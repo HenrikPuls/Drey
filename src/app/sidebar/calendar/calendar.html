@@ -1,0 +1,37 @@
+<div class="head">
+  <span class="month">{{ cal.monthLabel() }}</span>
+  <span class="nav">
+    <button type="button" class="nav-btn" (click)="cal.prevMonth()" aria-label="Previous month">
+      <app-icon name="chevron-left" [size]="10" />
+    </button>
+    <button type="button" class="nav-btn" (click)="cal.nextMonth()" aria-label="Next month">
+      <app-icon name="chevron-right" [size]="10" />
+    </button>
+  </span>
+</div>
+
+<div class="grid weekdays">
+  @for (wd of weekdays; track $index) {
+    <span class="weekday">{{ wd }}</span>
+  }
+</div>
+
+@for (week of cal.weeks(); track $index) {
+  <div class="grid">
+    @for (day of week; track day.iso) {
+      <button
+        type="button"
+        class="day"
+        [class.out]="!day.inMonth"
+        [class.today]="day.isToday"
+        [class.selected]="day.isSelected && !day.isToday"
+        (click)="onDayClick(day)"
+      >
+        <span class="num">{{ day.dayOfMonth }}</span>
+        @if (day.hasNote && !day.isToday) {
+          <span class="dot" aria-hidden="true"></span>
+        }
+      </button>
+    }
+  </div>
+}

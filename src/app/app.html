@@ -1,18 +1,40 @@
 <div class="shell">
   @if (!ipcAvailable) {
     <div class="ipc-warning">
-      Not running inside Electron (no <code>window.cyberNotesApi</code>) &mdash; expected when
+      Not running inside Electron (no <code>window.dreyApi</code>) &mdash; expected when
       opening this page directly in a browser via plain <code>ng serve</code>. Vault selection and
-      file listing need the Electron main process.
+      file access need the Electron main process.
     </div>
   }
 
   <div class="layout">
-    <aside class="sidebar-pane">
-      <app-sidebar></app-sidebar>
+    <aside class="sidebar-pane" [style.width.px]="layout.sidebarWidth()">
+      <app-sidebar />
     </aside>
+    <div
+      class="divider divider-x"
+      role="separator"
+      aria-orientation="vertical"
+      aria-label="Resize sidebar"
+      (pointerdown)="startSidebarDrag($event)"
+    ></div>
     <main class="main-pane">
-      <p class="placeholder">Select a file in the sidebar. The editor arrives with milestone 3.</p>
+      @if (editor.openDocs().length > 0) {
+        <app-tab-bar />
+        <app-editor />
+      } @else {
+        <div class="empty">
+          <p>Select a file in the sidebar, or click a calendar day to start a note.</p>
+        </div>
+      }
+      <div
+        class="divider divider-y"
+        role="separator"
+        aria-orientation="horizontal"
+        aria-label="Resize input area"
+        (pointerdown)="startChatDrag($event)"
+      ></div>
+      <app-chat-input [style.height.px]="layout.chatInputHeight()" />
     </main>
   </div>
 </div>

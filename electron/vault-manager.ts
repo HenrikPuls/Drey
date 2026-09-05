@@ -2,7 +2,7 @@ import { app, dialog } from 'electron';
 import * as fs from 'node:fs';
 import * as fsp from 'node:fs/promises';
 import * as path from 'node:path';
-import { VaultFileEntry } from '../shared/ipc-api';
+import { VaultFileContent, VaultFileEntry } from '../shared/ipc-api';
 
 interface VaultConfig {
   activeVaultPath: string | null;
@@ -14,7 +14,9 @@ function readConfig(): VaultConfig {
   try {
     const raw = fs.readFileSync(configFilePath(), 'utf-8');
     const parsed = JSON.parse(raw) as Partial<VaultConfig>;
-    return { activeVaultPath: typeof parsed.activeVaultPath === 'string' ? parsed.activeVaultPath : null };
+    return {
+      activeVaultPath: typeof parsed.activeVaultPath === 'string' ? parsed.activeVaultPath : null,
+    };
   } catch {
     // First run (no config file yet) or a corrupt/unreadable one -- either
     // way, "no vault selected" is the correct fallback, not a crash.
@@ -77,6 +79,81 @@ export class VaultManager {
       throw new Error(`Vault folder no longer exists: ${this.activeVaultPath}`);
     }
     return readDirRecursive(this.activeVaultPath, this.activeVaultPath);
+  }
+
+  async readFile(relativePath: string): Promise<VaultFileContent> {
+    const filePath = this.resolveInVault(relativePath);
+    const [content, stat] = await Promise.all([
+      fsp.readFile(filePath, 'utf-8'),
+      fsp.stat(filePath),
+    ]);
+    return { content, modifiedMs: stat.mtimeMs };
+  }
+
+  async writeFile(relativePath: string, content: string): Promise<number> {
+    const filePath = this.resolveInVault(relativePath);
+    // Create intermediate folders (e.g. `daily/` on the first save of a
+    // calendar-created draft note) -- `fsp.writeFile` won't on its own.
+    await fsp.mkdir(path.dirname(filePath), { recursive: true });
+    await fsp.writeFile(filePath, content, 'utf-8');
+    const stat = await fsp.stat(filePath);
+    return stat.mtimeMs;
+  }
+
+  /**
+   * Creates an empty file at `relativePath`, making any missing parent
+   * folders on the way (e.g. the user creates `notes/ideas.md` under a
+   * folder that only exists in the tree conceptually). The `wx` flag makes
+   * the write itself fail if something raced in between the check and now,
+   * so "already exists" is always reported rather than silently
+   * overwriting a note.
+   */
+  async createFile(relativePath: string): Promise<string> {
+    const filePath = this.resolveInVault(relativePath);
+    if (fs.existsSync(filePath)) {
+      throw new Error(`Already exists: ${relativePath}`);
+    }
+    await fsp.mkdir(path.dirname(filePath), { recursive: true });
+    await fsp.writeFile(filePath, '', { encoding: 'utf-8', flag: 'wx' });
+    return this.toRelative(filePath);
+  }
+
+  /** Creates a directory at `relativePath`; rejects if anything is there. */
+  async createDirectory(relativePath: string): Promise<string> {
+    const dirPath = this.resolveInVault(relativePath);
+    if (fs.existsSync(dirPath)) {
+      throw new Error(`Already exists: ${relativePath}`);
+    }
+    await fsp.mkdir(dirPath, { recursive: true });
+    return this.toRelative(dirPath);
+  }
+
+  /** Absolute path back to a forward-slash path relative to the vault root. */
+  private toRelative(absPath: string): string {
+    if (!this.activeVaultPath) {
+      throw new Error('No vault is active.');
+    }
+    return path.relative(path.resolve(this.activeVaultPath), absPath).split(path.sep).join('/');
+  }
+
+  /**
+   * Turns a vault-relative path from the renderer into an absolute path,
+   * and refuses anything that would escape the vault root (`..`,
+   * absolute input, symlink-free string check -- same defense-in-depth
+   * idea as the `app://` protocol handler in main.ts). The renderer only
+   * ever sends paths it got from `listFiles`, but read/write are a public
+   * IPC surface, so the guard lives here rather than being assumed.
+   */
+  private resolveInVault(relativePath: string): string {
+    if (!this.activeVaultPath) {
+      throw new Error('No vault is active.');
+    }
+    const root = path.resolve(this.activeVaultPath);
+    const resolved = path.resolve(root, relativePath);
+    if (resolved !== root && !resolved.startsWith(root + path.sep)) {
+      throw new Error(`Path is outside the active vault: ${relativePath}`);
+    }
+    return resolved;
   }
 }
 

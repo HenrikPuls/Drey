@@ -24,13 +24,61 @@
 }
 
 .sidebar-pane {
-  width: 260px;
+  width: var(--sidebar-width);
   flex-shrink: 0;
-  border-right: 1px solid #2a2a2a;
-  overflow-y: auto;
+  overflow: hidden;
+}
+
+/* Drag handles. A 1px visible line sits inside a 7px hit area so the
+   pointer target is comfortable without a thick seam. */
+.divider {
+  flex-shrink: 0;
+  position: relative;
+  background: var(--border);
+  z-index: 5;
+}
+
+.divider::before {
+  content: '';
+  position: absolute;
+  inset: -3px;
+}
+
+.divider-x {
+  width: 1px;
+  cursor: col-resize;
+}
+
+.divider-y {
+  height: 1px;
+  cursor: row-resize;
+}
+
+.divider:hover,
+.divider:active {
+  background: var(--accent);
 }
 
 .main-pane {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg-main);
+}
+
+app-editor {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+}
+
+app-chat-input {
+  flex-shrink: 0;
+  overflow: hidden;
+}
+
+.empty {
   flex: 1;
   display: flex;
   align-items: center;
@@ -38,7 +86,7 @@
   padding: 1rem;
 }
 
-.placeholder {
-  color: #6b6b6b;
+.empty p {
+  color: var(--text-6);
   font-size: 0.9rem;
 }

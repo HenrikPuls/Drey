@@ -1,0 +1,244 @@
+:host {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  background: var(--bg-main);
+}
+
+.chrome {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.4rem 0.9rem;
+  flex-shrink: 0;
+}
+
+.meta {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.03em;
+  color: var(--text-6);
+}
+
+.path {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sep {
+  opacity: 0.4;
+}
+
+.draft {
+  color: var(--accent);
+}
+
+.dirty {
+  color: var(--accent);
+  font-size: 8px;
+}
+
+.actions {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-shrink: 0;
+}
+
+.toggle {
+  display: inline-flex;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+
+.toggle button {
+  background: transparent;
+  color: var(--text-5);
+  border: none;
+  padding: 0.22rem 0.7rem;
+  font-size: 0.75rem;
+  cursor: pointer;
+}
+
+.toggle button + button {
+  border-left: 1px solid var(--border-strong);
+}
+
+.toggle button.on {
+  background: var(--hover-bg-strong);
+  color: var(--text-primary);
+}
+
+.auto {
+  background: transparent;
+  color: var(--text-5);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+  padding: 0.22rem 0.7rem;
+  font-size: 0.75rem;
+  cursor: pointer;
+}
+
+.auto:hover {
+  color: var(--text-primary);
+}
+
+.auto.on {
+  background: var(--hover-bg-strong);
+  color: var(--text-primary);
+  border-color: var(--accent);
+}
+
+.save {
+  background: var(--hover-bg);
+  color: var(--text-primary);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+  padding: 0.22rem 0.8rem;
+  font-size: 0.75rem;
+  cursor: pointer;
+}
+
+.save:hover:not(:disabled) {
+  background: var(--hover-bg-strong);
+}
+
+.save:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.err {
+  margin: 0;
+  padding: 0.4rem 0.9rem;
+  background: #3a1f1f;
+  color: #e0776d;
+  font-size: 0.8rem;
+  flex-shrink: 0;
+}
+
+.body {
+  flex: 1;
+  min-height: 0;
+  position: relative;
+}
+
+.cm-host {
+  height: 100%;
+}
+
+.cm-host.hidden {
+  display: none;
+}
+
+.rendered {
+  height: 100%;
+  overflow-y: auto;
+  cursor: text;
+}
+
+/* Auto-switch: the preview is contenteditable only for a native caret and
+   arrow-key navigation -- edits are intercepted in the component. Keep it
+   visually identical to the read-only view (no focus ring), just show the
+   caret in the accent colour so it reads as "you're positioned here". */
+.rendered.auto .doc {
+  outline: none;
+  caret-color: var(--accent);
+}
+
+.doc {
+  max-width: var(--editor-max-width);
+  margin: 0 auto;
+  padding: 40px 40px 56px;
+  font-size: 14.5px;
+  line-height: 1.72;
+  color: var(--text-2);
+}
+
+.doc :first-child {
+  margin-top: 0;
+}
+
+.doc h1,
+.doc h2,
+.doc h3 {
+  font-family: var(--font-serif);
+  font-weight: 500;
+  color: var(--text-heading);
+  line-height: 1.25;
+}
+
+.doc h1 {
+  font-size: 31px;
+  letter-spacing: -0.01em;
+  margin: 0 0 14px;
+}
+
+.doc h2 {
+  font-size: 19px;
+  color: #e6e2db;
+  margin: 30px 0 10px;
+}
+
+.doc p {
+  margin: 0 0 13px;
+  text-wrap: pretty;
+}
+
+.doc blockquote {
+  font-family: var(--font-serif);
+  font-style: italic;
+  font-size: 16px;
+  line-height: 1.6;
+  color: #a9a49c;
+  margin: 18px 0;
+  padding: 2px 0 2px 16px;
+  border-left: 2px solid var(--accent-quote);
+}
+
+.doc code {
+  background: var(--hover-bg);
+  border-radius: var(--radius-xs);
+  padding: 0.1em 0.35em;
+  font-family: var(--font-mono);
+  font-size: 0.9em;
+}
+
+.doc pre {
+  background: var(--bg-bar);
+  border-radius: var(--radius);
+  padding: 0.8rem 1rem;
+  overflow-x: auto;
+}
+
+.doc pre code {
+  background: none;
+  padding: 0;
+}
+
+.doc a {
+  color: var(--accent);
+}
+
+.doc ul,
+.doc ol {
+  padding-left: 1.3rem;
+}
+
+.doc table {
+  border-collapse: collapse;
+}
+
+.doc th,
+.doc td {
+  border: 1px solid var(--border-strong);
+  padding: 0.3rem 0.6rem;
+}

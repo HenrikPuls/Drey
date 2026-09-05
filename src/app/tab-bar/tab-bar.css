@@ -1,0 +1,98 @@
+:host {
+  display: flex;
+  align-items: stretch;
+  gap: 1px;
+  padding: 0 10px;
+  height: 38px;
+  background: var(--bg-bar);
+  border-bottom: 1px solid var(--border);
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+:host::-webkit-scrollbar {
+  display: none;
+}
+
+.tab {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  max-width: 230px;
+  padding: 0 10px;
+  margin-top: 6px;
+  border-radius: var(--radius-tab) var(--radius-tab) 0 0;
+  cursor: pointer;
+  color: var(--text-5);
+  background: transparent;
+  white-space: nowrap;
+}
+
+.tab:hover {
+  color: var(--text-2);
+}
+
+.tab.active {
+  background: var(--bg-main);
+  color: var(--text-heading);
+}
+
+.name {
+  font-size: 12px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dirty {
+  width: 5px;
+  height: 5px;
+  flex: none;
+  border-radius: 50%;
+  background: var(--accent);
+}
+
+.close {
+  width: 15px;
+  height: 15px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  background: transparent;
+  border-radius: var(--radius-xs);
+  flex: none;
+  opacity: 0.5;
+  cursor: pointer;
+  color: inherit;
+}
+
+.close:hover {
+  background: var(--hover-bg-loud);
+  opacity: 1;
+}
+
+.add {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  margin: 7px 0 0 6px;
+  border: 0;
+  background: transparent;
+  border-radius: var(--radius);
+  cursor: pointer;
+  color: var(--text-6);
+  flex: none;
+}
+
+.add:disabled {
+  cursor: default;
+  opacity: 0.5;
+}
+
+.add:not(:disabled):hover {
+  background: var(--hover-bg);
+  color: var(--text-primary);
+}

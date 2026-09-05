@@ -1,13 +1,13 @@
 import { TestBed } from '@angular/core/testing';
 import { VaultService } from './vault.service';
-import { CyberNotesApi, VaultFileEntry } from '../../../shared/ipc-api';
+import { DreyApi, VaultFileEntry } from '../../../shared/ipc-api';
 
 describe('VaultService', () => {
   afterEach(() => {
-    delete (window as { cyberNotesApi?: unknown }).cyberNotesApi;
+    delete (window as { dreyApi?: unknown }).dreyApi;
   });
 
-  it('stays empty when window.cyberNotesApi is unavailable', async () => {
+  it('stays empty when window.dreyApi is unavailable', async () => {
     const service = TestBed.inject(VaultService);
     await Promise.resolve(); // let the constructor's refresh() microtask settle
 
@@ -17,11 +17,11 @@ describe('VaultService', () => {
 
   it('loads the active vault and its file tree when available', async () => {
     const fakeTree: VaultFileEntry[] = [{ name: 'sailing', relativePath: 'sailing', type: 'directory', children: [] }];
-    const fakeApi: Partial<CyberNotesApi> = {
+    const fakeApi: Partial<DreyApi> = {
       getActiveVault: () => Promise.resolve('E:/vault'),
       listVaultFiles: () => Promise.resolve(fakeTree),
     };
-    window.cyberNotesApi = fakeApi as CyberNotesApi;
+    window.dreyApi = fakeApi as DreyApi;
 
     const service = TestBed.inject(VaultService);
     await Promise.resolve();
@@ -32,11 +32,11 @@ describe('VaultService', () => {
   });
 
   it('surfaces an error and clears the tree when listing fails', async () => {
-    const fakeApi: Partial<CyberNotesApi> = {
+    const fakeApi: Partial<DreyApi> = {
       getActiveVault: () => Promise.resolve('E:/gone'),
       listVaultFiles: () => Promise.reject(new Error('Vault folder no longer exists: E:/gone')),
     };
-    window.cyberNotesApi = fakeApi as CyberNotesApi;
+    window.dreyApi = fakeApi as DreyApi;
 
     const service = TestBed.inject(VaultService);
     await Promise.resolve();

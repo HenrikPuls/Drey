@@ -1,0 +1,27 @@
+@for (doc of editor.openDocs(); track doc.path) {
+  <div
+    class="tab"
+    role="tab"
+    [class.active]="doc.path === editor.activePath()"
+    [attr.aria-selected]="doc.path === editor.activePath()"
+    (click)="editor.activate(doc.path)"
+    [title]="doc.path"
+  >
+    <span class="name">{{ doc.name }}</span>
+    @if (doc.bufferContent !== doc.savedContent) {
+      <span class="dirty" aria-label="Unsaved changes"></span>
+    }
+    <button
+      type="button"
+      class="close"
+      (click)="onClose($event, doc.path)"
+      [attr.aria-label]="'Close ' + doc.name"
+    >
+      <app-icon name="x" [size]="8" [strokeWidth]="1.4" />
+    </button>
+  </div>
+}
+
+<button type="button" class="add" disabled aria-label="New note (not yet available)">
+  <app-icon name="plus" [size]="11" [strokeWidth]="1.4" />
+</button>

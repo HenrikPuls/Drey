@@ -1,0 +1,27 @@
+<div class="label">Open windows</div>
+
+@if (editor.openDocs().length === 0) {
+  <p class="empty">Nothing open.</p>
+} @else {
+  <div class="list">
+    @for (doc of editor.openDocs(); track doc.path) {
+      <div class="row" [class.active]="doc.path === editor.activePath()" [title]="doc.path">
+        <button type="button" class="open" (click)="editor.activate(doc.path)">
+          <app-icon name="window" [size]="12" />
+          <span class="name">{{ doc.name }}</span>
+        </button>
+        @if (doc.bufferContent !== doc.savedContent) {
+          <span class="dirty" aria-label="Unsaved changes"></span>
+        }
+        <button
+          type="button"
+          class="close"
+          (click)="onClose($event, doc.path)"
+          [attr.aria-label]="'Close ' + doc.name"
+        >
+          <app-icon name="x" [size]="8" [strokeWidth]="1.4" />
+        </button>
+      </div>
+    }
+  </div>
+}

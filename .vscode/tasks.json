@@ -1,10 +1,33 @@
 {
   // For more information, visit: https://go.microsoft.com/fwlink/?LinkId=733558
   "version": "2.0.0",
+  // Applies to every task below (also re-declared per-task, redundantly,
+  // since it's cheap and removes any doubt about default-merging):
+  // prepends the portable Node runtime to PATH. Needed for TWO separate
+  // hops, not just one -- confirmed by testing directly (see
+  // docs/11_risks_and_technical_debt.md, "Environment gotchas"):
+  //   1. Locating npm.cmd itself (solved by invoking it via absolute
+  //      path below, so technically doesn't need PATH).
+  //   2. npm's OWN spawning of lifecycle-script binaries (tsc.cmd,
+  //      ng.cmd, vitest, ...) from this project's node_modules/.bin --
+  //      each of THOSE .cmd shims has the same "local node.exe, else
+  //      bare `node` on PATH" fallback, and none of them sit next to our
+  //      node.exe. This one genuinely needs PATH; there's no absolute-path
+  //      shortcut for a binary npm resolves internally.
+  "options": {
+    "env": {
+      "PATH": "${workspaceFolder}\\.tools\\node;${env:PATH}"
+    }
+  },
   "tasks": [
     {
-      "type": "npm",
-      "script": "start",
+      "type": "shell",
+      "label": "npm: start",
+      "command": "${workspaceFolder}\\.tools\\node\\npm.cmd",
+      "args": ["run", "start"],
+      "options": {
+        "env": { "PATH": "${workspaceFolder}\\.tools\\node;${env:PATH}" }
+      },
       "isBackground": true,
       "problemMatcher": {
         "owner": "typescript",
@@ -21,8 +44,13 @@
       }
     },
     {
-      "type": "npm",
-      "script": "test",
+      "type": "shell",
+      "label": "npm: test",
+      "command": "${workspaceFolder}\\.tools\\node\\npm.cmd",
+      "args": ["run", "test"],
+      "options": {
+        "env": { "PATH": "${workspaceFolder}\\.tools\\node;${env:PATH}" }
+      },
       "isBackground": true,
       "problemMatcher": {
         "owner": "typescript",
@@ -37,6 +65,47 @@
           }
         }
       }
+    },
+    {
+      // Compiles electron/*.ts + shared/*.ts to dist-electron/. Used as a
+      // preLaunchTask by the "Electron: Main" debug configs -- a plain
+      // one-shot build, no watch/background behavior needed.
+      "type": "shell",
+      "label": "npm: build:electron",
+      "command": "${workspaceFolder}\\.tools\\node\\npm.cmd",
+      "args": ["run", "build:electron"],
+      "options": {
+        "env": { "PATH": "${workspaceFolder}\\.tools\\node;${env:PATH}" }
+      },
+      "problemMatcher": ["$tsc"],
+      "group": "build",
+      "presentation": { "reveal": "silent" }
+    },
+    {
+      // Full production build (renderer + electron). preLaunchTask for
+      // "Electron: Main (built)".
+      "type": "shell",
+      "label": "npm: build",
+      "command": "${workspaceFolder}\\.tools\\node\\npm.cmd",
+      "args": ["run", "build"],
+      "options": {
+        "env": { "PATH": "${workspaceFolder}\\.tools\\node;${env:PATH}" }
+      },
+      "problemMatcher": ["$tsc"],
+      "group": "build",
+      "presentation": { "reveal": "silent" }
+    },
+    {
+      // What "Electron: Main (dev)" actually needs before it can launch:
+      // the Angular dev server up (npm: start, background/watch -- VS
+      // Code treats it as "ready" once its problem matcher's background
+      // pattern signals so, same mechanism npm run dev's `wait-on` uses)
+      // AND the electron main/preload process compiled. Mirrors the
+      // "dev" npm script's own dependency shape.
+      "label": "prepare: electron dev",
+      "dependsOn": ["npm: start", "npm: build:electron"],
+      "dependsOrder": "parallel",
+      "problemMatcher": []
     }
   ]
 }

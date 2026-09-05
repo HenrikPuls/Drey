@@ -1,4 +1,4 @@
-# Notiz-App — Concept & Roadmap
+# Drey — Concept & Roadmap
 
 ## Vision
 Local, topic-based note-taking app. Runs in the background, thoughts land
@@ -29,8 +29,18 @@ Studio (LLM backend), Electron Builder (packaging).
 
 **Goal: usable day to day, smallest viable feature set**
 
-- Quick-capture (global hotkey, popup window), text input with inline tags
-  (`#tag`, autocomplete from the existing tag vocabulary while typing)
+- Quick-capture: a global hotkey brings the main window forward and opens
+  today's daily note (`daily/YYYY-MM-DD.md`) in the editor, appending a
+  fresh `## HH:mm` entry to type into. No separate popup window — capture
+  happens in the full editor, so inline `#tag` autocomplete (from the
+  existing tag vocabulary, see routing below) and the source/rendered
+  toggle are all there.
+- Note templates: a `templates/` folder in the vault holds Markdown
+  templates with `{{date}}` / `{{time}}` / `{{datetime}}` / `{{title}}`
+  placeholders. `templates/daily.md` seeds new daily notes and is
+  scaffolded with a starter layout on first use; editing it changes how
+  future daily notes look. The same substitution mechanism seeds files
+  created by tag routing.
 - Deterministic routing: a known tag → target file/folder is fixed, no LLM
   call needed. A new tag (first occurrence) → one-time short confirmation
   on whether a dedicated folder makes sense, automatic afterwards
@@ -52,7 +62,14 @@ Studio (LLM backend), Electron Builder (packaging).
   created files with no frontmatter — reviewed at leisure, no interruption
 - A single vault (no switching, no sensitive/general separation yet)
 - Editor: CodeMirror 6, source/rendered view via tab switch (no live
-  preview), click-to-edit
+  preview), click-to-edit. Optional **auto-switch mode** (off by default,
+  a persisted per-machine preference): the rendered view keeps its own
+  caret and no longer switches on a click — the first character typed is
+  what drops into source (at the matching source offset), and Ctrl+S
+  returns to the rendered view at the same spot. Still a tab switch, not
+  live preview; the source↔rendered position sync is best-effort
+  (character-precise for prose/headings/fenced code). See
+  [ADR-0004](../docs/09_architecture_decisions/0004-auto-switch-editor-mode.md).
 - Chat input at the bottom, scope "this document" (editor buffer goes
   straight into the prompt, no RAG needed)
 - Keyword search (SQLite FTS or simple text search over the files)
@@ -60,7 +77,8 @@ Studio (LLM backend), Electron Builder (packaging).
   body change vs. new external file; autosave conflict at minimum surfaces
   as a warning with "keep mine / take external version"
 - Daily tasks: inline `#task` syntax in any note file, a generated
-  (read-only) day view built from timestamp scanning
+  (read-only) day view built from timestamp scanning — distinct from the
+  daily note above (that is a normal editable file; this is an aggregate view)
 
 **Before Phase 1, as a separate step, not blocking coding:**
 Manually classify 20–30 real example captures, test the chosen small model
@@ -112,3 +130,5 @@ against them, before the inbox confidence threshold gets hardcoded.
   Studio — needs an availability check before every call
 - Folder sprawl from LLM suggestions: inbox review acts as a brake, but no
   guarantee against near-duplicates (e.g. "sailing" vs. "boat")
+- Structural folders (`daily/`, `templates/`) are not topic folders — tag
+  routing and LLM folder proposals must skip them

@@ -1,0 +1,105 @@
+:host {
+  display: flex;
+  flex-direction: column;
+  border-top: 1px solid var(--border);
+  background: var(--bg-bar);
+  padding: 12px 20px 14px;
+}
+
+.rail {
+  max-width: var(--editor-max-width);
+  width: 100%;
+  margin: 0 auto;
+  flex: 1;
+  min-height: 0;
+  display: flex;
+}
+
+.box {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  align-items: stretch;
+  gap: 10px;
+  background: var(--bg-input);
+  border: 1px solid var(--border-strong);
+  border-radius: 12px;
+  padding: 8px 8px 8px 12px;
+}
+
+.left {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.field {
+  flex: 1;
+  min-height: 0;
+  width: 100%;
+  border: 0;
+  background: transparent;
+  outline: none;
+  resize: none;
+  color: var(--text-primary);
+  font-size: 14px;
+  line-height: 1.5;
+  font-family: inherit;
+  padding: 5px 0 2px;
+}
+
+.field::-webkit-scrollbar {
+  width: 0;
+}
+
+.field::placeholder {
+  color: var(--text-6);
+}
+
+.scopes {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  padding-bottom: 1px;
+}
+
+.scope {
+  font-size: 11px;
+  padding: 4px 9px;
+  border: 0;
+  border-radius: var(--radius);
+  cursor: pointer;
+  background: transparent;
+  color: var(--text-7);
+}
+
+.scope.on {
+  background: var(--hover-bg-strong);
+  color: var(--text-primary);
+}
+
+.send {
+  width: 30px;
+  height: 30px;
+  flex: none;
+  align-self: flex-end;
+  border: 0;
+  border-radius: var(--radius-md);
+  background: var(--hover-bg);
+  color: var(--text-6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+
+.send.ready {
+  background: var(--accent);
+  color: var(--accent-contrast);
+}
+
+.send:disabled {
+  cursor: default;
+}

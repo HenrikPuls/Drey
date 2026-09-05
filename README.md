@@ -1,4 +1,4 @@
-# CyberNotes
+# Drey — your private AI knowledge vault
 
 Local, topic-based note-taking app (Electron + Angular). See
 [`CLAUDE.md`](CLAUDE.md) for the full project context and
@@ -43,8 +43,37 @@ npm run build     # builds the Angular renderer and the Electron main/preload pr
 npm run electron  # launches Electron against the built output
 ```
 
+## Quick-capture
+
+While the app is running, press **Ctrl+Alt+N** anywhere to jump into
+today's daily note. It brings the window forward, opens
+`daily/YYYY-MM-DD.md` in the active vault (creating it if needed), and
+starts a fresh `## HH:mm` section — type, then save with **Ctrl+S** like
+any file.
+
+New daily notes are created from `templates/daily.md` in the vault. That
+file is generated with a starter layout the first time you use the
+hotkey; edit it to change how future daily notes look. Placeholders:
+`{{date}}`, `{{time}}`, `{{datetime}}`, `{{title}}`.
+
+The main window must stay open — there is no tray/background mode yet. If
+the hotkey does nothing, another app already owns it (a warning is logged
+to the main-process console); rebinding comes in a later milestone.
+
 ## Tests
 
 ```powershell
 npm test
 ```
+
+## Debugging in VS Code
+
+Run and Debug panel → **Electron: Full App (dev)** and press start (or
+F5). Builds `electron/` and starts the Angular dev server automatically,
+then launches the app with breakpoints working on both sides of the IPC
+boundary: `electron/*.ts` (main/preload) and `src/app/**/*.ts` (renderer).
+See `.vscode/launch.json` for the individual pieces (main process only,
+renderer only, against the production build instead of the dev server)
+and their inline comments for the reasoning -- notably why
+`ELECTRON_RUN_AS_NODE` is explicitly cleared in these configs (see
+`docs/11_risks_and_technical_debt.md`, "Environment gotchas").

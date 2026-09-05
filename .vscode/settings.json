@@ -1,0 +1,21 @@
+{
+  // Workspace-scoped only (doesn't touch your global VS Code settings):
+  // every new integrated terminal opened in this project auto-sources
+  // env.ps1, so `npm`/`node` are just available -- no portable-Node PATH
+  // surprises when typing commands directly (see README.md, "Prerequisites").
+  "terminal.integrated.profiles.windows": {
+    "PowerShell (Drey)": {
+      "path": "powershell.exe",
+      "args": ["-NoExit", "-Command", ". '${workspaceFolder}\\env.ps1'"]
+    }
+  },
+  "terminal.integrated.defaultProfile.windows": "PowerShell (Drey)",
+  // Tasks/debug preLaunchTasks use THIS profile instead of the default
+  // above, not the customized one -- a plain shell here so VS Code's
+  // automation handshake (handing the actual task command to the shell
+  // after startup) isn't disrupted by the custom -Command args. Those
+  // shells get node/npm via tasks.json's own PATH prepend instead.
+  "terminal.integrated.automationProfile.windows": {
+    "path": "powershell.exe"
+  }
+}

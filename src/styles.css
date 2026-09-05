@@ -1,20 +1,86 @@
-/* Global styles. Dark theme by default per CLAUDE.md's UI/UX Design section
-   -- applied here (not just per-component) so there's no light-mode flash
-   before the app shell paints. */
+/* Global styles + design tokens.
+
+   The tokens below are the single source of truth for the palette,
+   typography and spacing lifted from the design prototype
+   (`Notizen Desktop.dc.html`). Component stylesheets reference these
+   variables and never hard-code a hex value, so a future accent-colour
+   switch (the prototype offers four) is a one-line change here.
+
+   Dark theme is applied at the root (not per component) so there's no
+   light-mode flash before the app shell paints -- see CLAUDE.md, "UI/UX
+   Design". */
 
 :root {
   color-scheme: dark;
+
+  /* Surfaces */
+  --bg-sidebar: #191817;
+  --bg-main: #262624;
+  --bg-bar: #1f1e1d;
+  --bg-input: #2c2a28;
+
+  /* Text, brightest to dimmest */
+  --text-heading: #f2efe9;
+  --text-primary: #eae7e1;
+  --text-2: #cfcbc4;
+  --text-3: #b9b4ad;
+  --text-4: #9a948c;
+  --text-5: #8b857e;
+  --text-6: #6e6862;
+  --text-7: #5f5a54;
+  --text-faint: #4d4842;
+
+  /* Accent (terracotta). Prototype alternatives: #7d8f6e #6e83a0 #a08a5e */
+  --accent: #c96442;
+  --accent-hover: #dd7f5f;
+  --accent-contrast: #1f1e1d;
+  --accent-ring: rgba(201, 100, 66, 0.55);
+  --accent-quote: rgba(201, 100, 66, 0.5);
+
+  /* Lines and hover fills */
+  --border: rgba(255, 255, 255, 0.06);
+  --border-strong: rgba(255, 255, 255, 0.08);
+  --hover-bg: rgba(255, 255, 255, 0.05);
+  --hover-bg-strong: rgba(255, 255, 255, 0.09);
+  --hover-bg-loud: rgba(255, 255, 255, 0.1);
+  --active-bg: rgba(255, 255, 255, 0.07);
+  --focus-bg: rgba(255, 255, 255, 0.035);
+
+  /* Radii */
+  --radius-xs: 4px;
+  --radius-sm: 5px;
+  --radius: 6px;
+  --radius-md: 8px;
+  --radius-tab: 7px;
+
+  /* Layout */
+  --sidebar-width: 220px;
+  --editor-max-width: 720px;
+
+  /* Type families. Newsreader / IBM Plex Mono are self-hosted -- drop the
+     .woff2 files into public/fonts/ and add the @font-face rules (see
+     public/fonts/README.md). Until then these fall back to Georgia /
+     the platform monospace, which is what the prototype specifies too. */
+  --font-sans: system-ui, -apple-system, 'Segoe UI', 'Helvetica Neue', sans-serif;
+  --font-serif: 'Newsreader', Georgia, 'Times New Roman', serif;
+  --font-mono: 'IBM Plex Mono', 'Cascadia Code', 'Consolas', ui-monospace, monospace;
 }
 
 html,
 body {
   margin: 0;
   padding: 0;
-  background: #1e1e1e;
-  color: #e4e4e4;
-  font-family:
-    system-ui,
-    -apple-system,
-    'Segoe UI',
-    sans-serif;
+  height: 100%;
+  background: var(--bg-sidebar);
+  color: var(--text-primary);
+  font-family: var(--font-sans);
+  overflow: hidden;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+::selection {
+  background: rgba(201, 100, 66, 0.32);
 }

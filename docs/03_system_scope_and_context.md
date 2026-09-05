@@ -7,7 +7,7 @@ service the app depends on to function.
 
 ```mermaid
 graph LR
-    User((User)) -->|quick-capture, chat, edits| App[CyberNotes]
+    User((User)) -->|quick-capture, chat, edits| App[Drey]
     App -->|reads/writes .md files| Vault[(Vault folder\non disk / OneDrive)]
     App -->|classification prompts,\nOpenAI-compatible HTTP| LMStudio[LM Studio\nlocal LLM server]
 ```
