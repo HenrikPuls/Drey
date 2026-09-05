@@ -1,0 +1,83 @@
+<div class="chrome">
+  <div class="meta" [title]="editor.openPath()">
+    <span class="path">{{ editor.openPath() }}</span>
+    <span class="sep">·</span>
+    <span>{{ wordCount() }} words</span>
+    @if (editor.activeIsDraft()) {
+      <span class="sep">·</span>
+      <span class="draft">unsaved draft</span>
+    }
+    @if (editor.isDirty()) {
+      <span class="dirty" title="Unsaved changes">&#9679;</span>
+    }
+  </div>
+
+  <div class="actions">
+    <button
+      type="button"
+      class="auto"
+      [class.on]="editor.autoSwitch()"
+      [attr.aria-pressed]="editor.autoSwitch()"
+      (click)="editor.setAutoSwitch(!editor.autoSwitch())"
+      title="Auto switch: preview keeps a caret and stays put; typing drops into source, saving returns to preview"
+    >
+      Auto switch
+    </button>
+
+    <div class="toggle" role="tablist" aria-label="Editor view">
+      <button
+        type="button"
+        role="tab"
+        [class.on]="editor.viewMode() === 'source'"
+        [attr.aria-selected]="editor.viewMode() === 'source'"
+        (click)="editor.setViewMode('source')"
+      >
+        Source
+      </button>
+      <button
+        type="button"
+        role="tab"
+        [class.on]="editor.viewMode() === 'rendered'"
+        [attr.aria-selected]="editor.viewMode() === 'rendered'"
+        (click)="editor.setViewMode('rendered')"
+      >
+        Rendered
+      </button>
+    </div>
+
+    <button
+      type="button"
+      class="save"
+      [disabled]="!editor.isDirty() || editor.isSaving()"
+      (click)="editor.save()"
+    >
+      {{ editor.isSaving() ? 'Saving…' : 'Save' }}
+    </button>
+  </div>
+</div>
+
+@if (editor.error(); as error) {
+  <p class="err">{{ error }}</p>
+}
+
+<div class="body">
+  <!-- Kept mounted (display:none when inactive) so the CodeMirror instance
+       and its undo history survive a toggle to the rendered view. -->
+  <div #cmHost class="cm-host" [class.hidden]="editor.viewMode() !== 'source'"></div>
+
+  @if (editor.viewMode() === 'rendered') {
+    <div class="rendered" [class.auto]="editor.autoSwitch()">
+      <div
+        #previewDoc
+        class="doc"
+        [innerHTML]="renderedHtml()"
+        [title]="editor.autoSwitch() ? 'Type to edit' : null"
+        [attr.contenteditable]="editor.autoSwitch() ? 'plaintext-only' : null"
+        [attr.spellcheck]="editor.autoSwitch() ? 'false' : null"
+        (click)="onPreviewClick()"
+        (keyup)="onPreviewKeyup()"
+        (beforeinput)="onPreviewBeforeInput($event)"
+      ></div>
+    </div>
+  }
+</div>

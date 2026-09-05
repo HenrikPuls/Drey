@@ -10,6 +10,9 @@ package, a minor naming convention).
 | # | Title | Status |
 |---|---|---|
 | [0001](09_architecture_decisions/0001-electron-process-split-contextbridge.md) | Electron main/renderer process split via contextBridge | Accepted |
+| [0002](09_architecture_decisions/0002-quick-capture-opens-daily-note.md) | Quick-capture opens the day's daily note in the editor (no popup) | Accepted |
+| [0003](09_architecture_decisions/0003-multi-document-editor-tab-model.md) | Multi-document `EditorService` and the tab model (incl. unsaved daily-note drafts) | Accepted |
+| [0004](09_architecture_decisions/0004-auto-switch-editor-mode.md) | Auto-switch editor mode and source↔rendered caret sync | Accepted |
 
 Decisions not yet written up (relevant spec already fixes them, but the
 ADR is deferred to the milestone that actually implements them, per

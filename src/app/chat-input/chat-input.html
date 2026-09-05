@@ -1,0 +1,44 @@
+<div class="rail">
+  <div class="box">
+    <div class="left">
+      <textarea
+        class="field"
+        rows="1"
+        [value]="chat.query()"
+        (input)="onInput($event)"
+        (keydown)="onKeydown($event)"
+        [placeholder]="
+          chat.scope() === 'doc' ? 'Ask about or add to this document …' : 'Search all notes …'
+        "
+      ></textarea>
+      <div class="scopes" role="group" aria-label="Search scope">
+        <button
+          type="button"
+          class="scope"
+          [class.on]="chat.scope() === 'doc'"
+          (click)="chat.setScope('doc')"
+        >
+          This document
+        </button>
+        <button
+          type="button"
+          class="scope"
+          [class.on]="chat.scope() === 'all'"
+          (click)="chat.setScope('all')"
+        >
+          All notes
+        </button>
+      </div>
+    </div>
+    <button
+      type="button"
+      class="send"
+      [class.ready]="chat.canSubmit()"
+      [disabled]="!chat.canSubmit()"
+      (click)="chat.submit()"
+      aria-label="Send"
+    >
+      <app-icon name="arrow-up" [size]="13" [strokeWidth]="1.5" />
+    </button>
+  </div>
+</div>

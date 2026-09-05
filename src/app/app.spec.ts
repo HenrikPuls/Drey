@@ -3,9 +3,9 @@ import { App } from './app';
 
 describe('App', () => {
   beforeEach(async () => {
-    // jsdom (the test environment) has no window.cyberNotesApi -- same as
+    // jsdom (the test environment) has no window.dreyApi -- same as
     // opening the page in a plain browser tab outside Electron.
-    delete (window as { cyberNotesApi?: unknown }).cyberNotesApi;
+    delete (window as { dreyApi?: unknown }).dreyApi;
 
     await TestBed.configureTestingModule({
       imports: [App],
@@ -18,7 +18,7 @@ describe('App', () => {
     expect(app).toBeTruthy();
   });
 
-  it('shows a warning when window.cyberNotesApi is unavailable', async () => {
+  it('shows a warning when window.dreyApi is unavailable', async () => {
     const fixture = TestBed.createComponent(App);
     await fixture.whenStable();
     const compiled = fixture.nativeElement as HTMLElement;

@@ -3,6 +3,70 @@
   "version": "0.2.0",
   "configurations": [
     {
+      // Debugs electron/main.ts + electron/preload.ts (breakpoints in the
+      // .ts sources, via the sourceMaps tsc emits -- see electron/tsconfig.json)
+      // against the live Angular dev server, same as `npm run dev`.
+      "name": "Electron: Main (dev)",
+      "type": "node",
+      "request": "launch",
+      "cwd": "${workspaceFolder}",
+      // Points straight at the project's portable node.exe + Electron's
+      // own cli.js instead of node_modules/.bin/electron(.cmd): that shim
+      // falls back to a bare "node" on PATH when no node.exe sits next to
+      // it (which is our case -- see env.ps1), so it would hit the same
+      // "node not found" failure the npm-run tasks did. This has no PATH
+      // dependency at all.
+      "runtimeExecutable": "${workspaceFolder}/.tools/node/node.exe",
+      "program": "${workspaceFolder}/node_modules/electron/cli.js",
+      "args": ["--remote-debugging-port=9222", "."],
+      "env": {
+        // Cleared, not just unset in this config: some parent shells on
+        // this machine already have this set (even to ""), which makes
+        // Electron run as plain Node instead of bootstrapping the app --
+        // see docs/11_risks_and_technical_debt.md, "Environment gotchas".
+        // `null` here is VS Code's documented way to remove an inherited
+        // env var, not just override its value.
+        "ELECTRON_RUN_AS_NODE": null,
+        "DREY_RENDERER_URL": "http://localhost:4200"
+      },
+      "outputCapture": "std",
+      "outFiles": ["${workspaceFolder}/dist-electron/**/*.js"],
+      "skipFiles": ["<node_internals>/**"],
+      "preLaunchTask": "prepare: electron dev"
+    },
+    {
+      // Same, but against the production build -- no dev server, no live
+      // reload. Closer to what a packaged build actually runs.
+      "name": "Electron: Main (built)",
+      "type": "node",
+      "request": "launch",
+      "cwd": "${workspaceFolder}",
+      "runtimeExecutable": "${workspaceFolder}/.tools/node/node.exe",
+      "program": "${workspaceFolder}/node_modules/electron/cli.js",
+      "args": ["--remote-debugging-port=9222", "."],
+      "env": {
+        "ELECTRON_RUN_AS_NODE": null
+      },
+      "outputCapture": "std",
+      "outFiles": ["${workspaceFolder}/dist-electron/**/*.js"],
+      "skipFiles": ["<node_internals>/**"],
+      "preLaunchTask": "npm: build"
+    },
+    {
+      // Attaches to the renderer (Angular/src/**/*.ts, via the dev
+      // server's source maps) over the Chrome DevTools protocol port
+      // opened by --remote-debugging-port above. Launch this together
+      // with one of the two configs above -- on its own there is nothing
+      // running yet to attach to. Use the "Electron: Full App (dev)"
+      // compound below for the one-click version.
+      "name": "Electron: Renderer",
+      "type": "chrome",
+      "request": "attach",
+      "port": 9222,
+      "webRoot": "${workspaceFolder}/src",
+      "timeout": 30000
+    },
+    {
       "name": "ng serve",
       "type": "chrome",
       "request": "launch",
@@ -15,6 +79,15 @@
       "request": "launch",
       "preLaunchTask": "npm: test",
       "url": "http://localhost:9876/debug.html"
+    }
+  ],
+  "compounds": [
+    {
+      // Press F5, get the real app with breakpoints working on both
+      // sides of the IPC boundary at once.
+      "name": "Electron: Full App (dev)",
+      "configurations": ["Electron: Main (dev)", "Electron: Renderer"],
+      "stopAll": true
     }
   ]
 }

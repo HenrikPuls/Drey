@@ -1,45 +1,104 @@
-<div class="sidebar">
-  <div class="vault-section">
-    @if (vault.activeVaultPath(); as activePath) {
-      <div class="vault-path" [title]="activePath">{{ activePath }}</div>
-      <button type="button" class="link-button" (click)="onSelectVault()">Change vault&hellip;</button>
-    } @else {
-      <p class="empty-hint">No vault selected yet.</p>
-      <button type="button" class="primary-button" (click)="onSelectVault()">Select vault folder&hellip;</button>
+<app-calendar />
+
+<div class="files" (contextmenu)="openMenu($event)">
+  <div class="files-head">
+    <span class="section-label">Files</span>
+    @if (vault.activeVaultPath()) {
+      <button type="button" class="text-btn" (click)="onSelectVault()">Change</button>
     }
   </div>
 
-  <div class="tree-section">
-    @if (vault.isLoading()) {
-      <p class="status">Loading&hellip;</p>
-    } @else if (vault.error(); as error) {
-      <p class="status status--error">{{ error }}</p>
-    } @else if (vault.activeVaultPath() && vault.fileTree().length === 0) {
-      <p class="empty-hint">Vault is empty.</p>
-    }
+  @if (creating(); as pending) {
+    <div class="create-row">
+      <app-icon [name]="pending.kind === 'directory' ? 'chevron-right' : 'plus'" [size]="10" />
+      <input
+        #createInput
+        class="create-input"
+        type="text"
+        [attr.placeholder]="
+          (pending.kind === 'directory' ? 'New folder' : 'New file') +
+          (pending.dir ? ' in ' + pending.dir : '')
+        "
+        (keydown.enter)="commitCreate(createInput.value)"
+        (keydown.escape)="cancelCreate()"
+        (blur)="commitCreate(createInput.value)"
+      />
+    </div>
+  }
 
-    <ng-container *ngTemplateOutlet="treeList; context: { $implicit: vault.fileTree() }"></ng-container>
-  </div>
+  @if (!vault.activeVaultPath()) {
+    <div class="vault-empty">
+      <p>No vault selected.</p>
+      <button type="button" class="primary" (click)="onSelectVault()">Select vault folder…</button>
+    </div>
+  } @else if (vault.isLoading()) {
+    <p class="hint">Loading…</p>
+  } @else if (vault.error(); as error) {
+    <p class="hint error">{{ error }}</p>
+  } @else if (vault.fileTree().length === 0) {
+    <p class="hint">Vault is empty.</p>
+  } @else {
+    <div class="tree-scroll">
+      <ng-container *ngTemplateOutlet="tree; context: { $implicit: vault.fileTree(), depth: 0 }" />
+    </div>
+  }
 </div>
 
-<ng-template #treeList let-entries>
-  <ul class="tree">
-    @for (entry of entries; track entry.relativePath) {
-      <li>
-        <button
-          type="button"
-          class="entry"
-          [class.entry--directory]="entry.type === 'directory'"
-          [class.entry--selected]="selectedPath() === entry.relativePath"
-          (click)="onEntryClick(entry)"
-        >
-          <span class="entry-icon">{{ entry.type === 'directory' ? '📁' : '📄' }}</span>
-          <span class="entry-name">{{ entry.name }}</span>
-        </button>
-        @if (entry.children && entry.children.length) {
-          <ng-container *ngTemplateOutlet="treeList; context: { $implicit: entry.children }"></ng-container>
-        }
-      </li>
+<app-open-windows />
+
+<button type="button" class="settings" disabled aria-label="Settings (not yet available)">
+  <app-icon name="settings" [size]="14" />
+  <span>Settings</span>
+</button>
+
+@if (menu(); as m) {
+  <div
+    class="ctx-backdrop"
+    (click)="closeMenu()"
+    (contextmenu)="$event.preventDefault(); closeMenu()"
+  ></div>
+  <div class="ctx-menu" [style.left.px]="m.x" [style.top.px]="m.y">
+    <button type="button" (click)="startCreate('file')">New file</button>
+    <button type="button" (click)="startCreate('directory')">New folder</button>
+  </div>
+}
+
+<ng-template #tree let-entries let-depth="depth">
+  @for (entry of entries; track entry.relativePath) {
+    @if (entry.type === 'directory') {
+      <button
+        type="button"
+        class="node folder"
+        [style.padding-left.px]="8 + depth * 12"
+        (click)="toggleFolder(entry.relativePath)"
+        (contextmenu)="openMenu($event, entry)"
+      >
+        <app-icon
+          class="twist"
+          name="chevron-right"
+          [size]="9"
+          [style.transform]="isCollapsed(entry.relativePath) ? 'none' : 'rotate(90deg)'"
+        />
+        <span class="node-name">{{ entry.name }}</span>
+        <span class="count">{{ entry.children?.length ?? 0 }}</span>
+      </button>
+      @if (!isCollapsed(entry.relativePath) && entry.children?.length) {
+        <ng-container
+          *ngTemplateOutlet="tree; context: { $implicit: entry.children, depth: depth + 1 }"
+        />
+      }
+    } @else {
+      <button
+        type="button"
+        class="node file"
+        [class.active]="editor.openPath() === entry.relativePath"
+        [style.padding-left.px]="21 + depth * 12"
+        (click)="onFileClick(entry)"
+        (contextmenu)="openMenu($event, entry)"
+      >
+        <span class="bullet" aria-hidden="true"></span>
+        <span class="node-name">{{ entry.name }}</span>
+      </button>
     }
-  </ul>
+  }
 </ng-template>

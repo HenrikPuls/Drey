@@ -58,6 +58,14 @@ No extra field needed, just the base fields. Differs from a master document
 in that it carries no `art`/`description` and is therefore not pulled in as
 classifier context for new-folder proposals.
 
+### Daily notes — `daily/YYYY-MM-DD.md`
+
+One `type: notiz` file per calendar day, living in the structural `daily/`
+folder (not a topic folder). Created by the quick-capture hotkey from
+`templates/daily.md`; entries are appended as `## HH:mm` timestamp
+headings per the body conventions below. `daily/` is excluded from tag
+routing and the tag overview.
+
 ## Body structure inside a master document
 
 Master documents (`type: master`) are organized into three fixed sections:
@@ -118,6 +126,23 @@ Second viewing fell through #sailing #disappointment
 ## Inbox (`inbox.md`) — deliberately schema-free
 
 A pure collection point, no per-entry frontmatter needed — every block just
-holds raw text plus its origin (timestamp, source: quick-capture / external
-file / folder proposal). Simple enough that its structure can emerge
-directly from the inbox UI logic instead of being pre-specified.
+holds raw text plus its origin (timestamp, source: external file / folder
+proposal / untagged block pulled for review). Simple enough that its
+structure can emerge directly from the inbox UI logic instead of being
+pre-specified. (Quick-capture does **not** write here — it goes straight
+into the day's daily note; see below.)
+
+## Templates (`templates/`) — structural folder
+
+Markdown templates for newly created notes. Placeholders substituted at
+creation time: `{{date}}` (`2026-09-05`), `{{time}}` (`14:32`),
+`{{datetime}}` (`2026-09-05T14:32:00`), `{{title}}` (same as `{{date}}`
+for daily notes). Unknown `{{...}}` tokens are left untouched.
+
+- `templates/daily.md` — seeds `daily/YYYY-MM-DD.md`. Scaffolded with a
+  starter (base frontmatter + a `# {{date}}` heading + a first
+  `## {{time}}` entry) the first time quick-capture needs it; edit it to
+  change how future daily notes look.
+- Later: the same mechanism seeds files created by tag routing.
+- `templates/` is excluded from tag routing, folder proposals, and the
+  tag overview.

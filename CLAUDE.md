@@ -1,4 +1,4 @@
-# Notiz-App — Project Context for Claude Code
+# Drey — your private AI knowledge vault — Project Context for Claude Code
 
 ## Overview
 Local, topic-based note-taking app (Electron + Angular). Full concept,
@@ -149,6 +149,7 @@ assume.
 2. Vault selection + file listing
 3. Editor (CodeMirror 6): open/save a file, source/rendered toggle
 4. Quick-capture (global hotkey, popup window)
+5. Implement multi tab support (x to close tab, only prompts to safe if program is closed not by switching editors )
 5. Tag parsing, autocomplete, registry index, deterministic routing
 6. LM Studio client + task/note classification (Prompt 1)
 7. Inbox + batch tag suggestion (Prompt 2)
@@ -167,7 +168,7 @@ This is meant to feel like pair programming, not a silent code generator:
 - Don't comment or explain every line of code — explanation belongs in the
   conversation, not in code comments.
 - If something deviates from the `specs/` documents: say so explicitly and
-  justify it, don't silently implement it differently.
+  justify it, don't silently implement it differently. If it is implemented differently please update specs file appropriately
 - For genuine alternatives with different trade-offs: state the options and
   a recommendation, then wait for confirmation — don't just pick the most
   likely option and run with it unasked.

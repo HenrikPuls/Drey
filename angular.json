@@ -2,11 +2,12 @@
   "$schema": "./node_modules/@angular/cli/lib/config/schema.json",
   "version": 1,
   "cli": {
-    "packageManager": "npm"
+    "packageManager": "npm",
+    "analytics": false
   },
   "newProjectRoot": "projects",
   "projects": {
-    "cybernotes": {
+    "drey": {
       "projectType": "application",
       "schematics": {},
       "root": "",
@@ -31,8 +32,8 @@
               "budgets": [
                 {
                   "type": "initial",
-                  "maximumWarning": "500kB",
-                  "maximumError": "1MB"
+                  "maximumWarning": "1.2MB",
+                  "maximumError": "2MB"
                 },
                 {
                   "type": "anyComponentStyle",
@@ -54,10 +55,10 @@
           "builder": "@angular/build:dev-server",
           "configurations": {
             "production": {
-              "buildTarget": "cybernotes:build:production"
+              "buildTarget": "drey:build:production"
             },
             "development": {
-              "buildTarget": "cybernotes:build:development"
+              "buildTarget": "drey:build:development"
             }
           },
           "defaultConfiguration": "development"
