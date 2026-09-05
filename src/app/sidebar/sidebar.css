@@ -1,0 +1,119 @@
+.sidebar {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  padding: 1rem 0.75rem;
+  box-sizing: border-box;
+  font-size: 0.85rem;
+}
+
+.vault-section {
+  padding-bottom: 0.75rem;
+  margin-bottom: 0.75rem;
+  border-bottom: 1px solid #333;
+}
+
+.vault-path {
+  color: #e4e4e4;
+  font-size: 0.8rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  margin-bottom: 0.4rem;
+}
+
+.empty-hint {
+  color: #9a9a9a;
+  margin: 0 0 0.5rem;
+}
+
+.primary-button {
+  width: 100%;
+  padding: 0.45rem 0.6rem;
+  background: #2b2b2b;
+  color: #e4e4e4;
+  border: 1px solid #3d3d3d;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 0.85rem;
+}
+
+.primary-button:hover {
+  background: #333;
+}
+
+.link-button {
+  background: none;
+  border: none;
+  color: #7aa2f7;
+  cursor: pointer;
+  padding: 0;
+  font-size: 0.8rem;
+}
+
+.link-button:hover {
+  text-decoration: underline;
+}
+
+.tree-section {
+  flex: 1;
+  overflow-y: auto;
+}
+
+.status {
+  color: #9a9a9a;
+  margin: 0 0 0.5rem;
+}
+
+.status--error {
+  color: #e0776d;
+}
+
+.tree {
+  list-style: none;
+  margin: 0;
+  padding-left: 0.85rem;
+}
+
+.tree-section > .tree {
+  padding-left: 0;
+}
+
+.entry {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  width: 100%;
+  background: none;
+  border: none;
+  color: #d0d0d0;
+  text-align: left;
+  padding: 0.2rem 0.35rem;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 0.85rem;
+}
+
+.entry:hover {
+  background: #2a2a2a;
+}
+
+.entry--selected {
+  background: #2f3d5c;
+  color: #fff;
+}
+
+.entry--directory {
+  color: #e4e4e4;
+  font-weight: 500;
+}
+
+.entry-icon {
+  flex-shrink: 0;
+}
+
+.entry-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
