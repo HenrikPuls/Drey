@@ -1,0 +1,44 @@
+:host {
+  display: block;
+  height: 100vh;
+}
+
+.shell {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+.ipc-warning {
+  padding: 0.5rem 1rem;
+  background: #3a2f1a;
+  color: #d7a34a;
+  font-size: 0.8rem;
+  border-bottom: 1px solid #4a3a20;
+}
+
+.layout {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+}
+
+.sidebar-pane {
+  width: 260px;
+  flex-shrink: 0;
+  border-right: 1px solid #2a2a2a;
+  overflow-y: auto;
+}
+
+.main-pane {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem;
+}
+
+.placeholder {
+  color: #6b6b6b;
+  font-size: 0.9rem;
+}

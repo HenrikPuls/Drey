@@ -1,0 +1,45 @@
+<div class="sidebar">
+  <div class="vault-section">
+    @if (vault.activeVaultPath(); as activePath) {
+      <div class="vault-path" [title]="activePath">{{ activePath }}</div>
+      <button type="button" class="link-button" (click)="onSelectVault()">Change vault&hellip;</button>
+    } @else {
+      <p class="empty-hint">No vault selected yet.</p>
+      <button type="button" class="primary-button" (click)="onSelectVault()">Select vault folder&hellip;</button>
+    }
+  </div>
+
+  <div class="tree-section">
+    @if (vault.isLoading()) {
+      <p class="status">Loading&hellip;</p>
+    } @else if (vault.error(); as error) {
+      <p class="status status--error">{{ error }}</p>
+    } @else if (vault.activeVaultPath() && vault.fileTree().length === 0) {
+      <p class="empty-hint">Vault is empty.</p>
+    }
+
+    <ng-container *ngTemplateOutlet="treeList; context: { $implicit: vault.fileTree() }"></ng-container>
+  </div>
+</div>
+
+<ng-template #treeList let-entries>
+  <ul class="tree">
+    @for (entry of entries; track entry.relativePath) {
+      <li>
+        <button
+          type="button"
+          class="entry"
+          [class.entry--directory]="entry.type === 'directory'"
+          [class.entry--selected]="selectedPath() === entry.relativePath"
+          (click)="onEntryClick(entry)"
+        >
+          <span class="entry-icon">{{ entry.type === 'directory' ? '📁' : '📄' }}</span>
+          <span class="entry-name">{{ entry.name }}</span>
+        </button>
+        @if (entry.children && entry.children.length) {
+          <ng-container *ngTemplateOutlet="treeList; context: { $implicit: entry.children }"></ng-container>
+        }
+      </li>
+    }
+  </ul>
+</ng-template>

@@ -1,0 +1,18 @@
+<div class="shell">
+  @if (!ipcAvailable) {
+    <div class="ipc-warning">
+      Not running inside Electron (no <code>window.cyberNotesApi</code>) &mdash; expected when
+      opening this page directly in a browser via plain <code>ng serve</code>. Vault selection and
+      file listing need the Electron main process.
+    </div>
+  }
+
+  <div class="layout">
+    <aside class="sidebar-pane">
+      <app-sidebar></app-sidebar>
+    </aside>
+    <main class="main-pane">
+      <p class="placeholder">Select a file in the sidebar. The editor arrives with milestone 3.</p>
+    </main>
+  </div>
+</div>
