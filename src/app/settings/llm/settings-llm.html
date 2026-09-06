@@ -1,5 +1,8 @@
-@if (llm(); as llm) {
-  <div class="pane">
+<app-settings-pane
+  title="LLM"
+  description="Connection to a local OpenAI-compatible model server, a connection test, and this session's request log."
+>
+  @if (llm(); as llm) {
     <label class="switch-row">
       <input
         type="checkbox"
@@ -26,8 +29,8 @@
           placeholder="http://localhost:1234/v1"
         />
         <p class="field-hint">
-          Any OpenAI-compatible endpoint — LM Studio (<span class="mono">:1234/v1</span>),
-          Unsloth Desktop (<span class="mono">:8888/v1</span>), llama.cpp, vLLM, Ollama.
+          Any OpenAI-compatible endpoint — LM Studio (<span class="mono">:1234/v1</span>), Unsloth
+          Desktop (<span class="mono">:8888/v1</span>), llama.cpp, vLLM, Ollama.
         </p>
       </div>
 
@@ -55,7 +58,9 @@
 
         <p class="key-status">
           @if (savedKeyMask(); as mask) {
-            <span class="ok">Saved: <span class="mono">{{ mask }}</span></span>
+            <span class="ok"
+              >Saved: <span class="mono">{{ mask }}</span></span
+            >
           } @else {
             <span class="none">No key saved.</span>
           }
@@ -67,10 +72,9 @@
         </p>
 
         <p class="field-hint">
-          Sent as <span class="mono">Authorization: Bearer …</span> on every request —
-          there is no separate login call. Leave empty for servers that don’t need one
-          (LM Studio ignores it); Unsloth Desktop requires it. Stored in plain text in the
-          app config file.
+          Sent as <span class="mono">Authorization: Bearer …</span> on every request — there is no
+          separate login call. Leave empty for servers that don’t need one (LM Studio ignores it);
+          Unsloth Desktop requires it. Stored in plain text in the app config file.
         </p>
       </div>
 
@@ -102,9 +106,8 @@
           </button>
         </div>
         <p class="field-hint">
-          “Load models” pulls the list live from the endpoint; you can also type an id by
-          hand if the server doesn’t expose <span class="mono">/models</span>. No model id
-          is ever assumed.
+          “Load models” pulls the list live from the endpoint; you can also type an id by hand if
+          the server doesn’t expose <span class="mono">/models</span>. No model id is ever assumed.
         </p>
       </div>
 
@@ -128,24 +131,27 @@
     <section class="debug">
       <div class="debug-head">
         <h3>Debug log</h3>
-        <span class="debug-count">{{ entries().length }} request{{ entries().length === 1 ? '' : 's' }}</span>
+        <span class="debug-count"
+          >{{ entries().length }} request{{ entries().length === 1 ? '' : 's' }}</span
+        >
         <button type="button" class="link" (click)="debug.clear()" [disabled]="!entries().length">
           Clear
         </button>
       </div>
       <p class="field-hint">
-        Every request this session, newest first — including ones that were refused
-        before being sent. There is no separate authentication call: the bearer token
-        travels as a header on each request, so the very first entry is normally
-        <span class="mono">GET /v1/models</span>. Click an entry for the exact headers
-        and body, and a runnable <span class="mono">curl</span>. The key is masked here;
-        “Copy curl” substitutes the real one.
+        Every request this session, newest first — including ones that were refused before being
+        sent. There is no separate authentication call: the bearer token travels as a header on each
+        request, so the very first entry is normally
+        <span class="mono">GET /v1/models</span>. Click an entry for the exact headers and body, and
+        a runnable <span class="mono">curl</span>. The key is masked here; “Copy curl” substitutes
+        the real one.
       </p>
 
       @if (debug.error(); as error) {
         <p class="diagnosis">
-          The debug log could not be read from the main process: <span class="mono">{{ error }}</span>.
-          That usually means the running Electron main process predates this feature —
+          The debug log could not be read from the main process:
+          <span class="mono">{{ error }}</span
+          >. That usually means the running Electron main process predates this feature —
           <strong>restart the app</strong>.
         </p>
       }
@@ -153,9 +159,9 @@
       @if (unauthorizedWithoutKey()) {
         <p class="diagnosis">
           The last request came back <strong>401/403</strong> and carried
-          <strong>no Authorization header</strong> — the app didn’t send a key at all.
-          Either no key is saved yet (type one above and press <strong>Save</strong>), or
-          the Electron main process is still running an older build: restart the app.
+          <strong>no Authorization header</strong> — the app didn’t send a key at all. Either no key
+          is saved yet (type one above and press <strong>Save</strong>), or the Electron main
+          process is still running an older build: restart the app.
         </p>
       }
 
@@ -212,5 +218,5 @@
         </ul>
       }
     </section>
-  </div>
-}
+  }
+</app-settings-pane>

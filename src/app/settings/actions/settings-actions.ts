@@ -1,6 +1,7 @@
 import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
 import { ActionEvent, ActionResultKind } from '../../../../shared/app-config';
 import { SettingsService } from '../../services/settings.service';
+import { SettingsPane } from '../settings-pane/settings-pane';
 
 /**
  * "Actions" settings category: the trigger -> template mappings and the
@@ -12,8 +13,9 @@ import { SettingsService } from '../../services/settings.service';
 @Component({
   selector: 'app-settings-actions',
   changeDetection: ChangeDetectionStrategy.OnPush,
+  imports: [SettingsPane],
   templateUrl: './settings-actions.html',
-  styleUrl: './settings-actions.css',
+  styleUrls: ['../settings-forms.css', './settings-actions.css'],
 })
 export class SettingsActions {
   protected readonly settings = inject(SettingsService);

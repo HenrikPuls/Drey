@@ -1,10 +1,13 @@
-<div class="pane">
+<app-settings-pane
+  title="Actions"
+  description="Trigger → template mappings and the prompt template library."
+>
   <section>
     <h3>Triggers</h3>
     <p class="section-hint">
-      When each template runs. “On save” runs from the note-save pipeline; “Manual button”
-      runs from the editor’s <span class="mono">⋯</span> menu. Each mapping confirms before
-      applying unless you turn that off here or via “don’t ask again”.
+      When each template runs. “On save” runs from the note-save pipeline; “Manual button” runs from
+      the editor’s <span class="mono">⋯</span> menu. Each mapping confirms before applying unless
+      you turn that off here or via “don’t ask again”.
     </p>
 
     @if (triggers().length === 0) {
@@ -46,7 +49,10 @@
     </ul>
 
     <div class="add-trigger">
-      <select [value]="newTriggerTemplate()" (change)="newTriggerTemplate.set($any($event.target).value)">
+      <select
+        [value]="newTriggerTemplate()"
+        (change)="newTriggerTemplate.set($any($event.target).value)"
+      >
         @for (template of templates(); track template.id) {
           <option [value]="template.id">{{ template.name }}</option>
         }
@@ -63,9 +69,9 @@
   <section>
     <h3>Template library</h3>
     <p class="section-hint">
-      A template is a name, a prompt, and the kind of change it makes. “Autotagging” routes
-      through the classifier (its prompt is the classifier’s system prompt); “Update summary”
-      rebuilds a master document’s Summary section.
+      A template is a name, a prompt, and the kind of change it makes. “Autotagging” routes through
+      the classifier (its prompt is the classifier’s system prompt); “Update summary” rebuilds a
+      master document’s Summary section.
     </p>
 
     <ul class="templates">
@@ -83,7 +89,9 @@
             }
             <select
               [value]="template.resultKind"
-              (change)="settings.updateTemplate(template.id, { resultKind: $any($event.target).value })"
+              (change)="
+                settings.updateTemplate(template.id, { resultKind: $any($event.target).value })
+              "
             >
               @for (kind of resultKinds; track kind.id) {
                 <option [value]="kind.id">{{ kind.label }}</option>
@@ -117,4 +125,4 @@
 
     <button type="button" class="ghost" (click)="addTemplate()">Add action</button>
   </section>
-</div>
+</app-settings-pane>

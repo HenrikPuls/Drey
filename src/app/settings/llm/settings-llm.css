@@ -1,87 +1,4 @@
-.pane {
-  display: flex;
-  flex-direction: column;
-  gap: 20px;
-  max-width: 620px;
-}
-
-.switch-row {
-  display: flex;
-  gap: 10px;
-  cursor: pointer;
-}
-
-.switch-row input {
-  margin-top: 2px;
-}
-
-.switch-label {
-  display: block;
-  font-size: 0.88rem;
-  color: var(--text-2);
-}
-
-.switch-hint {
-  display: block;
-  font-size: 0.76rem;
-  color: var(--text-6);
-  margin-top: 2px;
-}
-
-fieldset {
-  border: 0;
-  padding: 0;
-  margin: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 18px;
-}
-
-fieldset[disabled] {
-  opacity: 0.45;
-}
-
-.field {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-
-.field label {
-  font-size: 0.78rem;
-  color: var(--text-4);
-}
-
-.row {
-  display: flex;
-  gap: 8px;
-}
-
-input[type='text'],
-input[type='password'],
-select {
-  flex: 1;
-  min-width: 0;
-  background: var(--bg-input);
-  border: 1px solid var(--border-strong);
-  border-radius: var(--radius);
-  color: var(--text-primary);
-  font: inherit;
-  font-size: 0.82rem;
-  padding: 7px 9px;
-}
-
-.mono {
-  font-family: var(--font-mono);
-  font-size: 0.95em;
-  color: var(--text-5);
-}
-
-.field-hint {
-  margin: 0;
-  font-size: 0.74rem;
-  color: var(--text-6);
-}
+/* Local rules on top of settings-forms.css. */
 
 /* "Is a key actually stored?" -- distinguishes an empty field from a hidden one. */
 .key-status {
@@ -99,22 +16,6 @@ select {
 
 .key-status .pending {
   color: var(--accent);
-}
-
-.ghost {
-  background: transparent;
-  border: 1px solid var(--border-strong);
-  color: var(--text-3);
-  border-radius: var(--radius);
-  font-size: 0.8rem;
-  padding: 7px 12px;
-  cursor: pointer;
-  align-self: flex-start;
-}
-
-.ghost:disabled {
-  opacity: 0.5;
-  cursor: default;
 }
 
 .test-result {
@@ -183,8 +84,6 @@ select {
 
 .empty {
   margin: 10px 0 0;
-  font-size: 0.78rem;
-  color: var(--text-6);
 }
 
 .entries {

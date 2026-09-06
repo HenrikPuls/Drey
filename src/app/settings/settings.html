@@ -24,26 +24,7 @@
   <div class="right">
     <section class="detail">
       @if (settings.draft()) {
-        @switch (selected()) {
-          @case ('llm') {
-            <app-settings-llm />
-          }
-          @case ('assistant') {
-            <app-settings-assistant />
-          }
-          @case ('spellcheck') {
-            <app-settings-spellcheck />
-          }
-          @case ('appearance') {
-            <app-settings-appearance />
-          }
-          @case ('actions') {
-            <app-settings-actions />
-          }
-          @case ('about') {
-            <app-settings-about />
-          }
-        }
+        <ng-container *ngComponentOutlet="selectedComponent()" />
       } @else {
         <p class="loading">Loading settings…</p>
       }

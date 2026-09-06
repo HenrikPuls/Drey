@@ -1,0 +1,118 @@
+/*
+ * Form primitives shared by every Settings category pane. Panes pull this
+ * in through `styleUrls` alongside their own stylesheet, so the switch
+ * rows, field columns and inputs look the same everywhere without each
+ * pane re-declaring them. Pane-specific rules stay in the pane's own file.
+ */
+
+.switch-row {
+  display: flex;
+  gap: 10px;
+  cursor: pointer;
+}
+
+.switch-row input {
+  margin-top: 2px;
+}
+
+.switch-label {
+  display: block;
+  font-size: 0.88rem;
+  color: var(--text-2);
+}
+
+.switch-hint {
+  display: block;
+  font-size: 0.76rem;
+  line-height: 1.5;
+  color: var(--text-6);
+  margin-top: 2px;
+}
+
+fieldset {
+  border: 0;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+fieldset[disabled] {
+  opacity: 0.45;
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.field > label {
+  font-size: 0.78rem;
+  color: var(--text-4);
+}
+
+.row {
+  display: flex;
+  gap: 8px;
+}
+
+input[type='text'],
+input[type='password'],
+select {
+  flex: 1;
+  min-width: 0;
+  background: var(--bg-input);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+  color: var(--text-primary);
+  font: inherit;
+  font-size: 0.82rem;
+  padding: 7px 9px;
+  outline: none;
+}
+
+input[type='text']:focus,
+input[type='password']:focus,
+select:focus {
+  border-color: var(--accent-ring);
+}
+
+.field-hint {
+  margin: 0;
+  font-size: 0.74rem;
+  line-height: 1.6;
+  color: var(--text-6);
+}
+
+.mono {
+  font-family: var(--font-mono);
+  font-size: 0.95em;
+  color: var(--text-5);
+}
+
+.ghost {
+  background: transparent;
+  border: 1px solid var(--border-strong);
+  color: var(--text-3);
+  border-radius: var(--radius);
+  font-size: 0.8rem;
+  padding: 7px 12px;
+  cursor: pointer;
+  align-self: flex-start;
+}
+
+.ghost:hover {
+  background: var(--hover-bg);
+}
+
+.ghost:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.empty {
+  font-size: 0.8rem;
+  color: var(--text-6);
+}
