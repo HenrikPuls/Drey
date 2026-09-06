@@ -1,8 +1,10 @@
 import { Injectable, computed, inject, signal } from '@angular/core';
+import { dailyPathFor } from '../../../shared/daily';
 import { EntryDraft, entryInsertion } from '../../../shared/entry-compose';
 import { ActionOutcome } from '../../../shared/ipc-api';
 import { formatTime } from '../../../shared/timestamp';
 import { TagService } from './tag.service';
+import { VaultService } from './vault.service';
 
 /** Re-exported for existing importers (`Editor`, specs); defined in `markdown-frontmatter.ts`. */
 export { stripFrontmatter } from '../editor/markdown-frontmatter';
@@ -94,6 +96,7 @@ function baseName(relativePath: string): string {
 @Injectable({ providedIn: 'root' })
 export class EditorService {
   private readonly tags = inject(TagService);
+  private readonly vault = inject(VaultService);
 
   private readonly docs = signal<OpenDoc[]>([]);
   private readonly active = signal<string | null>(null);
@@ -242,27 +245,44 @@ export class EditorService {
     if (!this.api) {
       return;
     }
-    const relativePath = `daily/${dateStr}.md`;
-    if (this.docs().some((d) => d.path === relativePath)) {
-      this.active.set(relativePath);
-      return;
+    const nestedPath = dailyPathFor(dateStr);
+    const legacyPath = `daily/${dateStr}.md`;
+    // A note this session may already be open under either layout.
+    for (const candidate of [nestedPath, legacyPath]) {
+      if (this.docs().some((d) => d.path === candidate)) {
+        this.active.set(candidate);
+        return;
+      }
     }
 
     this.isLoading.set(true);
     this.error.set(null);
     try {
-      try {
-        const { content, modifiedMs } = await this.api.readVaultFile(relativePath);
-        this.addDoc(this.makeDoc(relativePath, content, modifiedMs, true));
-      } catch {
-        // No file for that day yet -- open an unsaved draft.
+      // Prefer the nested layout; fall back to a pre-existing flat file;
+      // otherwise open an unsaved draft at the nested path.
+      const existing =
+        (await this.tryReadDaily(nestedPath)) ?? (await this.tryReadDaily(legacyPath));
+      if (existing) {
+        this.addDoc(this.makeDoc(existing.path, existing.content, existing.modifiedMs, true));
+      } else {
         const template = await this.api.buildDailyNoteContent(dateStr);
-        this.addDoc(this.makeDoc(relativePath, template, 0, false));
+        this.addDoc(this.makeDoc(nestedPath, template, 0, false));
       }
     } catch (err) {
       this.error.set(err instanceof Error ? err.message : String(err));
     } finally {
       this.isLoading.set(false);
+    }
+  }
+
+  private async tryReadDaily(
+    path: string,
+  ): Promise<{ path: string; content: string; modifiedMs: number } | null> {
+    try {
+      const { content, modifiedMs } = await this.api!.readVaultFile(path);
+      return { path, content, modifiedMs };
+    } catch {
+      return null;
     }
   }
 
@@ -300,6 +320,26 @@ export class EditorService {
     }
   }
 
+  /**
+   * Tab-bar context menu: close every tab / every tab but one. Each is
+   * routed through `closeTab`, so a dirty tab still raises its own
+   * `confirm()` and a cancel there leaves that tab (and the rest) open.
+   * The path list is snapshotted first because `closeTab` mutates `docs`.
+   */
+  closeAll(): void {
+    for (const path of this.docs().map((d) => d.path)) {
+      this.closeTab(path);
+    }
+  }
+
+  closeOthers(keepPath: string): void {
+    for (const path of this.docs().map((d) => d.path)) {
+      if (path !== keepPath) {
+        this.closeTab(path);
+      }
+    }
+  }
+
   /** Called by the editor component on every buffer change (active tab). */
   updateBuffer(content: string): void {
     this.patchActive({ bufferContent: content });
@@ -334,6 +374,8 @@ export class EditorService {
       return;
     }
 
+    const wasDraft = doc.existsOnDisk === false;
+
     this.isSaving.set(true);
     this.error.set(null);
     try {
@@ -351,6 +393,13 @@ export class EditorService {
       });
       if (result.tags.length > 0) {
         void this.tags.refresh();
+      }
+      // A first save of a draft (a daily note opened from the calendar, or
+      // the quick-capture hotkey) creates a file the sidebar tree does not
+      // know about yet -- no watcher, so pull the tree in. Later, tag-system
+      // folder creation calls `vault.refresh()` at its own write points.
+      if (wasDraft) {
+        void this.vault.refresh();
       }
       const reloadPaths = result.appendedTo.filter((path) => path !== doc.path);
       if (reloadPaths.length > 0) {

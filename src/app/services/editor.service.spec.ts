@@ -217,16 +217,34 @@ describe('EditorService', () => {
   });
 
   describe('openDailyNote', () => {
-    it('opens an existing daily note like any file', async () => {
+    it('opens an existing daily note at the nested path', async () => {
       await service.openDailyNote('2026-09-05');
-      expect(service.openPath()).toBe('daily/2026-09-05.md');
-      expect(service.bufferContent()).toBe('content of daily/2026-09-05.md');
+      expect(service.openPath()).toBe('daily/2026/09/2026-09-05.md');
+      expect(service.bufferContent()).toBe('content of daily/2026/09/2026-09-05.md');
       expect(service.activeIsDraft()).toBe(false);
+    });
+
+    it('falls back to a pre-existing flat daily note', async () => {
+      TestBed.resetTestingModule();
+      const legacyApi: Partial<DreyApi> = {
+        readVaultFile: (relativePath: string) =>
+          relativePath === 'daily/2026-09-05.md'
+            ? Promise.resolve({ content: 'legacy body', modifiedMs: 1 })
+            : Promise.reject(new Error('ENOENT')),
+        listTags: () => Promise.resolve([]),
+      };
+      window.dreyApi = legacyApi as DreyApi;
+      const legacyService = TestBed.inject(EditorService);
+
+      await legacyService.openDailyNote('2026-09-05');
+      expect(legacyService.openPath()).toBe('daily/2026-09-05.md');
+      expect(legacyService.bufferContent()).toBe('legacy body');
     });
 
     it('opens an unsaved draft from the template when the file is missing, and only writes on first real edit', async () => {
       TestBed.resetTestingModule();
       const draftSaves: NoteSaveRequest[] = [];
+      let fileListReads = 0;
       const draftApi: Partial<DreyApi> = {
         readVaultFile: () => Promise.reject(new Error('ENOENT')),
         buildDailyNoteContent: () => Promise.resolve('# 2026-09-06\n\n## 08:00\n'),
@@ -235,12 +253,17 @@ describe('EditorService', () => {
           return echoSave(request);
         },
         listTags: () => Promise.resolve([]),
+        getActiveVault: () => Promise.resolve('E:/vault'),
+        listVaultFiles: () => {
+          fileListReads += 1;
+          return Promise.resolve([]);
+        },
       };
       window.dreyApi = draftApi as DreyApi;
       const draftService = TestBed.inject(EditorService);
 
       await draftService.openDailyNote('2026-09-06');
-      expect(draftService.openPath()).toBe('daily/2026-09-06.md');
+      expect(draftService.openPath()).toBe('daily/2026/09/2026-09-06.md');
       expect(draftService.activeIsDraft()).toBe(true);
       expect(draftService.isDirty()).toBe(false);
 
@@ -250,17 +273,23 @@ describe('EditorService', () => {
 
       draftService.updateBuffer('# 2026-09-06\n\n## 08:00\nEndlich getippt\n');
       expect(draftService.isDirty()).toBe(true);
+      const readsBeforeSave = fileListReads;
       await draftService.save();
+      // `save()` fires `vault.refresh()` without awaiting it; let it settle.
+      await new Promise((resolve) => setTimeout(resolve, 0));
 
       expect(draftSaves).toEqual([
         {
-          path: 'daily/2026-09-06.md',
+          path: 'daily/2026/09/2026-09-06.md',
           body: '# 2026-09-06\n\n## 08:00\nEndlich getippt\n',
           eol: '\n',
         },
       ]);
       expect(draftService.activeIsDraft()).toBe(false);
       expect(draftService.isDirty()).toBe(false);
+      // The first save of a draft created a file the sidebar tree did not
+      // know about -- it is pulled in (no watcher).
+      expect(fileListReads).toBeGreaterThan(readsBeforeSave);
     });
   });
 

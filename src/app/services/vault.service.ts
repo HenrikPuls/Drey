@@ -22,19 +22,27 @@ export class VaultService {
 
   /** Re-reads the active vault path and, if one is set, its file tree. */
   async refresh(): Promise<void> {
-    if (typeof window === 'undefined' || !window.dreyApi) {
-      // Plain `ng serve` in a browser tab, outside Electron -- see App's
-      // own ipcAvailable check. Nothing to load.
+    // No bridge at all (plain `ng serve` / a test that doesn't stub it), or
+    // a main process too old to expose `getActiveVault` -- nothing to load.
+    if (
+      typeof window === 'undefined' ||
+      !window.dreyApi ||
+      typeof window.dreyApi.getActiveVault !== 'function'
+    ) {
       return;
     }
 
-    const activePath = await window.dreyApi.getActiveVault();
-    this.activeVaultPath.set(activePath);
+    try {
+      const activePath = await window.dreyApi.getActiveVault();
+      this.activeVaultPath.set(activePath);
 
-    if (activePath) {
-      await this.loadFileTree();
-    } else {
-      this.fileTree.set([]);
+      if (activePath) {
+        await this.loadFileTree();
+      } else {
+        this.fileTree.set([]);
+      }
+    } catch (err) {
+      this.error.set(err instanceof Error ? err.message : String(err));
     }
   }
 

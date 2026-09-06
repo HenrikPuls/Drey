@@ -87,6 +87,11 @@ export class Sidebar {
     void this.vault.selectVault();
   }
 
+  /** Manual "re-read the vault from disk" -- there is no file watcher. */
+  protected onRefresh(): void {
+    void this.vault.refresh();
+  }
+
   protected onFileClick(entry: VaultFileEntry): void {
     if (entry.type === 'file') {
       void this.editor.openFile(entry.relativePath);

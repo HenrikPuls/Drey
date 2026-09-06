@@ -4,7 +4,19 @@
   <div class="files-head">
     <span class="section-label">Files</span>
     @if (vault.activeVaultPath()) {
-      <button type="button" class="text-btn" (click)="onSelectVault()">Change</button>
+      <div class="files-head-actions">
+        <button
+          type="button"
+          class="icon-btn"
+          (click)="onRefresh()"
+          [disabled]="vault.isLoading()"
+          title="Re-read the vault from disk"
+          aria-label="Refresh files"
+        >
+          <app-icon name="refresh-cw" [size]="12" />
+        </button>
+        <button type="button" class="text-btn" (click)="onSelectVault()">Change</button>
+      </div>
     }
   </div>
 
@@ -46,12 +58,7 @@
 
 <app-open-windows />
 
-<button
-  type="button"
-  class="settings"
-  aria-label="Settings"
-  (click)="settings.openScreen()"
->
+<button type="button" class="settings" aria-label="Settings" (click)="settings.openScreen()">
   <app-icon name="settings" [size]="14" />
   <span>Settings</span>
 </button>

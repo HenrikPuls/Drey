@@ -22,6 +22,7 @@
  * topic notes); `templates/` is also excluded from routing.
  */
 import { ActionOutcome, Frontmatter, NoteSaveRequest, NoteSaveResult } from '../shared/ipc-api';
+import { dailyDateFromPath } from '../shared/daily';
 import { parseDatedEntries } from '../shared/entries';
 import {
   bumpUpdated,
@@ -255,10 +256,4 @@ function dedupe(values: readonly string[]): string[] {
 
 function tagsChanged(before: readonly string[], after: readonly string[]): boolean {
   return before.length !== after.length || after.some((tag, i) => tag !== before[i]);
-}
-
-/** `daily/2026-09-06.md` -> `2026-09-06`, else `null`. */
-function dailyDateFromPath(relPath: string): string | null {
-  const match = /^daily\/(\d{4}-\d{2}-\d{2})\.md$/.exec(relPath);
-  return match ? match[1] : null;
 }

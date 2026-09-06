@@ -29,6 +29,12 @@
   color: var(--text-6);
 }
 
+.files-head-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
 .text-btn {
   border: 0;
   background: transparent;
@@ -40,6 +46,24 @@
 
 .text-btn:hover {
   color: var(--text-primary);
+}
+
+.icon-btn {
+  display: inline-flex;
+  border: 0;
+  background: transparent;
+  color: var(--text-5);
+  cursor: pointer;
+  padding: 0;
+}
+
+.icon-btn:hover:not(:disabled) {
+  color: var(--text-primary);
+}
+
+.icon-btn:disabled {
+  opacity: 0.4;
+  cursor: default;
 }
 
 .tree-scroll {
