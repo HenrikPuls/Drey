@@ -22,7 +22,9 @@ describe('App', () => {
     const fixture = TestBed.createComponent(App);
     await fixture.whenStable();
     const compiled = fixture.nativeElement as HTMLElement;
-    expect(compiled.querySelector('.ipc-warning')?.textContent).toContain('Not running inside Electron');
+    expect(compiled.querySelector('.ipc-warning')?.textContent).toContain(
+      'Not running inside Electron',
+    );
   });
 
   it('renders the sidebar', async () => {

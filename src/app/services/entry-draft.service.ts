@@ -27,7 +27,8 @@ export type SubmitResult = 'appended' | 'needs-topic-confirmation' | 'empty';
 export class EntryDraftService {
   private readonly editor = inject(EditorService);
 
-  readonly open = signal(true);
+  /** The drawer starts collapsed; the header toggle opens it. */
+  readonly open = signal(false);
   readonly topic = signal('');
   readonly text = signal('');
   readonly tags = signal<string[]>([]);

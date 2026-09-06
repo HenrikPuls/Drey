@@ -1,10 +1,10 @@
 import * as fs from 'node:fs';
 import * as fsp from 'node:fs/promises';
 import * as path from 'node:path';
+import { dailyPathFor } from '../shared/daily';
 import { formatDate, formatDateTime, formatTime } from '../shared/timestamp';
 import { VaultManager } from './vault-manager';
 
-const DAILY_DIR = 'daily';
 const TEMPLATE_DIR = 'templates';
 const DAILY_TEMPLATE_FILE = 'daily.md';
 
@@ -49,10 +49,10 @@ export class DailyNoteManager {
   constructor(private readonly vaultManager: VaultManager) {}
 
   /**
-   * Vault-relative path (`daily/2026-09-05.md`) of today's daily note,
-   * creating it -- plus the `daily/` and `templates/` folders and a
-   * starter `templates/daily.md` -- if it doesn't exist yet. Rejects if
-   * no vault is active or the vault folder is gone.
+   * Vault-relative path (`daily/2026/09/2026-09-05.md`) of today's daily
+   * note, creating it -- plus the nested `daily/<year>/<month>/` and the
+   * `templates/` folder and a starter `templates/daily.md` -- if it doesn't
+   * exist yet. Rejects if no vault is active or the vault folder is gone.
    */
   async ensureTodayNote(now: Date = new Date()): Promise<string> {
     const vaultRoot = this.vaultManager.getActiveVaultPath();
@@ -63,9 +63,8 @@ export class DailyNoteManager {
       throw new Error(`Vault folder no longer exists: ${vaultRoot}`);
     }
 
-    const fileName = `${formatDate(now)}.md`;
-    const relativePath = `${DAILY_DIR}/${fileName}`;
-    const absolutePath = path.join(vaultRoot, DAILY_DIR, fileName);
+    const relativePath = dailyPathFor(formatDate(now));
+    const absolutePath = path.join(vaultRoot, ...relativePath.split('/'));
 
     if (fs.existsSync(absolutePath)) {
       return relativePath;
@@ -74,6 +73,7 @@ export class DailyNoteManager {
     const template = await this.loadOrScaffoldTemplate(vaultRoot);
     const content = applyPlaceholders(template, now);
 
+    // Creates the nested `daily/<year>/<month>/` folders on the way.
     await fsp.mkdir(path.dirname(absolutePath), { recursive: true });
     await fsp.writeFile(absolutePath, content, 'utf-8');
     return relativePath;

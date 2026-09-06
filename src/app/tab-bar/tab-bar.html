@@ -5,6 +5,7 @@
     [class.active]="doc.path === editor.activePath()"
     [attr.aria-selected]="doc.path === editor.activePath()"
     (click)="editor.activate(doc.path)"
+    (contextmenu)="openMenu($event, doc.path)"
     [title]="doc.path"
   >
     <span class="name">{{ doc.name }}</span>
@@ -25,3 +26,15 @@
 <button type="button" class="add" disabled aria-label="New note (not yet available)">
   <app-icon name="plus" [size]="11" [strokeWidth]="1.4" />
 </button>
+
+@if (menu(); as m) {
+  <div
+    class="ctx-backdrop"
+    (click)="closeMenu()"
+    (contextmenu)="$event.preventDefault(); closeMenu()"
+  ></div>
+  <div class="ctx-menu" [style.left.px]="m.x" [style.top.px]="m.y">
+    <button type="button" (click)="closeOthers(m.path)">Close others</button>
+    <button type="button" (click)="closeAll()">Close all</button>
+  </div>
+}

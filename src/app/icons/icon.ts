@@ -30,7 +30,8 @@ export type IconName =
   | 'sparkles'
   | 'more-horizontal'
   | 'copy'
-  | 'rotate-ccw';
+  | 'rotate-ccw'
+  | 'refresh-cw';
 
 const ICONS: Record<IconName, readonly IconShape[]> = {
   'chevron-right': [{ kind: 'path', d: 'm9 18 6-6-6-6' }],
@@ -78,13 +79,23 @@ const ICONS: Record<IconName, readonly IconShape[]> = {
   // is Lucide's `<rect>` re-expressed as a rounded-rect path, since this
   // map only renders path / circle primitives.
   copy: [
-    { kind: 'path', d: 'M10 8h10a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H10a2 2 0 0 1-2-2V10a2 2 0 0 1 2-2z' },
+    {
+      kind: 'path',
+      d: 'M10 8h10a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H10a2 2 0 0 1-2-2V10a2 2 0 0 1 2-2z',
+    },
     { kind: 'path', d: 'M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2' },
   ],
   // Lucide "rotate-ccw" -- "restart chat from here".
   'rotate-ccw': [
     { kind: 'path', d: 'M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8' },
     { kind: 'path', d: 'M3 3v5h5' },
+  ],
+  // Lucide "refresh-cw" -- the sidebar's manual "re-read the vault" button.
+  'refresh-cw': [
+    { kind: 'path', d: 'M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8' },
+    { kind: 'path', d: 'M21 3v5h-5' },
+    { kind: 'path', d: 'M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16' },
+    { kind: 'path', d: 'M3 21v-5h5' },
   ],
 };
 

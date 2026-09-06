@@ -1,5 +1,7 @@
 import { Injectable, computed, inject, signal } from '@angular/core';
+import { dailyDateFromPath } from '../../../shared/daily';
 import { formatDate } from '../../../shared/timestamp';
+import { VaultFileEntry } from '../../../shared/ipc-api';
 import { VaultService } from './vault.service';
 
 /** One cell in the mini-calendar grid. */
@@ -40,7 +42,8 @@ export const WEEKDAY_INITIALS = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
  * day is selected. Opening a day's note is not done here -- the `Calendar`
  * component calls `EditorService.openDailyNote()` -- this service only owns
  * the calendar's own state plus the "does this day have a note?" lookup,
- * derived from the vault file tree (`daily/YYYY-MM-DD.md`).
+ * derived from the vault file tree (`daily/<year>/<month>/YYYY-MM-DD.md`,
+ * or a legacy flat `daily/YYYY-MM-DD.md`).
  */
 @Injectable({ providedIn: 'root' })
 export class CalendarService {
@@ -58,16 +61,28 @@ export class CalendarService {
 
   readonly monthLabel = computed(() => `${MONTH_NAMES[this.viewMonth()]} ${this.viewYear()}`);
 
-  /** Set of `YYYY-MM-DD` for which a `daily/` note exists in the vault. */
+  /**
+   * Set of `YYYY-MM-DD` for which a `daily/` note exists in the vault.
+   * Walks the whole `daily/` subtree so both the nested
+   * `daily/<year>/<month>/` layout and any legacy flat files are counted;
+   * `dailyDateFromPath` recognises either.
+   */
   private readonly noteDates = computed<ReadonlySet<string>>(() => {
     const daily = this.vault.fileTree().find((e) => e.type === 'directory' && e.name === 'daily');
     const dates = new Set<string>();
-    for (const child of daily?.children ?? []) {
-      const match = /^(\d{4}-\d{2}-\d{2})\.md$/.exec(child.name);
-      if (child.type === 'file' && match) {
-        dates.add(match[1]);
+    const walk = (entries: readonly VaultFileEntry[]): void => {
+      for (const entry of entries) {
+        if (entry.type === 'directory') {
+          walk(entry.children ?? []);
+        } else {
+          const date = dailyDateFromPath(entry.relativePath);
+          if (date) {
+            dates.add(date);
+          }
+        }
       }
-    }
+    };
+    walk(daily?.children ?? []);
     return dates;
   });
 
