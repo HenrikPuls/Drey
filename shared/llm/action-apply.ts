@@ -8,10 +8,10 @@
  *
  * Pure string in / string out; the Vitest suite covers them.
  */
-import { parseDatedEntries } from './entries';
-import { readFrontmatter, splitFrontmatter, writeFrontmatter } from './frontmatter';
-import { extractInlineTags } from './inline-tags';
-import { formatTimestamp } from './timestamp';
+import { parseDatedEntries } from '../entries';
+import { readFrontmatter, splitFrontmatter, writeFrontmatter } from '../frontmatter';
+import { extractInlineTags } from '../inline-tags';
+import { formatTimestamp } from '../timestamp';
 
 // -- Autotagging ------------------------------------------------------------
 

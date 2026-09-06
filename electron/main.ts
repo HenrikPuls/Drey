@@ -23,14 +23,16 @@ import {
   VaultFileContent,
   VaultFileEntry,
 } from '../shared/ipc-api';
-import { ActionRunner } from './action-runner';
 import { AppConfigStore } from './app-config';
 import { ChatStore } from './chat-store';
-import { ClassifierService } from './classifier';
 import { DailyNoteManager } from './daily-note';
-import { LlmDebugLog } from './llm-debug-log';
-import { LlmTaskRegistry } from './llm-tasks';
-import { LmStudioClient } from './lm-studio-client';
+import {
+  ActionRunner,
+  ClassifierService,
+  LlmDebugLog,
+  LlmTaskRegistry,
+  LmStudioClient,
+} from './llm';
 import { attachContextMenu, buildApplicationMenu } from './menu';
 import { NoteManager } from './note-manager';
 import { SpellcheckService } from './spellcheck';

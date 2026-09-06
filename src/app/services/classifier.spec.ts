@@ -4,7 +4,7 @@ import {
   normalizeTagToken,
   parseTagSuggestion,
   parseTaskClassification,
-} from '../../../shared/classifier';
+} from '../../../shared/llm';
 
 describe('normalizeTagToken', () => {
   it('lower-cases, transliterates umlauts, and single-words', () => {
@@ -32,7 +32,9 @@ describe('parseTagSuggestion', () => {
   });
 
   it('de-duplicates and normalises suggested tokens', () => {
-    expect(parseTagSuggestion('{"vorschlaege":["Sailing","sailing","Team X"],"neuer_tag":""}')).toEqual({
+    expect(
+      parseTagSuggestion('{"vorschlaege":["Sailing","sailing","Team X"],"neuer_tag":""}'),
+    ).toEqual({
       vorschlaege: ['sailing', 'team-x'],
       neuer_tag: null,
     });
@@ -52,9 +54,9 @@ describe('parseTaskClassification', () => {
   });
 
   it('rejects a bad date and a bad priority to null', () => {
-    expect(parseTaskClassification('{"typ":"notiz","faelligkeit":"soon","prioritaet":"urgent"}')).toEqual(
-      { typ: 'notiz', faelligkeit: null, prioritaet: null },
-    );
+    expect(
+      parseTaskClassification('{"typ":"notiz","faelligkeit":"soon","prioritaet":"urgent"}'),
+    ).toEqual({ typ: 'notiz', faelligkeit: null, prioritaet: null });
   });
 
   it('returns null without a valid typ', () => {
@@ -69,7 +71,11 @@ describe('message builders', () => {
   });
 
   it('injects the registry into the tag-suggestion system prompt', () => {
-    const msgs = buildTagSuggestionMessages('Tags:\n{registry_list}\nEnde', '- a (thema): x', 'notiz text');
+    const msgs = buildTagSuggestionMessages(
+      'Tags:\n{registry_list}\nEnde',
+      '- a (thema): x',
+      'notiz text',
+    );
     expect(msgs[0].content).toBe('Tags:\n- a (thema): x\nEnde');
     expect(msgs[1]).toEqual({ role: 'user', content: 'notiz text' });
   });

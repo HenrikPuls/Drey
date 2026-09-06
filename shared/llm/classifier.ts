@@ -7,7 +7,7 @@
  * local model does better with a matching language (CLAUDE.md language
  * convention; `specs/classifier-spec.md`).
  */
-import { formatDate } from './timestamp';
+import { formatDate } from '../timestamp';
 import { ChatMessage, parseJsonObject } from './llm';
 
 // -- Prompt 1: task vs. note (runs on every capture) -------------------------
@@ -51,7 +51,9 @@ export function parseTaskClassification(reply: string): TaskClassification | nul
       ? obj['faelligkeit']
       : null;
   const prioritaet =
-    obj['prioritaet'] === 'hoch' || obj['prioritaet'] === 'mittel' || obj['prioritaet'] === 'niedrig'
+    obj['prioritaet'] === 'hoch' ||
+    obj['prioritaet'] === 'mittel' ||
+    obj['prioritaet'] === 'niedrig'
       ? (obj['prioritaet'] as TaskPriority)
       : null;
   return { typ, faelligkeit, prioritaet };

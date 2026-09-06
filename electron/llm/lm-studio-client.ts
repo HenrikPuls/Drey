@@ -16,11 +16,10 @@
  * `electron/`-only; the request/reply shaping lives in `shared/llm.ts` and
  * `shared/classifier.ts` where the Vitest suite covers it.
  */
-import { LlmEndpoint } from '../shared/app-config';
-import { LlmConnectionTest } from '../shared/ipc-api';
-import { ChatMessage } from '../shared/llm';
-import { maskAuthorizationHeader, truncate } from '../shared/llm-debug';
-import { AppConfigStore } from './app-config';
+import { LlmEndpoint } from '../../shared/app-config';
+import { LlmConnectionTest } from '../../shared/ipc-api';
+import { ChatMessage, maskAuthorizationHeader, truncate } from '../../shared/llm';
+import { AppConfigStore } from '../app-config';
 import { LlmDebugLog } from './llm-debug-log';
 
 /** GET /models is a cheap reachability probe -- fail fast if nothing is listening. */
@@ -143,8 +142,7 @@ export class LmStudioClient {
         body: init.body,
         // A deadline where one makes sense (the /models probe), the
         // caller's cancellation where it does not (chat).
-        signal:
-          init.timeoutMs !== undefined ? AbortSignal.timeout(init.timeoutMs) : init.signal,
+        signal: init.timeoutMs !== undefined ? AbortSignal.timeout(init.timeoutMs) : init.signal,
       });
       const text = await res.text().catch(() => '');
       this.debug.record({
