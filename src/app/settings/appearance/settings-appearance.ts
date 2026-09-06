@@ -1,6 +1,7 @@
 import { ChangeDetectionStrategy, Component, inject } from '@angular/core';
 import { EDITOR_FONT_FAMILIES } from '../../../../shared/app-config';
 import { SettingsService } from '../../services/settings.service';
+import { SettingsPane } from '../settings-pane/settings-pane';
 
 /**
  * "Appearance" settings category. One control today: the document editor's
@@ -14,8 +15,9 @@ import { SettingsService } from '../../services/settings.service';
 @Component({
   selector: 'app-settings-appearance',
   changeDetection: ChangeDetectionStrategy.OnPush,
+  imports: [SettingsPane],
   templateUrl: './settings-appearance.html',
-  styleUrl: './settings-appearance.css',
+  styleUrls: ['../settings-forms.css', './settings-appearance.css'],
 })
 export class SettingsAppearance {
   protected readonly settings = inject(SettingsService);

@@ -1,52 +1,4 @@
-.pane {
-  display: flex;
-  flex-direction: column;
-  gap: 20px;
-  max-width: 620px;
-}
-
-.switch-row {
-  display: flex;
-  gap: 10px;
-  cursor: pointer;
-}
-
-.switch-row input {
-  margin-top: 2px;
-}
-
-.switch-label {
-  display: block;
-  font-size: 0.88rem;
-  color: var(--text-2);
-}
-
-.switch-hint {
-  display: block;
-  font-size: 0.76rem;
-  color: var(--text-6);
-  margin-top: 2px;
-  line-height: 1.5;
-}
-
-fieldset {
-  border: 0;
-  padding: 0;
-  margin: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 18px;
-}
-
-fieldset[disabled] {
-  opacity: 0.45;
-}
-
-.field {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
+/* Local overrides on top of settings-forms.css. */
 
 .field > label,
 .row label {
@@ -55,25 +7,13 @@ fieldset[disabled] {
 }
 
 .row {
-  display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 10px;
 }
 
 select {
-  background: var(--bg-input);
-  border: 1px solid var(--border-strong);
-  border-radius: var(--radius);
-  color: var(--text-primary);
   font-family: var(--font-sans);
-  font-size: 0.82rem;
-  padding: 7px 9px;
-  outline: none;
-}
-
-select:focus {
-  border-color: var(--accent-ring);
 }
 
 .dict-list {
@@ -123,32 +63,15 @@ select:focus {
 }
 
 .ghost {
-  background: transparent;
-  border: 1px solid var(--border-strong);
-  border-radius: var(--radius);
   color: var(--text-4);
-  font-family: var(--font-sans);
   font-size: 0.76rem;
   padding: 4px 10px;
-  cursor: pointer;
 }
 
 .ghost:hover {
   color: var(--text-primary);
-  background: var(--hover-bg);
 }
 
 .ghost.danger:hover {
   color: var(--accent-hover);
-}
-
-.field-hint {
-  margin: 0;
-  font-size: 0.74rem;
-  line-height: 1.6;
-  color: var(--text-6);
-}
-
-.mono {
-  font-family: var(--font-mono);
 }

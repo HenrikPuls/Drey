@@ -1,5 +1,5 @@
-@if (assistant(); as assistant) {
-  <div class="pane">
+<app-settings-pane title="Assistant" description="Defaults for the per-note assistant panel.">
+  @if (assistant(); as assistant) {
     <label class="switch-row">
       <input
         type="checkbox"
@@ -29,9 +29,7 @@
     }
 
     <p class="note">
-      Edit the prompt under <strong>Actions</strong> → <span class="mono">Summarise note</span>. The
-      prompt text itself stays German — it processes German note content (see CLAUDE.md, "Language
-      Convention").
+      Edit the prompt under <strong>Actions</strong> → <span class="mono">Summarise note</span>.
     </p>
-  </div>
-}
+  }
+</app-settings-pane>

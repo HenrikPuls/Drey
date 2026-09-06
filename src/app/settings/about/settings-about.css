@@ -1,9 +1,4 @@
-.pane {
-  display: flex;
-  flex-direction: column;
-  gap: 24px;
-  max-width: 620px;
-}
+/* Local rules on top of settings-forms.css. */
 
 .block {
   display: flex;
@@ -111,8 +106,4 @@ h3 {
   color: var(--text-4);
   background: var(--bg-input);
   border-top: 1px solid var(--border);
-}
-
-.mono {
-  font-family: var(--font-mono);
 }

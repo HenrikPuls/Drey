@@ -1,0 +1,30 @@
+:host {
+  display: block;
+}
+
+.pane-head {
+  margin-bottom: 20px;
+}
+
+.pane-head h2 {
+  margin: 0;
+  font-family: var(--font-serif);
+  font-size: 1rem;
+  font-weight: 500;
+  color: var(--text-heading);
+}
+
+.pane-description {
+  margin: 4px 0 0;
+  font-size: 0.78rem;
+  line-height: 1.6;
+  color: var(--text-6);
+  max-width: 620px;
+}
+
+.pane {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  max-width: 620px;
+}
