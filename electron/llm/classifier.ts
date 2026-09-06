@@ -15,7 +15,7 @@ import {
   buildTaskMessages,
   parseTagSuggestion,
   parseTaskClassification,
-} from '../shared/classifier';
+} from '../../shared/llm';
 import { LmStudioClient } from './lm-studio-client';
 
 export class ClassifierService {

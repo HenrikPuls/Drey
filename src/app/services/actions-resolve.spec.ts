@@ -1,4 +1,4 @@
-import { resolveActions } from '../../../shared/actions';
+import { resolveActions } from '../../../shared/llm';
 import { DEFAULT_APP_CONFIG, normalizeAppConfig } from '../../../shared/app-config';
 
 describe('resolveActions', () => {

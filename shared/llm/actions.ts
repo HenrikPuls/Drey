@@ -7,7 +7,7 @@
  *
  * See `docs/09_architecture_decisions/0011-unified-confirmation-flow.md`.
  */
-import { ActionEvent, ActionResultKind, AppConfig, BuiltinAction } from './app-config';
+import { ActionEvent, ActionResultKind, AppConfig, BuiltinAction } from '../app-config';
 
 /**
  * The document an action runs against -- always the active editor tab

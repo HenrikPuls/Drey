@@ -32,7 +32,7 @@ import {
 import { appendHistoryEntry } from '../shared/history';
 import { extractInlineTags } from '../shared/inline-tags';
 import { formatDate, formatDateTime } from '../shared/timestamp';
-import { ActionRunner } from './action-runner';
+import { ActionRunner } from './llm';
 import { TagIndex } from './tag-index';
 import { VaultManager } from './vault-manager';
 

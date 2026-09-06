@@ -9,29 +9,28 @@
  * `shared/` code; this class sequences the classifier / LLM / registry
  * calls around it.
  */
-import { ActionEvent, NOTE_SUMMARY_PROMPT } from '../shared/app-config';
+import { ActionEvent, NOTE_SUMMARY_PROMPT } from '../../shared/app-config';
 import {
   ActionContext,
   ActionOutcome,
+  applySummarySection,
   AskOutcome,
+  ChatMessage,
+  mergeFrontmatterTags,
+  parseJsonObject,
   ResolvedAction,
   resolveActions,
-} from '../shared/actions';
-import {
-  applySummarySection,
-  mergeFrontmatterTags,
   selectSummaryInput,
   untaggedEntryText,
-} from '../shared/action-apply';
-import { readFrontmatter } from '../shared/frontmatter';
-import { ChatMessage, parseJsonObject } from '../shared/llm';
-import { formatRegistry } from '../shared/tag-registry';
-import { pickPreviewStyle } from '../shared/text-diff';
-import { AppConfigStore } from './app-config';
+} from '../../shared/llm';
+import { readFrontmatter } from '../../shared/frontmatter';
+import { formatRegistry } from '../../shared/tag-registry';
+import { pickPreviewStyle } from '../../shared/text-diff';
+import { AppConfigStore } from '../app-config';
 import { ClassifierService } from './classifier';
 import { CANCELLED_MESSAGE, isAbortError, LlmTaskRegistry } from './llm-tasks';
 import { LmStudioClient } from './lm-studio-client';
-import { TagIndex } from './tag-index';
+import { TagIndex } from '../tag-index';
 
 const GENERIC_SYSTEM_SUFFIX =
   '\n\nGib das vollständige, überarbeitete Markdown-Dokument zurück – ohne Code-Fence, ohne Erklärung.';
@@ -195,7 +194,10 @@ export class ActionRunner {
     }
     const merged = mergeFrontmatterTags(context.body, proposed);
     if (!merged) {
-      return noop(action, 'No new tags to add (the note may already carry them, or has no frontmatter).');
+      return noop(
+        action,
+        'No new tags to add (the note may already carry them, or has no frontmatter).',
+      );
     }
     return {
       kind: 'edit',

@@ -1,4 +1,10 @@
-import { LlmDebugEntry, maskAuthorizationHeader, maskSecret, toCurl, truncate } from '../../../shared/llm-debug';
+import {
+  LlmDebugEntry,
+  maskAuthorizationHeader,
+  maskSecret,
+  toCurl,
+  truncate,
+} from '../../../shared/llm';
 
 function entry(patch: Partial<LlmDebugEntry> = {}): LlmDebugEntry {
   return {
@@ -33,9 +39,7 @@ describe('maskSecret', () => {
 
 describe('maskAuthorizationHeader', () => {
   it('masks only the token, keeping the scheme visible', () => {
-    expect(maskAuthorizationHeader('Bearer sk-unsloth-ABCDEF123456')).toBe(
-      'Bearer sk-unslo…3456',
-    );
+    expect(maskAuthorizationHeader('Bearer sk-unsloth-ABCDEF123456')).toBe('Bearer sk-unslo…3456');
   });
 
   it('masks a non-bearer value whole (no scheme kept)', () => {

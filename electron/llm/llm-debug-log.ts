@@ -9,7 +9,7 @@
  * already masked (`shared/llm-debug.ts`); the real key never leaves
  * `AppConfigStore`.
  */
-import { LlmDebugEntry } from '../shared/llm-debug';
+import { LlmDebugEntry } from '../../shared/llm';
 
 /** Enough to see a connection test plus a couple of real calls; bounded so a long session can't grow without limit. */
 const MAX_ENTRIES = 50;

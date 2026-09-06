@@ -3,7 +3,7 @@ import {
   mergeFrontmatterTags,
   selectSummaryInput,
   untaggedEntryText,
-} from '../../../shared/action-apply';
+} from '../../../shared/llm';
 
 describe('untaggedEntryText', () => {
   it('collects only the dated entries that carry no inline tag', () => {

@@ -13,7 +13,7 @@ import {
   normalizeAppConfig,
   normalizeEditorFontFamily,
 } from '../../../shared/app-config';
-import { ResolvedAction, resolveActions } from '../../../shared/actions';
+import { ResolvedAction, resolveActions } from '../../../shared/llm';
 import { deepEqual } from '../../../shared/deep-equal';
 import { LlmConnectionTest } from '../../../shared/ipc-api';
 

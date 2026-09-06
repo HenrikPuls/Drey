@@ -9,7 +9,7 @@ import {
   signal,
 } from '@angular/core';
 import { LlmDebugEntry } from '../../../../shared/ipc-api';
-import { maskSecret, toCurl } from '../../../../shared/llm-debug';
+import { maskSecret, toCurl } from '../../../../shared/llm';
 import { LlmDebugService } from '../../services/llm-debug.service';
 import { SettingsService } from '../../services/settings.service';
 import { SettingsPane } from '../settings-pane/settings-pane';

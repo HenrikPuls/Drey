@@ -8,14 +8,18 @@
  * not a runtime surprise. See docs/09_architecture_decisions/0001-*.md.
  */
 import type { AppConfig, CustomDictionary, LlmEndpoint } from './app-config';
-import type { ActionContext, ActionOutcome, AskOutcome } from './actions';
+import type { ActionContext, ActionOutcome, AskOutcome, LlmDebugEntry } from './llm';
 import type { ChatThread } from './chat-thread';
-import type { LlmDebugEntry } from './llm-debug';
 
 export type { AppConfig, LlmEndpoint, CustomDictionary } from './app-config';
 export type { ChatCard, ChatCardRole, ChatThread } from './chat-thread';
-export type { LlmDebugEntry } from './llm-debug';
-export type { ActionContext, ActionOutcome, AskOutcome, ResolvedAction } from './actions';
+export type {
+  ActionContext,
+  ActionOutcome,
+  AskOutcome,
+  LlmDebugEntry,
+  ResolvedAction,
+} from './llm';
 
 /**
  * Channel names. Most are `ipcMain.handle` / `ipcRenderer.invoke` request
