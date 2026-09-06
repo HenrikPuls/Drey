@@ -1,0 +1,67 @@
+@if (config(); as spell) {
+  <div class="pane">
+    <label class="switch-row">
+      <input
+        type="checkbox"
+        [checked]="spell.enabled"
+        (change)="onEnabledChange($any($event.target).checked)"
+      />
+      <span>
+        <span class="switch-label">Check spelling while typing</span>
+        <span class="switch-hint">
+          Misspelled words get a red wavy underline in the entry editor; clicking one offers
+          corrections. Runs only once the entry has a topic, a person or a meeting.
+        </span>
+      </span>
+    </label>
+
+    <fieldset [disabled]="!spell.enabled">
+      <div class="field">
+        <label for="spell-language">Language</label>
+        <select
+          id="spell-language"
+          [value]="spell.language"
+          (change)="onLanguageChange($any($event.target).value)"
+        >
+          @for (language of languages(); track language.id) {
+            <option [value]="language.id" [disabled]="!language.loaded">
+              {{ language.label }}{{ language.loaded ? '' : ' (cannot be loaded)' }}
+            </option>
+          }
+        </select>
+      </div>
+
+      <div class="field">
+        <div class="row">
+          <label>Dictionaries</label>
+          <button type="button" class="ghost" (click)="addDictionary()">Add dictionary …</button>
+        </div>
+
+        <ul class="dict-list">
+          @for (language of languages(); track language.id) {
+            <li class="dict" [class.broken]="!language.loaded">
+              <span class="dict-label">{{ language.label }}</span>
+              <span class="dict-id mono">{{ language.id }}</span>
+              @if (bundledIds.has(language.id)) {
+                <span class="dict-tag">bundled</span>
+              } @else {
+                <button type="button" class="ghost danger" (click)="removeDictionary(language.id)">
+                  Remove
+                </button>
+              }
+              @if (language.error) {
+                <span class="dict-error">{{ language.error }}</span>
+              }
+            </li>
+          }
+        </ul>
+
+        <p class="field-hint">
+          A Hunspell pair is expected: pick the <span class="mono">.dic</span> file, its same-named
+          <span class="mono">.aff</span> file must sit in the same folder. The files are not copied
+          — if that folder moves, the dictionary is listed here as unloadable.
+        </p>
+      </div>
+    </fieldset>
+  </div>
+}

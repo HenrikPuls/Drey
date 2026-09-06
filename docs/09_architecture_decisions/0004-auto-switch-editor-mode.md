@@ -2,8 +2,11 @@
 
 ## Status
 
-Accepted — implemented in milestone 3 (editor) as an opt-in extension of
-the source/rendered toggle.
+**Superseded by [ADR-0008](0008-editor-mode-menu-and-rendered-preview.md).**
+Shipped in milestone 3 as an opt-in extension of the source/rendered
+toggle; the editor rework removed auto-switch, the toggle, `caretOffset`
+and the `source-map.ts` / `preview-caret.ts` mapping. Kept for the history
+of why per-character caret mapping was tried.
 
 ## Context
 

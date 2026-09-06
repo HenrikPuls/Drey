@@ -16,7 +16,9 @@ describe('VaultService', () => {
   });
 
   it('loads the active vault and its file tree when available', async () => {
-    const fakeTree: VaultFileEntry[] = [{ name: 'sailing', relativePath: 'sailing', type: 'directory', children: [] }];
+    const fakeTree: VaultFileEntry[] = [
+      { name: 'sailing', relativePath: 'sailing', type: 'directory', children: [] },
+    ];
     const fakeApi: Partial<DreyApi> = {
       getActiveVault: () => Promise.resolve('E:/vault'),
       listVaultFiles: () => Promise.resolve(fakeTree),

@@ -53,4 +53,49 @@ describe('Calendar', () => {
     expect(editor.openPath()).toBe('daily/2026-09-02.md');
     expect(editor.activeIsDraft()).toBe(true);
   });
+
+  it('opens the month/year picker from the header and jumps the shown month', () => {
+    cal.viewYear.set(2026);
+    cal.viewMonth.set(8);
+    fixture.detectChanges();
+    const compiled = fixture.nativeElement as HTMLElement;
+
+    compiled.querySelector<HTMLButtonElement>('.month')!.click();
+    fixture.detectChanges();
+
+    // Day grid is replaced by twelve month cells; the header now shows the year.
+    expect(compiled.querySelectorAll('.month-cell').length).toBe(12);
+    expect(compiled.querySelectorAll('.day').length).toBe(0);
+    expect(compiled.querySelector('.month')?.textContent).toContain('2026');
+
+    // While the picker is open the ‹ › buttons step the year, and stepping
+    // alone must not move the calendar underneath.
+    compiled.querySelector<HTMLButtonElement>('.nav-btn')!.click();
+    fixture.detectChanges();
+    expect(compiled.querySelector('.month')?.textContent).toContain('2025');
+    expect(cal.viewYear()).toBe(2026);
+
+    // Picking a month commits year + month and returns to the day grid.
+    const cells = compiled.querySelectorAll<HTMLButtonElement>('.month-cell');
+    cells[2].click();
+    fixture.detectChanges();
+    expect([cal.viewYear(), cal.viewMonth()]).toEqual([2025, 2]);
+    expect(compiled.querySelector('.month')?.textContent).toContain('March 2025');
+    expect(compiled.querySelectorAll('.day').length).toBe(42);
+  });
+
+  it('closes the picker on Escape without changing the shown month', () => {
+    cal.viewYear.set(2026);
+    cal.viewMonth.set(8);
+    fixture.detectChanges();
+    const compiled = fixture.nativeElement as HTMLElement;
+
+    compiled.querySelector<HTMLButtonElement>('.month')!.click();
+    fixture.detectChanges();
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
+    fixture.detectChanges();
+
+    expect(compiled.querySelectorAll('.month-cell').length).toBe(0);
+    expect([cal.viewYear(), cal.viewMonth()]).toEqual([2026, 8]);
+  });
 });

@@ -1,0 +1,53 @@
+@if (pending(); as req) {
+  <div class="backdrop" (click)="onCancel()"></div>
+  <div class="dialog" role="dialog" aria-modal="true" aria-labelledby="confirm-title">
+    <header>
+      <h2 id="confirm-title">{{ req.title }}</h2>
+      @if (req.summary) {
+        <p class="summary">{{ req.summary }}</p>
+      }
+    </header>
+
+    @if (req.previewStyle === 'localized') {
+      <div class="preview diff" role="figure" aria-label="Line changes">
+        @for (line of diffLines(); track $index) {
+          @if (line.type === 'gap') {
+            <div class="row gap">⋯ {{ line.count }} unchanged line{{ line.count === 1 ? '' : 's' }}</div>
+          } @else {
+            <div class="row" [class.add]="line.type === 'add'" [class.del]="line.type === 'del'">
+              <span class="sign">{{ line.type === 'add' ? '+' : line.type === 'del' ? '−' : ' ' }}</span>
+              <span class="text">{{ line.text || ' ' }}</span>
+            </div>
+          }
+        }
+      </div>
+    } @else {
+      <div class="preview side-by-side">
+        <div class="pane">
+          <div class="pane-label">Before</div>
+          <pre>{{ req.before }}</pre>
+        </div>
+        <div class="pane">
+          <div class="pane-label">After</div>
+          <pre>{{ req.after }}</pre>
+        </div>
+      </div>
+    }
+
+    <footer>
+      @if (req.triggerId) {
+        <label class="dont-ask">
+          <input
+            type="checkbox"
+            [checked]="dontAskAgain()"
+            (change)="dontAskAgain.set($any($event.target).checked)"
+          />
+          Don’t ask again for this action
+        </label>
+      }
+      <div class="spacer"></div>
+      <button type="button" class="ghost" (click)="onCancel()">Cancel</button>
+      <button type="button" class="primary" (click)="onConfirm()">Apply</button>
+    </footer>
+  </div>
+}

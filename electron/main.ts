@@ -1,9 +1,40 @@
-import { app, BrowserWindow, globalShortcut, ipcMain, Menu, net, protocol } from 'electron';
+import { app, BrowserWindow, dialog, globalShortcut, ipcMain, Menu, net, protocol } from 'electron';
+import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { pathToFileURL } from 'node:url';
-import { AppInfo, IPC_CHANNELS, VaultFileContent, VaultFileEntry } from '../shared/ipc-api';
+import {
+  ActionContext,
+  ActionOutcome,
+  AppConfig,
+  AppInfo,
+  AskOutcome,
+  ChatThread,
+  CustomDictionary,
+  IPC_CHANNELS,
+  LlmConnectionTest,
+  LlmDebugEntry,
+  LlmEndpoint,
+  NoteSaveRequest,
+  NoteSaveResult,
+  SpellCheckResult,
+  SpellLanguage,
+  TagEntry,
+  TagRegistryEntry,
+  VaultFileContent,
+  VaultFileEntry,
+} from '../shared/ipc-api';
+import { ActionRunner } from './action-runner';
+import { AppConfigStore } from './app-config';
+import { ChatStore } from './chat-store';
+import { ClassifierService } from './classifier';
 import { DailyNoteManager } from './daily-note';
+import { LlmDebugLog } from './llm-debug-log';
+import { LlmTaskRegistry } from './llm-tasks';
+import { LmStudioClient } from './lm-studio-client';
 import { attachContextMenu, buildApplicationMenu } from './menu';
+import { NoteManager } from './note-manager';
+import { SpellcheckService } from './spellcheck';
+import { TagIndex } from './tag-index';
 import { VaultManager } from './vault-manager';
 
 /**
@@ -51,6 +82,14 @@ protocol.registerSchemesAsPrivileged([
       stream: true,
     },
   },
+  // Serves images referenced from notes (`![](relative/path.png)`) straight
+  // from inside the active vault. `standard` so `drey-asset://asset/<path>`
+  // parses with a normal pathname; `secure` so an `<img>` on the privileged
+  // `app://` page is allowed to load it.
+  {
+    scheme: 'drey-asset',
+    privileges: { standard: true, secure: true, supportFetchAPI: true, stream: true },
+  },
 ]);
 
 function registerAppProtocol(): void {
@@ -70,7 +109,36 @@ function registerAppProtocol(): void {
   });
 }
 
-function registerIpcHandlers(vaultManager: VaultManager, dailyNotes: DailyNoteManager): void {
+/**
+ * `drey-asset://asset/<url-encoded vault-relative path>` -> the file inside
+ * the active vault. `VaultManager.resolveAssetPath` applies the same escape
+ * guard as the IPC read path; anything it rejects (no vault, `..`, absolute)
+ * is a plain 404. The renderer only ever builds these URLs from
+ * `resolveVaultImageUrl`, which already normalises the path.
+ */
+function registerAssetProtocol(vaultManager: VaultManager): void {
+  protocol.handle('drey-asset', (request) => {
+    const relativePath = decodeURIComponent(new URL(request.url).pathname).replace(/^\/+/, '');
+    const filePath = vaultManager.resolveAssetPath(relativePath);
+    if (!filePath) {
+      return new Response('Not found', { status: 404 });
+    }
+    return net.fetch(pathToFileURL(filePath).toString());
+  });
+}
+
+function registerIpcHandlers(
+  vaultManager: VaultManager,
+  dailyNotes: DailyNoteManager,
+  noteManager: NoteManager,
+  tagIndex: TagIndex,
+  appConfig: AppConfigStore,
+  lmStudio: LmStudioClient,
+  actionRunner: ActionRunner,
+  llmDebug: LlmDebugLog,
+  chatStore: ChatStore,
+  spellcheck: SpellcheckService,
+): void {
   ipcMain.handle(IPC_CHANNELS.getAppInfo, (): AppInfo => ({
     appVersion: app.getVersion(),
     electronVersion: process.versions.electron,
@@ -82,9 +150,11 @@ function registerIpcHandlers(vaultManager: VaultManager, dailyNotes: DailyNoteMa
   ipcMain.handle(IPC_CHANNELS.vaultGetActive, (): string | null =>
     vaultManager.getActiveVaultPath(),
   );
-  ipcMain.handle(IPC_CHANNELS.vaultSelect, (): Promise<string | null> =>
-    vaultManager.selectVault(),
-  );
+  ipcMain.handle(IPC_CHANNELS.vaultSelect, async (): Promise<string | null> => {
+    const selected = await vaultManager.selectVault();
+    await tagIndex.rebuild();
+    return selected;
+  });
   ipcMain.handle(IPC_CHANNELS.vaultListFiles, (): Promise<VaultFileEntry[]> =>
     vaultManager.listFiles(),
   );
@@ -108,6 +178,98 @@ function registerIpcHandlers(vaultManager: VaultManager, dailyNotes: DailyNoteMa
   ipcMain.handle(IPC_CHANNELS.dailyBuildContent, (_event, date: string): Promise<string> =>
     dailyNotes.noteContentFor(date),
   );
+  ipcMain.handle(
+    IPC_CHANNELS.noteSave,
+    (_event, request: NoteSaveRequest): Promise<NoteSaveResult> => noteManager.saveNote(request),
+  );
+  ipcMain.handle(IPC_CHANNELS.tagList, (): TagEntry[] => tagIndex.getTags());
+  ipcMain.handle(IPC_CHANNELS.tagRegistry, (): TagRegistryEntry[] => tagIndex.getRegistry());
+
+  ipcMain.handle(IPC_CHANNELS.configGet, (): AppConfig => appConfig.get());
+  ipcMain.handle(IPC_CHANNELS.configSet, (_event, next: AppConfig): AppConfig => {
+    const stored = appConfig.set(next);
+    // The language or a dictionary path may have changed; the next check
+    // reloads rather than answering from a stale dictionary.
+    spellcheck.invalidate();
+    return stored;
+  });
+  ipcMain.handle(IPC_CHANNELS.llmListModels, (_event, override?: LlmEndpoint): Promise<string[]> =>
+    lmStudio.listModels(override),
+  );
+  ipcMain.handle(
+    IPC_CHANNELS.llmTestConnection,
+    (_event, override?: LlmEndpoint): Promise<LlmConnectionTest> =>
+      lmStudio.testConnection(override),
+  );
+  ipcMain.handle(IPC_CHANNELS.llmDebugList, (): LlmDebugEntry[] => llmDebug.all());
+  ipcMain.handle(IPC_CHANNELS.llmDebugClear, (): void => llmDebug.clear());
+  ipcMain.handle(
+    IPC_CHANNELS.actionRun,
+    (_event, triggerId: string, context: ActionContext, taskId?: string): Promise<ActionOutcome> =>
+      actionRunner.run(triggerId, context, taskId),
+  );
+  ipcMain.handle(
+    IPC_CHANNELS.chatAsk,
+    (_event, context: ActionContext, question: string, taskId?: string): Promise<AskOutcome> =>
+      actionRunner.ask(context, question, taskId),
+  );
+  ipcMain.handle(IPC_CHANNELS.llmCancel, (_event, taskId: string): boolean =>
+    actionRunner.cancel(taskId),
+  );
+
+  ipcMain.handle(IPC_CHANNELS.threadRead, (_event, notePath: string): Promise<ChatThread> =>
+    chatStore.read(notePath),
+  );
+  ipcMain.handle(IPC_CHANNELS.threadWrite, (_event, thread: ChatThread): Promise<void> =>
+    chatStore.write(thread),
+  );
+  ipcMain.handle(
+    IPC_CHANNELS.threadSummarize,
+    (_event, context: ActionContext, taskId?: string): Promise<string> =>
+      actionRunner.summarize(context, taskId),
+  );
+
+  ipcMain.handle(IPC_CHANNELS.spellCheck, (_event, words: string[]): Promise<SpellCheckResult> =>
+    spellcheck.check(words),
+  );
+  ipcMain.handle(IPC_CHANNELS.spellLanguages, (): Promise<SpellLanguage[]> =>
+    spellcheck.listLanguages(),
+  );
+  ipcMain.handle(IPC_CHANNELS.spellAddDictionary, (): Promise<CustomDictionary | null> =>
+    pickDictionary(),
+  );
+}
+
+/**
+ * Asks for a Hunspell `.dic` and pairs it with the `.aff` of the same name
+ * beside it -- the layout every Hunspell distribution uses, so one pick is
+ * enough and the user is not walked through two dialogs. The language id
+ * is the file's base name (`fr_FR.dic` -> `fr_FR`), which is also what
+ * such files are conventionally named after.
+ */
+async function pickDictionary(): Promise<CustomDictionary | null> {
+  const result = await dialog.showOpenDialog({
+    title: 'Select a Hunspell dictionary (.dic)',
+    properties: ['openFile'],
+    filters: [{ name: 'Hunspell dictionary', extensions: ['dic'] }],
+  });
+  if (result.canceled || result.filePaths.length === 0) {
+    return null;
+  }
+  const dicPath = result.filePaths[0];
+  const affPath = `${dicPath.slice(0, -'.dic'.length)}.aff`;
+  if (!fs.existsSync(affPath)) {
+    // Without the affix file nspell cannot build a checker at all, so
+    // this is refused here rather than stored as a broken entry.
+    await dialog.showMessageBox({
+      type: 'warning',
+      message: 'No matching .aff file found',
+      detail: `Expected ${path.basename(affPath)} in the same folder as the .dic file.`,
+    });
+    return null;
+  }
+  const id = path.basename(dicPath, '.dic');
+  return { id, label: id, affPath, dicPath };
 }
 
 let mainWindow: BrowserWindow | null = null;
@@ -153,6 +315,15 @@ function createMainWindow(): BrowserWindow {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
       nodeIntegration: false,
+      // The app ships its own spellchecker (nspell + CodeMirror
+      // decorations, ADR-0013) and it is meant to be the only one.
+      // Chromium's native checker would otherwise also underline every
+      // <input>/<textarea> in its own default language (en-US on Windows,
+      // never the configured one), with corrections reachable only through
+      // a context menu we don't build -- exactly the "wrong language, no
+      // way to fix a word" behaviour we're removing. Off, so spellcheck
+      // looks and behaves identically everywhere.
+      spellcheck: false,
       // NOT sandboxed: a sandboxed preload's require() is restricted to a
       // handful of built-ins and can't load our own shared/ipc-api.js
       // (see docs/09_architecture_decisions/0001-*.md) -- it silently
@@ -167,6 +338,13 @@ function createMainWindow(): BrowserWindow {
   });
 
   attachContextMenu(window);
+  // The app is not a zoomable web page: Ctrl +/-/0 scales the editor
+  // content in the renderer (ADR-0015), and the touchpad pinch gesture
+  // must not zoom the whole window. Ctrl+wheel is suppressed renderer-side
+  // (EditorZoomService).
+  window.webContents.setVisualZoomLevelLimits(1, 1).catch(() => {
+    // Older Electron rejects this off the main frame; harmless.
+  });
   mainWindow = window;
 
   window.on('closed', () => {
@@ -203,12 +381,41 @@ if (!app.requestSingleInstanceLock()) {
     }
   });
 
-  app.whenReady().then(() => {
+  app.whenReady().then(async () => {
     const vaultManager = new VaultManager();
     const dailyNotes = new DailyNoteManager(vaultManager);
+    const tagIndex = new TagIndex(vaultManager);
+    const appConfig = new AppConfigStore();
+    const llmDebug = new LlmDebugLog();
+    const lmStudio = new LmStudioClient(appConfig, llmDebug);
+    const classifier = new ClassifierService(lmStudio);
+    const llmTasks = new LlmTaskRegistry();
+    const actionRunner = new ActionRunner(appConfig, lmStudio, classifier, tagIndex, llmTasks);
+    const noteManager = new NoteManager(vaultManager, tagIndex, actionRunner);
+    const chatStore = new ChatStore(vaultManager);
+    const spellcheck = new SpellcheckService(appConfig);
+    await tagIndex.rebuild();
+
+    // Push each new debug entry to the renderer so the LLM settings pane
+    // updates live while a request is in flight.
+    llmDebug.onEntry((entry) => {
+      mainWindow?.webContents.send(IPC_CHANNELS.llmDebugEntry, entry);
+    });
 
     registerAppProtocol();
-    registerIpcHandlers(vaultManager, dailyNotes);
+    registerAssetProtocol(vaultManager);
+    registerIpcHandlers(
+      vaultManager,
+      dailyNotes,
+      noteManager,
+      tagIndex,
+      appConfig,
+      lmStudio,
+      actionRunner,
+      llmDebug,
+      chatStore,
+      spellcheck,
+    );
     Menu.setApplicationMenu(buildApplicationMenu());
     createMainWindow();
 

@@ -46,7 +46,12 @@
 
 <app-open-windows />
 
-<button type="button" class="settings" disabled aria-label="Settings (not yet available)">
+<button
+  type="button"
+  class="settings"
+  aria-label="Settings"
+  (click)="settings.openScreen()"
+>
   <app-icon name="settings" [size]="14" />
   <span>Settings</span>
 </button>

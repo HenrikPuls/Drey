@@ -27,14 +27,40 @@
           <p>Select a file in the sidebar, or click a calendar day to start a note.</p>
         </div>
       }
-      <div
-        class="divider divider-y"
-        role="separator"
-        aria-orientation="horizontal"
-        aria-label="Resize input area"
-        (pointerdown)="startChatDrag($event)"
-      ></div>
-      <app-chat-input [style.height.px]="layout.chatInputHeight()" />
+
+      <!-- Feature B: capture lives here now; the old chat bar is gone. The
+           divider only exists while the drawer is open -- there is nothing
+           to resize when it is a single collapsed strip. -->
+      @if (drawer.open()) {
+        <div
+          class="divider divider-y"
+          role="separator"
+          aria-orientation="horizontal"
+          aria-label="Resize entry drawer"
+          (pointerdown)="startDrawerDrag($event)"
+        ></div>
+        <app-entry-drawer [style.height.px]="layout.drawerHeight()" />
+      } @else {
+        <app-entry-drawer />
+      }
     </main>
+
+    @if (assistant.panelVisible()) {
+      <div
+        class="divider divider-x"
+        role="separator"
+        aria-orientation="vertical"
+        aria-label="Resize assistant panel"
+        (pointerdown)="startAssistantDrag($event)"
+      ></div>
+      <aside class="assistant-pane" [style.width.px]="layout.assistantWidth()">
+        <app-note-assistant />
+      </aside>
+    }
   </div>
+
+  @if (settings.screenOpen()) {
+    <app-settings />
+  }
+  <app-confirmation-dialog />
 </div>

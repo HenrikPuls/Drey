@@ -1,0 +1,185 @@
+.backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.5);
+  z-index: 30;
+}
+
+.panel {
+  position: fixed;
+  inset: 0;
+  margin: auto;
+  z-index: 31;
+  width: min(920px, calc(100vw - 48px));
+  height: min(640px, calc(100vh - 48px));
+  display: grid;
+  grid-template-columns: 200px 1fr;
+  background: var(--bg-main);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-md);
+  box-shadow: 0 24px 64px rgba(0, 0, 0, 0.5);
+  overflow: hidden;
+}
+
+.categories {
+  display: flex;
+  flex-direction: column;
+  padding: 8px;
+  gap: 2px;
+  background: var(--bg-sidebar);
+  border-right: 1px solid var(--border);
+}
+
+.head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 6px 10px;
+}
+
+.head .title {
+  font-family: var(--font-serif);
+  font-size: 0.95rem;
+  color: var(--text-heading);
+}
+
+.close {
+  border: 0;
+  background: transparent;
+  color: var(--text-5);
+  cursor: pointer;
+  padding: 4px;
+  border-radius: var(--radius-sm);
+  display: inline-flex;
+}
+
+.close:hover {
+  background: var(--hover-bg);
+  color: var(--text-2);
+}
+
+.category {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  text-align: left;
+  padding: 8px 10px;
+  border: 0;
+  border-radius: var(--radius);
+  background: transparent;
+  cursor: pointer;
+}
+
+.category:hover {
+  background: var(--hover-bg);
+}
+
+.category.active {
+  background: var(--active-bg);
+}
+
+.category .label {
+  font-size: 0.85rem;
+  color: var(--text-2);
+}
+
+.category .hint {
+  font-size: 0.72rem;
+  color: var(--text-6);
+}
+
+.right {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+}
+
+.detail {
+  flex: 1;
+  overflow: auto;
+  padding: 22px 26px;
+}
+
+.loading {
+  font-size: 0.85rem;
+  color: var(--text-5);
+}
+
+.save-error {
+  margin: 0;
+  padding: 8px 26px;
+  font-size: 0.8rem;
+  color: var(--accent);
+  background: rgba(201, 100, 66, 0.1);
+}
+
+/* Footer: dirty state + Discard / Save. Swapped for the unsaved-changes bar
+   while a close is being confirmed, so there is only ever one action row. */
+.actions-bar,
+.unsaved {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+  padding: 12px 20px 14px;
+  border-top: 1px solid var(--border);
+}
+
+.unsaved {
+  background: var(--bg-bar);
+}
+
+.unsaved-text {
+  flex: 1;
+  font-size: 0.82rem;
+  color: var(--text-2);
+}
+
+.spacer {
+  flex: 1;
+}
+
+.dirty,
+.saved {
+  font-size: 0.78rem;
+}
+
+.dirty {
+  color: var(--accent);
+}
+
+.saved {
+  color: var(--text-6);
+}
+
+.actions-bar button,
+.unsaved button {
+  font-size: 0.8rem;
+  padding: 7px 13px;
+  border-radius: var(--radius);
+  border: 1px solid transparent;
+  cursor: pointer;
+}
+
+.actions-bar .ghost,
+.unsaved .ghost {
+  background: transparent;
+  border-color: var(--border-strong);
+  color: var(--text-3);
+}
+
+.unsaved .ghost.danger {
+  color: var(--accent);
+}
+
+.actions-bar .primary,
+.unsaved .primary {
+  background: var(--accent);
+  color: var(--accent-contrast);
+}
+
+.actions-bar button:disabled {
+  opacity: 0.45;
+  cursor: default;
+}

@@ -55,7 +55,6 @@
 
   /* Layout */
   --sidebar-width: 220px;
-  --editor-max-width: 720px;
 
   /* Type families. Newsreader / IBM Plex Mono are self-hosted -- drop the
      .woff2 files into public/fonts/ and add the @font-face rules (see
@@ -64,6 +63,12 @@
   --font-sans: system-ui, -apple-system, 'Segoe UI', 'Helvetica Neue', sans-serif;
   --font-serif: 'Newsreader', Georgia, 'Times New Roman', serif;
   --font-mono: 'IBM Plex Mono', 'Cascadia Code', 'Consolas', ui-monospace, monospace;
+
+  /* Editor heading typeface. `editor-theme.ts` keys its heading rules off
+     this; `Editor` overrides it (and `--font-sans`) on its own host per the
+     Settings -> Appearance choice. The default keeps editor headings on the
+     body sans font -- the old serif look is one of the selectable options. */
+  --drey-heading-font: var(--font-sans);
 }
 
 html,

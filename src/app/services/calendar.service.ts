@@ -29,6 +29,9 @@ const MONTH_NAMES = [
   'December',
 ];
 
+/** Abbreviated month names for the month/year picker grid. */
+export const MONTH_SHORT_NAMES = MONTH_NAMES.map((m) => m.slice(0, 3));
+
 /** Monday-first weekday initials, matching the prototype's grid. */
 export const WEEKDAY_INITIALS = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
 
@@ -48,6 +51,10 @@ export class CalendarService {
   readonly viewYear = signal(this.today.getFullYear());
   readonly viewMonth = signal(this.today.getMonth()); // 0-11
   readonly selectedIso = signal<string>(formatDate(this.today));
+
+  /** Year/month of the real "today", for highlighting in the picker grid. */
+  readonly todayYear = this.today.getFullYear();
+  readonly todayMonth = this.today.getMonth();
 
   readonly monthLabel = computed(() => `${MONTH_NAMES[this.viewMonth()]} ${this.viewYear()}`);
 
@@ -116,6 +123,12 @@ export class CalendarService {
     } else {
       this.viewMonth.set(m + 1);
     }
+  }
+
+  /** Jump the shown month directly, e.g. from the month/year picker. */
+  setMonth(year: number, month: number): void {
+    this.viewYear.set(year);
+    this.viewMonth.set(month);
   }
 
   select(dayIso: string): void {

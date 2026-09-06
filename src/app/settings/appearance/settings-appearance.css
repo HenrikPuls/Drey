@@ -1,0 +1,40 @@
+.pane {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  max-width: 620px;
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.field > label {
+  font-size: 0.78rem;
+  color: var(--text-4);
+}
+
+select {
+  max-width: 280px;
+  background: var(--bg-input);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+  color: var(--text-primary);
+  font-family: var(--font-sans);
+  font-size: 0.82rem;
+  padding: 7px 9px;
+  outline: none;
+}
+
+select:focus {
+  border-color: var(--accent-ring);
+}
+
+.field-hint {
+  margin: 0;
+  font-size: 0.74rem;
+  line-height: 1.6;
+  color: var(--text-6);
+}

@@ -1,0 +1,202 @@
+import {
+  BUILTIN_TEMPLATE_IDS,
+  DEFAULT_APP_CONFIG,
+  EDITOR_FONT_SCALE_MAX,
+  EDITOR_FONT_SCALE_MIN,
+  normalizeAppConfig,
+} from '../../../shared/app-config';
+
+describe('normalizeAppConfig', () => {
+  it('fills a completely empty input from defaults', () => {
+    const config = normalizeAppConfig({});
+    expect(config.version).toBe(1);
+    expect(config.llm.enabled).toBe(false);
+    expect(config.llm.baseUrl).toBe(DEFAULT_APP_CONFIG.llm.baseUrl);
+    expect(config.llm.model).toBeNull();
+    expect(config.actions.templates.map((t) => t.builtin)).toEqual([
+      'autotagging',
+      'summary',
+      'note-summary',
+    ]);
+    expect(config.actions.triggers).toHaveLength(2);
+  });
+
+  it('round-trips the defaults unchanged', () => {
+    expect(normalizeAppConfig(DEFAULT_APP_CONFIG)).toEqual(DEFAULT_APP_CONFIG);
+  });
+
+  it('coerces malformed llm fields and a blank base URL', () => {
+    const config = normalizeAppConfig({
+      llm: { enabled: 'yes', baseUrl: '   ', model: 42, apiKey: 7 },
+    });
+    expect(config.llm.enabled).toBe(false);
+    expect(config.llm.baseUrl).toBe(DEFAULT_APP_CONFIG.llm.baseUrl);
+    expect(config.llm.model).toBeNull();
+    expect(config.llm.apiKey).toBeNull();
+  });
+
+  it('defaults the API key to null and keeps a set one, trimmed', () => {
+    expect(normalizeAppConfig({}).llm.apiKey).toBeNull();
+    expect(normalizeAppConfig({ llm: { apiKey: '  sk-unsloth-abc123  ' } }).llm.apiKey).toBe(
+      'sk-unsloth-abc123',
+    );
+  });
+
+  it('treats a blank API key or model as unset', () => {
+    const config = normalizeAppConfig({ llm: { apiKey: '   ', model: '  ' } });
+    expect(config.llm.apiKey).toBeNull();
+    expect(config.llm.model).toBeNull();
+  });
+
+  it('keeps a custom base URL and model together with a key (Unsloth-style setup)', () => {
+    const config = normalizeAppConfig({
+      llm: {
+        enabled: true,
+        baseUrl: 'http://127.0.0.1:8888/v1',
+        apiKey: 'sk-unsloth-KEY',
+        model: 'Bonsai-27B-GGUF',
+      },
+    });
+    expect(config.llm).toEqual({
+      enabled: true,
+      baseUrl: 'http://127.0.0.1:8888/v1',
+      apiKey: 'sk-unsloth-KEY',
+      model: 'Bonsai-27B-GGUF',
+    });
+  });
+
+  it('keeps a user edit to a built-in template, matched by id', () => {
+    const config = normalizeAppConfig({
+      actions: {
+        templates: [
+          {
+            id: BUILTIN_TEMPLATE_IDS.autotagging,
+            name: 'My tagging',
+            prompt: 'do it',
+            resultKind: 'document',
+          },
+        ],
+        triggers: [],
+      },
+    });
+    const autotag = config.actions.templates.find((t) => t.builtin === 'autotagging');
+    expect(autotag).toMatchObject({ name: 'My tagging', prompt: 'do it', resultKind: 'document' });
+    // Both built-ins are always present exactly once.
+    expect(config.actions.templates.filter((t) => t.builtin === 'summary')).toHaveLength(1);
+  });
+
+  it('re-injects a built-in the user deleted', () => {
+    const config = normalizeAppConfig({ actions: { templates: [], triggers: [] } });
+    expect(config.actions.templates.map((t) => t.builtin).sort()).toEqual([
+      'autotagging',
+      'note-summary',
+      'summary',
+    ]);
+  });
+
+  it('drops a half-written user template but keeps a valid one', () => {
+    const config = normalizeAppConfig({
+      actions: {
+        templates: [
+          { id: 'u1', name: '', prompt: 'x' },
+          { id: 'u2', name: 'Reformat', prompt: 'tidy up', resultKind: 'document' },
+        ],
+        triggers: [],
+      },
+    });
+    const user = config.actions.templates.filter((t) => t.builtin === null);
+    expect(user).toHaveLength(1);
+    expect(user[0]).toMatchObject({ id: 'u2', name: 'Reformat', builtin: null });
+  });
+
+  it('fills the assistant and spellcheck sections from defaults', () => {
+    const config = normalizeAppConfig({});
+    expect(config.assistant).toEqual({ autoSummaryDefault: true });
+    expect(config.spellcheck).toEqual({ enabled: true, language: 'de', dictionaries: [] });
+  });
+
+  it('defaults the editor font scale to 1 and clamps an out-of-range or junk value', () => {
+    expect(normalizeAppConfig({}).editor).toEqual({ fontScale: 1, fontFamily: 'sans' });
+    expect(normalizeAppConfig({ editor: { fontScale: 99 } }).editor.fontScale).toBe(
+      EDITOR_FONT_SCALE_MAX,
+    );
+    expect(normalizeAppConfig({ editor: { fontScale: 0.1 } }).editor.fontScale).toBe(
+      EDITOR_FONT_SCALE_MIN,
+    );
+    expect(normalizeAppConfig({ editor: { fontScale: 'big' } }).editor.fontScale).toBe(1);
+  });
+
+  it('snaps the editor font scale to a 0.05 grid so repeated steps do not drift', () => {
+    expect(normalizeAppConfig({ editor: { fontScale: 1.2000000000000002 } }).editor.fontScale).toBe(
+      1.2,
+    );
+  });
+
+  it('defaults the editor font family to sans and rejects an unknown id', () => {
+    expect(normalizeAppConfig({}).editor.fontFamily).toBe('sans');
+    expect(normalizeAppConfig({ editor: { fontFamily: 'serif' } }).editor.fontFamily).toBe('serif');
+    expect(normalizeAppConfig({ editor: { fontFamily: 'comic-sans' } }).editor.fontFamily).toBe(
+      'sans',
+    );
+    expect(normalizeAppConfig({ editor: { fontFamily: 42 } }).editor.fontFamily).toBe('sans');
+  });
+
+  it('keeps a well-formed custom dictionary and the language pointing at it', () => {
+    const config = normalizeAppConfig({
+      spellcheck: {
+        language: 'fr',
+        dictionaries: [
+          { id: 'fr', label: 'Français', affPath: 'C:/d/fr.aff', dicPath: 'C:/d/fr.dic' },
+        ],
+      },
+    });
+    expect(config.spellcheck.language).toBe('fr');
+    expect(config.spellcheck.dictionaries).toHaveLength(1);
+  });
+
+  it('drops an incomplete dictionary and falls back to the default language', () => {
+    const config = normalizeAppConfig({
+      spellcheck: { language: 'fr', dictionaries: [{ id: 'fr', affPath: 'C:/d/fr.aff' }] },
+    });
+    expect(config.spellcheck.dictionaries).toEqual([]);
+    expect(config.spellcheck.language).toBe('de');
+  });
+
+  it('refuses a custom dictionary that shadows a bundled language id', () => {
+    const config = normalizeAppConfig({
+      spellcheck: {
+        dictionaries: [{ id: 'de', label: 'Mine', affPath: 'a.aff', dicPath: 'a.dic' }],
+      },
+    });
+    expect(config.spellcheck.dictionaries).toEqual([]);
+  });
+
+  it('drops a trigger whose template no longer exists', () => {
+    const config = normalizeAppConfig({
+      actions: {
+        templates: [],
+        triggers: [
+          { id: 't1', templateId: 'gone', event: 'manual', confirm: true, enabled: true },
+          {
+            id: 't2',
+            templateId: BUILTIN_TEMPLATE_IDS.summary,
+            event: 'on-save',
+            confirm: false,
+            enabled: true,
+          },
+        ],
+      },
+    });
+    expect(config.actions.triggers).toHaveLength(1);
+    expect(config.actions.triggers[0]).toMatchObject({
+      id: 't2',
+      event: 'on-save',
+      confirm: false,
+    });
+  });
+
+  it('respects an explicit empty triggers array (user removed them all)', () => {
+    const config = normalizeAppConfig({ actions: { templates: [], triggers: [] } });
+    expect(config.actions.triggers).toEqual([]);
+  });
+});

@@ -81,6 +81,24 @@ export class VaultManager {
     return readDirRecursive(this.activeVaultPath, this.activeVaultPath);
   }
 
+  /**
+   * Flat list of every `.md` file in the vault, vault-relative and
+   * forward-slash separated. Feeds the tag index scan (milestone 6);
+   * dotfolders are skipped, same as `listFiles`.
+   */
+  async listMarkdownFiles(): Promise<string[]> {
+    if (!this.activeVaultPath) {
+      throw new Error('No vault is active.');
+    }
+    if (!fs.existsSync(this.activeVaultPath)) {
+      throw new Error(`Vault folder no longer exists: ${this.activeVaultPath}`);
+    }
+    const out: string[] = [];
+    await collectMarkdown(this.activeVaultPath, this.activeVaultPath, out);
+    out.sort((a, b) => a.localeCompare(b));
+    return out;
+  }
+
   async readFile(relativePath: string): Promise<VaultFileContent> {
     const filePath = this.resolveInVault(relativePath);
     const [content, stat] = await Promise.all([
@@ -128,6 +146,21 @@ export class VaultManager {
     return this.toRelative(dirPath);
   }
 
+  /**
+   * Resolves a vault-relative asset path (e.g. an image referenced from a
+   * note) to an absolute path, or `null` when there is no active vault or
+   * the path would escape it. Used by the `drey-asset://` protocol handler
+   * -- same guard as `resolveInVault`, but a bad path is "not found", not an
+   * error to surface.
+   */
+  resolveAssetPath(relativePath: string): string | null {
+    try {
+      return this.resolveInVault(relativePath);
+    } catch {
+      return null;
+    }
+  }
+
   /** Absolute path back to a forward-slash path relative to the vault root. */
   private toRelative(absPath: string): string {
     if (!this.activeVaultPath) {
@@ -154,6 +187,21 @@ export class VaultManager {
       throw new Error(`Path is outside the active vault: ${relativePath}`);
     }
     return resolved;
+  }
+}
+
+async function collectMarkdown(dir: string, vaultRoot: string, out: string[]): Promise<void> {
+  const dirents = await fsp.readdir(dir, { withFileTypes: true });
+  for (const dirent of dirents) {
+    if (dirent.name.startsWith('.')) {
+      continue;
+    }
+    const fullPath = path.join(dir, dirent.name);
+    if (dirent.isDirectory()) {
+      await collectMarkdown(fullPath, vaultRoot, out);
+    } else if (dirent.isFile() && dirent.name.toLowerCase().endsWith('.md')) {
+      out.push(path.relative(vaultRoot, fullPath).split(path.sep).join('/'));
+    }
   }
 }
 

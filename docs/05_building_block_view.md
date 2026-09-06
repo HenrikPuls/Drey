@@ -6,9 +6,16 @@ Electron main process, Angular renderer, the IPC bridge between them,
 vault selection + file listing, and the full two-column shell from the
 design prototype: a sidebar (mini-calendar, vault file tree,
 open-windows list, settings entry) and a main area with a **tab bar**, the
-CodeMirror 6 editor (source/rendered toggle, **rendered by default**,
-explicit save), and a sticky chat input bar (scope toggle wired, sending
-not yet). The sidebar↔main and editor↔chat-input borders are **drag-resizable**
+editor (one CodeMirror 6 view with an inline **Live Preview** mode and a
+raw **Source** mode, switched by a `⋯` mode menu, Live Preview by
+default, explicit save), and the **"Add entry" drawer** pinned to
+its bottom (TOPIC field, Tags/People/Meetings chip rows, a spellchecked
+Markdown body — §5.12). A third column on the right holds the **note
+assistant** (auto-summary + Q&A thread, §5.11). The bottom chat bar that
+used to sit under the editor is gone: its capture role became the drawer
+and its Ask role the assistant's composer, so each job lives in exactly one
+place. The sidebar↔main, editor↔drawer and main↔assistant borders are
+**drag-resizable**
 (sizes clamped + persisted to `localStorage` by `LayoutService`); the
 open-windows list is capped at a third of the sidebar height and each row
 has an `x` to close that document; the file tree has a **right-click menu
@@ -24,9 +31,14 @@ tabs never prompts, closing a dirty tab does. Clicking a calendar day
 opens that day's daily note, or — for a day with no file yet — an
 **unsaved draft** that only reaches disk once the user types and saves
 (see [ADR-0003](09_architecture_decisions/0003-multi-document-editor-tab-model.md)).
-Still to come (milestone 5+, see `CLAUDE.md` "Build Order"): tag parsing /
-routing, the "+" new-note action, and the chat/search backend. Those
-affordances render as clearly-disabled placeholders.
+Milestone 6 adds the tag layer: a main-process `TagIndex` scans every
+`type: master` document into the vault-wide tag vocabulary, the editor gets
+`#tag` autocomplete from it, and saving a note goes through a `note:save`
+pipeline that merges inline `#tag`s into the frontmatter, bumps `updated:`,
+and **routes** each tagged dated entry into its topic's master-document
+`## History` (a dated copy — nothing moves; see §5.9). Still to come: the
+"+" new-note action, the LLM classifier, and the chat/search backend — all
+rendered as clearly-disabled placeholders or simply absent.
 
 ```mermaid
 graph TB
@@ -36,19 +48,25 @@ graph TB
         Calendar["Calendar (src/app/sidebar/calendar/)\nmini-calendar; day click -> openDailyNote"]
         OpenWindows["OpenWindows (src/app/sidebar/open-windows/)\nmirror of open tabs"]
         TabBar["TabBar (src/app/tab-bar/)\ntab per open doc; activate / close"]
-        Editor["Editor (src/app/editor/)\none CodeMirror 6 view, doc swapped per\nactive tab; rendered view + toggle;\nopt-in auto-switch caret sync (ADR-0004)"]
-        ChatInput["ChatInput (src/app/chat-input/)\nsticky input + scope toggle (send inert)"]
+        Editor["Editor (src/app/editor/)\none CodeMirror 6 view, doc swapped per active\ntab; Live Preview decorations via Compartment;\n&hairsp;⋯ mode menu (ADR-0009)"]
+        EntryDrawer["EntryDrawer (src/app/entry-drawer/)\nTOPIC + chip rows + MarkdownSurface\n(compact, inline spellcheck)"]
+        NoteAssistant["NoteAssistant (src/app/note-assistant/)\nauto-summary switch + card thread + composer"]
         Icon["Icon (src/app/icons/)\nvendored Lucide path data"]
         VaultService["VaultService\nsignals: activeVaultPath, fileTree, isLoading, error"]
-        EditorService["EditorService\nopenDocs: OpenDoc[], activePath\n+ computed openPath/savedContent/bufferContent/\nviewMode/caretOffset/isDirty; openDailyNote, closeTab,\nnewEntryRequest + pure newDailyEntryEdit();\nautoSwitch (persisted pref)"]
+        EditorService["EditorService\nopenDocs: OpenDoc[], activePath\n+ computed openPath/savedContent/bufferContent/\nviewMode/isDirty; setViewMode (persists defaultMode);\nopenDailyNote, closeTab, newEntryRequest\n+ pure newDailyEntryEdit()"]
         CalendarService["CalendarService\nviewYear/viewMonth/selectedIso, weeks,\nnoteDates (from VaultService.fileTree)"]
-        ChatService["ChatService\nquery, scope ('doc' | 'all'); submit() is a no-op"]
-        LayoutService["LayoutService\nsidebarWidth / chatInputHeight signals;\nclamp + persist to localStorage"]
+        EntryDraftService["EntryDraftService\ntopic/text/tags/people/meetings;\nempty-TOPIC confirmation rule"]
+        AssistantService["AssistantService\nper-note sidecar thread + auto-summary rule;\npanel toggle is session state (ADR-0012)"]
+        SpellcheckService["SpellcheckService\nSpellcheckSource for the CM extension;\nper-language verdict cache"]
+        LlmTaskService["LlmTaskService\nin-flight generations: elapsed clock +\nCancel (ADR-0014)"]
+        LayoutService["LayoutService\nsidebarWidth / assistantWidth signals;\nclamp + persist to localStorage"]
         DailyNoteService["DailyNoteService (src/app/services/)\nonOpenDailyNote -> openFile + requestNewDailyEntry"]
+        TagService["TagService (src/app/services/)\ntags signal (TagEntry[]) from tag:list;\nrefreshed on construct + after a tag-changing save"]
         App --> Sidebar
         App --> TabBar
         App --> Editor
-        App --> ChatInput
+        App --> EntryDrawer
+        App --> NoteAssistant
         App --> LayoutService
         App --> DailyNoteService
         Sidebar --> Calendar
@@ -62,7 +80,14 @@ graph TB
         OpenWindows --> EditorService
         TabBar --> EditorService
         Editor --> EditorService
-        ChatInput --> ChatService
+        Editor -->|"#tag autocomplete source"| TagService
+        EditorService -->|"refresh() after a tag-changing save"| TagService
+        EntryDrawer --> EntryDraftService
+        EntryDrawer --> SpellcheckService
+        EntryDraftService -->|"requestEntryFromDraft(draft)"| EditorService
+        NoteAssistant --> AssistantService
+        AssistantService --> LlmTaskService
+        AssistantService --> EditorService
         DailyNoteService --> EditorService
     end
 
@@ -76,10 +101,17 @@ graph TB
         Hotkey["globalShortcut (Ctrl+Alt+N)\n+ single-instance lock\n-> openTodayDailyNote()"]
         VaultManager["VaultManager (electron/vault-manager.ts)\nactive vault + directory listing +\nfile read/write/create + dir create\n(path-guarded)"]
         DailyNoteManager["DailyNoteManager (electron/daily-note.ts)\nensureTodayNote(): create daily/ note from\ntemplates/daily.md, scaffold template;\nnoteContentFor(date): substituted template, no write"]
+        TagIndex["TagIndex (electron/tag-index.ts)\nin-memory tag vocabulary + master metadata;\nrebuild() scans all .md frontmatter\n(skips daily/ + templates/); tag:list / tag:registry"]
+        NoteManager["NoteManager (electron/note-manager.ts)\nnote:save pipeline: merge inline #tags -> frontmatter,\nbump updated:, (6b) route entries to master docs"]
         IpcHandlers --> VaultManager
         IpcHandlers --> DailyNoteManager
+        IpcHandlers --> NoteManager
+        IpcHandlers --> TagIndex
         Hotkey --> DailyNoteManager
         DailyNoteManager --> VaultManager
+        NoteManager --> VaultManager
+        NoteManager --> TagIndex
+        TagIndex --> VaultManager
     end
 
     ConfigFile[("vault-config.json\n(app.getPath('userData'))")]
@@ -87,10 +119,11 @@ graph TB
     VaultManager --> ConfigFile
     DailyNoteManager --> DailyFiles
 
-    Shared["shared/\nipc-api.ts: DreyApi, IPC_CHANNELS, ...\ntimestamp.ts: formatDate/Time/DateTime"]
+    Shared["shared/\nipc-api.ts: DreyApi, IPC_CHANNELS, Frontmatter, TagEntry, ...\ntimestamp.ts: formatDate/Time/DateTime\nfrontmatter.ts / inline-tags.ts / tag-registry.ts /\nentries.ts / history.ts: pure tag + YAML-frontmatter\n+ routing logic (milestone 6)"]
 
     VaultService -->|"window.dreyApi.*()"| Bridge
     EditorService -->|"window.dreyApi.*()"| Bridge
+    TagService -->|"window.dreyApi.listTags()"| Bridge
     DailyNoteService -->|"onOpenDailyNote(listener)"| Bridge
     Bridge -->|"ipcRenderer.invoke"| IpcHandlers
     IpcHandlers -->|"handle result"| Bridge
@@ -99,9 +132,12 @@ graph TB
     Shared -.->|imported by| VaultService
     Shared -.->|imported by| EditorService
     Shared -.->|imported by| CalendarService
+    Shared -.->|imported by| TagService
     Shared -.->|imported by| Bridge
     Shared -.->|imported by| IpcHandlers
     Shared -.->|imported by| DailyNoteManager
+    Shared -.->|imported by| TagIndex
+    Shared -.->|imported by| NoteManager
 ```
 
 ## 5.2 Folder Structure
@@ -117,6 +153,32 @@ electron/           Main process + preload (compiled to dist-electron/, CommonJS
                      from templates/daily.md (scaffolds a starter template on
                      first use); noteContentFor(date) -- substituted template
                      with no write (calendar draft); placeholder substitution
+  tag-index.ts      TagIndex: in-memory tag vocabulary + master-doc metadata;
+                     rebuild() scans all .md frontmatter (skips daily/, templates/);
+                     getTags() / getRegistry() / lookup()
+  note-manager.ts   NoteManager: the note:save pipeline -- merge inline #tags into
+                     frontmatter, bump updated:, route each tagged dated entry
+                     into its tag's master-document ## History (dated copy, no move,
+                     idempotent via a drey:src marker), then run the on-save Actions.
+                     Sequences fs calls only; the decisions are pure shared/ functions
+  app-config.ts     AppConfigStore: read/replace app-config.json under userData
+                     (LLM connection + Actions system). fs only; shape logic is
+                     shared/app-config.ts (ADR-0010)
+  lm-studio-client.ts LmStudioClient: GET /models, POST /chat/completions, and a
+                     never-rejecting testConnection(); model id from AppConfigStore,
+                     never hard-coded. Sends `Authorization: Bearer <key>` when one is
+                     configured, so any OpenAI-compatible server works (LM Studio,
+                     Unsloth Desktop, llama.cpp, vLLM, Ollama); 401/403 is reported as
+                     an API-key problem, not an unreachable host
+  llm-debug-log.ts  LlmDebugLog: in-memory ring buffer (50) of LLM HTTP exchanges +
+                     a listener for the main->renderer push. Not persisted -- it
+                     holds request bodies (note content) and is a session debug aid
+  classifier.ts     ClassifierService: wraps classifier-spec Prompt 1 (task vs note)
+                     and Prompt 2 (tag suggestion) around LmStudioClient; parsing is
+                     shared/classifier.ts
+  action-runner.ts  ActionRunner: runs an Action against the active document ->
+                     ActionOutcome (edit / noop / error); also hosts chat Ask.
+                     Pure decisions in shared/actions.ts + shared/action-apply.ts
   tsconfig.json      Node-targeted compile config, separate from the Angular one
 
 src/                Angular renderer (standalone components, esbuild via Angular CLI)
@@ -127,19 +189,78 @@ src/                Angular renderer (standalone components, esbuild via Angular
     services/
       vault.service.ts     Wraps dreyApi's vault methods as signals; no logic beyond that
       editor.service.ts    Multi-document state: openDocs[] + activePath, with computed
-                            openPath/savedContent/bufferContent/viewMode/caretOffset/isDirty
-                            over the active doc; openFile/openDailyNote/closeTab; unsaved
-                            drafts; newEntryRequest + pure newDailyEntryEdit();
-                            autoSwitch (localStorage-persisted preference, ADR-0004)
+                            openPath/savedContent/bufferContent/viewMode/isDirty over the
+                            active doc; openFile/openDailyNote/closeTab; unsaved drafts;
+                            newEntryRequest + pure newDailyEntryEdit(); setViewMode
+                            persists the last mode as the new-note default (drey.editor)
       calendar.service.ts  Mini-calendar view state (month, selected day) + weeks grid +
                             "has a daily note" lookup off VaultService.fileTree
-      chat.service.ts      query + scope ('doc' | 'all') for the input bar; submit() inert
-      layout.service.ts    sidebarWidth / chatInputHeight signals; setters clamp and
+      entry-draft.service.ts  The drawer's draft (topic / text / chips) + the
+                            empty-TOPIC confirmation rule; hands the finished draft
+                            to EditorService.requestEntryFromDraft()
+      assistant.service.ts  Per-note sidecar thread, the auto-summary rule, the
+                            session-scoped panel toggle, and Ask (ADR-0012)
+      spellcheck.service.ts  Builds the SpellcheckSource the CodeMirror extension
+                            consumes; per-language verdict cache; dictionary list
+                            for the settings pane
+      llm-task.service.ts  Tracks in-flight generations: mints the task id, ticks
+                            the elapsed clock at 1 Hz, cancels via llm:cancel, and
+                            reports how long a finished run took (ADR-0014)
+      layout.service.ts    sidebarWidth / assistantWidth / drawerHeight signals; clamp and
                             persist to localStorage; read back in the constructor
       daily-note.service.ts Subscribes to onOpenDailyNote; opens the pushed path and
                             requests a new `## HH:mm` entry. No other logic.
+      tag.service.ts       tags signal (TagEntry[]) from tag:list; refreshed on
+                            construction and after a save that changed the tag set.
+                            Source for the editor's #tag autocomplete.
+      settings.service.ts  Two signals: `config` (persisted) and `draft` (what the
+                            Settings screen edits). Pane mutators write the draft
+                            only; save() sends it via setConfig and adopts the
+                            normalised result, discard() resets it, isDirty compares
+                            structurally (shared/deep-equal.ts). Runtime state
+                            (llmEnabled, manualActions) reads `config`, never the
+                            draft. setTriggerConfirmImmediate is the one persist-now
+                            path (the dialog's "don't ask again"). Also holds the
+                            model list + connection-test state (ADR-0010/0011)
+      confirmation.service.ts  The one confirmation mechanism (ADR-0011): request()
+                            shows the shared dialog and resolves to the user's
+                            yes/no; "don't ask again" flips the trigger's confirm in
+                            SettingsService
+      actions.service.ts   Runs a manual action, routes an 'edit' outcome through
+                            ConfirmationService, applies it via
+                            EditorService.applyRewrite; an effect drains the on-save
+                            pendingActions queue the same way
+      about.service.ts     Backs SettingsAbout: appInfo signal (app:get-info IPC) +
+                            licenses signal (fetch of the bundled assets/licenses.json,
+                            generated from the production dep tree by
+                            scripts/generate-licenses.mjs, wired as the `prebuild` hook)
+    confirmation-dialog/  ConfirmationDialog: modal over ConfirmationService.pending;
+                            'localized' -> collapsed line diff (shared/text-diff.ts),
+                            'document' -> side-by-side; "don't ask again" checkbox
+    settings/          Settings: master-detail overlay (category list + detail pane).
+                        llm/ SettingsLlm: enable switch, base URL, model picker +
+                        refresh, test connection. assistant/ SettingsAssistant: the
+                        auto-summary default (ADR-0012). spellcheck/
+                        SettingsSpellcheck: enable switch, language picker, add/remove
+                        Hunspell dictionaries (ADR-0013). appearance/
+                        SettingsAppearance: the document editor's typeface
+                        (SettingsService.setEditorFontFamily -> --font-sans /
+                        --drey-heading-font on the Editor host, persisted at once
+                        like the editor zoom). actions/ SettingsActions:
+                        trigger rows (event / confirm / enabled) + template library CRUD.
+                        about/ SettingsAbout: read-only -- app/Electron/Chromium/Node
+                        version (app:get-info IPC) + a scrollable list of production
+                        dependencies with their license text (AboutService reads the
+                        build-time src/assets/licenses.json)
     tab-bar/           TabBar: a tab per open doc (activate / close), "+" placeholder
-    chat-input/        ChatInput: sticky field + "this document" / "all notes" toggle
+    entry-drawer/      EntryDrawer: the bottom capture drawer -- TOPIC field first,
+                         then Tags / People / Meetings chip rows, then a
+                         MarkdownSurface (compact, multi-line, inline spellcheck).
+                         Empty TOPIC raises an inline confirmation before appending
+    note-assistant/    NoteAssistant: the right-hand panel -- "Automatische
+                         Zusammenfassung" switch, the card thread (summary /
+                         question / answer) and the question composer (the
+                         shared MarkdownSurface, compact, inline spellcheck)
     sidebar/
       sidebar.ts        Calendar + recursive file tree (collapsible folders) +
                          open-windows list + settings entry; a file click opens it;
@@ -148,15 +269,44 @@ src/                Angular renderer (standalone components, esbuild via Angular
       calendar/         Calendar: mini-calendar grid; day click -> EditorService.openDailyNote
       open-windows/     OpenWindows: list mirroring the open editor tabs
     editor/
-      editor.ts         One CodeMirror 6 EditorView (document swapped per active tab) +
-                         markdown-it rendered view (default; leading YAML frontmatter
-                         stripped before render) + source/rendered toggle. The only
-                         place CodeMirror is referenced; applies newEntryRequest;
-                         drives auto-switch mode (ADR-0004).
-      source-map.ts     Pure. renderWithSourceMap() (markdown-it token.map -> cm-src-<n>
-                         block spans) + character alignment between a block's rendered
-                         text and its source slice. For auto-switch caret sync.
-      preview-caret.ts  DOM-pure helpers: DOM point <-> text offset, nearest cm-src-<n> block.
+      editor.ts         One CodeMirror 6 EditorView (document swapped per active tab);
+                         Live Preview extensions swapped in/out via a Compartment
+                         (`⋯` mode menu, Live Preview by default). Fenced code gets
+                         nested language parsing via @codemirror/language-data. The
+                         only place CodeMirror is referenced; applies newEntryRequest.
+      markdown-surface/ MarkdownSurface: THE shared CodeMirror component (full editor
+                         + drawer body): language setup, #tag autocomplete, mode
+                         compartment; compact = slim theme, submitOnEnter = Enter
+                         submits (off in the drawer, whose body is multi-line
+                         Markdown); spellcheck = the inline checker's source;
+                         foldFrontmatter = mount the frontmatter fold (full editor
+                         only), mirrored into a frontmatterExpanded signal.
+      frontmatter-fold.ts  ADR-0009. StateField<boolean> + block-replace pill
+                         ("Frontmatter . N fields") folding the leading YAML in BOTH
+                         modes; expand -> dim editable YAML + collapse chevron.
+                         Mounted outside the mode compartment; Editor remembers the
+                         state per document path across tab switches.
+      spellcheck/       ADR-0013. spellcheck.ts: the inline spellchecker -- StateField
+                         holding wavy-underline decorations + flagged words (mapped
+                         through edits), a debounced/version-guarded ViewPlugin that
+                         asks a SpellcheckSource, and a showTooltip popup whose
+                         suggestions replace the word on click.
+      live-preview/     ADR-0009. conceal.ts: ViewPlugin hiding syntax markers away
+                         from the selection (+ bullet/checkbox/rule widgets, quote/
+                         code/frontmatter line classes). block-render.ts: StateField
+                         rendering tables (block widgets via markdown-it), images
+                         (resolveVaultImageUrl) and sanitized HTML blocks.
+                         sanitize-html.ts: allowlist HTML sanitizer. theme.ts:
+                         EditorView.theme for the lp-* classes. widgets.ts: the
+                         WidgetType classes.
+      editor-theme.ts   dreyEditorLook: EditorView.theme + HighlightStyle from the design
+                         tokens (serif sized headings, mono code, accent links; dark
+                         token colors for code inside fences) -- both modes' typography.
+      markdown-frontmatter.ts  Pure. stripFrontmatter() + frontmatterEnd() +
+                         frontmatterFieldCount() (the fold pill's label); shared by
+                         EditorService and the editor.
+      vault-image.ts    Pure. resolveVaultImageUrl(): a note's `![](path)` -> a
+                         `drey-asset://` URL served from inside the vault, or null.
   index.html
   main.ts             Angular bootstrap
   styles.css          Global dark theme + design tokens (palette / type / spacing)
@@ -167,9 +317,38 @@ public/
 shared/             Code compiled into BOTH electron/ and src/ (two separate
                      tsconfig contexts -- see docs/09_architecture_decisions/0001-*.md).
   ipc-api.ts         Interfaces + channel names crossing the IPC boundary
+                      (incl. Frontmatter / TagEntry / TagRegistryEntry / NoteSave* /
+                      LlmConnectionTest; re-exports AppConfig + Action* from below)
+  app-config.ts      Pure: AppConfig shape (LlmConfig = enabled / baseUrl / apiKey /
+                      model), DEFAULT_APP_CONFIG (incl. the two built-in action
+                      templates + their prompts), normalizeAppConfig (total parse:
+                      fill defaults, re-inject built-ins, trim, drop junk)
+  actions.ts         Pure, dependency-light: ActionContext / ActionOutcome /
+                      AskOutcome / ResolvedAction types + resolveActions (trigger↔
+                      template join). Renderer-safe (no yaml)
+  action-apply.ts    Pure, main-only (imports frontmatter/yaml): untaggedEntryText,
+                      mergeFrontmatterTags, selectSummaryInput, applySummarySection
+  classifier.ts      Pure: build/parse the two classifier-spec prompts (German)
+  llm.ts             Pure: ChatMessage shape + a tolerant JSON extractor for small-
+                      model replies
+  text-diff.ts       Pure: lineDiff (LCS) + diffStats + pickPreviewStyle heuristic
+  deep-equal.ts      Pure: structural equality; the Settings screen's isDirty
+  llm-debug.ts       Pure: LlmDebugEntry shape, maskSecret/maskAuthorizationHeader,
+                      truncate, and toCurl() (masked by default, real key on request)
   timestamp.ts       Pure local-time formatters (date / time / datetime / timestamp);
                       used by template substitution in main and the `## HH:mm`
                       heading in the renderer
+  frontmatter.ts     Pure YAML frontmatter engine (split / read / write / bumpUpdated),
+                      built on the `yaml` package's parseDocument for a lossless
+                      round-trip; forces date fields to double-quoted scalars
+  inline-tags.ts     Pure: extract inline #tags from a body (skips code + timestamp
+                      headings; #task / #important are not tags)
+  tag-registry.ts    Pure: aggregate scanned frontmatter into TagEntry[] + the
+                      classifier TagRegistryEntry[]; formatRegistry() prompt text
+  entries.ts         Pure: split a note body into dated entries (## HH:mm /
+                      ## YYYY-MM-DD HH:mm / ### ... headings + their text)
+  history.ts         Pure: append a dated entry into a master doc's ## History,
+                      idempotent via a drey:src HTML-comment marker
 
 docs/               This arc42 documentation
 specs/              Binding concept/schema/classifier specs (not modified by the app build)
@@ -195,12 +374,23 @@ env.ps1             Puts .tools/node on PATH for the current shell session
 | `vault:create-directory` | Creates a vault-relative directory; same guards/rejections as `vault:create-file`. Backs "New folder".                                                                                                                                                                              |
 | `daily:build-content`    | Returns the substituted `templates/daily.md` for a given `YYYY-MM-DD`, **without** creating the file or scaffolding the template. Backs the calendar's "open a draft for a day with no note yet". Rejects if no vault is active or the date is malformed.                           |
 | `daily:open`             | `webContents.send` / `ipcRenderer.on` — **main → renderer** push, fired by the quick-capture hotkey after `DailyNoteManager.ensureTodayNote()`. Payload: the vault-relative path of today's daily note. Preload exposes it as `onOpenDailyNote(listener)` returning an unsubscribe. |
+| `note:save`              | Saves a `.md` note through `NoteManager`: parse frontmatter, merge inline body `#tag`s into `tags` (topic notes only — `daily/` / `templates/` keep their `tags`), bump `updated:`, (milestone 6b) route tagged entries to their master doc, write, then run the `on-save` Actions (§5.10). Takes `NoteSaveRequest` (`{ path, body (LF), eol, runOnSaveActions? }`), returns `NoteSaveResult` (`{ path, content (LF), modifiedMs, tags, unknownTags, appendedTo, pendingActions? }`). Replaces `vault:write-file` for notes. |
+| `tag:list`               | The vault-wide tag vocabulary (`TagEntry[]`) from `TagIndex`, for `#tag` autocomplete. `[]` when no vault is active. |
+| `tag:registry`           | The classifier tag registry (`TagRegistryEntry[]`) — one entry per `type: master` doc with `art` + `description`. Feeds the Autotagging action. |
+| `config:get` / `config:set` | Read / replace the whole `AppConfig` (`shared/app-config.ts`) held in `app-config.json` under `userData`. `set` normalises via `normalizeAppConfig` and returns what was stored. Backs the Settings screen (ADR-0010). |
+| `llm:list-models`        | Live `GET {baseUrl}/models`, with the bearer API key when one is set; `string[]` of model ids. Takes an optional `LlmEndpoint` override so the Settings screen can probe the URL/key currently *typed* rather than the saved one. Rejects on transport/HTTP error. |
+| `llm:test-connection`    | Probe the endpoint (saved, or the same override); never rejects — `{ ok, message, models }` for the Settings "test connection" feedback. A 401/403 is reported as an API-key problem. |
+| `llm:debug-list` / `llm:debug-clear` | Read / empty the session's LLM traffic log (`LlmDebugEntry[]`, oldest first) shown at the bottom of the LLM settings pane. Bearer tokens are already masked. |
+| `llm:debug-entry`        | `webContents.send` — **main → renderer** push, one per completed LLM request, so the debug panel updates live. Preload exposes it as `onLlmDebugEntry(listener)` returning an unsubscribe, same rule as `daily:open`. |
+| `action:run`             | Run one Action (by trigger id) against `ActionContext` (`{ path, body, selection? }` — the active document). Returns `ActionOutcome`: an `'edit'` (`before`/`after` for the confirmation flow), a `'noop'` (ran, nothing to change), or an `'error'`. |
+| `chat:ask`               | Chat Ask mode: `ActionContext` + question → `AskOutcome`, either `{ kind: 'answer', text }` (read-only) or `{ kind: 'edit', before, after, previewStyle, summary }` (routed through the same confirmation flow). |
 
 All but `daily:open` follow the same request/response pattern: a channel
 name + types in `shared/ipc-api.ts`, an `ipcMain.handle` in
-`electron/main.ts` (delegating to `VaultManager` or `DailyNoteManager`),
-and an exposed method in `electron/preload.ts`. `daily:open` is the first
-main→renderer push —
+`electron/main.ts` (delegating to `VaultManager`, `DailyNoteManager`,
+`NoteManager`, `TagIndex`, `AppConfigStore`, `LmStudioClient`, or
+`ActionRunner`), and an exposed method in
+`electron/preload.ts`. `daily:open` is the first main→renderer push —
 still typed in `shared/ipc-api.ts`, and the preload wrapper forwards only
 the path, never the raw `ipcRenderer` event (ADR-0001).
 
@@ -245,29 +435,33 @@ the path, never the raw `ipcRenderer` event (ADR-0001).
   precisely because features like spellcheck/syntax-highlighting plug in
   as extensions (no custom plugin loader) — so the wrapper stays a thin
   host, not a framework. Packages: `codemirror` (basicSetup) +
-  `@codemirror/lang-markdown` + `@codemirror/theme-one-dark` (matches the
-  dark theme). The `cm-host` div stays mounted (`display:none`) while the
-  rendered view shows, so the instance and its undo history survive a
-  toggle.
-- **Rendered view = markdown-it → `[innerHTML]`.** markdown-it is
-  configured `html: false` (raw HTML in a note is escaped, not executed)
-  and the output string is bound through Angular's `[innerHTML]`, which
-  runs the built-in HTML sanitizer — two layers, no separate sanitizer
-  dependency. No live preview: roadmap Phase 1 is explicit about the
-  tab-switch model; live inline rendering is "Future Scope".
-- **Auto-switch mode (opt-in, [ADR-0004](09_architecture_decisions/0004-auto-switch-editor-mode.md)).**
-  `EditorService.autoSwitch` (a `localStorage`-persisted preference, off by
-  default) changes the interaction, not the structure: the rendered `.doc`
-  becomes `contenteditable="plaintext-only"` for a native caret, clicks no
-  longer switch views, and the first `beforeinput` is cancelled and
-  replayed into CodeMirror after switching to source at the matching
-  offset. `OpenDoc.caretOffset` (offset into `bufferContent`, no effect on
-  dirty state) is the shared position both views sync on. The source↔render
-  offset translation lives in two pure/DOM-pure modules,
-  `editor/source-map.ts` (markdown-it `token.map` → `cm-src-<n>` marker classes +
-  a per-block character alignment) and `editor/preview-caret.ts` (DOM
-  point ↔ text offset). Best-effort: character-precise for prose, headings
-  and fenced code; a few characters off in dense inline markup.
+  `@codemirror/lang-markdown` + `@codemirror/language-data` (nested
+  parsers for fenced code); `oneDark` was dropped for `dreyEditorLook`
+  (`editor-theme.ts`, from the design tokens). One always-visible view
+  runs both modes, so undo history and selection survive a mode switch.
+- **Live Preview = decorations over the one view (ADR-0009).**
+  `src/app/editor/live-preview/`: a `ViewPlugin` conceals syntax markers
+  away from the selection (reveal-on-touch: per node for inline
+  formatting, per line for headings/quotes/bullets, per block for fences)
+  and renders bullets, task checkboxes and rules as small widgets; a
+  `StateField` renders tables (block widgets via a minimal markdown-it,
+  `html: false`) and images (`src` via `vault-image.ts` →
+  `drey-asset://`, a privileged scheme served from the vault by
+  `electron/main.ts`). The leading YAML frontmatter is folded behind a
+  `▸ Frontmatter · N fields` pill by default (`frontmatter-fold.ts`, active
+  in source mode too, state remembered per tab), expandable to dim editable
+  YAML; it stays inert for every other decoration. Footnotes degrade to
+  plain text (no Lezer extension). The old read-only markdown-it
+  preview, highlight.js and click-to-edit are gone; this supersedes the
+  preview half of
+  [ADR-0008](09_architecture_decisions/0008-editor-mode-menu-and-rendered-preview.md).
+- **Mode is a `⋯` menu, not toggle buttons.** `EditorViewMode` is
+  `'live' | 'source'` (a stored `'preview'` migrates to `'live'`), a
+  per-tab `OpenDoc` field; the last choice is persisted (`drey.editor` →
+  `{ defaultMode }`) as the landing mode for new notes. A `Compartment`
+  swaps the Live Preview extensions in and out. Auto-switch /
+  `caretOffset` / `source-map.ts` / `preview-caret.ts` from ADR-0004 are
+  gone.
 - **Explicit save (Ctrl+S) + dirty indicator, not autosave.** Autosave's
   conflict story (keep-mine / take-external) depends on the chokidar file
   watcher, which no milestone has built yet
@@ -281,6 +475,8 @@ the path, never the raw `ipcRenderer` event (ADR-0001).
   which is milestone 5's concern (it also merges body `#tags` into
   frontmatter) — doing it now would mean a throwaway partial parser.
   Flagged deviation, deferred to milestone 5.
+  _(Superseded by milestone 6a — `note:save` now parses the frontmatter,
+  merges body `#tag`s, and bumps `updated:`. §5.9.)_
 - **One open document, no tab bar.** `EditorService` holds exactly one
   file. CLAUDE.md's tab bar is built when quick-capture / multiple windows
   (milestone 4+) give it more than one thing to hold.
@@ -298,6 +494,25 @@ the path, never the raw `ipcRenderer` event (ADR-0001).
   (`angular.json`). CodeMirror + markdown-it put the initial bundle at
   ~880 kB raw / ~263 kB transfer. Lazy-loading the editor isn't worth it
   for a desktop app whose main surface _is_ the editor.
+- **Editor content zoom, in the renderer** (`EditorZoomService` +
+  `editor.fontScale` in `app-config.json`, ADR-0015). Ctrl +/−/0 and
+  Ctrl+wheel while a document is open scale the CodeMirror surface only —
+  headings and code included, via `em`-relative sizing off one
+  `--drey-editor-scale` custom property — never the sidebar, tab bar,
+  entry drawer or assistant panel. This replaced a main-process
+  `webContents.setZoomFactor` zoom (custom View-menu items + the
+  `zoom-changed` event, persisted in `window-config.json`) that scaled the
+  whole window; `electron/zoom.ts` and its menu items are gone, and
+  `main.ts` calls `setVisualZoomLevelLimits(1, 1)` so the touchpad pinch
+  gesture can't zoom the chrome either.
+- **Editor typeface, in the renderer** (`SettingsAppearance` +
+  `editor.fontFamily` in `app-config.json`). Settings → Appearance picks
+  one of `EDITOR_FONT_FAMILIES` (`shared/app-config.ts`); `Editor` maps the
+  id to `--font-sans` / `--drey-heading-font` overrides on its own host, so
+  the document editor's body and headings (Live Preview and source, via
+  `editor-theme.ts`) follow the choice while the rest of the app keeps the
+  `styles.css` defaults. Persisted immediately, off the draft/Save path,
+  the same way the zoom multiplier is.
 - **Clipboard is native, owned in the main process** (`electron/menu.ts`).
   A `Menu.setApplicationMenu` template carries the standard edit roles
   (cut/copy/paste/select-all) so their accelerators stay bound even once a
@@ -397,42 +612,48 @@ placeholders. See also
   is written until the user types and saves (ADR-0003). "Has a note"
   markers come from scanning `daily/*.md` in `VaultService.fileTree()` —
   no new IPC for that.
-- **`CalendarService` / `ChatService` hold the view state**, not the
-  components (CLAUDE.md, "no business logic inside components"). Calendar
-  navigation + selection + note-date lookup; chat query + scope.
-  `ChatService.submit()` is intentionally a no-op until keyword search
-  lands.
-- **UI chrome is English**, matching the existing app ("Save",
-  "Source"/"Rendered"); the prototype's German labels are treated as
-  visual reference only. Vault content stays German (CLAUDE.md, "Language
+- **`CalendarService` / `EntryDraftService` / `AssistantService` hold the
+  view state**, not the components (CLAUDE.md, "no business logic inside
+  components"). Calendar navigation + selection + note-date lookup; the
+  drawer's draft and its empty-TOPIC rule; the assistant's per-note thread
+  and auto-summary rule.
+- **UI chrome is English**, matching the existing app ("Save", and the
+  `⋯` menu's "Live Preview"/"Source"); the prototype's German labels are treated
+  as visual reference only. Vault content stays German (CLAUDE.md, "Language
   Convention"). _(The "Drey" wordmark above the calendar was later
   removed on UX feedback — §5.8.)_
-- **Placeholders, clearly disabled:** the tab-bar "+" button, the
-  sidebar "Settings" entry, and the chat send button (until there's a
-  query _and_ a backend). None are wired to anything yet.
+- **Placeholders, clearly disabled:** the tab-bar "+" button. The
+  all-notes search scope disappeared with the chat bar; keyword search
+  gets its own surface when that milestone lands.
 
 ## 5.8 Notable implementation decisions — shell refinements
 
 Follow-up polish on the visual shell, driven by direct UX feedback.
 
 - **Resizable panes via native pointer events, not a CDK/split-pane
-  package.** Two 1px drag handles in `App` (`.divider-x` sidebar↔main,
-  `.divider-y` editor↔chat-input); `setPointerCapture` on the handle keeps
+  package.** Three 1px drag handles in `App` (`.divider-x` sidebar↔main and
+  main↔assistant, `.divider-y` editor↔drawer — the last only while the
+  drawer is open); `setPointerCapture` on the handle keeps
   the drag alive off the strip, `pointermove`/`pointerup` are handled on
   the host, and the moved-to size goes straight into `LayoutService`. ~15
   lines, no dependency — same rationale as the vendored icons (§5.7).
 - **`LayoutService` owns pane sizes; persistence is `localStorage`.**
-  `sidebarWidth` / `chatInputHeight` signals, setters clamp to a fixed
+  `sidebarWidth` / `assistantWidth` / `drawerHeight` signals, setters clamp to a fixed
   range, and the value is written synchronously from the setter (not via an
   `effect`) so a drag frame and its persisted value never diverge. It's
   per-machine window chrome, not note data, and must be readable before
   first paint — `localStorage`, not a main-process config file or the
   vault.
-- **Editor lands in the rendered ("preview") view by default**, and a
-  leading YAML frontmatter block is stripped before markdown-it renders
-  (`stripFrontmatter`, a pure exported function in `editor.service.ts`).
-  Only a `---` fence at offset 0 counts — a `---` further down stays a
-  horizontal rule. Click-to-edit still drops into source.
+- **Editor lands in `preview` by default** (or the last mode chosen via the
+  `⋯` menu, persisted per machine). A leading YAML frontmatter block is
+  stripped before markdown-it renders (`stripFrontmatter` /
+  `frontmatterEnd`, pure, in `editor/markdown-frontmatter.ts`). Only a
+  `---` fence at offset 0 counts — a `---` further down stays a horizontal
+  rule. A click in the preview drops to source at that block's line.
+  _(Superseded by ADR-0009: the mode is now `live`; frontmatter is kept in
+  the document but folded behind a pill by default (`frontmatter-fold.ts`),
+  expandable to dim editable YAML, in both modes; and click-to-edit is gone
+  — the cursor already sits in the rendered document. §5.5.)_
 - **The file-tree context menu is an in-renderer overlay, not Electron's
   `Menu.popup()`.** It matches the app's flat visual language and keeps all
   future in-app menus (tree, tabs, calendar) on one renderer-side pattern;
@@ -455,3 +676,357 @@ Follow-up polish on the visual shell, driven by direct UX feedback.
   own scroll, and each row carries a close `x` (reusing the tab-bar close
   affordance → `EditorService.closeTab`, which already prompts on a dirty
   buffer). The file tree above stays the primary surface.
+
+## 5.9 Notable implementation decisions — milestone 6 (tag parsing, autocomplete, registry index, routing)
+
+Built in two passes: **6a** — the tag *vocabulary* (`TagIndex`,
+autocomplete) and the *save pipeline* that maintains the frontmatter;
+**6b** — deterministic *routing*, appending each tagged dated entry into
+its topic's master-document `## History`.
+
+- **YAML frontmatter via the `yaml` package (`parseDocument`), not
+  `js-yaml` or a hand parser.** `parseDocument()` round-trips losslessly —
+  `note:save` mutates only `tags` / `updated` / `created` and every other
+  key, its value style, and any comment survive. Date fields are forced to
+  double-quoted scalars (`updated: "2026-09-05T14:32:00"`) because
+  `specs/frontmatter-schema.md` requires it and some YAML consumers coerce
+  bare dates to `Date`. `yaml` has zero transitive deps and is
+  main-process-only — it never enters the renderer bundle (verified: the
+  built `main.js` contains no `yaml` symbols); the pure module still lives
+  in `shared/` so the renderer test suite can reach it.
+- **The save pipeline runs in the main process, behind `note:save`.**
+  `specs/frontmatter-schema.md` puts the body-`#tag` merge and `updated:`
+  bump on the chokidar file watcher. There is no watcher yet, and routing
+  (6b) inherently needs the main-process `TagIndex` and returns a possibly
+  new content string the editor must adopt — so a single main-process
+  chokepoint is cleaner than splitting frontmatter ownership. Recorded as a
+  spec deviation ([ADR-0007](09_architecture_decisions/0007-on-save-tag-pipeline.md),
+  [11_risks_and_technical_debt.md](11_risks_and_technical_debt.md)).
+- **`EditorService.save()` now calls `saveNote` and adopts the returned
+  `content`** as both `savedContent` and `bufferContent`, so the merged
+  frontmatter shows in the editor and the tab is immediately clean. The
+  EOL transform moved from the service into `NoteManager` (the service
+  sends the LF buffer plus the `eol` flag). `Editor.loadActiveDoc()` gained
+  a same-file guard so this in-place reload keeps the caret roughly in
+  place instead of snapping to offset 0 (a tab switch still lands at 0).
+- **`#task` / `#important` are never merged as tags** — they are structural
+  markers (task lines, summary pinning), a two-entry denylist in
+  `shared/inline-tags.ts`. `daily/` and `templates/` files get `updated:`
+  bumped but their `tags` array left alone.
+- **`TagIndex` is a full rescan on vault select and after a tag-changing
+  save**, not incremental — there is no file watcher, so an external edit
+  is only reflected on the next rebuild. Cheap for a personal vault; noted
+  as tech debt. It is the single source for both `#tag` autocomplete and
+  (milestone 7) the classifier registry, per CLAUDE.md.
+- **`#tag` autocomplete is a language-data completion source**
+  (`markdownLanguage.data.of({ autocomplete })`), added to the static
+  `extensions` array — `basicSetup` already runs `autocompletion()` and its
+  keymap, and there is no `Compartment` infrastructure to hot-swap. The
+  source is pure and reads the live `TagService` signal, so a vault change
+  needs no editor rebuild. An alias match inserts the canonical `#tag`.
+  `@codemirror/autocomplete` is now a direct (type-only) dependency.
+- **Main-process code (`TagIndex`, `NoteManager`) has no unit-test
+  harness** (Vitest only sees `src/**/*.spec.ts`). All branching logic was
+  pushed into the pure `shared/` modules, which are covered from `src`
+  specs; the two classes only sequence filesystem calls.
+
+### 6b — routing
+
+- **Routing appends a dated copy into `## History`; it never moves a
+  file** ([ADR-0007](09_architecture_decisions/0007-on-save-tag-pipeline.md)).
+  For each dated entry (`shared/entries.ts` `parseDatedEntries` — `## HH:mm`
+  / `## YYYY-MM-DD HH:mm` / `### …` headings) that carries a known tag,
+  `NoteManager` reads that tag's master document and
+  `shared/history.ts` `appendHistoryEntry` adds a
+  `### <date> <time> <!-- drey:src <path>@<date> <time> -->` block at the
+  end of its History section (creating the section if absent). The marker
+  makes re-saving idempotent. The source note is unchanged apart from the
+  6a frontmatter rewrite — content is deliberately duplicated between the
+  timeline and the topic view (the project owner's explicit call; refines
+  `specs/roadmap.md`'s "no duplicate", which meant *files*).
+- **The entry's date** comes from the heading if it has one, else from
+  `daily/YYYY-MM-DD.md` in the path, else `created:`, else today.
+- **Not routed:** `templates/` files, entries with no known-tag or a tag
+  with no master, and an entry whose target master *is* the note being
+  saved. Appending to a master also bumps *its* `updated:`.
+- **`NoteSaveResult.appendedTo`** lists masters that changed;
+  `EditorService` reloads any of them open in a **clean** tab (a dirty one
+  is left alone — that conflict is the file watcher's job).
+  `unknownTags` now also covers per-entry tags with no master, for the
+  milestone-8 inbox.
+- **History entries append at the end of the section, not date-sorted**
+  (`docs/11`). Fine when saves arrive roughly in order.
+
+## 5.10 Notable implementation decisions — Settings, Actions, chat Ask mode
+
+The Settings screen (LLM connection + an Actions engine), a single shared
+confirmation flow, and an Input/Ask toggle on the bottom bar. Two ADRs:
+[0010](09_architecture_decisions/0010-app-settings-storage.md) (settings
+storage) and
+[0011](09_architecture_decisions/0011-unified-confirmation-flow.md) (one
+confirmation mechanism). _The 5.1 whitebox diagram predates this work;
+the pieces below hang off `App` (renders `Settings` + `ConfirmationDialog`),
+the `Sidebar` settings entry, the editor `⋯` menu, and the chat bar._
+
+- **Settings live in `app-config.json` under `userData`, not the vault**
+  (ADR-0010). Settings are application config, not knowledge; a vault can
+  be opened from more than one machine. Same `app.getPath('userData')`
+  JSON-file pattern as `vault-config.json`.
+  `shared/app-config.ts` owns the shape + `normalizeAppConfig` (a total
+  parse); `electron/app-config.ts` does only fs. `config:get` / `config:set`
+  send the whole object (one editor, no field-level races).
+- **Global, not per-vault — flagged and decided.** Every setting is global
+  for Phase 1. A per-vault override layer is an additive change if Phase 3
+  multi-vault needs it; not built now.
+- **LM Studio client with no hard-coded model** (`lm-studio-client.ts`).
+  `GET /models` fills the Settings picker ("Load models"); `testConnection`
+  never rejects. `chat()` rejects when the master switch is off or no model
+  is set. Global `fetch` + `AbortSignal.timeout` (8 s list / 120 s chat).
+- **Bearer API key, so the client is not LM-Studio-specific.** `llm.apiKey`
+  (optional) goes out as `Authorization: Bearer <key>` on **both**
+  endpoints — the OpenAI convention that Unsloth Desktop
+  (`sk-unsloth-…`, `:8888/v1`), llama.cpp, vLLM and Ollama all speak; LM
+  Studio simply ignores it. The header is omitted entirely when no key is
+  set, so a server that needs none isn't handed an empty bearer. A
+  401/403 is translated into "the endpoint rejected the API key" /
+  "this endpoint requires an API key" rather than a bare status, and
+  `testConnection` stops claiming "could not reach" for a host that
+  answered. The class name stays `LmStudioClient` (CLAUDE.md's component
+  list, ADR-0010/0011) — LM Studio is still the documented default.
+- **The model box is a combobox, not a `<select>`.** `<input list>` +
+  `<datalist>`: "Load models" fills the dropdown from `/models`, but the id
+  can also be typed, so a server that doesn't expose that endpoint (or
+  rejects it before a key is entered) is still usable. Mirrors Unsloth's
+  own "Load Models … or enter model IDs manually" affordance.
+- **The Settings screen edits a draft; only Save crosses IPC** (ADR-0010).
+  `SettingsService` holds `config` (persisted) and `draft` (edited);
+  `isDirty` is a structural compare (`shared/deep-equal.ts`). Replaced a
+  persist-on-every-change design that could *erase input as you typed*
+  whenever the main process didn't yet know a field — the renderer adopted
+  the stripped response. Runtime state reads `config`, never `draft`.
+  Closing the screen while dirty raises an inline save / discard / keep-
+  editing bar (in-renderer, not a native `confirm()` — same reasoning as
+  the file-tree context menu, §5.8). The confirmation dialog's "don't ask
+  again" is the one persist-now path.
+- **Text inputs fire on `(input)` and store the value verbatim.** Trimming
+  in the handler would rewrite the bound `[value]` mid-typing and eat the
+  character just pressed; `normalizeAppConfig` trims on save instead.
+- **"Load models" / "Test connection" probe the *typed* endpoint.** Both
+  IPC calls take an optional `LlmEndpoint` override that the screen fills
+  from the draft, so testing a new URL/key doesn't force a save first.
+  `chat()` takes no override — actions and Ask always use committed settings.
+- **A debug log at the bottom of the LLM pane makes the traffic
+  inspectable.** `LmStudioClient.send()` is the single place a request
+  leaves the app; it records URL, headers, body, status, duration and
+  response into `LlmDebugLog` (main, ring buffer of 50, never persisted —
+  it carries note content). The pane lists them newest-first and expands
+  one into a runnable `curl`.
+  - **Secrets:** entries are built with the bearer **already masked**
+    (`maskAuthorizationHeader`), so the panel and any screenshot of it are
+    safe. "Copy curl (with key)" re-inserts the real key in the *renderer*
+    only, as an explicit user action.
+  - **`authSent` is a first-class field**, not just a header among others:
+    a 401 with `authSent: false` (no key sent at all) is a completely
+    different problem from a key the server rejected, and the pane calls
+    that case out with the two likely causes — an unsaved key, or a stale
+    main process (`docs/11`, environment gotchas).
+  - Bodies are truncated at 2 kB with a "N chars total" marker; a
+    document-rewrite prompt would otherwise dwarf the panel and the IPC
+    payload.
+  - **Calls refused before any HTTP** (master switch off, no model) are
+    recorded too, as `Not sent — <reason>`. Otherwise the log is silent in
+    exactly the cases where nothing reaches the server, which reads as "the
+    button did nothing".
+  - **There is no separate authentication call** to log — the bearer is a
+    header on every request, so the first entry of a session is normally
+    `GET /v1/models`. The pane says so, because expecting a login handshake
+    is the natural (wrong) assumption.
+  - `LlmDebugService` **merges** the pulled backlog with live pushes by id
+    rather than overwriting: an entry arriving during the `getLlmDebugLog()`
+    await used to be dropped. A failure to read the log is **surfaced**, not
+    swallowed — an empty panel was indistinguishable from "that IPC channel
+    doesn't exist", which is precisely what a stale main process looks like.
+- **The API key field distinguishes "empty" from "hidden".** A password
+  input alone cannot: both look blank. Below it, a status line reports the
+  *persisted* key masked (`Saved: sk-unslo…3456`) or `No key saved`, plus an
+  "edited, press Save" note when the draft differs — and a Show/Hide toggle
+  reveals what is actually stored, which is the first thing you want when a
+  server answers 401.
+- **Actions = templates + trigger mappings** (`shared/app-config.ts`).
+  A template is name + prompt + `resultKind` (`localized` / `document`,
+  which picks the confirmation preview). A trigger maps a template to an
+  event (`on-save` / `manual`) with its own `confirm` toggle (default on)
+  and `enabled` flag. Two built-in templates, editable but not deletable
+  (`normalizeAppConfig` re-injects them):
+  - **Autotagging** — its prompt text *is* the classifier's Prompt 2
+    system prompt (`{registry_list}` injected at call time), so it is
+    genuinely wired to the classifier, not a second copy. Ships with a
+    **manual** trigger: `specs/classifier-spec.md` scopes tag suggestion
+    to batch/inbox review, so auto-tagging every save is wrong; `on-save`
+    stays a supported type with no built-in mapping.
+  - **Update summary** — rebuilds a `type: master` document's `## Summary`
+    section (recency window + `#important` selection in
+    `selectSummaryInput`, prose from the model, section swap in
+    `applySummarySection`). A built-in **manual** Action, replacing the
+    standalone "Update summary" button `specs/roadmap.md` envisaged — one
+    code path.
+- **Manual actions run against the active editor document** (there is no
+  Inbox yet). The editor's `⋯` menu lists `SettingsService.manualActions()`;
+  `Editor.runAction` passes the live CodeMirror text + selection.
+- **One `ConfirmationService` + `ConfirmationDialog`** (ADR-0011), used by
+  both `ActionsService` (manual + the drained on-save queue) and
+  `AssistantService.ask`. `request()` returns `Promise<boolean>`; requests are
+  serialised (the on-save caller awaits them in a loop). `'localized'` →
+  `lineDiff` with long context runs collapsed; `'document'` → two panes.
+  The "don't ask again for this action" checkbox calls
+  `SettingsService.setTriggerConfirm(id, false)` — the same toggle
+  Settings shows, not a separate suppression list.
+- **`note:save` gained `runOnSaveActions` (in) + `pendingActions` (out).**
+  After the normal save, `NoteManager.runOnSaveActions` runs each enabled
+  `on-save` trigger against the just-written text: a `confirm` trigger's
+  `'edit'` outcome goes into `pendingActions`; a non-`confirm` one is
+  applied right there (the file is written again, `content` reflects it).
+  `EditorService.applyRewrite` saves confirmed edits with
+  `runOnSaveActions: false`, so applying an action never recurses.
+  `EditorService` exposes `pendingActions` as a signal;
+  `ActionsService` drains it via an `effect` (no `EditorService →
+  ActionsService` dependency, which would be a DI cycle).
+- **The Input/Ask toggle is gone, split into two surfaces.** What was the
+  bottom bar's `'input'` mode is now the entry drawer (§5.12); what was
+  `'ask'` is the assistant panel's composer (§5.11), which still calls
+  `chat:ask` and still routes a document-modifying reply through the shared
+  confirmation flow. One job, one place — the toggle (and `ChatService`
+  with it) had no reason to survive that split.
+- **Pure logic is Vitest-covered** (`shared/app-config.ts`,
+  `shared/classifier.ts`, `shared/actions.ts`, `shared/action-apply.ts`,
+  `shared/text-diff.ts`, `shared/llm.ts`); `electron/` stays a thin
+  sequencer (ADR-0007). `shared/actions.ts` was kept dependency-light and
+  the frontmatter/`yaml` helpers split into `shared/action-apply.ts` so
+  `resolveActions` can run in the renderer without pulling `yaml` into the
+  bundle.
+
+
+## 5.11 Note assistant panel (Feature A)
+
+The right-hand column. Per open note it shows an automatic summary card,
+then the question/answer cards that follow, and a composer.
+
+- **The panel is only shown when the assistant can actually do something.**
+  `panelVisible = llmEnabled && panelWanted`: with the LLM master switch off
+  it can neither summarise nor answer, so it would be dead furniture taking
+  a third of the window. `panelWanted` is the user's own show/hide choice
+  from the sparkles toggle in the editor chrome, remembered in
+  `localStorage` like the pane sizes; that toggle only appears when the
+  panel is available at all.
+- **`AssistantService`** owns the state: threads by note path, the per-note
+  auto-summary override, and the in-flight flags. It reads
+  `EditorService.openPath()` through an `effect`, so a tab switch loads
+  (and possibly summarises) the newly active note with no wiring in the
+  component.
+- **Persistence is a sidecar file** — `.{name}.chat.json` beside the note,
+  read/written through `thread:read` / `thread:write` (`ChatStore` in main).
+  See [ADR-0012](09_architecture_decisions/0012-note-assistant-sidecar-thread.md)
+  for why not in the note and why not in a central store.
+- **The auto-summary rule**: first open this session + no sidecar thread
+  yet + toggle on → `thread:summarize` → the reply is stored as the
+  thread's first card. Switching the toggle on later applies the same rule
+  once. Anything else does nothing, so re-opening a note never re-bills a
+  summary that already exists.
+- **The panel toggle is session state**, seeded from
+  `assistant.autoSummaryDefault` (Settings → Assistant) and never
+  written back — a per-note decision must not change the global default.
+- **The summary prompt is the `note-summary` built-in template**, editable
+  in Settings → Actions like the other built-ins. `ActionRunner.run`
+  refuses it as a generic action (returns a `noop`): its result is a panel
+  card, and running it as a rewrite would replace the note with its own
+  summary.
+- **Ask goes through the same plumbing as before**: `chat:ask` →
+  `{kind:'answer'}` becomes an answer card; `{kind:'edit'}` goes through
+  `ConfirmationService` and, on confirm, `EditorService.applyRewrite`,
+  with the outcome recorded as a card so the thread reads as a history of
+  what actually happened.
+- **Per-card actions** (hover, top-right): *Copy* puts the card text on the
+  clipboard; *Restart from here* is a two-step control — the first click
+  arms an inline "Remove N message(s)?" strip, the second calls
+  `AssistantService.restartFrom(cardId)`, which truncates the thread to
+  everything *before* that card and rewrites the sidecar. When the card was
+  a question its text is returned and dropped back into the composer to
+  edit and re-send; nothing is sent automatically. Disabled while a
+  generation is running.
+- **The composer is the shared `MarkdownSurface`** (compact mode), not a
+  bare `<textarea>` — so the inline spellchecker (nspell + click-to-correct
+  popup, [ADR-0013](09_architecture_decisions/0013-inline-spellcheck.md))
+  behaves here exactly as in the editor and the entry drawer; there is no
+  second spellchecker anywhere in the app. Its `submitRequested` (Enter,
+  not Shift+Enter) drives `send()`; a `readOnly` input makes it
+  non-interactive while no note is open. It grows with its content up to a
+  200 px cap (CSS), past which it scrolls.
+
+## 5.12 Entry drawer (Feature B)
+
+The bottom of the main area, replacing the old capture bar.
+
+- **Field order is load-bearing**: TOPIC first and prominent (serif, full
+  width, not a chip), then the Tags / People / Meetings chip rows, then
+  the Markdown body. The topic is what the entry is filed under and what
+  gates the spellchecker, so it is asked for before the prose.
+- **`EntryDraftService`** holds the draft and the one rule with teeth:
+  submitting with an empty TOPIC does not append, it raises an inline
+  confirmation, and only the second, explicit press appends. `submit()`
+  therefore returns `'appended' | 'needs-topic-confirmation' | 'empty'`,
+  not a boolean.
+- **The appended block is composed by pure shared code**
+  (`shared/entry-compose.ts`), so the preview and the real insertion cannot
+  drift:
+
+  ```
+  ## HH:mm — <Thema>
+  <Markdown-Text>
+  #tag #tag · [[Person]] · [[Meeting]]
+  ```
+
+  The topic (with its dash) and the meta line are each omitted when empty,
+  which keeps a bare entry byte-identical to what the old capture bar
+  wrote. `entryInsertion()` returns a `{from, to, insert}` range rather
+  than a new document, so the editor dispatches it as an ordinary
+  CodeMirror change — undo, caret and scroll position survive.
+- **`shared/entries.ts` learned the topic suffix.** The routing parser had
+  to, not a second parser: routing, `untaggedEntryText` and the master
+  `## History` all walk entries through `parseDatedEntries`, and a
+  topic-carrying entry that failed to parse would silently stop being
+  routed. A title with no dash (`## 14:32 Rollout`) still isn't an entry.
+- **Appending saves immediately.** The entry's `#tag`s only reach their
+  master documents through the `note:save` pipeline, and "Zum Dokument
+  hinzufügen" is an explicit commit — unlike typing in the editor, which
+  still leaves a dirty buffer for Ctrl+S.
+- **Inline spellcheck** ([ADR-0013](09_architecture_decisions/0013-inline-spellcheck.md)):
+  the body is a `MarkdownSurface` with the CodeMirror extension mixed in;
+  `SpellcheckService` supplies the `SpellcheckSource` and caches verdicts
+  per language. It checks from the first word typed — the "anchored entry"
+  gate an earlier version had was removed — and the **document editor gets
+  the same extension**, viewport-scoped past 60 kB. Because the Settings
+  switch and the dictionary choice can change without the text changing,
+  both surfaces hold an `effect` that calls
+  `MarkdownSurface.recheckSpelling()`.
+
+
+## 5.13 Generation: no timeout, Cancel and a clock (ADR-0014)
+
+`/chat/completions` has **no deadline**. The 120 s one it used to have was
+killing real work on a local model, and no constant is right for a machine
+whose answer time depends on the prompt (see
+[ADR-0014](09_architecture_decisions/0014-no-chat-timeout-cancellable-tasks.md)).
+
+- `LlmTaskRegistry` (main) holds an `AbortController` per generation, keyed
+  by a task id; `llm:cancel` aborts one. `ActionRunner.run` / `.ask` /
+  `.summarize` all run inside it, so Actions are cancellable too.
+- **The renderer mints the task id** (`LlmTaskService.run`) and passes it
+  into the call. It has to: a Cancel button that only appears once the call
+  returns is a Cancel button for a request that is already over.
+- A cancelled Action comes back as a `'noop'`, and the panel puts
+  "Generation cancelled." on a grey `notice` line rather than the accent
+  `err` line — the user decided, nothing broke.
+- `LlmTaskService` ticks a 1 Hz clock while anything is running
+  (`Summarising · thinking 12s`) and hands the caller the elapsed
+  milliseconds when it finishes; `AssistantService` stores that as
+  `durationMs` on the card, so `took 8s` survives a restart.

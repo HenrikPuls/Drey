@@ -1,0 +1,216 @@
+@if (llm(); as llm) {
+  <div class="pane">
+    <label class="switch-row">
+      <input
+        type="checkbox"
+        [checked]="llm.enabled"
+        (change)="onEnabledChange($any($event.target).checked)"
+      />
+      <span>
+        <span class="switch-label">Enable LLM features</span>
+        <span class="switch-hint">
+          Classification, actions, and the chat’s Ask mode. Off means no model is ever called.
+        </span>
+      </span>
+    </label>
+
+    <fieldset [disabled]="!llm.enabled">
+      <div class="field">
+        <label for="llm-base-url">Base URL</label>
+        <input
+          id="llm-base-url"
+          type="text"
+          spellcheck="false"
+          [value]="llm.baseUrl"
+          (input)="onBaseUrlChange($any($event.target).value)"
+          placeholder="http://localhost:1234/v1"
+        />
+        <p class="field-hint">
+          Any OpenAI-compatible endpoint — LM Studio (<span class="mono">:1234/v1</span>),
+          Unsloth Desktop (<span class="mono">:8888/v1</span>), llama.cpp, vLLM, Ollama.
+        </p>
+      </div>
+
+      <div class="field">
+        <label for="llm-api-key">API key</label>
+        <div class="row">
+          <input
+            id="llm-api-key"
+            [type]="showApiKey() ? 'text' : 'password'"
+            spellcheck="false"
+            autocomplete="off"
+            [value]="llm.apiKey ?? ''"
+            (input)="onApiKeyChange($any($event.target).value)"
+            placeholder="optional — e.g. sk-unsloth-…"
+          />
+          <button
+            type="button"
+            class="ghost"
+            (click)="showApiKey.set(!showApiKey())"
+            [attr.aria-pressed]="showApiKey()"
+          >
+            {{ showApiKey() ? 'Hide' : 'Show' }}
+          </button>
+        </div>
+
+        <p class="key-status">
+          @if (savedKeyMask(); as mask) {
+            <span class="ok">Saved: <span class="mono">{{ mask }}</span></span>
+          } @else {
+            <span class="none">No key saved.</span>
+          }
+          @if (apiKeyUnsaved()) {
+            <span class="pending">
+              — edited, press <strong>Save</strong> to store it (requests use the saved key).
+            </span>
+          }
+        </p>
+
+        <p class="field-hint">
+          Sent as <span class="mono">Authorization: Bearer …</span> on every request —
+          there is no separate login call. Leave empty for servers that don’t need one
+          (LM Studio ignores it); Unsloth Desktop requires it. Stored in plain text in the
+          app config file.
+        </p>
+      </div>
+
+      <div class="field">
+        <label for="llm-model">Model</label>
+        <div class="row">
+          <input
+            id="llm-model"
+            type="text"
+            list="llm-model-options"
+            spellcheck="false"
+            autocomplete="off"
+            [value]="llm.model ?? ''"
+            (input)="onModelChange($any($event.target).value)"
+            placeholder="— none selected —"
+          />
+          <datalist id="llm-model-options">
+            @for (model of modelOptions(); track model) {
+              <option [value]="model"></option>
+            }
+          </datalist>
+          <button
+            type="button"
+            class="ghost"
+            (click)="settings.refreshModels()"
+            [disabled]="settings.modelsLoading()"
+          >
+            {{ settings.modelsLoading() ? 'Loading…' : 'Load models' }}
+          </button>
+        </div>
+        <p class="field-hint">
+          “Load models” pulls the list live from the endpoint; you can also type an id by
+          hand if the server doesn’t expose <span class="mono">/models</span>. No model id
+          is ever assumed.
+        </p>
+      </div>
+
+      <div class="field">
+        <button
+          type="button"
+          class="ghost"
+          (click)="settings.testConnection()"
+          [disabled]="settings.testing()"
+        >
+          {{ settings.testing() ? 'Testing…' : 'Test connection' }}
+        </button>
+        @if (settings.connectionTest(); as test) {
+          <p class="test-result" [class.ok]="test.ok" [class.fail]="!test.ok">
+            {{ test.message }}
+          </p>
+        }
+      </div>
+    </fieldset>
+
+    <section class="debug">
+      <div class="debug-head">
+        <h3>Debug log</h3>
+        <span class="debug-count">{{ entries().length }} request{{ entries().length === 1 ? '' : 's' }}</span>
+        <button type="button" class="link" (click)="debug.clear()" [disabled]="!entries().length">
+          Clear
+        </button>
+      </div>
+      <p class="field-hint">
+        Every request this session, newest first — including ones that were refused
+        before being sent. There is no separate authentication call: the bearer token
+        travels as a header on each request, so the very first entry is normally
+        <span class="mono">GET /v1/models</span>. Click an entry for the exact headers
+        and body, and a runnable <span class="mono">curl</span>. The key is masked here;
+        “Copy curl” substitutes the real one.
+      </p>
+
+      @if (debug.error(); as error) {
+        <p class="diagnosis">
+          The debug log could not be read from the main process: <span class="mono">{{ error }}</span>.
+          That usually means the running Electron main process predates this feature —
+          <strong>restart the app</strong>.
+        </p>
+      }
+
+      @if (unauthorizedWithoutKey()) {
+        <p class="diagnosis">
+          The last request came back <strong>401/403</strong> and carried
+          <strong>no Authorization header</strong> — the app didn’t send a key at all.
+          Either no key is saved yet (type one above and press <strong>Save</strong>), or
+          the Electron main process is still running an older build: restart the app.
+        </p>
+      }
+
+      @if (!entries().length) {
+        <p class="empty">
+          Nothing yet. Press “Test connection” or “Load models” above to make a request.
+        </p>
+      } @else {
+        <ul class="entries">
+          @for (entry of entries(); track entry.id) {
+            <li class="entry" [class.bad]="entry.error !== null || (entry.status ?? 0) >= 400">
+              <button type="button" class="entry-head" (click)="toggleEntry(entry.id)">
+                <span class="status">
+                  {{ entry.error !== null ? 'ERR' : entry.status }}
+                </span>
+                <span class="method">{{ entry.method }}</span>
+                <span class="url">{{ entry.url }}</span>
+                <span class="auth" [class.missing]="!entry.authSent">
+                  {{ entry.authSent ? 'auth ✓' : 'no auth' }}
+                </span>
+                <span class="timing">{{ entry.durationMs }} ms</span>
+                <span class="at">{{ entry.at }}</span>
+              </button>
+
+              @if (openEntry() === entry.id) {
+                <div class="entry-body">
+                  <div class="block">
+                    <div class="block-head">
+                      <span class="block-label">Request (as curl)</span>
+                      <button type="button" class="link" (click)="copyCurl(entry)">
+                        {{ copied() === entry.id ? 'Copied ✓' : 'Copy curl (with key)' }}
+                      </button>
+                    </div>
+                    <pre>{{ curlFor(entry) }}</pre>
+                  </div>
+
+                  @if (entry.body) {
+                    <div class="block">
+                      <span class="block-label">Request body</span>
+                      <pre>{{ entry.body }}</pre>
+                    </div>
+                  }
+
+                  <div class="block">
+                    <span class="block-label">
+                      Response{{ entry.status !== null ? ' — HTTP ' + entry.status : '' }}
+                    </span>
+                    <pre>{{ entry.error ?? entry.responseBody ?? '(empty)' }}</pre>
+                  </div>
+                </div>
+              }
+            </li>
+          }
+        </ul>
+      }
+    </section>
+  </div>
+}

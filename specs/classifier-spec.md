@@ -53,6 +53,14 @@ with one click on the checkbox/line. No reason to build a confirmation flow for 
 (inbox) is opened. Needs the **tag registry** as context — derived from the
 `description` field of every `type: master` file.
 
+**Implementation note:** this prompt is the built-in **"Autotagging"**
+action's template text (`{registry_list}` is substituted with the rendered
+registry at call time), so the Actions system and the classifier share one
+prompt string — editing the template changes classification. Until the
+inbox milestone exists, Autotagging runs on demand against the *active
+document's* untagged dated entries instead of a batch queue; the batch/inbox
+entry point is added with milestone 7/8.
+
 ```
 System:
 Du bekommst eine Notiz ohne Tag sowie eine Liste bereits existierender
