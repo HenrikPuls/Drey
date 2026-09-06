@@ -1,0 +1,120 @@
+<div class="pane">
+  <section>
+    <h3>Triggers</h3>
+    <p class="section-hint">
+      When each template runs. “On save” runs from the note-save pipeline; “Manual button”
+      runs from the editor’s <span class="mono">⋯</span> menu. Each mapping confirms before
+      applying unless you turn that off here or via “don’t ask again”.
+    </p>
+
+    @if (triggers().length === 0) {
+      <p class="empty">No triggers. Add one below.</p>
+    }
+    <ul class="rows">
+      @for (trigger of triggers(); track trigger.id) {
+        <li class="row">
+          <span class="name">{{ templateName(trigger.templateId) }}</span>
+          <select
+            [value]="trigger.event"
+            (change)="settings.setTriggerEvent(trigger.id, $any($event.target).value)"
+          >
+            @for (event of events; track event.id) {
+              <option [value]="event.id">{{ event.label }}</option>
+            }
+          </select>
+          <label class="check">
+            <input
+              type="checkbox"
+              [checked]="trigger.confirm"
+              (change)="settings.setTriggerConfirm(trigger.id, $any($event.target).checked)"
+            />
+            Confirm
+          </label>
+          <label class="check">
+            <input
+              type="checkbox"
+              [checked]="trigger.enabled"
+              (change)="settings.setTriggerEnabled(trigger.id, $any($event.target).checked)"
+            />
+            Enabled
+          </label>
+          <button type="button" class="link-danger" (click)="settings.removeTrigger(trigger.id)">
+            Remove
+          </button>
+        </li>
+      }
+    </ul>
+
+    <div class="add-trigger">
+      <select [value]="newTriggerTemplate()" (change)="newTriggerTemplate.set($any($event.target).value)">
+        @for (template of templates(); track template.id) {
+          <option [value]="template.id">{{ template.name }}</option>
+        }
+      </select>
+      <select [value]="newTriggerEvent()" (change)="newTriggerEvent.set($any($event.target).value)">
+        @for (event of events; track event.id) {
+          <option [value]="event.id">{{ event.label }}</option>
+        }
+      </select>
+      <button type="button" class="ghost" (click)="addTrigger()">Add trigger</button>
+    </div>
+  </section>
+
+  <section>
+    <h3>Template library</h3>
+    <p class="section-hint">
+      A template is a name, a prompt, and the kind of change it makes. “Autotagging” routes
+      through the classifier (its prompt is the classifier’s system prompt); “Update summary”
+      rebuilds a master document’s Summary section.
+    </p>
+
+    <ul class="templates">
+      @for (template of templates(); track template.id) {
+        <li class="template">
+          <div class="template-head">
+            <input
+              class="template-name"
+              type="text"
+              [value]="template.name"
+              (input)="settings.updateTemplate(template.id, { name: $any($event.target).value })"
+            />
+            @if (template.builtin) {
+              <span class="badge">built-in</span>
+            }
+            <select
+              [value]="template.resultKind"
+              (change)="settings.updateTemplate(template.id, { resultKind: $any($event.target).value })"
+            >
+              @for (kind of resultKinds; track kind.id) {
+                <option [value]="kind.id">{{ kind.label }}</option>
+              }
+            </select>
+            <button type="button" class="link" (click)="toggleTemplate(template.id)">
+              {{ openTemplate() === template.id ? 'Hide prompt' : 'Edit prompt' }}
+            </button>
+            @if (!template.builtin) {
+              <button
+                type="button"
+                class="link-danger"
+                (click)="settings.removeTemplate(template.id)"
+              >
+                Delete
+              </button>
+            }
+          </div>
+          @if (openTemplate() === template.id) {
+            <textarea
+              class="template-prompt"
+              rows="6"
+              spellcheck="false"
+              [value]="template.prompt"
+              (input)="settings.updateTemplate(template.id, { prompt: $any($event.target).value })"
+            ></textarea>
+          }
+        </li>
+      }
+    </ul>
+
+    <button type="button" class="ghost" (click)="addTemplate()">Add action</button>
+  </section>
+</div>

@@ -1,0 +1,19 @@
+<div class="pane">
+  <div class="field">
+    <label for="editor-font-family">Editor font</label>
+    <select
+      id="editor-font-family"
+      [value]="settings.editorFontFamily()"
+      (change)="onFontFamilyChange($any($event.target).value)"
+    >
+      @for (font of fontFamilies; track font.id) {
+        <option [value]="font.id">{{ font.label }}</option>
+      }
+    </select>
+    <p class="field-hint">
+      Sets the typeface for the document editor — body text and headings, in both Live Preview and
+      source mode. It applies straight away and is saved on its own, independent of the Save button
+      below. The sidebar, entry drawer and assistant panel are left on the app default.
+    </p>
+  </div>
+</div>

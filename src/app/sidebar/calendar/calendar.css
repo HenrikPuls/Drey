@@ -11,9 +11,33 @@
 }
 
 .month {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  border: 0;
+  background: transparent;
+  padding: 2px 4px;
+  margin-left: -4px;
+  border-radius: var(--radius-xs);
+  cursor: pointer;
   font-size: 11.5px;
   font-weight: 500;
   color: #cdc9c2;
+}
+
+.month:hover {
+  background: var(--hover-bg);
+  color: var(--text-primary);
+}
+
+.month app-icon {
+  display: flex;
+  color: var(--text-5);
+  transition: transform 120ms ease;
+}
+
+.month.open app-icon {
+  transform: rotate(180deg);
 }
 
 .nav {
@@ -109,4 +133,40 @@
   margin-left: -1.5px;
   border-radius: 50%;
   background: rgba(234, 231, 225, 0.45);
+}
+
+.months {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 2px;
+  /* Roughly the height of the six-row day grid, so the sidebar below does
+     not jump when the picker opens. */
+  min-height: 150px;
+  align-content: center;
+}
+
+.month-cell {
+  position: relative;
+  height: 26px;
+  border: 0;
+  background: transparent;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  font-size: 10.5px;
+  color: var(--text-3);
+  padding: 0;
+}
+
+.month-cell:hover {
+  background: var(--hover-bg);
+}
+
+.month-cell.current {
+  color: var(--accent-contrast);
+  background: var(--accent);
+}
+
+.month-cell.shown:not(.current) {
+  box-shadow: inset 0 0 0 1px var(--accent-ring);
+  color: var(--text-primary);
 }

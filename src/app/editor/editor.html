@@ -15,43 +15,36 @@
   <div class="actions">
     <button
       type="button"
-      class="auto"
-      [class.on]="editor.autoSwitch()"
-      [attr.aria-pressed]="editor.autoSwitch()"
-      (click)="editor.setAutoSwitch(!editor.autoSwitch())"
-      title="Auto switch: preview keeps a caret and stays put; typing drops into source, saving returns to preview"
-    >
-      Auto switch
-    </button>
-
-    <div class="toggle" role="tablist" aria-label="Editor view">
-      <button
-        type="button"
-        role="tab"
-        [class.on]="editor.viewMode() === 'source'"
-        [attr.aria-selected]="editor.viewMode() === 'source'"
-        (click)="editor.setViewMode('source')"
-      >
-        Source
-      </button>
-      <button
-        type="button"
-        role="tab"
-        [class.on]="editor.viewMode() === 'rendered'"
-        [attr.aria-selected]="editor.viewMode() === 'rendered'"
-        (click)="editor.setViewMode('rendered')"
-      >
-        Rendered
-      </button>
-    </div>
-
-    <button
-      type="button"
       class="save"
       [disabled]="!editor.isDirty() || editor.isSaving()"
       (click)="editor.save()"
     >
       {{ editor.isSaving() ? 'Saving…' : 'Save' }}
+    </button>
+
+    @if (assistant.panelAvailable()) {
+      <button
+        type="button"
+        class="more"
+        [class.on]="assistant.panelShown()"
+        [attr.aria-pressed]="assistant.panelShown()"
+        (click)="assistant.togglePanel()"
+        [title]="assistant.panelShown() ? 'Hide note assistant' : 'Show note assistant'"
+      >
+        <app-icon name="sparkles" [size]="15" />
+      </button>
+    }
+
+    <button
+      #moreBtn
+      type="button"
+      class="more"
+      aria-haspopup="menu"
+      [attr.aria-expanded]="menuOpen()"
+      (click)="toggleMenu()"
+      title="Editor mode"
+    >
+      <app-icon name="more-horizontal" />
     </button>
   </div>
 </div>
@@ -59,25 +52,74 @@
 @if (editor.error(); as error) {
   <p class="err">{{ error }}</p>
 }
+@if (actions.message(); as message) {
+  <p class="err notice" (click)="actions.message.set(null)" title="Dismiss">{{ message }}</p>
+}
+
+@if (menuOpen()) {
+  <div
+    class="ctx-backdrop"
+    (click)="closeMenu()"
+    (contextmenu)="$event.preventDefault(); closeMenu()"
+  ></div>
+  <div
+    class="ctx-menu editor-menu"
+    role="menu"
+    [style.left.px]="menuPos().x"
+    [style.top.px]="menuPos().y"
+  >
+    <button
+      type="button"
+      role="menuitemradio"
+      [attr.aria-checked]="editor.viewMode() === 'live'"
+      (click)="chooseMode('live')"
+    >
+      <span class="tick">
+        @if (editor.viewMode() === 'live') {
+          <app-icon name="check" [size]="13" />
+        }
+      </span>
+      Live Preview
+    </button>
+    <button
+      type="button"
+      role="menuitemradio"
+      [attr.aria-checked]="editor.viewMode() === 'source'"
+      (click)="chooseMode('source')"
+    >
+      <span class="tick">
+        @if (editor.viewMode() === 'source') {
+          <app-icon name="check" [size]="13" />
+        }
+      </span>
+      Source
+    </button>
+
+    @if (settings.manualActions().length > 0) {
+      <div class="menu-sep" role="separator"></div>
+      @for (action of settings.manualActions(); track action.triggerId) {
+        <button
+          type="button"
+          role="menuitem"
+          [disabled]="actions.busy() !== null"
+          (click)="runAction(action.triggerId)"
+        >
+          <span class="tick"></span>
+          {{ actions.busy() === action.triggerId ? action.name + ' …' : action.name }}
+        </button>
+      }
+    }
+  </div>
+}
 
 <div class="body">
-  <!-- Kept mounted (display:none when inactive) so the CodeMirror instance
-       and its undo history survive a toggle to the rendered view. -->
-  <div #cmHost class="cm-host" [class.hidden]="editor.viewMode() !== 'source'"></div>
-
-  @if (editor.viewMode() === 'rendered') {
-    <div class="rendered" [class.auto]="editor.autoSwitch()">
-      <div
-        #previewDoc
-        class="doc"
-        [innerHTML]="renderedHtml()"
-        [title]="editor.autoSwitch() ? 'Type to edit' : null"
-        [attr.contenteditable]="editor.autoSwitch() ? 'plaintext-only' : null"
-        [attr.spellcheck]="editor.autoSwitch() ? 'false' : null"
-        (click)="onPreviewClick()"
-        (keyup)="onPreviewKeyup()"
-        (beforeinput)="onPreviewBeforeInput($event)"
-      ></div>
-    </div>
-  }
+  <!-- One shared MarkdownSurface for both modes; Live Preview is a set of
+       extensions swapped in/out via its mode input (ADR-0009). -->
+  <app-markdown-surface
+    class="cm-host"
+    [mode]="editor.viewMode()"
+    [foldFrontmatter]="true"
+    [spellcheck]="spellcheckSource"
+    (docChanged)="editor.updateBuffer($event)"
+  />
 </div>

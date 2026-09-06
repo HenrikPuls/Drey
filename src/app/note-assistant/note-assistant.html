@@ -1,0 +1,144 @@
+<header class="head">
+  <div class="titles">
+    <span class="title">Note assistant</span>
+    <span class="sub" [title]="assistant.notePath()">{{ noteName() }}</span>
+  </div>
+
+  <div class="toggle-row">
+    <span class="toggle-label" id="auto-summary-label">Automatic summary</span>
+    <button
+      type="button"
+      class="switch"
+      role="switch"
+      aria-labelledby="auto-summary-label"
+      [attr.aria-checked]="assistant.autoSummary()"
+      [class.on]="assistant.autoSummary()"
+      [disabled]="assistant.notePath() === null"
+      (click)="assistant.setAutoSummary(!assistant.autoSummary())"
+    >
+      <span class="knob"></span>
+    </button>
+  </div>
+</header>
+
+<div class="thread">
+  @for (card of assistant.cards(); track card.id) {
+    <article
+      class="card"
+      [class.summary]="card.role === 'summary'"
+      [class.q]="card.role === 'question'"
+      [class.a]="card.role === 'answer'"
+    >
+      <div class="card-label">
+        {{ label(card.role) }}
+        @if (card.at) {
+          <span class="at">· {{ card.at.slice(11, 16) }}</span>
+        }
+        @if (took(card.durationMs); as took) {
+          <span class="took">· {{ took }}</span>
+        }
+      </div>
+      <p class="card-body">{{ card.text }}</p>
+
+      @if (confirmingRestart() === card.id) {
+        <div class="card-confirm">
+          <span
+            >Remove {{ assistant.laterCount(card.id) }} message{{
+              assistant.laterCount(card.id) === 1 ? '' : 's'
+            }}?</span
+          >
+          <button type="button" (click)="restartFrom(card.id)">Restart</button>
+          <button type="button" class="ghost" (click)="cancelRestart()">Cancel</button>
+        </div>
+      } @else {
+        <div class="card-actions">
+          @if (card.role === 'question') {
+            <button
+              type="button"
+              title="Restart chat from here"
+              [disabled]="assistant.isRunning()"
+              (click)="armRestart(card.id)"
+            >
+              <app-icon name="rotate-ccw" [size]="12" />
+            </button>
+          }
+          <button
+            type="button"
+            [title]="copiedCard() === card.id ? 'Copied' : 'Copy to clipboard'"
+            (click)="copyCard(card.id, card.text)"
+          >
+            <app-icon [name]="copiedCard() === card.id ? 'check' : 'copy'" [size]="12" />
+          </button>
+        </div>
+      }
+    </article>
+  } @empty {
+    @if (!assistant.summarizing()) {
+      <p class="empty">
+        @if (assistant.notePath() === null) {
+          Open a note to have it summarised.
+        } @else if (assistant.autoSummary()) {
+          Nothing summarised yet.
+        } @else {
+          Automatic summary is off for this note.
+        }
+      </p>
+    }
+  }
+
+  <!-- No timeout on a local model any more, so the elapsed counter is what
+       says "still working" and Cancel is what ends it (ADR-0014). -->
+  @if (assistant.runningLabel(); as running) {
+    <p class="working">
+      <span class="at">{{ running }}</span>
+      <button type="button" class="cancel" (click)="assistant.cancel()">Cancel</button>
+    </p>
+  }
+  @if (assistant.notice(); as notice) {
+    <p class="notice" (click)="assistant.dismiss()" title="Dismiss">{{ notice }}</p>
+  }
+  @if (assistant.error(); as error) {
+    <p class="err" (click)="assistant.dismiss()" title="Dismiss">{{ error }}</p>
+  }
+</div>
+
+<div
+  class="divider-y"
+  role="separator"
+  aria-orientation="horizontal"
+  aria-label="Resize composer"
+  (pointerdown)="startComposerDrag($event)"
+></div>
+
+<footer class="composer" [style.height.px]="layout.assistantComposerHeight()">
+  @if (assistant.canSummarize()) {
+    <button
+      type="button"
+      class="summarize"
+      [disabled]="assistant.summarizing()"
+      (click)="assistant.summarizeNow()"
+    >
+      Summarise now
+    </button>
+  }
+
+  <div class="composer-box">
+    <app-markdown-surface
+      class="composer-input"
+      [compact]="true"
+      [spellcheck]="spellcheckSource"
+      [readOnly]="assistant.notePath() === null"
+      placeholder="Ask about this note …"
+      (submitRequested)="send()"
+    />
+    <button
+      type="button"
+      class="send"
+      aria-label="Send question"
+      [disabled]="assistant.asking()"
+      (click)="send()"
+    >
+      <app-icon name="arrow-up" [size]="13" [strokeWidth]="1.5" />
+    </button>
+  </div>
+</footer>

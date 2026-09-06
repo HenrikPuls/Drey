@@ -7,6 +7,15 @@
  * between what main sends and what renderer expects is a compile error,
  * not a runtime surprise. See docs/09_architecture_decisions/0001-*.md.
  */
+import type { AppConfig, CustomDictionary, LlmEndpoint } from './app-config';
+import type { ActionContext, ActionOutcome, AskOutcome } from './actions';
+import type { ChatThread } from './chat-thread';
+import type { LlmDebugEntry } from './llm-debug';
+
+export type { AppConfig, LlmEndpoint, CustomDictionary } from './app-config';
+export type { ChatCard, ChatCardRole, ChatThread } from './chat-thread';
+export type { LlmDebugEntry } from './llm-debug';
+export type { ActionContext, ActionOutcome, AskOutcome, ResolvedAction } from './actions';
 
 /**
  * Channel names. Most are `ipcMain.handle` / `ipcRenderer.invoke` request
@@ -25,6 +34,25 @@ export const IPC_CHANNELS = {
   vaultCreateDirectory: 'vault:create-directory',
   dailyOpen: 'daily:open',
   dailyBuildContent: 'daily:build-content',
+  noteSave: 'note:save',
+  tagList: 'tag:list',
+  tagRegistry: 'tag:registry',
+  configGet: 'config:get',
+  configSet: 'config:set',
+  llmListModels: 'llm:list-models',
+  llmTestConnection: 'llm:test-connection',
+  llmDebugList: 'llm:debug-list',
+  llmDebugClear: 'llm:debug-clear',
+  llmDebugEntry: 'llm:debug-entry',
+  actionRun: 'action:run',
+  chatAsk: 'chat:ask',
+  llmCancel: 'llm:cancel',
+  threadRead: 'thread:read',
+  threadWrite: 'thread:write',
+  threadSummarize: 'thread:summarize',
+  spellCheck: 'spell:check',
+  spellLanguages: 'spell:languages',
+  spellAddDictionary: 'spell:add-dictionary',
 } as const;
 
 /**
@@ -88,9 +116,236 @@ export interface VaultFileContent {
   modifiedMs: number;
 }
 
+/** `type:` of a note file (see `specs/frontmatter-schema.md`). */
+export type NoteType = 'master' | 'notiz' | 'interview-template';
+
+/** `art:` of a `type: master` document (see `specs/frontmatter-schema.md`). */
+export type MasterArt = 'thema' | 'person' | 'team' | 'projekt' | 'begriff';
+
+/**
+ * A note's parsed YAML frontmatter, normalised. Every field is present:
+ * arrays default to `[]`, everything else to `null` when the key is
+ * missing or the wrong shape, so consumers never have to null-check the
+ * container -- only the values. `tags[0]` is the primary tag.
+ */
+export interface Frontmatter {
+  type: NoteType | null;
+  title: string | null;
+  tags: string[];
+  aliases: string[];
+  created: string | null;
+  updated: string | null;
+  art: MasterArt | null;
+  description: string | null;
+  verweis: string | null;
+}
+
+/**
+ * One tag in the vault-wide vocabulary, as surfaced to the renderer for
+ * `#tag` autocomplete. Every tag ever seen in any file's `tags[]` gets an
+ * entry; `hasMaster` / `masterPath` are set only for tags that have a
+ * `type: master` document (the ones routing can target and the classifier
+ * registry is built from).
+ */
+export interface TagEntry {
+  tag: string;
+  aliases: string[];
+  art: MasterArt | null;
+  description: string | null;
+  hasMaster: boolean;
+  masterPath: string | null;
+}
+
+/**
+ * One line of the classifier tag registry (`specs/classifier-spec.md`):
+ * derived from the `description` of a `type: master` file. Kept structured
+ * here; `formatRegistry()` in `shared/tag-registry.ts` renders the
+ * `- <tag> (<art>): <description>` text where the prompt needs it.
+ */
+export interface TagRegistryEntry {
+  tag: string;
+  art: MasterArt;
+  description: string;
+  path: string;
+}
+
+/** Renderer -> main: save the active editor buffer as a note. */
+export interface NoteSaveRequest {
+  /** Vault-relative path of the file being saved. */
+  path: string;
+  /** Full buffer, always `\n`-separated (the editor normalises to LF). */
+  body: string;
+  /** Line ending to restore on disk. */
+  eol: '\n' | '\r\n';
+  /**
+   * Whether the `on-save` Action triggers run for this save. Default
+   * (`undefined`) is yes; the confirmation flow passes `false` when the
+   * save is itself applying an Action's result, so it can't recurse.
+   */
+  runOnSaveActions?: boolean;
+}
+
+/**
+ * Result of `saveNote`. `content` is the possibly-rewritten note text
+ * (frontmatter `tags` merged, `updated:` bumped) in `\n` form -- the
+ * renderer adopts it as the tab's new saved content. `appendedTo` lists
+ * master-document paths that gained a `## History` entry from this save
+ * (milestone 6b routing); `unknownTags` are inline tags with no known
+ * master, handed back for the milestone-8 inbox.
+ */
+export interface NoteSaveResult {
+  path: string;
+  content: string;
+  modifiedMs: number;
+  tags: string[];
+  unknownTags: string[];
+  appendedTo: string[];
+  /**
+   * `'edit'` outcomes from `on-save` Actions whose trigger still needs
+   * confirmation -- the renderer walks these through the confirmation
+   * dialog. Non-confirm triggers are applied in the main process before
+   * this result returns and are already reflected in `content`. Empty /
+   * absent when LLM features are off or there are no `on-save` triggers.
+   */
+  pendingActions?: ActionOutcome[];
+}
+
+/** Result of `llm:test-connection` / the model-list probe (`GET /models`). */
+export interface LlmConnectionTest {
+  ok: boolean;
+  /** Human-readable success or failure detail for the Settings screen. */
+  message: string;
+  /** Model ids from the endpoint; `[]` on failure. */
+  models: string[];
+}
+
+/**
+ * One dictionary the spellchecker can be switched to -- the bundled
+ * languages plus whatever the user added (`CustomDictionary`). `loaded`
+ * says whether the dictionary files were actually readable, so the
+ * settings pane can show a broken custom entry as broken instead of
+ * silently checking nothing.
+ */
+export interface SpellLanguage {
+  id: string;
+  label: string;
+  builtin: boolean;
+  loaded: boolean;
+  /** Why it failed to load, when `loaded` is false. */
+  error?: string;
+}
+
+/** Result of one `spell:check` round: only the words the dictionary rejects. */
+export interface SpellCheckResult {
+  /** The dictionary that produced this verdict (`''` when spellcheck is off). */
+  language: string;
+  issues: Array<{ word: string; suggestions: string[] }>;
+}
+
 /** The API surface exposed on `window.dreyApi` by the preload script. */
 export interface DreyApi {
   getAppInfo(): Promise<AppInfo>;
+
+  /** The full app config (`shared/app-config.ts`), always normalised/complete. */
+  getConfig(): Promise<AppConfig>;
+
+  /**
+   * Replaces the whole app config and returns what was persisted (the
+   * Settings screen holds the entire object and re-sends it on every
+   * change). Rejects only on a filesystem write error.
+   */
+  setConfig(config: AppConfig): Promise<AppConfig>;
+
+  /**
+   * Live `GET /models`. Uses the saved LLM endpoint unless `override` is
+   * given — the Settings screen passes the URL/key currently typed in, so
+   * loading models doesn't force a save first. Rejects on transport/HTTP error.
+   */
+  listLlmModels(override?: LlmEndpoint): Promise<string[]>;
+
+  /** Probe the LLM endpoint (saved, or `override`); never rejects (failure is `{ ok: false }`). */
+  testLlmConnection(override?: LlmEndpoint): Promise<LlmConnectionTest>;
+
+  /**
+   * Every LLM HTTP exchange this session, oldest first — what the LLM
+   * settings pane's debug log shows. Bearer tokens are already masked.
+   * In-memory only (it carries note content), capped at 50 entries.
+   */
+  getLlmDebugLog(): Promise<LlmDebugEntry[]>;
+
+  /** Empties the debug log. */
+  clearLlmDebugLog(): Promise<void>;
+
+  /**
+   * Subscribes to new debug entries as requests happen (main -> renderer
+   * push, same shape as `onOpenDailyNote`). Returns an unsubscribe.
+   */
+  onLlmDebugEntry(listener: (entry: LlmDebugEntry) => void): () => void;
+
+  /**
+   * Runs one Action (by trigger id) against `context` (the active
+   * document). An `'edit'` outcome is handed to the confirmation flow; the
+   * renderer applies the `after` text on confirm.
+   *
+   * `taskId` (see `cancelLlmTask`) makes the run abortable. Cancelling
+   * comes back as a `'noop'` outcome, not an error -- it is the user's
+   * decision, not a failure.
+   */
+  runAction(triggerId: string, context: ActionContext, taskId?: string): Promise<ActionOutcome>;
+
+  /**
+   * Chat Ask mode: sends `question` plus the document (and any selection)
+   * to the LLM. Returns an answer to display, or an edit to confirm.
+   * Abortable via `taskId`; a cancelled call rejects.
+   */
+  askChat(context: ActionContext, question: string, taskId?: string): Promise<AskOutcome>;
+
+  /**
+   * Aborts a running generation. `taskId` is minted by the **renderer**
+   * (`crypto.randomUUID`) and passed into the call being started, because
+   * the UI has to be able to offer Cancel before that call returns.
+   * Resolves `true` when something was actually aborted.
+   *
+   * This is why `/chat/completions` carries no timeout: a local model can
+   * legitimately think for minutes, so the user decides when waiting is
+   * over, not a constant (`electron/llm-tasks.ts`).
+   */
+  cancelLlmTask(taskId: string): Promise<boolean>;
+
+  /**
+   * The note assistant's sidecar thread for `notePath`
+   * (`shared/chat-thread.ts`). Resolves to an empty thread when no sidecar
+   * file exists yet -- "no thread" is a normal state, not an error.
+   */
+  readChatThread(notePath: string): Promise<ChatThread>;
+
+  /** Writes the sidecar thread back. Rejects only on a filesystem error. */
+  writeChatThread(thread: ChatThread): Promise<void>;
+
+  /**
+   * Summarises a note for the assistant panel's first card, using the
+   * `note-summary` built-in template's prompt. Rejects when LLM features
+   * are off or the endpoint is unreachable -- the panel shows the message.
+   */
+  summarizeNote(context: ActionContext, taskId?: string): Promise<string>;
+
+  /**
+   * Checks `words` against the active dictionary and returns only the ones
+   * it rejects, each with up to a handful of suggestions. Never rejects:
+   * spellcheck being off or a dictionary failing to load yields an empty
+   * issue list, because a broken checker must not break typing.
+   */
+  checkSpelling(words: string[]): Promise<SpellCheckResult>;
+
+  /** Every dictionary that can be selected, bundled and custom. */
+  listSpellLanguages(): Promise<SpellLanguage[]>;
+
+  /**
+   * Opens a file picker for a Hunspell `.dic` (its `.aff` sibling is taken
+   * from the same folder) and returns the config entry to store, or `null`
+   * when the user cancelled or the pair is incomplete.
+   */
+  addSpellDictionary(): Promise<CustomDictionary | null>;
 
   /** Currently active vault path, or null if none has been selected yet. */
   getActiveVault(): Promise<string | null>;
@@ -166,6 +421,32 @@ export interface DreyApi {
    * event is never forwarded (see docs/09_architecture_decisions/0001-*.md).
    */
   onOpenDailyNote(listener: (relativePath: string) => void): () => void;
+
+  /**
+   * Saves a note through the tag pipeline (milestone 6): parses the
+   * frontmatter, merges inline `#tag`s from the body into `tags` (topic
+   * notes only -- `daily/` and `templates/` are left alone), bumps
+   * `updated:`, routes tagged entries into their topic's master document,
+   * writes the file, and hands back the rewritten content plus what
+   * happened. Replaces `writeVaultFile` for `.md` documents. Same
+   * path rules / rejection conditions as `readVaultFile`.
+   */
+  saveNote(request: NoteSaveRequest): Promise<NoteSaveResult>;
+
+  /**
+   * The vault-wide tag vocabulary for `#tag` autocomplete. Rebuilt when a
+   * vault is selected and updated incrementally after each `saveNote`;
+   * external edits are picked up on the next vault load (no file watcher
+   * yet). Resolves to `[]` when no vault is active.
+   */
+  listTags(): Promise<TagEntry[]>;
+
+  /**
+   * The classifier tag registry (`specs/classifier-spec.md`): one entry
+   * per `type: master` document. Structured; the prompt text is rendered
+   * by `formatRegistry()`. Consumed from milestone 7 on.
+   */
+  getTagRegistry(): Promise<TagRegistryEntry[]>;
 }
 
 declare global {

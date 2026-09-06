@@ -1,20 +1,33 @@
 import { TestBed } from '@angular/core/testing';
 import { EditorService, stripFrontmatter } from './editor.service';
-import { DreyApi } from '../../../shared/ipc-api';
+import { DreyApi, NoteSaveRequest, NoteSaveResult } from '../../../shared/ipc-api';
+
+/** Default fake `saveNote`: echoes the buffer back as the saved content (no rewrite). */
+function echoSave(request: NoteSaveRequest): Promise<NoteSaveResult> {
+  return Promise.resolve({
+    path: request.path,
+    content: request.body,
+    modifiedMs: 200,
+    tags: [],
+    unknownTags: [],
+    appendedTo: [],
+  });
+}
 
 describe('EditorService', () => {
   let service: EditorService;
-  let writes: Array<{ path: string; content: string }>;
+  let saves: NoteSaveRequest[];
 
   beforeEach(() => {
-    writes = [];
+    saves = [];
     const fakeApi: Partial<DreyApi> = {
       readVaultFile: (relativePath: string) =>
         Promise.resolve({ content: `content of ${relativePath}`, modifiedMs: 100 }),
-      writeVaultFile: (relativePath: string, content: string) => {
-        writes.push({ path: relativePath, content });
-        return Promise.resolve(200);
+      saveNote: (request: NoteSaveRequest) => {
+        saves.push(request);
+        return echoSave(request);
       },
+      listTags: () => Promise.resolve([]),
     };
     window.dreyApi = fakeApi as DreyApi;
     service = TestBed.inject(EditorService);
@@ -32,7 +45,7 @@ describe('EditorService', () => {
     expect(service.bufferContent()).toBe('content of sailing/_index.md');
     expect(service.savedContent()).toBe('content of sailing/_index.md');
     expect(service.isDirty()).toBe(false);
-    expect(service.viewMode()).toBe('rendered');
+    expect(service.viewMode()).toBe('live');
   });
 
   it('becomes dirty when the buffer diverges and clean again after save', async () => {
@@ -42,26 +55,99 @@ describe('EditorService', () => {
 
     await service.save();
 
-    expect(writes).toEqual([{ path: 'note.md', content: 'content of note.md + edit' }]);
+    expect(saves).toEqual([{ path: 'note.md', body: 'content of note.md + edit', eol: '\n' }]);
     expect(service.savedContent()).toBe('content of note.md + edit');
     expect(service.isDirty()).toBe(false);
+  });
+
+  it('adopts the frontmatter the save pipeline rewrites and refreshes the tag list', async () => {
+    TestBed.resetTestingModule();
+    let tagListCalls = 0;
+    const rewriteApi: Partial<DreyApi> = {
+      readVaultFile: () =>
+        Promise.resolve({ content: '---\ntags: []\n---\n\nBody #sailing\n', modifiedMs: 1 }),
+      saveNote: (request: NoteSaveRequest) =>
+        Promise.resolve({
+          path: request.path,
+          content: '---\ntags: ["sailing"]\nupdated: "2026-09-06T10:00:00"\n---\n\nBody #sailing\n',
+          modifiedMs: 2,
+          tags: ['sailing'],
+          unknownTags: ['sailing'],
+          appendedTo: [],
+        }),
+      listTags: () => {
+        tagListCalls += 1;
+        return Promise.resolve([]);
+      },
+    };
+    window.dreyApi = rewriteApi as DreyApi;
+    const rewriteService = TestBed.inject(EditorService);
+
+    await rewriteService.openFile('note.md');
+    rewriteService.updateBuffer('---\ntags: []\n---\n\nBody #sailing edited\n');
+    await rewriteService.save();
+
+    const expected =
+      '---\ntags: ["sailing"]\nupdated: "2026-09-06T10:00:00"\n---\n\nBody #sailing\n';
+    expect(rewriteService.savedContent()).toBe(expected);
+    expect(rewriteService.bufferContent()).toBe(expected);
+    expect(rewriteService.isDirty()).toBe(false);
+    // once from the service constructor, once after the tag-changing save
+    expect(tagListCalls).toBeGreaterThanOrEqual(2);
   });
 
   it('save is a no-op when nothing changed', async () => {
     await service.openFile('note.md');
     await service.save();
-    expect(writes).toEqual([]);
+    expect(saves).toEqual([]);
   });
 
-  it('stays clean opening a CRLF file and writes CRLF back on save', async () => {
+  it('reloads a clean open master tab that a routed History entry was appended to', async () => {
     TestBed.resetTestingModule();
-    const crlfWrites: string[] = [];
+    let masterOnDisk = '---\ntype: master\n---\n\n## History\n';
+    const api: Partial<DreyApi> = {
+      readVaultFile: (path: string) =>
+        Promise.resolve({
+          content: path === 'sailing/_index.md' ? masterOnDisk : `content of ${path}`,
+          modifiedMs: 1,
+        }),
+      saveNote: (request: NoteSaveRequest) => {
+        masterOnDisk =
+          '---\ntype: master\n---\n\n## History\n\n### 2026-09-06 14:32 <!-- m -->\nRouted\n';
+        return Promise.resolve({
+          path: request.path,
+          content: request.body,
+          modifiedMs: 2,
+          tags: ['sailing'],
+          unknownTags: [],
+          appendedTo: ['sailing/_index.md'],
+        });
+      },
+      listTags: () => Promise.resolve([]),
+    };
+    window.dreyApi = api as DreyApi;
+    const svc = TestBed.inject(EditorService);
+
+    await svc.openFile('sailing/_index.md');
+    await svc.openFile('daily/2026-09-06.md');
+    svc.updateBuffer('# 2026-09-06\n\n## 14:32\nRouted #sailing\n');
+    await svc.save();
+
+    svc.activate('sailing/_index.md');
+    expect(svc.savedContent()).toContain('### 2026-09-06 14:32');
+    expect(svc.isDirty()).toBe(false);
+  });
+
+  it('sends the LF buffer plus the file EOL to the save pipeline', async () => {
+    TestBed.resetTestingModule();
+    const crlfSaves: NoteSaveRequest[] = [];
     const crlfApi: Partial<DreyApi> = {
       readVaultFile: () => Promise.resolve({ content: 'line one\r\nline two\r\n', modifiedMs: 1 }),
-      writeVaultFile: (_path: string, content: string) => {
-        crlfWrites.push(content);
-        return Promise.resolve(2);
+      saveNote: (request: NoteSaveRequest) => {
+        crlfSaves.push(request);
+        return echoSave(request);
       },
+      listTags: () => Promise.resolve([]),
     };
     window.dreyApi = crlfApi as DreyApi;
     const crlfService = TestBed.inject(EditorService);
@@ -75,7 +161,11 @@ describe('EditorService', () => {
     crlfService.updateBuffer('line one\nline two\nline three\n');
     await crlfService.save();
 
-    expect(crlfWrites).toEqual(['line one\r\nline two\r\nline three\r\n']);
+    // The renderer sends LF + the EOL flag; restoring CRLF on disk is the
+    // main process's job now (note:save), not the editor service's.
+    expect(crlfSaves).toEqual([
+      { path: 'crlf.md', body: 'line one\nline two\nline three\n', eol: '\r\n' },
+    ]);
     expect(crlfService.isDirty()).toBe(false);
   });
 
@@ -136,14 +226,15 @@ describe('EditorService', () => {
 
     it('opens an unsaved draft from the template when the file is missing, and only writes on first real edit', async () => {
       TestBed.resetTestingModule();
-      const draftWrites: Array<{ path: string; content: string }> = [];
+      const draftSaves: NoteSaveRequest[] = [];
       const draftApi: Partial<DreyApi> = {
         readVaultFile: () => Promise.reject(new Error('ENOENT')),
         buildDailyNoteContent: () => Promise.resolve('# 2026-09-06\n\n## 08:00\n'),
-        writeVaultFile: (path: string, content: string) => {
-          draftWrites.push({ path, content });
-          return Promise.resolve(9);
+        saveNote: (request: NoteSaveRequest) => {
+          draftSaves.push(request);
+          return echoSave(request);
         },
+        listTags: () => Promise.resolve([]),
       };
       window.dreyApi = draftApi as DreyApi;
       const draftService = TestBed.inject(EditorService);
@@ -155,14 +246,18 @@ describe('EditorService', () => {
 
       // An untouched draft is not saved -- no empty file created.
       await draftService.save();
-      expect(draftWrites).toEqual([]);
+      expect(draftSaves).toEqual([]);
 
       draftService.updateBuffer('# 2026-09-06\n\n## 08:00\nEndlich getippt\n');
       expect(draftService.isDirty()).toBe(true);
       await draftService.save();
 
-      expect(draftWrites).toEqual([
-        { path: 'daily/2026-09-06.md', content: '# 2026-09-06\n\n## 08:00\nEndlich getippt\n' },
+      expect(draftSaves).toEqual([
+        {
+          path: 'daily/2026-09-06.md',
+          body: '# 2026-09-06\n\n## 08:00\nEndlich getippt\n',
+          eol: '\n',
+        },
       ]);
       expect(draftService.activeIsDraft()).toBe(false);
       expect(draftService.isDirty()).toBe(false);
@@ -196,52 +291,37 @@ describe('EditorService', () => {
     });
   });
 
-  describe('auto-switch preference', () => {
-    it('defaults off, and persists across a fresh service instance when enabled', () => {
-      expect(service.autoSwitch()).toBe(false);
-
-      service.setAutoSwitch(true);
-      expect(service.autoSwitch()).toBe(true);
-      expect(JSON.parse(localStorage.getItem('drey.editor')!)).toEqual({ autoSwitch: true });
-
-      TestBed.resetTestingModule();
-      expect(TestBed.inject(EditorService).autoSwitch()).toBe(true);
+  describe('default-mode preference', () => {
+    it('defaults to live preview and a fresh instance opens files in live preview', async () => {
+      await service.openFile('a.md');
+      expect(service.viewMode()).toBe('live');
     });
 
-    it('forces the active tab into the rendered view when enabled', async () => {
+    it("migrates a stored pre-ADR-0009 'preview' default to 'live'", async () => {
+      localStorage.setItem('drey.editor', JSON.stringify({ defaultMode: 'preview' }));
+      await service.openFile('a.md');
+      expect(service.viewMode()).toBe('live');
+    });
+
+    it('remembers the last chosen mode as the default for future opens', async () => {
       await service.openFile('a.md');
       service.setViewMode('source');
+      expect(JSON.parse(localStorage.getItem('drey.editor')!)).toEqual({ defaultMode: 'source' });
 
-      service.setAutoSwitch(true);
-      expect(service.viewMode()).toBe('rendered');
-    });
-  });
-
-  describe('caretOffset', () => {
-    it('is per-tab and never negative', async () => {
-      await service.openFile('a.md');
-      service.setCaretOffset(5);
-      await service.openFile('b.md');
-      expect(service.caretOffset()).toBe(0);
-
-      service.activate('a.md');
-      expect(service.caretOffset()).toBe(5);
-
-      service.setCaretOffset(-3);
-      expect(service.caretOffset()).toBe(0);
-    });
-
-    it('does not make the tab dirty', async () => {
-      await service.openFile('a.md');
-      service.setCaretOffset(4);
-      expect(service.isDirty()).toBe(false);
+      TestBed.resetTestingModule();
+      const fresh = TestBed.inject(EditorService);
+      await fresh.openFile('b.md');
+      expect(fresh.viewMode()).toBe('source');
     });
   });
 
   it('requestNewDailyEntry bumps the request counter', () => {
-    const before = service.newEntryRequest();
+    const before = service.newEntryRequest().id;
     service.requestNewDailyEntry();
-    expect(service.newEntryRequest()).toBe(before + 1);
+    expect(service.newEntryRequest()).toEqual({ id: before + 1, text: undefined });
+
+    service.requestNewDailyEntry('captured line');
+    expect(service.newEntryRequest()).toEqual({ id: before + 2, text: 'captured line' });
   });
 
   describe('stripFrontmatter', () => {

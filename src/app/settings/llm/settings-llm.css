@@ -1,0 +1,303 @@
+.pane {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  max-width: 620px;
+}
+
+.switch-row {
+  display: flex;
+  gap: 10px;
+  cursor: pointer;
+}
+
+.switch-row input {
+  margin-top: 2px;
+}
+
+.switch-label {
+  display: block;
+  font-size: 0.88rem;
+  color: var(--text-2);
+}
+
+.switch-hint {
+  display: block;
+  font-size: 0.76rem;
+  color: var(--text-6);
+  margin-top: 2px;
+}
+
+fieldset {
+  border: 0;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+fieldset[disabled] {
+  opacity: 0.45;
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.field label {
+  font-size: 0.78rem;
+  color: var(--text-4);
+}
+
+.row {
+  display: flex;
+  gap: 8px;
+}
+
+input[type='text'],
+input[type='password'],
+select {
+  flex: 1;
+  min-width: 0;
+  background: var(--bg-input);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+  color: var(--text-primary);
+  font: inherit;
+  font-size: 0.82rem;
+  padding: 7px 9px;
+}
+
+.mono {
+  font-family: var(--font-mono);
+  font-size: 0.95em;
+  color: var(--text-5);
+}
+
+.field-hint {
+  margin: 0;
+  font-size: 0.74rem;
+  color: var(--text-6);
+}
+
+/* "Is a key actually stored?" -- distinguishes an empty field from a hidden one. */
+.key-status {
+  margin: 0;
+  font-size: 0.76rem;
+}
+
+.key-status .ok {
+  color: #7d8f6e;
+}
+
+.key-status .none {
+  color: var(--text-6);
+}
+
+.key-status .pending {
+  color: var(--accent);
+}
+
+.ghost {
+  background: transparent;
+  border: 1px solid var(--border-strong);
+  color: var(--text-3);
+  border-radius: var(--radius);
+  font-size: 0.8rem;
+  padding: 7px 12px;
+  cursor: pointer;
+  align-self: flex-start;
+}
+
+.ghost:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.test-result {
+  margin: 2px 0 0;
+  font-size: 0.78rem;
+}
+
+.test-result.ok {
+  color: #7d8f6e;
+}
+
+.test-result.fail {
+  color: var(--accent);
+}
+
+/* -- Debug log ---------------------------------------------------------- */
+
+.debug {
+  border-top: 1px solid var(--border);
+  padding-top: 16px;
+}
+
+.debug-head {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  margin-bottom: 4px;
+}
+
+.debug-head h3 {
+  margin: 0;
+  font-size: 0.88rem;
+  color: var(--text-2);
+}
+
+.debug-count {
+  flex: 1;
+  font-size: 0.74rem;
+  color: var(--text-6);
+}
+
+.link {
+  border: 0;
+  background: transparent;
+  color: var(--text-4);
+  font-size: 0.76rem;
+  padding: 2px 4px;
+  cursor: pointer;
+}
+
+.link:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.diagnosis {
+  margin: 10px 0 0;
+  padding: 9px 11px;
+  font-size: 0.78rem;
+  line-height: 1.5;
+  color: var(--text-2);
+  background: rgba(201, 100, 66, 0.12);
+  border-left: 2px solid var(--accent);
+  border-radius: var(--radius-xs);
+}
+
+.empty {
+  margin: 10px 0 0;
+  font-size: 0.78rem;
+  color: var(--text-6);
+}
+
+.entries {
+  list-style: none;
+  margin: 10px 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.entry {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-input);
+  overflow: hidden;
+}
+
+.entry.bad {
+  border-color: rgba(201, 100, 66, 0.4);
+}
+
+.entry-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+  padding: 7px 9px;
+  text-align: left;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-3);
+}
+
+.entry-head:hover {
+  background: var(--hover-bg);
+}
+
+.status {
+  flex: none;
+  min-width: 30px;
+  color: #7d8f6e;
+}
+
+.entry.bad .status {
+  color: var(--accent);
+}
+
+.method {
+  flex: none;
+  color: var(--text-5);
+}
+
+.url {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-2);
+}
+
+.auth {
+  flex: none;
+  color: var(--text-6);
+}
+
+.auth.missing {
+  color: var(--accent);
+}
+
+.timing,
+.at {
+  flex: none;
+  color: var(--text-6);
+}
+
+.entry-body {
+  padding: 4px 9px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  border-top: 1px solid var(--border);
+}
+
+.block-head {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.block-label {
+  flex: 1;
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-6);
+}
+
+.entry-body pre {
+  margin: 4px 0 0;
+  padding: 8px;
+  max-height: 220px;
+  overflow: auto;
+  background: var(--bg-main);
+  border-radius: var(--radius-xs);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  line-height: 1.5;
+  color: var(--text-2);
+  white-space: pre-wrap;
+  word-break: break-word;
+}

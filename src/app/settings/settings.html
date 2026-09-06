@@ -1,0 +1,90 @@
+<div class="backdrop" (click)="requestClose()"></div>
+
+<div class="panel" role="dialog" aria-modal="true" aria-label="Settings">
+  <nav class="categories">
+    <div class="head">
+      <span class="title">Settings</span>
+      <button type="button" class="close" (click)="requestClose()" aria-label="Close settings">
+        <app-icon name="x" [size]="15" />
+      </button>
+    </div>
+    @for (category of categories; track category.id) {
+      <button
+        type="button"
+        class="category"
+        [class.active]="selected() === category.id"
+        (click)="selected.set(category.id)"
+      >
+        <span class="label">{{ category.label }}</span>
+        <span class="hint">{{ category.hint }}</span>
+      </button>
+    }
+  </nav>
+
+  <div class="right">
+    <section class="detail">
+      @if (settings.draft()) {
+        @switch (selected()) {
+          @case ('llm') {
+            <app-settings-llm />
+          }
+          @case ('assistant') {
+            <app-settings-assistant />
+          }
+          @case ('spellcheck') {
+            <app-settings-spellcheck />
+          }
+          @case ('appearance') {
+            <app-settings-appearance />
+          }
+          @case ('actions') {
+            <app-settings-actions />
+          }
+          @case ('about') {
+            <app-settings-about />
+          }
+        }
+      } @else {
+        <p class="loading">Loading settings…</p>
+      }
+    </section>
+
+    @if (settings.saveError(); as error) {
+      <p class="save-error">Could not save settings: {{ error }}</p>
+    }
+
+    @if (confirmingClose()) {
+      <div class="unsaved" role="alertdialog" aria-label="Unsaved changes">
+        <span class="unsaved-text">You have unsaved changes.</span>
+        <button type="button" class="ghost" (click)="keepEditing()">Keep editing</button>
+        <button type="button" class="ghost danger" (click)="discardAndClose()">Discard</button>
+        <button type="button" class="primary" (click)="saveAndClose()">Save &amp; close</button>
+      </div>
+    } @else {
+      <footer class="actions-bar">
+        @if (settings.isDirty()) {
+          <span class="dirty" title="Unsaved changes">● Unsaved changes</span>
+        } @else {
+          <span class="saved">All changes saved</span>
+        }
+        <div class="spacer"></div>
+        <button
+          type="button"
+          class="ghost"
+          [disabled]="!settings.isDirty() || settings.saving()"
+          (click)="settings.discard()"
+        >
+          Discard
+        </button>
+        <button
+          type="button"
+          class="primary"
+          [disabled]="!settings.isDirty() || settings.saving()"
+          (click)="save()"
+        >
+          {{ settings.saving() ? 'Saving…' : 'Save' }}
+        </button>
+      </footer>
+    }
+  </div>
+</div>

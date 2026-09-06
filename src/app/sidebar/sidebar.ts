@@ -10,6 +10,7 @@ import {
 } from '@angular/core';
 import { NgTemplateOutlet } from '@angular/common';
 import { EditorService } from '../services/editor.service';
+import { SettingsService } from '../services/settings.service';
 import { VaultService } from '../services/vault.service';
 import { VaultFileEntry } from '../../../shared/ipc-api';
 import { Calendar } from './calendar/calendar';
@@ -47,6 +48,7 @@ interface PendingCreate {
 export class Sidebar {
   protected readonly vault = inject(VaultService);
   protected readonly editor = inject(EditorService);
+  protected readonly settings = inject(SettingsService);
 
   /** Folder paths the user has collapsed. Folders start expanded. */
   private readonly collapsed = signal<ReadonlySet<string>>(new Set());

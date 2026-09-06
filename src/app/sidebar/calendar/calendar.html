@@ -1,37 +1,73 @@
 <div class="head">
-  <span class="month">{{ cal.monthLabel() }}</span>
+  <button
+    type="button"
+    class="month"
+    [class.open]="pickerOpen()"
+    (click)="togglePicker()"
+    [attr.aria-expanded]="pickerOpen()"
+    aria-label="Choose month and year"
+  >
+    <span>{{ headLabel() }}</span>
+    <app-icon name="chevron-down" [size]="10" />
+  </button>
   <span class="nav">
-    <button type="button" class="nav-btn" (click)="cal.prevMonth()" aria-label="Previous month">
+    <button
+      type="button"
+      class="nav-btn"
+      (click)="onPrev()"
+      [attr.aria-label]="'Previous ' + stepUnit()"
+    >
       <app-icon name="chevron-left" [size]="10" />
     </button>
-    <button type="button" class="nav-btn" (click)="cal.nextMonth()" aria-label="Next month">
+    <button
+      type="button"
+      class="nav-btn"
+      (click)="onNext()"
+      [attr.aria-label]="'Next ' + stepUnit()"
+    >
       <app-icon name="chevron-right" [size]="10" />
     </button>
   </span>
 </div>
 
-<div class="grid weekdays">
-  @for (wd of weekdays; track $index) {
-    <span class="weekday">{{ wd }}</span>
-  }
-</div>
-
-@for (week of cal.weeks(); track $index) {
-  <div class="grid">
-    @for (day of week; track day.iso) {
+@if (pickerOpen()) {
+  <div class="months">
+    @for (name of months; track $index) {
       <button
         type="button"
-        class="day"
-        [class.out]="!day.inMonth"
-        [class.today]="day.isToday"
-        [class.selected]="day.isSelected && !day.isToday"
-        (click)="onDayClick(day)"
+        class="month-cell"
+        [class.shown]="isShownMonth($index)"
+        [class.current]="isCurrentMonth($index)"
+        (click)="onMonthClick($index)"
       >
-        <span class="num">{{ day.dayOfMonth }}</span>
-        @if (day.hasNote && !day.isToday) {
-          <span class="dot" aria-hidden="true"></span>
-        }
+        {{ name }}
       </button>
     }
   </div>
+} @else {
+  <div class="grid weekdays">
+    @for (wd of weekdays; track $index) {
+      <span class="weekday">{{ wd }}</span>
+    }
+  </div>
+
+  @for (week of cal.weeks(); track $index) {
+    <div class="grid">
+      @for (day of week; track day.iso) {
+        <button
+          type="button"
+          class="day"
+          [class.out]="!day.inMonth"
+          [class.today]="day.isToday"
+          [class.selected]="day.isSelected && !day.isToday"
+          (click)="onDayClick(day)"
+        >
+          <span class="num">{{ day.dayOfMonth }}</span>
+          @if (day.hasNote && !day.isToday) {
+            <span class="dot" aria-hidden="true"></span>
+          }
+        </button>
+      }
+    </div>
+  }
 }

@@ -36,13 +36,13 @@ describe('DailyNoteService', () => {
     service.start();
     expect(listeners.length).toBe(1);
 
-    const before = editor.newEntryRequest();
+    const before = editor.newEntryRequest().id;
     listeners[0]('daily/2026-09-05.md');
     await Promise.resolve();
     await Promise.resolve();
 
     expect(editor.openPath()).toBe('daily/2026-09-05.md');
-    expect(editor.newEntryRequest()).toBe(before + 1);
+    expect(editor.newEntryRequest().id).toBe(before + 1);
   });
 
   it('subscribes only once', () => {

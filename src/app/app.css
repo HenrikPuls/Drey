@@ -73,8 +73,16 @@ app-editor {
   display: flex;
 }
 
-app-chat-input {
+/* Height comes from LayoutService while the drawer is open (the divider
+   above it drags that value); collapsed, it is just its toggle strip. */
+app-entry-drawer {
   flex-shrink: 0;
+  min-height: 0;
+}
+
+.assistant-pane {
+  flex-shrink: 0;
+  min-height: 0;
   overflow: hidden;
 }
 

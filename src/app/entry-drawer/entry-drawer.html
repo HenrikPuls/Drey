@@ -1,0 +1,92 @@
+<button
+  type="button"
+  class="drawer-toggle"
+  [class.open]="drawer.open()"
+  [attr.aria-expanded]="drawer.open()"
+  (click)="drawer.toggle()"
+>
+  <app-icon name="chevron-down" [size]="11" />
+  ADD ENTRY
+  @if (!drawer.open() && drawer.hasContent()) {
+    <span class="pending" title="Unsent draft">●</span>
+  }
+</button>
+
+@if (drawer.open()) {
+  <div class="drawer-inner">
+    <div class="thema-field">
+      <label for="entry-topic">TOPIC</label>
+      <input
+        id="entry-topic"
+        type="text"
+        autocomplete="off"
+        placeholder="What is this entry about? (recommended)"
+        [value]="drawer.topic()"
+        (input)="drawer.setTopic($any($event.target).value)"
+      />
+    </div>
+
+    @for (row of chipRows; track row.field) {
+      <div class="tag-row">
+        <span class="tr-label">{{ row.label }}</span>
+        <div class="chip-field">
+          @for (chip of chips(row.field); track chip) {
+            <span class="chip" [class]="row.field">
+              {{ chip }}
+              <button
+                type="button"
+                class="x"
+                [attr.aria-label]="'Remove ' + chip"
+                (click)="drawer.removeChip(row.field, chip)"
+              >
+                ×
+              </button>
+            </span>
+          }
+          <input
+            class="chip-input"
+            type="text"
+            autocomplete="off"
+            [placeholder]="row.add"
+            (keydown)="onChipKeydown($event, row.field)"
+            (blur)="onChipBlur($event, row.field)"
+          />
+        </div>
+      </div>
+    }
+
+    <!-- The shared Markdown surface in compact mode, with the inline
+         spellchecker mixed in (red wavy underline + click popup). -->
+    <app-markdown-surface
+      class="md-editor"
+      [compact]="true"
+      [submitOnEnter]="false"
+      [spellcheck]="spellcheckSource"
+      placeholder="What happened? (Markdown)"
+      (docChanged)="drawer.setText($event)"
+    />
+
+    @if (drawer.confirmingNoTopic()) {
+      <div class="confirm-bar" role="alertdialog" aria-label="No topic given">
+        <span>No topic given — add it anyway?</span>
+        <div class="cb-actions">
+          <button type="button" class="btn" (click)="drawer.cancelNoTopic()">Cancel</button>
+          <button type="button" class="btn warn" (click)="submit(true)">Add anyway</button>
+        </div>
+      </div>
+    }
+
+    @if (editor.error(); as error) {
+      <p class="err">{{ error }}</p>
+    }
+
+    <div class="drawer-actions">
+      <button type="button" class="btn" [disabled]="!drawer.hasContent()" (click)="discard()">
+        Discard
+      </button>
+      <button type="button" class="btn primary" [disabled]="!canSubmit()" (click)="submit()">
+        {{ editor.isSaving() ? 'Adding…' : 'Add to document' }}
+      </button>
+    </div>
+  </div>
+}

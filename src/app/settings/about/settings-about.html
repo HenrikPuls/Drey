@@ -1,0 +1,64 @@
+<div class="pane">
+  <section class="block">
+    <h3>Application</h3>
+    @if (about.appInfo(); as info) {
+      <dl class="facts">
+        <dt>App version</dt>
+        <dd class="mono">{{ info.appVersion }}</dd>
+        <dt>Electron</dt>
+        <dd class="mono">{{ info.electronVersion }}</dd>
+        <dt>Chromium</dt>
+        <dd class="mono">{{ info.chromeVersion }}</dd>
+        <dt>Node</dt>
+        <dd class="mono">{{ info.nodeVersion }}</dd>
+        <dt>Platform</dt>
+        <dd class="mono">{{ info.platform }}</dd>
+      </dl>
+    } @else {
+      <p class="muted">Version information is only available when running inside the app.</p>
+    }
+  </section>
+
+  <section class="block">
+    <h3>Open-source licenses</h3>
+    <p class="muted">
+      Drey is licensed under <span class="mono">GPL-3.0-only</span> (see the
+      <span class="mono">LICENSE</span> file in the project root). It bundles the production
+      dependencies below; each is distributed under its own license.
+    </p>
+
+    @if (about.licensesError(); as error) {
+      <p class="muted">
+        The license list could not be loaded ({{ error }}). Run
+        <span class="mono">npm run licenses:generate</span> to rebuild it.
+      </p>
+    } @else if (about.licenses().length === 0) {
+      <p class="muted">Loading dependencies…</p>
+    } @else {
+      <p class="muted">{{ about.licenses().length }} packages</p>
+      <ul class="deps">
+        @for (dep of about.licenses(); track dep.name) {
+          <li class="dep">
+            <details>
+              <summary>
+                <span class="dep-name mono">{{ dep.name }}</span>
+                <span class="dep-version mono">{{ dep.version }}</span>
+                <span class="dep-license">{{ dep.license }}</span>
+              </summary>
+              @if (dep.repository) {
+                <a class="dep-repo mono" [href]="dep.repository" target="_blank" rel="noreferrer">
+                  {{ dep.repository }}
+                </a>
+              }
+              @if (dep.licenseText) {
+                <pre class="dep-text">{{ dep.licenseText }}</pre>
+              } @else {
+                <p class="muted">No license text shipped with this package.</p>
+              }
+            </details>
+          </li>
+        }
+      </ul>
+    }
+  </section>
+</div>

@@ -48,10 +48,10 @@ export function buildApplicationMenu(): Menu {
         { role: 'forceReload' },
         { role: 'toggleDevTools' },
         { type: 'separator' },
-        { role: 'resetZoom' },
-        { role: 'zoomIn' },
-        { role: 'zoomOut' },
-        { type: 'separator' },
+        // No window-zoom items here on purpose. Ctrl +/-/0 is handled in
+        // the renderer and scales the editor *content* only, not the whole
+        // window (ADR-0015). Menu accelerators would swallow those keys
+        // before the renderer ever saw them.
         { role: 'togglefullscreen' },
       ],
     },

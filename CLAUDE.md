@@ -12,14 +12,49 @@ binding specification, not just background reading.
 
 ## Language Convention
 - Code, comments, identifiers, file/folder names, commit messages: **English**.
+- **Everything the UI displays is English.** Every string a user can read on
+  screen: labels, buttons, placeholders, headings, settings category names,
+  hints, empty states, error and status messages, `title`/`aria-label`
+  attributes, native Electron dialog titles and text, and the *names* of
+  built-in Action templates. No exceptions, including for features whose
+  content is German — a German mockup or a German feature request is a
+  description of the layout and behaviour, **not** an instruction to write
+  German labels. Translate them.
 - Content the user actually writes into vault files at runtime (notes, tags,
   master document text) stays **German** — that's user data, not a code
   artifact, and is out of scope for this convention.
-- LLM prompt templates (system prompts sent to LM Studio) are a deliberate
-  exception: they are written in German in `specs/classifier-spec.md`
-  because they process German note text. Keep them German unless testing
-  shows English performs better with the chosen local model — this is a
-  judgment call to flag, not silently decide either way.
+- LLM prompt templates (system prompts sent to LM Studio) are the one
+  deliberate exception on the *code* side: they are written in German in
+  `specs/classifier-spec.md` and `shared/app-config.ts` because they
+  process German note text. Keep them German unless testing shows English
+  performs better with the chosen local model — this is a judgment call to
+  flag, not silently decide either way. The prompt *text* is German; the
+  template's display name is not.
+
+## Toolchain — no global Node
+There is **no global `node`/`npm` on PATH** (neither in PowerShell nor in a
+Bash shell). A portable Node lives at `.tools/node/` (gitignored, so the
+toolchain is removable by deleting `.tools/`). Never assume a bare `node`,
+`npm`, `npx`, `ng`, `tsc` or `vitest` command works.
+
+- PowerShell, per session, from the repo root: `. .\env.ps1`
+- Bash: `export PATH="$PWD/.tools/node:$PATH"`, then invoke tools **by
+  script path**, not by bin-shim name:
+  - Typecheck main + shared: `node node_modules/typescript/bin/tsc -p electron/tsconfig.json --noEmit`
+  - Typecheck renderer: `node node_modules/typescript/bin/tsc -p tsconfig.app.json --noEmit`
+  - Unit tests: `node node_modules/@angular/cli/bin/ng.js test --watch=false`
+    (add `--include "src/.../x.spec.ts"` to scope it)
+  - Production renderer build: `node node_modules/@angular/cli/bin/ng.js build --configuration production`
+  - Emit the main process: `node node_modules/typescript/bin/tsc -p electron/tsconfig.json`
+- VS Code tasks and debug configs don't inherit `env.ps1`; `.vscode/` works
+  around that three ways (see `docs/11`, "Environment gotchas").
+- **`npm run dev` builds `dist-electron/` only once, at startup**, while
+  `ng serve` hot-reloads the renderer forever. Since `shared/` compiles into
+  both contexts, touching `shared/` or `electron/` leaves the two sides
+  disagreeing about the IPC contract *at runtime* even though `tsc` is
+  clean — fields the stale main process doesn't know get silently stripped
+  from IPC payloads. After such a change, rebuild and restart Electron;
+  verify with `grep <new-field> dist-electron/shared/*.js`.
 
 ## Architecture & Design Decisions
 - Electron main/renderer split. No Node integration in the renderer — all
@@ -36,8 +71,12 @@ binding specification, not just background reading.
 - Tag-first capture: a typed `#tag` deterministically routes a note to its
   target file/folder with no LLM call. The LLM is only a fallback for
   untagged input (see `specs/classifier-spec.md`).
-- Local LLM via LM Studio (OpenAI-compatible HTTP API). No cloud calls, no
-  hardcoded model id — never assume a specific model is loaded.
+- Local LLM over an OpenAI-compatible HTTP API — LM Studio is the default,
+  but the client is generic (Unsloth Desktop, llama.cpp, vLLM, Ollama all
+  work) with an optional `Authorization: Bearer` API key for servers that
+  require auth. No cloud calls, no hardcoded model id — never assume a
+  specific model is loaded, and never assume `/v1/models` is reachable
+  (the model id must stay hand-enterable).
 - sqlite-vec for vector search, transformers.js for embeddings (Phase 2,
   not part of the MVP).
 - File watching via chokidar. Must distinguish frontmatter-only changes
@@ -52,13 +91,48 @@ Main process:
   (frontmatter-change / body-change / untracked-new-file)
 - `TagIndex` — in-memory registry of all tags and their master-document
   metadata; source for both autocomplete and the classifier registry
-- `LmStudioClient` — thin HTTP client for the local OpenAI-compatible endpoint
+- `LmStudioClient` — thin HTTP client for the local OpenAI-compatible
+  endpoint (`GET /models`, `POST /chat/completions`), with an optional
+  bearer API key; name kept for continuity, but not LM-Studio-specific.
+  **No timeout on generation** — a local model may think for minutes; the
+  user cancels instead ([ADR-0014](docs/09_architecture_decisions/0014-no-chat-timeout-cancellable-tasks.md))
+- `LlmTaskRegistry` — one `AbortController` per in-flight generation, so
+  `llm:cancel` can abort it
 - `ClassifierService` — wraps the two prompts from `specs/classifier-spec.md`
+- `AppConfigStore` — reads/persists `app-config.json` under the OS user-data
+  dir (LLM connection + Actions config); app config, never in the vault
+  ([ADR-0010](docs/09_architecture_decisions/0010-app-settings-storage.md))
+- `ActionRunner` — runs an Action (trigger → prompt template) against the
+  active document → an edit / no-op / error outcome; also hosts Ask and the
+  note assistant's summary
+- `ChatStore` — reads/writes the assistant's per-note sidecar thread
+  (`.{name}.chat.json` beside the note, ADR-0012)
+- `SpellcheckService` (main) — nspell + the bundled/added Hunspell
+  dictionaries; answers `spell:check` with misspelled words + suggestions
 
 Renderer (Angular):
 - `SidebarComponent` — calendar, folder/tag tree, open windows, settings entry
-- `EditorComponent` — CodeMirror 6 wrapper, source/rendered toggle
-- `ChatInputComponent` — bottom input bar, document-scope vs. all-notes-scope toggle
+- `EditorComponent` — one CodeMirror 6 view with an inline Live Preview
+  mode (decoration-based, ADR-0009) and a raw source mode, switched via a
+  `⋯` mode menu (ADR-0008); the same `⋯` menu lists the manual Actions
+- `EntryDrawerComponent` — the "Add entry" drawer at the bottom of
+  the main area (replaced the old chat bar's Input mode): TOPIC field
+  first, then Tags / People / Meetings chip rows, then the shared
+  Markdown editor component in compact mode with inline spellcheck. An
+  empty TOPIC raises an inline confirmation before appending
+  ([ADR-0013](docs/09_architecture_decisions/0013-inline-spellcheck.md))
+- `NoteAssistantComponent` — the right-hand panel (replaced the old chat
+  bar's Ask mode): the per-note "Automatic summary" switch, the
+  summary/question/answer card thread, and the question composer
+  ([ADR-0012](docs/09_architecture_decisions/0012-note-assistant-sidecar-thread.md))
+- `SettingsComponent` — master-detail settings screen (category list +
+  detail pane), categories "LLM", "Assistant" (auto-summary default),
+  "Spelling" (dictionaries + language) and "Actions"; opened from
+  the sidebar entry
+- `ConfirmationDialogComponent` — the one confirmation dialog shared by
+  Actions and chat Ask-mode edits (inline diff vs. side-by-side, "don't
+  ask again")
+  ([ADR-0011](docs/09_architecture_decisions/0011-unified-confirmation-flow.md))
 - `TagsOverviewComponent` — browsable tag list, opens the matching master document
 - `InboxComponent` — review queue for untagged captures, new-folder proposals,
   and untracked external files
@@ -76,12 +150,22 @@ be called out explicitly (see Working Style below), not introduced silently.
     document) → a list of currently open windows/tabs → a settings entry
     pinned at the very bottom.
   - **Main area**: a tab bar across the top for currently open documents,
-    the editor below it (source/rendered toggle per the note in
-    Architecture & Design Decisions), and a chat input bar pinned to the
-    bottom with a scope toggle ("this document" / "all notes").
-- Editing model: click directly into rendered content to start editing in
-  place — no separate "edit mode" button or dialog, similar to how
-  Obsidian's reading view behaves.
+    the editor below it (Live Preview ⇄ source via a `⋯` menu on the
+    chrome — no toggle buttons; see ADR-0008/0009), and the "Eintrag
+    hinzufügen" drawer pinned to the bottom.
+  - **Right column**: the note assistant panel for the open note —
+    auto-summary switch, card thread, composer. There is no bottom chat
+    bar any more; capture lives in the drawer, Ask in this panel.
+  - **Settings**: a full-surface overlay opened from the sidebar entry —
+    master-detail (category list on the left, detail pane on the right),
+    categories "LLM" and "Actions" (ADR-0010). The confirmation dialog
+    (Actions / Ask edits) is a centred modal: inline line diff for small
+    changes, side-by-side before/after for whole-document rewrites (ADR-0011).
+- Editing model: true in-place Live Preview (Obsidian-style, ADR-0009) —
+  the cursor sits in the rendered document, syntax markers reveal only
+  around the selection, tables/images render as widgets that show their
+  raw Markdown while the selection is inside them. Source mode stays in
+  the `⋯` menu as the escape hatch, not a separate "edit mode".
 - A visual reference mockup for this layout was discussed and shown inline
   during planning, but it was never saved as a file — treat this section
   (plus the component list above) as the source of truth for layout intent,
@@ -147,17 +231,24 @@ assume.
 ## Build Order (Milestones)
 1. Electron shell + Angular scaffold, IPC bridge, docs/ skeleton (including the 09_architecture_decisions/ subfolder)
 2. Vault selection + file listing
-3. Editor (CodeMirror 6): open/save a file, source/rendered toggle
+3. Editor: CodeMirror 6 with decoration-based Live Preview + source mode, `⋯` mode menu (ADR-0008/0009)
 4. Quick-capture (global hotkey, popup window)
 5. Implement multi tab support (x to close tab, only prompts to safe if program is closed not by switching editors )
 5. Tag parsing, autocomplete, registry index, deterministic routing
 6. LM Studio client + task/note classification (Prompt 1)
 7. Inbox + batch tag suggestion (Prompt 2)
 8. Keyword search
-9. Master document summary (manual button)
+9. Master document summary — now the built-in "Update summary" Action (see 10)
+10. Settings screen (LLM connection + Actions engine) + one shared
+    confirmation flow + chat Input/Ask toggle. Built in a single pass on
+    top of milestone 6, pulling forward the LM Studio client (6), batch
+    tag suggestion / Prompt 2 as the "Autotagging" built-in (7), and the
+    master-document summary (9). ADR-0010 (settings storage), ADR-0011
+    (unified confirmation flow).
 
 Pause after each milestone, show what works, don't push through several
-milestones in one uninterrupted stretch.
+milestones in one uninterrupted stretch. (Milestone 10 was an explicit
+exception — built in one stretch at the project owner's request.)
 
 ## Working Style — important
 This is meant to feel like pair programming, not a silent code generator:

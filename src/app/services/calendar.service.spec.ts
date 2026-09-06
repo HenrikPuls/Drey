@@ -67,4 +67,11 @@ describe('CalendarService', () => {
     expect([service.viewYear(), service.viewMonth()]).toEqual([2026, 11]);
     expect(service.selectedIso()).toBe('2026-12-24');
   });
+
+  it('setMonth() jumps the shown month without touching the selected day', () => {
+    service.select('2026-09-02');
+    service.setMonth(2024, 0);
+    expect([service.viewYear(), service.viewMonth()]).toEqual([2024, 0]);
+    expect(service.selectedIso()).toBe('2026-09-02');
+  });
 });

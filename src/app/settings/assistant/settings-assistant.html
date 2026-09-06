@@ -1,0 +1,37 @@
+@if (assistant(); as assistant) {
+  <div class="pane">
+    <label class="switch-row">
+      <input
+        type="checkbox"
+        [checked]="assistant.autoSummaryDefault"
+        (change)="onAutoSummaryChange($any($event.target).checked)"
+      />
+      <span>
+        <span class="switch-label">Summarise notes automatically by default</span>
+        <span class="switch-hint">
+          Pre-sets the switch in each note's assistant panel. The switch there overrides this
+          default for the open note only — it never changes the default itself.
+        </span>
+      </span>
+    </label>
+
+    <p class="note">
+      A note is only summarised when it is opened for the first time and has no chat file beside it
+      yet. The summary becomes the first card of the thread and is stored in
+      <span class="mono">.&lt;name&gt;.chat.json</span> next to the note — never inside the note.
+    </p>
+
+    @if (!llmEnabled()) {
+      <p class="warn">
+        LLM features are off — nothing is summarised regardless of this switch, and the assistant
+        panel stays hidden.
+      </p>
+    }
+
+    <p class="note">
+      Edit the prompt under <strong>Actions</strong> → <span class="mono">Summarise note</span>. The
+      prompt text itself stays German — it processes German note content (see CLAUDE.md, "Language
+      Convention").
+    </p>
+  </div>
+}
