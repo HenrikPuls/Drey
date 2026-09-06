@@ -4,25 +4,32 @@ import tseslint from 'typescript-eslint';
 /**
  * This config is intentionally narrow. It is not a full lint pass over the
  * codebase -- it exists to enforce the feature-module boundaries introduced
- * with the path-based-tags restructure: code outside `electron/llm/` /
- * `shared/llm/` (and later the `tags/` modules) must import through the
- * module's `index.ts` barrel, never reach into a file inside it. Internal
- * files import their siblings directly.
+ * with the path-based-tags restructure: code outside a feature module
+ * (`electron/llm/`, `shared/llm/`, `electron/tags/`, `shared/tags/`,
+ * `src/app/tags/`) must import through the module's `index.ts` barrel,
+ * never reach into a file inside it. Internal files import their siblings
+ * directly.
  */
 
-/** Reaching into `shared/llm/` from anywhere by its `shared/`-qualified path. */
-const SHARED_LLM = {
-  group: ['**/shared/llm/*', '**/shared/llm/*/*', '!**/shared/llm/index'],
-  message:
-    'Import from the module barrel (`shared/llm`), not a file inside it. The barrel is the module’s only public surface.',
-};
+const MODULES = ['llm', 'tags'];
 
-/** Reaching into a sibling `llm/` folder by a relative path (used inside electron/ and shared/). */
-const LOCAL_LLM = {
-  group: ['./llm/*', '../llm/*', '../../llm/*', '!**/llm/index'],
-  message:
-    'Import from the module barrel (`./llm`), not a file inside it. The barrel is the module’s only public surface.',
-};
+/** Reaching into `shared/<mod>/` from anywhere by its `shared/`-qualified path. */
+const sharedModulePatterns = MODULES.map((mod) => ({
+  group: [`**/shared/${mod}/*`, `**/shared/${mod}/*/*`, `!**/shared/${mod}/index`],
+  message: `Import from the module barrel (\`shared/${mod}\`), not a file inside it. The barrel is the module's only public surface.`,
+}));
+
+/**
+ * Reaching into a sibling `<mod>/` folder by a relative path. Safe to apply
+ * inside `electron/` and `shared/` (no innocent `llm/` or `tags/` subfolder
+ * exists there); for `src/` only `tags/` is a feature module, so `llm/` is
+ * left out (`src/app/settings/llm/` is a plain folder).
+ */
+const relativeModulePatterns = (mods) =>
+  mods.map((mod) => ({
+    group: [`./${mod}/*`, `../${mod}/*`, `../../${mod}/*`, `!**/${mod}/index`],
+    message: `Import from the module barrel (\`./${mod}\`), not a file inside it. The barrel is the module's only public surface.`,
+  }));
 
 export default tseslint.config(
   {
@@ -47,18 +54,30 @@ export default tseslint.config(
   {
     files: ['electron/**/*.ts', 'shared/**/*.ts'],
     rules: {
-      'no-restricted-imports': ['error', { patterns: [SHARED_LLM, LOCAL_LLM] }],
+      'no-restricted-imports': [
+        'error',
+        { patterns: [...sharedModulePatterns, ...relativeModulePatterns(MODULES)] },
+      ],
     },
   },
   {
     files: ['src/**/*.ts'],
     rules: {
-      'no-restricted-imports': ['error', { patterns: [SHARED_LLM] }],
+      'no-restricted-imports': [
+        'error',
+        { patterns: [...sharedModulePatterns, ...relativeModulePatterns(['tags'])] },
+      ],
     },
   },
   {
     // A feature module's own files reach their siblings directly.
-    files: ['electron/llm/**/*.ts', 'shared/llm/**/*.ts'],
+    files: [
+      'electron/llm/**/*.ts',
+      'shared/llm/**/*.ts',
+      'electron/tags/**/*.ts',
+      'shared/tags/**/*.ts',
+      'src/app/tags/**/*.ts',
+    ],
     rules: {
       'no-restricted-imports': 'off',
     },
