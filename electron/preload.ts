@@ -16,6 +16,8 @@ import {
   SpellCheckResult,
   SpellLanguage,
   TagEntry,
+  TagSearchHit,
+  TagSearchQuery,
   VaultFileContent,
   VaultFileEntry,
 } from '../shared/ipc-api';
@@ -45,6 +47,8 @@ const dreyApi: DreyApi = {
   saveNote: (request: NoteSaveRequest): Promise<NoteSaveResult> =>
     ipcRenderer.invoke(IPC_CHANNELS.noteSave, request),
   listTags: (): Promise<TagEntry[]> => ipcRenderer.invoke(IPC_CHANNELS.tagList),
+  searchTags: (query: TagSearchQuery): Promise<TagSearchHit[]> =>
+    ipcRenderer.invoke(IPC_CHANNELS.tagSearch, query),
   getConfig: (): Promise<AppConfig> => ipcRenderer.invoke(IPC_CHANNELS.configGet),
   setConfig: (config: AppConfig): Promise<AppConfig> =>
     ipcRenderer.invoke(IPC_CHANNELS.configSet, config),
