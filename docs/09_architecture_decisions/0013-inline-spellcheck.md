@@ -7,7 +7,7 @@ Accepted — implemented with the entry drawer (Feature B).
 ## Context
 
 The entry drawer needs a spellchecker that behaves like a native one:
-misspelled words underlined with a red wavy line *in the text*, and a click
+misspelled words underlined with a red wavy line _in the text_, and a click
 on such a word offering corrections. An earlier draft of the feature listed
 the errors separately, below the field — that was dropped because a list
 makes you match words to positions by eye.
@@ -19,7 +19,7 @@ underlines get drawn.
 
 1. **Chromium's built-in spellchecker.** Free — `spellcheck="true"` on the
    CodeMirror content element and Chromium underlines German for you. But
-   its suggestions are reachable *only* through the native right-click
+   its suggestions are reachable _only_ through the native right-click
    menu (`params.dictionarySuggestions`); there is no API to ask it about a
    word. No left-click popup, no control over styling.
 2. **A native Hunspell binding** (`nodehun`). Fast, but a native module
@@ -47,14 +47,14 @@ than downlevelling to `require`.
 the picker takes a Hunspell `.dic` and pairs it with the `.aff` of the same
 name beside it — the layout every Hunspell distribution ships — so one
 pick is enough. Entries are stored as absolute paths in the app config, not
-copied into the app; a dictionary whose folder has moved is listed as *cannot be loaded* rather than silently checking nothing. The active language is a
+copied into the app; a dictionary whose folder has moved is listed as _cannot be loaded_ rather than silently checking nothing. The active language is a
 single config field, so the checker is never in more than one language at a
 time.
 
 **Drawing is a CodeMirror 6 extension**
 (`src/app/editor/spellcheck/spellcheck.ts`), not Chromium's:
 
-- A `StateField` holds the decorations *and* the flagged words, so both
+- A `StateField` holds the decorations _and_ the flagged words, so both
   survive edits and move with the text (`RangeSet.map`). Recomputing on
   every keystroke would flicker and misplace underlines while a check is in
   flight.
@@ -63,7 +63,7 @@ time.
   the reply — an answer the document has moved past is dropped.
 - The plugin re-checks on a document change **and** on an explicit
   `requestSpellcheck(view)`. The second one is not optional: the gate below
-  can flip while the text sits still (type the body, *then* fill in the
+  can flip while the text sits still (type the body, _then_ fill in the
   topic), and CodeMirror gives the plugin no way to observe that. Without
   it the underlines only appeared after the next keystroke — found by
   driving the built app, not by the unit tests, which is why there is now a
@@ -108,10 +108,16 @@ For that to hold, every place you write prose is the shared
 `MarkdownSurface`: the document editor, the entry drawer body, **and the
 note assistant's question composer** (previously a bare `<textarea>`, now
 the compact surface with `[spellcheck]` and a `readOnly` input for the
-"no note open" state). The drawer's TOPIC field and the Tags / People /
-Meetings chip inputs stay plain inputs with no spellcheck at all — a tag
-or a person's name is not prose, and underlining it is noise, not a
-feature.
+"no note open" state). The drawer's TOPIC field and its Tags chip input
+stay plain inputs with no spellcheck at all — a tag is not prose, and
+underlining it is noise, not a feature.
+
+_(Update, milestone 11.3: with the tag rebuild
+([ADR-0017](0017-tags-as-labels-and-section-index.md)) the drawer's
+People and Meetings chip rows are gone — a person or meeting is written
+as an ordinary `#tag`. `EntryDraft` is `{ topic, text, tags }`. TOPIC is
+now optional with no inline "empty topic?" confirmation; an empty topic
+is normal.)_
 
 ## Consequences
 

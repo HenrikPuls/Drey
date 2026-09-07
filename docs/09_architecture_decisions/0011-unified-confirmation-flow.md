@@ -24,9 +24,9 @@ There is also a preview problem. A rewrite can be either:
 
 - **small and localized** — check off one task, merge two frontmatter
   tags. A line-level diff of just the affected lines is the right view.
-- **a whole-document rewrite** — reformat, regenerate the Summary
-  section. A line diff of two differently-worded paragraphs is noise;
-  before/after side by side is readable.
+- **a whole-document rewrite** — reformat, or a user template that
+  rephrases the whole note. A line diff of two differently-worded
+  paragraphs is noise; before/after side by side is readable.
 
 ## Decision
 
@@ -48,9 +48,10 @@ the `before`/`after` text, a `title`/`summary`, and `triggerId`
 ### `previewStyle` is decided per template, or heuristically for Ask
 
 - An action **template** declares `resultKind` (`localized` /
-  `document`). Built-ins: Autotagging → `localized` (frontmatter tag
-  lines), Update summary → `document` (regenerated prose). User templates
-  pick one in Settings.
+  `document`). User templates pick one in Settings. The current built-ins
+  are not document rewrites confirmed through this flow: _Summarise note_
+  and _Summarise search results_ produce panel/scratch text, _Autotag_
+  only pre-fills the drawer's tag field.
 - An **Ask** edit has no template, so `pickPreviewStyle(before, after)`
   in `shared/text-diff.ts` chooses: `document` when the change rewrites
   more than ~35% of the original lines or the length changes sharply,
@@ -85,14 +86,16 @@ applying one action's result never fires the on-save triggers again.
   depend on `ActionsService` (that would be a DI cycle).
 - The main-process runner (`electron/action-runner.ts`) also hosts chat
   Ask, since answer-vs-edit routing and the LLM call are shared.
-- Decision logic — `resolveActions`, `mergeFrontmatterTags`,
-  `applySummarySection`, `selectSummaryInput`, `lineDiff`,
-  `pickPreviewStyle` — is pure `shared/` code with Vitest coverage; the
-  runner only sequences classifier/LLM/registry calls (ADR-0007).
-- Autotagging ships as a built-in template with a **manual** trigger, not
-  on-save: `specs/classifier-spec.md` scopes tag suggestion to batch/inbox
-  review, and auto-tagging every save contradicts that. `on-save` is a
-  supported trigger type with no built-in mapping.
-- The former plan for a standalone "Update summary" button
-  (`specs/roadmap.md`) is instead a built-in manual Action — one code
-  path, not two.
+- Decision logic — `resolveActions`, `lineDiff`, `pickPreviewStyle` — is
+  pure `shared/` code with Vitest coverage; the runner only sequences
+  LLM calls. _(Update: `mergeFrontmatterTags` / `applySummarySection` /
+  `selectSummaryInput` were removed with
+  [ADR-0017](0017-tags-as-labels-and-section-index.md) — no `#tag`
+  frontmatter merge and no master-document Summary any more.)_
+- Autotag ships as a built-in template with a **manual** trigger, not
+  on-save (`specs/classifier-spec.md`). `on-save` is a supported trigger
+  type with no built-in mapping.
+- _(Update: the "Update summary" master-document Action referenced here
+  is gone — [ADR-0017](0017-tags-as-labels-and-section-index.md) removed
+  master documents. The surviving summariser is the note assistant's
+  per-note "Summarise note", [ADR-0012](0012-note-assistant-sidecar-thread.md).)_

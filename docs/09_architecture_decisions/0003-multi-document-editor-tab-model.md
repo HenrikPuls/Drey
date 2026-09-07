@@ -75,3 +75,28 @@ computed signals over the active document, so `App`, `Sidebar` and
   `readTemplate()` alongside the existing `ensureTodayNote()`.
 - The milestone-3 statement "one open document, no tab bar" in
   §5.5 is now superseded; §5.7 records the new shape.
+
+## Addendum (milestone 11.8–11.9): scratch tabs and Save-as
+
+The draft concept above (a daily note not yet on disk) generalised into
+two more cases:
+
+- **`EditorService.openScratch(path, content)`** — opens (or replaces) an
+  `existsOnDisk: false` tab holding arbitrary text. Used by the tag
+  search panel's **Export** button
+  ([ADR-0017](0017-tags-as-labels-and-section-index.md)) for
+  `search-results.md`. Its `savedContent` is set to `''` so the tab is
+  **dirty from the start** — the chrome Save button (disabled while not
+  dirty) is live without a throwaway edit — and it carries
+  `askOnSave: true`.
+- **`EditorService.saveAs()`** — `VaultManager.pickSavePath(name)` shows a
+  native save dialog rooted at the vault, forces a `.md` extension, and
+  **rejects a target outside the vault** ("The file must be saved inside
+  the current vault."). On confirm it writes via `note:save`, re-keys the
+  tab to the chosen path and refreshes the tree + tag index. `save()` on
+  an `askOnSave` doc routes to `saveAs()` before its not-dirty return, so
+  the first `Ctrl+S` on an export prompts for a location. `Ctrl+Shift+S`
+  and the `⋯` menu's "Save as…" reach it for any document.
+
+Daily-note drafts are unchanged — they still save silently to their
+`daily/<year>/<month>/` path, `askOnSave` is not set on them.

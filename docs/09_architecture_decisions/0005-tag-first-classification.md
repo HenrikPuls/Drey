@@ -1,9 +1,16 @@
 # 5. Tag-first classification vs. LLM-per-capture
 
+> **Superseded by [ADR-0017](0017-tags-as-labels-and-section-index.md).**
+> Tags are now free inline labels with no deterministic routing and no
+> LLM classifier on the capture path; tag _suggestion_ survives as the
+> manual Autotag button. The alternatives analysis below is kept for the
+> record.
+
 ## Status
 
-Accepted — the spec fixed this from the start (`specs/roadmap.md`,
-`specs/classifier-spec.md`); recorded now that milestone 6 implements it.
+Superseded by [0017] — was: Accepted, the spec fixed this from the start
+(`specs/roadmap.md`, `specs/classifier-spec.md`), recorded when milestone
+6 implemented it.
 
 ## Context
 

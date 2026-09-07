@@ -1,9 +1,15 @@
 # 6. Master-document / tag mechanism
 
+> **Superseded by [ADR-0017](0017-tags-as-labels-and-section-index.md).**
+> There are no `type: master` documents, no `art` / `description` /
+> `aliases`, and no `<tag>/_index.md` promotion. A tag's "view" is now a
+> search result computed on demand, not a maintained file.
+
 ## Status
 
-Accepted — fixed by `specs/frontmatter-schema.md` and `specs/roadmap.md`;
-recorded now that milestone 6 builds on it.
+Superseded by [0017] — was: Accepted, fixed by
+`specs/frontmatter-schema.md` and `specs/roadmap.md`, recorded when
+milestone 6 built on it.
 
 ## Context
 
