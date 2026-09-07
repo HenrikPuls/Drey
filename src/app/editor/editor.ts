@@ -74,6 +74,9 @@ export class Editor implements AfterViewInit {
   private readonly surface = viewChild.required(MarkdownSurface);
   private readonly moreBtn = viewChild.required<ElementRef<HTMLButtonElement>>('moreBtn');
 
+  /** Last `revealRequest` id this component has acted on. */
+  private handledRevealRequest = 0;
+
   /** Last `newEntryRequest` id this component has acted on. */
   private handledEntryRequest = 0;
   /** Path whose text CodeMirror currently holds -- distinguishes a tab switch from an in-place reload. */
@@ -124,6 +127,16 @@ export class Editor implements AfterViewInit {
       const request = this.editor.newEntryRequest();
       if (this.view) {
         this.applyNewEntryRequest(request);
+      }
+    });
+
+    // Reveal requests from the tag-search panel: jump the caret to a line
+    // once that file's buffer is actually in the view.
+    effect(() => {
+      const request = this.editor.revealRequest();
+      this.editor.bufferContent(); // re-run after the load settles
+      if (this.view && this.loadedPath === request.path) {
+        this.applyRevealRequest(request);
       }
     });
 
@@ -268,6 +281,20 @@ export class Editor implements AfterViewInit {
     if (!request.text) {
       view.focus();
     }
+  }
+
+  /** Puts the caret at the start of 1-based `line` and scrolls it into view. */
+  private applyRevealRequest(request: { id: number; path: string; line: number }): void {
+    const view = this.view;
+    if (!view || request.id === 0 || request.id === this.handledRevealRequest) {
+      return;
+    }
+    this.handledRevealRequest = request.id;
+    const doc = view.state.doc;
+    const lineNo = Math.min(Math.max(1, request.line), doc.lines);
+    const anchor = doc.line(lineNo).from;
+    view.dispatch({ selection: { anchor }, scrollIntoView: true });
+    view.focus();
   }
 
   /**

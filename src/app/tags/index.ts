@@ -1,15 +1,12 @@
 /**
- * `src/app/tags` — the renderer side of the path-based tag system: the tag
- * service (autocomplete data from the main-process index), the single
- * tag-input field with its inline "create tag?" confirmation, the
- * clickable `#tag` editor extension, and the Autotagging button.
+ * `src/app/tags` — the renderer side of the tag system: the search query
+ * service, the sidebar `SearchPanel`, and (11.7) the Autotagging button.
  *
- * Scaffold only for now. Milestones 11a–11g build into this folder; the old
- * `src/app/services/tag.service.ts` and `src/app/editor/tag-complete.ts`
- * are removed once their replacements land. This barrel is the module's
- * only public surface — import from the `tags` barrel, never a file inside
- * it (enforced by `eslint.config.mjs`). Angular components stay imported by
- * their own path, as elsewhere.
+ * This barrel is the module's public surface — code outside the module
+ * imports from `../tags`, never a file inside it (enforced by
+ * `eslint.config.mjs`). Files inside the module import their siblings
+ * directly.
  */
 
-export {};
+export { TagSearchService } from './tag-search.service';
+export { SearchPanel } from './search-panel/search-panel';

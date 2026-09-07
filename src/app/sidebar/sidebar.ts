@@ -15,6 +15,7 @@ import { VaultService } from '../services/vault.service';
 import { VaultFileEntry } from '../../../shared/ipc-api';
 import { Calendar } from './calendar/calendar';
 import { OpenWindows } from './open-windows/open-windows';
+import { SearchPanel } from '../tags';
 import { Icon } from '../icons/icon';
 
 /** Anchor + target for the file-tree right-click menu. */
@@ -43,7 +44,7 @@ interface PendingCreate {
 @Component({
   selector: 'app-sidebar',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [NgTemplateOutlet, Calendar, OpenWindows, Icon],
+  imports: [NgTemplateOutlet, Calendar, OpenWindows, SearchPanel, Icon],
   styleUrl: './sidebar.css',
   templateUrl: './sidebar.html',
 })

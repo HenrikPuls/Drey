@@ -236,6 +236,25 @@ export class EditorService {
   }
 
   /**
+   * Opens `relativePath` and asks the editor to put the caret at the start
+   * of 1-based `line` (a tag-search hit lands here). The `Editor` component
+   * consumes `revealRequest` once the buffer for that path is loaded.
+   */
+  async openFileAt(relativePath: string, line: number): Promise<void> {
+    await this.openFile(relativePath);
+    if (this.active() === relativePath) {
+      this.revealRequest.update((r) => ({ id: r.id + 1, path: relativePath, line }));
+    }
+  }
+
+  /** id + target for `openFileAt`; `id === 0` means "nothing pending". */
+  readonly revealRequest = signal<{ id: number; path: string; line: number }>({
+    id: 0,
+    path: '',
+    line: 1,
+  });
+
+  /**
    * Opens the daily note for `dateStr` (`YYYY-MM-DD`). If the file exists
    * it's opened normally; otherwise a **draft** tab is opened from the
    * template -- nothing hits disk until the user types and saves.
