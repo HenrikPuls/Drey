@@ -59,7 +59,7 @@ sequenceDiagram
     VaultService->>Sidebar: activeVaultPath + fileTree signals update
 ```
 
-Deliberately out of scope for this milestone: reacting to *external*
+Deliberately out of scope for this milestone: reacting to _external_
 changes to the vault folder while the app is running (chokidar file
 watching, frontmatter-change vs. body-change vs. untracked-new-file
 detection per CLAUDE.md's `FileWatcher` component). This flow is a
@@ -126,7 +126,7 @@ sequenceDiagram
 ```
 
 Deliberately out of scope for this milestone (unchanged from 6.1): no
-reaction to *external* changes while a file is open (file watcher), no
+reaction to _external_ changes while a file is open (file watcher), no
 autosave, and no `updated:` frontmatter bump on save (deferred to
 milestone 5 — needs YAML frontmatter handling; see
 [05_building_block_view.md](05_building_block_view.md) §5.5).
@@ -225,6 +225,13 @@ switches to source, leaving the caret where it was.
 
 ## 6.5 Save → tag merge + `updated:` bump → route entries to master History (milestone 6)
 
+> **Superseded by §6.11
+> ([ADR-0017](09_architecture_decisions/0017-tags-as-labels-and-section-index.md)).**
+> `note:save` no longer merges `#tag`s into the frontmatter and no longer
+> routes entries into a master document. It bumps `updated:` on a fenced
+> file, writes, and re-indexes that one file into `TagIndex`. The diagram
+> below is kept for the record.
+
 Saving a `.md` note no longer writes the buffer verbatim. `Ctrl+S` goes
 through the main-process `note:save` pipeline (`NoteManager`), which:
 
@@ -322,9 +329,13 @@ A manual Action from the editor `⋯` menu (or an `on-save` trigger from the
 `note:save` pipeline) produces a proposed rewrite that goes through the one
 confirmation dialog before it touches the document
 ([ADR-0011](09_architecture_decisions/0011-unified-confirmation-flow.md)).
-The example is the built-in **Autotagging** action; **Update summary** and
-user templates follow the same shape, differing only in how `after` is
-computed inside `ActionRunner`.
+The example is the (historical) built-in **Autotagging** action; user
+templates follow the same shape, differing only in how `after` is
+computed inside `ActionRunner`. _(Update — ADR-0017: "Autotagging" as a
+document-rewriting Action is gone; tag suggestion is now the drawer's
+`autotag` button, which only pre-fills a field — see §6.13. "Update
+summary" is gone with master documents. The confirmation flow itself is
+unchanged and still used by user templates and Ask edits.)_
 
 ```mermaid
 sequenceDiagram
@@ -486,8 +497,14 @@ back to the global default.
 ## 6.9 Adding an entry from the drawer (Feature B)
 
 "Add to document" composes the entry from pure shared code,
-dispatches it into CodeMirror as an ordinary edit, and saves — which is
-what pulls the entry's `#tag`s through the routing pipeline of §6.5.
+dispatches it into CodeMirror as an ordinary edit, and saves.
+
+> **Update — ADR-0017.** `EntryDraft` is `{ topic, text, tags }` (no
+> People/Meetings), the meta line is `#tag`-only, TOPIC is optional so
+> there is no `'needs-topic-confirmation'` branch or `force` argument any
+> more (`submit()` is now `'appended' | 'empty'`), and the save that
+> follows just re-indexes the file (§6.11) — it does not route anything.
+> The diagram's shape is otherwise current.
 
 ```mermaid
 sequenceDiagram
@@ -577,9 +594,148 @@ sequenceDiagram
     Ext->>CM: dispatch(replace range) -- only if the text there is still that word
 ```
 
+## 6.11 Save → `updated:` bump → incremental re-index (milestone 11, supersedes §6.5)
+
+`Ctrl+S` on a `.md` note goes through `note:save` (`NoteManager`). On a
+file with a `---` fence: bump `updated:`, fill `created:` if missing,
+rewrite (the pure `shared/` `yaml` round-trip, EOL restored). No fence:
+write the bytes verbatim. Either way, the just-written file is re-indexed
+into `TagIndex`, and the `on-save` Actions run (§6.6). No `#tag`
+frontmatter merge, no routing, no `appendedTo`.
+
+```mermaid
+sequenceDiagram
+    actor User
+    participant Editor as Editor (CodeMirror 6)
+    participant EditorService
+    participant TagService
+    participant Preload as preload (dreyApi)
+    participant NoteManager as NoteManager (main)
+    participant Pure as shared/ (frontmatter)
+    participant TagIndex
+    participant VaultManager
+    participant FS as Filesystem
+
+    User->>Editor: Ctrl+S
+    Editor->>EditorService: save()
+    Note over EditorService: no-op if buffer === savedContent (unless askOnSave -> saveAs, §6.12)
+    EditorService->>Preload: saveNote({ path, body (LF), eol })
+    Preload->>NoteManager: note:save
+    NoteManager->>Pure: readFrontmatter(body)
+    alt has --- fence
+        NoteManager->>Pure: bumpUpdated(fm) -> { updated: now, created }
+        NoteManager->>Pure: writeFrontmatter(body, { updated, created })
+    else no fence
+        Note over NoteManager: body used verbatim
+    end
+    NoteManager->>VaultManager: writeFile(path, text with EOL)
+    VaultManager->>FS: writeFile + stat
+    NoteManager->>TagIndex: reindexFile(path, text)
+    Note over TagIndex: splitSections + extractTagOccurrences ->\nreplace this file's SectionRecord[] + vocabulary counts
+    NoteManager->>NoteManager: runOnSaveActions(text)  (§6.6)
+    NoteManager-->>EditorService: NoteSaveResult { path, content, modifiedMs, pendingActions? }
+    EditorService->>EditorService: savedContent = bufferContent = content -> isDirty = false
+    EditorService->>TagService: refresh()  (re-reads tags:list)
+    EditorService->>EditorService: vault.refresh()  (tree + full TagIndex not needed; tree only)
+```
+
+## 6.12 Tag search → hits → open-at-line / Export → Save-as (milestone 11)
+
+The sidebar search panel (or a `Ctrl`/`Cmd`-click on a `#tag` pill, or
+`Ctrl+Shift+F`) runs a fast, LLM-free query over `TagIndex`'s tagged
+sections. A hit opens the file at its line; **Export** dumps the hits
+into an unsaved `search-results.md` tab that `Ctrl+S` then routes through
+Save-as.
+
+```mermaid
+sequenceDiagram
+    actor User
+    participant Pill as #tag pill (tag-pill.ts)
+    participant Keys as KeybindingService
+    participant Panel as SearchPanel
+    participant Search as TagSearchService
+    participant Preload as preload (dreyApi)
+    participant TagIndex as TagIndex (main)
+    participant Pure as shared/tags (runTagSearch, formatSearchResultsDoc)
+    participant EditorService
+    participant Editor as Editor (CodeMirror)
+    participant VaultManager
+
+    alt via keybinding
+        User->>Keys: Ctrl+Shift+F (capture-phase keydown)
+        Keys->>Search: openPanel()  (panelOpen=true, focusRequest++)
+    else via a pill
+        User->>Pill: Ctrl/Cmd-click
+        Pill->>Search: searchTag(tag)  (clear + addTag + panelOpen + run)
+    end
+    User->>Panel: add tag chips / free text, Search
+    Panel->>Search: run()
+    Search->>Preload: searchTags({ tags, text })
+    Preload->>TagIndex: tags:search
+    TagIndex->>Pure: runTagSearch(sections, { tags, text })
+    Pure-->>TagIndex: TagSearchHit[] (path, heading, line, snippet, text)
+    TagIndex-->>Search: hits
+    Search->>Panel: hits signal -> list renders
+
+    alt open a hit
+        User->>Panel: click a hit
+        Panel->>EditorService: openFileAt(path, line)
+        EditorService->>EditorService: openFile(path) + revealRequest = { path, line, id++ }
+        Note over Editor: effect on revealRequest, once path is loaded
+        Editor->>Editor: dispatch { selection: line(line).from, scrollIntoView } + focus
+    else Export
+        User->>Panel: Export
+        Panel->>Pure: formatSearchResultsDoc({ tags, text }, hits)
+        Panel->>EditorService: openScratch('search-results.md', doc)
+        EditorService->>EditorService: makeDoc(existsOnDisk:false, askOnSave:true); savedContent='' (dirty)
+        User->>Editor: Ctrl+S
+        Editor->>EditorService: save()  ->  askOnSave -> saveAs()
+        EditorService->>Preload: pickSavePath('search-results.md')
+        Preload->>VaultManager: vault:pick-save-path (native dialog, rooted at vault)
+        VaultManager-->>EditorService: vault-relative path (.md forced) | null
+        opt path chosen
+            EditorService->>Preload: saveNote({ path, body, eol })  (§6.11)
+            EditorService->>EditorService: re-key the tab to the chosen path + refresh
+        end
+    end
+```
+
+## 6.13 Autotag button → suggestTags → chips (milestone 11)
+
+The drawer's **Autotag** button sends the current entry text plus the tag
+vocabulary to the model; the reply pre-fills the tag chip row. Nothing is
+saved — the user still confirms by adding the entry.
+
+```mermaid
+sequenceDiagram
+    actor User
+    participant Button as AutotagButton
+    participant Draft as EntryDraftService
+    participant Tasks as LlmTaskService
+    participant Preload as preload (dreyApi)
+    participant Runner as ActionRunner.suggestTags (main)
+    participant LM as LmStudioClient
+    participant Pure as shared/llm (parseSuggestedTags)
+
+    User->>Button: click "Autotag"
+    Button->>Tasks: run('Suggesting tags', taskId => ...)
+    Button->>Preload: suggestTags(entryText, taskId)
+    Preload->>Runner: tags:suggest
+    Runner->>Runner: render the `autotag` template ({tags} = vocabulary)
+    Runner->>LM: POST /chat/completions
+    LM-->>Runner: reply
+    Runner->>Pure: parseSuggestedTags(reply)  ({"tags":[…]} -> normalised, <=4)
+    Runner-->>Button: string[]
+    Button->>Draft: add each suggested tag to the chip row
+    Note over User: user edits chips if needed, then "Add to document" (§6.9)
+```
+
 ## Planned flows (added as their milestone is built)
 
-- Batch tag suggestion in the inbox (milestone 7 — the Autotagging action is the same classifier call, run per-document for now)
-- File-watcher reaction (frontmatter-change / body-change / untracked-new-file) (deferred, see above)
-- Keyword search over all notes, on its own surface now that the bar is gone (milestone 8)
+- Dedicated keyword-search / FTS surface — the search panel's free-text
+  mode covers the common case for now (`specs/roadmap.md` Phase 2)
 - Chat/RAG scope resolution for a vault-wide scope (Phase 2)
+
+_(Dropped: the batch-tag-suggestion inbox and the chokidar file-watcher
+reaction — see [ADR-0017] and
+[ADR-0018](09_architecture_decisions/0018-manual-refresh-no-file-watcher.md).)_
