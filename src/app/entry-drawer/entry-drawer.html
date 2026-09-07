@@ -5,8 +5,8 @@
   [attr.aria-expanded]="drawer.open()"
   (click)="drawer.toggle()"
 >
-  <app-icon name="chevron-down" [size]="11" />
-  ADD ENTRY
+  <app-icon name="chevron-right" [size]="8" [strokeWidth]="1.1" />
+  <span class="dt-label">Add entry</span>
   @if (!drawer.open() && drawer.hasContent()) {
     <span class="pending" title="Unsent draft">●</span>
   }
@@ -70,6 +70,7 @@
     }
 
     <div class="drawer-actions">
+      <span class="count">{{ bodyCount() }}</span>
       <button type="button" class="btn" [disabled]="!drawer.hasContent()" (click)="discard()">
         Discard
       </button>

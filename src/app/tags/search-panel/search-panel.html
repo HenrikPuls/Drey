@@ -1,18 +1,20 @@
-<button
-  type="button"
-  class="head"
-  [class.open]="expanded()"
-  [attr.aria-expanded]="expanded()"
-  (click)="toggle()"
->
-  <app-icon name="chevron-right" [size]="9" />
-  <span class="label">SEARCH</span>
-  @if (!expanded() && search.hits().length > 0) {
-    <span class="count">{{ search.hits().length }}</span>
-  }
-</button>
+@if (!embedded()) {
+  <button
+    type="button"
+    class="head"
+    [class.open]="expanded()"
+    [attr.aria-expanded]="expanded()"
+    (click)="toggle()"
+  >
+    <app-icon name="chevron-right" [size]="9" />
+    <span class="label">SEARCH</span>
+    @if (!expanded() && search.hits().length > 0) {
+      <span class="count">{{ search.hits().length }}</span>
+    }
+  </button>
+}
 
-@if (expanded()) {
+@if (showBody()) {
   <div class="body">
     <div class="chip-field">
       @for (tag of search.queryTags(); track tag) {

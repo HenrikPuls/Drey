@@ -1,0 +1,27 @@
+<div class="head" (mousedown)="startDrag($event)" title="Drag by the header to move this panel">
+  <button
+    type="button"
+    class="twist"
+    (click)="toggleCollapse($event)"
+    (mousedown)="$event.stopPropagation()"
+    [attr.aria-label]="(collapsed() ? 'Expand ' : 'Collapse ') + title()"
+  >
+    <app-icon
+      name="chevron-right"
+      [size]="8"
+      [strokeWidth]="1.1"
+      [style.transform]="collapsed() ? 'none' : 'rotate(90deg)'"
+    />
+  </button>
+  <span class="title">{{ title() }}</span>
+  @if (status(); as s) {
+    <span class="status">{{ s }}</span>
+  }
+  <span class="grip" aria-hidden="true"> <i></i><i></i><i></i><i></i><i></i><i></i> </span>
+</div>
+
+@if (!collapsed()) {
+  <div class="body" [class.body--flush]="flush()">
+    <ng-content />
+  </div>
+}

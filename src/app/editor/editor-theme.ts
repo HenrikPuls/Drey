@@ -32,7 +32,7 @@ export const dreyHighlightStyle = HighlightStyle.define([
     tag: t.heading2,
     fontFamily: 'var(--drey-heading-font)',
     fontWeight: '500',
-    color: '#e6e2db',
+    color: 'var(--text-primary)',
     fontSize: '1.31em',
     lineHeight: '1.3',
   },
@@ -57,7 +57,7 @@ export const dreyHighlightStyle = HighlightStyle.define([
   { tag: t.link, color: 'var(--accent)' },
   { tag: t.url, color: 'var(--text-6)' },
   { tag: t.monospace, fontFamily: 'var(--font-mono)', fontSize: '0.9em' },
-  { tag: t.quote, fontFamily: 'var(--font-serif)', fontStyle: 'italic', color: '#a9a49c' },
+  { tag: t.quote, fontFamily: 'var(--font-serif)', fontStyle: 'italic', color: 'var(--text-3)' },
   { tag: t.list, color: 'var(--text-5)' },
   // The raw syntax marks (`#`, `**`, `>`, `---`, `` ` ``): dim but legible.
   { tag: [t.processingInstruction, t.contentSeparator], color: 'var(--text-faint)' },
@@ -123,13 +123,17 @@ export const dreyEditorTheme = EditorView.theme(
       fontSize: 'calc(14.5px * var(--drey-editor-scale, 1))',
       lineHeight: '1.72',
     },
-    // Fluid width: the prose column fills the pane, leaving only a small
-    // symmetric side margin (no readable-measure cap).
+    // Centred reading column (DESIGN.md: max-width 680px, +46px when the
+    // line-number gutter is on, padding 26/24/32). The gutter, when shown,
+    // adds its own width to the left of this box.
     '.cm-content': {
-      padding: '40px 24px 56px',
+      maxWidth: '680px',
+      margin: '0 auto',
+      padding: '26px 24px 32px',
       caretColor: 'var(--accent)',
     },
-    // `basicSetup` mounts line-number + fold gutters; this editor is prose.
+    // `basicSetup` mounts line-number + fold gutters; hidden until the meta
+    // bar's "Lines" toggle un-hides them (`markdown-surface.ts` gutterTheme).
     '.cm-gutters': { display: 'none' },
     '.cm-cursor, .cm-dropCursor': { borderLeftColor: 'var(--accent)' },
     '&.cm-focused .cm-selectionBackground, .cm-selectionBackground, .cm-content ::selection': {

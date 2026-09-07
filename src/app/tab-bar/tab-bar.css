@@ -1,44 +1,46 @@
 :host {
   display: flex;
-  align-items: stretch;
+  align-items: flex-end;
   gap: 1px;
-  padding: 0 10px;
-  height: 38px;
-  background: var(--bg-bar);
+  flex: none;
+  min-width: 0;
+  height: var(--bar-h);
+  padding: 0 8px;
+  background: var(--bg-dock);
   border-bottom: 1px solid var(--border);
-  overflow-x: auto;
-  scrollbar-width: none;
-}
-
-:host::-webkit-scrollbar {
-  display: none;
+  overflow: hidden;
 }
 
 .tab {
   display: flex;
   align-items: center;
-  gap: 8px;
-  max-width: 230px;
-  padding: 0 10px;
-  margin-top: 6px;
+  gap: 7px;
+  flex: 0 1 auto;
+  min-width: 44px;
+  max-width: 210px;
+  height: 28px;
+  padding: 0 8px 0 11px;
   border-radius: var(--radius-tab) var(--radius-tab) 0 0;
   cursor: pointer;
-  color: var(--text-5);
+  color: #847f79;
   background: transparent;
   white-space: nowrap;
 }
 
 .tab:hover {
-  color: var(--text-2);
+  background: var(--hover-bg);
 }
 
 .tab.active {
-  background: var(--bg-main);
+  background: var(--bg-editor);
   color: var(--text-heading);
 }
 
 .name {
-  font-size: 12px;
+  flex: 1;
+  min-width: 0;
+  font-family: var(--font-mono);
+  font-size: var(--fs-mono-tab);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -53,8 +55,8 @@
 }
 
 .close {
-  width: 15px;
-  height: 15px;
+  width: 16px;
+  height: 16px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -62,7 +64,7 @@
   background: transparent;
   border-radius: var(--radius-xs);
   flex: none;
-  opacity: 0.5;
+  opacity: 0.45;
   cursor: pointer;
   color: inherit;
 }
@@ -76,12 +78,12 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 24px;
-  height: 24px;
-  margin: 7px 0 0 6px;
+  width: 26px;
+  height: 26px;
+  margin: 0 0 1px 4px;
   border: 0;
   background: transparent;
-  border-radius: var(--radius);
+  border-radius: var(--radius-sm);
   cursor: pointer;
   color: var(--text-6);
   flex: none;
@@ -97,7 +99,7 @@
   color: var(--text-primary);
 }
 
-/* Right-click menu -- mirrors the sidebar's ctx-menu pattern. */
+/* Right-click menu -- mirrors the shared ctx-menu pattern. */
 .ctx-backdrop {
   position: fixed;
   inset: 0;
@@ -110,9 +112,9 @@
   min-width: 156px;
   padding: 4px;
   background: var(--bg-input);
-  border: 1px solid var(--border-strong);
+  border: 1px solid var(--popover-border);
   border-radius: var(--radius-md);
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+  box-shadow: var(--popover-shadow);
 }
 
 .ctx-menu button {

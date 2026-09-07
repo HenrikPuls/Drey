@@ -36,6 +36,20 @@ below).
 
 **Goal: usable day to day, smallest viable feature set**
 
+- **UI shell (v3 dock layout, milestone 14 — `handoff/DESIGN.md`,
+  [ADR-0019](../docs/09_architecture_decisions/0019-movable-dock-panels-and-layout-state.md)):**
+  a frameless window with a custom titlebar (accent square + "Drey" + an
+  HTML File/Edit/Selection/View menu bar + window controls), a left and a
+  right **dock**, the editor column between them, and a 26px status bar
+  (word/char count · context hint · Settings). The former sidebar
+  contents — calendar, file tree, tag search, open-windows — plus the note
+  assistant are **five panels** the user drags between the two docks,
+  resizes with splitters, and collapses to their header; the arrangement
+  persists per machine. "Sidebar" in the feature bullets below now means
+  the relevant dock panel. Design tokens (exact hex / px / type from the
+  handoff) live centrally in `src/styles.css`; the editor keeps
+  CodeMirror 6 + Live Preview rather than the prototype's block model.
+
 - **Quick-capture:** a global hotkey brings the main window forward and
   opens today's daily note — `daily/<year>/<month>/YYYY-MM-DD.md` — in the
   editor. On open, a fresh `## HH:mm` entry is appended, ready to type
@@ -121,8 +135,10 @@ below).
     whole-document rewrites; a "don't ask again for this action" checkbox
     flips the mapping's confirmation toggle.
 
-- **A single vault** (no switching, no sensitive/general separation yet —
-  that comes in Phase 3).
+- **A single active vault** (no sensitive/general separation yet — that
+  comes in Phase 3). The Files panel's vault row offers only "Open other
+  vault …", which re-points the one active vault through the directory
+  picker; there is no known-vaults registry.
 
 - **Editor:** one CodeMirror 6 view with a true **Live Preview** mode
   (Obsidian-/Typora-style): syntax markers conceal everywhere except

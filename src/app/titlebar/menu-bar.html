@@ -1,0 +1,43 @@
+@if (menu.open() !== null) {
+  <div class="overlay" (click)="menu.close()"></div>
+}
+
+<div class="bar">
+  @for (m of menu.menus(); track m.id) {
+    <div class="menu">
+      <button
+        type="button"
+        class="menu-label"
+        [class.open]="menu.open() === m.id"
+        (click)="menu.toggle(m.id)"
+        (mouseenter)="menu.hover(m.id)"
+      >
+        {{ m.label }}
+      </button>
+
+      @if (menu.open() === m.id) {
+        <div class="popover">
+          @for (row of m.rows; track $index) {
+            @if (row.kind === 'separator') {
+              <div class="sep"></div>
+            } @else {
+              <button
+                type="button"
+                class="row"
+                [class.disabled]="!row.run"
+                [disabled]="!row.run"
+                (click)="row.run && row.run()"
+              >
+                <span class="check">{{ row.checked && row.checked() ? '✓' : '' }}</span>
+                <span class="label">{{ row.label }}</span>
+                @if (row.hint) {
+                  <span class="hint">{{ row.hint }}</span>
+                }
+              </button>
+            }
+          }
+        </div>
+      }
+    </div>
+  }
+</div>

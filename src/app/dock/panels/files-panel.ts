@@ -9,14 +9,10 @@ import {
   viewChild,
 } from '@angular/core';
 import { NgTemplateOutlet } from '@angular/common';
-import { EditorService } from '../services/editor.service';
-import { SettingsService } from '../services/settings.service';
-import { VaultService } from '../services/vault.service';
-import { VaultFileEntry } from '../../../shared/ipc-api';
-import { Calendar } from './calendar/calendar';
-import { OpenWindows } from './open-windows/open-windows';
-import { SearchPanel } from '../tags';
-import { Icon } from '../icons/icon';
+import { EditorService } from '../../services/editor.service';
+import { VaultService } from '../../services/vault.service';
+import { VaultFileEntry } from '../../../../shared/ipc-api';
+import { Icon } from '../../icons/icon';
 
 /** Anchor + target for the file-tree right-click menu. */
 interface TreeMenu {
@@ -35,27 +31,27 @@ interface PendingCreate {
 }
 
 /**
- * Left column: mini-calendar, the vault file tree ("Files"), the
- * open-windows list, and a settings entry pinned at the bottom (CLAUDE.md,
- * "UI/UX Design"). Folder collapse state and the right-click "new file /
- * new folder" flow are local view state; the actual create call and the
- * tree reload live in `VaultService`.
+ * "Files" dock panel: the vault switcher row plus the vault file tree.
+ * Lifted out of the old `Sidebar` component unchanged in behaviour --
+ * folder collapse state and the right-click new/delete flow are local view
+ * state; the create call and the tree reload live in `VaultService`. Step 4
+ * restyles the switcher and tree to the v3 spec.
  */
 @Component({
-  selector: 'app-sidebar',
+  selector: 'app-files-panel',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [NgTemplateOutlet, Calendar, OpenWindows, SearchPanel, Icon],
-  styleUrl: './sidebar.css',
-  templateUrl: './sidebar.html',
+  imports: [NgTemplateOutlet, Icon],
+  templateUrl: './files-panel.html',
+  styleUrl: './files-panel.css',
 })
-export class Sidebar {
+export class FilesPanel {
   protected readonly vault = inject(VaultService);
   protected readonly editor = inject(EditorService);
-  protected readonly settings = inject(SettingsService);
 
   /** Folder paths the user has collapsed. Folders start expanded. */
   private readonly collapsed = signal<ReadonlySet<string>>(new Set());
 
+  protected readonly vaultMenuOpen = signal(false);
   protected readonly menu = signal<TreeMenu | null>(null);
   protected readonly creating = signal<PendingCreate | null>(null);
 
@@ -64,10 +60,18 @@ export class Sidebar {
   constructor() {
     effect(() => {
       if (this.creating()) {
-        // Wait for the @if branch to render before reaching for the input.
         setTimeout(() => this.createInput()?.nativeElement.focus(), 0);
       }
     });
+  }
+
+  protected vaultName(): string {
+    const path = this.vault.activeVaultPath();
+    if (!path) {
+      return 'No vault';
+    }
+    const parts = path.split(/[\\/]/).filter(Boolean);
+    return parts[parts.length - 1] ?? path;
   }
 
   protected isCollapsed(path: string): boolean {
@@ -86,7 +90,12 @@ export class Sidebar {
     });
   }
 
-  protected onSelectVault(): void {
+  protected toggleVaultMenu(): void {
+    this.vaultMenuOpen.update((v) => !v);
+  }
+
+  protected onOpenOtherVault(): void {
+    this.vaultMenuOpen.set(false);
     void this.vault.selectVault();
   }
 
@@ -101,13 +110,7 @@ export class Sidebar {
     }
   }
 
-  /**
-   * Right-click on the file panel. With no `entry` (empty area) the target
-   * is the vault root; on a folder it's that folder; on a file it's the
-   * file's parent folder.
-   */
   protected openMenu(event: MouseEvent, entry?: VaultFileEntry): void {
-    // Let the native editable menu (cut/copy/paste) win inside the name input.
     if (event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement) {
       return;
     }
@@ -150,11 +153,6 @@ export class Sidebar {
     this.creating.set(null);
   }
 
-  /**
-   * Deletes the entry the context menu was opened on, after a native
-   * `confirm`. Any open tab for the file (or, for a folder, tabs under it)
-   * is closed first without a dirty prompt -- the file is about to be gone.
-   */
   protected async onDelete(): Promise<void> {
     const entry = this.menu()?.entry;
     this.menu.set(null);
@@ -173,12 +171,6 @@ export class Sidebar {
     }
   }
 
-  /**
-   * Confirms the inline input. Runs on both Enter and blur, so it's guarded
-   * to be a no-op the second time. A file name with no dot gets `.md`
-   * appended -- these notes are Markdown, and typing the extension every
-   * time is friction (flagged as an assumption, not spec'd).
-   */
   protected async commitCreate(rawName: string): Promise<void> {
     const pending = this.creating();
     this.creating.set(null);
@@ -211,6 +203,7 @@ export class Sidebar {
   @HostListener('document:keydown.escape')
   protected onEscape(): void {
     this.menu.set(null);
+    this.vaultMenuOpen.set(false);
   }
 }
 

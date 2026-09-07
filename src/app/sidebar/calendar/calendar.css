@@ -1,13 +1,14 @@
 :host {
   display: block;
-  padding: 2px 12px 14px;
+  padding: 0 12px 12px;
 }
 
 .head {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 0 2px 8px;
+  height: 24px;
+  margin-bottom: 2px;
 }
 
 .month {
@@ -20,9 +21,9 @@
   margin-left: -4px;
   border-radius: var(--radius-xs);
   cursor: pointer;
-  font-size: 11.5px;
-  font-weight: 500;
-  color: #cdc9c2;
+  font-size: 12px;
+  color: var(--text-2);
+  white-space: nowrap;
 }
 
 .month:hover {
@@ -42,12 +43,12 @@
 
 .nav {
   display: flex;
-  gap: 2px;
+  gap: 1px;
 }
 
 .nav-btn {
-  width: 18px;
-  height: 18px;
+  width: 20px;
+  height: 20px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -66,20 +67,21 @@
 .grid {
   display: grid;
   grid-template-columns: repeat(7, 1fr);
-  gap: 1px;
 }
 
 .weekday {
-  text-align: center;
-  font-size: 9px;
-  font-weight: 500;
-  color: var(--text-6);
-  padding-bottom: 3px;
+  height: 18px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  color: var(--text-7);
 }
 
 .day {
   position: relative;
-  height: 22px;
+  height: 26px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -87,7 +89,8 @@
   background: transparent;
   border-radius: var(--radius-sm);
   cursor: pointer;
-  font-size: 10.5px;
+  font-family: var(--font-mono);
+  font-size: 11px;
   color: var(--text-3);
   padding: 0;
 }
@@ -97,7 +100,7 @@
 }
 
 .day.out {
-  color: var(--text-faint);
+  color: var(--calendar-muted);
 }
 
 .day.today {
@@ -117,7 +120,7 @@
   position: absolute;
   inset: 1px;
   border-radius: var(--radius-sm);
-  border: 1px solid var(--accent-ring);
+  border: 1px solid var(--accent-edge);
 }
 
 .num {
@@ -126,21 +129,21 @@
 
 .dot {
   position: absolute;
-  bottom: 2px;
+  bottom: 3px;
   left: 50%;
   width: 3px;
   height: 3px;
   margin-left: -1.5px;
   border-radius: 50%;
-  background: rgba(234, 231, 225, 0.45);
+  background: var(--text-4);
 }
 
 .months {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
   gap: 2px;
-  /* Roughly the height of the six-row day grid, so the sidebar below does
-     not jump when the picker opens. */
+  /* Roughly the height of the six-row day grid, so the layout does not
+     jump when the picker opens. */
   min-height: 150px;
   align-content: center;
 }
@@ -152,7 +155,8 @@
   background: transparent;
   border-radius: var(--radius-sm);
   cursor: pointer;
-  font-size: 10.5px;
+  font-family: var(--font-mono);
+  font-size: 11px;
   color: var(--text-3);
   padding: 0;
 }
@@ -167,6 +171,6 @@
 }
 
 .month-cell.shown:not(.current) {
-  box-shadow: inset 0 0 0 1px var(--accent-ring);
+  box-shadow: inset 0 0 0 1px var(--accent-edge);
   color: var(--text-primary);
 }

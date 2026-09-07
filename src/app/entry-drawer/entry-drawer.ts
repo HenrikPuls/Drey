@@ -47,6 +47,16 @@ export class EntryDrawer {
     () => this.drawer.hasContent() && !this.drawer.appending(),
   );
 
+  /** "N words · N chars" for the footer, from the body text. */
+  protected readonly bodyCount = computed<string>(() => {
+    const text = this.drawer.text();
+    const trimmed = text.trim();
+    if (!trimmed) {
+      return '';
+    }
+    return `${trimmed.split(/\s+/).length} words · ${text.length} chars`;
+  });
+
   constructor() {
     // The checker only re-runs on a text change, so toggling spelling (or
     // switching dictionary) in Settings would otherwise leave the current

@@ -1,24 +1,17 @@
 <header class="head">
-  <div class="titles">
-    <span class="title">Note assistant</span>
-    <span class="sub" [title]="assistant.notePath()">{{ noteName() }}</span>
-  </div>
-
-  <div class="toggle-row">
-    <span class="toggle-label" id="auto-summary-label">Automatic summary</span>
-    <button
-      type="button"
-      class="switch"
-      role="switch"
-      aria-labelledby="auto-summary-label"
-      [attr.aria-checked]="assistant.autoSummary()"
-      [class.on]="assistant.autoSummary()"
-      [disabled]="assistant.notePath() === null"
-      (click)="assistant.setAutoSummary(!assistant.autoSummary())"
-    >
-      <span class="knob"></span>
-    </button>
-  </div>
+  <span class="toggle-label" id="auto-summary-label">Automatic summary</span>
+  <button
+    type="button"
+    class="switch"
+    role="switch"
+    aria-labelledby="auto-summary-label"
+    [attr.aria-checked]="assistant.autoSummary()"
+    [class.on]="assistant.autoSummary()"
+    [disabled]="assistant.notePath() === null"
+    (click)="assistant.setAutoSummary(!assistant.autoSummary())"
+  >
+    <span class="knob"></span>
+  </button>
 </header>
 
 <div class="thread">

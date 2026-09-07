@@ -11,6 +11,7 @@ import {
 import { EditorView } from '@codemirror/view';
 import { ActionsService } from '../services/actions.service';
 import { AssistantService } from '../services/assistant.service';
+import { DockService } from '../dock';
 import { editorFontFamilyStacks } from '../../../shared/app-config';
 import { EditorService, EditorViewMode, NewEntryRequest } from '../services/editor.service';
 import { EditorZoomService } from '../services/editor-zoom.service';
@@ -24,7 +25,8 @@ import { MarkdownSurface } from './markdown-surface/markdown-surface';
  * The full-page document editor: hosts one `MarkdownSurface` (the shared
  * CodeMirror component, also used by the capture input -- ADR-0009) and owns
  * everything document-shaped around it: syncing the active tab's buffer,
- * the `⋯` mode menu, Ctrl+S, and quick-capture / capture-input entries.
+ * the `⋯` mode menu, and quick-capture / capture-input entries. Save
+ * (`Ctrl+S` / `Ctrl+Shift+S`) is an app-wide command now (`App`).
  *
  * Two modes over the one always-visible surface, switched from the `⋯`
  * menu: **live** (Live Preview decorations) and **source** (raw Markdown,
@@ -39,7 +41,6 @@ import { MarkdownSurface } from './markdown-surface/markdown-surface';
   styleUrl: './editor.css',
   imports: [Icon, MarkdownSurface],
   host: {
-    '(keydown)': 'onKeydown($event)',
     '(wheel)': 'onWheel($event)',
     // Editor content zoom (Ctrl +/-/0, ADR-0015). The keydown is bound on
     // `document` so it works while any pane has focus, as long as a
@@ -63,6 +64,7 @@ export class Editor implements AfterViewInit {
   protected readonly zoom = inject(EditorZoomService);
   protected readonly actions = inject(ActionsService);
   protected readonly assistant = inject(AssistantService);
+  protected readonly dock = inject(DockService);
   private readonly spellcheck = inject(SpellcheckService);
   private readonly tagSearch = inject(TagSearchService);
 
@@ -107,11 +109,6 @@ export class Editor implements AfterViewInit {
   protected readonly fontStacks = computed(() =>
     editorFontFamilyStacks(this.settings.editorFontFamily()),
   );
-
-  protected readonly wordCount = computed(() => {
-    const words = this.editor.bufferContent().trim().split(/\s+/).filter(Boolean);
-    return words.length;
-  });
 
   private get view(): EditorView | undefined {
     return this.surfaceReady ? this.surface().view : undefined;
@@ -167,13 +164,6 @@ export class Editor implements AfterViewInit {
     // (hotkey or capture on a not-yet-open file) -- the effect ran with no
     // view. Apply whatever is pending now.
     this.applyNewEntryRequest(this.editor.newEntryRequest());
-  }
-
-  protected async onKeydown(event: KeyboardEvent): Promise<void> {
-    if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 's') {
-      event.preventDefault();
-      await (event.shiftKey ? this.editor.saveAs() : this.editor.save());
-    }
   }
 
   /** Ctrl +/-/0 zoom the editor content only (ADR-0015), from any pane. */

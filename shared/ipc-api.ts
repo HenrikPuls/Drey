@@ -31,6 +31,11 @@ export type { TagSearchHit, TagSearchQuery } from './tags';
  */
 export const IPC_CHANNELS = {
   getAppInfo: 'app:get-info',
+  windowMinimize: 'window:minimize',
+  windowToggleMaximize: 'window:toggle-maximize',
+  windowClose: 'window:close',
+  windowIsMaximized: 'window:is-maximized',
+  windowMaximizeChanged: 'window:maximize-changed',
   vaultGetActive: 'vault:get-active',
   vaultSelect: 'vault:select',
   vaultListFiles: 'vault:list-files',
@@ -230,6 +235,24 @@ export interface SpellCheckResult {
 /** The API surface exposed on `window.dreyApi` by the preload script. */
 export interface DreyApi {
   getAppInfo(): Promise<AppInfo>;
+
+  /**
+   * Custom-titlebar window controls. The renderer draws its own
+   * minimize/maximize/close buttons because the window is frameless
+   * (`titleBarStyle: 'hidden'`) -- see
+   * docs/09_architecture_decisions/0019-*.md. No-ops if the window is gone.
+   */
+  minimizeWindow(): Promise<void>;
+  toggleMaximizeWindow(): Promise<void>;
+  closeWindow(): Promise<void>;
+  isWindowMaximized(): Promise<boolean>;
+
+  /**
+   * Fires whenever the window is maximized or restored, so the titlebar's
+   * maximize/restore glyph can follow along (main -> renderer push, same
+   * shape as `onOpenDailyNote`). Returns an unsubscribe.
+   */
+  onWindowMaximizeChange(listener: (maximized: boolean) => void): () => void;
 
   /** The full app config (`shared/app-config.ts`), always normalised/complete. */
   getConfig(): Promise<AppConfig>;

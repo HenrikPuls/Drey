@@ -1,0 +1,21 @@
+@for (id of ids(); track id; let i = $index, count = $count) {
+  @if (dropBefore(i)) {
+    <div class="drop-line"></div>
+  }
+
+  <app-panel-frame [panelId]="id" [status]="statusFor(id)" [style.flex]="flexStyle(id)">
+    <ng-container *ngComponentOutlet="component(id)" />
+  </app-panel-frame>
+
+  @if (splitTarget(id); as next) {
+    <div
+      class="split"
+      title="Drag to resize"
+      (pointerdown)="dock.startSplit(id, next, $event)"
+    ></div>
+  }
+
+  @if (dropAtEnd(i, count)) {
+    <div class="drop-line"></div>
+  }
+}

@@ -730,6 +730,74 @@ sequenceDiagram
     Note over User: user edits chips if needed, then "Add to document" (§6.9)
 ```
 
+## 6.14 Drag a panel between docks → drop → persist (milestone 14)
+
+`mousedown` on a panel header starts the drag in `DockService`; a `window`
+`mousemove` recomputes the drop target/index every frame (the header
+reorders under the pointer, so the listeners can't live on the element);
+`mouseup` applies the move and writes the layout.
+
+```mermaid
+sequenceDiagram
+    actor User
+    participant Frame as PanelFrame
+    participant Dock as DockService
+    participant Win as window (mousemove/mouseup)
+    participant Cmp as Dock component
+    participant LS as localStorage['drey.dock']
+
+    User->>Frame: mousedown on header (not the chevron)
+    Frame->>Dock: startPanelDrag(id, event)
+    Dock->>Dock: dragging=id; add window mousemove/mouseup; body cursor=grabbing
+    loop while dragging
+        Win->>Dock: onDragMove(event)
+        Dock->>Dock: dropDock = X in a dock box (±12px) else window midline
+        Dock->>Dock: dropIndex = first panel whose Y-midpoint is below the pointer
+        Dock-->>Cmp: dragging / dropDock / dropIndex signals
+        Cmp-->>User: 2px accent drop-line + inset ring on the target dock;\ndragged panel opacity .4
+    end
+    User->>Win: mouseup
+    Win->>Dock: onDragEnd()
+    Dock->>Dock: move(id, dropDock, dropIndex) — remove from both docks,\nsplice into target at the pre-removal slot
+    Dock->>LS: persist { dock, flexes, open, leftW, rightW }
+    Dock->>Dock: clear transient state; body cursor=''
+```
+
+Splitters (`startSplit`, keeps the summed height of the two open
+neighbours constant, min 40px each) and the dock-edge resizers
+(`startDockResize`, clamp 180–560px) use pointer capture instead and
+write the same `drey.dock` blob. `View → Reset layout` is
+`DockService.reset()`.
+
+## 6.15 Titlebar menu action → command (milestone 14)
+
+```mermaid
+sequenceDiagram
+    actor User
+    participant Bar as MenuBar
+    participant Menu as MenuService
+    participant Keys as KeybindingService
+    participant Target as EditorService / DockService / SettingsService
+
+    User->>Bar: click "File"
+    Bar->>Menu: toggle('file')  (hovering a sibling while open switches menus)
+    Menu-->>Bar: menus() model (checked() / disabled rows)
+    User->>Bar: click "Save"
+    Bar->>Menu: row.run()
+    Menu->>Menu: close()
+    Menu->>Keys: run('note.save')
+    Keys->>Target: editor.save()
+    Note over Bar: a full-viewport transparent overlay closes the menu on an outside click
+```
+
+Wired rows: File → New note (`note.new`), Switch vault … (`vault.selectVault`
++ `dock.openAndExpand('files')`), Save / Save all (`note.save` /
+`note.saveAll`), Settings (`settings.openScreen`); Edit → Search all notes
+(`search.open` + `dock.openAndExpand('search')`); View → Line numbers
+(`editor.toggleLineNumbers`), one collapse toggle per panel
+(`dock.toggleCollapse`), Reset layout (`dock.reset`). Everything else is a
+disabled placeholder.
+
 ## Planned flows (added as their milestone is built)
 
 - Dedicated keyword-search / FTS surface — the search panel's free-text

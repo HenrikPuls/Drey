@@ -1221,4 +1221,86 @@ vocabulary, taskId)` → the `autotag` built-in template
   each expose a thin `index.ts` barrel; `eslint.config.mjs`
   (`no-restricted-imports`, `npm run lint`) makes a deep import from
   outside a module a CI error. `shared/ipc-api.ts` stays the cross-layer
-  contract, outside any module.
+  contract, outside any module. _(Milestone 14 adds `src/app/dock/` and
+  `src/app/titlebar/` to this list — §5.15.)_
+
+## 5.15 v3 visual system + dock layout (milestone 14)
+
+The fixed `sidebar | main | assistant` shell is replaced by a **dock
+system**
+([ADR-0019](09_architecture_decisions/0019-movable-dock-panels-and-layout-state.md)):
+a custom titlebar with an HTML menu bar, a left and a right dock each
+holding an ordered list of panels, the main column between them, and a
+26px status bar. The panels — **Calendar, Files, Search, Open windows,
+Assistant** — are dragged between docks by their header, resized by
+splitters, and collapsed to their 32px header. `Sidebar` is deleted; its
+file tree + context menu + inline-create flow moved into `FilesPanel`.
+
+```mermaid
+graph TB
+    subgraph Renderer["Renderer (src/app/)"]
+        App["App\ntitlebar / [dock left | main | dock right] / status bar;\nregisters note.new/save/saveAs/saveAll + editor.toggleLineNumbers;\ndock-edge resizers -> DockService"]
+        subgraph tb["src/app/titlebar/ (barrel)"]
+            Titlebar["Titlebar\naccent square + Drey + MenuBar + window controls;\n-webkit-app-region drag"]
+            MenuBar["MenuBar + MenuService\nFile/Edit/Selection/View model;\nwired rows -> KeybindingService.run(id)"]
+            WindowChrome["WindowChromeService\nminimize/toggleMaximize/close + maximized signal"]
+        end
+        subgraph dk["src/app/dock/ (barrel)"]
+            DockService["DockService\nLayoutState (dock/flexes/open/leftW/rightW),\nlocalStorage['drey.dock'];\nstartPanelDrag/onDragMove/move,\nstartSplit, startDockResize, reset, openAndExpand"]
+            Dock["Dock [side]\nrenders panel list; drop-line + splitter;\ndrop-target ring; header status values"]
+            PanelFrame["PanelFrame\nidentical 32px header (chevron/title/status/grip);\nregisters host el; header mousedown -> drag"]
+            Panels["CalendarPanel / FilesPanel / SearchPanelHost /\nWindowsPanel / AssistantPanel\n(PANEL_TITLES + PANEL_COMPONENTS registry)"]
+        end
+        StatusBar["StatusBar\nEditorService.wordCount/charCount,\ndrag hint, Settings entry"]
+        EditorService2["EditorService\n+ lineNumbers signal (drey.editor),\nwordCount/charCount, newUntitled(), saveAll()"]
+        DockService2["(same DockService)"]
+        App --> Titlebar
+        App --> Dock
+        App --> StatusBar
+        Titlebar --> MenuBar
+        Titlebar --> WindowChrome
+        MenuBar --> DockService
+        Dock --> PanelFrame
+        Dock --> Panels
+        PanelFrame --> DockService
+        StatusBar --> DockService2
+        StatusBar --> EditorService2
+        WindowChrome -->|"window:* IPC"| Bridge3
+    end
+    Bridge3["contextBridge (dreyApi)"]
+    Bridge3 -.->|"window:minimize / :toggle-maximize / :close /\n:is-maximized + :maximize-changed push"| MainProc["electron/main.ts\ntitleBarStyle 'hidden' | 'hiddenInset';\nMenu.setApplicationMenu(null) off macOS"]
+```
+
+- **`DockService`** is the single owner of layout state and of the live
+  gestures. The header drag uses `window` `mousemove`/`mouseup` (the
+  pointer leaves the header and the list reorders under it); splitters and
+  the dock-edge resizers use pointer capture. Element rects come from a
+  `Map<PanelId, HTMLElement>` / `Map<DockSide, HTMLElement>` the components
+  register on init. Drop target = pointer X within a dock's box (±12px) or
+  the window midline; drop index = first panel whose vertical midpoint the
+  pointer is above. `nextOpenId` skips collapsed neighbours, so N open
+  panels have N−1 splitters. Persisted (minus the transient drag fields)
+  to `localStorage['drey.dock']`, merged defensively onto the defaults.
+- **`PanelFrame`** renders the header every panel shares (DESIGN.md
+  principle 3). The body scrolls, except the assistant panel, which fills
+  the frame and scrolls internally.
+- **Titlebar / menu bar.** The window is frameless
+  (`titleBarStyle: 'hidden'`, `'hiddenInset'` on macOS). `MenuService`
+  holds the File/Edit/Selection/View model; a wired row calls a
+  `KeybindingService` command id (so the menu and the shortcut are one
+  definition) or a service directly, an unwired row renders disabled.
+  Window controls go through four new IPC channels + a
+  `window:maximize-changed` push; the native `Menu` is kept only on macOS.
+- **`LayoutService`** now keeps only `drawerHeight` +
+  `assistantComposerHeight`.
+- **Editor chrome.** Tab bar and meta bar are both 34px; the meta bar's
+  path is the one shrink child (DESIGN.md layout hardening). `Ctrl+S` /
+  `Ctrl+Shift+S` are app-wide `KeybindingService` commands now, not an
+  `Editor` host listener. Line numbers: a `MarkdownSurface` `lineNumbers`
+  input un-hides + re-themes the gutter `basicSetup` already mounts (46px,
+  Plex Mono 10.5), driven by `EditorService.lineNumbers` (persisted in
+  `drey.editor`); reading width is a centred `max-width: 680px` column
+  (`editor-theme.ts`).
+- **Deviations** (also in `specs/`): editor stays CodeMirror 6 + Live
+  Preview — no `contenteditable` blocks, no per-block gutter offsets; the
+  vault switcher is "Open other vault …" only (no backend vault registry).

@@ -4,6 +4,7 @@ import {
   ElementRef,
   effect,
   inject,
+  input,
   viewChild,
 } from '@angular/core';
 import { formatSearchResultsDoc } from '../../../../shared/tags';
@@ -13,11 +14,15 @@ import { TagService } from '../../services/tag.service';
 import { TagSearchService } from '../tag-search.service';
 
 /**
- * The collapsible "Search" section in the sidebar: a tag-chip input plus a
- * free-text field, a section-granularity results list (click opens the file
- * at the hit's line), and an "Export" button that dumps the hits into an
- * unsaved `search-results.md` tab. The LLM digest is parked
+ * The "Search" panel: a tag-chip input plus a free-text field, a
+ * section-granularity results list (click opens the file at the hit's
+ * line), and an "Export" button that dumps the hits into an unsaved
+ * `search-results.md` tab. The LLM digest is parked
  * (`TagSearchService.summarise` still exists, just not wired here).
+ *
+ * `embedded` = it lives inside a `PanelFrame` (the dock), which supplies
+ * the collapse chevron + "SEARCH" title -- so the component's own head is
+ * dropped and the body always shows.
  */
 @Component({
   selector: 'app-search-panel',
@@ -31,8 +36,15 @@ export class SearchPanel {
   protected readonly tags = inject(TagService);
   private readonly editor = inject(EditorService);
 
+  /** True when hosted in the dock panel frame -- hide the own head, always show the body. */
+  readonly embedded = input(false);
+
   /** Panel open state lives on the service (pill click / keybinding drive it). */
   protected readonly expanded = this.search.panelOpen;
+
+  protected showBody(): boolean {
+    return this.embedded() || this.expanded();
+  }
 
   private readonly tagInput = viewChild<ElementRef<HTMLInputElement>>('tagInput');
 

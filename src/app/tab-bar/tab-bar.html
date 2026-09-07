@@ -23,8 +23,8 @@
   </div>
 }
 
-<button type="button" class="add" disabled aria-label="New note (not yet available)">
-  <app-icon name="plus" [size]="11" [strokeWidth]="1.4" />
+<button type="button" class="add" (click)="editor.newUntitled()" aria-label="New note">
+  <app-icon name="plus" [size]="11" [strokeWidth]="1.2" />
 </button>
 
 @if (menu(); as m) {
