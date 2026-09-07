@@ -1,22 +1,6 @@
 :host {
-  display: flex;
-  flex-direction: column;
-  /* Never eat more than a third of the sidebar -- the file tree above is
-     the primary surface (CLAUDE.md, "UI/UX Design" sidebar order). */
-  max-height: 33%;
-  flex-shrink: 0;
-  border-top: 1px solid var(--border);
-  padding: 8px;
-}
-
-.label {
-  font-size: 9.5px;
-  font-weight: 500;
-  letter-spacing: 0.07em;
-  text-transform: uppercase;
-  color: var(--text-6);
-  padding: 2px 6px 6px;
-  flex-shrink: 0;
+  display: block;
+  padding: 0 6px 8px;
 }
 
 .empty {
@@ -28,15 +12,17 @@
 
 .list {
   min-height: 0;
-  overflow-y: auto;
 }
 
 .row {
   display: flex;
   align-items: center;
   gap: 4px;
-  border-radius: var(--radius);
+  height: var(--row-h);
+  padding: 0 6px;
+  border-radius: var(--radius-sm);
   color: var(--text-4);
+  overflow: hidden;
 }
 
 .row:hover {
@@ -44,6 +30,7 @@
 }
 
 .row.active {
+  background: var(--hover-bg-strong);
   color: var(--text-primary);
 }
 
@@ -56,21 +43,28 @@
   border: 0;
   background: transparent;
   text-align: left;
-  padding: 4px 2px 4px 6px;
+  padding: 0;
   cursor: pointer;
   color: inherit;
 }
 
-.open app-icon {
+.win-glyph {
+  width: 9px;
+  height: 7px;
   flex: none;
-  opacity: 0.55;
+  border: 1px solid currentColor;
+  border-top-width: 2.5px;
+  border-radius: 1.5px;
+  opacity: 0.45;
 }
 
 .name {
+  flex: 1;
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-size: 11.5px;
+  font-size: 12px;
 }
 
 .dirty {
@@ -84,7 +78,6 @@
 .close {
   width: 16px;
   height: 16px;
-  margin-right: 4px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -92,7 +85,7 @@
   background: transparent;
   border-radius: var(--radius-xs);
   flex: none;
-  opacity: 0.4;
+  opacity: 0.45;
   cursor: pointer;
   color: inherit;
 }

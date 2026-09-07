@@ -144,6 +144,21 @@ function registerIpcHandlers(
     platform: process.platform,
   }));
 
+  // Custom-titlebar window controls (the window is frameless, ADR-0019).
+  ipcMain.handle(IPC_CHANNELS.windowMinimize, (): void => mainWindow?.minimize());
+  ipcMain.handle(IPC_CHANNELS.windowToggleMaximize, (): void => {
+    if (!mainWindow) {
+      return;
+    }
+    if (mainWindow.isMaximized()) {
+      mainWindow.unmaximize();
+    } else {
+      mainWindow.maximize();
+    }
+  });
+  ipcMain.handle(IPC_CHANNELS.windowClose, (): void => mainWindow?.close());
+  ipcMain.handle(IPC_CHANNELS.windowIsMaximized, (): boolean => mainWindow?.isMaximized() ?? false);
+
   ipcMain.handle(IPC_CHANNELS.vaultGetActive, (): string | null =>
     vaultManager.getActiveVaultPath(),
   );
@@ -348,10 +363,14 @@ function createMainWindow(): BrowserWindow {
     height: 800,
     // Matches the dark theme default (see CLAUDE.md, UI/UX Design) so the
     // window doesn't flash white while the renderer loads.
-    backgroundColor: '#1e1e1e',
-    // Keep the menu bar out of the minimal layout (CLAUDE.md, UI/UX
-    // Design) but still bound -- Alt reveals it, and its accelerators
-    // (Ctrl+C/V/X, ...) stay active while hidden.
+    backgroundColor: '#1b1a19',
+    // Frameless: the renderer draws its own titlebar (accent square, the
+    // File/Edit/Selection/View menu bar and the window controls) --
+    // "VS Code style", ADR-0019. macOS keeps its traffic lights inset over
+    // that bar; every other platform gets renderer-drawn buttons.
+    titleBarStyle: process.platform === 'darwin' ? 'hiddenInset' : 'hidden',
+    // Still bound so Alt reveals the (macOS-only) native menu and its
+    // accelerators stay live where one exists.
     autoHideMenuBar: true,
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
@@ -380,6 +399,13 @@ function createMainWindow(): BrowserWindow {
   });
 
   attachContextMenu(window);
+  // Keep the renderer titlebar's maximize/restore glyph in sync with the
+  // real window state.
+  const emitMaximizeState = (): void => {
+    window.webContents.send(IPC_CHANNELS.windowMaximizeChanged, window.isMaximized());
+  };
+  window.on('maximize', emitMaximizeState);
+  window.on('unmaximize', emitMaximizeState);
   // The app is not a zoomable web page: Ctrl +/-/0 scales the editor
   // content in the renderer (ADR-0015), and the touchpad pinch gesture
   // must not zoom the whole window. Ctrl+wheel is suppressed renderer-side
@@ -457,7 +483,10 @@ if (!app.requestSingleInstanceLock()) {
       chatStore,
       spellcheck,
     );
-    Menu.setApplicationMenu(buildApplicationMenu());
+    // The File/Edit/Selection/View menus are drawn by the renderer titlebar
+    // now (ADR-0019). Keep a native menu only on macOS, where the menu bar
+    // belongs to the system and its accelerators are expected there.
+    Menu.setApplicationMenu(process.platform === 'darwin' ? buildApplicationMenu() : null);
     createMainWindow();
 
     const shortcutRegistered = globalShortcut.register(CAPTURE_SHORTCUT, () => {

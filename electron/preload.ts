@@ -29,6 +29,16 @@ import {
  */
 const dreyApi: DreyApi = {
   getAppInfo: () => ipcRenderer.invoke(IPC_CHANNELS.getAppInfo),
+  minimizeWindow: (): Promise<void> => ipcRenderer.invoke(IPC_CHANNELS.windowMinimize),
+  toggleMaximizeWindow: (): Promise<void> => ipcRenderer.invoke(IPC_CHANNELS.windowToggleMaximize),
+  closeWindow: (): Promise<void> => ipcRenderer.invoke(IPC_CHANNELS.windowClose),
+  isWindowMaximized: (): Promise<boolean> => ipcRenderer.invoke(IPC_CHANNELS.windowIsMaximized),
+  onWindowMaximizeChange: (listener: (maximized: boolean) => void): (() => void) => {
+    // Forward only the payload, never the IpcRendererEvent (ADR-0001).
+    const wrapped = (_event: IpcRendererEvent, maximized: boolean): void => listener(maximized);
+    ipcRenderer.on(IPC_CHANNELS.windowMaximizeChanged, wrapped);
+    return () => ipcRenderer.removeListener(IPC_CHANNELS.windowMaximizeChanged, wrapped);
+  },
   getActiveVault: () => ipcRenderer.invoke(IPC_CHANNELS.vaultGetActive),
   selectVault: () => ipcRenderer.invoke(IPC_CHANNELS.vaultSelect),
   listVaultFiles: (): Promise<VaultFileEntry[]> => ipcRenderer.invoke(IPC_CHANNELS.vaultListFiles),

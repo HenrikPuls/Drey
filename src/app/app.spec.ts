@@ -27,10 +27,12 @@ describe('App', () => {
     );
   });
 
-  it('renders the sidebar', async () => {
+  it('renders the titlebar and both docks', async () => {
     const fixture = TestBed.createComponent(App);
     await fixture.whenStable();
     const compiled = fixture.nativeElement as HTMLElement;
-    expect(compiled.querySelector('app-sidebar')).toBeTruthy();
+    expect(compiled.querySelector('app-titlebar')).toBeTruthy();
+    expect(compiled.querySelectorAll('app-dock').length).toBe(2);
+    expect(compiled.querySelector('app-status-bar')).toBeTruthy();
   });
 });

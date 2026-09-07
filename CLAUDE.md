@@ -141,19 +141,45 @@ Main process:
 
 Renderer (Angular):
 
-- `SidebarComponent` — calendar, vault file tree (right-click new /
-  delete), the collapsible `SearchPanel`, open windows, settings entry
-- `SearchPanel` + `TagSearchService` (`src/app/tags/`) — the sidebar tag
-  search: tag chips + free text → section hits (click opens the file at
-  the line via `EditorService.openFileAt`), and an **Export** button that
-  dumps the hits into an unsaved `search-results.md` scratch tab
+- ~~`SidebarComponent`~~ — removed with the v3 dock rebuild
+  ([ADR-0019](docs/09_architecture_decisions/0019-movable-dock-panels-and-layout-state.md)).
+  `App` composes a **titlebar / [left dock | main | right dock] / status
+  bar** shell directly.
+- `DockService` + `Dock` + `PanelFrame` (`src/app/dock/`) — the dock
+  system: `DockService` holds the whole `LayoutState` (which panel in
+  which dock, order, `flexes`, collapse, `leftW`/`rightW`;
+  `localStorage['drey.dock']`) and runs the header-drag / splitter /
+  dock-edge-resize gestures. Five panels via a `PANEL_COMPONENTS`
+  registry: `CalendarPanel`, `FilesPanel` (the old sidebar's vault
+  switcher + file tree + right-click new/delete + inline create),
+  `SearchPanelHost`, `WindowsPanel`, `AssistantPanel`. `PanelFrame` is
+  the identical 32px header every panel shares.
+- `TitlebarComponent` + `MenuBar` + `MenuService` (`src/app/titlebar/`) —
+  the frameless-window titlebar: accent square, the HTML File/Edit/
+  Selection/View menu bar (wired rows call `KeybindingService` command
+  ids), and — off macOS — minimize/maximize/close over the `window:*` IPC
+  channels ([ADR-0019](docs/09_architecture_decisions/0019-movable-dock-panels-and-layout-state.md)).
+- `StatusBarComponent` (`src/app/status-bar/`) — the 26px bottom bar:
+  word/char count, a context hint (the drag instruction while a panel is
+  moving), and the Settings entry.
+- `SearchPanel` + `TagSearchService` (`src/app/tags/`) — the tag search
+  (now the **Search** dock panel, `embedded` mode): tag chips + free text
+  → section hits (click opens the file at the line via
+  `EditorService.openFileAt`), and an **Export** button that dumps the
+  hits into an unsaved `search-results.md` scratch tab
 - `KeybindingService` (`src/app/keybindings/`) — one capture-phase
-  `keydown` listener mapping chord strings (`Mod+Shift+F` → open search)
-  onto `Command`s; features register from `App`
+  `keydown` listener mapping chord strings onto `Command`s; features
+  register from `App`. Commands: `search.open` (`Mod+Shift+F`),
+  `note.new` (`Mod+N`), `note.save` (`Mod+S`), `note.saveAs`
+  (`Mod+Shift+S`), `note.saveAll` (`Mod+Alt+S`),
+  `editor.toggleLineNumbers` (`Mod+G`) — the titlebar menu invokes the
+  same ids
 - `EditorComponent` — one CodeMirror 6 view with an inline Live Preview
   mode (decoration-based, ADR-0009) and a raw source mode, switched via a
   `⋯` mode menu (ADR-0008); the same `⋯` menu lists the manual Actions
-  and "Save as…". Inline `#tag`s render as pills; `Ctrl`/`Cmd`-click runs
+  and "Save as…". A 34px meta bar carries the path, a **Lines** toggle
+  (line-number gutter, `Ctrl+G`), Save/Saved, the assistant sparkle and
+  the `⋯` menu. Inline `#tag`s render as pills; `Ctrl`/`Cmd`-click runs
   a tag search
 - `EntryDrawerComponent` — the "Add entry" drawer at the bottom of
   the main area: an optional TOPIC field, **one** Tags chip row (+ an
@@ -167,7 +193,7 @@ Renderer (Angular):
 - `SettingsComponent` — master-detail settings screen (category list +
   detail pane), categories "LLM", "Assistant" (auto-summary default),
   "Spelling" (dictionaries + language), "Appearance" (editor typeface)
-  and "Actions"; opened from the sidebar entry. Category list is
+  and "Actions"; opened from the status-bar entry. Category list is
   descriptor-driven (`*ngComponentOutlet`, ADR-0016)
 - `ConfirmationDialogComponent` — the one confirmation dialog shared by
   Actions and Ask-mode edits (inline diff vs. side-by-side, "don't
@@ -185,24 +211,35 @@ be called out explicitly (see Working Style below), not introduced silently.
 - Visual style: dark theme by default, minimal and unobtrusive — visual
   language similar to claude.ai (flat surfaces, no heavy borders or
   shadows, generous whitespace, sentence-case labels, no visual clutter).
-- Overall layout: two columns, sidebar on the left, main area on the right.
-  - **Sidebar**, top to bottom: a small calendar → the vault file tree
-    (clicking a file opens it) → a collapsible "Search" section (tag
-    chips + free text) → a list of currently open windows/tabs → a
-    settings entry pinned at the very bottom.
-  - **Main area**: a tab bar across the top for currently open documents,
-    the editor below it (Live Preview ⇄ source via a `⋯` menu on the
-    chrome — no toggle buttons; see ADR-0008/0009), and the "Add entry"
-    drawer pinned to the bottom.
-  - **Right column**: the note assistant panel for the open note —
-    auto-summary switch, card thread, composer. There is no bottom chat
-    bar any more; capture lives in the drawer, Ask in this panel.
-  - **Settings**: a full-surface overlay opened from the sidebar entry —
-    master-detail (category list on the left, detail pane on the right),
-    categories "LLM", "Assistant", "Spelling", "Appearance" and "Actions"
-    (ADR-0010; descriptor-driven list, ADR-0016). The confirmation dialog
-    (Actions / Ask edits) is a centred modal: inline line diff for small
-    changes, side-by-side before/after for whole-document rewrites (ADR-0011).
+- Overall layout ([ADR-0019](docs/09_architecture_decisions/0019-movable-dock-panels-and-layout-state.md)):
+  a frameless window with a **custom titlebar** (accent square + "Drey" +
+  an HTML File/Edit/Selection/View menu bar + window controls), then a row
+  of **[left dock | main column | right dock]**, then a **26px status
+  bar** (word/char count · context hint · Settings entry).
+  - **Docks**: each holds an ordered list of the five panels —
+    **Calendar, Files, Search, Open windows, Assistant**. A panel is
+    dragged between docks by its header, resized against its neighbour by
+    a splitter, and collapsed to its 32px header. Every panel header is
+    built the same way (chevron + mono-uppercase title + optional status
+    value + drag grip). Default: Calendar/Files/Search/Open windows left,
+    Assistant right, Search collapsed. `View → Reset layout` restores it.
+    Layout state persists (`localStorage['drey.dock']`).
+  - **Files panel**: a vault-switcher row (name + "Open other vault …")
+    above the vault file tree (clicking a file opens it; right-click →
+    new file/folder/delete).
+  - **Main column**: a 34px tab bar for open documents, a 34px meta bar
+    (path · Lines toggle · Save/Saved · sparkle · `⋯`), the editor
+    (Live Preview ⇄ source via the `⋯` menu — no toggle buttons; see
+    ADR-0008/0009), and the "Add entry" drawer pinned to the bottom.
+  - **Assistant panel**: auto-summary switch, card thread, composer. No
+    bottom chat bar; capture lives in the drawer, Ask in this panel.
+  - **Settings**: a full-surface overlay opened from the status-bar entry
+    — master-detail (category list on the left, detail pane on the
+    right), categories "LLM", "Assistant", "Spelling", "Appearance" and
+    "Actions" (ADR-0010; descriptor-driven list, ADR-0016). The
+    confirmation dialog (Actions / Ask edits) is a centred modal: inline
+    line diff for small changes, side-by-side before/after for
+    whole-document rewrites (ADR-0011).
 - Editing model: true in-place Live Preview (Obsidian-style, ADR-0009) —
   the cursor sits in the rendered document, syntax markers reveal only
   around the selection, tables/images render as widgets that show their
@@ -212,6 +249,13 @@ be called out explicitly (see Working Style below), not introduced silently.
   during planning, but it was never saved as a file — treat this section
   (plus the component list above) as the source of truth for layout intent,
   not an assumed saved mockup.
+- The **v3 visual system** (milestone 14) has a real handoff:
+  `handoff/DESIGN.md` (high-fidelity tokens, the four core principles, the
+  dock-system spec) + `handoff/Drey App v3.dc.html` (interactive
+  prototype, reference only) + `handoff/screenshots/`. Design tokens live
+  centrally in `src/styles.css`. Deviations from the prototype are
+  recorded in [ADR-0019](docs/09_architecture_decisions/0019-movable-dock-panels-and-layout-state.md)
+  and `specs/`.
 
 ## Coding & Style Conventions
 
@@ -300,6 +344,14 @@ assume.
     (ADR-0016), manual refresh instead of a watcher (ADR-0018), file
     delete, nested daily-note paths, scratch tabs + Save-as.
 13. Prompt sweep to English + docs/specs/ADR reconciliation.
+14. **v3 visual system + dock layout** — the `handoff/` design system
+    ([ADR-0019](docs/09_architecture_decisions/0019-movable-dock-panels-and-layout-state.md)):
+    central design tokens, a frameless titlebar with an HTML menu bar,
+    two docks of movable/resizable/collapsible panels (calendar, files,
+    search, open windows, assistant) replacing `SidebarComponent`, a
+    status bar, line numbers in the editor, and the tab/meta-bar + drawer
+    reskin. Built in five steps (tokens → shell → dock mechanics → the
+    five panels → editor chrome), pausing after each.
 
 Pause after each milestone, show what works, don't push through several
 milestones in one uninterrupted stretch. (Milestones 10 and 11 were

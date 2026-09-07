@@ -82,6 +82,25 @@ function readDefaultMode(): EditorViewMode {
   }
 }
 
+function readLineNumbers(): boolean {
+  try {
+    const raw = localStorage.getItem(PREFS_KEY);
+    return (JSON.parse(raw ?? '{}') as { lineNumbers?: boolean }).lineNumbers === true;
+  } catch {
+    return false;
+  }
+}
+
+function writePref(patch: Record<string, unknown>): void {
+  try {
+    const raw = localStorage.getItem(PREFS_KEY);
+    const current = JSON.parse(raw ?? '{}') as Record<string, unknown>;
+    localStorage.setItem(PREFS_KEY, JSON.stringify({ ...current, ...patch }));
+  } catch {
+    // Private-mode / storage-disabled: a non-persisted session is fine.
+  }
+}
+
 function baseName(relativePath: string): string {
   const parts = relativePath.split('/');
   return parts[parts.length - 1] || relativePath;
@@ -128,6 +147,25 @@ export class EditorService {
   readonly isLoading = signal(false);
   readonly isSaving = signal(false);
   readonly error = signal<string | null>(null);
+
+  /**
+   * Whether the editor shows a line-number gutter. App-wide, persisted per
+   * machine like the default view mode; the actual CodeMirror gutter is
+   * wired in step 5. Toggled from the meta bar and View -> "Line numbers".
+   */
+  readonly lineNumbers = signal(readLineNumbers());
+
+  toggleLineNumbers(): void {
+    this.lineNumbers.update((v) => !v);
+    writePref({ lineNumbers: this.lineNumbers() });
+  }
+
+  /** Word / character counts for the status bar, from the active buffer. */
+  readonly wordCount = computed<number>(() => {
+    const text = this.bufferContent().trim();
+    return text ? text.split(/\s+/).length : 0;
+  });
+  readonly charCount = computed<number>(() => this.bufferContent().length);
 
   /**
    * `'edit'` outcomes from `on-save` Actions that still need confirmation
@@ -416,11 +454,7 @@ export class EditorService {
    */
   setViewMode(mode: EditorViewMode): void {
     this.patchActive({ viewMode: mode });
-    try {
-      localStorage.setItem(PREFS_KEY, JSON.stringify({ defaultMode: mode }));
-    } catch {
-      // Private-mode / storage-disabled: a non-persisted session is fine.
-    }
+    writePref({ defaultMode: mode });
   }
 
   /**
@@ -482,6 +516,40 @@ export class EditorService {
     } finally {
       this.isSaving.set(false);
     }
+  }
+
+  /**
+   * File -> "Save all". Walks every open tab, saving the dirty ones. Each
+   * goes through `save()`, so a scratch tab still routes to `saveAs()` and
+   * an untouched draft is skipped. The active tab is restored afterwards.
+   */
+  async saveAll(): Promise<void> {
+    const restore = this.active();
+    for (const path of this.docs().map((d) => d.path)) {
+      const doc = this.docs().find((d) => d.path === path);
+      if (!doc || (doc.bufferContent === doc.savedContent && !doc.askOnSave)) {
+        continue;
+      }
+      this.active.set(path);
+      await this.save();
+    }
+    if (restore && this.docs().some((d) => d.path === restore)) {
+      this.active.set(restore);
+    }
+  }
+
+  /**
+   * File -> "New note". Opens a blank scratch tab; the first save prompts
+   * for a location inside the vault (`askOnSave`). A dedicated
+   * create-in-place flow can come later.
+   */
+  newUntitled(): void {
+    let name = 'untitled.md';
+    let n = 2;
+    while (this.docs().some((d) => d.path === name)) {
+      name = `untitled-${n++}.md`;
+    }
+    this.openScratch(name, '');
   }
 
   /**

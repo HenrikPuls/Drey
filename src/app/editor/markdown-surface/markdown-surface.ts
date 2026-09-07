@@ -64,6 +64,12 @@ export class MarkdownSurface implements AfterViewInit, OnDestroy {
   readonly mode = input<EditorViewMode>('live');
   readonly compact = input(false);
   /**
+   * Shows a line-number gutter (full-page editor only, toggled from the
+   * meta bar / `Ctrl+G`). `basicSetup` already mounts the gutter DOM; this
+   * just un-hides + restyles it to the v3 spec via a compartment.
+   */
+  readonly lineNumbers = input(false);
+  /**
    * Folds the leading YAML frontmatter behind a pill (both modes). Only the
    * full-page editor turns this on; the entry drawer's body never has
    * frontmatter. Read once at construction -- it never toggles per surface.
@@ -109,6 +115,7 @@ export class MarkdownSurface implements AfterViewInit, OnDestroy {
   private readonly modeCompartment = new Compartment();
   private readonly placeholderCompartment = new Compartment();
   private readonly readOnlyCompartment = new Compartment();
+  private readonly lineNumberCompartment = new Compartment();
 
   /**
    * Mirror of the fold extension's `StateField<boolean>` (see
@@ -141,6 +148,12 @@ export class MarkdownSurface implements AfterViewInit, OnDestroy {
       const ro = this.readOnly();
       this._view?.dispatch({
         effects: this.readOnlyCompartment.reconfigure(ro ? readOnlyExtension : []),
+      });
+    });
+    effect(() => {
+      const on = this.lineNumbers();
+      this._view?.dispatch({
+        effects: this.lineNumberCompartment.reconfigure(on ? gutterTheme : []),
       });
     });
   }
@@ -199,6 +212,7 @@ export class MarkdownSurface implements AfterViewInit, OnDestroy {
             this.placeholder() ? cmPlaceholder(this.placeholder()) : [],
           ),
           this.readOnlyCompartment.of(this.readOnly() ? readOnlyExtension : []),
+          this.lineNumberCompartment.of(this.lineNumbers() ? gutterTheme : []),
           this.modeCompartment.of(this.modeExtensions(this.mode())),
         ],
       }),
@@ -303,6 +317,34 @@ export class MarkdownSurface implements AfterViewInit, OnDestroy {
 
 /** Blocks user input while still allowing owner-driven `setContent`. */
 const readOnlyExtension: Extension = [EditorView.editable.of(false), EditorState.readOnly.of(true)];
+
+/**
+ * Un-hides the gutter `basicSetup` already mounts (the base theme keeps
+ * `.cm-gutters` `display:none`) and restyles the line numbers to the v3
+ * spec: 46px column, Plex Mono 10.5, right-aligned, no fold arrows.
+ * `Prec.high` so it beats the base `.cm-gutters` rule. No extra
+ * `lineNumbers()` extension -- `basicSetup` already provides one.
+ */
+const gutterTheme: Extension = Prec.high(
+  EditorView.theme({
+    '.cm-gutters': {
+      display: 'flex',
+      backgroundColor: 'transparent',
+      borderRight: 'none',
+      color: 'var(--gutter)',
+    },
+    '.cm-foldGutter': { display: 'none' },
+    '.cm-lineNumbers .cm-gutterElement': {
+      minWidth: '46px',
+      padding: '0 14px 0 6px',
+      fontFamily: 'var(--font-mono)',
+      fontSize: 'calc(10.5px * var(--drey-editor-scale, 1))',
+      color: 'var(--gutter)',
+      userSelect: 'none',
+    },
+    '.cm-activeLineGutter': { backgroundColor: 'transparent' },
+  }),
+);
 
 /**
  * Compact field look: no page padding. Fills its container so the editable

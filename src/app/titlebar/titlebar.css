@@ -1,0 +1,72 @@
+:host {
+  display: flex;
+  align-items: center;
+  flex: none;
+  min-width: 0;
+  height: var(--bar-h);
+  padding: 0 4px 0 12px;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-dock);
+  -webkit-app-region: drag;
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: none;
+  margin-right: 12px;
+}
+
+/* Leave room for the macOS traffic lights when they sit inset over the bar. */
+.brand.mac {
+  margin-left: 60px;
+}
+
+.mark {
+  width: 6px;
+  height: 6px;
+  border-radius: 2px;
+  background: var(--accent);
+}
+
+.name {
+  font-size: 12px;
+  white-space: nowrap;
+  color: var(--text-3);
+}
+
+.spacer {
+  flex: 1;
+  min-width: 0;
+}
+
+.controls {
+  display: flex;
+  gap: 1px;
+  flex: none;
+  -webkit-app-region: no-drag;
+}
+
+.ctl {
+  width: 40px;
+  height: 26px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-5);
+  cursor: pointer;
+}
+
+.ctl:hover {
+  background: var(--hover-bg);
+  color: var(--text-primary);
+}
+
+.ctl.close:hover {
+  background: var(--accent);
+  color: #fff;
+}

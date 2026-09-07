@@ -13,8 +13,8 @@ interface TabMenu {
  * `EditorService.openDocs` / `activePath`: click activates, the X closes
  * (a dirty tab confirms first, in the service). Right-click opens a small
  * menu with "Close all" / "Close others", both routed through the same
- * `closeTab` so the dirty-tab confirmation still applies. The "+" button is
- * a deliberate placeholder until there's a "new note" flow to hang on it.
+ * `closeTab` so the dirty-tab confirmation still applies. The "+" opens a
+ * blank scratch note (`EditorService.newUntitled`).
  */
 @Component({
   selector: 'app-tab-bar',

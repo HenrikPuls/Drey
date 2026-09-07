@@ -67,7 +67,10 @@ export default tseslint.config(
       'no-restricted-imports': [
         'error',
         {
-          patterns: [...sharedModulePatterns, ...relativeModulePatterns(['tags', 'keybindings'])],
+          patterns: [
+            ...sharedModulePatterns,
+            ...relativeModulePatterns(['tags', 'keybindings', 'dock', 'titlebar']),
+          ],
         },
       ],
     },
@@ -81,6 +84,8 @@ export default tseslint.config(
       'shared/tags/**/*.ts',
       'src/app/tags/**/*.ts',
       'src/app/keybindings/**/*.ts',
+      'src/app/dock/**/*.ts',
+      'src/app/titlebar/**/*.ts',
     ],
     rules: {
       'no-restricted-imports': 'off',

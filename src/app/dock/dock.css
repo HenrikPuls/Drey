@@ -1,0 +1,39 @@
+:host {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  flex: none;
+  background: var(--bg-dock);
+}
+
+:host(.drop-target) {
+  box-shadow: var(--drop-ring);
+}
+
+app-panel-frame {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+/* 2px accent bar at the live drop position during a panel drag. */
+.drop-line {
+  flex: none;
+  height: 2px;
+  background: var(--accent);
+}
+
+/* 7px row-resize strip, pulled over the 1px divider with negative margin. */
+.split {
+  flex: none;
+  height: 7px;
+  margin: -4px 0 -3px;
+  position: relative;
+  z-index: 6;
+  cursor: row-resize;
+  background: transparent;
+}
+
+.split:hover {
+  background: var(--resize-hover);
+}
