@@ -5,13 +5,19 @@
  * hosts chat Ask mode and the note assistant's summary, which share the
  * same LLM plumbing.
  */
-import { ActionEvent, NOTE_SUMMARY_PROMPT, SEARCH_SUMMARY_PROMPT } from '../../shared/app-config';
+import {
+  ActionEvent,
+  AUTOTAG_PROMPT,
+  NOTE_SUMMARY_PROMPT,
+  SEARCH_SUMMARY_PROMPT,
+} from '../../shared/app-config';
 import {
   ActionContext,
   ActionOutcome,
   AskOutcome,
   ChatMessage,
   parseJsonObject,
+  parseSuggestedTags,
   ResolvedAction,
   resolveActions,
 } from '../../shared/llm';
@@ -153,6 +159,39 @@ export class ActionRunner {
       throw new Error('The model returned an empty summary.');
     }
     return text;
+  }
+
+  /**
+   * The drawer's "Autotag" button: the entry text + the vault's tag
+   * vocabulary in, up to four suggested tags out (normalised,
+   * de-duplicated). Uses the editable `autotag` built-in template. `[]`
+   * when nothing usable came back; throws only when LLM features are off or
+   * the call fails. Cancellable via `taskId`.
+   */
+  async suggestTags(entryText: string, vocabulary: string[], taskId?: string): Promise<string[]> {
+    if (!this.config.get().llm.enabled) {
+      throw new Error('LLM features are disabled.');
+    }
+    if (entryText.trim() === '') {
+      return [];
+    }
+    const template = this.config
+      .get()
+      .actions.templates.find((entry) => entry.builtin === 'autotag');
+    const system = (template?.prompt ?? AUTOTAG_PROMPT).replace(
+      '{tags}',
+      vocabulary.length > 0 ? vocabulary.join('\n') : '(none yet)',
+    );
+    const reply = await this.tasks.run(taskId, (signal) =>
+      this.llm.chat(
+        [
+          { role: 'system', content: system },
+          { role: 'user', content: entryText },
+        ],
+        { signal },
+      ),
+    );
+    return parseSuggestedTags(reply);
   }
 
   /** Chat Ask mode: an answer to display, or an edit to confirm. */

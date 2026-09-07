@@ -194,6 +194,15 @@ function registerIpcHandlers(
     (_event, query: TagSearchQuery, taskId?: string): Promise<string> =>
       actionRunner.summariseSearchResults(formatHitsForSummary(tagIndex.search(query)), taskId),
   );
+  ipcMain.handle(
+    IPC_CHANNELS.tagSuggest,
+    (_event, entryText: string, taskId?: string): Promise<string[]> =>
+      actionRunner.suggestTags(
+        entryText,
+        tagIndex.getVocabulary().map((entry) => entry.tag),
+        taskId,
+      ),
+  );
 
   ipcMain.handle(IPC_CHANNELS.configGet, (): AppConfig => appConfig.get());
   ipcMain.handle(IPC_CHANNELS.configSet, (_event, next: AppConfig): AppConfig => {

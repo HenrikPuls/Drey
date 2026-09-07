@@ -10,3 +10,4 @@
 
 export { TagSearchService } from './tag-search.service';
 export { SearchPanel } from './search-panel/search-panel';
+export { AutotagButton } from './autotag-button/autotag-button';

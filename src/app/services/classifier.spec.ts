@@ -2,6 +2,7 @@ import {
   buildTagSuggestionMessages,
   buildTaskMessages,
   normalizeTagToken,
+  parseSuggestedTags,
   parseTagSuggestion,
   parseTaskClassification,
 } from '../../../shared/llm';
@@ -12,6 +13,20 @@ describe('normalizeTagToken', () => {
     expect(normalizeTagToken('Team Neptun')).toBe('team-neptun');
     expect(normalizeTagToken('Übergabe')).toBe('uebergabe');
     expect(normalizeTagToken('  #Kauf!  ')).toBe('kauf');
+  });
+});
+
+describe('parseSuggestedTags', () => {
+  it('normalises, de-duplicates and caps the "Autotag" reply at four', () => {
+    expect(
+      parseSuggestedTags('{"tags":["Sailing","sailing","Team X","kauf","segeln","extra"]}'),
+    ).toEqual(['sailing', 'team-x', 'kauf', 'segeln']);
+  });
+
+  it('returns [] for anything unparseable', () => {
+    expect(parseSuggestedTags('no json')).toEqual([]);
+    expect(parseSuggestedTags('{"tags":[]}')).toEqual([]);
+    expect(parseSuggestedTags('{"other":1}')).toEqual([]);
   });
 });
 

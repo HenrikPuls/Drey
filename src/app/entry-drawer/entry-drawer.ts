@@ -10,6 +10,7 @@ import { MarkdownSurface } from '../editor/markdown-surface/markdown-surface';
 import { EntryDraftService } from '../services/entry-draft.service';
 import { EditorService } from '../services/editor.service';
 import { SpellcheckService } from '../services/spellcheck.service';
+import { AutotagButton } from '../tags';
 import { Icon } from '../icons/icon';
 
 /**
@@ -24,7 +25,7 @@ import { Icon } from '../icons/icon';
 @Component({
   selector: 'app-entry-drawer',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [Icon, MarkdownSurface],
+  imports: [Icon, MarkdownSurface, AutotagButton],
   templateUrl: './entry-drawer.html',
   styleUrl: './entry-drawer.css',
 })

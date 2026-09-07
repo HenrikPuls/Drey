@@ -21,6 +21,7 @@ export {
   buildTagSuggestionMessages,
   buildTaskMessages,
   normalizeTagToken,
+  parseSuggestedTags,
   parseTagSuggestion,
   parseTaskClassification,
 } from './classifier';
