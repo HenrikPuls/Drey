@@ -13,13 +13,6 @@
 export type { ActionContext, ActionOutcome, AskOutcome, ResolvedAction } from './actions';
 export { resolveActions } from './actions';
 
-export {
-  applySummarySection,
-  mergeFrontmatterTags,
-  selectSummaryInput,
-  untaggedEntryText,
-} from './action-apply';
-
 export type { ChatMessage } from './llm';
 export { extractJsonObject, parseJsonObject } from './llm';
 

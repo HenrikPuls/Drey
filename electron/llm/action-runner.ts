@@ -2,35 +2,23 @@
  * Runs an Action (`shared/app-config.ts`) against the active document and
  * returns an `ActionOutcome` -- for an `'edit'`, a `before`/`after` pair
  * the renderer routes through the one confirmation flow (ADR-0011). Also
- * hosts chat Ask mode, which shares the same edit-vs-answer plumbing.
- *
- * All decision logic (`resolveActions`, `mergeFrontmatterTags`,
- * `selectSummaryInput`, `applySummarySection`, `pickPreviewStyle`) is pure
- * `shared/` code; this class sequences the classifier / LLM / registry
- * calls around it.
+ * hosts chat Ask mode and the note assistant's summary, which share the
+ * same LLM plumbing.
  */
 import { ActionEvent, NOTE_SUMMARY_PROMPT } from '../../shared/app-config';
 import {
   ActionContext,
   ActionOutcome,
-  applySummarySection,
   AskOutcome,
   ChatMessage,
-  mergeFrontmatterTags,
   parseJsonObject,
   ResolvedAction,
   resolveActions,
-  selectSummaryInput,
-  untaggedEntryText,
 } from '../../shared/llm';
-import { readFrontmatter } from '../../shared/frontmatter';
-import { formatRegistry } from '../../shared/tag-registry';
 import { pickPreviewStyle } from '../../shared/text-diff';
 import { AppConfigStore } from '../app-config';
-import { ClassifierService } from './classifier';
 import { CANCELLED_MESSAGE, isAbortError, LlmTaskRegistry } from './llm-tasks';
 import { LmStudioClient } from './lm-studio-client';
-import { TagIndex } from '../tag-index';
 
 const GENERIC_SYSTEM_SUFFIX =
   '\n\nGib das vollständige, überarbeitete Markdown-Dokument zurück – ohne Code-Fence, ohne Erklärung.';
@@ -47,8 +35,6 @@ export class ActionRunner {
   constructor(
     private readonly config: AppConfigStore,
     private readonly llm: LmStudioClient,
-    private readonly classifier: ClassifierService,
-    private readonly tagIndex: TagIndex,
     private readonly tasks: LlmTaskRegistry,
   ) {}
 
@@ -77,12 +63,6 @@ export class ActionRunner {
     }
     try {
       return await this.tasks.run(taskId, async (signal) => {
-        if (action.builtin === 'autotagging') {
-          return await this.runAutotagging(action, context, signal);
-        }
-        if (action.builtin === 'summary') {
-          return await this.runSummary(action, context, signal);
-        }
         if (action.builtin === 'note-summary') {
           // Its result is a panel card, not a document rewrite. Running it
           // as a generic action would replace the note with its own summary,
@@ -167,83 +147,6 @@ export class ActionRunner {
     }
     const text = typeof obj?.['text'] === 'string' ? obj['text'] : reply.trim();
     return { kind: 'answer', text };
-  }
-
-  private async runAutotagging(
-    action: ResolvedAction,
-    context: ActionContext,
-    signal: AbortSignal,
-  ): Promise<ActionOutcome> {
-    const noteText = untaggedEntryText(context.body);
-    if (!noteText.trim()) {
-      return noop(action, 'Nothing untagged in this document to classify.');
-    }
-    const registryText = formatRegistry(this.tagIndex.getRegistry());
-    const suggestion = await this.classifier.suggestTags(
-      action.prompt,
-      registryText,
-      noteText,
-      signal,
-    );
-    if (!suggestion) {
-      return noop(action, 'The model returned no usable tag suggestion.');
-    }
-    const proposed = [...suggestion.vorschlaege];
-    if (suggestion.neuer_tag) {
-      proposed.push(suggestion.neuer_tag);
-    }
-    const merged = mergeFrontmatterTags(context.body, proposed);
-    if (!merged) {
-      return noop(
-        action,
-        'No new tags to add (the note may already carry them, or has no frontmatter).',
-      );
-    }
-    return {
-      kind: 'edit',
-      triggerId: action.triggerId,
-      name: action.name,
-      previewStyle: action.resultKind,
-      path: context.path,
-      before: context.body,
-      after: merged.text,
-      summary: `Add tags: ${merged.added.map((tag) => `#${tag}`).join(', ')}`,
-    };
-  }
-
-  private async runSummary(
-    action: ResolvedAction,
-    context: ActionContext,
-    signal: AbortSignal,
-  ): Promise<ActionOutcome> {
-    if (readFrontmatter(context.body)?.type !== 'master') {
-      return noop(action, 'Update summary only runs on a master document (type: master).');
-    }
-    const input = selectSummaryInput(context.body);
-    if (!input.trim()) {
-      return noop(action, 'This master document has no History entries to summarise yet.');
-    }
-    const reply = await this.llm.chat(
-      [
-        { role: 'system', content: action.prompt },
-        { role: 'user', content: input },
-      ],
-      { signal },
-    );
-    const summaryText = reply.trim();
-    if (!summaryText) {
-      return noop(action, 'The model returned an empty summary.');
-    }
-    return {
-      kind: 'edit',
-      triggerId: action.triggerId,
-      name: action.name,
-      previewStyle: action.resultKind,
-      path: context.path,
-      before: context.body,
-      after: applySummarySection(context.body, summaryText),
-      summary: 'Rewrite the Summary section',
-    };
   }
 
   private async runGeneric(

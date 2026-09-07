@@ -42,9 +42,6 @@ describe('Editor', () => {
           path: request.path,
           content: request.body,
           modifiedMs: 2,
-          tags: [],
-          unknownTags: [],
-          appendedTo: [],
         }),
       listTags: () => Promise.resolve([]),
     };

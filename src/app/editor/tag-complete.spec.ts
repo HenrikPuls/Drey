@@ -3,15 +3,8 @@ import { makeTagCompletionSource } from './tag-complete';
 import { TagEntry } from '../../../shared/ipc-api';
 
 const TAGS: TagEntry[] = [
-  {
-    tag: 'sailing',
-    aliases: ['boot'],
-    art: 'thema',
-    description: 'Kaufprozess',
-    hasMaster: true,
-    masterPath: 'sailing/_index.md',
-  },
-  { tag: 'sales', aliases: [], art: null, description: null, hasMaster: false, masterPath: null },
+  { tag: 'sailing', count: 9 },
+  { tag: 'sales', count: 2 },
 ];
 
 function context(
@@ -24,18 +17,12 @@ function context(
 describe('makeTagCompletionSource', () => {
   const source = makeTagCompletionSource(() => TAGS);
 
-  it('offers prefix matches, master-backed first, applying "#tag "', () => {
+  it('offers prefix matches, most-used first, applying "#tag "', () => {
     const result = source(context({ from: 10, to: 13, text: '#sa' }));
     expect(result?.from).toBe(10);
     expect(result?.options.map((o) => o.label)).toEqual(['#sailing', '#sales']);
     expect(result?.options[0].apply).toBe('#sailing ');
-    expect(result?.options[0].detail).toBe('thema');
-  });
-
-  it('matches an alias but still inserts the canonical tag', () => {
-    const result = source(context({ from: 0, to: 4, text: '#boo' }));
-    expect(result?.options.map((o) => o.label)).toEqual(['#sailing']);
-    expect(result?.options[0].apply).toBe('#sailing ');
+    expect(result?.options[0].detail).toBe('9×');
   });
 
   it('returns null on a bare # unless completion was explicitly requested', () => {

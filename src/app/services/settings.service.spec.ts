@@ -142,9 +142,18 @@ describe('SettingsService (draft model)', () => {
   });
 
   describe('"don’t ask again" from the confirmation dialog', () => {
-    it('persists immediately and updates config and draft together', async () => {
-      const triggerId = service.config()!.actions.triggers[0].id;
+    let triggerId: string;
 
+    beforeEach(async () => {
+      // No default triggers any more -- seed one and save it.
+      const templateId = service.addTemplate();
+      service.updateTemplate(templateId, { name: 'Reformat', prompt: 'tidy' });
+      service.addTrigger(templateId, 'manual');
+      await service.save();
+      triggerId = service.config()!.actions.triggers[0].id;
+    });
+
+    it('persists immediately and updates config and draft together', async () => {
       await service.setTriggerConfirmImmediate(triggerId, false);
 
       const stored = harness.stored().actions.triggers.find((t) => t.id === triggerId);
@@ -156,7 +165,6 @@ describe('SettingsService (draft model)', () => {
     });
 
     it('leaves unrelated unsaved draft edits alone', async () => {
-      const triggerId = service.config()!.actions.triggers[0].id;
       service.patchLlm({ apiKey: 'sk-draft-only' });
 
       await service.setTriggerConfirmImmediate(triggerId, false);

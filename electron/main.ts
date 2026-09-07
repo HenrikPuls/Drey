@@ -19,24 +19,17 @@ import {
   SpellCheckResult,
   SpellLanguage,
   TagEntry,
-  TagRegistryEntry,
   VaultFileContent,
   VaultFileEntry,
 } from '../shared/ipc-api';
 import { AppConfigStore } from './app-config';
 import { ChatStore } from './chat-store';
 import { DailyNoteManager } from './daily-note';
-import {
-  ActionRunner,
-  ClassifierService,
-  LlmDebugLog,
-  LlmTaskRegistry,
-  LmStudioClient,
-} from './llm';
+import { ActionRunner, LlmDebugLog, LlmTaskRegistry, LmStudioClient } from './llm';
 import { attachContextMenu, buildApplicationMenu } from './menu';
 import { NoteManager } from './note-manager';
 import { SpellcheckService } from './spellcheck';
-import { TagIndex } from './tag-index';
+import { TagIndex } from './tags';
 import { VaultManager } from './vault-manager';
 
 /**
@@ -190,8 +183,7 @@ function registerIpcHandlers(
     IPC_CHANNELS.noteSave,
     (_event, request: NoteSaveRequest): Promise<NoteSaveResult> => noteManager.saveNote(request),
   );
-  ipcMain.handle(IPC_CHANNELS.tagList, (): TagEntry[] => tagIndex.getTags());
-  ipcMain.handle(IPC_CHANNELS.tagRegistry, (): TagRegistryEntry[] => tagIndex.getRegistry());
+  ipcMain.handle(IPC_CHANNELS.tagList, (): TagEntry[] => tagIndex.getVocabulary());
 
   ipcMain.handle(IPC_CHANNELS.configGet, (): AppConfig => appConfig.get());
   ipcMain.handle(IPC_CHANNELS.configSet, (_event, next: AppConfig): AppConfig => {
@@ -396,9 +388,8 @@ if (!app.requestSingleInstanceLock()) {
     const appConfig = new AppConfigStore();
     const llmDebug = new LlmDebugLog();
     const lmStudio = new LmStudioClient(appConfig, llmDebug);
-    const classifier = new ClassifierService(lmStudio);
     const llmTasks = new LlmTaskRegistry();
-    const actionRunner = new ActionRunner(appConfig, lmStudio, classifier, tagIndex, llmTasks);
+    const actionRunner = new ActionRunner(appConfig, lmStudio, llmTasks);
     const noteManager = new NoteManager(vaultManager, tagIndex, actionRunner);
     const chatStore = new ChatStore(vaultManager);
     const spellcheck = new SpellcheckService(appConfig);

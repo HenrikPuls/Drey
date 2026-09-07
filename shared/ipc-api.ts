@@ -40,8 +40,7 @@ export const IPC_CHANNELS = {
   dailyOpen: 'daily:open',
   dailyBuildContent: 'daily:build-content',
   noteSave: 'note:save',
-  tagList: 'tag:list',
-  tagRegistry: 'tag:registry',
+  tagList: 'tags:list',
   configGet: 'config:get',
   configSet: 'config:set',
   llmListModels: 'llm:list-models',
@@ -146,32 +145,13 @@ export interface Frontmatter {
 }
 
 /**
- * One tag in the vault-wide vocabulary, as surfaced to the renderer for
- * `#tag` autocomplete. Every tag ever seen in any file's `tags[]` gets an
- * entry; `hasMaster` / `masterPath` are set only for tags that have a
- * `type: master` document (the ones routing can target and the classifier
- * registry is built from).
+ * One tag in the vault-wide vocabulary, for `#tag` autocomplete and the
+ * search panel's tag picker. `count` is how many heading-sections carry
+ * the tag (`electron/tags/TagIndex`).
  */
 export interface TagEntry {
   tag: string;
-  aliases: string[];
-  art: MasterArt | null;
-  description: string | null;
-  hasMaster: boolean;
-  masterPath: string | null;
-}
-
-/**
- * One line of the classifier tag registry (`specs/classifier-spec.md`):
- * derived from the `description` of a `type: master` file. Kept structured
- * here; `formatRegistry()` in `shared/tag-registry.ts` renders the
- * `- <tag> (<art>): <description>` text where the prompt needs it.
- */
-export interface TagRegistryEntry {
-  tag: string;
-  art: MasterArt;
-  description: string;
-  path: string;
+  count: number;
 }
 
 /** Renderer -> main: save the active editor buffer as a note. */
@@ -192,19 +172,13 @@ export interface NoteSaveRequest {
 
 /**
  * Result of `saveNote`. `content` is the possibly-rewritten note text
- * (frontmatter `tags` merged, `updated:` bumped) in `\n` form -- the
- * renderer adopts it as the tab's new saved content. `appendedTo` lists
- * master-document paths that gained a `## History` entry from this save
- * (milestone 6b routing); `unknownTags` are inline tags with no known
- * master, handed back for the milestone-8 inbox.
+ * (`updated:` bumped, `created:` filled) in `\n` form -- the renderer
+ * adopts it as the tab's new saved content.
  */
 export interface NoteSaveResult {
   path: string;
   content: string;
   modifiedMs: number;
-  tags: string[];
-  unknownTags: string[];
-  appendedTo: string[];
   /**
    * `'edit'` outcomes from `on-save` Actions whose trigger still needs
    * confirmation -- the renderer walks these through the confirmation
@@ -448,19 +422,13 @@ export interface DreyApi {
   saveNote(request: NoteSaveRequest): Promise<NoteSaveResult>;
 
   /**
-   * The vault-wide tag vocabulary for `#tag` autocomplete. Rebuilt when a
-   * vault is selected and updated incrementally after each `saveNote`;
-   * external edits are picked up on the next vault load (no file watcher
-   * yet). Resolves to `[]` when no vault is active.
+   * The vault-wide tag vocabulary (`tag` + section count) for `#tag`
+   * autocomplete and the search panel's tag picker. Rebuilt when a vault
+   * is selected, re-indexed per file on each `saveNote` and on delete;
+   * external edits are picked up on the next vault load / manual refresh
+   * (no file watcher). Resolves to `[]` when no vault is active.
    */
   listTags(): Promise<TagEntry[]>;
-
-  /**
-   * The classifier tag registry (`specs/classifier-spec.md`): one entry
-   * per `type: master` document. Structured; the prompt text is rendered
-   * by `formatRegistry()`. Consumed from milestone 7 on.
-   */
-  getTagRegistry(): Promise<TagRegistryEntry[]>;
 }
 
 declare global {
