@@ -32,66 +32,68 @@ describe('parseSuggestedTags', () => {
 
 describe('parseTagSuggestion', () => {
   it('parses a clean reply', () => {
-    expect(parseTagSuggestion('{"vorschlaege": ["sailing"], "neuer_tag": null}')).toEqual({
-      vorschlaege: ['sailing'],
-      neuer_tag: null,
+    expect(parseTagSuggestion('{"suggestions": ["sailing"], "new_tag": null}')).toEqual({
+      suggestions: ['sailing'],
+      new_tag: null,
     });
   });
 
   it('unwraps a fenced / prefixed reply and caps at three suggestions', () => {
-    const reply = 'Hier:\n```json\n{"vorschlaege":["a","b","c","d"],"neuer_tag":"kiel"}\n```';
+    const reply = 'Here:\n```json\n{"suggestions":["a","b","c","d"],"new_tag":"kiel"}\n```';
     expect(parseTagSuggestion(reply)).toEqual({
-      vorschlaege: ['a', 'b', 'c'],
-      neuer_tag: 'kiel',
+      suggestions: ['a', 'b', 'c'],
+      new_tag: 'kiel',
     });
   });
 
   it('de-duplicates and normalises suggested tokens', () => {
     expect(
-      parseTagSuggestion('{"vorschlaege":["Sailing","sailing","Team X"],"neuer_tag":""}'),
+      parseTagSuggestion('{"suggestions":["Sailing","sailing","Team X"],"new_tag":""}'),
     ).toEqual({
-      vorschlaege: ['sailing', 'team-x'],
-      neuer_tag: null,
+      suggestions: ['sailing', 'team-x'],
+      new_tag: null,
     });
   });
 
   it('returns null when nothing usable came back', () => {
     expect(parseTagSuggestion('no json here')).toBeNull();
-    expect(parseTagSuggestion('{"vorschlaege":[],"neuer_tag":null}')).toBeNull();
+    expect(parseTagSuggestion('{"suggestions":[],"new_tag":null}')).toBeNull();
   });
 });
 
 describe('parseTaskClassification', () => {
   it('parses a task with due date and priority', () => {
-    expect(
-      parseTaskClassification('{"typ":"task","faelligkeit":"2026-09-10","prioritaet":"hoch"}'),
-    ).toEqual({ typ: 'task', faelligkeit: '2026-09-10', prioritaet: 'hoch' });
+    expect(parseTaskClassification('{"type":"task","due":"2026-09-10","priority":"high"}')).toEqual(
+      { type: 'task', due: '2026-09-10', priority: 'high' },
+    );
   });
 
   it('rejects a bad date and a bad priority to null', () => {
-    expect(
-      parseTaskClassification('{"typ":"notiz","faelligkeit":"soon","prioritaet":"urgent"}'),
-    ).toEqual({ typ: 'notiz', faelligkeit: null, prioritaet: null });
+    expect(parseTaskClassification('{"type":"note","due":"soon","priority":"urgent"}')).toEqual({
+      type: 'note',
+      due: null,
+      priority: null,
+    });
   });
 
-  it('returns null without a valid typ', () => {
-    expect(parseTaskClassification('{"faelligkeit":null}')).toBeNull();
+  it('returns null without a valid type', () => {
+    expect(parseTaskClassification('{"due":null}')).toBeNull();
   });
 });
 
 describe('message builders', () => {
   it('injects the current date into the task prompt', () => {
-    const [system] = buildTaskMessages('etwas', new Date('2026-09-06T10:00:00'));
-    expect(system.content).toContain('Heutiges Datum: 2026-09-06');
+    const [system] = buildTaskMessages('something', new Date('2026-09-06T10:00:00'));
+    expect(system.content).toContain("Today's date: 2026-09-06");
   });
 
   it('injects the registry into the tag-suggestion system prompt', () => {
     const msgs = buildTagSuggestionMessages(
-      'Tags:\n{registry_list}\nEnde',
-      '- a (thema): x',
-      'notiz text',
+      'Tags:\n{registry_list}\nEnd',
+      '- a (topic): x',
+      'note text',
     );
-    expect(msgs[0].content).toBe('Tags:\n- a (thema): x\nEnde');
-    expect(msgs[1]).toEqual({ role: 'user', content: 'notiz text' });
+    expect(msgs[0].content).toBe('Tags:\n- a (topic): x\nEnd');
+    expect(msgs[1]).toEqual({ role: 'user', content: 'note text' });
   });
 });

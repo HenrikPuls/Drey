@@ -277,7 +277,7 @@ export const BUILTIN_TEMPLATE_IDS: Record<BuiltinAction, string> = {
  * on purpose: the card sits in a 340px panel, so anything longer than a
  * few sentences is scrolled past rather than read.
  */
-export const NOTE_SUMMARY_PROMPT = `Du fasst eine Notiz für die Seitenleiste zusammen. Schreibe 1 bis 3 Sätze auf Deutsch, ganze Sätze, keine Aufzählung, keine Anrede, keine Überschrift. Nenne nur, worum es in der Notiz geht. Gib ausschließlich den Zusammenfassungstext zurück.`;
+export const NOTE_SUMMARY_PROMPT = `Summarise a note for the sidebar. Write 1 to 3 full sentences, no bullet points, no greeting, no heading. Say only what the note is about. Return the summary text and nothing else.`;
 
 /**
  * The system prompt for the tag-search "Summarise" button: the matching
