@@ -36,6 +36,7 @@ export const IPC_CHANNELS = {
   vaultWriteFile: 'vault:write-file',
   vaultCreateFile: 'vault:create-file',
   vaultCreateDirectory: 'vault:create-directory',
+  vaultDelete: 'vault:delete',
   dailyOpen: 'daily:open',
   dailyBuildContent: 'daily:build-content',
   noteSave: 'note:save',
@@ -401,6 +402,15 @@ export interface DreyApi {
    * vault-relative path.
    */
   createVaultDirectory(relativePath: string): Promise<string>;
+
+  /**
+   * Deletes a file or folder (recursively) inside the active vault. Same
+   * path rules as `readVaultFile`; refuses the vault root. Deleting a
+   * `.md` note also removes its assistant sidecar (`.{name}.chat.json`) if
+   * present. A missing target is not an error. Rejects only on a bad path
+   * or a real filesystem failure.
+   */
+  deleteVaultEntry(relativePath: string): Promise<void>;
 
   /**
    * Builds the Markdown a fresh daily note for `date` (`YYYY-MM-DD`) would

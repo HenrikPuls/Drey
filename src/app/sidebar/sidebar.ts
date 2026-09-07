@@ -17,12 +17,14 @@ import { Calendar } from './calendar/calendar';
 import { OpenWindows } from './open-windows/open-windows';
 import { Icon } from '../icons/icon';
 
-/** Anchor + target folder for the file-tree right-click menu. */
+/** Anchor + target for the file-tree right-click menu. */
 interface TreeMenu {
   x: number;
   y: number;
-  /** Vault-relative folder the new entry lands in; '' means the vault root. */
+  /** Vault-relative folder a new entry lands in; '' means the vault root. */
   dir: string;
+  /** The entry the menu was opened on, if any -- the "Delete" target. */
+  entry: VaultFileEntry | null;
 }
 
 /** An in-progress "new file" / "new folder" with its inline name input showing. */
@@ -117,8 +119,9 @@ export class Sidebar {
         : parentDir(entry.relativePath);
     this.menu.set({
       x: Math.min(event.clientX, window.innerWidth - 168),
-      y: Math.min(event.clientY, window.innerHeight - 96),
+      y: Math.min(event.clientY, window.innerHeight - 120),
       dir,
+      entry: entry ?? null,
     });
   }
 
@@ -144,6 +147,29 @@ export class Sidebar {
 
   protected cancelCreate(): void {
     this.creating.set(null);
+  }
+
+  /**
+   * Deletes the entry the context menu was opened on, after a native
+   * `confirm`. Any open tab for the file (or, for a folder, tabs under it)
+   * is closed first without a dirty prompt -- the file is about to be gone.
+   */
+  protected async onDelete(): Promise<void> {
+    const entry = this.menu()?.entry;
+    this.menu.set(null);
+    if (!entry) {
+      return;
+    }
+    const what = entry.type === 'directory' ? 'folder' : 'file';
+    if (!confirm(`Delete ${what} "${entry.relativePath}"? This cannot be undone.`)) {
+      return;
+    }
+    this.editor.closeTabsUnder(entry.relativePath);
+    try {
+      await this.vault.deleteEntry(entry.relativePath);
+    } catch (err) {
+      alert(err instanceof Error ? err.message : String(err));
+    }
   }
 
   /**

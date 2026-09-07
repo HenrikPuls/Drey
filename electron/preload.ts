@@ -39,6 +39,8 @@ const dreyApi: DreyApi = {
     ipcRenderer.invoke(IPC_CHANNELS.vaultCreateFile, relativePath),
   createVaultDirectory: (relativePath: string): Promise<string> =>
     ipcRenderer.invoke(IPC_CHANNELS.vaultCreateDirectory, relativePath),
+  deleteVaultEntry: (relativePath: string): Promise<void> =>
+    ipcRenderer.invoke(IPC_CHANNELS.vaultDelete, relativePath),
   buildDailyNoteContent: (date: string): Promise<string> =>
     ipcRenderer.invoke(IPC_CHANNELS.dailyBuildContent, date),
   saveNote: (request: NoteSaveRequest): Promise<NoteSaveResult> =>
@@ -61,11 +63,7 @@ const dreyApi: DreyApi = {
     ipcRenderer.on(IPC_CHANNELS.llmDebugEntry, wrapped);
     return () => ipcRenderer.removeListener(IPC_CHANNELS.llmDebugEntry, wrapped);
   },
-  runAction: (
-    triggerId: string,
-    context: ActionContext,
-    taskId?: string,
-  ): Promise<ActionOutcome> =>
+  runAction: (triggerId: string, context: ActionContext, taskId?: string): Promise<ActionOutcome> =>
     ipcRenderer.invoke(IPC_CHANNELS.actionRun, triggerId, context, taskId),
   askChat: (context: ActionContext, question: string, taskId?: string): Promise<AskOutcome> =>
     ipcRenderer.invoke(IPC_CHANNELS.chatAsk, context, question, taskId),

@@ -132,6 +132,16 @@
   color: var(--text-primary);
 }
 
+.ctx-menu button.danger {
+  color: var(--accent);
+}
+
+.ctx-sep {
+  height: 1px;
+  margin: 4px 2px;
+  background: var(--border);
+}
+
 .vault-empty {
   padding: 4px 6px;
 }

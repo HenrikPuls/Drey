@@ -18,9 +18,11 @@ describe('Sidebar', () => {
   ];
 
   let created: Array<{ kind: string; path: string }>;
+  let deleted: string[];
 
   beforeEach(async () => {
     created = [];
+    deleted = [];
     const fakeApi: Partial<DreyApi> = {
       getActiveVault: () => Promise.resolve('E:/vault'),
       listVaultFiles: () => Promise.resolve(fakeTree),
@@ -32,6 +34,10 @@ describe('Sidebar', () => {
       createVaultDirectory: (path: string) => {
         created.push({ kind: 'directory', path });
         return Promise.resolve(path);
+      },
+      deleteVaultEntry: (path: string) => {
+        deleted.push(path);
+        return Promise.resolve();
       },
     };
     window.dreyApi = fakeApi as DreyApi;
@@ -71,7 +77,11 @@ describe('Sidebar', () => {
     const items = (fixture.nativeElement as HTMLElement).querySelectorAll<HTMLButtonElement>(
       '.ctx-menu button',
     );
-    expect(items.length).toBe(2);
+    expect(Array.from(items).map((b) => b.textContent?.trim())).toEqual([
+      'New file',
+      'New folder',
+      'Delete',
+    ]);
     items[0].click(); // "New file"
     fixture.detectChanges();
 
@@ -106,6 +116,49 @@ describe('Sidebar', () => {
     await fixture.whenStable();
 
     expect(created).toEqual([{ kind: 'directory', path: 'trips' }]);
+  });
+
+  async function clickDelete(): Promise<void> {
+    const file = (fixture.nativeElement as HTMLElement).querySelector(
+      '.node.file',
+    ) as HTMLButtonElement;
+    file.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, clientX: 8, clientY: 8 }));
+    fixture.detectChanges();
+    const items = (fixture.nativeElement as HTMLElement).querySelectorAll<HTMLButtonElement>(
+      '.ctx-menu button',
+    );
+    (
+      Array.from(items).find((b) => b.textContent?.trim() === 'Delete') as HTMLButtonElement
+    ).click();
+    await fixture.whenStable();
+  }
+
+  it('deletes the right-clicked entry after confirming, and closes its open tab', async () => {
+    await editor.openFile('sailing/_index.md');
+    expect(editor.openPath()).toBe('sailing/_index.md');
+
+    const realConfirm = window.confirm;
+    window.confirm = () => true;
+    try {
+      await clickDelete();
+    } finally {
+      window.confirm = realConfirm;
+    }
+
+    expect(deleted).toEqual(['sailing/_index.md']);
+    expect(editor.openPath()).toBeNull();
+  });
+
+  it('does not delete when the confirm is dismissed', async () => {
+    const realConfirm = window.confirm;
+    window.confirm = () => false;
+    try {
+      await clickDelete();
+    } finally {
+      window.confirm = realConfirm;
+    }
+
+    expect(deleted).toEqual([]);
   });
 
   it('collapses and re-expands a folder on click', () => {

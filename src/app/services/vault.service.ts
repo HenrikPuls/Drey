@@ -75,6 +75,19 @@ export class VaultService {
     await this.loadFileTree();
   }
 
+  /**
+   * Deletes a file or folder and reloads the tree. Like `createEntry`,
+   * errors propagate to the caller (the sidebar shows a one-off `alert`)
+   * rather than blanking the whole list.
+   */
+  async deleteEntry(relativePath: string): Promise<void> {
+    if (typeof window === 'undefined' || !window.dreyApi?.deleteVaultEntry) {
+      return;
+    }
+    await window.dreyApi.deleteVaultEntry(relativePath);
+    await this.loadFileTree();
+  }
+
   private async loadFileTree(): Promise<void> {
     this.isLoading.set(true);
     this.error.set(null);

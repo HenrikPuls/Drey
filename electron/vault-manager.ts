@@ -2,6 +2,7 @@ import { app, dialog } from 'electron';
 import * as fs from 'node:fs';
 import * as fsp from 'node:fs/promises';
 import * as path from 'node:path';
+import { sidecarPathFor } from '../shared/chat-thread';
 import { VaultFileContent, VaultFileEntry } from '../shared/ipc-api';
 
 interface VaultConfig {
@@ -144,6 +145,25 @@ export class VaultManager {
     }
     await fsp.mkdir(dirPath, { recursive: true });
     return this.toRelative(dirPath);
+  }
+
+  /**
+   * Deletes a file or folder (recursively). `resolveInVault` is the path
+   * guard; the vault root itself is refused. A `.md` note's assistant
+   * sidecar (`.{name}.chat.json`) goes with it. `fsp.rm` with `force`
+   * treats a missing target as success -- the tree the renderer showed can
+   * be a step stale.
+   */
+  async deleteEntry(relativePath: string): Promise<void> {
+    const target = this.resolveInVault(relativePath);
+    if (!this.activeVaultPath || target === path.resolve(this.activeVaultPath)) {
+      throw new Error('Refusing to delete the vault root.');
+    }
+    await fsp.rm(target, { recursive: true, force: true });
+    if (relativePath.toLowerCase().endsWith('.md')) {
+      const sidecar = this.resolveInVault(sidecarPathFor(relativePath));
+      await fsp.rm(sidecar, { force: true }).catch(() => undefined);
+    }
   }
 
   /**

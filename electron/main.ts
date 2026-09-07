@@ -177,6 +177,12 @@ function registerIpcHandlers(
     IPC_CHANNELS.vaultCreateDirectory,
     (_event, relativePath: string): Promise<string> => vaultManager.createDirectory(relativePath),
   );
+  ipcMain.handle(IPC_CHANNELS.vaultDelete, async (_event, relativePath: string): Promise<void> => {
+    await vaultManager.deleteEntry(relativePath);
+    // No file watcher -- the tag index would otherwise still list tags from
+    // the deleted file until the next full rebuild.
+    await tagIndex.rebuild();
+  });
   ipcMain.handle(IPC_CHANNELS.dailyBuildContent, (_event, date: string): Promise<string> =>
     dailyNotes.noteContentFor(date),
   );
