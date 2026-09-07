@@ -37,6 +37,7 @@ The note text goes in as the user message. `{current_date}` is
 substituted with today's date at call time.
 
 **Example**
+
 - Input: `"Kiel-Dichtung vor dem Kauf unbedingt prüfen, ist dringend"`
 - Output: `{"type": "task", "due": null, "priority": "high"}`
 
@@ -77,6 +78,7 @@ Parsed by `parseSuggestedTags` — normalised (lower-case, umlauts
 transliterated, one hyphenated word), de-duplicated, capped at four.
 
 **Example**
+
 - Vocabulary: `sailing`, `arbeit`, `rollout-sync`, …
 - Input: `"Zweite Besichtigung ist geplatzt, neuer Kandidat in Kiel"`
 - Output: `{"tags": ["sailing"]}`
