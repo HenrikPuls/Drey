@@ -16,6 +16,7 @@ describe('SearchPanel', () => {
       heading: '08:00',
       line: 4,
       snippet: 'Kielboot besichtigt',
+      text: 'Kielboot besichtigt, Preis noch offen. #sailing',
     },
   ];
 
@@ -78,16 +79,30 @@ describe('SearchPanel', () => {
     expect(search.ran()).toBe(false);
   });
 
-  it('summarises the current results on demand and clears it when the query changes', async () => {
+  it('exports the hits into an unsaved search-results.md tab', async () => {
+    search.addTag('sailing');
+    await search.run();
+    (fixture.nativeElement as HTMLElement).querySelector<HTMLButtonElement>('.head')!.click();
+    fixture.detectChanges();
+
+    const exportBtn = Array.from(
+      (fixture.nativeElement as HTMLElement).querySelectorAll<HTMLButtonElement>('.ghost'),
+    ).find((b) => b.textContent?.trim() === 'Export')!;
+    exportBtn.click();
+    await fixture.whenStable();
+
+    expect(editor.openPath()).toBe('search-results.md');
+    expect(editor.activeIsDraft()).toBe(true);
+    expect(editor.bufferContent()).toContain('## daily/2026/09/2026-09-06.md:4');
+    expect(editor.bufferContent()).toContain('Kielboot besichtigt, Preis noch offen. #sailing');
+  });
+
+  it('still exposes the parked summarise() on the service', async () => {
     (window.dreyApi as unknown as { summariseSearchResults: unknown }).summariseSearchResults =
       () => Promise.resolve('Two boats seen, price still open.');
-
     search.addTag('sailing');
     await search.run();
     await search.summarise();
     expect(search.summary()).toBe('Two boats seen, price still open.');
-
-    search.setText('kiel');
-    expect(search.summary()).toBeNull();
   });
 });

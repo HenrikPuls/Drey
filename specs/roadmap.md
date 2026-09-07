@@ -192,6 +192,7 @@ OpenAI-API-compatible backend (LLM backend), Electron Builder (packaging).
 - Automatic image captioning via a vision model.
 - Editor: footnote rendering in Live Preview (needs a custom Lezer
   markdown extension), `Ctrl`-click to open concealed link targets.
+- playwright m365 copilot über browser automatisierung
 
 ---
 

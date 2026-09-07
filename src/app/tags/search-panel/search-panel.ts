@@ -1,4 +1,5 @@
 import { ChangeDetectionStrategy, Component, inject, signal } from '@angular/core';
+import { formatSearchResultsDoc } from '../../../../shared/tags';
 import { EditorService } from '../../services/editor.service';
 import { Icon } from '../../icons/icon';
 import { TagService } from '../../services/tag.service';
@@ -6,9 +7,10 @@ import { TagSearchService } from '../tag-search.service';
 
 /**
  * The collapsible "Search" section in the sidebar: a tag-chip input plus a
- * free-text field, a results list on heading/section granularity, and (from
- * 11.6) a "Summarise" button. A result click opens the file at the hit's
- * line via `EditorService.openFileAt`.
+ * free-text field, a section-granularity results list (click opens the file
+ * at the hit's line), and an "Export" button that dumps the hits into an
+ * unsaved `search-results.md` tab. The LLM digest is parked
+ * (`TagSearchService.summarise` still exists, just not wired here).
  */
 @Component({
   selector: 'app-search-panel',
@@ -58,5 +60,14 @@ export class SearchPanel {
 
   protected open(path: string, line: number): void {
     void this.editor.openFileAt(path, line);
+  }
+
+  /** Dump the current hits into an unsaved `search-results.md` tab. */
+  protected exportDoc(): void {
+    const doc = formatSearchResultsDoc(
+      { tags: this.search.queryTags(), text: this.search.queryText() },
+      this.search.hits(),
+    );
+    this.editor.openScratch('search-results.md', doc);
   }
 }

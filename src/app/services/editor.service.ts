@@ -255,6 +255,22 @@ export class EditorService {
   });
 
   /**
+   * Opens (or replaces) an unsaved **draft** tab at `path` holding
+   * arbitrary generated content -- e.g. the tag-search results document.
+   * Nothing hits disk until the user saves it; a re-generate reuses the
+   * same tab.
+   */
+  openScratch(path: string, content: string): void {
+    const normalized = content.replace(/\r\n/g, '\n');
+    if (this.docs().some((d) => d.path === path)) {
+      this.patchDoc(path, { savedContent: normalized, bufferContent: normalized });
+      this.active.set(path);
+      return;
+    }
+    this.addDoc(this.makeDoc(path, normalized, 0, false));
+  }
+
+  /**
    * Opens the daily note for `dateStr` (`YYYY-MM-DD`). If the file exists
    * it's opened normally; otherwise a **draft** tab is opened from the
    * template -- nothing hits disk until the user types and saves.

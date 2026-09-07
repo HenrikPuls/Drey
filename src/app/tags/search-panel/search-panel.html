@@ -74,21 +74,9 @@
           {{ search.hits().length }} {{ search.hits().length === 1 ? 'section' : 'sections' }}
         </p>
         @if (search.hits().length > 0) {
-          @if (search.summarising()) {
-            <button type="button" class="ghost" (click)="search.cancelSummary()">Cancel</button>
-          } @else {
-            <button type="button" class="ghost" (click)="search.summarise()">Summarise</button>
-          }
+          <button type="button" class="ghost" (click)="exportDoc()">Export</button>
         }
       </div>
-
-      @if (search.summarising()) {
-        <p class="summary-box muted">Summarising…</p>
-      } @else if (search.summaryError(); as err) {
-        <p class="summary-box error">{{ err }}</p>
-      } @else if (search.summary(); as text) {
-        <p class="summary-box">{{ text }}</p>
-      }
 
       <ul class="results">
         @for (hit of search.hits(); track $index) {
