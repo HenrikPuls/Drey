@@ -296,9 +296,11 @@ export class EditorService {
   /**
    * Closes a tab. A dirty tab asks first (the roadmap's minimum bar until
    * the file watcher forces a real keep-mine / take-external decision).
-   * Closing the active tab activates its neighbour.
+   * Closing the active tab activates its neighbour. `silent` skips the
+   * dirty prompt -- used when the underlying file was just deleted, where
+   * "keep editing" is not an option.
    */
-  closeTab(relativePath: string): void {
+  closeTab(relativePath: string, options: { silent?: boolean } = {}): void {
     const list = this.docs();
     const index = list.findIndex((d) => d.path === relativePath);
     if (index === -1) {
@@ -306,6 +308,7 @@ export class EditorService {
     }
     const doc = list[index];
     if (
+      !options.silent &&
       doc.bufferContent !== doc.savedContent &&
       !confirm(`Discard unsaved changes to ${doc.name}?`)
     ) {
@@ -336,6 +339,20 @@ export class EditorService {
     for (const path of this.docs().map((d) => d.path)) {
       if (path !== keepPath) {
         this.closeTab(path);
+      }
+    }
+  }
+
+  /**
+   * Silently closes every open tab for a path that was just deleted -- the
+   * file itself, or (for a folder) anything under it. No dirty prompt: the
+   * file is gone, there is nothing to save it back to.
+   */
+  closeTabsUnder(deletedPath: string): void {
+    const prefix = `${deletedPath}/`;
+    for (const path of this.docs().map((d) => d.path)) {
+      if (path === deletedPath || path.startsWith(prefix)) {
+        this.closeTab(path, { silent: true });
       }
     }
   }

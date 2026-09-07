@@ -72,6 +72,10 @@
   <div class="ctx-menu" [style.left.px]="m.x" [style.top.px]="m.y">
     <button type="button" (click)="startCreate('file')">New file</button>
     <button type="button" (click)="startCreate('directory')">New folder</button>
+    @if (m.entry) {
+      <div class="ctx-sep"></div>
+      <button type="button" class="danger" (click)="onDelete()">Delete</button>
+    }
   </div>
 }
 
