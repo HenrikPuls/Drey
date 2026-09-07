@@ -29,6 +29,8 @@ export interface TagSearchHit {
   line: number;
   /** ~240-char window around the first match, whitespace collapsed. */
   snippet: string;
+  /** The full section body (heading excluded) -- used by the doc export. */
+  text: string;
 }
 
 const SNIPPET_WINDOW = 240;
@@ -66,11 +68,39 @@ export function runTagSearch(
       heading: section.heading,
       line: section.line,
       snippet: makeSnippet(section.text, needles),
+      text: section.text,
     });
   }
 
   hits.sort((a, b) => a.path.localeCompare(b.path) || a.line - b.line);
   return hits;
+}
+
+/**
+ * A Markdown document listing the search hits: a header line describing the
+ * query, then one `## <path>:<line>` section per hit followed by its full
+ * text. No LLM -- this is the always-available alternative to the digest.
+ */
+export function formatSearchResultsDoc(
+  query: TagSearchQuery,
+  hits: readonly TagSearchHit[],
+): string {
+  const parts: string[] = [];
+  const tags = query.tags.map((t) => `#${t.replace(/^#/, '')}`).join(' ');
+  const text = query.text.trim();
+  const queryDesc = [tags, text ? `"${text}"` : ''].filter((s) => s !== '').join(' + ');
+
+  parts.push('# Search results');
+  parts.push(
+    `${queryDesc || '(everything)'} — ${hits.length} ${hits.length === 1 ? 'section' : 'sections'}`,
+  );
+
+  for (const hit of hits) {
+    parts.push(`## ${hit.path}:${hit.line}`);
+    parts.push(hit.text.trim());
+  }
+
+  return `${parts.join('\n\n')}\n`;
 }
 
 function makeSnippet(text: string, needles: readonly string[]): string {

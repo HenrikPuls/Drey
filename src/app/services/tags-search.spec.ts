@@ -1,4 +1,4 @@
-import { runTagSearch, SearchableSection } from '../../../shared/tags';
+import { formatSearchResultsDoc, runTagSearch, SearchableSection } from '../../../shared/tags';
 
 const SECTIONS: SearchableSection[] = [
   {
@@ -59,8 +59,27 @@ describe('runTagSearch', () => {
     ).toEqual(['notes/finanzen.md']);
   });
 
-  it('builds a snippet around the first match', () => {
+  it('builds a snippet around the first match and carries the full section text', () => {
     const [hit] = runTagSearch(SECTIONS, { tags: [], text: 'preisverhandlung' });
     expect(hit.snippet).toContain('Preisverhandlung offen');
+    expect(hit.text).toBe(SECTIONS[0].text);
+  });
+});
+
+describe('formatSearchResultsDoc', () => {
+  it('lists each hit as `## <path>:<line>` + full section text under a query header', () => {
+    const hits = runTagSearch(SECTIONS, { tags: ['sailing', 'kauf'], text: '' });
+    const doc = formatSearchResultsDoc({ tags: ['sailing', 'kauf'], text: '' }, hits);
+    expect(doc).toBe(
+      '# Search results\n\n' +
+        '#sailing #kauf — 1 section\n\n' +
+        '## daily/2026/09/2026-09-06.md:4\n\n' +
+        'Zweite Besichtigung fiel aus. Preisverhandlung offen. #sailing #kauf\n',
+    );
+  });
+
+  it('folds free text into the header', () => {
+    const doc = formatSearchResultsDoc({ tags: [], text: 'kiel  termin' }, []);
+    expect(doc.split('\n')[2]).toBe('"kiel  termin" — 0 sections');
   });
 });
