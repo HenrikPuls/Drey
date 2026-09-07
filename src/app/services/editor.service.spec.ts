@@ -264,6 +264,50 @@ describe('EditorService', () => {
     });
   });
 
+  describe('saveAs / save() on a scratch doc', () => {
+    let saved: NoteSaveRequest[];
+    let picked: string | null;
+    let svc: EditorService;
+
+    beforeEach(() => {
+      TestBed.resetTestingModule();
+      saved = [];
+      picked = 'notes/kept.md';
+      const api: Partial<DreyApi> = {
+        readVaultFile: (p: string) => Promise.resolve({ content: `on disk: ${p}`, modifiedMs: 3 }),
+        saveNote: (req: NoteSaveRequest) => {
+          saved.push(req);
+          return echoSave(req);
+        },
+        listTags: () => Promise.resolve([]),
+        getActiveVault: () => Promise.resolve('E:/vault'),
+        listVaultFiles: () => Promise.resolve([]),
+        pickSavePath: () => Promise.resolve(picked),
+      };
+      window.dreyApi = api as DreyApi;
+      svc = TestBed.inject(EditorService);
+    });
+
+    it('Ctrl+S on a scratch doc picks a location, writes there, and re-keys the tab', async () => {
+      svc.openScratch('search-results.md', '# Results\n\nbody\n');
+      await svc.save();
+
+      expect(saved).toEqual([{ path: 'notes/kept.md', body: '# Results\n\nbody\n', eol: '\n' }]);
+      expect(svc.openPath()).toBe('notes/kept.md');
+      expect(svc.openDocs().some((d) => d.path === 'search-results.md')).toBe(false);
+      expect(svc.activeIsDraft()).toBe(false);
+    });
+
+    it('does nothing when the save dialog is cancelled', async () => {
+      picked = null;
+      svc.openScratch('search-results.md', '# Results\n\nbody\n');
+      await svc.save();
+
+      expect(saved).toEqual([]);
+      expect(svc.openPath()).toBe('search-results.md');
+    });
+  });
+
   describe('newDailyEntryEdit', () => {
     const at = (s: string) => s.length;
 

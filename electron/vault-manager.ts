@@ -72,6 +72,38 @@ export class VaultManager {
     return this.activeVaultPath;
   }
 
+  /**
+   * Native "Save note" dialog rooted at the vault. Returns the chosen
+   * location as a forward-slash vault-relative path (with a `.md`
+   * extension forced), or `null` on cancel. Refuses a location outside the
+   * active vault -- the whole app is vault-relative, a note saved elsewhere
+   * could never be reopened from the file tree or indexed.
+   */
+  async pickSavePath(suggestedName: string): Promise<string | null> {
+    if (!this.activeVaultPath) {
+      throw new Error('No vault is active.');
+    }
+    const root = path.resolve(this.activeVaultPath);
+    const name = suggestedName.trim() || 'untitled.md';
+    const result = await dialog.showSaveDialog({
+      title: 'Save note',
+      defaultPath: path.join(root, name),
+      filters: [{ name: 'Markdown', extensions: ['md'] }],
+      properties: ['createDirectory', 'showOverwriteConfirmation'],
+    });
+    if (result.canceled || !result.filePath) {
+      return null;
+    }
+    let chosen = path.resolve(result.filePath);
+    if (!chosen.toLowerCase().endsWith('.md')) {
+      chosen += '.md';
+    }
+    if (chosen !== root && !chosen.startsWith(root + path.sep)) {
+      throw new Error('The file must be saved inside the current vault.');
+    }
+    return path.relative(root, chosen).split(path.sep).join('/');
+  }
+
   async listFiles(): Promise<VaultFileEntry[]> {
     if (!this.activeVaultPath) {
       throw new Error('No vault is active.');

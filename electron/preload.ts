@@ -42,6 +42,8 @@ const dreyApi: DreyApi = {
     ipcRenderer.invoke(IPC_CHANNELS.vaultCreateDirectory, relativePath),
   deleteVaultEntry: (relativePath: string): Promise<void> =>
     ipcRenderer.invoke(IPC_CHANNELS.vaultDelete, relativePath),
+  pickSavePath: (suggestedName: string): Promise<string | null> =>
+    ipcRenderer.invoke(IPC_CHANNELS.vaultPickSavePath, suggestedName),
   buildDailyNoteContent: (date: string): Promise<string> =>
     ipcRenderer.invoke(IPC_CHANNELS.dailyBuildContent, date),
   saveNote: (request: NoteSaveRequest): Promise<NoteSaveResult> =>

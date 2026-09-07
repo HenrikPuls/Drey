@@ -163,7 +163,7 @@ export class Editor implements AfterViewInit {
   protected async onKeydown(event: KeyboardEvent): Promise<void> {
     if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 's') {
       event.preventDefault();
-      await this.editor.save();
+      await (event.shiftKey ? this.editor.saveAs() : this.editor.save());
     }
   }
 

@@ -39,6 +39,7 @@ export const IPC_CHANNELS = {
   vaultCreateFile: 'vault:create-file',
   vaultCreateDirectory: 'vault:create-directory',
   vaultDelete: 'vault:delete',
+  vaultPickSavePath: 'vault:pick-save-path',
   dailyOpen: 'daily:open',
   dailyBuildContent: 'daily:build-content',
   noteSave: 'note:save',
@@ -390,6 +391,14 @@ export interface DreyApi {
    * or a real filesystem failure.
    */
   deleteVaultEntry(relativePath: string): Promise<void>;
+
+  /**
+   * Opens the native "Save note" dialog rooted at the vault. Resolves to
+   * the chosen location as a forward-slash vault-relative path (`.md`
+   * enforced), or `null` if the user cancelled. Rejects if the chosen
+   * location is outside the active vault.
+   */
+  pickSavePath(suggestedName: string): Promise<string | null>;
 
   /**
    * Builds the Markdown a fresh daily note for `date` (`YYYY-MM-DD`) would
