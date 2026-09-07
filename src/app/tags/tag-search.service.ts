@@ -16,6 +16,15 @@ export class TagSearchService {
   readonly queryTags = signal<string[]>([]);
   readonly queryText = signal('');
 
+  /**
+   * Whether the sidebar "Search" section is expanded. Lifted out of the
+   * component so a `#tag` pill click in the editor and the `Mod+Shift+F`
+   * keybinding can open it. `focusRequest` bumps to ask the panel to move
+   * focus into its tag input.
+   */
+  readonly panelOpen = signal(false);
+  readonly focusRequest = signal(0);
+
   readonly hits = signal<TagSearchHit[]>([]);
   readonly searching = signal(false);
   /** True once a non-empty query has been run -- drives the "no results" line. */
@@ -46,6 +55,30 @@ export class TagSearchService {
   removeTag(tag: string): void {
     this.queryTags.update((list) => list.filter((t) => t !== tag));
     this.invalidateSummary();
+  }
+
+  /** Expand the panel and ask it to focus the tag input (keybinding entry point). */
+  openPanel(): void {
+    this.panelOpen.set(true);
+    this.focusRequest.update((n) => n + 1);
+  }
+
+  togglePanel(): void {
+    this.panelOpen.update((v) => !v);
+    if (this.panelOpen()) {
+      this.focusRequest.update((n) => n + 1);
+    }
+  }
+
+  /**
+   * Replace the whole query with a single tag, expand the panel and run --
+   * the editor's `#tag` pills call this on a modifier-click.
+   */
+  searchTag(raw: string): void {
+    this.clear();
+    this.addTag(raw);
+    this.panelOpen.set(true);
+    void this.run();
   }
 
   setText(value: string): void {

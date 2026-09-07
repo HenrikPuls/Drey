@@ -28,6 +28,7 @@ import {
 import { livePreview } from '../live-preview';
 import { inlineSpellcheck, requestSpellcheck, SpellcheckSource } from '../spellcheck/spellcheck';
 import { makeTagCompletionSource } from '../tag-complete';
+import { tagPills } from '../tag-pill';
 import { resolveVaultImageUrl } from '../vault-image';
 
 /**
@@ -89,6 +90,13 @@ export class MarkdownSurface implements AfterViewInit, OnDestroy {
    * turns this off.
    */
   readonly submitOnEnter = input(true);
+  /**
+   * When set, inline `#tag`s render as pills and a `Ctrl`/`Cmd`-click on
+   * one calls this with the bare tag. Read once at construction. The full-
+   * page editor wires it to the tag search; the entry drawer leaves it
+   * unset (composing a note, not navigating it).
+   */
+  readonly onTagActivate = input<(tag: string) => void>();
 
   /** The document text after every edit. */
   readonly docChanged = output<string>();
@@ -159,6 +167,9 @@ export class MarkdownSurface implements AfterViewInit, OnDestroy {
           markdownLanguage.data.of({
             autocomplete: makeTagCompletionSource(() => this.tags.tags()),
           }),
+          // `#tag` pills + Ctrl/Cmd-click -> search. Outside the mode
+          // compartment: pills show in source mode too.
+          this.onTagActivate() ? tagPills(this.onTagActivate()!) : [],
           EditorView.updateListener.of((update) => {
             if (update.docChanged) {
               this.docChanged.emit(update.state.doc.toString());

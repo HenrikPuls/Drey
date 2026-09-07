@@ -11,6 +11,8 @@ import { EditorService } from './services/editor.service';
 import { EditorZoomService } from './services/editor-zoom.service';
 import { LayoutService } from './services/layout.service';
 import { SettingsService } from './services/settings.service';
+import { KeybindingService } from './keybindings';
+import { TagSearchService } from './tags';
 import { Settings } from './settings/settings';
 import { Sidebar } from './sidebar/sidebar';
 import { TabBar } from './tab-bar/tab-bar';
@@ -59,6 +61,16 @@ export class App {
     // Instantiate at startup so its global Ctrl+wheel guard is installed
     // even before the first document (and its editor) opens (ADR-0015).
     inject(EditorZoomService);
+
+    // App-wide keyboard commands. More features register here the same way.
+    const keys = inject(KeybindingService);
+    const tagSearch = inject(TagSearchService);
+    keys.register({
+      id: 'search.open',
+      label: 'Search notes',
+      keybinding: 'Mod+Shift+F',
+      run: () => tagSearch.openPanel(),
+    });
   }
 
   protected startSidebarDrag(event: PointerEvent): void {

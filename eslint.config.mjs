@@ -6,7 +6,8 @@ import tseslint from 'typescript-eslint';
  * codebase -- it exists to enforce the feature-module boundaries introduced
  * with the path-based-tags restructure: code outside a feature module
  * (`electron/llm/`, `shared/llm/`, `electron/tags/`, `shared/tags/`,
- * `src/app/tags/`) must import through the module's `index.ts` barrel,
+ * `src/app/tags/`, `src/app/keybindings/`) must import through the
+ * module's `index.ts` barrel,
  * never reach into a file inside it. Internal files import their siblings
  * directly.
  */
@@ -22,8 +23,8 @@ const sharedModulePatterns = MODULES.map((mod) => ({
 /**
  * Reaching into a sibling `<mod>/` folder by a relative path. Safe to apply
  * inside `electron/` and `shared/` (no innocent `llm/` or `tags/` subfolder
- * exists there); for `src/` only `tags/` is a feature module, so `llm/` is
- * left out (`src/app/settings/llm/` is a plain folder).
+ * exists there); for `src/` `tags/` and `keybindings/` are feature modules,
+ * so `llm/` is left out (`src/app/settings/llm/` is a plain folder).
  */
 const relativeModulePatterns = (mods) =>
   mods.map((mod) => ({
@@ -65,7 +66,9 @@ export default tseslint.config(
     rules: {
       'no-restricted-imports': [
         'error',
-        { patterns: [...sharedModulePatterns, ...relativeModulePatterns(['tags'])] },
+        {
+          patterns: [...sharedModulePatterns, ...relativeModulePatterns(['tags', 'keybindings'])],
+        },
       ],
     },
   },
@@ -77,6 +80,7 @@ export default tseslint.config(
       'electron/tags/**/*.ts',
       'shared/tags/**/*.ts',
       'src/app/tags/**/*.ts',
+      'src/app/keybindings/**/*.ts',
     ],
     rules: {
       'no-restricted-imports': 'off',

@@ -16,6 +16,7 @@ import { EditorService, EditorViewMode, NewEntryRequest } from '../services/edit
 import { EditorZoomService } from '../services/editor-zoom.service';
 import { SettingsService } from '../services/settings.service';
 import { SpellcheckService } from '../services/spellcheck.service';
+import { TagSearchService } from '../tags';
 import { Icon } from '../icons/icon';
 import { MarkdownSurface } from './markdown-surface/markdown-surface';
 
@@ -63,6 +64,14 @@ export class Editor implements AfterViewInit {
   protected readonly actions = inject(ActionsService);
   protected readonly assistant = inject(AssistantService);
   private readonly spellcheck = inject(SpellcheckService);
+  private readonly tagSearch = inject(TagSearchService);
+
+  /**
+   * Passed to the surface: a `Ctrl`/`Cmd`-click on a `#tag` pill replaces
+   * the sidebar search query with that tag and runs it. An arrow function
+   * so it keeps its `this` when the extension calls it.
+   */
+  protected readonly activateTag = (tag: string): void => this.tagSearch.searchTag(tag);
 
   /**
    * The document is spellchecked as you type, like the entry drawer. Past

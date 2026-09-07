@@ -126,6 +126,7 @@
     [mode]="editor.viewMode()"
     [foldFrontmatter]="true"
     [spellcheck]="spellcheckSource"
+    [onTagActivate]="activateTag"
     (docChanged)="editor.updateBuffer($event)"
   />
 </div>

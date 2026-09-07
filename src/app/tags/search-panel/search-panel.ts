@@ -1,4 +1,11 @@
-import { ChangeDetectionStrategy, Component, inject, signal } from '@angular/core';
+import {
+  ChangeDetectionStrategy,
+  Component,
+  ElementRef,
+  effect,
+  inject,
+  viewChild,
+} from '@angular/core';
 import { formatSearchResultsDoc } from '../../../../shared/tags';
 import { EditorService } from '../../services/editor.service';
 import { Icon } from '../../icons/icon';
@@ -24,10 +31,25 @@ export class SearchPanel {
   protected readonly tags = inject(TagService);
   private readonly editor = inject(EditorService);
 
-  protected readonly expanded = signal(false);
+  /** Panel open state lives on the service (pill click / keybinding drive it). */
+  protected readonly expanded = this.search.panelOpen;
+
+  private readonly tagInput = viewChild<ElementRef<HTMLInputElement>>('tagInput');
+
+  constructor() {
+    // The service bumps `focusRequest` when something (Mod+Shift+F, a pill
+    // click) opened the panel and wants the cursor in the tag field. The
+    // input only exists once the @if branch has rendered.
+    effect(() => {
+      this.search.focusRequest();
+      if (this.search.panelOpen()) {
+        setTimeout(() => this.tagInput()?.nativeElement.focus(), 0);
+      }
+    });
+  }
 
   protected toggle(): void {
-    this.expanded.update((v) => !v);
+    this.search.togglePanel();
   }
 
   protected onTagKeydown(event: KeyboardEvent): void {
