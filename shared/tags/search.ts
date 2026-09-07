@@ -1,0 +1,113 @@
+/**
+ * The tag search matcher: given the tagged sections and a query, return the
+ * sections where **every** requested tag is present and **every** free-text
+ * term appears (in the section body or its heading), each with a compact
+ * snippet. Pure -- `electron/tags` feeds it the index, the renderer's
+ * search panel renders the hits.
+ */
+
+/** A section the matcher can search. `SectionRecord` (electron) satisfies this. */
+export interface SearchableSection {
+  path: string;
+  heading: string;
+  line: number;
+  tags: readonly string[];
+  text: string;
+}
+
+export interface TagSearchQuery {
+  /** Tags that must all be present in a section (AND). */
+  tags: readonly string[];
+  /** Free text; whitespace-split into terms that must all appear. */
+  text: string;
+}
+
+export interface TagSearchHit {
+  path: string;
+  heading: string;
+  /** 1-based line the section starts on -- where a click should land. */
+  line: number;
+  /** ~240-char window around the first match, whitespace collapsed. */
+  snippet: string;
+}
+
+const SNIPPET_WINDOW = 240;
+const SNIPPET_LEAD = 60;
+
+export function runTagSearch(
+  sections: readonly SearchableSection[],
+  query: TagSearchQuery,
+): TagSearchHit[] {
+  const tags = dedupeLower(query.tags);
+  const terms = query.text
+    .toLowerCase()
+    .split(/\s+/)
+    .filter((t) => t !== '');
+
+  // Nothing to search for.
+  if (tags.length === 0 && terms.length === 0) {
+    return [];
+  }
+
+  const needles = [...terms, ...tags.map((t) => `#${t}`)];
+  const hits: TagSearchHit[] = [];
+
+  for (const section of sections) {
+    const sectionTags = new Set(section.tags.map((t) => t.toLowerCase()));
+    if (!tags.every((t) => sectionTags.has(t))) {
+      continue;
+    }
+    const hay = `${section.heading}\n${section.text}`.toLowerCase();
+    if (!terms.every((term) => hay.includes(term))) {
+      continue;
+    }
+    hits.push({
+      path: section.path,
+      heading: section.heading,
+      line: section.line,
+      snippet: makeSnippet(section.text, needles),
+    });
+  }
+
+  hits.sort((a, b) => a.path.localeCompare(b.path) || a.line - b.line);
+  return hits;
+}
+
+function makeSnippet(text: string, needles: readonly string[]): string {
+  const flat = text.replace(/\s+/g, ' ').trim();
+  const lower = flat.toLowerCase();
+
+  let at = -1;
+  for (const needle of needles) {
+    const i = lower.indexOf(needle);
+    if (i !== -1 && (at === -1 || i < at)) {
+      at = i;
+    }
+  }
+
+  if (at === -1) {
+    return flat.length > SNIPPET_WINDOW ? `${flat.slice(0, SNIPPET_WINDOW).trimEnd()}…` : flat;
+  }
+
+  const start = Math.max(0, at - SNIPPET_LEAD);
+  const end = Math.min(flat.length, start + SNIPPET_WINDOW);
+  let snippet = flat.slice(start, end).trim();
+  if (start > 0) {
+    snippet = `…${snippet}`;
+  }
+  if (end < flat.length) {
+    snippet = `${snippet}…`;
+  }
+  return snippet;
+}
+
+function dedupeLower(values: readonly string[]): string[] {
+  const seen = new Set<string>();
+  for (const value of values) {
+    const key = value.trim().toLowerCase().replace(/^#/, '');
+    if (key !== '') {
+      seen.add(key);
+    }
+  }
+  return [...seen];
+}

@@ -12,3 +12,6 @@ export type { Section } from './sections';
 export { splitSections } from './sections';
 
 export { extractInlineTags, extractTagOccurrences } from './tags';
+
+export type { SearchableSection, TagSearchHit, TagSearchQuery } from './search';
+export { runTagSearch } from './search';

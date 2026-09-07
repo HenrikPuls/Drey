@@ -19,6 +19,8 @@ import {
   SpellCheckResult,
   SpellLanguage,
   TagEntry,
+  TagSearchHit,
+  TagSearchQuery,
   VaultFileContent,
   VaultFileEntry,
 } from '../shared/ipc-api';
@@ -184,6 +186,9 @@ function registerIpcHandlers(
     (_event, request: NoteSaveRequest): Promise<NoteSaveResult> => noteManager.saveNote(request),
   );
   ipcMain.handle(IPC_CHANNELS.tagList, (): TagEntry[] => tagIndex.getVocabulary());
+  ipcMain.handle(IPC_CHANNELS.tagSearch, (_event, query: TagSearchQuery): TagSearchHit[] =>
+    tagIndex.search(query),
+  );
 
   ipcMain.handle(IPC_CHANNELS.configGet, (): AppConfig => appConfig.get());
   ipcMain.handle(IPC_CHANNELS.configSet, (_event, next: AppConfig): AppConfig => {

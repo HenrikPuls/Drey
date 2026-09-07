@@ -12,8 +12,8 @@
  * Full rebuild on vault open / manual refresh; a single file is re-indexed
  * on `note:save` and dropped on delete -- there is no file watcher.
  */
-import { extractInlineTags, splitSections } from '../../shared/tags';
-import { TagEntry } from '../../shared/ipc-api';
+import { extractInlineTags, runTagSearch, splitSections } from '../../shared/tags';
+import { TagEntry, TagSearchHit, TagSearchQuery } from '../../shared/ipc-api';
 import { VaultManager } from '../vault-manager';
 
 /** One heading-delimited section of a note that carries at least one tag. */
@@ -94,6 +94,11 @@ export class TagIndex {
   /** Every tagged section in the vault, for the search matcher. */
   getSections(): SectionRecord[] {
     return [...this.byPath.values()].flat();
+  }
+
+  /** Tag + free-text search over the tagged sections (`shared/tags/runTagSearch`). */
+  search(query: TagSearchQuery): TagSearchHit[] {
+    return runTagSearch(this.getSections(), query);
   }
 }
 

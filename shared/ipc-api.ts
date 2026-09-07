@@ -10,6 +10,7 @@
 import type { AppConfig, CustomDictionary, LlmEndpoint } from './app-config';
 import type { ActionContext, ActionOutcome, AskOutcome, LlmDebugEntry } from './llm';
 import type { ChatThread } from './chat-thread';
+import type { TagSearchHit, TagSearchQuery } from './tags';
 
 export type { AppConfig, LlmEndpoint, CustomDictionary } from './app-config';
 export type { ChatCard, ChatCardRole, ChatThread } from './chat-thread';
@@ -20,6 +21,7 @@ export type {
   LlmDebugEntry,
   ResolvedAction,
 } from './llm';
+export type { TagSearchHit, TagSearchQuery } from './tags';
 
 /**
  * Channel names. Most are `ipcMain.handle` / `ipcRenderer.invoke` request
@@ -41,6 +43,7 @@ export const IPC_CHANNELS = {
   dailyBuildContent: 'daily:build-content',
   noteSave: 'note:save',
   tagList: 'tags:list',
+  tagSearch: 'tags:search',
   configGet: 'config:get',
   configSet: 'config:set',
   llmListModels: 'llm:list-models',
@@ -429,6 +432,14 @@ export interface DreyApi {
    * (no file watcher). Resolves to `[]` when no vault is active.
    */
   listTags(): Promise<TagEntry[]>;
+
+  /**
+   * Runs the tag search: sections where every `query.tags` entry is present
+   * and every whitespace-split term of `query.text` appears (body or
+   * heading). Each hit carries a path, heading, 1-based line and a compact
+   * snippet. Fast -- no LLM. `[]` when the query is empty or no vault.
+   */
+  searchTags(query: TagSearchQuery): Promise<TagSearchHit[]>;
 }
 
 declare global {
