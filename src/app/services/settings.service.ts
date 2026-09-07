@@ -5,13 +5,17 @@ import {
   AppConfig,
   AssistantConfig,
   CustomDictionary,
+  DEFAULT_APPEARANCE,
   DEFAULT_EDITOR_FONT_FAMILY,
   LlmConfig,
   LlmEndpoint,
   SpellcheckConfig,
+  UiScale,
   clampEditorFontScale,
+  normalizeAccent,
   normalizeAppConfig,
   normalizeEditorFontFamily,
+  normalizeUiScale,
 } from '../../../shared/app-config';
 import { ResolvedAction, resolveActions } from '../../../shared/llm';
 import { deepEqual } from '../../../shared/deep-equal';
@@ -77,6 +81,16 @@ export class SettingsService {
   /** Editor font-family id (Settings -> Appearance). Persisted config, never the draft. */
   readonly editorFontFamily = computed<string>(
     () => this._config()?.editor.fontFamily ?? DEFAULT_EDITOR_FONT_FAMILY,
+  );
+
+  /** App-wide UI scale step (Settings -> Appearance). Persisted config only. */
+  readonly appearanceUiScale = computed<UiScale>(
+    () => this._config()?.appearance.uiScale ?? DEFAULT_APPEARANCE.uiScale,
+  );
+
+  /** App-wide highlight colour -- a preset id or `#rrggbb` (Settings -> Appearance). */
+  readonly appearanceAccent = computed<string>(
+    () => this._config()?.appearance.accent ?? DEFAULT_APPEARANCE.accent,
   );
 
   /** Manual-trigger actions, for the editor's run menu. Persisted config only. */
@@ -444,6 +458,57 @@ export class SettingsService {
     this.mutate((draft) => {
       draft.editor.fontFamily = fontFamily;
     });
+
+    if (!this.api) {
+      return;
+    }
+    try {
+      this._config.set(normalizeAppConfig(await this.api.setConfig(next)));
+    } catch (err) {
+      this.saveError.set(err instanceof Error ? err.message : String(err));
+      void this.load();
+    }
+  }
+
+  /**
+   * App-wide UI scale (Settings -> Appearance "Base font size"). Immediate,
+   * like the editor knobs: updates `_config` now, mirrors into an open draft,
+   * and persists. `AppearanceService` reacts to `appearanceUiScale`.
+   */
+  async setAppearanceUiScale(scale: string): Promise<void> {
+    await this.applyImmediate('uiScale', normalizeUiScale(scale), (config, value) => {
+      config.appearance.uiScale = value as UiScale;
+    });
+  }
+
+  /** App-wide highlight colour (a preset id or `#rrggbb`). Same immediate path. */
+  async setAppearanceAccent(accent: string): Promise<void> {
+    await this.applyImmediate('accent', normalizeAccent(accent), (config, value) => {
+      config.appearance.accent = value as string;
+    });
+  }
+
+  /**
+   * Shared body for the "outside a Settings session, persist right away"
+   * mutators (`setAppearanceUiScale` / `setAppearanceAccent`): no-op when the
+   * value is unchanged, update `_config` so the runtime reacts next frame,
+   * mirror the edit into any open draft, then write through. On a write
+   * error, surface it and reload from disk.
+   */
+  private async applyImmediate<T>(
+    field: keyof AppConfig['appearance'],
+    value: T,
+    patch: (config: AppConfig, value: T) => void,
+  ): Promise<void> {
+    const config = this._config();
+    if (!config || config.appearance[field] === value) {
+      return;
+    }
+
+    const next = structuredClone(config);
+    patch(next, value);
+    this._config.set(next);
+    this.mutate((draft) => patch(draft, value));
 
     if (!this.api) {
       return;

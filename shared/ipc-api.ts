@@ -36,6 +36,8 @@ export const IPC_CHANNELS = {
   windowClose: 'window:close',
   windowIsMaximized: 'window:is-maximized',
   windowMaximizeChanged: 'window:maximize-changed',
+  editExec: 'edit:exec',
+  uiSetZoom: 'ui:set-zoom',
   vaultGetActive: 'vault:get-active',
   vaultSelect: 'vault:select',
   vaultListFiles: 'vault:list-files',
@@ -69,6 +71,15 @@ export const IPC_CHANNELS = {
   spellLanguages: 'spell:languages',
   spellAddDictionary: 'spell:add-dictionary',
 } as const;
+
+/**
+ * Standard editing commands the HTML Edit menu routes through the focused
+ * `webContents` element (`electron/main.ts`). CodeMirror and native
+ * `<input>` / `<textarea>` fields both honour these, so one path covers
+ * every editable surface -- and it survives the menu click stealing DOM
+ * focus, which a renderer-side dispatch would not.
+ */
+export type EditCommand = 'undo' | 'redo' | 'cut' | 'copy' | 'paste' | 'selectAll';
 
 /**
  * Mirrors Node's `NodeJS.Platform` values. Spelled out explicitly instead
@@ -253,6 +264,23 @@ export interface DreyApi {
    * shape as `onOpenDailyNote`). Returns an unsubscribe.
    */
   onWindowMaximizeChange(listener: (maximized: boolean) => void): () => void;
+
+  /**
+   * Runs a standard editing command against the focused editable element
+   * (CodeMirror or a native field), via the window's `webContents`. Backs
+   * the HTML Edit menu's Undo/Redo/Cut/Copy/Paste/Select all rows -- the
+   * accelerators already work; this makes the menu clicks work too.
+   */
+  execEditCommand(command: EditCommand): Promise<void>;
+
+  /**
+   * Sets the whole renderer's zoom factor (`webContents.setZoomFactor`) --
+   * the app-wide "Base font size" preset in Settings -> Appearance. `1` is
+   * unscaled. Scales layout and pointer coordinates together, unlike a CSS
+   * `zoom`, so drag gestures keep working. Resets on reload, so the renderer
+   * re-applies it from config on startup.
+   */
+  setUiZoomFactor(factor: number): Promise<void>;
 
   /** The full app config (`shared/app-config.ts`), always normalised/complete. */
   getConfig(): Promise<AppConfig>;

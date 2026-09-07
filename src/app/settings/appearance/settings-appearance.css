@@ -1,3 +1,103 @@
+:host {
+  display: block;
+}
+
+/* Space the stacked fields apart (the shared `.field` only sets its own
+   inner gap). */
+.field + .field {
+  margin-top: 20px;
+}
+
 select {
   max-width: 280px;
+}
+
+/* ---- Base font size: segmented control ---- */
+
+.segmented {
+  display: inline-flex;
+  align-self: flex-start;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+
+.segmented button {
+  border: 0;
+  border-left: 1px solid var(--border-strong);
+  background: var(--bg-input);
+  color: var(--text-3);
+  font: inherit;
+  font-size: 0.8rem;
+  padding: 6px 14px;
+  cursor: pointer;
+}
+
+.segmented button:first-child {
+  border-left: 0;
+}
+
+.segmented button:hover {
+  background: var(--hover-bg);
+  color: var(--text-2);
+}
+
+.segmented button.active {
+  background: var(--accent);
+  color: var(--on-accent);
+}
+
+/* ---- Highlight colour: swatches ---- */
+
+.swatches {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
+.swatch {
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: 1px solid var(--border-strong);
+  border-radius: 50%;
+  cursor: pointer;
+  box-shadow: 0 0 0 2px transparent;
+  transition: box-shadow 0.12s ease;
+}
+
+.swatch.active {
+  box-shadow: 0 0 0 2px var(--accent-ring);
+}
+
+.swatch.custom {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  background:
+    conic-gradient(
+      from 90deg,
+      #c96442,
+      #7d8f6e,
+      #6e83a0,
+      #8b7fa8,
+      #c98a3c,
+      #4f9a90,
+      #c96442
+    );
+}
+
+.swatch.custom input {
+  position: absolute;
+  inset: -4px;
+  width: calc(100% + 8px);
+  height: calc(100% + 8px);
+  padding: 0;
+  border: 0;
+  background: transparent;
+  opacity: 0;
+  cursor: pointer;
 }

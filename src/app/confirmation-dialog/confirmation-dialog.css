@@ -73,7 +73,7 @@ h2 {
 }
 
 .diff .row.del {
-  background: rgba(201, 100, 66, 0.14);
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
 }
 
 .diff .row.del .sign {

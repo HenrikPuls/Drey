@@ -225,6 +225,14 @@ src/                Angular renderer (standalone components, esbuild via Angular
                             persist to localStorage; read back in the constructor
       daily-note.service.ts Subscribes to onOpenDailyNote; opens the pushed path and
                             requests a new `## HH:mm` entry. No other logic.
+      edit-target.service.ts  Tracks the CodeMirror surface that last held focus
+                            (register on focus, dropped only when another editable
+                            gains focus or the surface is destroyed). Lets the HTML
+                            Edit/Selection menus (MenuService) dispatch editor
+                            commands even after the menu click stole DOM focus.
+      appearance.service.ts  Applies AppearanceConfig (ADR-0020): writes the resolved
+                            accent hex onto --accent at :root and pushes the UI-scale
+                            preset through dreyApi.setUiZoomFactor. Instantiated by App.
       tag.service.ts       tags signal (TagEntry[] = { tag, count }) from tags:list;
                             refreshed on construction and after every save. Source
                             for the editor's #tag autocomplete and the search
@@ -265,10 +273,13 @@ src/                Angular renderer (standalone components, esbuild via Angular
                         auto-summary default (ADR-0012). spellcheck/
                         SettingsSpellcheck: enable switch, language picker, add/remove
                         Hunspell dictionaries (ADR-0013). appearance/
-                        SettingsAppearance: the document editor's typeface
+                        SettingsAppearance: app-wide base font size (preset ->
+                        webContents.setZoomFactor via AppearanceService) + highlight
+                        colour (preset or custom hex -> --accent at :root, tints
+                        color-mix'd off it; ADR-0020) + the document editor's typeface
                         (SettingsService.setEditorFontFamily -> --font-sans /
-                        --drey-heading-font on the Editor host, persisted at once
-                        like the editor zoom). actions/ SettingsActions:
+                        --drey-heading-font on the Editor host). All three persist at
+                        once, like the editor zoom. actions/ SettingsActions:
                         trigger rows (event / confirm / enabled) + template library CRUD.
                         about/ SettingsAbout: read-only -- app/Electron/Chromium/Node
                         version (app:get-info IPC) + a scrollable list of production
@@ -420,6 +431,8 @@ env.ps1             Puts .tools/node on PATH for the current shell session
 | `tags:summarise-results`             | `TagSearchQuery` + a task id → a prose digest of the matching sections (`search-summary` built-in). **Backend wired, panel UI parked** (ADR-0017).                                                                                                                                                                                                                                                                                                                            |
 | `tags:suggest`                       | Entry text + a task id → up to four suggested tags (`{"tags":[…]}`), using the current vocabulary. Backs the drawer's **Autotag** button.                                                                                                                                                                                                                                                                                                                                     |
 | `config:get` / `config:set`          | Read / replace the whole `AppConfig` (`shared/app-config.ts`) held in `app-config.json` under `userData`. `set` normalises via `normalizeAppConfig` and returns what was stored. Backs the Settings screen (ADR-0010).                                                                                                                                                                                                                                                        |
+| `edit:exec`                          | Runs a standard editing command (`undo`/`redo`/`cut`/`copy`/`paste`/`selectAll`) against the focused editable via `mainWindow.webContents`. Backs the HTML Edit-menu clicks (the accelerators already worked). CodeMirror and native fields both honour it.                                                                                                                                                                                                                    |
+| `ui:set-zoom`                        | `mainWindow.webContents.setZoomFactor(factor)` — the app-wide "Base font size" preset in Settings → Appearance (ADR-0020). Resets on reload, so `AppearanceService` re-sends it from config on startup.                                                                                                                                                                                                                                                                      |
 | `llm:list-models`                    | Live `GET {baseUrl}/models`, with the bearer API key when one is set; `string[]` of model ids. Takes an optional `LlmEndpoint` override so the Settings screen can probe the URL/key currently _typed_ rather than the saved one. Rejects on transport/HTTP error.                                                                                                                                                                                                            |
 | `llm:test-connection`                | Probe the endpoint (saved, or the same override); never rejects — `{ ok, message, models }` for the Settings "test connection" feedback. A 401/403 is reported as an API-key problem.                                                                                                                                                                                                                                                                                         |
 | `llm:debug-list` / `llm:debug-clear` | Read / empty the session's LLM traffic log (`LlmDebugEntry[]`, oldest first) shown at the bottom of the LLM settings pane. Bearer tokens are already masked.                                                                                                                                                                                                                                                                                                                  |

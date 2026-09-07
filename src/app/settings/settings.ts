@@ -49,7 +49,12 @@ export class Settings {
       hint: 'Dictionaries & language',
       component: SettingsSpellcheck,
     },
-    { id: 'appearance', label: 'Appearance', hint: 'Editor font', component: SettingsAppearance },
+    {
+      id: 'appearance',
+      label: 'Appearance',
+      hint: 'Type size, colour & font',
+      component: SettingsAppearance,
+    },
     {
       id: 'actions',
       label: 'Actions',

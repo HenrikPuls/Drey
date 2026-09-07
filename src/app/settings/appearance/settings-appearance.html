@@ -1,4 +1,54 @@
-<app-settings-pane title="Appearance" description="How the document editor is typeset.">
+<app-settings-pane
+  title="Appearance"
+  description="Type size, highlight colour and the editor typeface. Changes apply straight away and save on their own, independent of the Save button below."
+>
+  <div class="field">
+    <label>Base font size</label>
+    <div class="segmented" role="group" aria-label="Base font size">
+      @for (step of scaleSteps; track step.id) {
+        <button
+          type="button"
+          [class.active]="settings.appearanceUiScale() === step.id"
+          (click)="onScaleChange(step.id)"
+        >
+          {{ step.label }}
+        </button>
+      }
+    </div>
+    <p class="field-hint">
+      Scales the whole app — titlebar, panels, tabs, status bar and the editor. Everything else is
+      sized relative to this.
+    </p>
+  </div>
+
+  <div class="field">
+    <label>Highlight colour</label>
+    <div class="swatches">
+      @for (accent of accents; track accent.id) {
+        <button
+          type="button"
+          class="swatch"
+          [class.active]="settings.appearanceAccent() === accent.id"
+          [style.background]="accent.hex"
+          [title]="accent.label"
+          [attr.aria-label]="accent.label"
+          (click)="onAccentChange(accent.id)"
+        ></button>
+      }
+      <label class="swatch custom" [class.active]="accentIsCustom()" title="Custom colour">
+        <input
+          type="color"
+          [value]="accentHex()"
+          (input)="onAccentChange($any($event.target).value)"
+          aria-label="Custom highlight colour"
+        />
+      </label>
+    </div>
+    <p class="field-hint">
+      Used for the accent square, tag chips, primary buttons, the text selection and drag handles.
+    </p>
+  </div>
+
   <div class="field">
     <label for="editor-font-family">Editor font</label>
     <select
@@ -12,8 +62,7 @@
     </select>
     <p class="field-hint">
       Sets the typeface for the document editor — body text and headings, in both Live Preview and
-      source mode. It applies straight away and is saved on its own, independent of the Save button
-      below. The sidebar, entry drawer and assistant panel are left on the app default.
+      source mode. The sidebar, entry drawer and assistant panel are left on the app default.
     </p>
   </div>
 </app-settings-pane>

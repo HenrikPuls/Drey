@@ -10,6 +10,7 @@ import {
   AskOutcome,
   ChatThread,
   CustomDictionary,
+  EditCommand,
   IPC_CHANNELS,
   LlmConnectionTest,
   LlmDebugEntry,
@@ -158,6 +159,36 @@ function registerIpcHandlers(
   });
   ipcMain.handle(IPC_CHANNELS.windowClose, (): void => mainWindow?.close());
   ipcMain.handle(IPC_CHANNELS.windowIsMaximized, (): boolean => mainWindow?.isMaximized() ?? false);
+
+  // The HTML Edit menu (frameless titlebar, ADR-0019) drives the focused
+  // editable element through the same native editing commands the
+  // auto-hidden application menu already exposes via accelerators
+  // (electron/menu.ts). CodeMirror honours the resulting DOM events, so this
+  // needs nothing in the renderer beyond the menu click.
+  ipcMain.handle(IPC_CHANNELS.editExec, (_event, command: EditCommand): void => {
+    const wc = mainWindow?.webContents;
+    if (!wc) {
+      return;
+    }
+    ({
+      undo: () => wc.undo(),
+      redo: () => wc.redo(),
+      cut: () => wc.cut(),
+      copy: () => wc.copy(),
+      paste: () => wc.paste(),
+      selectAll: () => wc.selectAll(),
+    })[command]?.();
+  });
+
+  // App-wide UI scale (Settings -> Appearance "Base font size"). Browser-zoom
+  // the whole renderer -- resets on reload, so the renderer re-sends it from
+  // config on startup.
+  ipcMain.handle(IPC_CHANNELS.uiSetZoom, (_event, factor: number): void => {
+    const wc = mainWindow?.webContents;
+    if (wc && Number.isFinite(factor) && factor > 0) {
+      wc.setZoomFactor(factor);
+    }
+  });
 
   ipcMain.handle(IPC_CHANNELS.vaultGetActive, (): string | null =>
     vaultManager.getActiveVaultPath(),

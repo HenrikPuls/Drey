@@ -140,6 +140,24 @@ describe('normalizeAppConfig', () => {
     expect(normalizeAppConfig({ editor: { fontFamily: 42 } }).editor.fontFamily).toBe('sans');
   });
 
+  it('defaults appearance and keeps a valid scale step / accent (preset id or #hex)', () => {
+    expect(normalizeAppConfig({}).appearance).toEqual({ uiScale: 'default', accent: 'terracotta' });
+    expect(normalizeAppConfig({ appearance: { uiScale: 'large' } }).appearance.uiScale).toBe('large');
+    expect(normalizeAppConfig({ appearance: { uiScale: 'huge' } }).appearance.uiScale).toBe(
+      'default',
+    );
+    expect(normalizeAppConfig({ appearance: { accent: 'sage' } }).appearance.accent).toBe('sage');
+    expect(normalizeAppConfig({ appearance: { accent: '#AABBCC' } }).appearance.accent).toBe(
+      '#aabbcc',
+    );
+    expect(normalizeAppConfig({ appearance: { accent: 'not-a-colour' } }).appearance.accent).toBe(
+      'terracotta',
+    );
+    expect(normalizeAppConfig({ appearance: { accent: '#xyz' } }).appearance.accent).toBe(
+      'terracotta',
+    );
+  });
+
   it('keeps a well-formed custom dictionary and the language pointing at it', () => {
     const config = normalizeAppConfig({
       spellcheck: {
