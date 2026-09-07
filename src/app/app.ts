@@ -3,6 +3,7 @@ import { Editor } from './editor/editor';
 import { EntryDrawer } from './entry-drawer/entry-drawer';
 import { ConfirmationDialog } from './confirmation-dialog/confirmation-dialog';
 import { ActionsService } from './services/actions.service';
+import { AppearanceService } from './services/appearance.service';
 import { AssistantService } from './services/assistant.service';
 import { EntryDraftService } from './services/entry-draft.service';
 import { DailyNoteService } from './services/daily-note.service';
@@ -59,6 +60,9 @@ export class App {
     inject(EditorZoomService);
     // Instantiate so the assistant panel reacts to the active note.
     inject(AssistantService);
+    // Instantiate so the app-wide accent + UI scale from Settings ->
+    // Appearance are applied on startup and kept in sync.
+    inject(AppearanceService);
 
     // App-wide keyboard commands. Features register here the same way; the
     // titlebar menu bar invokes the same command ids.

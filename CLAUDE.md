@@ -156,9 +156,15 @@ Renderer (Angular):
   the identical 32px header every panel shares.
 - `TitlebarComponent` + `MenuBar` + `MenuService` (`src/app/titlebar/`) —
   the frameless-window titlebar: accent square, the HTML File/Edit/
-  Selection/View menu bar (wired rows call `KeybindingService` command
-  ids), and — off macOS — minimize/maximize/close over the `window:*` IPC
-  channels ([ADR-0019](docs/09_architecture_decisions/0019-movable-dock-panels-and-layout-state.md)).
+  Selection/View menu bar, and — off macOS — minimize/maximize/close over
+  the `window:*` IPC channels
+  ([ADR-0019](docs/09_architecture_decisions/0019-movable-dock-panels-and-layout-state.md)).
+  Menu rows dispatch three ways: `KeybindingService` command ids
+  (New note, Save, Search…), the `edit:exec` IPC → `webContents`
+  (Undo/Redo/Cut/Copy/Paste/Select all, works in any focused field), and
+  CodeMirror commands against the surface `EditTargetService` last saw
+  focused (Find in note, Select line, Move line, Duplicate selection,
+  Toggle task done — disabled when no editor is focused).
 - `StatusBarComponent` (`src/app/status-bar/`) — the 26px bottom bar:
   word/char count, a context hint (the drag instruction while a panel is
   moving), and the Settings entry.
@@ -192,9 +198,13 @@ Renderer (Angular):
   ([ADR-0012](docs/09_architecture_decisions/0012-note-assistant-sidecar-thread.md))
 - `SettingsComponent` — master-detail settings screen (category list +
   detail pane), categories "LLM", "Assistant" (auto-summary default),
-  "Spelling" (dictionaries + language), "Appearance" (editor typeface)
+  "Spelling" (dictionaries + language), "Appearance" (app-wide base font
+  size + highlight colour + editor typeface,
+  [ADR-0020](docs/09_architecture_decisions/0020-app-wide-appearance-accent-and-ui-scale.md))
   and "Actions"; opened from the status-bar entry. Category list is
-  descriptor-driven (`*ngComponentOutlet`, ADR-0016)
+  descriptor-driven (`*ngComponentOutlet`, ADR-0016). The close (X) is
+  top-right; the footer Discard is always enabled and closes, warning first
+  when the draft is dirty
 - `ConfirmationDialogComponent` — the one confirmation dialog shared by
   Actions and Ask-mode edits (inline diff vs. side-by-side, "don't
   ask again")
@@ -224,9 +234,9 @@ be called out explicitly (see Working Style below), not introduced silently.
     value + drag grip). Default: Calendar/Files/Search/Open windows left,
     Assistant right, Search collapsed. `View → Reset layout` restores it.
     Layout state persists (`localStorage['drey.dock']`).
-  - **Files panel**: a vault-switcher row (name + "Open other vault …")
-    above the vault file tree (clicking a file opens it; right-click →
-    new file/folder/delete).
+  - **Files panel**: a vault-switcher row (name + "Open other vault …",
+    with the refresh button on the same row) above the vault file tree
+    (clicking a file opens it; right-click → new file/folder/delete).
   - **Main column**: a 34px tab bar for open documents, a 34px meta bar
     (path · Lines toggle · Save/Saved · sparkle · `⋯`), the editor
     (Live Preview ⇄ source via the `⋯` menu — no toggle buttons; see
@@ -235,8 +245,11 @@ be called out explicitly (see Working Style below), not introduced silently.
     bottom chat bar; capture lives in the drawer, Ask in this panel.
   - **Settings**: a full-surface overlay opened from the status-bar entry
     — master-detail (category list on the left, detail pane on the
-    right), categories "LLM", "Assistant", "Spelling", "Appearance" and
-    "Actions" (ADR-0010; descriptor-driven list, ADR-0016). The
+    right), categories "LLM", "Assistant", "Spelling", "Appearance"
+    (app-wide base font size + highlight colour + editor typeface,
+    ADR-0020) and "Actions" (ADR-0010; descriptor-driven list, ADR-0016).
+    The X sits top-right; Discard is always active and closes (with a
+    dirty-state warning). The
     confirmation dialog (Actions / Ask edits) is a centred modal: inline
     line diff for small changes, side-by-side before/after for
     whole-document rewrites (ADR-0011).

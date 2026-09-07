@@ -137,7 +137,7 @@ export const dreyEditorTheme = EditorView.theme(
     '.cm-gutters': { display: 'none' },
     '.cm-cursor, .cm-dropCursor': { borderLeftColor: 'var(--accent)' },
     '&.cm-focused .cm-selectionBackground, .cm-selectionBackground, .cm-content ::selection': {
-      backgroundColor: 'rgba(201, 100, 66, 0.28)',
+      backgroundColor: 'color-mix(in srgb, var(--accent) 28%, transparent)',
     },
     // The document look wants no active-line wash.
     '.cm-activeLine, .cm-activeLineGutter': { backgroundColor: 'transparent' },

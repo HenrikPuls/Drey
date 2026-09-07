@@ -28,6 +28,7 @@ package, a minor naming convention).
 | [0017](09_architecture_decisions/0017-tags-as-labels-and-section-index.md)      | Tags as free labels + an inverted section index + tag search                       | Accepted                       |
 | [0018](09_architecture_decisions/0018-manual-refresh-no-file-watcher.md)        | Manual refresh instead of a file watcher (Variant B)                               | Accepted                       |
 | [0019](09_architecture_decisions/0019-movable-dock-panels-and-layout-state.md)  | Movable dock panels, a custom titlebar, and one layout state                       | Accepted                       |
+| [0020](09_architecture_decisions/0020-app-wide-appearance-accent-and-ui-scale.md) | App-wide Appearance: highlight colour (`--accent` + `color-mix` tints) + UI scale (`setZoomFactor`) | Accepted                       |
 
 Decisions not yet written up (relevant spec already fixes them, but the
 ADR is deferred to the milestone that actually implements them, per

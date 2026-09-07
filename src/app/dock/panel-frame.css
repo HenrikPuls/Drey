@@ -27,7 +27,7 @@
 }
 
 :host(.dragging) .head {
-  background: rgba(201, 100, 66, 0.16);
+  background: color-mix(in srgb, var(--accent) 16%, transparent);
   cursor: grabbing;
 }
 

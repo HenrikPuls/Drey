@@ -7,6 +7,7 @@ import {
   ChatThread,
   CustomDictionary,
   DreyApi,
+  EditCommand,
   IPC_CHANNELS,
   LlmConnectionTest,
   LlmDebugEntry,
@@ -39,6 +40,10 @@ const dreyApi: DreyApi = {
     ipcRenderer.on(IPC_CHANNELS.windowMaximizeChanged, wrapped);
     return () => ipcRenderer.removeListener(IPC_CHANNELS.windowMaximizeChanged, wrapped);
   },
+  execEditCommand: (command: EditCommand): Promise<void> =>
+    ipcRenderer.invoke(IPC_CHANNELS.editExec, command),
+  setUiZoomFactor: (factor: number): Promise<void> =>
+    ipcRenderer.invoke(IPC_CHANNELS.uiSetZoom, factor),
   getActiveVault: () => ipcRenderer.invoke(IPC_CHANNELS.vaultGetActive),
   selectVault: () => ipcRenderer.invoke(IPC_CHANNELS.vaultSelect),
   listVaultFiles: (): Promise<VaultFileEntry[]> => ipcRenderer.invoke(IPC_CHANNELS.vaultListFiles),

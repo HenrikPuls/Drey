@@ -38,19 +38,22 @@
   --placeholder: #5f5b56;
   --calendar-muted: #403c38; /* calendar: days outside the current month */
 
-  /* ---- Accent (terracotta). Prototype alternatives: #7d8f6e #6e83a0 #8b7fa8 ---- */
+  /* ---- Accent (terracotta by default). `AppearanceService` overrides
+     `--accent` at runtime from Settings -> Appearance; every tint below is
+     `color-mix()`ed off it, so one value re-colours the whole app. Preset
+     alternatives live in `ACCENT_PRESETS` (shared/app-config.ts). ---- */
   --accent: #c96442;
-  --accent-hover: #dd8163;
+  --accent-hover: color-mix(in srgb, var(--accent) 78%, white);
   --accent-contrast: #1b1a19; /* text/glyph on a filled accent surface */
-  --accent-surface: rgba(201, 100, 66, 0.15); /* tag chip fill */
-  --accent-text: #dfa189; /* tag chip text */
-  --accent-ring: rgba(201, 100, 66, 0.55);
-  --accent-edge: rgba(201, 100, 66, 0.45); /* quote rule, you-message rule, selected calendar day */
-  --accent-quote: rgba(201, 100, 66, 0.45);
-  --resize-hover: rgba(201, 100, 66, 0.3); /* splitter / dock-edge hover */
-  --drop-ring: inset 0 0 0 1px rgba(201, 100, 66, 0.45); /* dock drop target */
+  --accent-surface: color-mix(in srgb, var(--accent) 15%, transparent); /* tag chip fill */
+  --accent-text: color-mix(in srgb, var(--accent) 58%, #f2efe9); /* tag chip text */
+  --accent-ring: color-mix(in srgb, var(--accent) 55%, transparent);
+  --accent-edge: color-mix(in srgb, var(--accent) 45%, transparent); /* quote / selected day */
+  --accent-quote: color-mix(in srgb, var(--accent) 45%, transparent);
+  --resize-hover: color-mix(in srgb, var(--accent) 30%, transparent); /* splitter / dock-edge hover */
+  --drop-ring: inset 0 0 0 1px color-mix(in srgb, var(--accent) 45%, transparent); /* drop target */
   --on-accent: #f4ece8; /* text on a filled accent button */
-  --path-muted: #8a6552; /* file paths in search hits + the editor meta separator tag */
+  --path-muted: color-mix(in srgb, var(--accent) 42%, var(--text-5)); /* file paths in search hits */
 
   /* ---- Lines and hover fills ---- */
   --border: rgba(255, 255, 255, 0.055);
@@ -119,7 +122,10 @@ body {
   background: var(--bg-dock);
   color: var(--text-primary);
   font-family: var(--font-sans);
-  font-size: 13px;
+  /* Base body size. The app-wide "Base font size" preset scales the whole
+     renderer on top of this via `webContents.setZoomFactor`
+     (`AppearanceService`); this value is just the unscaled baseline. */
+  font-size: 14px;
   line-height: 1.5;
   -webkit-font-smoothing: antialiased;
   overflow: hidden;
@@ -140,7 +146,7 @@ textarea::placeholder {
 }
 
 ::selection {
-  background: rgba(201, 100, 66, 0.3);
+  background: color-mix(in srgb, var(--accent) 30%, transparent);
 }
 
 /* Thin, unobtrusive scrollbars everywhere (DESIGN.md "Maße": 9px, 3px

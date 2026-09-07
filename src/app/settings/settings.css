@@ -33,7 +33,6 @@
 .head {
   display: flex;
   align-items: center;
-  justify-content: space-between;
   padding: 6px 6px 10px;
 }
 
@@ -44,6 +43,10 @@
 }
 
 .close {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  z-index: 2;
   border: 0;
   background: transparent;
   color: var(--text-5);
@@ -98,7 +101,9 @@
 .detail {
   flex: 1;
   overflow: auto;
-  padding: 22px 26px;
+  /* Extra right padding keeps pane content clear of the panel's
+     top-right close button. */
+  padding: 22px 44px 22px 26px;
 }
 
 .loading {
@@ -111,7 +116,7 @@
   padding: 8px 26px;
   font-size: 0.8rem;
   color: var(--accent);
-  background: rgba(201, 100, 66, 0.1);
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
 }
 
 /* Footer: dirty state + Discard / Save. Swapped for the unsaved-changes bar

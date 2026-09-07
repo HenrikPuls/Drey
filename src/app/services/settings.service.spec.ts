@@ -239,4 +239,41 @@ describe('SettingsService (draft model)', () => {
       expect(service.isDirty()).toBe(true);
     });
   });
+
+  describe('appearance (Settings -> Appearance)', () => {
+    it('persists the UI scale immediately and updates config + draft together', async () => {
+      await service.setAppearanceUiScale('large');
+
+      expect(service.appearanceUiScale()).toBe('large');
+      expect(harness.stored().appearance.uiScale).toBe('large');
+      expect(service.draft()?.appearance.uiScale).toBe('large');
+      expect(service.isDirty()).toBe(false);
+    });
+
+    it('accepts a preset id or a #hex accent and pins junk to the default', async () => {
+      await service.setAppearanceAccent('#12ab34');
+      expect(service.appearanceAccent()).toBe('#12ab34');
+      expect(harness.stored().appearance.accent).toBe('#12ab34');
+
+      await service.setAppearanceAccent('bogus');
+      expect(service.appearanceAccent()).toBe('terracotta');
+    });
+
+    it('does not write when the value is unchanged', async () => {
+      const before = harness.setCalls();
+      await service.setAppearanceUiScale('default');
+      await service.setAppearanceAccent('terracotta');
+      expect(harness.setCalls()).toBe(before);
+    });
+
+    it('leaves unrelated unsaved draft edits alone', async () => {
+      service.patchLlm({ apiKey: 'sk-draft-only' });
+
+      await service.setAppearanceUiScale('small');
+
+      expect(service.draft()?.llm.apiKey).toBe('sk-draft-only');
+      expect(harness.stored().llm.apiKey).toBeNull();
+      expect(service.isDirty()).toBe(true);
+    });
+  });
 });

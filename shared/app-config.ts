@@ -245,6 +245,101 @@ export function clampEditorFontScale(value: unknown): number {
   return Math.round(clamped * 20) / 20;
 }
 
+/**
+ * App-wide look (Settings -> Appearance), distinct from the editor-only
+ * `EditorConfig` knobs:
+ *
+ * - `uiScale` scales the *whole* renderer -- titlebar, docks, tabs, status
+ *   bar, editor -- by driving `webContents.setZoomFactor` (the same
+ *   mechanism as a browser's Ctrl +/-, so pointer coordinates and layout
+ *   stay consistent). A preset, not a free number: four steps are enough and
+ *   a slider invites fiddling.
+ * - `accent` is the highlight colour. Either a preset id from
+ *   `ACCENT_PRESETS`, or a `#rrggbb` hex for a custom pick. `AppearanceService`
+ *   writes the resolved hex onto `--accent` at the document root; the
+ *   `--accent-*` tint tokens in `styles.css` are `color-mix()`ed off it, so
+ *   one value re-colours everything.
+ */
+export interface AppearanceConfig {
+  uiScale: UiScale;
+  accent: string;
+}
+
+export type UiScale = 'small' | 'default' | 'large' | 'xlarge';
+
+/** `webContents.setZoomFactor` value for each `uiScale` step. */
+export const UI_SCALE_FACTORS: Record<UiScale, number> = {
+  small: 0.9,
+  default: 1,
+  large: 1.15,
+  xlarge: 1.3,
+};
+
+export const UI_SCALE_LABELS: Record<UiScale, string> = {
+  small: 'Small',
+  default: 'Default',
+  large: 'Large',
+  xlarge: 'X-Large',
+};
+
+export interface AccentPreset {
+  id: string;
+  label: string;
+  hex: string;
+}
+
+/** The curated highlight colours (the first is the default terracotta). */
+export const ACCENT_PRESETS: readonly AccentPreset[] = [
+  { id: 'terracotta', label: 'Terracotta', hex: '#c96442' },
+  { id: 'sage', label: 'Sage', hex: '#7d8f6e' },
+  { id: 'slate', label: 'Slate blue', hex: '#6e83a0' },
+  { id: 'violet', label: 'Violet', hex: '#8b7fa8' },
+  { id: 'amber', label: 'Amber', hex: '#c98a3c' },
+  { id: 'teal', label: 'Teal', hex: '#4f9a90' },
+];
+
+export const DEFAULT_APPEARANCE: AppearanceConfig = {
+  uiScale: 'default',
+  accent: ACCENT_PRESETS[0].id,
+};
+
+const HEX_RE = /^#[0-9a-fA-F]{6}$/;
+
+/** A stored scale step, or `'default'` when it names no known step. */
+export function normalizeUiScale(value: unknown): UiScale {
+  return value === 'small' || value === 'large' || value === 'xlarge' || value === 'default'
+    ? value
+    : DEFAULT_APPEARANCE.uiScale;
+}
+
+/** A known preset id or a `#rrggbb` hex; anything else falls back to the default. */
+export function normalizeAccent(value: unknown): string {
+  if (typeof value !== 'string') {
+    return DEFAULT_APPEARANCE.accent;
+  }
+  if (ACCENT_PRESETS.some((preset) => preset.id === value)) {
+    return value;
+  }
+  return HEX_RE.test(value) ? value.toLowerCase() : DEFAULT_APPEARANCE.accent;
+}
+
+/** The concrete `#rrggbb` for an `accent` value (preset id -> its hex; hex -> itself). */
+export function resolveAccentHex(accent: string): string {
+  const preset = ACCENT_PRESETS.find((entry) => entry.id === accent);
+  if (preset) {
+    return preset.hex;
+  }
+  return HEX_RE.test(accent) ? accent.toLowerCase() : ACCENT_PRESETS[0].hex;
+}
+
+function normalizeAppearance(raw: unknown): AppearanceConfig {
+  const source = (raw ?? {}) as Record<string, unknown>;
+  return {
+    uiScale: normalizeUiScale(source['uiScale']),
+    accent: normalizeAccent(source['accent']),
+  };
+}
+
 export interface AppConfig {
   /** Bumped only on a breaking shape change; `normalizeAppConfig` migrates. */
   version: 1;
@@ -252,6 +347,7 @@ export interface AppConfig {
   assistant: AssistantConfig;
   spellcheck: SpellcheckConfig;
   editor: EditorConfig;
+  appearance: AppearanceConfig;
   actions: {
     templates: ActionTemplate[];
     triggers: ActionTrigger[];
@@ -352,6 +448,7 @@ export const DEFAULT_APP_CONFIG: AppConfig = {
     fontScale: 1,
     fontFamily: DEFAULT_EDITOR_FONT_FAMILY,
   },
+  appearance: { ...DEFAULT_APPEARANCE },
   actions: {
     templates: [noteSummaryTemplate(), searchSummaryTemplate(), autotagTemplate()],
     triggers: [],
@@ -539,6 +636,7 @@ export function normalizeAppConfig(raw: unknown): AppConfig {
     assistant: normalizeAssistant(source['assistant']),
     spellcheck: normalizeSpellcheck(source['spellcheck']),
     editor: normalizeEditor(source['editor']),
+    appearance: normalizeAppearance(source['appearance']),
     actions: {
       templates,
       triggers: normalizeTriggers(actionsSource['triggers'], templates),

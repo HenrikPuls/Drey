@@ -1,21 +1,36 @@
 <div class="files" (contextmenu)="openMenu($event)">
-  <button
-    type="button"
-    class="vault-row"
-    [class.open]="vaultMenuOpen()"
-    (click)="toggleVaultMenu()"
-    title="Switch vault"
-  >
-    <app-icon name="folder" [size]="11" [strokeWidth]="1.2" />
-    <span class="vault-name">{{ vaultName() }}</span>
-    <app-icon
-      class="twist"
-      name="chevron-down"
-      [size]="9"
-      [strokeWidth]="1.2"
-      [style.transform]="vaultMenuOpen() ? 'rotate(180deg)' : 'none'"
-    />
-  </button>
+  <div class="vault-bar">
+    <button
+      type="button"
+      class="vault-row"
+      [class.open]="vaultMenuOpen()"
+      (click)="toggleVaultMenu()"
+      title="Switch vault"
+    >
+      <app-icon name="folder" [size]="11" [strokeWidth]="1.2" />
+      <span class="vault-name">{{ vaultName() }}</span>
+      <app-icon
+        class="twist"
+        name="chevron-down"
+        [size]="9"
+        [strokeWidth]="1.2"
+        [style.transform]="vaultMenuOpen() ? 'rotate(180deg)' : 'none'"
+      />
+    </button>
+
+    @if (vault.activeVaultPath()) {
+      <button
+        type="button"
+        class="icon-btn refresh"
+        (click)="onRefresh()"
+        [disabled]="vault.isLoading()"
+        title="Re-read the vault from disk"
+        aria-label="Refresh files"
+      >
+        <app-icon name="refresh-cw" [size]="12" />
+      </button>
+    }
+  </div>
 
   @if (vaultMenuOpen()) {
     <div class="vault-menu">
@@ -29,21 +44,6 @@
       <button type="button" class="vault-menu-item" (click)="onOpenOtherVault()">
         <span class="mark">+</span>
         <span class="vault-menu-name">Open other vault …</span>
-      </button>
-    </div>
-  }
-
-  @if (vault.activeVaultPath()) {
-    <div class="files-actions">
-      <button
-        type="button"
-        class="icon-btn"
-        (click)="onRefresh()"
-        [disabled]="vault.isLoading()"
-        title="Re-read the vault from disk"
-        aria-label="Refresh files"
-      >
-        <app-icon name="refresh-cw" [size]="12" />
       </button>
     </div>
   }

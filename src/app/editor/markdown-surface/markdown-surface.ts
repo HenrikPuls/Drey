@@ -18,8 +18,10 @@ import { Compartment, EditorState, Extension, Prec } from '@codemirror/state';
 import { EditorView, keymap, placeholder as cmPlaceholder } from '@codemirror/view';
 import { basicSetup } from 'codemirror';
 import { EditorService, EditorViewMode } from '../../services/editor.service';
+import { EditTargetService } from '../../services/edit-target.service';
 import { TagService } from '../../services/tag.service';
 import { dreyEditorLook } from '../editor-theme';
+import { toggleTaskDone } from '../markdown-commands';
 import {
   frontmatterExpandedOf,
   frontmatterFold,
@@ -58,6 +60,7 @@ import { resolveVaultImageUrl } from '../vault-image';
 })
 export class MarkdownSurface implements AfterViewInit, OnDestroy {
   private readonly editor = inject(EditorService);
+  private readonly editTarget = inject(EditTargetService);
   private readonly tags = inject(TagService);
   private readonly host = viewChild.required<ElementRef<HTMLDivElement>>('host');
 
@@ -170,6 +173,9 @@ export class MarkdownSurface implements AfterViewInit, OnDestroy {
             ? Prec.highest(keymap.of(this.submitKeymap()))
             : [],
           basicSetup,
+          // `Ctrl/Cmd+Enter` toggles the task checkbox on the selected
+          // line(s) (also the Selection menu's "Toggle task done").
+          keymap.of([{ key: 'Mod-Enter', run: (view) => toggleTaskDone(view) }]),
           markdown({
             base: markdownLanguage,
             codeLanguages: languages,
@@ -183,6 +189,17 @@ export class MarkdownSurface implements AfterViewInit, OnDestroy {
           // `#tag` pills + Ctrl/Cmd-click -> search. Outside the mode
           // compartment: pills show in source mode too.
           this.onTagActivate() ? tagPills(this.onTagActivate()!) : [],
+          // Track this surface as the Edit/Selection menu's target while it
+          // holds focus (see `EditTargetService` -- "last focused", so a
+          // menu-bar click doesn't drop it).
+          EditorView.domEventHandlers({
+            focus: () => {
+              if (this._view) {
+                this.editTarget.register(this._view);
+              }
+              return false;
+            },
+          }),
           EditorView.updateListener.of((update) => {
             if (update.docChanged) {
               this.docChanged.emit(update.state.doc.toString());
@@ -223,7 +240,10 @@ export class MarkdownSurface implements AfterViewInit, OnDestroy {
   }
 
   ngOnDestroy(): void {
-    this._view?.destroy();
+    if (this._view) {
+      this.editTarget.unregister(this._view);
+      this._view.destroy();
+    }
   }
 
   /** Replaces the whole document (owner-driven loads, clearing the capture box). */
