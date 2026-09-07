@@ -1,10 +1,18 @@
 # 7. On-save tag pipeline (`note:save`), and routing as an append-copy
 
+> **Superseded by [ADR-0017](0017-tags-as-labels-and-section-index.md).**
+> `note:save` keeps only step 1/3 below — the `updated:` bump and
+> `created:` fill on a file that already has a frontmatter fence. The
+> `#tag` → `tags[]` merge and the master-document History append-copy are
+> removed; `NoteSaveResult` no longer carries `tags` / `unknownTags` /
+> `appendedTo`. The `note:save` chokepoint and the pure-`shared/` split
+> described here still hold.
+
 ## Status
 
-Accepted — implemented across milestone 6a (frontmatter merge + `updated:`
-bump) and 6b (routing tagged entries into master-document History).
-Contains two live deviations from `specs/`.
+Superseded by [0017] — was: Accepted, implemented across milestone 6a
+(frontmatter merge + `updated:` bump) and 6b (routing tagged entries into
+master-document History).
 
 ## Context
 
@@ -21,7 +29,7 @@ deferred the `updated:` bump for want of a YAML round-trip
 
 Separately, `specs/roadmap.md` says the primary tag "determines the
 physical location (one place, no symlink/duplicate)" — written with a
-topic *note file* in mind. During milestone 6 planning the project owner
+topic _note file_ in mind. During milestone 6 planning the project owner
 refined what routing should actually do for the common case (a daily note
 whose entries carry tags): **the daily note stays put and keeps its
 content; the tagged entries are copied, dated, into the topic's master
@@ -66,7 +74,7 @@ file watcher will reuse for external edits.
 Deliberate duplication. The daily note keeps its `## HH:mm` entry; the
 master document gains a `### <date> <time>` History entry with the same
 text. `specs/roadmap.md`'s "no duplicate" line refers to not putting the
-same *file* in two folders — that still holds (nothing is moved or
+same _file_ in two folders — that still holds (nothing is moved or
 symlinked). The master-document History section
 (`specs/frontmatter-schema.md`) is built for this aggregation.
 
