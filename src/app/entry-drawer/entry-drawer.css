@@ -128,21 +128,9 @@
   color: var(--text-3);
 }
 
-/* One accent per row so the three kinds stay apart at a glance without
-   inventing three new palette entries. */
 .chip.tags {
   border-color: var(--accent-quote);
   color: var(--accent-hover);
-}
-
-.chip.people {
-  border-color: var(--border-strong);
-  color: var(--text-2);
-}
-
-.chip.meetings {
-  border-color: var(--text-faint);
-  color: var(--text-4);
 }
 
 .chip .x {
@@ -186,26 +174,6 @@
   background: var(--bg-input);
   border: 1px solid var(--border-strong);
   border-radius: var(--radius-md);
-}
-
-.confirm-bar {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-  margin-top: 12px;
-  padding: 9px 12px;
-  border: 1px solid var(--accent-quote);
-  border-radius: 7px;
-  background: var(--focus-bg);
-  font-size: 12.5px;
-  color: var(--text-2);
-}
-
-.cb-actions {
-  display: flex;
-  flex: 0 0 auto;
-  gap: 8px;
 }
 
 .err {
@@ -252,10 +220,4 @@
 .btn.primary:hover:not(:disabled) {
   background: var(--accent-hover);
   color: var(--accent-contrast);
-}
-
-.btn.warn {
-  background: transparent;
-  border-color: var(--accent);
-  color: var(--accent-hover);
 }

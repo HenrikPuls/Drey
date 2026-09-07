@@ -26,34 +26,32 @@
       />
     </div>
 
-    @for (row of chipRows; track row.field) {
-      <div class="tag-row">
-        <span class="tr-label">{{ row.label }}</span>
-        <div class="chip-field">
-          @for (chip of chips(row.field); track chip) {
-            <span class="chip" [class]="row.field">
-              {{ chip }}
-              <button
-                type="button"
-                class="x"
-                [attr.aria-label]="'Remove ' + chip"
-                (click)="drawer.removeChip(row.field, chip)"
-              >
-                ×
-              </button>
-            </span>
-          }
-          <input
-            class="chip-input"
-            type="text"
-            autocomplete="off"
-            [placeholder]="row.add"
-            (keydown)="onChipKeydown($event, row.field)"
-            (blur)="onChipBlur($event, row.field)"
-          />
-        </div>
+    <div class="tag-row">
+      <span class="tr-label">TAGS</span>
+      <div class="chip-field">
+        @for (chip of drawer.tags(); track chip) {
+          <span class="chip tags">
+            #{{ chip }}
+            <button
+              type="button"
+              class="x"
+              [attr.aria-label]="'Remove ' + chip"
+              (click)="drawer.removeChip(chip)"
+            >
+              ×
+            </button>
+          </span>
+        }
+        <input
+          class="chip-input"
+          type="text"
+          autocomplete="off"
+          placeholder="+ tag"
+          (keydown)="onChipKeydown($event)"
+          (blur)="onChipBlur($event)"
+        />
       </div>
-    }
+    </div>
 
     <!-- The shared Markdown surface in compact mode, with the inline
          spellchecker mixed in (red wavy underline + click popup). -->
@@ -65,16 +63,6 @@
       placeholder="What happened? (Markdown)"
       (docChanged)="drawer.setText($event)"
     />
-
-    @if (drawer.confirmingNoTopic()) {
-      <div class="confirm-bar" role="alertdialog" aria-label="No topic given">
-        <span>No topic given — add it anyway?</span>
-        <div class="cb-actions">
-          <button type="button" class="btn" (click)="drawer.cancelNoTopic()">Cancel</button>
-          <button type="button" class="btn warn" (click)="submit(true)">Add anyway</button>
-        </div>
-      </div>
-    }
 
     @if (editor.error(); as error) {
       <p class="err">{{ error }}</p>

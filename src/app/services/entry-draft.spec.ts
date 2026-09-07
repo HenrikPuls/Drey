@@ -23,50 +23,41 @@ describe('EntryDraftService', () => {
     localStorage.removeItem('drey.editor');
   });
 
-  it('collects chips, ignoring blanks, duplicates and typed-in markup', () => {
-    drawer.addChip('tags', '  #daily ');
-    drawer.addChip('tags', 'DAILY');
-    drawer.addChip('tags', '   ');
-    drawer.addChip('people', '[[Markus]]');
+  it('collects tag chips, ignoring blanks, duplicates and a leading #', () => {
+    drawer.addChip('  #daily ');
+    drawer.addChip('DAILY');
+    drawer.addChip('   ');
+    drawer.addChip('arbeit');
 
-    expect(drawer.tags()).toEqual(['daily']);
-    expect(drawer.people()).toEqual(['Markus']);
+    expect(drawer.tags()).toEqual(['daily', 'arbeit']);
   });
 
   it('previews exactly what will be appended', () => {
     drawer.setTopic('Rollout-Sync');
     drawer.setText('Kurzes Sync');
-    drawer.addChip('tags', 'daily');
-    drawer.addChip('people', 'Markus');
+    drawer.addChip('daily');
 
-    expect(drawer.preview()).toMatch(
-      /^## \d{2}:\d{2} — Rollout-Sync\nKurzes Sync\n#daily · \[\[Markus\]\]$/,
-    );
+    expect(drawer.preview()).toMatch(/^## \d{2}:\d{2} — Rollout-Sync\nKurzes Sync\n#daily$/);
   });
 
-  it('asks before appending when THEMA is empty, and appends on confirmation', async () => {
+  it('appends with no topic, no prompt', async () => {
     drawer.setText('lklk');
 
-    expect(await drawer.submit()).toBe('needs-topic-confirmation');
-    expect(drawer.confirmingNoTopic()).toBe(true);
-    expect(editor.newEntryRequest().draft).toBeUndefined();
-
-    expect(await drawer.submit(true)).toBe('appended');
-    expect(editor.newEntryRequest().draft).toMatchObject({ text: 'lklk' });
+    expect(await drawer.submit()).toBe('appended');
+    expect(editor.newEntryRequest().draft).toMatchObject({ text: 'lklk', topic: '' });
   });
 
-  it('appends without asking once THEMA is set', async () => {
+  it('appends with a topic set', async () => {
     drawer.setTopic('Rollout-Sync');
     drawer.setText('lklk');
 
     expect(await drawer.submit()).toBe('appended');
-    expect(drawer.confirmingNoTopic()).toBe(false);
     expect(editor.newEntryRequest().draft).toMatchObject({ topic: 'Rollout-Sync' });
   });
 
   it('clears the draft after appending', async () => {
     drawer.setTopic('T');
-    drawer.addChip('tags', 'daily');
+    drawer.addChip('daily');
     await drawer.submit();
 
     expect(drawer.topic()).toBe('');
@@ -76,15 +67,5 @@ describe('EntryDraftService', () => {
 
   it('does nothing at all for an empty draft', async () => {
     expect(await drawer.submit()).toBe('empty');
-    expect(drawer.confirmingNoTopic()).toBe(false);
-  });
-
-  it('drops the topic prompt as soon as a topic is typed', async () => {
-    drawer.setText('x');
-    await drawer.submit();
-    expect(drawer.confirmingNoTopic()).toBe(true);
-
-    drawer.setTopic('Rollout');
-    expect(drawer.confirmingNoTopic()).toBe(false);
   });
 });

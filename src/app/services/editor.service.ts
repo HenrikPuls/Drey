@@ -47,8 +47,7 @@ export interface OpenDoc {
  * `id` deduplicates (the handling component remembers the last id it acted
  * on). Exactly one of the payloads is set: `text` for a bare body (the
  * quick-capture hotkey sends neither), `draft` for the entry drawer, whose
- * topic / tags / people / meetings are rendered by
- * `shared/entry-compose.ts`.
+ * topic / text / tags are rendered by `shared/entry-compose.ts`.
  */
 export interface NewEntryRequest {
   readonly id: number;
