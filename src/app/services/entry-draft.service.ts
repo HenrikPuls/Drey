@@ -28,6 +28,9 @@ export class EntryDraftService {
   readonly text = signal('');
   readonly tags = signal<string[]>([]);
 
+  /** Lowercase names of tags the user added by hand, so re-recognition keeps them. */
+  private readonly manualTags = new Set<string>();
+
   readonly appending = signal(false);
 
   readonly draft = computed<EntryDraft>(() => ({
@@ -50,8 +53,15 @@ export class EntryDraftService {
     this.topic.set(value);
   }
 
+  /**
+   * Sets the text content and automatically extracts #tags from it.
+   * If a tag from the text is not already in the tags list, it will be added.
+   * Also removes tags that are no longer in the text but were not manually added.
+   */
   setText(value: string): void {
     this.text.set(value);
+    this.extractTagsFromText(value);
+    this.syncTagsWithText(value);
   }
 
   /** Adds a tag chip, ignoring blanks and duplicates (case-insensitive). */
@@ -61,13 +71,27 @@ export class EntryDraftService {
       return;
     }
     if (this.tags().some((item) => item.toLowerCase() === value.toLowerCase())) {
+      this.manualTags.add(value.toLowerCase());
       return;
     }
     this.tags.update((list) => [...list, value]);
+    this.manualTags.add(value.toLowerCase());
   }
 
+  /**
+   * Removes a tag chip and also removes the corresponding #tag from the text
+   * if it exists.
+   */
   removeChip(value: string): void {
     this.tags.update((list) => list.filter((item) => item !== value));
+    this.manualTags.delete(value.toLowerCase());
+    // Remove the tag from the text if it exists
+    const text = this.text();
+    const tagPattern = new RegExp(`#\\s*${value}\\s*(?=\\s|$)`, 'g');
+    const newText = text.replace(tagPattern, '');
+    if (newText !== text) {
+      this.text.set(newText);
+    }
   }
 
   /** Throws away the draft (the "Discard" button). */
@@ -75,6 +99,7 @@ export class EntryDraftService {
     this.topic.set(EMPTY_ENTRY_DRAFT.topic);
     this.text.set(EMPTY_ENTRY_DRAFT.text);
     this.tags.set([]);
+    this.manualTags.clear();
   }
 
   /** "Add to document" -- appends the entry, or reports the draft was empty. */
@@ -109,5 +134,46 @@ export class EntryDraftService {
     } finally {
       this.appending.set(false);
     }
+  }
+
+  /**
+   * Extracts tags from the text and adds them to the tags list if they're not already present.
+   * This is called whenever the text content changes.
+   */
+  private extractTagsFromText(text: string): void {
+    const tagPattern = /#([a-zA-Z0-9_-]+)/g;
+    const matches = [...text.matchAll(tagPattern)];
+
+    const newTags = matches
+      .map((match) => match[1])
+      .filter(
+        (tag) =>
+          !this.tags().some((existingTag) => existingTag.toLowerCase() === tag.toLowerCase()),
+      );
+
+    if (newTags.length > 0) {
+      this.tags.update((list) => [...list, ...newTags]);
+    }
+  }
+
+  /**
+   * Synchronizes tags with the text content.
+   * Removes tags that are no longer in the text but were not manually added.
+   */
+  private syncTagsWithText(text: string): void {
+    const tagPattern = /#([a-zA-Z0-9_-]+)/g;
+    const matches = [...text.matchAll(tagPattern)];
+    const textTags = matches.map((match) => match[1].toLowerCase());
+
+    this.tags.update((list) => {
+      return list.filter((item) => {
+        // Manually added tags stay; otherwise only the ones currently in the text.
+        return this.isManual(item) || textTags.includes(item.toLowerCase());
+      });
+    });
+  }
+
+  private isManual(item: string): boolean {
+    return this.manualTags.has(item.toLowerCase());
   }
 }
