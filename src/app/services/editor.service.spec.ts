@@ -251,16 +251,18 @@ describe('EditorService', () => {
   });
 
   describe('openScratch', () => {
-    it('opens an unsaved draft tab and replaces it on a second call', () => {
+    it('opens a dirty draft tab and replaces it on a second call', () => {
       service.openScratch('search-results.md', '# Search results\n\nfirst\n');
       expect(service.openPath()).toBe('search-results.md');
       expect(service.activeIsDraft()).toBe(true);
       expect(service.bufferContent()).toBe('# Search results\n\nfirst\n');
-      expect(service.isDirty()).toBe(false);
+      // Dirty from the start so the Save button is live without an edit first.
+      expect(service.isDirty()).toBe(true);
 
       service.openScratch('search-results.md', '# Search results\n\nsecond\n');
       expect(service.openDocs().filter((d) => d.path === 'search-results.md')).toHaveLength(1);
       expect(service.bufferContent()).toBe('# Search results\n\nsecond\n');
+      expect(service.isDirty()).toBe(true);
     });
   });
 
