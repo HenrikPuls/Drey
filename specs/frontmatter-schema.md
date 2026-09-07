@@ -8,9 +8,9 @@ understands are `title`, `created` and `updated`.
 
 ```yaml
 ---
-title: "Boat purchase"
-created: "2026-08-01"
-updated: "2026-09-05T14:32:00"
+title: 'Boat purchase'
+created: '2026-08-01'
+updated: '2026-09-05T14:32:00'
 ---
 ```
 
@@ -48,6 +48,7 @@ free text or task lines:
 
 ```markdown
 ## 2026-09-05 14:32
+
 Second viewing fell through #sailing #disappointment
 
 - [ ] Check keel seal #task id:a3f1 due:2026-09-10 prio:high
@@ -61,6 +62,7 @@ the heading and its tags on a trailing meta line:
 
 ```markdown
 ## 06:12 — Rollout-Sync
+
 Kurzes Sync mit Team zu Rollout-Plan, Risiken bei DB-Migration besprochen.
 #daily #arbeit #rollout-sync
 ```

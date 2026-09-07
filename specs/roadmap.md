@@ -1,9 +1,11 @@
 # Drey — Concept & Roadmap
 
 ## Vision
+
 An AI-powered knowledge hub for note-taking and task automation.
 
 ## Core Architectural Principles (fixed, apply to every phase)
+
 - Everything stays plain Markdown with optional YAML frontmatter — no
   proprietary format.
 - No server — Electron app, direct file access to any folder (including
@@ -21,6 +23,7 @@ An AI-powered knowledge hub for note-taking and task automation.
   background jobs.
 
 ## Tech Stack
+
 Electron + Angular/TypeScript, CodeMirror 6 (editor), transformers.js
 (embeddings, Phase 2), sqlite-vec (vector search, Phase 2),
 OpenAI-API-compatible backend (LLM backend), Electron Builder (packaging).
@@ -182,6 +185,7 @@ below).
 ---
 
 ## Phase 2
+
 - **Dedicated keyword search / FTS index** — the free-text mode of tag
   search already covers the common case over section text and headings; a
   standalone SQLite FTS index over whole files is the deferred step.
@@ -196,6 +200,7 @@ below).
   continuously in the tray).
 
 ## Phase 3
+
 - Multi-vault (primary purpose: separating sensitive content — personnel
   topics, interviews — from general notes), a fixed default vault, manual
   switch before capture.
@@ -205,6 +210,7 @@ below).
   auto-caption.
 
 ## Phase 4 — Experiments
+
 - Interview mode: templates with starter questions, the model drafts
   adaptive follow-up questions, text-only, result feeds into the normal
   processing pipeline (primarily lands in the sensitive vault).
@@ -216,6 +222,7 @@ below).
   auto-pauses on interactive use.
 
 ## Future Scope (noted, no target date)
+
 - OCR for handwritten notes (iPad expansion stage, Apple Vision Framework
   or local Tesseract).
 - iPad/iPhone access via Tailscale to the PC backend.
@@ -229,6 +236,7 @@ below).
 ---
 
 ## Open Risks / Undecided Details
+
 - Stale view without a watcher: an external tool changing vault files is
   not noticed until the next manual refresh. Acceptable for a
   single-user, single-machine tool; revisit if it bites.
