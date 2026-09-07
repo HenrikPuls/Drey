@@ -85,6 +85,31 @@ export function buildTagSuggestionMessages(
   ];
 }
 
+/**
+ * Parses the drawer "Autotag" reply -- `{"tags": ["a", "b"]}` -- into up to
+ * four normalised, de-duplicated tag tokens. Anything unparseable yields `[]`.
+ */
+export function parseSuggestedTags(reply: string): string[] {
+  const obj = parseJsonObject(reply);
+  const raw = obj && Array.isArray(obj['tags']) ? obj['tags'] : [];
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const item of raw) {
+    if (typeof item !== 'string') {
+      continue;
+    }
+    const token = normalizeTagToken(item);
+    if (token && !seen.has(token)) {
+      seen.add(token);
+      out.push(token);
+    }
+    if (out.length === 4) {
+      break;
+    }
+  }
+  return out;
+}
+
 /** Lowercase, strip umlauts/ß, keep one word (`specs/classifier-spec.md`: "keine Umlaute"). */
 export function normalizeTagToken(raw: string): string {
   return raw

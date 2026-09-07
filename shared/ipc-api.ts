@@ -45,6 +45,7 @@ export const IPC_CHANNELS = {
   tagList: 'tags:list',
   tagSearch: 'tags:search',
   tagSummariseResults: 'tags:summarise-results',
+  tagSuggest: 'tags:suggest',
   configGet: 'config:get',
   configSet: 'config:set',
   llmListModels: 'llm:list-models',
@@ -449,6 +450,14 @@ export interface DreyApi {
    * off, the query is empty, or the model errors.
    */
   summariseSearchResults(query: TagSearchQuery, taskId?: string): Promise<string>;
+
+  /**
+   * The drawer's "Autotag" button: `entryText` plus the vault tag
+   * vocabulary in, up to four suggested tags out. Only pre-fills the tag
+   * field -- the user still confirms by saving. `taskId` makes it
+   * cancellable. Rejects when LLM features are off.
+   */
+  suggestTags(entryText: string, taskId?: string): Promise<string[]>;
 }
 
 declare global {

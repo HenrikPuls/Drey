@@ -13,7 +13,11 @@ describe('normalizeAppConfig', () => {
     expect(config.llm.enabled).toBe(false);
     expect(config.llm.baseUrl).toBe(DEFAULT_APP_CONFIG.llm.baseUrl);
     expect(config.llm.model).toBeNull();
-    expect(config.actions.templates.map((t) => t.builtin)).toEqual(['note-summary', 'search-summary']);
+    expect(config.actions.templates.map((t) => t.builtin)).toEqual([
+      'note-summary',
+      'search-summary',
+      'autotag',
+    ]);
     expect(config.actions.triggers).toHaveLength(0);
   });
 
@@ -82,7 +86,11 @@ describe('normalizeAppConfig', () => {
 
   it('re-injects the built-in the user deleted', () => {
     const config = normalizeAppConfig({ actions: { templates: [], triggers: [] } });
-    expect(config.actions.templates.map((t) => t.builtin)).toEqual(['note-summary', 'search-summary']);
+    expect(config.actions.templates.map((t) => t.builtin)).toEqual([
+      'note-summary',
+      'search-summary',
+      'autotag',
+    ]);
   });
 
   it('drops a half-written user template but keeps a valid one', () => {

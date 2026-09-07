@@ -79,7 +79,7 @@ export interface LlmConfig {
 export type ActionResultKind = 'localized' | 'document';
 
 /** The built-in templates that carry behaviour beyond "send prompt, replace document". */
-export type BuiltinAction = 'note-summary' | 'search-summary';
+export type BuiltinAction = 'note-summary' | 'search-summary' | 'autotag';
 
 /** Trigger kinds available now. `'on-save'` fires from the `note:save` pipeline. */
 export type ActionEvent = 'on-save' | 'manual';
@@ -268,6 +268,7 @@ export const BUNDLED_DICTIONARIES: ReadonlyArray<{ id: string; label: string }> 
 export const BUILTIN_TEMPLATE_IDS: Record<BuiltinAction, string> = {
   'note-summary': 'builtin:note-summary',
   'search-summary': 'builtin:search-summary',
+  autotag: 'builtin:autotag',
 };
 
 /**
@@ -308,6 +309,29 @@ function searchSummaryTemplate(): ActionTemplate {
   };
 }
 
+/**
+ * The system prompt behind the drawer's "Autotag" button. `{tags}` is
+ * swapped for the vocabulary list (one tag per line) at call time. The
+ * reply only pre-fills the drawer's tag field -- the user still confirms
+ * by saving.
+ */
+export const AUTOTAG_PROMPT = `You are given a short note and the tags already used in this vault. Suggest 1 to 4 tags for the note: reuse tags from the list where they fit, and otherwise propose new tags (one word, lowercase, no spaces).
+
+Existing tags:
+{tags}
+
+Respond ONLY with JSON, no prose: {"tags": ["tag1", "tag2"]}`;
+
+function autotagTemplate(): ActionTemplate {
+  return {
+    id: BUILTIN_TEMPLATE_IDS.autotag,
+    name: 'Autotag',
+    prompt: AUTOTAG_PROMPT,
+    resultKind: 'localized',
+    builtin: 'autotag',
+  };
+}
+
 export const DEFAULT_APP_CONFIG: AppConfig = {
   version: 1,
   llm: {
@@ -329,7 +353,7 @@ export const DEFAULT_APP_CONFIG: AppConfig = {
     fontFamily: DEFAULT_EDITOR_FONT_FAMILY,
   },
   actions: {
-    templates: [noteSummaryTemplate(), searchSummaryTemplate()],
+    templates: [noteSummaryTemplate(), searchSummaryTemplate(), autotagTemplate()],
     triggers: [],
   },
 };
@@ -439,7 +463,7 @@ function normalizeTemplates(raw: unknown): ActionTemplate[] {
   }
 
   const out: ActionTemplate[] = [];
-  for (const base of [noteSummaryTemplate(), searchSummaryTemplate()]) {
+  for (const base of [noteSummaryTemplate(), searchSummaryTemplate(), autotagTemplate()]) {
     const saved = byId.get(base.id);
     byId.delete(base.id);
     out.push(
