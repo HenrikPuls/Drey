@@ -408,19 +408,14 @@ export class EditorService {
         modifiedMs: result.modifiedMs,
         existsOnDisk: true,
       });
-      if (result.tags.length > 0) {
-        void this.tags.refresh();
-      }
+      // The main process re-indexed this file on save; pull the vocabulary
+      // so `#tag` autocomplete and the search picker stay current.
+      void this.tags.refresh();
       // A first save of a draft (a daily note opened from the calendar, or
       // the quick-capture hotkey) creates a file the sidebar tree does not
-      // know about yet -- no watcher, so pull the tree in. Later, tag-system
-      // folder creation calls `vault.refresh()` at its own write points.
+      // know about yet -- no watcher, so pull the tree in.
       if (wasDraft) {
         void this.vault.refresh();
-      }
-      const reloadPaths = result.appendedTo.filter((path) => path !== doc.path);
-      if (reloadPaths.length > 0) {
-        await this.reloadCleanTabs(reloadPaths);
       }
       if (result.pendingActions && result.pendingActions.length > 0) {
         this.pendingActions.set(result.pendingActions);
@@ -448,30 +443,6 @@ export class EditorService {
     }
     this.patchDoc(path, { bufferContent: content });
     await this.save({ runOnSaveActions: false });
-  }
-
-  /**
-   * Re-reads the given open tabs from disk, but only ones with no unsaved
-   * edits -- a routed History append must not clobber a buffer the user is
-   * editing (that conflict is the file watcher's job, later).
-   */
-  private async reloadCleanTabs(paths: readonly string[]): Promise<void> {
-    if (!this.api) {
-      return;
-    }
-    for (const path of paths) {
-      const open = this.docs().find((d) => d.path === path);
-      if (!open || open.bufferContent !== open.savedContent) {
-        continue;
-      }
-      try {
-        const { content, modifiedMs } = await this.api.readVaultFile(path);
-        const normalized = content.replace(/\r\n/g, '\n');
-        this.patchDoc(path, { savedContent: normalized, bufferContent: normalized, modifiedMs });
-      } catch {
-        // Leave the stale tab as-is; the user can reopen it.
-      }
-    }
   }
 
   private makeDoc(

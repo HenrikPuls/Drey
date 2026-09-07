@@ -70,10 +70,9 @@ export interface TagSuggestion {
 
 /**
  * Builds the tag-suggestion request. `systemPrompt` is the Autotagging
- * action template's prompt text (`AUTOTAGGING_PROMPT` by default), with
- * `{registry_list}` swapped for `registryText` (the rendered registry from
- * `formatRegistry` in `shared/tag-registry.ts`). The note goes in as the
- * user message.
+ * action template's prompt text, with `{registry_list}` swapped for
+ * `registryText` (the rendered known-tag list). The note goes in as the
+ * user message. Wired up by milestone 11.7.
  */
 export function buildTagSuggestionMessages(
   systemPrompt: string,

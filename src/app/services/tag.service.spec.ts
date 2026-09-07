@@ -2,14 +2,7 @@ import { TestBed } from '@angular/core/testing';
 import { TagService } from './tag.service';
 import { DreyApi, TagEntry } from '../../../shared/ipc-api';
 
-const SAILING: TagEntry = {
-  tag: 'sailing',
-  aliases: ['boot'],
-  art: 'thema',
-  description: 'Kaufprozess',
-  hasMaster: true,
-  masterPath: 'sailing/_index.md',
-};
+const SAILING: TagEntry = { tag: 'sailing', count: 9 };
 
 describe('TagService', () => {
   afterEach(() => {
@@ -33,7 +26,7 @@ describe('TagService', () => {
     await Promise.resolve();
     expect(service.tags()).toEqual([SAILING]);
 
-    list = [SAILING, { ...SAILING, tag: 'kiel', hasMaster: false, masterPath: null, aliases: [] }];
+    list = [SAILING, { tag: 'kiel', count: 1 }];
     await service.refresh();
     expect(service.tags().map((t) => t.tag)).toEqual(['sailing', 'kiel']);
   });

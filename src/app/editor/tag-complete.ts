@@ -12,9 +12,8 @@ export type SyncCompletionSource = (context: CompletionContext) => CompletionRes
  *
  * `basicSetup` already provides the `autocompletion()` extension and its
  * keymap; this only needs registering as a language-data `autocomplete`
- * source (see `editor.ts`). An alias match still inserts the canonical
- * `#tag` (`specs/frontmatter-schema.md`: typing `#boat` suggests
- * `sailing`).
+ * source (see `editor.ts`). Ranked by how many sections use the tag, then
+ * alphabetically.
  */
 export function makeTagCompletionSource(getTags: () => readonly TagEntry[]): SyncCompletionSource {
   return (context: CompletionContext): CompletionResult | null => {
@@ -24,27 +23,17 @@ export function makeTagCompletionSource(getTags: () => readonly TagEntry[]): Syn
     }
 
     const query = token.text.slice(1).toLowerCase();
-    const matches = getTags().filter(
-      (entry) =>
-        entry.tag.startsWith(query) ||
-        entry.aliases.some((alias) => alias.toLowerCase().startsWith(query)),
-    );
+    const matches = getTags().filter((entry) => entry.tag.startsWith(query));
     if (matches.length === 0) {
       return null;
     }
 
     const options: Completion[] = [...matches]
-      .sort((a, b) => {
-        if (a.hasMaster !== b.hasMaster) {
-          return a.hasMaster ? -1 : 1;
-        }
-        return a.tag.localeCompare(b.tag);
-      })
+      .sort((a, b) => b.count - a.count || a.tag.localeCompare(b.tag))
       .map((entry) => ({
         label: `#${entry.tag}`,
         apply: `#${entry.tag} `,
-        detail: entry.art ?? undefined,
-        info: entry.description ?? undefined,
+        detail: `${entry.count}×`,
       }));
 
     return { from: token.from, options, validFor: /^#[\p{L}\p{N}_-]*$/u };

@@ -79,7 +79,7 @@ export interface LlmConfig {
 export type ActionResultKind = 'localized' | 'document';
 
 /** The built-in templates that carry behaviour beyond "send prompt, replace document". */
-export type BuiltinAction = 'autotagging' | 'summary' | 'note-summary';
+export type BuiltinAction = 'note-summary';
 
 /** Trigger kinds available now. `'on-save'` fires from the `note:save` pipeline. */
 export type ActionEvent = 'on-save' | 'manual';
@@ -88,25 +88,18 @@ export type ActionEvent = 'on-save' | 'manual';
  * One entry in the template library (the "Actions" category, CRUD). A
  * user-created template is a name + prompt + result kind: its prompt is
  * sent to the model with the document as context and the reply replaces
- * the document. The two `builtin` templates additionally route through
- * dedicated code -- autotagging through the classifier
- * (`specs/classifier-spec.md`, Prompt 2), summary through the
- * master-document `## Summary` rebuild -- but their `prompt` text is still
- * the real prompt those paths use, so editing it here changes behaviour
- * and nothing is duplicated.
+ * the document. The `note-summary` built-in additionally routes through
+ * dedicated code (the assistant panel's summary card) -- but its `prompt`
+ * text is still the real prompt that path uses, so editing it here changes
+ * behaviour and nothing is duplicated.
  */
 export interface ActionTemplate {
   id: string;
   name: string;
-  /**
-   * Prompt text sent to the model. German on purpose for the built-ins --
-   * they process German note content (CLAUDE.md language convention,
-   * `specs/classifier-spec.md`). The autotagging prompt contains a
-   * `{registry_list}` placeholder filled with the tag registry at call time.
-   */
+  /** Prompt text sent to the model. */
   prompt: string;
   resultKind: ActionResultKind;
-  /** `'autotagging'` / `'summary'` for the built-ins (editable, not deletable); `null` otherwise. */
+  /** `'note-summary'` for the built-in (editable, not deletable); `null` otherwise. */
   builtin: BuiltinAction | null;
 }
 
@@ -237,8 +230,7 @@ export function normalizeEditorFontFamily(value: unknown): string {
 
 /** The `--font-sans` / `--drey-heading-font` values for a font-family id. */
 export function editorFontFamilyStacks(id: string): { body: string; heading: string } {
-  const option =
-    EDITOR_FONT_FAMILIES.find((entry) => entry.id === id) ?? EDITOR_FONT_FAMILIES[0];
+  const option = EDITOR_FONT_FAMILIES.find((entry) => entry.id === id) ?? EDITOR_FONT_FAMILIES[0];
   return { body: option.body, heading: option.heading };
 }
 
@@ -274,33 +266,8 @@ export const BUNDLED_DICTIONARIES: ReadonlyArray<{ id: string; label: string }> 
 
 /** Stable ids so `normalizeAppConfig` can re-attach a user's edits to the built-ins. */
 export const BUILTIN_TEMPLATE_IDS: Record<BuiltinAction, string> = {
-  autotagging: 'builtin:autotagging',
-  summary: 'builtin:summary',
   'note-summary': 'builtin:note-summary',
 };
-
-/**
- * The system prompt for batch tag suggestion. This is the runtime copy of
- * `specs/classifier-spec.md` Prompt 2 -- `shared/classifier.ts` consumes
- * it, so the Actions system and the classifier share one prompt string
- * (CLAUDE.md working style: no second tagging prompt). `{registry_list}`
- * is substituted with the tag registry before the call.
- */
-export const AUTOTAGGING_PROMPT = `Du bekommst eine Notiz ohne Tag sowie eine Liste bereits existierender Tags mit Kurzbeschreibung. Schlage 1 bis 3 passende Tags aus der Liste vor. Falls kein bestehender Tag gut passt, schlage einen NEUEN Tag vor (ein Wort, kleingeschrieben, keine Umlaute).
-
-Existierende Tags:
-{registry_list}
-
-Antworte AUSSCHLIESSLICH mit diesem JSON-Format:
-{"vorschlaege": ["tag1", "tag2"], "neuer_tag": "vorschlag" | null}`;
-
-/**
- * The system prompt for the master-document summary rebuild (roadmap
- * "Summary in the master document"). Recency weighting / `#important`
- * handling is done in code (`shared/actions.ts`); the model only prose-
- * summarises the entries it is handed.
- */
-export const SUMMARY_PROMPT = `Du fasst die bisherige Historie eines Themen-Dokuments zu einem kompakten Überblick zusammen. Schreibe 3 bis 6 Sätze in ganzen Sätzen auf Deutsch, present tense, keine Aufzählung, keine Anrede. Nenne offene Punkte zuletzt. Gib nur den Zusammenfassungstext zurück, ohne Überschrift.`;
 
 /**
  * The system prompt behind the note assistant's automatic summary (the
@@ -309,29 +276,6 @@ export const SUMMARY_PROMPT = `Du fasst die bisherige Historie eines Themen-Doku
  * few sentences is scrolled past rather than read.
  */
 export const NOTE_SUMMARY_PROMPT = `Du fasst eine Notiz für die Seitenleiste zusammen. Schreibe 1 bis 3 Sätze auf Deutsch, ganze Sätze, keine Aufzählung, keine Anrede, keine Überschrift. Nenne nur, worum es in der Notiz geht. Gib ausschließlich den Zusammenfassungstext zurück.`;
-
-function autotaggingTemplate(): ActionTemplate {
-  return {
-    id: BUILTIN_TEMPLATE_IDS.autotagging,
-    name: 'Autotagging',
-    prompt: AUTOTAGGING_PROMPT,
-    // Frontmatter `tags:` merge -- a few lines, an inline diff reads well.
-    resultKind: 'localized',
-    builtin: 'autotagging',
-  };
-}
-
-function summaryTemplate(): ActionTemplate {
-  return {
-    id: BUILTIN_TEMPLATE_IDS.summary,
-    name: 'Update summary',
-    prompt: SUMMARY_PROMPT,
-    // Regenerated prose replacing the old `## Summary` -- side-by-side; a
-    // line diff of two different paragraphs is noise (ADR-0011).
-    resultKind: 'document',
-    builtin: 'summary',
-  };
-}
 
 function noteSummaryTemplate(): ActionTemplate {
   return {
@@ -367,23 +311,8 @@ export const DEFAULT_APP_CONFIG: AppConfig = {
     fontFamily: DEFAULT_EDITOR_FONT_FAMILY,
   },
   actions: {
-    templates: [autotaggingTemplate(), summaryTemplate(), noteSummaryTemplate()],
-    triggers: [
-      {
-        id: 'builtin:autotagging:manual',
-        templateId: BUILTIN_TEMPLATE_IDS.autotagging,
-        event: 'manual',
-        confirm: true,
-        enabled: true,
-      },
-      {
-        id: 'builtin:summary:manual',
-        templateId: BUILTIN_TEMPLATE_IDS.summary,
-        event: 'manual',
-        confirm: true,
-        enabled: true,
-      },
-    ],
+    templates: [noteSummaryTemplate()],
+    triggers: [],
   },
 };
 
@@ -492,7 +421,7 @@ function normalizeTemplates(raw: unknown): ActionTemplate[] {
   }
 
   const out: ActionTemplate[] = [];
-  for (const base of [autotaggingTemplate(), summaryTemplate(), noteSummaryTemplate()]) {
+  for (const base of [noteSummaryTemplate()]) {
     const saved = byId.get(base.id);
     byId.delete(base.id);
     out.push(

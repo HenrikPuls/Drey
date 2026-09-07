@@ -13,12 +13,8 @@ describe('normalizeAppConfig', () => {
     expect(config.llm.enabled).toBe(false);
     expect(config.llm.baseUrl).toBe(DEFAULT_APP_CONFIG.llm.baseUrl);
     expect(config.llm.model).toBeNull();
-    expect(config.actions.templates.map((t) => t.builtin)).toEqual([
-      'autotagging',
-      'summary',
-      'note-summary',
-    ]);
-    expect(config.actions.triggers).toHaveLength(2);
+    expect(config.actions.templates.map((t) => t.builtin)).toEqual(['note-summary']);
+    expect(config.actions.triggers).toHaveLength(0);
   });
 
   it('round-trips the defaults unchanged', () => {
@@ -65,13 +61,13 @@ describe('normalizeAppConfig', () => {
     });
   });
 
-  it('keeps a user edit to a built-in template, matched by id', () => {
+  it('keeps a user edit to the built-in template, matched by id', () => {
     const config = normalizeAppConfig({
       actions: {
         templates: [
           {
-            id: BUILTIN_TEMPLATE_IDS.autotagging,
-            name: 'My tagging',
+            id: BUILTIN_TEMPLATE_IDS['note-summary'],
+            name: 'My summary',
             prompt: 'do it',
             resultKind: 'document',
           },
@@ -79,19 +75,14 @@ describe('normalizeAppConfig', () => {
         triggers: [],
       },
     });
-    const autotag = config.actions.templates.find((t) => t.builtin === 'autotagging');
-    expect(autotag).toMatchObject({ name: 'My tagging', prompt: 'do it', resultKind: 'document' });
-    // Both built-ins are always present exactly once.
-    expect(config.actions.templates.filter((t) => t.builtin === 'summary')).toHaveLength(1);
+    const builtin = config.actions.templates.find((t) => t.builtin === 'note-summary');
+    expect(builtin).toMatchObject({ name: 'My summary', prompt: 'do it', resultKind: 'document' });
+    expect(config.actions.templates.filter((t) => t.builtin === 'note-summary')).toHaveLength(1);
   });
 
-  it('re-injects a built-in the user deleted', () => {
+  it('re-injects the built-in the user deleted', () => {
     const config = normalizeAppConfig({ actions: { templates: [], triggers: [] } });
-    expect(config.actions.templates.map((t) => t.builtin).sort()).toEqual([
-      'autotagging',
-      'note-summary',
-      'summary',
-    ]);
+    expect(config.actions.templates.map((t) => t.builtin)).toEqual(['note-summary']);
   });
 
   it('drops a half-written user template but keeps a valid one', () => {
@@ -179,7 +170,7 @@ describe('normalizeAppConfig', () => {
           { id: 't1', templateId: 'gone', event: 'manual', confirm: true, enabled: true },
           {
             id: 't2',
-            templateId: BUILTIN_TEMPLATE_IDS.summary,
+            templateId: BUILTIN_TEMPLATE_IDS['note-summary'],
             event: 'on-save',
             confirm: false,
             enabled: true,
