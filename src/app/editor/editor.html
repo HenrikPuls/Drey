@@ -95,6 +95,12 @@
       Source
     </button>
 
+    <div class="menu-sep" role="separator"></div>
+    <button type="button" role="menuitem" (click)="closeMenu(); editor.saveAs()">
+      <span class="tick"></span>
+      Save as…
+    </button>
+
     @if (settings.manualActions().length > 0) {
       <div class="menu-sep" role="separator"></div>
       @for (action of settings.manualActions(); track action.triggerId) {

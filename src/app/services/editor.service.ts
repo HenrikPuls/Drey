@@ -40,6 +40,12 @@ export interface OpenDoc {
   /** `modifiedMs` from the last read/write -- round-tripped for the future file watcher. */
   modifiedMs: number;
   existsOnDisk: boolean;
+  /**
+   * `true` for a generated scratch doc (the tag-search export) that has no
+   * intended location: `save()` routes to `saveAs()` so the user picks one.
+   * Daily-note drafts leave this `false` -- they save to their own path.
+   */
+  askOnSave?: boolean;
 }
 
 /**
@@ -263,11 +269,16 @@ export class EditorService {
   openScratch(path: string, content: string): void {
     const normalized = content.replace(/\r\n/g, '\n');
     if (this.docs().some((d) => d.path === path)) {
-      this.patchDoc(path, { savedContent: normalized, bufferContent: normalized });
+      this.patchDoc(path, {
+        savedContent: normalized,
+        bufferContent: normalized,
+        existsOnDisk: false,
+        askOnSave: true,
+      });
       this.active.set(path);
       return;
     }
-    this.addDoc(this.makeDoc(path, normalized, 0, false));
+    this.addDoc(this.makeDoc(path, normalized, 0, false, true));
   }
 
   /**
@@ -421,7 +432,16 @@ export class EditorService {
    */
   async save(options: { runOnSaveActions?: boolean } = {}): Promise<void> {
     const doc = this.activeDoc();
-    if (!this.api || doc === null || doc.bufferContent === doc.savedContent || this.isSaving()) {
+    if (!this.api || doc === null || this.isSaving()) {
+      return;
+    }
+    // A generated scratch doc has no destination yet -- ask for one, even
+    // if the buffer is untouched (the user wants to keep the export as-is).
+    if (doc.askOnSave) {
+      await this.saveAs();
+      return;
+    }
+    if (doc.bufferContent === doc.savedContent) {
       return;
     }
 
@@ -462,6 +482,51 @@ export class EditorService {
   }
 
   /**
+   * "Save as…": pick a destination inside the vault (native dialog), write
+   * the active buffer there, and re-key the tab to the new file. For a
+   * never-saved scratch doc this is where `save()` lands; on a normal file
+   * it forks the buffer to a new path (the original on disk is untouched).
+   */
+  async saveAs(): Promise<void> {
+    const doc = this.activeDoc();
+    if (!this.api?.pickSavePath || doc === null || this.isSaving()) {
+      return;
+    }
+    this.error.set(null);
+    let target: string | null;
+    try {
+      target = await this.api.pickSavePath(doc.name);
+    } catch (err) {
+      this.error.set(err instanceof Error ? err.message : String(err));
+      return;
+    }
+    if (target === null) {
+      return; // cancelled
+    }
+    if (target === doc.path && !doc.askOnSave) {
+      await this.save();
+      return;
+    }
+
+    this.isSaving.set(true);
+    try {
+      await this.api.saveNote({ path: target, body: doc.bufferContent, eol: doc.eol });
+    } catch (err) {
+      this.error.set(err instanceof Error ? err.message : String(err));
+      this.isSaving.set(false);
+      return;
+    }
+    this.isSaving.set(false);
+
+    // Swap the scratch/old tab for the real file, then load it fresh so the
+    // buffer, mtime and `existsOnDisk` come from disk.
+    this.closeTab(doc.path, { silent: true });
+    await this.openFile(target);
+    void this.tags.refresh();
+    void this.vault.refresh();
+  }
+
+  /**
    * Adopts an Action / Ask-mode rewrite of an open document: pushes
    * `content` into the tab's buffer and saves it with the on-save Action
    * hook suppressed (so applying one action can't recurse into another).
@@ -484,6 +549,7 @@ export class EditorService {
     rawContent: string,
     modifiedMs: number,
     existsOnDisk: boolean,
+    askOnSave = false,
   ): OpenDoc {
     // CodeMirror normalises to `\n`; detect the file's dominant ending so a
     // CRLF file (the Windows default for these notes) doesn't read back as
@@ -500,6 +566,7 @@ export class EditorService {
       eol,
       modifiedMs,
       existsOnDisk,
+      askOnSave,
     };
   }
 

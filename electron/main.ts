@@ -178,6 +178,11 @@ function registerIpcHandlers(
     // the deleted file until the next full rebuild.
     await tagIndex.rebuild();
   });
+  ipcMain.handle(
+    IPC_CHANNELS.vaultPickSavePath,
+    (_event, suggestedName: string): Promise<string | null> =>
+      vaultManager.pickSavePath(suggestedName),
+  );
   ipcMain.handle(IPC_CHANNELS.dailyBuildContent, (_event, date: string): Promise<string> =>
     dailyNotes.noteContentFor(date),
   );
