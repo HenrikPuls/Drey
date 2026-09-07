@@ -18,9 +18,7 @@ const DAILY_TEMPLATE_FILE = 'daily.md';
  * `{{datetime}}` (2026-09-05T14:32:00), `{{title}}` (same as date).
  */
 const STARTER_DAILY_TEMPLATE = `---
-type: notiz
 title: "{{title}}"
-tags: ["daily"]
 created: "{{date}}"
 updated: "{{datetime}}"
 ---
