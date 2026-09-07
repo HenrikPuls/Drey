@@ -27,15 +27,15 @@ import { CANCELLED_MESSAGE, isAbortError, LlmTaskRegistry } from './llm-tasks';
 import { LmStudioClient } from './lm-studio-client';
 
 const GENERIC_SYSTEM_SUFFIX =
-  '\n\nGib das vollständige, überarbeitete Markdown-Dokument zurück – ohne Code-Fence, ohne Erklärung.';
+  '\n\nReturn the complete, revised Markdown document — no code fence, no explanation.';
 
-const ASK_SYSTEM = `Du arbeitest an einem Markdown-Dokument. Der Nutzer stellt entweder eine Frage zum Dokument oder gibt eine Anweisung, es zu ändern.
+const ASK_SYSTEM = `You are working on a Markdown document. The user either asks a question about it or gives an instruction to change it.
 
-Antworte AUSSCHLIESSLICH mit JSON, keine Erklärung drumherum:
-- Frage (nur beantworten, nichts ändern): {"kind":"answer","text":"<antwort>"}
-- Änderung: {"kind":"edit","document":"<das vollständige geänderte Dokument>"}
+Respond ONLY with JSON, no prose around it:
+- Question (answer only, change nothing): {"kind":"answer","text":"<answer>"}
+- Change: {"kind":"edit","document":"<the full changed document>"}
 
-Bei einer Änderung gibst du IMMER das gesamte Dokument zurück, nicht nur die geänderte Stelle.`;
+For a change you ALWAYS return the whole document, not just the changed part.`;
 
 export class ActionRunner {
   constructor(
@@ -226,7 +226,7 @@ export class ActionRunner {
     signal: AbortSignal,
   ): Promise<ActionOutcome> {
     const user = context.selection
-      ? `AUSGEWÄHLTER ABSCHNITT:\n${context.selection}\n\nGESAMTES DOKUMENT:\n${context.body}`
+      ? `SELECTED SECTION:\n${context.selection}\n\nWHOLE DOCUMENT:\n${context.body}`
       : context.body;
     const reply = await this.llm.chat(
       [
@@ -267,10 +267,10 @@ function normalizeDoc(text: string): string {
 }
 
 function buildAskUserMessage(context: ActionContext, question: string): string {
-  const parts = [`ANWEISUNG / FRAGE:\n${question.trim()}`];
+  const parts = [`INSTRUCTION / QUESTION:\n${question.trim()}`];
   if (context.selection?.trim()) {
-    parts.push(`AKTUELLE AUSWAHL:\n${context.selection}`);
+    parts.push(`CURRENT SELECTION:\n${context.selection}`);
   }
-  parts.push(`DOKUMENT (${context.path}):\n${context.body}`);
+  parts.push(`DOCUMENT (${context.path}):\n${context.body}`);
   return parts.join('\n\n');
 }

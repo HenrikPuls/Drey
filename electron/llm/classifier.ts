@@ -40,7 +40,7 @@ export class ClassifierService {
     return parseTagSuggestion(reply);
   }
 
-  /** Prompt 1. `null` when the reply doesn't parse to a task/notiz decision. */
+  /** Prompt 1. `null` when the reply doesn't parse to a task/note decision. */
   async classifyEntry(text: string, signal?: AbortSignal): Promise<TaskClassification | null> {
     const reply = await this.llm.chat(buildTaskMessages(text), { signal });
     return parseTaskClassification(reply);

@@ -1,32 +1,32 @@
 /**
  * The two classifier prompts from `specs/classifier-spec.md`, as pure
- * message builders + reply parsers. `electron/classifier.ts` calls the LM
- * Studio client with these and hands the raw reply back here to parse.
+ * message builders + reply parsers. `electron/llm/classifier.ts` calls the
+ * LM Studio client with these and hands the raw reply back here to parse.
  *
- * Prompt text stays German -- it processes German note content and a small
- * local model does better with a matching language (CLAUDE.md language
- * convention; `specs/classifier-spec.md`).
+ * Prompts are English (CLAUDE.md language convention). The note content
+ * they process may be any language; the model is only asked for a
+ * structured JSON verdict.
  */
 import { formatDate } from '../timestamp';
 import { ChatMessage, parseJsonObject } from './llm';
 
 // -- Prompt 1: task vs. note (runs on every capture) -------------------------
 
-export type TaskPriority = 'hoch' | 'mittel' | 'niedrig';
+export type TaskPriority = 'high' | 'medium' | 'low';
 
 export interface TaskClassification {
-  typ: 'task' | 'notiz';
+  type: 'task' | 'note';
   /** `YYYY-MM-DD` due date read from the wording, or `null`. */
-  faelligkeit: string | null;
-  prioritaet: TaskPriority | null;
+  due: string | null;
+  priority: TaskPriority | null;
 }
 
-const TASK_SYSTEM = `Du analysierst eine kurze, informell geschriebene Notiz auf Deutsch. Bestimme, ob es eine Aufgabe (etwas, das noch erledigt werden muss) oder eine reine Beobachtung/Notiz ist. Falls Aufgabe: erkenne, wenn möglich, Fälligkeit und Dringlichkeit aus der Formulierung.
+const TASK_SYSTEM = `You classify a short, informally written note. Decide whether it is a task (something still to be done) or a plain observation/note. If it is a task, read a due date and an urgency from the wording where possible.
 
-Heutiges Datum: {current_date}
+Today's date: {current_date}
 
-Antworte AUSSCHLIESSLICH mit diesem JSON-Format, ohne Erklärung:
-{"typ": "task" | "notiz", "faelligkeit": "YYYY-MM-DD" | null, "prioritaet": "hoch" | "mittel" | "niedrig" | null}`;
+Respond ONLY with this JSON, no prose:
+{"type": "task" | "note", "due": "YYYY-MM-DD" | null, "priority": "high" | "medium" | "low" | null}`;
 
 export function buildTaskMessages(text: string, now: Date = new Date()): ChatMessage[] {
   return [
@@ -42,30 +42,25 @@ export function parseTaskClassification(reply: string): TaskClassification | nul
   if (!obj) {
     return null;
   }
-  const typ = obj['typ'] === 'task' ? 'task' : obj['typ'] === 'notiz' ? 'notiz' : null;
-  if (typ === null) {
+  const type = obj['type'] === 'task' ? 'task' : obj['type'] === 'note' ? 'note' : null;
+  if (type === null) {
     return null;
   }
-  const faelligkeit =
-    typeof obj['faelligkeit'] === 'string' && DATE_RE.test(obj['faelligkeit'])
-      ? obj['faelligkeit']
+  const due = typeof obj['due'] === 'string' && DATE_RE.test(obj['due']) ? obj['due'] : null;
+  const priority =
+    obj['priority'] === 'high' || obj['priority'] === 'medium' || obj['priority'] === 'low'
+      ? (obj['priority'] as TaskPriority)
       : null;
-  const prioritaet =
-    obj['prioritaet'] === 'hoch' ||
-    obj['prioritaet'] === 'mittel' ||
-    obj['prioritaet'] === 'niedrig'
-      ? (obj['prioritaet'] as TaskPriority)
-      : null;
-  return { typ, faelligkeit, prioritaet };
+  return { type, due, priority };
 }
 
 // -- Prompt 2: tag suggestion (batch, for entries with no tag) ---------------
 
 export interface TagSuggestion {
-  /** 1-3 tags picked from the registry, lowercased, de-duplicated. */
-  vorschlaege: string[];
-  /** A proposed new tag when nothing fit, else `null`. One word, lowercase, no umlauts. */
-  neuer_tag: string | null;
+  /** 1-3 tags picked from the known list, lowercased, de-duplicated. */
+  suggestions: string[];
+  /** A proposed new tag when nothing fit, else `null`. One word, lowercase. */
+  new_tag: string | null;
 }
 
 /**
@@ -110,7 +105,7 @@ export function parseSuggestedTags(reply: string): string[] {
   return out;
 }
 
-/** Lowercase, strip umlauts/ß, keep one word (`specs/classifier-spec.md`: "keine Umlaute"). */
+/** Lowercase, transliterate umlauts/ß, collapse to one hyphenated word. */
 export function normalizeTagToken(raw: string): string {
   return raw
     .toLowerCase()
@@ -127,9 +122,9 @@ export function parseTagSuggestion(reply: string): TagSuggestion | null {
   if (!obj) {
     return null;
   }
-  const rawList = Array.isArray(obj['vorschlaege']) ? obj['vorschlaege'] : [];
+  const rawList = Array.isArray(obj['suggestions']) ? obj['suggestions'] : [];
   const seen = new Set<string>();
-  const vorschlaege: string[] = [];
+  const suggestions: string[] = [];
   for (const item of rawList) {
     if (typeof item !== 'string') {
       continue;
@@ -137,18 +132,18 @@ export function parseTagSuggestion(reply: string): TagSuggestion | null {
     const token = normalizeTagToken(item);
     if (token && !seen.has(token)) {
       seen.add(token);
-      vorschlaege.push(token);
+      suggestions.push(token);
     }
-    if (vorschlaege.length === 3) {
+    if (suggestions.length === 3) {
       break;
     }
   }
-  const rawNew = obj['neuer_tag'];
-  const neuer_tag =
+  const rawNew = obj['new_tag'];
+  const new_tag =
     typeof rawNew === 'string' && normalizeTagToken(rawNew) ? normalizeTagToken(rawNew) : null;
 
-  if (vorschlaege.length === 0 && neuer_tag === null) {
+  if (suggestions.length === 0 && new_tag === null) {
     return null;
   }
-  return { vorschlaege, neuer_tag };
+  return { suggestions, new_tag };
 }
