@@ -263,22 +263,25 @@ export class EditorService {
   /**
    * Opens (or replaces) an unsaved **draft** tab at `path` holding
    * arbitrary generated content -- e.g. the tag-search results document.
-   * Nothing hits disk until the user saves it; a re-generate reuses the
-   * same tab.
+   * Nothing hits disk until the user saves it. The tab is **dirty from the
+   * start** (`savedContent` empty) so the Save button is live without a
+   * throwaway edit first; `save()` routes it to `saveAs()` (`askOnSave`).
    */
   openScratch(path: string, content: string): void {
     const normalized = content.replace(/\r\n/g, '\n');
+    const patch = {
+      savedContent: '',
+      bufferContent: normalized,
+      existsOnDisk: false,
+      askOnSave: true,
+    };
     if (this.docs().some((d) => d.path === path)) {
-      this.patchDoc(path, {
-        savedContent: normalized,
-        bufferContent: normalized,
-        existsOnDisk: false,
-        askOnSave: true,
-      });
+      this.patchDoc(path, patch);
       this.active.set(path);
       return;
     }
-    this.addDoc(this.makeDoc(path, normalized, 0, false, true));
+    const doc = this.makeDoc(path, normalized, 0, false, true);
+    this.addDoc({ ...doc, savedContent: '' });
   }
 
   /**
