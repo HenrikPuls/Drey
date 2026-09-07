@@ -5,7 +5,7 @@
  * hosts chat Ask mode and the note assistant's summary, which share the
  * same LLM plumbing.
  */
-import { ActionEvent, NOTE_SUMMARY_PROMPT } from '../../shared/app-config';
+import { ActionEvent, NOTE_SUMMARY_PROMPT, SEARCH_SUMMARY_PROMPT } from '../../shared/app-config';
 import {
   ActionContext,
   ActionOutcome,
@@ -112,6 +112,38 @@ export class ActionRunner {
         [
           { role: 'system', content: template?.prompt ?? NOTE_SUMMARY_PROMPT },
           { role: 'user', content: body },
+        ],
+        { signal },
+      ),
+    );
+    const text = reply.trim();
+    if (text === '') {
+      throw new Error('The model returned an empty summary.');
+    }
+    return text;
+  }
+
+  /**
+   * The tag-search "Summarise" button: the matching sections (already
+   * formatted) go in, a prose digest comes out. Uses the editable
+   * `search-summary` built-in template. Cancellable via `taskId`; throws so
+   * the panel can show the reason.
+   */
+  async summariseSearchResults(sectionsText: string, taskId?: string): Promise<string> {
+    if (!this.config.get().llm.enabled) {
+      throw new Error('LLM features are disabled.');
+    }
+    if (sectionsText.trim() === '') {
+      throw new Error('No results to summarise.');
+    }
+    const template = this.config
+      .get()
+      .actions.templates.find((entry) => entry.builtin === 'search-summary');
+    const reply = await this.tasks.run(taskId, (signal) =>
+      this.llm.chat(
+        [
+          { role: 'system', content: template?.prompt ?? SEARCH_SUMMARY_PROMPT },
+          { role: 'user', content: sectionsText },
         ],
         { signal },
       ),

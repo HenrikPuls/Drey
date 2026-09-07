@@ -1,14 +1,18 @@
 import { Injectable, computed, inject, signal } from '@angular/core';
 import { TagSearchHit } from '../../../shared/ipc-api';
+import { LlmTaskService } from '../services/llm-task.service';
 
 /**
- * Query state and results for the sidebar tag-search panel. The component
- * only renders and forwards events (CLAUDE.md: no business logic in
- * components). One or more tags (AND) plus optional free text (AND); the
- * matcher runs in the main process (`tags:search`).
+ * Query state, results and the on-demand LLM digest for the sidebar
+ * tag-search panel. The component only renders and forwards events
+ * (CLAUDE.md: no business logic in components). One or more tags (AND) plus
+ * optional free text (AND); the matcher runs in the main process
+ * (`tags:search`), the digest through `tags:summarise-results`.
  */
 @Injectable({ providedIn: 'root' })
 export class TagSearchService {
+  private readonly llmTasks = inject(LlmTaskService);
+
   readonly queryTags = signal<string[]>([]);
   readonly queryText = signal('');
 
@@ -16,6 +20,11 @@ export class TagSearchService {
   readonly searching = signal(false);
   /** True once a non-empty query has been run -- drives the "no results" line. */
   readonly ran = signal(false);
+
+  readonly summary = signal<string | null>(null);
+  readonly summarising = signal(false);
+  readonly summaryError = signal<string | null>(null);
+  private summaryTaskId: string | null = null;
 
   readonly hasQuery = computed<boolean>(
     () => this.queryTags().length > 0 || this.queryText().trim() !== '',
@@ -31,14 +40,17 @@ export class TagSearchService {
       return;
     }
     this.queryTags.update((list) => [...list, tag]);
+    this.invalidateSummary();
   }
 
   removeTag(tag: string): void {
     this.queryTags.update((list) => list.filter((t) => t !== tag));
+    this.invalidateSummary();
   }
 
   setText(value: string): void {
     this.queryText.set(value);
+    this.invalidateSummary();
   }
 
   clear(): void {
@@ -46,9 +58,11 @@ export class TagSearchService {
     this.queryText.set('');
     this.hits.set([]);
     this.ran.set(false);
+    this.invalidateSummary();
   }
 
   async run(): Promise<void> {
+    this.invalidateSummary();
     if (!this.api || !this.hasQuery()) {
       this.hits.set([]);
       this.ran.set(false);
@@ -65,5 +79,38 @@ export class TagSearchService {
     } finally {
       this.searching.set(false);
     }
+  }
+
+  async summarise(): Promise<void> {
+    if (!this.api || !this.hasQuery() || this.summarising()) {
+      return;
+    }
+    this.summary.set(null);
+    this.summaryError.set(null);
+    this.summarising.set(true);
+    try {
+      const { value } = await this.llmTasks.run('Summarising results', (taskId) => {
+        this.summaryTaskId = taskId;
+        return this.api!.summariseSearchResults(
+          { tags: this.queryTags(), text: this.queryText().trim() },
+          taskId,
+        );
+      });
+      this.summary.set(value);
+    } catch (err) {
+      this.summaryError.set(err instanceof Error ? err.message : String(err));
+    } finally {
+      this.summarising.set(false);
+      this.summaryTaskId = null;
+    }
+  }
+
+  cancelSummary(): void {
+    void this.llmTasks.cancel(this.summaryTaskId ?? undefined);
+  }
+
+  private invalidateSummary(): void {
+    this.summary.set(null);
+    this.summaryError.set(null);
   }
 }

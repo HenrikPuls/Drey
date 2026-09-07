@@ -189,6 +189,11 @@ function registerIpcHandlers(
   ipcMain.handle(IPC_CHANNELS.tagSearch, (_event, query: TagSearchQuery): TagSearchHit[] =>
     tagIndex.search(query),
   );
+  ipcMain.handle(
+    IPC_CHANNELS.tagSummariseResults,
+    (_event, query: TagSearchQuery, taskId?: string): Promise<string> =>
+      actionRunner.summariseSearchResults(formatHitsForSummary(tagIndex.search(query)), taskId),
+  );
 
   ipcMain.handle(IPC_CHANNELS.configGet, (): AppConfig => appConfig.get());
   ipcMain.handle(IPC_CHANNELS.configSet, (_event, next: AppConfig): AppConfig => {
@@ -243,6 +248,24 @@ function registerIpcHandlers(
   ipcMain.handle(IPC_CHANNELS.spellAddDictionary, (): Promise<CustomDictionary | null> =>
     pickDictionary(),
   );
+}
+
+/**
+ * Flattens search hits into the user message for the result summary: one
+ * `## <heading> (<path>)` block per hit followed by its snippet, capped so
+ * a very broad search does not blow the model's context.
+ */
+function formatHitsForSummary(hits: readonly TagSearchHit[]): string {
+  const MAX_HITS = 40;
+  const MAX_CHARS = 8000;
+  const blocks = hits
+    .slice(0, MAX_HITS)
+    .map((hit) => `## ${hit.heading} (${hit.path})\n${hit.snippet}`);
+  let out = blocks.join('\n\n');
+  if (out.length > MAX_CHARS) {
+    out = `${out.slice(0, MAX_CHARS)}\n…`;
+  }
+  return out;
 }
 
 /**

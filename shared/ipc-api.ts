@@ -44,6 +44,7 @@ export const IPC_CHANNELS = {
   noteSave: 'note:save',
   tagList: 'tags:list',
   tagSearch: 'tags:search',
+  tagSummariseResults: 'tags:summarise-results',
   configGet: 'config:get',
   configSet: 'config:set',
   llmListModels: 'llm:list-models',
@@ -440,6 +441,14 @@ export interface DreyApi {
    * snippet. Fast -- no LLM. `[]` when the query is empty or no vault.
    */
   searchTags(query: TagSearchQuery): Promise<TagSearchHit[]>;
+
+  /**
+   * Runs the same search, then asks the local model for a short prose
+   * digest of the matching sections. `taskId` makes it cancellable
+   * (`cancelLlmTask`); no timeout (ADR-0014). Rejects when LLM features are
+   * off, the query is empty, or the model errors.
+   */
+  summariseSearchResults(query: TagSearchQuery, taskId?: string): Promise<string>;
 }
 
 declare global {

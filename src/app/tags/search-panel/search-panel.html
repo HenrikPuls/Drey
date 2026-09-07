@@ -18,7 +18,12 @@
       @for (tag of search.queryTags(); track tag) {
         <span class="chip">
           #{{ tag }}
-          <button type="button" class="x" [attr.aria-label]="'Remove ' + tag" (click)="search.removeTag(tag)">
+          <button
+            type="button"
+            class="x"
+            [attr.aria-label]="'Remove ' + tag"
+            (click)="search.removeTag(tag)"
+          >
             ×
           </button>
         </span>
@@ -64,9 +69,27 @@
     </div>
 
     @if (search.ran()) {
-      <p class="result-count">
-        {{ search.hits().length }} {{ search.hits().length === 1 ? 'section' : 'sections' }}
-      </p>
+      <div class="summary-row">
+        <p class="result-count">
+          {{ search.hits().length }} {{ search.hits().length === 1 ? 'section' : 'sections' }}
+        </p>
+        @if (search.hits().length > 0) {
+          @if (search.summarising()) {
+            <button type="button" class="ghost" (click)="search.cancelSummary()">Cancel</button>
+          } @else {
+            <button type="button" class="ghost" (click)="search.summarise()">Summarise</button>
+          }
+        }
+      </div>
+
+      @if (search.summarising()) {
+        <p class="summary-box muted">Summarising…</p>
+      } @else if (search.summaryError(); as err) {
+        <p class="summary-box error">{{ err }}</p>
+      } @else if (search.summary(); as text) {
+        <p class="summary-box">{{ text }}</p>
+      }
+
       <ul class="results">
         @for (hit of search.hits(); track $index) {
           <li>
