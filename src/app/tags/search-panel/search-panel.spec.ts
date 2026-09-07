@@ -77,4 +77,17 @@ describe('SearchPanel', () => {
     expect(queries).toEqual([]);
     expect(search.ran()).toBe(false);
   });
+
+  it('summarises the current results on demand and clears it when the query changes', async () => {
+    (window.dreyApi as unknown as { summariseSearchResults: unknown }).summariseSearchResults =
+      () => Promise.resolve('Two boats seen, price still open.');
+
+    search.addTag('sailing');
+    await search.run();
+    await search.summarise();
+    expect(search.summary()).toBe('Two boats seen, price still open.');
+
+    search.setText('kiel');
+    expect(search.summary()).toBeNull();
+  });
 });

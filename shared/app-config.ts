@@ -79,7 +79,7 @@ export interface LlmConfig {
 export type ActionResultKind = 'localized' | 'document';
 
 /** The built-in templates that carry behaviour beyond "send prompt, replace document". */
-export type BuiltinAction = 'note-summary';
+export type BuiltinAction = 'note-summary' | 'search-summary';
 
 /** Trigger kinds available now. `'on-save'` fires from the `note:save` pipeline. */
 export type ActionEvent = 'on-save' | 'manual';
@@ -267,6 +267,7 @@ export const BUNDLED_DICTIONARIES: ReadonlyArray<{ id: string; label: string }> 
 /** Stable ids so `normalizeAppConfig` can re-attach a user's edits to the built-ins. */
 export const BUILTIN_TEMPLATE_IDS: Record<BuiltinAction, string> = {
   'note-summary': 'builtin:note-summary',
+  'search-summary': 'builtin:search-summary',
 };
 
 /**
@@ -276,6 +277,13 @@ export const BUILTIN_TEMPLATE_IDS: Record<BuiltinAction, string> = {
  * few sentences is scrolled past rather than read.
  */
 export const NOTE_SUMMARY_PROMPT = `Du fasst eine Notiz für die Seitenleiste zusammen. Schreibe 1 bis 3 Sätze auf Deutsch, ganze Sätze, keine Aufzählung, keine Anrede, keine Überschrift. Nenne nur, worum es in der Notiz geht. Gib ausschließlich den Zusammenfassungstext zurück.`;
+
+/**
+ * The system prompt for the tag-search "Summarise" button: the matching
+ * sections go in as the user message, a short prose digest comes out.
+ * English (the language sweep landed this one already).
+ */
+export const SEARCH_SUMMARY_PROMPT = `You are given the sections of a personal note vault that match a search. Write a short prose digest (3–6 sentences, present tense, no bullet points, no greeting, no heading) of what they collectively say. Note any contradictions or open questions last. Return only the digest text.`;
 
 function noteSummaryTemplate(): ActionTemplate {
   return {
@@ -287,6 +295,16 @@ function noteSummaryTemplate(): ActionTemplate {
     // is the honest value should it ever be run as a plain action.
     resultKind: 'document',
     builtin: 'note-summary',
+  };
+}
+
+function searchSummaryTemplate(): ActionTemplate {
+  return {
+    id: BUILTIN_TEMPLATE_IDS['search-summary'],
+    name: 'Summarise search results',
+    prompt: SEARCH_SUMMARY_PROMPT,
+    resultKind: 'document',
+    builtin: 'search-summary',
   };
 }
 
@@ -311,7 +329,7 @@ export const DEFAULT_APP_CONFIG: AppConfig = {
     fontFamily: DEFAULT_EDITOR_FONT_FAMILY,
   },
   actions: {
-    templates: [noteSummaryTemplate()],
+    templates: [noteSummaryTemplate(), searchSummaryTemplate()],
     triggers: [],
   },
 };
@@ -421,7 +439,7 @@ function normalizeTemplates(raw: unknown): ActionTemplate[] {
   }
 
   const out: ActionTemplate[] = [];
-  for (const base of [noteSummaryTemplate()]) {
+  for (const base of [noteSummaryTemplate(), searchSummaryTemplate()]) {
     const saved = byId.get(base.id);
     byId.delete(base.id);
     out.push(

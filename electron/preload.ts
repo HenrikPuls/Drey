@@ -49,6 +49,8 @@ const dreyApi: DreyApi = {
   listTags: (): Promise<TagEntry[]> => ipcRenderer.invoke(IPC_CHANNELS.tagList),
   searchTags: (query: TagSearchQuery): Promise<TagSearchHit[]> =>
     ipcRenderer.invoke(IPC_CHANNELS.tagSearch, query),
+  summariseSearchResults: (query: TagSearchQuery, taskId?: string): Promise<string> =>
+    ipcRenderer.invoke(IPC_CHANNELS.tagSummariseResults, query, taskId),
   getConfig: (): Promise<AppConfig> => ipcRenderer.invoke(IPC_CHANNELS.configGet),
   setConfig: (config: AppConfig): Promise<AppConfig> =>
     ipcRenderer.invoke(IPC_CHANNELS.configSet, config),

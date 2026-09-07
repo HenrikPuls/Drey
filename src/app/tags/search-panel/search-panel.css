@@ -140,10 +140,39 @@
   cursor: default;
 }
 
+.summary-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: 2px;
+}
+
 .result-count {
-  margin: 2px 0 0;
+  margin: 0;
   font-size: 10.5px;
   color: var(--text-6);
+}
+
+.summary-box {
+  margin: 4px 0 0;
+  padding: 7px 9px;
+  font-size: 11.5px;
+  line-height: 1.5;
+  color: var(--text-3);
+  background: var(--focus-bg);
+  border-left: 2px solid var(--accent-quote);
+  border-radius: var(--radius-xs);
+}
+
+.summary-box.muted {
+  color: var(--text-6);
+  border-left-color: var(--border-strong);
+}
+
+.summary-box.error {
+  color: var(--accent-hover);
+  border-left-color: var(--accent);
 }
 
 .results {
