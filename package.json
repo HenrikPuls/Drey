@@ -14,6 +14,10 @@
     "prebuild": "npm run licenses:generate",
     "build": "npm run build:renderer && npm run build:electron",
     "electron": "node scripts/run-electron.js",
+    "e2e": "npm run build && playwright test",
+    "e2e:run": "playwright test",
+    "e2e:ui": "playwright test --ui",
+    "e2e:report": "playwright show-report",
     "dev": "concurrently -k -n ng,electron \"npm run start\" \"npm run dev:electron\"",
     "dev:electron": "wait-on http://localhost:4200 && npm run build:electron && cross-env DREY_RENDERER_URL=http://localhost:4200 npm run electron",
     "postinstall": "node node_modules/electron/install.js"
@@ -48,6 +52,7 @@
     "@angular/build": "^22.1.7",
     "@angular/cli": "^22.1.7",
     "@angular/compiler-cli": "^22.1.0",
+    "@playwright/test": "^1.63.0",
     "@types/markdown-it": "^14.2.0",
     "@types/node": "^26.4.1",
     "concurrently": "^10.0.5",
