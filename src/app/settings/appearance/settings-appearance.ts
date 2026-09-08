@@ -34,14 +34,14 @@ export class SettingsAppearance {
   );
 
   protected onFontFamilyChange(id: string): void {
-    void this.settings.setEditorFontFamily(id);
+    this.settings.setEditorFontFamily(id);
   }
 
   protected onScaleChange(id: string): void {
-    void this.settings.setAppearanceUiScale(id);
+    this.settings.setAppearanceUiScale(id);
   }
 
   protected onAccentChange(value: string): void {
-    void this.settings.setAppearanceAccent(value);
+    this.settings.setAppearanceAccent(value);
   }
 }

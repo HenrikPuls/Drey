@@ -232,7 +232,10 @@ src/                Angular renderer (standalone components, esbuild via Angular
                             commands even after the menu click stole DOM focus.
       appearance.service.ts  Applies AppearanceConfig (ADR-0020): writes the resolved
                             accent hex onto --accent at :root and pushes the UI-scale
-                            preset through dreyApi.setUiZoomFactor. Instantiated by App.
+                            preset through dreyApi.setUiZoomFactor. Reads
+                            SettingsService's effective getters, which preview the
+                            draft while the Settings screen is open (ADR-0020 later
+                            change) — Discard rolls the look back. Instantiated by App.
       tag.service.ts       tags signal (TagEntry[] = { tag, count }) from tags:list;
                             refreshed on construction and after every save. Source
                             for the editor's #tag autocomplete and the search
