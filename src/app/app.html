@@ -21,29 +21,29 @@
       ></div>
     }
 
-    <main class="main-pane">
-      @if (editor.openDocs().length > 0) {
-        <app-tab-bar />
-        <app-editor />
-      } @else {
-        <div class="empty">
-          <p>Select a file in the Files panel, or click a calendar day to start a note.</p>
-        </div>
-      }
+    <div class="center-col">
+      <main class="main-pane">
+        @if (editor.openDocs().length > 0) {
+          <app-tab-bar />
+          <app-editor />
+        } @else {
+          <div class="empty">
+            <p>Select a file in the Files panel, or click a calendar day to start a note.</p>
+          </div>
+        }
+      </main>
 
-      @if (drawer.open()) {
+      @if (dock.hasBottom()) {
         <div
           class="divider divider-y"
           role="separator"
           aria-orientation="horizontal"
-          aria-label="Resize entry drawer"
-          (pointerdown)="startDrawerDrag($event)"
+          aria-label="Resize bottom dock"
+          (pointerdown)="dock.startDockResize('bottom', $event)"
         ></div>
-        <app-entry-drawer [style.height.px]="layout.drawerHeight()" />
-      } @else {
-        <app-entry-drawer />
+        <app-dock side="bottom" />
       }
-    </main>
+    </div>
 
     @if (dock.hasRight()) {
       <div

@@ -6,6 +6,13 @@
   background: var(--bg-dock);
 }
 
+/* The bottom dock is a horizontal band under the editor: it fills the
+   centre column's width and takes its height from `bottomH`. Panels still
+   stack vertically inside it. */
+:host(.bottom) {
+  width: 100%;
+}
+
 :host(.drop-target) {
   box-shadow: var(--drop-ring);
 }

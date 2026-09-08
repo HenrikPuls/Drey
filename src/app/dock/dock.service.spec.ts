@@ -15,10 +15,35 @@ describe('DockService', () => {
     const dock = make();
     expect(dock.leftIds()).toEqual(['calendar', 'files', 'search', 'windows']);
     expect(dock.rightIds()).toEqual(['assistant']);
+    expect(dock.bottomIds()).toEqual(['entry']);
     expect(dock.collapsed('search')).toBe(true);
     expect(dock.collapsed('calendar')).toBe(false);
+    expect(dock.collapsed('entry')).toBe(true);
     expect(dock.dockWidth('left')).toBe(248);
     expect(dock.dockWidth('right')).toBe(340);
+    expect(dock.dockHeight()).toBe(280);
+  });
+
+  it('moves a panel into the bottom dock and clamps its height', () => {
+    const dock = make();
+    dock.move('calendar', 'bottom', 0);
+    expect(dock.bottomIds()).toEqual(['calendar', 'entry']);
+    expect(dock.leftIds()).toEqual(['files', 'search', 'windows']);
+    dock.setBottomHeight(10);
+    expect(dock.dockHeight()).toBe(140);
+    dock.setBottomHeight(9000);
+    expect(dock.dockHeight()).toBe(680);
+  });
+
+  it('re-places the entry panel into the bottom dock when a stored blob predates it', () => {
+    localStorage.setItem(
+      'drey.dock',
+      JSON.stringify({
+        dock: { left: ['calendar', 'files', 'search', 'windows'], right: ['assistant'] },
+      }),
+    );
+    const dock = make();
+    expect(dock.bottomIds()).toEqual(['entry']);
   });
 
   it('toggles collapse', () => {

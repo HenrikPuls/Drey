@@ -11,12 +11,13 @@ import { EntryDraftService } from '../services/entry-draft.service';
 import { EditorService } from '../services/editor.service';
 import { SpellcheckService } from '../services/spellcheck.service';
 import { AutotagButton } from '../tags';
-import { Icon } from '../icons/icon';
 
 /**
- * The "Add entry" drawer at the bottom of the main area: an optional TOPIC,
- * a row of tag chips, then the Markdown text. It replaced the old bottom
- * chat bar's capture role.
+ * The "Add entry" panel body: an optional TOPIC, a row of tag chips, then
+ * the Markdown text. It replaced the old bottom chat bar's capture role,
+ * and is now a dock panel (default home: the bottom dock) rather than a
+ * fixed strip -- the `PanelFrame` chevron handles show/hide, so this
+ * component no longer draws its own toggle.
  *
  * The text field is the shared `MarkdownSurface` with the inline
  * spellchecker mixed in -- one editor component everywhere (ADR-0009), one
@@ -25,7 +26,7 @@ import { Icon } from '../icons/icon';
 @Component({
   selector: 'app-entry-drawer',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [Icon, MarkdownSurface, AutotagButton],
+  imports: [MarkdownSurface, AutotagButton],
   templateUrl: './entry-drawer.html',
   styleUrl: './entry-drawer.css',
 })
