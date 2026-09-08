@@ -1,10 +1,11 @@
 /* Global styles + design tokens.
 
    The tokens below are the single source of truth for the palette,
-   typography and spacing lifted from the design prototype
-   (`Notizen Desktop.dc.html`). Component stylesheets reference these
-   variables and never hard-code a hex value, so a future accent-colour
-   switch (the prototype offers four) is a one-line change here.
+   typography, spacing and the line grid lifted from the v3 design
+   prototype (`handoff/Drey App v3.dc.html`, spec in `handoff/DESIGN.md`).
+   Component stylesheets reference these variables and never hard-code a
+   hex value, so the accent-colour switch the prototype offers (four
+   options) stays a one-line change here.
 
    Dark theme is applied at the root (not per component) so there's no
    light-mode flash before the app shell paints -- see CLAUDE.md, "UI/UX
@@ -13,62 +14,104 @@
 :root {
   color-scheme: dark;
 
-  /* Surfaces */
-  --bg-sidebar: #191817;
-  --bg-main: #262624;
-  --bg-bar: #1f1e1d;
-  --bg-input: #2c2a28;
+  /* ---- Surfaces (DESIGN.md "Farben") ---- */
+  --bg-dock: #1b1a19; /* app background + both docks */
+  --bg-editor: #211f1e; /* editor / main surface + search-field surfaces */
+  --bg-input: #262423; /* input fields, menu popover */
+  --bg-search: var(--bg-editor);
+  --bg-bar: var(--bg-dock); /* chrome bars sit on the dock colour, divided by --border */
+  /* Back-compat aliases for stylesheets not yet migrated to the new names. */
+  --bg-sidebar: var(--bg-dock);
+  --bg-main: var(--bg-editor);
 
-  /* Text, brightest to dimmest */
-  --text-heading: #f2efe9;
-  --text-primary: #eae7e1;
-  --text-2: #cfcbc4;
-  --text-3: #b9b4ad;
-  --text-4: #9a948c;
-  --text-5: #8b857e;
-  --text-6: #6e6862;
-  --text-7: #5f5a54;
-  --text-faint: #4d4842;
+  /* ---- Text, brightest to dimmest (DESIGN.md ramp) ---- */
+  --text-heading: #f2efe9; /* document titles */
+  --text-primary: #e6e3dd; /* primary text */
+  --text-2: #c3bfb8; /* body copy / menu entries */
+  --text-3: #a8a39c; /* secondary */
+  --text-4: #8b867f; /* label */
+  --text-5: #7b7671; /* label, dimmer */
+  --text-6: #6d6862; /* tertiary / meta / disabled menu items */
+  --text-7: #5c574f; /* meta, dimmest usable */
+  --text-faint: #4f4a45; /* editor line numbers */
+  --gutter: #4f4a45; /* editor line-number gutter */
+  --placeholder: #5f5b56;
+  --calendar-muted: #403c38; /* calendar: days outside the current month */
 
-  /* Accent (terracotta). Prototype alternatives: #7d8f6e #6e83a0 #a08a5e */
+  /* ---- Accent (terracotta by default). `AppearanceService` overrides
+     `--accent` at runtime from Settings -> Appearance; every tint below is
+     `color-mix()`ed off it, so one value re-colours the whole app. Preset
+     alternatives live in `ACCENT_PRESETS` (shared/app-config.ts). ---- */
   --accent: #c96442;
-  --accent-hover: #dd7f5f;
-  --accent-contrast: #1f1e1d;
-  --accent-ring: rgba(201, 100, 66, 0.55);
-  --accent-quote: rgba(201, 100, 66, 0.5);
+  --accent-hover: color-mix(in srgb, var(--accent) 78%, white);
+  --accent-contrast: #1b1a19; /* text/glyph on a filled accent surface */
+  --accent-surface: color-mix(in srgb, var(--accent) 15%, transparent); /* tag chip fill */
+  --accent-text: color-mix(in srgb, var(--accent) 58%, #f2efe9); /* tag chip text */
+  --accent-ring: color-mix(in srgb, var(--accent) 55%, transparent);
+  --accent-edge: color-mix(in srgb, var(--accent) 45%, transparent); /* quote / selected day */
+  --accent-quote: color-mix(in srgb, var(--accent) 45%, transparent);
+  --resize-hover: color-mix(in srgb, var(--accent) 30%, transparent); /* splitter / dock-edge hover */
+  --drop-ring: inset 0 0 0 1px color-mix(in srgb, var(--accent) 45%, transparent); /* drop target */
+  --on-accent: #f4ece8; /* text on a filled accent button */
+  --path-muted: color-mix(in srgb, var(--accent) 42%, var(--text-5)); /* file paths in search hits */
 
-  /* Lines and hover fills */
-  --border: rgba(255, 255, 255, 0.06);
-  --border-strong: rgba(255, 255, 255, 0.08);
+  /* ---- Lines and hover fills ---- */
+  --border: rgba(255, 255, 255, 0.055);
+  --border-strong: rgba(255, 255, 255, 0.07);
+  --field-border: rgba(255, 255, 255, 0.07);
+  --popover-border: rgba(255, 255, 255, 0.09);
   --hover-bg: rgba(255, 255, 255, 0.05);
   --hover-bg-strong: rgba(255, 255, 255, 0.09);
   --hover-bg-loud: rgba(255, 255, 255, 0.1);
-  --active-bg: rgba(255, 255, 255, 0.07);
-  --focus-bg: rgba(255, 255, 255, 0.035);
+  --active-bg: rgba(255, 255, 255, 0.07); /* active row / active file */
+  --focus-bg: rgba(255, 255, 255, 0.03); /* focused editable block */
 
-  /* Radii */
-  --radius-xs: 4px;
-  --radius-sm: 5px;
-  --radius: 6px;
-  --radius-md: 8px;
-  --radius-tab: 7px;
+  /* ---- Radii (DESIGN.md "Maße") ---- */
+  --radius-xs: 4px; /* tags, checkbox */
+  --radius-sm: 5px; /* rows, icon buttons, chips, menu entries */
+  --radius: 6px; /* buttons, fields */
+  --radius-tab: 7px; /* top tabs, large fields */
+  --radius-md: 8px; /* popover, summary card */
+  --radius-lg: 9px; /* assistant composer */
 
-  /* Layout */
-  --sidebar-width: 220px;
+  /* ---- Shadow ---- */
+  --popover-shadow: 0 14px 34px rgba(0, 0, 0, 0.55);
 
-  /* Type families. Newsreader / IBM Plex Mono are self-hosted -- drop the
-     .woff2 files into public/fonts/ and add the @font-face rules (see
-     public/fonts/README.md). Until then these fall back to Georgia /
-     the platform monospace, which is what the prototype specifies too. */
-  --font-sans: system-ui, -apple-system, 'Segoe UI', 'Helvetica Neue', sans-serif;
+  /* ---- Line grid (DESIGN.md principle 2: no in-between sizes) ---- */
+  --row-h: 26px; /* every list row */
+  --bar-h: 34px; /* every chrome / header bar (32-34px; panel headers use 32) */
+  --panel-head-h: 32px;
+  --status-h: 26px; /* status bar */
+  --field-h: 34px; /* text inputs */
+
+  /* ---- Metadata type sizes (all IBM Plex Mono, DESIGN.md "Typografie") ---- */
+  --fs-mono-title: 10px; /* panel titles, uppercase */
+  --fs-mono-meta: 10px; /* status bar, panel status, shortcuts */
+  --fs-mono-tab: 11.5px; /* tabs, file names */
+  --fs-mono-path: 10.5px; /* meta-bar path */
+  --fs-mono-num: 10.5px; /* line numbers */
+  --fs-mono-tag: 10.5px; /* tags */
+  --ls-mono-title: 0.09em;
+
+  /* ---- Layout ---- */
+  --sidebar-width: 220px; /* legacy; the dock system owns its own widths */
+
+  /* ---- Type families ---- */
+  /* IBM Plex Mono is self-hosted -- drop the .woff2 into public/fonts/ and add
+     the @font-face rule (see public/fonts/README.md). Until then it falls back
+     to the platform monospace, which DESIGN.md accepts. */
+  --font-sans: ui-sans-serif, system-ui, -apple-system, 'Segoe UI', 'Helvetica Neue', sans-serif;
   --font-serif: 'Newsreader', Georgia, 'Times New Roman', serif;
-  --font-mono: 'IBM Plex Mono', 'Cascadia Code', 'Consolas', ui-monospace, monospace;
+  --font-mono: 'IBM Plex Mono', ui-monospace, 'Cascadia Code', 'Consolas', monospace;
 
-  /* Editor heading typeface. `editor-theme.ts` keys its heading rules off
-     this; `Editor` overrides it (and `--font-sans`) on its own host per the
+  /* Editor heading typeface. `editor-theme.ts` keys its heading rules off this;
+     `Editor` overrides it (and `--font-sans`) on its own host per the
      Settings -> Appearance choice. The default keeps editor headings on the
-     body sans font -- the old serif look is one of the selectable options. */
+     body sans font. */
   --drey-heading-font: var(--font-sans);
+
+  /* ---- Misc ---- */
+  --spell-error: #c05a5a;
 }
 
 html,
@@ -76,9 +119,15 @@ body {
   margin: 0;
   padding: 0;
   height: 100%;
-  background: var(--bg-sidebar);
+  background: var(--bg-dock);
   color: var(--text-primary);
   font-family: var(--font-sans);
+  /* Base body size. The app-wide "Base font size" preset scales the whole
+     renderer on top of this via `webContents.setZoomFactor`
+     (`AppearanceService`); this value is just the unscaled baseline. */
+  font-size: 14px;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
   overflow: hidden;
 }
 
@@ -86,6 +135,39 @@ body {
   box-sizing: border-box;
 }
 
+input,
+textarea {
+  font-family: inherit;
+}
+
+input::placeholder,
+textarea::placeholder {
+  color: var(--placeholder);
+}
+
 ::selection {
-  background: rgba(201, 100, 66, 0.32);
+  background: color-mix(in srgb, var(--accent) 30%, transparent);
+}
+
+/* Thin, unobtrusive scrollbars everywhere (DESIGN.md "Maße": 9px, 3px
+   transparent inset, transparent track). */
+::-webkit-scrollbar {
+  width: 9px;
+  height: 9px;
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: 5px;
+  border: 3px solid transparent;
+  background-clip: padding-box;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.17);
+  background-clip: padding-box;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
 }

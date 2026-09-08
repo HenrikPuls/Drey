@@ -10,21 +10,19 @@ import { parseDatedEntries } from '../../../shared/entries';
 const at = new Date(2026, 8, 26, 6, 12);
 
 describe('composeEntry', () => {
-  it('writes the documented shape: heading, text, meta line', () => {
+  it('writes the documented shape: heading, text, tag meta line', () => {
     const text = composeEntry(
       {
         topic: 'Rollout-Sync',
         text: 'Kurzes Sync mit Team zu Rollout-Plan, Risiken bei DB-Migration besprochen.',
         tags: ['daily', 'arbeit'],
-        people: ['Markus'],
-        meetings: ['Rollout-Sync'],
       },
       at,
     );
     expect(text).toBe(
       '## 06:12 — Rollout-Sync\n' +
         'Kurzes Sync mit Team zu Rollout-Plan, Risiken bei DB-Migration besprochen.\n' +
-        '#daily #arbeit · [[Markus]] · [[Rollout-Sync]]',
+        '#daily #arbeit',
     );
   });
 
@@ -32,10 +30,8 @@ describe('composeEntry', () => {
     expect(composeEntry({ ...EMPTY_ENTRY_DRAFT, text: 'lklk' }, at)).toBe('## 06:12\nlklk');
   });
 
-  it('normalises leading `#` and `[[ ]]` the user may have typed into a chip', () => {
-    expect(formatEntryMeta({ ...EMPTY_ENTRY_DRAFT, tags: ['#a'], people: ['[[B]]'] })).toBe(
-      '#a · [[B]]',
-    );
+  it('normalises a leading `#` the user may have typed into a chip', () => {
+    expect(formatEntryMeta({ ...EMPTY_ENTRY_DRAFT, tags: ['#a', 'b'] })).toBe('#a #b');
   });
 
   it('round-trips back through the entry parser', () => {

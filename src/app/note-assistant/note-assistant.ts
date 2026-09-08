@@ -67,19 +67,13 @@ export class NoteAssistant {
   /** Card whose "Copy" button just copied, for the brief "Copied" label. */
   protected readonly copiedCard = signal<string | null>(null);
 
-  /** The file name shown under the panel title. */
-  protected noteName(): string {
-    const path = this.assistant.notePath();
-    return path === null ? 'No note open' : (path.split('/').pop() ?? path);
-  }
-
   /** `took 8s` for a finished card, or null when nothing was generated. */
   protected took(durationMs: number | undefined): string | null {
     return this.assistant.took(durationMs);
   }
 
   protected label(role: string): string {
-    return role === 'summary' ? 'AUTOMATIC SUMMARY' : role === 'question' ? 'YOU' : 'ANSWER';
+    return role === 'summary' ? 'SUMMARY' : role === 'question' ? 'YOU' : 'ANSWER';
   }
 
   /**

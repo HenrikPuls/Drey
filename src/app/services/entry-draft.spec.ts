@@ -23,50 +23,41 @@ describe('EntryDraftService', () => {
     localStorage.removeItem('drey.editor');
   });
 
-  it('collects chips, ignoring blanks, duplicates and typed-in markup', () => {
-    drawer.addChip('tags', '  #daily ');
-    drawer.addChip('tags', 'DAILY');
-    drawer.addChip('tags', '   ');
-    drawer.addChip('people', '[[Markus]]');
+  it('collects tag chips, ignoring blanks, duplicates and a leading #', () => {
+    drawer.addChip('  #daily ');
+    drawer.addChip('DAILY');
+    drawer.addChip('   ');
+    drawer.addChip('arbeit');
 
-    expect(drawer.tags()).toEqual(['daily']);
-    expect(drawer.people()).toEqual(['Markus']);
+    expect(drawer.tags()).toEqual(['daily', 'arbeit']);
   });
 
   it('previews exactly what will be appended', () => {
     drawer.setTopic('Rollout-Sync');
     drawer.setText('Kurzes Sync');
-    drawer.addChip('tags', 'daily');
-    drawer.addChip('people', 'Markus');
+    drawer.addChip('daily');
 
-    expect(drawer.preview()).toMatch(
-      /^## \d{2}:\d{2} — Rollout-Sync\nKurzes Sync\n#daily · \[\[Markus\]\]$/,
-    );
+    expect(drawer.preview()).toMatch(/^## \d{2}:\d{2} — Rollout-Sync\nKurzes Sync\n#daily$/);
   });
 
-  it('asks before appending when THEMA is empty, and appends on confirmation', async () => {
+  it('appends with no topic, no prompt', async () => {
     drawer.setText('lklk');
 
-    expect(await drawer.submit()).toBe('needs-topic-confirmation');
-    expect(drawer.confirmingNoTopic()).toBe(true);
-    expect(editor.newEntryRequest().draft).toBeUndefined();
-
-    expect(await drawer.submit(true)).toBe('appended');
-    expect(editor.newEntryRequest().draft).toMatchObject({ text: 'lklk' });
+    expect(await drawer.submit()).toBe('appended');
+    expect(editor.newEntryRequest().draft).toMatchObject({ text: 'lklk', topic: '' });
   });
 
-  it('appends without asking once THEMA is set', async () => {
+  it('appends with a topic set', async () => {
     drawer.setTopic('Rollout-Sync');
     drawer.setText('lklk');
 
     expect(await drawer.submit()).toBe('appended');
-    expect(drawer.confirmingNoTopic()).toBe(false);
     expect(editor.newEntryRequest().draft).toMatchObject({ topic: 'Rollout-Sync' });
   });
 
   it('clears the draft after appending', async () => {
     drawer.setTopic('T');
-    drawer.addChip('tags', 'daily');
+    drawer.addChip('daily');
     await drawer.submit();
 
     expect(drawer.topic()).toBe('');
@@ -76,15 +67,58 @@ describe('EntryDraftService', () => {
 
   it('does nothing at all for an empty draft', async () => {
     expect(await drawer.submit()).toBe('empty');
-    expect(drawer.confirmingNoTopic()).toBe(false);
   });
 
-  it('drops the topic prompt as soon as a topic is typed', async () => {
-    drawer.setText('x');
-    await drawer.submit();
-    expect(drawer.confirmingNoTopic()).toBe(true);
+  it('lifts #tags typed in the text into chips', () => {
+    drawer.setText('Kurzes Sync mit #projektx und #daily');
 
-    drawer.setTopic('Rollout');
-    expect(drawer.confirmingNoTopic()).toBe(false);
+    expect(drawer.tags()).toEqual(['projektx', 'daily']);
+  });
+
+  it('drops an auto-added chip once its #tag leaves the text', () => {
+    drawer.setText('note #projektx');
+    expect(drawer.tags()).toEqual(['projektx']);
+
+    drawer.setText('note');
+    expect(drawer.tags()).toEqual([]);
+  });
+
+  it('converges while a #tag is being typed, leaving no partial chips', () => {
+    drawer.setText('note #pr');
+    drawer.setText('note #pro');
+    drawer.setText('note #proj');
+
+    expect(drawer.tags()).toEqual(['proj']);
+  });
+
+  it('keeps a hand-added chip even when it is not in the text', () => {
+    drawer.addChip('wichtig');
+    drawer.setText('Text ganz ohne dieses Tag');
+
+    expect(drawer.tags()).toEqual(['wichtig']);
+  });
+
+  it('keeps a hand-added chip after its #tag is deleted from the text', () => {
+    drawer.addChip('daily');
+    drawer.setText('heute #daily');
+    drawer.setText('heute');
+
+    expect(drawer.tags()).toEqual(['daily']);
+  });
+
+  it('does not duplicate a hand-added chip that the text later mentions', () => {
+    drawer.addChip('Daily');
+    drawer.setText('heute #daily');
+
+    expect(drawer.tags()).toEqual(['Daily']);
+  });
+
+  it('removeChip also strips the matching #tag from the text', () => {
+    drawer.setText('note #foo bar');
+
+    drawer.removeChip('foo');
+
+    expect(drawer.tags()).toEqual([]);
+    expect(drawer.text()).not.toContain('#foo');
   });
 });

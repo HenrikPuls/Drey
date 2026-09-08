@@ -79,7 +79,7 @@ export interface LlmConfig {
 export type ActionResultKind = 'localized' | 'document';
 
 /** The built-in templates that carry behaviour beyond "send prompt, replace document". */
-export type BuiltinAction = 'autotagging' | 'summary' | 'note-summary';
+export type BuiltinAction = 'note-summary' | 'search-summary' | 'autotag';
 
 /** Trigger kinds available now. `'on-save'` fires from the `note:save` pipeline. */
 export type ActionEvent = 'on-save' | 'manual';
@@ -88,25 +88,18 @@ export type ActionEvent = 'on-save' | 'manual';
  * One entry in the template library (the "Actions" category, CRUD). A
  * user-created template is a name + prompt + result kind: its prompt is
  * sent to the model with the document as context and the reply replaces
- * the document. The two `builtin` templates additionally route through
- * dedicated code -- autotagging through the classifier
- * (`specs/classifier-spec.md`, Prompt 2), summary through the
- * master-document `## Summary` rebuild -- but their `prompt` text is still
- * the real prompt those paths use, so editing it here changes behaviour
- * and nothing is duplicated.
+ * the document. The `note-summary` built-in additionally routes through
+ * dedicated code (the assistant panel's summary card) -- but its `prompt`
+ * text is still the real prompt that path uses, so editing it here changes
+ * behaviour and nothing is duplicated.
  */
 export interface ActionTemplate {
   id: string;
   name: string;
-  /**
-   * Prompt text sent to the model. German on purpose for the built-ins --
-   * they process German note content (CLAUDE.md language convention,
-   * `specs/classifier-spec.md`). The autotagging prompt contains a
-   * `{registry_list}` placeholder filled with the tag registry at call time.
-   */
+  /** Prompt text sent to the model. */
   prompt: string;
   resultKind: ActionResultKind;
-  /** `'autotagging'` / `'summary'` for the built-ins (editable, not deletable); `null` otherwise. */
+  /** `'note-summary'` for the built-in (editable, not deletable); `null` otherwise. */
   builtin: BuiltinAction | null;
 }
 
@@ -237,8 +230,7 @@ export function normalizeEditorFontFamily(value: unknown): string {
 
 /** The `--font-sans` / `--drey-heading-font` values for a font-family id. */
 export function editorFontFamilyStacks(id: string): { body: string; heading: string } {
-  const option =
-    EDITOR_FONT_FAMILIES.find((entry) => entry.id === id) ?? EDITOR_FONT_FAMILIES[0];
+  const option = EDITOR_FONT_FAMILIES.find((entry) => entry.id === id) ?? EDITOR_FONT_FAMILIES[0];
   return { body: option.body, heading: option.heading };
 }
 
@@ -253,6 +245,101 @@ export function clampEditorFontScale(value: unknown): number {
   return Math.round(clamped * 20) / 20;
 }
 
+/**
+ * App-wide look (Settings -> Appearance), distinct from the editor-only
+ * `EditorConfig` knobs:
+ *
+ * - `uiScale` scales the *whole* renderer -- titlebar, docks, tabs, status
+ *   bar, editor -- by driving `webContents.setZoomFactor` (the same
+ *   mechanism as a browser's Ctrl +/-, so pointer coordinates and layout
+ *   stay consistent). A preset, not a free number: four steps are enough and
+ *   a slider invites fiddling.
+ * - `accent` is the highlight colour. Either a preset id from
+ *   `ACCENT_PRESETS`, or a `#rrggbb` hex for a custom pick. `AppearanceService`
+ *   writes the resolved hex onto `--accent` at the document root; the
+ *   `--accent-*` tint tokens in `styles.css` are `color-mix()`ed off it, so
+ *   one value re-colours everything.
+ */
+export interface AppearanceConfig {
+  uiScale: UiScale;
+  accent: string;
+}
+
+export type UiScale = 'small' | 'default' | 'large' | 'xlarge';
+
+/** `webContents.setZoomFactor` value for each `uiScale` step. */
+export const UI_SCALE_FACTORS: Record<UiScale, number> = {
+  small: 0.9,
+  default: 1,
+  large: 1.15,
+  xlarge: 1.3,
+};
+
+export const UI_SCALE_LABELS: Record<UiScale, string> = {
+  small: 'Small',
+  default: 'Default',
+  large: 'Large',
+  xlarge: 'X-Large',
+};
+
+export interface AccentPreset {
+  id: string;
+  label: string;
+  hex: string;
+}
+
+/** The curated highlight colours (the first is the default terracotta). */
+export const ACCENT_PRESETS: readonly AccentPreset[] = [
+  { id: 'terracotta', label: 'Terracotta', hex: '#c96442' },
+  { id: 'sage', label: 'Sage', hex: '#7d8f6e' },
+  { id: 'slate', label: 'Slate blue', hex: '#6e83a0' },
+  { id: 'violet', label: 'Violet', hex: '#8b7fa8' },
+  { id: 'amber', label: 'Amber', hex: '#c98a3c' },
+  { id: 'teal', label: 'Teal', hex: '#4f9a90' },
+];
+
+export const DEFAULT_APPEARANCE: AppearanceConfig = {
+  uiScale: 'default',
+  accent: ACCENT_PRESETS[0].id,
+};
+
+const HEX_RE = /^#[0-9a-fA-F]{6}$/;
+
+/** A stored scale step, or `'default'` when it names no known step. */
+export function normalizeUiScale(value: unknown): UiScale {
+  return value === 'small' || value === 'large' || value === 'xlarge' || value === 'default'
+    ? value
+    : DEFAULT_APPEARANCE.uiScale;
+}
+
+/** A known preset id or a `#rrggbb` hex; anything else falls back to the default. */
+export function normalizeAccent(value: unknown): string {
+  if (typeof value !== 'string') {
+    return DEFAULT_APPEARANCE.accent;
+  }
+  if (ACCENT_PRESETS.some((preset) => preset.id === value)) {
+    return value;
+  }
+  return HEX_RE.test(value) ? value.toLowerCase() : DEFAULT_APPEARANCE.accent;
+}
+
+/** The concrete `#rrggbb` for an `accent` value (preset id -> its hex; hex -> itself). */
+export function resolveAccentHex(accent: string): string {
+  const preset = ACCENT_PRESETS.find((entry) => entry.id === accent);
+  if (preset) {
+    return preset.hex;
+  }
+  return HEX_RE.test(accent) ? accent.toLowerCase() : ACCENT_PRESETS[0].hex;
+}
+
+function normalizeAppearance(raw: unknown): AppearanceConfig {
+  const source = (raw ?? {}) as Record<string, unknown>;
+  return {
+    uiScale: normalizeUiScale(source['uiScale']),
+    accent: normalizeAccent(source['accent']),
+  };
+}
+
 export interface AppConfig {
   /** Bumped only on a breaking shape change; `normalizeAppConfig` migrates. */
   version: 1;
@@ -260,6 +347,7 @@ export interface AppConfig {
   assistant: AssistantConfig;
   spellcheck: SpellcheckConfig;
   editor: EditorConfig;
+  appearance: AppearanceConfig;
   actions: {
     templates: ActionTemplate[];
     triggers: ActionTrigger[];
@@ -274,33 +362,10 @@ export const BUNDLED_DICTIONARIES: ReadonlyArray<{ id: string; label: string }> 
 
 /** Stable ids so `normalizeAppConfig` can re-attach a user's edits to the built-ins. */
 export const BUILTIN_TEMPLATE_IDS: Record<BuiltinAction, string> = {
-  autotagging: 'builtin:autotagging',
-  summary: 'builtin:summary',
   'note-summary': 'builtin:note-summary',
+  'search-summary': 'builtin:search-summary',
+  autotag: 'builtin:autotag',
 };
-
-/**
- * The system prompt for batch tag suggestion. This is the runtime copy of
- * `specs/classifier-spec.md` Prompt 2 -- `shared/classifier.ts` consumes
- * it, so the Actions system and the classifier share one prompt string
- * (CLAUDE.md working style: no second tagging prompt). `{registry_list}`
- * is substituted with the tag registry before the call.
- */
-export const AUTOTAGGING_PROMPT = `Du bekommst eine Notiz ohne Tag sowie eine Liste bereits existierender Tags mit Kurzbeschreibung. Schlage 1 bis 3 passende Tags aus der Liste vor. Falls kein bestehender Tag gut passt, schlage einen NEUEN Tag vor (ein Wort, kleingeschrieben, keine Umlaute).
-
-Existierende Tags:
-{registry_list}
-
-Antworte AUSSCHLIESSLICH mit diesem JSON-Format:
-{"vorschlaege": ["tag1", "tag2"], "neuer_tag": "vorschlag" | null}`;
-
-/**
- * The system prompt for the master-document summary rebuild (roadmap
- * "Summary in the master document"). Recency weighting / `#important`
- * handling is done in code (`shared/actions.ts`); the model only prose-
- * summarises the entries it is handed.
- */
-export const SUMMARY_PROMPT = `Du fasst die bisherige Historie eines Themen-Dokuments zu einem kompakten Überblick zusammen. Schreibe 3 bis 6 Sätze in ganzen Sätzen auf Deutsch, present tense, keine Aufzählung, keine Anrede. Nenne offene Punkte zuletzt. Gib nur den Zusammenfassungstext zurück, ohne Überschrift.`;
 
 /**
  * The system prompt behind the note assistant's automatic summary (the
@@ -308,30 +373,14 @@ export const SUMMARY_PROMPT = `Du fasst die bisherige Historie eines Themen-Doku
  * on purpose: the card sits in a 340px panel, so anything longer than a
  * few sentences is scrolled past rather than read.
  */
-export const NOTE_SUMMARY_PROMPT = `Du fasst eine Notiz für die Seitenleiste zusammen. Schreibe 1 bis 3 Sätze auf Deutsch, ganze Sätze, keine Aufzählung, keine Anrede, keine Überschrift. Nenne nur, worum es in der Notiz geht. Gib ausschließlich den Zusammenfassungstext zurück.`;
+export const NOTE_SUMMARY_PROMPT = `Summarise a note for the sidebar. Write 1 to 3 full sentences, no bullet points, no greeting, no heading. Say only what the note is about. Return the summary text and nothing else.`;
 
-function autotaggingTemplate(): ActionTemplate {
-  return {
-    id: BUILTIN_TEMPLATE_IDS.autotagging,
-    name: 'Autotagging',
-    prompt: AUTOTAGGING_PROMPT,
-    // Frontmatter `tags:` merge -- a few lines, an inline diff reads well.
-    resultKind: 'localized',
-    builtin: 'autotagging',
-  };
-}
-
-function summaryTemplate(): ActionTemplate {
-  return {
-    id: BUILTIN_TEMPLATE_IDS.summary,
-    name: 'Update summary',
-    prompt: SUMMARY_PROMPT,
-    // Regenerated prose replacing the old `## Summary` -- side-by-side; a
-    // line diff of two different paragraphs is noise (ADR-0011).
-    resultKind: 'document',
-    builtin: 'summary',
-  };
-}
+/**
+ * The system prompt for the tag-search "Summarise" button: the matching
+ * sections go in as the user message, a short prose digest comes out.
+ * English (the language sweep landed this one already).
+ */
+export const SEARCH_SUMMARY_PROMPT = `You are given the sections of a personal note vault that match a search. Write a short prose digest (3–6 sentences, present tense, no bullet points, no greeting, no heading) of what they collectively say. Note any contradictions or open questions last. Return only the digest text.`;
 
 function noteSummaryTemplate(): ActionTemplate {
   return {
@@ -343,6 +392,39 @@ function noteSummaryTemplate(): ActionTemplate {
     // is the honest value should it ever be run as a plain action.
     resultKind: 'document',
     builtin: 'note-summary',
+  };
+}
+
+function searchSummaryTemplate(): ActionTemplate {
+  return {
+    id: BUILTIN_TEMPLATE_IDS['search-summary'],
+    name: 'Summarise search results',
+    prompt: SEARCH_SUMMARY_PROMPT,
+    resultKind: 'document',
+    builtin: 'search-summary',
+  };
+}
+
+/**
+ * The system prompt behind the drawer's "Autotag" button. `{tags}` is
+ * swapped for the vocabulary list (one tag per line) at call time. The
+ * reply only pre-fills the drawer's tag field -- the user still confirms
+ * by saving.
+ */
+export const AUTOTAG_PROMPT = `You are given a short note and the tags already used in this vault. Suggest 1 to 4 tags for the note: reuse tags from the list where they fit, and otherwise propose new tags (one word, lowercase, no spaces).
+
+Existing tags:
+{tags}
+
+Respond ONLY with JSON, no prose: {"tags": ["tag1", "tag2"]}`;
+
+function autotagTemplate(): ActionTemplate {
+  return {
+    id: BUILTIN_TEMPLATE_IDS.autotag,
+    name: 'Autotag',
+    prompt: AUTOTAG_PROMPT,
+    resultKind: 'localized',
+    builtin: 'autotag',
   };
 }
 
@@ -366,24 +448,10 @@ export const DEFAULT_APP_CONFIG: AppConfig = {
     fontScale: 1,
     fontFamily: DEFAULT_EDITOR_FONT_FAMILY,
   },
+  appearance: { ...DEFAULT_APPEARANCE },
   actions: {
-    templates: [autotaggingTemplate(), summaryTemplate(), noteSummaryTemplate()],
-    triggers: [
-      {
-        id: 'builtin:autotagging:manual',
-        templateId: BUILTIN_TEMPLATE_IDS.autotagging,
-        event: 'manual',
-        confirm: true,
-        enabled: true,
-      },
-      {
-        id: 'builtin:summary:manual',
-        templateId: BUILTIN_TEMPLATE_IDS.summary,
-        event: 'manual',
-        confirm: true,
-        enabled: true,
-      },
-    ],
+    templates: [noteSummaryTemplate(), searchSummaryTemplate(), autotagTemplate()],
+    triggers: [],
   },
 };
 
@@ -492,7 +560,7 @@ function normalizeTemplates(raw: unknown): ActionTemplate[] {
   }
 
   const out: ActionTemplate[] = [];
-  for (const base of [autotaggingTemplate(), summaryTemplate(), noteSummaryTemplate()]) {
+  for (const base of [noteSummaryTemplate(), searchSummaryTemplate(), autotagTemplate()]) {
     const saved = byId.get(base.id);
     byId.delete(base.id);
     out.push(
@@ -568,6 +636,7 @@ export function normalizeAppConfig(raw: unknown): AppConfig {
     assistant: normalizeAssistant(source['assistant']),
     spellcheck: normalizeSpellcheck(source['spellcheck']),
     editor: normalizeEditor(source['editor']),
+    appearance: normalizeAppearance(source['appearance']),
     actions: {
       templates,
       triggers: normalizeTriggers(actionsSource['triggers'], templates),

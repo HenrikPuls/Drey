@@ -1,5 +1,6 @@
 import { ChangeDetectionStrategy, Component, computed, inject } from '@angular/core';
 import { SettingsService } from '../../services/settings.service';
+import { SettingsPane } from '../settings-pane/settings-pane';
 
 /**
  * "Assistant" settings category. One switch today: the default state of the
@@ -15,8 +16,9 @@ import { SettingsService } from '../../services/settings.service';
 @Component({
   selector: 'app-settings-assistant',
   changeDetection: ChangeDetectionStrategy.OnPush,
+  imports: [SettingsPane],
   templateUrl: './settings-assistant.html',
-  styleUrl: './settings-assistant.css',
+  styleUrls: ['../settings-forms.css', './settings-assistant.css'],
 })
 export class SettingsAssistant {
   protected readonly settings = inject(SettingsService);

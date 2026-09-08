@@ -7,6 +7,7 @@ import {
   ChatThread,
   CustomDictionary,
   DreyApi,
+  EditCommand,
   IPC_CHANNELS,
   LlmConnectionTest,
   LlmDebugEntry,
@@ -16,7 +17,8 @@ import {
   SpellCheckResult,
   SpellLanguage,
   TagEntry,
-  TagRegistryEntry,
+  TagSearchHit,
+  TagSearchQuery,
   VaultFileContent,
   VaultFileEntry,
 } from '../shared/ipc-api';
@@ -28,6 +30,20 @@ import {
  */
 const dreyApi: DreyApi = {
   getAppInfo: () => ipcRenderer.invoke(IPC_CHANNELS.getAppInfo),
+  minimizeWindow: (): Promise<void> => ipcRenderer.invoke(IPC_CHANNELS.windowMinimize),
+  toggleMaximizeWindow: (): Promise<void> => ipcRenderer.invoke(IPC_CHANNELS.windowToggleMaximize),
+  closeWindow: (): Promise<void> => ipcRenderer.invoke(IPC_CHANNELS.windowClose),
+  isWindowMaximized: (): Promise<boolean> => ipcRenderer.invoke(IPC_CHANNELS.windowIsMaximized),
+  onWindowMaximizeChange: (listener: (maximized: boolean) => void): (() => void) => {
+    // Forward only the payload, never the IpcRendererEvent (ADR-0001).
+    const wrapped = (_event: IpcRendererEvent, maximized: boolean): void => listener(maximized);
+    ipcRenderer.on(IPC_CHANNELS.windowMaximizeChanged, wrapped);
+    return () => ipcRenderer.removeListener(IPC_CHANNELS.windowMaximizeChanged, wrapped);
+  },
+  execEditCommand: (command: EditCommand): Promise<void> =>
+    ipcRenderer.invoke(IPC_CHANNELS.editExec, command),
+  setUiZoomFactor: (factor: number): Promise<void> =>
+    ipcRenderer.invoke(IPC_CHANNELS.uiSetZoom, factor),
   getActiveVault: () => ipcRenderer.invoke(IPC_CHANNELS.vaultGetActive),
   selectVault: () => ipcRenderer.invoke(IPC_CHANNELS.vaultSelect),
   listVaultFiles: (): Promise<VaultFileEntry[]> => ipcRenderer.invoke(IPC_CHANNELS.vaultListFiles),
@@ -39,12 +55,21 @@ const dreyApi: DreyApi = {
     ipcRenderer.invoke(IPC_CHANNELS.vaultCreateFile, relativePath),
   createVaultDirectory: (relativePath: string): Promise<string> =>
     ipcRenderer.invoke(IPC_CHANNELS.vaultCreateDirectory, relativePath),
+  deleteVaultEntry: (relativePath: string): Promise<void> =>
+    ipcRenderer.invoke(IPC_CHANNELS.vaultDelete, relativePath),
+  pickSavePath: (suggestedName: string): Promise<string | null> =>
+    ipcRenderer.invoke(IPC_CHANNELS.vaultPickSavePath, suggestedName),
   buildDailyNoteContent: (date: string): Promise<string> =>
     ipcRenderer.invoke(IPC_CHANNELS.dailyBuildContent, date),
   saveNote: (request: NoteSaveRequest): Promise<NoteSaveResult> =>
     ipcRenderer.invoke(IPC_CHANNELS.noteSave, request),
   listTags: (): Promise<TagEntry[]> => ipcRenderer.invoke(IPC_CHANNELS.tagList),
-  getTagRegistry: (): Promise<TagRegistryEntry[]> => ipcRenderer.invoke(IPC_CHANNELS.tagRegistry),
+  searchTags: (query: TagSearchQuery): Promise<TagSearchHit[]> =>
+    ipcRenderer.invoke(IPC_CHANNELS.tagSearch, query),
+  summariseSearchResults: (query: TagSearchQuery, taskId?: string): Promise<string> =>
+    ipcRenderer.invoke(IPC_CHANNELS.tagSummariseResults, query, taskId),
+  suggestTags: (entryText: string, taskId?: string): Promise<string[]> =>
+    ipcRenderer.invoke(IPC_CHANNELS.tagSuggest, entryText, taskId),
   getConfig: (): Promise<AppConfig> => ipcRenderer.invoke(IPC_CHANNELS.configGet),
   setConfig: (config: AppConfig): Promise<AppConfig> =>
     ipcRenderer.invoke(IPC_CHANNELS.configSet, config),
@@ -61,11 +86,7 @@ const dreyApi: DreyApi = {
     ipcRenderer.on(IPC_CHANNELS.llmDebugEntry, wrapped);
     return () => ipcRenderer.removeListener(IPC_CHANNELS.llmDebugEntry, wrapped);
   },
-  runAction: (
-    triggerId: string,
-    context: ActionContext,
-    taskId?: string,
-  ): Promise<ActionOutcome> =>
+  runAction: (triggerId: string, context: ActionContext, taskId?: string): Promise<ActionOutcome> =>
     ipcRenderer.invoke(IPC_CHANNELS.actionRun, triggerId, context, taskId),
   askChat: (context: ActionContext, question: string, taskId?: string): Promise<AskOutcome> =>
     ipcRenderer.invoke(IPC_CHANNELS.chatAsk, context, question, taskId),

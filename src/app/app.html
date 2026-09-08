@@ -1,36 +1,36 @@
 <div class="shell">
   @if (!ipcAvailable) {
     <div class="ipc-warning">
-      Not running inside Electron (no <code>window.dreyApi</code>) &mdash; expected when
-      opening this page directly in a browser via plain <code>ng serve</code>. Vault selection and
-      file access need the Electron main process.
+      Not running inside Electron (no <code>window.dreyApi</code>) &mdash; expected when opening
+      this page directly in a browser via plain <code>ng serve</code>. Vault selection and file
+      access need the Electron main process.
     </div>
   }
 
+  <app-titlebar />
+
   <div class="layout">
-    <aside class="sidebar-pane" [style.width.px]="layout.sidebarWidth()">
-      <app-sidebar />
-    </aside>
-    <div
-      class="divider divider-x"
-      role="separator"
-      aria-orientation="vertical"
-      aria-label="Resize sidebar"
-      (pointerdown)="startSidebarDrag($event)"
-    ></div>
+    @if (dock.hasLeft()) {
+      <app-dock side="left" />
+      <div
+        class="divider divider-x"
+        role="separator"
+        aria-orientation="vertical"
+        aria-label="Resize left dock"
+        (pointerdown)="dock.startDockResize('left', $event)"
+      ></div>
+    }
+
     <main class="main-pane">
       @if (editor.openDocs().length > 0) {
         <app-tab-bar />
         <app-editor />
       } @else {
         <div class="empty">
-          <p>Select a file in the sidebar, or click a calendar day to start a note.</p>
+          <p>Select a file in the Files panel, or click a calendar day to start a note.</p>
         </div>
       }
 
-      <!-- Feature B: capture lives here now; the old chat bar is gone. The
-           divider only exists while the drawer is open -- there is nothing
-           to resize when it is a single collapsed strip. -->
       @if (drawer.open()) {
         <div
           class="divider divider-y"
@@ -45,19 +45,19 @@
       }
     </main>
 
-    @if (assistant.panelVisible()) {
+    @if (dock.hasRight()) {
       <div
         class="divider divider-x"
         role="separator"
         aria-orientation="vertical"
-        aria-label="Resize assistant panel"
-        (pointerdown)="startAssistantDrag($event)"
+        aria-label="Resize right dock"
+        (pointerdown)="dock.startDockResize('right', $event)"
       ></div>
-      <aside class="assistant-pane" [style.width.px]="layout.assistantWidth()">
-        <app-note-assistant />
-      </aside>
+      <app-dock side="right" />
     }
   </div>
+
+  <app-status-bar />
 
   @if (settings.screenOpen()) {
     <app-settings />

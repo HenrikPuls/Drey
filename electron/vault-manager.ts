@@ -2,6 +2,7 @@ import { app, dialog } from 'electron';
 import * as fs from 'node:fs';
 import * as fsp from 'node:fs/promises';
 import * as path from 'node:path';
+import { sidecarPathFor } from '../shared/chat-thread';
 import { VaultFileContent, VaultFileEntry } from '../shared/ipc-api';
 
 interface VaultConfig {
@@ -69,6 +70,38 @@ export class VaultManager {
     this.activeVaultPath = result.filePaths[0];
     writeConfig({ activeVaultPath: this.activeVaultPath });
     return this.activeVaultPath;
+  }
+
+  /**
+   * Native "Save note" dialog rooted at the vault. Returns the chosen
+   * location as a forward-slash vault-relative path (with a `.md`
+   * extension forced), or `null` on cancel. Refuses a location outside the
+   * active vault -- the whole app is vault-relative, a note saved elsewhere
+   * could never be reopened from the file tree or indexed.
+   */
+  async pickSavePath(suggestedName: string): Promise<string | null> {
+    if (!this.activeVaultPath) {
+      throw new Error('No vault is active.');
+    }
+    const root = path.resolve(this.activeVaultPath);
+    const name = suggestedName.trim() || 'untitled.md';
+    const result = await dialog.showSaveDialog({
+      title: 'Save note',
+      defaultPath: path.join(root, name),
+      filters: [{ name: 'Markdown', extensions: ['md'] }],
+      properties: ['createDirectory', 'showOverwriteConfirmation'],
+    });
+    if (result.canceled || !result.filePath) {
+      return null;
+    }
+    let chosen = path.resolve(result.filePath);
+    if (!chosen.toLowerCase().endsWith('.md')) {
+      chosen += '.md';
+    }
+    if (chosen !== root && !chosen.startsWith(root + path.sep)) {
+      throw new Error('The file must be saved inside the current vault.');
+    }
+    return path.relative(root, chosen).split(path.sep).join('/');
   }
 
   async listFiles(): Promise<VaultFileEntry[]> {
@@ -144,6 +177,25 @@ export class VaultManager {
     }
     await fsp.mkdir(dirPath, { recursive: true });
     return this.toRelative(dirPath);
+  }
+
+  /**
+   * Deletes a file or folder (recursively). `resolveInVault` is the path
+   * guard; the vault root itself is refused. A `.md` note's assistant
+   * sidecar (`.{name}.chat.json`) goes with it. `fsp.rm` with `force`
+   * treats a missing target as success -- the tree the renderer showed can
+   * be a step stale.
+   */
+  async deleteEntry(relativePath: string): Promise<void> {
+    const target = this.resolveInVault(relativePath);
+    if (!this.activeVaultPath || target === path.resolve(this.activeVaultPath)) {
+      throw new Error('Refusing to delete the vault root.');
+    }
+    await fsp.rm(target, { recursive: true, force: true });
+    if (relativePath.toLowerCase().endsWith('.md')) {
+      const sidecar = this.resolveInVault(sidecarPathFor(relativePath));
+      await fsp.rm(sidecar, { force: true }).catch(() => undefined);
+    }
   }
 
   /**

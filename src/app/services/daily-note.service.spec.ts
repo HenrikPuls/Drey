@@ -37,11 +37,11 @@ describe('DailyNoteService', () => {
     expect(listeners.length).toBe(1);
 
     const before = editor.newEntryRequest().id;
-    listeners[0]('daily/2026-09-05.md');
+    listeners[0]('daily/2026/09/2026-09-05.md');
     await Promise.resolve();
     await Promise.resolve();
 
-    expect(editor.openPath()).toBe('daily/2026-09-05.md');
+    expect(editor.openPath()).toBe('daily/2026/09/2026-09-05.md');
     expect(editor.newEntryRequest().id).toBe(before + 1);
   });
 

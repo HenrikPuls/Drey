@@ -1,5 +1,8 @@
-@if (config(); as spell) {
-  <div class="pane">
+<app-settings-pane
+  title="Spelling"
+  description="Inline spellcheck for the entry editor: the master switch, the active language, and any dictionaries you add."
+>
+  @if (config(); as spell) {
     <label class="switch-row">
       <input
         type="checkbox"
@@ -63,5 +66,5 @@
         </p>
       </div>
     </fieldset>
-  </div>
-}
+  }
+</app-settings-pane>

@@ -7,23 +7,20 @@
   flex-direction: column;
   flex: 0 0 auto;
   min-height: 0;
-  background: var(--bg-bar);
+  background: var(--bg-editor);
   border-top: 1px solid var(--border);
 }
 
 .drawer-toggle {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 7px;
   width: 100%;
-  padding: 9px 16px;
+  height: 32px;
+  padding: 0 14px;
   background: transparent;
   border: none;
-  color: var(--text-5);
-  font-family: var(--font-mono);
-  font-size: 11px;
-  letter-spacing: 0.02em;
-  text-align: left;
+  color: var(--text-4);
   cursor: pointer;
 }
 
@@ -31,15 +28,21 @@
   color: var(--text-primary);
 }
 
-.drawer-toggle app-icon {
-  display: inline-flex;
-  transition: transform 0.15s;
+.dt-label {
+  font-family: var(--font-mono);
+  font-size: var(--fs-mono-title);
+  letter-spacing: var(--ls-mono-title);
+  text-transform: uppercase;
+  white-space: nowrap;
 }
 
-/* Points down when collapsed (opens downward is wrong -- the drawer grows
-   upward into the editor), so the open state is the un-rotated one. */
-.drawer-toggle:not(.open) app-icon {
-  transform: rotate(180deg);
+.drawer-toggle app-icon {
+  display: inline-flex;
+  transition: transform 0.12s;
+}
+
+.drawer-toggle.open app-icon {
+  transform: rotate(90deg);
 }
 
 .pending {
@@ -52,33 +55,35 @@
   min-height: 0;
   display: flex;
   flex-direction: column;
-  padding: 4px 16px 16px;
-  border-top: 1px solid var(--border);
+  padding: 0 14px 14px;
   overflow-y: auto;
+  overflow-x: hidden;
 }
 
-/* TOPIC: the one prominent field, serif and full width -- not a chip. */
 .thema-field {
-  margin-bottom: 12px;
+  margin-bottom: 8px;
 }
 
+/* The v3 topic field has no visible label; keep it for screen readers. */
 .thema-field label {
-  display: block;
-  font-family: var(--font-mono);
-  font-size: 10px;
-  color: var(--text-6);
-  margin-bottom: 5px;
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
 }
 
 .thema-field input {
   width: 100%;
+  height: var(--field-h);
   background: var(--bg-input);
-  border: 1px solid var(--border-strong);
-  border-radius: 7px;
-  padding: 9px 12px;
-  color: var(--text-heading);
-  font-family: var(--font-serif);
-  font-size: 15px;
+  border: 1px solid var(--field-border);
+  border-radius: var(--radius-tab);
+  padding: 0 11px;
+  color: var(--text-primary);
+  font-family: var(--font-sans);
+  font-size: 13px;
   outline: none;
 }
 
@@ -87,23 +92,24 @@
 }
 
 .thema-field input::placeholder {
-  color: var(--text-6);
-  font-family: var(--font-sans);
-  font-size: 13px;
+  color: var(--placeholder);
 }
 
 .tag-row {
   display: flex;
-  align-items: flex-start;
-  gap: 8px;
-  margin-bottom: 7px;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 5px;
+  margin-bottom: 4px;
 }
 
 .tr-label {
-  flex: 0 0 64px;
-  padding-top: 4px;
+  flex: none;
+  margin-right: 3px;
   font-family: var(--font-mono);
-  font-size: 9.5px;
+  font-size: var(--fs-mono-title);
+  letter-spacing: var(--ls-mono-title);
+  text-transform: uppercase;
   color: var(--text-6);
 }
 
@@ -120,92 +126,65 @@
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  padding: 2px 4px 2px 7px;
-  border: 1px solid var(--border-strong);
-  border-radius: 999px;
-  background: var(--bg-input);
-  font-size: 11px;
-  color: var(--text-3);
-}
-
-/* One accent per row so the three kinds stay apart at a glance without
-   inventing three new palette entries. */
-.chip.tags {
-  border-color: var(--accent-quote);
-  color: var(--accent-hover);
-}
-
-.chip.people {
-  border-color: var(--border-strong);
-  color: var(--text-2);
-}
-
-.chip.meetings {
-  border-color: var(--text-faint);
-  color: var(--text-4);
+  height: 24px;
+  padding: 0 4px 0 8px;
+  border-radius: var(--radius-sm);
+  background: var(--accent-surface);
+  color: var(--accent-text);
+  font-family: var(--font-mono);
+  font-size: var(--fs-mono-tag);
+  white-space: nowrap;
 }
 
 .chip .x {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 13px;
+  height: 13px;
   background: transparent;
   border: none;
-  padding: 0 2px;
-  color: var(--text-6);
-  font-size: 12px;
+  border-radius: 3px;
+  padding: 0;
+  color: inherit;
+  font-size: 11px;
   line-height: 1;
   cursor: pointer;
+  opacity: 0.65;
 }
 
 .chip .x:hover {
-  color: var(--text-primary);
+  opacity: 1;
+  background: var(--hover-bg-loud);
 }
 
 .chip-input {
   flex: 1;
-  min-width: 100px;
+  min-width: 80px;
   background: transparent;
   border: none;
   outline: none;
   color: var(--text-primary);
   font-family: var(--font-sans);
-  font-size: 12px;
+  font-size: 11.5px;
   padding: 3px 0;
 }
 
 .chip-input::placeholder {
-  color: var(--text-6);
+  color: var(--placeholder);
 }
 
 /* Grows into whatever the drag leaves over, never below one visible line. */
 .md-editor {
   display: block;
   flex: 1;
-  min-height: 60px;
+  min-height: 88px;
   overflow: auto;
-  margin-top: 10px;
-  padding: 6px 11px;
+  margin-top: 8px;
+  padding: 9px 11px;
   background: var(--bg-input);
-  border: 1px solid var(--border-strong);
-  border-radius: var(--radius-md);
-}
-
-.confirm-bar {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-  margin-top: 12px;
-  padding: 9px 12px;
-  border: 1px solid var(--accent-quote);
-  border-radius: 7px;
-  background: var(--focus-bg);
-  font-size: 12.5px;
-  color: var(--text-2);
-}
-
-.cb-actions {
-  display: flex;
-  flex: 0 0 auto;
-  gap: 8px;
+  border: 1px solid var(--field-border);
+  border-radius: var(--radius-tab);
 }
 
 .err {
@@ -216,25 +195,39 @@
 
 .drawer-actions {
   display: flex;
-  justify-content: flex-end;
-  gap: 10px;
-  margin-top: 14px;
+  align-items: center;
+  gap: 6px;
+  margin-top: 12px;
+}
+
+.count {
+  flex: none;
+  white-space: nowrap;
+  font-family: var(--font-mono);
+  font-size: var(--fs-mono-meta);
+  color: var(--text-7);
 }
 
 .btn {
-  padding: 7px 14px;
-  border: 1px solid var(--border-strong);
-  border-radius: 7px;
-  background: transparent;
-  color: var(--text-4);
+  height: 30px;
+  padding: 0 13px;
+  border: 0;
+  border-radius: var(--radius);
+  background: var(--hover-bg);
+  color: var(--text-3);
   font-family: var(--font-sans);
   font-size: 12.5px;
+  white-space: nowrap;
   cursor: pointer;
+}
+
+.btn:first-of-type {
+  margin-left: auto;
 }
 
 .btn:hover:not(:disabled) {
   color: var(--text-primary);
-  background: var(--hover-bg);
+  background: var(--hover-bg-strong);
 }
 
 .btn:disabled {
@@ -243,19 +236,19 @@
 }
 
 .btn.primary {
+  padding: 0 14px;
   background: var(--accent);
-  border-color: var(--accent);
-  color: var(--accent-contrast);
-  font-weight: 600;
+  color: var(--on-accent);
 }
 
 .btn.primary:hover:not(:disabled) {
-  background: var(--accent-hover);
-  color: var(--accent-contrast);
+  filter: brightness(1.12);
+  background: var(--accent);
+  color: var(--on-accent);
 }
 
-.btn.warn {
-  background: transparent;
-  border-color: var(--accent);
-  color: var(--accent-hover);
+.btn.primary:disabled {
+  background: var(--hover-bg);
+  color: var(--text-7);
+  opacity: 1;
 }

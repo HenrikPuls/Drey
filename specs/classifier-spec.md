@@ -1,114 +1,151 @@
-# Classifier Specification
+# Classifier & LLM-Prompt Specification
 
-## Why two prompts instead of one
+All prompt texts are **English** (CLAUDE.md language convention). The note
+content they process may be any language; the model is only ever asked for
+a structured JSON verdict, so matching the input language buys nothing.
 
-With the tag-first approach, the user handles topic assignment themselves
-most of the time (inline `#tag` + autocomplete). The classifier only needs
-to guess the topic when **no** tag is present — the exception, not the
-rule. So the common case only needs a very small, fast check instead of a
-heavy multi-category classification on every capture. This also lowers
-model contention (RTX 4080, 12GB VRAM) in daily use, since Prompt 1 is
-minimal and Prompt 2 runs asynchronously in the background, non-blocking.
-
-Note: the prompt text below stays German intentionally — it processes
-German note content, and matching the input language is expected to help a
-small local model. This is a deliberate choice, see the language note in
-`CLAUDE.md`.
+Pure message builders and reply parsers live in
+`shared/llm/classifier.ts`; `electron/llm/classifier.ts`
+(`ClassifierService`) and `electron/llm/action-runner.ts` sequence the
+actual LM Studio calls.
 
 ---
 
-## Prompt 1 — Task vs. note (runs on EVERY capture)
+## Prompt 1 — Task vs. note
 
-**Purpose**: only decides whether the entry is formatted as a checkbox task
-or a free-text note — no topic logic, no registry context needed.
+**Purpose**: decide whether a short captured entry is formatted as a
+checkbox task or a free-text note — nothing else. No topic logic, no
+vocabulary context.
+
+**Status**: implemented as `buildTaskMessages` / `parseTaskClassification`
+and wrapped by `ClassifierService.classifyEntry`, but **not yet wired**
+into the capture flow — capture currently never calls it.
 
 ```
 System:
-Du analysierst eine kurze, informell geschriebene Notiz auf Deutsch.
-Bestimme, ob es eine Aufgabe (etwas, das noch erledigt werden muss) oder
-eine reine Beobachtung/Notiz ist. Falls Aufgabe: erkenne, wenn möglich,
-Fälligkeit und Dringlichkeit aus der Formulierung.
+You classify a short, informally written note. Decide whether it is a task
+(something still to be done) or a plain observation/note. If it is a task,
+read a due date and an urgency from the wording where possible.
 
-Heutiges Datum: {current_date}
+Today's date: {current_date}
 
-Antworte AUSSCHLIESSLICH mit diesem JSON-Format, ohne Erklärung:
-{"typ": "task" | "notiz", "faelligkeit": "YYYY-MM-DD" | null, "prioritaet": "hoch" | "mittel" | "niedrig" | null}
-
-Notiz: "{input_text}"
+Respond ONLY with this JSON, no prose:
+{"type": "task" | "note", "due": "YYYY-MM-DD" | null, "priority": "high" | "medium" | "low" | null}
 ```
 
+The note text goes in as the user message. `{current_date}` is
+substituted with today's date at call time.
+
 **Example**
+
 - Input: `"Kiel-Dichtung vor dem Kauf unbedingt prüfen, ist dringend"`
-- Output: `{"typ": "task", "faelligkeit": null, "prioritaet": "hoch"}`
+- Output: `{"type": "task", "due": null, "priority": "high"}`
 
-**No confidence threshold needed.** Unlike the earlier concept: a wrong
-task/note call is low-risk — visible immediately in the document, fixed
-with one click on the checkbox/line. No reason to build a confirmation flow for it.
+**No confidence threshold needed.** A wrong task/note call is low-risk —
+visible immediately in the document, fixed with one click on the
+checkbox/line. No confirmation flow for it.
 
 ---
 
-## Prompt 2 — Tag suggestion (BATCH ONLY, for entries with no tag)
+## Prompt 2 — Tag suggestion from the vault vocabulary
 
-**Purpose**: doesn't run live during capture, only when the batch review
-(inbox) is opened. Needs the **tag registry** as context — derived from the
-`description` field of every `type: master` file.
+**Purpose**: suggest tags for an untagged entry, reusing tags the vault
+already uses where they fit and otherwise proposing new ones. There is no
+tag registry with descriptions any more, and **no folder proposal** — a
+tag is just a label.
 
-**Implementation note:** this prompt is the built-in **"Autotagging"**
-action's template text (`{registry_list}` is substituted with the rendered
-registry at call time), so the Actions system and the classifier share one
-prompt string — editing the template changes classification. Until the
-inbox milestone exists, Autotagging runs on demand against the *active
-document's* untagged dated entries instead of a batch queue; the batch/inbox
-entry point is added with milestone 7/8.
+**Status**: this is the live prompt behind the drawer's **Autotag**
+button. It is the built-in **"Autotag"** Action template
+(`AUTOTAG_PROMPT` in `shared/app-config.ts`), run by
+`ActionRunner.suggestTags(entryText, vocabulary)`; `{tags}` is substituted
+with the current tag vocabulary (one tag per line) at call time. Explicit
+invocation only — no on-save, no `⋯` trigger. The reply only **pre-fills**
+the drawer's tag field; the user confirms by saving.
 
 ```
 System:
-Du bekommst eine Notiz ohne Tag sowie eine Liste bereits existierender
-Tags mit Kurzbeschreibung. Schlage 1 bis 3 passende Tags aus der Liste
-vor. Falls kein bestehender Tag gut passt, schlage einen NEUEN Tag vor
-(ein Wort, kleingeschrieben, keine Umlaute).
+You are given a short note and the tags already used in this vault.
+Suggest 1 to 4 tags for the note: reuse tags from the list where they fit,
+and otherwise propose new tags (one word, lowercase, no spaces).
 
-Existierende Tags:
-{registry_list}
+Existing tags:
+{tags}
 
-Antworte AUSSCHLIESSLICH mit diesem JSON-Format:
-{"vorschlaege": ["tag1", "tag2"], "neuer_tag": "vorschlag" | null}
-
-Notiz: "{input_text}"
+Respond ONLY with JSON, no prose: {"tags": ["tag1", "tag2"]}
 ```
 
-**Registry format** (generated from the master documents, one line per entry):
-```
-- sailing (thema): Kriterien, Besichtigungen und Kaufprozess fürs neue Boot
-- partner (person): kurze Rollenbezeichnung
-- team-neptun (team): Architektur-Team, zuständig für Edge-Plattform
-```
+Parsed by `parseSuggestedTags` — normalised (lower-case, umlauts
+transliterated, one hyphenated word), de-duplicated, capped at four.
 
 **Example**
-- Input: `"Zweite Besichtigung ist geplatzt, neuer Kandidat in Kiel"`
-- Output: `{"vorschlaege": ["sailing"], "neuer_tag": null}`
 
-**A new tag** lands in the inbox for confirmation, exactly like a new tag
-the user typed themselves — never auto-creates a folder on its own.
+- Vocabulary: `sailing`, `arbeit`, `rollout-sync`, …
+- Input: `"Zweite Besichtigung ist geplatzt, neuer Kandidat in Kiel"`
+- Output: `{"tags": ["sailing"]}`
+
+### Richer variant (implemented, not wired)
+
+`shared/llm/classifier.ts` also carries `buildTagSuggestionMessages` /
+`parseTagSuggestion`, which take a described list via a `{registry_list}`
+placeholder and return
+`{"suggestions": ["tag1", "tag2"], "new_tag": "proposal" | null}`. Kept
+for a possible future batch / described-vocabulary flow; nothing calls it
+today.
+
+---
+
+## Summarise search results (parked)
+
+A short prose digest of the sections a tag search returned.
+`SEARCH_SUMMARY_PROMPT` (`shared/app-config.ts`), the built-in
+**"Summarise search results"** Action template, run by
+`ActionRunner.summariseSearchResults(query)` over IPC
+`tags:summarise-results`. The backend is wired; the search panel's UI
+button is currently removed (a plain Markdown **Export** replaced it),
+because the digest needs a configured local LLM and a stale
+`dist-electron` surfaces the failure as an opaque "error invoking remote".
+Re-enabling it is a UI-only change.
+
+```
+System:
+You are given the sections of a personal note vault that match a search.
+Write a short prose digest (3–6 sentences, present tense, no bullet
+points, no greeting, no heading) of what they collectively say. Note any
+contradictions or open questions last. Return only the digest text.
+```
+
+---
+
+## Other LLM prompts (for completeness)
+
+- **`NOTE_SUMMARY_PROMPT`** (`shared/app-config.ts`, built-in "Summarise
+  note") — the note assistant panel's automatic summary: 1–3 full
+  sentences, no bullets, no heading.
+- **`ASK_SYSTEM`** (`electron/llm/action-runner.ts`) — the assistant's Ask
+  mode: returns `{"kind":"answer","text":…}` for a question or
+  `{"kind":"edit","document":…}` (the whole revised document) for a
+  change request.
+- **`GENERIC_SYSTEM_SUFFIX`** — appended to a user's own Action template
+  prompt when the Action rewrites the document.
 
 ---
 
 ## Technical note: enforcing structured output
 
 ⚠️ Plain prompt instructions ("respond with JSON only") are occasionally
-ignored by small local models (extra prose around it, Markdown code-block
-wrapping, etc.) — this is a known weakness, not a guess. If the LM Studio
-server backend (llama.cpp-based) supports `response_format` with JSON
-schema/grammar constraining, use that instead of relying on the model's
-prompt discipline — saves you parse-error handling in code. Whether the
-currently chosen small model (Qwen3-4B / Gemma3-4B) supports this in the
-LM Studio setup should be checked before relying on it.
+ignored by small local models (extra prose, Markdown code-block wrapping,
+etc.) — a known weakness, not a guess. The parsers therefore tolerate a
+fenced or prose-prefixed reply (`extractJsonObject` / `parseJsonObject`).
+If the backend supports `response_format` with a JSON schema/grammar, use
+that instead of relying on the model's prompt discipline — it removes the
+parse-error handling. Whether the chosen small model (Qwen3-4B /
+Gemma3-4B) supports this in the current setup should be checked before
+relying on it.
 
-## Scaling note (not an MVP concern, but worth recording)
+## Scaling note
 
-The registry for Prompt 2 grows with every new tag. For a manageable number
-of topics (< 50), putting the full list in the prompt is fine. If the vault
-accumulates a very large number of tags over time, the list would need
-pre-filtering (e.g. keyword pre-selection instead of the full list) — not
-relevant at the current scale, but good to know the registry doesn't scale
-indefinitely without hitting context limits eventually.
+Prompt 2 embeds the full tag vocabulary. For tens to low hundreds of tags
+this is fine. A vault that accumulates a very large number of tags would
+need a pre-filter step (e.g. keyword pre-selection instead of the full
+list) before the list threatens the context window — not a current
+concern, but the vocabulary does not scale indefinitely.

@@ -8,42 +8,35 @@ import {
 import { formatDate } from '../../../shared/timestamp';
 import { EditorService } from './editor.service';
 
-/** The three chip rows, in the order the drawer shows them. */
-export type ChipField = 'tags' | 'people' | 'meetings';
+/** What `submit()` did, so the component knows whether to clear the text field. */
+export type SubmitResult = 'appended' | 'empty';
 
 /**
  * State and rules for the "Add entry" drawer. The component only renders
  * and forwards events (CLAUDE.md: no business logic in components).
  *
- * The one rule with teeth is the topic prompt: submitting with an empty
- * TOPIC does not append silently, it raises an inline confirmation, and
- * only the second, explicit press appends. A set topic appends straight
- * away. That is why `submit()` returns what happened rather than a boolean
- * -- the component has to know whether to show the bar.
+ * TOPIC is optional -- an empty topic just produces a bare `## HH:mm`
+ * heading, no prompt.
  */
-export type SubmitResult = 'appended' | 'needs-topic-confirmation' | 'empty';
-
 @Injectable({ providedIn: 'root' })
 export class EntryDraftService {
   private readonly editor = inject(EditorService);
 
-  readonly open = signal(true);
+  /** The drawer starts collapsed; the header toggle opens it. */
+  readonly open = signal(false);
   readonly topic = signal('');
   readonly text = signal('');
   readonly tags = signal<string[]>([]);
-  readonly people = signal<string[]>([]);
-  readonly meetings = signal<string[]>([]);
 
-  /** True while the "no topic given" confirmation bar is showing. */
-  readonly confirmingNoTopic = signal(false);
+  /** Lowercase names of tags the user added by hand, so re-recognition keeps them. */
+  private readonly manualTags = new Set<string>();
+
   readonly appending = signal(false);
 
   readonly draft = computed<EntryDraft>(() => ({
     topic: this.topic(),
     text: this.text(),
     tags: this.tags(),
-    people: this.people(),
-    meetings: this.meetings(),
   }));
 
   /** Anything to append at all -- drives the primary button. */
@@ -58,34 +51,47 @@ export class EntryDraftService {
 
   setTopic(value: string): void {
     this.topic.set(value);
-    if (value.trim() !== '') {
-      this.confirmingNoTopic.set(false);
-    }
   }
 
+  /**
+   * Sets the text content and automatically extracts #tags from it.
+   * If a tag from the text is not already in the tags list, it will be added.
+   * Also removes tags that are no longer in the text but were not manually added.
+   */
   setText(value: string): void {
     this.text.set(value);
+    this.extractTagsFromText(value);
+    this.syncTagsWithText(value);
   }
 
-  /** Adds a chip, ignoring blanks and duplicates (case-insensitive). */
-  addChip(field: ChipField, raw: string): void {
-    const value = raw
-      .trim()
-      .replace(/^#/, '')
-      .replace(/^\[\[|\]\]$/g, '')
-      .trim();
+  /** Adds a tag chip, ignoring blanks and duplicates (case-insensitive). */
+  addChip(raw: string): void {
+    const value = raw.trim().replace(/^#/, '').trim();
     if (value === '') {
       return;
     }
-    const target = this.chipSignal(field);
-    if (target().some((item) => item.toLowerCase() === value.toLowerCase())) {
+    if (this.tags().some((item) => item.toLowerCase() === value.toLowerCase())) {
+      this.manualTags.add(value.toLowerCase());
       return;
     }
-    target.update((list) => [...list, value]);
+    this.tags.update((list) => [...list, value]);
+    this.manualTags.add(value.toLowerCase());
   }
 
-  removeChip(field: ChipField, value: string): void {
-    this.chipSignal(field).update((list) => list.filter((item) => item !== value));
+  /**
+   * Removes a tag chip and also removes the corresponding #tag from the text
+   * if it exists.
+   */
+  removeChip(value: string): void {
+    this.tags.update((list) => list.filter((item) => item !== value));
+    this.manualTags.delete(value.toLowerCase());
+    // Remove the tag from the text if it exists
+    const text = this.text();
+    const tagPattern = new RegExp(`#\\s*${value}\\s*(?=\\s|$)`, 'g');
+    const newText = text.replace(tagPattern, '');
+    if (newText !== text) {
+      this.text.set(newText);
+    }
   }
 
   /** Throws away the draft (the "Discard" button). */
@@ -93,30 +99,16 @@ export class EntryDraftService {
     this.topic.set(EMPTY_ENTRY_DRAFT.topic);
     this.text.set(EMPTY_ENTRY_DRAFT.text);
     this.tags.set([]);
-    this.people.set([]);
-    this.meetings.set([]);
-    this.confirmingNoTopic.set(false);
+    this.manualTags.clear();
   }
 
-  /**
-   * "Add to document". With a topic set it appends; without one it asks
-   * first and appends on the second call (`force`).
-   */
-  async submit(force = false): Promise<SubmitResult> {
+  /** "Add to document" -- appends the entry, or reports the draft was empty. */
+  async submit(): Promise<SubmitResult> {
     if (!this.hasContent() || this.appending()) {
       return 'empty';
     }
-    if (this.topic().trim() === '' && !force) {
-      this.confirmingNoTopic.set(true);
-      return 'needs-topic-confirmation';
-    }
     await this.append();
     return 'appended';
-  }
-
-  /** Dismisses the inline confirmation without appending. */
-  cancelNoTopic(): void {
-    this.confirmingNoTopic.set(false);
   }
 
   /**
@@ -126,8 +118,7 @@ export class EntryDraftService {
    * insertion a normal editor edit -- undoable, caret placed after it --
    * and it is the same path the quick-capture hotkey already uses.
    *
-   * Nothing is open? Today's daily note is opened first, exactly as the
-   * old capture bar did.
+   * Nothing is open? Today's daily note is opened first.
    */
   private async append(): Promise<void> {
     this.appending.set(true);
@@ -145,7 +136,44 @@ export class EntryDraftService {
     }
   }
 
-  private chipSignal(field: ChipField) {
-    return field === 'tags' ? this.tags : field === 'people' ? this.people : this.meetings;
+  /**
+   * Extracts tags from the text and adds them to the tags list if they're not already present.
+   * This is called whenever the text content changes.
+   */
+  private extractTagsFromText(text: string): void {
+    const tagPattern = /#([a-zA-Z0-9_-]+)/g;
+    const matches = [...text.matchAll(tagPattern)];
+
+    const newTags = matches
+      .map((match) => match[1])
+      .filter(
+        (tag) =>
+          !this.tags().some((existingTag) => existingTag.toLowerCase() === tag.toLowerCase()),
+      );
+
+    if (newTags.length > 0) {
+      this.tags.update((list) => [...list, ...newTags]);
+    }
+  }
+
+  /**
+   * Synchronizes tags with the text content.
+   * Removes tags that are no longer in the text but were not manually added.
+   */
+  private syncTagsWithText(text: string): void {
+    const tagPattern = /#([a-zA-Z0-9_-]+)/g;
+    const matches = [...text.matchAll(tagPattern)];
+    const textTags = matches.map((match) => match[1].toLowerCase());
+
+    this.tags.update((list) => {
+      return list.filter((item) => {
+        // Manually added tags stay; otherwise only the ones currently in the text.
+        return this.isManual(item) || textTags.includes(item.toLowerCase());
+      });
+    });
+  }
+
+  private isManual(item: string): boolean {
+    return this.manualTags.has(item.toLowerCase());
   }
 }

@@ -18,8 +18,10 @@ import { Compartment, EditorState, Extension, Prec } from '@codemirror/state';
 import { EditorView, keymap, placeholder as cmPlaceholder } from '@codemirror/view';
 import { basicSetup } from 'codemirror';
 import { EditorService, EditorViewMode } from '../../services/editor.service';
+import { EditTargetService } from '../../services/edit-target.service';
 import { TagService } from '../../services/tag.service';
 import { dreyEditorLook } from '../editor-theme';
+import { toggleTaskDone } from '../markdown-commands';
 import {
   frontmatterExpandedOf,
   frontmatterFold,
@@ -28,6 +30,7 @@ import {
 import { livePreview } from '../live-preview';
 import { inlineSpellcheck, requestSpellcheck, SpellcheckSource } from '../spellcheck/spellcheck';
 import { makeTagCompletionSource } from '../tag-complete';
+import { tagPills } from '../tag-pill';
 import { resolveVaultImageUrl } from '../vault-image';
 
 /**
@@ -57,11 +60,18 @@ import { resolveVaultImageUrl } from '../vault-image';
 })
 export class MarkdownSurface implements AfterViewInit, OnDestroy {
   private readonly editor = inject(EditorService);
+  private readonly editTarget = inject(EditTargetService);
   private readonly tags = inject(TagService);
   private readonly host = viewChild.required<ElementRef<HTMLDivElement>>('host');
 
   readonly mode = input<EditorViewMode>('live');
   readonly compact = input(false);
+  /**
+   * Shows a line-number gutter (full-page editor only, toggled from the
+   * meta bar / `Ctrl+G`). `basicSetup` already mounts the gutter DOM; this
+   * just un-hides + restyles it to the v3 spec via a compartment.
+   */
+  readonly lineNumbers = input(false);
   /**
    * Folds the leading YAML frontmatter behind a pill (both modes). Only the
    * full-page editor turns this on; the entry drawer's body never has
@@ -89,6 +99,13 @@ export class MarkdownSurface implements AfterViewInit, OnDestroy {
    * turns this off.
    */
   readonly submitOnEnter = input(true);
+  /**
+   * When set, inline `#tag`s render as pills and a `Ctrl`/`Cmd`-click on
+   * one calls this with the bare tag. Read once at construction. The full-
+   * page editor wires it to the tag search; the entry drawer leaves it
+   * unset (composing a note, not navigating it).
+   */
+  readonly onTagActivate = input<(tag: string) => void>();
 
   /** The document text after every edit. */
   readonly docChanged = output<string>();
@@ -101,6 +118,7 @@ export class MarkdownSurface implements AfterViewInit, OnDestroy {
   private readonly modeCompartment = new Compartment();
   private readonly placeholderCompartment = new Compartment();
   private readonly readOnlyCompartment = new Compartment();
+  private readonly lineNumberCompartment = new Compartment();
 
   /**
    * Mirror of the fold extension's `StateField<boolean>` (see
@@ -135,6 +153,12 @@ export class MarkdownSurface implements AfterViewInit, OnDestroy {
         effects: this.readOnlyCompartment.reconfigure(ro ? readOnlyExtension : []),
       });
     });
+    effect(() => {
+      const on = this.lineNumbers();
+      this._view?.dispatch({
+        effects: this.lineNumberCompartment.reconfigure(on ? gutterTheme : []),
+      });
+    });
   }
 
   ngAfterViewInit(): void {
@@ -149,6 +173,9 @@ export class MarkdownSurface implements AfterViewInit, OnDestroy {
             ? Prec.highest(keymap.of(this.submitKeymap()))
             : [],
           basicSetup,
+          // `Ctrl/Cmd+Enter` toggles the task checkbox on the selected
+          // line(s) (also the Selection menu's "Toggle task done").
+          keymap.of([{ key: 'Mod-Enter', run: (view) => toggleTaskDone(view) }]),
           markdown({
             base: markdownLanguage,
             codeLanguages: languages,
@@ -158,6 +185,20 @@ export class MarkdownSurface implements AfterViewInit, OnDestroy {
           // vault change needs no editor rebuild.
           markdownLanguage.data.of({
             autocomplete: makeTagCompletionSource(() => this.tags.tags()),
+          }),
+          // `#tag` pills + Ctrl/Cmd-click -> search. Outside the mode
+          // compartment: pills show in source mode too.
+          this.onTagActivate() ? tagPills(this.onTagActivate()!) : [],
+          // Track this surface as the Edit/Selection menu's target while it
+          // holds focus (see `EditTargetService` -- "last focused", so a
+          // menu-bar click doesn't drop it).
+          EditorView.domEventHandlers({
+            focus: () => {
+              if (this._view) {
+                this.editTarget.register(this._view);
+              }
+              return false;
+            },
           }),
           EditorView.updateListener.of((update) => {
             if (update.docChanged) {
@@ -188,6 +229,7 @@ export class MarkdownSurface implements AfterViewInit, OnDestroy {
             this.placeholder() ? cmPlaceholder(this.placeholder()) : [],
           ),
           this.readOnlyCompartment.of(this.readOnly() ? readOnlyExtension : []),
+          this.lineNumberCompartment.of(this.lineNumbers() ? gutterTheme : []),
           this.modeCompartment.of(this.modeExtensions(this.mode())),
         ],
       }),
@@ -198,7 +240,10 @@ export class MarkdownSurface implements AfterViewInit, OnDestroy {
   }
 
   ngOnDestroy(): void {
-    this._view?.destroy();
+    if (this._view) {
+      this.editTarget.unregister(this._view);
+      this._view.destroy();
+    }
   }
 
   /** Replaces the whole document (owner-driven loads, clearing the capture box). */
@@ -292,6 +337,34 @@ export class MarkdownSurface implements AfterViewInit, OnDestroy {
 
 /** Blocks user input while still allowing owner-driven `setContent`. */
 const readOnlyExtension: Extension = [EditorView.editable.of(false), EditorState.readOnly.of(true)];
+
+/**
+ * Un-hides the gutter `basicSetup` already mounts (the base theme keeps
+ * `.cm-gutters` `display:none`) and restyles the line numbers to the v3
+ * spec: 46px column, Plex Mono 10.5, right-aligned, no fold arrows.
+ * `Prec.high` so it beats the base `.cm-gutters` rule. No extra
+ * `lineNumbers()` extension -- `basicSetup` already provides one.
+ */
+const gutterTheme: Extension = Prec.high(
+  EditorView.theme({
+    '.cm-gutters': {
+      display: 'flex',
+      backgroundColor: 'transparent',
+      borderRight: 'none',
+      color: 'var(--gutter)',
+    },
+    '.cm-foldGutter': { display: 'none' },
+    '.cm-lineNumbers .cm-gutterElement': {
+      minWidth: '46px',
+      padding: '0 14px 0 6px',
+      fontFamily: 'var(--font-mono)',
+      fontSize: 'calc(10.5px * var(--drey-editor-scale, 1))',
+      color: 'var(--gutter)',
+      userSelect: 'none',
+    },
+    '.cm-activeLineGutter': { backgroundColor: 'transparent' },
+  }),
+);
 
 /**
  * Compact field look: no page padding. Fills its container so the editable

@@ -1,0 +1,101 @@
+:host {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  border-bottom: 1px solid var(--border);
+  overflow: hidden;
+}
+
+.head {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  flex: none;
+  height: var(--panel-head-h);
+  padding: 0 10px 0 12px;
+  color: var(--text-4);
+  cursor: grab;
+  user-select: none;
+}
+
+.head:hover {
+  color: var(--text-primary);
+}
+
+:host(.dragging) {
+  opacity: 0.4;
+}
+
+:host(.dragging) .head {
+  background: color-mix(in srgb, var(--accent) 16%, transparent);
+  cursor: grabbing;
+}
+
+.twist {
+  width: 16px;
+  height: 16px;
+  margin-left: -5px;
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  background: transparent;
+  border-radius: var(--radius-xs);
+  cursor: pointer;
+  color: inherit;
+}
+
+.twist:hover {
+  background: var(--hover-bg-strong);
+}
+
+.twist app-icon {
+  transition: transform 0.12s ease;
+}
+
+.title {
+  flex: none;
+  white-space: nowrap;
+  font-family: var(--font-mono);
+  font-size: var(--fs-mono-title);
+  letter-spacing: var(--ls-mono-title);
+  text-transform: uppercase;
+}
+
+.status {
+  flex: none;
+  white-space: nowrap;
+  font-family: var(--font-mono);
+  font-size: var(--fs-mono-meta);
+  color: var(--text-6);
+}
+
+.grip {
+  margin-left: auto;
+  flex: none;
+  display: grid;
+  grid-template-columns: repeat(2, 2px);
+  gap: 2px;
+  opacity: 0.3;
+}
+
+.grip i {
+  width: 2px;
+  height: 2px;
+  border-radius: 50%;
+  background: currentColor;
+}
+
+.body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+
+.body--flush {
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}

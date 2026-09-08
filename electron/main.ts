@@ -10,6 +10,7 @@ import {
   AskOutcome,
   ChatThread,
   CustomDictionary,
+  EditCommand,
   IPC_CHANNELS,
   LlmConnectionTest,
   LlmDebugEntry,
@@ -19,22 +20,19 @@ import {
   SpellCheckResult,
   SpellLanguage,
   TagEntry,
-  TagRegistryEntry,
+  TagSearchHit,
+  TagSearchQuery,
   VaultFileContent,
   VaultFileEntry,
 } from '../shared/ipc-api';
-import { ActionRunner } from './action-runner';
 import { AppConfigStore } from './app-config';
 import { ChatStore } from './chat-store';
-import { ClassifierService } from './classifier';
 import { DailyNoteManager } from './daily-note';
-import { LlmDebugLog } from './llm-debug-log';
-import { LlmTaskRegistry } from './llm-tasks';
-import { LmStudioClient } from './lm-studio-client';
+import { ActionRunner, LlmDebugLog, LlmTaskRegistry, LmStudioClient } from './llm';
 import { attachContextMenu, buildApplicationMenu } from './menu';
 import { NoteManager } from './note-manager';
 import { SpellcheckService } from './spellcheck';
-import { TagIndex } from './tag-index';
+import { TagIndex } from './tags';
 import { VaultManager } from './vault-manager';
 
 /**
@@ -147,6 +145,51 @@ function registerIpcHandlers(
     platform: process.platform,
   }));
 
+  // Custom-titlebar window controls (the window is frameless, ADR-0019).
+  ipcMain.handle(IPC_CHANNELS.windowMinimize, (): void => mainWindow?.minimize());
+  ipcMain.handle(IPC_CHANNELS.windowToggleMaximize, (): void => {
+    if (!mainWindow) {
+      return;
+    }
+    if (mainWindow.isMaximized()) {
+      mainWindow.unmaximize();
+    } else {
+      mainWindow.maximize();
+    }
+  });
+  ipcMain.handle(IPC_CHANNELS.windowClose, (): void => mainWindow?.close());
+  ipcMain.handle(IPC_CHANNELS.windowIsMaximized, (): boolean => mainWindow?.isMaximized() ?? false);
+
+  // The HTML Edit menu (frameless titlebar, ADR-0019) drives the focused
+  // editable element through the same native editing commands the
+  // auto-hidden application menu already exposes via accelerators
+  // (electron/menu.ts). CodeMirror honours the resulting DOM events, so this
+  // needs nothing in the renderer beyond the menu click.
+  ipcMain.handle(IPC_CHANNELS.editExec, (_event, command: EditCommand): void => {
+    const wc = mainWindow?.webContents;
+    if (!wc) {
+      return;
+    }
+    ({
+      undo: () => wc.undo(),
+      redo: () => wc.redo(),
+      cut: () => wc.cut(),
+      copy: () => wc.copy(),
+      paste: () => wc.paste(),
+      selectAll: () => wc.selectAll(),
+    })[command]?.();
+  });
+
+  // App-wide UI scale (Settings -> Appearance "Base font size"). Browser-zoom
+  // the whole renderer -- resets on reload, so the renderer re-sends it from
+  // config on startup.
+  ipcMain.handle(IPC_CHANNELS.uiSetZoom, (_event, factor: number): void => {
+    const wc = mainWindow?.webContents;
+    if (wc && Number.isFinite(factor) && factor > 0) {
+      wc.setZoomFactor(factor);
+    }
+  });
+
   ipcMain.handle(IPC_CHANNELS.vaultGetActive, (): string | null =>
     vaultManager.getActiveVaultPath(),
   );
@@ -175,6 +218,17 @@ function registerIpcHandlers(
     IPC_CHANNELS.vaultCreateDirectory,
     (_event, relativePath: string): Promise<string> => vaultManager.createDirectory(relativePath),
   );
+  ipcMain.handle(IPC_CHANNELS.vaultDelete, async (_event, relativePath: string): Promise<void> => {
+    await vaultManager.deleteEntry(relativePath);
+    // No file watcher -- the tag index would otherwise still list tags from
+    // the deleted file until the next full rebuild.
+    await tagIndex.rebuild();
+  });
+  ipcMain.handle(
+    IPC_CHANNELS.vaultPickSavePath,
+    (_event, suggestedName: string): Promise<string | null> =>
+      vaultManager.pickSavePath(suggestedName),
+  );
   ipcMain.handle(IPC_CHANNELS.dailyBuildContent, (_event, date: string): Promise<string> =>
     dailyNotes.noteContentFor(date),
   );
@@ -182,8 +236,24 @@ function registerIpcHandlers(
     IPC_CHANNELS.noteSave,
     (_event, request: NoteSaveRequest): Promise<NoteSaveResult> => noteManager.saveNote(request),
   );
-  ipcMain.handle(IPC_CHANNELS.tagList, (): TagEntry[] => tagIndex.getTags());
-  ipcMain.handle(IPC_CHANNELS.tagRegistry, (): TagRegistryEntry[] => tagIndex.getRegistry());
+  ipcMain.handle(IPC_CHANNELS.tagList, (): TagEntry[] => tagIndex.getVocabulary());
+  ipcMain.handle(IPC_CHANNELS.tagSearch, (_event, query: TagSearchQuery): TagSearchHit[] =>
+    tagIndex.search(query),
+  );
+  ipcMain.handle(
+    IPC_CHANNELS.tagSummariseResults,
+    (_event, query: TagSearchQuery, taskId?: string): Promise<string> =>
+      actionRunner.summariseSearchResults(formatHitsForSummary(tagIndex.search(query)), taskId),
+  );
+  ipcMain.handle(
+    IPC_CHANNELS.tagSuggest,
+    (_event, entryText: string, taskId?: string): Promise<string[]> =>
+      actionRunner.suggestTags(
+        entryText,
+        tagIndex.getVocabulary().map((entry) => entry.tag),
+        taskId,
+      ),
+  );
 
   ipcMain.handle(IPC_CHANNELS.configGet, (): AppConfig => appConfig.get());
   ipcMain.handle(IPC_CHANNELS.configSet, (_event, next: AppConfig): AppConfig => {
@@ -238,6 +308,24 @@ function registerIpcHandlers(
   ipcMain.handle(IPC_CHANNELS.spellAddDictionary, (): Promise<CustomDictionary | null> =>
     pickDictionary(),
   );
+}
+
+/**
+ * Flattens search hits into the user message for the result summary: one
+ * `## <heading> (<path>)` block per hit followed by its snippet, capped so
+ * a very broad search does not blow the model's context.
+ */
+function formatHitsForSummary(hits: readonly TagSearchHit[]): string {
+  const MAX_HITS = 40;
+  const MAX_CHARS = 8000;
+  const blocks = hits
+    .slice(0, MAX_HITS)
+    .map((hit) => `## ${hit.heading} (${hit.path})\n${hit.snippet}`);
+  let out = blocks.join('\n\n');
+  if (out.length > MAX_CHARS) {
+    out = `${out.slice(0, MAX_CHARS)}\n…`;
+  }
+  return out;
 }
 
 /**
@@ -306,10 +394,14 @@ function createMainWindow(): BrowserWindow {
     height: 800,
     // Matches the dark theme default (see CLAUDE.md, UI/UX Design) so the
     // window doesn't flash white while the renderer loads.
-    backgroundColor: '#1e1e1e',
-    // Keep the menu bar out of the minimal layout (CLAUDE.md, UI/UX
-    // Design) but still bound -- Alt reveals it, and its accelerators
-    // (Ctrl+C/V/X, ...) stay active while hidden.
+    backgroundColor: '#1b1a19',
+    // Frameless: the renderer draws its own titlebar (accent square, the
+    // File/Edit/Selection/View menu bar and the window controls) --
+    // "VS Code style", ADR-0019. macOS keeps its traffic lights inset over
+    // that bar; every other platform gets renderer-drawn buttons.
+    titleBarStyle: process.platform === 'darwin' ? 'hiddenInset' : 'hidden',
+    // Still bound so Alt reveals the (macOS-only) native menu and its
+    // accelerators stay live where one exists.
     autoHideMenuBar: true,
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
@@ -338,6 +430,13 @@ function createMainWindow(): BrowserWindow {
   });
 
   attachContextMenu(window);
+  // Keep the renderer titlebar's maximize/restore glyph in sync with the
+  // real window state.
+  const emitMaximizeState = (): void => {
+    window.webContents.send(IPC_CHANNELS.windowMaximizeChanged, window.isMaximized());
+  };
+  window.on('maximize', emitMaximizeState);
+  window.on('unmaximize', emitMaximizeState);
   // The app is not a zoomable web page: Ctrl +/-/0 scales the editor
   // content in the renderer (ADR-0015), and the touchpad pinch gesture
   // must not zoom the whole window. Ctrl+wheel is suppressed renderer-side
@@ -388,9 +487,8 @@ if (!app.requestSingleInstanceLock()) {
     const appConfig = new AppConfigStore();
     const llmDebug = new LlmDebugLog();
     const lmStudio = new LmStudioClient(appConfig, llmDebug);
-    const classifier = new ClassifierService(lmStudio);
     const llmTasks = new LlmTaskRegistry();
-    const actionRunner = new ActionRunner(appConfig, lmStudio, classifier, tagIndex, llmTasks);
+    const actionRunner = new ActionRunner(appConfig, lmStudio, llmTasks);
     const noteManager = new NoteManager(vaultManager, tagIndex, actionRunner);
     const chatStore = new ChatStore(vaultManager);
     const spellcheck = new SpellcheckService(appConfig);
@@ -416,7 +514,10 @@ if (!app.requestSingleInstanceLock()) {
       chatStore,
       spellcheck,
     );
-    Menu.setApplicationMenu(buildApplicationMenu());
+    // The File/Edit/Selection/View menus are drawn by the renderer titlebar
+    // now (ADR-0019). Keep a native menu only on macOS, where the menu bar
+    // belongs to the system and its accelerators are expected there.
+    Menu.setApplicationMenu(process.platform === 'darwin' ? buildApplicationMenu() : null);
     createMainWindow();
 
     const shortcutRegistered = globalShortcut.register(CAPTURE_SHORTCUT, () => {

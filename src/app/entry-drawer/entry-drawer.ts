@@ -7,19 +7,16 @@ import {
   viewChild,
 } from '@angular/core';
 import { MarkdownSurface } from '../editor/markdown-surface/markdown-surface';
-import { ChipField, EntryDraftService } from '../services/entry-draft.service';
+import { EntryDraftService } from '../services/entry-draft.service';
 import { EditorService } from '../services/editor.service';
 import { SpellcheckService } from '../services/spellcheck.service';
+import { AutotagButton } from '../tags';
 import { Icon } from '../icons/icon';
 
 /**
- * The "Add entry" drawer at the bottom of the main area: TOPIC first and
- * prominent, then the Tags / People / Meetings chip rows, then the Markdown
- * text. It replaced the old bottom chat bar's capture role.
- *
- * Ordering is not cosmetic. The topic is what the entry is filed under and
- * what the inline spellcheck keys off (`spellcheckApplies`), so it is asked
- * for before the prose rather than after it.
+ * The "Add entry" drawer at the bottom of the main area: an optional TOPIC,
+ * a row of tag chips, then the Markdown text. It replaced the old bottom
+ * chat bar's capture role.
  *
  * The text field is the shared `MarkdownSurface` with the inline
  * spellchecker mixed in -- one editor component everywhere (ADR-0009), one
@@ -28,7 +25,7 @@ import { Icon } from '../icons/icon';
 @Component({
   selector: 'app-entry-drawer',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [Icon, MarkdownSurface],
+  imports: [Icon, MarkdownSurface, AutotagButton],
   templateUrl: './entry-drawer.html',
   styleUrl: './entry-drawer.css',
 })
@@ -50,6 +47,16 @@ export class EntryDrawer {
     () => this.drawer.hasContent() && !this.drawer.appending(),
   );
 
+  /** "N words · N chars" for the footer, from the body text. */
+  protected readonly bodyCount = computed<string>(() => {
+    const text = this.drawer.text();
+    const trimmed = text.trim();
+    if (!trimmed) {
+      return '';
+    }
+    return `${trimmed.split(/\s+/).length} words · ${text.length} chars`;
+  });
+
   constructor() {
     // The checker only re-runs on a text change, so toggling spelling (or
     // switching dictionary) in Settings would otherwise leave the current
@@ -61,48 +68,34 @@ export class EntryDrawer {
     });
   }
 
-  protected readonly chipRows: ReadonlyArray<{ field: ChipField; label: string; add: string }> = [
-    { field: 'tags', label: 'TAGS', add: '+ tag' },
-    { field: 'people', label: 'PEOPLE', add: '+ person' },
-    { field: 'meetings', label: 'MEETINGS', add: '+ meeting' },
-  ];
-
-  protected chips(field: ChipField): readonly string[] {
-    return field === 'tags'
-      ? this.drawer.tags()
-      : field === 'people'
-        ? this.drawer.people()
-        : this.drawer.meetings();
-  }
-
-  /** Enter (or comma) commits a chip; Backspace on an empty field removes the last. */
-  protected onChipKeydown(event: KeyboardEvent, field: ChipField): void {
+  /** Enter (or comma) commits a tag chip; Backspace on an empty field removes the last. */
+  protected onChipKeydown(event: KeyboardEvent): void {
     const input = event.target as HTMLInputElement;
     if (event.key === 'Enter' || event.key === ',') {
       event.preventDefault();
-      this.drawer.addChip(field, input.value);
+      this.drawer.addChip(input.value);
       input.value = '';
       return;
     }
     if (event.key === 'Backspace' && input.value === '') {
-      const list = this.chips(field);
+      const list = this.drawer.tags();
       if (list.length > 0) {
-        this.drawer.removeChip(field, list[list.length - 1]);
+        this.drawer.removeChip(list[list.length - 1]);
       }
     }
   }
 
   /** A half-typed chip should not be lost when focus moves on. */
-  protected onChipBlur(event: FocusEvent, field: ChipField): void {
+  protected onChipBlur(event: FocusEvent): void {
     const input = event.target as HTMLInputElement;
     if (input.value.trim() !== '') {
-      this.drawer.addChip(field, input.value);
+      this.drawer.addChip(input.value);
       input.value = '';
     }
   }
 
-  protected async submit(force = false): Promise<void> {
-    if ((await this.drawer.submit(force)) === 'appended') {
+  protected async submit(): Promise<void> {
+    if ((await this.drawer.submit()) === 'appended') {
       this.surface()?.setContent('');
     }
   }

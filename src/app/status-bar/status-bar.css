@@ -1,0 +1,66 @@
+:host {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: none;
+  min-width: 0;
+  height: var(--status-h);
+  padding: 0 12px;
+  border-top: 1px solid var(--border);
+  background: var(--bg-dock);
+}
+
+.count {
+  flex: none;
+  white-space: nowrap;
+  font-family: var(--font-mono);
+  font-size: var(--fs-mono-meta);
+  color: var(--text-3);
+}
+
+.dot {
+  flex: none;
+  font-family: var(--font-mono);
+  font-size: var(--fs-mono-meta);
+  color: var(--text-faint);
+}
+
+.divider {
+  flex: none;
+  width: 1px;
+  height: 12px;
+  background: var(--border-strong);
+}
+
+.hint {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--font-mono);
+  font-size: var(--fs-mono-meta);
+  color: var(--text-7);
+}
+
+.settings {
+  margin-left: auto;
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  height: 20px;
+  padding: 0 7px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-5);
+  font-size: 11.5px;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.settings:hover {
+  background: var(--hover-bg);
+  color: var(--text-primary);
+}

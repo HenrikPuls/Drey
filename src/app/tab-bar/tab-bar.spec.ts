@@ -46,4 +46,26 @@ describe('TabBar', () => {
     fixture.detectChanges();
     expect(editor.openDocs().map((d) => d.path)).toEqual(['a.md']);
   });
+
+  it('offers "Close others" / "Close all" from the tab context menu', async () => {
+    await editor.openFile('c.md');
+    fixture.detectChanges();
+    const compiled = fixture.nativeElement as HTMLElement;
+
+    compiled
+      .querySelectorAll('.tab')[1]
+      .dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, clientX: 20, clientY: 20 }));
+    fixture.detectChanges();
+
+    const items = compiled.querySelectorAll('.ctx-menu button');
+    expect(Array.from(items).map((b) => b.textContent?.trim())).toEqual([
+      'Close others',
+      'Close all',
+    ]);
+
+    (items[0] as HTMLButtonElement).click();
+    fixture.detectChanges();
+    expect(editor.openDocs().map((d) => d.path)).toEqual(['b.md']);
+    expect(compiled.querySelector('.ctx-menu')).toBeNull();
+  });
 });

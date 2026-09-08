@@ -13,8 +13,28 @@ describe('CalendarService', () => {
       relativePath: 'daily',
       type: 'directory',
       children: [
+        // A legacy flat file, and a note under the nested year/month layout.
         { name: '2026-09-03.md', relativePath: 'daily/2026-09-03.md', type: 'file' },
         { name: 'notes.txt', relativePath: 'daily/notes.txt', type: 'file' },
+        {
+          name: '2026',
+          relativePath: 'daily/2026',
+          type: 'directory',
+          children: [
+            {
+              name: '09',
+              relativePath: 'daily/2026/09',
+              type: 'directory',
+              children: [
+                {
+                  name: '2026-09-11.md',
+                  relativePath: 'daily/2026/09/2026-09-11.md',
+                  type: 'file',
+                },
+              ],
+            },
+          ],
+        },
       ],
     },
   ];
@@ -53,12 +73,13 @@ describe('CalendarService', () => {
     expect([service.viewYear(), service.viewMonth()]).toEqual([2026, 0]);
   });
 
-  it('marks days that have a daily note (only YYYY-MM-DD.md files)', async () => {
+  it('marks days that have a daily note, nested or flat, ignoring non-daily files', async () => {
     await vault.refresh();
     service.viewYear.set(2026);
     service.viewMonth.set(8);
     const days = service.weeks().flat();
-    expect(days.find((d) => d.iso === '2026-09-03')?.hasNote).toBe(true);
+    expect(days.find((d) => d.iso === '2026-09-03')?.hasNote).toBe(true); // legacy flat
+    expect(days.find((d) => d.iso === '2026-09-11')?.hasNote).toBe(true); // nested
     expect(days.find((d) => d.iso === '2026-09-04')?.hasNote).toBe(false);
   });
 

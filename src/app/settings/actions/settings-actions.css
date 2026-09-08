@@ -1,9 +1,4 @@
-.pane {
-  display: flex;
-  flex-direction: column;
-  gap: 28px;
-  max-width: 640px;
-}
+/* Local rules on top of settings-forms.css. */
 
 h3 {
   margin: 0 0 4px;
@@ -18,15 +13,6 @@ h3 {
   line-height: 1.5;
 }
 
-.mono {
-  font-family: var(--font-mono);
-}
-
-.empty {
-  font-size: 0.8rem;
-  color: var(--text-6);
-}
-
 .rows,
 .templates {
   list-style: none;
@@ -37,8 +23,8 @@ h3 {
   gap: 6px;
 }
 
+/* A trigger/template row is a bordered card here, not the plain flex row. */
 .row {
-  display: flex;
   align-items: center;
   gap: 10px;
   flex-wrap: wrap;
@@ -116,17 +102,6 @@ textarea {
   resize: vertical;
   font-family: var(--font-mono);
   line-height: 1.5;
-}
-
-.ghost {
-  background: transparent;
-  border: 1px solid var(--border-strong);
-  color: var(--text-3);
-  border-radius: var(--radius);
-  font-size: 0.8rem;
-  padding: 7px 12px;
-  cursor: pointer;
-  align-self: flex-start;
 }
 
 .link,

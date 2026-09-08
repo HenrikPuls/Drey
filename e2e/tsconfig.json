@@ -1,0 +1,21 @@
+{
+  /*
+   * Standalone from the Angular tsconfigs on purpose: the E2E suite runs in
+   * plain Node via Playwright's own esbuild transpile, not the ng builder.
+   * This file is for editor IntelliSense and an optional
+   * `tsc -p e2e/tsconfig.json --noEmit` gate.
+   */
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "lib": ["ES2022", "DOM"],
+    "types": ["node"],
+    "strict": true,
+    "skipLibCheck": true,
+    "esModuleInterop": true,
+    "forceConsistentCasingInFileNames": true,
+    "noEmit": true
+  },
+  "include": ["**/*.ts"]
+}

@@ -9,9 +9,10 @@ import {
   signal,
 } from '@angular/core';
 import { LlmDebugEntry } from '../../../../shared/ipc-api';
-import { maskSecret, toCurl } from '../../../../shared/llm-debug';
+import { maskSecret, toCurl } from '../../../../shared/llm';
 import { LlmDebugService } from '../../services/llm-debug.service';
 import { SettingsService } from '../../services/settings.service';
+import { SettingsPane } from '../settings-pane/settings-pane';
 
 /**
  * "LLM" settings category: the master switch, the OpenAI-compatible base
@@ -26,8 +27,9 @@ import { SettingsService } from '../../services/settings.service';
 @Component({
   selector: 'app-settings-llm',
   changeDetection: ChangeDetectionStrategy.OnPush,
+  imports: [SettingsPane],
   templateUrl: './settings-llm.html',
-  styleUrl: './settings-llm.css',
+  styleUrls: ['../settings-forms.css', './settings-llm.css'],
 })
 export class SettingsLlm implements OnInit, OnDestroy {
   protected readonly settings = inject(SettingsService);
@@ -57,7 +59,8 @@ export class SettingsLlm implements OnInit, OnDestroy {
 
   /** The draft's key differs from the saved one -- i.e. it still needs Save. */
   protected readonly apiKeyUnsaved = computed<boolean>(
-    () => (this.settings.draft()?.llm.apiKey ?? null) !== (this.settings.config()?.llm.apiKey ?? null),
+    () =>
+      (this.settings.draft()?.llm.apiKey ?? null) !== (this.settings.config()?.llm.apiKey ?? null),
   );
 
   /** The configured model plus anything the endpoint currently lists, de-duplicated. */

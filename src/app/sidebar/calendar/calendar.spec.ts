@@ -50,7 +50,7 @@ describe('Calendar', () => {
     await fixture.whenStable();
 
     expect(cal.selectedIso()).toBe('2026-09-02');
-    expect(editor.openPath()).toBe('daily/2026-09-02.md');
+    expect(editor.openPath()).toBe('daily/2026/09/2026-09-02.md');
     expect(editor.activeIsDraft()).toBe(true);
   });
 

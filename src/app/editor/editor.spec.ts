@@ -1,6 +1,7 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { Editor } from './editor';
 import { EditorService } from '../services/editor.service';
+import { KeybindingService } from '../keybindings';
 import { DreyApi } from '../../../shared/ipc-api';
 
 const RICH = [
@@ -42,9 +43,6 @@ describe('Editor', () => {
           path: request.path,
           content: request.body,
           modifiedMs: 2,
-          tags: [],
-          unknownTags: [],
-          appendedTo: [],
         }),
       listTags: () => Promise.resolve([]),
     };
@@ -200,13 +198,21 @@ describe('Editor', () => {
     expect(cmText()).toContain('**bold**');
   });
 
-  it('Ctrl+S saves and leaves the mode unchanged', async () => {
+  it('the app-wide save command saves and leaves the mode unchanged', async () => {
+    // Ctrl+S is registered by `App` on the keybinding registry now, not by
+    // the editor host -- wire the same command here and fire the chord.
+    const keys = TestBed.inject(KeybindingService);
+    keys.register({
+      id: 'note.save',
+      label: 'Save',
+      keybinding: 'Mod+S',
+      run: () => void editor.save(),
+    });
+
     editor.updateBuffer('# Title\n\nsome **bold** text edited');
     fixture.detectChanges();
 
-    compiled().dispatchEvent(
-      new KeyboardEvent('keydown', { key: 's', ctrlKey: true, bubbles: true }),
-    );
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 's', ctrlKey: true, bubbles: true }));
     await fixture.whenStable();
     fixture.detectChanges();
 

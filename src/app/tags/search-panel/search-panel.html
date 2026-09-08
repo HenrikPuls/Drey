@@ -1,0 +1,97 @@
+@if (!embedded()) {
+  <button
+    type="button"
+    class="head"
+    [class.open]="expanded()"
+    [attr.aria-expanded]="expanded()"
+    (click)="toggle()"
+  >
+    <app-icon name="chevron-right" [size]="9" />
+    <span class="label">SEARCH</span>
+    @if (!expanded() && search.hits().length > 0) {
+      <span class="count">{{ search.hits().length }}</span>
+    }
+  </button>
+}
+
+@if (showBody()) {
+  <div class="body">
+    <div class="chip-field">
+      @for (tag of search.queryTags(); track tag) {
+        <span class="chip">
+          #{{ tag }}
+          <button
+            type="button"
+            class="x"
+            [attr.aria-label]="'Remove ' + tag"
+            (click)="search.removeTag(tag)"
+          >
+            ×
+          </button>
+        </span>
+      }
+      <input
+        #tagInput
+        class="chip-input"
+        type="text"
+        list="search-tag-vocab"
+        autocomplete="off"
+        placeholder="+ tag"
+        (keydown)="onTagKeydown($event)"
+        (blur)="onTagBlur($event)"
+      />
+      <datalist id="search-tag-vocab">
+        @for (entry of tags.tags(); track entry.tag) {
+          <option [value]="entry.tag">{{ entry.count }}×</option>
+        }
+      </datalist>
+    </div>
+
+    <input
+      class="text-input"
+      type="text"
+      autocomplete="off"
+      placeholder="free text…"
+      [value]="search.queryText()"
+      (input)="search.setText($any($event.target).value)"
+      (keydown.enter)="search.run()"
+    />
+
+    <div class="actions">
+      <button type="button" class="ghost" [disabled]="!search.hasQuery()" (click)="search.clear()">
+        Clear
+      </button>
+      <button
+        type="button"
+        class="primary"
+        [disabled]="!search.hasQuery() || search.searching()"
+        (click)="search.run()"
+      >
+        {{ search.searching() ? 'Searching…' : 'Search' }}
+      </button>
+    </div>
+
+    @if (search.ran()) {
+      <div class="summary-row">
+        <p class="result-count">
+          {{ search.hits().length }} {{ search.hits().length === 1 ? 'section' : 'sections' }}
+        </p>
+        @if (search.hits().length > 0) {
+          <button type="button" class="ghost" (click)="exportDoc()">Export</button>
+        }
+      </div>
+
+      <ul class="results">
+        @for (hit of search.hits(); track $index) {
+          <li>
+            <button type="button" class="hit" (click)="open(hit.path, hit.line)">
+              <span class="hit-heading">{{ hit.heading }}</span>
+              <span class="hit-path">{{ hit.path }}</span>
+              <span class="hit-snippet">{{ hit.snippet }}</span>
+            </button>
+          </li>
+        }
+      </ul>
+    }
+  </div>
+}

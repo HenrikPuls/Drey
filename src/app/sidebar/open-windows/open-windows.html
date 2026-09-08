@@ -1,5 +1,3 @@
-<div class="label">Open windows</div>
-
 @if (editor.openDocs().length === 0) {
   <p class="empty">Nothing open.</p>
 } @else {
@@ -7,7 +5,7 @@
     @for (doc of editor.openDocs(); track doc.path) {
       <div class="row" [class.active]="doc.path === editor.activePath()" [title]="doc.path">
         <button type="button" class="open" (click)="editor.activate(doc.path)">
-          <app-icon name="window" [size]="12" />
+          <span class="win-glyph" aria-hidden="true"></span>
           <span class="name">{{ doc.name }}</span>
         </button>
         @if (doc.bufferContent !== doc.savedContent) {
@@ -19,7 +17,7 @@
           (click)="onClose($event, doc.path)"
           [attr.aria-label]="'Close ' + doc.name"
         >
-          <app-icon name="x" [size]="8" [strokeWidth]="1.4" />
+          <app-icon name="x" [size]="7" [strokeWidth]="1.1" />
         </button>
       </div>
     }

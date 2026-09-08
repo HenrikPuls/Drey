@@ -12,10 +12,14 @@
       <div class="preview diff" role="figure" aria-label="Line changes">
         @for (line of diffLines(); track $index) {
           @if (line.type === 'gap') {
-            <div class="row gap">⋯ {{ line.count }} unchanged line{{ line.count === 1 ? '' : 's' }}</div>
+            <div class="row gap">
+              ⋯ {{ line.count }} unchanged line{{ line.count === 1 ? '' : 's' }}
+            </div>
           } @else {
             <div class="row" [class.add]="line.type === 'add'" [class.del]="line.type === 'del'">
-              <span class="sign">{{ line.type === 'add' ? '+' : line.type === 'del' ? '−' : ' ' }}</span>
+              <span class="sign">{{
+                line.type === 'add' ? '+' : line.type === 'del' ? '−' : ' '
+              }}</span>
               <span class="text">{{ line.text || ' ' }}</span>
             </div>
           }

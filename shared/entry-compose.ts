@@ -4,17 +4,16 @@
  * actual insertion from the same function, so what the drawer shows and
  * what lands in the file cannot drift apart.
  *
- * The shape is fixed by the drawer spec:
+ * The shape:
  *
  *     ## HH:mm — <Topic>
  *     <Markdown-Text>
- *     #tag #tag · [[Person]] · [[Meeting]]
+ *     #tag #tag
  *
- * The meta line is omitted entirely when there are no tags, people or
- * meetings; the topic (and its dash) when there is no topic -- which keeps
- * a plain drawer entry byte-identical to what the old capture bar wrote,
- * so nothing downstream has to special-case it. `shared/entries.ts` parses
- * both shapes back.
+ * The meta line is omitted when there are no tags; the topic (and its dash)
+ * when there is no topic -- which keeps a plain drawer entry byte-identical
+ * to a bare `## HH:mm` block, so nothing downstream has to special-case it.
+ * `shared/entries.ts` parses both shapes back.
  */
 import { formatEntryHeading } from './entries';
 import { formatTime } from './timestamp';
@@ -27,34 +26,19 @@ export interface EntryDraft {
   text: string;
   /** Bare tag names, no leading `#`. */
   tags: readonly string[];
-  /** Person names, rendered as `[[Name]]`. */
-  people: readonly string[];
-  /** Meeting names, rendered as `[[Meeting]]`. */
-  meetings: readonly string[];
 }
 
 export const EMPTY_ENTRY_DRAFT: EntryDraft = {
   topic: '',
   text: '',
   tags: [],
-  people: [],
-  meetings: [],
 };
 
-/** `#tag #tag · [[Person]] · [[Meeting]]`, or `''` when nothing is set. */
+/** `#tag #tag`, or `''` when nothing is tagged. */
 export function formatEntryMeta(draft: EntryDraft): string {
-  const groups: string[] = [];
-  const tags = clean(draft.tags).map((tag) => `#${tag.replace(/^#/, '')}`);
-  if (tags.length > 0) {
-    groups.push(tags.join(' '));
-  }
-  for (const list of [draft.people, draft.meetings]) {
-    const links = clean(list).map((name) => `[[${name.replace(/^\[\[|\]\]$/g, '')}]]`);
-    if (links.length > 0) {
-      groups.push(links.join(' '));
-    }
-  }
-  return groups.join(' · ');
+  return clean(draft.tags)
+    .map((tag) => `#${tag.replace(/^#/, '')}`)
+    .join(' ');
 }
 
 /**
@@ -114,13 +98,7 @@ export function appendEntry(
 
 /** Whether there is anything worth appending at all. */
 export function hasEntryContent(draft: EntryDraft): boolean {
-  return (
-    draft.topic.trim() !== '' ||
-    draft.text.trim() !== '' ||
-    clean(draft.tags).length > 0 ||
-    clean(draft.people).length > 0 ||
-    clean(draft.meetings).length > 0
-  );
+  return draft.topic.trim() !== '' || draft.text.trim() !== '' || clean(draft.tags).length > 0;
 }
 
 function clean(list: readonly string[]): string[] {

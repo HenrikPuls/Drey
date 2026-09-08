@@ -142,9 +142,18 @@ describe('SettingsService (draft model)', () => {
   });
 
   describe('"don’t ask again" from the confirmation dialog', () => {
-    it('persists immediately and updates config and draft together', async () => {
-      const triggerId = service.config()!.actions.triggers[0].id;
+    let triggerId: string;
 
+    beforeEach(async () => {
+      // No default triggers any more -- seed one and save it.
+      const templateId = service.addTemplate();
+      service.updateTemplate(templateId, { name: 'Reformat', prompt: 'tidy' });
+      service.addTrigger(templateId, 'manual');
+      await service.save();
+      triggerId = service.config()!.actions.triggers[0].id;
+    });
+
+    it('persists immediately and updates config and draft together', async () => {
       await service.setTriggerConfirmImmediate(triggerId, false);
 
       const stored = harness.stored().actions.triggers.find((t) => t.id === triggerId);
@@ -156,7 +165,6 @@ describe('SettingsService (draft model)', () => {
     });
 
     it('leaves unrelated unsaved draft edits alone', async () => {
-      const triggerId = service.config()!.actions.triggers[0].id;
       service.patchLlm({ apiKey: 'sk-draft-only' });
 
       await service.setTriggerConfirmImmediate(triggerId, false);
@@ -225,6 +233,43 @@ describe('SettingsService (draft model)', () => {
       service.patchLlm({ apiKey: 'sk-draft-only' });
 
       await service.setEditorFontFamily('mono');
+
+      expect(service.draft()?.llm.apiKey).toBe('sk-draft-only');
+      expect(harness.stored().llm.apiKey).toBeNull();
+      expect(service.isDirty()).toBe(true);
+    });
+  });
+
+  describe('appearance (Settings -> Appearance)', () => {
+    it('persists the UI scale immediately and updates config + draft together', async () => {
+      await service.setAppearanceUiScale('large');
+
+      expect(service.appearanceUiScale()).toBe('large');
+      expect(harness.stored().appearance.uiScale).toBe('large');
+      expect(service.draft()?.appearance.uiScale).toBe('large');
+      expect(service.isDirty()).toBe(false);
+    });
+
+    it('accepts a preset id or a #hex accent and pins junk to the default', async () => {
+      await service.setAppearanceAccent('#12ab34');
+      expect(service.appearanceAccent()).toBe('#12ab34');
+      expect(harness.stored().appearance.accent).toBe('#12ab34');
+
+      await service.setAppearanceAccent('bogus');
+      expect(service.appearanceAccent()).toBe('terracotta');
+    });
+
+    it('does not write when the value is unchanged', async () => {
+      const before = harness.setCalls();
+      await service.setAppearanceUiScale('default');
+      await service.setAppearanceAccent('terracotta');
+      expect(harness.setCalls()).toBe(before);
+    });
+
+    it('leaves unrelated unsaved draft edits alone', async () => {
+      service.patchLlm({ apiKey: 'sk-draft-only' });
+
+      await service.setAppearanceUiScale('small');
 
       expect(service.draft()?.llm.apiKey).toBe('sk-draft-only');
       expect(harness.stored().llm.apiKey).toBeNull();

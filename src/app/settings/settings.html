@@ -1,12 +1,13 @@
 <div class="backdrop" (click)="requestClose()"></div>
 
 <div class="panel" role="dialog" aria-modal="true" aria-label="Settings">
+  <button type="button" class="close" (click)="requestClose()" aria-label="Close settings">
+    <app-icon name="x" [size]="15" />
+  </button>
+
   <nav class="categories">
     <div class="head">
       <span class="title">Settings</span>
-      <button type="button" class="close" (click)="requestClose()" aria-label="Close settings">
-        <app-icon name="x" [size]="15" />
-      </button>
     </div>
     @for (category of categories; track category.id) {
       <button
@@ -24,26 +25,7 @@
   <div class="right">
     <section class="detail">
       @if (settings.draft()) {
-        @switch (selected()) {
-          @case ('llm') {
-            <app-settings-llm />
-          }
-          @case ('assistant') {
-            <app-settings-assistant />
-          }
-          @case ('spellcheck') {
-            <app-settings-spellcheck />
-          }
-          @case ('appearance') {
-            <app-settings-appearance />
-          }
-          @case ('actions') {
-            <app-settings-actions />
-          }
-          @case ('about') {
-            <app-settings-about />
-          }
-        }
+        <ng-container *ngComponentOutlet="selectedComponent()" />
       } @else {
         <p class="loading">Loading settings…</p>
       }
@@ -71,8 +53,8 @@
         <button
           type="button"
           class="ghost"
-          [disabled]="!settings.isDirty() || settings.saving()"
-          (click)="settings.discard()"
+          [disabled]="settings.saving()"
+          (click)="requestClose()"
         >
           Discard
         </button>

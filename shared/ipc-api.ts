@@ -8,14 +8,20 @@
  * not a runtime surprise. See docs/09_architecture_decisions/0001-*.md.
  */
 import type { AppConfig, CustomDictionary, LlmEndpoint } from './app-config';
-import type { ActionContext, ActionOutcome, AskOutcome } from './actions';
+import type { ActionContext, ActionOutcome, AskOutcome, LlmDebugEntry } from './llm';
 import type { ChatThread } from './chat-thread';
-import type { LlmDebugEntry } from './llm-debug';
+import type { TagSearchHit, TagSearchQuery } from './tags';
 
 export type { AppConfig, LlmEndpoint, CustomDictionary } from './app-config';
 export type { ChatCard, ChatCardRole, ChatThread } from './chat-thread';
-export type { LlmDebugEntry } from './llm-debug';
-export type { ActionContext, ActionOutcome, AskOutcome, ResolvedAction } from './actions';
+export type {
+  ActionContext,
+  ActionOutcome,
+  AskOutcome,
+  LlmDebugEntry,
+  ResolvedAction,
+} from './llm';
+export type { TagSearchHit, TagSearchQuery } from './tags';
 
 /**
  * Channel names. Most are `ipcMain.handle` / `ipcRenderer.invoke` request
@@ -25,6 +31,13 @@ export type { ActionContext, ActionOutcome, AskOutcome, ResolvedAction } from '.
  */
 export const IPC_CHANNELS = {
   getAppInfo: 'app:get-info',
+  windowMinimize: 'window:minimize',
+  windowToggleMaximize: 'window:toggle-maximize',
+  windowClose: 'window:close',
+  windowIsMaximized: 'window:is-maximized',
+  windowMaximizeChanged: 'window:maximize-changed',
+  editExec: 'edit:exec',
+  uiSetZoom: 'ui:set-zoom',
   vaultGetActive: 'vault:get-active',
   vaultSelect: 'vault:select',
   vaultListFiles: 'vault:list-files',
@@ -32,11 +45,15 @@ export const IPC_CHANNELS = {
   vaultWriteFile: 'vault:write-file',
   vaultCreateFile: 'vault:create-file',
   vaultCreateDirectory: 'vault:create-directory',
+  vaultDelete: 'vault:delete',
+  vaultPickSavePath: 'vault:pick-save-path',
   dailyOpen: 'daily:open',
   dailyBuildContent: 'daily:build-content',
   noteSave: 'note:save',
-  tagList: 'tag:list',
-  tagRegistry: 'tag:registry',
+  tagList: 'tags:list',
+  tagSearch: 'tags:search',
+  tagSummariseResults: 'tags:summarise-results',
+  tagSuggest: 'tags:suggest',
   configGet: 'config:get',
   configSet: 'config:set',
   llmListModels: 'llm:list-models',
@@ -54,6 +71,15 @@ export const IPC_CHANNELS = {
   spellLanguages: 'spell:languages',
   spellAddDictionary: 'spell:add-dictionary',
 } as const;
+
+/**
+ * Standard editing commands the HTML Edit menu routes through the focused
+ * `webContents` element (`electron/main.ts`). CodeMirror and native
+ * `<input>` / `<textarea>` fields both honour these, so one path covers
+ * every editable surface -- and it survives the menu click stealing DOM
+ * focus, which a renderer-side dispatch would not.
+ */
+export type EditCommand = 'undo' | 'redo' | 'cut' | 'copy' | 'paste' | 'selectAll';
 
 /**
  * Mirrors Node's `NodeJS.Platform` values. Spelled out explicitly instead
@@ -141,32 +167,13 @@ export interface Frontmatter {
 }
 
 /**
- * One tag in the vault-wide vocabulary, as surfaced to the renderer for
- * `#tag` autocomplete. Every tag ever seen in any file's `tags[]` gets an
- * entry; `hasMaster` / `masterPath` are set only for tags that have a
- * `type: master` document (the ones routing can target and the classifier
- * registry is built from).
+ * One tag in the vault-wide vocabulary, for `#tag` autocomplete and the
+ * search panel's tag picker. `count` is how many heading-sections carry
+ * the tag (`electron/tags/TagIndex`).
  */
 export interface TagEntry {
   tag: string;
-  aliases: string[];
-  art: MasterArt | null;
-  description: string | null;
-  hasMaster: boolean;
-  masterPath: string | null;
-}
-
-/**
- * One line of the classifier tag registry (`specs/classifier-spec.md`):
- * derived from the `description` of a `type: master` file. Kept structured
- * here; `formatRegistry()` in `shared/tag-registry.ts` renders the
- * `- <tag> (<art>): <description>` text where the prompt needs it.
- */
-export interface TagRegistryEntry {
-  tag: string;
-  art: MasterArt;
-  description: string;
-  path: string;
+  count: number;
 }
 
 /** Renderer -> main: save the active editor buffer as a note. */
@@ -187,19 +194,13 @@ export interface NoteSaveRequest {
 
 /**
  * Result of `saveNote`. `content` is the possibly-rewritten note text
- * (frontmatter `tags` merged, `updated:` bumped) in `\n` form -- the
- * renderer adopts it as the tab's new saved content. `appendedTo` lists
- * master-document paths that gained a `## History` entry from this save
- * (milestone 6b routing); `unknownTags` are inline tags with no known
- * master, handed back for the milestone-8 inbox.
+ * (`updated:` bumped, `created:` filled) in `\n` form -- the renderer
+ * adopts it as the tab's new saved content.
  */
 export interface NoteSaveResult {
   path: string;
   content: string;
   modifiedMs: number;
-  tags: string[];
-  unknownTags: string[];
-  appendedTo: string[];
   /**
    * `'edit'` outcomes from `on-save` Actions whose trigger still needs
    * confirmation -- the renderer walks these through the confirmation
@@ -245,6 +246,41 @@ export interface SpellCheckResult {
 /** The API surface exposed on `window.dreyApi` by the preload script. */
 export interface DreyApi {
   getAppInfo(): Promise<AppInfo>;
+
+  /**
+   * Custom-titlebar window controls. The renderer draws its own
+   * minimize/maximize/close buttons because the window is frameless
+   * (`titleBarStyle: 'hidden'`) -- see
+   * docs/09_architecture_decisions/0019-*.md. No-ops if the window is gone.
+   */
+  minimizeWindow(): Promise<void>;
+  toggleMaximizeWindow(): Promise<void>;
+  closeWindow(): Promise<void>;
+  isWindowMaximized(): Promise<boolean>;
+
+  /**
+   * Fires whenever the window is maximized or restored, so the titlebar's
+   * maximize/restore glyph can follow along (main -> renderer push, same
+   * shape as `onOpenDailyNote`). Returns an unsubscribe.
+   */
+  onWindowMaximizeChange(listener: (maximized: boolean) => void): () => void;
+
+  /**
+   * Runs a standard editing command against the focused editable element
+   * (CodeMirror or a native field), via the window's `webContents`. Backs
+   * the HTML Edit menu's Undo/Redo/Cut/Copy/Paste/Select all rows -- the
+   * accelerators already work; this makes the menu clicks work too.
+   */
+  execEditCommand(command: EditCommand): Promise<void>;
+
+  /**
+   * Sets the whole renderer's zoom factor (`webContents.setZoomFactor`) --
+   * the app-wide "Base font size" preset in Settings -> Appearance. `1` is
+   * unscaled. Scales layout and pointer coordinates together, unlike a CSS
+   * `zoom`, so drag gestures keep working. Resets on reload, so the renderer
+   * re-applies it from config on startup.
+   */
+  setUiZoomFactor(factor: number): Promise<void>;
 
   /** The full app config (`shared/app-config.ts`), always normalised/complete. */
   getConfig(): Promise<AppConfig>;
@@ -399,6 +435,23 @@ export interface DreyApi {
   createVaultDirectory(relativePath: string): Promise<string>;
 
   /**
+   * Deletes a file or folder (recursively) inside the active vault. Same
+   * path rules as `readVaultFile`; refuses the vault root. Deleting a
+   * `.md` note also removes its assistant sidecar (`.{name}.chat.json`) if
+   * present. A missing target is not an error. Rejects only on a bad path
+   * or a real filesystem failure.
+   */
+  deleteVaultEntry(relativePath: string): Promise<void>;
+
+  /**
+   * Opens the native "Save note" dialog rooted at the vault. Resolves to
+   * the chosen location as a forward-slash vault-relative path (`.md`
+   * enforced), or `null` if the user cancelled. Rejects if the chosen
+   * location is outside the active vault.
+   */
+  pickSavePath(suggestedName: string): Promise<string | null>;
+
+  /**
    * Builds the Markdown a fresh daily note for `date` (`YYYY-MM-DD`) would
    * start from -- the current `templates/daily.md` with its placeholders
    * substituted -- WITHOUT creating the file (and without scaffolding the
@@ -434,19 +487,37 @@ export interface DreyApi {
   saveNote(request: NoteSaveRequest): Promise<NoteSaveResult>;
 
   /**
-   * The vault-wide tag vocabulary for `#tag` autocomplete. Rebuilt when a
-   * vault is selected and updated incrementally after each `saveNote`;
-   * external edits are picked up on the next vault load (no file watcher
-   * yet). Resolves to `[]` when no vault is active.
+   * The vault-wide tag vocabulary (`tag` + section count) for `#tag`
+   * autocomplete and the search panel's tag picker. Rebuilt when a vault
+   * is selected, re-indexed per file on each `saveNote` and on delete;
+   * external edits are picked up on the next vault load / manual refresh
+   * (no file watcher). Resolves to `[]` when no vault is active.
    */
   listTags(): Promise<TagEntry[]>;
 
   /**
-   * The classifier tag registry (`specs/classifier-spec.md`): one entry
-   * per `type: master` document. Structured; the prompt text is rendered
-   * by `formatRegistry()`. Consumed from milestone 7 on.
+   * Runs the tag search: sections where every `query.tags` entry is present
+   * and every whitespace-split term of `query.text` appears (body or
+   * heading). Each hit carries a path, heading, 1-based line and a compact
+   * snippet. Fast -- no LLM. `[]` when the query is empty or no vault.
    */
-  getTagRegistry(): Promise<TagRegistryEntry[]>;
+  searchTags(query: TagSearchQuery): Promise<TagSearchHit[]>;
+
+  /**
+   * Runs the same search, then asks the local model for a short prose
+   * digest of the matching sections. `taskId` makes it cancellable
+   * (`cancelLlmTask`); no timeout (ADR-0014). Rejects when LLM features are
+   * off, the query is empty, or the model errors.
+   */
+  summariseSearchResults(query: TagSearchQuery, taskId?: string): Promise<string>;
+
+  /**
+   * The drawer's "Autotag" button: `entryText` plus the vault tag
+   * vocabulary in, up to four suggested tags out. Only pre-fills the tag
+   * field -- the user still confirms by saving. `taskId` makes it
+   * cancellable. Rejects when LLM features are off.
+   */
+  suggestTags(entryText: string, taskId?: string): Promise<string[]>;
 }
 
 declare global {

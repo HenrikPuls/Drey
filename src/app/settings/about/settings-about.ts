@@ -1,5 +1,6 @@
 import { ChangeDetectionStrategy, Component, OnInit, inject } from '@angular/core';
 import { AboutService } from '../../services/about.service';
+import { SettingsPane } from '../settings-pane/settings-pane';
 
 /**
  * "About" settings category: the running app / Electron / Chromium / Node
@@ -12,8 +13,9 @@ import { AboutService } from '../../services/about.service';
 @Component({
   selector: 'app-settings-about',
   changeDetection: ChangeDetectionStrategy.OnPush,
+  imports: [SettingsPane],
   templateUrl: './settings-about.html',
-  styleUrl: './settings-about.css',
+  styleUrls: ['../settings-forms.css', './settings-about.css'],
 })
 export class SettingsAbout implements OnInit {
   protected readonly about = inject(AboutService);

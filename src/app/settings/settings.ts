@@ -1,4 +1,5 @@
-import { ChangeDetectionStrategy, Component, inject, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
+import { NgComponentOutlet } from '@angular/common';
 import { Icon } from '../icons/icon';
 import { SettingsService } from '../services/settings.service';
 import { SettingsAbout } from './about/settings-about';
@@ -7,15 +8,15 @@ import { SettingsAppearance } from './appearance/settings-appearance';
 import { SettingsAssistant } from './assistant/settings-assistant';
 import { SettingsLlm } from './llm/settings-llm';
 import { SettingsSpellcheck } from './spellcheck/settings-spellcheck';
-
-type CategoryId = 'llm' | 'assistant' | 'spellcheck' | 'appearance' | 'actions' | 'about';
+import { SettingsCategory } from './settings-category';
 
 /**
  * The Settings screen: master-detail per CLAUDE.md's "UI/UX Design" -- a
  * category list on the left, the detail pane on the right. Shown as a
  * full-surface overlay (`App` renders it when
- * `SettingsService.screenOpen`). `categories` is a list, not a hard-coded
- * set, so more slot in later.
+ * `SettingsService.screenOpen`). The category list is a data-driven
+ * registry (`SettingsCategory[]`), rendered through `NgComponentOutlet`, so
+ * a new category is one array entry -- no `@switch` to extend.
  *
  * Edits go into `SettingsService.draft` and reach disk only via **Save**.
  * Closing with unsaved changes -- the close button, the backdrop, or
@@ -26,15 +27,7 @@ type CategoryId = 'llm' | 'assistant' | 'spellcheck' | 'appearance' | 'actions' 
 @Component({
   selector: 'app-settings',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [
-    Icon,
-    SettingsLlm,
-    SettingsAssistant,
-    SettingsSpellcheck,
-    SettingsAppearance,
-    SettingsActions,
-    SettingsAbout,
-  ],
+  imports: [Icon, NgComponentOutlet],
   templateUrl: './settings.html',
   styleUrl: './settings.css',
   host: { '(document:keydown.escape)': 'requestClose()' },
@@ -42,16 +35,42 @@ type CategoryId = 'llm' | 'assistant' | 'spellcheck' | 'appearance' | 'actions' 
 export class Settings {
   protected readonly settings = inject(SettingsService);
 
-  protected readonly categories: ReadonlyArray<{ id: CategoryId; label: string; hint: string }> = [
-    { id: 'llm', label: 'LLM', hint: 'Local model connection' },
-    { id: 'assistant', label: 'Assistant', hint: 'Note summary panel' },
-    { id: 'spellcheck', label: 'Spelling', hint: 'Dictionaries & language' },
-    { id: 'appearance', label: 'Appearance', hint: 'Editor font' },
-    { id: 'actions', label: 'Actions', hint: 'Prompt templates & triggers' },
-    { id: 'about', label: 'About', hint: 'Version & licenses' },
+  protected readonly categories: readonly SettingsCategory[] = [
+    { id: 'llm', label: 'LLM', hint: 'Local model connection', component: SettingsLlm },
+    {
+      id: 'assistant',
+      label: 'Assistant',
+      hint: 'Note summary panel',
+      component: SettingsAssistant,
+    },
+    {
+      id: 'spellcheck',
+      label: 'Spelling',
+      hint: 'Dictionaries & language',
+      component: SettingsSpellcheck,
+    },
+    {
+      id: 'appearance',
+      label: 'Appearance',
+      hint: 'Type size, colour & font',
+      component: SettingsAppearance,
+    },
+    {
+      id: 'actions',
+      label: 'Actions',
+      hint: 'Prompt templates & triggers',
+      component: SettingsActions,
+    },
+    { id: 'about', label: 'About', hint: 'Version & licenses', component: SettingsAbout },
   ];
 
-  protected readonly selected = signal<CategoryId>('llm');
+  protected readonly selected = signal<string>(this.categories[0].id);
+
+  protected readonly selectedComponent = computed(
+    () =>
+      (this.categories.find((category) => category.id === this.selected()) ?? this.categories[0])
+        .component,
+  );
 
   /** True while the "you have unsaved changes" bar is showing. */
   protected readonly confirmingClose = signal(false);

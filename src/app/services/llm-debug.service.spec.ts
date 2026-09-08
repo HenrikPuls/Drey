@@ -87,8 +87,7 @@ describe('LlmDebugService', () => {
 
   it('surfaces a failure to read the log instead of showing an empty panel', async () => {
     install({
-      getLlmDebugLog: () =>
-        Promise.reject(new Error("No handler registered for 'llm:debug-list'")),
+      getLlmDebugLog: () => Promise.reject(new Error("No handler registered for 'llm:debug-list'")),
     });
 
     await service.start();

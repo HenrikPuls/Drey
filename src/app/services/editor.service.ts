@@ -1,8 +1,10 @@
 import { Injectable, computed, inject, signal } from '@angular/core';
+import { dailyPathFor } from '../../../shared/daily';
 import { EntryDraft, entryInsertion } from '../../../shared/entry-compose';
 import { ActionOutcome } from '../../../shared/ipc-api';
 import { formatTime } from '../../../shared/timestamp';
 import { TagService } from './tag.service';
+import { VaultService } from './vault.service';
 
 /** Re-exported for existing importers (`Editor`, specs); defined in `markdown-frontmatter.ts`. */
 export { stripFrontmatter } from '../editor/markdown-frontmatter';
@@ -38,6 +40,12 @@ export interface OpenDoc {
   /** `modifiedMs` from the last read/write -- round-tripped for the future file watcher. */
   modifiedMs: number;
   existsOnDisk: boolean;
+  /**
+   * `true` for a generated scratch doc (the tag-search export) that has no
+   * intended location: `save()` routes to `saveAs()` so the user picks one.
+   * Daily-note drafts leave this `false` -- they save to their own path.
+   */
+  askOnSave?: boolean;
 }
 
 /**
@@ -45,8 +53,7 @@ export interface OpenDoc {
  * `id` deduplicates (the handling component remembers the last id it acted
  * on). Exactly one of the payloads is set: `text` for a bare body (the
  * quick-capture hotkey sends neither), `draft` for the entry drawer, whose
- * topic / tags / people / meetings are rendered by
- * `shared/entry-compose.ts`.
+ * topic / text / tags are rendered by `shared/entry-compose.ts`.
  */
 export interface NewEntryRequest {
   readonly id: number;
@@ -75,6 +82,25 @@ function readDefaultMode(): EditorViewMode {
   }
 }
 
+function readLineNumbers(): boolean {
+  try {
+    const raw = localStorage.getItem(PREFS_KEY);
+    return (JSON.parse(raw ?? '{}') as { lineNumbers?: boolean }).lineNumbers === true;
+  } catch {
+    return false;
+  }
+}
+
+function writePref(patch: Record<string, unknown>): void {
+  try {
+    const raw = localStorage.getItem(PREFS_KEY);
+    const current = JSON.parse(raw ?? '{}') as Record<string, unknown>;
+    localStorage.setItem(PREFS_KEY, JSON.stringify({ ...current, ...patch }));
+  } catch {
+    // Private-mode / storage-disabled: a non-persisted session is fine.
+  }
+}
+
 function baseName(relativePath: string): string {
   const parts = relativePath.split('/');
   return parts[parts.length - 1] || relativePath;
@@ -94,6 +120,7 @@ function baseName(relativePath: string): string {
 @Injectable({ providedIn: 'root' })
 export class EditorService {
   private readonly tags = inject(TagService);
+  private readonly vault = inject(VaultService);
 
   private readonly docs = signal<OpenDoc[]>([]);
   private readonly active = signal<string | null>(null);
@@ -120,6 +147,25 @@ export class EditorService {
   readonly isLoading = signal(false);
   readonly isSaving = signal(false);
   readonly error = signal<string | null>(null);
+
+  /**
+   * Whether the editor shows a line-number gutter. App-wide, persisted per
+   * machine like the default view mode; the actual CodeMirror gutter is
+   * wired in step 5. Toggled from the meta bar and View -> "Line numbers".
+   */
+  readonly lineNumbers = signal(readLineNumbers());
+
+  toggleLineNumbers(): void {
+    this.lineNumbers.update((v) => !v);
+    writePref({ lineNumbers: this.lineNumbers() });
+  }
+
+  /** Word / character counts for the status bar, from the active buffer. */
+  readonly wordCount = computed<number>(() => {
+    const text = this.bufferContent().trim();
+    return text ? text.split(/\s+/).length : 0;
+  });
+  readonly charCount = computed<number>(() => this.bufferContent().length);
 
   /**
    * `'edit'` outcomes from `on-save` Actions that still need confirmation
@@ -234,6 +280,49 @@ export class EditorService {
   }
 
   /**
+   * Opens `relativePath` and asks the editor to put the caret at the start
+   * of 1-based `line` (a tag-search hit lands here). The `Editor` component
+   * consumes `revealRequest` once the buffer for that path is loaded.
+   */
+  async openFileAt(relativePath: string, line: number): Promise<void> {
+    await this.openFile(relativePath);
+    if (this.active() === relativePath) {
+      this.revealRequest.update((r) => ({ id: r.id + 1, path: relativePath, line }));
+    }
+  }
+
+  /** id + target for `openFileAt`; `id === 0` means "nothing pending". */
+  readonly revealRequest = signal<{ id: number; path: string; line: number }>({
+    id: 0,
+    path: '',
+    line: 1,
+  });
+
+  /**
+   * Opens (or replaces) an unsaved **draft** tab at `path` holding
+   * arbitrary generated content -- e.g. the tag-search results document.
+   * Nothing hits disk until the user saves it. The tab is **dirty from the
+   * start** (`savedContent` empty) so the Save button is live without a
+   * throwaway edit first; `save()` routes it to `saveAs()` (`askOnSave`).
+   */
+  openScratch(path: string, content: string): void {
+    const normalized = content.replace(/\r\n/g, '\n');
+    const patch = {
+      savedContent: '',
+      bufferContent: normalized,
+      existsOnDisk: false,
+      askOnSave: true,
+    };
+    if (this.docs().some((d) => d.path === path)) {
+      this.patchDoc(path, patch);
+      this.active.set(path);
+      return;
+    }
+    const doc = this.makeDoc(path, normalized, 0, false, true);
+    this.addDoc({ ...doc, savedContent: '' });
+  }
+
+  /**
    * Opens the daily note for `dateStr` (`YYYY-MM-DD`). If the file exists
    * it's opened normally; otherwise a **draft** tab is opened from the
    * template -- nothing hits disk until the user types and saves.
@@ -242,27 +331,44 @@ export class EditorService {
     if (!this.api) {
       return;
     }
-    const relativePath = `daily/${dateStr}.md`;
-    if (this.docs().some((d) => d.path === relativePath)) {
-      this.active.set(relativePath);
-      return;
+    const nestedPath = dailyPathFor(dateStr);
+    const legacyPath = `daily/${dateStr}.md`;
+    // A note this session may already be open under either layout.
+    for (const candidate of [nestedPath, legacyPath]) {
+      if (this.docs().some((d) => d.path === candidate)) {
+        this.active.set(candidate);
+        return;
+      }
     }
 
     this.isLoading.set(true);
     this.error.set(null);
     try {
-      try {
-        const { content, modifiedMs } = await this.api.readVaultFile(relativePath);
-        this.addDoc(this.makeDoc(relativePath, content, modifiedMs, true));
-      } catch {
-        // No file for that day yet -- open an unsaved draft.
+      // Prefer the nested layout; fall back to a pre-existing flat file;
+      // otherwise open an unsaved draft at the nested path.
+      const existing =
+        (await this.tryReadDaily(nestedPath)) ?? (await this.tryReadDaily(legacyPath));
+      if (existing) {
+        this.addDoc(this.makeDoc(existing.path, existing.content, existing.modifiedMs, true));
+      } else {
         const template = await this.api.buildDailyNoteContent(dateStr);
-        this.addDoc(this.makeDoc(relativePath, template, 0, false));
+        this.addDoc(this.makeDoc(nestedPath, template, 0, false));
       }
     } catch (err) {
       this.error.set(err instanceof Error ? err.message : String(err));
     } finally {
       this.isLoading.set(false);
+    }
+  }
+
+  private async tryReadDaily(
+    path: string,
+  ): Promise<{ path: string; content: string; modifiedMs: number } | null> {
+    try {
+      const { content, modifiedMs } = await this.api!.readVaultFile(path);
+      return { path, content, modifiedMs };
+    } catch {
+      return null;
     }
   }
 
@@ -276,9 +382,11 @@ export class EditorService {
   /**
    * Closes a tab. A dirty tab asks first (the roadmap's minimum bar until
    * the file watcher forces a real keep-mine / take-external decision).
-   * Closing the active tab activates its neighbour.
+   * Closing the active tab activates its neighbour. `silent` skips the
+   * dirty prompt -- used when the underlying file was just deleted, where
+   * "keep editing" is not an option.
    */
-  closeTab(relativePath: string): void {
+  closeTab(relativePath: string, options: { silent?: boolean } = {}): void {
     const list = this.docs();
     const index = list.findIndex((d) => d.path === relativePath);
     if (index === -1) {
@@ -286,6 +394,7 @@ export class EditorService {
     }
     const doc = list[index];
     if (
+      !options.silent &&
       doc.bufferContent !== doc.savedContent &&
       !confirm(`Discard unsaved changes to ${doc.name}?`)
     ) {
@@ -300,6 +409,40 @@ export class EditorService {
     }
   }
 
+  /**
+   * Tab-bar context menu: close every tab / every tab but one. Each is
+   * routed through `closeTab`, so a dirty tab still raises its own
+   * `confirm()` and a cancel there leaves that tab (and the rest) open.
+   * The path list is snapshotted first because `closeTab` mutates `docs`.
+   */
+  closeAll(): void {
+    for (const path of this.docs().map((d) => d.path)) {
+      this.closeTab(path);
+    }
+  }
+
+  closeOthers(keepPath: string): void {
+    for (const path of this.docs().map((d) => d.path)) {
+      if (path !== keepPath) {
+        this.closeTab(path);
+      }
+    }
+  }
+
+  /**
+   * Silently closes every open tab for a path that was just deleted -- the
+   * file itself, or (for a folder) anything under it. No dirty prompt: the
+   * file is gone, there is nothing to save it back to.
+   */
+  closeTabsUnder(deletedPath: string): void {
+    const prefix = `${deletedPath}/`;
+    for (const path of this.docs().map((d) => d.path)) {
+      if (path === deletedPath || path.startsWith(prefix)) {
+        this.closeTab(path, { silent: true });
+      }
+    }
+  }
+
   /** Called by the editor component on every buffer change (active tab). */
   updateBuffer(content: string): void {
     this.patchActive({ bufferContent: content });
@@ -311,11 +454,7 @@ export class EditorService {
    */
   setViewMode(mode: EditorViewMode): void {
     this.patchActive({ viewMode: mode });
-    try {
-      localStorage.setItem(PREFS_KEY, JSON.stringify({ defaultMode: mode }));
-    } catch {
-      // Private-mode / storage-disabled: a non-persisted session is fine.
-    }
+    writePref({ defaultMode: mode });
   }
 
   /**
@@ -330,9 +469,20 @@ export class EditorService {
    */
   async save(options: { runOnSaveActions?: boolean } = {}): Promise<void> {
     const doc = this.activeDoc();
-    if (!this.api || doc === null || doc.bufferContent === doc.savedContent || this.isSaving()) {
+    if (!this.api || doc === null || this.isSaving()) {
       return;
     }
+    // A generated scratch doc has no destination yet -- ask for one, even
+    // if the buffer is untouched (the user wants to keep the export as-is).
+    if (doc.askOnSave) {
+      await this.saveAs();
+      return;
+    }
+    if (doc.bufferContent === doc.savedContent) {
+      return;
+    }
+
+    const wasDraft = doc.existsOnDisk === false;
 
     this.isSaving.set(true);
     this.error.set(null);
@@ -349,12 +499,14 @@ export class EditorService {
         modifiedMs: result.modifiedMs,
         existsOnDisk: true,
       });
-      if (result.tags.length > 0) {
-        void this.tags.refresh();
-      }
-      const reloadPaths = result.appendedTo.filter((path) => path !== doc.path);
-      if (reloadPaths.length > 0) {
-        await this.reloadCleanTabs(reloadPaths);
+      // The main process re-indexed this file on save; pull the vocabulary
+      // so `#tag` autocomplete and the search picker stay current.
+      void this.tags.refresh();
+      // A first save of a draft (a daily note opened from the calendar, or
+      // the quick-capture hotkey) creates a file the sidebar tree does not
+      // know about yet -- no watcher, so pull the tree in.
+      if (wasDraft) {
+        void this.vault.refresh();
       }
       if (result.pendingActions && result.pendingActions.length > 0) {
         this.pendingActions.set(result.pendingActions);
@@ -364,6 +516,85 @@ export class EditorService {
     } finally {
       this.isSaving.set(false);
     }
+  }
+
+  /**
+   * File -> "Save all". Walks every open tab, saving the dirty ones. Each
+   * goes through `save()`, so a scratch tab still routes to `saveAs()` and
+   * an untouched draft is skipped. The active tab is restored afterwards.
+   */
+  async saveAll(): Promise<void> {
+    const restore = this.active();
+    for (const path of this.docs().map((d) => d.path)) {
+      const doc = this.docs().find((d) => d.path === path);
+      if (!doc || (doc.bufferContent === doc.savedContent && !doc.askOnSave)) {
+        continue;
+      }
+      this.active.set(path);
+      await this.save();
+    }
+    if (restore && this.docs().some((d) => d.path === restore)) {
+      this.active.set(restore);
+    }
+  }
+
+  /**
+   * File -> "New note". Opens a blank scratch tab; the first save prompts
+   * for a location inside the vault (`askOnSave`). A dedicated
+   * create-in-place flow can come later.
+   */
+  newUntitled(): void {
+    let name = 'untitled.md';
+    let n = 2;
+    while (this.docs().some((d) => d.path === name)) {
+      name = `untitled-${n++}.md`;
+    }
+    this.openScratch(name, '');
+  }
+
+  /**
+   * "Save as…": pick a destination inside the vault (native dialog), write
+   * the active buffer there, and re-key the tab to the new file. For a
+   * never-saved scratch doc this is where `save()` lands; on a normal file
+   * it forks the buffer to a new path (the original on disk is untouched).
+   */
+  async saveAs(): Promise<void> {
+    const doc = this.activeDoc();
+    if (!this.api?.pickSavePath || doc === null || this.isSaving()) {
+      return;
+    }
+    this.error.set(null);
+    let target: string | null;
+    try {
+      target = await this.api.pickSavePath(doc.name);
+    } catch (err) {
+      this.error.set(err instanceof Error ? err.message : String(err));
+      return;
+    }
+    if (target === null) {
+      return; // cancelled
+    }
+    if (target === doc.path && !doc.askOnSave) {
+      await this.save();
+      return;
+    }
+
+    this.isSaving.set(true);
+    try {
+      await this.api.saveNote({ path: target, body: doc.bufferContent, eol: doc.eol });
+    } catch (err) {
+      this.error.set(err instanceof Error ? err.message : String(err));
+      this.isSaving.set(false);
+      return;
+    }
+    this.isSaving.set(false);
+
+    // Swap the scratch/old tab for the real file, then load it fresh so the
+    // buffer, mtime and `existsOnDisk` come from disk.
+    this.closeTab(doc.path, { silent: true });
+    await this.openFile(target);
+    void this.tags.refresh();
+    void this.vault.refresh();
   }
 
   /**
@@ -384,35 +615,12 @@ export class EditorService {
     await this.save({ runOnSaveActions: false });
   }
 
-  /**
-   * Re-reads the given open tabs from disk, but only ones with no unsaved
-   * edits -- a routed History append must not clobber a buffer the user is
-   * editing (that conflict is the file watcher's job, later).
-   */
-  private async reloadCleanTabs(paths: readonly string[]): Promise<void> {
-    if (!this.api) {
-      return;
-    }
-    for (const path of paths) {
-      const open = this.docs().find((d) => d.path === path);
-      if (!open || open.bufferContent !== open.savedContent) {
-        continue;
-      }
-      try {
-        const { content, modifiedMs } = await this.api.readVaultFile(path);
-        const normalized = content.replace(/\r\n/g, '\n');
-        this.patchDoc(path, { savedContent: normalized, bufferContent: normalized, modifiedMs });
-      } catch {
-        // Leave the stale tab as-is; the user can reopen it.
-      }
-    }
-  }
-
   private makeDoc(
     relativePath: string,
     rawContent: string,
     modifiedMs: number,
     existsOnDisk: boolean,
+    askOnSave = false,
   ): OpenDoc {
     // CodeMirror normalises to `\n`; detect the file's dominant ending so a
     // CRLF file (the Windows default for these notes) doesn't read back as
@@ -429,6 +637,7 @@ export class EditorService {
       eol,
       modifiedMs,
       existsOnDisk,
+      askOnSave,
     };
   }
 

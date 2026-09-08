@@ -1,27 +1,47 @@
-import { ChangeDetectionStrategy, Component, inject } from '@angular/core';
-import { EDITOR_FONT_FAMILIES } from '../../../../shared/app-config';
+import { ChangeDetectionStrategy, Component, computed, inject } from '@angular/core';
+import {
+  ACCENT_PRESETS,
+  EDITOR_FONT_FAMILIES,
+  UI_SCALE_LABELS,
+  UiScale,
+  resolveAccentHex,
+} from '../../../../shared/app-config';
 import { SettingsService } from '../../services/settings.service';
+import { SettingsPane } from '../settings-pane/settings-pane';
 
-/**
- * "Appearance" settings category. One control today: the document editor's
- * typeface (body + headings, Live Preview and source alike).
- *
- * Like the editor zoom, the choice persists immediately through
- * `SettingsService.setEditorFontFamily` -- it is applied to the editor host
- * on the next frame and does not go through the draft / Save flow, so
- * changing it here never marks the Settings screen dirty.
- */
 @Component({
   selector: 'app-settings-appearance',
   changeDetection: ChangeDetectionStrategy.OnPush,
+  imports: [SettingsPane],
   templateUrl: './settings-appearance.html',
-  styleUrl: './settings-appearance.css',
+  styleUrls: ['../settings-forms.css', './settings-appearance.css'],
 })
 export class SettingsAppearance {
   protected readonly settings = inject(SettingsService);
   protected readonly fontFamilies = EDITOR_FONT_FAMILIES;
+  protected readonly accents = ACCENT_PRESETS;
+  protected readonly scaleSteps = (Object.keys(UI_SCALE_LABELS) as UiScale[]).map((id) => ({
+    id,
+    label: UI_SCALE_LABELS[id],
+  }));
+
+  /** The concrete hex for the current accent -- seeds the custom colour input. */
+  protected readonly accentHex = computed(() => resolveAccentHex(this.settings.appearanceAccent()));
+
+  /** True when the accent is a custom hex rather than one of the presets. */
+  protected readonly accentIsCustom = computed(
+    () => !this.accents.some((preset) => preset.id === this.settings.appearanceAccent()),
+  );
 
   protected onFontFamilyChange(id: string): void {
     void this.settings.setEditorFontFamily(id);
+  }
+
+  protected onScaleChange(id: string): void {
+    void this.settings.setAppearanceUiScale(id);
+  }
+
+  protected onAccentChange(value: string): void {
+    void this.settings.setAppearanceAccent(value);
   }
 }

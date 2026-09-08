@@ -8,9 +8,6 @@ function echoSave(request: NoteSaveRequest): Promise<NoteSaveResult> {
     path: request.path,
     content: request.body,
     modifiedMs: 200,
-    tags: [],
-    unknownTags: [],
-    appendedTo: [],
   });
 }
 
@@ -65,15 +62,12 @@ describe('EditorService', () => {
     let tagListCalls = 0;
     const rewriteApi: Partial<DreyApi> = {
       readVaultFile: () =>
-        Promise.resolve({ content: '---\ntags: []\n---\n\nBody #sailing\n', modifiedMs: 1 }),
+        Promise.resolve({ content: '---\ntitle: n\n---\n\nBody #sailing\n', modifiedMs: 1 }),
       saveNote: (request: NoteSaveRequest) =>
         Promise.resolve({
           path: request.path,
-          content: '---\ntags: ["sailing"]\nupdated: "2026-09-06T10:00:00"\n---\n\nBody #sailing\n',
+          content: '---\ntitle: n\nupdated: "2026-09-06T10:00:00"\n---\n\nBody #sailing\n',
           modifiedMs: 2,
-          tags: ['sailing'],
-          unknownTags: ['sailing'],
-          appendedTo: [],
         }),
       listTags: () => {
         tagListCalls += 1;
@@ -84,15 +78,14 @@ describe('EditorService', () => {
     const rewriteService = TestBed.inject(EditorService);
 
     await rewriteService.openFile('note.md');
-    rewriteService.updateBuffer('---\ntags: []\n---\n\nBody #sailing edited\n');
+    rewriteService.updateBuffer('---\ntitle: n\n---\n\nBody #sailing edited\n');
     await rewriteService.save();
 
-    const expected =
-      '---\ntags: ["sailing"]\nupdated: "2026-09-06T10:00:00"\n---\n\nBody #sailing\n';
+    const expected = '---\ntitle: n\nupdated: "2026-09-06T10:00:00"\n---\n\nBody #sailing\n';
     expect(rewriteService.savedContent()).toBe(expected);
     expect(rewriteService.bufferContent()).toBe(expected);
     expect(rewriteService.isDirty()).toBe(false);
-    // once from the service constructor, once after the tag-changing save
+    // once from the service constructor, once after the save
     expect(tagListCalls).toBeGreaterThanOrEqual(2);
   });
 
@@ -100,42 +93,6 @@ describe('EditorService', () => {
     await service.openFile('note.md');
     await service.save();
     expect(saves).toEqual([]);
-  });
-
-  it('reloads a clean open master tab that a routed History entry was appended to', async () => {
-    TestBed.resetTestingModule();
-    let masterOnDisk = '---\ntype: master\n---\n\n## History\n';
-    const api: Partial<DreyApi> = {
-      readVaultFile: (path: string) =>
-        Promise.resolve({
-          content: path === 'sailing/_index.md' ? masterOnDisk : `content of ${path}`,
-          modifiedMs: 1,
-        }),
-      saveNote: (request: NoteSaveRequest) => {
-        masterOnDisk =
-          '---\ntype: master\n---\n\n## History\n\n### 2026-09-06 14:32 <!-- m -->\nRouted\n';
-        return Promise.resolve({
-          path: request.path,
-          content: request.body,
-          modifiedMs: 2,
-          tags: ['sailing'],
-          unknownTags: [],
-          appendedTo: ['sailing/_index.md'],
-        });
-      },
-      listTags: () => Promise.resolve([]),
-    };
-    window.dreyApi = api as DreyApi;
-    const svc = TestBed.inject(EditorService);
-
-    await svc.openFile('sailing/_index.md');
-    await svc.openFile('daily/2026-09-06.md');
-    svc.updateBuffer('# 2026-09-06\n\n## 14:32\nRouted #sailing\n');
-    await svc.save();
-
-    svc.activate('sailing/_index.md');
-    expect(svc.savedContent()).toContain('### 2026-09-06 14:32');
-    expect(svc.isDirty()).toBe(false);
   });
 
   it('sends the LF buffer plus the file EOL to the save pipeline', async () => {
@@ -217,16 +174,34 @@ describe('EditorService', () => {
   });
 
   describe('openDailyNote', () => {
-    it('opens an existing daily note like any file', async () => {
+    it('opens an existing daily note at the nested path', async () => {
       await service.openDailyNote('2026-09-05');
-      expect(service.openPath()).toBe('daily/2026-09-05.md');
-      expect(service.bufferContent()).toBe('content of daily/2026-09-05.md');
+      expect(service.openPath()).toBe('daily/2026/09/2026-09-05.md');
+      expect(service.bufferContent()).toBe('content of daily/2026/09/2026-09-05.md');
       expect(service.activeIsDraft()).toBe(false);
+    });
+
+    it('falls back to a pre-existing flat daily note', async () => {
+      TestBed.resetTestingModule();
+      const legacyApi: Partial<DreyApi> = {
+        readVaultFile: (relativePath: string) =>
+          relativePath === 'daily/2026-09-05.md'
+            ? Promise.resolve({ content: 'legacy body', modifiedMs: 1 })
+            : Promise.reject(new Error('ENOENT')),
+        listTags: () => Promise.resolve([]),
+      };
+      window.dreyApi = legacyApi as DreyApi;
+      const legacyService = TestBed.inject(EditorService);
+
+      await legacyService.openDailyNote('2026-09-05');
+      expect(legacyService.openPath()).toBe('daily/2026-09-05.md');
+      expect(legacyService.bufferContent()).toBe('legacy body');
     });
 
     it('opens an unsaved draft from the template when the file is missing, and only writes on first real edit', async () => {
       TestBed.resetTestingModule();
       const draftSaves: NoteSaveRequest[] = [];
+      let fileListReads = 0;
       const draftApi: Partial<DreyApi> = {
         readVaultFile: () => Promise.reject(new Error('ENOENT')),
         buildDailyNoteContent: () => Promise.resolve('# 2026-09-06\n\n## 08:00\n'),
@@ -235,12 +210,17 @@ describe('EditorService', () => {
           return echoSave(request);
         },
         listTags: () => Promise.resolve([]),
+        getActiveVault: () => Promise.resolve('E:/vault'),
+        listVaultFiles: () => {
+          fileListReads += 1;
+          return Promise.resolve([]);
+        },
       };
       window.dreyApi = draftApi as DreyApi;
       const draftService = TestBed.inject(EditorService);
 
       await draftService.openDailyNote('2026-09-06');
-      expect(draftService.openPath()).toBe('daily/2026-09-06.md');
+      expect(draftService.openPath()).toBe('daily/2026/09/2026-09-06.md');
       expect(draftService.activeIsDraft()).toBe(true);
       expect(draftService.isDirty()).toBe(false);
 
@@ -250,17 +230,83 @@ describe('EditorService', () => {
 
       draftService.updateBuffer('# 2026-09-06\n\n## 08:00\nEndlich getippt\n');
       expect(draftService.isDirty()).toBe(true);
+      const readsBeforeSave = fileListReads;
       await draftService.save();
+      // `save()` fires `vault.refresh()` without awaiting it; let it settle.
+      await new Promise((resolve) => setTimeout(resolve, 0));
 
       expect(draftSaves).toEqual([
         {
-          path: 'daily/2026-09-06.md',
+          path: 'daily/2026/09/2026-09-06.md',
           body: '# 2026-09-06\n\n## 08:00\nEndlich getippt\n',
           eol: '\n',
         },
       ]);
       expect(draftService.activeIsDraft()).toBe(false);
       expect(draftService.isDirty()).toBe(false);
+      // The first save of a draft created a file the sidebar tree did not
+      // know about -- it is pulled in (no watcher).
+      expect(fileListReads).toBeGreaterThan(readsBeforeSave);
+    });
+  });
+
+  describe('openScratch', () => {
+    it('opens a dirty draft tab and replaces it on a second call', () => {
+      service.openScratch('search-results.md', '# Search results\n\nfirst\n');
+      expect(service.openPath()).toBe('search-results.md');
+      expect(service.activeIsDraft()).toBe(true);
+      expect(service.bufferContent()).toBe('# Search results\n\nfirst\n');
+      // Dirty from the start so the Save button is live without an edit first.
+      expect(service.isDirty()).toBe(true);
+
+      service.openScratch('search-results.md', '# Search results\n\nsecond\n');
+      expect(service.openDocs().filter((d) => d.path === 'search-results.md')).toHaveLength(1);
+      expect(service.bufferContent()).toBe('# Search results\n\nsecond\n');
+      expect(service.isDirty()).toBe(true);
+    });
+  });
+
+  describe('saveAs / save() on a scratch doc', () => {
+    let saved: NoteSaveRequest[];
+    let picked: string | null;
+    let svc: EditorService;
+
+    beforeEach(() => {
+      TestBed.resetTestingModule();
+      saved = [];
+      picked = 'notes/kept.md';
+      const api: Partial<DreyApi> = {
+        readVaultFile: (p: string) => Promise.resolve({ content: `on disk: ${p}`, modifiedMs: 3 }),
+        saveNote: (req: NoteSaveRequest) => {
+          saved.push(req);
+          return echoSave(req);
+        },
+        listTags: () => Promise.resolve([]),
+        getActiveVault: () => Promise.resolve('E:/vault'),
+        listVaultFiles: () => Promise.resolve([]),
+        pickSavePath: () => Promise.resolve(picked),
+      };
+      window.dreyApi = api as DreyApi;
+      svc = TestBed.inject(EditorService);
+    });
+
+    it('Ctrl+S on a scratch doc picks a location, writes there, and re-keys the tab', async () => {
+      svc.openScratch('search-results.md', '# Results\n\nbody\n');
+      await svc.save();
+
+      expect(saved).toEqual([{ path: 'notes/kept.md', body: '# Results\n\nbody\n', eol: '\n' }]);
+      expect(svc.openPath()).toBe('notes/kept.md');
+      expect(svc.openDocs().some((d) => d.path === 'search-results.md')).toBe(false);
+      expect(svc.activeIsDraft()).toBe(false);
+    });
+
+    it('does nothing when the save dialog is cancelled', async () => {
+      picked = null;
+      svc.openScratch('search-results.md', '# Results\n\nbody\n');
+      await svc.save();
+
+      expect(saved).toEqual([]);
+      expect(svc.openPath()).toBe('search-results.md');
     });
   });
 

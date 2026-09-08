@@ -1,45 +1,30 @@
 /**
- * The `note:save` pipeline (milestone 6). Replaces a raw `writeVaultFile`
- * for `.md` documents:
- *  - parse the frontmatter, merge inline body `#tag`s into `tags`, bump
- *    `updated:` (milestone 6a);
- *  - for every dated entry (`## HH:mm` block) that carries a known tag,
- *    append a dated copy of that entry to the tag's master document
- *    `## History` section -- the source note keeps its copy, nothing is
- *    moved (milestone 6b, [ADR-0007]).
+ * The `note:save` pipeline. For a `.md` document it replaces a raw
+ * `writeVaultFile` with:
+ *  - a `updated:` bump (and `created:` fill) when the file has a
+ *    frontmatter fence -- otherwise the bytes are written verbatim;
+ *  - the `on-save` Action hook (`docs/09_architecture_decisions/0011-*.md`);
+ *  - an incremental re-index of the file in `TagIndex` (no file watcher).
  *
- * Kept thin on purpose -- every decision (`splitFrontmatter`,
- * `readFrontmatter`, `extractInlineTags`, `bumpUpdated`,
- * `writeFrontmatter`, `parseDatedEntries`, `appendHistoryEntry`) is a pure
- * `shared/` function that the renderer test suite covers; this class only
- * sequences filesystem calls.
- *
- * Spec deviation (recorded in `specs/frontmatter-schema.md` + `docs/11`):
- * `specs/frontmatter-schema.md` puts the body-`#tag` merge, `updated:`
- * bump, and routing on the file watcher. There is no watcher yet, so it
- * runs here on an explicit save. `daily/` and `templates/` files get
- * `updated:` bumped but their `tags` array is left alone (structural, not
- * topic notes); `templates/` is also excluded from routing.
+ * No `#tag` -> frontmatter merge and no routing any more -- tags are free
+ * inline labels the tag search reads from the body directly (see the plan,
+ * "Tag-Index + Tag-Suche"). Every decision (`splitFrontmatter`,
+ * `readFrontmatter`, `bumpUpdated`, `writeFrontmatter`) is a pure
+ * `shared/frontmatter` function; this class only sequences filesystem calls.
  */
 import { ActionOutcome, Frontmatter, NoteSaveRequest, NoteSaveResult } from '../shared/ipc-api';
-import { parseDatedEntries } from '../shared/entries';
 import {
   bumpUpdated,
   readFrontmatter,
   splitFrontmatter,
   writeFrontmatter,
 } from '../shared/frontmatter';
-import { appendHistoryEntry } from '../shared/history';
-import { extractInlineTags } from '../shared/inline-tags';
-import { formatDate, formatDateTime } from '../shared/timestamp';
-import { ActionRunner } from './action-runner';
-import { TagIndex } from './tag-index';
+import { ActionRunner } from './llm';
+import { TagIndex } from './tags';
 import { VaultManager } from './vault-manager';
 
-/** `tags` is not merged for these -- they are structural folders, not topics. */
-const NO_MERGE_PREFIXES = ['daily/', 'templates/'];
-/** Never route entries out of a template file. */
-const NO_ROUTE_PREFIX = 'templates/';
+/** Structural notes: still get `updated:` bumped, but are not tag-indexed. */
+const NO_INDEX_PREFIX = 'templates/';
 
 export class NoteManager {
   constructor(
@@ -54,65 +39,29 @@ export class NoteManager {
 
     const split = splitFrontmatter(body);
 
-    // No frontmatter fence: write the bytes verbatim, nothing to merge or
-    // bump (adding a fence unasked would be surprising) and no routing.
-    if (!split.hadFence) {
-      const modifiedMs = await this.vault.writeFile(relPath, toDisk(body));
-      const onSave = await this.runOnSaveActions(request, body, modifiedMs);
-      return {
-        path: relPath,
-        content: onSave.content,
-        modifiedMs: onSave.modifiedMs,
-        tags: [],
-        unknownTags: [],
-        appendedTo: [],
-        pendingActions: onSave.pendingActions,
-      };
+    // No frontmatter fence: write the bytes verbatim (adding one unasked
+    // would be surprising). With a fence: bump `updated:`, fill `created:`.
+    let written = body;
+    if (split.hadFence) {
+      const frontmatter = readFrontmatter(body);
+      const { updated, created } = bumpUpdated(frontmatter);
+      const patch: Partial<Frontmatter> = { updated };
+      if (!frontmatter?.created) {
+        patch.created = created;
+      }
+      written = writeFrontmatter(body, patch);
     }
 
-    const frontmatter = readFrontmatter(body);
-    const isStructural = NO_MERGE_PREFIXES.some((prefix) => relPath.startsWith(prefix));
-
-    const existingTags = dedupe(frontmatter?.tags ?? []);
-    const mergedTags = isStructural
-      ? existingTags
-      : dedupe([...existingTags, ...extractInlineTags(body)]);
-
-    const { updated, created } = bumpUpdated(frontmatter);
-    const patch: Partial<Frontmatter> = { updated };
-    if (!isStructural) {
-      patch.tags = mergedTags;
-    }
-    if (!frontmatter?.created) {
-      patch.created = created;
+    const modifiedMs = await this.vault.writeFile(relPath, toDisk(written));
+    if (!relPath.startsWith(NO_INDEX_PREFIX)) {
+      this.index.reindexFile(relPath, written);
     }
 
-    const newText = writeFrontmatter(body, patch);
-    const modifiedMs = await this.vault.writeFile(relPath, toDisk(newText));
-
-    const routed = await this.route(relPath, split.body, frontmatter);
-
-    // Keep autocomplete / registry in step after a tag set change. No file
-    // watcher yet, so this is a full rescan -- cheap for a personal vault,
-    // noted as tech debt in docs/11. (A routing append only touches a
-    // master's History body + `updated:`, so it needs no rebuild.)
-    if (!isStructural && tagsChanged(existingTags, mergedTags)) {
-      await this.index.rebuild();
-    }
-
-    const unknownTags = dedupe([...mergedTags, ...routed.seenTags]).filter(
-      (tag) => !this.index.lookup(tag)?.hasMaster,
-    );
-
-    const onSave = await this.runOnSaveActions(request, newText, modifiedMs);
-
+    const onSave = await this.runOnSaveActions(request, written, modifiedMs);
     return {
       path: relPath,
       content: onSave.content,
       modifiedMs: onSave.modifiedMs,
-      tags: mergedTags,
-      unknownTags,
-      appendedTo: routed.appendedTo,
       pendingActions: onSave.pendingActions,
     };
   }
@@ -156,109 +105,12 @@ export class NoteManager {
       } else {
         current = outcome.after;
         currentMs = await this.vault.writeFile(request.path, toDisk(current));
+        // Keep the index in step after a non-confirm on-save edit.
+        if (!request.path.startsWith(NO_INDEX_PREFIX)) {
+          this.index.reindexFile(request.path, current);
+        }
       }
     }
     return { content: current, modifiedMs: currentMs, pendingActions };
   }
-
-  /**
-   * Appends every dated entry that carries a known tag into that tag's
-   * master-document History. Returns the master paths that actually
-   * changed and every inline tag seen across the entries.
-   */
-  private async route(
-    relPath: string,
-    noteBody: string,
-    frontmatter: Frontmatter | null,
-  ): Promise<{ appendedTo: string[]; seenTags: string[] }> {
-    const appendedTo: string[] = [];
-    const seenTags: string[] = [];
-    if (relPath.startsWith(NO_ROUTE_PREFIX)) {
-      return { appendedTo, seenTags };
-    }
-
-    const noteDate = dailyDateFromPath(relPath) ?? frontmatter?.created ?? formatDate(new Date());
-
-    for (const entry of parseDatedEntries(noteBody)) {
-      const entryTags = extractInlineTags(entry.text);
-      seenTags.push(...entryTags);
-      if (entry.text.trim() === '') {
-        continue;
-      }
-
-      const targets = new Set<string>();
-      for (const tag of entryTags) {
-        const known = this.index.lookup(tag);
-        if (!known?.hasMaster || !known.masterPath) {
-          continue;
-        }
-        if (known.masterPath === relPath || targets.has(known.masterPath)) {
-          continue;
-        }
-        targets.add(known.masterPath);
-
-        const changed = await this.appendToMaster(known.masterPath, {
-          date: entry.date ?? noteDate,
-          time: entry.time,
-          sourcePath: relPath,
-          entryText: entry.text,
-        });
-        if (changed && !appendedTo.includes(known.masterPath)) {
-          appendedTo.push(known.masterPath);
-        }
-      }
-    }
-
-    return { appendedTo, seenTags };
-  }
-
-  private async appendToMaster(
-    masterPath: string,
-    append: { date: string; time: string; sourcePath: string; entryText: string },
-  ): Promise<boolean> {
-    let masterText: string;
-    try {
-      masterText = (await this.vault.readFile(masterPath)).content;
-    } catch {
-      return false;
-    }
-
-    const masterEol = masterText.includes('\r\n') ? '\r\n' : '\n';
-    const lf = masterText.replace(/\r\n/g, '\n');
-    const result = appendHistoryEntry(lf, append);
-    if (!result.appended) {
-      return false;
-    }
-
-    let out = result.text;
-    if (readFrontmatter(out)) {
-      out = writeFrontmatter(out, { updated: formatDateTime(new Date()) });
-    }
-    const onDisk = masterEol === '\r\n' ? out.replace(/\n/g, '\r\n') : out;
-    await this.vault.writeFile(masterPath, onDisk);
-    return true;
-  }
-}
-
-function dedupe(values: readonly string[]): string[] {
-  const seen = new Set<string>();
-  const out: string[] = [];
-  for (const value of values) {
-    const key = value.toLowerCase();
-    if (key && !seen.has(key)) {
-      seen.add(key);
-      out.push(key);
-    }
-  }
-  return out;
-}
-
-function tagsChanged(before: readonly string[], after: readonly string[]): boolean {
-  return before.length !== after.length || after.some((tag, i) => tag !== before[i]);
-}
-
-/** `daily/2026-09-06.md` -> `2026-09-06`, else `null`. */
-function dailyDateFromPath(relPath: string): string | null {
-  const match = /^daily\/(\d{4}-\d{2}-\d{2})\.md$/.exec(relPath);
-  return match ? match[1] : null;
 }

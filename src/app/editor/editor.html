@@ -1,37 +1,41 @@
 <div class="chrome">
-  <div class="meta" [title]="editor.openPath()">
-    <span class="path">{{ editor.openPath() }}</span>
-    <span class="sep">·</span>
-    <span>{{ wordCount() }} words</span>
-    @if (editor.activeIsDraft()) {
-      <span class="sep">·</span>
-      <span class="draft">unsaved draft</span>
-    }
-    @if (editor.isDirty()) {
-      <span class="dirty" title="Unsaved changes">&#9679;</span>
-    }
-  </div>
+  <span class="path" [title]="editor.openPath()">{{ editor.openPath() }}</span>
+  @if (editor.activeIsDraft()) {
+    <span class="draft">unsaved draft</span>
+  }
 
   <div class="actions">
     <button
       type="button"
+      class="lines"
+      [class.on]="editor.lineNumbers()"
+      (click)="editor.toggleLineNumbers()"
+      title="Toggle line numbers (Ctrl G)"
+    >
+      <app-icon name="list-ordered" [size]="12" [strokeWidth]="1.1" />
+      <span>{{ editor.lineNumbers() ? 'Lines on' : 'Lines' }}</span>
+    </button>
+
+    <button
+      type="button"
       class="save"
+      [class.dirty]="editor.isDirty()"
       [disabled]="!editor.isDirty() || editor.isSaving()"
       (click)="editor.save()"
     >
-      {{ editor.isSaving() ? 'Saving…' : 'Save' }}
+      {{ editor.isSaving() ? 'Saving…' : editor.isDirty() ? 'Save' : 'Saved' }}
     </button>
 
     @if (assistant.panelAvailable()) {
       <button
         type="button"
-        class="more"
-        [class.on]="assistant.panelShown()"
-        [attr.aria-pressed]="assistant.panelShown()"
-        (click)="assistant.togglePanel()"
-        [title]="assistant.panelShown() ? 'Hide note assistant' : 'Show note assistant'"
+        class="more sparkle"
+        [class.on]="!dock.collapsed('assistant')"
+        [attr.aria-pressed]="!dock.collapsed('assistant')"
+        (click)="dock.toggleCollapse('assistant')"
+        [title]="dock.collapsed('assistant') ? 'Show note assistant' : 'Collapse note assistant'"
       >
-        <app-icon name="sparkles" [size]="15" />
+        <app-icon name="sparkles" [size]="13" />
       </button>
     }
 
@@ -44,7 +48,7 @@
       (click)="toggleMenu()"
       title="Editor mode"
     >
-      <app-icon name="more-horizontal" />
+      <app-icon name="more-horizontal" [size]="14" />
     </button>
   </div>
 </div>
@@ -95,6 +99,12 @@
       Source
     </button>
 
+    <div class="menu-sep" role="separator"></div>
+    <button type="button" role="menuitem" (click)="closeMenu(); editor.saveAs()">
+      <span class="tick"></span>
+      Save as…
+    </button>
+
     @if (settings.manualActions().length > 0) {
       <div class="menu-sep" role="separator"></div>
       @for (action of settings.manualActions(); track action.triggerId) {
@@ -118,8 +128,10 @@
   <app-markdown-surface
     class="cm-host"
     [mode]="editor.viewMode()"
+    [lineNumbers]="editor.lineNumbers()"
     [foldFrontmatter]="true"
     [spellcheck]="spellcheckSource"
+    [onTagActivate]="activateTag"
     (docChanged)="editor.updateBuffer($event)"
   />
 </div>
