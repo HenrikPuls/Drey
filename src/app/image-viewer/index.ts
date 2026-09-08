@@ -6,3 +6,4 @@
 export { ImageViewer } from './image-viewer';
 export { ImageLightbox } from './image-lightbox';
 export { ImageLightboxService } from './image-lightbox.service';
+export { ImageTab } from './image-tab';

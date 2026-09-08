@@ -60,6 +60,43 @@ test.describe('image lens → fullscreen viewer', () => {
   });
 });
 
+test.describe('image files open as a viewer tab', () => {
+  async function openImageFile(page: Page, vaultDir: string): Promise<void> {
+    fs.writeFileSync(path.join(vaultDir, 'photo.png'), Buffer.from(PNG_BASE64, 'base64'));
+    await page.locator('app-dock[side="left"] .icon-btn.refresh').click();
+    await page.locator('app-dock[side="left"] .node.file', { hasText: 'photo.png' }).click();
+  }
+
+  test('clicking a .png opens an image tab, not a text editor', async ({ page, vaultDir }) => {
+    await openImageFile(page, vaultDir);
+
+    await expect(page.locator('app-image-tab')).toBeVisible();
+    await expect(page.locator('app-editor')).toHaveCount(0);
+    await expect(page.locator('app-image-tab .cm-content')).toHaveCount(0);
+    await expect(page.locator('app-image-tab app-image-viewer img')).toHaveAttribute(
+      'src',
+      /^drey-asset:\/\/asset\/photo\.png$/,
+    );
+
+    // A real tab: shows in the bar with a close button, dedupes on reopen.
+    const tab = page.locator('app-tab-bar', { hasText: 'photo.png' });
+    await expect(tab).toBeVisible();
+    await page.locator('app-dock[side="left"] .node.file', { hasText: 'photo.png' }).click();
+    await expect(page.locator('app-tab-bar .tab', { hasText: 'photo.png' })).toHaveCount(1);
+
+    // Fullscreen opens the shared overlay.
+    await page.locator('app-image-tab .meta .fs').click();
+    await expect(page.locator('app-image-lightbox .backdrop')).toBeVisible();
+    await page.keyboard.press('Escape');
+  });
+
+  test('closing the image tab returns to the empty state', async ({ page, vaultDir }) => {
+    await openImageFile(page, vaultDir);
+    await page.locator('app-tab-bar .tab', { hasText: 'photo.png' }).locator('.close').click();
+    await expect(page.locator('app-image-tab')).toHaveCount(0);
+  });
+});
+
 test.describe('image resize handle', () => {
   async function dragGrip(page: Page, dx: number): Promise<void> {
     const image = page.locator('app-editor .cm-content .lp-image');
