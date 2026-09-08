@@ -83,19 +83,30 @@ export class SettingsService {
   /** Editor content zoom multiplier (Ctrl +/-/0). Persisted config, never the draft. */
   readonly editorFontScale = computed<number>(() => this._config()?.editor.fontScale ?? 1);
 
-  /** Editor font-family id (Settings -> Appearance). Persisted config, never the draft. */
+  /**
+   * What the Appearance controls (typeface, base font size, highlight
+   * colour) should reflect right now: the **draft** while the Settings
+   * screen is open, so a change previews live before Save, and the saved
+   * **config** otherwise. Discard / close resets the draft, which rolls
+   * the preview back. (ADR-0020, "Later change".)
+   */
+  private readonly appearanceSource = computed<AppConfig | null>(() =>
+    this.screenOpen() ? (this._draft() ?? this._config()) : this._config(),
+  );
+
+  /** Editor font-family id (Settings -> Appearance). Draft-previewed while the screen is open. */
   readonly editorFontFamily = computed<string>(
-    () => this._config()?.editor.fontFamily ?? DEFAULT_EDITOR_FONT_FAMILY,
+    () => this.appearanceSource()?.editor.fontFamily ?? DEFAULT_EDITOR_FONT_FAMILY,
   );
 
-  /** App-wide UI scale step (Settings -> Appearance). Persisted config only. */
+  /** App-wide UI scale step (Settings -> Appearance). Draft-previewed while the screen is open. */
   readonly appearanceUiScale = computed<UiScale>(
-    () => this._config()?.appearance.uiScale ?? DEFAULT_APPEARANCE.uiScale,
+    () => this.appearanceSource()?.appearance.uiScale ?? DEFAULT_APPEARANCE.uiScale,
   );
 
-  /** App-wide highlight colour -- a preset id or `#rrggbb` (Settings -> Appearance). */
+  /** App-wide highlight colour -- a preset id or `#rrggbb`. Draft-previewed while the screen is open. */
   readonly appearanceAccent = computed<string>(
-    () => this._config()?.appearance.accent ?? DEFAULT_APPEARANCE.accent,
+    () => this.appearanceSource()?.appearance.accent ?? DEFAULT_APPEARANCE.accent,
   );
 
   /** The active "Add entry" template's pattern. Persisted config, never the draft. */
@@ -543,90 +554,34 @@ export class SettingsService {
     }
   }
 
-  /**
-   * Editor font family (Settings -> Appearance). Persists immediately and
-   * mirrors the edit into an open draft, exactly like `setEditorFontScale`:
-   * the choice applies to the editor host on the next frame and the Settings
-   * screen stays in step without adding dirty state. An unknown id is pinned
-   * to the sans default by `normalizeEditorFontFamily`.
-   */
-  async setEditorFontFamily(id: string): Promise<void> {
-    const config = this._config();
-    if (!config) {
-      return;
-    }
-    const fontFamily = normalizeEditorFontFamily(id);
-    if (fontFamily === config.editor.fontFamily) {
-      return;
-    }
-
-    const next = structuredClone(config);
-    next.editor.fontFamily = fontFamily;
-    this._config.set(next);
-    this.mutate((draft) => {
-      draft.editor.fontFamily = fontFamily;
-    });
-
-    if (!this.api) {
-      return;
-    }
-    try {
-      this._config.set(normalizeAppConfig(await this.api.setConfig(next)));
-    } catch (err) {
-      this.saveError.set(err instanceof Error ? err.message : String(err));
-      void this.load();
-    }
-  }
+  // -- Appearance category (draft, ADR-0020 "Later change") --------------
 
   /**
-   * App-wide UI scale (Settings -> Appearance "Base font size"). Immediate,
-   * like the editor knobs: updates `_config` now, mirrors into an open draft,
-   * and persists. `AppearanceService` reacts to `appearanceUiScale`.
+   * Editor typeface (Settings -> Appearance). A draft edit, like every
+   * other category: `editorFontFamily()` previews it live while the
+   * Settings screen is open, and it reaches disk only on Save. An unknown
+   * id is pinned to the sans default by `normalizeEditorFontFamily`.
    */
-  async setAppearanceUiScale(scale: string): Promise<void> {
-    await this.applyImmediate('uiScale', normalizeUiScale(scale), (config, value) => {
-      config.appearance.uiScale = value as UiScale;
+  setEditorFontFamily(id: string): void {
+    this.mutate((config) => {
+      config.editor.fontFamily = normalizeEditorFontFamily(id);
     });
   }
 
-  /** App-wide highlight colour (a preset id or `#rrggbb`). Same immediate path. */
-  async setAppearanceAccent(accent: string): Promise<void> {
-    await this.applyImmediate('accent', normalizeAccent(accent), (config, value) => {
-      config.appearance.accent = value as string;
-    });
+  /** App-wide base font size (Settings -> Appearance). Draft edit; live-previewed; saved on Save. */
+  setAppearanceUiScale(scale: string): void {
+    this.patchAppearance({ uiScale: normalizeUiScale(scale) });
   }
 
-  /**
-   * Shared body for the "outside a Settings session, persist right away"
-   * mutators (`setAppearanceUiScale` / `setAppearanceAccent`): no-op when the
-   * value is unchanged, update `_config` so the runtime reacts next frame,
-   * mirror the edit into any open draft, then write through. On a write
-   * error, surface it and reload from disk.
-   */
-  private async applyImmediate<T>(
-    field: keyof AppConfig['appearance'],
-    value: T,
-    patch: (config: AppConfig, value: T) => void,
-  ): Promise<void> {
-    const config = this._config();
-    if (!config || config.appearance[field] === value) {
-      return;
-    }
+  /** App-wide highlight colour, a preset id or `#rrggbb` (Settings -> Appearance). Draft edit. */
+  setAppearanceAccent(accent: string): void {
+    this.patchAppearance({ accent: normalizeAccent(accent) });
+  }
 
-    const next = structuredClone(config);
-    patch(next, value);
-    this._config.set(next);
-    this.mutate((draft) => patch(draft, value));
-
-    if (!this.api) {
-      return;
-    }
-    try {
-      this._config.set(normalizeAppConfig(await this.api.setConfig(next)));
-    } catch (err) {
-      this.saveError.set(err instanceof Error ? err.message : String(err));
-      void this.load();
-    }
+  private patchAppearance(patch: Partial<AppConfig['appearance']>): void {
+    this.mutate((config) => {
+      config.appearance = { ...config.appearance, ...patch };
+    });
   }
 
   /** Applies `change` to a clone of the draft. No IPC -- `save()` does that. */
