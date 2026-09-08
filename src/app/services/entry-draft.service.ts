@@ -7,6 +7,7 @@ import {
 } from '../../../shared/entry-compose';
 import { formatDate } from '../../../shared/timestamp';
 import { EditorService } from './editor.service';
+import { SettingsService } from './settings.service';
 
 /** What `submit()` did, so the component knows whether to clear the text field. */
 export type SubmitResult = 'appended' | 'empty';
@@ -21,6 +22,7 @@ export type SubmitResult = 'appended' | 'empty';
 @Injectable({ providedIn: 'root' })
 export class EntryDraftService {
   private readonly editor = inject(EditorService);
+  private readonly settings = inject(SettingsService);
 
   /** The drawer starts collapsed; the header toggle opens it. */
   readonly open = signal(false);
@@ -42,8 +44,10 @@ export class EntryDraftService {
   /** Anything to append at all -- drives the primary button. */
   readonly hasContent = computed<boolean>(() => hasEntryContent(this.draft()));
 
-  /** What the entry will look like in the document. Shown as a preview. */
-  readonly preview = computed<string>(() => composeEntry(this.draft()));
+  /** What the entry will look like in the document, using the active template. */
+  readonly preview = computed<string>(() =>
+    composeEntry(this.draft(), this.settings.activeEntryPattern()),
+  );
 
   toggle(): void {
     this.open.update((open) => !open);
@@ -129,7 +133,7 @@ export class EntryDraftService {
           return; // no vault -- keep the draft rather than dropping it
         }
       }
-      this.editor.requestEntryFromDraft(this.draft());
+      this.editor.requestEntryFromDraft(this.draft(), this.settings.activeEntryPattern());
       this.discard();
     } finally {
       this.appending.set(false);

@@ -10,7 +10,7 @@ import {
 } from '@angular/core';
 import { EditorView } from '@codemirror/view';
 import { ActionsService } from '../services/actions.service';
-import { editorFontFamilyStacks } from '../../../shared/app-config';
+import { CLASSIC_ENTRY_PATTERN, editorFontFamilyStacks } from '../../../shared/app-config';
 import { EditorService, EditorViewMode, NewEntryRequest } from '../services/editor.service';
 import { EditorZoomService } from '../services/editor-zoom.service';
 import { SettingsService } from '../services/settings.service';
@@ -255,7 +255,11 @@ export class Editor implements AfterViewInit {
     this.handledEntryRequest = request.id;
 
     if (request.draft) {
-      const edit = this.editor.entryDraftEdit(view.state.doc.toString(), request.draft);
+      const edit = this.editor.entryDraftEdit(
+        view.state.doc.toString(),
+        request.draft,
+        request.pattern ?? CLASSIC_ENTRY_PATTERN,
+      );
       view.dispatch({
         changes: edit,
         selection: { anchor: edit.from + edit.insert.length },

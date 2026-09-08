@@ -529,10 +529,10 @@ sequenceDiagram
     end
     opt appending
         Note over Draft: nothing open? openDailyNote(today) first
-        Draft->>EditorService: requestEntryFromDraft(draft)
+        Draft->>EditorService: requestEntryFromDraft(draft, activeEntryPattern)
         Note over Editor: effect on newEntryRequest
-        Editor->>Pure: entryInsertion(docText, draft)
-        Pure-->>Editor: { from, to, insert: "## HH:mm — Thema\ntext\n#tag · [[Person]]" }
+        Editor->>Pure: entryInsertion(docText, draft, pattern)
+        Pure-->>Editor: { from, to, insert }  (pattern from AppConfig.entry, placeholders filled, blanks collapsed)
         Editor->>Editor: view.dispatch(changes)  (undoable, caret after it)
         Note over Editor: docChanged -> EditorService.updateBuffer (synchronous)
         Editor->>EditorService: save()

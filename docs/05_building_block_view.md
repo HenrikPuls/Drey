@@ -1057,19 +1057,20 @@ The bottom of the main area, replacing the old capture bar.
   not a boolean.
 - **The appended block is composed by pure shared code**
   (`shared/entry-compose.ts`), so the preview and the real insertion cannot
-  drift:
-
-  ```
-  ## HH:mm — <Thema>
-  <Markdown-Text>
-  #tag #tag · [[Person]] · [[Meeting]]
-  ```
-
-  The topic (with its dash) and the meta line are each omitted when empty,
-  which keeps a bare entry byte-identical to what the old capture bar
-  wrote. `entryInsertion()` returns a `{from, to, insert}` range rather
-  than a new document, so the editor dispatches it as an ordinary
-  CodeMirror change — undo, caret and scroll position survive.
+  drift. Since [ADR-0022](09_architecture_decisions/0022-configurable-entry-templates.md)
+  the shape is a **template** from `AppConfig.entry` (Settings → Add
+  entry): `composeEntry(draft, pattern, now?)` fills `{{time}} {{date}}
+  {{datetime}} {{title}} {{tags}} {{content}}` (via
+  `shared/placeholders.ts`, shared with the daily-note template) and
+  `substituteEntryTemplate` collapses blank lines / drops a trailing rule.
+  Two built-ins — **Classic** (the old fixed shape, byte-identical) and
+  **Ruled** (heading / `---` / tags / body). The renderer resolves the
+  active pattern in `SettingsService.activeEntryPattern()` and threads it
+  through `NewEntryRequest.pattern`. `entryInsertion()` returns a
+  `{from, to, insert}` range rather than a new document, so the editor
+  dispatches it as an ordinary CodeMirror change — undo, caret and scroll
+  position survive. `SettingsEntry` is the Settings pane (mirrors
+  `SettingsActions`).
 
 - **`shared/entries.ts` learned the topic suffix.** The routing parser had
   to, not a second parser: routing, `untaggedEntryText` and the master
