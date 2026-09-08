@@ -89,6 +89,45 @@ test.describe('finding 2 — native context menu params', () => {
   });
 });
 
+test.describe('Edit menu — history / clipboard act on the focused editor', () => {
+  async function editMenu(page: import('@playwright/test').Page, row: string): Promise<void> {
+    await page.locator('app-titlebar .menu-label', { hasText: 'Edit' }).click();
+    await page.locator('app-titlebar .popover .row', { hasText: row }).click();
+  }
+
+  test('Undo / Redo from the Edit menu reach CodeMirror history', async ({ page, vaultDir }) => {
+    await openANote(page, vaultDir);
+    const editor = page.locator('app-editor .cm-content');
+    await editor.click();
+    await page.keyboard.type('EXTRAWORD');
+    await expect(editor).toContainText('EXTRAWORD');
+
+    await editMenu(page, 'Undo');
+    await expect(editor).not.toContainText('EXTRAWORD');
+
+    await editMenu(page, 'Redo');
+    await expect(editor).toContainText('EXTRAWORD');
+  });
+
+  test('Copy from the Edit menu puts the selection on the clipboard', async ({
+    page,
+    electronApp,
+    vaultDir,
+  }) => {
+    await openANote(page, vaultDir);
+    const editor = page.locator('app-editor .cm-content');
+    await editor.click();
+    await page.keyboard.press('ControlOrMeta+A');
+
+    await electronApp.evaluate(({ clipboard }) => clipboard.writeText('SENTINEL'));
+    await editMenu(page, 'Copy');
+
+    await expect
+      .poll(() => electronApp.evaluate(({ clipboard }) => clipboard.readText()))
+      .toContain('alpha beta gamma');
+  });
+});
+
 test.describe('bottom dock — "Add entry" panel', () => {
   test('collapsing "Add entry" removes the bottom-dock resize divider', async ({ page }) => {
     const bottom = page.locator('app-dock[side="bottom"]');

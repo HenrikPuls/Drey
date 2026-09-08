@@ -1,5 +1,12 @@
 import { Injectable, computed, inject, signal } from '@angular/core';
-import { moveLineDown, moveLineUp, selectLine } from '@codemirror/commands';
+import {
+  moveLineDown,
+  moveLineUp,
+  redo,
+  selectAll,
+  selectLine,
+  undo,
+} from '@codemirror/commands';
 import { openSearchPanel } from '@codemirror/search';
 import type { EditorView } from '@codemirror/view';
 import { KeybindingService } from '../keybindings';
@@ -80,10 +87,38 @@ export class MenuService {
     this.keys.run(commandId);
   }
 
-  /** Route a standard editing command to the focused editable via the main process. */
+  /**
+   * A standard editing command from the Edit / Selection menu.
+   *
+   * When a CodeMirror surface last held focus, act on it directly:
+   * `undo` / `redo` / `selectAll` as CM commands (a menu click can't reach
+   * CM's private history through `webContents.undo()`, and
+   * `document.execCommand('undo')` is a no-op on CM's contenteditable),
+   * and `cut` / `copy` / `paste` as native `webContents` clipboard ops
+   * *after re-focusing the view* so the OS clipboard acts on the editor
+   * and not on whatever the menu click left focused. With no editor
+   * focused (a native `<input>` in Settings, the entry topic field) fall
+   * straight through to `webContents`.
+   */
   private exec(command: EditCommand): void {
     this.close();
+    const view = this.editTarget.view;
     const api = typeof window !== 'undefined' ? window.dreyApi : undefined;
+    if (view) {
+      view.focus();
+      if (command === 'undo') {
+        undo(view);
+        return;
+      }
+      if (command === 'redo') {
+        redo(view);
+        return;
+      }
+      if (command === 'selectAll') {
+        selectAll(view);
+        return;
+      }
+    }
     void api?.execEditCommand(command);
   }
 
