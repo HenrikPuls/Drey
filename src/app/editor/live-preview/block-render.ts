@@ -3,6 +3,7 @@ import { EditorState, Extension, Range, StateField } from '@codemirror/state';
 import { Decoration, DecorationSet, EditorView } from '@codemirror/view';
 import type { SyntaxNode } from '@lezer/common';
 import MarkdownIt from 'markdown-it';
+import { parseImageEmbed } from '../../../../shared/image-embed';
 import { frontmatterEnd } from '../markdown-frontmatter';
 import { fenceLang } from './fenced-code';
 import { htmlTagBalance, sanitizeHtml } from './sanitize-html';
@@ -91,10 +92,15 @@ export function blockDecorations(state: EditorState, config: LivePreviewConfig):
       }
       if (node.name === 'Image') {
         if (node.from >= fmEnd && !touches(node.from, node.to)) {
-          const { alt, url } = parseImage(state, node.node);
+          const { alt, url, width, height } = parseImage(state, node.node);
           deco.push(
             Decoration.replace({
-              widget: new ImageWidget(url === null ? null : config.resolveImage(url), alt),
+              widget: new ImageWidget(
+                url === null ? null : config.resolveImage(url),
+                alt,
+                width,
+                height,
+              ),
             }).range(node.from, node.to),
           );
         }
@@ -150,12 +156,29 @@ export function blockDecorations(state: EditorState, config: LivePreviewConfig):
   return Decoration.set(deco, true);
 }
 
-/** Alt text sits between the first two link marks (`![` and `]`). */
-function parseImage(state: EditorState, node: SyntaxNode): { alt: string; url: string | null } {
+/**
+ * Alt text sits between the first two link marks (`![` and `]`); an
+ * Obsidian-style `|W` / `|WxH` suffix on it sets the display size and is
+ * stripped from `alt` (`shared/image-embed.ts`). `altFrom`/`altTo` are the
+ * exact doc offsets of that span -- the resize handle rewrites it in place.
+ */
+function parseImage(
+  state: EditorState,
+  node: SyntaxNode,
+): {
+  alt: string;
+  url: string | null;
+  width: number | null;
+  height: number | null;
+  altFrom: number;
+  altTo: number;
+} {
   const url = node.getChild('URL');
   const marks = node.getChildren('LinkMark');
-  const alt = marks.length >= 2 ? state.sliceDoc(marks[0].to, marks[1].from) : '';
-  return { alt, url: url ? state.sliceDoc(url.from, url.to) : null };
+  const altFrom = marks.length >= 2 ? marks[0].to : node.from;
+  const altTo = marks.length >= 2 ? marks[1].from : node.from;
+  const { alt, width, height } = parseImageEmbed(state.sliceDoc(altFrom, altTo));
+  return { alt, url: url ? state.sliceDoc(url.from, url.to) : null, width, height, altFrom, altTo };
 }
 
 export function livePreviewBlocks(config: LivePreviewConfig): Extension {

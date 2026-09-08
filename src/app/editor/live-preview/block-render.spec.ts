@@ -62,6 +62,25 @@ describe('blockDecorations', () => {
     expect(widgets(blockDecorations(state('![a](b.png)', 3), passThrough))).toHaveLength(0);
   });
 
+  it('reads an Obsidian-style |W / |WxH size off the alt text', () => {
+    const w = widgets(blockDecorations(state('![a boat|300](img/boat.png)\n\nend'), passThrough));
+    const widget = w[0].deco.spec['widget'] as ImageWidget;
+    expect(widget.alt).toBe('a boat');
+    expect(widget.width).toBe(300);
+    expect(widget.height).toBeNull();
+
+    const wh = widgets(blockDecorations(state('![plan|300x200](p.png)\n\nend'), passThrough));
+    const w2 = wh[0].deco.spec['widget'] as ImageWidget;
+    expect(w2.alt).toBe('plan');
+    expect(w2.width).toBe(300);
+    expect(w2.height).toBe(200);
+  });
+
+  it('leaves width null for a plain image', () => {
+    const w = widgets(blockDecorations(state('![a](b.png)\n\nend'), passThrough));
+    expect((w[0].deco.spec['widget'] as ImageWidget).width).toBeNull();
+  });
+
   it('renders an HTML block as a sanitized widget, raw while the cursor is inside', () => {
     const doc = 'before\n\n<div class="x"><b>hi</b><script>boom()</script></div>\n\nafter';
     const all = widgets(blockDecorations(state(doc, 0), passThrough));
