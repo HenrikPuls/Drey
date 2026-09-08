@@ -875,6 +875,70 @@ sequenceDiagram
     end
 ```
 
+## 6.18 Startup → open today's daily note (ADR-0029)
+
+`App`'s one-shot effect opens today's note as an unsaved draft once the
+vault path and the persisted config are both known. Reuses the §6.3
+`openDailyNote` path (draft tab, no disk write).
+
+```mermaid
+sequenceDiagram
+    participant App
+    participant VaultService
+    participant SettingsService
+    participant EditorService
+    participant Main as main
+
+    Note over App: constructor registers effect()
+    VaultService->>Main: getActiveVault()  (from its own constructor refresh)
+    Main-->>VaultService: "<vault path>"  → activeVaultPath signal
+    SettingsService->>Main: config:get
+    Main-->>SettingsService: AppConfig  → config signal (loaded() = true)
+    Note over App: effect re-runs: activeVaultPath && loaded && !dailyNoteStartupDone
+    App->>App: dailyNoteStartupDone = true
+    alt config.daily.openOnStartup
+        App->>EditorService: openDailyNote(formatDate(today))
+        alt daily/<y>/<m>/<date>.md exists
+            EditorService->>Main: readVaultFile(path) → normal tab
+        else missing
+            EditorService->>Main: buildDailyNoteContent(date)
+            EditorService->>EditorService: addDoc(draft tab, existsOnDisk=false)  (nothing written)
+        end
+    end
+    Note over App,EditorService: later vault.refresh() (after a save) re-runs the effect → guard short-circuits
+```
+
+## 6.19 Insert a template (ADR-0029)
+
+Panel click / `Mod+T` picker / editor context menu / drag all funnel to
+`TemplateLibraryService.insert()`. The drag path keeps the drop coordinate;
+the others insert at the caret.
+
+```mermaid
+sequenceDiagram
+    actor User
+    participant UI as Panel / Picker / Context menu
+    participant Lib as TemplateLibraryService
+    participant VaultService
+    participant EditorService
+    participant Editor as Editor (CodeMirror 6)
+
+    User->>UI: pick a template (click / Enter / menu row)
+    UI->>Lib: insert("templates/meetings/1-1.md")
+    alt no text tab open
+        Lib->>EditorService: error.set("Open a note before inserting a template.")
+    else
+        Lib->>VaultService: readTextFile(path)
+        VaultService-->>Lib: raw file text
+        Lib->>Lib: stripFrontmatter → substitutePlaceholders({date,time,datetime,title})
+        Lib->>EditorService: requestInsertText(body)  (bumps insertRequest)
+        Editor->>Editor: dispatch { replace selection with body } + caret after + focus
+        Lib->>Lib: push path to recent (localStorage, cap 5)
+    end
+
+    Note over User,Editor: drag a row instead → image-paste.ts TEMPLATE_DT_TYPE branch:<br/>read → strip → substitute → insert at posAtCoords(x,y)
+```
+
 ## Planned flows (added as their milestone is built)
 
 - Dedicated keyword-search / FTS surface — the search panel's free-text

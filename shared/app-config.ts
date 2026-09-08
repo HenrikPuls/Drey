@@ -174,6 +174,32 @@ export function activeEntryPattern(entry: EntryConfig): string {
   );
 }
 
+/** Settings category "Daily notes". */
+export interface DailyConfig {
+  /**
+   * Open today's daily note automatically on app start. It opens as an
+   * unsaved draft tab (nothing is written until the user types and saves),
+   * exactly like clicking today in the calendar.
+   */
+  openOnStartup: boolean;
+}
+
+export const DEFAULT_DAILY_CONFIG: DailyConfig = { openOnStartup: true };
+
+/**
+ * Settings category "Templates": the vault folder whose `.md` files back
+ * the Templates panel and the `Mod+T` picker. Folders are categories,
+ * sub-folders sub-categories; a template is inserted at the cursor with its
+ * YAML frontmatter stripped and `{{date}}`/`{{time}}`/`{{datetime}}`/`{{title}}`
+ * substituted.
+ */
+export interface TemplatesConfig {
+  /** Vault-relative folder, forward-slash, no leading/trailing slash. */
+  dir: string;
+}
+
+export const DEFAULT_TEMPLATES_CONFIG: TemplatesConfig = { dir: 'templates' };
+
 /** Settings category "KI-Assistent": the note assistant panel's defaults. */
 export interface AssistantConfig {
   /**
@@ -457,6 +483,8 @@ export interface AppConfig {
   appearance: AppearanceConfig;
   mcp: McpConfig;
   entry: EntryConfig;
+  daily: DailyConfig;
+  templates: TemplatesConfig;
   actions: {
     templates: ActionTemplate[];
     triggers: ActionTrigger[];
@@ -565,6 +593,8 @@ export const DEFAULT_APP_CONFIG: AppConfig = {
     templates: [classicEntryTemplate(), ruledEntryTemplate()],
     activeId: BUILTIN_ENTRY_TEMPLATE_IDS.classic,
   },
+  daily: { ...DEFAULT_DAILY_CONFIG },
+  templates: { ...DEFAULT_TEMPLATES_CONFIG },
   actions: {
     templates: [noteSummaryTemplate(), searchSummaryTemplate(), autotagTemplate()],
     triggers: [],
@@ -677,6 +707,34 @@ function normalizeMcp(raw: unknown): McpConfig {
     httpPort: port,
     yolo: bool(source['yolo'], DEFAULT_MCP_CONFIG.yolo),
   };
+}
+
+function normalizeDaily(raw: unknown): DailyConfig {
+  const source = (raw ?? {}) as Record<string, unknown>;
+  return {
+    openOnStartup: bool(source['openOnStartup'], DEFAULT_DAILY_CONFIG.openOnStartup),
+  };
+}
+
+/**
+ * A vault-relative folder: trimmed, back-slashes folded, no leading/trailing
+ * slash, and no `.`/`..` segment (so it can never point outside the vault).
+ * Anything malformed falls back to the default `templates`.
+ */
+export function normalizeTemplatesDir(raw: unknown): string {
+  const cleaned = (typeof raw === 'string' ? raw : '')
+    .trim()
+    .replace(/\\/g, '/')
+    .replace(/^\/+|\/+$/g, '');
+  if (cleaned === '' || cleaned.split('/').some((seg) => seg === '' || seg === '.' || seg === '..')) {
+    return DEFAULT_TEMPLATES_CONFIG.dir;
+  }
+  return cleaned;
+}
+
+function normalizeTemplatesConfig(raw: unknown): TemplatesConfig {
+  const source = (raw ?? {}) as Record<string, unknown>;
+  return { dir: normalizeTemplatesDir(source['dir']) };
 }
 
 function normalizeEditor(raw: unknown): EditorConfig {
@@ -860,6 +918,8 @@ export function normalizeAppConfig(raw: unknown): AppConfig {
     appearance: normalizeAppearance(source['appearance']),
     mcp: normalizeMcp(source['mcp']),
     entry: normalizeEntryConfig(source['entry']),
+    daily: normalizeDaily(source['daily']),
+    templates: normalizeTemplatesConfig(source['templates']),
     actions: {
       templates,
       triggers: normalizeTriggers(actionsSource['triggers'], templates),

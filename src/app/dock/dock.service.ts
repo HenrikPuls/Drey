@@ -1,7 +1,14 @@
 import { Injectable, computed, signal } from '@angular/core';
 
 /** The dockable panels. Order within a dock is the render order. */
-export type PanelId = 'calendar' | 'files' | 'search' | 'windows' | 'assistant' | 'entry';
+export type PanelId =
+  | 'calendar'
+  | 'files'
+  | 'templates'
+  | 'search'
+  | 'windows'
+  | 'assistant'
+  | 'entry';
 
 /**
  * The three docks. `left` / `right` are vertical columns beside the
@@ -29,6 +36,7 @@ interface DockState {
 const ALL_PANELS: readonly PanelId[] = [
   'calendar',
   'files',
+  'templates',
   'search',
   'windows',
   'assistant',
@@ -50,14 +58,24 @@ const HEIGHT = { min: 140, max: 680 } as const;
 function defaultState(): DockState {
   return {
     dock: {
-      left: ['calendar', 'files', 'search', 'windows'],
+      left: ['calendar', 'files', 'templates', 'search', 'windows'],
       right: ['assistant'],
       bottom: ['entry'],
     },
-    flexes: { calendar: 250, files: 340, search: 220, windows: 150, assistant: 100, entry: 200 },
+    flexes: {
+      calendar: 250,
+      files: 340,
+      templates: 200,
+      search: 220,
+      windows: 150,
+      assistant: 100,
+      entry: 200,
+    },
     open: {
       calendar: true,
       files: true,
+      // The template library opens collapsed -- it is a reach-for-it panel.
+      templates: false,
       search: false,
       windows: true,
       assistant: true,
@@ -95,6 +113,8 @@ export class DockService {
 
   /** The panel being dragged by its header, else null. */
   readonly dragging = signal<PanelId | null>(null);
+  /** True while any panel is being dragged -- docks use it to show themselves as drop targets. */
+  readonly dragActive = computed(() => this.dragging() !== null);
   /** Where the drag would drop it right now. */
   readonly dropDock = signal<DockSide | null>(null);
   readonly dropIndex = signal<number | null>(null);
@@ -246,18 +266,23 @@ export class DockService {
     const bottom = this.dockEls.get('bottom')?.getBoundingClientRect();
     const t = DockService.DOCK_TOLERANCE;
 
+    // A side dock wins while the pointer is horizontally over it; anything
+    // in the lower band (past the bottom dock's top edge) that is not over a
+    // side dock drops into the bottom dock -- same "whole region" leniency
+    // the side docks already get, so every panel can reach every dock.
+    const overLeft = !!left && event.clientX <= left.right + t;
+    const overRight = !!right && event.clientX >= right.left - t;
+    const inBottomBand = !!bottom && event.clientY >= bottom.top - t;
+
     let target: DockSide;
-    if (
-      bottom &&
-      event.clientY >= bottom.top - t &&
-      event.clientX >= bottom.left - t &&
-      event.clientX <= bottom.right + t
-    ) {
+    if (inBottomBand && !overLeft && !overRight) {
       target = 'bottom';
-    } else if (left && event.clientX <= left.right + t) {
+    } else if (overLeft) {
       target = 'left';
-    } else if (right && event.clientX >= right.left - t) {
+    } else if (overRight) {
       target = 'right';
+    } else if (inBottomBand) {
+      target = 'bottom';
     } else {
       target = event.clientX < window.innerWidth / 2 ? 'left' : 'right';
     }

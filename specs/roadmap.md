@@ -57,12 +57,25 @@ below).
   editor, so inline `#tag` autocomplete (from the tag vocabulary, see the
   tag index below) and the editor mode menu are always available. Older
   flat `daily/YYYY-MM-DD.md` files are still opened if present.
+  On app start, today's daily note is opened automatically (as an unsaved
+  draft tab — nothing is written until you type and save), toggleable in
+  Settings → **Daily notes** ([ADR-0029](../docs/09_architecture_decisions/0029-template-library.md)).
 
 - **Note templates:** a `templates/` folder in the vault holds Markdown
   templates with `{{date}}` / `{{time}}` / `{{datetime}}` / `{{title}}`
   placeholders. `templates/daily.md` seeds new daily notes and is
   scaffolded with a starter layout on first use; editing it changes how
   future daily notes look.
+
+- **Template library** ([ADR-0029](../docs/09_architecture_decisions/0029-template-library.md)):
+  the same folder (configurable, Settings → **Templates**, default
+  `templates`) is a browsable library. Every sub-folder is a category,
+  nested sub-folders sub-categories, and each `.md` a template labelled by
+  its filename. A **Templates** dock panel lists them; inserting one
+  (click, drag into the editor, the editor's right-click menu, or the
+  `Ctrl+T` picker showing the last 5 used) drops its body at the cursor
+  with the YAML frontmatter stripped and the four placeholders substituted.
+  The configured folder is kept out of the tag index.
 
 - **Tags & tag index:** topics are free inline `#tag`s in the note body
   (`#` + a letter, then letters/digits/`_`/`-`, lower-cased). No creation

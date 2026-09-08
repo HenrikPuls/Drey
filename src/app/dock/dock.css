@@ -17,6 +17,26 @@
   box-shadow: var(--drop-ring);
 }
 
+/* An emptied dock while a panel is mid-drag: keep a visible target area. */
+:host(.drag-active) {
+  outline: 1px dashed var(--border-strong);
+  outline-offset: -4px;
+}
+
+:host(.drag-active.bottom) {
+  min-height: 140px;
+}
+
+.drop-hint {
+  flex: none;
+  padding: 16px 12px;
+  text-align: center;
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-5);
+}
+
 app-panel-frame {
   display: flex;
   flex-direction: column;

@@ -1,5 +1,6 @@
 import { Type } from '@angular/core';
 import { PanelId } from '../dock.service';
+import { TemplatesPanel } from '../../templates';
 import { CalendarPanel } from './calendar-panel';
 import { EntryPanel } from './entry-panel';
 import { FilesPanel } from './files-panel';
@@ -15,6 +16,7 @@ import { AssistantPanel } from './assistant-panel';
 export const PANEL_TITLES: Record<PanelId, string> = {
   calendar: 'Calendar',
   files: 'Files',
+  templates: 'Templates',
   search: 'Search',
   windows: 'Open windows',
   assistant: 'Assistant',
@@ -24,6 +26,7 @@ export const PANEL_TITLES: Record<PanelId, string> = {
 export const PANEL_COMPONENTS: Record<PanelId, Type<unknown>> = {
   calendar: CalendarPanel,
   files: FilesPanel,
+  templates: TemplatesPanel,
   search: SearchPanelHost,
   windows: WindowsPanel,
   assistant: AssistantPanel,

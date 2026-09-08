@@ -39,6 +39,7 @@ import { PANEL_COMPONENTS } from './panels/panel-registry';
     '[style.height.px]': 'hostHeight()',
     '[class.bottom]': 'side() === "bottom"',
     '[class.drop-target]': 'isDropTarget()',
+    '[class.drag-active]': 'dock.dragActive() && isEmpty()',
   },
 })
 export class Dock implements OnInit {
@@ -54,13 +55,23 @@ export class Dock implements OnInit {
   readonly side = input.required<DockSide>();
 
   protected readonly ids = computed<PanelId[]>(() => this.dock.idsFor(this.side()));
+  protected readonly isEmpty = computed(() => this.ids().length === 0);
   /** A side dock is width-sized; the bottom dock is height-sized. */
   protected readonly hostWidth = computed(() =>
     this.side() === 'bottom' ? null : this.dock.dockWidth(this.side()),
   );
-  protected readonly hostHeight = computed(() =>
-    this.side() === 'bottom' && !this.dock.allCollapsed('bottom') ? this.dock.dockHeight() : null,
-  );
+  protected readonly hostHeight = computed(() => {
+    if (this.side() !== 'bottom') {
+      return null;
+    }
+    // While a panel is being dragged, an emptied bottom dock still shows a
+    // band so it stays a reachable drop target (otherwise it collapses to
+    // 0 and nothing can be dropped back into it).
+    if (this.isEmpty()) {
+      return this.dock.dragActive() ? 140 : null;
+    }
+    return this.dock.allCollapsed('bottom') ? null : this.dock.dockHeight();
+  });
   protected readonly isDropTarget = computed(() => this.dock.dropDock() === this.side());
 
   constructor() {

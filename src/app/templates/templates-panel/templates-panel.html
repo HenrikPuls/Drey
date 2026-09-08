@@ -1,0 +1,87 @@
+<div class="templates">
+  <div class="bar">
+    <span class="dir mono">{{ settingsDir() }}</span>
+    @if (vault.activeVaultPath()) {
+      <button
+        type="button"
+        class="icon-btn"
+        (click)="onRefresh()"
+        [disabled]="vault.isLoading()"
+        title="Re-read the vault from disk"
+        aria-label="Refresh templates"
+      >
+        <app-icon name="refresh-cw" [size]="12" />
+      </button>
+    }
+  </div>
+
+  @if (!vault.activeVaultPath()) {
+    <p class="hint">No vault selected.</p>
+  } @else if (isEmpty()) {
+    <p class="hint">
+      No templates in <span class="mono">{{ settingsDir() }}</span
+      >. Add <span class="mono">.md</span> files there (Settings → Templates to change the folder).
+    </p>
+  } @else {
+    <div class="scroll">
+      <ng-container
+        *ngTemplateOutlet="group; context: { $implicit: categories(), depth: 0 }"
+      />
+    </div>
+  }
+</div>
+
+@if (menu(); as m) {
+  <div
+    class="ctx-backdrop"
+    (click)="closeMenu()"
+    (contextmenu)="$event.preventDefault(); closeMenu()"
+  ></div>
+  <div class="ctx-menu" [style.left.px]="m.x" [style.top.px]="m.y">
+    <button type="button" (click)="insertFromMenu()">Insert</button>
+    <button type="button" (click)="editFromMenu()">Edit template</button>
+  </div>
+}
+
+<ng-template #group let-cats let-depth="depth">
+  @for (cat of cats; track trackCat($index, cat)) {
+    <button
+      type="button"
+      class="cat"
+      [style.padding-left.px]="8 + depth * 12"
+      (click)="toggle(cat.path)"
+    >
+      <app-icon
+        class="twist"
+        name="chevron-right"
+        [size]="9"
+        [strokeWidth]="1.2"
+        [style.transform]="isCollapsed(cat.path) ? 'none' : 'rotate(90deg)'"
+      />
+      <span class="cat-name">{{ cat.name }}</span>
+      <span class="count">{{ cat.templates.length }}</span>
+    </button>
+
+    @if (!isCollapsed(cat.path)) {
+      @for (t of cat.templates; track t.relativePath) {
+        <button
+          type="button"
+          class="row"
+          draggable="true"
+          [style.padding-left.px]="8 + (depth + 1) * 12"
+          (click)="onRowClick(t)"
+          (dragstart)="onRowDragStart($event, t)"
+          (contextmenu)="openMenu($event, t)"
+        >
+          <span class="bullet" aria-hidden="true"></span>
+          <span class="row-name">{{ t.name }}</span>
+        </button>
+      }
+      @if (cat.children.length) {
+        <ng-container
+          *ngTemplateOutlet="group; context: { $implicit: cat.children, depth: depth + 1 }"
+        />
+      }
+    }
+  }
+</ng-template>

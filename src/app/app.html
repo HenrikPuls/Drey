@@ -10,15 +10,17 @@
   <app-titlebar />
 
   <div class="layout">
-    @if (dock.hasLeft()) {
+    @if (dock.hasLeft() || dock.dragActive()) {
       <app-dock side="left" />
-      <div
-        class="divider divider-x"
-        role="separator"
-        aria-orientation="vertical"
-        aria-label="Resize left dock"
-        (pointerdown)="dock.startDockResize('left', $event)"
-      ></div>
+      @if (dock.hasLeft()) {
+        <div
+          class="divider divider-x"
+          role="separator"
+          aria-orientation="vertical"
+          aria-label="Resize left dock"
+          (pointerdown)="dock.startDockResize('left', $event)"
+        ></div>
+      }
     }
 
     <div class="center-col">
@@ -37,8 +39,8 @@
         }
       </main>
 
-      @if (dock.hasBottom()) {
-        @if (!dock.allCollapsed('bottom')) {
+      @if (dock.hasBottom() || dock.dragActive()) {
+        @if (dock.hasBottom() && !dock.allCollapsed('bottom')) {
           <div
             class="divider divider-y"
             role="separator"
@@ -51,14 +53,16 @@
       }
     </div>
 
-    @if (dock.hasRight()) {
-      <div
-        class="divider divider-x"
-        role="separator"
-        aria-orientation="vertical"
-        aria-label="Resize right dock"
-        (pointerdown)="dock.startDockResize('right', $event)"
-      ></div>
+    @if (dock.hasRight() || dock.dragActive()) {
+      @if (dock.hasRight()) {
+        <div
+          class="divider divider-x"
+          role="separator"
+          aria-orientation="vertical"
+          aria-label="Resize right dock"
+          (pointerdown)="dock.startDockResize('right', $event)"
+        ></div>
+      }
       <app-dock side="right" />
     }
   </div>
@@ -70,4 +74,6 @@
   }
   <app-confirmation-dialog />
   <app-image-lightbox />
+  <app-template-picker />
+  <app-editor-context-menu />
 </div>

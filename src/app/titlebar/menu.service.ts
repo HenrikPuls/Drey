@@ -88,7 +88,8 @@ export class MenuService {
   }
 
   /**
-   * A standard editing command from the Edit / Selection menu.
+   * A standard editing command from the Edit / Selection menu -- also the
+   * clipboard rows of the editor's right-click menu (ADR-0030).
    *
    * When a CodeMirror surface last held focus, act on it directly:
    * `undo` / `redo` / `selectAll` as CM commands (a menu click can't reach
@@ -100,7 +101,7 @@ export class MenuService {
    * focused (a native `<input>` in Settings, the entry topic field) fall
    * straight through to `webContents`.
    */
-  private exec(command: EditCommand): void {
+  execEdit(command: EditCommand): void {
     this.close();
     const view = this.editTarget.view;
     const api = typeof window !== 'undefined' ? window.dreyApi : undefined;
@@ -207,12 +208,12 @@ export class MenuService {
       id: 'edit',
       label: 'Edit',
       rows: [
-        { kind: 'item', label: 'Undo', hint: 'Ctrl Z', run: () => this.exec('undo') },
-        { kind: 'item', label: 'Redo', hint: 'Ctrl Shift Z', run: () => this.exec('redo') },
+        { kind: 'item', label: 'Undo', hint: 'Ctrl Z', run: () => this.execEdit('undo') },
+        { kind: 'item', label: 'Redo', hint: 'Ctrl Shift Z', run: () => this.execEdit('redo') },
         SEP,
-        { kind: 'item', label: 'Cut', hint: 'Ctrl X', run: () => this.exec('cut') },
-        { kind: 'item', label: 'Copy', hint: 'Ctrl C', run: () => this.exec('copy') },
-        { kind: 'item', label: 'Paste', hint: 'Ctrl V', run: () => this.exec('paste') },
+        { kind: 'item', label: 'Cut', hint: 'Ctrl X', run: () => this.execEdit('cut') },
+        { kind: 'item', label: 'Copy', hint: 'Ctrl C', run: () => this.execEdit('copy') },
+        { kind: 'item', label: 'Paste', hint: 'Ctrl V', run: () => this.execEdit('paste') },
         SEP,
         this.editorRow('Find in note', 'Ctrl F', (view) => openSearchPanel(view), false),
         {
@@ -227,7 +228,7 @@ export class MenuService {
       id: 'selection',
       label: 'Selection',
       rows: [
-        { kind: 'item', label: 'Select all', hint: 'Ctrl A', run: () => this.exec('selectAll') },
+        { kind: 'item', label: 'Select all', hint: 'Ctrl A', run: () => this.execEdit('selectAll') },
         this.editorRow('Select line', 'Ctrl L', selectLine),
         SEP,
         this.editorRow('Duplicate selection', '', (view) => duplicateSelection(view)),
@@ -250,6 +251,7 @@ export class MenuService {
         },
         this.panelRow('calendar', 'Calendar'),
         this.panelRow('files', 'Files'),
+        this.panelRow('templates', 'Templates'),
         this.panelRow('search', 'Search'),
         this.panelRow('windows', 'Open windows'),
         this.panelRow('assistant', 'Assistant'),

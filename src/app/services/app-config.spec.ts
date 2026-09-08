@@ -147,6 +147,26 @@ describe('normalizeAppConfig', () => {
     );
   });
 
+  it('defaults the daily block to open-on-startup and coerces a junk value', () => {
+    expect(normalizeAppConfig({}).daily).toEqual({ openOnStartup: true });
+    expect(normalizeAppConfig({ daily: { openOnStartup: 'yes' } }).daily.openOnStartup).toBe(true);
+    expect(normalizeAppConfig({ daily: { openOnStartup: false } }).daily.openOnStartup).toBe(false);
+  });
+
+  it('normalises the templates folder: default, slash-trim, nested path, .. rejection', () => {
+    expect(normalizeAppConfig({}).templates).toEqual({ dir: 'templates' });
+    expect(normalizeAppConfig({ templates: { dir: '  /snippets/  ' } }).templates.dir).toBe(
+      'snippets',
+    );
+    expect(normalizeAppConfig({ templates: { dir: 'meta\\templates' } }).templates.dir).toBe(
+      'meta/templates',
+    );
+    expect(normalizeAppConfig({ templates: { dir: '../escape' } }).templates.dir).toBe('templates');
+    expect(normalizeAppConfig({ templates: { dir: 'a/./b' } }).templates.dir).toBe('templates');
+    expect(normalizeAppConfig({ templates: { dir: '' } }).templates.dir).toBe('templates');
+    expect(normalizeAppConfig({ templates: { dir: 42 } }).templates.dir).toBe('templates');
+  });
+
   it('fills the assistant and spellcheck sections from defaults', () => {
     const config = normalizeAppConfig({});
     expect(config.assistant).toEqual({ autoSummaryDefault: true });

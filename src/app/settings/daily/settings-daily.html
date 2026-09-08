@@ -1,0 +1,21 @@
+<app-settings-pane
+  title="Daily notes"
+  description="How the app handles the per-day note in the daily/ folder."
+>
+  @if (daily(); as daily) {
+    <label class="switch-row">
+      <input
+        type="checkbox"
+        [checked]="daily.openOnStartup"
+        (change)="onOpenOnStartupChange($any($event.target).checked)"
+      />
+      <span>
+        <span class="switch-label">Open today's daily note on startup</span>
+        <span class="switch-hint">
+          Opens today's note in a tab each time the app starts. It is an unsaved draft — nothing
+          is written to disk until you type and save.
+        </span>
+      </span>
+    </label>
+  }
+</app-settings-pane>

@@ -7,13 +7,16 @@ import {
   BUILTIN_ENTRY_TEMPLATE_IDS,
   CLASSIC_ENTRY_PATTERN,
   CustomDictionary,
+  DailyConfig,
   DEFAULT_APPEARANCE,
   DEFAULT_EDITOR_FONT_FAMILY,
+  DEFAULT_TEMPLATES_CONFIG,
   EntryTemplate,
   LlmConfig,
   LlmEndpoint,
   McpConfig,
   SpellcheckConfig,
+  TemplatesConfig,
   UiScale,
   activeEntryPattern,
   clampEditorFontScale,
@@ -79,6 +82,17 @@ export class SettingsService {
   });
 
   readonly llmEnabled = computed<boolean>(() => this._config()?.llm.enabled ?? false);
+
+  /** True once the initial `load()` has resolved -- `null` config means "not loaded yet". */
+  readonly loaded = computed<boolean>(() => this._config() !== null);
+
+  /** Whether to open today's daily note on app start. Persisted config, never the draft. */
+  readonly dailyOpenOnStartup = computed<boolean>(() => this._config()?.daily.openOnStartup ?? true);
+
+  /** The vault-relative templates folder. Persisted config, never the draft. */
+  readonly templatesDir = computed<string>(
+    () => this._config()?.templates.dir ?? DEFAULT_TEMPLATES_CONFIG.dir,
+  );
 
   /** Editor content zoom multiplier (Ctrl +/-/0). Persisted config, never the draft. */
   readonly editorFontScale = computed<number>(() => this._config()?.editor.fontScale ?? 1);
@@ -231,6 +245,18 @@ export class SettingsService {
   patchMcp(patch: Partial<McpConfig>): void {
     this.mutate((config) => {
       config.mcp = { ...config.mcp, ...patch };
+    });
+  }
+
+  patchDaily(patch: Partial<DailyConfig>): void {
+    this.mutate((config) => {
+      config.daily = { ...config.daily, ...patch };
+    });
+  }
+
+  patchTemplates(patch: Partial<TemplatesConfig>): void {
+    this.mutate((config) => {
+      config.templates = { ...config.templates, ...patch };
     });
   }
 

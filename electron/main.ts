@@ -281,12 +281,18 @@ function registerIpcHandlers(
 
   ipcMain.handle(IPC_CHANNELS.configGet, (): AppConfig => appConfig.get());
   ipcMain.handle(IPC_CHANNELS.configSet, async (_event, next: AppConfig): Promise<AppConfig> => {
+    const prevTemplatesDir = appConfig.get().templates.dir;
     const stored = appConfig.set(next);
     // The language or a dictionary path may have changed; the next check
     // reloads rather than answering from a stale dictionary.
     spellcheck.invalidate();
     // The MCP block may have flipped -- open/close the HTTP endpoint to match.
     await syncMcpHttpTransport(mcpHttp, appConfig);
+    // A changed templates folder shifts which files the tag index excludes.
+    // The renderer picks the new vocabulary up on its next refresh / search.
+    if (stored.templates.dir !== prevTemplatesDir) {
+      await tagIndex.rebuild();
+    }
     return stored;
   });
 
@@ -663,8 +669,11 @@ if (!app.requestSingleInstanceLock()) {
   app.whenReady().then(async () => {
     const vaultManager = new VaultManager();
     const dailyNotes = new DailyNoteManager(vaultManager);
-    const tagIndex = new TagIndex(vaultManager);
     const appConfig = new AppConfigStore();
+    // The tag index also skips the user-configured templates folder (on top
+    // of the always-excluded literal `templates/`), so snippet headings do
+    // not leak into tag search.
+    const tagIndex = new TagIndex(vaultManager, () => appConfig.get().templates.dir);
     const llmDebug = new LlmDebugLog();
     const lmStudio = new LmStudioClient(appConfig, llmDebug);
     const llmTasks = new LlmTaskRegistry();
