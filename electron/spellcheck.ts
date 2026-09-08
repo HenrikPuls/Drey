@@ -18,6 +18,7 @@
 import * as fsp from 'node:fs/promises';
 import { BUNDLED_DICTIONARIES, CustomDictionary } from '../shared/app-config';
 import { SpellCheckResult, SpellLanguage } from '../shared/ipc-api';
+import { personalDictionaryFor } from '../shared/spellcheck';
 import { AppConfigStore } from './app-config';
 
 // nspell ships no type declarations; the surface used here is small
@@ -25,6 +26,8 @@ import { AppConfigStore } from './app-config';
 interface NSpell {
   correct(word: string): boolean;
   suggest(word: string): string[];
+  /** Accepts a newline list of extra words (`shared/spellcheck.ts`). */
+  personal(dictionary: string): NSpell;
 }
 type NSpellFactory = (aff: Uint8Array | string, dic: Uint8Array | string) => NSpell;
 // eslint-disable-next-line @typescript-eslint/no-var-requires
@@ -120,7 +123,12 @@ export class SpellcheckService {
       const files = custom
         ? await readPair(custom.affPath, custom.dicPath)
         : await loadBundled(language);
-      loaded = { spell: nspell(files.aff, files.dic) };
+      const spell = nspell(files.aff, files.dic);
+      const personal = personalDictionaryFor(this.config.get().spellcheck, language);
+      if (personal !== '') {
+        spell.personal(personal);
+      }
+      loaded = { spell };
     } catch (err) {
       loaded = { spell: null, error: err instanceof Error ? err.message : String(err) };
     }

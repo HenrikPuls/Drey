@@ -165,9 +165,12 @@ below).
     immediately.
   - **Inline spellcheck**, active from the first word typed — in both this
     text field and the document editor: misspelled words get a red wavy
-    underline, clicking one offers corrections. German and English ship
-    with the app; further Hunspell dictionaries are addable, and the
-    active language is picked in Settings → Spelling.
+    underline, clicking one offers corrections or an "Add to dictionary"
+    action. German and English ship with the app; further Hunspell
+    dictionaries are addable, and the active language is picked in
+    Settings → Spelling. Accepted words are kept in two lists —
+    **personal** (every dictionary) and **per-dictionary** — editable
+    from the popup and from Settings.
 
 - **Note assistant panel** on the right — per open note.
   - An **"Automatic summary"** switch in the panel header. When a note is

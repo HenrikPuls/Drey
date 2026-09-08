@@ -125,8 +125,15 @@ is normal.)_
   `dictionary-de` + `dictionary-en` are three new packages. Accepted for a
   feature that has to work offline.
 - German Hunspell flags English loanwords the user's notes are full of
-  ("Rollout", "Sync"). There is no personal-dictionary ("add word")
-  mechanism yet — see `docs/11`.
+  ("Rollout", "Sync"). Addressed by two accepted-word lists in
+  `SpellcheckConfig` — `personalWords` (applied to every dictionary) and
+  `languageWords[<id>]` (one dictionary) — merged by
+  `personalDictionaryFor` and handed to `nspell.personal()` in
+  `SpellcheckService.load()`. Words are added from the correction popup
+  (immediate, via the `spell:add-word` IPC channel, which persists and
+  re-loads the checker) or managed in Settings → Spelling (draft,
+  persisted on Save). `config:set` / the immediate handler both call
+  `invalidate()`, so the next check reflects the change.
 - Verdicts are cached per language in `SpellcheckService`, so typing does
   not re-ship the whole field across IPC on every pause. The cache is
   dropped when the language or dictionary list changes.

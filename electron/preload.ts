@@ -112,6 +112,8 @@ const dreyApi: DreyApi = {
     ipcRenderer.invoke(IPC_CHANNELS.spellLanguages),
   addSpellDictionary: (): Promise<CustomDictionary | null> =>
     ipcRenderer.invoke(IPC_CHANNELS.spellAddDictionary),
+  addSpellWord: (word: string, target: 'language' | 'personal'): Promise<AppConfig> =>
+    ipcRenderer.invoke(IPC_CHANNELS.spellAddWord, word, target),
   onOpenDailyNote: (listener: (relativePath: string) => void): (() => void) => {
     // The wrapper drops the IpcRendererEvent and forwards only the path --
     // the renderer must never get a handle to the event or to ipcRenderer

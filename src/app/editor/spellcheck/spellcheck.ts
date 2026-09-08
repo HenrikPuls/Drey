@@ -34,12 +34,22 @@ import {
 } from '@codemirror/view';
 import { collectWords, distinctWords, issueSpans, WordSpan } from '../../../../shared/spellcheck';
 
+/** Which accepted-word list a popup "Add …" action targets. */
+export type AddWordTarget = 'language' | 'personal';
+
 /** What the extension needs from the outside world to do its job. */
 export interface SpellcheckSource {
   /** Whether checking is switched on at all right now. */
   enabled(): boolean;
   /** The misspelled subset of `words`, each with its suggestions. */
   check(words: string[]): Promise<Map<string, readonly string[]>>;
+  /**
+   * Adds `word` to an accepted-word list and repaints. Optional -- when
+   * absent, the popup shows no "Add to dictionary" rows.
+   */
+  addWord?(word: string, target: AddWordTarget): Promise<void>;
+  /** Human labels for the two "Add …" rows (active dictionary / personal list). */
+  wordTargets?(): { language: string; personal: string };
 }
 
 export interface SpellcheckConfig {
@@ -60,7 +70,7 @@ export interface SpellcheckConfig {
 const FULL_SCAN_LIMIT = 60_000;
 
 /** One flagged word, as held in the state field. */
-interface Flagged {
+export interface Flagged {
   from: number;
   to: number;
   word: string;
@@ -123,10 +133,9 @@ const spellState = StateField.define<SpellState>({
     }
     return next;
   },
-  provide: (field) => [
-    EditorView.decorations.from(field, (state) => state.decorations),
-    showTooltip.compute([field], (state) => buildTooltip(state.field(field))),
-  ],
+  // The tooltip provider lives in `inlineSpellcheck` instead, so it can
+  // close over `config.source` (for the "Add to dictionary" rows).
+  provide: (field) => [EditorView.decorations.from(field, (state) => state.decorations)],
 });
 
 function mapFlagged(flagged: readonly Flagged[], tr: Transaction): Flagged[] {
@@ -143,7 +152,7 @@ function mapFlagged(flagged: readonly Flagged[], tr: Transaction): Flagged[] {
   return out;
 }
 
-function buildTooltip(state: SpellState): Tooltip | null {
+function buildTooltip(state: SpellState, source: SpellcheckSource): Tooltip | null {
   const open = state.open;
   if (!open) {
     return null;
@@ -152,11 +161,16 @@ function buildTooltip(state: SpellState): Tooltip | null {
     pos: open.from,
     end: open.to,
     above: false,
-    create: (view) => ({ dom: suggestionDom(view, open) }),
+    create: (view) => ({ dom: suggestionDom(view, open, source) }),
   };
 }
 
-function suggestionDom(view: EditorView, issue: Flagged): HTMLElement {
+/** Exported as a test seam; built by `buildTooltip` at runtime. */
+export function suggestionDom(
+  view: EditorView,
+  issue: Flagged,
+  source: SpellcheckSource,
+): HTMLElement {
   const dom = document.createElement('div');
   dom.className = 'cm-spell-popup';
 
@@ -170,22 +184,48 @@ function suggestionDom(view: EditorView, issue: Flagged): HTMLElement {
     empty.className = 'cm-spell-popup-empty';
     empty.textContent = 'No suggestions';
     dom.appendChild(empty);
-    return dom;
+  } else {
+    for (const suggestion of issue.suggestions) {
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.className = 'cm-spell-popup-item';
+      button.textContent = suggestion;
+      button.addEventListener('mousedown', (event) => {
+        // mousedown, not click: the editor takes the selection back on blur
+        // before a click would ever land.
+        event.preventDefault();
+        applySuggestion(view, issue, suggestion);
+      });
+      dom.appendChild(button);
+    }
   }
 
-  for (const suggestion of issue.suggestions) {
-    const button = document.createElement('button');
-    button.type = 'button';
-    button.className = 'cm-spell-popup-item';
-    button.textContent = suggestion;
-    button.addEventListener('mousedown', (event) => {
-      // mousedown, not click: the editor takes the selection back on blur
-      // before a click would ever land.
-      event.preventDefault();
-      applySuggestion(view, issue, suggestion);
-    });
-    dom.appendChild(button);
+  if (typeof source.addWord === 'function') {
+    const targets = source.wordTargets?.() ?? {
+      language: 'this dictionary',
+      personal: 'personal words',
+    };
+    const sep = document.createElement('div');
+    sep.className = 'cm-spell-popup-sep';
+    dom.appendChild(sep);
+    for (const target of ['language', 'personal'] as const) {
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.className = 'cm-spell-popup-add';
+      button.textContent = `Add “${issue.word}” to ${targets[target]}`;
+      button.addEventListener('mousedown', (event) => {
+        event.preventDefault();
+        void source.addWord!(issue.word, target).then(() => {
+          // Clear the popup and re-run the check now that the verdict
+          // cache is stale -- the squiggle disappears without a keystroke.
+          view.dispatch({ effects: [closePopup.of(null), recheck.of(null)] });
+          view.focus();
+        });
+      });
+      dom.appendChild(button);
+    }
   }
+
   return dom;
 }
 
@@ -384,11 +424,41 @@ const spellcheckTheme = EditorView.baseTheme({
     fontSize: '12px',
     color: 'var(--text-6, #6e6862)',
   },
+  '.cm-spell-popup-sep': {
+    height: '1px',
+    margin: '4px 2px',
+    background: 'var(--border-strong, rgba(255,255,255,0.08))',
+  },
+  '.cm-spell-popup-add': {
+    display: 'block',
+    width: '100%',
+    textAlign: 'left',
+    background: 'transparent',
+    border: 'none',
+    borderRadius: 'var(--radius-xs, 4px)',
+    padding: '4px 7px',
+    font: 'inherit',
+    fontSize: '11.5px',
+    color: 'var(--text-4, #9a938b)',
+    cursor: 'pointer',
+  },
+  '.cm-spell-popup-add:hover': {
+    background: 'var(--hover-bg, rgba(255,255,255,0.05))',
+    color: 'var(--text-primary, #eae7e1)',
+  },
 });
 
 /** The inline spellchecker: underlines, click popup, and the check loop. */
 export function inlineSpellcheck(config: SpellcheckConfig): Extension {
-  return [spellState, clickHandler, checker(config), spellcheckTheme];
+  return [
+    spellState,
+    showTooltip.compute([spellState], (state) =>
+      buildTooltip(state.field(spellState), config.source),
+    ),
+    clickHandler,
+    checker(config),
+    spellcheckTheme,
+  ];
 }
 
 /**

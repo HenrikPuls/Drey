@@ -71,6 +71,7 @@ export const IPC_CHANNELS = {
   spellCheck: 'spell:check',
   spellLanguages: 'spell:languages',
   spellAddDictionary: 'spell:add-dictionary',
+  spellAddWord: 'spell:add-word',
   // MCP vault server (ADR-0021).
   mcpStatus: 'mcp:status',
   mcpWriteRequest: 'mcp:write-request',
@@ -420,6 +421,15 @@ export interface DreyApi {
    * when the user cancelled or the pair is incomplete.
    */
   addSpellDictionary(): Promise<CustomDictionary | null>;
+
+  /**
+   * Adds `word` to the spellchecker's accepted words -- to the active
+   * dictionary's list (`target: 'language'`) or the global personal list
+   * (`target: 'personal'`) -- persists it, and reloads the checker so the
+   * squiggle clears immediately (no Settings round-trip). Returns the
+   * stored config so an open Settings screen can reconcile.
+   */
+  addSpellWord(word: string, target: 'language' | 'personal'): Promise<AppConfig>;
 
   /** Currently active vault path, or null if none has been selected yet. */
   getActiveVault(): Promise<string | null>;

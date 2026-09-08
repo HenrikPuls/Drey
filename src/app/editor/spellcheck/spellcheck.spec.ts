@@ -1,15 +1,23 @@
 import { EditorState } from '@codemirror/state';
 import { EditorView } from '@codemirror/view';
-import { flaggedWords, inlineSpellcheck, requestSpellcheck, SpellcheckSource } from './spellcheck';
+import {
+  flaggedWords,
+  inlineSpellcheck,
+  requestSpellcheck,
+  SpellcheckSource,
+  suggestionDom,
+} from './spellcheck';
 
 /** A source that answers from a fixed misspelling list, on demand. */
 function fakeSource(
   issues: Record<string, string[]>,
-  options: { enabled?: boolean } = {},
-): SpellcheckSource & { calls: string[][] } {
+  options: { enabled?: boolean; withAddWord?: boolean } = {},
+): SpellcheckSource & { calls: string[][]; added: Array<[string, string]> } {
   const calls: string[][] = [];
+  const added: Array<[string, string]> = [];
   return {
     calls,
+    added,
     enabled: () => options.enabled !== false,
     check: async (words) => {
       calls.push(words);
@@ -17,6 +25,14 @@ function fakeSource(
         words.filter((word) => word in issues).map((word) => [word, issues[word]] as const),
       );
     },
+    ...(options.withAddWord
+      ? {
+          addWord: async (word: string, target: 'language' | 'personal') => {
+            added.push([word, target]);
+          },
+          wordTargets: () => ({ language: 'Deutsch', personal: 'personal words' }),
+        }
+      : {}),
   };
 }
 
@@ -124,6 +140,28 @@ describe('inlineSpellcheck', () => {
     requestSpellcheck(view);
     await settle();
     expect(flaggedWords(view).map((f) => f.word)).toEqual(['besprchen']);
+  });
+
+  it('offers two "Add to dictionary" rows only when the source can add words', () => {
+    const fakeView = { dispatch: () => {}, focus: () => {} } as unknown as EditorView;
+    const issue = { from: 0, to: 4, word: 'Drey', suggestions: [] };
+
+    const without = suggestionDom(fakeView, issue, fakeSource({}));
+    expect(without.querySelectorAll('.cm-spell-popup-add')).toHaveLength(0);
+
+    const source = fakeSource({}, { withAddWord: true });
+    const dom = suggestionDom(fakeView, issue, source);
+    const rows = dom.querySelectorAll<HTMLButtonElement>('.cm-spell-popup-add');
+    expect(rows).toHaveLength(2);
+    expect(rows[0].textContent).toBe('Add “Drey” to Deutsch');
+    expect(rows[1].textContent).toBe('Add “Drey” to personal words');
+
+    rows[0].dispatchEvent(new MouseEvent('mousedown', { bubbles: true }));
+    rows[1].dispatchEvent(new MouseEvent('mousedown', { bubbles: true }));
+    expect(source.added).toEqual([
+      ['Drey', 'language'],
+      ['Drey', 'personal'],
+    ]);
   });
 
   it('clears the underlines when the dictionary call fails', async () => {
