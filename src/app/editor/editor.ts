@@ -230,8 +230,8 @@ export class Editor implements AfterViewInit {
   }
 
   protected chooseMode(mode: EditorViewMode): void {
-    this.editor.setViewMode(mode);
     this.closeMenu();
+    this.editor.setViewMode(mode);
   }
 
   /**

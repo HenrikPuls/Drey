@@ -13,6 +13,7 @@ import {
   LlmConnectionTest,
   LlmDebugEntry,
   LlmEndpoint,
+  LogEntry,
   McpStatus,
   McpWriteRequest,
   NoteSaveRequest,
@@ -49,6 +50,8 @@ const dreyApi: DreyApi = {
     ipcRenderer.invoke(IPC_CHANNELS.uiSetZoom, factor),
   openExternal: (url: string): Promise<void> =>
     ipcRenderer.invoke(IPC_CHANNELS.openExternal, url),
+  logMessage: (entry: LogEntry): Promise<void> =>
+    ipcRenderer.invoke(IPC_CHANNELS.appLog, entry),
   getActiveVault: () => ipcRenderer.invoke(IPC_CHANNELS.vaultGetActive),
   selectVault: () => ipcRenderer.invoke(IPC_CHANNELS.vaultSelect),
   listVaultFiles: (): Promise<VaultFileEntry[]> => ipcRenderer.invoke(IPC_CHANNELS.vaultListFiles),

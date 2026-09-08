@@ -125,6 +125,21 @@ export class DockService {
   private readonly panelEls = new Map<PanelId, HTMLElement>();
   private readonly dockEls = new Map<DockSide, HTMLElement>();
 
+  constructor() {
+    if (typeof window !== 'undefined') {
+      // A pointerup lost outside the window (Alt-Tab mid-drag, a devtools
+      // pause) would otherwise leave `document.body` unselectable with the
+      // grab cursor stuck -- and the drag listeners attached. Abort on blur.
+      window.addEventListener('blur', () => {
+        if (this.dragging() !== null || this.resizing()) {
+          this.onDragEnd();
+          this.resizing.set(false);
+          this.setGlobalGesture(null);
+        }
+      });
+    }
+  }
+
   readonly leftIds = computed(() => this.state().dock.left);
   readonly rightIds = computed(() => this.state().dock.right);
   readonly bottomIds = computed(() => this.state().dock.bottom);
@@ -412,6 +427,13 @@ export class DockService {
     }
     document.body.style.cursor = cursor ?? '';
     document.body.style.userSelect = cursor ? 'none' : '';
+    // A marker the input-recovery watchdog reads: `user-select:none` on
+    // <body> is only legitimate while this is set.
+    if (cursor) {
+      document.body.setAttribute('data-drey-gesture', 'dock');
+    } else {
+      document.body.removeAttribute('data-drey-gesture');
+    }
   }
 
   private patch(fn: (s: DockState) => DockState): void {

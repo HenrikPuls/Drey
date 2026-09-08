@@ -158,6 +158,7 @@ export class ImageViewer implements AfterViewInit, OnDestroy {
     el.setPointerCapture?.(event.pointerId);
     document.body.style.cursor = 'grabbing';
     document.body.style.userSelect = 'none';
+    document.body.setAttribute('data-drey-gesture', 'image-pan');
 
     const startX = event.clientX;
     const startY = event.clientY;
@@ -171,13 +172,16 @@ export class ImageViewer implements AfterViewInit, OnDestroy {
       window.removeEventListener('pointermove', move);
       window.removeEventListener('pointerup', end);
       window.removeEventListener('pointercancel', end);
+      window.removeEventListener('blur', end);
       document.body.style.cursor = '';
       document.body.style.userSelect = '';
+      document.body.removeAttribute('data-drey-gesture');
       this.panCleanup = null;
     };
     this.panCleanup = end;
     window.addEventListener('pointermove', move);
     window.addEventListener('pointerup', end);
     window.addEventListener('pointercancel', end);
+    window.addEventListener('blur', end);
   }
 }

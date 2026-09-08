@@ -10,6 +10,8 @@ import { DailyNoteService } from './services/daily-note.service';
 import { EditorService } from './services/editor.service';
 import { DropGuardService } from './services/drop-guard.service';
 import { EditorZoomService } from './services/editor-zoom.service';
+import { InputRecoveryService } from './services/input-recovery.service';
+import { LogService } from './services/log.service';
 import { McpBridgeService } from './services/mcp-bridge.service';
 import { SettingsService } from './services/settings.service';
 import { VaultService } from './services/vault.service';
@@ -75,6 +77,12 @@ export class App {
     // Instantiate at startup so its global Ctrl+wheel guard is installed
     // even before the first document (and its editor) opens (ADR-0015).
     inject(EditorZoomService);
+    // Mirror uncaught renderer errors + rejections into the log file (ADR-0032).
+    inject(LogService).install();
+    // Manual "unstick the keyboard" escape hatch + watchdog (ADR-0032).
+    const recovery = inject(InputRecoveryService);
+    recovery.startWatchdog();
+
     // Install the window-level drag/drop navigation guard (ADR-0027).
     inject(DropGuardService);
     // Instantiate so the assistant panel reacts to the active note.
@@ -155,6 +163,12 @@ export class App {
       label: 'Insert template',
       keybinding: 'Mod+T',
       run: () => templates.openPicker(),
+    });
+    keys.register({
+      id: 'input.recover',
+      label: 'Recover input focus',
+      keybinding: 'Mod+Alt+Shift+R',
+      run: () => recovery.recover('manual'),
     });
   }
 }

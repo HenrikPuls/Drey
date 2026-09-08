@@ -40,6 +40,7 @@ export const IPC_CHANNELS = {
   editExec: 'edit:exec',
   uiSetZoom: 'ui:set-zoom',
   openExternal: 'app:open-external',
+  appLog: 'app:log',
   vaultGetActive: 'vault:get-active',
   vaultSelect: 'vault:select',
   vaultListFiles: 'vault:list-files',
@@ -116,6 +117,14 @@ export interface McpStatus {
  * focus, which a renderer-side dispatch would not.
  */
 export type EditCommand = 'undo' | 'redo' | 'cut' | 'copy' | 'paste' | 'selectAll';
+
+/** One renderer-sourced log entry written to the main process's log file. */
+export interface LogEntry {
+  level: 'error' | 'warn' | 'info';
+  message: string;
+  /** Optional structured payload (a stack, a state snapshot); JSON-stringified. */
+  context?: unknown;
+}
 
 /**
  * Mirrors Node's `NodeJS.Platform` values. Spelled out explicitly instead
@@ -325,6 +334,15 @@ export interface DreyApi {
    * the editor.
    */
   openExternal(url: string): Promise<void>;
+
+  /**
+   * Appends a line to the main process's log file
+   * (`<userData>/logs/drey.log`). Best-effort, fire-and-forget -- the
+   * renderer mirrors `console.error` / `window.onerror` /
+   * `unhandledrejection` and the input-recovery snapshot here so a field
+   * problem in the packaged build (no DevTools) leaves a trace.
+   */
+  logMessage(entry: LogEntry): Promise<void>;
 
   /** The full app config (`shared/app-config.ts`), always normalised/complete. */
   getConfig(): Promise<AppConfig>;

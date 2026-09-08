@@ -40,13 +40,27 @@ export class ImageLightbox {
   constructor() {
     effect(() => {
       if (this.lightbox.src()) {
+        const active = document.activeElement;
+        // Only remember a *real*, still-attached element that isn't <body>
+        // -- restoring focus to a detached node (or to <body>) is how the
+        // caret can end up nowhere after a rapid open/close.
         this.restoreFocusTo =
-          document.activeElement instanceof HTMLElement ? document.activeElement : null;
+          active instanceof HTMLElement && active.isConnected && active !== document.body
+            ? active
+            : null;
         // Wait for the button to render, then move focus into the overlay.
-        queueMicrotask(() => this.closeBtn()?.nativeElement.focus());
+        queueMicrotask(() => {
+          const btn = this.closeBtn()?.nativeElement;
+          if (btn?.isConnected) {
+            btn.focus();
+          }
+        });
       } else if (this.restoreFocusTo) {
-        this.restoreFocusTo.focus();
+        const target = this.restoreFocusTo;
         this.restoreFocusTo = null;
+        if (target.isConnected) {
+          target.focus();
+        }
       }
     });
   }
