@@ -4,8 +4,9 @@ import { Decoration, DecorationSet, EditorView } from '@codemirror/view';
 import type { SyntaxNode } from '@lezer/common';
 import MarkdownIt from 'markdown-it';
 import { frontmatterEnd } from '../markdown-frontmatter';
+import { fenceLang } from './fenced-code';
 import { htmlTagBalance, sanitizeHtml } from './sanitize-html';
-import { HtmlBlockWidget, ImageWidget, TableWidget } from './widgets';
+import { HtmlBlockWidget, ImageWidget, MermaidWidget, TableWidget } from './widgets';
 
 /**
  * The widget half of Live Preview (ADR-0009): constructs that cannot be
@@ -73,6 +74,20 @@ export function blockDecorations(state: EditorState, config: LivePreviewConfig):
           );
         }
         return false;
+      }
+      if (node.name === 'FencedCode') {
+        const infoNode = node.node.getChild('CodeInfo');
+        const lang = fenceLang(infoNode ? state.sliceDoc(infoNode.from, infoNode.to) : '');
+        if (lang === 'mermaid' && node.from >= fmEnd && !touches(node.from, node.to)) {
+          const textNode = node.node.getChild('CodeText');
+          const body = textNode ? state.sliceDoc(textNode.from, textNode.to) : '';
+          const from = doc.lineAt(node.from).from;
+          const to = doc.lineAt(node.to).to;
+          deco.push(
+            Decoration.replace({ widget: new MermaidWidget(body), block: true }).range(from, to),
+          );
+        }
+        return false; // never descend into a fence
       }
       if (node.name === 'Image') {
         if (node.from >= fmEnd && !touches(node.from, node.to)) {
@@ -161,7 +176,7 @@ export function livePreviewBlocks(config: LivePreviewConfig): Extension {
       if (!target?.closest('.lp-edit')) {
         return false;
       }
-      const widget = target.closest('.lp-table, .lp-html');
+      const widget = target.closest('.lp-table, .lp-html, .lp-mermaid');
       if (!widget) {
         return false;
       }

@@ -1,4 +1,5 @@
 import { WidgetType } from '@codemirror/view';
+import type { MermaidConfig } from 'mermaid';
 
 /** `•` in place of a bullet-list `-` / `*` / `+` marker. */
 export class BulletWidget extends WidgetType {
@@ -149,6 +150,93 @@ export class HtmlBlockWidget extends WidgetType {
     div.innerHTML = this.html;
     appendEditButton(div);
     return div;
+  }
+
+  override ignoreEvent(event: Event): boolean {
+    return ignoreWidgetEvent(event);
+  }
+}
+
+/**
+ * mermaid is a large renderer (d3, dagre, …) -- load it lazily on the
+ * first diagram and configure it once (ADR-0025). `securityLevel: 'strict'`
+ * routes its output through DOMPurify and blocks click handlers; the app
+ * has no CSP, but strict mode is the safe default for note content.
+ */
+let mermaidPromise: Promise<typeof import('mermaid').default> | null = null;
+
+function loadMermaid(): Promise<typeof import('mermaid').default> {
+  if (!mermaidPromise) {
+    mermaidPromise = import('mermaid').then((mod) => {
+      const config: MermaidConfig = {
+        startOnLoad: false,
+        securityLevel: 'strict',
+        theme: 'dark',
+        darkMode: true,
+        fontFamily: 'var(--font-sans, system-ui, sans-serif)',
+        // Throw a parse error out of `render()` instead of drawing
+        // mermaid's built-in "bomb" diagram -- we show our own compact box.
+        suppressErrorRendering: true,
+      };
+      mod.default.initialize(config);
+      return mod.default;
+    });
+  }
+  return mermaidPromise;
+}
+
+let mermaidRenderSeq = 0;
+
+/**
+ * A rendered Mermaid diagram in place of a ` ```mermaid ` fenced block
+ * (ADR-0025) -- Live-Preview-only, like tables: the cursor entering the
+ * fence reveals the raw source. Renders asynchronously (dynamic
+ * `import('mermaid')`) so the bundle stays out of the initial load; a
+ * "rendering…" note holds the space until it resolves, and a parse error
+ * becomes a compact inline box rather than throwing into the editor.
+ */
+export class MermaidWidget extends WidgetType {
+  constructor(readonly source: string) {
+    super();
+  }
+
+  override eq(other: MermaidWidget): boolean {
+    return other.source === this.source;
+  }
+
+  toDOM(): HTMLElement {
+    const wrap = document.createElement('div');
+    wrap.className = 'lp-mermaid';
+    const pending = document.createElement('span');
+    pending.className = 'lp-mermaid-pending';
+    pending.textContent = 'rendering diagram…';
+    wrap.appendChild(pending);
+    appendEditButton(wrap);
+    void this.render(wrap);
+    return wrap;
+  }
+
+  private async render(wrap: HTMLElement): Promise<void> {
+    const id = `lp-mermaid-${mermaidRenderSeq++}`;
+    let result: HTMLElement;
+    try {
+      const mermaid = await loadMermaid();
+      const { svg } = await mermaid.render(id, this.source);
+      result = document.createElement('div');
+      result.className = 'lp-mermaid-svg';
+      result.innerHTML = svg;
+    } catch (error) {
+      result = document.createElement('pre');
+      result.className = 'lp-mermaid-error';
+      result.textContent = `Mermaid: ${error instanceof Error ? error.message : String(error)}`;
+    }
+    // mermaid can leave its offscreen measuring node behind on a parse error.
+    document.getElementById(`d${id}`)?.remove();
+    if (!wrap.isConnected) {
+      return; // the widget was replaced while mermaid worked
+    }
+    wrap.querySelector('.lp-mermaid-pending')?.remove();
+    wrap.insertBefore(result, wrap.querySelector('.lp-edit'));
   }
 
   override ignoreEvent(event: Event): boolean {
