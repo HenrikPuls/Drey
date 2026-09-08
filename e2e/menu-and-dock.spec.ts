@@ -37,8 +37,8 @@ test.describe('finding 1 — Select all target', () => {
     const domSelText = await page.evaluate(() => window.getSelection()?.toString() ?? '');
     expect(domSelText).toContain('alpha beta gamma');
     expect(domSelText).toContain('third line');
-    expect(domSelText).not.toContain('Drey');
-    expect(domSelText.toLowerCase()).not.toContain('chars');
+    expect(domSelText.toLowerCase()).not.toContain('drey'); // titlebar brand
+    expect(domSelText.toLowerCase()).not.toContain('chars'); // status bar
   });
 });
 

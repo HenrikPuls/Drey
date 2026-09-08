@@ -4,7 +4,7 @@ import { test, expect } from './fixtures/drey';
 
 test.describe('app shell', () => {
   test('launches and renders the titlebar, dock and status bar', async ({ page }) => {
-    await expect(page.locator('app-titlebar .brand .name')).toHaveText('Drey');
+    await expect(page.locator('app-titlebar .brand .name')).toHaveText('drey');
     await expect(page.locator('app-dock[side="left"]')).toBeVisible();
     await expect(page.locator('app-status-bar')).toContainText('words');
     await expect(page.locator('app-status-bar')).toContainText('chars');

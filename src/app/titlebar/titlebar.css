@@ -24,10 +24,11 @@
 }
 
 .mark {
-  width: 6px;
-  height: 6px;
-  border-radius: 2px;
-  background: var(--accent);
+  width: 16px;
+  height: 16px;
+  border-radius: 4px;
+  object-fit: cover;
+  flex: none;
 }
 
 .name {

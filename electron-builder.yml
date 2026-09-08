@@ -29,6 +29,15 @@ files:
   - 'dist/drey/browser/**'
   - 'package.json'
   - '!dist-electron/**/*.map'
+
+# The BrowserWindow / taskbar icon at runtime (win.icon below covers the
+# exe + installer). Copied to resources/ ; main.ts reads it from
+# process.resourcesPath when packaged.
+extraResources:
+  - from: build/icon.ico
+    to: icon.ico
+  - from: build/icon.png
+    to: icon.png
   # Orphaned tsc output (tsc never cleans outDir); `npm run pack` also
   # wipes dist-electron/ first, this is belt-and-braces.
   - '!dist-electron/electron/quick-capture.js'
