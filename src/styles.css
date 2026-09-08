@@ -77,6 +77,11 @@
   /* ---- Shadow ---- */
   --popover-shadow: 0 14px 34px rgba(0, 0, 0, 0.55);
 
+  /* ---- Z-index ---- the rest of the ladder is hardcoded per component
+     (dock 6, content 5, menu-bar 30/40, Settings 30/31, confirmation
+     dialog / menus 40/41); the image lightbox is the ceiling (ADR-0026). */
+  --z-lightbox: 60;
+
   /* ---- Line grid (DESIGN.md principle 2: no in-between sizes) ---- */
   --row-h: 26px; /* every list row */
   --bar-h: 34px; /* every chrome / header bar (32-34px; panel headers use 32) */
