@@ -258,6 +258,12 @@ export class MenuService {
         SEP,
         {
           kind: 'item',
+          label: 'Recover input focus',
+          hint: 'Ctrl Alt Shift R',
+          run: () => this.run('input.recover'),
+        },
+        {
+          kind: 'item',
           label: 'Reset layout',
           run: () => {
             this.close();

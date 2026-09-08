@@ -40,6 +40,7 @@ import {
 import { AppConfigStore } from './app-config';
 import { ChatStore } from './chat-store';
 import { DailyNoteManager } from './daily-note';
+import { installMainProcessLogging, logFromRenderer, watchWebContents } from './logger';
 import { ActionRunner, LlmDebugLog, LlmTaskRegistry, LmStudioClient } from './llm';
 import { McpHttpTransport, McpServer, VaultTools } from './mcp';
 import { attachContextMenu, buildApplicationMenu } from './menu';
@@ -212,6 +213,17 @@ function registerIpcHandlers(
       void shell.openExternal(url.trim());
     }
   });
+
+  // Renderer -> log file (`<userData>/logs/drey.log`). The packaged build
+  // has no DevTools; this is how a field problem leaves a trace.
+  ipcMain.handle(
+    IPC_CHANNELS.appLog,
+    (_event, entry: { level?: string; message?: string; context?: unknown }): void => {
+      if (entry && typeof entry.message === 'string') {
+        logFromRenderer(String(entry.level ?? 'info'), entry.message, entry.context);
+      }
+    },
+  );
 
   ipcMain.handle(IPC_CHANNELS.vaultGetActive, (): string | null =>
     vaultManager.getActiveVaultPath(),
@@ -632,6 +644,8 @@ function createMainWindow(): BrowserWindow {
   });
 
   attachContextMenu(window);
+  // Renderer-process failures -> the log file (ADR-0032).
+  watchWebContents(window.webContents);
 
   // Belt-and-braces for the renderer's window-level drag/drop guard
   // (ADR-0027): a stray file / link drop must never navigate the window
@@ -692,6 +706,7 @@ function createMainWindow(): BrowserWindow {
 if (!app.requestSingleInstanceLock()) {
   app.quit();
 } else {
+  installMainProcessLogging();
   app.on('second-instance', () => {
     if (mainWindow) {
       if (mainWindow.isMinimized()) {

@@ -25,34 +25,37 @@ export class EditorContextMenu {
 
   protected readonly hasNote = computed(() => this.editor.activePath() !== null);
 
+  // Close the menu (and its full-screen backdrop) FIRST, then run the
+  // action -- if the action throws, the backdrop must not be left covering
+  // the app with a dead click handler.
   protected cut(): void {
-    this.menu.execEdit('cut');
     this.svc.close();
+    this.menu.execEdit('cut');
   }
 
   protected copy(): void {
-    this.menu.execEdit('copy');
     this.svc.close();
+    this.menu.execEdit('copy');
   }
 
   protected paste(): void {
-    this.menu.execEdit('paste');
     this.svc.close();
+    this.menu.execEdit('paste');
   }
 
   protected selectAll(): void {
-    this.menu.execEdit('selectAll');
     this.svc.close();
+    this.menu.execEdit('selectAll');
   }
 
   protected insert(relativePath: string): void {
-    void this.library.insert(relativePath);
     this.svc.close();
+    void this.library.insert(relativePath);
   }
 
   protected openPicker(): void {
-    this.library.openPicker();
     this.svc.close();
+    this.library.openPicker();
   }
 
   @HostListener('document:keydown.escape')

@@ -1471,6 +1471,25 @@ src/app/templates/
   `excludedPrefixes()` = `['templates/', '<configured>/']`. `config:set`
   rebuilds the index when `templates.dir` changed.
 
+## 5.19 Field logging + input recovery (ADR-0032)
+
+- `electron/logger.ts` — append-only `<userData>/logs/drey.log` (rotate at
+  ~1 MB). Fed by main `process` `uncaughtException`/`unhandledRejection`,
+  `webContents` `render-process-gone`/`unresponsive`/`preload-error`, and
+  the renderer over `app:log`.
+- `src/app/services/log.service.ts` — `LogService` mirrors
+  `console.error/warn` + `window.onerror` + `unhandledrejection`;
+  `LoggingErrorHandler` is registered as Angular's `ErrorHandler`
+  (`app.config.ts`).
+- `src/app/services/input-recovery.service.ts` — `InputRecoveryService`:
+  `recover(reason)` (View → *Recover input focus* / `Ctrl+Alt+Shift+R`,
+  command id `input.recover`) dispatches a document Escape, clears
+  `document.body` `user-select`/`cursor` + orphan `.ctx-backdrop`, refocuses
+  the editor; a 4 s `startWatchdog()` auto-recovers unambiguous leftovers.
+  `DockService` / `ImageViewer` gestures now set a `data-drey-gesture` body
+  attribute (so a legit `user-select:none` is distinguishable) and end on
+  `window` `blur`.
+
 ### Startup daily note (ADR-0002 flow, opened automatically)
 
 - `daily: { openOnStartup }` on `AppConfig` (default `true`), a one-toggle
