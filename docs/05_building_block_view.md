@@ -352,14 +352,19 @@ src/                Angular renderer (standalone components, esbuild via Angular
                          lp-* classes. widgets.ts: the WidgetType classes, incl.
                          MermaidWidget (lazy import('mermaid'), async render, inline
                          error box).
-      image-paste.ts    ADR-0024. imagePaste(): CodeMirror domEventHandlers for
-                         paste/drop of an image -- saves the bytes via
-                         VaultService.saveAsset (vault:save-asset IPC) into the
-                         per-note `attachments/` folder and inserts
-                         `![](attachments/…)` at the caret, behind a `![](uploading:…)`
-                         placeholder while the write is in flight. Mounted on the
-                         full-page editor and the "Add entry" drawer (imageCapture
-                         input); the assistant composer leaves it off.
+      image-paste.ts    ADR-0024 / ADR-0028. imagePaste(): CodeMirror
+                         domEventHandlers for paste + drop into the editor. An image
+                         (paste, OS drag) -> bytes saved via VaultService.saveAsset
+                         (vault:save-asset) into the per-note `attachments/`, `![](…)`
+                         inserted behind a `![](uploading:…)` placeholder. A file
+                         dragged from the Files panel (application/x-drey-vault-path):
+                         an image is linked in place (noteRelativeLink -> `![](../…)`,
+                         no copy), a text file's contents are inlined raw at the drop
+                         point (2 MB cap). A web image dragged from a browser -> URL
+                         pulled from text/uri-list / an <img> in text/html, downloaded
+                         via saveVaultAssetFromUrl (main-process fetch), inserted with
+                         a `[Source](<url>)` caption line. Mounted on the full-page
+                         editor and the "Add entry" drawer (imageCapture input).
       editor-theme.ts   dreyEditorLook: EditorView.theme + HighlightStyle from the design
                          tokens (sans headings by default -- overridable in Settings ->
                          Appearance, mono code, accent links; dark token colors for
@@ -441,6 +446,7 @@ env.ps1             Puts .tools/node on PATH for the current shell session
 | `vault:read-file`                    | Reads one vault-relative file (`VaultFileContent` = `{ content, modifiedMs }`); rejects if no vault is active, the path escapes the vault, or the file is unreadable.                                                                                                                                                                                                                                                                                                         |
 | `vault:write-file`                   | Overwrites one vault-relative file with UTF-8 `content`; creates intermediate folders (`daily/` on a draft's first save); same guards; resolves to the new `modifiedMs`.                                                                                                                                                                                                                                                                                                      |
 | `vault:save-asset`                   | ADR-0024. Writes binary `bytes` (a pasted/dropped image) into `<dir(noteRelPath)>/attachments/` (vault root when the note has no folder), named `YYYY-MM-DD-HHmmss-<6 hex sha256>.<ext>`, never overwriting; same path guard. Resolves to the note-relative `attachments/<name>` to drop into `![](...)`.                                                                                                                                                                        |
+| `vault:save-asset-from-url`          | ADR-0028. Downloads a web image dragged from a browser: main-process `fetch` (http(s) only, redirects + final-protocol re-check, 15 s timeout, 25 MB cap, image content-type / extension), then `saveAsset`. Rejects with a user-facing message.                                                                                                                                                                                                                                 |
 | `vault:create-file`                  | Creates an empty vault-relative file (missing parent folders included, `wx` flag); rejects if anything already exists there, the path escapes the vault, or no vault is active; resolves to the created path. Backs the file-tree right-click "New file".                                                                                                                                                                                                                     |
 | `vault:create-directory`             | Creates a vault-relative directory; same guards/rejections as `vault:create-file`. Backs "New folder".                                                                                                                                                                                                                                                                                                                                                                        |
 | `vault:delete`                       | Deletes one vault-relative file or folder (`fs.rm` recursive) plus its `.{name}.chat.json` sidecar; same path guard. Backs the file-tree "Delete". The renderer closes any open tab(s) under it first and refreshes the tag index after.                                                                                                                                                                                                                                      |
