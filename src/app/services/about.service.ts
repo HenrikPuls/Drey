@@ -19,6 +19,16 @@ interface LicenseManifest {
   packages: LicenseEntry[];
 }
 
+/** `src/assets/build-info.json`, written per build by `scripts/stamp-build.mjs`. */
+export interface BuildInfo {
+  /** `git rev-list --count HEAD` -- strictly monotonic, unique per commit. */
+  buildNumber: number;
+  /** Short commit SHA, with a trailing `+` when the working tree was dirty. */
+  commit: string;
+  /** ISO timestamp of the build. */
+  builtAt: string;
+}
+
 /**
  * Backs the "About" settings pane. Two independent sources:
  * - runtime versions from the main process (`app:get-info` IPC), and
@@ -31,12 +41,17 @@ interface LicenseManifest {
 @Injectable({ providedIn: 'root' })
 export class AboutService {
   readonly appInfo = signal<AppInfo | null>(null);
+  /** `null` until read; stays `null` when the file is absent (e.g. a dev run
+   *  that never ran `npm run stamp:build`). */
+  readonly buildInfo = signal<BuildInfo | null>(null);
   readonly licenses = signal<readonly LicenseEntry[]>([]);
   /** Set when `licenses.json` could not be read -- shown instead of a bare empty list. */
   readonly licensesError = signal<string | null>(null);
 
   /** True once the manifest has been read successfully (an empty list is still "read"). */
   private licensesFetched = false;
+  /** True once the build-info fetch has been attempted (present or 404). */
+  private buildInfoFetched = false;
 
   private get api() {
     return typeof window !== 'undefined' ? window.dreyApi : undefined;
@@ -48,10 +63,28 @@ export class AboutService {
     if (this.appInfo() === null) {
       tasks.push(this.loadAppInfo());
     }
+    if (!this.buildInfoFetched) {
+      tasks.push(this.loadBuildInfo());
+    }
     if (!this.licensesFetched) {
       tasks.push(this.loadLicenses());
     }
     await Promise.all(tasks);
+  }
+
+  private async loadBuildInfo(): Promise<void> {
+    // Best-effort: a missing file (dev without `npm run stamp:build`) just
+    // means the pane omits the build row.
+    this.buildInfoFetched = true;
+    try {
+      const response = await fetch('assets/build-info.json');
+      if (!response.ok) {
+        return;
+      }
+      this.buildInfo.set((await response.json()) as BuildInfo);
+    } catch {
+      // leave buildInfo null
+    }
   }
 
   private async loadAppInfo(): Promise<void> {

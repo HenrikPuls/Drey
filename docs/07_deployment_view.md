@@ -12,7 +12,11 @@ electron-builder ([ADR-0023](09_architecture_decisions/0023-windows-packaging-el
 1. `clean` — wipes `dist/`, `dist-electron/`, `release/` (`tsc` never
    cleans its `outDir`, so a stale build could otherwise ship orphaned
    files).
-2. `build` → `prebuild` regenerates `src/assets/licenses.json`
+2. `build` → `prebuild` regenerates `src/assets/build-info.json`
+   (`scripts/stamp-build.mjs`: `buildNumber` = `git rev-list --count HEAD`,
+   plus the short SHA and build timestamp — a unique, monotonic id the
+   About pane shows so builds already in testing can be told apart; the
+   file is gitignored, it is not byte-stable) and `src/assets/licenses.json`
    (`scripts/generate-licenses.mjs`, production deps only — a superset of
    Angular's `3rdpartylicenses.txt` because it also covers the
    main-process packages `yaml` / `nspell` / `dictionary-*`), then
