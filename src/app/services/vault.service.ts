@@ -88,6 +88,24 @@ export class VaultService {
     await this.loadFileTree();
   }
 
+  /**
+   * Persists a pasted / dropped image into the vault (ADR-0024) and
+   * returns the note-relative `attachments/<name>` path to put inside
+   * `![](...)`. `noteRelPath` is the open document's vault-relative path
+   * (`''` when nothing is open -> the vault root's `attachments/`). The
+   * file tree is reloaded so the new `attachments/` folder shows. Throws
+   * when there is no vault / no desktop bridge, so the caller can show a
+   * "not saved" notice instead of a silent no-op.
+   */
+  async saveAsset(bytes: Uint8Array, ext: string, noteRelPath: string): Promise<string> {
+    if (typeof window === 'undefined' || typeof window.dreyApi?.saveVaultAsset !== 'function') {
+      throw new Error('Saving images needs the desktop app.');
+    }
+    const rel = await window.dreyApi.saveVaultAsset(bytes, ext, noteRelPath);
+    await this.loadFileTree();
+    return rel;
+  }
+
   private async loadFileTree(): Promise<void> {
     this.isLoading.set(true);
     this.error.set(null);

@@ -153,6 +153,17 @@ below).
   face (serif, mono, …) is selectable in Settings → Appearance. Footnotes
   render as plain text for now (no Lezer footnote extension).
 
+- **Images ([ADR-0024](../docs/09_architecture_decisions/0024-binary-vault-asset-write.md),
+  pulled forward from Phase 3):** an image pasted or dropped into the
+  editor **or** the "Add entry" drawer is written into an `attachments/`
+  folder **beside the referencing note** (vault root when no note is
+  open), named `YYYY-MM-DD-HHmmss-<short hash>.<ext>`, and an
+  `![](attachments/…)` link is inserted at the caret. Rendering was
+  already in place — the privileged `drey-asset://` scheme served from
+  inside the vault, `resolveVaultImageUrl`, and the Live Preview image
+  widget. No vault open → the paste is reported, not saved. No
+  auto-caption.
+
 - **"Add entry" drawer** at the bottom of the main area — the capture
   surface. Starts collapsed. Contains an optional **TOPIC** field, a
   single **Tags** chip row, the Markdown text (the same editor component
@@ -257,9 +268,8 @@ below).
   topics, interviews — from general notes), a fixed default vault, manual
   switch before capture.
 - Optional cross-vault search mode (default: scoped per vault).
-- Image paste (editor + quick-capture), stored in a global `assets/`
-  folder, a dedicated Electron protocol for safe rendering, no
-  auto-caption.
+- ~~Image paste~~ — **pulled forward, done.** See Phase 1 ("Images")
+  below and [ADR-0024](../docs/09_architecture_decisions/0024-binary-vault-asset-write.md).
 
 ## Phase 4 — Experiments
 

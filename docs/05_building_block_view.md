@@ -110,7 +110,7 @@ graph TB
         IpcHandlers["ipcMain.handle(...)"]
         Protocol["app:// protocol handler\n(serves the built renderer)"]
         Hotkey["globalShortcut (Ctrl+Alt+N)\n+ single-instance lock\n-> openTodayDailyNote()"]
-        VaultManager["VaultManager (electron/vault-manager.ts)\nactive vault + directory listing +\nfile read/write/create + dir create\n(path-guarded)"]
+        VaultManager["VaultManager (electron/vault-manager.ts)\nactive vault + directory listing +\nfile read/write/create + dir create +\nbinary asset write (attachments/)\n(path-guarded)"]
         DailyNoteManager["DailyNoteManager (electron/daily-note.ts)\nensureTodayNote(): create daily/ note from\ntemplates/daily.md, scaffold template;\nnoteContentFor(date): substituted template, no write"]
         TagIndex["TagIndex (electron/tag-index.ts)\nin-memory tag vocabulary + master metadata;\nrebuild() scans all .md frontmatter\n(skips daily/ + templates/); tag:list / tag:registry"]
         NoteManager["NoteManager (electron/note-manager.ts)\nnote:save pipeline: merge inline #tags -> frontmatter,\nbump updated:, (6b) route entries to master docs"]
@@ -339,6 +339,14 @@ src/                Angular renderer (standalone components, esbuild via Angular
                          sanitize-html.ts: allowlist HTML sanitizer. theme.ts:
                          EditorView.theme for the lp-* classes. widgets.ts: the
                          WidgetType classes.
+      image-paste.ts    ADR-0024. imagePaste(): CodeMirror domEventHandlers for
+                         paste/drop of an image -- saves the bytes via
+                         VaultService.saveAsset (vault:save-asset IPC) into the
+                         per-note `attachments/` folder and inserts
+                         `![](attachments/…)` at the caret, behind a `![](uploading:…)`
+                         placeholder while the write is in flight. Mounted on the
+                         full-page editor and the "Add entry" drawer (imageCapture
+                         input); the assistant composer leaves it off.
       editor-theme.ts   dreyEditorLook: EditorView.theme + HighlightStyle from the design
                          tokens (sans headings by default -- overridable in Settings ->
                          Appearance, mono code, accent links; dark token colors for
@@ -419,6 +427,7 @@ env.ps1             Puts .tools/node on PATH for the current shell session
 | `vault:list-files`                   | Recursively lists the active vault's contents (`VaultFileEntry[]`); rejects if no vault is active or the folder is unreadable.                                                                                                                                                                                                                                                                                                                                                |
 | `vault:read-file`                    | Reads one vault-relative file (`VaultFileContent` = `{ content, modifiedMs }`); rejects if no vault is active, the path escapes the vault, or the file is unreadable.                                                                                                                                                                                                                                                                                                         |
 | `vault:write-file`                   | Overwrites one vault-relative file with UTF-8 `content`; creates intermediate folders (`daily/` on a draft's first save); same guards; resolves to the new `modifiedMs`.                                                                                                                                                                                                                                                                                                      |
+| `vault:save-asset`                   | ADR-0024. Writes binary `bytes` (a pasted/dropped image) into `<dir(noteRelPath)>/attachments/` (vault root when the note has no folder), named `YYYY-MM-DD-HHmmss-<6 hex sha256>.<ext>`, never overwriting; same path guard. Resolves to the note-relative `attachments/<name>` to drop into `![](...)`.                                                                                                                                                                        |
 | `vault:create-file`                  | Creates an empty vault-relative file (missing parent folders included, `wx` flag); rejects if anything already exists there, the path escapes the vault, or no vault is active; resolves to the created path. Backs the file-tree right-click "New file".                                                                                                                                                                                                                     |
 | `vault:create-directory`             | Creates a vault-relative directory; same guards/rejections as `vault:create-file`. Backs "New folder".                                                                                                                                                                                                                                                                                                                                                                        |
 | `vault:delete`                       | Deletes one vault-relative file or folder (`fs.rm` recursive) plus its `.{name}.chat.json` sidecar; same path guard. Backs the file-tree "Delete". The renderer closes any open tab(s) under it first and refreshes the tag index after.                                                                                                                                                                                                                                      |

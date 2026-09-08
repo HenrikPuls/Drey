@@ -844,6 +844,37 @@ The built-in assistant takes the in-process path instead:
 rounds, then parses the final message as the `{"kind":"answer"|"edit"}`
 verdict.
 
+## 6.17 Paste / drop an image → save into `attachments/` → render ([ADR-0024](09_architecture_decisions/0024-binary-vault-asset-write.md))
+
+```mermaid
+sequenceDiagram
+    participant User
+    participant CM as imagePaste (CodeMirror domEventHandlers)
+    participant Surface as MarkdownSurface
+    participant VS as VaultService
+    participant Main as main.ts
+    participant Vault as VaultManager
+
+    User->>CM: paste / drop an image blob
+    CM->>CM: preventDefault; insert `![](uploading:<id>)` on its own line, caret on the next
+    CM->>Surface: save(bytes, ext)  (config callback)
+    Surface->>VS: saveAsset(bytes, ext, editor.openPath() ?? '')
+    VS->>Main: invoke vault:save-asset(bytes, ext, noteRelPath)
+    Main->>Vault: saveAsset(bytes, ext, noteRelPath)
+    Vault->>Vault: sha256(bytes) → name; mkdir <dir(note)>/attachments/; write (no overwrite)
+    Vault-->>Main: "attachments/<name>"
+    Main-->>VS: "attachments/<name>"
+    VS->>VS: loadFileTree()  (the new attachments/ folder shows)
+    VS-->>CM: "attachments/<name>"
+    alt saved
+        CM->>CM: replace the placeholder with `![](attachments/<name>)`
+        Note over Surface: Live Preview ImageWidget → resolveVaultImageUrl → drey-asset://asset/<vault-rel>
+    else rejected (no vault / no bridge)
+        CM->>Surface: onError(message) → EditorService.error signal
+        CM->>CM: roll the placeholder (and its newlines) back out
+    end
+```
+
 ## Planned flows (added as their milestone is built)
 
 - Dedicated keyword-search / FTS surface — the search panel's free-text
