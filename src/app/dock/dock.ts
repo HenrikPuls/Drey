@@ -66,11 +66,19 @@ export class Dock implements OnInit {
   }
 
   protected flexStyle(id: PanelId): string {
-    return this.dock.collapsed(id) ? '0 0 auto' : `${this.dock.flexOf(id)} 1 0%`;
+    return this.dock.collapsed(id) || this.dock.contentHeight(id)
+      ? '0 0 auto'
+      : `${this.dock.flexOf(id)} 1 0%`;
   }
 
   protected splitTarget(id: PanelId): PanelId | null {
-    return this.dock.collapsed(id) ? null : this.dock.nextOpenId(id);
+    if (this.dock.collapsed(id) || this.dock.contentHeight(id)) {
+      return null;
+    }
+    const next = this.dock.nextOpenId(id);
+    // No splitter on the edge of a content-sized panel -- it can't give or
+    // take height.
+    return next && this.dock.contentHeight(next) ? null : next;
   }
 
   protected dropBefore(i: number): boolean {

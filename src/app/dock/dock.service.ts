@@ -18,6 +18,15 @@ interface DockState {
 
 const ALL_PANELS: readonly PanelId[] = ['calendar', 'files', 'search', 'windows', 'assistant'];
 
+/**
+ * Panels that take exactly their content's height when expanded instead of
+ * a `flex-grow` share of the dock. The calendar is a fixed grid -- letting
+ * it stretch just adds dead space below the last week and flattens the day
+ * cells. A splitter is not drawn on either side of one (you cannot resize
+ * a content-sized panel).
+ */
+const CONTENT_HEIGHT_PANELS: ReadonlySet<PanelId> = new Set<PanelId>(['calendar']);
+
 const WIDTH = { min: 180, max: 560 } as const;
 
 function defaultState(): DockState {
@@ -90,6 +99,11 @@ export class DockService {
 
   collapsed(id: PanelId): boolean {
     return !this.state().open[id];
+  }
+
+  /** True for a panel sized to its content rather than a `flex-grow` share. */
+  contentHeight(id: PanelId): boolean {
+    return CONTENT_HEIGHT_PANELS.has(id);
   }
 
   flexOf(id: PanelId): number {
