@@ -144,8 +144,9 @@ below).
   (Obsidian-/Typora-style): syntax markers conceal everywhere except
   around the selection, fenced code is highlighted via nested language
   parsing, tables/images render as widgets, task markers are clickable
-  checkboxes, inline `#tag`s render as pills; the cursor sits directly in
-  the rendered document. A `⋯` menu on the chrome switches to a raw
+  checkboxes (a checked `- [x]` line's text is struck through), inline
+  `#tag`s render as pills; the cursor sits directly in the rendered
+  document. A `⋯` menu on the chrome switches to a raw
   **Source** mode as the escape hatch (no toggle buttons); the last
   choice is the per-machine default for new notes, Live Preview by
   default. Headings use the app's sans typeface by default; a different

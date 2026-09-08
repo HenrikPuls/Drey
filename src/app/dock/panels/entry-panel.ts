@@ -13,7 +13,15 @@ import { EntryDrawer } from '../../entry-drawer/entry-drawer';
   template: `<app-entry-drawer />`,
   styles: `
     :host {
-      display: block;
+      display: flex;
+      flex-direction: column;
+      flex: 1;
+      min-height: 0;
+    }
+
+    :host ::ng-deep app-entry-drawer {
+      flex: 1;
+      min-height: 0;
     }
   `,
 })

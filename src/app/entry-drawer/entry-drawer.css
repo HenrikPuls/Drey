@@ -1,11 +1,11 @@
-/* The "Add entry" panel body. The `PanelFrame` gives it a scrolling body
-   sized by the bottom dock's height; this fills it. Tokens only
-   (src/styles.css). */
+/* The "Add entry" panel body. `PanelFrame` gives this panel a flush flex
+   body (like the assistant), so the drawer fills the frame and its text
+   field grows with the bottom dock's height. Tokens only (src/styles.css). */
 :host {
   display: flex;
   flex-direction: column;
+  flex: 1;
   min-height: 0;
-  height: 100%;
   background: var(--bg-editor);
 }
 

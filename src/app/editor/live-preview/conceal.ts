@@ -35,6 +35,7 @@ const codeLineFirst = Decoration.line({ class: 'lp-code lp-code-first' });
 const codeLineLast = Decoration.line({ class: 'lp-code lp-code-last' });
 const frontmatterLine = Decoration.line({ class: 'lp-frontmatter' });
 const inlineCodeMark = Decoration.mark({ class: 'lp-inline-code' });
+const taskDoneMark = Decoration.mark({ class: 'lp-task-done' });
 const hidden = Decoration.replace({});
 
 /**
@@ -173,6 +174,19 @@ export function concealDecorations(
               hide(node.from, node.to); // the checkbox replaces the whole marker
             } else {
               replaceWith(node.from, node.to, Decoration.replace({ widget: new BulletWidget() }));
+            }
+            return;
+          }
+          case 'Task': {
+            // Strike the text of a checked `- [x]` item -- kept even while
+            // the line is being edited, since it is a readability cue, not
+            // a syntax marker to reveal.
+            const marker = node.node.getChild('TaskMarker');
+            if (marker && /x/i.test(state.sliceDoc(marker.from, marker.to))) {
+              const from = eatSpace(marker.to);
+              if (node.to > from) {
+                deco.push(taskDoneMark.range(from, node.to));
+              }
             }
             return;
           }
