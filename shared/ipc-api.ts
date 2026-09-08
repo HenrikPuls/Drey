@@ -71,7 +71,35 @@ export const IPC_CHANNELS = {
   spellCheck: 'spell:check',
   spellLanguages: 'spell:languages',
   spellAddDictionary: 'spell:add-dictionary',
+  // MCP vault server (ADR-0021).
+  mcpStatus: 'mcp:status',
+  mcpWriteRequest: 'mcp:write-request',
+  mcpWriteDecision: 'mcp:write-decision',
+  mcpVaultChanged: 'mcp:vault-changed',
 } as const;
+
+/**
+ * A `vault_write` an MCP client asked for, pushed to the renderer so the
+ * user can confirm it in the shared diff dialog before it hits disk
+ * (skipped entirely in YOLO mode). The renderer replies via
+ * `resolveMcpWrite(id, approved)`.
+ */
+export interface McpWriteRequest {
+  id: number;
+  path: string;
+  before: string;
+  after: string;
+  mode: 'overwrite' | 'append';
+}
+
+/** What `getMcpStatus` reports for the Settings pane. */
+export interface McpStatus {
+  enabled: boolean;
+  httpListening: boolean;
+  httpPort: number | null;
+  /** Absolute path to the stdio bridge script, for the client config snippet. */
+  stdioBridgePath: string;
+}
 
 /**
  * Standard editing commands the HTML Edit menu routes through the focused
@@ -528,6 +556,27 @@ export interface DreyApi {
    * cancellable. Rejects when LLM features are off.
    */
   suggestTags(entryText: string, taskId?: string): Promise<string[]>;
+
+  /** Current MCP vault server state for the Settings pane (ADR-0021). */
+  getMcpStatus(): Promise<McpStatus>;
+
+  /**
+   * Subscribes to `vault_write` requests from an MCP client. The renderer
+   * shows the shared confirmation diff and answers with
+   * `resolveMcpWrite(request.id, approved)`. Never fires in YOLO mode.
+   * Returns an unsubscribe; the raw IPC event is never forwarded.
+   */
+  onMcpWriteRequest(listener: (request: McpWriteRequest) => void): () => void;
+
+  /** Answers an `onMcpWriteRequest` (approve / reject the write). */
+  resolveMcpWrite(id: number, approved: boolean): Promise<void>;
+
+  /**
+   * Fires after an MCP `vault_write` changed a file, so the renderer can
+   * refresh the tag index / file tree (there is no file watcher, ADR-0018).
+   * Returns an unsubscribe.
+   */
+  onVaultChanged(listener: () => void): () => void;
 }
 
 declare global {

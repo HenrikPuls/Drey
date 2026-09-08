@@ -9,6 +9,7 @@ import {
   DEFAULT_EDITOR_FONT_FAMILY,
   LlmConfig,
   LlmEndpoint,
+  McpConfig,
   SpellcheckConfig,
   UiScale,
   clampEditorFontScale,
@@ -203,6 +204,12 @@ export class SettingsService {
   patchAssistant(patch: Partial<AssistantConfig>): void {
     this.mutate((config) => {
       config.assistant = { ...config.assistant, ...patch };
+    });
+  }
+
+  patchMcp(patch: Partial<McpConfig>): void {
+    this.mutate((config) => {
+      config.mcp = { ...config.mcp, ...patch };
     });
   }
 

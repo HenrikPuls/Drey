@@ -7,6 +7,7 @@ import { AssistantService } from './services/assistant.service';
 import { DailyNoteService } from './services/daily-note.service';
 import { EditorService } from './services/editor.service';
 import { EditorZoomService } from './services/editor-zoom.service';
+import { McpBridgeService } from './services/mcp-bridge.service';
 import { SettingsService } from './services/settings.service';
 import { KeybindingService } from './keybindings';
 import { TagSearchService } from './tags';
@@ -53,6 +54,8 @@ export class App {
     // Instantiate so the app-wide accent + UI scale from Settings ->
     // Appearance are applied on startup and kept in sync.
     inject(AppearanceService);
+    // Listen for MCP client write-confirmations / vault-changed pushes (ADR-0021).
+    inject(McpBridgeService).start();
 
     // App-wide keyboard commands. Features register here the same way; the
     // titlebar menu bar invokes the same command ids.

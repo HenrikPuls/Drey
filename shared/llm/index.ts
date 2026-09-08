@@ -13,7 +13,7 @@
 export type { ActionContext, ActionOutcome, AskOutcome, ResolvedAction } from './actions';
 export { resolveActions } from './actions';
 
-export type { ChatMessage } from './llm';
+export type { ChatMessage, ChatToolCall } from './llm';
 export { extractJsonObject, parseJsonObject } from './llm';
 
 export type { TagSuggestion, TaskClassification, TaskPriority } from './classifier';

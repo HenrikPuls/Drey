@@ -16,6 +16,7 @@ import {
   LlmConnectionTest,
   LlmDebugEntry,
   LlmEndpoint,
+  McpStatus,
   NoteSaveRequest,
   NoteSaveResult,
   SpellCheckResult,
@@ -30,6 +31,7 @@ import { AppConfigStore } from './app-config';
 import { ChatStore } from './chat-store';
 import { DailyNoteManager } from './daily-note';
 import { ActionRunner, LlmDebugLog, LlmTaskRegistry, LmStudioClient } from './llm';
+import { McpHttpTransport, McpServer, VaultTools } from './mcp';
 import { attachContextMenu, buildApplicationMenu } from './menu';
 import { NoteManager } from './note-manager';
 import { SpellcheckService } from './spellcheck';
@@ -137,6 +139,7 @@ function registerIpcHandlers(
   llmDebug: LlmDebugLog,
   chatStore: ChatStore,
   spellcheck: SpellcheckService,
+  mcpHttp: McpHttpTransport,
 ): void {
   ipcMain.handle(IPC_CHANNELS.getAppInfo, (): AppInfo => ({
     appVersion: app.getVersion(),
@@ -257,12 +260,24 @@ function registerIpcHandlers(
   );
 
   ipcMain.handle(IPC_CHANNELS.configGet, (): AppConfig => appConfig.get());
-  ipcMain.handle(IPC_CHANNELS.configSet, (_event, next: AppConfig): AppConfig => {
+  ipcMain.handle(IPC_CHANNELS.configSet, async (_event, next: AppConfig): Promise<AppConfig> => {
     const stored = appConfig.set(next);
     // The language or a dictionary path may have changed; the next check
     // reloads rather than answering from a stale dictionary.
     spellcheck.invalidate();
+    // The MCP block may have flipped -- open/close the HTTP endpoint to match.
+    await syncMcpHttpTransport(mcpHttp, appConfig);
     return stored;
+  });
+
+  ipcMain.handle(IPC_CHANNELS.mcpStatus, (): McpStatus => ({
+    enabled: appConfig.get().mcp.enabled,
+    httpListening: mcpHttp.running,
+    httpPort: mcpHttp.activePort,
+    stdioBridgePath: path.join(__dirname, 'mcp', 'stdio-bridge.js'),
+  }));
+  ipcMain.handle(IPC_CHANNELS.mcpWriteDecision, (_event, id: number, approved: boolean): void => {
+    pendingMcpWrites.get(id)?.(approved);
   });
   ipcMain.handle(IPC_CHANNELS.llmListModels, (_event, override?: LlmEndpoint): Promise<string[]> =>
     lmStudio.listModels(override),
@@ -367,6 +382,63 @@ async function pickDictionary(): Promise<CustomDictionary | null> {
 }
 
 let mainWindow: BrowserWindow | null = null;
+
+/**
+ * In-flight `vault_write` confirmations from MCP clients, keyed by the id
+ * sent to the renderer. Resolved by the `mcp:write-decision` IPC reply; a
+ * missing renderer / a timeout defaults to a reject (never write
+ * unattended).
+ */
+const pendingMcpWrites = new Map<number, (approved: boolean) => void>();
+let mcpWriteSeq = 0;
+/** Module-scope handle so the `will-quit` listener can close the socket. */
+let mcpHttpForShutdown: McpHttpTransport | null = null;
+const MCP_WRITE_CONFIRM_TIMEOUT_MS = 120_000;
+
+function requestMcpWriteConfirmation(request: {
+  path: string;
+  before: string;
+  after: string;
+  mode: 'overwrite' | 'append';
+}): Promise<boolean> {
+  const wc = mainWindow?.webContents;
+  if (!wc) {
+    return Promise.resolve(false);
+  }
+  const id = ++mcpWriteSeq;
+  return new Promise<boolean>((resolve) => {
+    const done = (approved: boolean): void => {
+      if (pendingMcpWrites.delete(id)) {
+        clearTimeout(timer);
+        resolve(approved);
+      }
+    };
+    const timer = setTimeout(() => done(false), MCP_WRITE_CONFIRM_TIMEOUT_MS);
+    pendingMcpWrites.set(id, done);
+    wc.send(IPC_CHANNELS.mcpWriteRequest, { id, ...request });
+  });
+}
+
+/** Starts / stops the localhost MCP HTTP endpoint to match the current config. */
+async function syncMcpHttpTransport(
+  transport: McpHttpTransport,
+  appConfig: AppConfigStore,
+): Promise<void> {
+  const { enabled, httpEnabled, httpPort } = appConfig.get().mcp;
+  try {
+    if (enabled && httpEnabled) {
+      await transport.start(httpPort);
+    } else {
+      await transport.stop();
+    }
+  } catch (err) {
+    console.warn(
+      `MCP HTTP endpoint on 127.0.0.1:${httpPort} could not start: ${
+        err instanceof Error ? err.message : String(err)
+      }`,
+    );
+  }
+}
 
 /**
  * Quick-capture hotkey handler: bring the main window forward and tell the
@@ -494,11 +566,24 @@ if (!app.requestSingleInstanceLock()) {
     const llmDebug = new LlmDebugLog();
     const lmStudio = new LmStudioClient(appConfig, llmDebug);
     const llmTasks = new LlmTaskRegistry();
-    const actionRunner = new ActionRunner(appConfig, lmStudio, llmTasks);
+    // The vault tool set (ADR-0021): one instance backs both the MCP
+    // server and the assistant's in-process tool-calling loop.
+    const vaultTools = new VaultTools(
+      vaultManager,
+      tagIndex,
+      () => appConfig.get(),
+      requestMcpWriteConfirmation,
+      () => mainWindow?.webContents.send(IPC_CHANNELS.mcpVaultChanged),
+    );
+    const actionRunner = new ActionRunner(appConfig, lmStudio, llmTasks, vaultTools);
     const noteManager = new NoteManager(vaultManager, tagIndex, actionRunner);
     const chatStore = new ChatStore(vaultManager);
     const spellcheck = new SpellcheckService(appConfig);
+    const mcpServer = new McpServer(vaultTools, app.getVersion());
+    const mcpHttp = new McpHttpTransport(mcpServer);
+    mcpHttpForShutdown = mcpHttp;
     await tagIndex.rebuild();
+    await syncMcpHttpTransport(mcpHttp, appConfig);
 
     // Push each new debug entry to the renderer so the LLM settings pane
     // updates live while a request is in flight.
@@ -519,6 +604,7 @@ if (!app.requestSingleInstanceLock()) {
       llmDebug,
       chatStore,
       spellcheck,
+      mcpHttp,
     );
     // The File/Edit/Selection/View menus are drawn by the renderer titlebar
     // now (ADR-0019). Keep a native menu only on macOS, where the menu bar
@@ -546,6 +632,7 @@ if (!app.requestSingleInstanceLock()) {
 
   app.on('will-quit', () => {
     globalShortcut.unregisterAll();
+    void mcpHttpForShutdown?.stop();
   });
 
   app.on('window-all-closed', () => {

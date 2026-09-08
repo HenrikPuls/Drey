@@ -13,6 +13,8 @@ import {
   LlmConnectionTest,
   LlmDebugEntry,
   LlmEndpoint,
+  McpStatus,
+  McpWriteRequest,
   NoteSaveRequest,
   NoteSaveResult,
   SpellCheckResult,
@@ -118,6 +120,19 @@ const dreyApi: DreyApi = {
       listener(relativePath);
     ipcRenderer.on(IPC_CHANNELS.dailyOpen, wrapped);
     return () => ipcRenderer.removeListener(IPC_CHANNELS.dailyOpen, wrapped);
+  },
+  getMcpStatus: (): Promise<McpStatus> => ipcRenderer.invoke(IPC_CHANNELS.mcpStatus),
+  onMcpWriteRequest: (listener: (request: McpWriteRequest) => void): (() => void) => {
+    const wrapped = (_event: IpcRendererEvent, request: McpWriteRequest): void => listener(request);
+    ipcRenderer.on(IPC_CHANNELS.mcpWriteRequest, wrapped);
+    return () => ipcRenderer.removeListener(IPC_CHANNELS.mcpWriteRequest, wrapped);
+  },
+  resolveMcpWrite: (id: number, approved: boolean): Promise<void> =>
+    ipcRenderer.invoke(IPC_CHANNELS.mcpWriteDecision, id, approved),
+  onVaultChanged: (listener: () => void): (() => void) => {
+    const wrapped = (): void => listener();
+    ipcRenderer.on(IPC_CHANNELS.mcpVaultChanged, wrapped);
+    return () => ipcRenderer.removeListener(IPC_CHANNELS.mcpVaultChanged, wrapped);
   },
 };
 
