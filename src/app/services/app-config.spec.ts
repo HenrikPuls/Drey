@@ -25,6 +25,18 @@ describe('normalizeAppConfig', () => {
     expect(normalizeAppConfig(DEFAULT_APP_CONFIG)).toEqual(DEFAULT_APP_CONFIG);
   });
 
+  it('defaults the MCP block to off and coerces a bad port', () => {
+    expect(normalizeAppConfig({}).mcp).toEqual({
+      enabled: false,
+      httpEnabled: false,
+      httpPort: 4319,
+      yolo: false,
+    });
+    expect(normalizeAppConfig({ mcp: { httpPort: 80 } }).mcp.httpPort).toBe(1024);
+    expect(normalizeAppConfig({ mcp: { httpPort: 999999 } }).mcp.httpPort).toBe(65535);
+    expect(normalizeAppConfig({ mcp: { enabled: 'yes', yolo: 1 } }).mcp.enabled).toBe(false);
+  });
+
   it('coerces malformed llm fields and a blank base URL', () => {
     const config = normalizeAppConfig({
       llm: { enabled: 'yes', baseUrl: '   ', model: 42, apiKey: 7 },
