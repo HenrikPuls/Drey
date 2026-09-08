@@ -39,6 +39,7 @@ package, a minor naming convention).
 | [0028](09_architecture_decisions/0028-drag-drop-into-the-editor.md)               | Drag-and-drop into the editor: link vault images in place, inline text files, download web images (`vault:save-asset-from-url`) | Accepted |
 | [0029](09_architecture_decisions/0029-template-library.md)                        | Template library: a configurable vault sub-folder, folder = category, insert at cursor (frontmatter stripped, placeholders substituted) | Accepted |
 | [0030](09_architecture_decisions/0030-renderer-editor-context-menu.md)            | Renderer-owned editor context menu, replacing the OS menu (`formControlType` gate) | Accepted |
+| [0031](09_architecture_decisions/0031-editor-link-activation.md)                  | Ctrl/Cmd-click to open a link in the editor (web via `shell.openExternal`, vault path as a tab) | Accepted |
 
 Decisions not yet written up (relevant spec already fixes them, but the
 ADR is deferred to the milestone that actually implements them, per

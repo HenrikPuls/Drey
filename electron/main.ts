@@ -204,6 +204,15 @@ function registerIpcHandlers(
     }
   });
 
+  // Ctrl/Cmd-click on a link in the editor. Same allowlist as the
+  // `setWindowOpenHandler` guard -- only web + mail, everything else is a
+  // no-op so a note can never drive `shell.openExternal` to e.g. `file:`.
+  ipcMain.handle(IPC_CHANNELS.openExternal, (_event, url: unknown): void => {
+    if (typeof url === 'string' && /^(https?:|mailto:)/i.test(url.trim())) {
+      void shell.openExternal(url.trim());
+    }
+  });
+
   ipcMain.handle(IPC_CHANNELS.vaultGetActive, (): string | null =>
     vaultManager.getActiveVaultPath(),
   );

@@ -39,6 +39,7 @@ export const IPC_CHANNELS = {
   windowMaximizeChanged: 'window:maximize-changed',
   editExec: 'edit:exec',
   uiSetZoom: 'ui:set-zoom',
+  openExternal: 'app:open-external',
   vaultGetActive: 'vault:get-active',
   vaultSelect: 'vault:select',
   vaultListFiles: 'vault:list-files',
@@ -313,6 +314,14 @@ export interface DreyApi {
    * re-applies it from config on startup.
    */
   setUiZoomFactor(factor: number): Promise<void>;
+
+  /**
+   * Opens an external URL in the OS default handler (`shell.openExternal`).
+   * Only `http:`, `https:` and `mailto:` are honoured -- anything else is
+   * ignored in the main process. Backs a `Ctrl`/`Cmd`-click on a link in
+   * the editor.
+   */
+  openExternal(url: string): Promise<void>;
 
   /** The full app config (`shared/app-config.ts`), always normalised/complete. */
   getConfig(): Promise<AppConfig>;
