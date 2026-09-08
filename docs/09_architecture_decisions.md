@@ -34,6 +34,7 @@ package, a minor naming convention).
 | [0023](09_architecture_decisions/0023-windows-packaging-electron-builder.md)      | Windows packaging with electron-builder (`electron-builder.yml`, `output: release`, `asarUnpack`)   | Accepted                       |
 | [0024](09_architecture_decisions/0024-binary-vault-asset-write.md)                | Binary vault asset write (`vault:save-asset`) for pasted images + per-note `attachments/`           | Accepted                       |
 | [0025](09_architecture_decisions/0025-mermaid-live-preview.md)                    | Mermaid diagrams in Live Preview (lazy `import('mermaid')`, block widget, Live-Preview-only)        | Accepted                       |
+| [0026](09_architecture_decisions/0026-image-viewer-and-lightbox.md)               | Image viewer: shared zoom/pan component, fullscreen lightbox, `kind: 'image'` tabs, `![alt\|W]` sizing | Accepted                       |
 
 Decisions not yet written up (relevant spec already fixes them, but the
 ADR is deferred to the milestone that actually implements them, per
