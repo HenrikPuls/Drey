@@ -26,19 +26,6 @@
       {{ editor.isSaving() ? 'Saving…' : editor.isDirty() ? 'Save' : 'Saved' }}
     </button>
 
-    @if (assistant.panelAvailable()) {
-      <button
-        type="button"
-        class="more sparkle"
-        [class.on]="!dock.collapsed('assistant')"
-        [attr.aria-pressed]="!dock.collapsed('assistant')"
-        (click)="dock.toggleCollapse('assistant')"
-        [title]="dock.collapsed('assistant') ? 'Show note assistant' : 'Collapse note assistant'"
-      >
-        <app-icon name="sparkles" [size]="13" />
-      </button>
-    }
-
     <button
       #moreBtn
       type="button"
