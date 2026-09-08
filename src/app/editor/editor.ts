@@ -17,6 +17,7 @@ import { SettingsService } from '../services/settings.service';
 import { SpellcheckService } from '../services/spellcheck.service';
 import { TagSearchService } from '../tags';
 import { Icon } from '../icons/icon';
+import { resolveVaultLinkPath } from './link-open';
 import { MarkdownSurface } from './markdown-surface/markdown-surface';
 
 /**
@@ -70,6 +71,26 @@ export class Editor implements AfterViewInit {
    * so it keeps its `this` when the extension calls it.
    */
   protected readonly activateTag = (tag: string): void => this.tagSearch.searchTag(tag);
+
+  /**
+   * Passed to the surface: a `Ctrl`/`Cmd`-click on a Markdown link. Web /
+   * mail targets open in the OS default handler; a vault-relative path
+   * opens as a tab. An arrow function so it keeps `this`.
+   */
+  protected readonly activateLink = (href: string): void => {
+    const raw = href.trim();
+    if (/^(https?:|mailto:)/i.test(raw)) {
+      void window.dreyApi.openExternal(raw);
+      return;
+    }
+    if (/^[a-z][a-z0-9+.-]*:/i.test(raw) || raw.startsWith('//')) {
+      return; // some other scheme -- leave it alone
+    }
+    const target = resolveVaultLinkPath(this.editor.openPath(), raw);
+    if (target) {
+      void this.editor.openFile(target);
+    }
+  };
 
   /**
    * The document is spellchecked as you type, like the entry drawer. Past

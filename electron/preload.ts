@@ -47,6 +47,8 @@ const dreyApi: DreyApi = {
     ipcRenderer.invoke(IPC_CHANNELS.editExec, command),
   setUiZoomFactor: (factor: number): Promise<void> =>
     ipcRenderer.invoke(IPC_CHANNELS.uiSetZoom, factor),
+  openExternal: (url: string): Promise<void> =>
+    ipcRenderer.invoke(IPC_CHANNELS.openExternal, url),
   getActiveVault: () => ipcRenderer.invoke(IPC_CHANNELS.vaultGetActive),
   selectVault: () => ipcRenderer.invoke(IPC_CHANNELS.vaultSelect),
   listVaultFiles: (): Promise<VaultFileEntry[]> => ipcRenderer.invoke(IPC_CHANNELS.vaultListFiles),

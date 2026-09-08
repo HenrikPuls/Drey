@@ -324,13 +324,20 @@ src/                Angular renderer (standalone components, esbuild via Angular
                          Markdown); spellcheck = the inline checker's source;
                          foldFrontmatter = mount the frontmatter fold (full editor
                          only), mirrored into a frontmatterExpanded signal;
-                         onTagActivate = wire the tag-pill extension (full editor only).
+                         onTagActivate = wire the tag-pill extension (full editor only);
+                         onLinkActivate = wire the link-open extension (full editor only).
       tag-complete.ts   Pure #tag autocomplete completion source (vocabulary from
                          the live TagService signal).
       tag-pill.ts       ViewPlugin rendering inline #tags as pills in both modes;
                          Ctrl/Cmd-click -> onTagActivate(tag). Matching delegated to
                          shared/tags extractTagOccurrences. Pure tagPillDecorations
                          split out for tests (like conceal.ts). §5.14
+      link-open.ts      ViewPlugin marking Markdown links ([..](..), <autolink>,
+                         bare URL) in both modes; Ctrl/Cmd-click -> onLinkActivate(href):
+                         web/mail via the app:open-external IPC (shell.openExternal),
+                         a vault path via EditorService.openFile. Pure
+                         linkTargetDecorations + resolveVaultLinkPath split out for
+                         tests. ADR-0031
       frontmatter-fold.ts  ADR-0009. StateField<boolean> + block-replace pill
                          ("Frontmatter . N fields") folding the leading YAML in BOTH
                          modes; expand -> dim editable YAML + collapse chevron.

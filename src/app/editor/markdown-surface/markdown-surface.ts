@@ -33,6 +33,7 @@ import {
 } from '../frontmatter-fold';
 import { livePreview } from '../live-preview';
 import { inlineSpellcheck, requestSpellcheck, SpellcheckSource } from '../spellcheck/spellcheck';
+import { linkActivation } from '../link-open';
 import { makeTagCompletionSource } from '../tag-complete';
 import { tagPills } from '../tag-pill';
 import { resolveVaultImageUrl } from '../vault-image';
@@ -121,6 +122,14 @@ export class MarkdownSurface implements AfterViewInit, OnDestroy {
    * unset (composing a note, not navigating it).
    */
   readonly onTagActivate = input<(tag: string) => void>();
+
+  /**
+   * When set, a `Ctrl`/`Cmd`-click on a Markdown link calls this with the
+   * raw target. Read once at construction. The full-page editor wires it to
+   * open web links externally / vault links in a tab; the entry drawer
+   * leaves it unset.
+   */
+  readonly onLinkActivate = input<(href: string) => void>();
 
   /** The document text after every edit. */
   readonly docChanged = output<string>();
@@ -213,6 +222,9 @@ export class MarkdownSurface implements AfterViewInit, OnDestroy {
           // `#tag` pills + Ctrl/Cmd-click -> search. Outside the mode
           // compartment: pills show in source mode too.
           this.onTagActivate() ? tagPills(this.onTagActivate()!) : [],
+          // Ctrl/Cmd-click a link to open it (also outside the mode
+          // compartment -- works in source mode).
+          this.onLinkActivate() ? linkActivation(this.onLinkActivate()!) : [],
           // Track this surface as the Edit/Selection menu's target while it
           // holds focus (see `EditTargetService` -- "last focused", so a
           // menu-bar click doesn't drop it).

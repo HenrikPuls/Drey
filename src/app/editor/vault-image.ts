@@ -6,7 +6,7 @@
  */
 
 /** Collapse `.`/`..` segments; return `null` if the path climbs above the root. */
-function normalizeRelative(pathStr: string): string | null {
+export function normalizeRelative(pathStr: string): string | null {
   const out: string[] = [];
   for (const seg of pathStr.split('/')) {
     if (seg === '' || seg === '.') {
