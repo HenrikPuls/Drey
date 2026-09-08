@@ -215,6 +215,11 @@ function registerIpcHandlers(
     (_event, relativePath: string, content: string): Promise<number> =>
       vaultManager.writeFile(relativePath, content),
   );
+  ipcMain.handle(
+    IPC_CHANNELS.vaultSaveAsset,
+    (_event, bytes: Uint8Array, ext: string, noteRelPath: string): Promise<string> =>
+      vaultManager.saveAsset(bytes, ext, noteRelPath),
+  );
   ipcMain.handle(IPC_CHANNELS.vaultCreateFile, (_event, relativePath: string): Promise<string> =>
     vaultManager.createFile(relativePath),
   );

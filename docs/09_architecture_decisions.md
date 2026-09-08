@@ -32,6 +32,7 @@ package, a minor naming convention).
 | [0021](09_architecture_decisions/0021-mcp-vault-server.md)                        | MCP vault server (hand-rolled JSON-RPC, stdio + HTTP) + assistant vault tool use                    | Accepted                       |
 | [0022](09_architecture_decisions/0022-configurable-entry-templates.md)            | Configurable "Add entry" templates (placeholder patterns, built-in re-injection, parser tweak)      | Accepted                       |
 | [0023](09_architecture_decisions/0023-windows-packaging-electron-builder.md)      | Windows packaging with electron-builder (`electron-builder.yml`, `output: release`, `asarUnpack`)   | Accepted                       |
+| [0024](09_architecture_decisions/0024-binary-vault-asset-write.md)                | Binary vault asset write (`vault:save-asset`) for pasted images + per-note `attachments/`           | Accepted                       |
 
 Decisions not yet written up (relevant spec already fixes them, but the
 ADR is deferred to the milestone that actually implements them, per

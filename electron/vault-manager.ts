@@ -1,7 +1,9 @@
 import { app, dialog } from 'electron';
+import * as crypto from 'node:crypto';
 import * as fs from 'node:fs';
 import * as fsp from 'node:fs/promises';
 import * as path from 'node:path';
+import { assetFileName, ATTACHMENTS_DIR } from '../shared/asset-name';
 import { sidecarPathFor } from '../shared/chat-thread';
 import { VaultFileContent, VaultFileEntry } from '../shared/ipc-api';
 
@@ -149,6 +151,38 @@ export class VaultManager {
     await fsp.writeFile(filePath, content, 'utf-8');
     const stat = await fsp.stat(filePath);
     return stat.mtimeMs;
+  }
+
+  /**
+   * Writes a binary asset (a pasted / dropped image) into an `attachments/`
+   * folder beside the note that will reference it, and returns the path to
+   * put in the `![](...)` -- relative to that note's own folder, so
+   * `resolveVaultImageUrl` (renderer) resolves it straight back to a
+   * `drey-asset://` URL.
+   *
+   * `noteRelPath` is the vault-relative path of the open document; when it
+   * has no folder part (a bare name, or an unsaved scratch tab) the vault
+   * root's `attachments/` is used. The file name is
+   * `<timestamp>-<6 hex of sha256>.<ext>` (`shared/asset-name.ts`); a name
+   * collision gets a `-2`, `-3`, ... suffix rather than overwriting.
+   */
+  async saveAsset(bytes: Uint8Array, ext: string, noteRelPath: string): Promise<string> {
+    const hashHex = crypto.createHash('sha256').update(bytes).digest('hex');
+    const baseName = assetFileName({ date: new Date(), hashHex, ext });
+
+    const noteDir =
+      noteRelPath.includes('/') ? noteRelPath.slice(0, noteRelPath.lastIndexOf('/')) : '';
+    const dirRelToVault = noteDir ? `${noteDir}/${ATTACHMENTS_DIR}` : ATTACHMENTS_DIR;
+    const absDir = this.resolveInVault(dirRelToVault);
+    await fsp.mkdir(absDir, { recursive: true });
+
+    let name = baseName;
+    const dot = baseName.lastIndexOf('.');
+    for (let i = 2; fs.existsSync(path.join(absDir, name)); i++) {
+      name = `${baseName.slice(0, dot)}-${i}${baseName.slice(dot)}`;
+    }
+    await fsp.writeFile(path.join(absDir, name), bytes);
+    return `${ATTACHMENTS_DIR}/${name}`;
   }
 
   /**
