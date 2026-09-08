@@ -18,7 +18,7 @@
  */
 import { LlmEndpoint } from '../../shared/app-config';
 import { LlmConnectionTest } from '../../shared/ipc-api';
-import { ChatMessage, maskAuthorizationHeader, truncate } from '../../shared/llm';
+import { ChatMessage, ChatToolCall, maskAuthorizationHeader, truncate } from '../../shared/llm';
 import { AppConfigStore } from '../app-config';
 import { LlmDebugLog } from './llm-debug-log';
 
@@ -217,10 +217,22 @@ export class LmStudioClient {
    * assistant message text. Rejects when LLM features are off, no model is
    * selected, the server errors, or `options.signal` is aborted (the user
    * pressed Cancel). There is no timeout -- see the note at the top.
+   *
+   * When `options.tools` is set, the reply may be one or more
+   * `tool_calls` instead of prose: each is run through `options.onToolCall`
+   * and the result fed back, looping up to `maxToolRounds` (default 5)
+   * until the model returns text. A server that rejects the `tools`
+   * parameter outright is retried once without it (capability fallback).
    */
   async chat(
     messages: ChatMessage[],
-    options: { temperature?: number; signal?: AbortSignal } = {},
+    options: {
+      temperature?: number;
+      signal?: AbortSignal;
+      tools?: unknown[];
+      onToolCall?: (name: string, argsJson: string) => Promise<string>;
+      maxToolRounds?: number;
+    } = {},
   ): Promise<string> {
     const { llm } = this.config.get();
     if (!llm.enabled) {
@@ -235,26 +247,72 @@ export class LmStudioClient {
     // Always the saved endpoint -- actions and Ask run against settings the
     // user actually committed, never an in-flight Settings draft.
     const endpoint = this.endpoint();
-    const { status, text } = await this.send(endpoint, '/chat/completions', {
-      method: 'POST',
-      body: JSON.stringify({
+    const convo: ChatMessage[] = [...messages];
+    const useTools =
+      Array.isArray(options.tools) && options.tools.length > 0 && !!options.onToolCall;
+    let toolsAllowed = useTools;
+    const maxRounds = options.maxToolRounds ?? 5;
+
+    for (let round = 0; ; round++) {
+      const body: Record<string, unknown> = {
         model: llm.model,
-        messages,
+        messages: convo,
         temperature: options.temperature ?? 0.2,
         stream: false,
-      }),
-      signal: options.signal,
-    });
-    if (status < 200 || status >= 300) {
-      throw new Error(this.describeHttpError(status, text, endpoint));
-    }
-    const json = JSON.parse(text) as {
-      choices?: Array<{ message?: { content?: unknown } }>;
-    };
-    const content = json.choices?.[0]?.message?.content;
-    if (typeof content !== 'string') {
+      };
+      if (toolsAllowed) {
+        body['tools'] = options.tools;
+        body['tool_choice'] = 'auto';
+      }
+
+      const { status, text } = await this.send(endpoint, '/chat/completions', {
+        method: 'POST',
+        body: JSON.stringify(body),
+        signal: options.signal,
+      });
+
+      if (status === 400 && toolsAllowed) {
+        // This server doesn't understand `tools`. Drop them and retry once.
+        toolsAllowed = false;
+        continue;
+      }
+      if (status < 200 || status >= 300) {
+        throw new Error(this.describeHttpError(status, text, endpoint));
+      }
+
+      const json = JSON.parse(text) as {
+        choices?: Array<{
+          message?: { content?: unknown; tool_calls?: ChatToolCall[] };
+        }>;
+      };
+      const message = json.choices?.[0]?.message;
+      const toolCalls = message?.tool_calls;
+
+      if (toolsAllowed && Array.isArray(toolCalls) && toolCalls.length > 0 && round < maxRounds) {
+        convo.push({
+          role: 'assistant',
+          content: typeof message?.content === 'string' ? message.content : null,
+          tool_calls: toolCalls,
+        });
+        for (const call of toolCalls) {
+          const result = await options.onToolCall!(
+            call.function?.name ?? '',
+            call.function?.arguments ?? '{}',
+          );
+          convo.push({ role: 'tool', tool_call_id: call.id, content: result });
+        }
+        continue;
+      }
+
+      if (typeof message?.content === 'string') {
+        return message.content;
+      }
+      // A model that keeps calling tools past the round cap, or returns an
+      // empty message -- give back what we can rather than throw.
+      if (round >= maxRounds) {
+        return '';
+      }
       throw new Error('The endpoint returned no message content.');
     }
-    return content;
   }
 }

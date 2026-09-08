@@ -16,5 +16,5 @@
     "noFallthroughCasesInSwitch": true,
     "types": ["node", "electron"]
   },
-  "include": ["*.ts", "../shared/**/*.ts"]
+  "include": ["*.ts", "mcp/stdio-bridge.ts", "../shared/**/*.ts"]
 }

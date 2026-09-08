@@ -7,6 +7,7 @@ import { SettingsActions } from './actions/settings-actions';
 import { SettingsAppearance } from './appearance/settings-appearance';
 import { SettingsAssistant } from './assistant/settings-assistant';
 import { SettingsLlm } from './llm/settings-llm';
+import { SettingsMcp } from './mcp/settings-mcp';
 import { SettingsSpellcheck } from './spellcheck/settings-spellcheck';
 import { SettingsCategory } from './settings-category';
 
@@ -61,6 +62,7 @@ export class Settings {
       hint: 'Prompt templates & triggers',
       component: SettingsActions,
     },
+    { id: 'mcp', label: 'MCP', hint: 'Vault server & tools', component: SettingsMcp },
     { id: 'about', label: 'About', hint: 'Version & licenses', component: SettingsAbout },
   ];
 

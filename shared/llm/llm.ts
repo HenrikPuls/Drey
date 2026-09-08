@@ -9,10 +9,23 @@
  * the fragile part (`electron/` is a thin sequencer, ADR-0007).
  */
 
-/** One message in an OpenAI-compatible chat request. */
+/** An OpenAI-style tool call the model asked for. */
+export interface ChatToolCall {
+  id: string;
+  type: 'function';
+  function: { name: string; arguments: string };
+}
+
+/**
+ * One message in an OpenAI-compatible chat request. `content` is `null`
+ * on an assistant turn that only carries `tool_calls`; a `tool` turn
+ * carries the tool's result plus the `tool_call_id` it answers.
+ */
 export interface ChatMessage {
-  role: 'system' | 'user' | 'assistant';
-  content: string;
+  role: 'system' | 'user' | 'assistant' | 'tool';
+  content: string | null;
+  tool_calls?: ChatToolCall[];
+  tool_call_id?: string;
 }
 
 /**

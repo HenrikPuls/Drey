@@ -154,7 +154,9 @@ describe('normalizeAppConfig', () => {
 
   it('defaults appearance and keeps a valid scale step / accent (preset id or #hex)', () => {
     expect(normalizeAppConfig({}).appearance).toEqual({ uiScale: 'default', accent: 'terracotta' });
-    expect(normalizeAppConfig({ appearance: { uiScale: 'large' } }).appearance.uiScale).toBe('large');
+    expect(normalizeAppConfig({ appearance: { uiScale: 'large' } }).appearance.uiScale).toBe(
+      'large',
+    );
     expect(normalizeAppConfig({ appearance: { uiScale: 'huge' } }).appearance.uiScale).toBe(
       'default',
     );
