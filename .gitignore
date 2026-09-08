@@ -44,6 +44,10 @@ yarn-error.log
 /blob-report
 /playwright/.cache
 
+# Generated per build by scripts/stamp-build.mjs -- not byte-stable, so
+# checking it in would only add noise.
+/src/assets/build-info.json
+
 # Miscellaneous
 /.angular/cache
 .sass-cache/

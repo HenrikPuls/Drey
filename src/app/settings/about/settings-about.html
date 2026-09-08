@@ -11,6 +11,10 @@
           <dd>drey</dd>
           <dt>App version</dt>
           <dd class="mono">{{ info.appVersion }}</dd>
+          @if (about.buildInfo(); as build) {
+            <dt>Build</dt>
+            <dd class="mono">{{ build.buildNumber }} · {{ build.commit }}</dd>
+          }
           <dt>Copyright</dt>
           <dd>© 2026 Henrik Puls</dd>
           <dt>Electron</dt>
