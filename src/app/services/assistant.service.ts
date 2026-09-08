@@ -82,6 +82,15 @@ export class AssistantService {
     this.notice.set(null);
   }
 
+  /**
+   * The card's "insert into note" arrow: drops the card text into the
+   * document editor at the caret (replacing any selection). The user saves
+   * it like any other edit -- nothing is written here.
+   */
+  insertIntoNote(text: string): void {
+    this.editor.requestInsertText(text);
+  }
+
   /** Routes a rejection to the error line or the quiet notice line. */
   private report(err: unknown): void {
     if (isCancellation(err)) {
