@@ -182,9 +182,18 @@ function appendEditButton(parent: HTMLElement): void {
   parent.appendChild(btn);
 }
 
-/** `true` (= CodeMirror ignores it) for everything except the `✎` button. */
+/**
+ * `true` (= CodeMirror ignores it) for everything except the `✎` button and
+ * a mermaid error box -- clicking the error message anywhere should drop the
+ * cursor into the fence to fix it, not stay swallowed by the widget.
+ */
 function ignoreWidgetEvent(event: Event): boolean {
-  return !(event.target instanceof Element && event.target.closest('.lp-edit') !== null);
+  if (!(event.target instanceof Element)) {
+    return true;
+  }
+  return (
+    event.target.closest('.lp-edit') === null && event.target.closest('.lp-mermaid-error') === null
+  );
 }
 
 /**

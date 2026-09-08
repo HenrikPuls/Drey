@@ -163,8 +163,12 @@ export class ImageViewer implements AfterViewInit, OnDestroy {
     const startX = event.clientX;
     const startY = event.clientY;
     const start = this.offset();
+    let moved = false;
 
     const move = (ev: PointerEvent): void => {
+      if (!moved && Math.hypot(ev.clientX - startX, ev.clientY - startY) > 3) {
+        moved = true;
+      }
       this.offset.set({ x: start.x + (ev.clientX - startX), y: start.y + (ev.clientY - startY) });
     };
     const end = (): void => {
@@ -177,6 +181,19 @@ export class ImageViewer implements AfterViewInit, OnDestroy {
       document.body.style.userSelect = '';
       document.body.removeAttribute('data-drey-gesture');
       this.panCleanup = null;
+      if (moved) {
+        // A real pan synthesises a `click` on release. Swallow that one
+        // click (capture phase) so the lightbox backdrop doesn't read the
+        // end of a drag as "clicked outside the image" and close --
+        // otherwise the diagram can't be dragged around at all.
+        const swallow = (ce: Event): void => {
+          ce.stopPropagation();
+          ce.preventDefault();
+          window.removeEventListener('click', swallow, true);
+        };
+        window.addEventListener('click', swallow, true);
+        setTimeout(() => window.removeEventListener('click', swallow, true), 0);
+      }
     };
     this.panCleanup = end;
     window.addEventListener('pointermove', move);

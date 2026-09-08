@@ -103,3 +103,31 @@ mounted this way shows a dashed "Drop a panel here" band (bottom: a fixed
 the whole lower band as `bottom` unless the pointer is horizontally over a
 side dock — the same "whole half" leniency the side docks already had.
 Dock resize splitters still render only for a non-empty dock.
+
+## Later change — low-profile headers, click-to-collapse, drag feedback
+
+Panel headers were reworked to be quieter and to carry their own drag
+affordance:
+
+- **No chevron button.** `PanelFrame`'s header is now a single
+  `role="button"` region. `mousedown` opens a *press* gesture in
+  `DockService.beginHeaderPress(id, title, event)`: released under a ~4 px
+  move → `toggleCollapse`; past it → the existing header drag. Enter /
+  Space on the focused header also toggles. The header no longer takes an
+  accent-tinted background while dragging — only `cursor: grab/grabbing`
+  and a faint text lift on hover/focus.
+- **Drag ghost.** On promotion to a drag, `DockService` appends a
+  `position: fixed` `.dock-drag-ghost` chip (the panel title, `styles.css`)
+  that follows the cursor and is removed on drop — the "something is
+  happening" signal that used to be a status-bar sentence.
+- **Drop target.** The accent inset ring on the target dock
+  (`--drop-ring`) is replaced by a translucent dark wash
+  (`:host(.drop-target)::after`); the 2 px accent drop-line stays.
+- **Collapse animation.** The panel body stays mounted while collapsed
+  (its `*ngComponentOutlet` panel keeps its state) inside a
+  `grid-template-rows: 1fr ⇄ 0fr` wrapper that transitions over 140 ms;
+  `content-visibility: hidden` (with `allow-discrete`) skips rendering once
+  folded. Previously the body — and the panel component — were destroyed on
+  collapse.
+- **Status bar.** The idle "Drag a panel header…" hint (and its drag-state
+  variant) is gone; `StatusBar` no longer injects `DockService`.

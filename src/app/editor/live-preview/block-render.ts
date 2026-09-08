@@ -206,17 +206,24 @@ export function livePreviewBlocks(config: LivePreviewConfig): Extension {
     create: (state) => blockDecorations(state, config),
     update: (value, tr) =>
       tr.docChanged || tr.selection ? blockDecorations(tr.state, config) : value,
-    provide: (f) => EditorView.decorations.from(f),
+    provide: (f) => [
+      EditorView.decorations.from(f),
+      // Rendered tables / diagrams / HTML blocks / images are single atoms:
+      // arrow keys step over them in one move instead of the selection
+      // snapping to the document start when ArrowUp lands on a block widget.
+      EditorView.atomicRanges.of((view) => view.state.field(f, false) ?? Decoration.none),
+    ],
   });
   // The `✎` button on a rendered table/HTML block moves the cursor into
   // it, which reveals the raw source (the selection then touches the
   // node). Only the button: other clicks belong to the widget content
   // (toggling a <details>, selecting table text) -- its `ignoreEvent`
-  // keeps CodeMirror out of those.
+  // keeps CodeMirror out of those. Exception: a mermaid *error* box is
+  // clickable anywhere -- the whole point is to get back into the fence.
   const clickToReveal = EditorView.domEventHandlers({
     mousedown(event, view) {
       const target = event.target as HTMLElement | null;
-      if (!target?.closest('.lp-edit')) {
+      if (!target?.closest('.lp-edit') && !target?.closest('.lp-mermaid-error')) {
         return false;
       }
       const widget = target.closest('.lp-table, .lp-html, .lp-mermaid');

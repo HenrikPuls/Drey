@@ -131,28 +131,31 @@ test.describe('Edit menu — history / clipboard act on the focused editor', () 
 test.describe('bottom dock — "Add entry" panel', () => {
   test('collapsing "Add entry" removes the bottom-dock resize divider', async ({ page }) => {
     const bottom = page.locator('app-dock[side="bottom"]');
-    const twist = bottom.locator('app-panel-frame .twist').first();
+    const head = bottom.locator('app-panel-frame .head').first();
     const divider = page.locator('.center-col .divider-y[aria-label="Resize bottom dock"]');
 
     // Default: "Add entry" starts collapsed → no divider.
     await expect(divider).toHaveCount(0);
 
-    // Expand it → divider appears and the band takes bottomH.
-    await twist.click();
+    // Expand it → divider appears and the band takes bottomH (poll past the
+    // ~140ms collapse/expand height animation).
+    await head.click();
     await expect(divider).toHaveCount(1);
-    const expandedH = await bottom.evaluate((el) => el.getBoundingClientRect().height);
-    expect(expandedH).toBeGreaterThan(120);
+    await expect
+      .poll(() => bottom.evaluate((el) => el.getBoundingClientRect().height))
+      .toBeGreaterThan(120);
 
     // Collapse again → divider gone, band is just the header.
-    await twist.click();
+    await head.click();
     await expect(divider).toHaveCount(0);
-    const collapsedH = await bottom.evaluate((el) => el.getBoundingClientRect().height);
-    expect(collapsedH).toBeLessThan(80);
+    await expect
+      .poll(() => bottom.evaluate((el) => el.getBoundingClientRect().height))
+      .toBeLessThan(80);
   });
 
   test('the "Add entry" text field grows to fill the expanded panel', async ({ page }) => {
     const bottom = page.locator('app-dock[side="bottom"]');
-    await bottom.locator('app-panel-frame .twist').first().click();
+    await bottom.locator('app-panel-frame .head').first().click();
 
     const field = bottom.locator('app-entry-drawer .md-editor');
     const short = await field.evaluate((el) => el.getBoundingClientRect().height);

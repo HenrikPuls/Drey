@@ -732,10 +732,13 @@ sequenceDiagram
 
 ## 6.14 Drag a panel between docks → drop → persist (milestone 14)
 
-`mousedown` on a panel header starts the drag in `DockService`; a `window`
-`mousemove` recomputes the drop target/index every frame (the header
-reorders under the pointer, so the listeners can't live on the element);
-`mouseup` applies the move and writes the layout.
+`mousedown` on a panel header opens a *press* gesture in `DockService`. A
+release before the pointer moves ~4px is a click → `toggleCollapse` (the
+whole header is the collapse target; there is no separate chevron button).
+Moving past the threshold promotes it to a drag: a `window` `mousemove`
+recomputes the drop target/index every frame (the header reorders under the
+pointer, so the listeners can't live on the element) and a small title chip
+follows the cursor; `mouseup` applies the move and writes the layout.
 
 ```mermaid
 sequenceDiagram
@@ -746,21 +749,26 @@ sequenceDiagram
     participant Cmp as Dock component
     participant LS as localStorage['drey.dock']
 
-    User->>Frame: mousedown on header (not the chevron)
-    Frame->>Dock: startPanelDrag(id, event)
-    Dock->>Dock: dragging=id; add window mousemove/mouseup; body cursor=grabbing
-    loop while dragging
-        Win->>Dock: onDragMove(event)
-        Dock->>Dock: dropDock = X in a dock box (±12px) else window midline
-        Dock->>Dock: dropIndex = first panel whose Y-midpoint is below the pointer
-        Dock-->>Cmp: dragging / dropDock / dropIndex signals
-        Cmp-->>User: 2px accent drop-line + inset ring on the target dock;\ndragged panel opacity .4
+    User->>Frame: mousedown on header
+    Frame->>Dock: beginHeaderPress(id, title, event)
+    Dock->>Dock: record start x/y; add temp window mousemove/mouseup
+    alt released before ~4px move
+        Win->>Dock: onHeaderPressUp() → toggleCollapse(id)
+    else moved past threshold
+        Dock->>Dock: dragging=id; body cursor=grabbing; mount title-chip ghost
+        loop while dragging
+            Win->>Dock: onDragMove(event)
+            Dock->>Dock: dropDock = X in a dock box (±12px) else window midline
+            Dock->>Dock: dropIndex = first panel whose Y-midpoint is below the pointer
+            Dock-->>Cmp: dragging / dropDock / dropIndex signals
+            Cmp-->>User: 2px accent drop-line + dark wash over the target dock;\ndragged panel opacity .4; title chip follows the cursor
+        end
+        User->>Win: mouseup
+        Win->>Dock: onDragEnd()
+        Dock->>Dock: move(id, dropDock, dropIndex) — remove from both docks,\nsplice into target at the pre-removal slot
+        Dock->>LS: persist { dock, flexes, open, leftW, rightW }
+        Dock->>Dock: clear transient state; unmount ghost; body cursor=''
     end
-    User->>Win: mouseup
-    Win->>Dock: onDragEnd()
-    Dock->>Dock: move(id, dropDock, dropIndex) — remove from both docks,\nsplice into target at the pre-removal slot
-    Dock->>LS: persist { dock, flexes, open, leftW, rightW }
-    Dock->>Dock: clear transient state; body cursor=''
 ```
 
 Splitters (`startSplit`, keeps the summed height of the two open

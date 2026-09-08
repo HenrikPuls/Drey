@@ -16,10 +16,13 @@
   color: var(--text-4);
   cursor: grab;
   user-select: none;
+  outline: none;
 }
 
-.head:hover {
-  color: var(--text-primary);
+/* Low-profile: a faint text lift on hover / keyboard focus, no fill. */
+.head:hover,
+.head:focus-visible {
+  color: var(--text-2);
 }
 
 :host(.dragging) {
@@ -27,31 +30,7 @@
 }
 
 :host(.dragging) .head {
-  background: color-mix(in srgb, var(--accent) 16%, transparent);
   cursor: grabbing;
-}
-
-.twist {
-  width: 16px;
-  height: 16px;
-  margin-left: -5px;
-  flex: none;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border: 0;
-  background: transparent;
-  border-radius: var(--radius-xs);
-  cursor: pointer;
-  color: inherit;
-}
-
-.twist:hover {
-  background: var(--hover-bg-strong);
-}
-
-.twist app-icon {
-  transition: transform 0.12s ease;
 }
 
 .title {
@@ -87,8 +66,33 @@
   background: currentColor;
 }
 
-.body {
+/* Collapse / expand: the row track animates between the body's height and
+   0. The body stays mounted so a panel keeps its state across a collapse
+   (draft text, scroll, the assistant thread). */
+.body-wrap {
   flex: 1;
+  min-height: 0;
+  display: grid;
+  grid-template-rows: 1fr;
+  transition: grid-template-rows 140ms ease;
+}
+
+.body-wrap.collapsed {
+  grid-template-rows: 0fr;
+}
+
+.body-wrap .body {
+  /* Skip rendering the body once collapsed -- deferred to the end of the
+     height transition where `allow-discrete` is supported, instant
+     otherwise. */
+  transition: content-visibility 140ms allow-discrete;
+}
+
+.body-wrap.collapsed .body {
+  content-visibility: hidden;
+}
+
+.body {
   min-height: 0;
   overflow-y: auto;
   overflow-x: hidden;

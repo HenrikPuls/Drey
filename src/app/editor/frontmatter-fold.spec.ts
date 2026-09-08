@@ -62,15 +62,29 @@ describe('foldDecorations', () => {
     expect(all[0].deco.spec['widget']).toBeTruthy();
   });
 
-  it('expanded: dims every frontmatter line and adds a collapse chevron, no replace', () => {
+  it('expanded: header widget replaces the opening fence, hides the closing fence, dims the YAML lines', () => {
     const all = entries(foldDecorations(state(FM), true));
-    const lines = all.filter((e) => e.deco.spec['class'] === 'cm-fm-line');
-    // One dim line per frontmatter line, opening and closing `---` included.
-    expect(lines.map((e) => e.from)).toEqual([0, 4, 16, 22, 28, 34, 48]);
-    const widgetsOnly = all.filter((e) => e.deco.spec['widget'] !== undefined);
-    expect(widgetsOnly).toHaveLength(1);
-    expect(widgetsOnly[0].deco.spec['block']).toBeUndefined();
-    expect(all.some((e) => e.deco.spec['class'] === undefined && e.to > e.from)).toBe(false);
+
+    // One dim line per YAML field line -- the `---` fences are replaced, not dimmed.
+    const dimLines = all.filter((e) => e.deco.spec['class'] === 'cm-fm-line');
+    expect(dimLines.map((e) => e.from)).toEqual([4, 16, 22, 28, 34]);
+
+    // Exactly two replaces, both block, position-ordered by `entries`.
+    const replaces = all.filter((e) => e.deco.spec['class'] === undefined);
+    expect(replaces).toHaveLength(2);
+    const [open, close] = replaces;
+
+    // Opening `---` -> the `⌄ Frontmatter` header widget.
+    expect(open.from).toBe(0);
+    expect(open.to).toBe(3);
+    expect(open.deco.spec['block']).toBe(true);
+    expect(open.deco.spec['widget']).toBeTruthy();
+
+    // Closing `---` + the newline before it -> hidden, no widget.
+    expect(close.from).toBe(FM.indexOf('---\n\n') - 1);
+    expect(close.to).toBe(FM.indexOf('---\n\n') + 3);
+    expect(close.deco.spec['block']).toBe(true);
+    expect(close.deco.spec['widget']).toBeUndefined();
   });
 });
 

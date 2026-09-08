@@ -131,11 +131,8 @@
   padding: 0;
 }
 
-.icon-btn.refresh:hover:not(:disabled) {
-  background: var(--hover-bg);
-}
-
 .icon-btn:hover:not(:disabled) {
+  background: var(--hover-bg);
   color: var(--text-primary);
 }
 
@@ -151,6 +148,7 @@
   min-height: 0;
   overflow-y: auto;
   overflow-x: hidden;
+  outline: none;
 }
 
 .create-row {
@@ -315,4 +313,11 @@
 .file.active {
   background: var(--active-bg);
   color: var(--text-heading);
+}
+
+/* Roving keyboard selection -- a faint ring so it reads under the pointer
+   hover and the `.active` open-file fill without competing with them. */
+.node.selected {
+  box-shadow: inset 0 0 0 1px var(--accent-edge);
+  color: var(--text-primary);
 }

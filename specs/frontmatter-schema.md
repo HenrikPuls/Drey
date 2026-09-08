@@ -32,11 +32,13 @@ updated: '2026-09-05T14:32:00'
 ### Editor display
 
 The editor keeps the frontmatter in the file but **folds it behind a pill**
-(`▸ Frontmatter · N fields`) by default, in both Live Preview and source
-mode — a note opens as prose, not metadata. Clicking the pill expands the
-block to dim, editable raw YAML with a chevron to fold it back; the fold
-state is remembered per open tab. There is no structured field editor;
-expanding edits the YAML directly. See
+(`▸ Frontmatter`) by default, in both Live Preview and source mode — a note
+opens as prose, not metadata. Clicking the pill expands the block to dim,
+editable raw YAML: a `⌄ Frontmatter` header (same look as the pill, chevron
+flipped) sits where the opening `---` was, both `---` fences are hidden, and
+clicking the header folds it back. The fold state is remembered per open
+tab. There is no structured field editor; expanding edits the YAML
+directly. See
 `docs/09_architecture_decisions/0009-live-preview-decorations.md`.
 
 ## Body conventions (the part that actually carries meaning)

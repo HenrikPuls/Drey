@@ -154,6 +154,27 @@ textarea::placeholder {
   background: color-mix(in srgb, var(--accent) 30%, transparent);
 }
 
+/* The label chip that follows the cursor while a dock panel header is
+   dragged (created by `DockService`, appended to <body>). Low-profile:
+   just the panel title, no accent fill. */
+.dock-drag-ghost {
+  position: fixed;
+  top: 0;
+  left: 0;
+  z-index: 50;
+  pointer-events: none;
+  padding: 4px 9px;
+  border-radius: var(--radius-sm);
+  background: var(--bg-input);
+  border: 1px solid var(--border-strong);
+  box-shadow: var(--popover-shadow);
+  color: var(--text-2);
+  font-family: var(--font-mono);
+  font-size: var(--fs-mono-title);
+  letter-spacing: var(--ls-mono-title);
+  text-transform: uppercase;
+}
+
 /* Thin, unobtrusive scrollbars everywhere (DESIGN.md "Maße": 9px, 3px
    transparent inset, transparent track). */
 ::-webkit-scrollbar {

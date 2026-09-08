@@ -25,24 +25,6 @@
   color: var(--text-faint);
 }
 
-.divider {
-  flex: none;
-  width: 1px;
-  height: 12px;
-  background: var(--border-strong);
-}
-
-.hint {
-  flex: 0 1 auto;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  font-family: var(--font-mono);
-  font-size: var(--fs-mono-meta);
-  color: var(--text-7);
-}
-
 .settings {
   margin-left: auto;
   flex: none;

@@ -131,6 +131,11 @@ export class DockService {
       // pause) would otherwise leave `document.body` unselectable with the
       // grab cursor stuck -- and the drag listeners attached. Abort on blur.
       window.addEventListener('blur', () => {
+        if (this.headerPress) {
+          window.removeEventListener('mousemove', this.onHeaderPressMove);
+          window.removeEventListener('mouseup', this.onHeaderPressUp);
+          this.headerPress = null;
+        }
         if (this.dragging() !== null || this.resizing()) {
           this.onDragEnd();
           this.resizing.set(false);
@@ -260,22 +265,92 @@ export class DockService {
     }
   }
 
-  // ---- panel header drag ----
+  // ---- panel header press: a click toggles collapse, a drag moves ----
 
-  startPanelDrag(id: PanelId, event: MouseEvent): void {
+  /** In-flight header press, before it is promoted to a real drag. */
+  private headerPress: {
+    id: PanelId;
+    title: string;
+    startX: number;
+    startY: number;
+    promoted: boolean;
+  } | null = null;
+  /** The label chip that follows the cursor once a header drag starts. */
+  private dragGhost: HTMLElement | null = null;
+  private static readonly DRAG_THRESHOLD_PX = 4;
+
+  /**
+   * Mousedown on a panel header. A release before the pointer moves
+   * `DRAG_THRESHOLD_PX` is treated as a click -> toggle collapse; moving
+   * past it promotes the gesture to a panel drag between docks.
+   */
+  beginHeaderPress(id: PanelId, title: string, event: MouseEvent): void {
     if (event.button !== 0) {
       return;
     }
     event.preventDefault();
-    this.dragging.set(id);
+    this.headerPress = { id, title, startX: event.clientX, startY: event.clientY, promoted: false };
+    window.addEventListener('mousemove', this.onHeaderPressMove);
+    window.addEventListener('mouseup', this.onHeaderPressUp);
+  }
+
+  private readonly onHeaderPressMove = (event: MouseEvent): void => {
+    const press = this.headerPress;
+    if (!press || press.promoted) {
+      return;
+    }
+    const moved = Math.hypot(event.clientX - press.startX, event.clientY - press.startY);
+    if (moved < DockService.DRAG_THRESHOLD_PX) {
+      return;
+    }
+    // Promote to a drag: hand off to the move/end listeners.
+    press.promoted = true;
+    window.removeEventListener('mousemove', this.onHeaderPressMove);
+    this.dragging.set(press.id);
     this.dropDock.set(null);
     this.dropIndex.set(null);
     this.setGlobalGesture('grabbing');
+    this.mountDragGhost(press.title, event);
     window.addEventListener('mousemove', this.onDragMove);
     window.addEventListener('mouseup', this.onDragEnd);
+    this.onDragMove(event);
+  };
+
+  private readonly onHeaderPressUp = (): void => {
+    window.removeEventListener('mousemove', this.onHeaderPressMove);
+    window.removeEventListener('mouseup', this.onHeaderPressUp);
+    const press = this.headerPress;
+    this.headerPress = null;
+    if (press && !press.promoted) {
+      this.toggleCollapse(press.id);
+    }
+  };
+
+  private mountDragGhost(title: string, event: MouseEvent): void {
+    if (typeof document === 'undefined') {
+      return;
+    }
+    const ghost = document.createElement('div');
+    ghost.className = 'dock-drag-ghost';
+    ghost.textContent = title;
+    document.body.appendChild(ghost);
+    this.dragGhost = ghost;
+    this.positionDragGhost(event);
+  }
+
+  private positionDragGhost(event: MouseEvent): void {
+    if (this.dragGhost) {
+      this.dragGhost.style.transform = `translate(${event.clientX + 14}px, ${event.clientY + 12}px)`;
+    }
+  }
+
+  private unmountDragGhost(): void {
+    this.dragGhost?.remove();
+    this.dragGhost = null;
   }
 
   private readonly onDragMove = (event: MouseEvent): void => {
+    this.positionDragGhost(event);
     const left = this.dockEls.get('left')?.getBoundingClientRect();
     const right = this.dockEls.get('right')?.getBoundingClientRect();
     const bottom = this.dockEls.get('bottom')?.getBoundingClientRect();
@@ -323,6 +398,7 @@ export class DockService {
   private readonly onDragEnd = (): void => {
     window.removeEventListener('mousemove', this.onDragMove);
     window.removeEventListener('mouseup', this.onDragEnd);
+    this.unmountDragGhost();
     this.setGlobalGesture(null);
 
     const id = this.dragging();

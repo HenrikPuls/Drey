@@ -22,6 +22,6 @@ test('a file dropped on the titlebar does not navigate the window away', async (
   // Give a navigation a chance to start, then assert the SPA is still up.
   await page.waitForTimeout(300);
   expect(page.url()).toBe(urlBefore);
-  await expect(page.locator('app-titlebar .brand .name')).toHaveText('drey');
+  await expect(page.locator('app-titlebar .brand .mark')).toBeVisible();
   await expect(page.locator('app-status-bar')).toBeVisible();
 });

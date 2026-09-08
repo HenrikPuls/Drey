@@ -37,6 +37,7 @@ import {
   VaultFileContent,
   VaultFileEntry,
 } from '../shared/ipc-api';
+import { UI_SCALE_FACTORS } from '../shared/app-config';
 import { AppConfigStore } from './app-config';
 import { ChatStore } from './chat-store';
 import { DailyNoteManager } from './daily-note';
@@ -598,7 +599,7 @@ async function openTodayDailyNote(dailyNotes: DailyNoteManager): Promise<void> {
   }
 }
 
-function createMainWindow(): BrowserWindow {
+function createMainWindow(getUiScaleFactor?: () => number): BrowserWindow {
   const window = new BrowserWindow({
     width: 1280,
     height: 800,
@@ -679,6 +680,21 @@ function createMainWindow(): BrowserWindow {
   window.webContents.setVisualZoomLevelLimits(1, 1).catch(() => {
     // Older Electron rejects this off the main frame; harmless.
   });
+
+  // Re-apply the app-wide "Base font size" (Settings -> Appearance) after
+  // every load. `webContents.setZoomFactor` is reset by Chromium on each
+  // navigation, and the renderer's own one-shot call on first config load
+  // races the initial commit and is dropped -- so on a cold start the UI
+  // opened unscaled even though the setting was stored. This is the
+  // authoritative re-apply (ADR-0020).
+  if (getUiScaleFactor) {
+    window.webContents.on('did-finish-load', () => {
+      const factor = getUiScaleFactor();
+      if (Number.isFinite(factor) && factor > 0) {
+        window.webContents.setZoomFactor(factor);
+      }
+    });
+  }
   mainWindow = window;
 
   window.on('closed', () => {
@@ -771,7 +787,8 @@ if (!app.requestSingleInstanceLock()) {
     // now (ADR-0019). Keep a native menu only on macOS, where the menu bar
     // belongs to the system and its accelerators are expected there.
     Menu.setApplicationMenu(process.platform === 'darwin' ? buildApplicationMenu() : null);
-    createMainWindow();
+    const uiScaleFactor = (): number => UI_SCALE_FACTORS[appConfig.get().appearance.uiScale];
+    createMainWindow(uiScaleFactor);
 
     const shortcutRegistered = globalShortcut.register(CAPTURE_SHORTCUT, () => {
       void openTodayDailyNote(dailyNotes);
@@ -786,7 +803,7 @@ if (!app.requestSingleInstanceLock()) {
 
     app.on('activate', () => {
       if (BrowserWindow.getAllWindows().length === 0) {
-        createMainWindow();
+        createMainWindow(uiScaleFactor);
       }
     });
   });

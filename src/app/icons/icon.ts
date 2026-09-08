@@ -21,6 +21,7 @@ export type IconName =
   | 'chevron-right'
   | 'chevron-left'
   | 'chevron-down'
+  | 'chevrons-down-up'
   | 'settings'
   | 'window'
   | 'x'
@@ -44,6 +45,11 @@ const ICONS: Record<IconName, readonly IconShape[]> = {
   'chevron-right': [{ kind: 'path', d: 'm9 18 6-6-6-6' }],
   'chevron-left': [{ kind: 'path', d: 'm15 18-6-6 6-6' }],
   'chevron-down': [{ kind: 'path', d: 'm6 9 6 6 6-6' }],
+  // Lucide "chevrons-down-up" -- the Files panel "collapse all folders" button.
+  'chevrons-down-up': [
+    { kind: 'path', d: 'm7 20 5-5 5 5' },
+    { kind: 'path', d: 'm7 4 5 5 5-5' },
+  ],
   settings: [
     {
       kind: 'path',

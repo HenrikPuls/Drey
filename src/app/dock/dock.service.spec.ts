@@ -47,12 +47,26 @@ describe('DockService', () => {
     expect(dock.bottomIds()).toEqual(['entry']);
   });
 
-  it('flags dragActive between a header drag start and end', () => {
+  it('promotes a header press to a drag only past the movement threshold', () => {
     const dock = make();
     expect(dock.dragActive()).toBe(false);
-    dock.startPanelDrag('calendar', new MouseEvent('mousedown', { button: 0 }));
+    dock.beginHeaderPress('calendar', 'Calendar', new MouseEvent('mousedown', { button: 0 }));
+    // A tiny jitter is still a click, not a drag.
+    window.dispatchEvent(new MouseEvent('mousemove', { clientX: 2, clientY: 1 }));
+    expect(dock.dragActive()).toBe(false);
+    // Past the threshold it becomes a drag.
+    window.dispatchEvent(new MouseEvent('mousemove', { clientX: 40, clientY: 30 }));
     expect(dock.dragActive()).toBe(true);
     window.dispatchEvent(new MouseEvent('mouseup'));
+    expect(dock.dragActive()).toBe(false);
+  });
+
+  it('treats a header press with no movement as a collapse toggle', () => {
+    const dock = make();
+    expect(dock.collapsed('calendar')).toBe(false);
+    dock.beginHeaderPress('calendar', 'Calendar', new MouseEvent('mousedown', { button: 0 }));
+    window.dispatchEvent(new MouseEvent('mouseup'));
+    expect(dock.collapsed('calendar')).toBe(true);
     expect(dock.dragActive()).toBe(false);
   });
 
