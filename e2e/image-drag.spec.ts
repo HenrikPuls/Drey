@@ -67,4 +67,26 @@ test.describe('drag a vault file into the editor', () => {
       .poll(() => fs.readFileSync(path.join(vaultDir, 'main.md'), 'utf-8'))
       .toContain('reusable **snippet** text');
   });
+
+  test('an OS text file dropped from the file manager is inlined', async ({ page, vaultDir }) => {
+    await openNote(page, vaultDir, 'target.md', '# target\n\n');
+    await page.locator('app-editor .cm-content').click();
+
+    await page.evaluate(() => {
+      const el = document.querySelector('app-editor .cm-content')!;
+      const dt = new DataTransfer();
+      dt.items.add(new File(['- one\n- two\n'], 'checklist.md', { type: 'text/plain' }));
+      for (const name of ['dragover', 'drop'] as const) {
+        const event = new DragEvent(name, { bubbles: true, cancelable: true, clientX: 60, clientY: 60 });
+        Object.defineProperty(event, 'dataTransfer', { value: dt });
+        el.dispatchEvent(event);
+      }
+    });
+
+    await expect(page.locator('app-editor .cm-content')).toContainText('two');
+    await page.keyboard.press('ControlOrMeta+s');
+    await expect
+      .poll(() => fs.readFileSync(path.join(vaultDir, 'target.md'), 'utf-8'))
+      .toContain('- one\n- two');
+  });
 });

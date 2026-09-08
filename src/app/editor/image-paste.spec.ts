@@ -212,4 +212,45 @@ describe('imagePaste', () => {
       expect(view.state.doc.toString()).toBe('# note\n');
     });
   });
+
+  describe('OS text file drop', () => {
+    it('inlines a dropped text file raw', async () => {
+      const file = {
+        type: 'text/plain',
+        name: 'notes.txt',
+        size: 12,
+        text: async () => 'dropped text',
+      } as unknown as File;
+      view = mount('# note\n', { save: async () => 'x' });
+
+      fireDrop(view, transfer([file]));
+      await settle();
+
+      const text = view.state.doc.toString();
+      expect(text).toContain('dropped text');
+      expect(text).not.toContain('![](');
+    });
+
+    it('refuses a dropped text file over 2 MB without reading it', async () => {
+      const errors: string[] = [];
+      let read = false;
+      const file = {
+        type: 'text/plain',
+        name: 'huge.log',
+        size: 2 * 1024 * 1024 + 1,
+        text: async () => {
+          read = true;
+          return '';
+        },
+      } as unknown as File;
+      view = mount('# note\n', { save: async () => 'x', onError: (m) => errors.push(m) });
+
+      fireDrop(view, transfer([file]));
+      await settle();
+
+      expect(read).toBe(false);
+      expect(errors[0]).toContain('2 MB');
+      expect(view.state.doc.toString()).toBe('# note\n');
+    });
+  });
 });
