@@ -22,6 +22,22 @@ h3 {
   color: var(--text-6);
 }
 
+/* Version facts on the left, the app mark on the right. */
+.app-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 20px;
+}
+
+.app-mark {
+  flex: none;
+  width: 96px;
+  height: 96px;
+  border-radius: var(--radius);
+  object-fit: cover;
+}
+
 .facts {
   display: grid;
   grid-template-columns: 110px 1fr;

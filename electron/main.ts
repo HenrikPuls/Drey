@@ -424,6 +424,16 @@ let mainWindow: BrowserWindow | null = null;
  * the real file. `$`-anchored so a path that merely contains "app.asar"
  * earlier is not corrupted.
  */
+/**
+ * The BrowserWindow / taskbar icon. Packaged, it is an `extraResources`
+ * copy under `process.resourcesPath`; in dev it is `build/icon.ico` at the
+ * repo root (`__dirname` is `dist-electron/electron`). `.ico` is what
+ * Windows wants for a window icon.
+ */
+const windowIconPath = app.isPackaged
+  ? path.join(process.resourcesPath, 'icon.ico')
+  : path.join(__dirname, '..', '..', 'build', 'icon.ico');
+
 function stdioBridgePath(): string {
   const rel = ['dist-electron', 'electron', 'mcp', 'stdio-bridge.js'];
   if (app.isPackaged) {
@@ -519,6 +529,10 @@ function createMainWindow(): BrowserWindow {
   const window = new BrowserWindow({
     width: 1280,
     height: 800,
+    // The frameless window draws no title bar, but this still sets the
+    // taskbar / Alt-Tab icon (dev too, where there is no exe icon to
+    // inherit).
+    ...(fs.existsSync(windowIconPath) ? { icon: windowIconPath } : {}),
     // Matches the dark theme default (see CLAUDE.md, UI/UX Design) so the
     // window doesn't flash white while the renderer loads.
     backgroundColor: '#1b1a19',
