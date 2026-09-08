@@ -106,6 +106,18 @@ export class VaultService {
     return rel;
   }
 
+  /**
+   * Reads a vault file's text -- the Files-panel drag of a text file
+   * inlines its contents at the drop point (ADR-0028). Throws when the
+   * bridge is missing so the caller can show a notice.
+   */
+  async readTextFile(relativePath: string): Promise<string> {
+    if (typeof window === 'undefined' || typeof window.dreyApi?.readVaultFile !== 'function') {
+      throw new Error('Reading files needs the desktop app.');
+    }
+    return (await window.dreyApi.readVaultFile(relativePath)).content;
+  }
+
   private async loadFileTree(): Promise<void> {
     this.isLoading.set(true);
     this.error.set(null);

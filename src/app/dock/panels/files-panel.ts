@@ -110,6 +110,21 @@ export class FilesPanel {
     }
   }
 
+  /**
+   * Drag a file onto the editor to insert it (ADR-0028): carry the vault
+   * path on a private type the editor's drop handler reads (an image gets
+   * linked in place, a text file's contents inlined). Set for any file;
+   * the editor decides what to do from the extension.
+   */
+  protected onFileDragStart(event: DragEvent, entry: VaultFileEntry): void {
+    if (entry.type !== 'file' || !event.dataTransfer) {
+      return;
+    }
+    event.dataTransfer.setData('application/x-drey-vault-path', entry.relativePath);
+    event.dataTransfer.setData('text/plain', entry.relativePath);
+    event.dataTransfer.effectAllowed = 'copyLink';
+  }
+
   protected openMenu(event: MouseEvent, entry?: VaultFileEntry): void {
     if (event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement) {
       return;

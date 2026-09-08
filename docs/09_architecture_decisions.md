@@ -36,6 +36,7 @@ package, a minor naming convention).
 | [0025](09_architecture_decisions/0025-mermaid-live-preview.md)                    | Mermaid diagrams in Live Preview (lazy `import('mermaid')`, block widget, Live-Preview-only)        | Accepted                       |
 | [0026](09_architecture_decisions/0026-image-viewer-and-lightbox.md)               | Image viewer: shared zoom/pan component, fullscreen lightbox, `kind: 'image'` tabs, `![alt\|W]` sizing | Accepted                       |
 | [0027](09_architecture_decisions/0027-window-dnd-navigation-guard.md)             | Window-level drag-and-drop navigation guard (capture-phase renderer service + `will-navigate`)     | Accepted                       |
+| [0028](09_architecture_decisions/0028-drag-drop-into-the-editor.md)               | Drag-and-drop into the editor: link vault images in place, inline text files, download web images (`vault:save-asset-from-url`) | Accepted |
 
 Decisions not yet written up (relevant spec already fixes them, but the
 ADR is deferred to the milestone that actually implements them, per

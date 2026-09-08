@@ -131,9 +131,11 @@
       <button
         type="button"
         class="node file"
+        draggable="true"
         [class.active]="editor.openPath() === entry.relativePath"
         [style.padding-left.px]="8 + depth * 13"
         (click)="onFileClick(entry)"
+        (dragstart)="onFileDragStart($event, entry)"
         (contextmenu)="openMenu($event, entry)"
       >
         <span class="bullet" aria-hidden="true"></span>

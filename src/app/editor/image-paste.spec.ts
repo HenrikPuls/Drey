@@ -145,4 +145,71 @@ describe('imagePaste', () => {
     expect(saved).toBe(false);
     expect(view.state.doc.toString()).toBe('# note\n');
   });
+
+  describe('Files-panel drag (application/x-drey-vault-path)', () => {
+    it('links a vault image in place, relative to the open note, without saving', async () => {
+      let saved = false;
+      view = mount('# note\n', {
+        save: async () => {
+          saved = true;
+          return 'x';
+        },
+        notePath: () => 'projects/foo.md',
+      });
+      view.dispatch({ selection: { anchor: view.state.doc.length } });
+
+      fireDrop(view, transfer([], { 'application/x-drey-vault-path': 'assets/logo.png' }));
+      await settle();
+
+      expect(saved).toBe(false);
+      expect(view.state.doc.toString()).toContain('![](../assets/logo.png)');
+      expect(view.state.doc.toString()).not.toContain('uploading:');
+    });
+
+    it('uses the angle-bracket form for a path with a space', async () => {
+      view = mount('# note\n', { save: async () => 'x', notePath: () => 'foo.md' });
+      view.dispatch({ selection: { anchor: view.state.doc.length } });
+      fireDrop(view, transfer([], { 'application/x-drey-vault-path': 'assets/my pic.png' }));
+      await settle();
+      expect(view.state.doc.toString()).toContain('![](<assets/my pic.png>)');
+    });
+
+    it('inlines a vault text file raw (no ![]() link, no placeholder)', async () => {
+      view = mount('a\nb\n', {
+        save: async () => 'x',
+        readTextFile: async (p) => `contents of ${p}\n`,
+      });
+
+      fireDrop(view, transfer([], { 'application/x-drey-vault-path': 'notes/todo.md' }));
+      await settle();
+
+      const text = view.state.doc.toString();
+      expect(text).toContain('contents of notes/todo.md');
+      expect(text).toContain('a\nb\n');
+      expect(text).not.toContain('![](');
+      expect(text).not.toContain('uploading:');
+    });
+
+    it('refuses a vault text file over 2 MB', async () => {
+      const errors: string[] = [];
+      view = mount('# note\n', {
+        save: async () => 'x',
+        readTextFile: async () => 'x'.repeat(2 * 1024 * 1024 + 1),
+        onError: (m) => errors.push(m),
+      });
+      fireDrop(view, transfer([], { 'application/x-drey-vault-path': 'big.log' }));
+      await settle();
+
+      expect(errors[0]).toContain('2 MB');
+      expect(view.state.doc.toString()).toBe('# note\n');
+    });
+
+    it('does nothing for a non-image, non-text vault file', async () => {
+      view = mount('# note\n', { save: async () => 'x', readTextFile: async () => 'nope' });
+      const event = fireDrop(view, transfer([], { 'application/x-drey-vault-path': 'data/x.bin' }));
+      await settle();
+      expect(event.defaultPrevented).toBe(true);
+      expect(view.state.doc.toString()).toBe('# note\n');
+    });
+  });
 });
