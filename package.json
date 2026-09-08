@@ -17,7 +17,7 @@
     "make:icon": "node scripts/make-icon.mjs",
     "prebuild": "npm run licenses:generate",
     "build": "npm run build:renderer && npm run build:electron",
-    "clean": "node -e \"const f=require('node:fs');for(const d of ['dist','dist-electron','release'])f.rmSync(d,{recursive:true,force:true})\"",
+    "clean": "node scripts/clean.mjs",
     "pack:dir": "npm run clean && npm run build && node node_modules/electron-builder/cli.js --win --dir",
     "pack": "npm run clean && npm run build && node node_modules/electron-builder/cli.js --win",
     "electron": "node scripts/run-electron.js",
