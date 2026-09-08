@@ -120,6 +120,33 @@ describe('normalizeAppConfig', () => {
     expect(user[0]).toMatchObject({ id: 'u2', name: 'Reformat', builtin: null });
   });
 
+  it('normalises the entry-template section: built-ins re-injected, activeId falls back', () => {
+    const fresh = normalizeAppConfig({});
+    expect(fresh.entry.templates.map((t) => t.builtin)).toEqual(['classic', 'ruled']);
+    expect(fresh.entry.activeId).toBe('builtin:entry-classic');
+
+    const edited = normalizeAppConfig({
+      entry: {
+        activeId: 'builtin:entry-ruled',
+        templates: [
+          { id: 'builtin:entry-classic', name: 'Klassisch', pattern: '## {{time}}' },
+          { id: 'u1', name: '', pattern: 'x' }, // half-written -> dropped
+          { id: 'u2', name: 'Mine', pattern: '{{content}}' },
+        ],
+      },
+    });
+    const classic = edited.entry.templates.find((t) => t.builtin === 'classic');
+    expect(classic).toMatchObject({ name: 'Klassisch', pattern: '## {{time}}' });
+    expect(edited.entry.templates.map((t) => t.builtin)).toEqual(['classic', 'ruled', null]);
+    expect(edited.entry.templates.filter((t) => t.builtin === null)[0]).toMatchObject({ id: 'u2' });
+    expect(edited.entry.activeId).toBe('builtin:entry-ruled');
+
+    // An activeId that names no template falls back to the classic id.
+    expect(normalizeAppConfig({ entry: { activeId: 'gone', templates: [] } }).entry.activeId).toBe(
+      'builtin:entry-classic',
+    );
+  });
+
   it('fills the assistant and spellcheck sections from defaults', () => {
     const config = normalizeAppConfig({});
     expect(config.assistant).toEqual({ autoSummaryDefault: true });

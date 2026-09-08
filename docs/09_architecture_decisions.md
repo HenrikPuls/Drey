@@ -30,6 +30,7 @@ package, a minor naming convention).
 | [0019](09_architecture_decisions/0019-movable-dock-panels-and-layout-state.md)    | Movable dock panels, a custom titlebar, and one layout state                                        | Accepted                       |
 | [0020](09_architecture_decisions/0020-app-wide-appearance-accent-and-ui-scale.md) | App-wide Appearance: highlight colour (`--accent` + `color-mix` tints) + UI scale (`setZoomFactor`) | Accepted                       |
 | [0021](09_architecture_decisions/0021-mcp-vault-server.md)                        | MCP vault server (hand-rolled JSON-RPC, stdio + HTTP) + assistant vault tool use                    | Accepted                       |
+| [0022](09_architecture_decisions/0022-configurable-entry-templates.md)            | Configurable "Add entry" templates (placeholder patterns, built-in re-injection, parser tweak)      | Accepted                       |
 
 Decisions not yet written up (relevant spec already fixes them, but the
 ADR is deferred to the milestone that actually implements them, per

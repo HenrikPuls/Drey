@@ -117,6 +117,63 @@ export interface ActionTrigger {
   enabled: boolean;
 }
 
+/**
+ * Settings category "Add entry": the Markdown block the capture drawer
+ * appends is a chosen template. Placeholders: `{{time}}`, `{{date}}`,
+ * `{{datetime}}`, `{{title}}` (empty or ` — <Topic>`), `{{tags}}` (empty
+ * or `#a #b`), `{{content}}` (the body). `shared/entry-compose.ts`
+ * substitutes them and collapses blank lines.
+ */
+export interface EntryTemplate {
+  id: string;
+  name: string;
+  pattern: string;
+  /** `'classic'` / `'ruled'` for a built-in (editable, not deletable); `null` otherwise. */
+  builtin: 'classic' | 'ruled' | null;
+}
+
+export interface EntryConfig {
+  templates: EntryTemplate[];
+  /** Id of the template the drawer uses; falls back to the classic built-in. */
+  activeId: string;
+}
+
+/** Reproduces the pre-template output: heading, body, tag line. */
+export const CLASSIC_ENTRY_PATTERN = '## {{time}}{{title}}\n{{content}}\n{{tags}}';
+/** Heading, a rule, the tags, then the body. */
+export const RULED_ENTRY_PATTERN = '## {{time}}{{title}}\n---\n{{tags}}\n\n{{content}}';
+
+export const BUILTIN_ENTRY_TEMPLATE_IDS: Record<'classic' | 'ruled', string> = {
+  classic: 'builtin:entry-classic',
+  ruled: 'builtin:entry-ruled',
+};
+
+function classicEntryTemplate(): EntryTemplate {
+  return {
+    id: BUILTIN_ENTRY_TEMPLATE_IDS.classic,
+    name: 'Classic',
+    pattern: CLASSIC_ENTRY_PATTERN,
+    builtin: 'classic',
+  };
+}
+
+function ruledEntryTemplate(): EntryTemplate {
+  return {
+    id: BUILTIN_ENTRY_TEMPLATE_IDS.ruled,
+    name: 'Ruled',
+    pattern: RULED_ENTRY_PATTERN,
+    builtin: 'ruled',
+  };
+}
+
+/** The pattern of the active template, or the classic pattern as a floor. */
+export function activeEntryPattern(entry: EntryConfig): string {
+  return (
+    entry.templates.find((template) => template.id === entry.activeId)?.pattern ??
+    CLASSIC_ENTRY_PATTERN
+  );
+}
+
 /** Settings category "KI-Assistent": the note assistant panel's defaults. */
 export interface AssistantConfig {
   /**
@@ -399,6 +456,7 @@ export interface AppConfig {
   editor: EditorConfig;
   appearance: AppearanceConfig;
   mcp: McpConfig;
+  entry: EntryConfig;
   actions: {
     templates: ActionTemplate[];
     triggers: ActionTrigger[];
@@ -503,6 +561,10 @@ export const DEFAULT_APP_CONFIG: AppConfig = {
   },
   appearance: { ...DEFAULT_APPEARANCE },
   mcp: { ...DEFAULT_MCP_CONFIG },
+  entry: {
+    templates: [classicEntryTemplate(), ruledEntryTemplate()],
+    activeId: BUILTIN_ENTRY_TEMPLATE_IDS.classic,
+  },
   actions: {
     templates: [noteSummaryTemplate(), searchSummaryTemplate(), autotagTemplate()],
     triggers: [],
@@ -700,6 +762,58 @@ function normalizeTemplates(raw: unknown): ActionTemplate[] {
 }
 
 /**
+ * Rebuilds the entry-template list, same rule as `normalizeTemplates`:
+ * both built-ins present exactly once (keeping the user's `name` /
+ * `pattern` edits, matched by id), then well-formed user templates.
+ */
+function normalizeEntryTemplates(raw: unknown): EntryTemplate[] {
+  const list = Array.isArray(raw) ? raw : [];
+  const byId = new Map<string, Record<string, unknown>>();
+  for (const item of list) {
+    if (item && typeof item === 'object' && typeof (item as { id?: unknown }).id === 'string') {
+      byId.set((item as { id: string }).id, item as Record<string, unknown>);
+    }
+  }
+
+  const out: EntryTemplate[] = [];
+  for (const base of [classicEntryTemplate(), ruledEntryTemplate()]) {
+    const saved = byId.get(base.id);
+    byId.delete(base.id);
+    out.push(
+      saved
+        ? {
+            ...base,
+            name: str(saved['name'], base.name),
+            pattern: str(saved['pattern'], base.pattern),
+          }
+        : base,
+    );
+  }
+
+  for (const saved of byId.values()) {
+    const name = str(saved['name'], '').trim();
+    const pattern = str(saved['pattern'], '');
+    if (!name || !pattern) {
+      continue;
+    }
+    out.push({ id: str(saved['id'], ''), name, pattern, builtin: null });
+  }
+  return out;
+}
+
+function normalizeEntryConfig(raw: unknown): EntryConfig {
+  const source = (raw ?? {}) as Record<string, unknown>;
+  const templates = normalizeEntryTemplates(source['templates']);
+  const activeId = optionalText(source['activeId']) ?? '';
+  return {
+    templates,
+    activeId: templates.some((template) => template.id === activeId)
+      ? activeId
+      : BUILTIN_ENTRY_TEMPLATE_IDS.classic,
+  };
+}
+
+/**
  * Keeps every well-formed trigger whose `templateId` still resolves. A
  * missing `triggers` key (a fresh config) seeds the two built-in manual
  * triggers; an explicit empty array is respected (the user removed them).
@@ -745,6 +859,7 @@ export function normalizeAppConfig(raw: unknown): AppConfig {
     editor: normalizeEditor(source['editor']),
     appearance: normalizeAppearance(source['appearance']),
     mcp: normalizeMcp(source['mcp']),
+    entry: normalizeEntryConfig(source['entry']),
     actions: {
       templates,
       triggers: normalizeTriggers(actionsSource['triggers'], templates),

@@ -2,6 +2,7 @@ import * as fs from 'node:fs';
 import * as fsp from 'node:fs/promises';
 import * as path from 'node:path';
 import { dailyPathFor } from '../shared/daily';
+import { substitutePlaceholders } from '../shared/placeholders';
 import { formatDate, formatDateTime, formatTime } from '../shared/timestamp';
 import { VaultManager } from './vault-manager';
 
@@ -135,15 +136,12 @@ export class DailyNoteManager {
   }
 }
 
-/** Replaces `{{key}}` for the known keys; leaves any unknown token as-is. */
+/** Substitutes the daily-note placeholders. `{{title}}` is the date here. */
 function applyPlaceholders(template: string, now: Date): string {
-  const values: Record<string, string> = {
+  return substitutePlaceholders(template, {
     date: formatDate(now),
     time: formatTime(now),
     datetime: formatDateTime(now),
     title: formatDate(now),
-  };
-  return template.replace(/\{\{(\w+)\}\}/g, (token, key: string) =>
-    Object.prototype.hasOwnProperty.call(values, key) ? values[key] : token,
-  );
+  });
 }

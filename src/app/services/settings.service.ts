@@ -4,14 +4,18 @@ import {
   ActionTemplate,
   AppConfig,
   AssistantConfig,
+  BUILTIN_ENTRY_TEMPLATE_IDS,
+  CLASSIC_ENTRY_PATTERN,
   CustomDictionary,
   DEFAULT_APPEARANCE,
   DEFAULT_EDITOR_FONT_FAMILY,
+  EntryTemplate,
   LlmConfig,
   LlmEndpoint,
   McpConfig,
   SpellcheckConfig,
   UiScale,
+  activeEntryPattern,
   clampEditorFontScale,
   normalizeAccent,
   normalizeAppConfig,
@@ -93,6 +97,12 @@ export class SettingsService {
   readonly appearanceAccent = computed<string>(
     () => this._config()?.appearance.accent ?? DEFAULT_APPEARANCE.accent,
   );
+
+  /** The active "Add entry" template's pattern. Persisted config, never the draft. */
+  readonly activeEntryPattern = computed<string>(() => {
+    const config = this._config();
+    return config ? activeEntryPattern(config.entry) : CLASSIC_ENTRY_PATTERN;
+  });
 
   /** Manual-trigger actions, for the editor's run menu. Persisted config only. */
   readonly manualActions = computed<ResolvedAction[]>(() => {
@@ -406,6 +416,54 @@ export class SettingsService {
       config.actions.triggers = config.actions.triggers.filter(
         (trigger) => trigger.templateId !== templateId,
       );
+    });
+  }
+
+  // -- "Add entry" templates (draft) -------------------------------------
+
+  /** Picks which entry template the drawer uses. */
+  setActiveEntryTemplate(id: string): void {
+    this.mutate((config) => {
+      if (config.entry.templates.some((template) => template.id === id)) {
+        config.entry.activeId = id;
+      }
+    });
+  }
+
+  /** Adds a blank user template (seeded with the Classic pattern) and returns its id. */
+  addEntryTemplate(): string {
+    const id = `entry-template:${uid()}`;
+    this.mutate((config) => {
+      config.entry.templates.push({
+        id,
+        name: 'New template',
+        pattern: CLASSIC_ENTRY_PATTERN,
+        builtin: null,
+      });
+    });
+    return id;
+  }
+
+  updateEntryTemplate(id: string, patch: Partial<Pick<EntryTemplate, 'name' | 'pattern'>>): void {
+    this.mutate((config) => {
+      const template = config.entry.templates.find((t) => t.id === id);
+      if (template) {
+        Object.assign(template, patch);
+      }
+    });
+  }
+
+  /** User templates only; if it was active, the selection falls back to Classic. */
+  removeEntryTemplate(id: string): void {
+    this.mutate((config) => {
+      const template = config.entry.templates.find((t) => t.id === id);
+      if (!template || template.builtin) {
+        return;
+      }
+      config.entry.templates = config.entry.templates.filter((t) => t.id !== id);
+      if (config.entry.activeId === id) {
+        config.entry.activeId = BUILTIN_ENTRY_TEMPLATE_IDS.classic;
+      }
     });
   }
 

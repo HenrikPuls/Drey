@@ -6,6 +6,7 @@ import { SettingsAbout } from './about/settings-about';
 import { SettingsActions } from './actions/settings-actions';
 import { SettingsAppearance } from './appearance/settings-appearance';
 import { SettingsAssistant } from './assistant/settings-assistant';
+import { SettingsEntry } from './entry/settings-entry';
 import { SettingsLlm } from './llm/settings-llm';
 import { SettingsMcp } from './mcp/settings-mcp';
 import { SettingsSpellcheck } from './spellcheck/settings-spellcheck';
@@ -44,6 +45,7 @@ export class Settings {
       hint: 'Note summary panel',
       component: SettingsAssistant,
     },
+    { id: 'entry', label: 'Add entry', hint: 'Append template', component: SettingsEntry },
     {
       id: 'spellcheck',
       label: 'Spelling',

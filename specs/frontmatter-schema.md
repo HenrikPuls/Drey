@@ -77,6 +77,26 @@ Kurzes Sync mit Team zu Rollout-Plan, Risiken bei DB-Migration besprochen.
 - Both the topic and the meta line are optional and omitted entirely when
   empty, so an entry with neither is byte-identical to a plain `## HH:mm`
   block. Composition lives in `shared/entry-compose.ts`.
+- The exact layout is a **template** (`AppConfig.entry`, Settings → Add
+  entry) with `{{time}} {{date}} {{datetime}} {{title}} {{tags}}
+  {{content}}` placeholders. The example above is the built-in **Classic**
+  template. The built-in **Ruled** template puts a `---` rule and the tag
+  line right under the heading:
+
+  ```markdown
+  ## 08:15 — Urlaub-Ideen
+  ---
+  #urlaub #planung
+
+  Mallorca oder Kroatien, Flüge im März checken.
+  ```
+
+  `parseDatedEntries` strips a leading rule line from an entry's `text`,
+  and a leading `#tag` line **only when a blank line follows it** (the
+  Ruled signature) — a Classic body that opens with a hashtag is left
+  alone. A custom template's first line must still be a `## HH:mm[ —
+  Topic]` heading or the entry is not recognised (no daily-note section
+  index, no routing).
 
 ### Inline `#tag`s
 

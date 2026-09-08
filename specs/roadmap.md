@@ -158,11 +158,16 @@ below).
   single **Tags** chip row, the Markdown text (the same editor component
   as the main editor, compact, with Live Preview and `#tag` autocomplete),
   inline spellcheck, and the Autotag button.
-  - The appended block is `## HH:mm` (or `## HH:mm — <Topic>` when a topic
-    is given), followed by the text and a meta line listing the assigned
-    `#tag`s; empty parts are omitted, so an entry with neither topic nor
-    tags is byte-identical to the plain `## HH:mm` form. Appending saves
-    immediately.
+  - The appended block is a **chosen template** (`AppConfig.entry`,
+    Settings → Add entry) with `{{time}} {{date}} {{datetime}} {{title}}
+    {{tags}} {{content}}` substituted; blank lines collapse and a trailing
+    rule is dropped, so an entry with nothing filled in stays
+    byte-identical to a bare `## HH:mm`. Two built-ins ship —
+    **Classic** (`## HH:mm[ — Topic]` / text / `#tag` line, the old fixed
+    shape) and **Ruled** (heading / `---` / `#tags` / body) — plus the
+    user's own; one is active. `parseDatedEntries` strips a leading rule
+    (and, on the Ruled signature, a leading tag line) so entries still
+    round-trip. Appending saves immediately.
   - **Inline spellcheck**, active from the first word typed — in both this
     text field and the document editor: misspelled words get a red wavy
     underline, clicking one offers corrections or an "Add to dictionary"

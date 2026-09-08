@@ -59,6 +59,8 @@ export interface NewEntryRequest {
   readonly id: number;
   readonly text?: string;
   readonly draft?: EntryDraft;
+  /** The active entry template's pattern -- set only with `draft`. */
+  readonly pattern?: string;
 }
 
 /** `localStorage` key for editor-wide preferences. */
@@ -225,22 +227,24 @@ export class EditorService {
     this.insertRequest.update((r) => ({ id: r.id + 1, text }));
   }
 
-  /** The entry drawer's "Zum Dokument hinzufügen". */
-  requestEntryFromDraft(draft: EntryDraft): void {
-    this.newEntryRequest.update((r) => ({ id: r.id + 1, draft }));
+  /** The entry drawer's "Add to document"; `pattern` is the active template. */
+  requestEntryFromDraft(draft: EntryDraft, pattern: string): void {
+    this.newEntryRequest.update((r) => ({ id: r.id + 1, draft, pattern }));
   }
 
   /**
-   * Pure: the CodeMirror change that appends `draft` to `currentText`.
-   * Lives here rather than in the component for the same reason
-   * `newDailyEntryEdit` does -- the component only dispatches it.
+   * Pure: the CodeMirror change that appends `draft` to `currentText`
+   * using entry-template `pattern`. Lives here rather than in the
+   * component for the same reason `newDailyEntryEdit` does -- the
+   * component only dispatches it.
    */
   entryDraftEdit(
     currentText: string,
     draft: EntryDraft,
+    pattern: string,
     now: Date = new Date(),
   ): { from: number; to: number; insert: string } {
-    return entryInsertion(currentText, draft, now);
+    return entryInsertion(currentText, draft, pattern, now);
   }
 
   /**
