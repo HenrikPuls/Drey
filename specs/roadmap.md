@@ -188,6 +188,33 @@ below).
     user ends the wait, not a fixed timeout.
   - The thread is persisted next to the note as `.{name}.chat.json`,
     never into the note itself.
+  - **Ask carries the running conversation.** A follow-up question sends
+    the note's earlier cards as chat turns (`historyForAsk`, capped at
+    ~12), so the model answers in context rather than re-reading the
+    document cold each time.
+  - Each answer / summary card has an **insert-into-note** arrow beside
+    Copy — drops the card text into the editor at the caret.
+
+- **Vault MCP server ([ADR-0021](../docs/09_architecture_decisions/0021-mcp-vault-server.md)):**
+  a local Model Context Protocol server exposing three tools over the
+  active vault — `vault_search` (tags + free text + an optional **regex**
+  filter, or a standalone whole-vault regex line scan), `vault_read`,
+  `vault_write` (overwrite / append). Hand-rolled JSON-RPC (no SDK
+  dependency), two transports: a bundled **stdio bridge** script for
+  desktop clients and an **opt-in localhost HTTP endpoint** for network
+  clients. A `vault_write` is shown in the shared diff dialog for
+  confirmation before it touches disk, unless **"YOLO mode"** (Settings →
+  MCP, off by default) is on. The built-in assistant uses the same tool
+  set during Ask when the server is enabled (an OpenAI tool-calling loop
+  in `LmStudioClient`, with a capability fallback). Settings gains an
+  **MCP** category (enable switch, HTTP port, YOLO switch, client config
+  snippet).
+
+- **"Add entry" is a dock panel.** The capture drawer is no longer a
+  fixed strip: it is a movable/collapsible panel whose default home is a
+  new **bottom dock** (a band under the editor). See
+  [ADR-0019](../docs/09_architecture_decisions/0019-movable-dock-panels-and-layout-state.md)'s
+  "Later change".
 
 - **Manual refresh:** there is no file watcher. A refresh button in the
   sidebar re-reads the vault from disk and rebuilds the tag index; the

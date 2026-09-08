@@ -99,3 +99,10 @@ applying one action's result never fires the on-save triggers again.
   is gone — [ADR-0017](0017-tags-as-labels-and-section-index.md) removed
   master documents. The surviving summariser is the note assistant's
   per-note "Summarise note", [ADR-0012](0012-note-assistant-sidecar-thread.md).)_
+- _(Update: the `'document'` preview is now an **aligned split diff**, not
+  two raw before/after dumps. `lineDiff` rows are context-collapsed
+  (`pad 4`) and then zipped into two-column rows — removed lines left,
+  added lines right, `empty` placeholder cells keeping every row's two
+  halves structurally identical in size. The `'localized'` inline diff is
+  unchanged. Same `ConfirmationRequest` shape; also reused by
+  [ADR-0021](0021-mcp-vault-server.md) for MCP `vault_write` confirmations.)_
