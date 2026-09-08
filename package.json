@@ -51,6 +51,7 @@
     "dictionary-de": "^3.0.0",
     "dictionary-en": "^4.0.0",
     "markdown-it": "^15.0.1",
+    "mermaid": "^11.17.2",
     "nspell": "^2.1.5",
     "rxjs": "~7.8.0",
     "tslib": "^2.3.0",

@@ -89,6 +89,34 @@ export const livePreviewTheme = EditorView.theme(
       fontStyle: 'italic',
     },
 
+    // A rendered ```mermaid diagram (ADR-0025).
+    '.lp-mermaid': {
+      display: 'block',
+      margin: '6px 0',
+      padding: '10px 12px',
+      background: 'var(--bg-bar)',
+      borderRadius: 'var(--radius)',
+      overflowX: 'auto',
+      textAlign: 'center',
+    },
+    '.lp-mermaid svg': {
+      maxWidth: '100%',
+      height: 'auto',
+    },
+    '.lp-mermaid-pending': {
+      color: 'var(--text-faint)',
+      fontStyle: 'italic',
+      fontSize: '0.9em',
+    },
+    '.lp-mermaid-error': {
+      margin: '0',
+      textAlign: 'left',
+      whiteSpace: 'pre-wrap',
+      fontFamily: 'var(--font-mono)',
+      fontSize: '0.85em',
+      color: 'var(--danger, #e06c75)',
+    },
+
     '.lp-table': {
       padding: '4px 0',
       cursor: 'default',
@@ -129,7 +157,7 @@ export const livePreviewTheme = EditorView.theme(
     },
 
     // The hover `✎` on rendered blocks: jump to the source (Obsidian-style).
-    '.lp-table, .lp-html': {
+    '.lp-table, .lp-html, .lp-mermaid': {
       position: 'relative',
     },
     '.lp-edit': {
@@ -146,7 +174,7 @@ export const livePreviewTheme = EditorView.theme(
       opacity: '0',
       transition: 'opacity 0.12s ease',
     },
-    '.lp-table:hover .lp-edit, .lp-html:hover .lp-edit': {
+    '.lp-table:hover .lp-edit, .lp-html:hover .lp-edit, .lp-mermaid:hover .lp-edit': {
       opacity: '1',
     },
     '.lp-edit:hover': {

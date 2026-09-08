@@ -333,12 +333,15 @@ src/                Angular renderer (standalone components, esbuild via Angular
                          suggestions replace the word on click.
       live-preview/     ADR-0009. conceal.ts: ViewPlugin hiding syntax markers away
                          from the selection (+ bullet/checkbox/rule widgets, quote/
-                         code/frontmatter line classes). block-render.ts: StateField
-                         rendering tables (block widgets via markdown-it), images
-                         (resolveVaultImageUrl) and sanitized HTML blocks.
-                         sanitize-html.ts: allowlist HTML sanitizer. theme.ts:
-                         EditorView.theme for the lp-* classes. widgets.ts: the
-                         WidgetType classes.
+                         code/frontmatter line classes; yields a ```mermaid fence to
+                         block-render). block-render.ts: StateField rendering tables
+                         (block widgets via markdown-it), images (resolveVaultImageUrl),
+                         sanitized HTML blocks, and ```mermaid fences (MermaidWidget,
+                         ADR-0025). fenced-code.ts: pure fenceLang(). sanitize-html.ts:
+                         allowlist HTML sanitizer. theme.ts: EditorView.theme for the
+                         lp-* classes. widgets.ts: the WidgetType classes, incl.
+                         MermaidWidget (lazy import('mermaid'), async render, inline
+                         error box).
       image-paste.ts    ADR-0024. imagePaste(): CodeMirror domEventHandlers for
                          paste/drop of an image -- saves the bytes via
                          VaultService.saveAsset (vault:save-asset IPC) into the

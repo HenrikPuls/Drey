@@ -2,6 +2,7 @@ import { ensureSyntaxTree, syntaxTree } from '@codemirror/language';
 import { EditorState, Range } from '@codemirror/state';
 import { Decoration, DecorationSet, EditorView, ViewPlugin, ViewUpdate } from '@codemirror/view';
 import { frontmatterEnd } from '../markdown-frontmatter';
+import { fenceLang } from './fenced-code';
 import { BulletWidget, CheckboxWidget, HrWidget } from './widgets';
 
 /**
@@ -216,6 +217,12 @@ export function concealDecorations(
             const lastLine = doc.lineAt(node.to);
             const revealed = touches(node.from, node.to);
             const info = node.node.getChild('CodeInfo');
+            // A concealed ```mermaid fence is owned whole by block-render.ts
+            // (the rendered diagram widget). Adding line backgrounds / hiding
+            // its fence lines here would fight that block replacement.
+            if (!revealed && info && fenceLang(state.sliceDoc(info.from, info.to)) === 'mermaid') {
+              return false;
+            }
             // The language badge shows only while the fence is concealed --
             // the raw ```lang already says it otherwise.
             const lang = !revealed && info ? state.sliceDoc(info.from, info.to).trim() : '';

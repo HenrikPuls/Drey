@@ -143,7 +143,10 @@ below).
 - **Editor:** one CodeMirror 6 view with a true **Live Preview** mode
   (Obsidian-/Typora-style): syntax markers conceal everywhere except
   around the selection, fenced code is highlighted via nested language
-  parsing, tables/images render as widgets, task markers are clickable
+  parsing, tables/images render as widgets, a ` ```mermaid ` fence
+  renders as a diagram
+  ([ADR-0025](../docs/09_architecture_decisions/0025-mermaid-live-preview.md);
+  the cursor inside it reveals the raw source), task markers are clickable
   checkboxes (a checked `- [x]` line's text is struck through), inline
   `#tag`s render as pills; the cursor sits directly in the rendered
   document. A `⋯` menu on the chrome switches to a raw
