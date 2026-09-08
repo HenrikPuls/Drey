@@ -1,31 +1,46 @@
 import { Extension } from '@codemirror/state';
 import { EditorView } from '@codemirror/view';
 import { imageExtension } from '../../../shared/asset-name';
+import { noteRelativeLink } from '../../../shared/note-link';
+import { textExtension } from '../../../shared/text-extension';
 
 /**
- * Paste / drop an image into the editor: the bytes are saved into the
- * vault (ADR-0024) and an `![](attachments/…)` link is inserted at the
- * caret (or the drop point). One CodeMirror extension, so every surface
- * that mounts the shared `MarkdownSurface` with `imageCapture` on -- the
- * full-page editor and the "Add entry" drawer -- gets it; the note
- * assistant composer leaves it off.
+ * Paste / drop into the editor (ADR-0024, ADR-0027, ADR-0028). One
+ * CodeMirror extension, mounted on every surface that sets
+ * `imageCapture` -- the full-page editor and the "Add entry" drawer.
+ * Handles:
  *
- * While the save is in flight a `![](uploading:<id>)` placeholder holds
- * the spot, so concurrent typing and multi-image pastes stay correct; it
- * is swapped for the real link (or removed on failure) by a plain text
- * match once the promise settles.
+ * - an **image file** (paste, OS drag) -> bytes saved into the vault's
+ *   per-note `attachments/`, `![](attachments/…)` inserted;
+ * - a **vault file** dragged from the Files panel
+ *   (`application/x-drey-vault-path`) -> an image is linked in place
+ *   (`![](../relative/path)`, no copy), a text file's contents are
+ *   inserted raw;
+ * - a **web image** dragged from a browser -> downloaded via `saveFromUrl`
+ *   and inserted with a visible `[Source](<url>)` line beneath it.
+ *
+ * A save that has to await shows a `![](uploading:<id>)` placeholder that
+ * is swapped for the real link (or rolled back on failure) by a plain
+ * text match.
  */
 export interface ImagePasteConfig {
-  /**
-   * Persists the bytes and resolves to the path to put inside `![](...)`
-   * -- note-relative, so the existing image resolver picks it up. Rejects
-   * when there is no vault / no desktop bridge; the placeholder is then
-   * removed and `onError` is called.
-   */
+  /** Persists raw bytes; resolves to the path for `![](...)`. Rejects with a user message. */
   save: (bytes: Uint8Array, ext: string) => Promise<string>;
-  /** Shown to the user when a save fails (e.g. no vault open). */
+  /** The open document's vault-relative path, for `noteRelativeLink`. */
+  notePath?: () => string | null;
+  /** Reads a vault file's text (Files-panel drag of a text file). */
+  readTextFile?: (vaultPath: string) => Promise<string>;
+  /** Downloads a web image into the vault; resolves to the path for `![](...)`. */
+  saveFromUrl?: (url: string) => Promise<string>;
+  /** Shown to the user when a save / read fails, or a file is too large. */
   onError?: (message: string) => void;
 }
+
+/** The DataTransfer type the Files panel sets on `dragstart`. */
+export const VAULT_PATH_DT_TYPE = 'application/x-drey-vault-path';
+
+/** Largest text file whose contents we inline on drop (case D). */
+export const TEXT_DROP_MAX = 2 * 1024 * 1024;
 
 /**
  * True for a dropped/pasted file that is an image -- by MIME (the fast
@@ -66,58 +81,113 @@ function imageFiles(data: DataTransfer | null): File[] {
 let placeholderSeq = 0;
 
 /**
- * Inserts one image at the current selection: a `![](uploading:…)`
- * placeholder on its own line (a leading newline is added when the caret
- * isn't at line start, a trailing one always), with the caret parked on
- * the line after it -- so the rendered image never sits fused to a
- * heading, and Live Preview shows it straight away rather than revealing
- * the raw link the caret would otherwise touch.
- *
- * The placeholder dispatch is synchronous up to the first `await`, so a
- * caller looping over several files just calls this repeatedly -- each run
- * sees the selection the previous one left.
+ * The change + resulting caret for inserting `text` on its own line at
+ * `at` -- a leading newline unless already at line start, a trailing one
+ * always, caret parked on the line after. Keeps a rendered image from
+ * fusing to a heading and stops Live Preview revealing the raw link the
+ * caret would otherwise touch.
  */
+function ownLineInsert(
+  view: EditorView,
+  at: number,
+  text: string,
+): { from: number; insert: string; anchor: number } {
+  const atLineStart = view.state.doc.lineAt(at).from === at;
+  const insert = `${atLineStart ? '' : '\n'}${text}\n`;
+  return { from: at, insert, anchor: at + insert.length };
+}
+
+/**
+ * Inserts a `![](uploading:<id>)` placeholder on its own line at the
+ * caret and returns the token + whether a leading newline was added
+ * (needed to roll the whole thing back on failure). Synchronous.
+ */
+function insertPlaceholder(view: EditorView): { token: string; atLineStart: boolean } {
+  const token = `![](uploading:${Date.now().toString(36)}-${(placeholderSeq++).toString(36)})`;
+  const at = view.state.selection.main.from;
+  const atLineStart = view.state.doc.lineAt(at).from === at;
+  const { from, insert, anchor } = ownLineInsert(view, at, token);
+  view.dispatch({ changes: { from, insert }, selection: { anchor } });
+  return { token, atLineStart };
+}
+
+/** Swaps a placeholder for `replacement`, or rolls it (and its newlines) back out. */
+function settlePlaceholder(
+  view: EditorView,
+  handle: { token: string; atLineStart: boolean },
+  replacement: string,
+): void {
+  const idx = view.state.doc.toString().indexOf(handle.token);
+  if (idx === -1) {
+    return; // the user deleted the placeholder while we waited
+  }
+  if (replacement === '') {
+    const from = Math.max(0, idx - (handle.atLineStart ? 0 : 1));
+    const to = Math.min(idx + handle.token.length + 1, view.state.doc.length);
+    view.dispatch({ changes: { from, to, insert: '' } });
+  } else {
+    view.dispatch({ changes: { from: idx, to: idx + handle.token.length, insert: replacement } });
+  }
+}
+
+/** Placeholder -> `await produce()` -> settle; `onError` + rollback on rejection. */
+async function resolveInserted(
+  view: EditorView,
+  produce: () => Promise<string>,
+  config: ImagePasteConfig,
+): Promise<void> {
+  const handle = insertPlaceholder(view);
+  let replacement: string;
+  try {
+    replacement = await produce();
+  } catch (error) {
+    config.onError?.(error instanceof Error ? error.message : String(error));
+    replacement = '';
+  }
+  settlePlaceholder(view, handle, replacement);
+}
+
+/** An image file (paste / OS drag): save the bytes, insert `![](attachments/…)`. */
 async function insertImage(view: EditorView, file: File, config: ImagePasteConfig): Promise<void> {
   const ext = imageExtension(file.type || file.name || '');
   if (!ext) {
     return;
   }
-  const token = `![](uploading:${Date.now().toString(36)}-${(placeholderSeq++).toString(36)})`;
+  await resolveInserted(
+    view,
+    async () => `![](${await config.save(new Uint8Array(await file.arrayBuffer()), ext)})`,
+    config,
+  );
+}
+
+/** A vault image dragged from the Files panel: link it in place, no copy. Synchronous. */
+function insertRelativeLink(view: EditorView, vaultPath: string, config: ImagePasteConfig): void {
+  const rel = noteRelativeLink(config.notePath?.() ?? '', vaultPath);
+  const link = /[ ()]/.test(rel) ? `![](<${rel}>)` : `![](${rel})`;
   const at = view.state.selection.main.from;
-  const atLineStart = view.state.doc.lineAt(at).from === at;
-  const inserted = `${atLineStart ? '' : '\n'}${token}\n`;
-  view.dispatch({
-    changes: { from: at, insert: inserted },
-    selection: { anchor: at + inserted.length },
-  });
+  const { from, insert, anchor } = ownLineInsert(view, at, link);
+  view.dispatch({ changes: { from, insert }, selection: { anchor } });
+}
 
-  let replacement: string;
-  try {
-    const bytes = new Uint8Array(await file.arrayBuffer());
-    replacement = `![](${await config.save(bytes, ext)})`;
-  } catch (error) {
-    config.onError?.(error instanceof Error ? error.message : String(error));
-    replacement = '';
+/** A text file (Files panel or OS drag): its contents, raw, at the drop point. */
+function insertText(view: EditorView, text: string, config: ImagePasteConfig): void {
+  if (text.length > TEXT_DROP_MAX) {
+    config.onError?.('That file is too large to drop in (over 2 MB).');
+    return;
   }
-
-  const idx = view.state.doc.toString().indexOf(token);
-  if (idx === -1) {
-    return; // the user deleted the placeholder while we waited
-  }
-  if (replacement === '') {
-    // Roll the whole placeholder insertion back out, newlines included.
-    const from = Math.max(0, idx - (atLineStart ? 0 : 1));
-    const to = Math.min(idx + token.length + 1, view.state.doc.length);
-    view.dispatch({ changes: { from, to, insert: '' } });
-  } else {
-    view.dispatch({ changes: { from: idx, to: idx + token.length, insert: replacement } });
-  }
+  const at = view.state.selection.main.from;
+  view.dispatch({ changes: { from: at, insert: text }, selection: { anchor: at + text.length } });
 }
 
 export function imagePaste(config: ImagePasteConfig): Extension {
+  const wantsDrop = (data: DataTransfer | null): boolean => {
+    const types = Array.from(data?.types ?? []);
+    return ['Files', VAULT_PATH_DT_TYPE].some((t) => types.includes(t));
+  };
+
   return EditorView.domEventHandlers({
     dragover(event, view) {
-      if (!view.state.readOnly && Array.from(event.dataTransfer?.types ?? []).includes('Files')) {
+      if (!view.state.readOnly && wantsDrop(event.dataTransfer)) {
         event.preventDefault(); // required for `drop` to fire
       }
       return false;
@@ -129,19 +199,34 @@ export function imagePaste(config: ImagePasteConfig): Extension {
       const data = event.dataTransfer;
       const files = imageFiles(data);
       const hasAnyFile = (data?.files.length ?? 0) > 0;
-      if (files.length === 0 && !hasAnyFile) {
+      const vaultPath = files.length ? '' : (data?.getData(VAULT_PATH_DT_TYPE) ?? '');
+      if (files.length === 0 && !hasAnyFile && !vaultPath) {
         return false; // a plain text / URL drag -- let CodeMirror handle it
       }
       event.preventDefault();
-      if (files.length === 0) {
-        return true; // a non-image file -- swallow it, don't let CM read it as text
-      }
+
       const at =
         view.posAtCoords({ x: event.clientX, y: event.clientY }) ?? view.state.selection.main.from;
       view.dispatch({ selection: { anchor: at } });
-      for (const file of files) {
-        void insertImage(view, file, config);
+
+      if (files.length) {
+        for (const file of files) {
+          void insertImage(view, file, config);
+        }
+      } else if (vaultPath) {
+        if (imageExtension(vaultPath)) {
+          insertRelativeLink(view, vaultPath, config);
+        } else if (textExtension(vaultPath) && config.readTextFile) {
+          const read = config.readTextFile;
+          void read(vaultPath)
+            .then((text) => insertText(view, text, config))
+            .catch((error: unknown) =>
+              config.onError?.(error instanceof Error ? error.message : String(error)),
+            );
+        }
       }
+      // A non-image, non-text file drop falls through here: swallowed
+      // (preventDefault'd), nothing inserted.
       return true;
     },
     paste(event, view) {

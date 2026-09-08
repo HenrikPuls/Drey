@@ -185,7 +185,11 @@ function parseImage(
   const altFrom = marks.length >= 2 ? marks[0].to : node.from;
   const altTo = marks.length >= 2 ? marks[1].from : node.from;
   const { alt, width, height } = parseImageEmbed(state.sliceDoc(altFrom, altTo));
-  return { alt, url: url ? state.sliceDoc(url.from, url.to) : null, width, height, altFrom, altTo };
+  // CommonMark angle-bracket destination `![](<path with spaces>)` -- the
+  // sliced `URL` node keeps the `<>`; drop them so the resolver sees the
+  // bare path.
+  const rawUrl = url ? state.sliceDoc(url.from, url.to).replace(/^<|>$/g, '') : null;
+  return { alt, url: rawUrl, width, height, altFrom, altTo };
 }
 
 export function livePreviewBlocks(config: LivePreviewConfig): Extension {
