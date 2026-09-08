@@ -1,5 +1,11 @@
 :host {
   display: block;
+  /* Cap the width and centre it so the day cells keep their proportions
+     in a wide dock instead of stretching into flat rectangles. Combined
+     with the dock giving the Calendar panel its content height
+     (`DockService.contentHeight`), the panel never grows taller either. */
+  max-width: 312px;
+  margin: 0 auto;
   padding: 0 12px 12px;
 }
 
@@ -81,7 +87,10 @@
 
 .day {
   position: relative;
-  height: 26px;
+  /* Square cells that scale with the (capped) panel width -- the
+     proportions stay constant instead of the day boxes flattening out. */
+  aspect-ratio: 1;
+  min-height: 22px;
   display: flex;
   align-items: center;
   justify-content: center;
