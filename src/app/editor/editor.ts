@@ -86,6 +86,8 @@ export class Editor implements AfterViewInit {
 
   /** Last `newEntryRequest` id this component has acted on. */
   private handledEntryRequest = 0;
+  /** Last `insertRequest` id this component has acted on. */
+  private handledInsertRequest = 0;
   /** Path whose text CodeMirror currently holds -- distinguishes a tab switch from an in-place reload. */
   private loadedPath: string | null = null;
   /**
@@ -129,6 +131,15 @@ export class Editor implements AfterViewInit {
       const request = this.editor.newEntryRequest();
       if (this.view) {
         this.applyNewEntryRequest(request);
+      }
+    });
+
+    // The note assistant's "insert into note" arrow: drop the card text in
+    // at the caret (replacing any selection).
+    effect(() => {
+      const request = this.editor.insertRequest();
+      if (this.view) {
+        this.applyInsertRequest(request);
       }
     });
 
@@ -276,6 +287,27 @@ export class Editor implements AfterViewInit {
     if (!request.text) {
       view.focus();
     }
+  }
+
+  /**
+   * Replaces the current selection (or inserts at the caret) with
+   * `request.text` and moves the caret past it -- the assistant's
+   * insert-into-note action. The buffer's `docChanged` handles the rest
+   * (dirty state, save with Ctrl+S); nothing is written automatically.
+   */
+  private applyInsertRequest(request: { id: number; text: string }): void {
+    const view = this.view;
+    if (!view || request.id === 0 || request.id === this.handledInsertRequest) {
+      return;
+    }
+    this.handledInsertRequest = request.id;
+    const range = view.state.selection.main;
+    view.dispatch({
+      changes: { from: range.from, to: range.to, insert: request.text },
+      selection: { anchor: range.from + request.text.length },
+      scrollIntoView: true,
+    });
+    view.focus();
   }
 
   /** Puts the caret at the start of 1-based `line` and scrolls it into view. */

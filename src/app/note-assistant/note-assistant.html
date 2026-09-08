@@ -54,6 +54,15 @@
             >
               <app-icon name="rotate-ccw" [size]="12" />
             </button>
+          } @else {
+            <button
+              type="button"
+              title="Insert into note"
+              [disabled]="assistant.notePath() === null"
+              (click)="assistant.insertIntoNote(card.text)"
+            >
+              <app-icon name="corner-down-left" [size]="12" />
+            </button>
           }
           <button
             type="button"

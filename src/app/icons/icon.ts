@@ -30,6 +30,7 @@ export type IconName =
   | 'sparkles'
   | 'more-horizontal'
   | 'copy'
+  | 'corner-down-left'
   | 'rotate-ccw'
   | 'refresh-cw'
   | 'folder'
@@ -66,7 +67,7 @@ const ICONS: Record<IconName, readonly IconShape[]> = {
     { kind: 'path', d: 'm5 12 7-7 7 7' },
     { kind: 'path', d: 'M12 19V5' },
   ],
-  // Lucide "sparkles" -- the assistant panel's show/hide toggle.
+  // Lucide "sparkles" -- the assistant / AI affordance.
   sparkles: [
     {
       kind: 'path',
@@ -89,6 +90,11 @@ const ICONS: Record<IconName, readonly IconShape[]> = {
       d: 'M10 8h10a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H10a2 2 0 0 1-2-2V10a2 2 0 0 1 2-2z',
     },
     { kind: 'path', d: 'M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2' },
+  ],
+  // Lucide "corner-down-left" -- "insert this card into the note".
+  'corner-down-left': [
+    { kind: 'path', d: 'M20 4v7a4 4 0 0 1-4 4H4' },
+    { kind: 'path', d: 'm9 10-5 5 5 5' },
   ],
   // Lucide "rotate-ccw" -- "restart chat from here".
   'rotate-ccw': [

@@ -208,6 +208,23 @@ export class EditorService {
     this.newEntryRequest.update((r) => ({ id: r.id + 1, text }));
   }
 
+  /**
+   * id + payload for "drop this text into the document editor at the
+   * caret" -- the note assistant's insert-into-note arrow. Same
+   * counter-not-payload pattern as `newEntryRequest`: the `Editor`
+   * component turns it into a CodeMirror change against live state,
+   * replacing the current selection.
+   */
+  readonly insertRequest = signal<{ id: number; text: string }>({ id: 0, text: '' });
+
+  /** The assistant card's "insert into note" button. No-op with no open document. */
+  requestInsertText(text: string): void {
+    if (text.trim() === '' || this.active() === null) {
+      return;
+    }
+    this.insertRequest.update((r) => ({ id: r.id + 1, text }));
+  }
+
   /** The entry drawer's "Zum Dokument hinzufügen". */
   requestEntryFromDraft(draft: EntryDraft): void {
     this.newEntryRequest.update((r) => ({ id: r.id + 1, draft }));
