@@ -136,6 +136,7 @@ export const livePreviewTheme = EditorView.theme(
 
     // A rendered ```mermaid diagram (ADR-0025).
     '.lp-mermaid': {
+      position: 'relative',
       display: 'block',
       margin: '6px 0',
       padding: '10px 12px',
@@ -143,6 +144,11 @@ export const livePreviewTheme = EditorView.theme(
       borderRadius: 'var(--radius)',
       overflowX: 'auto',
       textAlign: 'center',
+    },
+    // Hover lens -> open the diagram in the shared viewer. Shares the
+    // `.lp-lens` look (defined above); only the reveal trigger differs.
+    '.lp-mermaid:hover .lp-mermaid-lens': {
+      opacity: '1',
     },
     '.lp-mermaid svg': {
       maxWidth: '100%',

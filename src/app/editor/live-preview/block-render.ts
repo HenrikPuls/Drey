@@ -37,6 +37,12 @@ export interface LivePreviewConfig {
    * doesn't want the lens (none today) omits it.
    */
   onOpenImage?: (src: string) => void;
+  /**
+   * Opens a rendered mermaid diagram (handed over as a `data:` SVG URL) in
+   * the same viewer -- the hover lens on a diagram. Optional, like
+   * `onOpenImage`.
+   */
+  onZoomDiagram?: (dataUrl: string) => void;
 }
 
 const PARSE_BUDGET_MS = 50;
@@ -91,7 +97,10 @@ export function blockDecorations(state: EditorState, config: LivePreviewConfig):
           const from = doc.lineAt(node.from).from;
           const to = doc.lineAt(node.to).to;
           deco.push(
-            Decoration.replace({ widget: new MermaidWidget(body), block: true }).range(from, to),
+            Decoration.replace({
+              widget: new MermaidWidget(body, config.onZoomDiagram),
+              block: true,
+            }).range(from, to),
           );
         }
         return false; // never descend into a fence

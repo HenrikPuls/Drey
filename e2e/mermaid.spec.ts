@@ -35,6 +35,22 @@ test.describe('mermaid diagrams in Live Preview (ADR-0025)', () => {
     await expect(page.locator('app-editor .cm-content')).toContainText('graph TD;');
   });
 
+  test('the hover lens opens the diagram in the image lightbox', async ({ page, vaultDir }) => {
+    await openNote(page, vaultDir, 'zoom.md', DIAGRAM);
+    const diagram = page.locator('app-editor .cm-content .lp-mermaid');
+    await expect(diagram.locator('svg')).toBeVisible({ timeout: 15000 });
+
+    await diagram.hover();
+    await diagram.locator('.lp-mermaid-lens').click({ force: true });
+
+    const lightbox = page.locator('app-image-lightbox .backdrop');
+    await expect(lightbox).toBeVisible();
+    await expect(lightbox.locator('app-image-viewer img')).toHaveAttribute(
+      'src',
+      /^data:image\/svg\+xml/,
+    );
+  });
+
   test('a broken diagram shows an inline error box, not a crash', async ({ page, vaultDir }) => {
     await openNote(
       page,
