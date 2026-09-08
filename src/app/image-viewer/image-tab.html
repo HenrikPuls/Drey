@@ -1,0 +1,11 @@
+<div class="meta">
+  <span class="path" [title]="path()">{{ path() }}</span>
+  <span class="zoom">{{ viewer().zoomPercent() }}%</span>
+  <button type="button" class="fs" (click)="openFullscreen()" title="Open full view">
+    Fullscreen
+  </button>
+</div>
+
+<div class="body">
+  <app-image-viewer [src]="url()" />
+</div>

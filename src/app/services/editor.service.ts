@@ -1,4 +1,5 @@
 import { Injectable, computed, inject, signal } from '@angular/core';
+import { imageExtension } from '../../../shared/asset-name';
 import { dailyPathFor } from '../../../shared/daily';
 import { EntryDraft, entryInsertion } from '../../../shared/entry-compose';
 import { ActionOutcome } from '../../../shared/ipc-api';
@@ -32,6 +33,13 @@ export interface OpenDoc {
   /** Vault-relative path, e.g. `daily/2026-09-05.md`. Unique per tab. */
   readonly path: string;
   readonly name: string;
+  /**
+   * `'text'` (a Markdown buffer, the default) or `'image'` -- a viewer tab
+   * for a `.png`/`.jpg`/… file (ADR-0026). An image tab carries no buffer
+   * (`savedContent === bufferContent === ''`, never dirty) and skips every
+   * text-only path (`save`, `saveAs`, `setViewMode`, `updateBuffer`).
+   */
+  readonly kind: 'text' | 'image';
   savedContent: string;
   bufferContent: string;
   viewMode: EditorViewMode;
@@ -146,6 +154,24 @@ export class EditorService {
   readonly bufferContent = computed<string>(() => this.activeDoc()?.bufferContent ?? '');
   readonly viewMode = computed<EditorViewMode>(() => this.activeDoc()?.viewMode ?? 'live');
 
+  /** `'image'` when the active tab is an image viewer -- the centre column swaps components. */
+  readonly activeKind = computed<'text' | 'image'>(() => this.activeDoc()?.kind ?? 'text');
+
+  /**
+   * Live viewport of the active image tab (natural pixel size + current
+   * zoom) -- the status bar shows it instead of the word/char count.
+   * `ImageTab` writes it; `null` when the active tab isn't an image.
+   */
+  readonly imageViewport = signal<{
+    naturalWidth: number;
+    naturalHeight: number;
+    scale: number;
+  } | null>(null);
+
+  setImageViewport(v: { naturalWidth: number; naturalHeight: number; scale: number } | null): void {
+    this.imageViewport.set(v);
+  }
+
   readonly isLoading = signal(false);
   readonly isSaving = signal(false);
   readonly error = signal<string | null>(null);
@@ -219,9 +245,9 @@ export class EditorService {
    */
   readonly insertRequest = signal<{ id: number; text: string }>({ id: 0, text: '' });
 
-  /** The assistant card's "insert into note" button. No-op with no open document. */
+  /** The assistant card's "insert into note" button. No-op with no open (text) document. */
   requestInsertText(text: string): void {
-    if (text.trim() === '' || this.active() === null) {
+    if (text.trim() === '' || this.active() === null || this.activeKind() === 'image') {
       return;
     }
     this.insertRequest.update((r) => ({ id: r.id + 1, text }));
@@ -285,6 +311,13 @@ export class EditorService {
     }
     if (this.docs().some((d) => d.path === relativePath)) {
       this.active.set(relativePath);
+      return;
+    }
+
+    // An image file opens as a viewer tab -- never read as text (that used
+    // to open a mojibake buffer that Ctrl+S would write back).
+    if (imageExtension(relativePath)) {
+      this.addDoc(this.makeImageDoc(relativePath));
       return;
     }
 
@@ -466,6 +499,9 @@ export class EditorService {
 
   /** Called by the editor component on every buffer change (active tab). */
   updateBuffer(content: string): void {
+    if (this.activeDoc()?.kind === 'image') {
+      return;
+    }
     this.patchActive({ bufferContent: content });
   }
 
@@ -474,6 +510,9 @@ export class EditorService {
    * future opens (`⋯` menu). Persisted per machine, like the pane sizes.
    */
   setViewMode(mode: EditorViewMode): void {
+    if (this.activeDoc()?.kind === 'image') {
+      return;
+    }
     this.patchActive({ viewMode: mode });
     writePref({ defaultMode: mode });
   }
@@ -490,7 +529,7 @@ export class EditorService {
    */
   async save(options: { runOnSaveActions?: boolean } = {}): Promise<void> {
     const doc = this.activeDoc();
-    if (!this.api || doc === null || this.isSaving()) {
+    if (!this.api || doc === null || doc.kind === 'image' || this.isSaving()) {
       return;
     }
     // A generated scratch doc has no destination yet -- ask for one, even
@@ -581,7 +620,7 @@ export class EditorService {
    */
   async saveAs(): Promise<void> {
     const doc = this.activeDoc();
-    if (!this.api?.pickSavePath || doc === null || this.isSaving()) {
+    if (!this.api?.pickSavePath || doc === null || doc.kind === 'image' || this.isSaving()) {
       return;
     }
     this.error.set(null);
@@ -651,6 +690,7 @@ export class EditorService {
     return {
       path: relativePath,
       name: baseName(relativePath),
+      kind: 'text',
       savedContent: normalized,
       bufferContent: normalized,
       // Land in whichever mode the user last chose (`⋯` menu), Live Preview by default.
@@ -659,6 +699,26 @@ export class EditorService {
       modifiedMs,
       existsOnDisk,
       askOnSave,
+    };
+  }
+
+  /**
+   * An image viewer tab (ADR-0026): no `readVaultFile`, no buffer, never
+   * dirty. The renderer loads the pixels through `drey-asset://` -- the
+   * `ImageTab` component resolves `relativePath` (vault-root-relative)
+   * itself.
+   */
+  private makeImageDoc(relativePath: string): OpenDoc {
+    return {
+      path: relativePath,
+      name: baseName(relativePath),
+      kind: 'image',
+      savedContent: '',
+      bufferContent: '',
+      viewMode: 'live',
+      eol: '\n',
+      modifiedMs: 0,
+      existsOnDisk: true,
     };
   }
 
