@@ -59,7 +59,7 @@ export class Dock implements OnInit {
     this.side() === 'bottom' ? null : this.dock.dockWidth(this.side()),
   );
   protected readonly hostHeight = computed(() =>
-    this.side() === 'bottom' ? this.dock.dockHeight() : null,
+    this.side() === 'bottom' && !this.dock.allCollapsed('bottom') ? this.dock.dockHeight() : null,
   );
   protected readonly isDropTarget = computed(() => this.dock.dropDock() === this.side());
 

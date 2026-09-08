@@ -1,5 +1,8 @@
 @if (menu.open() !== null) {
-  <div class="overlay" (click)="menu.close()"></div>
+  <!-- pointerdown (not click) so a right-click dismisses the menu too,
+       instead of the overlay swallowing it — the next right-click then
+       reaches the editor's native context menu. -->
+  <div class="overlay" (pointerdown)="menu.close()" (contextmenu)="menu.close()"></div>
 }
 
 <div class="bar">
@@ -11,6 +14,7 @@
         [class.open]="menu.open() === m.id"
         (click)="menu.toggle(m.id)"
         (mouseenter)="menu.hover(m.id)"
+        (mousedown)="$event.preventDefault()"
       >
         {{ m.label }}
       </button>
@@ -27,6 +31,7 @@
                 [class.disabled]="!row.run"
                 [disabled]="!row.run"
                 (click)="row.run && row.run()"
+                (mousedown)="$event.preventDefault()"
               >
                 <span class="check">{{ row.checked && row.checked() ? '✓' : '' }}</span>
                 <span class="label">{{ row.label }}</span>

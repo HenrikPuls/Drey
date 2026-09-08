@@ -130,6 +130,16 @@ export class DockService {
     return CONTENT_HEIGHT_PANELS.has(id);
   }
 
+  /**
+   * True when a dock has no expanded panel -- every panel is collapsed to
+   * its header, or the dock is empty. The bottom dock then shrinks to its
+   * stacked headers and its resize splitter is hidden (nothing to size).
+   */
+  allCollapsed(side: DockSide): boolean {
+    const ids = this.state().dock[side];
+    return ids.every((id) => !this.state().open[id]);
+  }
+
   flexOf(id: PanelId): number {
     return this.state().flexes[id];
   }

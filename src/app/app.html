@@ -34,13 +34,15 @@
       </main>
 
       @if (dock.hasBottom()) {
-        <div
-          class="divider divider-y"
-          role="separator"
-          aria-orientation="horizontal"
-          aria-label="Resize bottom dock"
-          (pointerdown)="dock.startDockResize('bottom', $event)"
-        ></div>
+        @if (!dock.allCollapsed('bottom')) {
+          <div
+            class="divider divider-y"
+            role="separator"
+            aria-orientation="horizontal"
+            aria-label="Resize bottom dock"
+            (pointerdown)="dock.startDockResize('bottom', $event)"
+          ></div>
+        }
         <app-dock side="bottom" />
       }
     </div>
