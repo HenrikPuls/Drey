@@ -49,6 +49,9 @@ export const IPC_CHANNELS = {
   vaultSaveAssetFromUrl: 'vault:save-asset-from-url',
   vaultCreateFile: 'vault:create-file',
   vaultCreateDirectory: 'vault:create-directory',
+  vaultRename: 'vault:rename-entry',
+  vaultCopy: 'vault:copy-entry',
+  vaultDuplicate: 'vault:duplicate-entry',
   vaultDelete: 'vault:delete',
   vaultPickSavePath: 'vault:pick-save-path',
   dailyOpen: 'daily:open',
@@ -516,6 +519,29 @@ export interface DreyApi {
    * vault-relative path.
    */
   createVaultDirectory(relativePath: string): Promise<string>;
+
+  /**
+   * Renames / moves a file or folder inside the active vault. Both paths
+   * follow the `readVaultFile` rules; refuses the vault root, a missing
+   * source and an occupied target. A `.md` note's assistant sidecar moves
+   * with it. Resolves to the new vault-relative path.
+   */
+  renameVaultEntry(fromRelativePath: string, toRelativePath: string): Promise<string>;
+
+  /**
+   * Copies a file or folder (recursively) into `destDirRelativePath`
+   * (`''` = vault root). Keeps the source name, or adds a `" copy"` /
+   * `" copy N"` suffix on a collision. Refuses copying a folder into its
+   * own subtree. A `.md` note's assistant sidecar is copied along.
+   * Resolves to the new entry's vault-relative path.
+   */
+  copyVaultEntry(sourceRelativePath: string, destDirRelativePath: string): Promise<string>;
+
+  /**
+   * Copies an entry next to itself, always with a `" copy"` suffix.
+   * Resolves to the new entry's vault-relative path.
+   */
+  duplicateVaultEntry(sourceRelativePath: string): Promise<string>;
 
   /**
    * Deletes a file or folder (recursively) inside the active vault. Same

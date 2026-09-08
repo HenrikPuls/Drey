@@ -939,6 +939,37 @@ sequenceDiagram
     Note over User,Editor: drag a row instead → image-paste.ts TEMPLATE_DT_TYPE branch:<br/>read → strip → substitute → insert at posAtCoords(x,y)
 ```
 
+## 6.20 Files panel: copy / paste / duplicate / rename (ADR-0018 refresh model)
+
+Context-menu rows on the file tree. "Copy" only stashes a `{ path, name }`
+on `VaultService.clipboard`; the fs work happens on "Paste" / "Duplicate" /
+"Rename". Each mutating IPC handler rebuilds the tag index (same reason as
+`vault:delete` — a `.md` file can move in or out of scope), and the
+renderer reloads the tree. A rename also re-points open tabs.
+
+```mermaid
+sequenceDiagram
+    actor User
+    participant Panel as FilesPanel
+    participant VaultService
+    participant EditorService
+    participant IPC as main.ts handler
+    participant VM as VaultManager
+    participant Idx as TagIndex
+
+    User->>Panel: right-click entry → Copy
+    Panel->>VaultService: clipboard.set({ path, name })
+    User->>Panel: right-click folder → Paste
+    Panel->>VaultService: copyEntry(src, destDir)
+    VaultService->>IPC: vault:copy-entry
+    IPC->>VM: copyEntry(src, destDir)
+    VM->>VM: resolveInVault(both) · fsp.cp(recursive) · uniqueCopyName on clash · copy .md sidecar
+    IPC->>Idx: rebuild()
+    VaultService->>VaultService: loadFileTree()
+
+    Note over User,Idx: Rename: prompt-less inline input → renameEntry(from,to)<br/>→ VM.fsp.rename (+ sidecar) → Idx.rebuild → loadFileTree<br/>→ EditorService.retargetTabs(from,to) keeps unsaved buffers
+```
+
 ## Planned flows (added as their milestone is built)
 
 - Dedicated keyword-search / FTS surface — the search panel's free-text

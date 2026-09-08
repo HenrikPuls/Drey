@@ -66,6 +66,22 @@
     </div>
   }
 
+  @if (renaming(); as pending) {
+    <div class="create-row">
+      <app-icon [name]="pending.entry.type === 'directory' ? 'chevron-right' : 'pencil'" [size]="10" />
+      <input
+        #renameInput
+        class="create-input"
+        type="text"
+        [value]="pending.entry.name"
+        [attr.aria-label]="'Rename ' + pending.entry.relativePath"
+        (keydown.enter)="commitRename(renameInput.value)"
+        (keydown.escape)="cancelRename()"
+        (blur)="commitRename(renameInput.value)"
+      />
+    </div>
+  }
+
   @if (!vault.activeVaultPath()) {
     <div class="vault-empty">
       <p>No vault selected.</p>
@@ -95,7 +111,18 @@
   <div class="ctx-menu" [style.left.px]="m.x" [style.top.px]="m.y">
     <button type="button" (click)="startCreate('file')">New file</button>
     <button type="button" (click)="startCreate('directory')">New folder</button>
+    @if (m.entry || vault.clipboard()) {
+      <div class="ctx-sep"></div>
+    }
     @if (m.entry) {
+      <button type="button" (click)="onCopy()">Copy</button>
+      <button type="button" (click)="onDuplicate()">Duplicate</button>
+    }
+    @if (vault.clipboard(); as clip) {
+      <button type="button" (click)="onPaste()">Paste “{{ clip.name }}”</button>
+    }
+    @if (m.entry) {
+      <button type="button" (click)="startRename()">Rename…</button>
       <div class="ctx-sep"></div>
       <button type="button" class="danger" (click)="onDelete()">Delete</button>
     }

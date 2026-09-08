@@ -497,6 +497,36 @@ export class EditorService {
     }
   }
 
+  /**
+   * A file or folder was renamed/moved on disk: re-point any open tab at
+   * its new path, keeping the buffer so unsaved edits survive the rename.
+   * For a folder rename every tab under it moves.
+   */
+  retargetTabs(oldPath: string, newPath: string): void {
+    const prefix = `${oldPath}/`;
+    const remap = (p: string): string | null =>
+      p === oldPath ? newPath : p.startsWith(prefix) ? newPath + p.slice(oldPath.length) : null;
+
+    let touched = false;
+    this.docs.update((list) =>
+      list.map((d) => {
+        const next = remap(d.path);
+        if (next === null) {
+          return d;
+        }
+        touched = true;
+        return { ...d, path: next, name: next.slice(next.lastIndexOf('/') + 1) };
+      }),
+    );
+    if (!touched) {
+      return;
+    }
+    const activeNext = this.active() ? remap(this.active()!) : null;
+    if (activeNext) {
+      this.active.set(activeNext);
+    }
+  }
+
   /** Called by the editor component on every buffer change (active tab). */
   updateBuffer(content: string): void {
     if (this.activeDoc()?.kind === 'image') {

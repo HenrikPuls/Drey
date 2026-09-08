@@ -64,6 +64,12 @@ const dreyApi: DreyApi = {
     ipcRenderer.invoke(IPC_CHANNELS.vaultCreateFile, relativePath),
   createVaultDirectory: (relativePath: string): Promise<string> =>
     ipcRenderer.invoke(IPC_CHANNELS.vaultCreateDirectory, relativePath),
+  renameVaultEntry: (fromRelativePath: string, toRelativePath: string): Promise<string> =>
+    ipcRenderer.invoke(IPC_CHANNELS.vaultRename, fromRelativePath, toRelativePath),
+  copyVaultEntry: (sourceRelativePath: string, destDirRelativePath: string): Promise<string> =>
+    ipcRenderer.invoke(IPC_CHANNELS.vaultCopy, sourceRelativePath, destDirRelativePath),
+  duplicateVaultEntry: (sourceRelativePath: string): Promise<string> =>
+    ipcRenderer.invoke(IPC_CHANNELS.vaultDuplicate, sourceRelativePath),
   deleteVaultEntry: (relativePath: string): Promise<void> =>
     ipcRenderer.invoke(IPC_CHANNELS.vaultDelete, relativePath),
   pickSavePath: (suggestedName: string): Promise<string | null> =>

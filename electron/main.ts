@@ -257,6 +257,32 @@ function registerIpcHandlers(
     // the deleted file until the next full rebuild.
     await tagIndex.rebuild();
   });
+  // Rename / copy / duplicate can move `.md` content in or out of the
+  // index's scope, so each rebuilds it (same reason as `vault:delete`).
+  ipcMain.handle(
+    IPC_CHANNELS.vaultRename,
+    async (_event, fromRel: string, toRel: string): Promise<string> => {
+      const next = await vaultManager.renameEntry(fromRel, toRel);
+      await tagIndex.rebuild();
+      return next;
+    },
+  );
+  ipcMain.handle(
+    IPC_CHANNELS.vaultCopy,
+    async (_event, srcRel: string, destDirRel: string): Promise<string> => {
+      const next = await vaultManager.copyEntry(srcRel, destDirRel);
+      await tagIndex.rebuild();
+      return next;
+    },
+  );
+  ipcMain.handle(
+    IPC_CHANNELS.vaultDuplicate,
+    async (_event, srcRel: string): Promise<string> => {
+      const next = await vaultManager.duplicateEntry(srcRel);
+      await tagIndex.rebuild();
+      return next;
+    },
+  );
   ipcMain.handle(
     IPC_CHANNELS.vaultPickSavePath,
     (_event, suggestedName: string): Promise<string | null> =>

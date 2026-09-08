@@ -171,6 +171,41 @@ describe('EditorService', () => {
       expect(service.openDocs()).toEqual([]);
       expect(service.openPath()).toBeNull();
     });
+
+    describe('retargetTabs (rename on disk)', () => {
+      it('re-points an open tab, keeping its unsaved buffer, and follows the active path', async () => {
+        await service.openFile('notes/a.md');
+        service.updateBuffer('content of notes/a.md + edit');
+
+        service.retargetTabs('notes/a.md', 'notes/renamed.md');
+
+        expect(service.openDocs().map((d) => d.path)).toEqual(['notes/renamed.md']);
+        expect(service.openPath()).toBe('notes/renamed.md');
+        expect(service.bufferContent()).toBe('content of notes/a.md + edit');
+        expect(service.isDirty()).toBe(true);
+      });
+
+      it('moves every tab under a renamed folder', async () => {
+        await service.openFile('proj/one.md');
+        await service.openFile('proj/sub/two.md');
+        await service.openFile('other.md');
+
+        service.retargetTabs('proj', 'work');
+
+        expect(service.openDocs().map((d) => d.path)).toEqual([
+          'work/one.md',
+          'work/sub/two.md',
+          'other.md',
+        ]);
+      });
+
+      it('does nothing when no tab matches', async () => {
+        await service.openFile('a.md');
+        service.retargetTabs('b.md', 'c.md');
+        expect(service.openDocs().map((d) => d.path)).toEqual(['a.md']);
+        expect(service.openPath()).toBe('a.md');
+      });
+    });
   });
 
   describe('openDailyNote', () => {
