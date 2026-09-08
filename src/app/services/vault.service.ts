@@ -118,6 +118,24 @@ export class VaultService {
     return (await window.dreyApi.readVaultFile(relativePath)).content;
   }
 
+  /**
+   * Downloads a web image dragged from a browser into the vault (ADR-0028)
+   * and returns the note-relative `attachments/<name>` path. The file tree
+   * is reloaded. Rejects with a user-facing message (bad URL, not an
+   * image, too large, unreachable).
+   */
+  async saveAssetFromUrl(url: string, noteRelPath: string): Promise<string> {
+    if (
+      typeof window === 'undefined' ||
+      typeof window.dreyApi?.saveVaultAssetFromUrl !== 'function'
+    ) {
+      throw new Error('Downloading images needs the desktop app.');
+    }
+    const rel = await window.dreyApi.saveVaultAssetFromUrl(url, noteRelPath);
+    await this.loadFileTree();
+    return rel;
+  }
+
   private async loadFileTree(): Promise<void> {
     this.isLoading.set(true);
     this.error.set(null);

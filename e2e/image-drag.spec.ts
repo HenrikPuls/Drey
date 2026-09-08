@@ -1,3 +1,4 @@
+import * as http from 'node:http';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { test, expect, type Page } from './fixtures/drey';
@@ -66,6 +67,50 @@ test.describe('drag a vault file into the editor', () => {
     await expect
       .poll(() => fs.readFileSync(path.join(vaultDir, 'main.md'), 'utf-8'))
       .toContain('reusable **snippet** text');
+  });
+
+  test('a web image dragged from a browser is downloaded and given a [Source] line', async ({
+    page,
+    vaultDir,
+  }) => {
+    const png = Buffer.from(PNG_BASE64, 'base64');
+    const server = http.createServer((req, res) => {
+      if (req.url === '/pic.png') {
+        res.writeHead(200, { 'content-type': 'image/png' });
+        res.end(png);
+      } else {
+        res.writeHead(200, { 'content-type': 'text/html' });
+        res.end('<h1>not an image</h1>');
+      }
+    });
+    await new Promise<void>((r) => server.listen(0, '127.0.0.1', r));
+    const port = (server.address() as { port: number }).port;
+
+    try {
+      await openNote(page, vaultDir, 'web.md', '# web\n\n');
+      await page.locator('app-editor .cm-content').click();
+
+      await dropOnEditor(page, { 'text/uri-list': `http://127.0.0.1:${port}/pic.png` });
+
+      await expect
+        .poll(() =>
+          fs.existsSync(path.join(vaultDir, 'attachments'))
+            ? fs.readdirSync(path.join(vaultDir, 'attachments')).length
+            : 0,
+        )
+        .toBe(1);
+      await page.keyboard.press('ControlOrMeta+s');
+      await expect
+        .poll(() => fs.readFileSync(path.join(vaultDir, 'web.md'), 'utf-8'))
+        .toMatch(/!\[\]\(attachments\/.+\.png\)\n\[Source\]\(<http:\/\/127\.0\.0\.1:\d+\/pic\.png>\)/);
+
+      // A non-image URL is rejected with a notice, nothing written.
+      await dropOnEditor(page, { 'text/uri-list': `http://127.0.0.1:${port}/page.png` });
+      await expect(page.locator('app-editor .err')).toContainText(/image/i);
+      expect(fs.readdirSync(path.join(vaultDir, 'attachments'))).toHaveLength(1);
+    } finally {
+      await new Promise<void>((r) => server.close(() => r()));
+    }
   });
 
   test('an OS text file dropped from the file manager is inlined', async ({ page, vaultDir }) => {

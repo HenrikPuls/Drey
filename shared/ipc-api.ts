@@ -45,6 +45,7 @@ export const IPC_CHANNELS = {
   vaultReadFile: 'vault:read-file',
   vaultWriteFile: 'vault:write-file',
   vaultSaveAsset: 'vault:save-asset',
+  vaultSaveAssetFromUrl: 'vault:save-asset-from-url',
   vaultCreateFile: 'vault:create-file',
   vaultCreateDirectory: 'vault:create-directory',
   vaultDelete: 'vault:delete',
@@ -477,6 +478,17 @@ export interface DreyApi {
    * is active or the resolved folder escapes the vault.
    */
   saveVaultAsset(bytes: Uint8Array, ext: string, noteRelPath: string): Promise<string>;
+
+  /**
+   * Downloads a web image and saves it like `saveVaultAsset` (ADR-0028) --
+   * the main process `fetch`es `url` (http(s) only, redirects followed
+   * with a final-protocol re-check, 15 s timeout, 25 MB cap, image
+   * content-type / extension required), then writes the bytes into the
+   * note's `attachments/`. Resolves to the note-relative path for
+   * `![](...)`. Rejects with a short user-facing message on any of: not a
+   * URL, non-http(s), HTTP error, timeout, too large, not an image.
+   */
+  saveVaultAssetFromUrl(url: string, noteRelPath: string): Promise<string>;
 
   /**
    * Creates an empty file inside the active vault (any missing parent

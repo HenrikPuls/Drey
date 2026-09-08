@@ -48,4 +48,34 @@ describe('VaultService', () => {
     expect(service.fileTree()).toEqual([]);
     expect(service.error()).toContain('no longer exists');
   });
+
+  describe('saveAssetFromUrl (ADR-0028)', () => {
+    it('returns the path from the bridge and reloads the file tree', async () => {
+      let listCalls = 0;
+      window.dreyApi = {
+        getActiveVault: () => Promise.resolve('E:/vault'),
+        listVaultFiles: () => {
+          listCalls++;
+          return Promise.resolve([]);
+        },
+        saveVaultAssetFromUrl: (_url: string, note: string) =>
+          Promise.resolve(`attachments/for-${note}.png`),
+      } as unknown as DreyApi;
+
+      const service = TestBed.inject(VaultService);
+      await Promise.resolve();
+      const before = listCalls;
+
+      const rel = await service.saveAssetFromUrl('https://x/pic.png', 'notes/n.md');
+      expect(rel).toBe('attachments/for-notes/n.md.png');
+      expect(listCalls).toBeGreaterThan(before);
+    });
+
+    it('throws when the bridge is missing', async () => {
+      const service = TestBed.inject(VaultService);
+      await expect(service.saveAssetFromUrl('https://x/pic.png', '')).rejects.toThrow(
+        /desktop app/,
+      );
+    });
+  });
 });

@@ -94,3 +94,6 @@ folder.**
 - No new dependency (`node:crypto` is built in).
 - A paste with no active vault can't be saved; the renderer keeps the
   default text paste and shows a transient notice (capture-side).
+- Later: [ADR-0028](0028-drag-drop-into-the-editor.md) adds a sibling
+  `vault:save-asset-from-url` that fetches a web image in the main process
+  and reuses `saveAsset` to store it.

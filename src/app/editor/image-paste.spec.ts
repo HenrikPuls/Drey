@@ -213,6 +213,84 @@ describe('imagePaste', () => {
     });
   });
 
+  describe('web image drag (URL)', () => {
+    it('downloads the image and adds a [Source] line under it', async () => {
+      const calls: string[] = [];
+      view = mount('# note\n', {
+        save: async () => 'x',
+        saveFromUrl: async (u) => {
+          calls.push(u);
+          return 'attachments/dl.png';
+        },
+      });
+      view.dispatch({ selection: { anchor: view.state.doc.length } });
+
+      fireDrop(view, transfer([], { 'text/uri-list': 'https://example.com/pic.png' }));
+      await settle();
+
+      expect(calls).toEqual(['https://example.com/pic.png']);
+      expect(view.state.doc.toString()).toContain(
+        '![](attachments/dl.png)\n[Source](<https://example.com/pic.png>)',
+      );
+    });
+
+    it('extracts the URL from an <img> in text/html even without an extension', async () => {
+      const calls: string[] = [];
+      view = mount('# note\n', {
+        save: async () => 'x',
+        saveFromUrl: async (u) => {
+          calls.push(u);
+          return 'attachments/dl.png';
+        },
+      });
+      fireDrop(view, transfer([], { 'text/html': '<img src="https://cdn.example.com/asset">' }));
+      await settle();
+      expect(calls).toEqual(['https://cdn.example.com/asset']);
+    });
+
+    it('reports a download failure and rolls the placeholder back', async () => {
+      const errors: string[] = [];
+      view = mount('# note\n', {
+        save: async () => 'x',
+        saveFromUrl: async () => {
+          throw new Error('That link is not an image.');
+        },
+        onError: (m) => errors.push(m),
+      });
+      fireDrop(view, transfer([], { 'text/uri-list': 'https://example.com/pic.png' }));
+      await settle();
+
+      expect(errors).toEqual(['That link is not an image.']);
+      const text = view.state.doc.toString();
+      expect(text).toBe('# note\n');
+    });
+
+    it('ignores a plain hyperlink drag (no image)', async () => {
+      let called = false;
+      view = mount('# note\n', {
+        save: async () => 'x',
+        saveFromUrl: async () => {
+          called = true;
+          return 'x';
+        },
+      });
+      const event = fireDrop(view, transfer([], { 'text/uri-list': 'https://example.com/article' }));
+      await settle();
+
+      expect(called).toBe(false);
+      expect(event.defaultPrevented).toBe(false);
+      expect(view.state.doc.toString()).toBe('# note\n');
+    });
+
+    it('does nothing with a URL drag when saveFromUrl is not configured', async () => {
+      view = mount('# note\n', { save: async () => 'x' });
+      const event = fireDrop(view, transfer([], { 'text/uri-list': 'https://example.com/pic.png' }));
+      await settle();
+      expect(event.defaultPrevented).toBe(false);
+      expect(view.state.doc.toString()).toBe('# note\n');
+    });
+  });
+
   describe('OS text file drop', () => {
     it('inlines a dropped text file raw', async () => {
       const file = {
