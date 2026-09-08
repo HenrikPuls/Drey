@@ -340,6 +340,46 @@ function normalizeAppearance(raw: unknown): AppearanceConfig {
   };
 }
 
+/**
+ * The vault MCP server (`electron/mcp/`,
+ * `docs/09_architecture_decisions/0021-*.md`). One tool set --
+ * `vault_search` (with a regex filter), `vault_read`, `vault_write` --
+ * exposed two ways and also callable by the built-in assistant.
+ */
+export interface McpConfig {
+  /**
+   * Master switch. Off: no MCP server, and the assistant does not call
+   * vault tools. On: the tool set is available in-process to the
+   * assistant, and (with `httpEnabled`) over the network.
+   */
+  enabled: boolean;
+  /**
+   * Also open the localhost Streamable-HTTP endpoint
+   * (`http://127.0.0.1:<httpPort>/mcp`) that any network MCP client -- and
+   * the bundled stdio bridge -- connects to. A listening socket, so it is
+   * opt-in on top of `enabled`.
+   */
+  httpEnabled: boolean;
+  /** Port for the localhost HTTP endpoint. */
+  httpPort: number;
+  /**
+   * "YOLO mode": apply a `vault_write` tool call WITHOUT the confirmation
+   * diff. Off by default and meant to stay off -- a model (local or a
+   * remote client's) can otherwise overwrite vault files unattended.
+   */
+  yolo: boolean;
+}
+
+export const MCP_PORT_MIN = 1024;
+export const MCP_PORT_MAX = 65535;
+
+export const DEFAULT_MCP_CONFIG: McpConfig = {
+  enabled: false,
+  httpEnabled: false,
+  httpPort: 4319,
+  yolo: false,
+};
+
 export interface AppConfig {
   /** Bumped only on a breaking shape change; `normalizeAppConfig` migrates. */
   version: 1;
@@ -348,6 +388,7 @@ export interface AppConfig {
   spellcheck: SpellcheckConfig;
   editor: EditorConfig;
   appearance: AppearanceConfig;
+  mcp: McpConfig;
   actions: {
     templates: ActionTemplate[];
     triggers: ActionTrigger[];
@@ -449,6 +490,7 @@ export const DEFAULT_APP_CONFIG: AppConfig = {
     fontFamily: DEFAULT_EDITOR_FONT_FAMILY,
   },
   appearance: { ...DEFAULT_APPEARANCE },
+  mcp: { ...DEFAULT_MCP_CONFIG },
   actions: {
     templates: [noteSummaryTemplate(), searchSummaryTemplate(), autotagTemplate()],
     triggers: [],
@@ -510,6 +552,20 @@ function normalizeDictionaries(raw: unknown): CustomDictionary[] {
     out.push({ id, label: optionalText(source['label']) ?? id, affPath, dicPath });
   }
   return out;
+}
+
+function normalizeMcp(raw: unknown): McpConfig {
+  const source = (raw ?? {}) as Record<string, unknown>;
+  const port =
+    typeof source['httpPort'] === 'number' && Number.isInteger(source['httpPort'])
+      ? Math.min(MCP_PORT_MAX, Math.max(MCP_PORT_MIN, source['httpPort']))
+      : DEFAULT_MCP_CONFIG.httpPort;
+  return {
+    enabled: bool(source['enabled'], DEFAULT_MCP_CONFIG.enabled),
+    httpEnabled: bool(source['httpEnabled'], DEFAULT_MCP_CONFIG.httpEnabled),
+    httpPort: port,
+    yolo: bool(source['yolo'], DEFAULT_MCP_CONFIG.yolo),
+  };
 }
 
 function normalizeEditor(raw: unknown): EditorConfig {
@@ -637,6 +693,7 @@ export function normalizeAppConfig(raw: unknown): AppConfig {
     spellcheck: normalizeSpellcheck(source['spellcheck']),
     editor: normalizeEditor(source['editor']),
     appearance: normalizeAppearance(source['appearance']),
+    mcp: normalizeMcp(source['mcp']),
     actions: {
       templates,
       triggers: normalizeTriggers(actionsSource['triggers'], templates),
