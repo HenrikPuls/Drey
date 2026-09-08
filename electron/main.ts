@@ -329,6 +329,39 @@ function registerIpcHandlers(
   ipcMain.handle(IPC_CHANNELS.spellAddDictionary, (): Promise<CustomDictionary | null> =>
     pickDictionary(),
   );
+  ipcMain.handle(
+    IPC_CHANNELS.spellAddWord,
+    (_event, word: string, target: 'language' | 'personal'): AppConfig => {
+      const trimmed = word.trim();
+      const current = appConfig.get();
+      const sc = current.spellcheck;
+      const personalWords = [...sc.personalWords];
+      const languageWords: Record<string, string[]> = {};
+      for (const [id, list] of Object.entries(sc.languageWords)) {
+        languageWords[id] = [...list];
+      }
+      if (trimmed !== '') {
+        if (target === 'personal') {
+          if (!personalWords.includes(trimmed)) {
+            personalWords.push(trimmed);
+          }
+        } else {
+          const list = languageWords[sc.language] ?? [];
+          if (!list.includes(trimmed)) {
+            languageWords[sc.language] = [...list, trimmed];
+          }
+        }
+      }
+      const stored = appConfig.set({
+        ...current,
+        spellcheck: { ...sc, personalWords, languageWords },
+      });
+      // This path doesn't go through the `config:set` handler, so reload
+      // the checker here.
+      spellcheck.invalidate();
+      return stored;
+    },
+  );
 }
 
 /**

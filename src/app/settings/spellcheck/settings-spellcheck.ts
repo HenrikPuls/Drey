@@ -59,6 +59,19 @@ export class SettingsSpellcheck implements OnInit {
 
   protected readonly bundledIds = new Set(BUNDLED_DICTIONARIES.map((entry) => entry.id));
 
+  /** The global personal list, and the list pinned to the active dictionary. */
+  protected readonly personalWords = computed<readonly string[]>(
+    () => this.config()?.personalWords ?? [],
+  );
+  protected readonly languageWords = computed<readonly string[]>(() => {
+    const draft = this.config();
+    return draft ? (draft.languageWords[draft.language] ?? []) : [];
+  });
+  protected readonly activeLanguageLabel = computed<string>(() => {
+    const id = this.config()?.language ?? 'de';
+    return this.languages().find((entry) => entry.id === id)?.label ?? id;
+  });
+
   ngOnInit(): void {
     void this.spellcheck.refreshLanguages();
   }
@@ -84,6 +97,21 @@ export class SettingsSpellcheck implements OnInit {
 
   protected removeDictionary(id: string): void {
     this.settings.removeDictionary(id);
+    this.spellcheck.invalidate();
+  }
+
+  protected addWord(input: HTMLInputElement, target: 'language' | 'personal'): void {
+    const value = input.value.trim();
+    if (value === '') {
+      return;
+    }
+    this.settings.addSpellWord(value, target);
+    input.value = '';
+    this.spellcheck.invalidate();
+  }
+
+  protected removeWord(word: string, target: 'language' | 'personal'): void {
+    this.settings.removeSpellWord(word, target);
     this.spellcheck.invalidate();
   }
 }

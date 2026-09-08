@@ -1,4 +1,10 @@
-import { collectWords, distinctWords, issueSpans } from '../../../shared/spellcheck';
+import {
+  collectWords,
+  distinctWords,
+  issueSpans,
+  personalDictionaryFor,
+} from '../../../shared/spellcheck';
+import type { SpellcheckConfig } from '../../../shared/app-config';
 
 const words = (text: string): string[] => collectWords(text).map((span) => span.word);
 
@@ -44,5 +50,34 @@ describe('distinctWords / issueSpans', () => {
     const flagged = issueSpans(spans, new Map([['besprchen', ['besprochen']]]));
     expect(flagged.map((span) => span.from)).toEqual([0, 14]);
     expect(flagged[0].suggestions).toEqual(['besprochen']);
+  });
+});
+
+describe('personalDictionaryFor', () => {
+  const config = (patch: Partial<SpellcheckConfig>): SpellcheckConfig => ({
+    enabled: true,
+    language: 'de',
+    dictionaries: [],
+    personalWords: [],
+    languageWords: {},
+    ...patch,
+  });
+
+  it('merges the personal list with the words pinned to the active dictionary', () => {
+    const out = personalDictionaryFor(
+      config({ personalWords: ['Lariscus', 'Drey'], languageWords: { de: ['Montag'], en: ['x'] } }),
+      'de',
+    );
+    expect(out.split('\n')).toEqual(['Lariscus', 'Drey', 'Montag']);
+  });
+
+  it('de-duplicates across the two lists and is empty when both are', () => {
+    expect(
+      personalDictionaryFor(
+        config({ personalWords: ['Drey'], languageWords: { de: ['Drey', 'Montag'] } }),
+        'de',
+      ),
+    ).toBe('Drey\nMontag');
+    expect(personalDictionaryFor(config({ languageWords: { en: ['x'] } }), 'de')).toBe('');
   });
 });

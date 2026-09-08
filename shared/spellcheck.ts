@@ -16,11 +16,31 @@
  * switched off for good.
  */
 
+import type { SpellcheckConfig } from './app-config';
+
 /** One checkable word and where it sits in the source text. */
 export interface WordSpan {
   word: string;
   from: number;
   to: number;
+}
+
+/**
+ * The extra words a given dictionary should accept: the global personal
+ * list plus any words pinned to this dictionary id, de-duplicated and
+ * newline-joined for `nspell.personal()`. `''` when there are none.
+ */
+export function personalDictionaryFor(config: SpellcheckConfig, language: string): string {
+  const seen = new Set<string>();
+  const words: string[] = [];
+  for (const raw of [...config.personalWords, ...(config.languageWords[language] ?? [])]) {
+    const word = raw.replace(/[\r\n]+/g, ' ').trim();
+    if (word !== '' && !seen.has(word)) {
+      seen.add(word);
+      words.push(word);
+    }
+  }
+  return words.join('\n');
 }
 
 /** Ranges of `text` that are syntax, not prose. */

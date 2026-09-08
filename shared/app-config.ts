@@ -154,6 +154,16 @@ export interface SpellcheckConfig {
   language: string;
   /** User-added dictionaries, offered alongside the bundled ones. */
   dictionaries: CustomDictionary[];
+  /**
+   * Words accepted in **every** dictionary -- project names, people, terms
+   * that are not language-specific. Shown in Settings as "Personal words".
+   */
+  personalWords: string[];
+  /**
+   * Words accepted only under a specific dictionary id (`de`, `en`, or a
+   * custom id). Keys with an empty list are dropped on normalisation.
+   */
+  languageWords: Record<string, string[]>;
 }
 
 /**
@@ -484,6 +494,8 @@ export const DEFAULT_APP_CONFIG: AppConfig = {
     enabled: true,
     language: 'de',
     dictionaries: [],
+    personalWords: [],
+    languageWords: {},
   },
   editor: {
     fontScale: 1,
@@ -554,6 +566,43 @@ function normalizeDictionaries(raw: unknown): CustomDictionary[] {
   return out;
 }
 
+/** Trimmed, de-duplicated, blank-free string list; a non-array yields `[]`. */
+function normalizeWordList(raw: unknown): string[] {
+  const list = Array.isArray(raw) ? raw : [];
+  const out: string[] = [];
+  const seen = new Set<string>();
+  for (const item of list) {
+    if (typeof item !== 'string') {
+      continue;
+    }
+    const word = item.trim();
+    if (word !== '' && !seen.has(word)) {
+      seen.add(word);
+      out.push(word);
+    }
+  }
+  return out;
+}
+
+/**
+ * `{ <dictionaryId>: string[] }` -- per-dictionary accepted words. Any key
+ * is allowed (custom dictionary ids are user-defined); a key whose list
+ * normalises to empty is dropped so the default `{}` round-trips.
+ */
+function normalizeLanguageWords(raw: unknown): Record<string, string[]> {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {
+    return {};
+  }
+  const out: Record<string, string[]> = {};
+  for (const [key, value] of Object.entries(raw as Record<string, unknown>)) {
+    const words = normalizeWordList(value);
+    if (words.length > 0) {
+      out[key] = words;
+    }
+  }
+  return out;
+}
+
 function normalizeMcp(raw: unknown): McpConfig {
   const source = (raw ?? {}) as Record<string, unknown>;
   const port =
@@ -590,6 +639,8 @@ function normalizeSpellcheck(raw: unknown): SpellcheckConfig {
     // default rather than leaving the checker pointed at nothing.
     language: known.has(language) ? language : DEFAULT_APP_CONFIG.spellcheck.language,
     dictionaries,
+    personalWords: normalizeWordList(source['personalWords']),
+    languageWords: normalizeLanguageWords(source['languageWords']),
   };
 }
 

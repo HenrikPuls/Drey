@@ -12,8 +12,8 @@
       <span>
         <span class="switch-label">Check spelling while typing</span>
         <span class="switch-hint">
-          Misspelled words get a red wavy underline in the entry editor; clicking one offers
-          corrections. Runs only once the entry has a topic, a person or a meeting.
+          Misspelled words get a red wavy underline; click one to correct it or add it to a
+          dictionary.
         </span>
       </span>
     </label>
@@ -64,6 +64,64 @@
           <span class="mono">.aff</span> file must sit in the same folder. The files are not copied
           — if that folder moves, the dictionary is listed here as unloadable.
         </p>
+      </div>
+
+      <div class="field">
+        <label for="spell-personal">Personal words</label>
+        <div class="row">
+          <input
+            id="spell-personal"
+            type="text"
+            autocomplete="off"
+            placeholder="Add a name or term …"
+            (keydown.enter)="addWord($any($event.target), 'personal'); $event.preventDefault()"
+            #personalInput
+          />
+          <button type="button" class="ghost" (click)="addWord(personalInput, 'personal')">
+            Add
+          </button>
+        </div>
+        <ul class="word-list">
+          @for (word of personalWords(); track word) {
+            <li class="word">
+              <span class="word-text">{{ word }}</span>
+              <button type="button" class="ghost danger" (click)="removeWord(word, 'personal')">
+                Remove
+              </button>
+            </li>
+          } @empty {
+            <li class="word-empty">No personal words yet.</li>
+          }
+        </ul>
+        <p class="field-hint">Accepted in every dictionary — project names, people, terms.</p>
+      </div>
+
+      <div class="field">
+        <label for="spell-lang-word">Words for {{ activeLanguageLabel() }}</label>
+        <div class="row">
+          <input
+            id="spell-lang-word"
+            type="text"
+            autocomplete="off"
+            placeholder="Add a word …"
+            (keydown.enter)="addWord($any($event.target), 'language'); $event.preventDefault()"
+            #langInput
+          />
+          <button type="button" class="ghost" (click)="addWord(langInput, 'language')">Add</button>
+        </div>
+        <ul class="word-list">
+          @for (word of languageWords(); track word) {
+            <li class="word">
+              <span class="word-text">{{ word }}</span>
+              <button type="button" class="ghost danger" (click)="removeWord(word, 'language')">
+                Remove
+              </button>
+            </li>
+          } @empty {
+            <li class="word-empty">No words added for this dictionary.</li>
+          }
+        </ul>
+        <p class="field-hint">Accepted only while this dictionary is the active one.</p>
       </div>
     </fieldset>
   }

@@ -123,7 +123,27 @@ describe('normalizeAppConfig', () => {
   it('fills the assistant and spellcheck sections from defaults', () => {
     const config = normalizeAppConfig({});
     expect(config.assistant).toEqual({ autoSummaryDefault: true });
-    expect(config.spellcheck).toEqual({ enabled: true, language: 'de', dictionaries: [] });
+    expect(config.spellcheck).toEqual({
+      enabled: true,
+      language: 'de',
+      dictionaries: [],
+      personalWords: [],
+      languageWords: {},
+    });
+  });
+
+  it('normalises spellcheck word lists: trims, dedupes, drops empty language keys', () => {
+    const config = normalizeAppConfig({
+      spellcheck: {
+        personalWords: ['  Lariscus ', 'Lariscus', '', 7, 'Drey'],
+        languageWords: { de: ['Montag', ' Montag', 'x'], en: [], fr: 'nope', junk: [1, 2] },
+      },
+    });
+    expect(config.spellcheck.personalWords).toEqual(['Lariscus', 'Drey']);
+    expect(config.spellcheck.languageWords).toEqual({ de: ['Montag', 'x'] });
+    expect(
+      normalizeAppConfig({ spellcheck: { languageWords: [] } }).spellcheck.languageWords,
+    ).toEqual({});
   });
 
   it('defaults the editor font scale to 1 and clamps an out-of-range or junk value', () => {

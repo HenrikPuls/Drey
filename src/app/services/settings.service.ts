@@ -245,6 +245,49 @@ export class SettingsService {
     });
   }
 
+  /**
+   * Adds an accepted word to the personal list (`target: 'personal'`) or
+   * to the active dictionary's list (`target: 'language'`). Draft edit --
+   * persisted on Save; the editor popup uses the immediate IPC path instead.
+   */
+  addSpellWord(word: string, target: 'language' | 'personal'): void {
+    const trimmed = word.trim();
+    if (trimmed === '') {
+      return;
+    }
+    this.mutate((config) => {
+      const sc = config.spellcheck;
+      if (target === 'personal') {
+        if (!sc.personalWords.includes(trimmed)) {
+          sc.personalWords = [...sc.personalWords, trimmed];
+        }
+      } else {
+        const list = sc.languageWords[sc.language] ?? [];
+        if (!list.includes(trimmed)) {
+          sc.languageWords = { ...sc.languageWords, [sc.language]: [...list, trimmed] };
+        }
+      }
+    });
+  }
+
+  removeSpellWord(word: string, target: 'language' | 'personal'): void {
+    this.mutate((config) => {
+      const sc = config.spellcheck;
+      if (target === 'personal') {
+        sc.personalWords = sc.personalWords.filter((entry) => entry !== word);
+      } else {
+        const list = (sc.languageWords[sc.language] ?? []).filter((entry) => entry !== word);
+        const next = { ...sc.languageWords };
+        if (list.length > 0) {
+          next[sc.language] = list;
+        } else {
+          delete next[sc.language];
+        }
+        sc.languageWords = next;
+      }
+    });
+  }
+
   /** The endpoint the connection probes should use: what's typed, not what's saved. */
   private draftEndpoint(): LlmEndpoint | undefined {
     const llm = this._draft()?.llm;
