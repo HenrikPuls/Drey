@@ -177,3 +177,18 @@ test.describe('image capture — paste & drop in the editors', () => {
     expect(fs.existsSync(attachmentsDir(vaultDir))).toBe(false);
   });
 });
+
+test.describe('inline image sizing — ![alt|W]', () => {
+  test('an image with a |width suffix renders at that width', async ({ page, vaultDir }) => {
+    fs.mkdirSync(path.join(vaultDir, 'assets'), { recursive: true });
+    fs.writeFileSync(path.join(vaultDir, 'assets', 'p.png'), Buffer.from(PNG_BASE64, 'base64'));
+    fs.writeFileSync(path.join(vaultDir, 'sized.md'), '# sized\n\n![shot|140](assets/p.png)\n');
+
+    await page.locator('app-dock[side="left"] .icon-btn.refresh').click();
+    await page.locator('app-dock[side="left"] .node.file', { hasText: 'sized.md' }).click();
+
+    const img = page.locator('app-editor .cm-content .lp-image img');
+    await expect(img).toHaveAttribute('src', /^drey-asset:\/\/asset\/assets\/p\.png$/);
+    await expect(img).toHaveAttribute('style', /width:\s*140px/);
+  });
+});

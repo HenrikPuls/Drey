@@ -63,17 +63,28 @@ export class HrWidget extends WidgetType {
  * path could not be resolved to something servable (escapes the vault, no
  * open document); a load error at runtime falls back to the same
  * placeholder, so a broken reference reads as text instead of a broken icon.
+ *
+ * `width` / `height` come from an Obsidian-style `![alt|300](path)` /
+ * `![alt|300x200](path)` suffix (`shared/image-embed.ts`) and are applied
+ * as CSS px; the theme's `max-width: 100%` still caps overflow.
  */
 export class ImageWidget extends WidgetType {
   constructor(
     readonly src: string | null,
     readonly alt: string,
+    readonly width: number | null = null,
+    readonly height: number | null = null,
   ) {
     super();
   }
 
   override eq(other: ImageWidget): boolean {
-    return other.src === this.src && other.alt === this.alt;
+    return (
+      other.src === this.src &&
+      other.alt === this.alt &&
+      other.width === this.width &&
+      other.height === this.height
+    );
   }
 
   toDOM(): HTMLElement {
@@ -86,6 +97,12 @@ export class ImageWidget extends WidgetType {
     const img = document.createElement('img');
     img.src = this.src;
     img.alt = this.alt;
+    if (this.width !== null) {
+      img.style.width = `${this.width}px`;
+    }
+    if (this.height !== null) {
+      img.style.height = `${this.height}px`;
+    }
     img.onerror = () => {
       img.remove();
       span.appendChild(this.placeholder());
