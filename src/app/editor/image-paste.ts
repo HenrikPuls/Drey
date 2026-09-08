@@ -199,7 +199,10 @@ export function imagePaste(config: ImagePasteConfig): Extension {
       const data = event.dataTransfer;
       const files = imageFiles(data);
       const hasAnyFile = (data?.files.length ?? 0) > 0;
-      const vaultPath = files.length ? '' : (data?.getData(VAULT_PATH_DT_TYPE) ?? '');
+      const textFile = files.length
+        ? undefined
+        : Array.from(data?.files ?? []).find((f) => textExtension(f.name));
+      const vaultPath = files.length || textFile ? '' : (data?.getData(VAULT_PATH_DT_TYPE) ?? '');
       if (files.length === 0 && !hasAnyFile && !vaultPath) {
         return false; // a plain text / URL drag -- let CodeMirror handle it
       }
@@ -212,6 +215,17 @@ export function imagePaste(config: ImagePasteConfig): Extension {
       if (files.length) {
         for (const file of files) {
           void insertImage(view, file, config);
+        }
+      } else if (textFile) {
+        if (textFile.size > TEXT_DROP_MAX) {
+          config.onError?.('That file is too large to drop in (over 2 MB).');
+        } else {
+          void textFile
+            .text()
+            .then((text) => insertText(view, text, config))
+            .catch((error: unknown) =>
+              config.onError?.(error instanceof Error ? error.message : String(error)),
+            );
         }
       } else if (vaultPath) {
         if (imageExtension(vaultPath)) {
