@@ -54,6 +54,8 @@ const dreyApi: DreyApi = {
     ipcRenderer.invoke(IPC_CHANNELS.vaultReadFile, relativePath),
   writeVaultFile: (relativePath: string, content: string): Promise<number> =>
     ipcRenderer.invoke(IPC_CHANNELS.vaultWriteFile, relativePath, content),
+  saveVaultAsset: (bytes: Uint8Array, ext: string, noteRelPath: string): Promise<string> =>
+    ipcRenderer.invoke(IPC_CHANNELS.vaultSaveAsset, bytes, ext, noteRelPath),
   createVaultFile: (relativePath: string): Promise<string> =>
     ipcRenderer.invoke(IPC_CHANNELS.vaultCreateFile, relativePath),
   createVaultDirectory: (relativePath: string): Promise<string> =>

@@ -44,6 +44,7 @@ export const IPC_CHANNELS = {
   vaultListFiles: 'vault:list-files',
   vaultReadFile: 'vault:read-file',
   vaultWriteFile: 'vault:write-file',
+  vaultSaveAsset: 'vault:save-asset',
   vaultCreateFile: 'vault:create-file',
   vaultCreateDirectory: 'vault:create-directory',
   vaultDelete: 'vault:delete',
@@ -463,6 +464,19 @@ export interface DreyApi {
    * Resolves to the file's new `modifiedMs` after the write.
    */
   writeVaultFile(relativePath: string, content: string): Promise<number>;
+
+  /**
+   * Saves a binary asset -- a pasted or dropped image -- into an
+   * `attachments/` folder beside the note that references it (ADR-0024).
+   * `noteRelPath` is the open document's vault-relative path (a bare name /
+   * empty string falls back to the vault root's `attachments/`); `ext` is
+   * the file extension without a dot (`imageExtension()` from
+   * `shared/asset-name.ts`). Resolves to the path to drop into the
+   * `![](...)` -- relative to the note's own folder, so `resolveVaultImageUrl`
+   * turns it straight back into a `drey-asset://` URL. Rejects if no vault
+   * is active or the resolved folder escapes the vault.
+   */
+  saveVaultAsset(bytes: Uint8Array, ext: string, noteRelPath: string): Promise<string>;
 
   /**
    * Creates an empty file inside the active vault (any missing parent
