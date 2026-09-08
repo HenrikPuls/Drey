@@ -357,6 +357,7 @@ export class MarkdownSurface implements AfterViewInit, OnDestroy {
       ? livePreview({
           resolveImage: (url) => resolveVaultImageUrl(this.editor.openPath(), url),
           onOpenImage: (src) => this.lightbox.open(src),
+          onZoomDiagram: (dataUrl) => this.lightbox.open(dataUrl),
         })
       : [];
   }

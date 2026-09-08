@@ -249,15 +249,50 @@ function loadMermaid(): Promise<typeof import('mermaid').default> {
 let mermaidRenderSeq = 0;
 
 /**
+ * Serialises a rendered SVG string to a `data:` URL an `<img>` (the shared
+ * image viewer) can load. A `viewBox` is promoted to explicit `width` /
+ * `height` attributes and the `max-width` style dropped, so the `<img>`
+ * reports a real `naturalWidth`/`Height` -- mermaid otherwise emits
+ * `style="max-width…"` + `width="100%"`, which would give the lightbox a
+ * zero natural size and break Fit / zoom.
+ */
+export function svgToDataUrl(svg: string): string {
+  let markup = svg;
+  try {
+    const el = new DOMParser().parseFromString(svg, 'image/svg+xml').documentElement;
+    if (el && el.nodeName.toLowerCase() === 'svg' && !el.querySelector('parsererror')) {
+      const vb = el.getAttribute('viewBox');
+      const m = vb?.match(/-?[\d.]+\s+-?[\d.]+\s+([\d.]+)\s+([\d.]+)/);
+      if (m) {
+        el.setAttribute('width', m[1]);
+        el.setAttribute('height', m[2]);
+        el.style.removeProperty('max-width');
+      }
+      markup = new XMLSerializer().serializeToString(el);
+    }
+  } catch {
+    // fall back to the raw markup
+  }
+  return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(markup)}`;
+}
+
+/**
  * A rendered Mermaid diagram in place of a ` ```mermaid ` fenced block
  * (ADR-0025) -- Live-Preview-only, like tables: the cursor entering the
  * fence reveals the raw source. Renders asynchronously (dynamic
  * `import('mermaid')`) so the bundle stays out of the initial load; a
  * "rendering…" note holds the space until it resolves, and a parse error
  * becomes a compact inline box rather than throwing into the editor.
+ *
+ * With `onZoom` (the Live Preview config's `onZoomDiagram`) a hover lens
+ * button opens the diagram in the shared image viewer -- same recipe as
+ * `ImageWidget`'s `.lp-lens`, the SVG handed over as a `data:` URL.
  */
 export class MermaidWidget extends WidgetType {
-  constructor(readonly source: string) {
+  constructor(
+    readonly source: string,
+    readonly onZoom?: (dataUrl: string) => void,
+  ) {
     super();
   }
 
@@ -280,9 +315,11 @@ export class MermaidWidget extends WidgetType {
   private async render(wrap: HTMLElement): Promise<void> {
     const id = `lp-mermaid-${mermaidRenderSeq++}`;
     let result: HTMLElement;
+    let renderedSvg: string | null = null;
     try {
       const mermaid = await loadMermaid();
       const { svg } = await mermaid.render(id, this.source);
+      renderedSvg = svg;
       result = document.createElement('div');
       result.className = 'lp-mermaid-svg';
       result.innerHTML = svg;
@@ -298,6 +335,25 @@ export class MermaidWidget extends WidgetType {
     }
     wrap.querySelector('.lp-mermaid-pending')?.remove();
     wrap.insertBefore(result, wrap.querySelector('.lp-edit'));
+
+    if (renderedSvg !== null && this.onZoom) {
+      const svg = renderedSvg;
+      const zoom = this.onZoom;
+      const lens = document.createElement('button');
+      lens.type = 'button';
+      lens.className = 'lp-lens lp-mermaid-lens';
+      lens.title = 'Open full view';
+      lens.innerHTML =
+        '<svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" ' +
+        'stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' +
+        '<circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3M11 8v6M8 11h6"/></svg>';
+      lens.addEventListener('click', (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        zoom(svgToDataUrl(svg));
+      });
+      wrap.appendChild(lens);
+    }
   }
 
   override ignoreEvent(event: Event): boolean {

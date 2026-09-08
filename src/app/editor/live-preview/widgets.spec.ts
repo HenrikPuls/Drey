@@ -1,4 +1,4 @@
-import { ImageWidget } from './widgets';
+import { ImageWidget, svgToDataUrl } from './widgets';
 
 describe('ImageWidget', () => {
   it('renders an <img> with the resolved src and alt', () => {
@@ -77,6 +77,30 @@ describe('ImageWidget', () => {
       dom.querySelector('img')!.onerror!(new Event('error'));
       expect(dom.querySelector('.lp-lens')).toBeNull();
       expect(dom.querySelector('.lp-image-missing')).not.toBeNull();
+    });
+  });
+
+  describe('svgToDataUrl (mermaid zoom)', () => {
+    it('promotes a viewBox to explicit width/height and drops max-width', () => {
+      const svg =
+        '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 480" ' +
+        'style="max-width: 640px; background: white;"><rect width="10" height="10"/></svg>';
+      const url = svgToDataUrl(svg);
+      expect(url.startsWith('data:image/svg+xml;charset=utf-8,')).toBe(true);
+      const decoded = decodeURIComponent(url.slice('data:image/svg+xml;charset=utf-8,'.length));
+      expect(decoded).toContain('width="640"');
+      expect(decoded).toContain('height="480"');
+      expect(decoded).not.toContain('max-width');
+    });
+
+    it('still returns a usable data URL when there is no viewBox', () => {
+      const url = svgToDataUrl('<svg xmlns="http://www.w3.org/2000/svg"><g/></svg>');
+      expect(url.startsWith('data:image/svg+xml;charset=utf-8,')).toBe(true);
+    });
+
+    it('falls back to the raw markup for non-SVG input', () => {
+      const url = svgToDataUrl('not svg at all');
+      expect(url).toBe('data:image/svg+xml;charset=utf-8,not%20svg%20at%20all');
     });
   });
 

@@ -94,3 +94,12 @@ files opening as a real "document" tab with the same viewer.
   `width`/`height` but gets no lens/handle — a follow-up); an SVG whose
   `naturalWidth` is 0 shows `—` for dimensions and `fit()` returns 1; a
   very large image is transformed as one element with no tiling.
+
+## Later change — the lightbox also shows diagrams
+
+The mermaid zoom lens (ADR-0025) reuses this lightbox unchanged: the
+rendered diagram is handed to `ImageLightboxService.open` as a
+`data:image/svg+xml` URL, which the `ImageViewer`'s `<img>` loads like any
+other source. `fitScale` is now width-only (project owner's call), so a
+tall diagram / image fills the width and overflows vertically instead of
+being shrunk to fit its height.

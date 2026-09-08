@@ -89,3 +89,14 @@ dynamic `import('mermaid')` on first use; Live-Preview-only.**
 - `node_modules` grows notably (mermaid + d3 + dagre + …); shipped only in
   lazy chunks, and `licenses.json` picks up the new transitive licenses.
 - Diagrams render only in Live Preview; Source mode shows the raw fence.
+
+## Later change — a zoom lens
+
+With `LivePreviewConfig.onZoomDiagram` set (the full-page editor wires it),
+`MermaidWidget` shows a hover lens button — same recipe as `ImageWidget`'s
+`.lp-lens`. It serialises the rendered SVG to a `data:image/svg+xml` URL
+(`svgToDataUrl` promotes the `viewBox` to explicit `width`/`height` so the
+`<img>` reports a real natural size) and opens it in the shared image
+lightbox (ADR-0026) — no lightbox change needed, the data URL loads in its
+`<img>`. Text in the diagram is not selectable in the zoom view; that is
+the accepted cost of reusing the raster viewer over generalising it.

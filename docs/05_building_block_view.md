@@ -358,7 +358,8 @@ src/                Angular renderer (standalone components, esbuild via Angular
                          allowlist HTML sanitizer. theme.ts: EditorView.theme for the
                          lp-* classes. widgets.ts: the WidgetType classes, incl.
                          MermaidWidget (lazy import('mermaid'), async render, inline
-                         error box).
+                         error box, hover zoom lens -> onZoomDiagram via
+                         svgToDataUrl, ADR-0025/0026) and ImageWidget's lens.
       image-paste.ts    ADR-0024 / ADR-0028. imagePaste(): CodeMirror
                          domEventHandlers for paste + drop into the editor. An image
                          (paste, OS drag) -> bytes saved via VaultService.saveAsset
