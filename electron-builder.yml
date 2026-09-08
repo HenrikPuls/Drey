@@ -1,0 +1,53 @@
+# Windows packaging for Drey (electron-builder). See
+# docs/07_deployment_view.md and
+# docs/09_architecture_decisions/0023-windows-packaging-electron-builder.md.
+#
+# Build inputs must be current: `npm run pack` cleans + `npm run build`
+# (renderer -> dist/drey/browser, main -> dist-electron) first.
+
+appId: de.lariscus.drey
+productName: drey
+copyright: Copyright © 2026 Henrik Puls
+
+directories:
+  # NOT the default `dist/` -- Angular owns dist/drey/.
+  output: release
+  buildResources: build
+
+asar: true
+asarUnpack:
+  # ESM packages that read their own .aff/.dic via import.meta.url --
+  # must be real files, not asar entries.
+  - '**/node_modules/dictionary-de/**'
+  - '**/node_modules/dictionary-en/**'
+  # Spawned by an EXTERNAL `node` (an MCP client) -- cannot live in the asar.
+  - 'dist-electron/electron/mcp/stdio-bridge.js'
+
+files:
+  - 'dist-electron/**/*.js'
+  - 'dist-electron/**/*.json'
+  - 'dist/drey/browser/**'
+  - 'package.json'
+  - '!dist-electron/**/*.map'
+  # Orphaned tsc output (tsc never cleans outDir); `npm run pack` also
+  # wipes dist-electron/ first, this is belt-and-braces.
+  - '!dist-electron/electron/quick-capture.js'
+  - '!dist-electron/electron/timestamp.js'
+  - '!dist-electron/electron/zoom.js'
+
+win:
+  target:
+    - nsis
+    - portable
+  icon: build/icon.ico
+
+nsis:
+  oneClick: false
+  perMachine: false
+  allowElevation: true
+  allowToChangeInstallationDirectory: true
+  license: LICENSE
+  artifactName: ${productName}-${version}-setup.${ext}
+
+portable:
+  artifactName: ${productName}-${version}-portable.${ext}

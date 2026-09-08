@@ -7,6 +7,9 @@
 /out-tsc
 /bazel-out
 
+# electron-builder output (installer + portable)
+/release
+
 # Project-local portable Node.js runtime (see env.ps1) -- deliberately not
 # a machine-wide install, but also not something to check into git.
 /.tools/

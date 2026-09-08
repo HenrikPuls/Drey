@@ -6,10 +6,13 @@
  * (`http://127.0.0.1:$DREY_MCP_PORT/mcp`) and writes the response back on
  * stdout.
  *
- * Config the client uses (Drey shows this in Settings -> MCP):
+ * Config the client uses -- Drey shows the exact block, with the real
+ * absolute path, in Settings -> MCP. Packaged, that path is under
+ * `resources/app.asar.unpacked/` (the script is `asarUnpack`'d so an
+ * external `node` can execute it -- see `stdioBridgePath()` in main.ts):
  *   {
  *     "command": "node",
- *     "args": ["<abs path>/dist-electron/electron/mcp/stdio-bridge.js"],
+ *     "args": ["<abs>/dist-electron/electron/mcp/stdio-bridge.js"],
  *     "env": { "DREY_MCP_PORT": "4319" }
  *   }
  *
