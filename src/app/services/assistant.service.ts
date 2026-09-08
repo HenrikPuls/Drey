@@ -8,19 +8,6 @@ import { EditorService } from './editor.service';
 import { LlmTaskService } from './llm-task.service';
 import { SettingsService } from './settings.service';
 
-/** `localStorage` key for the panel's show/hide state. */
-const PANEL_KEY = 'drey.assistant';
-
-/** Read synchronously at construction, like the pane sizes in `LayoutService`. */
-function readPanelPref(): boolean {
-  try {
-    const raw = localStorage.getItem(PANEL_KEY);
-    return (JSON.parse(raw ?? '{}') as { open?: boolean }).open !== false;
-  } catch {
-    return true;
-  }
-}
-
 /** The text a cancelled generation reports. */
 const CANCELLED = 'Generation cancelled.';
 
@@ -111,12 +98,6 @@ export class AssistantService {
     return durationMs === undefined ? null : this.llmTasks.took(durationMs);
   }
 
-  /**
-   * The user's show/hide choice for the panel (the editor chrome's toggle),
-   * remembered per machine like the pane sizes.
-   */
-  private readonly panelWanted = signal(readPanelPref());
-
   readonly notePath = computed<string | null>(() => this.editor.openPath());
 
   readonly thread = computed<ChatThread>(() => {
@@ -136,20 +117,6 @@ export class AssistantService {
   /** Whether the LLM master switch allows summaries / questions at all. */
   readonly llmEnabled = computed<boolean>(() => this.settings.llmEnabled());
 
-  /**
-   * Whether the panel is shown. It needs BOTH the assistant to be usable
-   * (the LLM master switch -- with it off the panel can neither summarise
-   * nor answer, so it would be dead furniture taking a third of the window)
-   * and the user not to have hidden it.
-   */
-  readonly panelVisible = computed<boolean>(() => this.llmEnabled() && this.panelWanted());
-
-  /** Whether the show/hide toggle in the editor chrome does anything. */
-  readonly panelAvailable = computed<boolean>(() => this.llmEnabled());
-
-  /** The user's show/hide choice, independent of whether the LLM is on. */
-  readonly panelShown = this.panelWanted.asReadonly();
-
   /** True when a manual "Summarise now" makes sense (no summary card yet). */
   readonly canSummarize = computed<boolean>(
     () => this.notePath() !== null && this.llmEnabled() && !hasSummary(this.thread()),
@@ -167,18 +134,6 @@ export class AssistantService {
 
   private get api() {
     return typeof window !== 'undefined' ? window.dreyApi : undefined;
-  }
-
-  togglePanel(): void {
-    this.panelWanted.update((wanted) => {
-      const next = !wanted;
-      try {
-        localStorage.setItem(PANEL_KEY, JSON.stringify({ open: next }));
-      } catch {
-        // Private-mode / storage-disabled: a non-persisted session is fine.
-      }
-      return next;
-    });
   }
 
   /** The panel switch. Applies to this note only; the default is untouched. */

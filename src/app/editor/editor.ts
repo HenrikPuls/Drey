@@ -10,8 +10,6 @@ import {
 } from '@angular/core';
 import { EditorView } from '@codemirror/view';
 import { ActionsService } from '../services/actions.service';
-import { AssistantService } from '../services/assistant.service';
-import { DockService } from '../dock';
 import { editorFontFamilyStacks } from '../../../shared/app-config';
 import { EditorService, EditorViewMode, NewEntryRequest } from '../services/editor.service';
 import { EditorZoomService } from '../services/editor-zoom.service';
@@ -63,8 +61,6 @@ export class Editor implements AfterViewInit {
   protected readonly settings = inject(SettingsService);
   protected readonly zoom = inject(EditorZoomService);
   protected readonly actions = inject(ActionsService);
-  protected readonly assistant = inject(AssistantService);
-  protected readonly dock = inject(DockService);
   private readonly spellcheck = inject(SpellcheckService);
   private readonly tagSearch = inject(TagSearchService);
 
