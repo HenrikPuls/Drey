@@ -85,7 +85,7 @@ export function parseDatedEntries(body: string): DatedEntry[] {
         .slice(head.end, textEnd)
         .replace(/^\n/, '')
         .replace(/^(?:-{3,}|\*{3,}|_{3,})[ \t]*\n/, '')
-        .replace(/^(?:#[\w-]+(?:[ \t]+#[\w-]+)*)[ \t]*\n(?=[ \t]*\n|[ \t]*$)/, '')
+        .replace(/^(?:#[\w/-]+(?:[ \t]+#[\w/-]+)*)[ \t]*\n(?=[ \t]*\n|[ \t]*$)/, '')
         .replace(/^\n+/, '')
         .replace(/\s+$/, ''),
     };

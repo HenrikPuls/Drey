@@ -17,7 +17,9 @@ export type SyncCompletionSource = (context: CompletionContext) => CompletionRes
  */
 export function makeTagCompletionSource(getTags: () => readonly TagEntry[]): SyncCompletionSource {
   return (context: CompletionContext): CompletionResult | null => {
-    const token = context.matchBefore(/#[\p{L}\p{N}_-]*/u);
+    // `/` is allowed so a nested tag (`#project/frontend`) completes segment
+    // by segment; the canonical grammar is `TAG_NAME_SOURCE` in shared/tags.
+    const token = context.matchBefore(/#[\p{L}\p{N}_/-]*/u);
     if (!token || (token.from === token.to && !context.explicit)) {
       return null;
     }
@@ -36,6 +38,6 @@ export function makeTagCompletionSource(getTags: () => readonly TagEntry[]): Syn
         detail: `${entry.count}×`,
       }));
 
-    return { from: token.from, options, validFor: /^#[\p{L}\p{N}_-]*$/u };
+    return { from: token.from, options, validFor: /^#[\p{L}\p{N}_/-]*$/u };
   };
 }

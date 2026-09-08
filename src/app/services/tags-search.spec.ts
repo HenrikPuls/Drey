@@ -22,6 +22,20 @@ const SECTIONS: SearchableSection[] = [
     tags: ['kauf'],
     text: 'Obergrenze 45k egal in welchem Zustand. #kauf',
   },
+  {
+    path: 'notes/projekt.md',
+    heading: 'Frontend',
+    line: 1,
+    tags: ['projekt/frontend'],
+    text: 'Umbau der Editorbreite. #projekt/frontend',
+  },
+  {
+    path: 'notes/projekt.md',
+    heading: 'Backend',
+    line: 8,
+    tags: ['projekt/backend', 'kauf'],
+    text: 'Neue IPC-Kanäle. #projekt/backend #kauf',
+  },
 ];
 
 describe('runTagSearch', () => {
@@ -51,6 +65,21 @@ describe('runTagSearch', () => {
     expect(runTagSearch(SECTIONS, { tags: [], text: 'budget' }).map((h) => h.path)).toEqual([
       'notes/finanzen.md',
     ]);
+  });
+
+  it('a parent tag also returns its nested #parent/* sections', () => {
+    const hits = runTagSearch(SECTIONS, { tags: ['projekt'], text: '' });
+    expect(hits.map((h) => h.heading)).toEqual(['Frontend', 'Backend']);
+  });
+
+  it('a nested tag matches only that exact sub-tag', () => {
+    const hits = runTagSearch(SECTIONS, { tags: ['projekt/frontend'], text: '' });
+    expect(hits.map((h) => h.heading)).toEqual(['Frontend']);
+  });
+
+  it('ANDs a parent tag with another tag across the hierarchy', () => {
+    const hits = runTagSearch(SECTIONS, { tags: ['projekt', 'kauf'], text: '' });
+    expect(hits.map((h) => h.heading)).toEqual(['Backend']);
   });
 
   it('combines tags and free text', () => {

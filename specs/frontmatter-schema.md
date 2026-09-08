@@ -102,9 +102,16 @@ Kurzes Sync mit Team zu Rollout-Plan, Risiken bei DB-Migration besprochen.
 
 - `#` + a letter, then letters/digits/`_`/`-`; matched at start of line or
   after whitespace; lower-cased. Fenced and inline code spans are ignored.
+- **Nested tags:** segments joined with `/`, e.g. `#project/frontend/api`.
+  The first segment must start with a letter (so `## 2026-09-05` headings
+  never match); later segments may start with a digit (`#project/2024`). A
+  trailing or doubled `/` is not part of the tag. These are **label
+  hierarchies, not folders** (ADR-0017) — a tag search for `#project` also
+  returns every `#project/*` section. The canonical grammar lives in
+  `shared/tags/tags.ts` (`TAG_NAME_SOURCE`).
 - `#task` is a **reserved structural marker** (task lines) and is never a
-  tag. `#important` no longer carries special meaning — it is an ordinary,
-  searchable tag.
+  tag — nor is any `#task/*` sub-tag. `#important` no longer carries special
+  meaning — it is an ordinary, searchable tag.
 - Inline tags are **not** merged into frontmatter. They are read straight
   from the body by the main-process tag index (`electron/tags/`), which
   keeps the tag vocabulary (for autocomplete + the search tag picker) and

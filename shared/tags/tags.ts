@@ -5,14 +5,37 @@
  * spans are ignored; `## 14:32` / `### 2026-09-05` timestamp headings never
  * match (a `#` run is not followed by a letter).
  *
+ * Tags can be nested with `/`, e.g. `#project/frontend` -- these are label
+ * hierarchies, not folders (ADR-0017); a tag search for `#project` also
+ * returns the `#project/*` sections (see `shared/tags/search.ts`).
+ *
  * Moved here from the old `shared/inline-tags.ts` when the tag system
  * became index + search.
  */
 
 const RESERVED = new Set(['task']);
 
-/** `#` + a letter, then letters/digits/`_`/`-`. Preceded by start-of-line or whitespace. */
-const INLINE_TAG = /(?:^|\s)#(\p{L}[\p{L}\p{N}_-]*)/gu;
+/**
+ * The first tag segment must start with a Unicode letter -- this is what
+ * keeps `## 2026-09-05` / `## 14:32` timestamp headings from matching.
+ */
+const TAG_HEAD = String.raw`\p{L}[\p{L}\p{N}_-]*`;
+/** Later `/`-separated segments may also start with a digit (`#project/2024`). */
+const TAG_TAIL = String.raw`[\p{L}\p{N}_-]+`;
+
+/**
+ * The tag name (no leading `#`): a {@link TAG_HEAD} then zero or more
+ * `/`-separated {@link TAG_TAIL} segments, no empty or trailing segment.
+ * Exported as a source string so the editor's autocomplete and the other
+ * tag parsers build their partial/anchored regexes from the same rule.
+ */
+export const TAG_NAME_SOURCE = `${TAG_HEAD}(?:/${TAG_TAIL})*`;
+
+/**
+ * `#` + a {@link TAG_NAME_SOURCE}. Preceded by start-of-line or whitespace,
+ * so URL fragments (`…/#frag`) and `#!/bin/sh` never match.
+ */
+const INLINE_TAG = new RegExp(String.raw`(?:^|\s)#(${TAG_NAME_SOURCE})`, 'gu');
 
 /** Lower-cased, order-preserving, de-duplicated inline tags in `body`. */
 export function extractInlineTags(body: string): string[] {
@@ -38,7 +61,8 @@ export function extractTagOccurrences(body: string): Array<{ tag: string; index:
   const out: Array<{ tag: string; index: number }> = [];
   for (const match of scannable.matchAll(INLINE_TAG)) {
     const tag = match[1].toLowerCase();
-    if (RESERVED.has(tag)) {
+    // `#task` and any `#task/*` subtree stay a structural marker, not a tag.
+    if (RESERVED.has(tag.split('/', 1)[0])) {
       continue;
     }
     // `match.index` points at the leading whitespace/BOL; the `#` is next.

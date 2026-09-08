@@ -56,7 +56,9 @@ export function runTagSearch(
 
   for (const section of sections) {
     const sectionTags = new Set(section.tags.map((t) => t.toLowerCase()));
-    if (!tags.every((t) => sectionTags.has(t))) {
+    // A requested tag matches exactly OR as the parent of a nested tag:
+    // searching `#project` also returns `#project/frontend` sections.
+    if (!tags.every((t) => sectionHasTagOrChild(sectionTags, t))) {
       continue;
     }
     const hay = `${section.heading}\n${section.text}`.toLowerCase();
@@ -129,6 +131,20 @@ function makeSnippet(text: string, needles: readonly string[]): string {
     snippet = `${snippet}…`;
   }
   return snippet;
+}
+
+/** `wanted` is present exactly, or a `wanted/…` nested tag is (label hierarchy). */
+function sectionHasTagOrChild(sectionTags: ReadonlySet<string>, wanted: string): boolean {
+  if (sectionTags.has(wanted)) {
+    return true;
+  }
+  const prefix = `${wanted}/`;
+  for (const t of sectionTags) {
+    if (t.startsWith(prefix)) {
+      return true;
+    }
+  }
+  return false;
 }
 
 function dedupeLower(values: readonly string[]): string[] {

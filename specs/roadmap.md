@@ -13,7 +13,8 @@ An AI-powered knowledge hub for note-taking and task automation.
 - Folder structure is **the user's own**. The app imposes only the
   structural `templates/` and `daily/` folders; topics are free inline
   `#tag` labels, never directories, and the app never creates or moves
-  folders on a tag's behalf.
+  folders on a tag's behalf. Nested tags (`#project/frontend`) are a label
+  hierarchy — a naming convention, still not folders (ADR-0017).
 - Classification/synthesis via a **local** OpenAI-compatible API, no fixed
   model. Unsloth Desktop is the default; any server speaking that dialect
   works (Unsloth Desktop, llama.cpp, vLLM, Ollama, LM Studio), with an
@@ -78,10 +79,12 @@ below).
   The configured folder is kept out of the tag index.
 
 - **Tags & tag index:** topics are free inline `#tag`s in the note body
-  (`#` + a letter, then letters/digits/`_`/`-`, lower-cased). No creation
-  flow, no "unknown tag" concept, no folders, no routing. `#task` is a
+  (`#` + a letter, then letters/digits/`_`/`-`, lower-cased; nestable with
+  `/` as in `#project/frontend`). No creation flow, no "unknown tag"
+  concept, no folders, no routing. `#task` (and any `#task/*`) is a
   reserved structural marker and is never a tag; `#important` is an
-  ordinary, searchable tag. A main-process **tag index** scans every `.md`
+  ordinary, searchable tag. A tag search for a parent tag also returns its
+  nested `#parent/*` sections. A main-process **tag index** scans every `.md`
   in the vault (`templates/` excluded, `daily/` **included**) and holds
   - the **tag vocabulary** with per-tag counts — feeds `#tag` autocomplete
     and the search panel's tag picker;

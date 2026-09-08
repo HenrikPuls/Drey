@@ -139,3 +139,21 @@ No inbox, no folder proposal. See `specs/classifier-spec.md`.
   recorded here so it is not re-proposed.
 - Determinism's failure mode ("user typed a tag that doesn't exist yet")
   simply disappears — there is nothing a tag has to match.
+
+## Later change — nested tags with `/`
+
+`#tag` names may now contain `/`-separated segments, e.g.
+`#project/frontend/api`. The grammar (canonical in `shared/tags/tags.ts`,
+exported as `TAG_NAME_SOURCE`): a first segment starting with a Unicode
+letter, then any number of `/`-separated segments of letters/digits/`_`/`-`
+(later segments may start with a digit). A trailing or doubled `/` is not
+part of the tag. `#task` and the whole `#task/*` subtree stay reserved.
+
+This does **not** reintroduce folders (the "no folders, no routing"
+decision stands): the `/` is a **label hierarchy**, purely a naming
+convention. Its one behavioural effect is in `runTagSearch` — a query for
+a parent tag (`#project`) also returns sections carrying a nested tag
+(`#project/frontend`); an exact nested query stays exact. Autocomplete
+offers the full nested vocabulary entries, so the user types through the
+segments. `TagIndex` stores each nested tag as its own vocabulary entry
+(no synthesised parent rows).
