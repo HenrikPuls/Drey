@@ -169,6 +169,60 @@ function insertRelativeLink(view: EditorView, vaultPath: string, config: ImagePa
   view.dispatch({ changes: { from, insert }, selection: { anchor } });
 }
 
+/**
+ * The image URL a browser drag carries: the first real entry of
+ * `text/uri-list`, else an `<img src>` in `text/html`, else `text/plain`.
+ * Returns `''` unless it is an `http(s)` URL that is plausibly an image
+ * (an `<img>` was in the html, or the path has an image extension) -- so a
+ * plain dragged hyperlink is left alone, not downloaded.
+ */
+function imageUrlFromTransfer(data: DataTransfer | null): string {
+  if (!data) {
+    return '';
+  }
+  const html = data.getData('text/html');
+  const fromList =
+    data
+      .getData('text/uri-list')
+      .split(/\r?\n/)
+      .map((line) => line.trim())
+      .find((line) => line && !line.startsWith('#')) ?? '';
+  let url = fromList;
+  if (!url && html) {
+    url =
+      new DOMParser().parseFromString(html, 'text/html').querySelector('img')?.getAttribute('src')
+        ?.trim() ?? '';
+  }
+  if (!url) {
+    url = data.getData('text/plain').trim();
+  }
+  if (!/^https?:\/\//i.test(url)) {
+    return '';
+  }
+  let looksImage = /<img\b/i.test(html);
+  if (!looksImage) {
+    try {
+      looksImage = !!imageExtension(new URL(url).pathname);
+    } catch {
+      return '';
+    }
+  }
+  return looksImage ? url : '';
+}
+
+/** A web image dragged from a browser: download it, insert `![](…)` + a `[Source](<url>)` line. */
+async function insertFromUrl(
+  view: EditorView,
+  url: string,
+  config: ImagePasteConfig,
+): Promise<void> {
+  await resolveInserted(
+    view,
+    async () => `![](${await config.saveFromUrl!(url)})\n[Source](<${url}>)`,
+    config,
+  );
+}
+
 /** A text file (Files panel or OS drag): its contents, raw, at the drop point. */
 function insertText(view: EditorView, text: string, config: ImagePasteConfig): void {
   if (text.length > TEXT_DROP_MAX) {
@@ -182,7 +236,9 @@ function insertText(view: EditorView, text: string, config: ImagePasteConfig): v
 export function imagePaste(config: ImagePasteConfig): Extension {
   const wantsDrop = (data: DataTransfer | null): boolean => {
     const types = Array.from(data?.types ?? []);
-    return ['Files', VAULT_PATH_DT_TYPE].some((t) => types.includes(t));
+    return ['Files', VAULT_PATH_DT_TYPE, 'text/uri-list', 'text/html'].some((t) =>
+      types.includes(t),
+    );
   };
 
   return EditorView.domEventHandlers({
@@ -203,8 +259,12 @@ export function imagePaste(config: ImagePasteConfig): Extension {
         ? undefined
         : Array.from(data?.files ?? []).find((f) => textExtension(f.name));
       const vaultPath = files.length || textFile ? '' : (data?.getData(VAULT_PATH_DT_TYPE) ?? '');
-      if (files.length === 0 && !hasAnyFile && !vaultPath) {
-        return false; // a plain text / URL drag -- let CodeMirror handle it
+      const url =
+        files.length || textFile || vaultPath || !config.saveFromUrl
+          ? ''
+          : imageUrlFromTransfer(data);
+      if (files.length === 0 && !hasAnyFile && !vaultPath && !url) {
+        return false; // a plain text / URL drag we won't act on -- let CodeMirror handle it
       }
       event.preventDefault();
 
@@ -238,6 +298,8 @@ export function imagePaste(config: ImagePasteConfig): Extension {
               config.onError?.(error instanceof Error ? error.message : String(error)),
             );
         }
+      } else if (url) {
+        void insertFromUrl(view, url, config);
       }
       // A non-image, non-text file drop falls through here: swallowed
       // (preventDefault'd), nothing inserted.

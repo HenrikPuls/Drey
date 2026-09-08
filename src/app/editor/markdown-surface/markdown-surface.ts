@@ -251,6 +251,8 @@ export class MarkdownSurface implements AfterViewInit, OnDestroy {
                   this.vault.saveAsset(bytes, ext, this.editor.openPath() ?? ''),
                 notePath: () => this.editor.openPath(),
                 readTextFile: (path) => this.vault.readTextFile(path),
+                saveFromUrl: (url) =>
+                  this.vault.saveAssetFromUrl(url, this.editor.openPath() ?? ''),
                 onError: (message) => this.editor.error.set(message),
               })
             : [],

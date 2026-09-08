@@ -3,13 +3,16 @@ import * as crypto from 'node:crypto';
 import * as fs from 'node:fs';
 import * as fsp from 'node:fs/promises';
 import * as path from 'node:path';
-import { assetFileName, ATTACHMENTS_DIR } from '../shared/asset-name';
+import { assetFileName, ATTACHMENTS_DIR, imageExtension } from '../shared/asset-name';
 import { sidecarPathFor } from '../shared/chat-thread';
 import { VaultFileContent, VaultFileEntry } from '../shared/ipc-api';
 
 interface VaultConfig {
   activeVaultPath: string | null;
 }
+
+/** Cap for a downloaded web image (`saveAssetFromUrl`). */
+const MAX_ASSET_BYTES = 25 * 1024 * 1024;
 
 const configFilePath = (): string => path.join(app.getPath('userData'), 'vault-config.json');
 
@@ -183,6 +186,75 @@ export class VaultManager {
     }
     await fsp.writeFile(path.join(absDir, name), bytes);
     return `${ATTACHMENTS_DIR}/${name}`;
+  }
+
+  /**
+   * Downloads a web image and stores it with {@link saveAsset} (ADR-0028).
+   * `fetch` runs here in the main process (the renderer has no Node and
+   * cross-origin hosts have no permissive CORS). Guarded: http(s) only,
+   * redirects followed but the final URL's protocol re-checked, a 15 s
+   * timeout, a 25 MB cap (Content-Length pre-check + the read length), and
+   * an `image/*` content-type or a recognised image extension on the final
+   * URL. Rejects with a short user-facing message.
+   */
+  async saveAssetFromUrl(url: string, noteRelPath: string): Promise<string> {
+    let parsed: URL;
+    try {
+      parsed = new URL(url);
+    } catch {
+      throw new Error('That is not a valid URL.');
+    }
+    if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+      throw new Error('Only http(s) image links can be downloaded.');
+    }
+
+    let response: Response;
+    try {
+      response = await fetch(parsed, {
+        redirect: 'follow',
+        signal: AbortSignal.timeout(15_000),
+        headers: { accept: 'image/*' },
+      });
+    } catch (error) {
+      throw new Error(
+        (error as Error)?.name === 'TimeoutError'
+          ? 'Downloading the image timed out.'
+          : `Could not download the image: ${(error as Error).message}`,
+      );
+    }
+
+    const finalProtocol = new URL(response.url).protocol;
+    if (finalProtocol !== 'http:' && finalProtocol !== 'https:') {
+      throw new Error('The image link redirected somewhere unsafe.');
+    }
+    if (!response.ok) {
+      throw new Error(`Could not download the image (HTTP ${response.status}).`);
+    }
+
+    const declared = Number(response.headers.get('content-length') ?? '');
+    if (Number.isFinite(declared) && declared > MAX_ASSET_BYTES) {
+      throw new Error('That image is too large (over 25 MB).');
+    }
+
+    const contentType = (response.headers.get('content-type') ?? '')
+      .split(';')[0]
+      .trim()
+      .toLowerCase();
+    // A server that explicitly says "not an image" is believed; only fall
+    // back to the URL extension for a missing / generic type.
+    if (contentType && !contentType.startsWith('image/') && contentType !== 'application/octet-stream') {
+      throw new Error('That link is not an image.');
+    }
+    const ext = imageExtension(contentType) ?? imageExtension(new URL(response.url).pathname);
+    if (!ext) {
+      throw new Error('That link is not an image.');
+    }
+
+    const bytes = new Uint8Array(await response.arrayBuffer());
+    if (bytes.byteLength > MAX_ASSET_BYTES) {
+      throw new Error('That image is too large (over 25 MB).');
+    }
+    return this.saveAsset(bytes, ext, noteRelPath);
   }
 
   /**
