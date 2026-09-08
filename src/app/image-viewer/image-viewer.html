@@ -1,0 +1,25 @@
+<div #stage class="stage" (pointerdown)="onPanStart($event)">
+  @if (loadError()) {
+    <span class="load-error">Image could not be loaded.</span>
+  }
+  <img
+    #img
+    class="canvas"
+    [src]="src()"
+    alt=""
+    draggable="false"
+    [style.transform]="transform()"
+    [hidden]="loadError()"
+    (load)="onLoad()"
+    (error)="onImgError()"
+  />
+</div>
+
+<div class="zoom-cluster" role="group" aria-label="Zoom">
+  <button type="button" (click)="zoomOut()" aria-label="Zoom out">&minus;</button>
+  <button type="button" class="pct" (click)="reset100()" title="Reset to 100%">
+    {{ zoomPercent() }}%
+  </button>
+  <button type="button" (click)="zoomIn()" aria-label="Zoom in">+</button>
+  <button type="button" class="fit" (click)="fit()">Fit</button>
+</div>
