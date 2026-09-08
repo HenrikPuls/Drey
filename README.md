@@ -43,6 +43,27 @@ npm run build     # builds the Angular renderer and the Electron main/preload pr
 npm run electron  # launches Electron against the built output
 ```
 
+## Windows packaging
+
+```powershell
+npm run pack       # installer + portable .exe  -> release/
+npm run pack:dir   # unpacked folder only       -> release/win-unpacked/
+```
+
+`npm run pack` cleans, runs `npm run build` (renderer + Electron
+main/preload), then electron-builder for Windows. It writes into
+`release/`:
+
+- `drey-<version>-setup.exe` — NSIS installer (per-user, installation
+  directory selectable)
+- `drey-<version>-portable.exe` — single-file portable build
+
+`npm run pack:dir` does the same build but stops at `--dir`: an unpacked
+`release/win-unpacked/` with no installer — faster, for smoke-testing the
+packaged app. Packaging config is in [`electron-builder.yml`](electron-builder.yml);
+see [`docs/09_architecture_decisions/0023-windows-packaging-electron-builder.md`](docs/09_architecture_decisions/0023-windows-packaging-electron-builder.md)
+for the rationale.
+
 ## Quick-capture
 
 While the app is running, press **Ctrl+Alt+N** anywhere to jump into

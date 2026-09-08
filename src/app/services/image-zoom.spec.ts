@@ -55,7 +55,7 @@ describe('zoomToward', () => {
 });
 
 describe('fitScale', () => {
-  it('scales a large image down to fit the box', () => {
+  it('scales a wide image down to the box width', () => {
     expect(fitScale({ w: 4000, h: 2000 }, { w: 800, h: 600 })).toBe(0.2);
   });
 
@@ -63,8 +63,9 @@ describe('fitScale', () => {
     expect(fitScale({ w: 200, h: 100 }, { w: 800, h: 600 })).toBe(1);
   });
 
-  it('uses the tighter of the two axes', () => {
-    expect(fitScale({ w: 1000, h: 4000 }, { w: 800, h: 800 })).toBe(0.2);
+  it('fits to width only; a tall image overflows the stage vertically', () => {
+    // Old behaviour fit the height (0.2); now only the width ratio counts.
+    expect(fitScale({ w: 1000, h: 4000 }, { w: 800, h: 800 })).toBe(0.8);
   });
 
   it('returns 1 for a zero / unknown natural size or box', () => {
