@@ -84,10 +84,19 @@ test.describe('image files open as a viewer tab', () => {
     await page.locator('app-dock[side="left"] .node.file', { hasText: 'photo.png' }).click();
     await expect(page.locator('app-tab-bar .tab', { hasText: 'photo.png' })).toHaveCount(1);
 
+    // Status bar shows pixel size + zoom, not word/char counts.
+    await expect(page.locator('app-status-bar')).toContainText(/\d+ × \d+ · \d+%/);
+    await expect(page.locator('app-status-bar')).not.toContainText('words');
+
     // Fullscreen opens the shared overlay.
     await page.locator('app-image-tab .meta .fs').click();
     await expect(page.locator('app-image-lightbox .backdrop')).toBeVisible();
     await page.keyboard.press('Escape');
+
+    // Wheel-zooming the tab moves the status-bar percentage.
+    await page.locator('app-image-tab .stage').hover();
+    await page.mouse.wheel(0, -600);
+    await expect(page.locator('app-status-bar')).not.toContainText('· 100%');
   });
 
   test('closing the image tab returns to the empty state', async ({ page, vaultDir }) => {

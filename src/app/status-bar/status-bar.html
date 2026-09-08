@@ -1,6 +1,10 @@
-<span class="count">{{ editor.wordCount() }} words</span>
-<span class="dot">·</span>
-<span class="count">{{ editor.charCount() }} chars</span>
+@if (editor.activeKind() === 'image') {
+  <span class="count">{{ imageInfo() }}</span>
+} @else {
+  <span class="count">{{ editor.wordCount() }} words</span>
+  <span class="dot">·</span>
+  <span class="count">{{ editor.charCount() }} chars</span>
+}
 <span class="divider"></span>
 <span class="hint">{{ hint() }}</span>
 
