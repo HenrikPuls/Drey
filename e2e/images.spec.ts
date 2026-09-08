@@ -147,7 +147,7 @@ test.describe('image capture — paste & drop in the editors', () => {
     await openNote(page, vaultDir, 'entry.md');
 
     const bottom = page.locator('app-dock[side="bottom"]');
-    await bottom.locator('app-panel-frame .twist').first().click();
+    await bottom.locator('app-panel-frame .head').first().click();
     const surface = bottom.locator('app-entry-drawer .md-editor .cm-content');
     await surface.click();
 

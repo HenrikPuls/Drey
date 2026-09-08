@@ -3,6 +3,7 @@ import {
   Component,
   ElementRef,
   HostListener,
+  computed,
   effect,
   inject,
   signal,
@@ -52,9 +53,40 @@ interface PendingRename {
 export class FilesPanel {
   protected readonly vault = inject(VaultService);
   protected readonly editor = inject(EditorService);
+  private readonly host = inject<ElementRef<HTMLElement>>(ElementRef).nativeElement;
 
   /** Folder paths the user has collapsed. Folders start expanded. */
   private readonly collapsed = signal<ReadonlySet<string>>(new Set());
+
+  /**
+   * The tree entry the keyboard cursor sits on (a `relativePath`). Distinct
+   * from `editor.openPath()` (the open file) -- this is a roving selection
+   * for Up/Down/Left/Right navigation, like a file explorer.
+   */
+  protected readonly selected = signal<string | null>(null);
+
+  /**
+   * `vault.fileTree()` flattened to the rows that are actually visible
+   * (a folder's children are dropped while it is collapsed), in display
+   * order -- the model the arrow keys step through.
+   */
+  protected readonly visibleNodes = computed<{ entry: VaultFileEntry; depth: number }[]>(() => {
+    const out: { entry: VaultFileEntry; depth: number }[] = [];
+    const walk = (entries: readonly VaultFileEntry[], depth: number): void => {
+      for (const entry of entries) {
+        out.push({ entry, depth });
+        if (
+          entry.type === 'directory' &&
+          entry.children?.length &&
+          !this.collapsed().has(entry.relativePath)
+        ) {
+          walk(entry.children, depth + 1);
+        }
+      }
+    };
+    walk(this.vault.fileTree(), 0);
+    return out;
+  });
 
   protected readonly vaultMenuOpen = signal(false);
   protected readonly menu = signal<TreeMenu | null>(null);
@@ -109,6 +141,117 @@ export class FilesPanel {
     });
   }
 
+  /** Header "collapse all folders" button: fold every directory in the tree. */
+  protected collapseAll(): void {
+    const paths = new Set<string>();
+    const walk = (entries: readonly VaultFileEntry[]): void => {
+      for (const entry of entries) {
+        if (entry.type === 'directory') {
+          paths.add(entry.relativePath);
+          if (entry.children?.length) {
+            walk(entry.children);
+          }
+        }
+      }
+    };
+    walk(this.vault.fileTree());
+    this.collapsed.set(paths);
+  }
+
+  protected onFolderClick(entry: VaultFileEntry): void {
+    this.selected.set(entry.relativePath);
+    this.toggleFolder(entry.relativePath);
+  }
+
+  /**
+   * File-explorer keyboard navigation on the tree container: Up/Down move
+   * the selection one visible row, Right/Left expand/collapse a folder (or
+   * step in/out), Enter/Space open a file or toggle a folder. Every handled
+   * key calls `preventDefault()` so the container does not also scroll.
+   */
+  protected onTreeKeydown(event: KeyboardEvent): void {
+    const nodes = this.visibleNodes();
+    if (nodes.length === 0) {
+      return;
+    }
+    const idx = nodes.findIndex((n) => n.entry.relativePath === this.selected());
+    const current = idx >= 0 ? nodes[idx].entry : null;
+
+    switch (event.key) {
+      case 'ArrowDown':
+        event.preventDefault();
+        this.selectAt(nodes, idx < 0 ? 0 : Math.min(idx + 1, nodes.length - 1));
+        break;
+      case 'ArrowUp':
+        event.preventDefault();
+        this.selectAt(nodes, idx < 0 ? nodes.length - 1 : Math.max(idx - 1, 0));
+        break;
+      case 'ArrowRight': {
+        event.preventDefault();
+        if (!current) {
+          this.selectAt(nodes, 0);
+          break;
+        }
+        if (current.type === 'directory') {
+          if (this.collapsed().has(current.relativePath)) {
+            this.toggleFolder(current.relativePath);
+          } else {
+            const child = nodes[idx + 1];
+            if (child && child.entry.relativePath.startsWith(`${current.relativePath}/`)) {
+              this.selectAt(nodes, idx + 1);
+            }
+          }
+        }
+        break;
+      }
+      case 'ArrowLeft': {
+        event.preventDefault();
+        if (!current) {
+          this.selectAt(nodes, 0);
+          break;
+        }
+        if (current.type === 'directory' && !this.collapsed().has(current.relativePath)) {
+          this.toggleFolder(current.relativePath);
+        } else {
+          const parent = parentDir(current.relativePath);
+          if (parent) {
+            this.select(parent);
+          }
+        }
+        break;
+      }
+      case 'Enter':
+      case ' ':
+        // A focused node <button> activates itself -- only act here when the
+        // scroll container itself has focus, to avoid a double toggle.
+        if (!current || event.target !== event.currentTarget) {
+          break;
+        }
+        event.preventDefault();
+        if (current.type === 'directory') {
+          this.toggleFolder(current.relativePath);
+        } else {
+          this.onFileClick(current);
+        }
+        break;
+    }
+  }
+
+  private selectAt(nodes: { entry: VaultFileEntry }[], i: number): void {
+    const entry = nodes[i]?.entry;
+    if (entry) {
+      this.select(entry.relativePath);
+    }
+  }
+
+  private select(path: string): void {
+    this.selected.set(path);
+    // Wait for the `.selected` class to land, then keep the row in view.
+    setTimeout(() => {
+      this.host.querySelector('.node.selected')?.scrollIntoView({ block: 'nearest' });
+    }, 0);
+  }
+
   protected toggleVaultMenu(): void {
     this.vaultMenuOpen.update((v) => !v);
   }
@@ -125,6 +268,7 @@ export class FilesPanel {
 
   protected onFileClick(entry: VaultFileEntry): void {
     if (entry.type === 'file') {
+      this.selected.set(entry.relativePath);
       void this.editor.openFile(entry.relativePath);
     }
   }

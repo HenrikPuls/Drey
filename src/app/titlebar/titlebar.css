@@ -13,7 +13,6 @@
 .brand {
   display: flex;
   align-items: center;
-  gap: 8px;
   flex: none;
   margin-right: 12px;
 }
@@ -29,12 +28,6 @@
   border-radius: 4px;
   object-fit: cover;
   flex: none;
-}
-
-.name {
-  font-size: 12px;
-  white-space: nowrap;
-  color: var(--text-3);
 }
 
 .spacer {

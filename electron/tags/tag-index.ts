@@ -14,18 +14,21 @@
  * refresh; a single file is re-indexed on `note:save` and dropped on
  * delete -- there is no file watcher.
  */
-import { extractInlineTags, runTagSearch, splitSections } from '../../shared/tags';
+import { runTagSearch, sectionRecordsFor } from '../../shared/tags';
 import { TagEntry, TagSearchHit, TagSearchQuery } from '../../shared/ipc-api';
 import { VaultManager } from '../vault-manager';
 
-/** One heading-delimited section of a note that carries at least one tag. */
+/**
+ * One heading-delimited section of a note that carries at least one tag.
+ * Built by the shared `sectionRecordsFor` -- the same routine the renderer
+ * runs over an open tab's unsaved buffer, so on-disk and in-buffer hits are
+ * shaped identically.
+ */
 export interface SectionRecord {
   /** Vault-relative path of the note. */
   path: string;
   /** Section heading, or the file's base name for the pre-heading part. */
   heading: string;
-  /** Heading level 1–6, or 0 for the pre-heading section. */
-  level: number;
   /** 1-based line the section starts on. */
   line: number;
   /** Distinct tags in the section (heading + body), lower-cased. */
@@ -124,25 +127,9 @@ export class TagIndex {
   }
 }
 
-function baseName(path: string): string {
-  return path.slice(path.lastIndexOf('/') + 1);
-}
-
 function recordsFor(path: string, content: string): SectionRecord[] {
-  const out: SectionRecord[] = [];
-  for (const section of splitSections(content)) {
-    const tags = extractInlineTags(`${section.heading}\n${section.text}`);
-    if (tags.length === 0) {
-      continue;
-    }
-    out.push({
-      path,
-      heading: section.heading || baseName(path),
-      level: section.level,
-      line: section.line,
-      tags,
-      text: section.text,
-    });
-  }
-  return out;
+  return sectionRecordsFor(path, content).map((record) => ({
+    ...record,
+    tags: [...record.tags],
+  }));
 }

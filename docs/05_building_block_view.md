@@ -339,10 +339,14 @@ src/                Angular renderer (standalone components, esbuild via Angular
                          linkTargetDecorations + resolveVaultLinkPath split out for
                          tests. ADR-0031
       frontmatter-fold.ts  ADR-0009. StateField<boolean> + block-replace pill
-                         ("Frontmatter . N fields") folding the leading YAML in BOTH
-                         modes; expand -> dim editable YAML + collapse chevron.
-                         Mounted outside the mode compartment; Editor remembers the
-                         state per document path across tab switches.
+                         ("Frontmatter . N fields", no box, accent > marker)
+                         folding the leading YAML in BOTH modes; expand -> dim
+                         editable YAML + accent collapse chevron; clicking the
+                         pill expands without moving the caret. Provides
+                         EditorView.atomicRanges for the collapsed block so
+                         ArrowUp/Down step over it. Mounted outside the mode
+                         compartment; Editor remembers the state per document
+                         path across tab switches.
       spellcheck/       ADR-0013. spellcheck.ts: the inline spellchecker -- StateField
                          holding wavy-underline decorations + flagged words (mapped
                          through edits), a debounced/version-guarded ViewPlugin that
@@ -463,7 +467,7 @@ env.ps1             Puts .tools/node on PATH for the current shell session
 | `daily:open`                         | `webContents.send` / `ipcRenderer.on` — **main → renderer** push, fired by the quick-capture hotkey after `DailyNoteManager.ensureTodayNote()`. Payload: the vault-relative path of today's daily note. Preload exposes it as `onOpenDailyNote(listener)` returning an unsubscribe.                                                                                                                                                                                           |
 | `note:save`                          | Saves a `.md` note through `NoteManager`: on a file with a `---` fence, bump `updated:` / fill `created:` and rewrite; no fence → bytes verbatim. Then `TagIndex.reindexFile` and the `on-save` Actions (§5.10). **No `#tag`→frontmatter merge and no routing** (ADR-0017). Takes `NoteSaveRequest` (`{ path, body (LF), eol, runOnSaveActions? }`), returns `NoteSaveResult` (`{ path, content (LF), modifiedMs, pendingActions? }`). Replaces `vault:write-file` for notes. |
 | `tags:list`                          | The vault-wide tag vocabulary (`TagEntry[]` = `{ tag, count }`) from `TagIndex`, for `#tag` autocomplete and the search tag picker. `[]` when no vault is active.                                                                                                                                                                                                                                                                                                             |
-| `tags:search`                        | `TagSearchQuery` (`{ tags, text }`) → `TagSearchHit[]` (`{ path, heading, line, snippet, text }`), matched over `TagIndex`'s tagged `SectionRecord[]`. Fast, no LLM.                                                                                                                                                                                                                                                                                                          |
+| `tags:search`                        | `TagSearchQuery` (`{ tags, text }`) → `TagSearchHit[]` (`{ path, heading, line, snippet, text }`), matched over `TagIndex`'s tagged `SectionRecord[]` (files on disk). Fast, no LLM. `TagSearchService` then folds in hits from open tabs' unsaved buffers — same `sectionRecordsFor` + `runTagSearch` routines — replacing a dirty file's on-disk hits and tagging them `unsaved`.                                                                                                 |
 | `tags:summarise-results`             | `TagSearchQuery` + a task id → a prose digest of the matching sections (`search-summary` built-in). **Backend wired, panel UI parked** (ADR-0017).                                                                                                                                                                                                                                                                                                                            |
 | `tags:suggest`                       | Entry text + a task id → up to four suggested tags (`{"tags":[…]}`), using the current vocabulary. Backs the drawer's **Autotag** button.                                                                                                                                                                                                                                                                                                                                     |
 | `config:get` / `config:set`          | Read / replace the whole `AppConfig` (`shared/app-config.ts`) held in `app-config.json` under `userData`. `set` normalises via `normalizeAppConfig` and returns what was stored. Backs the Settings screen (ADR-0010).                                                                                                                                                                                                                                                        |
@@ -1304,17 +1308,17 @@ graph TB
     subgraph Renderer["Renderer (src/app/)"]
         App["App\ntitlebar / [dock left | main | dock right] / status bar;\nregisters note.new/save/saveAs/saveAll + editor.toggleLineNumbers;\ndock-edge resizers -> DockService"]
         subgraph tb["src/app/titlebar/ (barrel)"]
-            Titlebar["Titlebar\naccent square + Drey + MenuBar + window controls;\n-webkit-app-region drag"]
+            Titlebar["Titlebar\naccent square + MenuBar + window controls;\n-webkit-app-region drag"]
             MenuBar["MenuBar + MenuService\nFile/Edit/Selection/View model;\nwired rows -> KeybindingService.run(id)"]
             WindowChrome["WindowChromeService\nminimize/toggleMaximize/close + maximized signal"]
         end
         subgraph dk["src/app/dock/ (barrel)"]
-            DockService["DockService\nLayoutState (dock/flexes/open/leftW/rightW),\nlocalStorage['drey.dock'];\nstartPanelDrag/onDragMove/move,\nstartSplit, startDockResize, reset, openAndExpand"]
-            Dock["Dock [side]\nrenders panel list; drop-line + splitter;\ndrop-target ring; header status values"]
-            PanelFrame["PanelFrame\nidentical 32px header (chevron/title/status/grip);\nregisters host el; header mousedown -> drag"]
+            DockService["DockService\nLayoutState (dock/flexes/open/leftW/rightW),\nlocalStorage['drey.dock'];\nbeginHeaderPress (click=collapse / drag=move) + title-chip ghost,\nonDragMove/move, startSplit, startDockResize, reset, openAndExpand"]
+            Dock["Dock [side]\nrenders panel list; drop-line + splitter;\ndark wash on the drop-target dock; header status values"]
+            PanelFrame["PanelFrame\nidentical 32px low-profile header (title/status/grip, no chevron);\nbody stays mounted + height-animates on collapse;\nregisters host el; header press -> collapse or drag"]
             Panels["CalendarPanel / FilesPanel / SearchPanelHost /\nWindowsPanel / AssistantPanel\n(PANEL_TITLES + PANEL_COMPONENTS registry)"]
         end
-        StatusBar["StatusBar\nEditorService.wordCount/charCount,\ndrag hint, Settings entry"]
+        StatusBar["StatusBar\nEditorService.wordCount/charCount,\nSettings entry"]
         EditorService2["EditorService\n+ lineNumbers signal (drey.editor),\nwordCount/charCount, newUntitled(), saveAll()"]
         DockService2["(same DockService)"]
         App --> Titlebar

@@ -21,6 +21,15 @@
     @if (vault.activeVaultPath()) {
       <button
         type="button"
+        class="icon-btn"
+        (click)="collapseAll()"
+        title="Collapse all folders"
+        aria-label="Collapse all folders"
+      >
+        <app-icon name="chevrons-down-up" [size]="12" />
+      </button>
+      <button
+        type="button"
         class="icon-btn refresh"
         (click)="onRefresh()"
         [disabled]="vault.isLoading()"
@@ -96,7 +105,7 @@
   } @else if (vault.fileTree().length === 0) {
     <p class="hint">Vault is empty.</p>
   } @else {
-    <div class="tree-scroll">
+    <div class="tree-scroll" tabindex="0" (keydown)="onTreeKeydown($event)">
       <ng-container *ngTemplateOutlet="tree; context: { $implicit: vault.fileTree(), depth: 0 }" />
     </div>
   }
@@ -135,8 +144,9 @@
       <button
         type="button"
         class="node folder"
+        [class.selected]="selected() === entry.relativePath"
         [style.padding-left.px]="8 + depth * 13"
-        (click)="toggleFolder(entry.relativePath)"
+        (click)="onFolderClick(entry)"
         (contextmenu)="openMenu($event, entry)"
       >
         <app-icon
@@ -160,6 +170,7 @@
         class="node file"
         draggable="true"
         [class.active]="editor.openPath() === entry.relativePath"
+        [class.selected]="selected() === entry.relativePath"
         [style.padding-left.px]="8 + depth * 13"
         (click)="onFileClick(entry)"
         (dragstart)="onFileDragStart($event, entry)"

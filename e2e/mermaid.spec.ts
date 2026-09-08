@@ -64,8 +64,12 @@ test.describe('mermaid diagrams in Live Preview (ADR-0025)', () => {
     });
     // No successfully-rendered diagram alongside the error.
     await expect(page.locator('app-editor .cm-content .lp-mermaid .lp-mermaid-svg')).toHaveCount(0);
+    // Clicking the error box itself drops the caret into the fence to fix it.
+    await page.locator('app-editor .cm-content .lp-mermaid-error').click();
+    await expect(page.locator('app-editor .cm-content .lp-mermaid')).toHaveCount(0);
+    await expect(page.locator('app-editor .cm-content')).toContainText('A -->');
     // The app is still alive and responsive.
-    await expect(page.locator('app-titlebar .brand .name')).toHaveText('drey');
+    await expect(page.locator('app-titlebar .brand .mark')).toBeVisible();
   });
 
   test('the "Add entry" drawer renders a diagram too (shared surface)', async ({
@@ -75,7 +79,7 @@ test.describe('mermaid diagrams in Live Preview (ADR-0025)', () => {
     await openNote(page, vaultDir, 'note.md', '# note\n');
 
     const bottom = page.locator('app-dock[side="bottom"]');
-    await bottom.locator('app-panel-frame .twist').first().click();
+    await bottom.locator('app-panel-frame .head').first().click();
     const surface = bottom.locator('app-entry-drawer .md-editor .cm-content');
     await surface.click();
     await page.keyboard.insertText('intro\n\n```mermaid\ngraph LR; X-->Y;\n```');

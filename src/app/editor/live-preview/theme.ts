@@ -8,10 +8,21 @@ import { EditorView } from '@codemirror/view';
  */
 export const livePreviewTheme = EditorView.theme(
   {
+    // The expanded frontmatter block (`---` ... `---`) reads as plain grey
+    // body text, matching `.cm-fm-line` in source mode -- no mono, no dimming.
+    // The `span` rule (0,0,1,1) overrides the per-token highlight spans:
+    // without a frontmatter parser, Lezer-Markdown tags the block as a Setext
+    // H2, so each line otherwise gets heading weight/size + inline colours.
     '.lp-frontmatter': {
-      color: 'var(--text-faint)',
-      fontFamily: 'var(--font-mono)',
-      fontSize: '0.85em',
+      color: 'var(--text-3)',
+    },
+    '.lp-frontmatter span': {
+      color: 'var(--text-3)',
+      fontWeight: '400',
+      fontStyle: 'normal',
+      fontSize: '1em',
+      fontFamily: 'var(--font-sans)',
+      textDecoration: 'none',
     },
 
     '.lp-quote': {
@@ -166,6 +177,8 @@ export const livePreviewTheme = EditorView.theme(
       fontFamily: 'var(--font-mono)',
       fontSize: '0.85em',
       color: 'var(--danger, #e06c75)',
+      // The whole box is a hit target back into the fenced source.
+      cursor: 'pointer',
     },
 
     '.lp-table': {

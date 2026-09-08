@@ -31,6 +31,11 @@ export interface TagSearchHit {
   snippet: string;
   /** The full section body (heading excluded) -- used by the doc export. */
   text: string;
+  /**
+   * Set by the renderer when the hit comes from an open tab's unsaved
+   * buffer rather than the file on disk (`tags:search` never sets it).
+   */
+  unsaved?: boolean;
 }
 
 const SNIPPET_WINDOW = 240;

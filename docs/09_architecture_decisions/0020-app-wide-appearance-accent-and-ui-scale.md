@@ -85,7 +85,11 @@ renderer service.**
   which is the intuitive result.
 - `setZoomFactor` resets on reload; `AppearanceService`'s effect re-applies
   it whenever `SettingsService` (re)loads the config, so a refresh is
-  invisible.
+  invisible. **Cold start is the exception:**
+  the renderer's single post-load `setUiZoomFactor` call races the window's
+  first navigation and Chromium drops it, so `createMainWindow` also
+  re-applies the stored factor on every `webContents` `did-finish-load`
+  from the main process — the authoritative path.
 - The accent is now a single source of truth. A custom hex with poor
   contrast is possible; the presets are the safe path and the default.
 - `styles.css` no longer needs a `rem` refactor. Component stylesheets keep

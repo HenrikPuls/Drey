@@ -1,11 +1,12 @@
 import { test, expect } from './fixtures/drey';
 
 /** The chipmunk mark in the titlebar, and the About pane. */
-test('the titlebar shows the icon (not a plain square) and lowercase "drey"', async ({ page }) => {
+test('the titlebar shows the icon (not a plain square)', async ({ page }) => {
   const mark = page.locator('app-titlebar .brand .mark');
   await expect(mark).toHaveJSProperty('tagName', 'IMG');
   await expect(mark).toHaveJSProperty('naturalWidth', 512); // the PNG actually loaded
-  await expect(page.locator('app-titlebar .brand .name')).toHaveText('drey');
+  // The word-mark text was removed -- the icon alone stands for the app.
+  await expect(page.locator('app-titlebar .brand .name')).toHaveCount(0);
   await page.locator('app-titlebar').screenshot({ path: 'test-results/titlebar.png' });
 });
 

@@ -8,25 +8,26 @@ import {
   inject,
   input,
 } from '@angular/core';
-import { Icon } from '../icons/icon';
 import { DockService, PanelId } from './dock.service';
 import { PANEL_TITLES } from './panels/panel-registry';
 
 /**
- * The chrome every dock panel shares (DESIGN.md principle 3): a 32px header
- * with a collapse chevron, the mono-uppercase title, an optional status
- * value and a drag grip -- then the panel body (`<ng-content>`).
+ * The chrome every dock panel shares (DESIGN.md principle 3): a 32px
+ * low-profile header (the mono-uppercase title + an optional status value +
+ * a drag grip), then the panel body (`<ng-content>`).
  *
  * The body scrolls, except for the assistant panel, which fills the frame
- * and scrolls internally (its own header + composer stay put).
+ * and scrolls internally (its own header + composer stay put). It stays
+ * mounted while collapsed so its state survives; `.body-wrap` animates the
+ * height between the two.
  *
- * `mousedown` on the header (but not the chevron) starts a panel drag via
- * `DockService`; the chevron toggles collapse.
+ * `mousedown` on the header opens a press gesture in `DockService`: a click
+ * (no movement) toggles collapse, a drag past the threshold moves the panel
+ * between docks. Enter / Space on the focused header also toggles.
  */
 @Component({
   selector: 'app-panel-frame',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [Icon],
   templateUrl: './panel-frame.html',
   styleUrl: './panel-frame.css',
   host: {
@@ -60,13 +61,14 @@ export class PanelFrame implements OnInit {
     this.dock.registerPanelEl(this.panelId(), this.el);
   }
 
-  protected startDrag(event: MouseEvent): void {
-    this.dock.startPanelDrag(this.panelId(), event);
+  protected onHeaderPress(event: MouseEvent): void {
+    this.dock.beginHeaderPress(this.panelId(), this.title(), event);
   }
 
-  protected toggleCollapse(event: MouseEvent): void {
-    // Stop the header drag from starting on the chevron.
-    event.stopPropagation();
-    this.dock.toggleCollapse(this.panelId());
+  protected onHeaderKey(event: KeyboardEvent): void {
+    if (event.key === 'Enter' || event.key === ' ') {
+      event.preventDefault();
+      this.dock.toggleCollapse(this.panelId());
+    }
   }
 }

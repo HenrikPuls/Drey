@@ -27,7 +27,7 @@ test('switching to the "Ruled" template changes what the drawer appends', async 
 
   // Fill and submit the drawer.
   const bottom = page.locator('app-dock[side="bottom"]');
-  await bottom.locator('app-panel-frame .twist').first().click();
+  await bottom.locator('app-panel-frame .head').first().click();
   await bottom.locator('#entry-topic').fill('Urlaub-Ideen');
   await bottom.locator('.chip-input').fill('urlaub');
   await bottom.locator('.chip-input').press('Enter');

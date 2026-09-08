@@ -13,13 +13,24 @@
   width: 100%;
 }
 
+/* The dock the drag would drop into: a soft dark wash over the whole
+   column, no accent ring -- low-profile, matches the panel headers. */
 :host(.drop-target) {
-  box-shadow: var(--drop-ring);
+  position: relative;
+}
+
+:host(.drop-target)::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.18);
+  pointer-events: none;
+  z-index: 5;
 }
 
 /* An emptied dock while a panel is mid-drag: keep a visible target area. */
 :host(.drag-active) {
-  outline: 1px dashed var(--border-strong);
+  outline: 1px dashed var(--border);
   outline-offset: -4px;
 }
 
@@ -43,10 +54,13 @@ app-panel-frame {
   min-height: 0;
 }
 
-/* 2px accent bar at the live drop position during a panel drag. */
+/* 2px accent bar at the live drop position during a panel drag -- kept
+   above the drop-target wash. */
 .drop-line {
   flex: none;
   height: 2px;
+  position: relative;
+  z-index: 6;
   background: var(--accent);
 }
 

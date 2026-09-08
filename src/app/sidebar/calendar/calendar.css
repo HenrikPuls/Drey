@@ -1,10 +1,12 @@
 :host {
   display: block;
-  /* Cap the width and centre it so the day cells keep their proportions
-     in a wide dock instead of stretching into flat rectangles. Combined
-     with the dock giving the Calendar panel its content height
-     (`DockService.contentHeight`), the panel never grows taller either. */
-  max-width: 312px;
+  /* A fixed width, centred, so the calendar keeps one size in a wide dock
+     instead of stretching -- but `max-width: 100%` lets it shrink to fit a
+     dock narrower than that (never clipped). Combined with the dock giving
+     the Calendar panel its content height (`DockService.contentHeight`),
+     the panel never grows taller either. */
+  width: 312px;
+  max-width: 100%;
   margin: 0 auto;
   padding: 0 12px 12px;
 }

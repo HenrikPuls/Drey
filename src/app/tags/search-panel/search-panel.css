@@ -232,6 +232,19 @@
   white-space: nowrap;
 }
 
+.hit-unsaved {
+  margin-left: 6px;
+  padding: 0 5px;
+  border-radius: var(--radius-xs);
+  background: var(--accent-surface);
+  color: var(--accent-text);
+  font-family: var(--font-mono);
+  font-size: 9px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  vertical-align: middle;
+}
+
 .hit-path {
   font-family: var(--font-mono);
   font-size: 10px;
