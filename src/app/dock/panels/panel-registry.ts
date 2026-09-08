@@ -1,6 +1,7 @@
 import { Type } from '@angular/core';
 import { PanelId } from '../dock.service';
 import { CalendarPanel } from './calendar-panel';
+import { EntryPanel } from './entry-panel';
 import { FilesPanel } from './files-panel';
 import { SearchPanelHost } from './search-panel-host';
 import { WindowsPanel } from './windows-panel';
@@ -17,6 +18,7 @@ export const PANEL_TITLES: Record<PanelId, string> = {
   search: 'Search',
   windows: 'Open windows',
   assistant: 'Assistant',
+  entry: 'Add entry',
 };
 
 export const PANEL_COMPONENTS: Record<PanelId, Type<unknown>> = {
@@ -25,4 +27,5 @@ export const PANEL_COMPONENTS: Record<PanelId, Type<unknown>> = {
   search: SearchPanelHost,
   windows: WindowsPanel,
   assistant: AssistantPanel,
+  entry: EntryPanel,
 };

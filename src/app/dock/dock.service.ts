@@ -1,9 +1,17 @@
 import { Injectable, computed, signal } from '@angular/core';
 
-/** The five dockable panels. Order within a dock is the render order. */
-export type PanelId = 'calendar' | 'files' | 'search' | 'windows' | 'assistant';
+/** The dockable panels. Order within a dock is the render order. */
+export type PanelId = 'calendar' | 'files' | 'search' | 'windows' | 'assistant' | 'entry';
 
-export type DockSide = 'left' | 'right';
+/**
+ * The three docks. `left` / `right` are vertical columns beside the
+ * editor; `bottom` is a band under it (the old fixed "Add entry" strip,
+ * now a real dock). Panels stack vertically in every dock -- the bottom
+ * band just happens to be wide and short.
+ */
+export type DockSide = 'left' | 'right' | 'bottom';
+
+const DOCK_SIDES: readonly DockSide[] = ['left', 'right', 'bottom'];
 
 /** Persisted layout state (DESIGN.md "Datenmodell", minus the transient drag fields). */
 interface DockState {
@@ -14,9 +22,18 @@ interface DockState {
   open: Record<PanelId, boolean>;
   leftW: number;
   rightW: number;
+  /** Height of the bottom dock band. */
+  bottomH: number;
 }
 
-const ALL_PANELS: readonly PanelId[] = ['calendar', 'files', 'search', 'windows', 'assistant'];
+const ALL_PANELS: readonly PanelId[] = [
+  'calendar',
+  'files',
+  'search',
+  'windows',
+  'assistant',
+  'entry',
+];
 
 /**
  * Panels that take exactly their content's height when expanded instead of
@@ -28,17 +45,28 @@ const ALL_PANELS: readonly PanelId[] = ['calendar', 'files', 'search', 'windows'
 const CONTENT_HEIGHT_PANELS: ReadonlySet<PanelId> = new Set<PanelId>(['calendar']);
 
 const WIDTH = { min: 180, max: 560 } as const;
+const HEIGHT = { min: 140, max: 680 } as const;
 
 function defaultState(): DockState {
   return {
     dock: {
       left: ['calendar', 'files', 'search', 'windows'],
       right: ['assistant'],
+      bottom: ['entry'],
     },
-    flexes: { calendar: 250, files: 340, search: 220, windows: 150, assistant: 100 },
-    open: { calendar: true, files: true, search: false, windows: true, assistant: true },
+    flexes: { calendar: 250, files: 340, search: 220, windows: 150, assistant: 100, entry: 200 },
+    open: {
+      calendar: true,
+      files: true,
+      search: false,
+      windows: true,
+      assistant: true,
+      // The "Add entry" panel keeps the drawer's old habit of opening collapsed.
+      entry: false,
+    },
     leftW: 248,
     rightW: 340,
+    bottomH: 280,
   };
 }
 
@@ -79,8 +107,10 @@ export class DockService {
 
   readonly leftIds = computed(() => this.state().dock.left);
   readonly rightIds = computed(() => this.state().dock.right);
+  readonly bottomIds = computed(() => this.state().dock.bottom);
   readonly hasLeft = computed(() => this.state().dock.left.length > 0);
   readonly hasRight = computed(() => this.state().dock.right.length > 0);
+  readonly hasBottom = computed(() => this.state().dock.bottom.length > 0);
 
   idsFor(side: DockSide): PanelId[] {
     return this.state().dock[side];
@@ -88,13 +118,7 @@ export class DockService {
 
   sideOf(id: PanelId): DockSide | null {
     const { dock } = this.state();
-    if (dock.left.includes(id)) {
-      return 'left';
-    }
-    if (dock.right.includes(id)) {
-      return 'right';
-    }
-    return null;
+    return DOCK_SIDES.find((side) => dock[side].includes(id)) ?? null;
   }
 
   collapsed(id: PanelId): boolean {
@@ -110,8 +134,14 @@ export class DockService {
     return this.state().flexes[id];
   }
 
+  /** Column width for a side dock (not meaningful for `bottom` -- use `dockHeight`). */
   dockWidth(side: DockSide): number {
     return side === 'left' ? this.state().leftW : this.state().rightW;
+  }
+
+  /** Band height for the bottom dock. */
+  dockHeight(): number {
+    return this.state().bottomH;
   }
 
   toggleCollapse(id: PanelId): void {
@@ -125,7 +155,7 @@ export class DockService {
         return s;
       }
       const next: DockState = { ...s, open: { ...s.open, [id]: true } };
-      if (!s.dock.left.includes(id) && !s.dock.right.includes(id)) {
+      if (!DOCK_SIDES.some((side) => s.dock[side].includes(id))) {
         next.dock = { ...s.dock, left: [...s.dock.left, id] };
       }
       return next;
@@ -135,6 +165,11 @@ export class DockService {
   setDockWidth(side: DockSide, px: number): void {
     const clamped = Math.max(WIDTH.min, Math.min(WIDTH.max, Math.round(px)));
     this.patch((s) => (side === 'left' ? { ...s, leftW: clamped } : { ...s, rightW: clamped }));
+  }
+
+  setBottomHeight(px: number): void {
+    const clamped = Math.max(HEIGHT.min, Math.min(HEIGHT.max, Math.round(px)));
+    this.patch((s) => ({ ...s, bottomH: clamped }));
   }
 
   /** View -> "Reset layout": everything back to the defaults. */
@@ -198,10 +233,18 @@ export class DockService {
   private readonly onDragMove = (event: MouseEvent): void => {
     const left = this.dockEls.get('left')?.getBoundingClientRect();
     const right = this.dockEls.get('right')?.getBoundingClientRect();
+    const bottom = this.dockEls.get('bottom')?.getBoundingClientRect();
     const t = DockService.DOCK_TOLERANCE;
 
     let target: DockSide;
-    if (left && event.clientX <= left.right + t) {
+    if (
+      bottom &&
+      event.clientY >= bottom.top - t &&
+      event.clientX >= bottom.left - t &&
+      event.clientX <= bottom.right + t
+    ) {
+      target = 'bottom';
+    } else if (left && event.clientX <= left.right + t) {
       target = 'left';
     } else if (right && event.clientX >= right.left - t) {
       target = 'right';
@@ -248,11 +291,13 @@ export class DockService {
   move(id: PanelId, dock: DockSide, index: number): void {
     this.patch((s) => {
       const from = s.dock[dock].slice(0, index).filter((x) => x !== id).length;
-      const left = s.dock.left.filter((x) => x !== id);
-      const right = s.dock.right.filter((x) => x !== id);
-      const targetList = dock === 'left' ? left : right;
-      targetList.splice(from, 0, id);
-      return { ...s, dock: { left, right } };
+      const lists: Record<DockSide, PanelId[]> = {
+        left: s.dock.left.filter((x) => x !== id),
+        right: s.dock.right.filter((x) => x !== id),
+        bottom: s.dock.bottom.filter((x) => x !== id),
+      };
+      lists[dock].splice(from, 0, id);
+      return { ...s, dock: lists };
     });
   }
 
@@ -287,6 +332,17 @@ export class DockService {
       return;
     }
     event.preventDefault();
+    if (side === 'bottom') {
+      // The band grows as the pointer moves up: measure from its own
+      // bottom edge so a status bar / other chrome below it doesn't skew
+      // the value.
+      const anchor =
+        this.dockEls.get('bottom')?.getBoundingClientRect().bottom ?? window.innerHeight;
+      this.beginPointerGesture(event, 'row-resize', (ev) => {
+        this.setBottomHeight(anchor - ev.clientY);
+      });
+      return;
+    }
     this.beginPointerGesture(event, 'col-resize', (ev) => {
       this.setDockWidth(side, side === 'left' ? ev.clientX : window.innerWidth - ev.clientX);
     });
@@ -330,8 +386,11 @@ export class DockService {
 
   private persist(): void {
     try {
-      const { dock, flexes, open, leftW, rightW } = this.state();
-      localStorage.setItem(DockService.KEY, JSON.stringify({ dock, flexes, open, leftW, rightW }));
+      const { dock, flexes, open, leftW, rightW, bottomH } = this.state();
+      localStorage.setItem(
+        DockService.KEY,
+        JSON.stringify({ dock, flexes, open, leftW, rightW, bottomH }),
+      );
     } catch {
       // Private-mode / storage-disabled: a non-persisted session is fine.
     }
@@ -365,12 +424,18 @@ export class DockService {
 
     const left = clean(saved.dock?.left);
     const right = clean(saved.dock?.right);
-    const placed = new Set<PanelId>([...left, ...right]);
-    // Any panel missing from the stored docks (e.g. a newly added one) goes
-    // back to wherever the defaults keep it.
+    const bottom = clean(saved.dock?.bottom);
+    const placed = new Set<PanelId>([...left, ...right, ...bottom]);
+    // Any panel missing from the stored docks (e.g. one added by an app
+    // update, like `entry`) goes back to wherever the defaults keep it.
     for (const id of ALL_PANELS) {
       if (!placed.has(id)) {
-        (base.dock.left.includes(id) ? left : right).push(id);
+        const home = base.dock.left.includes(id)
+          ? left
+          : base.dock.right.includes(id)
+            ? right
+            : bottom;
+        home.push(id);
       }
     }
 
@@ -378,7 +443,7 @@ export class DockService {
       typeof v === 'number' && Number.isFinite(v) ? v : fallback;
 
     return {
-      dock: { left, right },
+      dock: { left, right, bottom },
       flexes: Object.fromEntries(
         ALL_PANELS.map((id) => [id, num(saved.flexes?.[id], base.flexes[id])]),
       ) as Record<PanelId, number>,
@@ -390,6 +455,7 @@ export class DockService {
       ) as Record<PanelId, boolean>,
       leftW: Math.max(WIDTH.min, Math.min(WIDTH.max, num(saved.leftW, base.leftW))),
       rightW: Math.max(WIDTH.min, Math.min(WIDTH.max, num(saved.rightW, base.rightW))),
+      bottomH: Math.max(HEIGHT.min, Math.min(HEIGHT.max, num(saved.bottomH, base.bottomH))),
     };
   }
 }

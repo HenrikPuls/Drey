@@ -1,53 +1,12 @@
-/* Bottom drawer of the main area. Open, the host is given an explicit
-   height by the shell (drag-resizable, LayoutService.drawerHeight) and the
-   body field takes the leftover space; collapsed, it is just the toggle
-   strip. Tokens only (src/styles.css). */
+/* The "Add entry" panel body. The `PanelFrame` gives it a scrolling body
+   sized by the bottom dock's height; this fills it. Tokens only
+   (src/styles.css). */
 :host {
   display: flex;
   flex-direction: column;
-  flex: 0 0 auto;
   min-height: 0;
+  height: 100%;
   background: var(--bg-editor);
-  border-top: 1px solid var(--border);
-}
-
-.drawer-toggle {
-  display: flex;
-  align-items: center;
-  gap: 7px;
-  width: 100%;
-  height: 32px;
-  padding: 0 14px;
-  background: transparent;
-  border: none;
-  color: var(--text-4);
-  cursor: pointer;
-}
-
-.drawer-toggle:hover {
-  color: var(--text-primary);
-}
-
-.dt-label {
-  font-family: var(--font-mono);
-  font-size: var(--fs-mono-title);
-  letter-spacing: var(--ls-mono-title);
-  text-transform: uppercase;
-  white-space: nowrap;
-}
-
-.drawer-toggle app-icon {
-  display: inline-flex;
-  transition: transform 0.12s;
-}
-
-.drawer-toggle.open app-icon {
-  transform: rotate(90deg);
-}
-
-.pending {
-  color: var(--accent);
-  font-size: 9px;
 }
 
 .drawer-inner {
@@ -55,7 +14,7 @@
   min-height: 0;
   display: flex;
   flex-direction: column;
-  padding: 0 14px 14px;
+  padding: 12px 14px 14px;
   overflow-y: auto;
   overflow-x: hidden;
 }

@@ -1,15 +1,12 @@
-import { Component, HostListener, inject } from '@angular/core';
+import { Component, inject } from '@angular/core';
 import { Editor } from './editor/editor';
-import { EntryDrawer } from './entry-drawer/entry-drawer';
 import { ConfirmationDialog } from './confirmation-dialog/confirmation-dialog';
 import { ActionsService } from './services/actions.service';
 import { AppearanceService } from './services/appearance.service';
 import { AssistantService } from './services/assistant.service';
-import { EntryDraftService } from './services/entry-draft.service';
 import { DailyNoteService } from './services/daily-note.service';
 import { EditorService } from './services/editor.service';
 import { EditorZoomService } from './services/editor-zoom.service';
-import { LayoutService } from './services/layout.service';
 import { SettingsService } from './services/settings.service';
 import { KeybindingService } from './keybindings';
 import { TagSearchService } from './tags';
@@ -25,30 +22,23 @@ import { TabBar } from './tab-bar/tab-bar';
  * (calendar, files, search, open windows, assistant) live in the two docks
  * and are dragged/resized/collapsed via `DockService`.
  *
- * The main column is a tab bar + editor (once at least one document is
- * open) with the "Add entry" drawer pinned to its bottom. Quick-capture
- * (`DailyNoteService`) wires the Ctrl+Alt+N hotkey for the app's lifetime.
- *
- * The only imperative code here is the entry-drawer resize handle: pointer
- * capture keeps the drag alive outside the 6px strip, and the moved-to size
- * is pushed into `LayoutService`. The dock widths get their own edge
- * resizers in step 3.
+ * The centre column is a tab bar + editor (once at least one document is
+ * open) above the bottom dock (which hosts the "Add entry" panel by
+ * default). Quick-capture (`DailyNoteService`) wires the Ctrl+Alt+N hotkey
+ * for the app's lifetime. Every pane resize is now a `DockService` edge /
+ * splitter gesture -- `App` holds no imperative drag code.
  */
 @Component({
   selector: 'app-root',
-  imports: [Titlebar, Dock, StatusBar, TabBar, Editor, EntryDrawer, Settings, ConfirmationDialog],
+  imports: [Titlebar, Dock, StatusBar, TabBar, Editor, Settings, ConfirmationDialog],
   templateUrl: './app.html',
   styleUrl: './app.css',
 })
 export class App {
   protected readonly ipcAvailable = typeof window !== 'undefined' && !!window.dreyApi;
   protected readonly editor = inject(EditorService);
-  protected readonly layout = inject(LayoutService);
   protected readonly settings = inject(SettingsService);
   protected readonly dock = inject(DockService);
-  protected readonly drawer = inject(EntryDraftService);
-
-  private dragging = false;
 
   constructor() {
     // Subscribe to the quick-capture hotkey for the app's lifetime.
@@ -107,29 +97,5 @@ export class App {
       keybinding: 'Mod+G',
       run: () => this.editor.toggleLineNumbers(),
     });
-  }
-
-  protected startDrawerDrag(event: PointerEvent): void {
-    event.preventDefault();
-    (event.target as HTMLElement).setPointerCapture(event.pointerId);
-    this.dragging = true;
-    document.body.style.userSelect = 'none';
-  }
-
-  @HostListener('pointermove', ['$event'])
-  protected onPointerMove(event: PointerEvent): void {
-    if (this.dragging) {
-      // The drawer sits on the window's bottom edge.
-      this.layout.setDrawerHeight(window.innerHeight - event.clientY);
-    }
-  }
-
-  @HostListener('pointerup')
-  @HostListener('pointercancel')
-  protected onPointerUp(): void {
-    if (this.dragging) {
-      this.dragging = false;
-      document.body.style.userSelect = '';
-    }
   }
 }

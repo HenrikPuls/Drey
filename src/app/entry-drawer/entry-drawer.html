@@ -1,82 +1,66 @@
-<button
-  type="button"
-  class="drawer-toggle"
-  [class.open]="drawer.open()"
-  [attr.aria-expanded]="drawer.open()"
-  (click)="drawer.toggle()"
->
-  <app-icon name="chevron-right" [size]="8" [strokeWidth]="1.1" />
-  <span class="dt-label">Add entry</span>
-  @if (!drawer.open() && drawer.hasContent()) {
-    <span class="pending" title="Unsent draft">●</span>
-  }
-</button>
+<div class="drawer-inner">
+  <div class="thema-field">
+    <label for="entry-topic">TOPIC</label>
+    <input
+      id="entry-topic"
+      type="text"
+      autocomplete="off"
+      placeholder="What is this entry about? (recommended)"
+      [value]="drawer.topic()"
+      (input)="drawer.setTopic($any($event.target).value)"
+    />
+  </div>
 
-@if (drawer.open()) {
-  <div class="drawer-inner">
-    <div class="thema-field">
-      <label for="entry-topic">TOPIC</label>
+  <div class="tag-row">
+    <span class="tr-label">TAGS</span>
+    <app-autotag-button />
+    <div class="chip-field">
+      @for (chip of drawer.tags(); track chip) {
+        <span class="chip tags">
+          #{{ chip }}
+          <button
+            type="button"
+            class="x"
+            [attr.aria-label]="'Remove ' + chip"
+            (click)="drawer.removeChip(chip)"
+          >
+            ×
+          </button>
+        </span>
+      }
       <input
-        id="entry-topic"
+        class="chip-input"
         type="text"
         autocomplete="off"
-        placeholder="What is this entry about? (recommended)"
-        [value]="drawer.topic()"
-        (input)="drawer.setTopic($any($event.target).value)"
+        placeholder="+ tag"
+        (keydown)="onChipKeydown($event)"
+        (blur)="onChipBlur($event)"
       />
     </div>
-
-    <div class="tag-row">
-      <span class="tr-label">TAGS</span>
-      <app-autotag-button />
-      <div class="chip-field">
-        @for (chip of drawer.tags(); track chip) {
-          <span class="chip tags">
-            #{{ chip }}
-            <button
-              type="button"
-              class="x"
-              [attr.aria-label]="'Remove ' + chip"
-              (click)="drawer.removeChip(chip)"
-            >
-              ×
-            </button>
-          </span>
-        }
-        <input
-          class="chip-input"
-          type="text"
-          autocomplete="off"
-          placeholder="+ tag"
-          (keydown)="onChipKeydown($event)"
-          (blur)="onChipBlur($event)"
-        />
-      </div>
-    </div>
-
-    <!-- The shared Markdown surface in compact mode, with the inline
-         spellchecker mixed in (red wavy underline + click popup). -->
-    <app-markdown-surface
-      class="md-editor"
-      [compact]="true"
-      [submitOnEnter]="false"
-      [spellcheck]="spellcheckSource"
-      placeholder="What happened? (Markdown)"
-      (docChanged)="drawer.setText($event)"
-    />
-
-    @if (editor.error(); as error) {
-      <p class="err">{{ error }}</p>
-    }
-
-    <div class="drawer-actions">
-      <span class="count">{{ bodyCount() }}</span>
-      <button type="button" class="btn" [disabled]="!drawer.hasContent()" (click)="discard()">
-        Discard
-      </button>
-      <button type="button" class="btn primary" [disabled]="!canSubmit()" (click)="submit()">
-        {{ editor.isSaving() ? 'Adding…' : 'Add to document' }}
-      </button>
-    </div>
   </div>
-}
+
+  <!-- The shared Markdown surface in compact mode, with the inline
+       spellchecker mixed in (red wavy underline + click popup). -->
+  <app-markdown-surface
+    class="md-editor"
+    [compact]="true"
+    [submitOnEnter]="false"
+    [spellcheck]="spellcheckSource"
+    placeholder="What happened? (Markdown)"
+    (docChanged)="drawer.setText($event)"
+  />
+
+  @if (editor.error(); as error) {
+    <p class="err">{{ error }}</p>
+  }
+
+  <div class="drawer-actions">
+    <span class="count">{{ bodyCount() }}</span>
+    <button type="button" class="btn" [disabled]="!drawer.hasContent()" (click)="discard()">
+      Discard
+    </button>
+    <button type="button" class="btn primary" [disabled]="!canSubmit()" (click)="submit()">
+      {{ editor.isSaving() ? 'Adding…' : 'Add to document' }}
+    </button>
+  </div>
+</div>

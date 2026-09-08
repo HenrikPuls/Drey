@@ -53,9 +53,18 @@
   background: var(--resize-hover);
 }
 
+/* The editor area stacked above the bottom dock. */
+.center-col {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
 .main-pane {
   flex: 1;
   min-width: 0;
+  min-height: 0;
   display: flex;
   flex-direction: column;
   background: var(--bg-editor);
@@ -65,13 +74,6 @@ app-editor {
   flex: 1;
   min-height: 0;
   display: flex;
-}
-
-/* Height comes from LayoutService while the drawer is open (the divider
-   above it drags that value); collapsed, it is just its toggle strip. */
-app-entry-drawer {
-  flex-shrink: 0;
-  min-height: 0;
 }
 
 .empty {

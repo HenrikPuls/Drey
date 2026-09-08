@@ -13,6 +13,7 @@ import { NgComponentOutlet } from '@angular/common';
 import { EditorService } from '../services/editor.service';
 import { AssistantService } from '../services/assistant.service';
 import { CalendarService } from '../services/calendar.service';
+import { EntryDraftService } from '../services/entry-draft.service';
 import { VaultService } from '../services/vault.service';
 import { TagSearchService } from '../tags';
 import { DockService, DockSide, PanelId } from './dock.service';
@@ -33,8 +34,10 @@ import { PANEL_COMPONENTS } from './panels/panel-registry';
   templateUrl: './dock.html',
   styleUrl: './dock.css',
   host: {
-    '[style.width.px]': 'width()',
-    '[style.minWidth.px]': 'width()',
+    '[style.width.px]': 'hostWidth()',
+    '[style.minWidth.px]': 'hostWidth()',
+    '[style.height.px]': 'hostHeight()',
+    '[class.bottom]': 'side() === "bottom"',
     '[class.drop-target]': 'isDropTarget()',
   },
 })
@@ -45,12 +48,19 @@ export class Dock implements OnInit {
   private readonly search = inject(TagSearchService);
   private readonly editor = inject(EditorService);
   private readonly assistant = inject(AssistantService);
+  private readonly entryDraft = inject(EntryDraftService);
   private readonly el = inject<ElementRef<HTMLElement>>(ElementRef).nativeElement;
 
   readonly side = input.required<DockSide>();
 
   protected readonly ids = computed<PanelId[]>(() => this.dock.idsFor(this.side()));
-  protected readonly width = computed(() => this.dock.dockWidth(this.side()));
+  /** A side dock is width-sized; the bottom dock is height-sized. */
+  protected readonly hostWidth = computed(() =>
+    this.side() === 'bottom' ? null : this.dock.dockWidth(this.side()),
+  );
+  protected readonly hostHeight = computed(() =>
+    this.side() === 'bottom' ? this.dock.dockHeight() : null,
+  );
   protected readonly isDropTarget = computed(() => this.dock.dropDock() === this.side());
 
   constructor() {
@@ -110,6 +120,8 @@ export class Dock implements OnInit {
         const p = this.assistant.notePath();
         return p ? (p.split('/').pop() ?? null) : null;
       }
+      case 'entry':
+        return this.entryDraft.hasContent() ? 'unsent draft' : null;
       default:
         return null;
     }
