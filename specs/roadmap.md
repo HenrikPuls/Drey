@@ -166,6 +166,14 @@ below).
   inside the vault, `resolveVaultImageUrl`, and the Live Preview image
   widget. No vault open → the paste is reported, not saved. No
   auto-caption.
+  - **Drag-and-drop ([ADR-0028](../docs/09_architecture_decisions/0028-drag-drop-into-the-editor.md)):**
+    dropping an image from the OS file manager works like paste; dragging a
+    file from the Files panel links an image in place (relative path, no
+    copy) or inlines a text file's contents; dragging an image from a web
+    browser downloads it into `attachments/` with a `[Source](url)` line.
+    A window-level guard
+    ([ADR-0027](../docs/09_architecture_decisions/0027-window-dnd-navigation-guard.md))
+    makes a stray drop a no-op instead of navigating the app away.
   - **Viewing ([ADR-0026](../docs/09_architecture_decisions/0026-image-viewer-and-lightbox.md)):**
     a rendered image honours an Obsidian-style `![alt|W]` / `![alt|WxH]`
     size and has a hover **resize grip** (drag → rewrites the `|W` in the
