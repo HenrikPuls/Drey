@@ -274,7 +274,7 @@ function registerIpcHandlers(
     enabled: appConfig.get().mcp.enabled,
     httpListening: mcpHttp.running,
     httpPort: mcpHttp.activePort,
-    stdioBridgePath: path.join(__dirname, 'mcp', 'stdio-bridge.js'),
+    stdioBridgePath: stdioBridgePath(),
   }));
   ipcMain.handle(IPC_CHANNELS.mcpWriteDecision, (_event, id: number, approved: boolean): void => {
     pendingMcpWrites.get(id)?.(approved);
@@ -415,6 +415,22 @@ async function pickDictionary(): Promise<CustomDictionary | null> {
 }
 
 let mainWindow: BrowserWindow | null = null;
+
+/**
+ * Absolute path to the MCP stdio bridge script an external client
+ * (`node <path>`) runs. Packaged, `__dirname` is inside `app.asar` but the
+ * script was `asarUnpack`'d, and a plain external Node does not redirect
+ * `app.asar` -> `app.asar.unpacked` the way Electron does -- so point at
+ * the real file. `$`-anchored so a path that merely contains "app.asar"
+ * earlier is not corrupted.
+ */
+function stdioBridgePath(): string {
+  const rel = ['dist-electron', 'electron', 'mcp', 'stdio-bridge.js'];
+  if (app.isPackaged) {
+    return path.join(app.getAppPath().replace(/app\.asar$/, 'app.asar.unpacked'), ...rel);
+  }
+  return path.join(__dirname, 'mcp', 'stdio-bridge.js');
+}
 
 /**
  * In-flight `vault_write` confirmations from MCP clients, keyed by the id
