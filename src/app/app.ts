@@ -7,6 +7,7 @@ import { AppearanceService } from './services/appearance.service';
 import { AssistantService } from './services/assistant.service';
 import { DailyNoteService } from './services/daily-note.service';
 import { EditorService } from './services/editor.service';
+import { DropGuardService } from './services/drop-guard.service';
 import { EditorZoomService } from './services/editor-zoom.service';
 import { McpBridgeService } from './services/mcp-bridge.service';
 import { SettingsService } from './services/settings.service';
@@ -60,6 +61,8 @@ export class App {
     // Instantiate at startup so its global Ctrl+wheel guard is installed
     // even before the first document (and its editor) opens (ADR-0015).
     inject(EditorZoomService);
+    // Install the window-level drag/drop navigation guard (ADR-0027).
+    inject(DropGuardService);
     // Instantiate so the assistant panel reacts to the active note.
     inject(AssistantService);
     // Instantiate so the app-wide accent + UI scale from Settings ->
