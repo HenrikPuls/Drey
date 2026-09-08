@@ -16,6 +16,13 @@ export class VaultService {
   readonly isLoading = signal(false);
   readonly error = signal<string | null>(null);
 
+  /**
+   * The entry marked with "Copy" in the Files panel, awaiting a "Paste".
+   * Lives on the service (not the panel) so it survives the panel being
+   * unmounted and re-mounted as it is dragged between docks.
+   */
+  readonly clipboard = signal<{ path: string; name: string } | null>(null);
+
   constructor() {
     void this.refresh();
   }
@@ -73,6 +80,39 @@ export class VaultService {
       await window.dreyApi.createVaultDirectory(relativePath);
     }
     await this.loadFileTree();
+  }
+
+  /**
+   * Renames / moves an entry and reloads the tree. Resolves to the new
+   * vault-relative path. Errors propagate to the caller (a one-off alert).
+   */
+  async renameEntry(fromRelativePath: string, toRelativePath: string): Promise<string> {
+    if (typeof window === 'undefined' || !window.dreyApi?.renameVaultEntry) {
+      throw new Error('Renaming needs the desktop app.');
+    }
+    const next = await window.dreyApi.renameVaultEntry(fromRelativePath, toRelativePath);
+    await this.loadFileTree();
+    return next;
+  }
+
+  /** Copies an entry into `destDirRelativePath` (`''` = vault root) and reloads. */
+  async copyEntry(sourceRelativePath: string, destDirRelativePath: string): Promise<string> {
+    if (typeof window === 'undefined' || !window.dreyApi?.copyVaultEntry) {
+      throw new Error('Copying needs the desktop app.');
+    }
+    const next = await window.dreyApi.copyVaultEntry(sourceRelativePath, destDirRelativePath);
+    await this.loadFileTree();
+    return next;
+  }
+
+  /** Duplicates an entry next to itself (`" copy"` suffix) and reloads. */
+  async duplicateEntry(sourceRelativePath: string): Promise<string> {
+    if (typeof window === 'undefined' || !window.dreyApi?.duplicateVaultEntry) {
+      throw new Error('Duplicating needs the desktop app.');
+    }
+    const next = await window.dreyApi.duplicateVaultEntry(sourceRelativePath);
+    await this.loadFileTree();
+    return next;
   }
 
   /**

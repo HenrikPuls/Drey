@@ -37,6 +37,7 @@ export type IconName =
   | 'list-ordered'
   | 'grip-vertical'
   | 'minus'
+  | 'pencil'
   | 'square';
 
 const ICONS: Record<IconName, readonly IconShape[]> = {
@@ -135,6 +136,8 @@ const ICONS: Record<IconName, readonly IconShape[]> = {
   ],
   // Titlebar minimize.
   minus: [{ kind: 'path', d: 'M5 12h14' }],
+  // Rename (matches the Live Preview widgets' edit affordance).
+  pencil: [{ kind: 'path', d: 'M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z' }],
   // Titlebar maximize (an outline square).
   square: [
     {

@@ -110,7 +110,7 @@ graph TB
         IpcHandlers["ipcMain.handle(...)"]
         Protocol["app:// protocol handler\n(serves the built renderer)"]
         Hotkey["globalShortcut (Ctrl+Alt+N)\n+ single-instance lock\n-> openTodayDailyNote()"]
-        VaultManager["VaultManager (electron/vault-manager.ts)\nactive vault + directory listing +\nfile read/write/create + dir create +\nbinary asset write (attachments/)\n(path-guarded)"]
+        VaultManager["VaultManager (electron/vault-manager.ts)\nactive vault + directory listing +\nfile read/write/create + dir create +\nrename/copy/duplicate (sidecar-aware) +\nbinary asset write (attachments/)\n(path-guarded)"]
         DailyNoteManager["DailyNoteManager (electron/daily-note.ts)\nensureTodayNote(): create daily/ note from\ntemplates/daily.md, scaffold template;\nnoteContentFor(date): substituted template, no write"]
         TagIndex["TagIndex (electron/tag-index.ts)\nin-memory tag vocabulary + master metadata;\nrebuild() scans all .md frontmatter\n(skips daily/ + templates/); tag:list / tag:registry"]
         NoteManager["NoteManager (electron/note-manager.ts)\nnote:save pipeline: merge inline #tags -> frontmatter,\nbump updated:, (6b) route entries to master docs"]
@@ -753,16 +753,26 @@ Follow-up polish on the visual shell, driven by direct UX feedback.
   bows out (`return` before `preventDefault`) when the target is the
   inline name `<input>`, so the native editing menu still works there.
   Chosen over the native menu after flagging the trade-off.
-- **New-file naming: inline input, `.md` appended when no extension is
-  typed.** `window.prompt` is disabled in Electron, so the name is entered
-  in a small input at the top of the Files panel (Enter commits, Esc/blur
-  cancels). Appending `.md` to an extension-less name is an assumption
-  (these notes are Markdown), not something the specs state.
-- **Create errors surface as a one-off `alert()`, not `VaultService.error()`.**
-  A name clash or a bad name shouldn't blank the whole file tree the way a
-  failed initial load does; `createEntry()` lets the error propagate and
-  the sidebar shows it transiently (consistent with the existing
-  `confirm()` on closing a dirty tab).
+- **New-file / rename naming: inline input, `.md` appended when no extension
+  is typed.** `window.prompt` is disabled in Electron, so the name is
+  entered in a small input at the top of the Files panel (Enter commits,
+  Esc/blur cancels). Rename reuses the same inline-input pattern
+  (`renaming` signal, name stem pre-selected). Appending `.md` to an
+  extension-less name is an assumption (these notes are Markdown), not
+  something the specs state.
+- **Copy / paste / duplicate / rename** (Files panel context menu): the
+  clipboard is a `{ path, name }` signal on `VaultService` (survives the
+  panel being re-mounted while dragged between docks). `VaultManager`
+  does the fs work (`renameEntry` / `copyEntry` / `duplicateEntry`,
+  `fsp.cp`/`fsp.rename`, `shared/unique-name.ts` for the `" copy"` suffix,
+  the `.md` assistant sidecar carried along); the three IPC handlers
+  rebuild the tag index like `vault:delete`. A rename re-points open tabs
+  via `EditorService.retargetTabs` (unsaved buffers survive).
+- **Create / copy / rename errors surface as a one-off `alert()`, not
+  `VaultService.error()`.** A name clash or a bad name shouldn't blank the
+  whole file tree the way a failed initial load does; the mutating methods
+  let the error propagate and the panel shows it transiently (consistent
+  with the existing `confirm()` on closing a dirty tab).
 - **Open-windows list capped at `max-height: 33%`** of the sidebar with its
   own scroll, and each row carries a close `x` (reusing the tab-bar close
   affordance → `EditorService.closeTab`, which already prompts on a dirty
@@ -1194,7 +1204,7 @@ graph TB
             ActionRunner["ActionRunner\nsummarize / ask / runGeneric /\nsummariseSearchResults (parked) /\nsuggestTags"]
         end
         NoteManager["NoteManager\nnote:save -> bump updated: (fenced only),\nwrite, TagIndex.reindexFile, on-save Actions"]
-        VaultManager["VaultManager\ndeleteEntry(), pickSavePath()"]
+        VaultManager["VaultManager\ndeleteEntry() / renameEntry() /\ncopyEntry() / duplicateEntry(), pickSavePath()"]
         NoteManager --> TagIndex
     end
 
@@ -1285,6 +1295,9 @@ holding an ordered list of panels, the main column between them, and a
 Assistant** — are dragged between docks by their header, resized by
 splitters, and collapsed to their 32px header. `Sidebar` is deleted; its
 file tree + context menu + inline-create flow moved into `FilesPanel`.
+`FilesPanel`'s context menu now also does copy / paste / duplicate /
+rename (`VaultService.copyEntry` / `duplicateEntry` / `renameEntry`,
+clipboard signal on `VaultService`).
 
 ```mermaid
 graph TB

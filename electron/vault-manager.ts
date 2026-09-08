@@ -6,6 +6,7 @@ import * as path from 'node:path';
 import { assetFileName, ATTACHMENTS_DIR, imageExtension } from '../shared/asset-name';
 import { sidecarPathFor } from '../shared/chat-thread';
 import { VaultFileContent, VaultFileEntry } from '../shared/ipc-api';
+import { uniqueCopyName } from '../shared/unique-name';
 
 interface VaultConfig {
   activeVaultPath: string | null;
@@ -302,6 +303,84 @@ export class VaultManager {
       const sidecar = this.resolveInVault(sidecarPathFor(relativePath));
       await fsp.rm(sidecar, { force: true }).catch(() => undefined);
     }
+  }
+
+  /**
+   * Renames / moves a file or folder from one vault-relative path to
+   * another. Both ends go through `resolveInVault`; the vault root is
+   * refused, a missing source and an occupied target both throw. A `.md`
+   * note's assistant sidecar (`.{name}.chat.json`) moves with it.
+   */
+  async renameEntry(fromRel: string, toRel: string): Promise<string> {
+    const from = this.resolveInVault(fromRel);
+    const to = this.resolveInVault(toRel);
+    if (!this.activeVaultPath || from === path.resolve(this.activeVaultPath)) {
+      throw new Error('Refusing to rename the vault root.');
+    }
+    if (from === to) {
+      return this.toRelative(to);
+    }
+    if (!fs.existsSync(from)) {
+      throw new Error(`Not found: ${fromRel}`);
+    }
+    if (fs.existsSync(to)) {
+      throw new Error(`Already exists: ${toRel}`);
+    }
+    await fsp.mkdir(path.dirname(to), { recursive: true });
+    await fsp.rename(from, to);
+    if (fromRel.toLowerCase().endsWith('.md') && toRel.toLowerCase().endsWith('.md')) {
+      const sidecarFrom = this.resolveInVault(sidecarPathFor(fromRel));
+      const sidecarTo = this.resolveInVault(sidecarPathFor(toRel));
+      if (fs.existsSync(sidecarFrom) && !fs.existsSync(sidecarTo)) {
+        await fsp.rename(sidecarFrom, sidecarTo).catch(() => undefined);
+      }
+    }
+    return this.toRelative(to);
+  }
+
+  /**
+   * Copies a file or folder (recursively) into `destDirRel` (`''` = vault
+   * root). The copy keeps the source's name, or gets a `" copy"` / `" copy
+   * N"` suffix when that name is already taken in the destination. Copying
+   * a folder into itself or its own subtree is refused. A `.md` note's
+   * assistant sidecar is copied alongside it.
+   */
+  async copyEntry(srcRel: string, destDirRel: string): Promise<string> {
+    const src = this.resolveInVault(srcRel);
+    if (!fs.existsSync(src)) {
+      throw new Error(`Not found: ${srcRel}`);
+    }
+    const destDir = destDirRel ? this.resolveInVault(destDirRel) : this.resolveInVault('.');
+    if (!fs.existsSync(destDir) || !fs.statSync(destDir).isDirectory()) {
+      throw new Error(`Not a folder: ${destDirRel || '(vault root)'}`);
+    }
+    if (destDir === src || destDir.startsWith(src + path.sep)) {
+      throw new Error('Cannot copy a folder into itself.');
+    }
+
+    const baseName = path.basename(src);
+    const siblings = await fsp.readdir(destDir);
+    const targetName = siblings.includes(baseName)
+      ? uniqueCopyName(baseName, siblings)
+      : baseName;
+    const dest = path.join(destDir, targetName);
+
+    await fsp.cp(src, dest, { recursive: true, errorOnExist: true, force: false });
+
+    if (srcRel.toLowerCase().endsWith('.md')) {
+      const sidecarSrc = this.resolveInVault(sidecarPathFor(srcRel));
+      if (fs.existsSync(sidecarSrc)) {
+        const sidecarDest = path.join(destDir, sidecarPathFor(targetName));
+        await fsp.cp(sidecarSrc, sidecarDest, { force: false }).catch(() => undefined);
+      }
+    }
+    return this.toRelative(dest);
+  }
+
+  /** Copies an entry next to itself, always with a `" copy"` suffix. */
+  async duplicateEntry(srcRel: string): Promise<string> {
+    const parent = srcRel.includes('/') ? srcRel.slice(0, srcRel.lastIndexOf('/')) : '';
+    return this.copyEntry(srcRel, parent);
   }
 
   /**
