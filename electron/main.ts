@@ -1,4 +1,14 @@
-import { app, BrowserWindow, dialog, globalShortcut, ipcMain, Menu, net, protocol } from 'electron';
+import {
+  app,
+  BrowserWindow,
+  dialog,
+  globalShortcut,
+  ipcMain,
+  Menu,
+  net,
+  protocol,
+  shell,
+} from 'electron';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { pathToFileURL } from 'node:url';
@@ -576,6 +586,25 @@ function createMainWindow(): BrowserWindow {
   });
 
   attachContextMenu(window);
+
+  // Belt-and-braces for the renderer's window-level drag/drop guard
+  // (ADR-0027): a stray file / link drop must never navigate the window
+  // away from the SPA, and an http(s) link opens in the OS browser.
+  window.webContents.on('will-navigate', (event, url) => {
+    const allowed = rendererDevServerUrl
+      ? url.startsWith(rendererDevServerUrl)
+      : url.startsWith('app://');
+    if (!allowed) {
+      event.preventDefault();
+    }
+  });
+  window.webContents.setWindowOpenHandler(({ url }) => {
+    if (/^https?:/i.test(url)) {
+      void shell.openExternal(url);
+    }
+    return { action: 'deny' };
+  });
+
   // Keep the renderer titlebar's maximize/restore glyph in sync with the
   // real window state.
   const emitMaximizeState = (): void => {
