@@ -27,6 +27,15 @@ export interface ImagePasteConfig {
   onError?: (message: string) => void;
 }
 
+/**
+ * True for a dropped/pasted file that is an image -- by MIME (the fast
+ * path) or, when the OS left `type` blank (common for a Windows Explorer
+ * drag), by a recognised image extension on the name.
+ */
+function isImageFile(type: string, name: string | undefined): boolean {
+  return type.startsWith('image/') || !!imageExtension(name ?? '');
+}
+
 /** Image files carried by a clipboard or drag `DataTransfer`. */
 function imageFiles(data: DataTransfer | null): File[] {
   if (!data) {
@@ -34,17 +43,18 @@ function imageFiles(data: DataTransfer | null): File[] {
   }
   const out: File[] = [];
   for (const item of Array.from(data.items ?? [])) {
-    if (item.kind === 'file' && item.type.startsWith('image/')) {
-      const file = item.getAsFile();
-      if (file) {
-        out.push(file);
-      }
+    if (item.kind !== 'file') {
+      continue;
+    }
+    const file = item.getAsFile();
+    if (file && isImageFile(item.type, file.name)) {
+      out.push(file);
     }
   }
   // Some drops expose `files` but not `items`.
   if (out.length === 0) {
     for (const file of Array.from(data.files ?? [])) {
-      if (file.type.startsWith('image/')) {
+      if (isImageFile(file.type, file.name)) {
         out.push(file);
       }
     }
@@ -116,11 +126,16 @@ export function imagePaste(config: ImagePasteConfig): Extension {
       if (view.state.readOnly) {
         return false;
       }
-      const files = imageFiles(event.dataTransfer);
-      if (files.length === 0) {
-        return false;
+      const data = event.dataTransfer;
+      const files = imageFiles(data);
+      const hasAnyFile = (data?.files.length ?? 0) > 0;
+      if (files.length === 0 && !hasAnyFile) {
+        return false; // a plain text / URL drag -- let CodeMirror handle it
       }
       event.preventDefault();
+      if (files.length === 0) {
+        return true; // a non-image file -- swallow it, don't let CM read it as text
+      }
       const at =
         view.posAtCoords({ x: event.clientX, y: event.clientY }) ?? view.state.selection.main.from;
       view.dispatch({ selection: { anchor: at } });

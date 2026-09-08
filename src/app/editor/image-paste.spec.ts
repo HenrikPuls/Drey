@@ -2,24 +2,28 @@ import { EditorState } from '@codemirror/state';
 import { EditorView } from '@codemirror/view';
 import { imagePaste, ImagePasteConfig } from './image-paste';
 
-/** A minimal stand-in for a pasted image `File`. */
-function fakeImage(type = 'image/png'): File {
+/** A minimal stand-in for a pasted/dropped `File`. */
+function fakeFile(type = 'image/png', name = 'shot.png'): File {
   return {
     type,
-    name: 'shot.png',
+    name,
+    size: 4,
     arrayBuffer: async () => new Uint8Array([1, 2, 3, 4]).buffer,
+    text: async () => 'file contents',
   } as unknown as File;
 }
+const fakeImage = fakeFile;
 
-/** A fake clipboard/drag payload carrying `files` (and matching `items`). */
-function transfer(files: File[]): DataTransfer {
+/**
+ * A fake clipboard/drag payload. `files` populate `items`/`files`; `data`
+ * is the `getData(type)` map (`text/uri-list`, `application/x-drey-vault-path`, …).
+ */
+function transfer(files: File[], data: Record<string, string> = {}): DataTransfer {
   return {
     items: files.map((file) => ({ kind: 'file', type: file.type, getAsFile: () => file })),
     files,
-    types: files.length ? ['Files'] : [],
-    // CodeMirror's own paste handler runs when ours declines a text-only
-    // paste; give it a harmless reader so it doesn't throw in jsdom.
-    getData: () => '',
+    types: [...(files.length ? ['Files'] : []), ...Object.keys(data)],
+    getData: (type: string) => data[type] ?? '',
   } as unknown as DataTransfer;
 }
 
@@ -34,6 +38,15 @@ function firePaste(view: EditorView, data: DataTransfer): void {
   const event = new Event('paste', { bubbles: true, cancelable: true });
   Object.defineProperty(event, 'clipboardData', { value: data });
   view.contentDOM.dispatchEvent(event);
+}
+
+function fireDrop(view: EditorView, data: DataTransfer): Event {
+  const event = new Event('drop', { bubbles: true, cancelable: true });
+  Object.defineProperty(event, 'dataTransfer', { value: data });
+  Object.defineProperty(event, 'clientX', { value: 0 });
+  Object.defineProperty(event, 'clientY', { value: 0 });
+  view.contentDOM.dispatchEvent(event);
+  return event;
 }
 
 /** Two microtask hops: `file.arrayBuffer()` then `config.save()`. */
@@ -110,5 +123,26 @@ describe('imagePaste', () => {
     await settle();
 
     expect(view.state.doc.toString()).toBe('before\n![](attachments/x.png)\n after\n');
+  });
+
+  it('accepts a dropped image file whose OS type is blank, by extension', async () => {
+    view = mount('# note\n', { save: async () => 'attachments/x.png' });
+    fireDrop(view, transfer([fakeFile('', 'logo.png')]));
+    await settle();
+    expect(view.state.doc.toString()).toContain('![](attachments/x.png)');
+  });
+
+  it('still ignores a dropped non-image file with a blank type', async () => {
+    let saved = false;
+    view = mount('# note\n', {
+      save: async () => {
+        saved = true;
+        return 'x';
+      },
+    });
+    fireDrop(view, transfer([fakeFile('', 'archive.zip')]));
+    await settle();
+    expect(saved).toBe(false);
+    expect(view.state.doc.toString()).toBe('# note\n');
   });
 });
