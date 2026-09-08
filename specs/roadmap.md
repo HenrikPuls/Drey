@@ -166,6 +166,14 @@ below).
   inside the vault, `resolveVaultImageUrl`, and the Live Preview image
   widget. No vault open → the paste is reported, not saved. No
   auto-caption.
+  - **Viewing ([ADR-0026](../docs/09_architecture_decisions/0026-image-viewer-and-lightbox.md)):**
+    a rendered image honours an Obsidian-style `![alt|W]` / `![alt|WxH]`
+    size and has a hover **resize grip** (drag → rewrites the `|W` in the
+    note) and a hover **lens** button that opens a whole-app zoom/pan
+    viewer (plain-wheel zoom, drag pan, `+`/`-`/`0`). Opening an image
+    file from the Files panel opens it as a `kind:'image'` **tab** with
+    the same viewer + a Fullscreen button; the status bar shows its pixel
+    size and zoom.
 
 - **"Add entry" drawer** at the bottom of the main area — the capture
   surface. Starts collapsed. Contains an optional **TOPIC** field, a
