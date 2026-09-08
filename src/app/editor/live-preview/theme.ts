@@ -115,6 +115,24 @@ export const livePreviewTheme = EditorView.theme(
       color: 'var(--text-primary)',
       background: 'var(--hover-bg-strong)',
     },
+    // Corner grip -> drag to resize (rewrites `![alt|W]`, ADR-0026).
+    '.lp-resize': {
+      position: 'absolute',
+      right: '-4px',
+      bottom: '-4px',
+      width: '14px',
+      height: '14px',
+      borderRadius: '3px',
+      background: 'var(--accent)',
+      border: '2px solid var(--bg-editor)',
+      cursor: 'nwse-resize',
+      opacity: '0',
+      transition: 'opacity 0.12s ease',
+      touchAction: 'none',
+    },
+    '.lp-image:hover .lp-resize': {
+      opacity: '1',
+    },
 
     // A rendered ```mermaid diagram (ADR-0025).
     '.lp-mermaid': {

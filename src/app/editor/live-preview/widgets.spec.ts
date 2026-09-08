@@ -79,4 +79,32 @@ describe('ImageWidget', () => {
       expect(dom.querySelector('.lp-image-missing')).not.toBeNull();
     });
   });
+
+  describe('resize grip', () => {
+    it('is present for a resolved image and gone for the placeholder / on error', () => {
+      expect(
+        new ImageWidget('drey-asset://asset/p.png', 'x').toDOM().querySelector('.lp-resize'),
+      ).not.toBeNull();
+      expect(new ImageWidget(null, 'x').toDOM().querySelector('.lp-resize')).toBeNull();
+
+      const dom = new ImageWidget('drey-asset://asset/p.png', 'x').toDOM();
+      dom.querySelector('img')!.onerror!(new Event('error'));
+      expect(dom.querySelector('.lp-resize')).toBeNull();
+    });
+
+    it('ignoreEvent lets CodeMirror see only .lp-resize events', () => {
+      const w = new ImageWidget('drey-asset://asset/p.png', 'x');
+      const dom = w.toDOM();
+      const grip = dom.querySelector('.lp-resize')!;
+      const img = dom.querySelector('img')!;
+
+      const onGrip = new MouseEvent('pointerdown');
+      Object.defineProperty(onGrip, 'target', { value: grip });
+      expect(w.ignoreEvent(onGrip)).toBe(false);
+
+      const onImg = new MouseEvent('pointerdown');
+      Object.defineProperty(onImg, 'target', { value: img });
+      expect(w.ignoreEvent(onImg)).toBe(true);
+    });
+  });
 });
