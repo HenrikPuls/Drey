@@ -5,6 +5,8 @@ import { TagEntry } from '../../../shared/ipc-api';
 const TAGS: TagEntry[] = [
   { tag: 'sailing', count: 9 },
   { tag: 'sales', count: 2 },
+  { tag: 'projekt/frontend', count: 5 },
+  { tag: 'projekt/backend', count: 3 },
 ];
 
 function context(
@@ -27,11 +29,17 @@ describe('makeTagCompletionSource', () => {
 
   it('returns null on a bare # unless completion was explicitly requested', () => {
     expect(source(context({ from: 5, to: 5, text: '#' }))).toBeNull();
-    expect(source(context({ from: 5, to: 5, text: '#' }, true))?.options.length).toBe(2);
+    expect(source(context({ from: 5, to: 5, text: '#' }, true))?.options.length).toBe(TAGS.length);
   });
 
   it('returns null when nothing matches or there is no # token', () => {
     expect(source(context({ from: 0, to: 4, text: '#zzz' }))).toBeNull();
     expect(source(context(null))).toBeNull();
+  });
+
+  it('completes a nested tag segment by segment', () => {
+    const result = source(context({ from: 2, to: 12, text: '#projekt/fr' }));
+    expect(result?.options.map((o) => o.label)).toEqual(['#projekt/frontend']);
+    expect(result?.options[0].apply).toBe('#projekt/frontend ');
   });
 });

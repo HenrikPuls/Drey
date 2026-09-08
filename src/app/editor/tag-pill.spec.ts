@@ -35,6 +35,16 @@ describe('tagPillDecorations', () => {
     expect(pills('- #task id:7 ship it')).toEqual([]);
   });
 
+  it('spans a nested #parent/child tag as one pill', () => {
+    expect(pills('see #projekt/frontend here')).toEqual([
+      { from: 4, to: 21, tag: 'projekt/frontend' },
+    ]);
+  });
+
+  it('stops a nested tag at a trailing slash', () => {
+    expect(pills('done #projekt/ ok').map((p) => p.tag)).toEqual(['projekt']);
+  });
+
   it('ignores a #tag inside an inline code span', () => {
     expect(pills('use `#sailing` literally')).toEqual([]);
   });

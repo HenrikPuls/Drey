@@ -105,7 +105,11 @@ export function parseSuggestedTags(reply: string): string[] {
   return out;
 }
 
-/** Lowercase, transliterate umlauts/ß, collapse to one hyphenated word. */
+/**
+ * Lowercase, transliterate umlauts/ß, collapse to one hyphenated word.
+ * `/` is kept so a nested suggestion (`project/frontend`) survives, with
+ * stray separators around it tidied up.
+ */
 export function normalizeTagToken(raw: string): string {
   return raw
     .toLowerCase()
@@ -113,8 +117,10 @@ export function normalizeTagToken(raw: string): string {
     .replace(/ö/g, 'oe')
     .replace(/ü/g, 'ue')
     .replace(/ß/g, 'ss')
-    .replace(/[^a-z0-9-]+/g, '-')
-    .replace(/^-+|-+$/g, '');
+    .replace(/[^a-z0-9/-]+/g, '-')
+    .replace(/\/{2,}/g, '/')
+    .replace(/-*\/-*/g, '/')
+    .replace(/^[-/]+|[-/]+$/g, '');
 }
 
 export function parseTagSuggestion(reply: string): TagSuggestion | null {
