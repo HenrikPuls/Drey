@@ -20,7 +20,9 @@ import { basicSetup } from 'codemirror';
 import { EditorService, EditorViewMode } from '../../services/editor.service';
 import { EditTargetService } from '../../services/edit-target.service';
 import { TagService } from '../../services/tag.service';
+import { VaultService } from '../../services/vault.service';
 import { dreyEditorLook } from '../editor-theme';
+import { imagePaste } from '../image-paste';
 import { toggleTaskDone } from '../markdown-commands';
 import {
   frontmatterExpandedOf,
@@ -62,6 +64,7 @@ export class MarkdownSurface implements AfterViewInit, OnDestroy {
   private readonly editor = inject(EditorService);
   private readonly editTarget = inject(EditTargetService);
   private readonly tags = inject(TagService);
+  private readonly vault = inject(VaultService);
   private readonly host = viewChild.required<ElementRef<HTMLDivElement>>('host');
 
   readonly mode = input<EditorViewMode>('live');
@@ -79,6 +82,14 @@ export class MarkdownSurface implements AfterViewInit, OnDestroy {
    */
   readonly foldFrontmatter = input(false);
   readonly placeholder = input('');
+  /**
+   * Turns on image paste / drop: a pasted or dropped image is saved into
+   * the vault's per-note `attachments/` folder and an `![](…)` link is
+   * inserted at the caret (ADR-0024). Read once at construction. The
+   * full-page editor and the "Add entry" drawer set it; the note
+   * assistant composer (a prompt box, not a document) does not.
+   */
+  readonly imageCapture = input(false);
   /**
    * Makes the surface non-editable (the note assistant composer while no
    * note is open). Programmatic `setContent` still works -- this only
@@ -221,6 +232,13 @@ export class MarkdownSurface implements AfterViewInit, OnDestroy {
           // otherwise open with its first line pushed 40px down.
           this.compact() ? [Prec.high(compactTheme), EditorView.lineWrapping] : [],
           this.spellcheck() ? inlineSpellcheck({ source: this.spellcheck()! }) : [],
+          this.imageCapture()
+            ? imagePaste({
+                save: (bytes, ext) =>
+                  this.vault.saveAsset(bytes, ext, this.editor.openPath() ?? ''),
+                onError: (message) => this.editor.error.set(message),
+              })
+            : [],
           // Outside the mode compartment on purpose: the frontmatter pill
           // shows in source mode too, and its fold state must survive a
           // Live Preview <-> source switch.
