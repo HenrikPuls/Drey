@@ -79,6 +79,11 @@ export const livePreviewTheme = EditorView.theme(
       borderTop: '1px solid var(--border-strong)',
     },
 
+    '.lp-image': {
+      position: 'relative',
+      display: 'inline-block',
+      lineHeight: '0',
+    },
     '.lp-image img': {
       maxWidth: '100%',
       borderRadius: 'var(--radius-xs)',
@@ -87,6 +92,28 @@ export const livePreviewTheme = EditorView.theme(
     '.lp-image-missing': {
       color: 'var(--text-faint)',
       fontStyle: 'italic',
+    },
+    // Hover lens -> open the full-app viewer (ADR-0026). Same recipe as `.lp-edit`.
+    '.lp-lens': {
+      position: 'absolute',
+      top: '4px',
+      right: '4px',
+      display: 'inline-flex',
+      padding: '3px',
+      border: '0',
+      borderRadius: 'var(--radius-sm)',
+      background: 'var(--hover-bg)',
+      color: 'var(--text-6)',
+      cursor: 'pointer',
+      opacity: '0',
+      transition: 'opacity 0.12s ease',
+    },
+    '.lp-image:hover .lp-lens': {
+      opacity: '1',
+    },
+    '.lp-lens:hover': {
+      color: 'var(--text-primary)',
+      background: 'var(--hover-bg-strong)',
     },
 
     // A rendered ```mermaid diagram (ADR-0025).

@@ -81,6 +81,17 @@ describe('blockDecorations', () => {
     expect((w[0].deco.spec['widget'] as ImageWidget).width).toBeNull();
   });
 
+  it('threads config.onOpenImage into the image widget', () => {
+    const seen: string[] = [];
+    const config: LivePreviewConfig = {
+      resolveImage: (url) => `resolved:${url}`,
+      onOpenImage: (s) => seen.push(s),
+    };
+    const w = widgets(blockDecorations(state('![a](b.png)\n\nend'), config));
+    (w[0].deco.spec['widget'] as ImageWidget).onOpenImage!('resolved:b.png');
+    expect(seen).toEqual(['resolved:b.png']);
+  });
+
   it('renders an HTML block as a sanitized widget, raw while the cursor is inside', () => {
     const doc = 'before\n\n<div class="x"><b>hi</b><script>boom()</script></div>\n\nafter';
     const all = widgets(blockDecorations(state(doc, 0), passThrough));

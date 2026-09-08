@@ -53,17 +53,22 @@ describe('ImageLightbox', () => {
     expect(svc.src()).toBeNull();
   });
 
-  it('closes on a backdrop click but not on a click inside the frame', () => {
+  it('closes on a click of empty space but not on the image or a control', () => {
     svc.open('data:image/png;base64,iVBORw0KGgo=');
     fixture.detectChanges();
 
-    (el.querySelector('.frame') as HTMLElement).dispatchEvent(
-      new PointerEvent('pointerdown', { bubbles: true }),
+    (el.querySelector('app-image-viewer img') as HTMLElement).dispatchEvent(
+      new MouseEvent('click', { bubbles: true }),
     );
     expect(svc.src()).not.toBeNull();
 
-    (el.querySelector('.backdrop') as HTMLElement).dispatchEvent(
-      new PointerEvent('pointerdown', { bubbles: true }),
+    (el.querySelector('.zoom-cluster button') as HTMLElement).dispatchEvent(
+      new MouseEvent('click', { bubbles: true }),
+    );
+    expect(svc.src()).not.toBeNull();
+
+    (el.querySelector('.stage') as HTMLElement).dispatchEvent(
+      new MouseEvent('click', { bubbles: true }),
     );
     fixture.detectChanges();
     expect(svc.src()).toBeNull();

@@ -84,11 +84,20 @@ export class ImageLightbox {
     }
   }
 
-  protected onBackdropPointer(event: PointerEvent): void {
-    // Close only on a genuine click of the backdrop itself -- a pan gesture
-    // captures the pointer on the stage, so its target is never the backdrop.
-    if (event.target === event.currentTarget) {
-      this.lightbox.close();
+  protected onBackdropClick(event: MouseEvent): void {
+    // Click on empty space closes (Preview / Photos behaviour). The viewer
+    // fills the overlay, so this catches clicks on the stage that aren't on
+    // the image or a control; a real pan drag moves the pointer far enough
+    // that no `click` fires.
+    const target = event.target as HTMLElement | null;
+    if (
+      !target ||
+      target.tagName === 'IMG' ||
+      target.closest('.zoom-cluster') ||
+      target.closest('.close')
+    ) {
+      return;
     }
+    this.lightbox.close();
   }
 }

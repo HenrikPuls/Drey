@@ -164,3 +164,24 @@ and the task-lists/footnote plugins are removed. markdown-it itself stays
   tag extends its region only to the last HTML block, never past it.
 - Bundle: highlight.js (~150 kB) out; `@codemirror/language-data` adds a
   small registry up front and per-language lazy chunks on first use.
+
+## Later change — interactive image widget (ADR-0026)
+
+The Live Preview `ImageWidget` gained two hover affordances:
+
+- **Lens button** — opens the image in the full-app viewer
+  (`ImageLightboxService`). Handled by a direct DOM `click` listener on
+  the button that `stopPropagation`s + `preventDefault`s, so CodeMirror
+  never sees it; no `EditorView` reference and no `ignoreEvent` override
+  needed for the lens. `LivePreviewConfig` carries an optional
+  `onOpenImage(src)` that `MarkdownSurface` wires to the lightbox.
+- **Resize handle** — a corner grip; dragging it rewrites the note's
+  `![alt|W](url)` in place. Delegated `EditorView.domEventHandlers`
+  `pointerdown` (in `livePreviewBlocks`) locates the `Image` node via
+  `view.posAtDOM(span)` + the syntax tree, live-sizes `img.style.width`
+  during the drag (no transaction), and dispatches **one** `changes`
+  transaction on `pointerup` (no `selection`, so the widget swaps rather
+  than the raw text revealing). `ImageWidget.ignoreEvent` returns `false`
+  only for a `.lp-resize` target so that handler receives the event; the
+  `touches()` reveal is suppressed because the `pointerdown` handler
+  returns `true`.

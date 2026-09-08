@@ -67,6 +67,11 @@ export class HrWidget extends WidgetType {
  * `width` / `height` come from an Obsidian-style `![alt|300](path)` /
  * `![alt|300x200](path)` suffix (`shared/image-embed.ts`) and are applied
  * as CSS px; the theme's `max-width: 100%` still caps overflow.
+ *
+ * When `onOpenImage` is given (and the src resolved), a hover lens button
+ * opens the image in the full-app viewer (ADR-0026). Its click is handled
+ * by a direct DOM listener that `stopPropagation`s, so CodeMirror never
+ * sees it -- no `ignoreEvent` override needed for the lens.
  */
 export class ImageWidget extends WidgetType {
   constructor(
@@ -74,6 +79,7 @@ export class ImageWidget extends WidgetType {
     readonly alt: string,
     readonly width: number | null = null,
     readonly height: number | null = null,
+    readonly onOpenImage?: (src: string) => void,
   ) {
     super();
   }
@@ -94,8 +100,9 @@ export class ImageWidget extends WidgetType {
       span.appendChild(this.placeholder());
       return span;
     }
+    const src = this.src;
     const img = document.createElement('img');
-    img.src = this.src;
+    img.src = src;
     img.alt = this.alt;
     if (this.width !== null) {
       img.style.width = `${this.width}px`;
@@ -105,9 +112,28 @@ export class ImageWidget extends WidgetType {
     }
     img.onerror = () => {
       img.remove();
+      span.querySelector('.lp-lens')?.remove();
       span.appendChild(this.placeholder());
     };
     span.appendChild(img);
+
+    if (this.onOpenImage) {
+      const open = this.onOpenImage;
+      const lens = document.createElement('button');
+      lens.type = 'button';
+      lens.className = 'lp-lens';
+      lens.title = 'Open full view';
+      lens.innerHTML =
+        '<svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" ' +
+        'stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' +
+        '<circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3M11 8v6M8 11h6"/></svg>';
+      lens.addEventListener('click', (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        open(src);
+      });
+      span.appendChild(lens);
+    }
     return span;
   }
 
