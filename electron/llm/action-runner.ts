@@ -35,7 +35,11 @@ Respond ONLY with JSON, no prose around it:
 - Question (answer only, change nothing): {"kind":"answer","text":"<answer>"}
 - Change: {"kind":"edit","document":"<the full changed document>"}
 
-For a change you ALWAYS return the whole document, not just the changed part.`;
+For a change you ALWAYS return the whole document, not just the changed part.
+Earlier turns of this conversation are shown as plain text; your reply must still be one of the JSON forms above.`;
+
+/** Kept small so a long thread cannot crowd the document out of context. */
+const MAX_HISTORY_MESSAGES = 12;
 
 export class ActionRunner {
   constructor(
@@ -195,12 +199,21 @@ export class ActionRunner {
   }
 
   /** Chat Ask mode: an answer to display, or an edit to confirm. */
-  async ask(context: ActionContext, question: string, taskId?: string): Promise<AskOutcome> {
+  async ask(
+    context: ActionContext,
+    question: string,
+    taskId?: string,
+    history?: ChatMessage[],
+  ): Promise<AskOutcome> {
     if (!this.config.get().llm.enabled) {
       throw new Error('LLM features are disabled.');
     }
+    // The renderer already shapes and caps the thread (`historyForAsk`);
+    // the slice here is defence in depth against an over-long payload.
+    const prior = (history ?? []).slice(-MAX_HISTORY_MESSAGES);
     const messages: ChatMessage[] = [
       { role: 'system', content: ASK_SYSTEM },
+      ...prior,
       { role: 'user', content: buildAskUserMessage(context, question) },
     ];
     const reply = await this.tasks.run(taskId, (signal) => this.llm.chat(messages, { signal }));

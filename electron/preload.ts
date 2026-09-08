@@ -4,6 +4,7 @@ import {
   ActionOutcome,
   AppConfig,
   AskOutcome,
+  ChatMessage,
   ChatThread,
   CustomDictionary,
   DreyApi,
@@ -88,8 +89,13 @@ const dreyApi: DreyApi = {
   },
   runAction: (triggerId: string, context: ActionContext, taskId?: string): Promise<ActionOutcome> =>
     ipcRenderer.invoke(IPC_CHANNELS.actionRun, triggerId, context, taskId),
-  askChat: (context: ActionContext, question: string, taskId?: string): Promise<AskOutcome> =>
-    ipcRenderer.invoke(IPC_CHANNELS.chatAsk, context, question, taskId),
+  askChat: (
+    context: ActionContext,
+    question: string,
+    taskId?: string,
+    history?: ChatMessage[],
+  ): Promise<AskOutcome> =>
+    ipcRenderer.invoke(IPC_CHANNELS.chatAsk, context, question, taskId, history),
   cancelLlmTask: (taskId: string): Promise<boolean> =>
     ipcRenderer.invoke(IPC_CHANNELS.llmCancel, taskId),
   readChatThread: (notePath: string): Promise<ChatThread> =>
