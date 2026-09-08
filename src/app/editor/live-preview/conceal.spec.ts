@@ -86,6 +86,22 @@ describe('concealDecorations', () => {
     expect(boxes.map((w) => w.checked)).toEqual([false, true]);
   });
 
+  it('strikes the text of a checked task, leaving an open one alone', () => {
+    const done = build('- [ ] todo\n- [x] done\n\nend').filter(
+      (e) => e.deco.spec['class'] === 'lp-task-done',
+    );
+    expect(done).toHaveLength(1);
+    // "- [x] " is 6 chars into the doc after "- [ ] todo\n" (11) -> text at 17.
+    expect(done[0]).toMatchObject({ from: 17, to: 21 });
+  });
+
+  it('keeps the strikethrough while the cursor is on the checked line', () => {
+    const done = build('- [x] done\n\nend', 8).filter(
+      (e) => e.deco.spec['class'] === 'lp-task-done',
+    );
+    expect(done).toHaveLength(1);
+  });
+
   it('replaces bullets with a • widget, leaving ordered lists alone', () => {
     const all = build('- item\n\n1. first\n\nend');
     const bullets = widgets(all).filter((e) => e.deco.spec['widget'] instanceof BulletWidget);

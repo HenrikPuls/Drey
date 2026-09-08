@@ -42,7 +42,14 @@ export class PanelFrame implements OnInit {
 
   protected readonly title = computed(() => PANEL_TITLES[this.panelId()]);
   protected readonly collapsed = computed(() => this.dock.collapsed(this.panelId()));
-  protected readonly flush = computed(() => this.panelId() === 'assistant');
+  /**
+   * Panels whose body fills the frame (a flex column) instead of
+   * scrolling: the assistant (own header + composer stay put) and the
+   * "Add entry" drawer (its text field grows with the panel).
+   */
+  protected readonly flush = computed(
+    () => this.panelId() === 'assistant' || this.panelId() === 'entry',
+  );
   protected readonly isDragging = computed(() => this.dock.dragging() === this.panelId());
 
   constructor() {

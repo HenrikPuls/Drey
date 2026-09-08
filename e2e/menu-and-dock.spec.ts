@@ -89,7 +89,7 @@ test.describe('finding 2 — native context menu params', () => {
   });
 });
 
-test.describe('finding 3 — collapsed bottom dock', () => {
+test.describe('bottom dock — "Add entry" panel', () => {
   test('collapsing "Add entry" removes the bottom-dock resize divider', async ({ page }) => {
     const bottom = page.locator('app-dock[side="bottom"]');
     const twist = bottom.locator('app-panel-frame .twist').first();
@@ -109,5 +109,43 @@ test.describe('finding 3 — collapsed bottom dock', () => {
     await expect(divider).toHaveCount(0);
     const collapsedH = await bottom.evaluate((el) => el.getBoundingClientRect().height);
     expect(collapsedH).toBeLessThan(80);
+  });
+
+  test('the "Add entry" text field grows to fill the expanded panel', async ({ page }) => {
+    const bottom = page.locator('app-dock[side="bottom"]');
+    await bottom.locator('app-panel-frame .twist').first().click();
+
+    const field = bottom.locator('app-entry-drawer .md-editor');
+    const short = await field.evaluate((el) => el.getBoundingClientRect().height);
+
+    // Drag the bottom-dock divider up ~150px to enlarge the band.
+    const divider = page.locator('.center-col .divider-y[aria-label="Resize bottom dock"]');
+    const box = await divider.boundingBox();
+    await page.mouse.move(box!.x + box!.width / 2, box!.y + box!.height / 2);
+    await page.mouse.down();
+    await page.mouse.move(box!.x + box!.width / 2, box!.y - 150, { steps: 8 });
+    await page.mouse.up();
+
+    const tall = await field.evaluate((el) => el.getBoundingClientRect().height);
+    expect(tall).toBeGreaterThan(short + 100);
+  });
+});
+
+test.describe('Live Preview — checked tasks', () => {
+  test('a "- [x]" line is struck through, an open one is not', async ({ page, vaultDir }) => {
+    fs.writeFileSync(
+      path.join(vaultDir, 'todos.md'),
+      '# Todos\n\n- [ ] open task\n- [x] done task\n',
+    );
+    await page.locator('app-dock[side="left"] .icon-btn.refresh').click();
+    await page.locator('app-dock[side="left"] .node.file', { hasText: 'todos.md' }).click();
+    await expect(page.locator('app-editor .cm-content')).toBeVisible();
+
+    const done = page.locator('app-editor .cm-content .lp-task-done');
+    await expect(done).toHaveText(/done task/);
+    await expect(done).toHaveCSS('text-decoration-line', 'line-through');
+
+    const openLine = page.locator('app-editor .cm-line', { hasText: 'open task' });
+    await expect(openLine.locator('.lp-task-done')).toHaveCount(0);
   });
 });

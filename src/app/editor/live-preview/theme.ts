@@ -64,6 +64,14 @@ export const livePreviewTheme = EditorView.theme(
       cursor: 'pointer',
     },
 
+    // A checked `- [x]` task: strike the text and mute it, the way a
+    // done item reads in Obsidian / a paper list.
+    '.lp-task-done': {
+      textDecoration: 'line-through',
+      textDecorationThickness: '1px',
+      color: 'var(--text-6)',
+    },
+
     '.lp-hr': {
       display: 'inline-block',
       width: '100%',
