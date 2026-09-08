@@ -8,7 +8,7 @@
  * not a runtime surprise. See docs/09_architecture_decisions/0001-*.md.
  */
 import type { AppConfig, CustomDictionary, LlmEndpoint } from './app-config';
-import type { ActionContext, ActionOutcome, AskOutcome, LlmDebugEntry } from './llm';
+import type { ActionContext, ActionOutcome, AskOutcome, ChatMessage, LlmDebugEntry } from './llm';
 import type { ChatThread } from './chat-thread';
 import type { TagSearchHit, TagSearchQuery } from './tags';
 
@@ -18,6 +18,7 @@ export type {
   ActionContext,
   ActionOutcome,
   AskOutcome,
+  ChatMessage,
   LlmDebugEntry,
   ResolvedAction,
 } from './llm';
@@ -333,8 +334,17 @@ export interface DreyApi {
    * Chat Ask mode: sends `question` plus the document (and any selection)
    * to the LLM. Returns an answer to display, or an edit to confirm.
    * Abortable via `taskId`; a cancelled call rejects.
+   *
+   * `history` is the note's prior thread as chat turns
+   * (`historyForAsk`) so a follow-up is answered in context; omitted or
+   * `[]` reproduces the old one-shot behaviour.
    */
-  askChat(context: ActionContext, question: string, taskId?: string): Promise<AskOutcome>;
+  askChat(
+    context: ActionContext,
+    question: string,
+    taskId?: string,
+    history?: ChatMessage[],
+  ): Promise<AskOutcome>;
 
   /**
    * Aborts a running generation. `taskId` is minted by the **renderer**

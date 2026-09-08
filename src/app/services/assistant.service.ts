@@ -1,6 +1,6 @@
 import { Injectable, computed, effect, inject, signal } from '@angular/core';
 import { ActionContext, ChatCard, ChatThread } from '../../../shared/ipc-api';
-import { emptyThread, hasSummary } from '../../../shared/chat-thread';
+import { emptyThread, hasSummary, historyForAsk } from '../../../shared/chat-thread';
 import { ipcErrorMessage } from '../../../shared/ipc-error';
 import { formatDateTime } from '../../../shared/timestamp';
 import { ConfirmationService } from './confirmation.service';
@@ -259,11 +259,15 @@ export class AssistantService {
     this.asking.set(true);
     this.error.set(null);
     this.notice.set(null);
+    // Snapshot the thread as chat turns *before* the new question is added
+    // as a card, so the model gets the running conversation as context
+    // rather than re-answering from the document alone.
+    const history = historyForAsk(this.threads()[path] ?? emptyThread(path));
     await this.appendCard(path, 'question', text);
     try {
       const context: ActionContext = { path, body: this.editor.bufferContent() };
       const { value: outcome, durationMs } = await this.llmTasks.run('Thinking', (taskId) =>
-        this.api!.askChat(context, text, taskId),
+        this.api!.askChat(context, text, taskId, history),
       );
       if (outcome.kind === 'answer') {
         await this.appendCard(path, 'answer', outcome.text, durationMs);

@@ -8,6 +8,7 @@ import {
   AppConfig,
   AppInfo,
   AskOutcome,
+  ChatMessage,
   ChatThread,
   CustomDictionary,
   EditCommand,
@@ -280,8 +281,13 @@ function registerIpcHandlers(
   );
   ipcMain.handle(
     IPC_CHANNELS.chatAsk,
-    (_event, context: ActionContext, question: string, taskId?: string): Promise<AskOutcome> =>
-      actionRunner.ask(context, question, taskId),
+    (
+      _event,
+      context: ActionContext,
+      question: string,
+      taskId?: string,
+      history?: ChatMessage[],
+    ): Promise<AskOutcome> => actionRunner.ask(context, question, taskId, history),
   );
   ipcMain.handle(IPC_CHANNELS.llmCancel, (_event, taskId: string): boolean =>
     actionRunner.cancel(taskId),
