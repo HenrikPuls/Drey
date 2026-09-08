@@ -71,3 +71,23 @@ menu the design does not use.
   "Open other vault …" (no vault registry in the backend).
 - The dock gestures are hand-rolled on native events, keeping the "no
   CDK / split-pane dependency" line the shell already held.
+
+## Later change — a third dock, and "Add entry" as a panel
+
+The two-dock model (`left | right`) became `left | right | bottom`. The
+bottom dock is a resizable band **under the editor** — `DockService.bottomH`
+plus a horizontal edge splitter. Panels stack vertically inside it exactly
+as in a side dock, so no new gesture code was needed — only a `'bottom'`
+branch in the drop hit-test and `startDockResize`, and a `bottom` list +
+`bottomH` in the persisted `DockState` (a stored blob without them
+re-homes the new panel from the defaults).
+
+The "Add entry" drawer — previously a fixed strip owned by `App` with its
+own toggle button and a `LayoutService.drawerHeight` — is now a normal
+dock panel (`PanelId 'entry'`, default home: the bottom dock, opens
+collapsed). `PanelFrame`'s chevron governs show/hide, the unsent-draft
+dot moved to the panel header status value, and `App` lost all its
+imperative drawer-resize code. `DockService.contentHeight(id)` (a small
+set, currently just `calendar`) marks a panel that takes its content
+height instead of a `flex-grow` share and draws no splitter on its edges.
+`LayoutService.drawerHeight` is now unused but left in place.

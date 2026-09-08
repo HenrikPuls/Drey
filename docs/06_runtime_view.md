@@ -791,12 +791,58 @@ sequenceDiagram
 ```
 
 Wired rows: File → New note (`note.new`), Switch vault … (`vault.selectVault`
-+ `dock.openAndExpand('files')`), Save / Save all (`note.save` /
-`note.saveAll`), Settings (`settings.openScreen`); Edit → Search all notes
-(`search.open` + `dock.openAndExpand('search')`); View → Line numbers
-(`editor.toggleLineNumbers`), one collapse toggle per panel
-(`dock.toggleCollapse`), Reset layout (`dock.reset`). Everything else is a
-disabled placeholder.
+
+- `dock.openAndExpand('files')`), Save / Save all (`note.save` /
+  `note.saveAll`), Settings (`settings.openScreen`); Edit → Search all notes
+  (`search.open` + `dock.openAndExpand('search')`); View → Line numbers
+  (`editor.toggleLineNumbers`), one collapse toggle per panel
+  (`dock.toggleCollapse`), Reset layout (`dock.reset`). Everything else is a
+  disabled placeholder.
+
+## 6.16 MCP client `vault_write` → confirm diff → apply (ADR-0021)
+
+```mermaid
+sequenceDiagram
+    participant Client as MCP client (stdio bridge / HTTP)
+    participant HTTP as McpHttpTransport
+    participant Srv as McpServer
+    participant Tools as VaultTools
+    participant Main as main.ts (ConfirmWrite)
+    participant Bridge as McpBridgeService (renderer)
+    participant Conf as ConfirmationService + dialog
+    participant Vault as VaultManager + TagIndex
+
+    Client->>HTTP: POST /mcp  tools/call vault_write {path, content, mode}
+    HTTP->>Srv: handle(message)
+    Srv->>Tools: call('vault_write', args)
+    Tools->>Vault: readFile(path)  (before; '' if new)
+    alt mcp.yolo is off
+        Tools->>Main: confirmWrite({path, before, after, mode})
+        Main->>Bridge: send mcp:write-request {id, …}
+        Bridge->>Conf: request({previewStyle: pickPreviewStyle(before, after), …})
+        Conf-->>Bridge: user's yes / no
+        Bridge->>Main: invoke mcp:write-decision(id, approved)
+        Main-->>Tools: approved
+    else YOLO mode
+        Note over Tools: no confirmation
+    end
+    alt approved (or YOLO)
+        Tools->>Vault: writeFile(path, after) + reindexFile(path, after)
+        Tools->>Bridge: send mcp:vault-changed → TagService/VaultService.refresh()
+        Tools-->>Srv: { content:[{text:"Wrote …"}] }
+    else declined
+        Tools-->>Srv: { content:[{text:"The user declined the write."}], isError:true }
+    end
+    Srv-->>HTTP: JSON-RPC result
+    HTTP-->>Client: 200 { result }
+```
+
+The built-in assistant takes the in-process path instead:
+`ActionRunner.ask` passes `VaultTools.openAiToolSpec()` +
+`runVaultTool` into `LmStudioClient.chat`, whose tool-calling loop invokes
+`VaultTools.call` directly (same `ConfirmWrite` gate) between model
+rounds, then parses the final message as the `{"kind":"answer"|"edit"}`
+verdict.
 
 ## Planned flows (added as their milestone is built)
 

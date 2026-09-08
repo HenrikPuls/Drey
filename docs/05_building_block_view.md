@@ -431,8 +431,8 @@ env.ps1             Puts .tools/node on PATH for the current shell session
 | `tags:summarise-results`             | `TagSearchQuery` + a task id → a prose digest of the matching sections (`search-summary` built-in). **Backend wired, panel UI parked** (ADR-0017).                                                                                                                                                                                                                                                                                                                            |
 | `tags:suggest`                       | Entry text + a task id → up to four suggested tags (`{"tags":[…]}`), using the current vocabulary. Backs the drawer's **Autotag** button.                                                                                                                                                                                                                                                                                                                                     |
 | `config:get` / `config:set`          | Read / replace the whole `AppConfig` (`shared/app-config.ts`) held in `app-config.json` under `userData`. `set` normalises via `normalizeAppConfig` and returns what was stored. Backs the Settings screen (ADR-0010).                                                                                                                                                                                                                                                        |
-| `edit:exec`                          | Runs a standard editing command (`undo`/`redo`/`cut`/`copy`/`paste`/`selectAll`) against the focused editable via `mainWindow.webContents`. Backs the HTML Edit-menu clicks (the accelerators already worked). CodeMirror and native fields both honour it.                                                                                                                                                                                                                    |
-| `ui:set-zoom`                        | `mainWindow.webContents.setZoomFactor(factor)` — the app-wide "Base font size" preset in Settings → Appearance (ADR-0020). Resets on reload, so `AppearanceService` re-sends it from config on startup.                                                                                                                                                                                                                                                                      |
+| `edit:exec`                          | Runs a standard editing command (`undo`/`redo`/`cut`/`copy`/`paste`/`selectAll`) against the focused editable via `mainWindow.webContents`. Backs the HTML Edit-menu clicks (the accelerators already worked). CodeMirror and native fields both honour it.                                                                                                                                                                                                                   |
+| `ui:set-zoom`                        | `mainWindow.webContents.setZoomFactor(factor)` — the app-wide "Base font size" preset in Settings → Appearance (ADR-0020). Resets on reload, so `AppearanceService` re-sends it from config on startup.                                                                                                                                                                                                                                                                       |
 | `llm:list-models`                    | Live `GET {baseUrl}/models`, with the bearer API key when one is set; `string[]` of model ids. Takes an optional `LlmEndpoint` override so the Settings screen can probe the URL/key currently _typed_ rather than the saved one. Rejects on transport/HTTP error.                                                                                                                                                                                                            |
 | `llm:test-connection`                | Probe the endpoint (saved, or the same override); never rejects — `{ ok, message, models }` for the Settings "test connection" feedback. A 401/403 is reported as an API-key problem.                                                                                                                                                                                                                                                                                         |
 | `llm:debug-list` / `llm:debug-clear` | Read / empty the session's LLM traffic log (`LlmDebugEntry[]`, oldest first) shown at the bottom of the LLM settings pane. Bearer tokens are already masked.                                                                                                                                                                                                                                                                                                                  |
@@ -1317,3 +1317,56 @@ graph TB
 - **Deviations** (also in `specs/`): editor stays CodeMirror 6 + Live
   Preview — no `contenteditable` blocks, no per-block gutter offsets; the
   vault switcher is "Open other vault …" only (no backend vault registry).
+
+## 5.16 Bottom dock + "Add entry" as a panel (ADR-0019 later change)
+
+- **`DockSide`** is now `left | right | bottom`. `DockState` gained a
+  `dock.bottom` list and `bottomH`; `defaultState` puts a new `entry`
+  panel there, collapsed. The bottom dock is an `<app-dock side="bottom">`
+  in a `.center-col` under `<main class="main-pane">`, its height bound to
+  `DockService.dockHeight()` and resized by a horizontal edge splitter
+  (`startDockResize('bottom', …)` measures from the dock element's bottom
+  edge). Panels still stack vertically inside it — the drop hit-test just
+  gained a `bottom` branch (pointer Y past the band's top, X within it).
+- **`EntryPanel`** (`src/app/dock/panels/entry-panel.ts`) wraps the
+  existing `EntryDrawer`, whose own toggle strip is gone — `PanelFrame`'s
+  chevron governs show/hide and the unsent-draft indicator is the panel
+  header's status value (`Dock.statusFor('entry')`). `App` lost
+  `startDrawerDrag` / the pointer listeners; `LayoutService.drawerHeight`
+  is unused but kept.
+- **`DockService.contentHeight(id)`** — a small set (currently
+  `calendar`) whose panels take their content height (`flex: 0 0 auto`)
+  instead of a `flex-grow` share, with no splitter on their edges. The
+  calendar body is also width-capped + centred with aspect-locked day
+  cells so it keeps its proportions in a wide dock.
+
+## 5.17 MCP vault server (`electron/mcp/`, ADR-0021)
+
+```
+electron/mcp/
+  index.ts          barrel
+  vault-tools.ts    VaultTools: vault_search (tags/text/regex or a
+                    whole-vault regex line scan) / vault_read /
+                    vault_write (overwrite|append, confirm gate);
+                    openAiToolSpec() for the assistant loop
+  server.ts         McpServer.handle() — JSON-RPC 2.0 dispatch, no IO
+  http-transport.ts McpHttpTransport — POST /mcp on 127.0.0.1:<port>
+  stdio-bridge.ts   standalone: stdin/stdout JSON-RPC <-> the HTTP endpoint
+```
+
+- **One tool set, three consumers**: an external stdio client (via the
+  bridge), an external HTTP client, and the built-in assistant.
+  `LmStudioClient.chat` gained an OpenAI tool-calling loop (`tools` +
+  `onToolCall`, cap 5 rounds, `400`→drop-tools-and-retry fallback);
+  `ActionRunner.ask` passes `VaultTools` only when `mcp.enabled`.
+- **Write confirmation bridge**: `main.ts`'s `ConfirmWrite` sends
+  `mcp:write-request` to the renderer and awaits a `mcp:write-decision`
+  reply (120s timeout / no window → reject). `McpBridgeService`
+  (renderer, started by `App`) runs it through `ConfirmationService` and
+  also refreshes the tag index / file tree on `mcp:vault-changed`.
+  Skipped entirely when `mcp.yolo`.
+- **Config**: `mcp: { enabled, httpEnabled, httpPort, yolo }` in
+  `app-config.json`; `syncMcpHttpTransport` opens/closes the socket on
+  boot and after each `config:set`. Settings → **MCP** category.
+- `server.ts` + `vault-tools.ts` are IO/transport-free at their core and
+  unit-tested (`src/app/services/mcp-vault-tools.spec.ts`) per ADR-0007.
