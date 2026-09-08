@@ -57,12 +57,15 @@ export function zoomToward(vp: Viewport, cursor: Point, center: Point, factor: n
 }
 
 /**
- * The scale that fits `natural` inside `box` without upscaling past 100%.
+ * The scale that fits `natural` to the **width** of `box` without upscaling
+ * past 100%. Height is deliberately ignored: a tall image then overflows the
+ * stage vertically and is reached by panning / the wheel, rather than being
+ * shrunk to fit its height and leaving the stage half-empty on the sides.
  * A zero/unknown natural size (an SVG whose `naturalWidth` is 0) yields 1.
  */
 export function fitScale(natural: { w: number; h: number }, box: { w: number; h: number }): number {
   if (!(natural.w > 0) || !(natural.h > 0) || !(box.w > 0) || !(box.h > 0)) {
     return 1;
   }
-  return clampImageScale(Math.min(1, box.w / natural.w, box.h / natural.h));
+  return clampImageScale(Math.min(1, box.w / natural.w));
 }

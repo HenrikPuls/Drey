@@ -1341,8 +1341,8 @@ graph TB
   `Editor` host listener. Line numbers: a `MarkdownSurface` `lineNumbers`
   input un-hides + re-themes the gutter `basicSetup` already mounts (46px,
   Plex Mono 10.5), driven by `EditorService.lineNumbers` (persisted in
-  `drey.editor`); reading width is a centred `max-width: 680px` column
-  (`editor-theme.ts`).
+  `drey.editor`); the text column is full-width and left-aligned (no
+  centred max-width — project owner's call, `editor-theme.ts`).
 - **Deviations** (also in `specs/`): editor stays CodeMirror 6 + Live
   Preview — no `contenteditable` blocks, no per-block gutter offsets; the
   vault switcher is "Open other vault …" only (no backend vault registry).

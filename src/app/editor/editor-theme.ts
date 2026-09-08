@@ -123,13 +123,13 @@ export const dreyEditorTheme = EditorView.theme(
       fontSize: 'calc(14.5px * var(--drey-editor-scale, 1))',
       lineHeight: '1.72',
     },
-    // Centred reading column (DESIGN.md: max-width 680px, +46px when the
-    // line-number gutter is on, padding 26/24/32). The gutter, when shown,
-    // adds its own width to the left of this box.
+    // Full-width, left-aligned text column: no centred max-width -- the
+    // editor uses the whole area, only side padding keeps the text off the
+    // edges. The line-number gutter, when shown, adds its own width to the
+    // left of this box. (Was a 680px centred reading column; the project
+    // owner asked for the full width -- see DESIGN.md.)
     '.cm-content': {
-      maxWidth: '680px',
-      margin: '0 auto',
-      padding: '26px 24px 32px',
+      padding: '26px 32px 32px',
       caretColor: 'var(--accent)',
     },
     // `basicSetup` mounts line-number + fold gutters; hidden until the meta
