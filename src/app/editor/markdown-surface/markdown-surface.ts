@@ -246,16 +246,20 @@ export class MarkdownSurface implements AfterViewInit, OnDestroy {
             }
           }),
           dreyEditorLook,
-          // Compact surfaces (entry drawer, note assistant composer) are
-          // narrow single-purpose fields -- long lines must wrap, not
-          // scroll sideways. The full-page editor keeps its own behaviour.
+          // Long lines wrap at the editor's width instead of scrolling the
+          // content sideways -- the full-page editor now fills the whole
+          // area (no centred column), so a horizontal scrollbar there would
+          // just be noise.
+          EditorView.lineWrapping,
+          // Compact surfaces (entry drawer, note assistant composer) also
+          // get a slimmer theme.
           //
           // `Prec.high` is load-bearing: `compactTheme` restyles `.cm-content`
           // (drops the full-page 40px top padding), but at equal precedence
           // CodeMirror lets the style module declared *earlier* -- here
           // `dreyEditorLook` -- win the cascade, so the compact field would
           // otherwise open with its first line pushed 40px down.
-          this.compact() ? [Prec.high(compactTheme), EditorView.lineWrapping] : [],
+          this.compact() ? Prec.high(compactTheme) : [],
           this.spellcheck() ? inlineSpellcheck({ source: this.spellcheck()! }) : [],
           this.imageCapture()
             ? imagePaste({
