@@ -113,6 +113,7 @@ export class ImageWidget extends WidgetType {
     img.onerror = () => {
       img.remove();
       span.querySelector('.lp-lens')?.remove();
+      span.querySelector('.lp-resize')?.remove();
       span.appendChild(this.placeholder());
     };
     span.appendChild(img);
@@ -134,7 +135,24 @@ export class ImageWidget extends WidgetType {
       });
       span.appendChild(lens);
     }
+
+    // Corner grip -- the actual drag is a delegated `EditorView`
+    // `pointerdown` handler in `block-render.ts` (the widget has no view).
+    const grip = document.createElement('span');
+    grip.className = 'lp-resize';
+    grip.setAttribute('aria-hidden', 'true');
+    span.appendChild(grip);
     return span;
+  }
+
+  /**
+   * CodeMirror ignores everything inside the widget (default `true`)
+   * except a `.lp-resize` grip -- the block-render `domEventHandlers`
+   * needs that `pointerdown`. The lens button handles its own click and
+   * `stopPropagation`s, so it never gets here.
+   */
+  override ignoreEvent(event: Event): boolean {
+    return !(event.target instanceof Element && event.target.closest('.lp-resize') !== null);
   }
 
   private placeholder(): HTMLElement {

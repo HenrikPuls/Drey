@@ -3,7 +3,7 @@ import { EditorState, Extension, Range, StateField } from '@codemirror/state';
 import { Decoration, DecorationSet, EditorView } from '@codemirror/view';
 import type { SyntaxNode } from '@lezer/common';
 import MarkdownIt from 'markdown-it';
-import { parseImageEmbed } from '../../../../shared/image-embed';
+import { clampEmbedWidth, parseImageEmbed, setEmbedWidth } from '../../../../shared/image-embed';
 import { frontmatterEnd } from '../markdown-frontmatter';
 import { fenceLang } from './fenced-code';
 import { htmlTagBalance, sanitizeHtml } from './sanitize-html';
@@ -216,5 +216,89 @@ export function livePreviewBlocks(config: LivePreviewConfig): Extension {
       return true;
     },
   });
-  return [field, clickToReveal];
+
+  // The `.lp-resize` corner grip on a rendered image: dragging it live-
+  // sizes the `<img>` and, on release, rewrites the note's `![alt|W](url)`
+  // (ADR-0026). Returning `true` from `pointerdown`/`mousedown` suppresses
+  // CodeMirror's caret placement, so `touches()` never reveals the raw
+  // text mid-drag.
+  const imageResize = EditorView.domEventHandlers({
+    mousedown(event) {
+      const target = event.target as HTMLElement | null;
+      return target?.closest('.lp-resize') != null;
+    },
+    pointerdown(event, view) {
+      const target = event.target as HTMLElement | null;
+      const grip = target?.closest('.lp-resize') as HTMLElement | null;
+      if (!grip || event.button !== 0) {
+        return false;
+      }
+      event.preventDefault();
+      startImageResize(view, grip, event);
+      return true;
+    },
+  });
+
+  return [field, clickToReveal, imageResize];
+}
+
+/**
+ * Runs an image resize gesture: locate the `Image` node from the grip's
+ * `.lp-image` span, live-size `img.style.width` during the drag (no
+ * transaction), and on `pointerup` dispatch **one** `changes` transaction
+ * rewriting the alt span to `alt|<width>` (no `selection`, so the widget
+ * swaps in place instead of the raw text revealing). Offsets are cached at
+ * `pointerdown` -- the pointer is captured and nothing edits the doc until
+ * release, so they stay valid.
+ */
+function startImageResize(view: EditorView, grip: HTMLElement, event: PointerEvent): void {
+  const span = grip.closest('.lp-image');
+  const img = span?.querySelector('img') as HTMLImageElement | null;
+  if (!span || !img) {
+    return;
+  }
+
+  let node: SyntaxNode | null = syntaxTree(view.state).resolveInner(view.posAtDOM(span) + 1, 1);
+  while (node && node.name !== 'Image') {
+    node = node.parent;
+  }
+  const marks = node?.getChildren('LinkMark');
+  if (!node || !marks || marks.length < 2) {
+    return;
+  }
+  const altFrom = marks[0].to;
+  const altTo = marks[1].from;
+  const startAlt = view.state.sliceDoc(altFrom, altTo);
+  const startWidth = img.getBoundingClientRect().width || img.naturalWidth || 300;
+  const startX = event.clientX;
+
+  grip.setPointerCapture?.(event.pointerId);
+  const prevCursor = document.body.style.cursor;
+  const prevSelect = document.body.style.userSelect;
+  document.body.style.cursor = 'nwse-resize';
+  document.body.style.userSelect = 'none';
+
+  let liveWidth = clampEmbedWidth(startWidth);
+  const move = (ev: PointerEvent): void => {
+    liveWidth = clampEmbedWidth(startWidth + (ev.clientX - startX));
+    img.style.width = `${liveWidth}px`;
+    img.style.height = ''; // width-only: aspect ratio comes from the image
+  };
+  const end = (): void => {
+    grip.releasePointerCapture?.(event.pointerId);
+    window.removeEventListener('pointermove', move);
+    window.removeEventListener('pointerup', end);
+    window.removeEventListener('pointercancel', end);
+    document.body.style.cursor = prevCursor;
+    document.body.style.userSelect = prevSelect;
+
+    if (parseImageEmbed(startAlt).width !== liveWidth) {
+      view.dispatch({
+        changes: { from: altFrom, to: altTo, insert: setEmbedWidth(startAlt, liveWidth) },
+      });
+    }
+  };
+  window.addEventListener('pointermove', move);
+  window.addEventListener('pointerup', end);
+  window.addEventListener('pointercancel', end);
 }
