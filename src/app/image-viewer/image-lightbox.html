@@ -4,7 +4,7 @@
     role="dialog"
     aria-modal="true"
     aria-label="Image preview"
-    (pointerdown)="onBackdropPointer($event)"
+    (click)="onBackdropClick($event)"
   >
     <div class="frame">
       <app-image-viewer [src]="src" />

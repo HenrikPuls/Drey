@@ -20,6 +20,7 @@ import { basicSetup } from 'codemirror';
 import { EditorService, EditorViewMode } from '../../services/editor.service';
 import { EditTargetService } from '../../services/edit-target.service';
 import { EditorZoomService } from '../../services/editor-zoom.service';
+import { ImageLightboxService } from '../../image-viewer';
 import { TagService } from '../../services/tag.service';
 import { VaultService } from '../../services/vault.service';
 import { dreyEditorLook } from '../editor-theme';
@@ -67,6 +68,7 @@ export class MarkdownSurface implements AfterViewInit, OnDestroy {
   private readonly tags = inject(TagService);
   private readonly vault = inject(VaultService);
   private readonly zoom = inject(EditorZoomService);
+  private readonly lightbox = inject(ImageLightboxService);
   private readonly host = viewChild.required<ElementRef<HTMLDivElement>>('host');
 
   readonly mode = input<EditorViewMode>('live');
@@ -334,6 +336,7 @@ export class MarkdownSurface implements AfterViewInit, OnDestroy {
     return mode === 'live'
       ? livePreview({
           resolveImage: (url) => resolveVaultImageUrl(this.editor.openPath(), url),
+          onOpenImage: (src) => this.lightbox.open(src),
         })
       : [];
   }

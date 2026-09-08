@@ -31,6 +31,12 @@ export interface LivePreviewConfig {
    * `resolveVaultImageUrl` with the active document's path.
    */
   resolveImage: (url: string) => string | null;
+  /**
+   * Opens a resolved image `src` in the full-app viewer (ADR-0026) --
+   * the hover lens button on a rendered image. Optional: a surface that
+   * doesn't want the lens (none today) omits it.
+   */
+  onOpenImage?: (src: string) => void;
 }
 
 const PARSE_BUDGET_MS = 50;
@@ -100,6 +106,7 @@ export function blockDecorations(state: EditorState, config: LivePreviewConfig):
                 alt,
                 width,
                 height,
+                config.onOpenImage,
               ),
             }).range(node.from, node.to),
           );

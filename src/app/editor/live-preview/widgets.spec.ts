@@ -45,4 +45,38 @@ describe('ImageWidget', () => {
     expect(dom.querySelector('img')).toBeNull();
     expect(dom.querySelector('.lp-image-missing')).not.toBeNull();
   });
+
+  describe('lens button', () => {
+    it('is absent without an onOpenImage callback', () => {
+      expect(
+        new ImageWidget('drey-asset://asset/pic.png', 'x').toDOM().querySelector('.lp-lens'),
+      ).toBeNull();
+    });
+
+    it('is absent when the src could not be resolved', () => {
+      const dom = new ImageWidget(null, 'x', null, null, () => undefined).toDOM();
+      expect(dom.querySelector('.lp-lens')).toBeNull();
+    });
+
+    it('calls onOpenImage with the resolved src, and stops the event', () => {
+      const opened: string[] = [];
+      const dom = new ImageWidget('drey-asset://asset/pic.png', 'x', null, null, (s) =>
+        opened.push(s),
+      ).toDOM();
+      const lens = dom.querySelector('.lp-lens') as HTMLButtonElement;
+      const event = new MouseEvent('click', { bubbles: true, cancelable: true });
+      lens.dispatchEvent(event);
+      expect(opened).toEqual(['drey-asset://asset/pic.png']);
+      expect(event.defaultPrevented).toBe(true);
+    });
+
+    it('is removed alongside the img on a load error', () => {
+      const dom = new ImageWidget('drey-asset://asset/pic.png', 'x', null, null, () =>
+        undefined,
+      ).toDOM();
+      dom.querySelector('img')!.onerror!(new Event('error'));
+      expect(dom.querySelector('.lp-lens')).toBeNull();
+      expect(dom.querySelector('.lp-image-missing')).not.toBeNull();
+    });
+  });
 });
