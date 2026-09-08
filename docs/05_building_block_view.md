@@ -246,6 +246,13 @@ src/                Angular renderer (standalone components, esbuild via Angular
     keybindings/         Feature module (ADR-0016), barrel index.ts: KeybindingService
                           (one capture-phase keydown listener mapping chord strings
                           -> Command.run) + the Command type. §5.14
+    image-viewer/        Feature module (ADR-0026), barrel index.ts. ImageViewer
+                          (shared zoom/pan canvas: plain-wheel zoom toward the
+                          cursor, pointer-drag pan, +/-/0, fit); ImageLightbox +
+                          ImageLightboxService (the full-app inset:0 overlay at
+                          --z-lightbox, opened from the Live Preview lens button
+                          and the image tab); ImageTab (centre-column view for a
+                          kind:'image' OpenDoc, picked by editor.activeKind()).
       settings.service.ts  Two signals: `config` (persisted) and `draft` (what the
                             Settings screen edits). Pane mutators write the draft
                             only; save() sends it via setConfig and adopts the
