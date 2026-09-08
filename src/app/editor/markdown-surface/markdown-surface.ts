@@ -19,6 +19,7 @@ import { EditorView, keymap, placeholder as cmPlaceholder } from '@codemirror/vi
 import { basicSetup } from 'codemirror';
 import { EditorService, EditorViewMode } from '../../services/editor.service';
 import { EditTargetService } from '../../services/edit-target.service';
+import { EditorZoomService } from '../../services/editor-zoom.service';
 import { TagService } from '../../services/tag.service';
 import { VaultService } from '../../services/vault.service';
 import { dreyEditorLook } from '../editor-theme';
@@ -65,6 +66,7 @@ export class MarkdownSurface implements AfterViewInit, OnDestroy {
   private readonly editTarget = inject(EditTargetService);
   private readonly tags = inject(TagService);
   private readonly vault = inject(VaultService);
+  private readonly zoom = inject(EditorZoomService);
   private readonly host = viewChild.required<ElementRef<HTMLDivElement>>('host');
 
   readonly mode = input<EditorViewMode>('live');
@@ -169,6 +171,15 @@ export class MarkdownSurface implements AfterViewInit, OnDestroy {
       this._view?.dispatch({
         effects: this.lineNumberCompartment.reconfigure(on ? gutterTheme : []),
       });
+    });
+    // The editor content scale (Ctrl +/-/0) is a CSS custom property on the
+    // host that CodeMirror's theme reads but never reacts to -- without a
+    // nudge the selection/cursor geometry stays at the old font size until
+    // the next edit or scroll. `requestMeasure` re-measures on the next
+    // frame, after the browser has applied the new size.
+    effect(() => {
+      this.zoom.scale();
+      this._view?.requestMeasure();
     });
   }
 
