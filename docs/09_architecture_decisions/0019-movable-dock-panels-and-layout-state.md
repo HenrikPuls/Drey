@@ -91,3 +91,15 @@ imperative drawer-resize code. `DockService.contentHeight(id)` (a small
 set, currently just `calendar`) marks a panel that takes its content
 height instead of a `flex-grow` share and draws no splitter on its edges.
 `LayoutService.drawerHeight` is now unused but left in place.
+
+**Every panel reaches every dock.** `move()` was always generic, but two
+things made the bottom band feel like `entry`-only: `App` unmounted a dock
+the instant it held no panels (so an emptied dock stopped registering as a
+drop target), and the `bottom` drop test only matched the band's live
+rect (~32 px with `entry` collapsed). Now `App` also mounts a dock while
+`DockService.dragActive()` (any header drag in progress), an emptied dock
+mounted this way shows a dashed "Drop a panel here" band (bottom: a fixed
+140 px via `Dock.hostHeight()`), and the `onDragMove` region test treats
+the whole lower band as `bottom` unless the pointer is horizontally over a
+side dock — the same "whole half" leniency the side docks already had.
+Dock resize splitters still render only for a non-empty dock.

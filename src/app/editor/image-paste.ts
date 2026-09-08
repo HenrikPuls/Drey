@@ -2,7 +2,10 @@ import { Extension } from '@codemirror/state';
 import { EditorView } from '@codemirror/view';
 import { imageExtension } from '../../../shared/asset-name';
 import { noteRelativeLink } from '../../../shared/note-link';
+import { substitutePlaceholders } from '../../../shared/placeholders';
 import { textExtension } from '../../../shared/text-extension';
+import { formatDate, formatDateTime, formatTime } from '../../../shared/timestamp';
+import { stripFrontmatter } from './markdown-frontmatter';
 
 /**
  * Paste / drop into the editor (ADR-0024, ADR-0027, ADR-0028). One
@@ -38,6 +41,14 @@ export interface ImagePasteConfig {
 
 /** The DataTransfer type the Files panel sets on `dragstart`. */
 export const VAULT_PATH_DT_TYPE = 'application/x-drey-vault-path';
+
+/**
+ * The DataTransfer type a Templates-panel row sets on `dragstart` -- a
+ * vault-relative `.md` path. Unlike a plain Files-panel drag, the body is
+ * inserted with its YAML frontmatter stripped and `{{date}}`/`{{time}}`/
+ * `{{datetime}}`/`{{title}}` substituted (ADR-0029).
+ */
+export const TEMPLATE_DT_TYPE = 'application/x-drey-template';
 
 /** Largest text file whose contents we inline on drop (case D). */
 export const TEXT_DROP_MAX = 2 * 1024 * 1024;
@@ -223,6 +234,19 @@ async function insertFromUrl(
   );
 }
 
+/** `{{date}}`/`{{time}}`/`{{datetime}}`/`{{title}}` for a template dropped now. */
+function templatePlaceholders(config: ImagePasteConfig): Record<string, string> {
+  const now = new Date();
+  const note = config.notePath?.() ?? null;
+  const title = note ? (note.split('/').pop() ?? '').replace(/\.md$/i, '') : '';
+  return {
+    date: formatDate(now),
+    time: formatTime(now),
+    datetime: formatDateTime(now),
+    title,
+  };
+}
+
 /** A text file (Files panel or OS drag): its contents, raw, at the drop point. */
 function insertText(view: EditorView, text: string, config: ImagePasteConfig): void {
   if (text.length > TEXT_DROP_MAX) {
@@ -236,7 +260,7 @@ function insertText(view: EditorView, text: string, config: ImagePasteConfig): v
 export function imagePaste(config: ImagePasteConfig): Extension {
   const wantsDrop = (data: DataTransfer | null): boolean => {
     const types = Array.from(data?.types ?? []);
-    return ['Files', VAULT_PATH_DT_TYPE, 'text/uri-list', 'text/html'].some((t) =>
+    return ['Files', VAULT_PATH_DT_TYPE, TEMPLATE_DT_TYPE, 'text/uri-list', 'text/html'].some((t) =>
       types.includes(t),
     );
   };
@@ -253,6 +277,31 @@ export function imagePaste(config: ImagePasteConfig): Extension {
         return false;
       }
       const data = event.dataTransfer;
+
+      // A template dragged from the Templates panel: read it, strip the
+      // frontmatter, substitute placeholders, drop the body at the pointer.
+      const templatePath = data?.getData(TEMPLATE_DT_TYPE) ?? '';
+      if (templatePath && config.readTextFile) {
+        event.preventDefault();
+        const dropAt =
+          view.posAtCoords({ x: event.clientX, y: event.clientY }) ??
+          view.state.selection.main.from;
+        view.dispatch({ selection: { anchor: dropAt } });
+        const read = config.readTextFile;
+        void read(templatePath)
+          .then((raw) =>
+            insertText(
+              view,
+              substitutePlaceholders(stripFrontmatter(raw), templatePlaceholders(config)),
+              config,
+            ),
+          )
+          .catch((error: unknown) =>
+            config.onError?.(error instanceof Error ? error.message : String(error)),
+          );
+        return true;
+      }
+
       const files = imageFiles(data);
       const hasAnyFile = (data?.files.length ?? 0) > 0;
       const textFile = files.length

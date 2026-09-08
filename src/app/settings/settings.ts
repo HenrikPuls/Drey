@@ -6,10 +6,12 @@ import { SettingsAbout } from './about/settings-about';
 import { SettingsActions } from './actions/settings-actions';
 import { SettingsAppearance } from './appearance/settings-appearance';
 import { SettingsAssistant } from './assistant/settings-assistant';
+import { SettingsDaily } from './daily/settings-daily';
 import { SettingsEntry } from './entry/settings-entry';
 import { SettingsLlm } from './llm/settings-llm';
 import { SettingsMcp } from './mcp/settings-mcp';
 import { SettingsSpellcheck } from './spellcheck/settings-spellcheck';
+import { SettingsTemplates } from './templates/settings-templates';
 import { SettingsCategory } from './settings-category';
 
 /**
@@ -46,6 +48,13 @@ export class Settings {
       component: SettingsAssistant,
     },
     { id: 'entry', label: 'Add entry', hint: 'Append template', component: SettingsEntry },
+    { id: 'daily', label: 'Daily notes', hint: 'Open on startup', component: SettingsDaily },
+    {
+      id: 'templates',
+      label: 'Templates',
+      hint: 'Snippet library folder',
+      component: SettingsTemplates,
+    },
     {
       id: 'spellcheck',
       label: 'Spelling',

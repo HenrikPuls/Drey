@@ -1,3 +1,7 @@
+@if (isEmpty() && dock.dragActive()) {
+  <div class="drop-hint">Drop a panel here</div>
+}
+
 @for (id of ids(); track id; let i = $index, count = $count) {
   @if (dropBefore(i)) {
     <div class="drop-line"></div>

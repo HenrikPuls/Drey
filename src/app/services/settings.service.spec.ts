@@ -108,6 +108,23 @@ describe('SettingsService (draft model)', () => {
     expect(service.llmEnabled()).toBe(true);
   });
 
+  it('patchDaily / patchTemplates write the draft only, and getters read the persisted config', async () => {
+    expect(service.loaded()).toBe(true);
+    expect(service.dailyOpenOnStartup()).toBe(true);
+    expect(service.templatesDir()).toBe('templates');
+
+    service.patchDaily({ openOnStartup: false });
+    service.patchTemplates({ dir: 'snippets' });
+    // Draft moved; persisted getters unchanged until save.
+    expect(service.draft()?.daily.openOnStartup).toBe(false);
+    expect(service.dailyOpenOnStartup()).toBe(true);
+    expect(service.templatesDir()).toBe('templates');
+
+    await service.save();
+    expect(service.dailyOpenOnStartup()).toBe(false);
+    expect(service.templatesDir()).toBe('snippets');
+  });
+
   it('closeScreen discards the draft', () => {
     service.patchLlm({ apiKey: 'sk-nope' });
     service.closeScreen();

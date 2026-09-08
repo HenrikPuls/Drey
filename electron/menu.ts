@@ -67,9 +67,16 @@ export function buildApplicationMenu(): Menu {
 /**
  * The right-click menu inside the window. Electron has no default context
  * menu at all, so this is built per-invocation from the hit-test params:
- * full cut/copy/paste/select-all in an editable spot (the CodeMirror
- * editor), just "Copy" when there's a text selection somewhere
- * non-editable (e.g. the rendered Markdown view), and nothing otherwise.
+ * full cut/copy/paste/select-all in a native editable field (`<input>` /
+ * `<textarea>` in Settings, the entry topic), just "Copy" when there's a
+ * text selection somewhere non-editable (e.g. the rendered Markdown view),
+ * and nothing otherwise.
+ *
+ * The CodeMirror editing surface is deliberately skipped: it is
+ * `contenteditable`, which Chromium reports as `isEditable === true` but
+ * `formControlType === 'none'` (a real `<input>` is `'input-text'`, a
+ * `<textarea>` is `'text-area'`), and the renderer draws its own
+ * right-click menu there (ADR-0030).
  */
 export function attachContextMenu(window: BrowserWindow): void {
   window.webContents.on('context-menu', (_event, params) => {
@@ -77,6 +84,11 @@ export function attachContextMenu(window: BrowserWindow): void {
     const hasSelection = params.selectionText.trim().length > 0;
 
     if (!params.isEditable && !hasSelection) {
+      return;
+    }
+
+    // CodeMirror's contenteditable surface -> the renderer owns the menu.
+    if (params.isEditable && params.formControlType === 'none') {
       return;
     }
 

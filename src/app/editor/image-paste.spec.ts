@@ -213,6 +213,37 @@ describe('imagePaste', () => {
     });
   });
 
+  describe('Templates-panel drag (application/x-drey-template)', () => {
+    it('strips frontmatter, substitutes placeholders, inserts at the drop point', async () => {
+      view = mount('a\nb\n', {
+        save: async () => 'x',
+        notePath: () => 'projects/foo.md',
+        readTextFile: async () => '---\ntitle: t\n---\n\n## {{title}} {{date}}\nbody\n',
+      });
+
+      fireDrop(view, transfer([], { 'application/x-drey-template': 'templates/meeting.md' }));
+      await settle();
+
+      const text = view.state.doc.toString();
+      expect(text).not.toContain('---'); // frontmatter gone
+      expect(text).not.toContain('{{title}}');
+      expect(text).not.toContain('{{date}}');
+      expect(text).toContain('## foo ' + new Date().getFullYear()); // {{title}} = note base name
+      expect(text).not.toContain('uploading:');
+    });
+
+    it('does nothing when readTextFile is not configured', async () => {
+      view = mount('# note\n', { save: async () => 'x' });
+      const event = fireDrop(
+        view,
+        transfer([], { 'application/x-drey-template': 'templates/meeting.md' }),
+      );
+      await settle();
+      expect(event.defaultPrevented).toBe(false);
+      expect(view.state.doc.toString()).toBe('# note\n');
+    });
+  });
+
   describe('web image drag (URL)', () => {
     it('downloads the image and adds a [Source] line under it', async () => {
       const calls: string[] = [];

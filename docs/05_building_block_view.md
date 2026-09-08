@@ -1356,7 +1356,15 @@ graph TB
   `DockService.dockHeight()` and resized by a horizontal edge splitter
   (`startDockResize('bottom', …)` measures from the dock element's bottom
   edge). Panels still stack vertically inside it — the drop hit-test just
-  gained a `bottom` branch (pointer Y past the band's top, X within it).
+  gained a `bottom` branch (any pointer past the band's top that is not
+  horizontally over a side dock).
+- **Every panel is dockable to every dock.** `App` mounts each
+  `<app-dock>` when it has panels **or** `DockService.dragActive()` is set
+  (a header drag is running), so an emptied dock keeps registering as a
+  drop target; such a dock shows a dashed "Drop a panel here" band
+  (`Dock.isEmpty()` + `dragActive()`; bottom gets a fixed 140 px from
+  `Dock.hostHeight()`). Edge-resize splitters still render only for a
+  non-empty dock.
 - **`EntryPanel`** (`src/app/dock/panels/entry-panel.ts`) wraps the
   existing `EntryDrawer`, whose own toggle strip is gone — `PanelFrame`'s
   chevron governs show/hide and the unsent-draft indicator is the panel
@@ -1399,3 +1407,54 @@ electron/mcp/
   boot and after each `config:set`. Settings → **MCP** category.
 - `server.ts` + `vault-tools.ts` are IO/transport-free at their core and
   unit-tested (`src/app/services/mcp-vault-tools.spec.ts`) per ADR-0007.
+
+## 5.18 Template library + startup daily note + editor context menu (ADR-0029, ADR-0030)
+
+### `src/app/templates/` (feature module, ADR-0016 barrel)
+
+```
+src/app/templates/
+  index.ts                       public surface (not ESLint-enforced — a plain
+                                 src/app/settings/templates/ folder collides with
+                                 the path pattern, same as `llm`)
+  template-library.service.ts    categories() tree from VaultService.fileTree();
+                                 recent() (localStorage['drey.templates.recent'],
+                                 last 5); insert() = read → stripFrontmatter →
+                                 substitutePlaceholders → EditorService.requestInsertText;
+                                 pickerOpen signal
+  templates-panel/               dock panel PanelId 'templates' (left, collapsed):
+                                 recursive collapsible category groups, rows are
+                                 click-to-insert + draggable (application/x-drey-template)
+                                 + right-click (Insert / Edit template); header refresh
+  template-picker/               the Mod+T overlay: recent 5 on top, filter box +
+                                 full list, Arrow/Enter/Esc
+  editor-context-menu/           .service.ts installs one capture-phase `contextmenu`
+                                 listener (target.closest('.cm-editor') → preventDefault
+                                 + open); the component renders .ctx-menu — clipboard rows
+                                 via MenuService.execEdit + the recent-templates section
+```
+
+- **No new IPC.** The templates folder must live in the vault, so the
+  library reads `VaultService.fileTree()` / `readTextFile()`. Config slice
+  `templates: { dir }` (default `templates`, `normalizeTemplatesConfig`
+  rejects `..`), edited in a one-field **Templates** settings category.
+- **Drag** — `image-paste.ts` gains a `TEMPLATE_DT_TYPE`
+  (`application/x-drey-template`) branch ahead of the vault-path cascade:
+  read → strip → substitute → insert at `posAtCoords`.
+- **Native context menu** — `electron/menu.ts attachContextMenu` bails when
+  `params.isEditable && params.formControlType === 'none'` (CodeMirror's
+  contenteditable); real `<input>`/`<textarea>` keep the OS menu.
+- **TagIndex** — `new TagIndex(vaultManager, () => appConfig.get().templates.dir)`;
+  `excludedPrefixes()` = `['templates/', '<configured>/']`. `config:set`
+  rebuilds the index when `templates.dir` changed.
+
+### Startup daily note (ADR-0002 flow, opened automatically)
+
+- `daily: { openOnStartup }` on `AppConfig` (default `true`), a one-toggle
+  **Daily notes** settings category.
+- `App` runs a one-shot `effect()`: when `VaultService.activeVaultPath()`
+  and `SettingsService.loaded()` are both truthy (guarded by a
+  `dailyNoteStartupDone` boolean so post-save `vault.refresh()` calls do
+  not re-open), it calls the existing `EditorService.openDailyNote(today)`
+  — which opens an **unsaved draft** tab (nothing on disk until the user
+  types and saves), identical to a calendar click.

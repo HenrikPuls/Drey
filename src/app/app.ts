@@ -1,4 +1,5 @@
-import { Component, inject } from '@angular/core';
+import { Component, effect, inject } from '@angular/core';
+import { formatDate } from '../../shared/timestamp';
 import { Editor } from './editor/editor';
 import { ImageLightbox, ImageTab } from './image-viewer';
 import { ConfirmationDialog } from './confirmation-dialog/confirmation-dialog';
@@ -11,6 +12,7 @@ import { DropGuardService } from './services/drop-guard.service';
 import { EditorZoomService } from './services/editor-zoom.service';
 import { McpBridgeService } from './services/mcp-bridge.service';
 import { SettingsService } from './services/settings.service';
+import { VaultService } from './services/vault.service';
 import { KeybindingService } from './keybindings';
 import { TagSearchService } from './tags';
 import { Dock, DockService } from './dock';
@@ -18,6 +20,12 @@ import { Titlebar } from './titlebar';
 import { StatusBar } from './status-bar/status-bar';
 import { Settings } from './settings/settings';
 import { TabBar } from './tab-bar/tab-bar';
+import {
+  EditorContextMenu,
+  EditorContextMenuService,
+  TemplateLibraryService,
+  TemplatePicker,
+} from './templates';
 
 /**
  * Root shell (ADR-0019): a custom titlebar with the HTML menu bar, then a
@@ -43,6 +51,8 @@ import { TabBar } from './tab-bar/tab-bar';
     Settings,
     ConfirmationDialog,
     ImageLightbox,
+    TemplatePicker,
+    EditorContextMenu,
   ],
   templateUrl: './app.html',
   styleUrl: './app.css',
@@ -52,6 +62,10 @@ export class App {
   protected readonly editor = inject(EditorService);
   protected readonly settings = inject(SettingsService);
   protected readonly dock = inject(DockService);
+  private readonly vault = inject(VaultService);
+
+  /** Guards the one-shot "open today's daily note on startup" effect. */
+  private dailyNoteStartupDone = false;
 
   constructor() {
     // Subscribe to the quick-capture hotkey for the app's lifetime.
@@ -70,6 +84,26 @@ export class App {
     inject(AppearanceService);
     // Listen for MCP client write-confirmations / vault-changed pushes (ADR-0021).
     inject(McpBridgeService).start();
+    // Install the capture-phase contextmenu listener that gives the editor
+    // its own right-click menu in place of the OS one (ADR-0030).
+    inject(EditorContextMenuService).start();
+
+    // Open today's daily note once, after both the vault path and the
+    // persisted config are known. `vault.refresh()` re-runs after saves, so
+    // the boolean guard (not just the signal) keeps this to a single open;
+    // it is consumed even when the setting is off, so flipping it on later
+    // in the session does not retroactively open a tab.
+    effect(() => {
+      const vaultPath = this.vault.activeVaultPath();
+      const loaded = this.settings.loaded();
+      if (this.dailyNoteStartupDone || !vaultPath || !loaded) {
+        return;
+      }
+      this.dailyNoteStartupDone = true;
+      if (this.settings.dailyOpenOnStartup()) {
+        void this.editor.openDailyNote(formatDate(new Date()));
+      }
+    });
 
     // App-wide keyboard commands. Features register here the same way; the
     // titlebar menu bar invokes the same command ids.
@@ -113,6 +147,14 @@ export class App {
       label: 'Toggle line numbers',
       keybinding: 'Mod+G',
       run: () => this.editor.toggleLineNumbers(),
+    });
+
+    const templates = inject(TemplateLibraryService);
+    keys.register({
+      id: 'template.insert',
+      label: 'Insert template',
+      keybinding: 'Mod+T',
+      run: () => templates.openPicker(),
     });
   }
 }
