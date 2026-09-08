@@ -1,5 +1,6 @@
 import { Component, inject } from '@angular/core';
 import { Editor } from './editor/editor';
+import { ImageLightbox } from './image-viewer';
 import { ConfirmationDialog } from './confirmation-dialog/confirmation-dialog';
 import { ActionsService } from './services/actions.service';
 import { AppearanceService } from './services/appearance.service';
@@ -31,7 +32,7 @@ import { TabBar } from './tab-bar/tab-bar';
  */
 @Component({
   selector: 'app-root',
-  imports: [Titlebar, Dock, StatusBar, TabBar, Editor, Settings, ConfirmationDialog],
+  imports: [Titlebar, Dock, StatusBar, TabBar, Editor, Settings, ConfirmationDialog, ImageLightbox],
   templateUrl: './app.html',
   styleUrl: './app.css',
 })

@@ -1,0 +1,22 @@
+@if (lightbox.src(); as src) {
+  <div
+    class="backdrop"
+    role="dialog"
+    aria-modal="true"
+    aria-label="Image preview"
+    (pointerdown)="onBackdropPointer($event)"
+  >
+    <div class="frame">
+      <app-image-viewer [src]="src" />
+    </div>
+    <button
+      #closeBtn
+      type="button"
+      class="close"
+      (click)="lightbox.close()"
+      aria-label="Close image preview"
+    >
+      <app-icon name="x" [size]="15" />
+    </button>
+  </div>
+}

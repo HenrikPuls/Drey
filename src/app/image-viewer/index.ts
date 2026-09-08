@@ -4,3 +4,5 @@
  * (`ImageTab`). Thin barrel per the feature-module convention (ADR-0016).
  */
 export { ImageViewer } from './image-viewer';
+export { ImageLightbox } from './image-lightbox';
+export { ImageLightboxService } from './image-lightbox.service';
