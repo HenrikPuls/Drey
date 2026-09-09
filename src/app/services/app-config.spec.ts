@@ -219,8 +219,12 @@ describe('normalizeAppConfig', () => {
     expect(normalizeAppConfig({ editor: { fontFamily: 42 } }).editor.fontFamily).toBe('sans');
   });
 
-  it('defaults appearance and keeps a valid scale step / accent (preset id or #hex)', () => {
-    expect(normalizeAppConfig({}).appearance).toEqual({ uiScale: 'default', accent: 'terracotta' });
+  it('defaults appearance and keeps a valid scale step / accent / theme', () => {
+    expect(normalizeAppConfig({}).appearance).toEqual({
+      uiScale: 'default',
+      accent: 'theme',
+      theme: 'drey',
+    });
     expect(normalizeAppConfig({ appearance: { uiScale: 'large' } }).appearance.uiScale).toBe(
       'large',
     );
@@ -228,15 +232,16 @@ describe('normalizeAppConfig', () => {
       'default',
     );
     expect(normalizeAppConfig({ appearance: { accent: 'sage' } }).appearance.accent).toBe('sage');
+    expect(normalizeAppConfig({ appearance: { accent: 'theme' } }).appearance.accent).toBe('theme');
     expect(normalizeAppConfig({ appearance: { accent: '#AABBCC' } }).appearance.accent).toBe(
       '#aabbcc',
     );
     expect(normalizeAppConfig({ appearance: { accent: 'not-a-colour' } }).appearance.accent).toBe(
-      'terracotta',
+      'theme',
     );
-    expect(normalizeAppConfig({ appearance: { accent: '#xyz' } }).appearance.accent).toBe(
-      'terracotta',
-    );
+    expect(normalizeAppConfig({ appearance: { accent: '#xyz' } }).appearance.accent).toBe('theme');
+    expect(normalizeAppConfig({ appearance: { theme: 'dracula' } }).appearance.theme).toBe('dracula');
+    expect(normalizeAppConfig({ appearance: { theme: '  ' } }).appearance.theme).toBe('drey');
   });
 
   it('keeps a well-formed custom dictionary and the language pointing at it', () => {

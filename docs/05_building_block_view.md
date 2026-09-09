@@ -236,6 +236,14 @@ src/                Angular renderer (standalone components, esbuild via Angular
                             SettingsService's effective getters, which preview the
                             draft while the Settings screen is open (ADR-0020 later
                             change) — Discard rolls the look back. Instantiated by App.
+                            The 'theme' accent sentinel resolves against ThemeService.
+      theme.service.ts     Applies the selected theme (ADR-0035). For a published
+                            theme writes the seed's bg/fg onto --_bg/--_fg + a
+                            data-theme attribute at :root (activates styles.css's
+                            :root[data-theme] color-mix() block); for Drey clears them.
+                            Exposes the resolved ThemeCatalogEntry as a signal that
+                            MarkdownSurface reads to swap its CM6 theme compartment.
+                            Instantiated by App.
       tag.service.ts       tags signal (TagEntry[] = { tag, count }) from tags:list;
                             refreshed on construction and after every save. Source
                             for the editor's #tag autocomplete and the search
@@ -380,7 +388,12 @@ src/                Angular renderer (standalone components, esbuild via Angular
       editor-theme.ts   dreyEditorLook: EditorView.theme + HighlightStyle from the design
                          tokens (sans headings by default -- overridable in Settings ->
                          Appearance, mono code, accent links; dark token colors for
-                         code inside fences) -- both modes' typography.
+                         code inside fences) -- both modes' typography. The default
+                         entry of themes/theme-catalog.ts (ADR-0035).
+      themes/theme-catalog.ts  THEME_CATALOG: Drey (local dreyEditorLook) + ~18
+                         published @uiw/codemirror-themes-all entries, each a lazy
+                         load() + a { bg, fg, accent, dark } seed for the shell.
+                         resolveTheme(id) -> entry, unknown -> Drey.
       markdown-frontmatter.ts  Pure. stripFrontmatter() + frontmatterEnd() +
                          frontmatterFieldCount() (the fold pill's label); shared by
                          EditorService and the editor.
@@ -388,7 +401,10 @@ src/                Angular renderer (standalone components, esbuild via Angular
                          `drey-asset://` URL served from inside the vault, or null.
   index.html
   main.ts             Angular bootstrap
-  styles.css          Global dark theme + design tokens (palette / type / spacing)
+  styles.css          Global theme + design tokens (palette / type / spacing). :root is
+                       the Drey (default) palette; :root[data-theme] re-derives every
+                       surface / text / border token as a color-mix() of --_bg / --_fg
+                       for a published theme (ADR-0035).
 
 public/
   fonts/README.md    Where to drop the self-hosted Newsreader / IBM Plex Mono .woff2

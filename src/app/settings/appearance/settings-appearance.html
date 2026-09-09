@@ -1,7 +1,28 @@
 <app-settings-pane
   title="Appearance"
-  description="Type size, highlight colour and the editor typeface. Previewed live; applied when you Save (Discard rolls the preview back)."
+  description="Theme, type size, highlight colour and the editor typeface. Previewed live; applied when you Save (Discard rolls the preview back)."
 >
+  <div class="field">
+    <label for="app-theme">Theme</label>
+    <select
+      id="app-theme"
+      [value]="settings.appearanceTheme()"
+      (change)="onThemeChange($any($event.target).value)"
+    >
+      @for (grp of themeGroups; track grp.group) {
+        <optgroup [label]="grp.group">
+          @for (entry of grp.entries; track entry.id) {
+            <option [value]="entry.id">{{ entry.label }}</option>
+          }
+        </optgroup>
+      }
+    </select>
+    <p class="field-hint">
+      <strong>Drey</strong> is the built-in look. Every other theme is a published CodeMirror
+      colour scheme — the editor swaps to it and the rest of the app re-tints to match.
+    </p>
+  </div>
+
   <div class="field">
     <label>Base font size</label>
     <div class="segmented" role="group" aria-label="Base font size">
@@ -24,6 +45,15 @@
   <div class="field">
     <label>Highlight colour</label>
     <div class="swatches">
+      <button
+        type="button"
+        class="swatch"
+        [class.active]="settings.appearanceAccent() === themeAccent"
+        [style.background]="seedAccentHex()"
+        title="Match the theme"
+        aria-label="Match the theme"
+        (click)="onAccentChange(themeAccent)"
+      ></button>
       @for (accent of accents; track accent.id) {
         <button
           type="button"

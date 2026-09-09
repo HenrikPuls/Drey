@@ -270,22 +270,32 @@ describe('SettingsService (draft model)', () => {
       expect(harness.setCalls()).toBe(0);
     });
 
-    it('normalises the accent in the draft (preset id or #hex; junk -> default)', () => {
+    it('normalises the accent in the draft (sentinel, preset id or #hex; junk -> default)', () => {
       service.setAppearanceAccent('#12ab34');
       expect(service.appearanceAccent()).toBe('#12ab34');
-      expect(service.config()?.appearance.accent).toBe('terracotta');
+      expect(service.config()?.appearance.accent).toBe('theme');
 
       service.setAppearanceAccent('bogus');
-      expect(service.draft()?.appearance.accent).toBe('terracotta');
+      expect(service.draft()?.appearance.accent).toBe('theme');
+    });
+
+    it('keeps the theme id in the draft and previews it live until save', () => {
+      service.setAppearanceTheme('dracula');
+      expect(service.appearanceTheme()).toBe('dracula');
+      expect(service.draft()?.appearance.theme).toBe('dracula');
+      expect(service.config()?.appearance.theme).toBe('drey');
+      expect(service.isDirty()).toBe(true);
     });
 
     it('rolls the whole Appearance preview back on discard', () => {
       service.setAppearanceUiScale('small');
       service.setAppearanceAccent('#0055ff');
+      service.setAppearanceTheme('nord');
       service.discard();
 
       expect(service.appearanceUiScale()).toBe('default');
-      expect(service.appearanceAccent()).toBe('terracotta');
+      expect(service.appearanceAccent()).toBe('theme');
+      expect(service.appearanceTheme()).toBe('drey');
       expect(service.isDirty()).toBe(false);
     });
 
@@ -311,7 +321,7 @@ describe('SettingsService (draft model)', () => {
       service.setAppearanceAccent('#0055ff');
       service.closeScreen(); // discards + closes
 
-      expect(service.appearanceAccent()).toBe('terracotta');
+      expect(service.appearanceAccent()).toBe('theme');
     });
   });
 });
