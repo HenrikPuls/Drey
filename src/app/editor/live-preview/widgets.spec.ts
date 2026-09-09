@@ -1,4 +1,11 @@
-import { ImageWidget, svgToDataUrl } from './widgets';
+import {
+  HtmlBlockWidget,
+  ImagePreviewWidget,
+  ImageWidget,
+  MermaidWidget,
+  svgToDataUrl,
+  TableWidget,
+} from './widgets';
 
 describe('ImageWidget', () => {
   it('renders an <img> with the resolved src and alt', () => {
@@ -46,6 +53,50 @@ describe('ImageWidget', () => {
     expect(dom.querySelector('.lp-image-missing')).not.toBeNull();
   });
 
+  describe('tool cluster', () => {
+    it('wraps the corner buttons in a .lp-tools flex row, not the .lp-resize grip', () => {
+      const dom = new ImageWidget('drey-asset://asset/pic.png', 'x', null, null, () =>
+        undefined,
+      ).toDOM();
+      const tools = dom.querySelector(':scope > .lp-tools');
+      expect(tools).not.toBeNull();
+      expect(tools!.querySelector('.lp-edit')).not.toBeNull();
+      expect(tools!.querySelector('.lp-lens')).not.toBeNull();
+      // the resize grip is its own bottom-corner element, outside the cluster
+      expect(tools!.querySelector('.lp-resize')).toBeNull();
+      expect(dom.querySelector(':scope > .lp-resize')).not.toBeNull();
+    });
+
+    it('has a .lp-edit "View source" button carrying the </> glyph', () => {
+      const btn = new ImageWidget('drey-asset://asset/pic.png', 'x')
+        .toDOM()
+        .querySelector('.lp-edit') as HTMLButtonElement;
+      expect(btn).not.toBeNull();
+      expect(btn.title).toBe('View source');
+      expect(btn.innerHTML).toContain('m16 18 6-6-6-6');
+      expect(btn.innerHTML).toContain('m8 6-6 6 6 6');
+      expect(btn.innerHTML).not.toContain('M17 3a2.85');
+    });
+
+    it('an image with no onOpenImage still gets the </> button (no lens)', () => {
+      const dom = new ImageWidget('drey-asset://asset/pic.png', 'x').toDOM();
+      expect(dom.querySelector('.lp-tools .lp-edit')).not.toBeNull();
+      expect(dom.querySelector('.lp-lens')).toBeNull();
+    });
+
+    it('TableWidget / HtmlBlockWidget / MermaidWidget render the same cluster', () => {
+      for (const dom of [
+        new TableWidget('<table></table>', '| a |').toDOM(),
+        new HtmlBlockWidget('<div>hi</div>', '<div>hi</div>').toDOM(),
+        new MermaidWidget('graph TD; A-->B').toDOM(),
+      ]) {
+        const tools = dom.querySelector(':scope > .lp-tools');
+        expect(tools).not.toBeNull();
+        expect(tools!.querySelector('.lp-edit')).not.toBeNull();
+      }
+    });
+  });
+
   describe('lens button', () => {
     it('is absent without an onOpenImage callback', () => {
       expect(
@@ -70,12 +121,13 @@ describe('ImageWidget', () => {
       expect(event.defaultPrevented).toBe(true);
     });
 
-    it('is removed alongside the img on a load error', () => {
+    it('is removed alongside the img (with the whole cluster) on a load error', () => {
       const dom = new ImageWidget('drey-asset://asset/pic.png', 'x', null, null, () =>
         undefined,
       ).toDOM();
       dom.querySelector('img')!.onerror!(new Event('error'));
       expect(dom.querySelector('.lp-lens')).toBeNull();
+      expect(dom.querySelector('.lp-tools')).toBeNull();
       expect(dom.querySelector('.lp-image-missing')).not.toBeNull();
     });
   });
@@ -116,19 +168,65 @@ describe('ImageWidget', () => {
       expect(dom.querySelector('.lp-resize')).toBeNull();
     });
 
-    it('ignoreEvent lets CodeMirror see only .lp-resize events', () => {
+    it('ignoreEvent lets CodeMirror see only .lp-resize and .lp-edit events', () => {
       const w = new ImageWidget('drey-asset://asset/p.png', 'x');
       const dom = w.toDOM();
       const grip = dom.querySelector('.lp-resize')!;
+      const edit = dom.querySelector('.lp-edit')!;
       const img = dom.querySelector('img')!;
 
       const onGrip = new MouseEvent('pointerdown');
       Object.defineProperty(onGrip, 'target', { value: grip });
       expect(w.ignoreEvent(onGrip)).toBe(false);
 
+      const onEdit = new MouseEvent('mousedown');
+      Object.defineProperty(onEdit, 'target', { value: edit });
+      expect(w.ignoreEvent(onEdit)).toBe(false);
+
       const onImg = new MouseEvent('pointerdown');
       Object.defineProperty(onImg, 'target', { value: img });
       expect(w.ignoreEvent(onImg)).toBe(true);
+    });
+  });
+
+  describe('ImagePreviewWidget', () => {
+    it('renders a bare <img> with the resolved src / alt and both lp-image classes', () => {
+      const dom = new ImagePreviewWidget('drey-asset://asset/pic.png', 'a boat').toDOM();
+      expect(dom.classList.contains('lp-image')).toBe(true);
+      expect(dom.classList.contains('lp-image-preview')).toBe(true);
+      const img = dom.querySelector('img')!;
+      expect(img.getAttribute('src')).toBe('drey-asset://asset/pic.png');
+      expect(img.getAttribute('alt')).toBe('a boat');
+    });
+
+    it('applies an explicit width / height in px', () => {
+      const img = new ImagePreviewWidget('s', 'x', 300, 200).toDOM().querySelector('img')!;
+      expect(img.style.width).toBe('300px');
+      expect(img.style.height).toBe('200px');
+    });
+
+    it('carries no lens, resize grip, </> button or tool cluster', () => {
+      const dom = new ImagePreviewWidget('s', 'x').toDOM();
+      expect(dom.querySelector('.lp-lens')).toBeNull();
+      expect(dom.querySelector('.lp-resize')).toBeNull();
+      expect(dom.querySelector('.lp-edit')).toBeNull();
+      expect(dom.querySelector('.lp-tools')).toBeNull();
+    });
+
+    it('drops the img on a runtime load error (raw markup is already shown above)', () => {
+      const dom = new ImagePreviewWidget('s', 'x').toDOM();
+      dom.querySelector('img')!.onerror!(new Event('error'));
+      expect(dom.querySelector('img')).toBeNull();
+      expect(dom.querySelector('.lp-image-missing')).toBeNull();
+    });
+
+    it('eq compares src, alt, width and height', () => {
+      const base = new ImagePreviewWidget('s', 'a', 100, 50);
+      expect(base.eq(new ImagePreviewWidget('s', 'a', 100, 50))).toBe(true);
+      expect(base.eq(new ImagePreviewWidget('s', 'a', 120, 50))).toBe(false);
+      expect(base.eq(new ImagePreviewWidget('s', 'a', 100, null))).toBe(false);
+      expect(base.eq(new ImagePreviewWidget('s2', 'a', 100, 50))).toBe(false);
+      expect(base.eq(new ImagePreviewWidget('s', 'b', 100, 50))).toBe(false);
     });
   });
 });

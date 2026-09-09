@@ -1,8 +1,14 @@
 import { markdown, markdownLanguage } from '@codemirror/lang-markdown';
 import { EditorState } from '@codemirror/state';
 import { Decoration, DecorationSet } from '@codemirror/view';
-import { blockDecorations, LivePreviewConfig } from './block-render';
-import { HtmlBlockWidget, ImageWidget, MermaidWidget, TableWidget } from './widgets';
+import { blockDecorations, LivePreviewConfig, revealDecorations } from './block-render';
+import {
+  HtmlBlockWidget,
+  ImagePreviewWidget,
+  ImageWidget,
+  MermaidWidget,
+  TableWidget,
+} from './widgets';
 
 const TABLE = '| a | b |\n| - | - |\n| 1 | 2 |';
 const MERMAID = '```mermaid\ngraph TD;\n  A-->B;\n```';
@@ -156,5 +162,86 @@ describe('blockDecorations', () => {
     // frontmatter guard must keep it raw.
     const doc = '---\ncover: ![x](y.png)\n---\n\ntext';
     expect(widgets(blockDecorations(state(doc), passThrough))).toHaveLength(0);
+  });
+});
+
+describe('revealDecorations', () => {
+  const classesOf = (set: DecorationSet): (string | undefined)[] =>
+    widgets(set)
+      .filter((d) => typeof d.deco.spec['class'] === 'string')
+      .map((d) => d.deco.spec['class'] as string);
+  const previewOf = (set: DecorationSet) =>
+    widgets(set).find((d) => d.deco.spec['widget'] instanceof ImagePreviewWidget);
+
+  it('is empty while nothing is revealed', () => {
+    const doc = `intro\n\n${TABLE}\n\nend`;
+    expect(widgets(revealDecorations(state(doc, 0), passThrough))).toHaveLength(0);
+  });
+
+  it('wraps a touched table in a first / middle / last .lp-reveal container, no widget', () => {
+    const doc = `intro\n\n${TABLE}\n\nend`;
+    const inTable = doc.indexOf('| 1 |') + 2;
+    const set = revealDecorations(state(doc, inTable), passThrough);
+    expect(classesOf(set)).toEqual([
+      'lp-reveal lp-reveal-first',
+      'lp-reveal',
+      'lp-reveal lp-reveal-last',
+    ]);
+    // line decorations sit at a line start (zero length)
+    for (const d of widgets(set)) expect(d.from).toBe(d.to);
+    expect(previewOf(set)).toBeUndefined();
+  });
+
+  it('wraps a touched mermaid fence, no widget', () => {
+    const doc = `intro\n\n${MERMAID}\n\nend`;
+    const inside = doc.indexOf('A-->B');
+    const cls = classesOf(revealDecorations(state(doc, inside), passThrough));
+    expect(cls.length).toBeGreaterThan(1);
+    expect(cls[0]).toContain('lp-reveal-first');
+    expect(cls[cls.length - 1]).toContain('lp-reveal-last');
+    expect(previewOf(revealDecorations(state(doc, inside), passThrough))).toBeUndefined();
+  });
+
+  it('wraps a touched HTML region, no widget', () => {
+    const doc =
+      'intro\n\n<details>\n<summary>Titel</summary>\n\nGeheim **fett**\n\n</details>\n\nafter';
+    const inBody = doc.indexOf('Geheim') + 2;
+    const set = revealDecorations(state(doc, inBody), passThrough);
+    const cls = classesOf(set);
+    expect(cls[0]).toContain('lp-reveal-first');
+    expect(cls[cls.length - 1]).toContain('lp-reveal-last');
+    expect(previewOf(set)).toBeUndefined();
+  });
+
+  it('keeps a read-only ImagePreviewWidget below a touched image, one-line container', () => {
+    const doc = '![a boat|300](img/boat.png)\n\nend';
+    const set = revealDecorations(state(doc, 3), passThrough);
+    expect(classesOf(set)).toEqual(['lp-reveal lp-reveal-first lp-reveal-last']);
+    const preview = previewOf(set);
+    expect(preview).toBeDefined();
+    expect(preview!.deco.spec['block']).toBe(true);
+    const w = preview!.deco.spec['widget'] as ImagePreviewWidget;
+    expect(w.src).toBe('img/boat.png');
+    expect(w.alt).toBe('a boat');
+    expect(w.width).toBe(300);
+  });
+
+  it('adds the container but no mirror when the image src does not resolve', () => {
+    const config: LivePreviewConfig = { resolveImage: () => null };
+    const set = revealDecorations(state('![gone](../../etc/x.png)\n\nend', 3), config);
+    expect(classesOf(set).length).toBeGreaterThan(0);
+    expect(previewOf(set)).toBeUndefined();
+  });
+
+  it('reveals an inline image at paragraph granularity (container + mirror)', () => {
+    const doc = 'see ![a](b.png) here\n\nend';
+    const set = revealDecorations(state(doc, doc.indexOf('b.png')), passThrough);
+    expect(classesOf(set).length).toBeGreaterThan(0);
+    expect(previewOf(set)).toBeDefined();
+  });
+
+  it('never reveals inside frontmatter', () => {
+    const doc = '---\ncover: ![x](y.png)\n---\n\ntext';
+    expect(widgets(revealDecorations(state(doc), passThrough))).toHaveLength(0);
   });
 });

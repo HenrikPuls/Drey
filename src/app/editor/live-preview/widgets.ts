@@ -112,11 +112,14 @@ export class ImageWidget extends WidgetType {
     }
     img.onerror = () => {
       img.remove();
-      span.querySelector('.lp-lens')?.remove();
+      span.querySelector('.lp-tools')?.remove();
       span.querySelector('.lp-resize')?.remove();
       span.appendChild(this.placeholder());
     };
     span.appendChild(img);
+
+    const tools = appendTools(span);
+    tools.appendChild(makeEditButton());
 
     if (this.onOpenImage) {
       const open = this.onOpenImage;
@@ -133,7 +136,7 @@ export class ImageWidget extends WidgetType {
         event.stopPropagation();
         open(src);
       });
-      span.appendChild(lens);
+      tools.appendChild(lens);
     }
 
     // Corner grip -- the actual drag is a delegated `EditorView`
@@ -147,12 +150,18 @@ export class ImageWidget extends WidgetType {
 
   /**
    * CodeMirror ignores everything inside the widget (default `true`)
-   * except a `.lp-resize` grip -- the block-render `domEventHandlers`
-   * needs that `pointerdown`. The lens button handles its own click and
+   * except a `.lp-resize` grip (the block-render `domEventHandlers` needs
+   * that `pointerdown`) and the `</>` "View source" button (its click goes
+   * through `clickToReveal`). The lens button handles its own click and
    * `stopPropagation`s, so it never gets here.
    */
   override ignoreEvent(event: Event): boolean {
-    return !(event.target instanceof Element && event.target.closest('.lp-resize') !== null);
+    if (!(event.target instanceof Element)) {
+      return true;
+    }
+    return (
+      event.target.closest('.lp-resize') === null && event.target.closest('.lp-edit') === null
+    );
   }
 
   private placeholder(): HTMLElement {
@@ -164,28 +173,95 @@ export class ImageWidget extends WidgetType {
 }
 
 /**
- * The hover `✎` affordance on rendered block widgets (Obsidian-style):
- * clicking it drops the cursor into the block's source. It is the ONE part
- * of such a widget whose events go to CodeMirror (see `ignoreWidgetEvent`)
- * -- everything else stays interactive widget content, so e.g. a
- * `<details>` summary toggles instead of yanking the user into the source.
+ * A read-only copy of a rendered image, shown directly below the raw
+ * `![alt](path)` line while that image's source is revealed (ADR-0009
+ * "Later change"). Unlike `ImageWidget` it has no lens, resize grip or
+ * `</>` button -- it is a mirror of what the note will look like, not an
+ * interactive surface. It lives in the non-atomic `reveal` decoration
+ * layer, so the caret stays on the editable source line above it.
  */
-function appendEditButton(parent: HTMLElement): void {
-  const btn = document.createElement('button');
-  btn.type = 'button';
-  btn.className = 'lp-edit';
-  btn.title = 'Edit source';
-  btn.innerHTML =
-    '<svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" ' +
-    'stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' +
-    '<path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/></svg>';
-  parent.appendChild(btn);
+export class ImagePreviewWidget extends WidgetType {
+  constructor(
+    readonly src: string,
+    readonly alt: string,
+    readonly width: number | null = null,
+    readonly height: number | null = null,
+  ) {
+    super();
+  }
+
+  override eq(other: ImagePreviewWidget): boolean {
+    return (
+      other.src === this.src &&
+      other.alt === this.alt &&
+      other.width === this.width &&
+      other.height === this.height
+    );
+  }
+
+  toDOM(): HTMLElement {
+    const span = document.createElement('span');
+    span.className = 'lp-image lp-image-preview';
+    const img = document.createElement('img');
+    img.src = this.src;
+    img.alt = this.alt;
+    if (this.width !== null) {
+      img.style.width = `${this.width}px`;
+    }
+    if (this.height !== null) {
+      img.style.height = `${this.height}px`;
+    }
+    // The raw markup is already on the line above -- a broken reference
+    // just drops the mirror instead of showing its own placeholder.
+    img.onerror = () => img.remove();
+    span.appendChild(img);
+    return span;
+  }
 }
 
 /**
- * `true` (= CodeMirror ignores it) for everything except the `✎` button and
- * a mermaid error box -- clicking the error message anywhere should drop the
- * cursor into the fence to fix it, not stay swallowed by the widget.
+ * The hover corner cluster shared by rendered block widgets: a flex row
+ * pinned to the widget's top-right that holds the `</>` "View source"
+ * button and, where the widget has one, the zoom lens -- so the two never
+ * stack on top of each other. Returns the container for the caller to
+ * append its buttons into.
+ */
+function appendTools(parent: HTMLElement): HTMLElement {
+  // A `<span>`, not a `<div>`: `ImageWidget` is an *inline* replace
+  // decoration, so its DOM should stay inline-level. `display:flex` in the
+  // theme still lays the buttons out in a row (the element is
+  // `position:absolute`, so it's out of flow anyway).
+  const tools = document.createElement('span');
+  tools.className = 'lp-tools';
+  parent.appendChild(tools);
+  return tools;
+}
+
+/**
+ * The `</>` "View source" affordance on rendered block widgets
+ * (Obsidian-style): clicking it drops the cursor into the block's source.
+ * It is the ONE part of such a widget whose events go to CodeMirror (see
+ * `ignoreWidgetEvent`) -- everything else stays interactive widget content,
+ * so e.g. a `<details>` summary toggles instead of yanking the user into
+ * the source.
+ */
+function makeEditButton(): HTMLButtonElement {
+  const btn = document.createElement('button');
+  btn.type = 'button';
+  btn.className = 'lp-edit';
+  btn.title = 'View source';
+  btn.innerHTML =
+    '<svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" ' +
+    'stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' +
+    '<path d="m16 18 6-6-6-6"/><path d="m8 6-6 6 6 6"/></svg>';
+  return btn;
+}
+
+/**
+ * `true` (= CodeMirror ignores it) for everything except the `</>` button
+ * and a mermaid error box -- clicking the error message anywhere should
+ * drop the cursor into the fence to fix it, not stay swallowed by the
+ * widget.
  */
 function ignoreWidgetEvent(event: Event): boolean {
   if (!(event.target instanceof Element)) {
@@ -200,7 +276,7 @@ function ignoreWidgetEvent(event: Event): boolean {
  * A rendered HTML block (`<div>`, `<table>`, `<details>`, ...) in place of
  * raw HTML in the note -- Markdown allows embedded HTML, so Live Preview
  * renders it. `html` MUST already be sanitized (`sanitize-html.ts`).
- * The hover `✎` reveals the source; content clicks stay in the widget.
+ * The hover `</>` reveals the source; content clicks stay in the widget.
  */
 export class HtmlBlockWidget extends WidgetType {
   constructor(
@@ -218,7 +294,7 @@ export class HtmlBlockWidget extends WidgetType {
     const div = document.createElement('div');
     div.className = 'lp-html';
     div.innerHTML = this.html;
-    appendEditButton(div);
+    appendTools(div).appendChild(makeEditButton());
     return div;
   }
 
@@ -235,20 +311,21 @@ export class HtmlBlockWidget extends WidgetType {
  */
 let mermaidPromise: Promise<typeof import('mermaid').default> | null = null;
 
+const MERMAID_BASE_CONFIG: MermaidConfig = {
+  startOnLoad: false,
+  securityLevel: 'strict',
+  theme: 'dark',
+  darkMode: true,
+  fontFamily: 'var(--font-sans, system-ui, sans-serif)',
+  // Throw a parse error out of `render()` instead of drawing mermaid's
+  // built-in "bomb" diagram -- we show our own compact box.
+  suppressErrorRendering: true,
+};
+
 function loadMermaid(): Promise<typeof import('mermaid').default> {
   if (!mermaidPromise) {
     mermaidPromise = import('mermaid').then((mod) => {
-      const config: MermaidConfig = {
-        startOnLoad: false,
-        securityLevel: 'strict',
-        theme: 'dark',
-        darkMode: true,
-        fontFamily: 'var(--font-sans, system-ui, sans-serif)',
-        // Throw a parse error out of `render()` instead of drawing
-        // mermaid's built-in "bomb" diagram -- we show our own compact box.
-        suppressErrorRendering: true,
-      };
-      mod.default.initialize(config);
+      mod.default.initialize(MERMAID_BASE_CONFIG);
       return mod.default;
     });
   }
@@ -256,6 +333,30 @@ function loadMermaid(): Promise<typeof import('mermaid').default> {
 }
 
 let mermaidRenderSeq = 0;
+let mermaidFontFamily = '';
+
+/**
+ * Re-pin mermaid's `fontFamily` to the editor's *resolved* typeface before
+ * a render. `MERMAID_BASE_CONFIG.fontFamily` is `var(--font-sans, …)`, which
+ * mermaid resolves against its own offscreen measuring node -- not
+ * `.cm-content`, where Settings → Appearance overrides `--font-sans`. So a
+ * non-sans editor font makes mermaid measure every label in a fallback sans,
+ * size the node box to that, then paint the (wider) real font -- the label
+ * spills past its rectangle (mild for serif, ~40% for monospace). Feeding
+ * the concrete resolved stack makes measurement and paint agree.
+ *
+ * `mermaid.initialize` replaces the whole config (it does not merge onto the
+ * previous call), so the full base config is re-sent with `fontFamily`
+ * overridden.
+ */
+function syncMermaidFont(mermaid: typeof import('mermaid').default, near: HTMLElement): void {
+  const host = near.closest('.cm-scroller') ?? document.querySelector('.cm-scroller');
+  const font = host ? getComputedStyle(host).fontFamily : '';
+  if (font && font !== mermaidFontFamily) {
+    mermaidFontFamily = font;
+    mermaid.initialize({ ...MERMAID_BASE_CONFIG, fontFamily: font });
+  }
+}
 
 /**
  * Serialises a rendered SVG string to a `data:` URL an `<img>` (the shared
@@ -316,7 +417,7 @@ export class MermaidWidget extends WidgetType {
     pending.className = 'lp-mermaid-pending';
     pending.textContent = 'rendering diagram…';
     wrap.appendChild(pending);
-    appendEditButton(wrap);
+    appendTools(wrap).appendChild(makeEditButton());
     void this.render(wrap);
     return wrap;
   }
@@ -327,6 +428,7 @@ export class MermaidWidget extends WidgetType {
     let renderedSvg: string | null = null;
     try {
       const mermaid = await loadMermaid();
+      syncMermaidFont(mermaid, wrap);
       const { svg } = await mermaid.render(id, this.source);
       renderedSvg = svg;
       result = document.createElement('div');
@@ -343,7 +445,10 @@ export class MermaidWidget extends WidgetType {
       return; // the widget was replaced while mermaid worked
     }
     wrap.querySelector('.lp-mermaid-pending')?.remove();
-    wrap.insertBefore(result, wrap.querySelector('.lp-edit'));
+    // Anchor on `.lp-tools` (a real direct child of `wrap`); `.lp-edit` now
+    // lives inside that cluster, so it is no longer a valid `insertBefore`
+    // reference node here.
+    wrap.insertBefore(result, wrap.querySelector('.lp-tools'));
 
     if (renderedSvg !== null && this.onZoom) {
       const svg = renderedSvg;
@@ -361,7 +466,7 @@ export class MermaidWidget extends WidgetType {
         event.stopPropagation();
         zoom(svgToDataUrl(svg));
       });
-      wrap.appendChild(lens);
+      wrap.querySelector('.lp-tools')?.appendChild(lens);
     }
   }
 
@@ -373,7 +478,7 @@ export class MermaidWidget extends WidgetType {
 /**
  * A rendered HTML table in place of a raw GFM table block. `html` comes from
  * markdown-it with `html: false`, so note content cannot smuggle markup in.
- * The hover `✎` reveals the raw table for editing; the table body itself
+ * The hover `</>` reveals the raw table for editing; the table body itself
  * stays selectable for copying.
  */
 export class TableWidget extends WidgetType {
@@ -392,7 +497,7 @@ export class TableWidget extends WidgetType {
     const div = document.createElement('div');
     div.className = 'lp-table';
     div.innerHTML = this.html;
-    appendEditButton(div);
+    appendTools(div).appendChild(makeEditButton());
     return div;
   }
 

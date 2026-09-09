@@ -37,6 +37,7 @@ import {
 import { livePreview } from '../live-preview';
 import { inlineSpellcheck, requestSpellcheck, SpellcheckSource } from '../spellcheck/spellcheck';
 import { linkActivation } from '../link-open';
+import { pasteUrlAsMarkdownLink } from '../paste-link';
 import { makeTagCompletionSource } from '../tag-complete';
 import { tagPills } from '../tag-pill';
 import { resolveVaultImageUrl } from '../vault-image';
@@ -253,12 +254,26 @@ export class MarkdownSurface implements AfterViewInit, OnDestroy {
    */
   private markdownBundle(): Extension {
     return [
-      markdown({ base: markdownLanguage, codeLanguages: languages, completeHTMLTags: false }),
+      markdown({
+        base: markdownLanguage,
+        codeLanguages: languages,
+        completeHTMLTags: false,
+        // `markdownLanguage` bakes in `@lezer/markdown`'s `Emoji` inline
+        // parser, whose `:name:` rule is `/^[a-zA-Z_0-9]+:/` -- digits alone
+        // count, so a bare timestamp like `2026-09-09T00:03:48` has its
+        // `:03:` slice parsed as an `Emoji` node and coloured as such. We
+        // never render `:shortcode:` emoji, so drop the parser: the text
+        // stays plain.
+        extensions: [{ remove: ['Emoji'] }],
+      }),
       markdownLanguage.data.of({
         autocomplete: makeTagCompletionSource(() => this.tags.tags()),
       }),
       this.onTagActivate() ? tagPills(this.onTagActivate()!) : [],
       this.onLinkActivate() ? linkActivation(this.onLinkActivate()!) : [],
+      // Paste a bare URL onto an empty caret -> `[url](url)` (lang-markdown's
+      // own pasteURLAsLink only handles the wrap-a-selection case).
+      pasteUrlAsMarkdownLink(),
       this.spellcheck() ? inlineSpellcheck({ source: this.spellcheck()! }) : [],
       this.foldFrontmatter() ? frontmatterFold() : [],
     ];
@@ -518,25 +533,22 @@ export class MarkdownSurface implements AfterViewInit, OnDestroy {
 const readOnlyExtension: Extension = [EditorView.editable.of(false), EditorState.readOnly.of(true)];
 
 /**
- * Un-hides the gutter `basicSetup` already mounts (the base theme keeps
- * `.cm-gutters` `display:none`) and restyles the line numbers to the v3
- * spec: 46px column, Plex Mono 10.5, right-aligned, no fold arrows.
- * `Prec.high` so it beats the base `.cm-gutters` rule. No extra
- * `lineNumbers()` extension -- `basicSetup` already provides one.
+ * Shows the line-number column and restyles it to the v3 spec: 46px column,
+ * Plex Mono 10.5, right-aligned. Mounted in a compartment gated on the meta
+ * bar's "Lines" toggle; `editorStructure` hides `.cm-lineNumbers` by
+ * default, this re-shows it. `Prec.high` so it beats `editorStructure` on
+ * equal specificity. No extra `lineNumbers()` extension -- `basicSetup`
+ * already provides one. (The fold-chevron column is always-on in
+ * `editorStructure`, independent of this toggle.)
  */
 const gutterTheme: Extension = Prec.high(
   EditorView.theme({
     '.cm-gutters': {
-      display: 'flex',
       backgroundColor: 'transparent',
       borderRight: 'none',
       color: 'var(--gutter)',
     },
-    // `!important` is load-bearing: the CM base theme sets
-    // `.cm-gutter { display: flex !important }`, which extension precedence
-    // (`Prec.high`) orders but does not defeat -- a plain `display: none`
-    // silently loses and the markdown heading fold arrows stay visible.
-    '.cm-foldGutter': { display: 'none !important' },
+    '.cm-lineNumbers': { display: 'flex !important' },
     '.cm-lineNumbers .cm-gutterElement': {
       minWidth: '46px',
       padding: '0 14px 0 6px',
@@ -582,4 +594,9 @@ const compactTheme = EditorView.theme({
   '.cm-placeholder': {
     color: 'var(--text-6)',
   },
+  // No gutter at all on a compact surface (entry drawer, assistant
+  // composer): `basicSetup` mounts line-number + fold gutters and
+  // `editorStructure` now makes the fold column always-on, but a one-line
+  // composer has nothing to number or fold.
+  '.cm-gutters': { display: 'none' },
 });

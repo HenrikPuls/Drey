@@ -7,7 +7,13 @@ import { clampEmbedWidth, parseImageEmbed, setEmbedWidth } from '../../../../sha
 import { frontmatterEnd } from '../markdown-frontmatter';
 import { fenceLang } from './fenced-code';
 import { htmlTagBalance, sanitizeHtml } from './sanitize-html';
-import { HtmlBlockWidget, ImageWidget, MermaidWidget, TableWidget } from './widgets';
+import {
+  HtmlBlockWidget,
+  ImagePreviewWidget,
+  ImageWidget,
+  MermaidWidget,
+  TableWidget,
+} from './widgets';
 
 /**
  * The widget half of Live Preview (ADR-0009): constructs that cannot be
@@ -62,63 +68,119 @@ const tableMd = new MarkdownIt({ html: false });
  */
 const htmlMd = new MarkdownIt({ html: true });
 
-export function blockDecorations(state: EditorState, config: LivePreviewConfig): DecorationSet {
-  const deco: Range<Decoration>[] = [];
+type EmbedKind = 'table' | 'mermaid' | 'image' | 'html';
+
+/**
+ * One rendered embed found in the tree. `from`/`to` are the node range for
+ * the touch test; `lineFrom`/`lineTo` are the whole-line span of the raw
+ * source (what the reveal container wraps). `atom` builds the
+ * `Decoration.replace` shown while the embed is NOT touched -- a thunk so a
+ * touched table / diagram never pays for its markdown-it render. `preview`
+ * (images only) builds the read-only render kept below the markup while the
+ * source is revealed.
+ */
+interface Embed {
+  kind: EmbedKind;
+  from: number;
+  to: number;
+  lineFrom: number;
+  lineTo: number;
+  atom: () => Range<Decoration>;
+  preview: (() => Range<Decoration>) | null;
+}
+
+/**
+ * Walks the tree once and collects every rendered embed (tables, `mermaid`
+ * fences, images, merged HTML regions), past the frontmatter. Whether an
+ * embed is currently revealed is decided later, in `buildBlockState`.
+ */
+function scanEmbeds(state: EditorState, config: LivePreviewConfig): Embed[] {
   const doc = state.doc;
   const fmEnd = frontmatterEnd(state.sliceDoc());
-  const touches = (from: number, to: number): boolean =>
-    state.selection.ranges.some((r) => r.from <= to && r.to >= from);
-
+  const embeds: Embed[] = [];
   const htmlBlocks: { from: number; to: number }[] = [];
+
   const tree = ensureSyntaxTree(state, doc.length, PARSE_BUDGET_MS) ?? syntaxTree(state);
   tree.iterate({
     enter: (node) => {
       if (node.name === 'Table') {
-        if (node.from >= fmEnd && !touches(node.from, node.to)) {
+        if (node.from >= fmEnd) {
           // Block decorations must cover whole lines.
           const from = doc.lineAt(node.from).from;
           const to = doc.lineAt(node.to).to;
           const source = state.sliceDoc(node.from, node.to);
-          deco.push(
-            Decoration.replace({
-              widget: new TableWidget(tableMd.render(source), source),
-              block: true,
-            }).range(from, to),
-          );
+          embeds.push({
+            kind: 'table',
+            from: node.from,
+            to: node.to,
+            lineFrom: from,
+            lineTo: to,
+            atom: () =>
+              Decoration.replace({
+                widget: new TableWidget(tableMd.render(source), source),
+                block: true,
+              }).range(from, to),
+            preview: null,
+          });
         }
         return false;
       }
       if (node.name === 'FencedCode') {
         const infoNode = node.node.getChild('CodeInfo');
         const lang = fenceLang(infoNode ? state.sliceDoc(infoNode.from, infoNode.to) : '');
-        if (lang === 'mermaid' && node.from >= fmEnd && !touches(node.from, node.to)) {
+        if (lang === 'mermaid' && node.from >= fmEnd) {
           const textNode = node.node.getChild('CodeText');
           const body = textNode ? state.sliceDoc(textNode.from, textNode.to) : '';
           const from = doc.lineAt(node.from).from;
           const to = doc.lineAt(node.to).to;
-          deco.push(
-            Decoration.replace({
-              widget: new MermaidWidget(body, config.onZoomDiagram),
-              block: true,
-            }).range(from, to),
-          );
+          embeds.push({
+            kind: 'mermaid',
+            from: node.from,
+            to: node.to,
+            lineFrom: from,
+            lineTo: to,
+            atom: () =>
+              Decoration.replace({
+                widget: new MermaidWidget(body, config.onZoomDiagram),
+                block: true,
+              }).range(from, to),
+            preview: null,
+          });
         }
         return false; // never descend into a fence
       }
       if (node.name === 'Image') {
-        if (node.from >= fmEnd && !touches(node.from, node.to)) {
+        if (node.from >= fmEnd) {
+          // `node` is the iterate cursor -- its `from`/`to` are only valid
+          // in this callback. Capture them before they move on.
+          const nodeFrom = node.from;
+          const nodeTo = node.to;
           const { alt, url, width, height } = parseImage(state, node.node);
-          deco.push(
-            Decoration.replace({
-              widget: new ImageWidget(
-                url === null ? null : config.resolveImage(url),
-                alt,
-                width,
-                height,
-                config.onOpenImage,
-              ),
-            }).range(node.from, node.to),
-          );
+          const resolved = url === null ? null : config.resolveImage(url);
+          const previewPos = doc.lineAt(nodeTo).to;
+          embeds.push({
+            kind: 'image',
+            from: nodeFrom,
+            to: nodeTo,
+            lineFrom: doc.lineAt(nodeFrom).from,
+            lineTo: previewPos,
+            atom: () =>
+              Decoration.replace({
+                widget: new ImageWidget(resolved, alt, width, height, config.onOpenImage),
+              }).range(nodeFrom, nodeTo),
+            // While the `![alt](path)` line is revealed, keep a read-only
+            // render of the image directly below it (owner's call). A
+            // reference that doesn't resolve has nothing to mirror.
+            preview:
+              resolved === null
+                ? null
+                : () =>
+                    Decoration.widget({
+                      widget: new ImagePreviewWidget(resolved, alt, width, height),
+                      block: true,
+                      side: 1,
+                    }).range(previewPos),
+          });
         }
         return false;
       }
@@ -153,23 +215,106 @@ export function blockDecorations(state: EditorState, config: LivePreviewConfig):
     const regionTo = htmlBlocks[end].to;
     i = end;
 
-    if (touches(regionFrom, regionTo)) {
-      continue;
-    }
     const source = state.sliceDoc(regionFrom, regionTo);
     const html = sanitizeHtml(htmlMd.render(source), config);
     if (!html.trim()) {
-      continue; // e.g. a stray closing tag -- leave it raw rather than invisible
+      continue; // e.g. a stray closing tag -- not an embed, leave it raw
     }
-    deco.push(
-      Decoration.replace({
-        widget: new HtmlBlockWidget(html, source),
-        block: true,
-      }).range(doc.lineAt(regionFrom).from, doc.lineAt(regionTo).to),
-    );
+    const from = doc.lineAt(regionFrom).from;
+    const to = doc.lineAt(regionTo).to;
+    embeds.push({
+      kind: 'html',
+      from: regionFrom,
+      to: regionTo,
+      lineFrom: from,
+      lineTo: to,
+      atom: () =>
+        Decoration.replace({
+          widget: new HtmlBlockWidget(html, source),
+          block: true,
+        }).range(from, to),
+      preview: null,
+    });
   }
 
-  return Decoration.set(deco, true);
+  return embeds;
+}
+
+// The rounded container drawn around a revealed embed's raw source lines,
+// so the active-line highlight reads as "in scope" rather than full-bleed.
+// Cached: decorations compare by identity across rebuilds (cf. `conceal.ts`).
+const revealLine = Decoration.line({ class: 'lp-reveal' });
+const revealLineFirst = Decoration.line({ class: 'lp-reveal lp-reveal-first' });
+const revealLineLast = Decoration.line({ class: 'lp-reveal lp-reveal-last' });
+const revealLineSole = Decoration.line({ class: 'lp-reveal lp-reveal-first lp-reveal-last' });
+
+interface BlockState {
+  /** replace/widget decorations for un-revealed embeds; also the atomic set. */
+  atoms: DecorationSet;
+  /** the reveal container + image mirror; never atomic. */
+  reveal: DecorationSet;
+}
+
+/**
+ * One tree walk (`scanEmbeds`), partitioned by whether each embed's node is
+ * currently touched by the selection: not touched -> the `atoms` layer
+ * (rendered widget, also fed to `EditorView.atomicRanges`); touched -> the
+ * `reveal` layer (the `.lp-reveal*` line container, plus an
+ * `ImagePreviewWidget` below an image's markup), which must stay
+ * non-atomic so the caret can sit in the raw source.
+ */
+function buildBlockState(state: EditorState, config: LivePreviewConfig): BlockState {
+  const doc = state.doc;
+  const touches = (from: number, to: number): boolean =>
+    state.selection.ranges.some((r) => r.from <= to && r.to >= from);
+
+  const atoms: Range<Decoration>[] = [];
+  const reveal: Range<Decoration>[] = [];
+
+  for (const embed of scanEmbeds(state, config)) {
+    if (!touches(embed.from, embed.to)) {
+      atoms.push(embed.atom());
+      continue;
+    }
+    const first = doc.lineAt(embed.lineFrom);
+    const last = doc.lineAt(embed.lineTo);
+    if (first.number === last.number) {
+      reveal.push(revealLineSole.range(first.from));
+    } else {
+      reveal.push(revealLineFirst.range(first.from));
+      for (let n = first.number + 1; n < last.number; n++) {
+        reveal.push(revealLine.range(doc.line(n).from));
+      }
+      reveal.push(revealLineLast.range(last.from));
+    }
+    if (embed.preview) {
+      reveal.push(embed.preview());
+    }
+  }
+
+  return {
+    atoms: Decoration.set(atoms, true),
+    reveal: Decoration.set(reveal, true),
+  };
+}
+
+/**
+ * The widget layer: a `Decoration.replace` per un-revealed table / diagram /
+ * image / HTML region. Also the source of `EditorView.atomicRanges`.
+ */
+export function blockDecorations(state: EditorState, config: LivePreviewConfig): DecorationSet {
+  return buildBlockState(state, config).atoms;
+}
+
+/**
+ * The reveal layer (ADR-0009 "Later change"): while a text embed's source is
+ * revealed, its raw lines get a rounded container (`.lp-reveal*` line
+ * decorations) and an image additionally keeps a read-only render
+ * (`ImagePreviewWidget`) below the markup. Separate from `blockDecorations`
+ * because these decorations must NOT feed `EditorView.atomicRanges`.
+ */
+export function revealDecorations(state: EditorState, config: LivePreviewConfig): DecorationSet {
+  return buildBlockState(state, config).reveal;
 }
 
 /**
@@ -202,36 +347,45 @@ function parseImage(
 }
 
 export function livePreviewBlocks(config: LivePreviewConfig): Extension {
-  const field = StateField.define<DecorationSet>({
-    create: (state) => blockDecorations(state, config),
+  const field = StateField.define<BlockState>({
+    create: (state) => buildBlockState(state, config),
     update: (value, tr) =>
-      tr.docChanged || tr.selection ? blockDecorations(tr.state, config) : value,
+      tr.docChanged || tr.selection ? buildBlockState(tr.state, config) : value,
     provide: (f) => [
-      EditorView.decorations.from(f),
-      // Rendered tables / diagrams / HTML blocks / images are single atoms:
-      // arrow keys step over them in one move instead of the selection
-      // snapping to the document start when ArrowUp lands on a block widget.
-      EditorView.atomicRanges.of((view) => view.state.field(f, false) ?? Decoration.none),
+      EditorView.decorations.from(f, (v) => v.atoms),
+      EditorView.decorations.from(f, (v) => v.reveal),
+      // Only the widget layer is atomic: arrow keys step over a rendered
+      // table / diagram / image in one move instead of the selection
+      // snapping to offset 0 on a block widget. The reveal layer (the
+      // source container and the image mirror) stays non-atomic so the
+      // caret can sit in the raw markup.
+      EditorView.atomicRanges.of((view) => view.state.field(f, false)?.atoms ?? Decoration.none),
     ],
   });
-  // The `✎` button on a rendered table/HTML block moves the cursor into
-  // it, which reveals the raw source (the selection then touches the
-  // node). Only the button: other clicks belong to the widget content
-  // (toggling a <details>, selecting table text) -- its `ignoreEvent`
-  // keeps CodeMirror out of those. Exception: a mermaid *error* box is
-  // clickable anywhere -- the whole point is to get back into the fence.
+  // The `</>` button on a rendered table / HTML block / image moves the
+  // cursor into it, which reveals the raw source (the selection then
+  // touches the node). Only the button: other clicks belong to the widget
+  // content (toggling a <details>, selecting table text) -- its
+  // `ignoreEvent` keeps CodeMirror out of those. Exception: a mermaid
+  // *error* box is clickable anywhere -- the whole point is to get back
+  // into the fence.
   const clickToReveal = EditorView.domEventHandlers({
     mousedown(event, view) {
       const target = event.target as HTMLElement | null;
       if (!target?.closest('.lp-edit') && !target?.closest('.lp-mermaid-error')) {
         return false;
       }
-      const widget = target.closest('.lp-table, .lp-html, .lp-mermaid');
+      const widget = target.closest('.lp-table, .lp-html, .lp-mermaid, .lp-image');
       if (!widget) {
         return false;
       }
       event.preventDefault();
-      view.dispatch({ selection: { anchor: view.posAtDOM(widget) }, scrollIntoView: true });
+      // `posAtDOM` on a *block* widget resolves to the position just before
+      // it (the blank line above the fence), one short of the node range
+      // `touches()` tests -- without the nudge the reveal needs an extra
+      // ArrowRight. Same `+ 1` workaround as `startImageResize()` below.
+      const anchor = Math.min(view.posAtDOM(widget) + 1, view.state.doc.length);
+      view.dispatch({ selection: { anchor }, scrollIntoView: true });
       view.focus();
       return true;
     },

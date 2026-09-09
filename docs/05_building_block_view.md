@@ -349,6 +349,13 @@ src/                Angular renderer (standalone components, esbuild via Angular
                          mousedown anywhere in it calls PaneService.focus. App renders
                          <app-pane-layout [node]="panes.root()"> in place of the old
                          single fixed tab-bar + editor pair.
+                       PaneLeaf host also owns dragover/drop: a vault file dropped in
+                         the pane but not on .cm-content opens as a tab there via
+                         PaneDropService (pane-drop.service.ts) -- resolves an
+                         application/x-drey-vault-path drag or an OS file under the
+                         active vault root to a relative path, focuses the pane, calls
+                         EditorService.openFile. Out-of-vault OS files are left to
+                         DropGuardService (ADR-0027 / ADR-0028 amendment).
     entry-drawer/      EntryDrawer: the bottom capture drawer -- TOPIC field first,
                          then Tags / People / Meetings chip rows, then a
                          MarkdownSurface (compact, multi-line, inline spellcheck).
@@ -415,15 +422,25 @@ src/                Angular renderer (standalone components, esbuild via Angular
       live-preview/     ADR-0009. conceal.ts: ViewPlugin hiding syntax markers away
                          from the selection (+ bullet/checkbox/rule widgets, quote/
                          code/frontmatter line classes; yields a ```mermaid fence to
-                         block-render). block-render.ts: StateField rendering tables
-                         (block widgets via markdown-it), images (resolveVaultImageUrl),
-                         sanitized HTML blocks, and ```mermaid fences (MermaidWidget,
-                         ADR-0025). fenced-code.ts: pure fenceLang(). sanitize-html.ts:
+                         block-render). block-render.ts: StateField holding
+                         { atoms, reveal } from one scanEmbeds walk -- atoms = the
+                         Decoration.replace per un-revealed table (markdown-it) / image
+                         (resolveVaultImageUrl) / sanitized HTML block / ```mermaid fence
+                         (MermaidWidget, ADR-0025), also fed to atomicRanges; reveal =
+                         the .lp-reveal line container around a touched embed's raw
+                         source + an ImagePreviewWidget below a revealed image's markup
+                         (Req-1, non-atomic). blockDecorations / revealDecorations are
+                         accessors. clickToReveal handles the </> button (.lp-edit) on
+                         table/html/mermaid/image; imageResize handles the .lp-resize
+                         grip. fenced-code.ts: pure fenceLang(). sanitize-html.ts:
                          allowlist HTML sanitizer. theme.ts: EditorView.theme for the
-                         lp-* classes. widgets.ts: the WidgetType classes, incl.
-                         MermaidWidget (lazy import('mermaid'), async render, inline
-                         error box, hover zoom lens -> onZoomDiagram via
-                         svgToDataUrl, ADR-0025/0026) and ImageWidget's lens.
+                         lp-* classes (incl. the .lp-tools corner cluster + .lp-reveal
+                         box). widgets.ts: the WidgetType classes -- MermaidWidget (lazy
+                         import('mermaid'), async render, inline error box, hover zoom
+                         lens -> onZoomDiagram via svgToDataUrl, ADR-0025/0026),
+                         ImageWidget (lens + resize grip + </> button) and the read-only
+                         ImagePreviewWidget; makeEditButton/appendTools build the shared
+                         </> "View source" cluster.
       image-paste.ts    ADR-0024 / ADR-0028. imagePaste(): CodeMirror
                          domEventHandlers for paste + drop into the editor. An image
                          (paste, OS drag) -> bytes saved via VaultService.saveAsset
@@ -1457,13 +1474,19 @@ graph TB
 - **Editor chrome.** Tab bar and meta bar are both 34px; the meta bar's
   path is the one shrink child (DESIGN.md layout hardening). `Ctrl+S` /
   `Ctrl+Shift+S` are app-wide `KeybindingService` commands now, not an
-  `Editor` host listener. Line numbers: a `MarkdownSurface` `lineNumbers`
-  input un-hides + re-themes the gutter `basicSetup` already mounts (46px,
-  Plex Mono 10.5), driven by `EditorService.lineNumbers` (persisted in
-  `drey.editor`); the text column is full-width and left-aligned (no
-  centred max-width — project owner's call, `editor-theme.ts`) and long
-  lines wrap at the editor width (`EditorView.lineWrapping`, no horizontal
-  scroll).
+  `Editor` host listener. Gutter: `basicSetup` mounts a line-number gutter
+  and a fold gutter. The **fold column is always live** (Obsidian-style
+  collapsible headings — lang-markdown's `headerIndent` fold service; the
+  chevron is styled + revealed-on-hover in `editorStructure`,
+  `editor-theme.ts`). The **line-number column** follows the meta bar's
+  "Lines" toggle: `editorStructure` hides it, the `Prec.high` `gutterTheme`
+  compartment (`markdown-surface.ts`, driven by
+  `EditorService.lineNumbers`, persisted in `drey.editor`) re-shows +
+  re-themes it (46px, Plex Mono 10.5). Compact surfaces (entry drawer,
+  assistant composer) hide the whole gutter (`compactTheme`). The text
+  column is full-width and left-aligned (no centred max-width — project
+  owner's call, `editor-theme.ts`) and long lines wrap at the editor width
+  (`EditorView.lineWrapping`, no horizontal scroll).
 - **Deviations** (also in `specs/`): editor stays CodeMirror 6 + Live
   Preview — no `contenteditable` blocks, no per-block gutter offsets; the
   vault switcher is "Open other vault …" only (no backend vault registry).

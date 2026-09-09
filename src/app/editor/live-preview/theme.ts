@@ -104,28 +104,6 @@ export const livePreviewTheme = EditorView.theme(
       color: 'var(--text-faint)',
       fontStyle: 'italic',
     },
-    // Hover lens -> open the full-app viewer (ADR-0026). Same recipe as `.lp-edit`.
-    '.lp-lens': {
-      position: 'absolute',
-      top: '4px',
-      right: '4px',
-      display: 'inline-flex',
-      padding: '3px',
-      border: '0',
-      borderRadius: 'var(--radius-sm)',
-      background: 'var(--hover-bg)',
-      color: 'var(--text-6)',
-      cursor: 'pointer',
-      opacity: '0',
-      transition: 'opacity 0.12s ease',
-    },
-    '.lp-image:hover .lp-lens': {
-      opacity: '1',
-    },
-    '.lp-lens:hover': {
-      color: 'var(--text-primary)',
-      background: 'var(--hover-bg-strong)',
-    },
     // Corner grip -> drag to resize (rewrites `![alt|W]`, ADR-0026).
     '.lp-resize': {
       position: 'absolute',
@@ -159,11 +137,6 @@ export const livePreviewTheme = EditorView.theme(
       borderRadius: 'var(--radius)',
       overflowX: 'auto',
       textAlign: 'center',
-    },
-    // Hover lens -> open the diagram in the shared viewer. Shares the
-    // `.lp-lens` look (defined above); only the reveal trigger differs.
-    '.lp-mermaid:hover .lp-mermaid-lens': {
-      opacity: '1',
     },
     '.lp-mermaid svg': {
       maxWidth: '100%',
@@ -224,14 +197,28 @@ export const livePreviewTheme = EditorView.theme(
       padding: '6px 10px',
     },
 
-    // The hover `✎` on rendered blocks: jump to the source (Obsidian-style).
     '.lp-table, .lp-html, .lp-mermaid': {
       position: 'relative',
     },
-    '.lp-edit': {
+
+    // The hover corner cluster on a rendered block: the `</>` "View source"
+    // button and, where present, the zoom lens -- a flex row so the two
+    // sit side by side instead of stacking in the same corner. The
+    // `.lp-resize` grip stays its own separate bottom-right element.
+    '.lp-tools': {
       position: 'absolute',
       top: '4px',
       right: '4px',
+      display: 'flex',
+      gap: '4px',
+      opacity: '0',
+      transition: 'opacity 0.12s ease',
+    },
+    '.lp-table:hover .lp-tools, .lp-html:hover .lp-tools, .lp-mermaid:hover .lp-tools, .lp-image:hover .lp-tools':
+      {
+        opacity: '1',
+      },
+    '.lp-edit, .lp-lens': {
       display: 'inline-flex',
       padding: '3px',
       border: '0',
@@ -239,15 +226,38 @@ export const livePreviewTheme = EditorView.theme(
       background: 'var(--hover-bg)',
       color: 'var(--text-6)',
       cursor: 'pointer',
-      opacity: '0',
-      transition: 'opacity 0.12s ease',
     },
-    '.lp-table:hover .lp-edit, .lp-html:hover .lp-edit, .lp-mermaid:hover .lp-edit': {
-      opacity: '1',
-    },
-    '.lp-edit:hover': {
+    '.lp-edit:hover, .lp-lens:hover': {
       color: 'var(--text-primary)',
       background: 'var(--hover-bg-strong)',
+    },
+
+    // The revealed-source container: while an embed's raw Markdown is shown
+    // for editing, its line(s) get a rounded box so the active-line
+    // highlight reads as "in scope" rather than running full-bleed. Border
+    // only + near-transparent fill, so it composes over `.lp-code*` (a
+    // revealed mermaid fence) and `.cm-activeLine`.
+    '.lp-reveal': {
+      background: 'var(--hover-bg)',
+      borderLeft: '1px solid var(--border-strong)',
+      borderRight: '1px solid var(--border-strong)',
+    },
+    '.lp-reveal-first': {
+      borderTop: '1px solid var(--border-strong)',
+      borderTopLeftRadius: 'var(--radius)',
+      borderTopRightRadius: 'var(--radius)',
+      paddingTop: '2px',
+    },
+    '.lp-reveal-last': {
+      borderBottom: '1px solid var(--border-strong)',
+      borderBottomLeftRadius: 'var(--radius)',
+      borderBottomRightRadius: 'var(--radius)',
+      paddingBottom: '2px',
+    },
+    // The read-only render kept below an image's markup while it is revealed.
+    '.lp-image-preview': {
+      display: 'block',
+      margin: '4px 0 2px',
     },
   },
   { dark: true },

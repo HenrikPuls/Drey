@@ -386,9 +386,11 @@ Or Description => Jira (Creates a ticket from the description and returns the li
 ---
 
 ## Next Steps
-Arch-1 Restructure the programm completely to have a hieracrchical structure and all modules/widgets are self containes only acessing the interfaces.
 
-Req-1 - We need to perform some changes to how images, mermaid and other things are integrated in the text. At the moment the edit and magnifier icons are on top of each other and edit is not usable. please generally take </> as the symbol to view the code or source, magnifier with + inside for the magnification.
+I will ask you to implement certain requirements from the following list, once it is done please move it to the implemented chapter at the end of the list and remove it from here.
+
+
+Arch-1 Restructure the programm completely to have a hieracrchical structure and all modules/widgets are self containes only acessing the interfaces.
 
 Req-2 I would also like to inlcude the following document types whic should be rendered, however as i can not forsee the effort lets discuss this upfront: word, excel, powerpoint, pdf and loop components, i would like to inser a link and it should open it inline. However if I drag a document directly than the document shall be placed within the attachements folder
 
@@ -396,9 +398,52 @@ Req-3 I would like to have a wrapper around copilot m365 for web so that i can u
 
 Req-4 Atlassian Integration, when I paste a link to a workitem then i would like to check if i can retrieve the status of the ticket.
 
-Req-5 Strg+Click on a link shall open the link in an external browser
-
-bug-1 if a string like 2026-09-09T00:03:48 is shown in the editor then :03: is green (don't know why it is detected like this and not normal text (Mac Address filter?))
-
 Req-6 it would be nice to have the ability to download further themes for cm6 if easily dooable
 
+req-7 widget control elements which are now at the top but inside the widget shall be moved to the title bar of the widget to get rid of the line within the widget
+
+req-8 Task Widget: Die Tasks sollen zusätzlich um freitext oder mehrere tags erweitert werden  einzugeben. Autocomplete der Tags soll funktionieren. 
+
+# Completed
+
+Req-5 — `Ctrl`/`Cmd`-click a link opens it in the OS browser. Already wired
+for the document editor (`link-open.ts` `linkActivation` → `Editor.activateLink`
+→ `shell.openExternal`, allow-listed to `http(s):` / `mailto:`); extended to
+the "Add entry" capture surface (`EntryDrawer.activateLink`, web/mail only —
+the drawer has no note path to resolve a relative link against).
+
+Paste-a-URL → Markdown link. Pasting a bare URL onto an **empty** caret now
+inserts `[url](url)` with the label pre-selected (`paste-link.ts`
+`pasteUrlAsMarkdownLink`, Markdown-only). `@codemirror/lang-markdown`'s own
+`pasteURLAsLink` still handles the wrap-a-selection case (`[selection](url)`);
+the new handler only fills the empty-caret gap and stays clear of code /
+existing links / frontmatter and image pastes.
+
+bug-1 — a bare timestamp (`2026-09-09T00:03:48`) had its `:03:` slice
+coloured. Cause: `markdownLanguage` bundles `@lezer/markdown`'s `Emoji`
+inline parser, whose `:name:` rule (`/^[a-zA-Z_0-9]+:/`) accepts digits, so
+`:03:` parsed as an `Emoji` node. We never render `:shortcode:` emoji — the
+parser is now dropped (`markdown({ extensions: [{ remove: ['Emoji'] }] })`).
+
+bug-2 — the Appearance **Theme** (and Editor font) `<select>` always showed
+the first option. `<select [value]>` is set before `@for` renders the
+`<option>`s, so the browser can't match it. Fixed with `[selected]` on each
+option.
+
+bug-3 — the editor typeface stopped applying under a published `@uiw` theme.
+Those themes emit `&.cm-editor .cm-scroller { font-family: <mono> }` — the
+exact selector `editorStructure` used for `var(--font-sans)` — and the theme
+compartment wins at equal specificity regardless of declaration order. The
+app rule is now one class heavier (`&.cm-editor.cm-editor .cm-scroller`) so
+it outranks any theme outright.
+
+Req-1 — Live Preview embed affordances. The corner **View source** button is
+now `</>` (was a pencil) and shares a `.lp-tools` flex cluster with the zoom
+lens, so they no longer stack on top of each other (they did on a mermaid
+diagram, making the button unclickable). Images gained the `</>` button too;
+revealing an image's source now shows the raw `![alt](path)` line inside a
+rounded, bordered container **with the rendered image kept directly below
+it**. Every text embed's revealed source (table / mermaid / HTML / image)
+gets that same container so the active-line highlight reads as in-scope.
+See [ADR-0009](../docs/09_architecture_decisions/0009-live-preview-decorations.md)
+"Later change".

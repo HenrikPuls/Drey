@@ -47,6 +47,33 @@ test.describe('image lens → fullscreen viewer', () => {
     await expect(backdrop).toHaveCount(0);
   });
 
+  test('the </> button reveals the markup while keeping the image rendered below it', async ({
+    page,
+    vaultDir,
+  }) => {
+    await openNoteWithImage(page, vaultDir);
+
+    const widget = page.locator('app-editor .cm-content .lp-image:not(.lp-image-preview)');
+    await widget.hover();
+    await widget.locator('.lp-edit').click();
+
+    // Raw markup is back on its own line, inside the rounded reveal box...
+    await expect(page.locator('app-editor .cm-content')).toContainText('![a shot](assets/p.png)');
+    await expect(page.locator('app-editor .cm-content .cm-line.lp-reveal')).toHaveCount(1);
+    // ...and a read-only render is still shown (below the markup).
+    await expect(page.locator('app-editor .cm-content .lp-image-preview img')).toBeVisible();
+    // The read-only mirror carries no controls.
+    await expect(page.locator('app-editor .cm-content .lp-image-preview .lp-edit')).toHaveCount(0);
+
+    // Moving the caret off the line restores the full interactive widget.
+    await page.locator('app-editor .cm-content').press('ArrowDown');
+    await page.locator('app-editor .cm-content').press('ArrowDown');
+    await expect(page.locator('app-editor .cm-content .lp-image-preview')).toHaveCount(0);
+    await expect(
+      page.locator('app-editor .cm-content .lp-image:not(.lp-image-preview) .lp-resize'),
+    ).toHaveCount(1);
+  });
+
   test('wheel over the viewer zooms it', async ({ page, vaultDir }) => {
     await openNoteWithImage(page, vaultDir);
     await page.locator('app-editor .cm-content .lp-image').hover();

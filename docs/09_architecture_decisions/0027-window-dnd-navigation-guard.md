@@ -70,7 +70,11 @@ belt-and-braces.**
 
 - A file / link dropped on any chrome is a silent no-op; dropped on the
   editor text or a native field it works as before / as designed
-  (ADR-0028).
+  (ADR-0028). Later narrowed: a **vault file** dropped inside an editor
+  pane but not on `.cm-content` opens as a tab there (`PaneDropService`,
+  ADR-0028 amendment) — the guard still `preventDefault`s the navigation,
+  the pane's own bubble-phase `drop` handler then opens the file. Only a
+  drop that lands on true non-pane chrome stays a no-op.
 - One more always-on renderer service; trivial and dependency-free.
 - `will-navigate` also blocks a stray `<a href>` click to an external
   site from replacing the app; such links now open in the OS browser via

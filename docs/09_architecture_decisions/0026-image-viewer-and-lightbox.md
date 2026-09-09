@@ -103,3 +103,13 @@ rendered diagram is handed to `ImageLightboxService.open` as a
 other source. `fitScale` is now width-only (project owner's call), so a
 tall diagram / image fills the width and overflows vertically instead of
 being shrunk to fit its height.
+
+## Later change — `</>` view-source button + reveal preview (Req-1)
+
+The Live Preview `ImageWidget` gained a `</>` **View source** button (in
+the shared `.lp-tools` corner cluster alongside the lens). Revealing an
+image no longer drops the picture: the raw `![alt](path)` line shows in a
+rounded container with a read-only `ImagePreviewWidget` rendered directly
+below it. The resize grip and lens are unchanged. The HTML `<img>` caveat
+above still stands. See [ADR-0009](0009-live-preview-decorations.md)'s
+"Later change" section for the decoration mechanics.

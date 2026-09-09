@@ -106,9 +106,13 @@ export const dreyHighlightStyle = HighlightStyle.define([
  * whatever colour theme is active (ADR-0035: the palette lives in a
  * swappable compartment; a published `@uiw` theme sets colours only and
  * never `display` / `height` / `overflow`). Kept OUT of the compartment and
- * mounted always-on, *after* it, so it wins on equal specificity while the
- * `Prec.high` `gutterTheme` / `compactTheme` (`markdown-surface.ts`) still
- * override the gutter and the compact padding.
+ * mounted always-on so a published theme can't drop it. Its rules mostly
+ * don't collide with a `@uiw` theme (which only sets colours), so ordering
+ * is moot; where one *does* collide -- the `.cm-scroller` typeface -- the
+ * selector is made specificity-heavier on purpose, because at equal
+ * specificity the compartment's style module wins regardless of declaration
+ * order (the same quirk `Prec.high` `gutterTheme` / `compactTheme` in
+ * `markdown-surface.ts` work around).
  */
 export const editorStructure = EditorView.theme({
   '&': { height: '100%' },
@@ -122,18 +126,62 @@ export const editorStructure = EditorView.theme({
     fontSize: 'calc(14.5px * var(--drey-editor-scale, 1))',
     lineHeight: '1.72',
   },
-  // Two-class selector so the app's body font beats a published theme's own
-  // `&.cm-editor .cm-scroller` monospace rule -- a theme is picked for its
-  // colours, not to turn prose into code.
-  '&.cm-editor .cm-scroller': { fontFamily: 'var(--font-sans)' },
+  // The editor typeface (Settings -> Appearance, via `--font-sans` on the
+  // `Editor` host). A published `@uiw` theme emits its own
+  // `&.cm-editor .cm-scroller { font-family: <mono> }` (see `createTheme`),
+  // and its style module -- living in the theme compartment, which sits
+  // *earlier* in the extension list -- wins the cascade at equal specificity
+  // (the same ordering quirk `compactTheme` works around with `Prec.high`).
+  // So this selector is deliberately one class heavier (`.cm-editor` twice)
+  // to outrank it outright -- a theme is picked for its colours, not to turn
+  // prose into code.
+  '&.cm-editor.cm-editor .cm-scroller': { fontFamily: 'var(--font-sans)' },
   // Full-width, left-aligned text column: no centred max-width -- the editor
   // uses the whole area, only side padding keeps the text off the edges.
   // (Was a 680px centred reading column; the project owner asked for the
   // full width -- see DESIGN.md.)
   '.cm-content': { padding: '26px 32px 32px' },
-  // `basicSetup` mounts line-number + fold gutters; hidden until the meta
-  // bar's "Lines" toggle un-hides them (`markdown-surface.ts` gutterTheme).
-  '.cm-gutters': { display: 'none' },
+  // `basicSetup` mounts a line-number gutter and a fold gutter. The fold
+  // column is always live (Obsidian-style collapsible headings); the
+  // line-number column follows the meta bar's "Lines" toggle -- hidden here,
+  // re-shown by the `Prec.high` `gutterTheme` compartment
+  // (`markdown-surface.ts`) when the toggle is on.
+  '.cm-gutters': {
+    display: 'flex',
+    backgroundColor: 'transparent',
+    borderRight: 'none',
+  },
+  // `!important` beats the CM base `.cm-gutter { display: flex !important }`
+  // (`.cm-lineNumbers` carries `.cm-gutter`). `gutterTheme` re-shows it, also
+  // `!important`, `Prec.high` so it wins the toggle-on cascade.
+  '.cm-lineNumbers': { display: 'none !important' },
+  // The fold chevron column. The `.cm-gutterElement` box gets the same
+  // vertical metrics as the line-number element (`gutterTheme`) so the
+  // marker sits on the heading's first visual row and never reintroduces
+  // the milestone-19a gutter drift.
+  '.cm-foldGutter .cm-gutterElement': {
+    display: 'flex',
+    alignItems: 'flex-start',
+    justifyContent: 'center',
+    width: '16px',
+    padding: '0',
+    lineHeight: 'calc(14.5px * 1.72 * var(--drey-editor-scale, 1))',
+  },
+  // Obsidian-ish reveal: the `⌄` marker (CM's default `foldGutter` renders a
+  // `<span>` only on foldable lines) is invisible until the gutter is
+  // hovered, except a *folded* section (`title` "Unfold line") keeps a
+  // visible accent chevron so it stays discoverable.
+  '.cm-foldGutter span': {
+    color: 'var(--gutter)',
+    cursor: 'pointer',
+    opacity: '0',
+    transition: 'opacity 80ms ease',
+  },
+  '.cm-gutters:hover .cm-foldGutter span': { opacity: '1' },
+  '.cm-foldGutter span[title="Unfold line"]': {
+    opacity: '1',
+    color: 'var(--accent)',
+  },
 });
 
 /**

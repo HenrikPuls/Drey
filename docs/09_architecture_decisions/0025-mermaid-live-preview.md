@@ -49,12 +49,14 @@ dynamic `import('mermaid')` on first use; Live-Preview-only.**
     app sans `fontFamily`, and `suppressErrorRendering: true` so a parse
     error is thrown rather than drawn as mermaid's "bomb" diagram.
   - `toDOM()` returns immediately with a "rendering diagram…" note and the
-    shared hover `✎` (reveal source); `render()` runs async and swaps in
-    either a `.lp-mermaid-svg` holder (`mermaid.render(id, src)` output)
-    or a compact `.lp-mermaid-error` `<pre>`. It never throws into the
-    editor, checks `wrap.isConnected` before touching the DOM (the widget
-    may have been replaced while mermaid worked), and removes mermaid's
-    stray offscreen measuring node on error.
+    shared hover **View source** button (`</>`, in the `.lp-tools` corner
+    cluster — see ADR-0009's Later change); `render()` runs async and swaps
+    in either a `.lp-mermaid-svg` holder (`mermaid.render(id, src)` output)
+    or a compact `.lp-mermaid-error` `<pre>`, inserting it *before*
+    `.lp-tools`. It never throws into the editor, checks `wrap.isConnected`
+    before touching the DOM (the widget may have been replaced while
+    mermaid worked), and removes mermaid's stray offscreen measuring node
+    on error.
   - `.lp-mermaid` is added to `block-render.ts`'s `clickToReveal` targets
     and to `theme.ts` (dark card, horizontal scroll for wide diagrams,
     error box styling).
@@ -100,3 +102,33 @@ With `LivePreviewConfig.onZoomDiagram` set (the full-page editor wires it),
 lightbox (ADR-0026) — no lightbox change needed, the data URL loads in its
 `<img>`. Text in the diagram is not selectable in the zoom view; that is
 the accepted cost of reusing the raster viewer over generalising it.
+
+## Later change — label font sync (non-sans editor typeface)
+
+`loadMermaid()`'s config sets `fontFamily: 'var(--font-sans, …)'`. mermaid
+resolves that against its own offscreen measuring node, where `--font-sans`
+is the app default (sans) — not `.cm-content`, where Settings → Appearance
+(ADR-0020) overrides `--font-sans` with the chosen editor typeface. So with
+a **serif or monospace** editor font mermaid measured each label in a
+narrower sans, sized the `<foreignObject>` and the node `<rect>` to that,
+then painted the wider real font: every label spilled past its box (a few px
+for serif, ~40% for monospace). The zoom lens was unaffected — the
+serialised SVG has no `--font-sans` context, so it falls back to sans for
+both measure and paint.
+
+Fix: `MermaidWidget.render()` calls `syncMermaidFont()` first, which reads
+the *resolved* `font-family` off `.cm-scroller` and, when it changed,
+re-runs `mermaid.initialize({ ...MERMAID_BASE_CONFIG, fontFamily })` (the
+whole base config is re-sent because `initialize` replaces rather than
+merges). Measurement and paint then use the same concrete stack.
+Regression-covered by `e2e/mermaid.spec.ts` ("non-sans editor typeface"),
+which seeds `app-config.json` via the `appConfig` fixture option.
+
+## Later change — `</>` view-source button + corner cluster (Req-1)
+
+The hover pencil became a `</>` **View source** button and now shares a
+`.lp-tools` flex cluster with the zoom lens, so the two no longer stack in
+the same corner (they did on a mermaid diagram — the only widget with
+both). A revealed fence's raw lines also gain the `.lp-reveal` rounded
+container. Details in [ADR-0009](0009-live-preview-decorations.md)'s
+"Later change" section.

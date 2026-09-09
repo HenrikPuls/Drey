@@ -93,16 +93,72 @@ test.describe('line-number gutter alignment', () => {
     expect(delta.heightDelta).toBeLessThan(2);
   });
 
-  test('no markdown fold arrows in the gutter', async ({ page, vaultDir }) => {
+  /**
+   * The fold marker on the `## A heading...` row, as viewport coords + how
+   * far its top sits from the heading's own row. lezer-markdown also reads
+   * the frontmatter block as a Setext H2, so there is a second marker --
+   * pick the one on the heading's row by geometry.
+   */
+  async function headingFoldMarker(
+    page: Page,
+    titleAttr: 'Fold line' | 'Unfold line',
+  ): Promise<{ x: number; y: number; drift: number } | null> {
+    return page.evaluate((title) => {
+      const heading = [
+        ...document.querySelectorAll<HTMLElement>('app-editor .cm-content .cm-line'),
+      ].find((l) => l.textContent?.includes('A heading line rendered larger'));
+      if (!heading) {
+        return null;
+      }
+      const hy = heading.getBoundingClientRect().top;
+      const markers = [
+        ...document.querySelectorAll<HTMLElement>('app-editor .cm-foldGutter .cm-gutterElement'),
+      ].filter((el) => el.querySelector(`span[title="${title}"]`));
+      const onRow = markers.find((m) => Math.abs(m.getBoundingClientRect().top - hy) < 3);
+      if (!onRow) {
+        return null;
+      }
+      const r = onRow.getBoundingClientRect();
+      return { x: r.x + r.width / 2, y: r.y + r.height / 2, drift: Math.abs(r.top - hy) };
+    }, titleAttr);
+  }
+
+  test('a heading has a fold chevron that collapses its section', async ({ page, vaultDir }) => {
     await openWithLineNumbers(page, vaultDir);
 
-    const foldGutterVisible = await page.evaluate(() => {
-      const fold = document.querySelector('app-editor .cm-foldGutter') as HTMLElement | null;
-      if (!fold) {
-        return false;
-      }
-      return getComputedStyle(fold).display !== 'none';
-    });
-    expect(foldGutterVisible).toBe(false);
+    const body = page.locator('app-editor .cm-content .cm-line', { hasText: 'first body line' });
+    await expect(body).toHaveCount(1);
+
+    const marker = await headingFoldMarker(page, 'Fold line');
+    expect(marker).not.toBeNull();
+    // The marker sits on the heading's own row (no milestone-19a drift).
+    expect(marker!.drift).toBeLessThan(2);
+
+    await page.mouse.click(marker!.x, marker!.y);
+    await expect(body).toHaveCount(0);
+
+    // A folded section keeps a visible "Unfold line" chevron; clicking restores.
+    const unfold = await headingFoldMarker(page, 'Unfold line');
+    expect(unfold).not.toBeNull();
+    await page.mouse.click(unfold!.x, unfold!.y);
+    await expect(body).toHaveCount(1);
+  });
+
+  test('the fold column is live when line numbers are off', async ({ page, vaultDir }) => {
+    fs.writeFileSync(path.join(vaultDir, 'gutter.md'), NOTE);
+    await page.locator('app-dock[side="left"] .icon-btn.refresh').click();
+    await page.locator('app-dock[side="left"] .node.file', { hasText: 'gutter.md' }).click();
+    await expect(page.locator('app-editor .cm-content')).toBeVisible();
+
+    // Line numbers off (default): the number column is hidden, the fold
+    // column is still mounted and folds a section.
+    await expect(page.locator('app-editor .cm-lineNumbers')).toBeHidden();
+
+    const marker = await headingFoldMarker(page, 'Fold line');
+    expect(marker).not.toBeNull();
+
+    const body = page.locator('app-editor .cm-content .cm-line', { hasText: 'first body line' });
+    await page.mouse.click(marker!.x, marker!.y);
+    await expect(body).toHaveCount(0);
   });
 });

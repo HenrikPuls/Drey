@@ -223,6 +223,19 @@ not the exact character (the per-character `source-map.ts` mapping from
 ADR-0004 is gone). A click that misses every `[data-line]` block still
 switches to source, leaving the caret where it was.
 
+> The read-only `preview` mode above is largely superseded by **Live
+> Preview** ([ADR-0009](09_architecture_decisions/0009-live-preview-decorations.md)):
+> one editable `EditorView` where a rendered table / diagram / image / HTML
+> block is a `Decoration.replace` widget only while the selection is
+> *outside* it. Reveal for edit = get the selection to touch the node:
+> clicking the widget's corner **`</>` View source** button
+> (`clickToReveal` → `view.dispatch({ selection: posAtDOM(widget) })`), or
+> arrowing in. On reveal the raw lines gain a `.lp-reveal` rounded
+> container, and an image additionally keeps a read-only `ImagePreviewWidget`
+> rendered below its `![alt](path)` markup (Req-1). The widget/atomic layer
+> and this reveal layer are one `StateField` value `{ atoms, reveal }`;
+> only `atoms` feeds `EditorView.atomicRanges`.
+
 ## 6.5 Save → tag merge + `updated:` bump → route entries to master History (milestone 6)
 
 > **Superseded by §6.11

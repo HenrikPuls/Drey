@@ -12,7 +12,9 @@
       @for (grp of themeGroups; track grp.group) {
         <optgroup [label]="grp.group">
           @for (entry of grp.entries; track entry.id) {
-            <option [value]="entry.id">{{ entry.label }}</option>
+            <option [value]="entry.id" [selected]="entry.id === settings.appearanceTheme()">
+              {{ entry.label }}
+            </option>
           }
         </optgroup>
       }
@@ -87,7 +89,9 @@
       (change)="onFontFamilyChange($any($event.target).value)"
     >
       @for (font of fontFamilies; track font.id) {
-        <option [value]="font.id">{{ font.label }}</option>
+        <option [value]="font.id" [selected]="font.id === settings.editorFontFamily()">
+          {{ font.label }}
+        </option>
       }
     </select>
     <p class="field-hint">
