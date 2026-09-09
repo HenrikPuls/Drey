@@ -102,48 +102,63 @@ export const dreyHighlightStyle = HighlightStyle.define([
 ]);
 
 /**
- * Chrome + layout for the CodeMirror surface, reading the app's design
- * tokens (`src/styles.css`).
+ * Layout skeleton for the CodeMirror surface -- the rules that must hold
+ * whatever colour theme is active (ADR-0035: the palette lives in a
+ * swappable compartment; a published `@uiw` theme sets colours only and
+ * never `display` / `height` / `overflow`). Kept OUT of the compartment and
+ * mounted always-on, *after* it, so it wins on equal specificity while the
+ * `Prec.high` `gutterTheme` / `compactTheme` (`markdown-surface.ts`) still
+ * override the gutter and the compact padding.
+ */
+export const editorStructure = EditorView.theme({
+  '&': { height: '100%' },
+  // `--drey-editor-scale` is set on the editor host by `Editor` from the
+  // persisted `editor.fontScale` (Ctrl +/-/0). It is the ONE size the whole
+  // surface keys off -- headings and code are `em` from here, and the
+  // fallback `1` keeps every other CodeMirror surface (the entry drawer) at
+  // its normal size.
+  '.cm-scroller': {
+    overflow: 'auto',
+    fontSize: 'calc(14.5px * var(--drey-editor-scale, 1))',
+    lineHeight: '1.72',
+  },
+  // Two-class selector so the app's body font beats a published theme's own
+  // `&.cm-editor .cm-scroller` monospace rule -- a theme is picked for its
+  // colours, not to turn prose into code.
+  '&.cm-editor .cm-scroller': { fontFamily: 'var(--font-sans)' },
+  // Full-width, left-aligned text column: no centred max-width -- the editor
+  // uses the whole area, only side padding keeps the text off the edges.
+  // (Was a 680px centred reading column; the project owner asked for the
+  // full width -- see DESIGN.md.)
+  '.cm-content': { padding: '26px 32px 32px' },
+  // `basicSetup` mounts line-number + fold gutters; hidden until the meta
+  // bar's "Lines" toggle un-hides them (`markdown-surface.ts` gutterTheme).
+  '.cm-gutters': { display: 'none' },
+});
+
+/**
+ * The **Drey** colour palette for the CodeMirror surface, reading the app's
+ * design tokens (`src/styles.css`). Palette only -- the layout skeleton is
+ * `editorStructure`. This is what the theme compartment swaps out for a
+ * published theme.
  */
 export const dreyEditorTheme = EditorView.theme(
   {
     '&': {
-      height: '100%',
       color: 'var(--text-2)',
       backgroundColor: 'var(--bg-main)',
     },
-    // `--drey-editor-scale` is set on the editor host by `Editor` from the
-    // persisted `editor.fontScale` (Ctrl +/-/0). It is the ONE size the
-    // whole surface keys off -- headings and code are `em` from here, and
-    // the fallback `1` keeps every other CodeMirror surface (the entry
-    // drawer) at its normal size.
-    '.cm-scroller': {
-      overflow: 'auto',
-      fontFamily: 'var(--font-sans)',
-      fontSize: 'calc(14.5px * var(--drey-editor-scale, 1))',
-      lineHeight: '1.72',
-    },
-    // Full-width, left-aligned text column: no centred max-width -- the
-    // editor uses the whole area, only side padding keeps the text off the
-    // edges. The line-number gutter, when shown, adds its own width to the
-    // left of this box. (Was a 680px centred reading column; the project
-    // owner asked for the full width -- see DESIGN.md.)
-    '.cm-content': {
-      padding: '26px 32px 32px',
-      caretColor: 'var(--accent)',
-    },
-    // `basicSetup` mounts line-number + fold gutters; hidden until the meta
-    // bar's "Lines" toggle un-hides them (`markdown-surface.ts` gutterTheme).
-    '.cm-gutters': { display: 'none' },
+    '.cm-content': { caretColor: 'var(--accent)' },
     '.cm-cursor, .cm-dropCursor': { borderLeftColor: 'var(--accent)' },
     '&.cm-focused .cm-selectionBackground, .cm-selectionBackground, .cm-content ::selection': {
       backgroundColor: 'color-mix(in srgb, var(--accent) 28%, transparent)',
     },
-    // The document look wants no active-line wash.
+    // The Drey document look wants no active-line wash (a published theme
+    // keeps its own, from `lineHighlight`).
     '.cm-activeLine, .cm-activeLineGutter': { backgroundColor: 'transparent' },
   },
   { dark: true },
 );
 
-/** Theme + highlight as one extension, added after `basicSetup` so it wins. */
+/** Drey palette + highlight as one extension, added after `basicSetup` so it wins. */
 export const dreyEditorLook = [dreyEditorTheme, syntaxHighlighting(dreyHighlightStyle)];
