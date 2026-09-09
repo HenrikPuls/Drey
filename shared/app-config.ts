@@ -348,14 +348,22 @@ export function clampEditorFontScale(value: unknown): number {
  *   stay consistent). A preset, not a free number: four steps are enough and
  *   a slider invites fiddling.
  * - `accent` is the highlight colour. Either a preset id from
- *   `ACCENT_PRESETS`, or a `#rrggbb` hex for a custom pick. `AppearanceService`
- *   writes the resolved hex onto `--accent` at the document root; the
- *   `--accent-*` tint tokens in `styles.css` are `color-mix()`ed off it, so
- *   one value re-colours everything.
+ *   `ACCENT_PRESETS`, a `#rrggbb` hex for a custom pick, or the sentinel
+ *   `'theme'` (the default) meaning "follow the active theme's seed accent".
+ *   `AppearanceService` writes the resolved hex onto `--accent` at the
+ *   document root; the `--accent-*` tint tokens in `styles.css` are
+ *   `color-mix()`ed off it, so one value re-colours everything.
+ * - `theme` is an id from the renderer's theme catalog
+ *   (`src/app/editor/themes/theme-catalog.ts`) -- `'drey'` is the built-in
+ *   look, every other id is a published CodeMirror 6 theme whose editor
+ *   colours are swapped in a compartment and whose shell palette is derived
+ *   from a seed. `shared/` cannot import the catalog, so this is a plain
+ *   string; the catalog resolves an unknown id back to `'drey'`.
  */
 export interface AppearanceConfig {
   uiScale: UiScale;
   accent: string;
+  theme: string;
 }
 
 export type UiScale = 'small' | 'default' | 'large' | 'xlarge';
@@ -391,9 +399,20 @@ export const ACCENT_PRESETS: readonly AccentPreset[] = [
   { id: 'teal', label: 'Teal', hex: '#4f9a90' },
 ];
 
+/**
+ * The `accent` sentinel: follow the active theme's own seed accent rather
+ * than a fixed preset / hex. `resolveAccentHex` needs the theme accent
+ * passed in to turn this into a concrete colour.
+ */
+export const THEME_ACCENT = 'theme';
+
+/** Built-in theme id -- the bespoke "Drey v3" look, no shell derivation. */
+export const DEFAULT_THEME = 'drey';
+
 export const DEFAULT_APPEARANCE: AppearanceConfig = {
   uiScale: 'default',
-  accent: ACCENT_PRESETS[0].id,
+  accent: THEME_ACCENT,
+  theme: DEFAULT_THEME,
 };
 
 const HEX_RE = /^#[0-9a-fA-F]{6}$/;
@@ -405,19 +424,34 @@ export function normalizeUiScale(value: unknown): UiScale {
     : DEFAULT_APPEARANCE.uiScale;
 }
 
-/** A known preset id or a `#rrggbb` hex; anything else falls back to the default. */
+/**
+ * The `'theme'` sentinel, a known preset id, or a `#rrggbb` hex; anything
+ * else falls back to the default (`'theme'`).
+ */
 export function normalizeAccent(value: unknown): string {
   if (typeof value !== 'string') {
     return DEFAULT_APPEARANCE.accent;
   }
-  if (ACCENT_PRESETS.some((preset) => preset.id === value)) {
+  if (value === THEME_ACCENT || ACCENT_PRESETS.some((preset) => preset.id === value)) {
     return value;
   }
   return HEX_RE.test(value) ? value.toLowerCase() : DEFAULT_APPEARANCE.accent;
 }
 
-/** The concrete `#rrggbb` for an `accent` value (preset id -> its hex; hex -> itself). */
-export function resolveAccentHex(accent: string): string {
+/** Non-empty string, else `'drey'`. The renderer catalog does the real resolve. */
+export function normalizeTheme(value: unknown): string {
+  return typeof value === 'string' && value.trim().length > 0 ? value : DEFAULT_THEME;
+}
+
+/**
+ * The concrete `#rrggbb` for an `accent` value: preset id -> its hex,
+ * hex -> itself, and the `'theme'` sentinel -> `themeAccent` (the active
+ * theme's seed accent, supplied by the caller) or the first preset.
+ */
+export function resolveAccentHex(accent: string, themeAccent?: string): string {
+  if (accent === THEME_ACCENT) {
+    return themeAccent && HEX_RE.test(themeAccent) ? themeAccent.toLowerCase() : ACCENT_PRESETS[0].hex;
+  }
   const preset = ACCENT_PRESETS.find((entry) => entry.id === accent);
   if (preset) {
     return preset.hex;
@@ -430,6 +464,7 @@ function normalizeAppearance(raw: unknown): AppearanceConfig {
   return {
     uiScale: normalizeUiScale(source['uiScale']),
     accent: normalizeAccent(source['accent']),
+    theme: normalizeTheme(source['theme']),
   };
 }
 

@@ -5,6 +5,7 @@ import { ImageLightbox, ImageTab } from './image-viewer';
 import { ConfirmationDialog } from './confirmation-dialog/confirmation-dialog';
 import { ActionsService } from './services/actions.service';
 import { AppearanceService } from './services/appearance.service';
+import { ThemeService } from './services/theme.service';
 import { AssistantService } from './services/assistant.service';
 import { DailyNoteService } from './services/daily-note.service';
 import { EditorService } from './services/editor.service';
@@ -87,6 +88,9 @@ export class App {
     inject(DropGuardService);
     // Instantiate so the assistant panel reacts to the active note.
     inject(AssistantService);
+    // Instantiate so the selected theme's shell palette is applied on
+    // startup and kept in sync (the editor swaps its own CM theme).
+    inject(ThemeService);
     // Instantiate so the app-wide accent + UI scale from Settings ->
     // Appearance are applied on startup and kept in sync.
     inject(AppearanceService);

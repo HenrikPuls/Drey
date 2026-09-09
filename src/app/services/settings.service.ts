@@ -10,6 +10,7 @@ import {
   DailyConfig,
   DEFAULT_APPEARANCE,
   DEFAULT_EDITOR_FONT_FAMILY,
+  DEFAULT_THEME,
   DEFAULT_TEMPLATES_CONFIG,
   EntryTemplate,
   LlmConfig,
@@ -23,6 +24,7 @@ import {
   normalizeAccent,
   normalizeAppConfig,
   normalizeEditorFontFamily,
+  normalizeTheme,
   normalizeUiScale,
 } from '../../../shared/app-config';
 import { ResolvedAction, resolveActions } from '../../../shared/llm';
@@ -118,9 +120,14 @@ export class SettingsService {
     () => this.appearanceSource()?.appearance.uiScale ?? DEFAULT_APPEARANCE.uiScale,
   );
 
-  /** App-wide highlight colour -- a preset id or `#rrggbb`. Draft-previewed while the screen is open. */
+  /** App-wide highlight colour -- `'theme'`, a preset id, or `#rrggbb`. Draft-previewed while the screen is open. */
   readonly appearanceAccent = computed<string>(
     () => this.appearanceSource()?.appearance.accent ?? DEFAULT_APPEARANCE.accent,
+  );
+
+  /** Active theme id (Settings -> Appearance). Draft-previewed while the screen is open. */
+  readonly appearanceTheme = computed<string>(
+    () => this.appearanceSource()?.appearance.theme ?? DEFAULT_THEME,
   );
 
   /** The active "Add entry" template's pattern. Persisted config, never the draft. */
@@ -599,9 +606,14 @@ export class SettingsService {
     this.patchAppearance({ uiScale: normalizeUiScale(scale) });
   }
 
-  /** App-wide highlight colour, a preset id or `#rrggbb` (Settings -> Appearance). Draft edit. */
+  /** App-wide highlight colour: `'theme'`, a preset id, or `#rrggbb` (Settings -> Appearance). Draft edit. */
   setAppearanceAccent(accent: string): void {
     this.patchAppearance({ accent: normalizeAccent(accent) });
+  }
+
+  /** Active theme id (Settings -> Appearance). Draft edit; live-previewed; saved on Save. */
+  setAppearanceTheme(theme: string): void {
+    this.patchAppearance({ theme: normalizeTheme(theme) });
   }
 
   private patchAppearance(patch: Partial<AppConfig['appearance']>): void {

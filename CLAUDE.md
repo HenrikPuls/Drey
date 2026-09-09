@@ -421,6 +421,21 @@ assume.
     the assistant carrying its thread on Ask + an insert-into-note arrow,
     the split-diff confirmation preview (ADR-0011 update), and the
     content-height calendar panel.
+16. **Named themes** — a theme picker in Settings → Appearance
+    ([ADR-0035](docs/09_architecture_decisions/0035-named-ui-themes.md)): the
+    **Drey** built-in look plus the published CodeMirror 6 themes
+    (`@uiw/codemirror-themes-all`), the editor swapping its CM theme in a
+    compartment and the app shell re-tinting from a per-theme seed
+    (`src/styles.css` `:root[data-theme]`, `ThemeService`).
+17. **Widget registry + View visibility** — the dock panels become a
+    data-driven `src/app/widgets/` registry with a typed `WidgetContext`
+    read-facade (active document, file tree, tag/task queries); the View
+    menu hides/shows a whole widget rather than only collapsing it
+    ([ADR-0034](docs/09_architecture_decisions/0034-internal-widget-model.md);
+    refines ADR-0016, amends ADR-0019). Internal structure only — no
+    runtime/third-party plugin loading.
+18. **Settings → Widgets enable/disable** — a `widgets` config slice + a
+    Settings category to turn a widget off entirely (ADR-0034).
 
 Pause after each milestone, show what works, don't push through several
 milestones in one uninterrupted stretch. (Milestones 10, 11 and 15 were

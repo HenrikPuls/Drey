@@ -23,6 +23,8 @@ import { EditorZoomService } from '../../services/editor-zoom.service';
 import { ImageLightboxService } from '../../image-viewer';
 import { TagService } from '../../services/tag.service';
 import { VaultService } from '../../services/vault.service';
+import { ThemeService } from '../../services/theme.service';
+import { ThemeCatalogEntry } from '../themes/theme-catalog';
 import { dreyEditorLook } from '../editor-theme';
 import { imagePaste } from '../image-paste';
 import { toggleTaskDone } from '../markdown-commands';
@@ -68,6 +70,7 @@ export class MarkdownSurface implements AfterViewInit, OnDestroy {
   private readonly editTarget = inject(EditTargetService);
   private readonly tags = inject(TagService);
   private readonly vault = inject(VaultService);
+  private readonly themes = inject(ThemeService);
   private readonly zoom = inject(EditorZoomService);
   private readonly lightbox = inject(ImageLightboxService);
   private readonly host = viewChild.required<ElementRef<HTMLDivElement>>('host');
@@ -143,6 +146,10 @@ export class MarkdownSurface implements AfterViewInit, OnDestroy {
   private readonly placeholderCompartment = new Compartment();
   private readonly readOnlyCompartment = new Compartment();
   private readonly lineNumberCompartment = new Compartment();
+  /** Swaps the whole CM6 theme (chrome + syntax) when Settings -> Appearance changes. */
+  private readonly themeCompartment = new Compartment();
+  /** Guards against an out-of-order theme `load()` resolving after a newer pick. */
+  private themeToken = 0;
 
   /**
    * Mirror of the fold extension's `StateField<boolean>` (see
@@ -183,6 +190,9 @@ export class MarkdownSurface implements AfterViewInit, OnDestroy {
         effects: this.lineNumberCompartment.reconfigure(on ? gutterTheme : []),
       });
     });
+    effect(() => {
+      this.applyTheme(this.themes.theme());
+    });
     // The editor content scale (Ctrl +/-/0) is a CSS custom property on the
     // host that CodeMirror's theme reads but never reacts to -- without a
     // nudge the selection/cursor geometry stays at the old font size until
@@ -191,6 +201,21 @@ export class MarkdownSurface implements AfterViewInit, OnDestroy {
     effect(() => {
       this.zoom.scale();
       this._view?.requestMeasure();
+    });
+  }
+
+  /**
+   * Loads the selected theme's CM6 extension (Drey resolves synchronously;
+   * a published theme is a lazy `import()`) and swaps it into the
+   * compartment. The token check drops a slow load whose theme is no longer
+   * the current pick.
+   */
+  private applyTheme(entry: ThemeCatalogEntry): void {
+    const token = ++this.themeToken;
+    void entry.load().then((ext) => {
+      if (token === this.themeToken) {
+        this._view?.dispatch({ effects: this.themeCompartment.reconfigure(ext) });
+      }
     });
   }
 
@@ -245,7 +270,11 @@ export class MarkdownSurface implements AfterViewInit, OnDestroy {
               this._frontmatterExpanded.set(expanded);
             }
           }),
-          dreyEditorLook,
+          // The active CM6 theme. Seeded with Drey (local, synchronous) and
+          // swapped by `applyTheme()` -- a published theme is a lazy import,
+          // so it arrives a microtask/frame later. In a compartment so
+          // Settings -> Appearance can swap it live without a view rebuild.
+          this.themeCompartment.of(dreyEditorLook),
           // Long lines wrap at the editor's width instead of scrolling the
           // content sideways -- the full-page editor now fills the whole
           // area (no centred column), so a horizontal scrollbar there would
@@ -256,8 +285,8 @@ export class MarkdownSurface implements AfterViewInit, OnDestroy {
           //
           // `Prec.high` is load-bearing: `compactTheme` restyles `.cm-content`
           // (drops the full-page 40px top padding), but at equal precedence
-          // CodeMirror lets the style module declared *earlier* -- here
-          // `dreyEditorLook` -- win the cascade, so the compact field would
+          // CodeMirror lets the style module declared *earlier* -- the theme
+          // compartment above -- win the cascade, so the compact field would
           // otherwise open with its first line pushed 40px down.
           this.compact() ? Prec.high(compactTheme) : [],
           this.spellcheck() ? inlineSpellcheck({ source: this.spellcheck()! }) : [],
