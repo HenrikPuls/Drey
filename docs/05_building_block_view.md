@@ -58,13 +58,15 @@ graph TB
         Sidebar["Sidebar (src/app/sidebar/)\ncalendar + file tree (+ right-click\nnew file/folder) + open-windows +\nsettings entry"]
         Calendar["Calendar (src/app/sidebar/calendar/)\nmini-calendar; day click -> openDailyNote"]
         OpenWindows["OpenWindows (src/app/sidebar/open-windows/)\nmirror of open tabs"]
-        TabBar["TabBar (src/app/tab-bar/)\ntab per open doc; activate / close"]
-        Editor["Editor (src/app/editor/)\none CodeMirror 6 view, doc swapped per active\ntab; Live Preview decorations via Compartment;\n&hairsp;⋯ mode menu (ADR-0009)"]
+        PaneLayout["PaneLayout / PaneLeaf (src/app/panes/, ADR-0037)\nrecursive split-tree layout; one TabBar +\nEditor/ImageTab per leaf pane"]
+        TabBar["TabBar (src/app/tab-bar/)\none pane's own tabs (PaneService); activate /\nclose / reorder / drag to another pane"]
+        Editor["Editor (src/app/editor/)\none CodeMirror 6 view per pane, doc swapped per\nthat pane's active tab; Live Preview decorations\nvia Compartment; ⋯ mode menu (ADR-0009)"]
         EntryDrawer["EntryDrawer (src/app/entry-drawer/)\nTOPIC + chip rows + MarkdownSurface\n(compact, inline spellcheck)"]
         NoteAssistant["NoteAssistant (src/app/note-assistant/)\nauto-summary switch + card thread + composer"]
         Icon["Icon (src/app/icons/)\nvendored Lucide path data"]
         VaultService["VaultService\nsignals: activeVaultPath, fileTree, isLoading, error"]
-        EditorService["EditorService\nopenDocs: OpenDoc[], activePath\n+ computed openPath/savedContent/bufferContent/\nviewMode/isDirty; setViewMode (persists defaultMode);\nopenDailyNote, closeTab, newEntryRequest\n+ pure newDailyEntryEdit()"]
+        EditorService["EditorService\nopenDocs: OpenDoc[] (registry); activePath = the\nFOCUSED pane's active path (PaneService, ADR-0037)\n+ computed openPath/savedContent/bufferContent/\nviewMode/isDirty; save/saveAs/setViewMode take an\noptional explicit path; openDailyNote, closeTab,\nnewEntryRequest + pure newDailyEntryEdit()"]
+        PaneService["PaneService (src/app/panes/, ADR-0037)\nsplit tree + per-pane { tabs, active }; focusedId"]
         CalendarService["CalendarService\nviewYear/viewMonth/selectedIso, weeks,\nnoteDates (from VaultService.fileTree)"]
         EntryDraftService["EntryDraftService\ntopic/text/tags/people/meetings;\nempty-TOPIC confirmation rule"]
         AssistantService["AssistantService\nper-note sidecar thread + auto-summary rule;\npanel toggle is session state (ADR-0012)"]
@@ -74,8 +76,11 @@ graph TB
         DailyNoteService["DailyNoteService (src/app/services/)\nonOpenDailyNote -> openFile + requestNewDailyEntry"]
         TagService["TagService (src/app/services/)\ntags signal (TagEntry[]) from tag:list;\nrefreshed on construct + after a tag-changing save"]
         App --> Sidebar
-        App --> TabBar
-        App --> Editor
+        App --> PaneLayout
+        PaneLayout --> TabBar
+        PaneLayout --> Editor
+        PaneLayout --> PaneService
+        TabBar --> PaneService
         App --> EntryDrawer
         App --> NoteAssistant
         App --> LayoutService
@@ -306,7 +311,32 @@ src/                Angular renderer (standalone components, esbuild via Angular
                         version (app:get-info IPC) + a scrollable list of production
                         dependencies with their license text (AboutService reads the
                         build-time src/assets/licenses.json)
-    tab-bar/           TabBar: a tab per open doc (activate / close), "+" placeholder
+    tab-bar/           TabBar: [paneId] input (ADR-0037) -- one pane's own tab strip,
+                         reading/mutating PaneService (not the old flat EditorService
+                         list). Drag a tab to reorder it in place (press-then-promote
+                         gesture, live reorder as the pointer crosses a neighbour's
+                         midpoint) or onto another pane's tab bar to move it there
+                         (document.elementFromPoint + a [data-pane-id] host marker).
+                         Context menu: Split right / Split down (PaneService.splitPane)
+                         + Close others / Close all (this pane only). "+" opens a blank
+                         scratch note in the focused pane.
+    panes/             (ADR-0037) PaneService: the split-view layout -- an arbitrary
+                         row/column split tree (pane-tree.ts: leafIds/replaceLeaf/
+                         removeLeaf, pure + unit-tested) down to leaf PaneRecords
+                         { tabs, active }; open/activate/reorder/close(InPane|Everywhere|
+                         AllInPane|OthersInPane)/moveToPane/splitPane/resizeSplit/
+                         renamePath. Not session-persisted (no tab-restore across a
+                         restart today, so a restored *layout* with no tabs would just
+                         be empty panes). PaneLayout renders the tree recursively
+                         (imports itself for the split case) with draggable splitters
+                         (DockService.startSplit's "measure + redistribute a delta"
+                         recipe, resizing only the dragged pair). PaneLeaf renders one
+                         pane's TabBar + EditorComponent (text) or ImageTab (image) or
+                         an empty state (only the tree's sole tabless pane -- a non-root
+                         pane collapses out of the layout when its last tab closes); a
+                         mousedown anywhere in it calls PaneService.focus. App renders
+                         <app-pane-layout [node]="panes.root()"> in place of the old
+                         single fixed tab-bar + editor pair.
     entry-drawer/      EntryDrawer: the bottom capture drawer -- TOPIC field first,
                          then Tags / People / Meetings chip rows, then a
                          MarkdownSurface (compact, multi-line, inline spellcheck).
@@ -329,14 +359,21 @@ src/                Angular renderer (standalone components, esbuild via Angular
                          nested language parsing via @codemirror/language-data. The
                          only place CodeMirror is referenced; applies newEntryRequest.
       markdown-surface/ MarkdownSurface: THE shared CodeMirror component (full editor
-                         + drawer body): language setup, #tag autocomplete, mode
-                         compartment; compact = slim theme, submitOnEnter = Enter
-                         submits (off in the drawer, whose body is multi-line
-                         Markdown); spellcheck = the inline checker's source;
-                         foldFrontmatter = mount the frontmatter fold (full editor
-                         only), mirrored into a frontmatterExpanded signal;
-                         onTagActivate = wire the tag-pill extension (full editor only);
-                         onLinkActivate = wire the link-open extension (full editor only).
+                         + drawer body): language compartment, mode compartment;
+                         compact = slim theme, submitOnEnter = Enter submits (off in
+                         the drawer, whose body is multi-line Markdown); spellcheck =
+                         the inline checker's source; foldFrontmatter = mount the
+                         frontmatter fold (full editor only), mirrored into a
+                         frontmatterExpanded signal; onTagActivate = wire the tag-pill
+                         extension (full editor only); onLinkActivate = wire the
+                         link-open extension (full editor only).
+                         languageFilename: the active tab's path -> its extension picks
+                         the language compartment's contents. .md / null = the Markdown
+                         bundle (grammar + #tag autocomplete + pills + link activation
+                         + spellcheck + frontmatter fold); a code file (.cpp/.json/.ts)
+                         = that language's grammar alone (lazy LanguageDescription.load,
+                         @codemirror/language-data), source mode forced, none of the
+                         Markdown chrome (ADR-0036). Compact composers pass nothing.
       tag-complete.ts   Pure #tag autocomplete completion source (vocabulary from
                          the live TagService signal).
       tag-pill.ts       ViewPlugin rendering inline #tags as pills in both modes;
@@ -854,9 +891,10 @@ its topic's master-document `## History`.
   as tech debt. It is the single source for both `#tag` autocomplete and
   (milestone 7) the classifier registry, per CLAUDE.md.
 - **`#tag` autocomplete is a language-data completion source**
-  (`markdownLanguage.data.of({ autocomplete })`), added to the static
-  `extensions` array — `basicSetup` already runs `autocompletion()` and its
-  keymap, and there is no `Compartment` infrastructure to hot-swap. The
+  (`markdownLanguage.data.of({ autocomplete })`), part of the Markdown
+  bundle the language `Compartment` holds — so it is present for a `.md`
+  tab and absent for a code file, alongside the grammar it rides on.
+  `basicSetup` already runs `autocompletion()` and its keymap. The
   source is pure and reads the live `TagService` signal, so a vault change
   needs no editor rebuild. An alias match inserts the canonical `#tag`.
   `@codemirror/autocomplete` is now a direct (type-only) dependency.
@@ -1297,9 +1335,14 @@ vocabulary, taskId)` → the `autotag` built-in template
   (`Mod+Shift+F`, `Mod` = Ctrl/Cmd); a match `preventDefault` +
   `stopPropagation`s so a CodeMirror keymap underneath never also fires.
   `register({ id, label, keybinding, run })` is called from `App`
-  alongside the other app-lifetime wiring; today the only command is
-  `search.open` → `TagSearchService.openPanel()`. Deliberately a small
-  registry, not a plugin runtime.
+  alongside the other app-lifetime wiring: `search.open`, `note.new/save/
+  saveAs/saveAll`, `editor.toggleLineNumbers`, `template.insert`,
+  `input.recover`, and the split-view pane commands (ADR-0037) —
+  `pane.splitRight` (`Ctrl+Alt+Enter`), `pane.splitDown`
+  (`Ctrl+Alt+Shift+Enter`) → `PaneService.splitPane(focusedId, dir,
+  activePath)`, `pane.focusNext` (`F6`) / `pane.focusPrev` (`Shift+F6`) →
+  cycle `PaneService.paneIds()`. The titlebar View menu invokes the same
+  ids. Deliberately a small registry, not a plugin runtime.
 - **Feature-module boundaries** — `electron/llm/`, `electron/tags/`,
   `shared/llm/`, `shared/tags/`, `src/app/tags/`, `src/app/keybindings/`
   each expose a thin `index.ts` barrel; `eslint.config.mjs`
@@ -1326,7 +1369,7 @@ clipboard signal on `VaultService`).
 ```mermaid
 graph TB
     subgraph Renderer["Renderer (src/app/)"]
-        App["App\ntitlebar / [dock left | main | dock right] / status bar;\nregisters note.new/save/saveAs/saveAll + editor.toggleLineNumbers;\ndock-edge resizers -> DockService"]
+        App["App\ntitlebar / [dock left | main | dock right] / status bar;\nregisters note.new/save/saveAs/saveAll + editor.toggleLineNumbers\n+ pane.split*/focus* (ADR-0037);\ndock-edge resizers -> DockService"]
         subgraph tb["src/app/titlebar/ (barrel)"]
             Titlebar["Titlebar\naccent square + MenuBar + window controls;\n-webkit-app-region drag"]
             MenuBar["MenuBar + MenuService\nFile/Edit/Selection/View model;\nwired rows -> KeybindingService.run(id)"]

@@ -1,0 +1,14 @@
+@if (pane(); as p) {
+  @if (p.tabs.length > 0) {
+    <app-tab-bar [paneId]="paneId()" />
+    @if (activeDoc()?.kind === 'image') {
+      <app-image-tab [path]="p.active!" [focused]="focused()" />
+    } @else {
+      <app-editor [paneId]="paneId()" />
+    }
+  } @else {
+    <div class="empty">
+      <p>Select a file in the Files panel, or click a calendar day to start a note.</p>
+    </div>
+  }
+}

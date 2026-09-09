@@ -1,0 +1,59 @@
+:host {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+}
+
+.split {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+}
+
+.split.row {
+  flex-direction: row;
+}
+
+.split.column {
+  flex-direction: column;
+}
+
+.cell {
+  display: flex;
+  flex-basis: 0;
+  min-width: 0;
+  min-height: 0;
+}
+
+/* Same recipe as the dock dividers (`app.css` `.divider`): a 1px seam
+   inside a wider invisible hit area, so the pointer target is comfortable
+   without a thick visible line. */
+.splitter {
+  flex-shrink: 0;
+  position: relative;
+  background: var(--border);
+  z-index: 5;
+}
+
+.splitter::before {
+  content: '';
+  position: absolute;
+  inset: -3px;
+}
+
+.splitter.row {
+  width: 1px;
+  cursor: col-resize;
+}
+
+.splitter.column {
+  height: 1px;
+  cursor: row-resize;
+}
+
+.splitter:hover,
+.splitter:active {
+  background: var(--resize-hover);
+}

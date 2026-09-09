@@ -13,6 +13,7 @@ import {
 import { completionStatus } from '@codemirror/autocomplete';
 import { insertNewlineAndIndent } from '@codemirror/commands';
 import { markdown, markdownLanguage } from '@codemirror/lang-markdown';
+import { LanguageDescription } from '@codemirror/language';
 import { languages } from '@codemirror/language-data';
 import { Compartment, EditorState, Extension, Prec } from '@codemirror/state';
 import { EditorView, keymap, placeholder as cmPlaceholder } from '@codemirror/view';
@@ -89,6 +90,18 @@ export class MarkdownSurface implements AfterViewInit, OnDestroy {
    * frontmatter. Read once at construction -- it never toggles per surface.
    */
   readonly foldFrontmatter = input(false);
+  /**
+   * The active document's filename / path. Its extension picks the
+   * CodeMirror language: `.md` / `.markdown` / `.mdx` (or `null` / no
+   * extension) -> the full Markdown bundle (grammar + `#tag` autocomplete +
+   * tag pills + link activation + inline spellcheck + frontmatter fold);
+   * anything else -> that language's grammar alone, so a `.cpp` / `.json` /
+   * `.ts` file gets real syntax highlighting and none of the Markdown-only
+   * chrome (`#include` must not become a `#tag` pill). Swapped live through
+   * a compartment -- one surface serves every tab. Only the full-page
+   * editor sets it; the compact composers leave it `null` (always Markdown).
+   */
+  readonly languageFilename = input<string | null>(null);
   readonly placeholder = input('');
   /**
    * Turns on image paste / drop: a pasted or dropped image is saved into
@@ -150,6 +163,14 @@ export class MarkdownSurface implements AfterViewInit, OnDestroy {
   private readonly themeCompartment = new Compartment();
   /** Guards against an out-of-order theme `load()` resolving after a newer pick. */
   private themeToken = 0;
+  /** Holds the language grammar (+ Markdown chrome) for the active tab; see `languageFilename`. */
+  private readonly languageCompartment = new Compartment();
+  /** Guards against an out-of-order language `load()` resolving after a newer tab. */
+  private langToken = 0;
+  /** The language currently in the compartment (`'markdown'` | `'plain'` | `'lang:<name>'`). */
+  private currentLangKey = 'markdown';
+  /** Last frontmatter fold state the owner asked for; re-asserted after a code -> Markdown swap. */
+  private desiredFrontmatterExpanded = false;
 
   /**
    * Mirror of the fold extension's `StateField<boolean>` (see
@@ -193,6 +214,9 @@ export class MarkdownSurface implements AfterViewInit, OnDestroy {
     effect(() => {
       this.applyTheme(this.themes.theme());
     });
+    effect(() => {
+      void this.applyLanguage(this.languageFilename());
+    });
     // The editor content scale (Ctrl +/-/0) is a CSS custom property on the
     // host that CodeMirror's theme reads but never reacts to -- without a
     // nudge the selection/cursor geometry stays at the old font size until
@@ -219,6 +243,79 @@ export class MarkdownSurface implements AfterViewInit, OnDestroy {
     });
   }
 
+  /**
+   * The Markdown language plus every Markdown-only surface feature: `#tag`
+   * autocomplete, the `#tag` pills / link activation (both work in source
+   * mode too), inline spellcheck and the frontmatter fold. This is what the
+   * language compartment holds for a `.md` tab and for every compact
+   * composer; a code tab gets `LanguageDescription.load()`'s grammar
+   * instead and none of this.
+   */
+  private markdownBundle(): Extension {
+    return [
+      markdown({ base: markdownLanguage, codeLanguages: languages, completeHTMLTags: false }),
+      markdownLanguage.data.of({
+        autocomplete: makeTagCompletionSource(() => this.tags.tags()),
+      }),
+      this.onTagActivate() ? tagPills(this.onTagActivate()!) : [],
+      this.onLinkActivate() ? linkActivation(this.onLinkActivate()!) : [],
+      this.spellcheck() ? inlineSpellcheck({ source: this.spellcheck()! }) : [],
+      this.foldFrontmatter() ? frontmatterFold() : [],
+    ];
+  }
+
+  /**
+   * Swaps the language compartment to match `name`'s extension. `.md` /
+   * `.markdown` / `.mdx` / `null` -> `markdownBundle()`; a filename CM knows
+   * -> its grammar (lazy `import()`, token-guarded like `applyTheme`);
+   * anything else -> plain text. `currentLangKey` skips a no-op reconfigure,
+   * so switching between two Markdown tabs never tears down the frontmatter
+   * fold's `StateField`.
+   */
+  private async applyLanguage(name: string | null): Promise<void> {
+    const view = this._view;
+    if (!view) {
+      return;
+    }
+    const isMarkdown = !name || /\.(md|markdown|mdx)$/i.test(name);
+    if (isMarkdown) {
+      if (this.currentLangKey === 'markdown') {
+        return;
+      }
+      this.currentLangKey = 'markdown';
+      this.langToken++;
+      view.dispatch({ effects: this.languageCompartment.reconfigure(this.markdownBundle()) });
+      // The fold `StateField` is brand new (`create: () => false`); if the
+      // owner already replayed an expanded tab before this ran, re-apply it.
+      if (this.desiredFrontmatterExpanded && this.foldFrontmatter()) {
+        view.dispatch({ effects: setFrontmatterExpanded.of(true) });
+      }
+      return;
+    }
+
+    const desc = LanguageDescription.matchFilename(languages, name);
+    const key = desc ? `lang:${desc.name}` : 'plain';
+    if (this.currentLangKey === key) {
+      return;
+    }
+    this.currentLangKey = key;
+    const token = ++this.langToken;
+    if (!desc) {
+      view.dispatch({ effects: this.languageCompartment.reconfigure([]) });
+      return;
+    }
+    try {
+      const support = await desc.load();
+      if (token === this.langToken) {
+        this._view?.dispatch({ effects: this.languageCompartment.reconfigure(support) });
+      }
+    } catch {
+      if (token === this.langToken) {
+        this._view?.dispatch({ effects: this.languageCompartment.reconfigure([]) });
+      }
+    }
+  }
+
   ngAfterViewInit(): void {
     this._view = new EditorView({
       parent: this.host().nativeElement,
@@ -234,22 +331,11 @@ export class MarkdownSurface implements AfterViewInit, OnDestroy {
           // `Ctrl/Cmd+Enter` toggles the task checkbox on the selected
           // line(s) (also the Selection menu's "Toggle task done").
           keymap.of([{ key: 'Mod-Enter', run: (view) => toggleTaskDone(view) }]),
-          markdown({
-            base: markdownLanguage,
-            codeLanguages: languages,
-            completeHTMLTags: false,
-          }),
-          // `#tag` completion, keyed off the live TagService signal so a
-          // vault change needs no editor rebuild.
-          markdownLanguage.data.of({
-            autocomplete: makeTagCompletionSource(() => this.tags.tags()),
-          }),
-          // `#tag` pills + Ctrl/Cmd-click -> search. Outside the mode
-          // compartment: pills show in source mode too.
-          this.onTagActivate() ? tagPills(this.onTagActivate()!) : [],
-          // Ctrl/Cmd-click a link to open it (also outside the mode
-          // compartment -- works in source mode).
-          this.onLinkActivate() ? linkActivation(this.onLinkActivate()!) : [],
+          // The language grammar + (for Markdown) the `#tag` autocomplete /
+          // pills / link activation / spellcheck / frontmatter fold. Seeded
+          // with the Markdown bundle; `applyLanguage()` swaps in a code
+          // grammar (and drops the Markdown chrome) for a non-`.md` tab.
+          this.languageCompartment.of(this.markdownBundle()),
           // Track this surface as the Edit/Selection menu's target while it
           // holds focus (see `EditTargetService` -- "last focused", so a
           // menu-bar click doesn't drop it).
@@ -295,7 +381,6 @@ export class MarkdownSurface implements AfterViewInit, OnDestroy {
           // compartment above -- win the cascade, so the compact field would
           // otherwise open with its first line pushed 40px down.
           this.compact() ? Prec.high(compactTheme) : [],
-          this.spellcheck() ? inlineSpellcheck({ source: this.spellcheck()! }) : [],
           this.imageCapture()
             ? imagePaste({
                 save: (bytes, ext) =>
@@ -307,10 +392,6 @@ export class MarkdownSurface implements AfterViewInit, OnDestroy {
                 onError: (message) => this.editor.error.set(message),
               })
             : [],
-          // Outside the mode compartment on purpose: the frontmatter pill
-          // shows in source mode too, and its fold state must survive a
-          // Live Preview <-> source switch.
-          this.foldFrontmatter() ? frontmatterFold() : [],
           this.placeholderCompartment.of(
             this.placeholder() ? cmPlaceholder(this.placeholder()) : [],
           ),
@@ -323,6 +404,10 @@ export class MarkdownSurface implements AfterViewInit, OnDestroy {
     // Pick up any tags registered after TagService first constructed
     // (e.g. a vault selected later in the session).
     void this.tags.refresh();
+    // The compartment is seeded with the Markdown bundle; if this surface
+    // opened straight onto a code file, swap the grammar now rather than
+    // waiting for the first `languageFilename` change.
+    void this.applyLanguage(this.languageFilename());
   }
 
   ngOnDestroy(): void {
@@ -379,8 +464,14 @@ export class MarkdownSurface implements AfterViewInit, OnDestroy {
    * Expand or fold the frontmatter (only meaningful with `foldFrontmatter`).
    * The owner calls this on tab switch to replay the tab's remembered state;
    * the pill and chevron flip it from inside CodeMirror.
+   *
+   * The value is also stashed: switching *from* a code tab back to Markdown
+   * re-adds the fold `StateField` a beat after the owner replays the state
+   * (the language compartment reconfigures in this component's own effect,
+   * which runs after the owner's), so `applyLanguage` re-asserts it.
    */
   setFrontmatterExpanded(expanded: boolean): void {
+    this.desiredFrontmatterExpanded = expanded;
     const view = this._view;
     if (view && frontmatterExpandedOf(view.state) !== expanded) {
       view.dispatch({ effects: setFrontmatterExpanded.of(expanded) });
@@ -441,12 +532,27 @@ const gutterTheme: Extension = Prec.high(
       borderRight: 'none',
       color: 'var(--gutter)',
     },
-    '.cm-foldGutter': { display: 'none' },
+    // `!important` is load-bearing: the CM base theme sets
+    // `.cm-gutter { display: flex !important }`, which extension precedence
+    // (`Prec.high`) orders but does not defeat -- a plain `display: none`
+    // silently loses and the markdown heading fold arrows stay visible.
+    '.cm-foldGutter': { display: 'none !important' },
     '.cm-lineNumbers .cm-gutterElement': {
       minWidth: '46px',
       padding: '0 14px 0 6px',
       fontFamily: 'var(--font-mono)',
       fontSize: 'calc(10.5px * var(--drey-editor-scale, 1))',
+      // CodeMirror sizes each gutter row to its line's measured pixel
+      // height but does NOT copy the content's line-height, so the number
+      // glyph would inherit the unitless `1.72` from `.cm-scroller` and
+      // re-multiply it against this 10.5px font -- a short inline box that
+      // floats near the top of a ~25px body row (worse on a heading line).
+      // Pin it to the body line-box height and top-align the digits so they
+      // sit level with the first visual row of any line (heading, wrapped).
+      lineHeight: 'calc(14.5px * 1.72 * var(--drey-editor-scale, 1))',
+      display: 'flex',
+      alignItems: 'flex-start',
+      justifyContent: 'flex-end',
       color: 'var(--gutter)',
       userSelect: 'none',
     },

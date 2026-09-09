@@ -44,6 +44,9 @@ package, a minor naming convention).
 | [0033](09_architecture_decisions/0033-tasks-panel-and-index.md)                   | Tasks dock panel + whole-vault `TaskIndex` (checkbox / `#task` lines, `#task/done`, document = live buffer) | Accepted |
 | [0034](09_architecture_decisions/0034-internal-widget-model.md)                   | Internal widget model: `WIDGETS` registry, `WidgetContext` capability facade, per-widget View-menu hide/show | Accepted |
 | [0035](09_architecture_decisions/0035-named-ui-themes.md)                          | Named UI themes: `@uiw/codemirror-themes-all` catalog, shell palette derived from a per-theme seed, live compartment swap | Accepted |
+| [0036](09_architecture_decisions/0036-code-file-editor-mode.md)                    | Non-Markdown files open in a read-oriented code mode: extension → language compartment, source-only, no Markdown chrome | Accepted |
+| [0037](09_architecture_decisions/0037-split-view-editor-panes.md)                  | Split-view editor panes: a `PaneService` split tree, `EditorService` as a facade over the focused pane | Accepted |
+| [0038](09_architecture_decisions/0038-editor-panes-in-docks.md)                    | Editor panes in the docks (split-view Phase 2): a `PaneService` region model, a dock "editor slot", no `WidgetDescriptor` involvement | Proposed |
 
 Decisions not yet written up (relevant spec already fixes them, but the
 ADR is deferred to the milestone that actually implements them, per

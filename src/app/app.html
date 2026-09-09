@@ -26,12 +26,7 @@
     <div class="center-col">
       <main class="main-pane">
         @if (editor.openDocs().length > 0) {
-          <app-tab-bar />
-          @if (editor.activeKind() === 'image') {
-            <app-image-tab />
-          } @else {
-            <app-editor />
-          }
+          <app-pane-layout [node]="panes.root()" />
         } @else {
           <div class="empty">
             <p>Select a file in the Files panel, or click a calendar day to start a note.</p>

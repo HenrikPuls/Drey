@@ -11,6 +11,7 @@ import { openSearchPanel } from '@codemirror/search';
 import type { EditorView } from '@codemirror/view';
 import { KeybindingService } from '../keybindings';
 import { DockService, WIDGETS, WidgetId } from '../dock';
+import { PaneService } from '../panes';
 import { EditorService } from '../services/editor.service';
 import { EditTargetService } from '../services/edit-target.service';
 import { SettingsService } from '../services/settings.service';
@@ -60,6 +61,7 @@ const SEP: MenuSeparator = { kind: 'separator' };
 export class MenuService {
   private readonly keys = inject(KeybindingService);
   private readonly dock = inject(DockService);
+  private readonly panes = inject(PaneService);
   private readonly editor = inject(EditorService);
   private readonly editTarget = inject(EditTargetService);
   private readonly settings = inject(SettingsService);
@@ -262,6 +264,31 @@ export class MenuService {
         ...WIDGETS.filter((w) => w.removable && this.settings.widgetEnabled(w.id)).map((w) =>
           this.widgetRow(w.id, w.title),
         ),
+        SEP,
+        {
+          kind: 'item',
+          label: 'Split editor right',
+          hint: 'Ctrl Alt Enter',
+          run: this.editor.openDocs().length > 0 ? () => this.run('pane.splitRight') : undefined,
+        },
+        {
+          kind: 'item',
+          label: 'Split editor down',
+          hint: 'Ctrl Alt Shift Enter',
+          run: this.editor.openDocs().length > 0 ? () => this.run('pane.splitDown') : undefined,
+        },
+        {
+          kind: 'item',
+          label: 'Focus next pane',
+          hint: 'F6',
+          run: this.panes.paneIds().length > 1 ? () => this.run('pane.focusNext') : undefined,
+        },
+        {
+          kind: 'item',
+          label: 'Focus previous pane',
+          hint: 'Shift F6',
+          run: this.panes.paneIds().length > 1 ? () => this.run('pane.focusPrev') : undefined,
+        },
         SEP,
         {
           kind: 'item',

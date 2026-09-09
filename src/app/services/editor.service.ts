@@ -5,6 +5,7 @@ import { EntryDraft, entryInsertion } from '../../../shared/entry-compose';
 import { ActionOutcome } from '../../../shared/ipc-api';
 import { setDoneOnLine } from '../../../shared/tasks';
 import { formatTime } from '../../../shared/timestamp';
+import { PaneService } from '../panes/pane.service';
 import { TagService } from './tag.service';
 import { VaultService } from './vault.service';
 
@@ -118,32 +119,59 @@ function baseName(relativePath: string): string {
 }
 
 /**
- * Holds every open document and which one is active. Same shape as
- * `VaultService`: talk to `window.dreyApi`, keep the result in
- * signals, no logic beyond that (CLAUDE.md, "no business logic inside
- * components"; filesystem access stays in the main process per ADR-0001).
+ * Whether `path` is a Markdown document (or a still-unnamed one). Only these
+ * get Live Preview and the Markdown-only editor chrome; a `.cpp` / `.json` /
+ * `.ts` file opens in source mode with that language's syntax highlighting.
+ */
+function isMarkdownPath(path: string): boolean {
+  return path === '' || /\.(md|markdown|mdx)$/i.test(path);
+}
+
+/**
+ * Holds every open document (the registry: buffer, dirty state, kind, eol)
+ * and, via `PaneService`, which one is "active" for every consumer that
+ * doesn't care about panes. Same shape as `VaultService`: talk to
+ * `window.dreyApi`, keep the result in signals, no logic beyond that
+ * (CLAUDE.md, "no business logic inside components"; filesystem access
+ * stays in the main process per ADR-0001).
  *
  * Milestone "visual shell" turned this from one-document-at-a-time into a
  * multi-buffer model so the tab bar has something real to drive (see
- * ADR-0003). Switching tabs never prompts -- unsaved buffers are just kept
- * in memory; only closing a dirty tab asks (CLAUDE.md build order, item 5).
+ * ADR-0003). ADR-0037 split *tab placement* out into `PaneService`: this
+ * class no longer owns which paths are tabs or which is active -- it owns
+ * the documents themselves, and `activePath`/`activeDoc` (and everything
+ * derived from them: `isDirty`, `save()`, word count, ...) now mean "the
+ * *focused pane's* active document". That is deliberate: ~20 other files
+ * (Assistant, Tasks, Actions, the status bar, MCP tools, keybindings, the
+ * calendar, tag search's "open at line", ...) all read this single
+ * "current document" and none of them need to become pane-aware -- only
+ * `TabBar` and `Editor` do (see `PaneService`'s doc comment for the pane
+ * model itself: one pane per path, an arbitrary split tree).
+ *
+ * Switching tabs never prompts -- unsaved buffers are just kept in memory;
+ * only closing a dirty tab asks (CLAUDE.md build order, item 5).
  */
 @Injectable({ providedIn: 'root' })
 export class EditorService {
   private readonly tags = inject(TagService);
   private readonly vault = inject(VaultService);
+  private readonly panes = inject(PaneService);
 
   private readonly docs = signal<OpenDoc[]>([]);
-  private readonly active = signal<string | null>(null);
 
-  /** All open documents, in tab order. */
+  /** Every open document (the registry), regardless of which pane shows it. */
   readonly openDocs = this.docs.asReadonly();
-  /** Vault-relative path of the active tab, or null when nothing is open. */
-  readonly activePath = this.active.asReadonly();
+  /** Vault-relative path of the focused pane's active tab, or null when nothing is open. */
+  readonly activePath = computed<string | null>(() => this.panes.focusedPane()?.active ?? null);
 
   private readonly activeDoc = computed<OpenDoc | null>(
-    () => this.docs().find((d) => d.path === this.active()) ?? null,
+    () => this.docs().find((d) => d.path === this.activePath()) ?? null,
   );
+
+  /** The `OpenDoc` for `path`, or null if it isn't open. For a specific pane's own chrome (not "the" active doc). */
+  docFor(path: string | null): OpenDoc | null {
+    return path === null ? null : (this.docs().find((d) => d.path === path) ?? null);
+  }
 
   /**
    * Vault-relative path of the open file. Kept as the historical name so
@@ -157,6 +185,17 @@ export class EditorService {
 
   /** `'image'` when the active tab is an image viewer -- the centre column swaps components. */
   readonly activeKind = computed<'text' | 'image'>(() => this.activeDoc()?.kind ?? 'text');
+
+  /**
+   * `true` for a Markdown path (or `null`/nothing open). `false` for a code
+   * file (`.cpp`, `.json`, …): a pane's `⋯` menu hides the Live Preview /
+   * Source toggle for it, and the surface loads that language's grammar
+   * instead of the Markdown bundle. Takes an explicit path (each pane has
+   * its own shown document) rather than assuming "the" active one.
+   */
+  isMarkdown(path: string | null): boolean {
+    return isMarkdownPath(path ?? '');
+  }
 
   /**
    * Live viewport of the active image tab (natural pixel size + current
@@ -248,7 +287,7 @@ export class EditorService {
 
   /** The assistant card's "insert into note" button. No-op with no open (text) document. */
   requestInsertText(text: string): void {
-    if (text.trim() === '' || this.active() === null || this.activeKind() === 'image') {
+    if (text.trim() === '' || this.activePath() === null || this.activeKind() === 'image') {
       return;
     }
     this.insertRequest.update((r) => ({ id: r.id + 1, text }));
@@ -311,7 +350,9 @@ export class EditorService {
       return;
     }
     if (this.docs().some((d) => d.path === relativePath)) {
-      this.active.set(relativePath);
+      // Already open -- reveal it (focus + activate whichever pane has it;
+      // a path lives in one pane at a time, see `PaneService`).
+      this.panes.open(relativePath);
       return;
     }
 
@@ -341,7 +382,7 @@ export class EditorService {
    */
   async openFileAt(relativePath: string, line: number): Promise<void> {
     await this.openFile(relativePath);
-    if (this.active() === relativePath) {
+    if (this.docs().some((d) => d.path === relativePath)) {
       this.revealRequest.update((r) => ({ id: r.id + 1, path: relativePath, line }));
     }
   }
@@ -370,7 +411,7 @@ export class EditorService {
     };
     if (this.docs().some((d) => d.path === path)) {
       this.patchDoc(path, patch);
-      this.active.set(path);
+      this.panes.open(path);
       return;
     }
     const doc = this.makeDoc(path, normalized, 0, false, true);
@@ -391,7 +432,7 @@ export class EditorService {
     // A note this session may already be open under either layout.
     for (const candidate of [nestedPath, legacyPath]) {
       if (this.docs().some((d) => d.path === candidate)) {
-        this.active.set(candidate);
+        this.panes.open(candidate);
         return;
       }
     }
@@ -427,10 +468,16 @@ export class EditorService {
     }
   }
 
-  /** Switches the active tab. No-op if the path isn't open. */
+  /**
+   * Reveals a tab app-wide: focuses + activates whichever pane already has
+   * `relativePath` open (the "Open windows" list, File-menu style global
+   * commands). No-op if it isn't open. A pane's *own* tab bar activates
+   * within itself via `PaneService.activate` directly -- it doesn't need
+   * this "search every pane" version of the same idea.
+   */
   activate(relativePath: string): void {
     if (this.docs().some((d) => d.path === relativePath)) {
-      this.active.set(relativePath);
+      this.panes.open(relativePath);
     }
   }
 
@@ -442,12 +489,10 @@ export class EditorService {
    * "keep editing" is not an option.
    */
   closeTab(relativePath: string, options: { silent?: boolean } = {}): void {
-    const list = this.docs();
-    const index = list.findIndex((d) => d.path === relativePath);
-    if (index === -1) {
+    const doc = this.docs().find((d) => d.path === relativePath);
+    if (!doc) {
       return;
     }
-    const doc = list[index];
     if (
       !options.silent &&
       doc.bufferContent !== doc.savedContent &&
@@ -455,29 +500,28 @@ export class EditorService {
     ) {
       return;
     }
-
-    const remaining = list.filter((d) => d.path !== relativePath);
-    this.docs.set(remaining);
-    if (this.active() === relativePath) {
-      const next = remaining[index] ?? remaining[index - 1] ?? null;
-      this.active.set(next?.path ?? null);
-    }
+    // Pane placement first (picks the neighbour to activate there), then
+    // drop the buffer -- a path lives in one pane at a time, so this closes
+    // its one and only tab.
+    this.panes.closeEverywhere(relativePath);
+    this.docs.update((list) => list.filter((d) => d.path !== relativePath));
   }
 
   /**
-   * Tab-bar context menu: close every tab / every tab but one. Each is
-   * routed through `closeTab`, so a dirty tab still raises its own
-   * `confirm()` and a cancel there leaves that tab (and the rest) open.
-   * The path list is snapshotted first because `closeTab` mutates `docs`.
+   * A pane's own tab-bar context menu: close every tab / every tab but one
+   * *in that pane* -- a split's other panes are untouched. Each is routed
+   * through `closeTab`, so a dirty tab still raises its own `confirm()` and
+   * a cancel there leaves that tab (and the rest) open. The path list is
+   * snapshotted first (from `PaneService`) because `closeTab` mutates it.
    */
-  closeAll(): void {
-    for (const path of this.docs().map((d) => d.path)) {
+  closeAll(paneId: string): void {
+    for (const path of this.panes.pane(paneId)?.tabs ?? []) {
       this.closeTab(path);
     }
   }
 
-  closeOthers(keepPath: string): void {
-    for (const path of this.docs().map((d) => d.path)) {
+  closeOthers(paneId: string, keepPath: string): void {
+    for (const path of this.panes.pane(paneId)?.tabs ?? []) {
       if (path !== keepPath) {
         this.closeTab(path);
       }
@@ -508,43 +552,47 @@ export class EditorService {
     const remap = (p: string): string | null =>
       p === oldPath ? newPath : p.startsWith(prefix) ? newPath + p.slice(oldPath.length) : null;
 
-    let touched = false;
     this.docs.update((list) =>
       list.map((d) => {
         const next = remap(d.path);
         if (next === null) {
           return d;
         }
-        touched = true;
+        // Pane placement references the same path string, so re-point it
+        // there too before the registry's own path changes underneath it.
+        this.panes.renamePath(d.path, next);
         return { ...d, path: next, name: next.slice(next.lastIndexOf('/') + 1) };
       }),
     );
-    if (!touched) {
-      return;
-    }
-    const activeNext = this.active() ? remap(this.active()!) : null;
-    if (activeNext) {
-      this.active.set(activeNext);
-    }
   }
 
-  /** Called by the editor component on every buffer change (active tab). */
-  updateBuffer(content: string): void {
-    if (this.activeDoc()?.kind === 'image') {
+  /** Called by a pane's editor surface on every buffer change; `path` is that pane's shown document. */
+  updateBuffer(path: string, content: string): void {
+    const doc = this.docs().find((d) => d.path === path);
+    if (!doc || doc.kind === 'image') {
       return;
     }
-    this.patchActive({ bufferContent: content });
+    this.patchDoc(path, { bufferContent: content });
   }
 
   /**
-   * Switches the active tab's mode and remembers it as the default for
-   * future opens (`⋯` menu). Persisted per machine, like the pane sizes.
+   * Switches a tab's mode and remembers it as the default for future opens
+   * (`⋯` menu). `path` defaults to the focused pane's document -- the
+   * global Ctrl+S-style callers want that; a pane's own `⋯` menu passes its
+   * own shown path explicitly, since that pane needn't be the focused one.
+   * Persisted per machine, like the pane sizes.
    */
-  setViewMode(mode: EditorViewMode): void {
-    if (this.activeDoc()?.kind === 'image') {
+  setViewMode(mode: EditorViewMode, path?: string): void {
+    const doc = path !== undefined ? this.docFor(path) : this.activeDoc();
+    if (!doc || doc.kind === 'image') {
       return;
     }
-    this.patchActive({ viewMode: mode });
+    // Live Preview is Markdown-only; a code tab stays in source (its menu
+    // item is hidden anyway).
+    if (mode === 'live' && !isMarkdownPath(doc.path)) {
+      return;
+    }
+    this.patchDoc(doc.path, { viewMode: mode });
     writePref({ defaultMode: mode });
   }
 
@@ -557,16 +605,19 @@ export class EditorService {
    * and the tab is clean. Any master doc that got a routed History entry
    * and is open in another (clean) tab is reloaded from disk. No-op when
    * nothing changed.
+   *
+   * `options.path` defaults to the focused pane's document (Ctrl+S, the
+   * File menu); a pane's own Save button passes its own shown path.
    */
-  async save(options: { runOnSaveActions?: boolean } = {}): Promise<void> {
-    const doc = this.activeDoc();
+  async save(options: { runOnSaveActions?: boolean; path?: string } = {}): Promise<void> {
+    const doc = options.path !== undefined ? this.docFor(options.path) : this.activeDoc();
     if (!this.api || doc === null || doc.kind === 'image' || this.isSaving()) {
       return;
     }
     // A generated scratch doc has no destination yet -- ask for one, even
     // if the buffer is untouched (the user wants to keep the export as-is).
     if (doc.askOnSave) {
-      await this.saveAs();
+      await this.saveAs(doc.path);
       return;
     }
     if (doc.bufferContent === doc.savedContent) {
@@ -610,22 +661,19 @@ export class EditorService {
   }
 
   /**
-   * File -> "Save all". Walks every open tab, saving the dirty ones. Each
-   * goes through `save()`, so a scratch tab still routes to `saveAs()` and
-   * an untouched draft is skipped. The active tab is restored afterwards.
+   * File -> "Save all". Walks every open document in the registry, saving
+   * the dirty ones, by explicit path -- doesn't touch pane focus/activation
+   * at all (unlike the single-pane version this replaced), since `save()`
+   * now takes the path directly. Each goes through `save()`, so a scratch
+   * tab still routes to `saveAs()` and an untouched draft is skipped.
    */
   async saveAll(): Promise<void> {
-    const restore = this.active();
     for (const path of this.docs().map((d) => d.path)) {
       const doc = this.docs().find((d) => d.path === path);
       if (!doc || (doc.bufferContent === doc.savedContent && !doc.askOnSave)) {
         continue;
       }
-      this.active.set(path);
-      await this.save();
-    }
-    if (restore && this.docs().some((d) => d.path === restore)) {
-      this.active.set(restore);
+      await this.save({ path });
     }
   }
 
@@ -645,12 +693,13 @@ export class EditorService {
 
   /**
    * "Save as…": pick a destination inside the vault (native dialog), write
-   * the active buffer there, and re-key the tab to the new file. For a
-   * never-saved scratch doc this is where `save()` lands; on a normal file
-   * it forks the buffer to a new path (the original on disk is untouched).
+   * the buffer there, and re-key the tab to the new file. For a never-saved
+   * scratch doc this is where `save()` lands; on a normal file it forks the
+   * buffer to a new path (the original on disk is untouched). `path`
+   * defaults to the focused pane's document, like `save()`.
    */
-  async saveAs(): Promise<void> {
-    const doc = this.activeDoc();
+  async saveAs(path?: string): Promise<void> {
+    const doc = path !== undefined ? this.docFor(path) : this.activeDoc();
     if (!this.api?.pickSavePath || doc === null || doc.kind === 'image' || this.isSaving()) {
       return;
     }
@@ -666,7 +715,7 @@ export class EditorService {
       return; // cancelled
     }
     if (target === doc.path && !doc.askOnSave) {
-      await this.save();
+      await this.save({ path: doc.path });
       return;
     }
 
@@ -699,11 +748,9 @@ export class EditorService {
     if (!doc || content === doc.bufferContent) {
       return;
     }
-    if (this.active() !== path) {
-      this.active.set(path);
-    }
+    this.panes.open(path); // reveal: focuses + activates wherever it is
     this.patchDoc(path, { bufferContent: content });
-    await this.save({ runOnSaveActions: false });
+    await this.save({ runOnSaveActions: false, path });
   }
 
   /**
@@ -723,11 +770,9 @@ export class EditorService {
       if (next === open.bufferContent) {
         return;
       }
-      if (this.active() !== path) {
-        this.active.set(path);
-      }
+      this.panes.open(path); // reveal: focuses + activates wherever it is
       this.patchDoc(path, { bufferContent: next });
-      await this.save();
+      await this.save({ path });
       return;
     }
 
@@ -768,8 +813,10 @@ export class EditorService {
       kind: 'text',
       savedContent: normalized,
       bufferContent: normalized,
-      // Land in whichever mode the user last chose (`⋯` menu), Live Preview by default.
-      viewMode: readDefaultMode(),
+      // Markdown lands in whichever mode the user last chose (`⋯` menu),
+      // Live Preview by default; a code file always opens in source -- Live
+      // Preview only renders Markdown.
+      viewMode: isMarkdownPath(relativePath) ? readDefaultMode() : 'source',
       eol,
       modifiedMs,
       existsOnDisk,
@@ -799,14 +846,7 @@ export class EditorService {
 
   private addDoc(doc: OpenDoc): void {
     this.docs.update((list) => [...list, doc]);
-    this.active.set(doc.path);
-  }
-
-  private patchActive(patch: Partial<OpenDoc>): void {
-    const path = this.active();
-    if (path !== null) {
-      this.patchDoc(path, patch);
-    }
+    this.panes.open(doc.path);
   }
 
   private patchDoc(path: string, patch: Partial<OpenDoc>): void {

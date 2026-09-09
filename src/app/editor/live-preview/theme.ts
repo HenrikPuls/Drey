@@ -145,12 +145,16 @@ export const livePreviewTheme = EditorView.theme(
       opacity: '1',
     },
 
-    // A rendered ```mermaid diagram (ADR-0025).
+    // A rendered ```mermaid diagram (ADR-0025). Spacing is `padding`, not
+    // `margin`: this is the root of a `block: true` replace widget and
+    // CodeMirror's height measurement ignores a block widget's own margin
+    // (see `.cm-fm-pill` in `frontmatter-fold.ts`), which would drift the
+    // gutter / click hit-testing for every line below the diagram.
     '.lp-mermaid': {
       position: 'relative',
       display: 'block',
-      margin: '6px 0',
-      padding: '10px 12px',
+      margin: '0',
+      padding: '16px 12px',
       background: 'var(--bg-bar)',
       borderRadius: 'var(--radius)',
       overflowX: 'auto',

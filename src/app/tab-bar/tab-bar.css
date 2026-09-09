@@ -36,6 +36,10 @@
   color: var(--text-heading);
 }
 
+.tab.dragging {
+  opacity: 0.6;
+}
+
 .name {
   flex: 1;
   min-width: 0;
@@ -133,4 +137,10 @@
 .ctx-menu button:hover {
   background: var(--hover-bg);
   color: var(--text-primary);
+}
+
+.ctx-sep {
+  height: 1px;
+  margin: 4px 2px;
+  background: var(--border);
 }
