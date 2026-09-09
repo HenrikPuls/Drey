@@ -1,23 +1,20 @@
 import { Injectable, computed, inject, signal } from '@angular/core';
 import { imageExtension } from '../../../shared/asset-name';
 import { dailyPathFor } from '../../../shared/daily';
-import { EntryDraft, entryInsertion } from '../../../shared/entry-compose';
+import { EntryDraft } from '../../../shared/entry-compose';
 import { ActionOutcome } from '../../../shared/ipc-api';
 import { setDoneOnLine } from '../../../shared/tasks';
-import { formatTime } from '../../../shared/timestamp';
+import { EditorCommandsService } from '../editor/editor-commands.service';
+import { EditorPrefsService, EditorViewMode } from '../editor/editor-prefs.service';
 import { PaneService } from '../panes/pane.service';
 import { TagService } from './tag.service';
 import { VaultService } from './vault.service';
 
 /** Re-exported for existing importers (`Editor`, specs); defined in `markdown-frontmatter.ts`. */
 export { stripFrontmatter } from '../editor/markdown-frontmatter';
-
-/**
- * Which mode the editor shows. One `EditorView` runs both; `'live'` adds
- * the Live Preview extensions (ADR-0009), `'source'` shows the raw Markdown.
- * Both share the same typography (`editor-theme.ts`).
- */
-export type EditorViewMode = 'source' | 'live';
+/** Re-exported for existing importers; defined in the split-out collaborators. */
+export type { EditorViewMode } from '../editor/editor-prefs.service';
+export type { NewEntryRequest } from '../editor/editor-commands.service';
 
 /**
  * One open document (one tab). `savedContent` is what's on disk (in `\n`
@@ -56,61 +53,6 @@ export interface OpenDoc {
    * Daily-note drafts leave this `false` -- they save to their own path.
    */
   askOnSave?: boolean;
-}
-
-/**
- * One ask for a new `## HH:mm` entry at the end of the active document.
- * `id` deduplicates (the handling component remembers the last id it acted
- * on). Exactly one of the payloads is set: `text` for a bare body (the
- * quick-capture hotkey sends neither), `draft` for the entry drawer, whose
- * topic / text / tags are rendered by `shared/entry-compose.ts`.
- */
-export interface NewEntryRequest {
-  readonly id: number;
-  readonly text?: string;
-  readonly draft?: EntryDraft;
-  /** The active entry template's pattern -- set only with `draft`. */
-  readonly pattern?: string;
-}
-
-/** `localStorage` key for editor-wide preferences. */
-const PREFS_KEY = 'drey.editor';
-
-/**
- * The mode a freshly opened note lands in: whatever the user last switched to
- * via the `⋯` menu, defaulting to `'live'`. Read synchronously at
- * construction, like the pane sizes in `LayoutService`. A stored `'preview'`
- * (the pre-ADR-0009 name of the rendered mode) migrates to `'live'` by
- * falling through the `'source'` check.
- */
-function readDefaultMode(): EditorViewMode {
-  try {
-    const raw = localStorage.getItem(PREFS_KEY);
-    return (JSON.parse(raw ?? '{}') as { defaultMode?: string }).defaultMode === 'source'
-      ? 'source'
-      : 'live';
-  } catch {
-    return 'live';
-  }
-}
-
-function readLineNumbers(): boolean {
-  try {
-    const raw = localStorage.getItem(PREFS_KEY);
-    return (JSON.parse(raw ?? '{}') as { lineNumbers?: boolean }).lineNumbers === true;
-  } catch {
-    return false;
-  }
-}
-
-function writePref(patch: Record<string, unknown>): void {
-  try {
-    const raw = localStorage.getItem(PREFS_KEY);
-    const current = JSON.parse(raw ?? '{}') as Record<string, unknown>;
-    localStorage.setItem(PREFS_KEY, JSON.stringify({ ...current, ...patch }));
-  } catch {
-    // Private-mode / storage-disabled: a non-persisted session is fine.
-  }
 }
 
 function baseName(relativePath: string): string {
@@ -156,6 +98,8 @@ export class EditorService {
   private readonly tags = inject(TagService);
   private readonly vault = inject(VaultService);
   private readonly panes = inject(PaneService);
+  private readonly prefs = inject(EditorPrefsService);
+  private readonly commands = inject(EditorCommandsService);
 
   private readonly docs = signal<OpenDoc[]>([]);
 
@@ -218,14 +162,14 @@ export class EditorService {
 
   /**
    * Whether the editor shows a line-number gutter. App-wide, persisted per
-   * machine like the default view mode; the actual CodeMirror gutter is
-   * wired in step 5. Toggled from the meta bar and View -> "Line numbers".
+   * machine like the default view mode. Toggled from the meta bar and
+   * View -> "Line numbers". Owned by `EditorPrefsService`; re-exposed here so
+   * the meta bar / menu / `App` keep reading it off `EditorService`.
    */
-  readonly lineNumbers = signal(readLineNumbers());
+  readonly lineNumbers = this.prefs.lineNumbers;
 
   toggleLineNumbers(): void {
-    this.lineNumbers.update((v) => !v);
-    writePref({ lineNumbers: this.lineNumbers() });
+    this.prefs.toggleLineNumbers();
   }
 
   /** Word / character counts for the status bar, from the active buffer. */
@@ -260,81 +204,54 @@ export class EditorService {
   readonly activeIsDraft = computed<boolean>(() => this.activeDoc()?.existsOnDisk === false);
 
   /**
-   * Bumped by the quick-capture hotkey flow (via `DailyNoteService`) and by
-   * the entry drawer (via `EntryDraftService`) to ask the `Editor`
-   * component to start a fresh `## HH:mm` entry at the end of the current
-   * document -- with `text`, that text is inserted under the heading; with
-   * a `draft`, the composed drawer entry is appended and saved. An id
-   * counter rather than a raw payload signal: the component computes the
-   * actual edit against live CodeMirror state when it handles the request,
-   * which sidesteps effect-ordering with the doc-reload that a just-opened
-   * file triggers.
+   * The deferred editor-command bus (`EditorCommandsService`), re-exposed
+   * here so the ~5 callers (`Editor`, `DailyNoteService`, `EntryDraftService`,
+   * `AssistantService`, `TemplateLibraryService`) keep going through
+   * `EditorService`.
+   *
+   * `newEntryRequest` is bumped by the quick-capture hotkey flow and the
+   * entry drawer to ask the `Editor` component to start a fresh `## HH:mm`
+   * entry; `insertRequest` drops text at the caret (the assistant's
+   * insert-into-note arrow). Both are id counters, not payload signals: the
+   * component computes the real CodeMirror change against live state when it
+   * handles the request.
    */
-  readonly newEntryRequest = signal<NewEntryRequest>({ id: 0 });
+  readonly newEntryRequest = this.commands.newEntryRequest;
+  readonly insertRequest = this.commands.insertRequest;
 
   requestNewDailyEntry(text?: string): void {
-    this.newEntryRequest.update((r) => ({ id: r.id + 1, text }));
+    this.commands.requestNewDailyEntry(text);
   }
-
-  /**
-   * id + payload for "drop this text into the document editor at the
-   * caret" -- the note assistant's insert-into-note arrow. Same
-   * counter-not-payload pattern as `newEntryRequest`: the `Editor`
-   * component turns it into a CodeMirror change against live state,
-   * replacing the current selection.
-   */
-  readonly insertRequest = signal<{ id: number; text: string }>({ id: 0, text: '' });
 
   /** The assistant card's "insert into note" button. No-op with no open (text) document. */
   requestInsertText(text: string): void {
     if (text.trim() === '' || this.activePath() === null || this.activeKind() === 'image') {
       return;
     }
-    this.insertRequest.update((r) => ({ id: r.id + 1, text }));
+    this.commands.requestInsertText(text);
   }
 
   /** The entry drawer's "Add to document"; `pattern` is the active template. */
   requestEntryFromDraft(draft: EntryDraft, pattern: string): void {
-    this.newEntryRequest.update((r) => ({ id: r.id + 1, draft, pattern }));
+    this.commands.requestEntryFromDraft(draft, pattern);
   }
 
-  /**
-   * Pure: the CodeMirror change that appends `draft` to `currentText`
-   * using entry-template `pattern`. Lives here rather than in the
-   * component for the same reason `newDailyEntryEdit` does -- the
-   * component only dispatches it.
-   */
+  /** @see EditorCommandsService.entryDraftEdit */
   entryDraftEdit(
     currentText: string,
     draft: EntryDraft,
     pattern: string,
     now: Date = new Date(),
   ): { from: number; to: number; insert: string } {
-    return entryInsertion(currentText, draft, pattern, now);
+    return this.commands.entryDraftEdit(currentText, draft, pattern, now);
   }
 
-  /**
-   * Pure: given the editor's current text, the insertion needed to start
-   * a new daily entry heading (`## HH:mm`), or `null` when the text
-   * already ends with an empty entry heading -- pressing the hotkey twice
-   * without typing shouldn't stack blank sections. The `Editor` component
-   * applies the result to CodeMirror and leaves the buffer dirty (the
-   * user saves with Ctrl+S like any edit).
-   */
+  /** @see EditorCommandsService.newDailyEntryEdit */
   newDailyEntryEdit(
     currentText: string,
     now: Date = new Date(),
   ): { insert: string; at: number } | null {
-    if (/(^|\n)##[ \t]+\d{1,2}:\d{2}[ \t]*\n?\s*$/.test(currentText)) {
-      return null;
-    }
-
-    // Land the new heading after exactly one blank line.
-    let gap = '';
-    if (currentText.length > 0 && !currentText.endsWith('\n\n')) {
-      gap = currentText.endsWith('\n') ? '\n' : '\n\n';
-    }
-    return { insert: `${gap}## ${formatTime(now)}\n`, at: currentText.length };
+    return this.commands.newDailyEntryEdit(currentText, now);
   }
 
   private get api() {
@@ -593,7 +510,7 @@ export class EditorService {
       return;
     }
     this.patchDoc(doc.path, { viewMode: mode });
-    writePref({ defaultMode: mode });
+    this.prefs.setDefaultMode(mode);
   }
 
   /**
@@ -816,7 +733,7 @@ export class EditorService {
       // Markdown lands in whichever mode the user last chose (`⋯` menu),
       // Live Preview by default; a code file always opens in source -- Live
       // Preview only renders Markdown.
-      viewMode: isMarkdownPath(relativePath) ? readDefaultMode() : 'source',
+      viewMode: isMarkdownPath(relativePath) ? this.prefs.defaultMode() : 'source',
       eol,
       modifiedMs,
       existsOnDisk,

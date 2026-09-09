@@ -1,9 +1,7 @@
 import {
   app,
   BrowserWindow,
-  dialog,
   globalShortcut,
-  ipcMain,
   Menu,
   net,
   protocol,
@@ -12,37 +10,14 @@ import {
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { pathToFileURL } from 'node:url';
-import {
-  ActionContext,
-  ActionOutcome,
-  AppConfig,
-  AppInfo,
-  AskOutcome,
-  ChatMessage,
-  ChatThread,
-  CustomDictionary,
-  EditCommand,
-  IPC_CHANNELS,
-  LlmConnectionTest,
-  LlmDebugEntry,
-  LlmEndpoint,
-  McpStatus,
-  NoteSaveRequest,
-  NoteSaveResult,
-  SpellCheckResult,
-  SpellLanguage,
-  TagEntry,
-  TagSearchHit,
-  TagSearchQuery,
-  VaultFileContent,
-  VaultFileEntry,
-} from '../shared/ipc-api';
+import { IPC_CHANNELS } from '../shared/ipc-api';
 import { UI_SCALE_FACTORS } from '../shared/app-config';
 import { AppConfigStore } from './app-config';
 import { ChatStore } from './chat-store';
 import { DailyNoteManager } from './daily-note';
-import { installMainProcessLogging, logFromRenderer, watchWebContents } from './logger';
+import { installMainProcessLogging, watchWebContents } from './logger';
 import { ActionRunner, LlmDebugLog, LlmTaskRegistry, LmStudioClient } from './llm';
+import { registerIpcHandlers, McpWriteBridge } from './ipc';
 import { McpHttpTransport, McpServer, VaultTools } from './mcp';
 import { attachContextMenu, buildApplicationMenu } from './menu';
 import { NoteManager } from './note-manager';
@@ -141,372 +116,8 @@ function registerAssetProtocol(vaultManager: VaultManager): void {
   });
 }
 
-function registerIpcHandlers(
-  vaultManager: VaultManager,
-  dailyNotes: DailyNoteManager,
-  noteManager: NoteManager,
-  tagIndex: TagIndex,
-  taskIndex: TaskIndex,
-  appConfig: AppConfigStore,
-  lmStudio: LmStudioClient,
-  actionRunner: ActionRunner,
-  llmDebug: LlmDebugLog,
-  chatStore: ChatStore,
-  spellcheck: SpellcheckService,
-  mcpHttp: McpHttpTransport,
-): void {
-  ipcMain.handle(IPC_CHANNELS.getAppInfo, (): AppInfo => ({
-    appVersion: app.getVersion(),
-    electronVersion: process.versions.electron,
-    nodeVersion: process.versions.node,
-    chromeVersion: process.versions.chrome,
-    platform: process.platform,
-  }));
-
-  // Custom-titlebar window controls (the window is frameless, ADR-0019).
-  ipcMain.handle(IPC_CHANNELS.windowMinimize, (): void => mainWindow?.minimize());
-  ipcMain.handle(IPC_CHANNELS.windowToggleMaximize, (): void => {
-    if (!mainWindow) {
-      return;
-    }
-    if (mainWindow.isMaximized()) {
-      mainWindow.unmaximize();
-    } else {
-      mainWindow.maximize();
-    }
-  });
-  ipcMain.handle(IPC_CHANNELS.windowClose, (): void => mainWindow?.close());
-  ipcMain.handle(IPC_CHANNELS.windowIsMaximized, (): boolean => mainWindow?.isMaximized() ?? false);
-
-  // The HTML Edit menu (frameless titlebar, ADR-0019) drives the focused
-  // editable element through the same native editing commands the
-  // auto-hidden application menu already exposes via accelerators
-  // (electron/menu.ts). CodeMirror honours the resulting DOM events, so this
-  // needs nothing in the renderer beyond the menu click.
-  ipcMain.handle(IPC_CHANNELS.editExec, (_event, command: EditCommand): void => {
-    const wc = mainWindow?.webContents;
-    if (!wc) {
-      return;
-    }
-    ({
-      undo: () => wc.undo(),
-      redo: () => wc.redo(),
-      cut: () => wc.cut(),
-      copy: () => wc.copy(),
-      paste: () => wc.paste(),
-      selectAll: () => wc.selectAll(),
-    })[command]?.();
-  });
-
-  // App-wide UI scale (Settings -> Appearance "Base font size"). Browser-zoom
-  // the whole renderer -- resets on reload, so the renderer re-sends it from
-  // config on startup.
-  ipcMain.handle(IPC_CHANNELS.uiSetZoom, (_event, factor: number): void => {
-    const wc = mainWindow?.webContents;
-    if (wc && Number.isFinite(factor) && factor > 0) {
-      wc.setZoomFactor(factor);
-    }
-  });
-
-  // Ctrl/Cmd-click on a link in the editor. Same allowlist as the
-  // `setWindowOpenHandler` guard -- only web + mail, everything else is a
-  // no-op so a note can never drive `shell.openExternal` to e.g. `file:`.
-  ipcMain.handle(IPC_CHANNELS.openExternal, (_event, url: unknown): void => {
-    if (typeof url === 'string' && /^(https?:|mailto:)/i.test(url.trim())) {
-      void shell.openExternal(url.trim());
-    }
-  });
-
-  // Renderer -> log file (`<userData>/logs/drey.log`). The packaged build
-  // has no DevTools; this is how a field problem leaves a trace.
-  ipcMain.handle(
-    IPC_CHANNELS.appLog,
-    (_event, entry: { level?: string; message?: string; context?: unknown }): void => {
-      if (entry && typeof entry.message === 'string') {
-        logFromRenderer(String(entry.level ?? 'info'), entry.message, entry.context);
-      }
-    },
-  );
-
-  ipcMain.handle(IPC_CHANNELS.vaultGetActive, (): string | null =>
-    vaultManager.getActiveVaultPath(),
-  );
-  ipcMain.handle(IPC_CHANNELS.vaultSelect, async (): Promise<string | null> => {
-    const selected = await vaultManager.selectVault();
-    await tagIndex.rebuild();
-    await taskIndex.rebuild();
-    return selected;
-  });
-  ipcMain.handle(IPC_CHANNELS.vaultListFiles, (): Promise<VaultFileEntry[]> =>
-    vaultManager.listFiles(),
-  );
-  ipcMain.handle(
-    IPC_CHANNELS.vaultReadFile,
-    (_event, relativePath: string): Promise<VaultFileContent> =>
-      vaultManager.readFile(relativePath),
-  );
-  ipcMain.handle(
-    IPC_CHANNELS.vaultWriteFile,
-    (_event, relativePath: string, content: string): Promise<number> =>
-      vaultManager.writeFile(relativePath, content),
-  );
-  ipcMain.handle(
-    IPC_CHANNELS.vaultSaveAsset,
-    (_event, bytes: Uint8Array, ext: string, noteRelPath: string): Promise<string> =>
-      vaultManager.saveAsset(bytes, ext, noteRelPath),
-  );
-  ipcMain.handle(
-    IPC_CHANNELS.vaultSaveAssetFromUrl,
-    (_event, url: string, noteRelPath: string): Promise<string> =>
-      vaultManager.saveAssetFromUrl(url, noteRelPath),
-  );
-  ipcMain.handle(IPC_CHANNELS.vaultCreateFile, (_event, relativePath: string): Promise<string> =>
-    vaultManager.createFile(relativePath),
-  );
-  ipcMain.handle(
-    IPC_CHANNELS.vaultCreateDirectory,
-    (_event, relativePath: string): Promise<string> => vaultManager.createDirectory(relativePath),
-  );
-  ipcMain.handle(IPC_CHANNELS.vaultDelete, async (_event, relativePath: string): Promise<void> => {
-    await vaultManager.deleteEntry(relativePath);
-    // No file watcher -- the tag / task indexes would otherwise still list
-    // entries from the deleted file until the next full rebuild.
-    await tagIndex.rebuild();
-    await taskIndex.rebuild();
-  });
-  // Rename / copy / duplicate can move `.md` content in or out of the
-  // indexes' scope, so each rebuilds them (same reason as `vault:delete`).
-  ipcMain.handle(
-    IPC_CHANNELS.vaultRename,
-    async (_event, fromRel: string, toRel: string): Promise<string> => {
-      const next = await vaultManager.renameEntry(fromRel, toRel);
-      await tagIndex.rebuild();
-      await taskIndex.rebuild();
-      return next;
-    },
-  );
-  ipcMain.handle(
-    IPC_CHANNELS.vaultCopy,
-    async (_event, srcRel: string, destDirRel: string): Promise<string> => {
-      const next = await vaultManager.copyEntry(srcRel, destDirRel);
-      await tagIndex.rebuild();
-      await taskIndex.rebuild();
-      return next;
-    },
-  );
-  ipcMain.handle(
-    IPC_CHANNELS.vaultDuplicate,
-    async (_event, srcRel: string): Promise<string> => {
-      const next = await vaultManager.duplicateEntry(srcRel);
-      await tagIndex.rebuild();
-      await taskIndex.rebuild();
-      return next;
-    },
-  );
-  ipcMain.handle(
-    IPC_CHANNELS.vaultPickSavePath,
-    (_event, suggestedName: string): Promise<string | null> =>
-      vaultManager.pickSavePath(suggestedName),
-  );
-  ipcMain.handle(IPC_CHANNELS.dailyBuildContent, (_event, date: string): Promise<string> =>
-    dailyNotes.noteContentFor(date),
-  );
-  ipcMain.handle(
-    IPC_CHANNELS.noteSave,
-    (_event, request: NoteSaveRequest): Promise<NoteSaveResult> => noteManager.saveNote(request),
-  );
-  ipcMain.handle(IPC_CHANNELS.tagList, (): TagEntry[] => tagIndex.getVocabulary());
-  ipcMain.handle(IPC_CHANNELS.tagSearch, (_event, query: TagSearchQuery): TagSearchHit[] =>
-    tagIndex.search(query),
-  );
-  ipcMain.handle(IPC_CHANNELS.taskList, () => taskIndex.all());
-  ipcMain.handle(
-    IPC_CHANNELS.tagSummariseResults,
-    (_event, query: TagSearchQuery, taskId?: string): Promise<string> =>
-      actionRunner.summariseSearchResults(formatHitsForSummary(tagIndex.search(query)), taskId),
-  );
-  ipcMain.handle(
-    IPC_CHANNELS.tagSuggest,
-    (_event, entryText: string, taskId?: string): Promise<string[]> =>
-      actionRunner.suggestTags(
-        entryText,
-        tagIndex.getVocabulary().map((entry) => entry.tag),
-        taskId,
-      ),
-  );
-
-  ipcMain.handle(IPC_CHANNELS.configGet, (): AppConfig => appConfig.get());
-  ipcMain.handle(IPC_CHANNELS.configSet, async (_event, next: AppConfig): Promise<AppConfig> => {
-    const prevTemplatesDir = appConfig.get().templates.dir;
-    const stored = appConfig.set(next);
-    // The language or a dictionary path may have changed; the next check
-    // reloads rather than answering from a stale dictionary.
-    spellcheck.invalidate();
-    // The MCP block may have flipped -- open/close the HTTP endpoint to match.
-    await syncMcpHttpTransport(mcpHttp, appConfig);
-    // A changed templates folder shifts which files the tag / task indexes
-    // exclude. The renderer picks the new data up on its next refresh.
-    if (stored.templates.dir !== prevTemplatesDir) {
-      await tagIndex.rebuild();
-      await taskIndex.rebuild();
-    }
-    return stored;
-  });
-
-  ipcMain.handle(IPC_CHANNELS.mcpStatus, (): McpStatus => ({
-    enabled: appConfig.get().mcp.enabled,
-    httpListening: mcpHttp.running,
-    httpPort: mcpHttp.activePort,
-    stdioBridgePath: stdioBridgePath(),
-  }));
-  ipcMain.handle(IPC_CHANNELS.mcpWriteDecision, (_event, id: number, approved: boolean): void => {
-    pendingMcpWrites.get(id)?.(approved);
-  });
-  ipcMain.handle(IPC_CHANNELS.llmListModels, (_event, override?: LlmEndpoint): Promise<string[]> =>
-    lmStudio.listModels(override),
-  );
-  ipcMain.handle(
-    IPC_CHANNELS.llmTestConnection,
-    (_event, override?: LlmEndpoint): Promise<LlmConnectionTest> =>
-      lmStudio.testConnection(override),
-  );
-  ipcMain.handle(IPC_CHANNELS.llmDebugList, (): LlmDebugEntry[] => llmDebug.all());
-  ipcMain.handle(IPC_CHANNELS.llmDebugClear, (): void => llmDebug.clear());
-  ipcMain.handle(
-    IPC_CHANNELS.actionRun,
-    (_event, triggerId: string, context: ActionContext, taskId?: string): Promise<ActionOutcome> =>
-      actionRunner.run(triggerId, context, taskId),
-  );
-  ipcMain.handle(
-    IPC_CHANNELS.chatAsk,
-    (
-      _event,
-      context: ActionContext,
-      question: string,
-      taskId?: string,
-      history?: ChatMessage[],
-    ): Promise<AskOutcome> => actionRunner.ask(context, question, taskId, history),
-  );
-  ipcMain.handle(IPC_CHANNELS.llmCancel, (_event, taskId: string): boolean =>
-    actionRunner.cancel(taskId),
-  );
-
-  ipcMain.handle(IPC_CHANNELS.threadRead, (_event, notePath: string): Promise<ChatThread> =>
-    chatStore.read(notePath),
-  );
-  ipcMain.handle(IPC_CHANNELS.threadWrite, (_event, thread: ChatThread): Promise<void> =>
-    chatStore.write(thread),
-  );
-  ipcMain.handle(
-    IPC_CHANNELS.threadSummarize,
-    (_event, context: ActionContext, taskId?: string): Promise<string> =>
-      actionRunner.summarize(context, taskId),
-  );
-
-  ipcMain.handle(IPC_CHANNELS.spellCheck, (_event, words: string[]): Promise<SpellCheckResult> =>
-    spellcheck.check(words),
-  );
-  ipcMain.handle(IPC_CHANNELS.spellLanguages, (): Promise<SpellLanguage[]> =>
-    spellcheck.listLanguages(),
-  );
-  ipcMain.handle(IPC_CHANNELS.spellAddDictionary, (): Promise<CustomDictionary | null> =>
-    pickDictionary(),
-  );
-  ipcMain.handle(
-    IPC_CHANNELS.spellAddWord,
-    (_event, word: string, target: 'language' | 'personal'): AppConfig => {
-      const trimmed = word.trim();
-      const current = appConfig.get();
-      const sc = current.spellcheck;
-      const personalWords = [...sc.personalWords];
-      const languageWords: Record<string, string[]> = {};
-      for (const [id, list] of Object.entries(sc.languageWords)) {
-        languageWords[id] = [...list];
-      }
-      if (trimmed !== '') {
-        if (target === 'personal') {
-          if (!personalWords.includes(trimmed)) {
-            personalWords.push(trimmed);
-          }
-        } else {
-          const list = languageWords[sc.language] ?? [];
-          if (!list.includes(trimmed)) {
-            languageWords[sc.language] = [...list, trimmed];
-          }
-        }
-      }
-      const stored = appConfig.set({
-        ...current,
-        spellcheck: { ...sc, personalWords, languageWords },
-      });
-      // This path doesn't go through the `config:set` handler, so reload
-      // the checker here.
-      spellcheck.invalidate();
-      return stored;
-    },
-  );
-}
-
-/**
- * Flattens search hits into the user message for the result summary: one
- * `## <heading> (<path>)` block per hit followed by its snippet, capped so
- * a very broad search does not blow the model's context.
- */
-function formatHitsForSummary(hits: readonly TagSearchHit[]): string {
-  const MAX_HITS = 40;
-  const MAX_CHARS = 8000;
-  const blocks = hits
-    .slice(0, MAX_HITS)
-    .map((hit) => `## ${hit.heading} (${hit.path})\n${hit.snippet}`);
-  let out = blocks.join('\n\n');
-  if (out.length > MAX_CHARS) {
-    out = `${out.slice(0, MAX_CHARS)}\n…`;
-  }
-  return out;
-}
-
-/**
- * Asks for a Hunspell `.dic` and pairs it with the `.aff` of the same name
- * beside it -- the layout every Hunspell distribution uses, so one pick is
- * enough and the user is not walked through two dialogs. The language id
- * is the file's base name (`fr_FR.dic` -> `fr_FR`), which is also what
- * such files are conventionally named after.
- */
-async function pickDictionary(): Promise<CustomDictionary | null> {
-  const result = await dialog.showOpenDialog({
-    title: 'Select a Hunspell dictionary (.dic)',
-    properties: ['openFile'],
-    filters: [{ name: 'Hunspell dictionary', extensions: ['dic'] }],
-  });
-  if (result.canceled || result.filePaths.length === 0) {
-    return null;
-  }
-  const dicPath = result.filePaths[0];
-  const affPath = `${dicPath.slice(0, -'.dic'.length)}.aff`;
-  if (!fs.existsSync(affPath)) {
-    // Without the affix file nspell cannot build a checker at all, so
-    // this is refused here rather than stored as a broken entry.
-    await dialog.showMessageBox({
-      type: 'warning',
-      message: 'No matching .aff file found',
-      detail: `Expected ${path.basename(affPath)} in the same folder as the .dic file.`,
-    });
-    return null;
-  }
-  const id = path.basename(dicPath, '.dic');
-  return { id, label: id, affPath, dicPath };
-}
-
 let mainWindow: BrowserWindow | null = null;
 
-/**
- * Absolute path to the MCP stdio bridge script an external client
- * (`node <path>`) runs. Packaged, `__dirname` is inside `app.asar` but the
- * script was `asarUnpack`'d, and a plain external Node does not redirect
- * `app.asar` -> `app.asar.unpacked` the way Electron does -- so point at
- * the real file. `$`-anchored so a path that merely contains "app.asar"
- * earlier is not corrupted.
- */
 /**
  * The BrowserWindow / taskbar icon. Packaged, it is an `extraResources`
  * copy under `process.resourcesPath`; in dev it is `build/icon.ico` at the
@@ -517,6 +128,14 @@ const windowIconPath = app.isPackaged
   ? path.join(process.resourcesPath, 'icon.ico')
   : path.join(__dirname, '..', '..', 'build', 'icon.ico');
 
+/**
+ * Absolute path to the MCP stdio bridge script an external client
+ * (`node <path>`) runs. Packaged, `__dirname` is inside `app.asar` but the
+ * script was `asarUnpack`'d, and a plain external Node does not redirect
+ * `app.asar` -> `app.asar.unpacked` the way Electron does -- so point at
+ * the real file. `$`-anchored so a path that merely contains "app.asar"
+ * earlier is not corrupted.
+ */
 function stdioBridgePath(): string {
   const rel = ['dist-electron', 'electron', 'mcp', 'stdio-bridge.js'];
   if (app.isPackaged) {
@@ -525,41 +144,15 @@ function stdioBridgePath(): string {
   return path.join(__dirname, 'mcp', 'stdio-bridge.js');
 }
 
-/**
- * In-flight `vault_write` confirmations from MCP clients, keyed by the id
- * sent to the renderer. Resolved by the `mcp:write-decision` IPC reply; a
- * missing renderer / a timeout defaults to a reject (never write
- * unattended).
- */
-const pendingMcpWrites = new Map<number, (approved: boolean) => void>();
-let mcpWriteSeq = 0;
 /** Module-scope handle so the `will-quit` listener can close the socket. */
 let mcpHttpForShutdown: McpHttpTransport | null = null;
-const MCP_WRITE_CONFIRM_TIMEOUT_MS = 120_000;
 
-function requestMcpWriteConfirmation(request: {
-  path: string;
-  before: string;
-  after: string;
-  mode: 'overwrite' | 'append';
-}): Promise<boolean> {
-  const wc = mainWindow?.webContents;
-  if (!wc) {
-    return Promise.resolve(false);
-  }
-  const id = ++mcpWriteSeq;
-  return new Promise<boolean>((resolve) => {
-    const done = (approved: boolean): void => {
-      if (pendingMcpWrites.delete(id)) {
-        clearTimeout(timer);
-        resolve(approved);
-      }
-    };
-    const timer = setTimeout(() => done(false), MCP_WRITE_CONFIRM_TIMEOUT_MS);
-    pendingMcpWrites.set(id, done);
-    wc.send(IPC_CHANNELS.mcpWriteRequest, { id, ...request });
-  });
-}
+/**
+ * The main<->renderer bridge for confirming an MCP `vault_write` (ADR-0011 /
+ * ADR-0021). Backs both the `VaultTools` confirmation callback and the
+ * `mcp:write-decision` IPC handler.
+ */
+const mcpWriteBridge = new McpWriteBridge(() => mainWindow);
 
 /** Starts / stops the localhost MCP HTTP endpoint to match the current config. */
 async function syncMcpHttpTransport(
@@ -759,7 +352,7 @@ if (!app.requestSingleInstanceLock()) {
       vaultManager,
       tagIndex,
       () => appConfig.get(),
-      requestMcpWriteConfirmation,
+      (request) => mcpWriteBridge.requestConfirmation(request),
       () => mainWindow?.webContents.send(IPC_CHANNELS.mcpVaultChanged),
     );
     const actionRunner = new ActionRunner(appConfig, lmStudio, llmTasks, vaultTools);
@@ -781,7 +374,8 @@ if (!app.requestSingleInstanceLock()) {
 
     registerAppProtocol();
     registerAssetProtocol(vaultManager);
-    registerIpcHandlers(
+    registerIpcHandlers({
+      getMainWindow: () => mainWindow,
       vaultManager,
       dailyNotes,
       noteManager,
@@ -794,7 +388,10 @@ if (!app.requestSingleInstanceLock()) {
       chatStore,
       spellcheck,
       mcpHttp,
-    );
+      mcpWriteBridge,
+      stdioBridgePath,
+      syncMcpHttp: () => syncMcpHttpTransport(mcpHttp, appConfig),
+    });
     // The File/Edit/Selection/View menus are drawn by the renderer titlebar
     // now (ADR-0019). Keep a native menu only on macOS, where the menu bar
     // belongs to the system and its accelerators are expected there.

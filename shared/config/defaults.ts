@@ -1,0 +1,133 @@
+/**
+ * The factory built-ins and `DEFAULT_APP_CONFIG` -- the value every missing
+ * key in a stored config falls back to. Split out of `schema.ts` (shapes)
+ * and `normalize.ts` (validation); re-exported from `shared/app-config.ts`.
+ */
+import {
+  ActionTemplate,
+  AppConfig,
+  AppearanceConfig,
+  BUILTIN_ENTRY_TEMPLATE_IDS,
+  BUILTIN_TEMPLATE_IDS,
+  CLASSIC_ENTRY_PATTERN,
+  DEFAULT_EDITOR_FONT_FAMILY,
+  DEFAULT_THEME,
+  DailyConfig,
+  EntryTemplate,
+  LM_STUDIO_DEFAULT_BASE_URL,
+  McpConfig,
+  NOTE_SUMMARY_PROMPT,
+  RULED_ENTRY_PATTERN,
+  SEARCH_SUMMARY_PROMPT,
+  AUTOTAG_PROMPT,
+  TemplatesConfig,
+  THEME_ACCENT,
+  WidgetsConfig,
+} from './schema';
+
+export const DEFAULT_DAILY_CONFIG: DailyConfig = { openOnStartup: true };
+
+export const DEFAULT_WIDGETS_CONFIG: WidgetsConfig = { disabled: [] };
+
+export const DEFAULT_TEMPLATES_CONFIG: TemplatesConfig = { dir: 'templates' };
+
+export const DEFAULT_APPEARANCE: AppearanceConfig = {
+  uiScale: 'default',
+  accent: THEME_ACCENT,
+  theme: DEFAULT_THEME,
+};
+
+export const DEFAULT_MCP_CONFIG: McpConfig = {
+  enabled: false,
+  httpEnabled: false,
+  httpPort: 4319,
+  yolo: false,
+};
+
+export function classicEntryTemplate(): EntryTemplate {
+  return {
+    id: BUILTIN_ENTRY_TEMPLATE_IDS.classic,
+    name: 'Classic',
+    pattern: CLASSIC_ENTRY_PATTERN,
+    builtin: 'classic',
+  };
+}
+
+export function ruledEntryTemplate(): EntryTemplate {
+  return {
+    id: BUILTIN_ENTRY_TEMPLATE_IDS.ruled,
+    name: 'Ruled',
+    pattern: RULED_ENTRY_PATTERN,
+    builtin: 'ruled',
+  };
+}
+
+export function noteSummaryTemplate(): ActionTemplate {
+  return {
+    id: BUILTIN_TEMPLATE_IDS['note-summary'],
+    name: 'Summarise note',
+    prompt: NOTE_SUMMARY_PROMPT,
+    // The result is a panel card, never a document edit -- `resultKind`
+    // is irrelevant for it, but the field is not optional; `'document'`
+    // is the honest value should it ever be run as a plain action.
+    resultKind: 'document',
+    builtin: 'note-summary',
+  };
+}
+
+export function searchSummaryTemplate(): ActionTemplate {
+  return {
+    id: BUILTIN_TEMPLATE_IDS['search-summary'],
+    name: 'Summarise search results',
+    prompt: SEARCH_SUMMARY_PROMPT,
+    resultKind: 'document',
+    builtin: 'search-summary',
+  };
+}
+
+export function autotagTemplate(): ActionTemplate {
+  return {
+    id: BUILTIN_TEMPLATE_IDS.autotag,
+    name: 'Autotag',
+    prompt: AUTOTAG_PROMPT,
+    resultKind: 'localized',
+    builtin: 'autotag',
+  };
+}
+
+export const DEFAULT_APP_CONFIG: AppConfig = {
+  version: 1,
+  llm: {
+    enabled: false,
+    baseUrl: LM_STUDIO_DEFAULT_BASE_URL,
+    apiKey: null,
+    model: null,
+  },
+  assistant: {
+    autoSummaryDefault: true,
+  },
+  spellcheck: {
+    enabled: true,
+    language: 'de',
+    dictionaries: [],
+    personalWords: [],
+    languageWords: {},
+  },
+  editor: {
+    fontScale: 1,
+    fontFamily: DEFAULT_EDITOR_FONT_FAMILY,
+  },
+  appearance: { ...DEFAULT_APPEARANCE },
+  mcp: { ...DEFAULT_MCP_CONFIG },
+  entry: {
+    templates: [classicEntryTemplate(), ruledEntryTemplate()],
+    activeId: BUILTIN_ENTRY_TEMPLATE_IDS.classic,
+  },
+  daily: { ...DEFAULT_DAILY_CONFIG },
+  templates: { ...DEFAULT_TEMPLATES_CONFIG },
+  widgets: { disabled: [] },
+  actions: {
+    templates: [noteSummaryTemplate(), searchSummaryTemplate(), autotagTemplate()],
+    triggers: [],
+  },
+};
