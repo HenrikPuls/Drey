@@ -11,9 +11,9 @@ import {
   CalendarService,
   MONTH_SHORT_NAMES,
   WEEKDAY_INITIALS,
-} from '../../services/calendar.service';
-import { EditorService } from '../../services/editor.service';
-import { Icon } from '../../icons/icon';
+} from './calendar.service';
+import { EditorService } from '../services/editor.service';
+import { Icon } from '../icons/icon';
 
 /**
  * Sidebar mini-calendar. View state (shown month, selected day) lives in

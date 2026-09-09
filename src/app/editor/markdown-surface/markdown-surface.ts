@@ -23,7 +23,7 @@ import { EditTargetService } from '../../services/edit-target.service';
 import { EditorZoomService } from '../../services/editor-zoom.service';
 import { ImageLightboxService } from '../../image-viewer';
 import { TagService } from '../../services/tag.service';
-import { VaultService } from '../../services/vault.service';
+import { VaultService } from '../../vault';
 import { ThemeService } from '../../services/theme.service';
 import { ThemeCatalogEntry } from '../themes/theme-catalog';
 import { dreyEditorLook, editorStructure } from '../editor-theme';

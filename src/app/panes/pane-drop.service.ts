@@ -1,6 +1,6 @@
 import { Injectable, inject } from '@angular/core';
 import { EditorService } from '../services/editor.service';
-import { VaultService } from '../services/vault.service';
+import { VaultService } from '../vault';
 import { PaneService } from './pane.service';
 
 /**

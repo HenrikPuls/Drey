@@ -1,6 +1,6 @@
 import { TestBed } from '@angular/core/testing';
 import { CalendarService } from './calendar.service';
-import { VaultService } from './vault.service';
+import { VaultService } from '../vault';
 import { DreyApi, VaultFileEntry } from '../../../shared/ipc-api';
 
 describe('CalendarService', () => {

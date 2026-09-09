@@ -10,7 +10,7 @@ import { Command, KeybindingService } from '../keybindings';
 import { EditorService, OpenDoc } from '../services/editor.service';
 import { EditTargetService } from '../services/edit-target.service';
 import { TagService } from '../services/tag.service';
-import { VaultService } from '../services/vault.service';
+import { VaultService } from '../vault';
 
 /** A text selection in the focused editor surface. */
 export interface WidgetSelection {

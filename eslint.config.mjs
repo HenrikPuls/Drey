@@ -23,13 +23,26 @@ const sharedModulePatterns = MODULES.map((mod) => ({
 /**
  * Reaching into a sibling `<mod>/` folder by a relative path. Safe to apply
  * inside `electron/` and `shared/` (no innocent `llm/` or `tags/` subfolder
- * exists there); for `src/` `tags/` and `keybindings/` are feature modules,
- * so `llm/` is left out (`src/app/settings/llm/` is a plain folder).
+ * exists there).
  */
 const relativeModulePatterns = (mods) =>
   mods.map((mod) => ({
     group: [`./${mod}/*`, `../${mod}/*`, `../../${mod}/*`, `!**/${mod}/index`],
     message: `Import from the module barrel (\`./${mod}\`), not a file inside it. The barrel is the module's only public surface.`,
+  }));
+
+/**
+ * Same, minus the `./${mod}/*` form. For a renderer feature module whose
+ * name also exists as a `src/app/settings/<mod>/` *plain* folder (`llm`,
+ * `assistant`, `entry`): from `src/app/settings/settings.ts` a
+ * `./​<mod>/settings-<mod>` import is that settings folder, not the feature
+ * module, and must not be flagged. Deep imports from further out
+ * (`../<mod>/x`, `../../<mod>/x`) are still caught.
+ */
+const relativeModulePatternsDeepOnly = (mods) =>
+  mods.map((mod) => ({
+    group: [`../${mod}/*`, `../../${mod}/*`, `!**/${mod}/index`],
+    message: `Import from the module barrel (\`../${mod}\`), not a file inside it. The barrel is the module's only public surface.`,
   }));
 
 export default tseslint.config(
@@ -76,7 +89,10 @@ export default tseslint.config(
               'dock',
               'titlebar',
               'widgets',
+              'calendar',
+              'vault',
             ]),
+            ...relativeModulePatternsDeepOnly(['llm', 'assistant', 'entry']),
           ],
         },
       ],
@@ -98,6 +114,11 @@ export default tseslint.config(
       'src/app/dock/**/*.ts',
       'src/app/titlebar/**/*.ts',
       'src/app/widgets/**/*.ts',
+      'src/app/llm/**/*.ts',
+      'src/app/assistant/**/*.ts',
+      'src/app/entry/**/*.ts',
+      'src/app/calendar/**/*.ts',
+      'src/app/vault/**/*.ts',
     ],
     rules: {
       'no-restricted-imports': 'off',

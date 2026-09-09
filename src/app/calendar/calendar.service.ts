@@ -2,7 +2,7 @@ import { Injectable, computed, inject, signal } from '@angular/core';
 import { dailyDateFromPath } from '../../../shared/daily';
 import { formatDate } from '../../../shared/timestamp';
 import { VaultFileEntry } from '../../../shared/ipc-api';
-import { VaultService } from './vault.service';
+import { VaultService } from '../vault';
 
 /** One cell in the mini-calendar grid. */
 export interface CalendarDay {

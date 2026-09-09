@@ -1,6 +1,6 @@
 import { TestBed } from '@angular/core/testing';
 import { DreyApi } from '../../../shared/ipc-api';
-import { EditorService } from './editor.service';
+import { EditorService } from '../services/editor.service';
 import { EntryDraftService } from './entry-draft.service';
 
 describe('EntryDraftService', () => {

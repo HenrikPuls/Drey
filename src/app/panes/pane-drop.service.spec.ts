@@ -1,7 +1,7 @@
 import { TestBed } from '@angular/core/testing';
 import { vi } from 'vitest';
 import { EditorService } from '../services/editor.service';
-import { VaultService } from '../services/vault.service';
+import { VaultService } from '../vault';
 import { PaneDropService } from './pane-drop.service';
 import { PaneService } from './pane.service';
 

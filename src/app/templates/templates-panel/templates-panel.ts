@@ -3,7 +3,7 @@ import { NgTemplateOutlet } from '@angular/common';
 import { Icon } from '../../icons/icon';
 import { EditorService } from '../../services/editor.service';
 import { SettingsService } from '../../services/settings.service';
-import { VaultService } from '../../services/vault.service';
+import { VaultService } from '../../vault';
 import { TEMPLATE_DT_TYPE } from '../../editor/image-paste';
 import { TemplateCategory, TemplateEntry, TemplateLibraryService } from '../template-library.service';
 

@@ -3,10 +3,10 @@ import { ActionContext, ChatCard, ChatThread } from '../../../shared/ipc-api';
 import { emptyThread, hasSummary, historyForAsk } from '../../../shared/chat-thread';
 import { ipcErrorMessage } from '../../../shared/ipc-error';
 import { formatDateTime } from '../../../shared/timestamp';
-import { ConfirmationService } from './confirmation.service';
-import { EditorService } from './editor.service';
-import { LlmTaskService } from './llm-task.service';
-import { SettingsService } from './settings.service';
+import { ConfirmationService } from '../llm';
+import { EditorService } from '../services/editor.service';
+import { LlmTaskService } from '../llm';
+import { SettingsService } from '../services/settings.service';
 
 /** The text a cancelled generation reports. */
 const CANCELLED = 'Generation cancelled.';

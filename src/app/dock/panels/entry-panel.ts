@@ -1,5 +1,5 @@
 import { ChangeDetectionStrategy, Component } from '@angular/core';
-import { EntryDrawer } from '../../entry-drawer/entry-drawer';
+import { EntryDrawer } from '../../entry/entry-drawer';
 
 /**
  * "Add entry" dock panel -- hosts the capture drawer. Its default home is

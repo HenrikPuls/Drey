@@ -10,7 +10,7 @@ import {
   viewChild,
 } from '@angular/core';
 import { EditorView } from '@codemirror/view';
-import { ActionsService } from '../services/actions.service';
+import { ActionsService } from '../llm';
 import { CLASSIC_ENTRY_PATTERN, editorFontFamilyStacks } from '../../../shared/app-config';
 import { EditorService, EditorViewMode, NewEntryRequest } from '../services/editor.service';
 import { EditorZoomService } from '../services/editor-zoom.service';

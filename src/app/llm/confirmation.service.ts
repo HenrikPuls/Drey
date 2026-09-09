@@ -1,6 +1,6 @@
 import { Injectable, inject, signal } from '@angular/core';
 import { ActionResultKind } from '../../../shared/app-config';
-import { SettingsService } from './settings.service';
+import { SettingsService } from '../services/settings.service';
 
 /**
  * One change awaiting the user's yes/no, for the shared confirmation

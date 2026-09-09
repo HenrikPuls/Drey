@@ -3,7 +3,9 @@
 ## Status
 
 Accepted — introduced with the path-based-tags restructure (milestones
-M0.1–M0.3), extended with the keybinding module.
+M0.1–M0.3), extended with the keybinding module, then with the
+`dock` / `titlebar` / `widgets` modules, then with the renderer service
+reorg (see "Later change: renderer feature modules" below).
 
 ## Context
 
@@ -81,3 +83,49 @@ decision.
   a broader pass can be added later without disturbing the boundary rule.
 - A little duplication at the barrel (re-exporting a component for one
   outside importer) is accepted as the price of the seam.
+
+## Later change: renderer feature modules (service reorg)
+
+`src/app/services/` had become a 21-file flat folder mixing genuinely
+app-wide singletons with feature clusters. The convention above is now
+applied to the renderer for those clusters:
+
+| Module               | Holds                                                                 |
+| -------------------- | -------------------------------------------------------------------- |
+| `src/app/llm/`       | `ActionsService`, `LlmTaskService`, `LlmDebugService`, `ConfirmationService` (renderer half of the LLM / Actions feature, mirrors `electron/llm/` + `shared/llm/`) |
+| `src/app/assistant/` | `AssistantService` + the `NoteAssistant` panel body (ADR-0012)       |
+| `src/app/entry/`     | `EntryDraftService` + the `EntryDrawer` capture surface (ADR-0013)   |
+| `src/app/calendar/`  | `CalendarService` + the `Calendar` grid                             |
+| `src/app/vault/`     | `VaultService`, `DailyNoteService`                                  |
+
+`src/app/sidebar/` — orphaned when `SidebarComponent` was removed
+([ADR-0019](0019-movable-dock-panels-and-layout-state.md)) — is deleted:
+its `calendar/` folded into `src/app/calendar/`, its `open-windows/` moved
+to a plain `src/app/windows/` folder.
+
+What **stays** in `src/app/services/` is the app-wide infrastructure that
+belongs to no one feature: `settings`, `log`, `drop-guard`,
+`input-recovery`, `theme`, `appearance`, `about`, `layout`, `mcp-bridge`,
+`editor-zoom`, `edit-target`, `spellcheck`, `tag`, and the `editor`
+facade itself.
+
+Two deviations from the "barrel is the only public surface" rule, both
+forced by the string-matching nature of the ESLint check:
+
+- **Barrels are service-only.** A panel component (`NoteAssistant`,
+  `Calendar`, `EntryDrawer`, `OpenWindows`) is deep-imported by its one
+  dock-panel wrapper in `src/app/dock/panels/` (which is already
+  boundary-exempt) rather than re-exported. Re-exporting the component
+  pulls its whole import chain (`MarkdownSurface`, `AutotagButton`, …)
+  into every service-only consumer of the barrel and creates an Angular
+  `NG0919` runtime cycle. `TagService` similarly stays in
+  `src/app/services/` rather than moving into the component-bearing
+  `src/app/tags/` module, so leaf editor code can use it without dragging
+  the tag panels in.
+- **`llm` / `assistant` / `entry` are guarded "deep-only".**
+  `src/app/settings/` has a plain sub-folder of each of those names
+  (`settings/llm/`, …), so a `./llm/settings-llm` import from
+  `settings.ts` is that folder, not the feature module. The ESLint
+  `no-restricted-imports` group for these three drops the `./<mod>/*`
+  form and keeps only `../<mod>/*` / `../../<mod>/*`
+  (`relativeModulePatternsDeepOnly` in `eslint.config.mjs`).

@@ -2,9 +2,9 @@ import { Injectable, inject } from '@angular/core';
 import { McpWriteRequest } from '../../../shared/ipc-api';
 import { pickPreviewStyle } from '../../../shared/text-diff';
 import { TaskService } from '../tasks';
-import { ConfirmationService } from './confirmation.service';
+import { ConfirmationService } from '../llm';
 import { TagService } from './tag.service';
-import { VaultService } from './vault.service';
+import { VaultService } from '../vault';
 
 /**
  * Renderer side of the vault MCP server (ADR-0021):

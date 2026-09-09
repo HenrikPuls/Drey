@@ -7,7 +7,7 @@ import {
   viewChild,
 } from '@angular/core';
 import { MarkdownSurface } from '../editor/markdown-surface/markdown-surface';
-import { EntryDraftService } from '../services/entry-draft.service';
+import { EntryDraftService } from './entry-draft.service';
 import { EditorService } from '../services/editor.service';
 import { SpellcheckService } from '../services/spellcheck.service';
 import { AutotagButton } from '../tags';

@@ -1,7 +1,7 @@
 import { Injectable, effect, inject, signal } from '@angular/core';
 import { ActionContext, ActionOutcome } from '../../../shared/ipc-api';
 import { ConfirmationService } from './confirmation.service';
-import { EditorService } from './editor.service';
+import { EditorService } from '../services/editor.service';
 
 /**
  * Orchestrates running an Action: call `runAction` in the main process,

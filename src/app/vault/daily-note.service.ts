@@ -1,5 +1,5 @@
 import { Injectable, inject } from '@angular/core';
-import { EditorService } from './editor.service';
+import { EditorService } from '../services/editor.service';
 
 /**
  * Bridges the quick-capture hotkey to the editor. The main process

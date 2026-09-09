@@ -1,6 +1,6 @@
 import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
 import { DiffRow, lineDiff } from '../../../shared/text-diff';
-import { ConfirmationService } from '../services/confirmation.service';
+import { ConfirmationService } from '../llm';
 
 /** A collapsed run of unchanged lines between edits (localized preview). */
 interface DiffGap {

@@ -1,8 +1,8 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { Calendar } from './calendar';
-import { CalendarService } from '../../services/calendar.service';
-import { EditorService } from '../../services/editor.service';
-import { DreyApi } from '../../../../shared/ipc-api';
+import { CalendarService } from './calendar.service';
+import { EditorService } from '../services/editor.service';
+import { DreyApi } from '../../../shared/ipc-api';
 
 describe('Calendar', () => {
   let fixture: ComponentFixture<Calendar>;

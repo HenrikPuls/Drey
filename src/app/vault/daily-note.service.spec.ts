@@ -1,6 +1,6 @@
 import { TestBed } from '@angular/core/testing';
 import { DailyNoteService } from './daily-note.service';
-import { EditorService } from './editor.service';
+import { EditorService } from '../services/editor.service';
 import { DreyApi } from '../../../shared/ipc-api';
 
 describe('DailyNoteService', () => {

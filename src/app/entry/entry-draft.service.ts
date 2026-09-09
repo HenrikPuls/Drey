@@ -7,8 +7,8 @@ import {
 } from '../../../shared/entry-compose';
 import { formatDate } from '../../../shared/timestamp';
 import { TAG_NAME_SOURCE } from '../../../shared/tags';
-import { EditorService } from './editor.service';
-import { SettingsService } from './settings.service';
+import { EditorService } from '../services/editor.service';
+import { SettingsService } from '../services/settings.service';
 
 /**
  * `#` + the canonical tag-name grammar (shared/tags), global. The drawer

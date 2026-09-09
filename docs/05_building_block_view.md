@@ -205,8 +205,24 @@ src/                Angular renderer (standalone components, esbuild via Angular
     app.ts            Root component -- two-column shell; tab bar + editor + chat bar
     icons/
       icon.ts          <app-icon name>: vendored Lucide path data, no dependency
-    services/
-      vault.service.ts     Wraps dreyApi's vault methods as signals; no logic beyond that
+    llm/               Feature module (ADR-0016 "renderer feature modules"): the
+                         renderer half of LLM / Actions -- ActionsService,
+                         LlmTaskService, LlmDebugService, ConfirmationService.
+                         Service-only index.ts barrel.
+    assistant/         Feature module: AssistantService + the NoteAssistant panel
+                         body (ADR-0012). Barrel exports the service only; the
+                         component is deep-imported by AssistantPanel.
+    entry/             Feature module: EntryDraftService + the EntryDrawer capture
+                         surface (ADR-0013). Same service-only barrel rule.
+    calendar/          Feature module: CalendarService + the Calendar grid.
+                         (Formerly src/app/sidebar/calendar/.)
+    vault/             Feature module: VaultService + DailyNoteService.
+    windows/           OpenWindows panel body -- plain folder (formerly
+                         src/app/sidebar/open-windows/; SidebarComponent is gone,
+                         ADR-0019).
+    services/          App-wide singletons that belong to no one feature (the
+                         feature clusters moved into the modules above, ADR-0016):
+      vault.service.ts     -> src/app/vault/ (see above)
       editor.service.ts    Multi-document state: openDocs[] + activePath, with computed
                             openPath/savedContent/bufferContent/viewMode/isDirty over the
                             active doc; openFile/openDailyNote/closeTab; unsaved drafts;
@@ -356,21 +372,22 @@ src/                Angular renderer (standalone components, esbuild via Angular
                          active vault root to a relative path, focuses the pane, calls
                          EditorService.openFile. Out-of-vault OS files are left to
                          DropGuardService (ADR-0027 / ADR-0028 amendment).
-    entry-drawer/      EntryDrawer: the bottom capture drawer -- TOPIC field first,
-                         then Tags / People / Meetings chip rows, then a
-                         MarkdownSurface (compact, multi-line, inline spellcheck).
-                         Empty TOPIC raises an inline confirmation before appending
-    note-assistant/    NoteAssistant: the right-hand panel -- "Automatische
-                         Zusammenfassung" switch, the card thread (summary /
-                         question / answer) and the question composer (the
-                         shared MarkdownSurface, compact, inline spellcheck)
-    sidebar/
-      sidebar.ts        Calendar + recursive file tree (collapsible folders) +
-                         open-windows list + settings entry; a file click opens it;
-                         right-click -> in-renderer menu -> inline name input ->
-                         VaultService.createEntry()
-      calendar/         Calendar: mini-calendar grid; day click -> EditorService.openDailyNote
-      open-windows/     OpenWindows: list mirroring the open editor tabs
+    entry/             Feature module (ADR-0016). entry-drawer.ts = EntryDrawer, the
+                         bottom capture drawer -- TOPIC field first, then a Tags chip
+                         row + Autotag, then a MarkdownSurface (compact, inline
+                         spellcheck); entry-draft.service.ts = EntryDraftService.
+                         (Formerly src/app/entry-drawer/ + services/.)
+    assistant/         Feature module. note-assistant.ts = NoteAssistant, the
+                         right-hand panel -- auto-summary switch, the card thread
+                         (summary / question / answer) and the composer;
+                         assistant.service.ts = AssistantService.
+                         (Formerly src/app/note-assistant/ + services/.)
+    calendar/          Feature module. calendar.ts = Calendar (mini-calendar grid;
+                         day click -> EditorService.openDailyNote);
+                         calendar.service.ts = CalendarService.
+    windows/           open-windows.ts = OpenWindows: list mirroring the open editor
+                         tabs. Plain folder. (src/app/sidebar/ is deleted --
+                         SidebarComponent went with ADR-0019.)
     editor/
       editor.ts         One CodeMirror 6 EditorView (document swapped per active tab);
                          Live Preview extensions swapped in/out via a Compartment

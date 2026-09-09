@@ -15,7 +15,7 @@ import { PaneService } from '../panes';
 import { EditorService } from '../services/editor.service';
 import { EditTargetService } from '../services/edit-target.service';
 import { SettingsService } from '../services/settings.service';
-import { VaultService } from '../services/vault.service';
+import { VaultService } from '../vault';
 import { duplicateSelection, toggleTaskDone } from '../editor/markdown-commands';
 import type { EditCommand } from '../../../shared/ipc-api';
 

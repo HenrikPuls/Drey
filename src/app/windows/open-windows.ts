@@ -1,6 +1,6 @@
 import { ChangeDetectionStrategy, Component, inject } from '@angular/core';
-import { EditorService } from '../../services/editor.service';
-import { Icon } from '../../icons/icon';
+import { EditorService } from '../services/editor.service';
+import { Icon } from '../icons/icon';
 
 /**
  * The sidebar's "open windows" list -- currently a mirror of the open

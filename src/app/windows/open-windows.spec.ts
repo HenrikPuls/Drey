@@ -1,7 +1,7 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { OpenWindows } from './open-windows';
-import { EditorService } from '../../services/editor.service';
-import { DreyApi } from '../../../../shared/ipc-api';
+import { EditorService } from '../services/editor.service';
+import { DreyApi } from '../../../shared/ipc-api';
 
 describe('OpenWindows', () => {
   let fixture: ComponentFixture<OpenWindows>;

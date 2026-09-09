@@ -3,7 +3,7 @@ import { signal } from '@angular/core';
 import { VaultFileEntry } from '../../../shared/ipc-api';
 import { EditorService } from '../services/editor.service';
 import { SettingsService } from '../services/settings.service';
-import { VaultService } from '../services/vault.service';
+import { VaultService } from '../vault';
 import { TemplateLibraryService } from './template-library.service';
 
 function dir(name: string, relativePath: string, children: VaultFileEntry[]): VaultFileEntry {

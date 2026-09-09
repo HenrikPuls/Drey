@@ -1,5 +1,5 @@
 import { ChangeDetectionStrategy, Component } from '@angular/core';
-import { NoteAssistant } from '../../note-assistant/note-assistant';
+import { NoteAssistant } from '../../assistant/note-assistant';
 
 /**
  * "Assistant" dock panel -- hosts the note assistant. Unlike the other

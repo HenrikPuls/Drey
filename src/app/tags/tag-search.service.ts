@@ -2,7 +2,7 @@ import { Injectable, computed, inject, signal } from '@angular/core';
 import { TagSearchHit, TagSearchQuery } from '../../../shared/ipc-api';
 import { runTagSearch, sectionRecordsFor } from '../../../shared/tags';
 import { EditorService } from '../services/editor.service';
-import { LlmTaskService } from '../services/llm-task.service';
+import { LlmTaskService } from '../llm';
 
 /** Files under here are kept out of the tag index (mirrors `TagIndex`). */
 const TEMPLATES_PREFIX = 'templates/';

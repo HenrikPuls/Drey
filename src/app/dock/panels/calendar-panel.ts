@@ -1,5 +1,5 @@
 import { ChangeDetectionStrategy, Component } from '@angular/core';
-import { Calendar } from '../../sidebar/calendar/calendar';
+import { Calendar } from '../../calendar/calendar';
 
 /** "Calendar" dock panel -- hosts the existing mini-calendar. */
 @Component({

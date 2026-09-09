@@ -1,6 +1,6 @@
 import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
-import { EntryDraftService } from '../../services/entry-draft.service';
-import { LlmTaskService } from '../../services/llm-task.service';
+import { EntryDraftService } from '../../entry';
+import { LlmTaskService } from '../../llm';
 import { Icon } from '../../icons/icon';
 
 /**

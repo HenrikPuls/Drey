@@ -4,7 +4,7 @@ import { formatDate, formatDateTime, formatTime } from '../../../shared/timestam
 import { VaultFileEntry } from '../../../shared/ipc-api';
 import { EditorService } from '../services/editor.service';
 import { SettingsService } from '../services/settings.service';
-import { VaultService } from '../services/vault.service';
+import { VaultService } from '../vault';
 import { stripFrontmatter } from '../editor/markdown-frontmatter';
 
 /** One template file. `name` (filename minus `.md`) is the label shown everywhere. */

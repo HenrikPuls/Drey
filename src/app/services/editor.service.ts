@@ -7,8 +7,8 @@ import { setDoneOnLine } from '../../../shared/tasks';
 import { EditorCommandsService } from '../editor/editor-commands.service';
 import { EditorPrefsService, EditorViewMode } from '../editor/editor-prefs.service';
 import { PaneService } from '../panes/pane.service';
-import { TagService } from './tag.service';
-import { VaultService } from './vault.service';
+import { TagService } from '../services/tag.service';
+import { VaultService } from '../vault';
 
 /** Re-exported for existing importers (`Editor`, specs); defined in `markdown-frontmatter.ts`. */
 export { stripFrontmatter } from '../editor/markdown-frontmatter';

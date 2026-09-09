@@ -11,7 +11,7 @@ import {
 } from '@angular/core';
 import { NgTemplateOutlet } from '@angular/common';
 import { EditorService } from '../../services/editor.service';
-import { VaultService } from '../../services/vault.service';
+import { VaultService } from '../../vault';
 import { VaultFileEntry } from '../../../../shared/ipc-api';
 import { Icon } from '../../icons/icon';
 

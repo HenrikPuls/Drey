@@ -9,7 +9,7 @@ import {
   viewChild,
 } from '@angular/core';
 import { MarkdownSurface } from '../editor/markdown-surface/markdown-surface';
-import { AssistantService } from '../services/assistant.service';
+import { AssistantService } from './assistant.service';
 import { EditorService } from '../services/editor.service';
 import { LayoutService } from '../services/layout.service';
 import { SpellcheckService } from '../services/spellcheck.service';

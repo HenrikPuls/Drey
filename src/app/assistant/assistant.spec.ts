@@ -2,8 +2,8 @@ import { TestBed } from '@angular/core/testing';
 import { AppConfig, ChatThread, DreyApi } from '../../../shared/ipc-api';
 import { DEFAULT_APP_CONFIG } from '../../../shared/app-config';
 import { AssistantService } from './assistant.service';
-import { EditorService } from './editor.service';
-import { SettingsService } from './settings.service';
+import { EditorService } from '../services/editor.service';
+import { SettingsService } from '../services/settings.service';
 
 /** Lets the service's `effect` and its awaited IPC calls settle. */
 const settle = async (): Promise<void> => {

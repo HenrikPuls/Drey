@@ -1,5 +1,5 @@
 import { ChangeDetectionStrategy, Component } from '@angular/core';
-import { OpenWindows } from '../../sidebar/open-windows/open-windows';
+import { OpenWindows } from '../../windows/open-windows';
 
 /** "Open windows" dock panel -- mirrors the open editor tabs. */
 @Component({

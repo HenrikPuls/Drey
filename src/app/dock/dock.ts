@@ -11,10 +11,10 @@ import {
 } from '@angular/core';
 import { NgComponentOutlet } from '@angular/common';
 import { EditorService } from '../services/editor.service';
-import { AssistantService } from '../services/assistant.service';
-import { CalendarService } from '../services/calendar.service';
-import { EntryDraftService } from '../services/entry-draft.service';
-import { VaultService } from '../services/vault.service';
+import { AssistantService } from '../assistant';
+import { CalendarService } from '../calendar';
+import { EntryDraftService } from '../entry';
+import { VaultService } from '../vault';
 import { TagSearchService } from '../tags';
 import { TaskService } from '../tasks';
 import { DockService, DockSide, PanelId } from './dock.service';
