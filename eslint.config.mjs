@@ -69,7 +69,14 @@ export default tseslint.config(
         {
           patterns: [
             ...sharedModulePatterns,
-            ...relativeModulePatterns(['tags', 'tasks', 'keybindings', 'dock', 'titlebar']),
+            ...relativeModulePatterns([
+              'tags',
+              'tasks',
+              'keybindings',
+              'dock',
+              'titlebar',
+              'widgets',
+            ]),
           ],
         },
       ],
@@ -90,6 +97,7 @@ export default tseslint.config(
       'src/app/keybindings/**/*.ts',
       'src/app/dock/**/*.ts',
       'src/app/titlebar/**/*.ts',
+      'src/app/widgets/**/*.ts',
     ],
     rules: {
       'no-restricted-imports': 'off',

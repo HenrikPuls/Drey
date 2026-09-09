@@ -9,7 +9,7 @@ import {
   input,
 } from '@angular/core';
 import { DockService, PanelId } from './dock.service';
-import { PANEL_TITLES } from './panels/panel-registry';
+import { WIDGET_MAP } from './widget-registry';
 
 /**
  * The chrome every dock panel shares (DESIGN.md principle 3): a 32px
@@ -41,16 +41,16 @@ export class PanelFrame implements OnInit {
   readonly panelId = input.required<PanelId>();
   readonly status = input<string | null>(null);
 
-  protected readonly title = computed(() => PANEL_TITLES[this.panelId()]);
+  protected readonly title = computed(
+    () => WIDGET_MAP.get(this.panelId())?.title ?? this.panelId(),
+  );
   protected readonly collapsed = computed(() => this.dock.collapsed(this.panelId()));
   /**
    * Panels whose body fills the frame (a flex column) instead of
    * scrolling: the assistant (own header + composer stay put) and the
    * "Add entry" drawer (its text field grows with the panel).
    */
-  protected readonly flush = computed(
-    () => this.panelId() === 'assistant' || this.panelId() === 'entry',
-  );
+  protected readonly flush = computed(() => WIDGET_MAP.get(this.panelId())?.flush ?? false);
   protected readonly isDragging = computed(() => this.dock.dragging() === this.panelId());
 
   constructor() {

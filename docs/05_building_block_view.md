@@ -1330,10 +1330,14 @@ graph TB
             WindowChrome["WindowChromeService\nminimize/toggleMaximize/close + maximized signal"]
         end
         subgraph dk["src/app/dock/ (barrel)"]
-            DockService["DockService\nLayoutState (dock/flexes/open/leftW/rightW),\nlocalStorage['drey.dock'];\nbeginHeaderPress (click=collapse / drag=move) + title-chip ghost,\nonDragMove/move, startSplit, startDockResize, reset, openAndExpand"]
-            Dock["Dock [side]\nrenders panel list; drop-line + splitter;\ndark wash on the drop-target dock; header status values"]
+            DockService["DockService\nDockState (dock/flexes/open/hidden/leftW/rightW/bottomH),\nlocalStorage['drey.dock'];\nbeginHeaderPress (click=collapse / drag=move) + title-chip ghost,\nonDragMove/move, startSplit, startDockResize, reset,\nhide/show/isHidden (View menu), openAndExpand"]
+            Dock["Dock [side]\nrenders widget list; drop-line + splitter;\ndark wash on the drop-target dock; header status values"]
             PanelFrame["PanelFrame\nidentical 32px low-profile header (title/status/grip, no chevron);\nbody stays mounted + height-animates on collapse;\nregisters host el; header press -> collapse or drag"]
-            Panels["CalendarPanel / FilesPanel / SearchPanelHost /\nWindowsPanel / AssistantPanel\n(PANEL_TITLES + PANEL_COMPONENTS registry)"]
+            WidgetRegistry["widget-registry.ts\nWIDGETS: WidgetDescriptor[] (id/title/component/defaultDock/\ndefaultOpen/defaultFlex/contentHeight/flush/removable/capabilities);\nWIDGET_MAP; ALL_WIDGET_IDS -- single source of truth (ADR-0034)"]
+            Panels["8 panel components\n(CalendarPanel / FilesPanel / TemplatesPanel / SearchPanelHost /\nTasksPanel / WindowsPanel / AssistantPanel / EntryPanel)"]
+        end
+        subgraph wg["src/app/widgets/ (barrel, ADR-0034)"]
+            WidgetContext["WidgetContext\ntyped read-facade: active document (path/name/saved/buffer/dirty/\nselection/openFile), fileTree + activeVaultPath, tags,\nsearchSections(), listTasks(), registerCommand(), onVaultChanged();\nWidgetCapability (descriptive)"]
         end
         StatusBar["StatusBar\nEditorService.wordCount/charCount,\nSettings entry"]
         EditorService2["EditorService\n+ lineNumbers signal (drey.editor),\nwordCount/charCount, newUntitled(), saveAll()"]
@@ -1346,6 +1350,10 @@ graph TB
         MenuBar --> DockService
         Dock --> PanelFrame
         Dock --> Panels
+        Dock --> WidgetRegistry
+        PanelFrame --> WidgetRegistry
+        DockService --> WidgetRegistry
+        MenuBar --> WidgetRegistry
         PanelFrame --> DockService
         StatusBar --> DockService2
         StatusBar --> EditorService2
@@ -1366,8 +1374,19 @@ graph TB
   panels have N−1 splitters. Persisted (minus the transient drag fields)
   to `localStorage['drey.dock']`, merged defensively onto the defaults.
 - **`PanelFrame`** renders the header every panel shares (DESIGN.md
-  principle 3). The body scrolls, except the assistant panel, which fills
-  the frame and scrolls internally.
+  principle 3). Title + "fills the frame vs. scrolls" (`flush`) come from
+  the widget descriptor; the body stays mounted while collapsed.
+- **Widget registry + hide/show (ADR-0034).** `dock/widget-registry.ts`
+  `WIDGETS` is the single source of truth (id, title, component, default
+  dock/flex/open, `contentHeight`, `flush`, `removable`, declared
+  `capabilities`); `dock.service.ts`, `PanelFrame` and the View menu all
+  read it, so a ninth widget is one array entry. `DockState.hidden` +
+  `DockService.hide/show/isHidden` back the View menu, which now removes a
+  whole widget from the docks (not just collapses it) and generates its
+  rows from `WIDGETS.filter(w => w.removable)`. **`WidgetContext`**
+  (`src/app/widgets/`) is the typed read-facade a widget uses to reach the
+  active document, the vault tree and the standard tag/task/search queries;
+  the existing panels are ported to it incrementally.
 - **Titlebar / menu bar.** The window is frameless
   (`titleBarStyle: 'hidden'`, `'hiddenInset'` on macOS). `MenuService`
   holds the File/Edit/Selection/View model; a wired row calls a
@@ -1466,7 +1485,7 @@ src/app/templates/
                                  last 5); insert() = read → stripFrontmatter →
                                  substitutePlaceholders → EditorService.requestInsertText;
                                  pickerOpen signal
-  templates-panel/               dock panel PanelId 'templates' (left, collapsed):
+  templates-panel/               dock panel, widget id 'templates' (left, collapsed):
                                  recursive collapsible category groups, rows are
                                  click-to-insert + draggable (application/x-drey-template)
                                  + right-click (Insert / Edit template); header refresh
@@ -1558,7 +1577,8 @@ A third feature-module trio, shaped like the tag stack (§5.14):
     kind filter (Checkboxes / `#task`); rows group by file in vault scope,
     the row checkbox toggles done, the row body calls
     `EditorService.openFileAt(path, line)` (same as a search hit).
-    Registered as `PanelId` `'tasks'` (`PANEL_COMPONENTS`), default home
-    the left dock after Search, collapsed.
+    Registered as the widget `'tasks'` in `WIDGETS`
+    (`dock/widget-registry.ts`), default home the left dock after Search,
+    collapsed.
 - `eslint.config.mjs` `MODULES` gains `'tasks'` — the three barrels are
   the only import surface.

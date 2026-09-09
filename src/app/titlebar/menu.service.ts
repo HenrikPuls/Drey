@@ -10,7 +10,7 @@ import {
 import { openSearchPanel } from '@codemirror/search';
 import type { EditorView } from '@codemirror/view';
 import { KeybindingService } from '../keybindings';
-import { DockService, PanelId } from '../dock';
+import { DockService, WIDGETS, WidgetId } from '../dock';
 import { EditorService } from '../services/editor.service';
 import { EditTargetService } from '../services/edit-target.service';
 import { SettingsService } from '../services/settings.service';
@@ -156,14 +156,24 @@ export class MenuService {
     };
   }
 
-  private panelRow(id: PanelId, label: string): MenuItem {
+  /**
+   * A View-menu row that shows / hides a whole widget (ADR-0034): the check
+   * mark tracks whether it is present in a dock, and a click pulls it out
+   * of every dock or puts it back at its default slot. (Collapsing to just
+   * the header is the separate header-click gesture.)
+   */
+  private widgetRow(id: WidgetId, label: string): MenuItem {
     return {
       kind: 'item',
       label,
-      checked: () => !this.dock.collapsed(id),
+      checked: () => !this.dock.isHidden(id),
       run: () => {
         this.close();
-        this.dock.toggleCollapse(id);
+        if (this.dock.isHidden(id)) {
+          this.dock.show(id);
+        } else {
+          this.dock.hide(id);
+        }
       },
     };
   }
@@ -249,14 +259,7 @@ export class MenuService {
           checked: () => this.editor.lineNumbers(),
           run: () => this.run('editor.toggleLineNumbers'),
         },
-        this.panelRow('calendar', 'Calendar'),
-        this.panelRow('files', 'Files'),
-        this.panelRow('templates', 'Templates'),
-        this.panelRow('search', 'Search'),
-        this.panelRow('tasks', 'Tasks'),
-        this.panelRow('windows', 'Open windows'),
-        this.panelRow('assistant', 'Assistant'),
-        this.panelRow('entry', 'Add entry'),
+        ...WIDGETS.filter((w) => w.removable).map((w) => this.widgetRow(w.id, w.title)),
         SEP,
         {
           kind: 'item',
