@@ -173,6 +173,31 @@ test.describe('bottom dock — "Add entry" panel', () => {
   });
 });
 
+test.describe('View menu — widget visibility (ADR-0034)', () => {
+  test('deselecting "Add entry" removes the whole panel; reselecting brings it back', async ({
+    page,
+  }) => {
+    const entry = page.locator('app-entry-drawer');
+    await expect(entry).toHaveCount(1);
+
+    // View -> "Add entry" is checked (present).
+    await page.locator('app-titlebar .menu-label', { hasText: 'View' }).click();
+    const row = page.locator('app-titlebar .popover .row', { hasText: 'Add entry' });
+    await expect(row.locator('.check')).toHaveText('✓');
+    await row.click();
+
+    // The whole panel is gone -- not just collapsed.
+    await expect(entry).toHaveCount(0);
+
+    // Reselect -> back.
+    await page.locator('app-titlebar .menu-label', { hasText: 'View' }).click();
+    const row2 = page.locator('app-titlebar .popover .row', { hasText: 'Add entry' });
+    await expect(row2.locator('.check')).toHaveText('');
+    await row2.click();
+    await expect(entry).toHaveCount(1);
+  });
+});
+
 test.describe('Live Preview — checked tasks', () => {
   test('a "- [x]" line is struck through, an open one is not', async ({ page, vaultDir }) => {
     fs.writeFileSync(
