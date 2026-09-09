@@ -13,7 +13,14 @@ describe('DockService', () => {
 
   it('starts from the documented defaults', () => {
     const dock = make();
-    expect(dock.leftIds()).toEqual(['calendar', 'files', 'templates', 'search', 'windows']);
+    expect(dock.leftIds()).toEqual([
+      'calendar',
+      'files',
+      'templates',
+      'search',
+      'tasks',
+      'windows',
+    ]);
     expect(dock.rightIds()).toEqual(['assistant']);
     expect(dock.bottomIds()).toEqual(['entry']);
     expect(dock.collapsed('search')).toBe(true);
@@ -29,7 +36,7 @@ describe('DockService', () => {
     const dock = make();
     dock.move('calendar', 'bottom', 0);
     expect(dock.bottomIds()).toEqual(['calendar', 'entry']);
-    expect(dock.leftIds()).toEqual(['files', 'templates', 'search', 'windows']);
+    expect(dock.leftIds()).toEqual(['files', 'templates', 'search', 'tasks', 'windows']);
     dock.setBottomHeight(10);
     expect(dock.dockHeight()).toBe(140);
     dock.setBottomHeight(9000);
@@ -80,9 +87,9 @@ describe('DockService', () => {
 
   it('nextOpenId skips collapsed neighbours and stops at the end', () => {
     const dock = make();
-    // left: [calendar, files, templates(collapsed), search(collapsed), windows]
+    // left: [calendar, files, templates(collapsed), search(collapsed), tasks(collapsed), windows]
     expect(dock.nextOpenId('calendar')).toBe('files');
-    expect(dock.nextOpenId('files')).toBe('windows'); // templates + search are collapsed
+    expect(dock.nextOpenId('files')).toBe('windows'); // templates + search + tasks are collapsed
     expect(dock.nextOpenId('windows')).toBeNull();
     expect(dock.nextOpenId('assistant')).toBeNull(); // alone in the right dock
   });
@@ -90,7 +97,7 @@ describe('DockService', () => {
   it('moves a panel across docks at the requested slot', () => {
     const dock = make();
     dock.move('calendar', 'right', 0);
-    expect(dock.leftIds()).toEqual(['files', 'templates', 'search', 'windows']);
+    expect(dock.leftIds()).toEqual(['files', 'templates', 'search', 'tasks', 'windows']);
     expect(dock.rightIds()).toEqual(['calendar', 'assistant']);
   });
 
@@ -98,7 +105,14 @@ describe('DockService', () => {
     const dock = make();
     // Move `calendar` to sit after `files`: visual slot 2 in the original list.
     dock.move('calendar', 'left', 2);
-    expect(dock.leftIds()).toEqual(['files', 'calendar', 'templates', 'search', 'windows']);
+    expect(dock.leftIds()).toEqual([
+      'files',
+      'calendar',
+      'templates',
+      'search',
+      'tasks',
+      'windows',
+    ]);
   });
 
   it('clamps dock width to 180..560', () => {
@@ -123,7 +137,14 @@ describe('DockService', () => {
     dock.toggleCollapse('files');
     dock.setDockWidth('left', 500);
     dock.reset();
-    expect(dock.leftIds()).toEqual(['calendar', 'files', 'templates', 'search', 'windows']);
+    expect(dock.leftIds()).toEqual([
+      'calendar',
+      'files',
+      'templates',
+      'search',
+      'tasks',
+      'windows',
+    ]);
     expect(dock.collapsed('files')).toBe(false);
     expect(dock.dockWidth('left')).toBe(248);
   });
@@ -143,7 +164,14 @@ describe('DockService', () => {
   it('ignores a corrupt stored blob', () => {
     localStorage.setItem('drey.dock', '{ not json');
     const dock = make();
-    expect(dock.leftIds()).toEqual(['calendar', 'files', 'templates', 'search', 'windows']);
+    expect(dock.leftIds()).toEqual([
+      'calendar',
+      'files',
+      'templates',
+      'search',
+      'tasks',
+      'windows',
+    ]);
   });
 
   it('re-places a panel missing from a stored blob', () => {
@@ -152,8 +180,15 @@ describe('DockService', () => {
       JSON.stringify({ dock: { left: ['calendar', 'files'], right: [] } }),
     );
     const dock = make();
-    // templates + search + windows (left by default) and assistant (right) come back.
-    expect(dock.leftIds()).toEqual(['calendar', 'files', 'templates', 'search', 'windows']);
+    // templates + search + tasks + windows (left by default) and assistant (right) come back.
+    expect(dock.leftIds()).toEqual([
+      'calendar',
+      'files',
+      'templates',
+      'search',
+      'tasks',
+      'windows',
+    ]);
     expect(dock.rightIds()).toEqual(['assistant']);
   });
 });

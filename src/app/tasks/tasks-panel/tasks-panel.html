@@ -1,0 +1,89 @@
+<div class="controls">
+  <div class="seg" role="tablist" aria-label="Task scope">
+    <button
+      type="button"
+      role="tab"
+      [class.on]="tasks.scope() === 'document'"
+      [attr.aria-selected]="tasks.scope() === 'document'"
+      (click)="tasks.setScope('document')"
+    >
+      Document
+    </button>
+    <button
+      type="button"
+      role="tab"
+      [class.on]="tasks.scope() === 'vault'"
+      [attr.aria-selected]="tasks.scope() === 'vault'"
+      (click)="tasks.setScope('vault')"
+    >
+      Vault
+    </button>
+  </div>
+
+  <div class="filters">
+    <label class="chk">
+      <input
+        type="checkbox"
+        [checked]="tasks.hideDone()"
+        (change)="tasks.toggleHideDone()"
+      />
+      Hide done
+    </label>
+    <span class="sep"></span>
+    <label class="chk" title="Show `- [ ]` checkbox tasks">
+      <input
+        type="checkbox"
+        [checked]="tasks.hasKind('checkbox')"
+        (change)="tasks.toggleKind('checkbox')"
+      />
+      Checkboxes
+    </label>
+    <label class="chk" title="Show lines tagged #task">
+      <input
+        type="checkbox"
+        [checked]="tasks.hasKind('tag')"
+        (change)="tasks.toggleKind('tag')"
+      />
+      #task
+    </label>
+  </div>
+</div>
+
+@if (empty()) {
+  <p class="empty">
+    {{ tasks.scope() === 'document' ? 'No tasks in this document.' : 'No tasks in the vault.' }}
+  </p>
+} @else {
+  <div class="list">
+    @for (group of groups(); track group.path) {
+      @if (group.name) {
+        <p class="group" [title]="group.path">{{ group.name }}</p>
+      }
+      @for (task of group.tasks; track task.path + ':' + task.line) {
+        <div class="task" [class.done]="task.done">
+          <input
+            type="checkbox"
+            class="box"
+            [checked]="task.done"
+            [attr.aria-label]="task.done ? 'Mark not done' : 'Mark done'"
+            (change)="tasks.toggle(task)"
+          />
+          <button type="button" class="body" (click)="tasks.open(task)">
+            <span class="text">{{ task.text || '(untitled task)' }}</span>
+            <span class="meta">
+              @if (task.kind === 'tag') {
+                <span class="kind">#task</span>
+              }
+              @if (task.heading) {
+                <span class="heading">{{ task.heading }}</span>
+              }
+              @if (tasks.scope() === 'vault') {
+                <span class="loc">:{{ task.line }}</span>
+              }
+            </span>
+          </button>
+        </div>
+      }
+    }
+  </div>
+}

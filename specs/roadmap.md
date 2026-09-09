@@ -271,6 +271,20 @@ below).
   [ADR-0019](../docs/09_architecture_decisions/0019-movable-dock-panels-and-layout-state.md)'s
   "Later change".
 
+- **Tasks panel ([ADR-0033](../docs/09_architecture_decisions/0033-tasks-panel-and-index.md),
+  pulled forward from Phase 2/4):** a dock panel listing task lines in the
+  open document **or** the whole vault, with a "hide done" toggle and a
+  configurable definition of "task" — GFM checkbox items (`- [ ]` / `- [x]`),
+  lines carrying the reserved `#task` marker, or both. A `#task` line with
+  no checkbox counts as done when it also carries `#task/done`. A row's
+  checkbox writes the done-state straight back to the source file
+  (`note:save` pipeline); clicking a row opens that file at the line.
+  Document scope is scanned live from the editor buffer (unsaved edits
+  show); vault scope comes from a main-process `TaskIndex` that mirrors the
+  tag index's lifecycle (rebuild on vault open, re-index per file on save,
+  no watcher). This delivers the interactive slice of the Phase-2 "Daily
+  tasks" / Phase-4 "Task center" ideas below.
+
 - **Manual refresh:** there is no file watcher. A refresh button in the
   sidebar re-reads the vault from disk and rebuilds the tag index; the
   app also refreshes itself after the writes it makes (note save, first
@@ -290,7 +304,9 @@ below).
 - **Daily tasks:** inline `#task` syntax in any note file, a generated
   (read-only) day view built from timestamp scanning — distinct from the
   daily note file itself (that's a normal editable file; this is an
-  aggregate view).
+  aggregate view). _The task-collection + tick-back part shipped early as
+  the Phase-1 Tasks panel (ADR-0033); what remains here is the
+  timestamp-driven **day** view specifically._
 - Semantic search (embeddings via transformers.js + sqlite-vec, RAG for
   the "all notes" chat scope).
 - Daily wrap-up (yesterday done/worked-on, prioritized list for today) —
@@ -313,7 +329,10 @@ below).
   processing pipeline (primarily lands in the sensitive vault).
 - Task center: an active, writable task overview across all files
   (checking a box here writes back to the source file, using the
-  mandatory `#task id:` instead of line numbers).
+  mandatory `#task id:` instead of line numbers). _A first cut of the
+  writable overview shipped as the Phase-1 Tasks panel (ADR-0033); it
+  writes back by line number, not a stable `#task id:` — the id-based
+  addressing is what's still open here._
 - Job queue: configurable background processes (re-indexing after a model
   change, export), status/progress, persisted against crashes,
   auto-pauses on interactive use.

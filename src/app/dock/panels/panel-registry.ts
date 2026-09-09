@@ -7,6 +7,7 @@ import { FilesPanel } from './files-panel';
 import { SearchPanelHost } from './search-panel-host';
 import { WindowsPanel } from './windows-panel';
 import { AssistantPanel } from './assistant-panel';
+import { TasksPanel } from '../../tasks';
 
 /**
  * Maps each panel id to its title (the mono-uppercase header label) and its
@@ -18,6 +19,7 @@ export const PANEL_TITLES: Record<PanelId, string> = {
   files: 'Files',
   templates: 'Templates',
   search: 'Search',
+  tasks: 'Tasks',
   windows: 'Open windows',
   assistant: 'Assistant',
   entry: 'Add entry',
@@ -28,6 +30,7 @@ export const PANEL_COMPONENTS: Record<PanelId, Type<unknown>> = {
   files: FilesPanel,
   templates: TemplatesPanel,
   search: SearchPanelHost,
+  tasks: TasksPanel,
   windows: WindowsPanel,
   assistant: AssistantPanel,
   entry: EntryPanel,

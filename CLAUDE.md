@@ -95,8 +95,9 @@ toolchain is removable by deleting `.tools/`). Never assume a bare `node`,
   purely additive future option
   ([ADR-0018](docs/09_architecture_decisions/0018-manual-refresh-no-file-watcher.md)).
 - **Feature modules** ([ADR-0016](docs/09_architecture_decisions/0016-feature-module-convention.md)):
-  `electron/llm/`, `electron/tags/`, `shared/llm/`, `shared/tags/`,
-  `src/app/tags/`, `src/app/keybindings/` each expose a thin `index.ts`
+  `electron/llm/`, `electron/tags/`, `electron/tasks/`, `shared/llm/`,
+  `shared/tags/`, `shared/tasks/`, `src/app/tags/`, `src/app/tasks/`,
+  `src/app/keybindings/` each expose a thin `index.ts`
   barrel; `eslint.config.mjs` (`no-restricted-imports`, `npm run lint`)
   makes a deep import from outside a module a CI error. `shared/ipc-api.ts`
   stays the cross-layer contract, outside any module. Modular monolith —
@@ -115,6 +116,12 @@ Main process:
   sections (`SectionRecord[]`); `rebuild` on vault open / refresh,
   `reindexFile` on save, `removeFile` on delete; backs `tags:list` and
   `tags:search`. `templates/` excluded, `daily/` included
+- `TaskIndex` (`electron/tasks/`, ADR-0033) — same shape/lifecycle as
+  `TagIndex`: a per-file cache of every checkbox / `#task` line
+  (`shared/tasks/scanTasks`), `rebuild` on vault open / refresh /
+  rename / copy / duplicate, `reindexFile` from `NoteManager` on save,
+  `removeFile` on delete; backs `tasks:list` (the Tasks panel's "whole
+  vault" scope). `templates/` excluded, `daily/` included
 - `LmStudioClient` — thin HTTP client for the local OpenAI-compatible
   endpoint (`GET /models`, `POST /chat/completions`), with an optional
   bearer API key; name kept for continuity, but not LM-Studio-specific.
@@ -158,11 +165,12 @@ Renderer (Angular):
   which dock, order, `flexes`, collapse, `leftW`/`rightW`, `bottomH`;
   `localStorage['drey.dock']`) and runs the header-drag / splitter /
   dock-edge-resize gestures. Three docks — `left | right | bottom` (the
-  bottom one a resizable band under the editor). **Six** panels via a
+  bottom one a resizable band under the editor). **Eight** panels via a
   `PANEL_COMPONENTS` registry: `CalendarPanel`, `FilesPanel` (the old
   sidebar's vault switcher + file tree + right-click new/delete + inline
-  create), `SearchPanelHost`, `WindowsPanel`, `AssistantPanel`, and
-  `EntryPanel` (the "Add entry" drawer — default home: the bottom dock).
+  create), `TemplatesPanel` (ADR-0029), `SearchPanelHost`, `TasksPanel`
+  (ADR-0033), `WindowsPanel`, `AssistantPanel`, and `EntryPanel` (the
+  "Add entry" drawer — default home: the bottom dock).
   `PanelFrame` is the identical 32px header every panel shares.
   `DockService.contentHeight(id)` marks a panel (currently `calendar`)
   that sizes to its content rather than a flex share.
@@ -185,6 +193,15 @@ Renderer (Angular):
   → section hits (click opens the file at the line via
   `EditorService.openFileAt`), and an **Export** button that dumps the
   hits into an unsaved `search-results.md` scratch tab
+- `TasksPanel` + `TaskService` (`src/app/tasks/`, ADR-0033) — the **Tasks**
+  dock panel: checkbox / `#task` lines in the open document or the whole
+  vault, a scope toggle · "hide done" · a kind filter (all persisted to
+  `localStorage['drey.tasks']`). Document scope scans the live editor
+  buffer via `shared/tasks/scanTasks`; vault scope reads `tasks:list`
+  (`TaskIndex`), refreshed after each save and on `mcp:vault-changed`. A
+  row's checkbox calls `EditorService.setTaskDone(path,line,done)`
+  (`shared/tasks/setDoneOnLine` → buffer edit + save, or read → patch →
+  `note:save`); a row click opens the file at the line
 - `KeybindingService` (`src/app/keybindings/`) — one capture-phase
   `keydown` listener mapping chord strings onto `Command`s; features
   register from `App`. Commands: `search.open` (`Mod+Shift+F`),
@@ -253,14 +270,15 @@ be called out explicitly (see Working Style below), not introduced silently.
   being the editor area above a **bottom dock** band — then a **26px
   status bar** (word/char count · context hint · Settings entry).
   - **Docks**: three (`left`, `right`, `bottom`), each an ordered list of
-    the six panels — **Calendar, Files, Search, Open windows, Assistant,
-    Add entry**. A panel is dragged between docks by its header, resized
-    against its neighbour by a splitter, and collapsed to its 32px
-    header. Every panel header is built the same way (chevron +
+    the eight panels — **Calendar, Files, Templates, Search, Tasks, Open
+    windows, Assistant, Add entry**. A panel is dragged between docks by
+    its header, resized against its neighbour by a splitter, and collapsed
+    to its 32px header. Every panel header is built the same way (chevron +
     mono-uppercase title + optional status value + drag grip). Default:
-    Calendar/Files/Search/Open windows left, Assistant right, Add entry in
-    the bottom band, Search + Add entry collapsed. Calendar takes its
-    content height, not a flex share. `View → Reset layout` restores it.
+    Calendar/Files/Templates/Search/Tasks/Open windows left, Assistant
+    right, Add entry in the bottom band, Templates + Search + Tasks + Add
+    entry collapsed. Calendar takes its content height, not a flex share.
+    `View → Reset layout` restores it.
     Layout state persists (`localStorage['drey.dock']`).
   - **Files panel**: a vault-switcher row (name + "Open other vault …",
     with the refresh button on the same row) above the vault file tree

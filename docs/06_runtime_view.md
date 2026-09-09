@@ -978,6 +978,48 @@ sequenceDiagram
     Note over User,Idx: Rename: prompt-less inline input → renameEntry(from,to)<br/>→ VM.fsp.rename (+ sidecar) → Idx.rebuild → loadFileTree<br/>→ EditorService.retargetTabs(from,to) keeps unsaved buffers
 ```
 
+## 6.21 Tasks panel: list + tick a task ([ADR-0033](09_architecture_decisions/0033-tasks-panel-and-index.md))
+
+The panel shows `TaskService.visible()`. In **document** scope that is
+`scanTasks` over the live editor buffer, so it tracks unsaved edits with no
+IPC. In **vault** scope it is `listTasks()` from the main-process
+`TaskIndex`, refreshed on construct / after each save / on
+`mcp:vault-changed`. Ticking a row toggles the source line and saves.
+
+```mermaid
+sequenceDiagram
+    actor User
+    participant Panel as TasksPanel
+    participant Svc as TaskService
+    participant Ed as EditorService
+    participant IPC as main.ts handler
+    participant NM as NoteManager
+    participant TI as TaskIndex
+
+    Note over Panel,Svc: document scope — no IPC
+    User->>Panel: open panel / edit a "- [ ]" line in the editor
+    Panel->>Svc: visible() = scanTasks(openPath, bufferContent())
+
+    Note over Panel,TI: vault scope
+    Svc->>IPC: tasks:list
+    IPC->>TI: all()
+    TI-->>Svc: TaskRecord[]
+
+    User->>Panel: tick a row's checkbox
+    Panel->>Svc: toggle(task)
+    Svc->>Ed: setTaskDone(path, line, !done)
+    alt file is an open text tab
+        Ed->>Ed: setDoneOnLine(buffer) · patchDoc · save()
+    else not open
+        Ed->>IPC: vault:read-file → setDoneOnLine → note:save
+    end
+    IPC->>NM: saveNote(...)
+    NM->>TI: reindexFile(path, written)
+    Svc->>Svc: refresh() → tasks:list
+    User->>Panel: click a row body
+    Panel->>Ed: openFileAt(path, line)
+```
+
 ## Planned flows (added as their milestone is built)
 
 - Dedicated keyword-search / FTS surface — the search panel's free-text

@@ -12,7 +12,7 @@ import tseslint from 'typescript-eslint';
  * directly.
  */
 
-const MODULES = ['llm', 'tags', 'mcp'];
+const MODULES = ['llm', 'tags', 'tasks', 'mcp'];
 
 /** Reaching into `shared/<mod>/` from anywhere by its `shared/`-qualified path. */
 const sharedModulePatterns = MODULES.map((mod) => ({
@@ -69,7 +69,7 @@ export default tseslint.config(
         {
           patterns: [
             ...sharedModulePatterns,
-            ...relativeModulePatterns(['tags', 'keybindings', 'dock', 'titlebar']),
+            ...relativeModulePatterns(['tags', 'tasks', 'keybindings', 'dock', 'titlebar']),
           ],
         },
       ],
@@ -82,8 +82,11 @@ export default tseslint.config(
       'shared/llm/**/*.ts',
       'electron/tags/**/*.ts',
       'shared/tags/**/*.ts',
+      'electron/tasks/**/*.ts',
+      'shared/tasks/**/*.ts',
       'electron/mcp/**/*.ts',
       'src/app/tags/**/*.ts',
+      'src/app/tasks/**/*.ts',
       'src/app/keybindings/**/*.ts',
       'src/app/dock/**/*.ts',
       'src/app/titlebar/**/*.ts',

@@ -41,6 +41,7 @@ package, a minor naming convention).
 | [0030](09_architecture_decisions/0030-renderer-editor-context-menu.md)            | Renderer-owned editor context menu, replacing the OS menu (`formControlType` gate) | Accepted |
 | [0031](09_architecture_decisions/0031-editor-link-activation.md)                  | Ctrl/Cmd-click to open a link in the editor (web via `shell.openExternal`, vault path as a tab) | Accepted |
 | [0032](09_architecture_decisions/0032-field-logging-and-input-recovery.md)        | Field log file + a manual/​watchdog "Recover input" escape hatch for the intermittent input lock | Accepted |
+| [0033](09_architecture_decisions/0033-tasks-panel-and-index.md)                   | Tasks dock panel + whole-vault `TaskIndex` (checkbox / `#task` lines, `#task/done`, document = live buffer) | Accepted |
 
 Decisions not yet written up (relevant spec already fixes them, but the
 ADR is deferred to the milestone that actually implements them, per
