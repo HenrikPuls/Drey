@@ -44,6 +44,19 @@ export class EntryDrawer {
    */
   protected readonly spellcheckSource = this.spellcheck.makeSource();
 
+  /**
+   * `Ctrl`/`Cmd`-click on a Markdown link in the capture body. The drawer
+   * has no "current note" to resolve a relative path against, so only web /
+   * mail targets act -- they open in the OS browser (Req-5); anything else
+   * is left alone.
+   */
+  protected readonly activateLink = (href: string): void => {
+    const raw = href.trim();
+    if (/^(https?:|mailto:)/i.test(raw)) {
+      void window.dreyApi.openExternal(raw);
+    }
+  };
+
   protected readonly canSubmit = computed<boolean>(
     () => this.drawer.hasContent() && !this.drawer.appending(),
   );

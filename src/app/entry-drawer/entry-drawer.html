@@ -47,6 +47,7 @@
     [submitOnEnter]="false"
     [spellcheck]="spellcheckSource"
     [imageCapture]="true"
+    [onLinkActivate]="activateLink"
     placeholder="What happened? (Markdown)"
     (docChanged)="drawer.setText($event)"
   />

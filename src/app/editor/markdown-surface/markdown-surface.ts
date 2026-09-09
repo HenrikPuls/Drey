@@ -37,6 +37,7 @@ import {
 import { livePreview } from '../live-preview';
 import { inlineSpellcheck, requestSpellcheck, SpellcheckSource } from '../spellcheck/spellcheck';
 import { linkActivation } from '../link-open';
+import { pasteUrlAsMarkdownLink } from '../paste-link';
 import { makeTagCompletionSource } from '../tag-complete';
 import { tagPills } from '../tag-pill';
 import { resolveVaultImageUrl } from '../vault-image';
@@ -253,12 +254,26 @@ export class MarkdownSurface implements AfterViewInit, OnDestroy {
    */
   private markdownBundle(): Extension {
     return [
-      markdown({ base: markdownLanguage, codeLanguages: languages, completeHTMLTags: false }),
+      markdown({
+        base: markdownLanguage,
+        codeLanguages: languages,
+        completeHTMLTags: false,
+        // `markdownLanguage` bakes in `@lezer/markdown`'s `Emoji` inline
+        // parser, whose `:name:` rule is `/^[a-zA-Z_0-9]+:/` -- digits alone
+        // count, so a bare timestamp like `2026-09-09T00:03:48` has its
+        // `:03:` slice parsed as an `Emoji` node and coloured as such. We
+        // never render `:shortcode:` emoji, so drop the parser: the text
+        // stays plain.
+        extensions: [{ remove: ['Emoji'] }],
+      }),
       markdownLanguage.data.of({
         autocomplete: makeTagCompletionSource(() => this.tags.tags()),
       }),
       this.onTagActivate() ? tagPills(this.onTagActivate()!) : [],
       this.onLinkActivate() ? linkActivation(this.onLinkActivate()!) : [],
+      // Paste a bare URL onto an empty caret -> `[url](url)` (lang-markdown's
+      // own pasteURLAsLink only handles the wrap-a-selection case).
+      pasteUrlAsMarkdownLink(),
       this.spellcheck() ? inlineSpellcheck({ source: this.spellcheck()! }) : [],
       this.foldFrontmatter() ? frontmatterFold() : [],
     ];

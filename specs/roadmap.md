@@ -398,19 +398,44 @@ Req-3 I would like to have a wrapper around copilot m365 for web so that i can u
 
 Req-4 Atlassian Integration, when I paste a link to a workitem then i would like to check if i can retrieve the status of the ticket.
 
-Req-5 Strg+Click on a link shall open the link in an external browser
-
-bug-1 if a string like 2026-09-09T00:03:48 is shown in the editor then :03: is green (don't know why it is detected like this and not normal text (Mac Address filter?))
-
-bug-2 Appearance settings does not select the active theme, it always defaults to drey, please always select the active theme
-
-bug-3 Specify the font within the setting is not working any longer, probably because it is not any longer applied as we moved to full theme support. 
-
 Req-6 it would be nice to have the ability to download further themes for cm6 if easily dooable
 
 req-7 widget control elements which are now at the top but inside the widget shall be moved to the title bar of the widget to get rid of the line within the widget
 
+req-8 Task Widget: Die Tasks sollen zusätzlich um freitext oder mehrere tags erweitert werden  einzugeben. Autocomplete der Tags soll funktionieren. 
+
 # Completed
+
+Req-5 — `Ctrl`/`Cmd`-click a link opens it in the OS browser. Already wired
+for the document editor (`link-open.ts` `linkActivation` → `Editor.activateLink`
+→ `shell.openExternal`, allow-listed to `http(s):` / `mailto:`); extended to
+the "Add entry" capture surface (`EntryDrawer.activateLink`, web/mail only —
+the drawer has no note path to resolve a relative link against).
+
+Paste-a-URL → Markdown link. Pasting a bare URL onto an **empty** caret now
+inserts `[url](url)` with the label pre-selected (`paste-link.ts`
+`pasteUrlAsMarkdownLink`, Markdown-only). `@codemirror/lang-markdown`'s own
+`pasteURLAsLink` still handles the wrap-a-selection case (`[selection](url)`);
+the new handler only fills the empty-caret gap and stays clear of code /
+existing links / frontmatter and image pastes.
+
+bug-1 — a bare timestamp (`2026-09-09T00:03:48`) had its `:03:` slice
+coloured. Cause: `markdownLanguage` bundles `@lezer/markdown`'s `Emoji`
+inline parser, whose `:name:` rule (`/^[a-zA-Z_0-9]+:/`) accepts digits, so
+`:03:` parsed as an `Emoji` node. We never render `:shortcode:` emoji — the
+parser is now dropped (`markdown({ extensions: [{ remove: ['Emoji'] }] })`).
+
+bug-2 — the Appearance **Theme** (and Editor font) `<select>` always showed
+the first option. `<select [value]>` is set before `@for` renders the
+`<option>`s, so the browser can't match it. Fixed with `[selected]` on each
+option.
+
+bug-3 — the editor typeface stopped applying under a published `@uiw` theme.
+Those themes emit `&.cm-editor .cm-scroller { font-family: <mono> }` — the
+exact selector `editorStructure` used for `var(--font-sans)` — and the theme
+compartment wins at equal specificity regardless of declaration order. The
+app rule is now one class heavier (`&.cm-editor.cm-editor .cm-scroller`) so
+it outranks any theme outright.
 
 Req-1 — Live Preview embed affordances. The corner **View source** button is
 now `</>` (was a pencil) and shares a `.lp-tools` flex cluster with the zoom

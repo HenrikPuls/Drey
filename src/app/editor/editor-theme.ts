@@ -106,9 +106,13 @@ export const dreyHighlightStyle = HighlightStyle.define([
  * whatever colour theme is active (ADR-0035: the palette lives in a
  * swappable compartment; a published `@uiw` theme sets colours only and
  * never `display` / `height` / `overflow`). Kept OUT of the compartment and
- * mounted always-on, *after* it, so it wins on equal specificity while the
- * `Prec.high` `gutterTheme` / `compactTheme` (`markdown-surface.ts`) still
- * override the gutter and the compact padding.
+ * mounted always-on so a published theme can't drop it. Its rules mostly
+ * don't collide with a `@uiw` theme (which only sets colours), so ordering
+ * is moot; where one *does* collide -- the `.cm-scroller` typeface -- the
+ * selector is made specificity-heavier on purpose, because at equal
+ * specificity the compartment's style module wins regardless of declaration
+ * order (the same quirk `Prec.high` `gutterTheme` / `compactTheme` in
+ * `markdown-surface.ts` work around).
  */
 export const editorStructure = EditorView.theme({
   '&': { height: '100%' },
@@ -122,10 +126,16 @@ export const editorStructure = EditorView.theme({
     fontSize: 'calc(14.5px * var(--drey-editor-scale, 1))',
     lineHeight: '1.72',
   },
-  // Two-class selector so the app's body font beats a published theme's own
-  // `&.cm-editor .cm-scroller` monospace rule -- a theme is picked for its
-  // colours, not to turn prose into code.
-  '&.cm-editor .cm-scroller': { fontFamily: 'var(--font-sans)' },
+  // The editor typeface (Settings -> Appearance, via `--font-sans` on the
+  // `Editor` host). A published `@uiw` theme emits its own
+  // `&.cm-editor .cm-scroller { font-family: <mono> }` (see `createTheme`),
+  // and its style module -- living in the theme compartment, which sits
+  // *earlier* in the extension list -- wins the cascade at equal specificity
+  // (the same ordering quirk `compactTheme` works around with `Prec.high`).
+  // So this selector is deliberately one class heavier (`.cm-editor` twice)
+  // to outrank it outright -- a theme is picked for its colours, not to turn
+  // prose into code.
+  '&.cm-editor.cm-editor .cm-scroller': { fontFamily: 'var(--font-sans)' },
   // Full-width, left-aligned text column: no centred max-width -- the editor
   // uses the whole area, only side padding keeps the text off the edges.
   // (Was a 680px centred reading column; the project owner asked for the
