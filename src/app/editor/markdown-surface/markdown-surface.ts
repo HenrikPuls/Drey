@@ -25,7 +25,7 @@ import { TagService } from '../../services/tag.service';
 import { VaultService } from '../../services/vault.service';
 import { ThemeService } from '../../services/theme.service';
 import { ThemeCatalogEntry } from '../themes/theme-catalog';
-import { dreyEditorLook } from '../editor-theme';
+import { dreyEditorLook, editorStructure } from '../editor-theme';
 import { imagePaste } from '../image-paste';
 import { toggleTaskDone } from '../markdown-commands';
 import {
@@ -275,6 +275,12 @@ export class MarkdownSurface implements AfterViewInit, OnDestroy {
           // so it arrives a microtask/frame later. In a compartment so
           // Settings -> Appearance can swap it live without a view rebuild.
           this.themeCompartment.of(dreyEditorLook),
+          // Layout skeleton (height, scroll, content padding, hidden
+          // gutter) -- kept out of the swappable theme so a published theme
+          // can't drop it. After the compartment so it wins on equal
+          // specificity; `gutterTheme` / `compactTheme` (Prec.high) still
+          // override where they need to.
+          editorStructure,
           // Long lines wrap at the editor's width instead of scrolling the
           // content sideways -- the full-page editor now fills the whole
           // area (no centred column), so a horizontal scrollbar there would

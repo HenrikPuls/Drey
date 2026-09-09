@@ -253,8 +253,10 @@ export class MenuService {
         this.panelRow('files', 'Files'),
         this.panelRow('templates', 'Templates'),
         this.panelRow('search', 'Search'),
+        this.panelRow('tasks', 'Tasks'),
         this.panelRow('windows', 'Open windows'),
         this.panelRow('assistant', 'Assistant'),
+        this.panelRow('entry', 'Add entry'),
         SEP,
         {
           kind: 'item',
