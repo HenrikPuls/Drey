@@ -31,14 +31,25 @@
               }
             ],
             "styles": ["src/styles.css"],
-            "allowedCommonJsDependencies": []
+            "allowedCommonJsDependencies": [
+              "cytoscape-cose-bilkent",
+              "cytoscape-fcose",
+              "@braintree/sanitize-url",
+              "dayjs",
+              "dayjs/plugin/isoWeek.js",
+              "dayjs/plugin/customParseFormat.js",
+              "dayjs/plugin/advancedFormat.js",
+              "dayjs/plugin/duration.js",
+              "fastdom",
+              "fastdom/extensions/fastdom-promised.js"
+            ]
           },
           "configurations": {
             "production": {
               "budgets": [
                 {
                   "type": "initial",
-                  "maximumWarning": "1.2MB",
+                  "maximumWarning": "1.3MB",
                   "maximumError": "2MB"
                 },
                 {

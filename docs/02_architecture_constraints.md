@@ -16,4 +16,7 @@ these apply to every phase and are not up for reconsideration per-feature.
 
 Electron, Angular (standalone components), CodeMirror 6, chokidar,
 transformers.js + sqlite-vec (Phase 2), LM Studio (OpenAI-compatible HTTP
-API), Electron Builder for packaging.
+API), electron-builder for packaging — Windows NSIS installer + portable
+exe, config in `electron-builder.yml`
+([ADR-0023](09_architecture_decisions/0023-windows-packaging-electron-builder.md),
+[07_deployment_view.md](07_deployment_view.md)). No code signing yet.

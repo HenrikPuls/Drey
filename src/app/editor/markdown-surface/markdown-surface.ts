@@ -19,8 +19,14 @@ import { EditorView, keymap, placeholder as cmPlaceholder } from '@codemirror/vi
 import { basicSetup } from 'codemirror';
 import { EditorService, EditorViewMode } from '../../services/editor.service';
 import { EditTargetService } from '../../services/edit-target.service';
+import { EditorZoomService } from '../../services/editor-zoom.service';
+import { ImageLightboxService } from '../../image-viewer';
 import { TagService } from '../../services/tag.service';
-import { dreyEditorLook } from '../editor-theme';
+import { VaultService } from '../../services/vault.service';
+import { ThemeService } from '../../services/theme.service';
+import { ThemeCatalogEntry } from '../themes/theme-catalog';
+import { dreyEditorLook, editorStructure } from '../editor-theme';
+import { imagePaste } from '../image-paste';
 import { toggleTaskDone } from '../markdown-commands';
 import {
   frontmatterExpandedOf,
@@ -29,6 +35,7 @@ import {
 } from '../frontmatter-fold';
 import { livePreview } from '../live-preview';
 import { inlineSpellcheck, requestSpellcheck, SpellcheckSource } from '../spellcheck/spellcheck';
+import { linkActivation } from '../link-open';
 import { makeTagCompletionSource } from '../tag-complete';
 import { tagPills } from '../tag-pill';
 import { resolveVaultImageUrl } from '../vault-image';
@@ -62,6 +69,10 @@ export class MarkdownSurface implements AfterViewInit, OnDestroy {
   private readonly editor = inject(EditorService);
   private readonly editTarget = inject(EditTargetService);
   private readonly tags = inject(TagService);
+  private readonly vault = inject(VaultService);
+  private readonly themes = inject(ThemeService);
+  private readonly zoom = inject(EditorZoomService);
+  private readonly lightbox = inject(ImageLightboxService);
   private readonly host = viewChild.required<ElementRef<HTMLDivElement>>('host');
 
   readonly mode = input<EditorViewMode>('live');
@@ -79,6 +90,14 @@ export class MarkdownSurface implements AfterViewInit, OnDestroy {
    */
   readonly foldFrontmatter = input(false);
   readonly placeholder = input('');
+  /**
+   * Turns on image paste / drop: a pasted or dropped image is saved into
+   * the vault's per-note `attachments/` folder and an `![](…)` link is
+   * inserted at the caret (ADR-0024). Read once at construction. The
+   * full-page editor and the "Add entry" drawer set it; the note
+   * assistant composer (a prompt box, not a document) does not.
+   */
+  readonly imageCapture = input(false);
   /**
    * Makes the surface non-editable (the note assistant composer while no
    * note is open). Programmatic `setContent` still works -- this only
@@ -107,6 +126,14 @@ export class MarkdownSurface implements AfterViewInit, OnDestroy {
    */
   readonly onTagActivate = input<(tag: string) => void>();
 
+  /**
+   * When set, a `Ctrl`/`Cmd`-click on a Markdown link calls this with the
+   * raw target. Read once at construction. The full-page editor wires it to
+   * open web links externally / vault links in a tab; the entry drawer
+   * leaves it unset.
+   */
+  readonly onLinkActivate = input<(href: string) => void>();
+
   /** The document text after every edit. */
   readonly docChanged = output<string>();
   /** Compact mode only: Enter was pressed; payload is the current text. */
@@ -119,6 +146,10 @@ export class MarkdownSurface implements AfterViewInit, OnDestroy {
   private readonly placeholderCompartment = new Compartment();
   private readonly readOnlyCompartment = new Compartment();
   private readonly lineNumberCompartment = new Compartment();
+  /** Swaps the whole CM6 theme (chrome + syntax) when Settings -> Appearance changes. */
+  private readonly themeCompartment = new Compartment();
+  /** Guards against an out-of-order theme `load()` resolving after a newer pick. */
+  private themeToken = 0;
 
   /**
    * Mirror of the fold extension's `StateField<boolean>` (see
@@ -159,6 +190,33 @@ export class MarkdownSurface implements AfterViewInit, OnDestroy {
         effects: this.lineNumberCompartment.reconfigure(on ? gutterTheme : []),
       });
     });
+    effect(() => {
+      this.applyTheme(this.themes.theme());
+    });
+    // The editor content scale (Ctrl +/-/0) is a CSS custom property on the
+    // host that CodeMirror's theme reads but never reacts to -- without a
+    // nudge the selection/cursor geometry stays at the old font size until
+    // the next edit or scroll. `requestMeasure` re-measures on the next
+    // frame, after the browser has applied the new size.
+    effect(() => {
+      this.zoom.scale();
+      this._view?.requestMeasure();
+    });
+  }
+
+  /**
+   * Loads the selected theme's CM6 extension (Drey resolves synchronously;
+   * a published theme is a lazy `import()`) and swaps it into the
+   * compartment. The token check drops a slow load whose theme is no longer
+   * the current pick.
+   */
+  private applyTheme(entry: ThemeCatalogEntry): void {
+    const token = ++this.themeToken;
+    void entry.load().then((ext) => {
+      if (token === this.themeToken) {
+        this._view?.dispatch({ effects: this.themeCompartment.reconfigure(ext) });
+      }
+    });
   }
 
   ngAfterViewInit(): void {
@@ -189,6 +247,9 @@ export class MarkdownSurface implements AfterViewInit, OnDestroy {
           // `#tag` pills + Ctrl/Cmd-click -> search. Outside the mode
           // compartment: pills show in source mode too.
           this.onTagActivate() ? tagPills(this.onTagActivate()!) : [],
+          // Ctrl/Cmd-click a link to open it (also outside the mode
+          // compartment -- works in source mode).
+          this.onLinkActivate() ? linkActivation(this.onLinkActivate()!) : [],
           // Track this surface as the Edit/Selection menu's target while it
           // holds focus (see `EditTargetService` -- "last focused", so a
           // menu-bar click doesn't drop it).
@@ -209,18 +270,43 @@ export class MarkdownSurface implements AfterViewInit, OnDestroy {
               this._frontmatterExpanded.set(expanded);
             }
           }),
-          dreyEditorLook,
-          // Compact surfaces (entry drawer, note assistant composer) are
-          // narrow single-purpose fields -- long lines must wrap, not
-          // scroll sideways. The full-page editor keeps its own behaviour.
+          // The active CM6 theme. Seeded with Drey (local, synchronous) and
+          // swapped by `applyTheme()` -- a published theme is a lazy import,
+          // so it arrives a microtask/frame later. In a compartment so
+          // Settings -> Appearance can swap it live without a view rebuild.
+          this.themeCompartment.of(dreyEditorLook),
+          // Layout skeleton (height, scroll, content padding, hidden
+          // gutter) -- kept out of the swappable theme so a published theme
+          // can't drop it. After the compartment so it wins on equal
+          // specificity; `gutterTheme` / `compactTheme` (Prec.high) still
+          // override where they need to.
+          editorStructure,
+          // Long lines wrap at the editor's width instead of scrolling the
+          // content sideways -- the full-page editor now fills the whole
+          // area (no centred column), so a horizontal scrollbar there would
+          // just be noise.
+          EditorView.lineWrapping,
+          // Compact surfaces (entry drawer, note assistant composer) also
+          // get a slimmer theme.
           //
           // `Prec.high` is load-bearing: `compactTheme` restyles `.cm-content`
           // (drops the full-page 40px top padding), but at equal precedence
-          // CodeMirror lets the style module declared *earlier* -- here
-          // `dreyEditorLook` -- win the cascade, so the compact field would
+          // CodeMirror lets the style module declared *earlier* -- the theme
+          // compartment above -- win the cascade, so the compact field would
           // otherwise open with its first line pushed 40px down.
-          this.compact() ? [Prec.high(compactTheme), EditorView.lineWrapping] : [],
+          this.compact() ? Prec.high(compactTheme) : [],
           this.spellcheck() ? inlineSpellcheck({ source: this.spellcheck()! }) : [],
+          this.imageCapture()
+            ? imagePaste({
+                save: (bytes, ext) =>
+                  this.vault.saveAsset(bytes, ext, this.editor.openPath() ?? ''),
+                notePath: () => this.editor.openPath(),
+                readTextFile: (path) => this.vault.readTextFile(path),
+                saveFromUrl: (url) =>
+                  this.vault.saveAssetFromUrl(url, this.editor.openPath() ?? ''),
+                onError: (message) => this.editor.error.set(message),
+              })
+            : [],
           // Outside the mode compartment on purpose: the frontmatter pill
           // shows in source mode too, and its fold state must survive a
           // Live Preview <-> source switch.
@@ -305,6 +391,8 @@ export class MarkdownSurface implements AfterViewInit, OnDestroy {
     return mode === 'live'
       ? livePreview({
           resolveImage: (url) => resolveVaultImageUrl(this.editor.openPath(), url),
+          onOpenImage: (src) => this.lightbox.open(src),
+          onZoomDiagram: (dataUrl) => this.lightbox.open(dataUrl),
         })
       : [];
   }

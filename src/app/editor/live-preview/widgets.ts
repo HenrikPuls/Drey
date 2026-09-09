@@ -1,4 +1,5 @@
 import { WidgetType } from '@codemirror/view';
+import type { MermaidConfig } from 'mermaid';
 
 /** `•` in place of a bullet-list `-` / `*` / `+` marker. */
 export class BulletWidget extends WidgetType {
@@ -62,17 +63,34 @@ export class HrWidget extends WidgetType {
  * path could not be resolved to something servable (escapes the vault, no
  * open document); a load error at runtime falls back to the same
  * placeholder, so a broken reference reads as text instead of a broken icon.
+ *
+ * `width` / `height` come from an Obsidian-style `![alt|300](path)` /
+ * `![alt|300x200](path)` suffix (`shared/image-embed.ts`) and are applied
+ * as CSS px; the theme's `max-width: 100%` still caps overflow.
+ *
+ * When `onOpenImage` is given (and the src resolved), a hover lens button
+ * opens the image in the full-app viewer (ADR-0026). Its click is handled
+ * by a direct DOM listener that `stopPropagation`s, so CodeMirror never
+ * sees it -- no `ignoreEvent` override needed for the lens.
  */
 export class ImageWidget extends WidgetType {
   constructor(
     readonly src: string | null,
     readonly alt: string,
+    readonly width: number | null = null,
+    readonly height: number | null = null,
+    readonly onOpenImage?: (src: string) => void,
   ) {
     super();
   }
 
   override eq(other: ImageWidget): boolean {
-    return other.src === this.src && other.alt === this.alt;
+    return (
+      other.src === this.src &&
+      other.alt === this.alt &&
+      other.width === this.width &&
+      other.height === this.height
+    );
   }
 
   toDOM(): HTMLElement {
@@ -82,15 +100,59 @@ export class ImageWidget extends WidgetType {
       span.appendChild(this.placeholder());
       return span;
     }
+    const src = this.src;
     const img = document.createElement('img');
-    img.src = this.src;
+    img.src = src;
     img.alt = this.alt;
+    if (this.width !== null) {
+      img.style.width = `${this.width}px`;
+    }
+    if (this.height !== null) {
+      img.style.height = `${this.height}px`;
+    }
     img.onerror = () => {
       img.remove();
+      span.querySelector('.lp-lens')?.remove();
+      span.querySelector('.lp-resize')?.remove();
       span.appendChild(this.placeholder());
     };
     span.appendChild(img);
+
+    if (this.onOpenImage) {
+      const open = this.onOpenImage;
+      const lens = document.createElement('button');
+      lens.type = 'button';
+      lens.className = 'lp-lens';
+      lens.title = 'Open full view';
+      lens.innerHTML =
+        '<svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" ' +
+        'stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' +
+        '<circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3M11 8v6M8 11h6"/></svg>';
+      lens.addEventListener('click', (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        open(src);
+      });
+      span.appendChild(lens);
+    }
+
+    // Corner grip -- the actual drag is a delegated `EditorView`
+    // `pointerdown` handler in `block-render.ts` (the widget has no view).
+    const grip = document.createElement('span');
+    grip.className = 'lp-resize';
+    grip.setAttribute('aria-hidden', 'true');
+    span.appendChild(grip);
     return span;
+  }
+
+  /**
+   * CodeMirror ignores everything inside the widget (default `true`)
+   * except a `.lp-resize` grip -- the block-render `domEventHandlers`
+   * needs that `pointerdown`. The lens button handles its own click and
+   * `stopPropagation`s, so it never gets here.
+   */
+  override ignoreEvent(event: Event): boolean {
+    return !(event.target instanceof Element && event.target.closest('.lp-resize') !== null);
   }
 
   private placeholder(): HTMLElement {
@@ -120,9 +182,18 @@ function appendEditButton(parent: HTMLElement): void {
   parent.appendChild(btn);
 }
 
-/** `true` (= CodeMirror ignores it) for everything except the `✎` button. */
+/**
+ * `true` (= CodeMirror ignores it) for everything except the `✎` button and
+ * a mermaid error box -- clicking the error message anywhere should drop the
+ * cursor into the fence to fix it, not stay swallowed by the widget.
+ */
 function ignoreWidgetEvent(event: Event): boolean {
-  return !(event.target instanceof Element && event.target.closest('.lp-edit') !== null);
+  if (!(event.target instanceof Element)) {
+    return true;
+  }
+  return (
+    event.target.closest('.lp-edit') === null && event.target.closest('.lp-mermaid-error') === null
+  );
 }
 
 /**
@@ -149,6 +220,149 @@ export class HtmlBlockWidget extends WidgetType {
     div.innerHTML = this.html;
     appendEditButton(div);
     return div;
+  }
+
+  override ignoreEvent(event: Event): boolean {
+    return ignoreWidgetEvent(event);
+  }
+}
+
+/**
+ * mermaid is a large renderer (d3, dagre, …) -- load it lazily on the
+ * first diagram and configure it once (ADR-0025). `securityLevel: 'strict'`
+ * routes its output through DOMPurify and blocks click handlers; the app
+ * has no CSP, but strict mode is the safe default for note content.
+ */
+let mermaidPromise: Promise<typeof import('mermaid').default> | null = null;
+
+function loadMermaid(): Promise<typeof import('mermaid').default> {
+  if (!mermaidPromise) {
+    mermaidPromise = import('mermaid').then((mod) => {
+      const config: MermaidConfig = {
+        startOnLoad: false,
+        securityLevel: 'strict',
+        theme: 'dark',
+        darkMode: true,
+        fontFamily: 'var(--font-sans, system-ui, sans-serif)',
+        // Throw a parse error out of `render()` instead of drawing
+        // mermaid's built-in "bomb" diagram -- we show our own compact box.
+        suppressErrorRendering: true,
+      };
+      mod.default.initialize(config);
+      return mod.default;
+    });
+  }
+  return mermaidPromise;
+}
+
+let mermaidRenderSeq = 0;
+
+/**
+ * Serialises a rendered SVG string to a `data:` URL an `<img>` (the shared
+ * image viewer) can load. A `viewBox` is promoted to explicit `width` /
+ * `height` attributes and the `max-width` style dropped, so the `<img>`
+ * reports a real `naturalWidth`/`Height` -- mermaid otherwise emits
+ * `style="max-width…"` + `width="100%"`, which would give the lightbox a
+ * zero natural size and break Fit / zoom.
+ */
+export function svgToDataUrl(svg: string): string {
+  let markup = svg;
+  try {
+    const el = new DOMParser().parseFromString(svg, 'image/svg+xml').documentElement;
+    if (el && el.nodeName.toLowerCase() === 'svg' && !el.querySelector('parsererror')) {
+      const vb = el.getAttribute('viewBox');
+      const m = vb?.match(/-?[\d.]+\s+-?[\d.]+\s+([\d.]+)\s+([\d.]+)/);
+      if (m) {
+        el.setAttribute('width', m[1]);
+        el.setAttribute('height', m[2]);
+        el.style.removeProperty('max-width');
+      }
+      markup = new XMLSerializer().serializeToString(el);
+    }
+  } catch {
+    // fall back to the raw markup
+  }
+  return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(markup)}`;
+}
+
+/**
+ * A rendered Mermaid diagram in place of a ` ```mermaid ` fenced block
+ * (ADR-0025) -- Live-Preview-only, like tables: the cursor entering the
+ * fence reveals the raw source. Renders asynchronously (dynamic
+ * `import('mermaid')`) so the bundle stays out of the initial load; a
+ * "rendering…" note holds the space until it resolves, and a parse error
+ * becomes a compact inline box rather than throwing into the editor.
+ *
+ * With `onZoom` (the Live Preview config's `onZoomDiagram`) a hover lens
+ * button opens the diagram in the shared image viewer -- same recipe as
+ * `ImageWidget`'s `.lp-lens`, the SVG handed over as a `data:` URL.
+ */
+export class MermaidWidget extends WidgetType {
+  constructor(
+    readonly source: string,
+    readonly onZoom?: (dataUrl: string) => void,
+  ) {
+    super();
+  }
+
+  override eq(other: MermaidWidget): boolean {
+    return other.source === this.source;
+  }
+
+  toDOM(): HTMLElement {
+    const wrap = document.createElement('div');
+    wrap.className = 'lp-mermaid';
+    const pending = document.createElement('span');
+    pending.className = 'lp-mermaid-pending';
+    pending.textContent = 'rendering diagram…';
+    wrap.appendChild(pending);
+    appendEditButton(wrap);
+    void this.render(wrap);
+    return wrap;
+  }
+
+  private async render(wrap: HTMLElement): Promise<void> {
+    const id = `lp-mermaid-${mermaidRenderSeq++}`;
+    let result: HTMLElement;
+    let renderedSvg: string | null = null;
+    try {
+      const mermaid = await loadMermaid();
+      const { svg } = await mermaid.render(id, this.source);
+      renderedSvg = svg;
+      result = document.createElement('div');
+      result.className = 'lp-mermaid-svg';
+      result.innerHTML = svg;
+    } catch (error) {
+      result = document.createElement('pre');
+      result.className = 'lp-mermaid-error';
+      result.textContent = `Mermaid: ${error instanceof Error ? error.message : String(error)}`;
+    }
+    // mermaid can leave its offscreen measuring node behind on a parse error.
+    document.getElementById(`d${id}`)?.remove();
+    if (!wrap.isConnected) {
+      return; // the widget was replaced while mermaid worked
+    }
+    wrap.querySelector('.lp-mermaid-pending')?.remove();
+    wrap.insertBefore(result, wrap.querySelector('.lp-edit'));
+
+    if (renderedSvg !== null && this.onZoom) {
+      const svg = renderedSvg;
+      const zoom = this.onZoom;
+      const lens = document.createElement('button');
+      lens.type = 'button';
+      lens.className = 'lp-lens lp-mermaid-lens';
+      lens.title = 'Open full view';
+      lens.innerHTML =
+        '<svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" ' +
+        'stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' +
+        '<circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3M11 8v6M8 11h6"/></svg>';
+      lens.addEventListener('click', (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        zoom(svgToDataUrl(svg));
+      });
+      wrap.appendChild(lens);
+    }
   }
 
   override ignoreEvent(event: Event): boolean {

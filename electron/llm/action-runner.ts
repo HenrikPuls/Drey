@@ -23,6 +23,7 @@ import {
 } from '../../shared/llm';
 import { pickPreviewStyle } from '../../shared/text-diff';
 import { AppConfigStore } from '../app-config';
+import type { VaultTools } from '../mcp';
 import { CANCELLED_MESSAGE, isAbortError, LlmTaskRegistry } from './llm-tasks';
 import { LmStudioClient } from './lm-studio-client';
 
@@ -35,13 +36,22 @@ Respond ONLY with JSON, no prose around it:
 - Question (answer only, change nothing): {"kind":"answer","text":"<answer>"}
 - Change: {"kind":"edit","document":"<the full changed document>"}
 
-For a change you ALWAYS return the whole document, not just the changed part.`;
+For a change you ALWAYS return the whole document, not just the changed part.
+Earlier turns of this conversation are shown as plain text; your reply must still be one of the JSON forms above.`;
+
+/** Appended to `ASK_SYSTEM` when the vault tool set is available (ADR-0021). */
+const ASK_TOOLS_NOTE = `You may call the vault tools (vault_search, vault_read, vault_write) to look things up in the wider vault or to make changes elsewhere before you give your final JSON answer. A vault_write is confirmed by the user unless the app is in YOLO mode.`;
+
+/** Kept small so a long thread cannot crowd the document out of context. */
+const MAX_HISTORY_MESSAGES = 12;
 
 export class ActionRunner {
   constructor(
     private readonly config: AppConfigStore,
     private readonly llm: LmStudioClient,
     private readonly tasks: LlmTaskRegistry,
+    /** The vault tool set -- the assistant may call it when `mcp.enabled` (ADR-0021). */
+    private readonly vaultTools?: VaultTools,
   ) {}
 
   /** Aborts a running generation by the id the renderer minted for it. */
@@ -195,15 +205,35 @@ export class ActionRunner {
   }
 
   /** Chat Ask mode: an answer to display, or an edit to confirm. */
-  async ask(context: ActionContext, question: string, taskId?: string): Promise<AskOutcome> {
+  async ask(
+    context: ActionContext,
+    question: string,
+    taskId?: string,
+    history?: ChatMessage[],
+  ): Promise<AskOutcome> {
     if (!this.config.get().llm.enabled) {
       throw new Error('LLM features are disabled.');
     }
+    // The renderer already shapes and caps the thread (`historyForAsk`);
+    // the slice here is defence in depth against an over-long payload.
+    const prior = (history ?? []).slice(-MAX_HISTORY_MESSAGES);
+    const toolsOn = this.config.get().mcp.enabled && this.vaultTools !== undefined;
     const messages: ChatMessage[] = [
-      { role: 'system', content: ASK_SYSTEM },
+      { role: 'system', content: toolsOn ? `${ASK_SYSTEM}\n${ASK_TOOLS_NOTE}` : ASK_SYSTEM },
+      ...prior,
       { role: 'user', content: buildAskUserMessage(context, question) },
     ];
-    const reply = await this.tasks.run(taskId, (signal) => this.llm.chat(messages, { signal }));
+    const reply = await this.tasks.run(taskId, (signal) =>
+      this.llm.chat(messages, {
+        signal,
+        ...(toolsOn
+          ? {
+              tools: this.vaultTools!.openAiToolSpec(),
+              onToolCall: (name, argsJson) => this.runVaultTool(name, argsJson),
+            }
+          : {}),
+      }),
+    );
     const obj = parseJsonObject(reply);
 
     if (obj?.['kind'] === 'edit' && typeof obj['document'] === 'string') {
@@ -218,6 +248,24 @@ export class ActionRunner {
     }
     const text = typeof obj?.['text'] === 'string' ? obj['text'] : reply.trim();
     return { kind: 'answer', text };
+  }
+
+  /** Bridges one model tool call to `VaultTools`, flattening the result to text. */
+  private async runVaultTool(name: string, argsJson: string): Promise<string> {
+    if (!this.vaultTools) {
+      return 'Vault tools are not available.';
+    }
+    let args: Record<string, unknown> = {};
+    try {
+      const parsed: unknown = JSON.parse(argsJson || '{}');
+      if (parsed && typeof parsed === 'object') {
+        args = parsed as Record<string, unknown>;
+      }
+    } catch {
+      return `Could not parse arguments for ${name}: ${argsJson}`;
+    }
+    const result = await this.vaultTools.call(name, args);
+    return result.content.map((block) => block.text).join('\n');
   }
 
   private async runGeneric(

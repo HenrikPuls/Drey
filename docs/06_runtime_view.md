@@ -529,10 +529,10 @@ sequenceDiagram
     end
     opt appending
         Note over Draft: nothing open? openDailyNote(today) first
-        Draft->>EditorService: requestEntryFromDraft(draft)
+        Draft->>EditorService: requestEntryFromDraft(draft, activeEntryPattern)
         Note over Editor: effect on newEntryRequest
-        Editor->>Pure: entryInsertion(docText, draft)
-        Pure-->>Editor: { from, to, insert: "## HH:mm — Thema\ntext\n#tag · [[Person]]" }
+        Editor->>Pure: entryInsertion(docText, draft, pattern)
+        Pure-->>Editor: { from, to, insert }  (pattern from AppConfig.entry, placeholders filled, blanks collapsed)
         Editor->>Editor: view.dispatch(changes)  (undoable, caret after it)
         Note over Editor: docChanged -> EditorService.updateBuffer (synchronous)
         Editor->>EditorService: save()
@@ -732,10 +732,13 @@ sequenceDiagram
 
 ## 6.14 Drag a panel between docks → drop → persist (milestone 14)
 
-`mousedown` on a panel header starts the drag in `DockService`; a `window`
-`mousemove` recomputes the drop target/index every frame (the header
-reorders under the pointer, so the listeners can't live on the element);
-`mouseup` applies the move and writes the layout.
+`mousedown` on a panel header opens a *press* gesture in `DockService`. A
+release before the pointer moves ~4px is a click → `toggleCollapse` (the
+whole header is the collapse target; there is no separate chevron button).
+Moving past the threshold promotes it to a drag: a `window` `mousemove`
+recomputes the drop target/index every frame (the header reorders under the
+pointer, so the listeners can't live on the element) and a small title chip
+follows the cursor; `mouseup` applies the move and writes the layout.
 
 ```mermaid
 sequenceDiagram
@@ -746,21 +749,26 @@ sequenceDiagram
     participant Cmp as Dock component
     participant LS as localStorage['drey.dock']
 
-    User->>Frame: mousedown on header (not the chevron)
-    Frame->>Dock: startPanelDrag(id, event)
-    Dock->>Dock: dragging=id; add window mousemove/mouseup; body cursor=grabbing
-    loop while dragging
-        Win->>Dock: onDragMove(event)
-        Dock->>Dock: dropDock = X in a dock box (±12px) else window midline
-        Dock->>Dock: dropIndex = first panel whose Y-midpoint is below the pointer
-        Dock-->>Cmp: dragging / dropDock / dropIndex signals
-        Cmp-->>User: 2px accent drop-line + inset ring on the target dock;\ndragged panel opacity .4
+    User->>Frame: mousedown on header
+    Frame->>Dock: beginHeaderPress(id, title, event)
+    Dock->>Dock: record start x/y; add temp window mousemove/mouseup
+    alt released before ~4px move
+        Win->>Dock: onHeaderPressUp() → toggleCollapse(id)
+    else moved past threshold
+        Dock->>Dock: dragging=id; body cursor=grabbing; mount title-chip ghost
+        loop while dragging
+            Win->>Dock: onDragMove(event)
+            Dock->>Dock: dropDock = X in a dock box (±12px) else window midline
+            Dock->>Dock: dropIndex = first panel whose Y-midpoint is below the pointer
+            Dock-->>Cmp: dragging / dropDock / dropIndex signals
+            Cmp-->>User: 2px accent drop-line + dark wash over the target dock;\ndragged panel opacity .4; title chip follows the cursor
+        end
+        User->>Win: mouseup
+        Win->>Dock: onDragEnd()
+        Dock->>Dock: move(id, dropDock, dropIndex) — remove from both docks,\nsplice into target at the pre-removal slot
+        Dock->>LS: persist { dock, flexes, open, leftW, rightW }
+        Dock->>Dock: clear transient state; unmount ghost; body cursor=''
     end
-    User->>Win: mouseup
-    Win->>Dock: onDragEnd()
-    Dock->>Dock: move(id, dropDock, dropIndex) — remove from both docks,\nsplice into target at the pre-removal slot
-    Dock->>LS: persist { dock, flexes, open, leftW, rightW }
-    Dock->>Dock: clear transient state; body cursor=''
 ```
 
 Splitters (`startSplit`, keeps the summed height of the two open
@@ -768,6 +776,40 @@ neighbours constant, min 40px each) and the dock-edge resizers
 (`startDockResize`, clamp 180–560px) use pointer capture instead and
 write the same `drey.dock` blob. `View → Reset layout` is
 `DockService.reset()`.
+
+### View menu → hide / show a whole widget (ADR-0034)
+
+The View menu rows are generated from `WIDGETS.filter(w => w.removable)`.
+A row's check mark tracks `!DockService.isHidden(id)`; clicking it calls
+`hide(id)` or `show(id)` — distinct from collapsing to the header.
+
+```mermaid
+sequenceDiagram
+    actor User
+    participant Menu as MenuService (View)
+    participant Dock as DockService
+    participant Reg as widget-registry (WIDGETS)
+    participant Cmp as Dock component
+    participant LS as localStorage['drey.dock']
+
+    User->>Menu: click "Add entry" (checked)
+    Menu->>Dock: hide('entry')
+    Dock->>Dock: remove 'entry' from every dock list; hidden += 'entry'
+    Dock->>LS: persist { dock, flexes, open, hidden, … }
+    Dock-->>Cmp: bottomIds() no longer contains 'entry'
+    Cmp-->>User: the panel (and its header) is gone; bottom band collapses
+    User->>Menu: click "Add entry" again (unchecked)
+    Menu->>Dock: show('entry')
+    Dock->>Reg: descriptor.defaultDock = 'bottom'
+    Dock->>Dock: splice 'entry' back at its registry-order slot; open['entry']=true; hidden -= 'entry'
+    Dock->>LS: persist
+    Cmp-->>User: panel returns to the bottom dock, expanded
+```
+
+`DockService.move()` (drag) and `openAndExpand()` (a command that reveals a
+widget, e.g. `search.open`) also drop the id from `hidden`, so dragging a
+hidden widget back or invoking its command un-hides it. `reset()` clears
+`hidden` entirely.
 
 ## 6.15 Titlebar menu action → command (milestone 14)
 
@@ -791,12 +833,226 @@ sequenceDiagram
 ```
 
 Wired rows: File → New note (`note.new`), Switch vault … (`vault.selectVault`
-+ `dock.openAndExpand('files')`), Save / Save all (`note.save` /
-`note.saveAll`), Settings (`settings.openScreen`); Edit → Search all notes
-(`search.open` + `dock.openAndExpand('search')`); View → Line numbers
-(`editor.toggleLineNumbers`), one collapse toggle per panel
-(`dock.toggleCollapse`), Reset layout (`dock.reset`). Everything else is a
-disabled placeholder.
+
+- `dock.openAndExpand('files')`), Save / Save all (`note.save` /
+  `note.saveAll`), Settings (`settings.openScreen`); Edit → Search all notes
+  (`search.open` + `dock.openAndExpand('search')`); View → Line numbers
+  (`editor.toggleLineNumbers`), one collapse toggle per panel
+  (`dock.toggleCollapse`), Reset layout (`dock.reset`). Everything else is a
+  disabled placeholder.
+
+## 6.16 MCP client `vault_write` → confirm diff → apply (ADR-0021)
+
+```mermaid
+sequenceDiagram
+    participant Client as MCP client (stdio bridge / HTTP)
+    participant HTTP as McpHttpTransport
+    participant Srv as McpServer
+    participant Tools as VaultTools
+    participant Main as main.ts (ConfirmWrite)
+    participant Bridge as McpBridgeService (renderer)
+    participant Conf as ConfirmationService + dialog
+    participant Vault as VaultManager + TagIndex
+
+    Client->>HTTP: POST /mcp  tools/call vault_write {path, content, mode}
+    HTTP->>Srv: handle(message)
+    Srv->>Tools: call('vault_write', args)
+    Tools->>Vault: readFile(path)  (before; '' if new)
+    alt mcp.yolo is off
+        Tools->>Main: confirmWrite({path, before, after, mode})
+        Main->>Bridge: send mcp:write-request {id, …}
+        Bridge->>Conf: request({previewStyle: pickPreviewStyle(before, after), …})
+        Conf-->>Bridge: user's yes / no
+        Bridge->>Main: invoke mcp:write-decision(id, approved)
+        Main-->>Tools: approved
+    else YOLO mode
+        Note over Tools: no confirmation
+    end
+    alt approved (or YOLO)
+        Tools->>Vault: writeFile(path, after) + reindexFile(path, after)
+        Tools->>Bridge: send mcp:vault-changed → TagService/VaultService.refresh()
+        Tools-->>Srv: { content:[{text:"Wrote …"}] }
+    else declined
+        Tools-->>Srv: { content:[{text:"The user declined the write."}], isError:true }
+    end
+    Srv-->>HTTP: JSON-RPC result
+    HTTP-->>Client: 200 { result }
+```
+
+The built-in assistant takes the in-process path instead:
+`ActionRunner.ask` passes `VaultTools.openAiToolSpec()` +
+`runVaultTool` into `LmStudioClient.chat`, whose tool-calling loop invokes
+`VaultTools.call` directly (same `ConfirmWrite` gate) between model
+rounds, then parses the final message as the `{"kind":"answer"|"edit"}`
+verdict.
+
+## 6.17 Paste / drop an image → save into `attachments/` → render ([ADR-0024](09_architecture_decisions/0024-binary-vault-asset-write.md))
+
+```mermaid
+sequenceDiagram
+    participant User
+    participant CM as imagePaste (CodeMirror domEventHandlers)
+    participant Surface as MarkdownSurface
+    participant VS as VaultService
+    participant Main as main.ts
+    participant Vault as VaultManager
+
+    User->>CM: paste / drop an image blob
+    CM->>CM: preventDefault; insert `![](uploading:<id>)` on its own line, caret on the next
+    CM->>Surface: save(bytes, ext)  (config callback)
+    Surface->>VS: saveAsset(bytes, ext, editor.openPath() ?? '')
+    VS->>Main: invoke vault:save-asset(bytes, ext, noteRelPath)
+    Main->>Vault: saveAsset(bytes, ext, noteRelPath)
+    Vault->>Vault: sha256(bytes) → name; mkdir <dir(note)>/attachments/; write (no overwrite)
+    Vault-->>Main: "attachments/<name>"
+    Main-->>VS: "attachments/<name>"
+    VS->>VS: loadFileTree()  (the new attachments/ folder shows)
+    VS-->>CM: "attachments/<name>"
+    alt saved
+        CM->>CM: replace the placeholder with `![](attachments/<name>)`
+        Note over Surface: Live Preview ImageWidget → resolveVaultImageUrl → drey-asset://asset/<vault-rel>
+    else rejected (no vault / no bridge)
+        CM->>Surface: onError(message) → EditorService.error signal
+        CM->>CM: roll the placeholder (and its newlines) back out
+    end
+```
+
+## 6.18 Startup → open today's daily note (ADR-0029)
+
+`App`'s one-shot effect opens today's note as an unsaved draft once the
+vault path and the persisted config are both known. Reuses the §6.3
+`openDailyNote` path (draft tab, no disk write).
+
+```mermaid
+sequenceDiagram
+    participant App
+    participant VaultService
+    participant SettingsService
+    participant EditorService
+    participant Main as main
+
+    Note over App: constructor registers effect()
+    VaultService->>Main: getActiveVault()  (from its own constructor refresh)
+    Main-->>VaultService: "<vault path>"  → activeVaultPath signal
+    SettingsService->>Main: config:get
+    Main-->>SettingsService: AppConfig  → config signal (loaded() = true)
+    Note over App: effect re-runs: activeVaultPath && loaded && !dailyNoteStartupDone
+    App->>App: dailyNoteStartupDone = true
+    alt config.daily.openOnStartup
+        App->>EditorService: openDailyNote(formatDate(today))
+        alt daily/<y>/<m>/<date>.md exists
+            EditorService->>Main: readVaultFile(path) → normal tab
+        else missing
+            EditorService->>Main: buildDailyNoteContent(date)
+            EditorService->>EditorService: addDoc(draft tab, existsOnDisk=false)  (nothing written)
+        end
+    end
+    Note over App,EditorService: later vault.refresh() (after a save) re-runs the effect → guard short-circuits
+```
+
+## 6.19 Insert a template (ADR-0029)
+
+Panel click / `Mod+T` picker / editor context menu / drag all funnel to
+`TemplateLibraryService.insert()`. The drag path keeps the drop coordinate;
+the others insert at the caret.
+
+```mermaid
+sequenceDiagram
+    actor User
+    participant UI as Panel / Picker / Context menu
+    participant Lib as TemplateLibraryService
+    participant VaultService
+    participant EditorService
+    participant Editor as Editor (CodeMirror 6)
+
+    User->>UI: pick a template (click / Enter / menu row)
+    UI->>Lib: insert("templates/meetings/1-1.md")
+    alt no text tab open
+        Lib->>EditorService: error.set("Open a note before inserting a template.")
+    else
+        Lib->>VaultService: readTextFile(path)
+        VaultService-->>Lib: raw file text
+        Lib->>Lib: stripFrontmatter → substitutePlaceholders({date,time,datetime,title})
+        Lib->>EditorService: requestInsertText(body)  (bumps insertRequest)
+        Editor->>Editor: dispatch { replace selection with body } + caret after + focus
+        Lib->>Lib: push path to recent (localStorage, cap 5)
+    end
+
+    Note over User,Editor: drag a row instead → image-paste.ts TEMPLATE_DT_TYPE branch:<br/>read → strip → substitute → insert at posAtCoords(x,y)
+```
+
+## 6.20 Files panel: copy / paste / duplicate / rename (ADR-0018 refresh model)
+
+Context-menu rows on the file tree. "Copy" only stashes a `{ path, name }`
+on `VaultService.clipboard`; the fs work happens on "Paste" / "Duplicate" /
+"Rename". Each mutating IPC handler rebuilds the tag index (same reason as
+`vault:delete` — a `.md` file can move in or out of scope), and the
+renderer reloads the tree. A rename also re-points open tabs.
+
+```mermaid
+sequenceDiagram
+    actor User
+    participant Panel as FilesPanel
+    participant VaultService
+    participant EditorService
+    participant IPC as main.ts handler
+    participant VM as VaultManager
+    participant Idx as TagIndex
+
+    User->>Panel: right-click entry → Copy
+    Panel->>VaultService: clipboard.set({ path, name })
+    User->>Panel: right-click folder → Paste
+    Panel->>VaultService: copyEntry(src, destDir)
+    VaultService->>IPC: vault:copy-entry
+    IPC->>VM: copyEntry(src, destDir)
+    VM->>VM: resolveInVault(both) · fsp.cp(recursive) · uniqueCopyName on clash · copy .md sidecar
+    IPC->>Idx: rebuild()
+    VaultService->>VaultService: loadFileTree()
+
+    Note over User,Idx: Rename: prompt-less inline input → renameEntry(from,to)<br/>→ VM.fsp.rename (+ sidecar) → Idx.rebuild → loadFileTree<br/>→ EditorService.retargetTabs(from,to) keeps unsaved buffers
+```
+
+## 6.21 Tasks panel: list + tick a task ([ADR-0033](09_architecture_decisions/0033-tasks-panel-and-index.md))
+
+The panel shows `TaskService.visible()`. In **document** scope that is
+`scanTasks` over the live editor buffer, so it tracks unsaved edits with no
+IPC. In **vault** scope it is `listTasks()` from the main-process
+`TaskIndex`, refreshed on construct / after each save / on
+`mcp:vault-changed`. Ticking a row toggles the source line and saves.
+
+```mermaid
+sequenceDiagram
+    actor User
+    participant Panel as TasksPanel
+    participant Svc as TaskService
+    participant Ed as EditorService
+    participant IPC as main.ts handler
+    participant NM as NoteManager
+    participant TI as TaskIndex
+
+    Note over Panel,Svc: document scope — no IPC
+    User->>Panel: open panel / edit a "- [ ]" line in the editor
+    Panel->>Svc: visible() = scanTasks(openPath, bufferContent())
+
+    Note over Panel,TI: vault scope
+    Svc->>IPC: tasks:list
+    IPC->>TI: all()
+    TI-->>Svc: TaskRecord[]
+
+    User->>Panel: tick a row's checkbox
+    Panel->>Svc: toggle(task)
+    Svc->>Ed: setTaskDone(path, line, !done)
+    alt file is an open text tab
+        Ed->>Ed: setDoneOnLine(buffer) · patchDoc · save()
+    else not open
+        Ed->>IPC: vault:read-file → setDoneOnLine → note:save
+    end
+    IPC->>NM: saveNote(...)
+    NM->>TI: reindexFile(path, written)
+    Svc->>Svc: refresh() → tasks:list
+    User->>Panel: click a row body
+    Panel->>Ed: openFileAt(path, line)
+```
 
 ## Planned flows (added as their milestone is built)
 

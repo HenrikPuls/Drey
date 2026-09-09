@@ -4,6 +4,7 @@ import {
   ActionOutcome,
   AppConfig,
   AskOutcome,
+  ChatMessage,
   ChatThread,
   CustomDictionary,
   DreyApi,
@@ -12,6 +13,9 @@ import {
   LlmConnectionTest,
   LlmDebugEntry,
   LlmEndpoint,
+  LogEntry,
+  McpStatus,
+  McpWriteRequest,
   NoteSaveRequest,
   NoteSaveResult,
   SpellCheckResult,
@@ -19,6 +23,7 @@ import {
   TagEntry,
   TagSearchHit,
   TagSearchQuery,
+  TaskRecord,
   VaultFileContent,
   VaultFileEntry,
 } from '../shared/ipc-api';
@@ -44,6 +49,10 @@ const dreyApi: DreyApi = {
     ipcRenderer.invoke(IPC_CHANNELS.editExec, command),
   setUiZoomFactor: (factor: number): Promise<void> =>
     ipcRenderer.invoke(IPC_CHANNELS.uiSetZoom, factor),
+  openExternal: (url: string): Promise<void> =>
+    ipcRenderer.invoke(IPC_CHANNELS.openExternal, url),
+  logMessage: (entry: LogEntry): Promise<void> =>
+    ipcRenderer.invoke(IPC_CHANNELS.appLog, entry),
   getActiveVault: () => ipcRenderer.invoke(IPC_CHANNELS.vaultGetActive),
   selectVault: () => ipcRenderer.invoke(IPC_CHANNELS.vaultSelect),
   listVaultFiles: (): Promise<VaultFileEntry[]> => ipcRenderer.invoke(IPC_CHANNELS.vaultListFiles),
@@ -51,10 +60,20 @@ const dreyApi: DreyApi = {
     ipcRenderer.invoke(IPC_CHANNELS.vaultReadFile, relativePath),
   writeVaultFile: (relativePath: string, content: string): Promise<number> =>
     ipcRenderer.invoke(IPC_CHANNELS.vaultWriteFile, relativePath, content),
+  saveVaultAsset: (bytes: Uint8Array, ext: string, noteRelPath: string): Promise<string> =>
+    ipcRenderer.invoke(IPC_CHANNELS.vaultSaveAsset, bytes, ext, noteRelPath),
+  saveVaultAssetFromUrl: (url: string, noteRelPath: string): Promise<string> =>
+    ipcRenderer.invoke(IPC_CHANNELS.vaultSaveAssetFromUrl, url, noteRelPath),
   createVaultFile: (relativePath: string): Promise<string> =>
     ipcRenderer.invoke(IPC_CHANNELS.vaultCreateFile, relativePath),
   createVaultDirectory: (relativePath: string): Promise<string> =>
     ipcRenderer.invoke(IPC_CHANNELS.vaultCreateDirectory, relativePath),
+  renameVaultEntry: (fromRelativePath: string, toRelativePath: string): Promise<string> =>
+    ipcRenderer.invoke(IPC_CHANNELS.vaultRename, fromRelativePath, toRelativePath),
+  copyVaultEntry: (sourceRelativePath: string, destDirRelativePath: string): Promise<string> =>
+    ipcRenderer.invoke(IPC_CHANNELS.vaultCopy, sourceRelativePath, destDirRelativePath),
+  duplicateVaultEntry: (sourceRelativePath: string): Promise<string> =>
+    ipcRenderer.invoke(IPC_CHANNELS.vaultDuplicate, sourceRelativePath),
   deleteVaultEntry: (relativePath: string): Promise<void> =>
     ipcRenderer.invoke(IPC_CHANNELS.vaultDelete, relativePath),
   pickSavePath: (suggestedName: string): Promise<string | null> =>
@@ -66,6 +85,7 @@ const dreyApi: DreyApi = {
   listTags: (): Promise<TagEntry[]> => ipcRenderer.invoke(IPC_CHANNELS.tagList),
   searchTags: (query: TagSearchQuery): Promise<TagSearchHit[]> =>
     ipcRenderer.invoke(IPC_CHANNELS.tagSearch, query),
+  listTasks: (): Promise<TaskRecord[]> => ipcRenderer.invoke(IPC_CHANNELS.taskList),
   summariseSearchResults: (query: TagSearchQuery, taskId?: string): Promise<string> =>
     ipcRenderer.invoke(IPC_CHANNELS.tagSummariseResults, query, taskId),
   suggestTags: (entryText: string, taskId?: string): Promise<string[]> =>
@@ -88,8 +108,13 @@ const dreyApi: DreyApi = {
   },
   runAction: (triggerId: string, context: ActionContext, taskId?: string): Promise<ActionOutcome> =>
     ipcRenderer.invoke(IPC_CHANNELS.actionRun, triggerId, context, taskId),
-  askChat: (context: ActionContext, question: string, taskId?: string): Promise<AskOutcome> =>
-    ipcRenderer.invoke(IPC_CHANNELS.chatAsk, context, question, taskId),
+  askChat: (
+    context: ActionContext,
+    question: string,
+    taskId?: string,
+    history?: ChatMessage[],
+  ): Promise<AskOutcome> =>
+    ipcRenderer.invoke(IPC_CHANNELS.chatAsk, context, question, taskId, history),
   cancelLlmTask: (taskId: string): Promise<boolean> =>
     ipcRenderer.invoke(IPC_CHANNELS.llmCancel, taskId),
   readChatThread: (notePath: string): Promise<ChatThread> =>
@@ -104,6 +129,8 @@ const dreyApi: DreyApi = {
     ipcRenderer.invoke(IPC_CHANNELS.spellLanguages),
   addSpellDictionary: (): Promise<CustomDictionary | null> =>
     ipcRenderer.invoke(IPC_CHANNELS.spellAddDictionary),
+  addSpellWord: (word: string, target: 'language' | 'personal'): Promise<AppConfig> =>
+    ipcRenderer.invoke(IPC_CHANNELS.spellAddWord, word, target),
   onOpenDailyNote: (listener: (relativePath: string) => void): (() => void) => {
     // The wrapper drops the IpcRendererEvent and forwards only the path --
     // the renderer must never get a handle to the event or to ipcRenderer
@@ -112,6 +139,19 @@ const dreyApi: DreyApi = {
       listener(relativePath);
     ipcRenderer.on(IPC_CHANNELS.dailyOpen, wrapped);
     return () => ipcRenderer.removeListener(IPC_CHANNELS.dailyOpen, wrapped);
+  },
+  getMcpStatus: (): Promise<McpStatus> => ipcRenderer.invoke(IPC_CHANNELS.mcpStatus),
+  onMcpWriteRequest: (listener: (request: McpWriteRequest) => void): (() => void) => {
+    const wrapped = (_event: IpcRendererEvent, request: McpWriteRequest): void => listener(request);
+    ipcRenderer.on(IPC_CHANNELS.mcpWriteRequest, wrapped);
+    return () => ipcRenderer.removeListener(IPC_CHANNELS.mcpWriteRequest, wrapped);
+  },
+  resolveMcpWrite: (id: number, approved: boolean): Promise<void> =>
+    ipcRenderer.invoke(IPC_CHANNELS.mcpWriteDecision, id, approved),
+  onVaultChanged: (listener: () => void): (() => void) => {
+    const wrapped = (): void => listener();
+    ipcRenderer.on(IPC_CHANNELS.mcpVaultChanged, wrapped);
+    return () => ipcRenderer.removeListener(IPC_CHANNELS.mcpVaultChanged, wrapped);
   },
 };
 

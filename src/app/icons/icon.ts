@@ -21,6 +21,7 @@ export type IconName =
   | 'chevron-right'
   | 'chevron-left'
   | 'chevron-down'
+  | 'chevrons-down-up'
   | 'settings'
   | 'window'
   | 'x'
@@ -30,18 +31,25 @@ export type IconName =
   | 'sparkles'
   | 'more-horizontal'
   | 'copy'
+  | 'corner-down-left'
   | 'rotate-ccw'
   | 'refresh-cw'
   | 'folder'
   | 'list-ordered'
   | 'grip-vertical'
   | 'minus'
+  | 'pencil'
   | 'square';
 
 const ICONS: Record<IconName, readonly IconShape[]> = {
   'chevron-right': [{ kind: 'path', d: 'm9 18 6-6-6-6' }],
   'chevron-left': [{ kind: 'path', d: 'm15 18-6-6 6-6' }],
   'chevron-down': [{ kind: 'path', d: 'm6 9 6 6 6-6' }],
+  // Lucide "chevrons-down-up" -- the Files panel "collapse all folders" button.
+  'chevrons-down-up': [
+    { kind: 'path', d: 'm7 20 5-5 5 5' },
+    { kind: 'path', d: 'm7 4 5 5 5-5' },
+  ],
   settings: [
     {
       kind: 'path',
@@ -66,7 +74,7 @@ const ICONS: Record<IconName, readonly IconShape[]> = {
     { kind: 'path', d: 'm5 12 7-7 7 7' },
     { kind: 'path', d: 'M12 19V5' },
   ],
-  // Lucide "sparkles" -- the assistant panel's show/hide toggle.
+  // Lucide "sparkles" -- the assistant / AI affordance.
   sparkles: [
     {
       kind: 'path',
@@ -89,6 +97,11 @@ const ICONS: Record<IconName, readonly IconShape[]> = {
       d: 'M10 8h10a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H10a2 2 0 0 1-2-2V10a2 2 0 0 1 2-2z',
     },
     { kind: 'path', d: 'M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2' },
+  ],
+  // Lucide "corner-down-left" -- "insert this card into the note".
+  'corner-down-left': [
+    { kind: 'path', d: 'M20 4v7a4 4 0 0 1-4 4H4' },
+    { kind: 'path', d: 'm9 10-5 5 5 5' },
   ],
   // Lucide "rotate-ccw" -- "restart chat from here".
   'rotate-ccw': [
@@ -129,6 +142,8 @@ const ICONS: Record<IconName, readonly IconShape[]> = {
   ],
   // Titlebar minimize.
   minus: [{ kind: 'path', d: 'M5 12h14' }],
+  // Rename (matches the Live Preview widgets' edit affordance).
+  pencil: [{ kind: 'path', d: 'M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z' }],
   // Titlebar maximize (an outline square).
   square: [
     {

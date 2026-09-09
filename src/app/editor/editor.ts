@@ -10,15 +10,14 @@ import {
 } from '@angular/core';
 import { EditorView } from '@codemirror/view';
 import { ActionsService } from '../services/actions.service';
-import { AssistantService } from '../services/assistant.service';
-import { DockService } from '../dock';
-import { editorFontFamilyStacks } from '../../../shared/app-config';
+import { CLASSIC_ENTRY_PATTERN, editorFontFamilyStacks } from '../../../shared/app-config';
 import { EditorService, EditorViewMode, NewEntryRequest } from '../services/editor.service';
 import { EditorZoomService } from '../services/editor-zoom.service';
 import { SettingsService } from '../services/settings.service';
 import { SpellcheckService } from '../services/spellcheck.service';
 import { TagSearchService } from '../tags';
 import { Icon } from '../icons/icon';
+import { resolveVaultLinkPath } from './link-open';
 import { MarkdownSurface } from './markdown-surface/markdown-surface';
 
 /**
@@ -63,8 +62,6 @@ export class Editor implements AfterViewInit {
   protected readonly settings = inject(SettingsService);
   protected readonly zoom = inject(EditorZoomService);
   protected readonly actions = inject(ActionsService);
-  protected readonly assistant = inject(AssistantService);
-  protected readonly dock = inject(DockService);
   private readonly spellcheck = inject(SpellcheckService);
   private readonly tagSearch = inject(TagSearchService);
 
@@ -74,6 +71,26 @@ export class Editor implements AfterViewInit {
    * so it keeps its `this` when the extension calls it.
    */
   protected readonly activateTag = (tag: string): void => this.tagSearch.searchTag(tag);
+
+  /**
+   * Passed to the surface: a `Ctrl`/`Cmd`-click on a Markdown link. Web /
+   * mail targets open in the OS default handler; a vault-relative path
+   * opens as a tab. An arrow function so it keeps `this`.
+   */
+  protected readonly activateLink = (href: string): void => {
+    const raw = href.trim();
+    if (/^(https?:|mailto:)/i.test(raw)) {
+      void window.dreyApi.openExternal(raw);
+      return;
+    }
+    if (/^[a-z][a-z0-9+.-]*:/i.test(raw) || raw.startsWith('//')) {
+      return; // some other scheme -- leave it alone
+    }
+    const target = resolveVaultLinkPath(this.editor.openPath(), raw);
+    if (target) {
+      void this.editor.openFile(target);
+    }
+  };
 
   /**
    * The document is spellchecked as you type, like the entry drawer. Past
@@ -90,6 +107,8 @@ export class Editor implements AfterViewInit {
 
   /** Last `newEntryRequest` id this component has acted on. */
   private handledEntryRequest = 0;
+  /** Last `insertRequest` id this component has acted on. */
+  private handledInsertRequest = 0;
   /** Path whose text CodeMirror currently holds -- distinguishes a tab switch from an in-place reload. */
   private loadedPath: string | null = null;
   /**
@@ -133,6 +152,15 @@ export class Editor implements AfterViewInit {
       const request = this.editor.newEntryRequest();
       if (this.view) {
         this.applyNewEntryRequest(request);
+      }
+    });
+
+    // The note assistant's "insert into note" arrow: drop the card text in
+    // at the caret (replacing any selection).
+    effect(() => {
+      const request = this.editor.insertRequest();
+      if (this.view) {
+        this.applyInsertRequest(request);
       }
     });
 
@@ -202,8 +230,8 @@ export class Editor implements AfterViewInit {
   }
 
   protected chooseMode(mode: EditorViewMode): void {
-    this.editor.setViewMode(mode);
     this.closeMenu();
+    this.editor.setViewMode(mode);
   }
 
   /**
@@ -248,7 +276,11 @@ export class Editor implements AfterViewInit {
     this.handledEntryRequest = request.id;
 
     if (request.draft) {
-      const edit = this.editor.entryDraftEdit(view.state.doc.toString(), request.draft);
+      const edit = this.editor.entryDraftEdit(
+        view.state.doc.toString(),
+        request.draft,
+        request.pattern ?? CLASSIC_ENTRY_PATTERN,
+      );
       view.dispatch({
         changes: edit,
         selection: { anchor: edit.from + edit.insert.length },
@@ -280,6 +312,27 @@ export class Editor implements AfterViewInit {
     if (!request.text) {
       view.focus();
     }
+  }
+
+  /**
+   * Replaces the current selection (or inserts at the caret) with
+   * `request.text` and moves the caret past it -- the assistant's
+   * insert-into-note action. The buffer's `docChanged` handles the rest
+   * (dirty state, save with Ctrl+S); nothing is written automatically.
+   */
+  private applyInsertRequest(request: { id: number; text: string }): void {
+    const view = this.view;
+    if (!view || request.id === 0 || request.id === this.handledInsertRequest) {
+      return;
+    }
+    this.handledInsertRequest = request.id;
+    const range = view.state.selection.main;
+    view.dispatch({
+      changes: { from: range.from, to: range.to, insert: request.text },
+      selection: { anchor: range.from + request.text.length },
+      scrollIntoView: true,
+    });
+    view.focus();
   }
 
   /** Puts the caret at the start of 1-based `line` and scrolls it into view. */

@@ -1,17 +1,25 @@
 import { Injectable, computed, inject, signal } from '@angular/core';
-import { TagSearchHit } from '../../../shared/ipc-api';
+import { TagSearchHit, TagSearchQuery } from '../../../shared/ipc-api';
+import { runTagSearch, sectionRecordsFor } from '../../../shared/tags';
+import { EditorService } from '../services/editor.service';
 import { LlmTaskService } from '../services/llm-task.service';
+
+/** Files under here are kept out of the tag index (mirrors `TagIndex`). */
+const TEMPLATES_PREFIX = 'templates/';
 
 /**
  * Query state, results and the on-demand LLM digest for the sidebar
  * tag-search panel. The component only renders and forwards events
  * (CLAUDE.md: no business logic in components). One or more tags (AND) plus
  * optional free text (AND); the matcher runs in the main process
- * (`tags:search`), the digest through `tags:summarise-results`.
+ * (`tags:search`) over the files on disk, then this service folds in hits
+ * from open tabs' unsaved buffers; the digest goes through
+ * `tags:summarise-results`.
  */
 @Injectable({ providedIn: 'root' })
 export class TagSearchService {
   private readonly llmTasks = inject(LlmTaskService);
+  private readonly editor = inject(EditorService);
 
   readonly queryTags = signal<string[]>([]);
   readonly queryText = signal('');
@@ -103,15 +111,48 @@ export class TagSearchService {
     }
     this.searching.set(true);
     try {
-      this.hits.set(
-        await this.api.searchTags({ tags: this.queryTags(), text: this.queryText().trim() }),
-      );
+      const query: TagSearchQuery = { tags: this.queryTags(), text: this.queryText().trim() };
+      const diskHits = await this.api.searchTags(query);
+      this.hits.set(this.withOpenBufferHits(diskHits, query));
       this.ran.set(true);
     } catch {
       this.hits.set([]);
     } finally {
       this.searching.set(false);
     }
+  }
+
+  /**
+   * Fold hits from open tabs' live buffers into the on-disk results. A tab
+   * with unsaved edits (or a never-saved scratch tab) replaces its own
+   * on-disk hits with what its current text matches -- tagged `unsaved` so
+   * the panel can mark it. A saved, unmodified tab contributes nothing new.
+   * `sectionRecordsFor` + `runTagSearch` are the exact routines the main
+   * process runs, so an unsaved edit is searched as it will be once saved.
+   */
+  private withOpenBufferHits(diskHits: TagSearchHit[], query: TagSearchQuery): TagSearchHit[] {
+    const dirty = this.editor
+      .openDocs()
+      .filter(
+        (d) =>
+          d.kind === 'text' &&
+          d.bufferContent !== d.savedContent &&
+          !d.path.startsWith(TEMPLATES_PREFIX) &&
+          // The tag-search export tab would otherwise match its own dump.
+          !(d.name === 'search-results.md' && !d.existsOnDisk),
+      );
+    if (dirty.length === 0) {
+      return diskHits;
+    }
+    const dirtyPaths = new Set(dirty.map((d) => d.path));
+    const merged = diskHits.filter((h) => !dirtyPaths.has(h.path));
+    for (const doc of dirty) {
+      for (const hit of runTagSearch(sectionRecordsFor(doc.path, doc.bufferContent), query)) {
+        merged.push({ ...hit, unsaved: true });
+      }
+    }
+    merged.sort((a, b) => a.path.localeCompare(b.path) || a.line - b.line);
+    return merged;
   }
 
   async summarise(): Promise<void> {

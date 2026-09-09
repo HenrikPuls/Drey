@@ -14,6 +14,15 @@
 :root {
   color-scheme: dark;
 
+  /* ---- Theme seed ---- the two colours a non-Drey theme is derived from.
+     `ThemeService` writes these onto <html> from the chosen theme's seed
+     (`src/app/editor/themes/theme-catalog.ts`); the `:root[data-theme]`
+     block far below `color-mix()`es the whole token set off them. The
+     defaults here are the Drey palette, and Drey carries no `data-theme`
+     attribute, so the bespoke values below win untouched for it. */
+  --_bg: #1b1a19;
+  --_fg: #e6e3dd;
+
   /* ---- Surfaces (DESIGN.md "Farben") ---- */
   --bg-dock: #1b1a19; /* app background + both docks */
   --bg-editor: #211f1e; /* editor / main surface + search-field surfaces */
@@ -77,6 +86,11 @@
   /* ---- Shadow ---- */
   --popover-shadow: 0 14px 34px rgba(0, 0, 0, 0.55);
 
+  /* ---- Z-index ---- the rest of the ladder is hardcoded per component
+     (dock 6, content 5, menu-bar 30/40, Settings 30/31, confirmation
+     dialog / menus 40/41); the image lightbox is the ceiling (ADR-0026). */
+  --z-lightbox: 60;
+
   /* ---- Line grid (DESIGN.md principle 2: no in-between sizes) ---- */
   --row-h: 26px; /* every list row */
   --bar-h: 34px; /* every chrome / header bar (32-34px; panel headers use 32) */
@@ -114,6 +128,51 @@
   --spell-error: #c05a5a;
 }
 
+/* ---- Derived shell palette for a published theme ----
+
+   Active only while `ThemeService` has set a `data-theme` attribute (i.e.
+   any theme other than Drey). Every surface, text-ramp, border and hover
+   token is re-expressed as a `color-mix()` of the theme's two seed colours
+   (`--_bg` / `--_fg`, written on <html> by `ThemeService`) so a single
+   published CodeMirror theme yields a coherent whole-app look with no
+   per-theme CSS. The accent tints (further down, `color-mix()`ed off
+   `--accent`) and the line-grid / type metrics stay shared. Works for
+   light seeds too -- the ratios read as "N% toward the text colour".  */
+:root[data-theme] {
+  color-scheme: light dark;
+
+  --bg-dock: var(--_bg);
+  --bg-editor: color-mix(in srgb, var(--_fg) 4%, var(--_bg));
+  --bg-input: color-mix(in srgb, var(--_fg) 8%, var(--_bg));
+  --bg-search: var(--bg-editor);
+  --bg-bar: var(--bg-dock);
+  --bg-sidebar: var(--bg-dock);
+  --bg-main: var(--bg-editor);
+
+  --text-heading: var(--_fg);
+  --text-primary: color-mix(in srgb, var(--_fg) 92%, var(--_bg));
+  --text-2: color-mix(in srgb, var(--_fg) 82%, var(--_bg));
+  --text-3: color-mix(in srgb, var(--_fg) 70%, var(--_bg));
+  --text-4: color-mix(in srgb, var(--_fg) 60%, var(--_bg));
+  --text-5: color-mix(in srgb, var(--_fg) 52%, var(--_bg));
+  --text-6: color-mix(in srgb, var(--_fg) 44%, var(--_bg));
+  --text-7: color-mix(in srgb, var(--_fg) 36%, var(--_bg));
+  --text-faint: color-mix(in srgb, var(--_fg) 26%, var(--_bg));
+  --gutter: color-mix(in srgb, var(--_fg) 26%, var(--_bg));
+  --placeholder: color-mix(in srgb, var(--_fg) 38%, var(--_bg));
+  --calendar-muted: color-mix(in srgb, var(--_fg) 20%, var(--_bg));
+
+  --border: color-mix(in srgb, var(--_fg) 9%, transparent);
+  --border-strong: color-mix(in srgb, var(--_fg) 13%, transparent);
+  --field-border: color-mix(in srgb, var(--_fg) 13%, transparent);
+  --popover-border: color-mix(in srgb, var(--_fg) 16%, transparent);
+  --hover-bg: color-mix(in srgb, var(--_fg) 7%, transparent);
+  --hover-bg-strong: color-mix(in srgb, var(--_fg) 12%, transparent);
+  --hover-bg-loud: color-mix(in srgb, var(--_fg) 14%, transparent);
+  --active-bg: color-mix(in srgb, var(--_fg) 10%, transparent);
+  --focus-bg: color-mix(in srgb, var(--_fg) 5%, transparent);
+}
+
 html,
 body {
   margin: 0;
@@ -147,6 +206,27 @@ textarea::placeholder {
 
 ::selection {
   background: color-mix(in srgb, var(--accent) 30%, transparent);
+}
+
+/* The label chip that follows the cursor while a dock panel header is
+   dragged (created by `DockService`, appended to <body>). Low-profile:
+   just the panel title, no accent fill. */
+.dock-drag-ghost {
+  position: fixed;
+  top: 0;
+  left: 0;
+  z-index: 50;
+  pointer-events: none;
+  padding: 4px 9px;
+  border-radius: var(--radius-sm);
+  background: var(--bg-input);
+  border: 1px solid var(--border-strong);
+  box-shadow: var(--popover-shadow);
+  color: var(--text-2);
+  font-family: var(--font-mono);
+  font-size: var(--fs-mono-title);
+  letter-spacing: var(--ls-mono-title);
+  text-transform: uppercase;
 }
 
 /* Thin, unobtrusive scrollbars everywhere (DESIGN.md "Maße": 9px, 3px

@@ -17,6 +17,12 @@
  * topic-carrying entry that failed to parse would silently stop being
  * routed. A bare title with no dash (`## 14:32 Rollout`) still does not
  * match -- that stays prose, as before.
+ *
+ * An entry template may put a horizontal rule (and a tag line) right
+ * under the heading (the "Ruled" built-in). A leading `---` line is
+ * stripped from an entry's `text`; a leading `#tag` line is stripped only
+ * when a blank line follows it -- the exact "Ruled" signature -- so a
+ * Classic body that legitimately opens with a hashtag is never eaten.
  */
 
 export interface DatedEntry {
@@ -75,7 +81,13 @@ export function parseDatedEntries(body: string): DatedEntry[] {
       date: head.date,
       time: head.time,
       title: head.title,
-      text: body.slice(head.end, textEnd).replace(/^\n/, '').replace(/\s+$/, ''),
+      text: body
+        .slice(head.end, textEnd)
+        .replace(/^\n/, '')
+        .replace(/^(?:-{3,}|\*{3,}|_{3,})[ \t]*\n/, '')
+        .replace(/^(?:#[\w/-]+(?:[ \t]+#[\w/-]+)*)[ \t]*\n(?=[ \t]*\n|[ \t]*$)/, '')
+        .replace(/^\n+/, '')
+        .replace(/\s+$/, ''),
     };
   });
 }

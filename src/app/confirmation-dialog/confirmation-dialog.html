@@ -26,15 +26,37 @@
         }
       </div>
     } @else {
-      <div class="preview side-by-side">
-        <div class="pane">
-          <div class="pane-label">Before</div>
-          <pre>{{ req.before }}</pre>
+      <div class="preview split-diff" role="figure" aria-label="Before and after, side by side">
+        <div class="split-head">
+          <span>Before</span>
+          <span>After</span>
         </div>
-        <div class="pane">
-          <div class="pane-label">After</div>
-          <pre>{{ req.after }}</pre>
-        </div>
+        @for (row of splitDiffRows(); track $index) {
+          @if (row.type === 'gap') {
+            <div class="split-gap">
+              ⋯ {{ row.count }} unchanged line{{ row.count === 1 ? '' : 's' }}
+            </div>
+          } @else {
+            <div class="split-row">
+              <div
+                class="cell"
+                [class.del]="row.left.type === 'del'"
+                [class.empty]="row.left.type === 'empty'"
+              >
+                <span class="ln">{{ row.left.lineNo }}</span>
+                <span class="text">{{ row.left.text || ' ' }}</span>
+              </div>
+              <div
+                class="cell"
+                [class.add]="row.right.type === 'add'"
+                [class.empty]="row.right.type === 'empty'"
+              >
+                <span class="ln">{{ row.right.lineNo }}</span>
+                <span class="text">{{ row.right.text || ' ' }}</span>
+              </div>
+            </div>
+          }
+        }
       </div>
     }
 

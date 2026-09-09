@@ -86,35 +86,69 @@ h2 {
   font-style: italic;
 }
 
-.side-by-side {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 12px;
-}
-
-.pane {
-  min-width: 0;
+/* Side-by-side diff. Every row is a 2-column grid with identical column
+   tracks, so the two halves are always the exact same size. */
+.split-diff {
   display: flex;
   flex-direction: column;
 }
 
-.pane-label {
+.split-head,
+.split-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  column-gap: 1px;
+}
+
+.split-head {
   position: sticky;
   top: 0;
-  padding: 2px 0 6px;
+  z-index: 1;
+  background: var(--bg-main);
   font-family: var(--font-sans);
   font-size: 11px;
   text-transform: uppercase;
   letter-spacing: 0.04em;
   color: var(--text-6);
-  background: var(--bg-main);
 }
 
-.pane pre {
-  margin: 0;
+.split-head span {
+  padding: 2px 8px 6px;
+}
+
+.split-row .cell {
+  display: flex;
+  gap: 8px;
+  padding: 0 8px;
   white-space: pre-wrap;
   word-break: break-word;
   color: var(--text-2);
+}
+
+.split-row .ln {
+  flex: none;
+  width: 3ch;
+  text-align: right;
+  color: var(--text-7);
+  user-select: none;
+}
+
+.split-row .cell.add {
+  background: rgba(125, 143, 110, 0.16);
+}
+
+.split-row .cell.del {
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+}
+
+.split-row .cell.empty {
+  background: var(--bg-inset, rgba(255, 255, 255, 0.02));
+}
+
+.split-gap {
+  color: var(--text-6);
+  padding: 2px 8px;
+  font-style: italic;
 }
 
 footer {

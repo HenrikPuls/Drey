@@ -1,6 +1,7 @@
 import { Injectable, effect, inject } from '@angular/core';
 import { UI_SCALE_FACTORS, resolveAccentHex } from '../../../shared/app-config';
 import { SettingsService } from './settings.service';
+import { ThemeService } from './theme.service';
 
 /**
  * Applies the app-wide look from `Settings -> Appearance` (`AppearanceConfig`)
@@ -22,10 +23,15 @@ import { SettingsService } from './settings.service';
 @Injectable({ providedIn: 'root' })
 export class AppearanceService {
   private readonly settings = inject(SettingsService);
+  private readonly theme = inject(ThemeService);
 
   constructor() {
     effect(() => {
-      const hex = resolveAccentHex(this.settings.appearanceAccent());
+      // `'theme'` (the default) means "follow the active theme's seed accent".
+      const hex = resolveAccentHex(
+        this.settings.appearanceAccent(),
+        this.theme.theme().seed.accent,
+      );
       if (typeof document !== 'undefined') {
         document.documentElement.style.setProperty('--accent', hex);
       }

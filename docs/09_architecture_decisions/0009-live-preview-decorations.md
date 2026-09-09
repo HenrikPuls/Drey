@@ -46,14 +46,21 @@ The Live Preview layer lives in `src/app/editor/live-preview/`:
   read better rendered: `•` bullets, real `<input type="checkbox">` task
   boxes (clicking one edits the `[ ]`/`[x]` text), `<hr>` rules. Line
   classes style quote bars, code-block backgrounds and dimmed frontmatter.
-- **Reveal-on-touch instead of atomic ranges.** The document text is never
-  modified — decorations vanish when the selection touches their construct:
-  inline formatting reveals per *node*, line markers (headings, bullets,
-  quotes, rules) per *line*, a fenced block reveals its fences while the
-  selection is anywhere inside it. Because moving the cursor toward a
-  concealed range reveals it before the cursor can enter, arrow-key
-  navigation through rendered spans just works and no `atomicRanges`
-  machinery is needed.
+- **Reveal-on-touch instead of atomic ranges — for inline conceal.** The
+  document text is never modified — decorations vanish when the selection
+  touches their construct: inline formatting reveals per *node*, line
+  markers (headings, bullets, quotes, rules) per *line*, a fenced block
+  reveals its fences while the selection is anywhere inside it. Because
+  moving the cursor toward a concealed range reveals it before the cursor
+  can enter, arrow-key navigation through rendered spans just works.
+  **Block `Decoration.replace({block: true})` widgets are the exception**:
+  a block widget the cursor cannot enter corrupts vertical cursor motion
+  (ArrowUp near one drops the selection to offset 0), so
+  `block-render.ts` and `frontmatter-fold.ts` each publish their block
+  replaces through `EditorView.atomicRanges` — arrow keys then step over a
+  rendered table / diagram / folded frontmatter in one move. The atomic
+  set is derived from the same decoration field, so a revealed block
+  (selection inside it) contributes no atom and stays editable.
 - **`block-render.ts` — a `StateField` for what a `ViewPlugin` may not
   provide.** GFM tables become `Decoration.replace({block: true})` widgets
   rendered by a minimal markdown-it instance (`html: false`, one block at a
@@ -112,19 +119,24 @@ The Live Preview layer lives in `src/app/editor/live-preview/`:
 - **Frontmatter folds behind a pill** (`src/app/editor/frontmatter-fold.ts`,
   a sibling of the Live Preview layer, **not** part of it). A note opens as
   prose: the leading YAML is replaced by a `Decoration.replace({ block: true })`
-  pill — `▸ Frontmatter · N fields` — clicking which expands it to dim,
-  editable raw YAML with a `⌄` chevron to fold it back. It lives *outside*
-  the mode `Compartment` (mounted directly in `MarkdownSurface`, gated by a
-  `foldFrontmatter` input only the full-page editor sets) so it applies in
-  source mode too — where no other decoration runs — and so the fold state
-  survives a Live Preview ⇄ source switch. State is one `StateField<boolean>`
-  per `EditorView`, flipped by a `setFrontmatterExpanded` effect from the
-  pill/chevron; `MarkdownSurface` mirrors it into a read-only signal, and the
-  full-page `Editor` remembers it per document path across tab switches (the
-  one reused view can't hold per-tab state itself). `conceal.ts` is
-  unchanged — its `.lp-frontmatter` dimming and its "never conceal inside the
-  header" guard still run; when the block is folded those line decorations
-  simply fall under the pill widget and never render.
+  pill — `▸ Frontmatter` — clicking which expands it to dim, editable raw
+  YAML. Expanded, both `---` fences are hidden by `block` `Decoration.replace`s
+  (the opening one carries a `⌄ Frontmatter` header widget — same look as the
+  pill, chevron flipped — to fold it back); the YAML lines between get a dim
+  line class. Every decoration in the fold's `StateField` also feeds
+  `EditorView.atomicRanges`, so the caret steps over the hidden fences
+  cleanly. It lives *outside* the mode `Compartment` (mounted directly in
+  `MarkdownSurface`, gated by a `foldFrontmatter` input only the full-page
+  editor sets) so it applies in source mode too — where no other decoration
+  runs — and so the fold state survives a Live Preview ⇄ source switch. State
+  is one `StateField<boolean>` per `EditorView`, flipped by a
+  `setFrontmatterExpanded` effect from the pill / expanded header;
+  `MarkdownSurface` mirrors it into a read-only signal, and the full-page
+  `Editor` remembers it per document path across tab switches (the one reused
+  view can't hold per-tab state itself). `conceal.ts` is unchanged — its
+  `.lp-frontmatter` dimming and its "never conceal inside the header" guard
+  still run; when the block is folded those line decorations simply fall
+  under the pill widget and never render.
 
 The markdown-it full-document preview, its `[innerHTML]` binding,
 `bypassSecurityTrustHtml`, click-to-edit `data-line` mapping, highlight.js
@@ -164,3 +176,24 @@ and the task-lists/footnote plugins are removed. markdown-it itself stays
   tag extends its region only to the last HTML block, never past it.
 - Bundle: highlight.js (~150 kB) out; `@codemirror/language-data` adds a
   small registry up front and per-language lazy chunks on first use.
+
+## Later change — interactive image widget (ADR-0026)
+
+The Live Preview `ImageWidget` gained two hover affordances:
+
+- **Lens button** — opens the image in the full-app viewer
+  (`ImageLightboxService`). Handled by a direct DOM `click` listener on
+  the button that `stopPropagation`s + `preventDefault`s, so CodeMirror
+  never sees it; no `EditorView` reference and no `ignoreEvent` override
+  needed for the lens. `LivePreviewConfig` carries an optional
+  `onOpenImage(src)` that `MarkdownSurface` wires to the lightbox.
+- **Resize handle** — a corner grip; dragging it rewrites the note's
+  `![alt|W](url)` in place. Delegated `EditorView.domEventHandlers`
+  `pointerdown` (in `livePreviewBlocks`) locates the `Image` node via
+  `view.posAtDOM(span)` + the syntax tree, live-sizes `img.style.width`
+  during the drag (no transaction), and dispatches **one** `changes`
+  transaction on `pointerup` (no `selection`, so the widget swaps rather
+  than the raw text revealing). `ImageWidget.ignoreEvent` returns `false`
+  only for a `.lp-resize` target so that handler receives the event; the
+  `touches()` reveal is suppressed because the `pointerdown` handler
+  returns `true`.

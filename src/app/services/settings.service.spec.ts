@@ -108,6 +108,23 @@ describe('SettingsService (draft model)', () => {
     expect(service.llmEnabled()).toBe(true);
   });
 
+  it('patchDaily / patchTemplates write the draft only, and getters read the persisted config', async () => {
+    expect(service.loaded()).toBe(true);
+    expect(service.dailyOpenOnStartup()).toBe(true);
+    expect(service.templatesDir()).toBe('templates');
+
+    service.patchDaily({ openOnStartup: false });
+    service.patchTemplates({ dir: 'snippets' });
+    // Draft moved; persisted getters unchanged until save.
+    expect(service.draft()?.daily.openOnStartup).toBe(false);
+    expect(service.dailyOpenOnStartup()).toBe(true);
+    expect(service.templatesDir()).toBe('templates');
+
+    await service.save();
+    expect(service.dailyOpenOnStartup()).toBe(false);
+    expect(service.templatesDir()).toBe('snippets');
+  });
+
   it('closeScreen discards the draft', () => {
     service.patchLlm({ apiKey: 'sk-nope' });
     service.closeScreen();
@@ -207,73 +224,104 @@ describe('SettingsService (draft model)', () => {
     });
   });
 
-  describe('editor font family (Settings -> Appearance)', () => {
-    it('persists the choice immediately and updates config + draft together', async () => {
-      await service.setEditorFontFamily('serif');
+  describe('editor font family (Settings -> Appearance) — draft model (ADR-0020 later change)', () => {
+    it('keeps the choice in the draft and previews it live until save', () => {
+      service.setEditorFontFamily('serif');
 
-      expect(service.editorFontFamily()).toBe('serif');
-      expect(harness.stored().editor.fontFamily).toBe('serif');
+      expect(service.editorFontFamily()).toBe('serif'); // live preview (screen open)
       expect(service.draft()?.editor.fontFamily).toBe('serif');
+      expect(service.config()?.editor.fontFamily).toBe('sans'); // untouched on disk
+      expect(service.isDirty()).toBe(true);
+      expect(harness.setCalls()).toBe(0);
+    });
+
+    it('rolls the preview back on discard', () => {
+      service.setEditorFontFamily('serif');
+      service.discard();
+
+      expect(service.editorFontFamily()).toBe('sans');
       expect(service.isDirty()).toBe(false);
     });
 
-    it('pins an unknown id to the sans default rather than rejecting it', async () => {
-      await service.setEditorFontFamily('comic-sans');
-      expect(service.editorFontFamily()).toBe('sans');
-      expect(harness.setCalls()).toBe(0); // 'sans' is already the stored value
+    it('reaches disk on save', async () => {
+      service.setEditorFontFamily('mono');
+      expect(await service.save()).toBe(true);
+
+      expect(harness.stored().editor.fontFamily).toBe('mono');
+      expect(service.editorFontFamily()).toBe('mono');
+      expect(service.isDirty()).toBe(false);
     });
 
-    it('does not write when the value is unchanged', async () => {
-      const before = harness.setCalls();
-      await service.setEditorFontFamily('sans');
-      expect(harness.setCalls()).toBe(before);
-    });
-
-    it('leaves unrelated unsaved draft edits alone', async () => {
-      service.patchLlm({ apiKey: 'sk-draft-only' });
-
-      await service.setEditorFontFamily('mono');
-
-      expect(service.draft()?.llm.apiKey).toBe('sk-draft-only');
-      expect(harness.stored().llm.apiKey).toBeNull();
-      expect(service.isDirty()).toBe(true);
+    it('pins an unknown id to the sans default', () => {
+      service.setEditorFontFamily('comic-sans');
+      expect(service.draft()?.editor.fontFamily).toBe('sans');
+      expect(service.isDirty()).toBe(false); // 'sans' equals the persisted value
     });
   });
 
-  describe('appearance (Settings -> Appearance)', () => {
-    it('persists the UI scale immediately and updates config + draft together', async () => {
-      await service.setAppearanceUiScale('large');
+  describe('appearance (Settings -> Appearance) — draft model (ADR-0020 later change)', () => {
+    it('keeps the UI scale in the draft and previews it live until save', () => {
+      service.setAppearanceUiScale('large');
 
-      expect(service.appearanceUiScale()).toBe('large');
-      expect(harness.stored().appearance.uiScale).toBe('large');
+      expect(service.appearanceUiScale()).toBe('large'); // live preview
       expect(service.draft()?.appearance.uiScale).toBe('large');
+      expect(service.config()?.appearance.uiScale).toBe('default');
+      expect(service.isDirty()).toBe(true);
+      expect(harness.setCalls()).toBe(0);
+    });
+
+    it('normalises the accent in the draft (sentinel, preset id or #hex; junk -> default)', () => {
+      service.setAppearanceAccent('#12ab34');
+      expect(service.appearanceAccent()).toBe('#12ab34');
+      expect(service.config()?.appearance.accent).toBe('theme');
+
+      service.setAppearanceAccent('bogus');
+      expect(service.draft()?.appearance.accent).toBe('theme');
+    });
+
+    it('keeps the theme id in the draft and previews it live until save', () => {
+      service.setAppearanceTheme('dracula');
+      expect(service.appearanceTheme()).toBe('dracula');
+      expect(service.draft()?.appearance.theme).toBe('dracula');
+      expect(service.config()?.appearance.theme).toBe('drey');
+      expect(service.isDirty()).toBe(true);
+    });
+
+    it('rolls the whole Appearance preview back on discard', () => {
+      service.setAppearanceUiScale('small');
+      service.setAppearanceAccent('#0055ff');
+      service.setAppearanceTheme('nord');
+      service.discard();
+
+      expect(service.appearanceUiScale()).toBe('default');
+      expect(service.appearanceAccent()).toBe('theme');
+      expect(service.appearanceTheme()).toBe('drey');
       expect(service.isDirty()).toBe(false);
     });
 
-    it('accepts a preset id or a #hex accent and pins junk to the default', async () => {
-      await service.setAppearanceAccent('#12ab34');
-      expect(service.appearanceAccent()).toBe('#12ab34');
-      expect(harness.stored().appearance.accent).toBe('#12ab34');
+    it('persists on save and stops previewing from the draft', async () => {
+      service.setAppearanceUiScale('small');
+      expect(await service.save()).toBe(true);
 
-      await service.setAppearanceAccent('bogus');
-      expect(service.appearanceAccent()).toBe('terracotta');
+      expect(harness.stored().appearance.uiScale).toBe('small');
+      expect(service.appearanceUiScale()).toBe('small');
+      expect(service.isDirty()).toBe(false);
     });
 
-    it('does not write when the value is unchanged', async () => {
-      const before = harness.setCalls();
-      await service.setAppearanceUiScale('default');
-      await service.setAppearanceAccent('terracotta');
-      expect(harness.setCalls()).toBe(before);
-    });
-
-    it('leaves unrelated unsaved draft edits alone', async () => {
+    it('leaves unrelated unsaved draft edits alone', () => {
       service.patchLlm({ apiKey: 'sk-draft-only' });
-
-      await service.setAppearanceUiScale('small');
+      service.setAppearanceUiScale('small');
 
       expect(service.draft()?.llm.apiKey).toBe('sk-draft-only');
       expect(harness.stored().llm.apiKey).toBeNull();
       expect(service.isDirty()).toBe(true);
+    });
+
+    it('shows the saved config, not the draft, once the screen is closed', () => {
+      service.setAppearanceAccent('#0055ff');
+      service.closeScreen(); // discards + closes
+
+      expect(service.appearanceAccent()).toBe('theme');
     });
   });
 });

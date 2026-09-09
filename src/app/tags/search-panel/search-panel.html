@@ -85,7 +85,12 @@
         @for (hit of search.hits(); track $index) {
           <li>
             <button type="button" class="hit" (click)="open(hit.path, hit.line)">
-              <span class="hit-heading">{{ hit.heading }}</span>
+              <span class="hit-heading">
+                {{ hit.heading }}
+                @if (hit.unsaved) {
+                  <span class="hit-unsaved" title="From an unsaved buffer">unsaved</span>
+                }
+              </span>
               <span class="hit-path">{{ hit.path }}</span>
               <span class="hit-snippet">{{ hit.snippet }}</span>
             </button>

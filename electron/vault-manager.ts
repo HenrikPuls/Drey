@@ -1,13 +1,19 @@
 import { app, dialog } from 'electron';
+import * as crypto from 'node:crypto';
 import * as fs from 'node:fs';
 import * as fsp from 'node:fs/promises';
 import * as path from 'node:path';
+import { assetFileName, ATTACHMENTS_DIR, imageExtension } from '../shared/asset-name';
 import { sidecarPathFor } from '../shared/chat-thread';
 import { VaultFileContent, VaultFileEntry } from '../shared/ipc-api';
+import { uniqueCopyName } from '../shared/unique-name';
 
 interface VaultConfig {
   activeVaultPath: string | null;
 }
+
+/** Cap for a downloaded web image (`saveAssetFromUrl`). */
+const MAX_ASSET_BYTES = 25 * 1024 * 1024;
 
 const configFilePath = (): string => path.join(app.getPath('userData'), 'vault-config.json');
 
@@ -152,6 +158,107 @@ export class VaultManager {
   }
 
   /**
+   * Writes a binary asset (a pasted / dropped image) into an `attachments/`
+   * folder beside the note that will reference it, and returns the path to
+   * put in the `![](...)` -- relative to that note's own folder, so
+   * `resolveVaultImageUrl` (renderer) resolves it straight back to a
+   * `drey-asset://` URL.
+   *
+   * `noteRelPath` is the vault-relative path of the open document; when it
+   * has no folder part (a bare name, or an unsaved scratch tab) the vault
+   * root's `attachments/` is used. The file name is
+   * `<timestamp>-<6 hex of sha256>.<ext>` (`shared/asset-name.ts`); a name
+   * collision gets a `-2`, `-3`, ... suffix rather than overwriting.
+   */
+  async saveAsset(bytes: Uint8Array, ext: string, noteRelPath: string): Promise<string> {
+    const hashHex = crypto.createHash('sha256').update(bytes).digest('hex');
+    const baseName = assetFileName({ date: new Date(), hashHex, ext });
+
+    const noteDir =
+      noteRelPath.includes('/') ? noteRelPath.slice(0, noteRelPath.lastIndexOf('/')) : '';
+    const dirRelToVault = noteDir ? `${noteDir}/${ATTACHMENTS_DIR}` : ATTACHMENTS_DIR;
+    const absDir = this.resolveInVault(dirRelToVault);
+    await fsp.mkdir(absDir, { recursive: true });
+
+    let name = baseName;
+    const dot = baseName.lastIndexOf('.');
+    for (let i = 2; fs.existsSync(path.join(absDir, name)); i++) {
+      name = `${baseName.slice(0, dot)}-${i}${baseName.slice(dot)}`;
+    }
+    await fsp.writeFile(path.join(absDir, name), bytes);
+    return `${ATTACHMENTS_DIR}/${name}`;
+  }
+
+  /**
+   * Downloads a web image and stores it with {@link saveAsset} (ADR-0028).
+   * `fetch` runs here in the main process (the renderer has no Node and
+   * cross-origin hosts have no permissive CORS). Guarded: http(s) only,
+   * redirects followed but the final URL's protocol re-checked, a 15 s
+   * timeout, a 25 MB cap (Content-Length pre-check + the read length), and
+   * an `image/*` content-type or a recognised image extension on the final
+   * URL. Rejects with a short user-facing message.
+   */
+  async saveAssetFromUrl(url: string, noteRelPath: string): Promise<string> {
+    let parsed: URL;
+    try {
+      parsed = new URL(url);
+    } catch {
+      throw new Error('That is not a valid URL.');
+    }
+    if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+      throw new Error('Only http(s) image links can be downloaded.');
+    }
+
+    let response: Response;
+    try {
+      response = await fetch(parsed, {
+        redirect: 'follow',
+        signal: AbortSignal.timeout(15_000),
+        headers: { accept: 'image/*' },
+      });
+    } catch (error) {
+      throw new Error(
+        (error as Error)?.name === 'TimeoutError'
+          ? 'Downloading the image timed out.'
+          : `Could not download the image: ${(error as Error).message}`,
+      );
+    }
+
+    const finalProtocol = new URL(response.url).protocol;
+    if (finalProtocol !== 'http:' && finalProtocol !== 'https:') {
+      throw new Error('The image link redirected somewhere unsafe.');
+    }
+    if (!response.ok) {
+      throw new Error(`Could not download the image (HTTP ${response.status}).`);
+    }
+
+    const declared = Number(response.headers.get('content-length') ?? '');
+    if (Number.isFinite(declared) && declared > MAX_ASSET_BYTES) {
+      throw new Error('That image is too large (over 25 MB).');
+    }
+
+    const contentType = (response.headers.get('content-type') ?? '')
+      .split(';')[0]
+      .trim()
+      .toLowerCase();
+    // A server that explicitly says "not an image" is believed; only fall
+    // back to the URL extension for a missing / generic type.
+    if (contentType && !contentType.startsWith('image/') && contentType !== 'application/octet-stream') {
+      throw new Error('That link is not an image.');
+    }
+    const ext = imageExtension(contentType) ?? imageExtension(new URL(response.url).pathname);
+    if (!ext) {
+      throw new Error('That link is not an image.');
+    }
+
+    const bytes = new Uint8Array(await response.arrayBuffer());
+    if (bytes.byteLength > MAX_ASSET_BYTES) {
+      throw new Error('That image is too large (over 25 MB).');
+    }
+    return this.saveAsset(bytes, ext, noteRelPath);
+  }
+
+  /**
    * Creates an empty file at `relativePath`, making any missing parent
    * folders on the way (e.g. the user creates `notes/ideas.md` under a
    * folder that only exists in the tree conceptually). The `wx` flag makes
@@ -196,6 +303,84 @@ export class VaultManager {
       const sidecar = this.resolveInVault(sidecarPathFor(relativePath));
       await fsp.rm(sidecar, { force: true }).catch(() => undefined);
     }
+  }
+
+  /**
+   * Renames / moves a file or folder from one vault-relative path to
+   * another. Both ends go through `resolveInVault`; the vault root is
+   * refused, a missing source and an occupied target both throw. A `.md`
+   * note's assistant sidecar (`.{name}.chat.json`) moves with it.
+   */
+  async renameEntry(fromRel: string, toRel: string): Promise<string> {
+    const from = this.resolveInVault(fromRel);
+    const to = this.resolveInVault(toRel);
+    if (!this.activeVaultPath || from === path.resolve(this.activeVaultPath)) {
+      throw new Error('Refusing to rename the vault root.');
+    }
+    if (from === to) {
+      return this.toRelative(to);
+    }
+    if (!fs.existsSync(from)) {
+      throw new Error(`Not found: ${fromRel}`);
+    }
+    if (fs.existsSync(to)) {
+      throw new Error(`Already exists: ${toRel}`);
+    }
+    await fsp.mkdir(path.dirname(to), { recursive: true });
+    await fsp.rename(from, to);
+    if (fromRel.toLowerCase().endsWith('.md') && toRel.toLowerCase().endsWith('.md')) {
+      const sidecarFrom = this.resolveInVault(sidecarPathFor(fromRel));
+      const sidecarTo = this.resolveInVault(sidecarPathFor(toRel));
+      if (fs.existsSync(sidecarFrom) && !fs.existsSync(sidecarTo)) {
+        await fsp.rename(sidecarFrom, sidecarTo).catch(() => undefined);
+      }
+    }
+    return this.toRelative(to);
+  }
+
+  /**
+   * Copies a file or folder (recursively) into `destDirRel` (`''` = vault
+   * root). The copy keeps the source's name, or gets a `" copy"` / `" copy
+   * N"` suffix when that name is already taken in the destination. Copying
+   * a folder into itself or its own subtree is refused. A `.md` note's
+   * assistant sidecar is copied alongside it.
+   */
+  async copyEntry(srcRel: string, destDirRel: string): Promise<string> {
+    const src = this.resolveInVault(srcRel);
+    if (!fs.existsSync(src)) {
+      throw new Error(`Not found: ${srcRel}`);
+    }
+    const destDir = destDirRel ? this.resolveInVault(destDirRel) : this.resolveInVault('.');
+    if (!fs.existsSync(destDir) || !fs.statSync(destDir).isDirectory()) {
+      throw new Error(`Not a folder: ${destDirRel || '(vault root)'}`);
+    }
+    if (destDir === src || destDir.startsWith(src + path.sep)) {
+      throw new Error('Cannot copy a folder into itself.');
+    }
+
+    const baseName = path.basename(src);
+    const siblings = await fsp.readdir(destDir);
+    const targetName = siblings.includes(baseName)
+      ? uniqueCopyName(baseName, siblings)
+      : baseName;
+    const dest = path.join(destDir, targetName);
+
+    await fsp.cp(src, dest, { recursive: true, errorOnExist: true, force: false });
+
+    if (srcRel.toLowerCase().endsWith('.md')) {
+      const sidecarSrc = this.resolveInVault(sidecarPathFor(srcRel));
+      if (fs.existsSync(sidecarSrc)) {
+        const sidecarDest = path.join(destDir, sidecarPathFor(targetName));
+        await fsp.cp(sidecarSrc, sidecarDest, { force: false }).catch(() => undefined);
+      }
+    }
+    return this.toRelative(dest);
+  }
+
+  /** Copies an entry next to itself, always with a `" copy"` suffix. */
+  async duplicateEntry(srcRel: string): Promise<string> {
+    const parent = srcRel.includes('/') ? srcRel.slice(0, srcRel.lastIndexOf('/')) : '';
+    return this.copyEntry(srcRel, parent);
   }
 
   /**

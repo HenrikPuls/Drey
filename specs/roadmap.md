@@ -13,7 +13,8 @@ An AI-powered knowledge hub for note-taking and task automation.
 - Folder structure is **the user's own**. The app imposes only the
   structural `templates/` and `daily/` folders; topics are free inline
   `#tag` labels, never directories, and the app never creates or moves
-  folders on a tag's behalf.
+  folders on a tag's behalf. Nested tags (`#project/frontend`) are a label
+  hierarchy — a naming convention, still not folders (ADR-0017).
 - Classification/synthesis via a **local** OpenAI-compatible API, no fixed
   model. Unsloth Desktop is the default; any server speaking that dialect
   works (Unsloth Desktop, llama.cpp, vLLM, Ollama, LM Studio), with an
@@ -49,6 +50,13 @@ below).
   the relevant dock panel. Design tokens (exact hex / px / type from the
   handoff) live centrally in `src/styles.css`; the editor keeps
   CodeMirror 6 + Live Preview rather than the prototype's block model.
+  The panels are a data-driven **widget registry**
+  ([ADR-0034](../docs/09_architecture_decisions/0034-internal-widget-model.md)):
+  each declares its default dock / capabilities, the View menu shows or
+  hides a whole widget (not just collapses it), and a `WidgetContext`
+  facade is the typed surface a widget uses to read the active document,
+  the file tree and the tag / task / search queries. Internal structure
+  only — no runtime plugin loading.
 
 - **Quick-capture:** a global hotkey brings the main window forward and
   opens today's daily note — `daily/<year>/<month>/YYYY-MM-DD.md` — in the
@@ -57,6 +65,9 @@ below).
   editor, so inline `#tag` autocomplete (from the tag vocabulary, see the
   tag index below) and the editor mode menu are always available. Older
   flat `daily/YYYY-MM-DD.md` files are still opened if present.
+  On app start, today's daily note is opened automatically (as an unsaved
+  draft tab — nothing is written until you type and save), toggleable in
+  Settings → **Daily notes** ([ADR-0029](../docs/09_architecture_decisions/0029-template-library.md)).
 
 - **Note templates:** a `templates/` folder in the vault holds Markdown
   templates with `{{date}}` / `{{time}}` / `{{datetime}}` / `{{title}}`
@@ -64,11 +75,23 @@ below).
   scaffolded with a starter layout on first use; editing it changes how
   future daily notes look.
 
+- **Template library** ([ADR-0029](../docs/09_architecture_decisions/0029-template-library.md)):
+  the same folder (configurable, Settings → **Templates**, default
+  `templates`) is a browsable library. Every sub-folder is a category,
+  nested sub-folders sub-categories, and each `.md` a template labelled by
+  its filename. A **Templates** dock panel lists them; inserting one
+  (click, drag into the editor, the editor's right-click menu, or the
+  `Ctrl+T` picker showing the last 5 used) drops its body at the cursor
+  with the YAML frontmatter stripped and the four placeholders substituted.
+  The configured folder is kept out of the tag index.
+
 - **Tags & tag index:** topics are free inline `#tag`s in the note body
-  (`#` + a letter, then letters/digits/`_`/`-`, lower-cased). No creation
-  flow, no "unknown tag" concept, no folders, no routing. `#task` is a
+  (`#` + a letter, then letters/digits/`_`/`-`, lower-cased; nestable with
+  `/` as in `#project/frontend`). No creation flow, no "unknown tag"
+  concept, no folders, no routing. `#task` (and any `#task/*`) is a
   reserved structural marker and is never a tag; `#important` is an
-  ordinary, searchable tag. A main-process **tag index** scans every `.md`
+  ordinary, searchable tag. A tag search for a parent tag also returns its
+  nested `#parent/*` sections. A main-process **tag index** scans every `.md`
   in the vault (`templates/` excluded, `daily/` **included**) and holds
   - the **tag vocabulary** with per-tag counts — feeds `#tag` autocomplete
     and the search panel's tag picker;
@@ -116,7 +139,12 @@ below).
   and are written only on **Save**; closing with unsaved changes asks
   first (save / discard / keep editing). Categories: **LLM**,
   **Assistant** (auto-summary default), **Spelling** (dictionaries +
-  language), **Appearance** (editor typeface), **Actions**.
+  language), **Appearance** (theme, base font size, highlight colour,
+  editor typeface — [ADR-0035](../docs/09_architecture_decisions/0035-named-ui-themes.md):
+  a **Drey** built-in look plus the published CodeMirror themes, the app
+  shell re-tinting from a per-theme seed), **Widgets** (turn a dock panel
+  off entirely — [ADR-0034](../docs/09_architecture_decisions/0034-internal-widget-model.md)),
+  **Actions**.
   - **LLM** — the connection config above, plus a **debug log** of every
     request sent this session (URL, headers, body, status, timing,
     response), each expandable into a runnable `curl` command so a
@@ -143,30 +171,69 @@ below).
 - **Editor:** one CodeMirror 6 view with a true **Live Preview** mode
   (Obsidian-/Typora-style): syntax markers conceal everywhere except
   around the selection, fenced code is highlighted via nested language
-  parsing, tables/images render as widgets, task markers are clickable
-  checkboxes, inline `#tag`s render as pills; the cursor sits directly in
-  the rendered document. A `⋯` menu on the chrome switches to a raw
+  parsing, tables/images render as widgets, a ` ```mermaid ` fence
+  renders as a diagram
+  ([ADR-0025](../docs/09_architecture_decisions/0025-mermaid-live-preview.md);
+  the cursor inside it reveals the raw source), task markers are clickable
+  checkboxes (a checked `- [x]` line's text is struck through), inline
+  `#tag`s render as pills; the cursor sits directly in the rendered
+  document. A `⋯` menu on the chrome switches to a raw
   **Source** mode as the escape hatch (no toggle buttons); the last
   choice is the per-machine default for new notes, Live Preview by
   default. Headings use the app's sans typeface by default; a different
   face (serif, mono, …) is selectable in Settings → Appearance. Footnotes
   render as plain text for now (no Lezer footnote extension).
 
+- **Images ([ADR-0024](../docs/09_architecture_decisions/0024-binary-vault-asset-write.md),
+  pulled forward from Phase 3):** an image pasted or dropped into the
+  editor **or** the "Add entry" drawer is written into an `attachments/`
+  folder **beside the referencing note** (vault root when no note is
+  open), named `YYYY-MM-DD-HHmmss-<short hash>.<ext>`, and an
+  `![](attachments/…)` link is inserted at the caret. Rendering was
+  already in place — the privileged `drey-asset://` scheme served from
+  inside the vault, `resolveVaultImageUrl`, and the Live Preview image
+  widget. No vault open → the paste is reported, not saved. No
+  auto-caption.
+  - **Drag-and-drop ([ADR-0028](../docs/09_architecture_decisions/0028-drag-drop-into-the-editor.md)):**
+    dropping an image from the OS file manager works like paste; dragging a
+    file from the Files panel links an image in place (relative path, no
+    copy) or inlines a text file's contents; dragging an image from a web
+    browser downloads it into `attachments/` with a `[Source](url)` line.
+    A window-level guard
+    ([ADR-0027](../docs/09_architecture_decisions/0027-window-dnd-navigation-guard.md))
+    makes a stray drop a no-op instead of navigating the app away.
+  - **Viewing ([ADR-0026](../docs/09_architecture_decisions/0026-image-viewer-and-lightbox.md)):**
+    a rendered image honours an Obsidian-style `![alt|W]` / `![alt|WxH]`
+    size and has a hover **resize grip** (drag → rewrites the `|W` in the
+    note) and a hover **lens** button that opens a whole-app zoom/pan
+    viewer (plain-wheel zoom, drag pan, `+`/`-`/`0`). Opening an image
+    file from the Files panel opens it as a `kind:'image'` **tab** with
+    the same viewer + a Fullscreen button; the status bar shows its pixel
+    size and zoom.
+
 - **"Add entry" drawer** at the bottom of the main area — the capture
   surface. Starts collapsed. Contains an optional **TOPIC** field, a
   single **Tags** chip row, the Markdown text (the same editor component
   as the main editor, compact, with Live Preview and `#tag` autocomplete),
   inline spellcheck, and the Autotag button.
-  - The appended block is `## HH:mm` (or `## HH:mm — <Topic>` when a topic
-    is given), followed by the text and a meta line listing the assigned
-    `#tag`s; empty parts are omitted, so an entry with neither topic nor
-    tags is byte-identical to the plain `## HH:mm` form. Appending saves
-    immediately.
+  - The appended block is a **chosen template** (`AppConfig.entry`,
+    Settings → Add entry) with `{{time}} {{date}} {{datetime}} {{title}}
+    {{tags}} {{content}}` substituted; blank lines collapse and a trailing
+    rule is dropped, so an entry with nothing filled in stays
+    byte-identical to a bare `## HH:mm`. Two built-ins ship —
+    **Classic** (`## HH:mm[ — Topic]` / text / `#tag` line, the old fixed
+    shape) and **Ruled** (heading / `---` / `#tags` / body) — plus the
+    user's own; one is active. `parseDatedEntries` strips a leading rule
+    (and, on the Ruled signature, a leading tag line) so entries still
+    round-trip. Appending saves immediately.
   - **Inline spellcheck**, active from the first word typed — in both this
     text field and the document editor: misspelled words get a red wavy
-    underline, clicking one offers corrections. German and English ship
-    with the app; further Hunspell dictionaries are addable, and the
-    active language is picked in Settings → Spelling.
+    underline, clicking one offers corrections or an "Add to dictionary"
+    action. German and English ship with the app; further Hunspell
+    dictionaries are addable, and the active language is picked in
+    Settings → Spelling. Accepted words are kept in two lists —
+    **personal** (every dictionary) and **per-dictionary** — editable
+    from the popup and from Settings.
 
 - **Note assistant panel** on the right — per open note.
   - An **"Automatic summary"** switch in the panel header. When a note is
@@ -188,6 +255,47 @@ below).
     user ends the wait, not a fixed timeout.
   - The thread is persisted next to the note as `.{name}.chat.json`,
     never into the note itself.
+  - **Ask carries the running conversation.** A follow-up question sends
+    the note's earlier cards as chat turns (`historyForAsk`, capped at
+    ~12), so the model answers in context rather than re-reading the
+    document cold each time.
+  - Each answer / summary card has an **insert-into-note** arrow beside
+    Copy — drops the card text into the editor at the caret.
+
+- **Vault MCP server ([ADR-0021](../docs/09_architecture_decisions/0021-mcp-vault-server.md)):**
+  a local Model Context Protocol server exposing three tools over the
+  active vault — `vault_search` (tags + free text + an optional **regex**
+  filter, or a standalone whole-vault regex line scan), `vault_read`,
+  `vault_write` (overwrite / append). Hand-rolled JSON-RPC (no SDK
+  dependency), two transports: a bundled **stdio bridge** script for
+  desktop clients and an **opt-in localhost HTTP endpoint** for network
+  clients. A `vault_write` is shown in the shared diff dialog for
+  confirmation before it touches disk, unless **"YOLO mode"** (Settings →
+  MCP, off by default) is on. The built-in assistant uses the same tool
+  set during Ask when the server is enabled (an OpenAI tool-calling loop
+  in `LmStudioClient`, with a capability fallback). Settings gains an
+  **MCP** category (enable switch, HTTP port, YOLO switch, client config
+  snippet).
+
+- **"Add entry" is a dock panel.** The capture drawer is no longer a
+  fixed strip: it is a movable/collapsible panel whose default home is a
+  new **bottom dock** (a band under the editor). See
+  [ADR-0019](../docs/09_architecture_decisions/0019-movable-dock-panels-and-layout-state.md)'s
+  "Later change".
+
+- **Tasks panel ([ADR-0033](../docs/09_architecture_decisions/0033-tasks-panel-and-index.md),
+  pulled forward from Phase 2/4):** a dock panel listing task lines in the
+  open document **or** the whole vault, with a "hide done" toggle and a
+  configurable definition of "task" — GFM checkbox items (`- [ ]` / `- [x]`),
+  lines carrying the reserved `#task` marker, or both. A `#task` line with
+  no checkbox counts as done when it also carries `#task/done`. A row's
+  checkbox writes the done-state straight back to the source file
+  (`note:save` pipeline); clicking a row opens that file at the line.
+  Document scope is scanned live from the editor buffer (unsaved edits
+  show); vault scope comes from a main-process `TaskIndex` that mirrors the
+  tag index's lifecycle (rebuild on vault open, re-index per file on save,
+  no watcher). This delivers the interactive slice of the Phase-2 "Daily
+  tasks" / Phase-4 "Task center" ideas below.
 
 - **Manual refresh:** there is no file watcher. A refresh button in the
   sidebar re-reads the vault from disk and rebuilds the tag index; the
@@ -208,7 +316,9 @@ below).
 - **Daily tasks:** inline `#task` syntax in any note file, a generated
   (read-only) day view built from timestamp scanning — distinct from the
   daily note file itself (that's a normal editable file; this is an
-  aggregate view).
+  aggregate view). _The task-collection + tick-back part shipped early as
+  the Phase-1 Tasks panel (ADR-0033); what remains here is the
+  timestamp-driven **day** view specifically._
 - Semantic search (embeddings via transformers.js + sqlite-vec, RAG for
   the "all notes" chat scope).
 - Daily wrap-up (yesterday done/worked-on, prioritized list for today) —
@@ -221,9 +331,8 @@ below).
   topics, interviews — from general notes), a fixed default vault, manual
   switch before capture.
 - Optional cross-vault search mode (default: scoped per vault).
-- Image paste (editor + quick-capture), stored in a global `assets/`
-  folder, a dedicated Electron protocol for safe rendering, no
-  auto-caption.
+- ~~Image paste~~ — **pulled forward, done.** See Phase 1 ("Images")
+  below and [ADR-0024](../docs/09_architecture_decisions/0024-binary-vault-asset-write.md).
 
 ## Phase 4 — Experiments
 
@@ -232,7 +341,10 @@ below).
   processing pipeline (primarily lands in the sensitive vault).
 - Task center: an active, writable task overview across all files
   (checking a box here writes back to the source file, using the
-  mandatory `#task id:` instead of line numbers).
+  mandatory `#task id:` instead of line numbers). _A first cut of the
+  writable overview shipped as the Phase-1 Tasks panel (ADR-0033); it
+  writes back by line number, not a stable `#task id:` — the id-based
+  addressing is what's still open here._
 - Job queue: configurable background processes (re-indexing after a model
   change, export), status/progress, persisted against crashes,
   auto-pauses on interactive use.

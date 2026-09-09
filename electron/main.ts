@@ -1,4 +1,14 @@
-import { app, BrowserWindow, dialog, globalShortcut, ipcMain, Menu, net, protocol } from 'electron';
+import {
+  app,
+  BrowserWindow,
+  dialog,
+  globalShortcut,
+  ipcMain,
+  Menu,
+  net,
+  protocol,
+  shell,
+} from 'electron';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { pathToFileURL } from 'node:url';
@@ -8,6 +18,7 @@ import {
   AppConfig,
   AppInfo,
   AskOutcome,
+  ChatMessage,
   ChatThread,
   CustomDictionary,
   EditCommand,
@@ -15,6 +26,7 @@ import {
   LlmConnectionTest,
   LlmDebugEntry,
   LlmEndpoint,
+  McpStatus,
   NoteSaveRequest,
   NoteSaveResult,
   SpellCheckResult,
@@ -25,14 +37,18 @@ import {
   VaultFileContent,
   VaultFileEntry,
 } from '../shared/ipc-api';
+import { UI_SCALE_FACTORS } from '../shared/app-config';
 import { AppConfigStore } from './app-config';
 import { ChatStore } from './chat-store';
 import { DailyNoteManager } from './daily-note';
+import { installMainProcessLogging, logFromRenderer, watchWebContents } from './logger';
 import { ActionRunner, LlmDebugLog, LlmTaskRegistry, LmStudioClient } from './llm';
+import { McpHttpTransport, McpServer, VaultTools } from './mcp';
 import { attachContextMenu, buildApplicationMenu } from './menu';
 import { NoteManager } from './note-manager';
 import { SpellcheckService } from './spellcheck';
 import { TagIndex } from './tags';
+import { TaskIndex } from './tasks';
 import { VaultManager } from './vault-manager';
 
 /**
@@ -130,12 +146,14 @@ function registerIpcHandlers(
   dailyNotes: DailyNoteManager,
   noteManager: NoteManager,
   tagIndex: TagIndex,
+  taskIndex: TaskIndex,
   appConfig: AppConfigStore,
   lmStudio: LmStudioClient,
   actionRunner: ActionRunner,
   llmDebug: LlmDebugLog,
   chatStore: ChatStore,
   spellcheck: SpellcheckService,
+  mcpHttp: McpHttpTransport,
 ): void {
   ipcMain.handle(IPC_CHANNELS.getAppInfo, (): AppInfo => ({
     appVersion: app.getVersion(),
@@ -190,12 +208,33 @@ function registerIpcHandlers(
     }
   });
 
+  // Ctrl/Cmd-click on a link in the editor. Same allowlist as the
+  // `setWindowOpenHandler` guard -- only web + mail, everything else is a
+  // no-op so a note can never drive `shell.openExternal` to e.g. `file:`.
+  ipcMain.handle(IPC_CHANNELS.openExternal, (_event, url: unknown): void => {
+    if (typeof url === 'string' && /^(https?:|mailto:)/i.test(url.trim())) {
+      void shell.openExternal(url.trim());
+    }
+  });
+
+  // Renderer -> log file (`<userData>/logs/drey.log`). The packaged build
+  // has no DevTools; this is how a field problem leaves a trace.
+  ipcMain.handle(
+    IPC_CHANNELS.appLog,
+    (_event, entry: { level?: string; message?: string; context?: unknown }): void => {
+      if (entry && typeof entry.message === 'string') {
+        logFromRenderer(String(entry.level ?? 'info'), entry.message, entry.context);
+      }
+    },
+  );
+
   ipcMain.handle(IPC_CHANNELS.vaultGetActive, (): string | null =>
     vaultManager.getActiveVaultPath(),
   );
   ipcMain.handle(IPC_CHANNELS.vaultSelect, async (): Promise<string | null> => {
     const selected = await vaultManager.selectVault();
     await tagIndex.rebuild();
+    await taskIndex.rebuild();
     return selected;
   });
   ipcMain.handle(IPC_CHANNELS.vaultListFiles, (): Promise<VaultFileEntry[]> =>
@@ -211,6 +250,16 @@ function registerIpcHandlers(
     (_event, relativePath: string, content: string): Promise<number> =>
       vaultManager.writeFile(relativePath, content),
   );
+  ipcMain.handle(
+    IPC_CHANNELS.vaultSaveAsset,
+    (_event, bytes: Uint8Array, ext: string, noteRelPath: string): Promise<string> =>
+      vaultManager.saveAsset(bytes, ext, noteRelPath),
+  );
+  ipcMain.handle(
+    IPC_CHANNELS.vaultSaveAssetFromUrl,
+    (_event, url: string, noteRelPath: string): Promise<string> =>
+      vaultManager.saveAssetFromUrl(url, noteRelPath),
+  );
   ipcMain.handle(IPC_CHANNELS.vaultCreateFile, (_event, relativePath: string): Promise<string> =>
     vaultManager.createFile(relativePath),
   );
@@ -220,10 +269,40 @@ function registerIpcHandlers(
   );
   ipcMain.handle(IPC_CHANNELS.vaultDelete, async (_event, relativePath: string): Promise<void> => {
     await vaultManager.deleteEntry(relativePath);
-    // No file watcher -- the tag index would otherwise still list tags from
-    // the deleted file until the next full rebuild.
+    // No file watcher -- the tag / task indexes would otherwise still list
+    // entries from the deleted file until the next full rebuild.
     await tagIndex.rebuild();
+    await taskIndex.rebuild();
   });
+  // Rename / copy / duplicate can move `.md` content in or out of the
+  // indexes' scope, so each rebuilds them (same reason as `vault:delete`).
+  ipcMain.handle(
+    IPC_CHANNELS.vaultRename,
+    async (_event, fromRel: string, toRel: string): Promise<string> => {
+      const next = await vaultManager.renameEntry(fromRel, toRel);
+      await tagIndex.rebuild();
+      await taskIndex.rebuild();
+      return next;
+    },
+  );
+  ipcMain.handle(
+    IPC_CHANNELS.vaultCopy,
+    async (_event, srcRel: string, destDirRel: string): Promise<string> => {
+      const next = await vaultManager.copyEntry(srcRel, destDirRel);
+      await tagIndex.rebuild();
+      await taskIndex.rebuild();
+      return next;
+    },
+  );
+  ipcMain.handle(
+    IPC_CHANNELS.vaultDuplicate,
+    async (_event, srcRel: string): Promise<string> => {
+      const next = await vaultManager.duplicateEntry(srcRel);
+      await tagIndex.rebuild();
+      await taskIndex.rebuild();
+      return next;
+    },
+  );
   ipcMain.handle(
     IPC_CHANNELS.vaultPickSavePath,
     (_event, suggestedName: string): Promise<string | null> =>
@@ -240,6 +319,7 @@ function registerIpcHandlers(
   ipcMain.handle(IPC_CHANNELS.tagSearch, (_event, query: TagSearchQuery): TagSearchHit[] =>
     tagIndex.search(query),
   );
+  ipcMain.handle(IPC_CHANNELS.taskList, () => taskIndex.all());
   ipcMain.handle(
     IPC_CHANNELS.tagSummariseResults,
     (_event, query: TagSearchQuery, taskId?: string): Promise<string> =>
@@ -256,12 +336,31 @@ function registerIpcHandlers(
   );
 
   ipcMain.handle(IPC_CHANNELS.configGet, (): AppConfig => appConfig.get());
-  ipcMain.handle(IPC_CHANNELS.configSet, (_event, next: AppConfig): AppConfig => {
+  ipcMain.handle(IPC_CHANNELS.configSet, async (_event, next: AppConfig): Promise<AppConfig> => {
+    const prevTemplatesDir = appConfig.get().templates.dir;
     const stored = appConfig.set(next);
     // The language or a dictionary path may have changed; the next check
     // reloads rather than answering from a stale dictionary.
     spellcheck.invalidate();
+    // The MCP block may have flipped -- open/close the HTTP endpoint to match.
+    await syncMcpHttpTransport(mcpHttp, appConfig);
+    // A changed templates folder shifts which files the tag / task indexes
+    // exclude. The renderer picks the new data up on its next refresh.
+    if (stored.templates.dir !== prevTemplatesDir) {
+      await tagIndex.rebuild();
+      await taskIndex.rebuild();
+    }
     return stored;
+  });
+
+  ipcMain.handle(IPC_CHANNELS.mcpStatus, (): McpStatus => ({
+    enabled: appConfig.get().mcp.enabled,
+    httpListening: mcpHttp.running,
+    httpPort: mcpHttp.activePort,
+    stdioBridgePath: stdioBridgePath(),
+  }));
+  ipcMain.handle(IPC_CHANNELS.mcpWriteDecision, (_event, id: number, approved: boolean): void => {
+    pendingMcpWrites.get(id)?.(approved);
   });
   ipcMain.handle(IPC_CHANNELS.llmListModels, (_event, override?: LlmEndpoint): Promise<string[]> =>
     lmStudio.listModels(override),
@@ -280,8 +379,13 @@ function registerIpcHandlers(
   );
   ipcMain.handle(
     IPC_CHANNELS.chatAsk,
-    (_event, context: ActionContext, question: string, taskId?: string): Promise<AskOutcome> =>
-      actionRunner.ask(context, question, taskId),
+    (
+      _event,
+      context: ActionContext,
+      question: string,
+      taskId?: string,
+      history?: ChatMessage[],
+    ): Promise<AskOutcome> => actionRunner.ask(context, question, taskId, history),
   );
   ipcMain.handle(IPC_CHANNELS.llmCancel, (_event, taskId: string): boolean =>
     actionRunner.cancel(taskId),
@@ -307,6 +411,39 @@ function registerIpcHandlers(
   );
   ipcMain.handle(IPC_CHANNELS.spellAddDictionary, (): Promise<CustomDictionary | null> =>
     pickDictionary(),
+  );
+  ipcMain.handle(
+    IPC_CHANNELS.spellAddWord,
+    (_event, word: string, target: 'language' | 'personal'): AppConfig => {
+      const trimmed = word.trim();
+      const current = appConfig.get();
+      const sc = current.spellcheck;
+      const personalWords = [...sc.personalWords];
+      const languageWords: Record<string, string[]> = {};
+      for (const [id, list] of Object.entries(sc.languageWords)) {
+        languageWords[id] = [...list];
+      }
+      if (trimmed !== '') {
+        if (target === 'personal') {
+          if (!personalWords.includes(trimmed)) {
+            personalWords.push(trimmed);
+          }
+        } else {
+          const list = languageWords[sc.language] ?? [];
+          if (!list.includes(trimmed)) {
+            languageWords[sc.language] = [...list, trimmed];
+          }
+        }
+      }
+      const stored = appConfig.set({
+        ...current,
+        spellcheck: { ...sc, personalWords, languageWords },
+      });
+      // This path doesn't go through the `config:set` handler, so reload
+      // the checker here.
+      spellcheck.invalidate();
+      return stored;
+    },
   );
 }
 
@@ -363,6 +500,89 @@ async function pickDictionary(): Promise<CustomDictionary | null> {
 let mainWindow: BrowserWindow | null = null;
 
 /**
+ * Absolute path to the MCP stdio bridge script an external client
+ * (`node <path>`) runs. Packaged, `__dirname` is inside `app.asar` but the
+ * script was `asarUnpack`'d, and a plain external Node does not redirect
+ * `app.asar` -> `app.asar.unpacked` the way Electron does -- so point at
+ * the real file. `$`-anchored so a path that merely contains "app.asar"
+ * earlier is not corrupted.
+ */
+/**
+ * The BrowserWindow / taskbar icon. Packaged, it is an `extraResources`
+ * copy under `process.resourcesPath`; in dev it is `build/icon.ico` at the
+ * repo root (`__dirname` is `dist-electron/electron`). `.ico` is what
+ * Windows wants for a window icon.
+ */
+const windowIconPath = app.isPackaged
+  ? path.join(process.resourcesPath, 'icon.ico')
+  : path.join(__dirname, '..', '..', 'build', 'icon.ico');
+
+function stdioBridgePath(): string {
+  const rel = ['dist-electron', 'electron', 'mcp', 'stdio-bridge.js'];
+  if (app.isPackaged) {
+    return path.join(app.getAppPath().replace(/app\.asar$/, 'app.asar.unpacked'), ...rel);
+  }
+  return path.join(__dirname, 'mcp', 'stdio-bridge.js');
+}
+
+/**
+ * In-flight `vault_write` confirmations from MCP clients, keyed by the id
+ * sent to the renderer. Resolved by the `mcp:write-decision` IPC reply; a
+ * missing renderer / a timeout defaults to a reject (never write
+ * unattended).
+ */
+const pendingMcpWrites = new Map<number, (approved: boolean) => void>();
+let mcpWriteSeq = 0;
+/** Module-scope handle so the `will-quit` listener can close the socket. */
+let mcpHttpForShutdown: McpHttpTransport | null = null;
+const MCP_WRITE_CONFIRM_TIMEOUT_MS = 120_000;
+
+function requestMcpWriteConfirmation(request: {
+  path: string;
+  before: string;
+  after: string;
+  mode: 'overwrite' | 'append';
+}): Promise<boolean> {
+  const wc = mainWindow?.webContents;
+  if (!wc) {
+    return Promise.resolve(false);
+  }
+  const id = ++mcpWriteSeq;
+  return new Promise<boolean>((resolve) => {
+    const done = (approved: boolean): void => {
+      if (pendingMcpWrites.delete(id)) {
+        clearTimeout(timer);
+        resolve(approved);
+      }
+    };
+    const timer = setTimeout(() => done(false), MCP_WRITE_CONFIRM_TIMEOUT_MS);
+    pendingMcpWrites.set(id, done);
+    wc.send(IPC_CHANNELS.mcpWriteRequest, { id, ...request });
+  });
+}
+
+/** Starts / stops the localhost MCP HTTP endpoint to match the current config. */
+async function syncMcpHttpTransport(
+  transport: McpHttpTransport,
+  appConfig: AppConfigStore,
+): Promise<void> {
+  const { enabled, httpEnabled, httpPort } = appConfig.get().mcp;
+  try {
+    if (enabled && httpEnabled) {
+      await transport.start(httpPort);
+    } else {
+      await transport.stop();
+    }
+  } catch (err) {
+    console.warn(
+      `MCP HTTP endpoint on 127.0.0.1:${httpPort} could not start: ${
+        err instanceof Error ? err.message : String(err)
+      }`,
+    );
+  }
+}
+
+/**
  * Quick-capture hotkey handler: bring the main window forward and tell the
  * renderer to open today's daily note (created from `templates/daily.md`
  * if needed). The window is raised first so that even the failure case
@@ -388,10 +608,14 @@ async function openTodayDailyNote(dailyNotes: DailyNoteManager): Promise<void> {
   }
 }
 
-function createMainWindow(): BrowserWindow {
+function createMainWindow(getUiScaleFactor?: () => number): BrowserWindow {
   const window = new BrowserWindow({
     width: 1280,
     height: 800,
+    // The frameless window draws no title bar, but this still sets the
+    // taskbar / Alt-Tab icon (dev too, where there is no exe icon to
+    // inherit).
+    ...(fs.existsSync(windowIconPath) ? { icon: windowIconPath } : {}),
     // Matches the dark theme default (see CLAUDE.md, UI/UX Design) so the
     // window doesn't flash white while the renderer loads.
     backgroundColor: '#1b1a19',
@@ -430,6 +654,27 @@ function createMainWindow(): BrowserWindow {
   });
 
   attachContextMenu(window);
+  // Renderer-process failures -> the log file (ADR-0032).
+  watchWebContents(window.webContents);
+
+  // Belt-and-braces for the renderer's window-level drag/drop guard
+  // (ADR-0027): a stray file / link drop must never navigate the window
+  // away from the SPA, and an http(s) link opens in the OS browser.
+  window.webContents.on('will-navigate', (event, url) => {
+    const allowed = rendererDevServerUrl
+      ? url.startsWith(rendererDevServerUrl)
+      : url.startsWith('app://');
+    if (!allowed) {
+      event.preventDefault();
+    }
+  });
+  window.webContents.setWindowOpenHandler(({ url }) => {
+    if (/^https?:/i.test(url)) {
+      void shell.openExternal(url);
+    }
+    return { action: 'deny' };
+  });
+
   // Keep the renderer titlebar's maximize/restore glyph in sync with the
   // real window state.
   const emitMaximizeState = (): void => {
@@ -444,6 +689,21 @@ function createMainWindow(): BrowserWindow {
   window.webContents.setVisualZoomLevelLimits(1, 1).catch(() => {
     // Older Electron rejects this off the main frame; harmless.
   });
+
+  // Re-apply the app-wide "Base font size" (Settings -> Appearance) after
+  // every load. `webContents.setZoomFactor` is reset by Chromium on each
+  // navigation, and the renderer's own one-shot call on first config load
+  // races the initial commit and is dropped -- so on a cold start the UI
+  // opened unscaled even though the setting was stored. This is the
+  // authoritative re-apply (ADR-0020).
+  if (getUiScaleFactor) {
+    window.webContents.on('did-finish-load', () => {
+      const factor = getUiScaleFactor();
+      if (Number.isFinite(factor) && factor > 0) {
+        window.webContents.setZoomFactor(factor);
+      }
+    });
+  }
   mainWindow = window;
 
   window.on('closed', () => {
@@ -471,6 +731,7 @@ function createMainWindow(): BrowserWindow {
 if (!app.requestSingleInstanceLock()) {
   app.quit();
 } else {
+  installMainProcessLogging();
   app.on('second-instance', () => {
     if (mainWindow) {
       if (mainWindow.isMinimized()) {
@@ -483,16 +744,34 @@ if (!app.requestSingleInstanceLock()) {
   app.whenReady().then(async () => {
     const vaultManager = new VaultManager();
     const dailyNotes = new DailyNoteManager(vaultManager);
-    const tagIndex = new TagIndex(vaultManager);
     const appConfig = new AppConfigStore();
+    // The tag index also skips the user-configured templates folder (on top
+    // of the always-excluded literal `templates/`), so snippet headings do
+    // not leak into tag search.
+    const tagIndex = new TagIndex(vaultManager, () => appConfig.get().templates.dir);
+    const taskIndex = new TaskIndex(vaultManager, () => appConfig.get().templates.dir);
     const llmDebug = new LlmDebugLog();
     const lmStudio = new LmStudioClient(appConfig, llmDebug);
     const llmTasks = new LlmTaskRegistry();
-    const actionRunner = new ActionRunner(appConfig, lmStudio, llmTasks);
-    const noteManager = new NoteManager(vaultManager, tagIndex, actionRunner);
+    // The vault tool set (ADR-0021): one instance backs both the MCP
+    // server and the assistant's in-process tool-calling loop.
+    const vaultTools = new VaultTools(
+      vaultManager,
+      tagIndex,
+      () => appConfig.get(),
+      requestMcpWriteConfirmation,
+      () => mainWindow?.webContents.send(IPC_CHANNELS.mcpVaultChanged),
+    );
+    const actionRunner = new ActionRunner(appConfig, lmStudio, llmTasks, vaultTools);
+    const noteManager = new NoteManager(vaultManager, tagIndex, taskIndex, actionRunner);
     const chatStore = new ChatStore(vaultManager);
     const spellcheck = new SpellcheckService(appConfig);
+    const mcpServer = new McpServer(vaultTools, app.getVersion());
+    const mcpHttp = new McpHttpTransport(mcpServer);
+    mcpHttpForShutdown = mcpHttp;
     await tagIndex.rebuild();
+    await taskIndex.rebuild();
+    await syncMcpHttpTransport(mcpHttp, appConfig);
 
     // Push each new debug entry to the renderer so the LLM settings pane
     // updates live while a request is in flight.
@@ -507,18 +786,21 @@ if (!app.requestSingleInstanceLock()) {
       dailyNotes,
       noteManager,
       tagIndex,
+      taskIndex,
       appConfig,
       lmStudio,
       actionRunner,
       llmDebug,
       chatStore,
       spellcheck,
+      mcpHttp,
     );
     // The File/Edit/Selection/View menus are drawn by the renderer titlebar
     // now (ADR-0019). Keep a native menu only on macOS, where the menu bar
     // belongs to the system and its accelerators are expected there.
     Menu.setApplicationMenu(process.platform === 'darwin' ? buildApplicationMenu() : null);
-    createMainWindow();
+    const uiScaleFactor = (): number => UI_SCALE_FACTORS[appConfig.get().appearance.uiScale];
+    createMainWindow(uiScaleFactor);
 
     const shortcutRegistered = globalShortcut.register(CAPTURE_SHORTCUT, () => {
       void openTodayDailyNote(dailyNotes);
@@ -533,13 +815,14 @@ if (!app.requestSingleInstanceLock()) {
 
     app.on('activate', () => {
       if (BrowserWindow.getAllWindows().length === 0) {
-        createMainWindow();
+        createMainWindow(uiScaleFactor);
       }
     });
   });
 
   app.on('will-quit', () => {
     globalShortcut.unregisterAll();
+    void mcpHttpForShutdown?.stop();
   });
 
   app.on('window-all-closed', () => {

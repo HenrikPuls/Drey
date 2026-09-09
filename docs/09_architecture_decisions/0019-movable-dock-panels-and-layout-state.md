@@ -71,3 +71,81 @@ menu the design does not use.
   "Open other vault …" (no vault registry in the backend).
 - The dock gestures are hand-rolled on native events, keeping the "no
   CDK / split-pane dependency" line the shell already held.
+
+## Later change — a third dock, and "Add entry" as a panel
+
+The two-dock model (`left | right`) became `left | right | bottom`. The
+bottom dock is a resizable band **under the editor** — `DockService.bottomH`
+plus a horizontal edge splitter. Panels stack vertically inside it exactly
+as in a side dock, so no new gesture code was needed — only a `'bottom'`
+branch in the drop hit-test and `startDockResize`, and a `bottom` list +
+`bottomH` in the persisted `DockState` (a stored blob without them
+re-homes the new panel from the defaults).
+
+The "Add entry" drawer — previously a fixed strip owned by `App` with its
+own toggle button and a `LayoutService.drawerHeight` — is now a normal
+dock panel (`PanelId 'entry'`, default home: the bottom dock, opens
+collapsed). `PanelFrame`'s chevron governs show/hide, the unsent-draft
+dot moved to the panel header status value, and `App` lost all its
+imperative drawer-resize code. `DockService.contentHeight(id)` (a small
+set, currently just `calendar`) marks a panel that takes its content
+height instead of a `flex-grow` share and draws no splitter on its edges.
+`LayoutService.drawerHeight` is now unused but left in place.
+
+**Every panel reaches every dock.** `move()` was always generic, but two
+things made the bottom band feel like `entry`-only: `App` unmounted a dock
+the instant it held no panels (so an emptied dock stopped registering as a
+drop target), and the `bottom` drop test only matched the band's live
+rect (~32 px with `entry` collapsed). Now `App` also mounts a dock while
+`DockService.dragActive()` (any header drag in progress), an emptied dock
+mounted this way shows a dashed "Drop a panel here" band (bottom: a fixed
+140 px via `Dock.hostHeight()`), and the `onDragMove` region test treats
+the whole lower band as `bottom` unless the pointer is horizontally over a
+side dock — the same "whole half" leniency the side docks already had.
+Dock resize splitters still render only for a non-empty dock.
+
+## Later change — low-profile headers, click-to-collapse, drag feedback
+
+Panel headers were reworked to be quieter and to carry their own drag
+affordance:
+
+- **No chevron button.** `PanelFrame`'s header is now a single
+  `role="button"` region. `mousedown` opens a *press* gesture in
+  `DockService.beginHeaderPress(id, title, event)`: released under a ~4 px
+  move → `toggleCollapse`; past it → the existing header drag. Enter /
+  Space on the focused header also toggles. The header no longer takes an
+  accent-tinted background while dragging — only `cursor: grab/grabbing`
+  and a faint text lift on hover/focus.
+- **Drag ghost.** On promotion to a drag, `DockService` appends a
+  `position: fixed` `.dock-drag-ghost` chip (the panel title, `styles.css`)
+  that follows the cursor and is removed on drop — the "something is
+  happening" signal that used to be a status-bar sentence.
+- **Drop target.** The accent inset ring on the target dock
+  (`--drop-ring`) is replaced by a translucent dark wash
+  (`:host(.drop-target)::after`); the 2 px accent drop-line stays.
+- **Collapse animation.** The panel body stays mounted while collapsed
+  (its `*ngComponentOutlet` panel keeps its state) inside a
+  `grid-template-rows: 1fr ⇄ 0fr` wrapper that transitions over 140 ms;
+  `content-visibility: hidden` (with `allow-discrete`) skips rendering once
+  folded. Previously the body — and the panel component — were destroyed on
+  collapse.
+- **Status bar.** The idle "Drag a panel header…" hint (and its drag-state
+  variant) is gone; `StatusBar` no longer injects `DockService`.
+
+## Later change — data-driven registry + a true hide/show ([ADR-0034](0034-internal-widget-model.md))
+
+- The closed `PanelId` union and the `Record<PanelId, …>` maps
+  (`panel-registry.ts`, `CONTENT_HEIGHT_PANELS`, the `defaultState()`
+  literals) are replaced by a `WIDGETS: WidgetDescriptor[]` registry
+  (`src/app/dock/widget-registry.ts`). `PanelId` is now an open `WidgetId`
+  string alias; `defaultState()` / `merge()` / `contentHeight()` /
+  `PanelFrame` title + flush all read the registry.
+- `DockState` gains **`hidden: WidgetId[]`**. `DockService.hide(id)` pulls a
+  widget out of every dock; `show(id)` puts it back at its descriptor's
+  default slot, expanded; `isHidden(id)` reports it. `move()` /
+  `openAndExpand()` clear `hidden`. It persists in `localStorage['drey.dock']`.
+- The View menu toggles **visibility** now, not collapse: `widgetRow`'s
+  check mark is `!isHidden(id)`, and the rows are generated from
+  `WIDGETS.filter(w => w.removable)` so every panel — including `tasks` and
+  `entry`, which had none — gets one. Collapsing to the header stays the
+  header-click gesture.

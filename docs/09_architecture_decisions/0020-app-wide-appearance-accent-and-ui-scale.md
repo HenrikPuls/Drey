@@ -85,7 +85,11 @@ renderer service.**
   which is the intuitive result.
 - `setZoomFactor` resets on reload; `AppearanceService`'s effect re-applies
   it whenever `SettingsService` (re)loads the config, so a refresh is
-  invisible.
+  invisible. **Cold start is the exception:**
+  the renderer's single post-load `setUiZoomFactor` call races the window's
+  first navigation and Chromium drops it, so `createMainWindow` also
+  re-applies the stored factor on every `webContents` `did-finish-load`
+  from the main process — the authoritative path.
 - The accent is now a single source of truth. A custom hex with poor
   contrast is possible; the presets are the safe path and the default.
 - `styles.css` no longer needs a `rem` refactor. Component stylesheets keep
@@ -95,3 +99,28 @@ renderer service.**
   deliberately app-wide axis.
 - `normalizeUiScale` / `normalizeAccent` / `resolveAccentHex` are pure and
   unit-covered; the mutators are covered against a fake `SettingsService`.
+
+## Later change — Appearance joins the draft / Save / Discard flow
+
+**Status:** Accepted (supersedes the "persist immediately" decision above
+for the three in-`Settings` Appearance controls).
+
+The immediate-apply choice made the Appearance category behave unlike
+every other Settings category: its footer showed "All changes saved", the
+**Save** button never enabled, and **Discard** had nothing to revert —
+the project owner read this as the Save/Discard buttons being broken.
+
+`setAppearanceUiScale` / `setAppearanceAccent` / `setEditorFontFamily` now
+write to the **draft only** (`mutate()`), exactly like `patchLlm` and the
+rest. They still preview **live**: `editorFontFamily()` /
+`appearanceUiScale()` / `appearanceAccent()` read a new
+`appearanceSource` computed — the draft while `screenOpen()`, the saved
+config otherwise — so `AppearanceService`'s effects and the editor host
+follow the draft as the user tries values, and a **Discard** / close
+(which resets the draft) rolls the preview back. **Save** persists them
+with the rest of the draft. `applyImmediate` is gone.
+
+Unchanged and still immediate, because they fire **outside** the Settings
+screen where there is no Save to wait for: `setEditorFontScale` (the
+`Ctrl +/-/0` editor zoom) and `setTriggerConfirmImmediate` (the
+confirmation dialog's "don't ask again").

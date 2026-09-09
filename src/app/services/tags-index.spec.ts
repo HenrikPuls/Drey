@@ -21,6 +21,20 @@ describe('extractInlineTags', () => {
     expect(extractInlineTags('#2fa and #-dash but #ok2')).toEqual(['ok2']);
   });
 
+  it('keeps nested tags whole; the first segment must start with a letter', () => {
+    expect(
+      extractInlineTags('#project/frontend #project/frontend/api #q3/2024 but not #2024/01'),
+    ).toEqual(['project/frontend', 'project/frontend/api', 'q3/2024']);
+  });
+
+  it('does not eat a trailing slash into the tag', () => {
+    expect(extractInlineTags('done #project/ and #plain/')).toEqual(['project', 'plain']);
+  });
+
+  it('reserves the whole #task/* subtree, not just #task', () => {
+    expect(extractInlineTags('#task #task/blocked #tasky/x')).toEqual(['tasky/x']);
+  });
+
   it('returns an empty array when there are no tags', () => {
     expect(extractInlineTags('plain text, no hashes')).toEqual([]);
   });

@@ -171,6 +171,41 @@ describe('EditorService', () => {
       expect(service.openDocs()).toEqual([]);
       expect(service.openPath()).toBeNull();
     });
+
+    describe('retargetTabs (rename on disk)', () => {
+      it('re-points an open tab, keeping its unsaved buffer, and follows the active path', async () => {
+        await service.openFile('notes/a.md');
+        service.updateBuffer('content of notes/a.md + edit');
+
+        service.retargetTabs('notes/a.md', 'notes/renamed.md');
+
+        expect(service.openDocs().map((d) => d.path)).toEqual(['notes/renamed.md']);
+        expect(service.openPath()).toBe('notes/renamed.md');
+        expect(service.bufferContent()).toBe('content of notes/a.md + edit');
+        expect(service.isDirty()).toBe(true);
+      });
+
+      it('moves every tab under a renamed folder', async () => {
+        await service.openFile('proj/one.md');
+        await service.openFile('proj/sub/two.md');
+        await service.openFile('other.md');
+
+        service.retargetTabs('proj', 'work');
+
+        expect(service.openDocs().map((d) => d.path)).toEqual([
+          'work/one.md',
+          'work/sub/two.md',
+          'other.md',
+        ]);
+      });
+
+      it('does nothing when no tab matches', async () => {
+        await service.openFile('a.md');
+        service.retargetTabs('b.md', 'c.md');
+        expect(service.openDocs().map((d) => d.path)).toEqual(['a.md']);
+        expect(service.openPath()).toBe('a.md');
+      });
+    });
   });
 
   describe('openDailyNote', () => {
@@ -368,6 +403,54 @@ describe('EditorService', () => {
 
     service.requestNewDailyEntry('captured line');
     expect(service.newEntryRequest()).toEqual({ id: before + 2, text: 'captured line' });
+  });
+
+  describe('image tabs (kind: image, ADR-0026)', () => {
+    it('opens an image file without reading it as text and never dirty', async () => {
+      let reads = 0;
+      (window.dreyApi as unknown as { readVaultFile: unknown }).readVaultFile = (p: string) => {
+        reads++;
+        return Promise.resolve({ content: `content of ${p}`, modifiedMs: 1 });
+      };
+
+      await service.openFile('assets/photo.png');
+
+      expect(reads).toBe(0);
+      expect(service.activeKind()).toBe('image');
+      expect(service.openPath()).toBe('assets/photo.png');
+      expect(service.bufferContent()).toBe('');
+      expect(service.isDirty()).toBe(false);
+      expect(service.activeIsDraft()).toBe(false);
+    });
+
+    it('save / saveAs / updateBuffer / setViewMode are no-ops on an image tab', async () => {
+      await service.openFile('a/pic.jpg');
+      service.updateBuffer('junk');
+      service.setViewMode('source');
+      await service.save();
+      await service.saveAs();
+
+      expect(saves).toHaveLength(0);
+      expect(service.bufferContent()).toBe('');
+      expect(service.viewMode()).toBe('live');
+    });
+
+    it('dedupes on reopen and closes without a prompt / with closeTabsUnder', async () => {
+      await service.openFile('img/a.png');
+      await service.openFile('note.md');
+      await service.openFile('img/a.png');
+      expect(service.openDocs().filter((d) => d.path === 'img/a.png')).toHaveLength(1);
+
+      service.closeTabsUnder('img');
+      expect(service.openDocs().some((d) => d.path === 'img/a.png')).toBe(false);
+    });
+
+    it('the assistant insert request is a no-op while an image tab is active', async () => {
+      await service.openFile('x.png');
+      const before = service.insertRequest().id;
+      service.requestInsertText('hello');
+      expect(service.insertRequest().id).toBe(before);
+    });
   });
 
   describe('stripFrontmatter', () => {

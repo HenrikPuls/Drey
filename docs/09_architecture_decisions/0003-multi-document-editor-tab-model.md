@@ -100,3 +100,17 @@ two more cases:
 
 Daily-note drafts are unchanged — they still save silently to their
 `daily/<year>/<month>/` path, `askOnSave` is not set on them.
+
+## Later change — image tabs (`kind: 'image'`, ADR-0026)
+
+`OpenDoc` gained `kind: 'text' | 'image'`. `EditorService.openFile` routes
+a path whose extension `imageExtension()` recognises to `makeImageDoc`
+instead of `readVaultFile` + `makeDoc`: an image tab holds **no buffer**
+(`savedContent === bufferContent === ''`, so `isDirty` is always false and
+the close prompt never fires), and `save` / `saveAs` / `setViewMode` /
+`updateBuffer` early-return on it. It is otherwise an ordinary tab — the
+tab bar, the open-windows panel, dedupe-on-reopen, the Files-tree active
+highlight and `closeTabsUnder` (folder delete) all treat it like any
+other. The centre column renders `<app-image-tab>` instead of
+`<app-editor>` when `editor.activeKind() === 'image'`. Still no
+cross-restart persistence.

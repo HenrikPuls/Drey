@@ -6,7 +6,16 @@ import {
   hasEntryContent,
 } from '../../../shared/entry-compose';
 import { formatDate } from '../../../shared/timestamp';
+import { TAG_NAME_SOURCE } from '../../../shared/tags';
 import { EditorService } from './editor.service';
+import { SettingsService } from './settings.service';
+
+/**
+ * `#` + the canonical tag-name grammar (shared/tags), global. The drawer
+ * lifts these into chips as the user types; unlike the main index it does
+ * not skip code spans, which is fine for a short capture field.
+ */
+const TAG_IN_TEXT = new RegExp(`#(${TAG_NAME_SOURCE})`, 'gu');
 
 /** What `submit()` did, so the component knows whether to clear the text field. */
 export type SubmitResult = 'appended' | 'empty';
@@ -21,6 +30,7 @@ export type SubmitResult = 'appended' | 'empty';
 @Injectable({ providedIn: 'root' })
 export class EntryDraftService {
   private readonly editor = inject(EditorService);
+  private readonly settings = inject(SettingsService);
 
   /** The drawer starts collapsed; the header toggle opens it. */
   readonly open = signal(false);
@@ -42,8 +52,10 @@ export class EntryDraftService {
   /** Anything to append at all -- drives the primary button. */
   readonly hasContent = computed<boolean>(() => hasEntryContent(this.draft()));
 
-  /** What the entry will look like in the document. Shown as a preview. */
-  readonly preview = computed<string>(() => composeEntry(this.draft()));
+  /** What the entry will look like in the document, using the active template. */
+  readonly preview = computed<string>(() =>
+    composeEntry(this.draft(), this.settings.activeEntryPattern()),
+  );
 
   toggle(): void {
     this.open.update((open) => !open);
@@ -129,7 +141,7 @@ export class EntryDraftService {
           return; // no vault -- keep the draft rather than dropping it
         }
       }
-      this.editor.requestEntryFromDraft(this.draft());
+      this.editor.requestEntryFromDraft(this.draft(), this.settings.activeEntryPattern());
       this.discard();
     } finally {
       this.appending.set(false);
@@ -141,8 +153,7 @@ export class EntryDraftService {
    * This is called whenever the text content changes.
    */
   private extractTagsFromText(text: string): void {
-    const tagPattern = /#([a-zA-Z0-9_-]+)/g;
-    const matches = [...text.matchAll(tagPattern)];
+    const matches = [...text.matchAll(TAG_IN_TEXT)];
 
     const newTags = matches
       .map((match) => match[1])
@@ -161,8 +172,7 @@ export class EntryDraftService {
    * Removes tags that are no longer in the text but were not manually added.
    */
   private syncTagsWithText(text: string): void {
-    const tagPattern = /#([a-zA-Z0-9_-]+)/g;
-    const matches = [...text.matchAll(tagPattern)];
+    const matches = [...text.matchAll(TAG_IN_TEXT)];
     const textTags = matches.map((match) => match[1].toLowerCase());
 
     this.tags.update((list) => {

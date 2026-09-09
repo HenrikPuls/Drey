@@ -21,6 +21,15 @@
     @if (vault.activeVaultPath()) {
       <button
         type="button"
+        class="icon-btn"
+        (click)="collapseAll()"
+        title="Collapse all folders"
+        aria-label="Collapse all folders"
+      >
+        <app-icon name="chevrons-down-up" [size]="12" />
+      </button>
+      <button
+        type="button"
         class="icon-btn refresh"
         (click)="onRefresh()"
         [disabled]="vault.isLoading()"
@@ -66,6 +75,22 @@
     </div>
   }
 
+  @if (renaming(); as pending) {
+    <div class="create-row">
+      <app-icon [name]="pending.entry.type === 'directory' ? 'chevron-right' : 'pencil'" [size]="10" />
+      <input
+        #renameInput
+        class="create-input"
+        type="text"
+        [value]="pending.entry.name"
+        [attr.aria-label]="'Rename ' + pending.entry.relativePath"
+        (keydown.enter)="commitRename(renameInput.value)"
+        (keydown.escape)="cancelRename()"
+        (blur)="commitRename(renameInput.value)"
+      />
+    </div>
+  }
+
   @if (!vault.activeVaultPath()) {
     <div class="vault-empty">
       <p>No vault selected.</p>
@@ -80,7 +105,7 @@
   } @else if (vault.fileTree().length === 0) {
     <p class="hint">Vault is empty.</p>
   } @else {
-    <div class="tree-scroll">
+    <div class="tree-scroll" tabindex="0" (keydown)="onTreeKeydown($event)">
       <ng-container *ngTemplateOutlet="tree; context: { $implicit: vault.fileTree(), depth: 0 }" />
     </div>
   }
@@ -95,7 +120,18 @@
   <div class="ctx-menu" [style.left.px]="m.x" [style.top.px]="m.y">
     <button type="button" (click)="startCreate('file')">New file</button>
     <button type="button" (click)="startCreate('directory')">New folder</button>
+    @if (m.entry || vault.clipboard()) {
+      <div class="ctx-sep"></div>
+    }
     @if (m.entry) {
+      <button type="button" (click)="onCopy()">Copy</button>
+      <button type="button" (click)="onDuplicate()">Duplicate</button>
+    }
+    @if (vault.clipboard(); as clip) {
+      <button type="button" (click)="onPaste()">Paste “{{ clip.name }}”</button>
+    }
+    @if (m.entry) {
+      <button type="button" (click)="startRename()">Rename…</button>
       <div class="ctx-sep"></div>
       <button type="button" class="danger" (click)="onDelete()">Delete</button>
     }
@@ -108,8 +144,9 @@
       <button
         type="button"
         class="node folder"
+        [class.selected]="selected() === entry.relativePath"
         [style.padding-left.px]="8 + depth * 13"
-        (click)="toggleFolder(entry.relativePath)"
+        (click)="onFolderClick(entry)"
         (contextmenu)="openMenu($event, entry)"
       >
         <app-icon
@@ -131,9 +168,12 @@
       <button
         type="button"
         class="node file"
+        draggable="true"
         [class.active]="editor.openPath() === entry.relativePath"
+        [class.selected]="selected() === entry.relativePath"
         [style.padding-left.px]="8 + depth * 13"
         (click)="onFileClick(entry)"
+        (dragstart)="onFileDragStart($event, entry)"
         (contextmenu)="openMenu($event, entry)"
       >
         <span class="bullet" aria-hidden="true"></span>

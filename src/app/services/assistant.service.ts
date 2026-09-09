@@ -1,25 +1,12 @@
 import { Injectable, computed, effect, inject, signal } from '@angular/core';
 import { ActionContext, ChatCard, ChatThread } from '../../../shared/ipc-api';
-import { emptyThread, hasSummary } from '../../../shared/chat-thread';
+import { emptyThread, hasSummary, historyForAsk } from '../../../shared/chat-thread';
 import { ipcErrorMessage } from '../../../shared/ipc-error';
 import { formatDateTime } from '../../../shared/timestamp';
 import { ConfirmationService } from './confirmation.service';
 import { EditorService } from './editor.service';
 import { LlmTaskService } from './llm-task.service';
 import { SettingsService } from './settings.service';
-
-/** `localStorage` key for the panel's show/hide state. */
-const PANEL_KEY = 'drey.assistant';
-
-/** Read synchronously at construction, like the pane sizes in `LayoutService`. */
-function readPanelPref(): boolean {
-  try {
-    const raw = localStorage.getItem(PANEL_KEY);
-    return (JSON.parse(raw ?? '{}') as { open?: boolean }).open !== false;
-  } catch {
-    return true;
-  }
-}
 
 /** The text a cancelled generation reports. */
 const CANCELLED = 'Generation cancelled.';
@@ -95,6 +82,15 @@ export class AssistantService {
     this.notice.set(null);
   }
 
+  /**
+   * The card's "insert into note" arrow: drops the card text into the
+   * document editor at the caret (replacing any selection). The user saves
+   * it like any other edit -- nothing is written here.
+   */
+  insertIntoNote(text: string): void {
+    this.editor.requestInsertText(text);
+  }
+
   /** Routes a rejection to the error line or the quiet notice line. */
   private report(err: unknown): void {
     if (isCancellation(err)) {
@@ -110,12 +106,6 @@ export class AssistantService {
   took(durationMs: number | undefined): string | null {
     return durationMs === undefined ? null : this.llmTasks.took(durationMs);
   }
-
-  /**
-   * The user's show/hide choice for the panel (the editor chrome's toggle),
-   * remembered per machine like the pane sizes.
-   */
-  private readonly panelWanted = signal(readPanelPref());
 
   readonly notePath = computed<string | null>(() => this.editor.openPath());
 
@@ -136,20 +126,6 @@ export class AssistantService {
   /** Whether the LLM master switch allows summaries / questions at all. */
   readonly llmEnabled = computed<boolean>(() => this.settings.llmEnabled());
 
-  /**
-   * Whether the panel is shown. It needs BOTH the assistant to be usable
-   * (the LLM master switch -- with it off the panel can neither summarise
-   * nor answer, so it would be dead furniture taking a third of the window)
-   * and the user not to have hidden it.
-   */
-  readonly panelVisible = computed<boolean>(() => this.llmEnabled() && this.panelWanted());
-
-  /** Whether the show/hide toggle in the editor chrome does anything. */
-  readonly panelAvailable = computed<boolean>(() => this.llmEnabled());
-
-  /** The user's show/hide choice, independent of whether the LLM is on. */
-  readonly panelShown = this.panelWanted.asReadonly();
-
   /** True when a manual "Summarise now" makes sense (no summary card yet). */
   readonly canSummarize = computed<boolean>(
     () => this.notePath() !== null && this.llmEnabled() && !hasSummary(this.thread()),
@@ -167,18 +143,6 @@ export class AssistantService {
 
   private get api() {
     return typeof window !== 'undefined' ? window.dreyApi : undefined;
-  }
-
-  togglePanel(): void {
-    this.panelWanted.update((wanted) => {
-      const next = !wanted;
-      try {
-        localStorage.setItem(PANEL_KEY, JSON.stringify({ open: next }));
-      } catch {
-        // Private-mode / storage-disabled: a non-persisted session is fine.
-      }
-      return next;
-    });
   }
 
   /** The panel switch. Applies to this note only; the default is untouched. */
@@ -259,11 +223,15 @@ export class AssistantService {
     this.asking.set(true);
     this.error.set(null);
     this.notice.set(null);
+    // Snapshot the thread as chat turns *before* the new question is added
+    // as a card, so the model gets the running conversation as context
+    // rather than re-answering from the document alone.
+    const history = historyForAsk(this.threads()[path] ?? emptyThread(path));
     await this.appendCard(path, 'question', text);
     try {
       const context: ActionContext = { path, body: this.editor.bufferContent() };
       const { value: outcome, durationMs } = await this.llmTasks.run('Thinking', (taskId) =>
-        this.api!.askChat(context, text, taskId),
+        this.api!.askChat(context, text, taskId, history),
       );
       if (outcome.kind === 'answer') {
         await this.appendCard(path, 'answer', outcome.text, durationMs);

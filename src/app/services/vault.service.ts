@@ -16,6 +16,13 @@ export class VaultService {
   readonly isLoading = signal(false);
   readonly error = signal<string | null>(null);
 
+  /**
+   * The entry marked with "Copy" in the Files panel, awaiting a "Paste".
+   * Lives on the service (not the panel) so it survives the panel being
+   * unmounted and re-mounted as it is dragged between docks.
+   */
+  readonly clipboard = signal<{ path: string; name: string } | null>(null);
+
   constructor() {
     void this.refresh();
   }
@@ -76,6 +83,39 @@ export class VaultService {
   }
 
   /**
+   * Renames / moves an entry and reloads the tree. Resolves to the new
+   * vault-relative path. Errors propagate to the caller (a one-off alert).
+   */
+  async renameEntry(fromRelativePath: string, toRelativePath: string): Promise<string> {
+    if (typeof window === 'undefined' || !window.dreyApi?.renameVaultEntry) {
+      throw new Error('Renaming needs the desktop app.');
+    }
+    const next = await window.dreyApi.renameVaultEntry(fromRelativePath, toRelativePath);
+    await this.loadFileTree();
+    return next;
+  }
+
+  /** Copies an entry into `destDirRelativePath` (`''` = vault root) and reloads. */
+  async copyEntry(sourceRelativePath: string, destDirRelativePath: string): Promise<string> {
+    if (typeof window === 'undefined' || !window.dreyApi?.copyVaultEntry) {
+      throw new Error('Copying needs the desktop app.');
+    }
+    const next = await window.dreyApi.copyVaultEntry(sourceRelativePath, destDirRelativePath);
+    await this.loadFileTree();
+    return next;
+  }
+
+  /** Duplicates an entry next to itself (`" copy"` suffix) and reloads. */
+  async duplicateEntry(sourceRelativePath: string): Promise<string> {
+    if (typeof window === 'undefined' || !window.dreyApi?.duplicateVaultEntry) {
+      throw new Error('Duplicating needs the desktop app.');
+    }
+    const next = await window.dreyApi.duplicateVaultEntry(sourceRelativePath);
+    await this.loadFileTree();
+    return next;
+  }
+
+  /**
    * Deletes a file or folder and reloads the tree. Like `createEntry`,
    * errors propagate to the caller (the sidebar shows a one-off `alert`)
    * rather than blanking the whole list.
@@ -86,6 +126,54 @@ export class VaultService {
     }
     await window.dreyApi.deleteVaultEntry(relativePath);
     await this.loadFileTree();
+  }
+
+  /**
+   * Persists a pasted / dropped image into the vault (ADR-0024) and
+   * returns the note-relative `attachments/<name>` path to put inside
+   * `![](...)`. `noteRelPath` is the open document's vault-relative path
+   * (`''` when nothing is open -> the vault root's `attachments/`). The
+   * file tree is reloaded so the new `attachments/` folder shows. Throws
+   * when there is no vault / no desktop bridge, so the caller can show a
+   * "not saved" notice instead of a silent no-op.
+   */
+  async saveAsset(bytes: Uint8Array, ext: string, noteRelPath: string): Promise<string> {
+    if (typeof window === 'undefined' || typeof window.dreyApi?.saveVaultAsset !== 'function') {
+      throw new Error('Saving images needs the desktop app.');
+    }
+    const rel = await window.dreyApi.saveVaultAsset(bytes, ext, noteRelPath);
+    await this.loadFileTree();
+    return rel;
+  }
+
+  /**
+   * Reads a vault file's text -- the Files-panel drag of a text file
+   * inlines its contents at the drop point (ADR-0028). Throws when the
+   * bridge is missing so the caller can show a notice.
+   */
+  async readTextFile(relativePath: string): Promise<string> {
+    if (typeof window === 'undefined' || typeof window.dreyApi?.readVaultFile !== 'function') {
+      throw new Error('Reading files needs the desktop app.');
+    }
+    return (await window.dreyApi.readVaultFile(relativePath)).content;
+  }
+
+  /**
+   * Downloads a web image dragged from a browser into the vault (ADR-0028)
+   * and returns the note-relative `attachments/<name>` path. The file tree
+   * is reloaded. Rejects with a user-facing message (bad URL, not an
+   * image, too large, unreachable).
+   */
+  async saveAssetFromUrl(url: string, noteRelPath: string): Promise<string> {
+    if (
+      typeof window === 'undefined' ||
+      typeof window.dreyApi?.saveVaultAssetFromUrl !== 'function'
+    ) {
+      throw new Error('Downloading images needs the desktop app.');
+    }
+    const rel = await window.dreyApi.saveVaultAssetFromUrl(url, noteRelPath);
+    await this.loadFileTree();
+    return rel;
   }
 
   private async loadFileTree(): Promise<void> {

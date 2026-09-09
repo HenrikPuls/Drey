@@ -95,8 +95,9 @@ toolchain is removable by deleting `.tools/`). Never assume a bare `node`,
   purely additive future option
   ([ADR-0018](docs/09_architecture_decisions/0018-manual-refresh-no-file-watcher.md)).
 - **Feature modules** ([ADR-0016](docs/09_architecture_decisions/0016-feature-module-convention.md)):
-  `electron/llm/`, `electron/tags/`, `shared/llm/`, `shared/tags/`,
-  `src/app/tags/`, `src/app/keybindings/` each expose a thin `index.ts`
+  `electron/llm/`, `electron/tags/`, `electron/tasks/`, `shared/llm/`,
+  `shared/tags/`, `shared/tasks/`, `src/app/tags/`, `src/app/tasks/`,
+  `src/app/keybindings/` each expose a thin `index.ts`
   barrel; `eslint.config.mjs` (`no-restricted-imports`, `npm run lint`)
   makes a deep import from outside a module a CI error. `shared/ipc-api.ts`
   stays the cross-layer contract, outside any module. Modular monolith —
@@ -115,6 +116,12 @@ Main process:
   sections (`SectionRecord[]`); `rebuild` on vault open / refresh,
   `reindexFile` on save, `removeFile` on delete; backs `tags:list` and
   `tags:search`. `templates/` excluded, `daily/` included
+- `TaskIndex` (`electron/tasks/`, ADR-0033) — same shape/lifecycle as
+  `TagIndex`: a per-file cache of every checkbox / `#task` line
+  (`shared/tasks/scanTasks`), `rebuild` on vault open / refresh /
+  rename / copy / duplicate, `reindexFile` from `NoteManager` on save,
+  `removeFile` on delete; backs `tasks:list` (the Tasks panel's "whole
+  vault" scope). `templates/` excluded, `daily/` included
 - `LmStudioClient` — thin HTTP client for the local OpenAI-compatible
   endpoint (`GET /models`, `POST /chat/completions`), with an optional
   bearer API key; name kept for continuity, but not LM-Studio-specific.
@@ -136,6 +143,14 @@ Main process:
   `suggestTags` (Autotag)
 - `ChatStore` — reads/writes the assistant's per-note sidecar thread
   (`.{name}.chat.json` beside the note, ADR-0012)
+- `electron/mcp/` ([ADR-0021](docs/09_architecture_decisions/0021-mcp-vault-server.md)) —
+  the vault MCP server. `VaultTools` (`vault_search` with a regex filter /
+  `vault_read` / `vault_write`), `McpServer` (hand-rolled JSON-RPC 2.0),
+  `McpHttpTransport` (opt-in localhost `POST /mcp`) and a standalone
+  `stdio-bridge.ts` script. `vault_write` routes through the ADR-0011
+  confirmation dialog (main→renderer bridge) unless "YOLO mode" is on.
+  The same `VaultTools` backs the assistant's tool-calling loop in
+  `LmStudioClient.chat` / `ActionRunner.ask` when `mcp.enabled`
 - `SpellcheckService` (main) — nspell + the bundled/added Hunspell
   dictionaries; answers `spell:check` with misspelled words + suggestions
 
@@ -147,13 +162,18 @@ Renderer (Angular):
   bar** shell directly.
 - `DockService` + `Dock` + `PanelFrame` (`src/app/dock/`) — the dock
   system: `DockService` holds the whole `LayoutState` (which panel in
-  which dock, order, `flexes`, collapse, `leftW`/`rightW`;
+  which dock, order, `flexes`, collapse, `leftW`/`rightW`, `bottomH`;
   `localStorage['drey.dock']`) and runs the header-drag / splitter /
-  dock-edge-resize gestures. Five panels via a `PANEL_COMPONENTS`
-  registry: `CalendarPanel`, `FilesPanel` (the old sidebar's vault
-  switcher + file tree + right-click new/delete + inline create),
-  `SearchPanelHost`, `WindowsPanel`, `AssistantPanel`. `PanelFrame` is
-  the identical 32px header every panel shares.
+  dock-edge-resize gestures. Three docks — `left | right | bottom` (the
+  bottom one a resizable band under the editor). **Eight** panels via a
+  `PANEL_COMPONENTS` registry: `CalendarPanel`, `FilesPanel` (the old
+  sidebar's vault switcher + file tree + right-click new/delete + inline
+  create), `TemplatesPanel` (ADR-0029), `SearchPanelHost`, `TasksPanel`
+  (ADR-0033), `WindowsPanel`, `AssistantPanel`, and `EntryPanel` (the
+  "Add entry" drawer — default home: the bottom dock).
+  `PanelFrame` is the identical 32px header every panel shares.
+  `DockService.contentHeight(id)` marks a panel (currently `calendar`)
+  that sizes to its content rather than a flex share.
 - `TitlebarComponent` + `MenuBar` + `MenuService` (`src/app/titlebar/`) —
   the frameless-window titlebar: accent square, the HTML File/Edit/
   Selection/View menu bar, and — off macOS — minimize/maximize/close over
@@ -173,6 +193,15 @@ Renderer (Angular):
   → section hits (click opens the file at the line via
   `EditorService.openFileAt`), and an **Export** button that dumps the
   hits into an unsaved `search-results.md` scratch tab
+- `TasksPanel` + `TaskService` (`src/app/tasks/`, ADR-0033) — the **Tasks**
+  dock panel: checkbox / `#task` lines in the open document or the whole
+  vault, a scope toggle · "hide done" · a kind filter (all persisted to
+  `localStorage['drey.tasks']`). Document scope scans the live editor
+  buffer via `shared/tasks/scanTasks`; vault scope reads `tasks:list`
+  (`TaskIndex`), refreshed after each save and on `mcp:vault-changed`. A
+  row's checkbox calls `EditorService.setTaskDone(path,line,done)`
+  (`shared/tasks/setDoneOnLine` → buffer edit + save, or read → patch →
+  `note:save`); a row click opens the file at the line
 - `KeybindingService` (`src/app/keybindings/`) — one capture-phase
   `keydown` listener mapping chord strings onto `Command`s; features
   register from `App`. Commands: `search.open` (`Mod+Shift+F`),
@@ -184,30 +213,43 @@ Renderer (Angular):
   mode (decoration-based, ADR-0009) and a raw source mode, switched via a
   `⋯` mode menu (ADR-0008); the same `⋯` menu lists the manual Actions
   and "Save as…". A 34px meta bar carries the path, a **Lines** toggle
-  (line-number gutter, `Ctrl+G`), Save/Saved, the assistant sparkle and
-  the `⋯` menu. Inline `#tag`s render as pills; `Ctrl`/`Cmd`-click runs
-  a tag search
-- `EntryDrawerComponent` — the "Add entry" drawer at the bottom of
-  the main area: an optional TOPIC field, **one** Tags chip row (+ an
-  Autotag button), then the shared Markdown editor component in compact
-  mode with inline spellcheck. An empty TOPIC is fine — no confirmation
-  ([ADR-0013](docs/09_architecture_decisions/0013-inline-spellcheck.md))
+  (line-number gutter, `Ctrl+G`), Save/Saved and the `⋯` menu (no
+  assistant toggle — the panel is shown/collapsed from its own dock
+  header). Inline `#tag`s render as pills; `Ctrl`/`Cmd`-click runs a tag
+  search. `EditorService.requestInsertText` (consumed here) backs the
+  assistant's insert-into-note arrow
+- `EntryDrawerComponent` — the "Add entry" capture surface: an optional
+  TOPIC field, **one** Tags chip row (+ an Autotag button), then the
+  shared Markdown editor component in compact mode with inline
+  spellcheck. An empty TOPIC is fine — no confirmation
+  ([ADR-0013](docs/09_architecture_decisions/0013-inline-spellcheck.md)).
+  It is now the body of `EntryPanel`, a movable dock panel (default
+  home: the bottom dock) — no self-toggle button; `PanelFrame`'s chevron
+  collapses it
 - `NoteAssistantComponent` — the right-hand panel (replaced the old chat
   bar's Ask mode): the per-note "Automatic summary" switch, the
   summary/question/answer card thread, and the question composer
-  ([ADR-0012](docs/09_architecture_decisions/0012-note-assistant-sidecar-thread.md))
+  ([ADR-0012](docs/09_architecture_decisions/0012-note-assistant-sidecar-thread.md)).
+  Ask now sends the prior thread as chat turns (`historyForAsk`), and each
+  answer/summary card has an **insert-into-note** arrow beside Copy
+- `McpBridgeService` — renderer side of the vault MCP server: shows an
+  MCP client's `vault_write` in the shared confirmation diff and replies;
+  refreshes the tag index / file tree on `mcp:vault-changed`
+  ([ADR-0021](docs/09_architecture_decisions/0021-mcp-vault-server.md))
 - `SettingsComponent` — master-detail settings screen (category list +
   detail pane), categories "LLM", "Assistant" (auto-summary default),
   "Spelling" (dictionaries + language), "Appearance" (app-wide base font
   size + highlight colour + editor typeface,
-  [ADR-0020](docs/09_architecture_decisions/0020-app-wide-appearance-accent-and-ui-scale.md))
-  and "Actions"; opened from the status-bar entry. Category list is
-  descriptor-driven (`*ngComponentOutlet`, ADR-0016). The close (X) is
-  top-right; the footer Discard is always enabled and closes, warning first
-  when the draft is dirty
+  [ADR-0020](docs/09_architecture_decisions/0020-app-wide-appearance-accent-and-ui-scale.md)),
+  "Actions", and "MCP" (vault server: enable, HTTP port, YOLO switch,
+  client config snippet — ADR-0021); opened from the status-bar entry.
+  Category list is descriptor-driven (`*ngComponentOutlet`, ADR-0016). The
+  close (X) is top-right; the footer Discard is always enabled and closes,
+  warning first when the draft is dirty
 - `ConfirmationDialogComponent` — the one confirmation dialog shared by
-  Actions and Ask-mode edits (inline diff vs. side-by-side, "don't
-  ask again")
+  Actions, Ask-mode edits and MCP `vault_write` (inline line diff for a
+  localized change; an **aligned split diff** — equal-size halves — for a
+  whole-document rewrite; "don't ask again")
   ([ADR-0011](docs/09_architecture_decisions/0011-unified-confirmation-flow.md))
 - ~~`TagsOverviewComponent`~~, ~~`InboxComponent`~~ — not built; tag
   search replaces the overview, and there is no untagged-capture inbox
@@ -224,30 +266,37 @@ be called out explicitly (see Working Style below), not introduced silently.
 - Overall layout ([ADR-0019](docs/09_architecture_decisions/0019-movable-dock-panels-and-layout-state.md)):
   a frameless window with a **custom titlebar** (accent square + "Drey" +
   an HTML File/Edit/Selection/View menu bar + window controls), then a row
-  of **[left dock | main column | right dock]**, then a **26px status
-  bar** (word/char count · context hint · Settings entry).
-  - **Docks**: each holds an ordered list of the five panels —
-    **Calendar, Files, Search, Open windows, Assistant**. A panel is
-    dragged between docks by its header, resized against its neighbour by
-    a splitter, and collapsed to its 32px header. Every panel header is
-    built the same way (chevron + mono-uppercase title + optional status
-    value + drag grip). Default: Calendar/Files/Search/Open windows left,
-    Assistant right, Search collapsed. `View → Reset layout` restores it.
+  of **[left dock | centre column | right dock]** — the centre column
+  being the editor area above a **bottom dock** band — then a **26px
+  status bar** (word/char count · context hint · Settings entry).
+  - **Docks**: three (`left`, `right`, `bottom`), each an ordered list of
+    the eight panels — **Calendar, Files, Templates, Search, Tasks, Open
+    windows, Assistant, Add entry**. A panel is dragged between docks by
+    its header, resized against its neighbour by a splitter, and collapsed
+    to its 32px header. Every panel header is built the same way (chevron +
+    mono-uppercase title + optional status value + drag grip). Default:
+    Calendar/Files/Templates/Search/Tasks/Open windows left, Assistant
+    right, Add entry in the bottom band, Templates + Search + Tasks + Add
+    entry collapsed. Calendar takes its content height, not a flex share.
+    `View → Reset layout` restores it.
     Layout state persists (`localStorage['drey.dock']`).
   - **Files panel**: a vault-switcher row (name + "Open other vault …",
     with the refresh button on the same row) above the vault file tree
     (clicking a file opens it; right-click → new file/folder/delete).
-  - **Main column**: a 34px tab bar for open documents, a 34px meta bar
-    (path · Lines toggle · Save/Saved · sparkle · `⋯`), the editor
-    (Live Preview ⇄ source via the `⋯` menu — no toggle buttons; see
-    ADR-0008/0009), and the "Add entry" drawer pinned to the bottom.
-  - **Assistant panel**: auto-summary switch, card thread, composer. No
-    bottom chat bar; capture lives in the drawer, Ask in this panel.
+  - **Centre column**: a 34px tab bar for open documents, a 34px meta bar
+    (path · Lines toggle · Save/Saved · `⋯` — no assistant sparkle
+    button any more), the editor (Live Preview ⇄ source via the `⋯` menu
+    — no toggle buttons; see ADR-0008/0009), then the **bottom dock** band
+    (default: the "Add entry" panel).
+  - **Assistant panel**: auto-summary switch, card thread (each card has
+    Copy + insert-into-note), composer. Ask sends the running thread as
+    context. No bottom chat bar; capture lives in the Add entry panel.
   - **Settings**: a full-surface overlay opened from the status-bar entry
     — master-detail (category list on the left, detail pane on the
     right), categories "LLM", "Assistant", "Spelling", "Appearance"
     (app-wide base font size + highlight colour + editor typeface,
-    ADR-0020) and "Actions" (ADR-0010; descriptor-driven list, ADR-0016).
+    ADR-0020), "Actions" and "MCP" (vault server, ADR-0021) (ADR-0010;
+    descriptor-driven list, ADR-0016).
     The X sits top-right; Discard is always active and closes (with a
     dirty-state warning). The
     confirmation dialog (Actions / Ask edits) is a centred modal: inline
@@ -365,9 +414,31 @@ assume.
     status bar, line numbers in the editor, and the tab/meta-bar + drawer
     reskin. Built in five steps (tokens → shell → dock mechanics → the
     five panels → editor chrome), pausing after each.
+15. **MCP + shell follow-ups** — built in one pass at the project owner's
+    request: the vault MCP server + assistant vault tool use
+    ([ADR-0021](docs/09_architecture_decisions/0021-mcp-vault-server.md)),
+    a **bottom dock** with "Add entry" as a panel (ADR-0019 later change),
+    the assistant carrying its thread on Ask + an insert-into-note arrow,
+    the split-diff confirmation preview (ADR-0011 update), and the
+    content-height calendar panel.
+16. **Named themes** — a theme picker in Settings → Appearance
+    ([ADR-0035](docs/09_architecture_decisions/0035-named-ui-themes.md)): the
+    **Drey** built-in look plus the published CodeMirror 6 themes
+    (`@uiw/codemirror-themes-all`), the editor swapping its CM theme in a
+    compartment and the app shell re-tinting from a per-theme seed
+    (`src/styles.css` `:root[data-theme]`, `ThemeService`).
+17. **Widget registry + View visibility** — the dock panels become a
+    data-driven `src/app/widgets/` registry with a typed `WidgetContext`
+    read-facade (active document, file tree, tag/task queries); the View
+    menu hides/shows a whole widget rather than only collapsing it
+    ([ADR-0034](docs/09_architecture_decisions/0034-internal-widget-model.md);
+    refines ADR-0016, amends ADR-0019). Internal structure only — no
+    runtime/third-party plugin loading.
+18. **Settings → Widgets enable/disable** — a `widgets` config slice + a
+    Settings category to turn a widget off entirely (ADR-0034).
 
 Pause after each milestone, show what works, don't push through several
-milestones in one uninterrupted stretch. (Milestones 10 and 11 were
+milestones in one uninterrupted stretch. (Milestones 10, 11 and 15 were
 explicit exceptions — built in one stretch at the project owner's request.)
 
 ## Working Style — important

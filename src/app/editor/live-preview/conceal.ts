@@ -2,6 +2,7 @@ import { ensureSyntaxTree, syntaxTree } from '@codemirror/language';
 import { EditorState, Range } from '@codemirror/state';
 import { Decoration, DecorationSet, EditorView, ViewPlugin, ViewUpdate } from '@codemirror/view';
 import { frontmatterEnd } from '../markdown-frontmatter';
+import { fenceLang } from './fenced-code';
 import { BulletWidget, CheckboxWidget, HrWidget } from './widgets';
 
 /**
@@ -35,6 +36,7 @@ const codeLineFirst = Decoration.line({ class: 'lp-code lp-code-first' });
 const codeLineLast = Decoration.line({ class: 'lp-code lp-code-last' });
 const frontmatterLine = Decoration.line({ class: 'lp-frontmatter' });
 const inlineCodeMark = Decoration.mark({ class: 'lp-inline-code' });
+const taskDoneMark = Decoration.mark({ class: 'lp-task-done' });
 const hidden = Decoration.replace({});
 
 /**
@@ -176,6 +178,19 @@ export function concealDecorations(
             }
             return;
           }
+          case 'Task': {
+            // Strike the text of a checked `- [x]` item -- kept even while
+            // the line is being edited, since it is a readability cue, not
+            // a syntax marker to reveal.
+            const marker = node.node.getChild('TaskMarker');
+            if (marker && /x/i.test(state.sliceDoc(marker.from, marker.to))) {
+              const from = eatSpace(marker.to);
+              if (node.to > from) {
+                deco.push(taskDoneMark.range(from, node.to));
+              }
+            }
+            return;
+          }
           case 'TaskMarker': {
             if (touchesLine(node.from)) {
               return;
@@ -202,6 +217,12 @@ export function concealDecorations(
             const lastLine = doc.lineAt(node.to);
             const revealed = touches(node.from, node.to);
             const info = node.node.getChild('CodeInfo');
+            // A concealed ```mermaid fence is owned whole by block-render.ts
+            // (the rendered diagram widget). Adding line backgrounds / hiding
+            // its fence lines here would fight that block replacement.
+            if (!revealed && info && fenceLang(state.sliceDoc(info.from, info.to)) === 'mermaid') {
+              return false;
+            }
             // The language badge shows only while the fence is concealed --
             // the raw ```lang already says it otherwise.
             const lang = !revealed && info ? state.sliceDoc(info.from, info.to).trim() : '';

@@ -7,6 +7,9 @@
 /out-tsc
 /bazel-out
 
+# electron-builder output (installer + portable)
+/release
+
 # Project-local portable Node.js runtime (see env.ps1) -- deliberately not
 # a machine-wide install, but also not something to check into git.
 /.tools/
@@ -40,6 +43,10 @@ yarn-error.log
 /playwright-report
 /blob-report
 /playwright/.cache
+
+# Generated per build by scripts/stamp-build.mjs -- not byte-stable, so
+# checking it in would only add noise.
+/src/assets/build-info.json
 
 # Miscellaneous
 /.angular/cache

@@ -4,28 +4,39 @@
 >
   <section class="block">
     <h3>Application</h3>
-    @if (about.appInfo(); as info) {
-      <dl class="facts">
-        <dt>App version</dt>
-        <dd class="mono">{{ info.appVersion }}</dd>
-        <dt>Electron</dt>
-        <dd class="mono">{{ info.electronVersion }}</dd>
-        <dt>Chromium</dt>
-        <dd class="mono">{{ info.chromeVersion }}</dd>
-        <dt>Node</dt>
-        <dd class="mono">{{ info.nodeVersion }}</dd>
-        <dt>Platform</dt>
-        <dd class="mono">{{ info.platform }}</dd>
-      </dl>
-    } @else {
-      <p class="muted">Version information is only available when running inside the app.</p>
-    }
+    <div class="app-row">
+      @if (about.appInfo(); as info) {
+        <dl class="facts">
+          <dt>Name</dt>
+          <dd>drey</dd>
+          <dt>App version</dt>
+          <dd class="mono">{{ info.appVersion }}</dd>
+          @if (about.buildInfo(); as build) {
+            <dt>Build</dt>
+            <dd class="mono">{{ build.buildNumber }} · {{ build.commit }}</dd>
+          }
+          <dt>Copyright</dt>
+          <dd>© 2026 Henrik Puls</dd>
+          <dt>Electron</dt>
+          <dd class="mono">{{ info.electronVersion }}</dd>
+          <dt>Chromium</dt>
+          <dd class="mono">{{ info.chromeVersion }}</dd>
+          <dt>Node</dt>
+          <dd class="mono">{{ info.nodeVersion }}</dd>
+          <dt>Platform</dt>
+          <dd class="mono">{{ info.platform }}</dd>
+        </dl>
+      } @else {
+        <p class="muted">Version information is only available when running inside the app.</p>
+      }
+      <img class="app-mark" src="icon.png" alt="drey" />
+    </div>
   </section>
 
   <section class="block">
     <h3>Open-source licenses</h3>
     <p class="muted">
-      Drey is licensed under <span class="mono">GPL-3.0-only</span> (see the
+      drey is licensed under <span class="mono">GPL-3.0-only</span> (see the
       <span class="mono">LICENSE</span> file in the project root). It bundles the production
       dependencies below; each is distributed under its own license.
     </p>

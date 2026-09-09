@@ -14,6 +14,8 @@
  * throwing, because the assistant panel must still open.
  */
 
+import type { ChatMessage } from './llm';
+
 /** Who produced a card. `summary` is the automatic note summary. */
 export type ChatCardRole = 'summary' | 'question' | 'answer';
 
@@ -98,4 +100,36 @@ export function serializeChatThread(thread: ChatThread): string {
 
 function normalizeRole(value: unknown): ChatCardRole {
   return value === 'summary' || value === 'question' ? value : 'answer';
+}
+
+/**
+ * The prior thread turned into OpenAI-style chat turns so a follow-up
+ * question is answered *in context* rather than from scratch. `question`
+ * cards become `user` turns, `summary` / `answer` cards `assistant` turns;
+ * the summary is prefixed so the model reads it as background rather than
+ * as its own last reply.
+ *
+ * The caller passes the thread **before** appending the new question (that
+ * goes to `ActionRunner.ask` as its own argument). A dangling trailing
+ * `user` turn -- a question whose generation failed -- is dropped so the
+ * request never sends two `user` messages in a row.
+ *
+ * `maxMessages` caps the replayed turns to keep a long thread from
+ * crowding out the document in a local model's context window; when it
+ * bites, the oldest turns are dropped but a leading `summary` is kept.
+ */
+export function historyForAsk(thread: ChatThread, maxMessages = 12): ChatMessage[] {
+  const messages: ChatMessage[] = thread.cards.map((card) => ({
+    role: card.role === 'question' ? 'user' : 'assistant',
+    content: card.role === 'summary' ? `Note summary: ${card.text}` : card.text,
+  }));
+  while (messages.length > 0 && messages[messages.length - 1].role === 'user') {
+    messages.pop();
+  }
+  if (messages.length <= maxMessages) {
+    return messages;
+  }
+  const keepSummary = thread.cards[0]?.role === 'summary';
+  const head = keepSummary ? [messages[0]] : [];
+  return [...head, ...messages.slice(messages.length - (maxMessages - head.length))];
 }

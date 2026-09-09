@@ -54,7 +54,7 @@ describe('SearchPanel', () => {
 
     expect(queries).toEqual([{ tags: ['sailing'], text: 'kiel' }]);
     expect(el.querySelectorAll('.hit').length).toBe(1);
-    expect(el.querySelector('.hit-heading')?.textContent).toBe('08:00');
+    expect(el.querySelector('.hit-heading')?.textContent?.trim()).toBe('08:00');
   });
 
   it('a hit opens the file at its line', async () => {

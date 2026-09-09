@@ -75,7 +75,8 @@ Respond ONLY with JSON, no prose: {"tags": ["tag1", "tag2"]}
 ```
 
 Parsed by `parseSuggestedTags` — normalised (lower-case, umlauts
-transliterated, one hyphenated word), de-duplicated, capped at four.
+transliterated, one hyphenated word; a `/` is kept so a nested suggestion
+like `project/frontend` survives), de-duplicated, capped at four.
 
 **Example**
 

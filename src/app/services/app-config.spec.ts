@@ -25,6 +25,18 @@ describe('normalizeAppConfig', () => {
     expect(normalizeAppConfig(DEFAULT_APP_CONFIG)).toEqual(DEFAULT_APP_CONFIG);
   });
 
+  it('defaults the MCP block to off and coerces a bad port', () => {
+    expect(normalizeAppConfig({}).mcp).toEqual({
+      enabled: false,
+      httpEnabled: false,
+      httpPort: 4319,
+      yolo: false,
+    });
+    expect(normalizeAppConfig({ mcp: { httpPort: 80 } }).mcp.httpPort).toBe(1024);
+    expect(normalizeAppConfig({ mcp: { httpPort: 999999 } }).mcp.httpPort).toBe(65535);
+    expect(normalizeAppConfig({ mcp: { enabled: 'yes', yolo: 1 } }).mcp.enabled).toBe(false);
+  });
+
   it('coerces malformed llm fields and a blank base URL', () => {
     const config = normalizeAppConfig({
       llm: { enabled: 'yes', baseUrl: '   ', model: 42, apiKey: 7 },
@@ -108,10 +120,86 @@ describe('normalizeAppConfig', () => {
     expect(user[0]).toMatchObject({ id: 'u2', name: 'Reformat', builtin: null });
   });
 
+  it('normalises the entry-template section: built-ins re-injected, activeId falls back', () => {
+    const fresh = normalizeAppConfig({});
+    expect(fresh.entry.templates.map((t) => t.builtin)).toEqual(['classic', 'ruled']);
+    expect(fresh.entry.activeId).toBe('builtin:entry-classic');
+
+    const edited = normalizeAppConfig({
+      entry: {
+        activeId: 'builtin:entry-ruled',
+        templates: [
+          { id: 'builtin:entry-classic', name: 'Klassisch', pattern: '## {{time}}' },
+          { id: 'u1', name: '', pattern: 'x' }, // half-written -> dropped
+          { id: 'u2', name: 'Mine', pattern: '{{content}}' },
+        ],
+      },
+    });
+    const classic = edited.entry.templates.find((t) => t.builtin === 'classic');
+    expect(classic).toMatchObject({ name: 'Klassisch', pattern: '## {{time}}' });
+    expect(edited.entry.templates.map((t) => t.builtin)).toEqual(['classic', 'ruled', null]);
+    expect(edited.entry.templates.filter((t) => t.builtin === null)[0]).toMatchObject({ id: 'u2' });
+    expect(edited.entry.activeId).toBe('builtin:entry-ruled');
+
+    // An activeId that names no template falls back to the classic id.
+    expect(normalizeAppConfig({ entry: { activeId: 'gone', templates: [] } }).entry.activeId).toBe(
+      'builtin:entry-classic',
+    );
+  });
+
+  it('defaults the daily block to open-on-startup and coerces a junk value', () => {
+    expect(normalizeAppConfig({}).daily).toEqual({ openOnStartup: true });
+    expect(normalizeAppConfig({ daily: { openOnStartup: 'yes' } }).daily.openOnStartup).toBe(true);
+    expect(normalizeAppConfig({ daily: { openOnStartup: false } }).daily.openOnStartup).toBe(false);
+  });
+
+  it('normalises the widgets block: empty default, string list, dedupe, junk drop', () => {
+    expect(normalizeAppConfig({}).widgets).toEqual({ disabled: [] });
+    expect(normalizeAppConfig({ widgets: { disabled: 'nope' } }).widgets.disabled).toEqual([]);
+    expect(
+      normalizeAppConfig({ widgets: { disabled: ['tasks', 'tasks', '', 3, 'calendar'] } }).widgets
+        .disabled,
+    ).toEqual(['tasks', 'calendar']);
+  });
+
+  it('normalises the templates folder: default, slash-trim, nested path, .. rejection', () => {
+    expect(normalizeAppConfig({}).templates).toEqual({ dir: 'templates' });
+    expect(normalizeAppConfig({ templates: { dir: '  /snippets/  ' } }).templates.dir).toBe(
+      'snippets',
+    );
+    expect(normalizeAppConfig({ templates: { dir: 'meta\\templates' } }).templates.dir).toBe(
+      'meta/templates',
+    );
+    expect(normalizeAppConfig({ templates: { dir: '../escape' } }).templates.dir).toBe('templates');
+    expect(normalizeAppConfig({ templates: { dir: 'a/./b' } }).templates.dir).toBe('templates');
+    expect(normalizeAppConfig({ templates: { dir: '' } }).templates.dir).toBe('templates');
+    expect(normalizeAppConfig({ templates: { dir: 42 } }).templates.dir).toBe('templates');
+  });
+
   it('fills the assistant and spellcheck sections from defaults', () => {
     const config = normalizeAppConfig({});
     expect(config.assistant).toEqual({ autoSummaryDefault: true });
-    expect(config.spellcheck).toEqual({ enabled: true, language: 'de', dictionaries: [] });
+    expect(config.spellcheck).toEqual({
+      enabled: true,
+      language: 'de',
+      dictionaries: [],
+      personalWords: [],
+      languageWords: {},
+    });
+  });
+
+  it('normalises spellcheck word lists: trims, dedupes, drops empty language keys', () => {
+    const config = normalizeAppConfig({
+      spellcheck: {
+        personalWords: ['  Lariscus ', 'Lariscus', '', 7, 'Drey'],
+        languageWords: { de: ['Montag', ' Montag', 'x'], en: [], fr: 'nope', junk: [1, 2] },
+      },
+    });
+    expect(config.spellcheck.personalWords).toEqual(['Lariscus', 'Drey']);
+    expect(config.spellcheck.languageWords).toEqual({ de: ['Montag', 'x'] });
+    expect(
+      normalizeAppConfig({ spellcheck: { languageWords: [] } }).spellcheck.languageWords,
+    ).toEqual({});
   });
 
   it('defaults the editor font scale to 1 and clamps an out-of-range or junk value', () => {
@@ -140,22 +228,29 @@ describe('normalizeAppConfig', () => {
     expect(normalizeAppConfig({ editor: { fontFamily: 42 } }).editor.fontFamily).toBe('sans');
   });
 
-  it('defaults appearance and keeps a valid scale step / accent (preset id or #hex)', () => {
-    expect(normalizeAppConfig({}).appearance).toEqual({ uiScale: 'default', accent: 'terracotta' });
-    expect(normalizeAppConfig({ appearance: { uiScale: 'large' } }).appearance.uiScale).toBe('large');
+  it('defaults appearance and keeps a valid scale step / accent / theme', () => {
+    expect(normalizeAppConfig({}).appearance).toEqual({
+      uiScale: 'default',
+      accent: 'theme',
+      theme: 'drey',
+    });
+    expect(normalizeAppConfig({ appearance: { uiScale: 'large' } }).appearance.uiScale).toBe(
+      'large',
+    );
     expect(normalizeAppConfig({ appearance: { uiScale: 'huge' } }).appearance.uiScale).toBe(
       'default',
     );
     expect(normalizeAppConfig({ appearance: { accent: 'sage' } }).appearance.accent).toBe('sage');
+    expect(normalizeAppConfig({ appearance: { accent: 'theme' } }).appearance.accent).toBe('theme');
     expect(normalizeAppConfig({ appearance: { accent: '#AABBCC' } }).appearance.accent).toBe(
       '#aabbcc',
     );
     expect(normalizeAppConfig({ appearance: { accent: 'not-a-colour' } }).appearance.accent).toBe(
-      'terracotta',
+      'theme',
     );
-    expect(normalizeAppConfig({ appearance: { accent: '#xyz' } }).appearance.accent).toBe(
-      'terracotta',
-    );
+    expect(normalizeAppConfig({ appearance: { accent: '#xyz' } }).appearance.accent).toBe('theme');
+    expect(normalizeAppConfig({ appearance: { theme: 'dracula' } }).appearance.theme).toBe('dracula');
+    expect(normalizeAppConfig({ appearance: { theme: '  ' } }).appearance.theme).toBe('drey');
   });
 
   it('keeps a well-formed custom dictionary and the language pointing at it', () => {

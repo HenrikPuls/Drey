@@ -63,6 +63,17 @@ describe('parseDatedEntries', () => {
   it('returns an empty array when there are no dated entries', () => {
     expect(parseDatedEntries('just some text\n')).toEqual([]);
   });
+
+  it('strips a leading rule + tag line from a "Ruled" template entry', () => {
+    const body = '## 06:12 — X\n---\n#daily #arbeit\n\nBody line #daily\n';
+    expect(parseDatedEntries(body)[0]).toMatchObject({ title: 'X', text: 'Body line #daily' });
+  });
+
+  it('does NOT eat a Classic body that legitimately opens with a hashtag', () => {
+    // No blank line after the `#tag` line -> not the "Ruled" signature.
+    const body = '## 06:12\n#projektx ist gestartet\nweiter geht es\n';
+    expect(parseDatedEntries(body)[0].text).toBe('#projektx ist gestartet\nweiter geht es');
+  });
 });
 
 describe('formatEntryHeading', () => {

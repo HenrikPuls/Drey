@@ -32,11 +32,13 @@ updated: '2026-09-05T14:32:00'
 ### Editor display
 
 The editor keeps the frontmatter in the file but **folds it behind a pill**
-(`▸ Frontmatter · N fields`) by default, in both Live Preview and source
-mode — a note opens as prose, not metadata. Clicking the pill expands the
-block to dim, editable raw YAML with a chevron to fold it back; the fold
-state is remembered per open tab. There is no structured field editor;
-expanding edits the YAML directly. See
+(`▸ Frontmatter`) by default, in both Live Preview and source mode — a note
+opens as prose, not metadata. Clicking the pill expands the block to dim,
+editable raw YAML: a `⌄ Frontmatter` header (same look as the pill, chevron
+flipped) sits where the opening `---` was, both `---` fences are hidden, and
+clicking the header folds it back. The fold state is remembered per open
+tab. There is no structured field editor; expanding edits the YAML
+directly. See
 `docs/09_architecture_decisions/0009-live-preview-decorations.md`.
 
 ## Body conventions (the part that actually carries meaning)
@@ -77,14 +79,41 @@ Kurzes Sync mit Team zu Rollout-Plan, Risiken bei DB-Migration besprochen.
 - Both the topic and the meta line are optional and omitted entirely when
   empty, so an entry with neither is byte-identical to a plain `## HH:mm`
   block. Composition lives in `shared/entry-compose.ts`.
+- The exact layout is a **template** (`AppConfig.entry`, Settings → Add
+  entry) with `{{time}} {{date}} {{datetime}} {{title}} {{tags}}
+  {{content}}` placeholders. The example above is the built-in **Classic**
+  template. The built-in **Ruled** template puts a `---` rule and the tag
+  line right under the heading:
+
+  ```markdown
+  ## 08:15 — Urlaub-Ideen
+  ---
+  #urlaub #planung
+
+  Mallorca oder Kroatien, Flüge im März checken.
+  ```
+
+  `parseDatedEntries` strips a leading rule line from an entry's `text`,
+  and a leading `#tag` line **only when a blank line follows it** (the
+  Ruled signature) — a Classic body that opens with a hashtag is left
+  alone. A custom template's first line must still be a `## HH:mm[ —
+  Topic]` heading or the entry is not recognised (no daily-note section
+  index, no routing).
 
 ### Inline `#tag`s
 
 - `#` + a letter, then letters/digits/`_`/`-`; matched at start of line or
   after whitespace; lower-cased. Fenced and inline code spans are ignored.
+- **Nested tags:** segments joined with `/`, e.g. `#project/frontend/api`.
+  The first segment must start with a letter (so `## 2026-09-05` headings
+  never match); later segments may start with a digit (`#project/2024`). A
+  trailing or doubled `/` is not part of the tag. These are **label
+  hierarchies, not folders** (ADR-0017) — a tag search for `#project` also
+  returns every `#project/*` section. The canonical grammar lives in
+  `shared/tags/tags.ts` (`TAG_NAME_SOURCE`).
 - `#task` is a **reserved structural marker** (task lines) and is never a
-  tag. `#important` no longer carries special meaning — it is an ordinary,
-  searchable tag.
+  tag — nor is any `#task/*` sub-tag. `#important` no longer carries special
+  meaning — it is an ordinary, searchable tag.
 - Inline tags are **not** merged into frontmatter. They are read straight
   from the body by the main-process tag index (`electron/tags/`), which
   keeps the tag vocabulary (for autocomplete + the search tag picker) and

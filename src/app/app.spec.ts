@@ -27,12 +27,12 @@ describe('App', () => {
     );
   });
 
-  it('renders the titlebar and both docks', async () => {
+  it('renders the titlebar and the left/right/bottom docks', async () => {
     const fixture = TestBed.createComponent(App);
     await fixture.whenStable();
     const compiled = fixture.nativeElement as HTMLElement;
     expect(compiled.querySelector('app-titlebar')).toBeTruthy();
-    expect(compiled.querySelectorAll('app-dock').length).toBe(2);
+    expect(compiled.querySelectorAll('app-dock').length).toBe(3);
     expect(compiled.querySelector('app-status-bar')).toBeTruthy();
   });
 });

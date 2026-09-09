@@ -8,9 +8,10 @@
  * not a runtime surprise. See docs/09_architecture_decisions/0001-*.md.
  */
 import type { AppConfig, CustomDictionary, LlmEndpoint } from './app-config';
-import type { ActionContext, ActionOutcome, AskOutcome, LlmDebugEntry } from './llm';
+import type { ActionContext, ActionOutcome, AskOutcome, ChatMessage, LlmDebugEntry } from './llm';
 import type { ChatThread } from './chat-thread';
 import type { TagSearchHit, TagSearchQuery } from './tags';
+import type { TaskRecord } from './tasks';
 
 export type { AppConfig, LlmEndpoint, CustomDictionary } from './app-config';
 export type { ChatCard, ChatCardRole, ChatThread } from './chat-thread';
@@ -18,10 +19,12 @@ export type {
   ActionContext,
   ActionOutcome,
   AskOutcome,
+  ChatMessage,
   LlmDebugEntry,
   ResolvedAction,
 } from './llm';
 export type { TagSearchHit, TagSearchQuery } from './tags';
+export type { TaskKind, TaskRecord } from './tasks';
 
 /**
  * Channel names. Most are `ipcMain.handle` / `ipcRenderer.invoke` request
@@ -38,13 +41,20 @@ export const IPC_CHANNELS = {
   windowMaximizeChanged: 'window:maximize-changed',
   editExec: 'edit:exec',
   uiSetZoom: 'ui:set-zoom',
+  openExternal: 'app:open-external',
+  appLog: 'app:log',
   vaultGetActive: 'vault:get-active',
   vaultSelect: 'vault:select',
   vaultListFiles: 'vault:list-files',
   vaultReadFile: 'vault:read-file',
   vaultWriteFile: 'vault:write-file',
+  vaultSaveAsset: 'vault:save-asset',
+  vaultSaveAssetFromUrl: 'vault:save-asset-from-url',
   vaultCreateFile: 'vault:create-file',
   vaultCreateDirectory: 'vault:create-directory',
+  vaultRename: 'vault:rename-entry',
+  vaultCopy: 'vault:copy-entry',
+  vaultDuplicate: 'vault:duplicate-entry',
   vaultDelete: 'vault:delete',
   vaultPickSavePath: 'vault:pick-save-path',
   dailyOpen: 'daily:open',
@@ -52,6 +62,7 @@ export const IPC_CHANNELS = {
   noteSave: 'note:save',
   tagList: 'tags:list',
   tagSearch: 'tags:search',
+  taskList: 'tasks:list',
   tagSummariseResults: 'tags:summarise-results',
   tagSuggest: 'tags:suggest',
   configGet: 'config:get',
@@ -70,7 +81,36 @@ export const IPC_CHANNELS = {
   spellCheck: 'spell:check',
   spellLanguages: 'spell:languages',
   spellAddDictionary: 'spell:add-dictionary',
+  spellAddWord: 'spell:add-word',
+  // MCP vault server (ADR-0021).
+  mcpStatus: 'mcp:status',
+  mcpWriteRequest: 'mcp:write-request',
+  mcpWriteDecision: 'mcp:write-decision',
+  mcpVaultChanged: 'mcp:vault-changed',
 } as const;
+
+/**
+ * A `vault_write` an MCP client asked for, pushed to the renderer so the
+ * user can confirm it in the shared diff dialog before it hits disk
+ * (skipped entirely in YOLO mode). The renderer replies via
+ * `resolveMcpWrite(id, approved)`.
+ */
+export interface McpWriteRequest {
+  id: number;
+  path: string;
+  before: string;
+  after: string;
+  mode: 'overwrite' | 'append';
+}
+
+/** What `getMcpStatus` reports for the Settings pane. */
+export interface McpStatus {
+  enabled: boolean;
+  httpListening: boolean;
+  httpPort: number | null;
+  /** Absolute path to the stdio bridge script, for the client config snippet. */
+  stdioBridgePath: string;
+}
 
 /**
  * Standard editing commands the HTML Edit menu routes through the focused
@@ -80,6 +120,14 @@ export const IPC_CHANNELS = {
  * focus, which a renderer-side dispatch would not.
  */
 export type EditCommand = 'undo' | 'redo' | 'cut' | 'copy' | 'paste' | 'selectAll';
+
+/** One renderer-sourced log entry written to the main process's log file. */
+export interface LogEntry {
+  level: 'error' | 'warn' | 'info';
+  message: string;
+  /** Optional structured payload (a stack, a state snapshot); JSON-stringified. */
+  context?: unknown;
+}
 
 /**
  * Mirrors Node's `NodeJS.Platform` values. Spelled out explicitly instead
@@ -282,6 +330,23 @@ export interface DreyApi {
    */
   setUiZoomFactor(factor: number): Promise<void>;
 
+  /**
+   * Opens an external URL in the OS default handler (`shell.openExternal`).
+   * Only `http:`, `https:` and `mailto:` are honoured -- anything else is
+   * ignored in the main process. Backs a `Ctrl`/`Cmd`-click on a link in
+   * the editor.
+   */
+  openExternal(url: string): Promise<void>;
+
+  /**
+   * Appends a line to the main process's log file
+   * (`<userData>/logs/drey.log`). Best-effort, fire-and-forget -- the
+   * renderer mirrors `console.error` / `window.onerror` /
+   * `unhandledrejection` and the input-recovery snapshot here so a field
+   * problem in the packaged build (no DevTools) leaves a trace.
+   */
+  logMessage(entry: LogEntry): Promise<void>;
+
   /** The full app config (`shared/app-config.ts`), always normalised/complete. */
   getConfig(): Promise<AppConfig>;
 
@@ -333,8 +398,17 @@ export interface DreyApi {
    * Chat Ask mode: sends `question` plus the document (and any selection)
    * to the LLM. Returns an answer to display, or an edit to confirm.
    * Abortable via `taskId`; a cancelled call rejects.
+   *
+   * `history` is the note's prior thread as chat turns
+   * (`historyForAsk`) so a follow-up is answered in context; omitted or
+   * `[]` reproduces the old one-shot behaviour.
    */
-  askChat(context: ActionContext, question: string, taskId?: string): Promise<AskOutcome>;
+  askChat(
+    context: ActionContext,
+    question: string,
+    taskId?: string,
+    history?: ChatMessage[],
+  ): Promise<AskOutcome>;
 
   /**
    * Aborts a running generation. `taskId` is minted by the **renderer**
@@ -383,6 +457,15 @@ export interface DreyApi {
    */
   addSpellDictionary(): Promise<CustomDictionary | null>;
 
+  /**
+   * Adds `word` to the spellchecker's accepted words -- to the active
+   * dictionary's list (`target: 'language'`) or the global personal list
+   * (`target: 'personal'`) -- persists it, and reloads the checker so the
+   * squiggle clears immediately (no Settings round-trip). Returns the
+   * stored config so an open Settings screen can reconcile.
+   */
+  addSpellWord(word: string, target: 'language' | 'personal'): Promise<AppConfig>;
+
   /** Currently active vault path, or null if none has been selected yet. */
   getActiveVault(): Promise<string | null>;
 
@@ -417,6 +500,30 @@ export interface DreyApi {
   writeVaultFile(relativePath: string, content: string): Promise<number>;
 
   /**
+   * Saves a binary asset -- a pasted or dropped image -- into an
+   * `attachments/` folder beside the note that references it (ADR-0024).
+   * `noteRelPath` is the open document's vault-relative path (a bare name /
+   * empty string falls back to the vault root's `attachments/`); `ext` is
+   * the file extension without a dot (`imageExtension()` from
+   * `shared/asset-name.ts`). Resolves to the path to drop into the
+   * `![](...)` -- relative to the note's own folder, so `resolveVaultImageUrl`
+   * turns it straight back into a `drey-asset://` URL. Rejects if no vault
+   * is active or the resolved folder escapes the vault.
+   */
+  saveVaultAsset(bytes: Uint8Array, ext: string, noteRelPath: string): Promise<string>;
+
+  /**
+   * Downloads a web image and saves it like `saveVaultAsset` (ADR-0028) --
+   * the main process `fetch`es `url` (http(s) only, redirects followed
+   * with a final-protocol re-check, 15 s timeout, 25 MB cap, image
+   * content-type / extension required), then writes the bytes into the
+   * note's `attachments/`. Resolves to the note-relative path for
+   * `![](...)`. Rejects with a short user-facing message on any of: not a
+   * URL, non-http(s), HTTP error, timeout, too large, not an image.
+   */
+  saveVaultAssetFromUrl(url: string, noteRelPath: string): Promise<string>;
+
+  /**
    * Creates an empty file inside the active vault (any missing parent
    * folders are created too). `relativePath` follows the same forward-slash
    * / no-escape rules as `readVaultFile`. Rejects if a file or folder
@@ -433,6 +540,29 @@ export interface DreyApi {
    * vault-relative path.
    */
   createVaultDirectory(relativePath: string): Promise<string>;
+
+  /**
+   * Renames / moves a file or folder inside the active vault. Both paths
+   * follow the `readVaultFile` rules; refuses the vault root, a missing
+   * source and an occupied target. A `.md` note's assistant sidecar moves
+   * with it. Resolves to the new vault-relative path.
+   */
+  renameVaultEntry(fromRelativePath: string, toRelativePath: string): Promise<string>;
+
+  /**
+   * Copies a file or folder (recursively) into `destDirRelativePath`
+   * (`''` = vault root). Keeps the source name, or adds a `" copy"` /
+   * `" copy N"` suffix on a collision. Refuses copying a folder into its
+   * own subtree. A `.md` note's assistant sidecar is copied along.
+   * Resolves to the new entry's vault-relative path.
+   */
+  copyVaultEntry(sourceRelativePath: string, destDirRelativePath: string): Promise<string>;
+
+  /**
+   * Copies an entry next to itself, always with a `" copy"` suffix.
+   * Resolves to the new entry's vault-relative path.
+   */
+  duplicateVaultEntry(sourceRelativePath: string): Promise<string>;
 
   /**
    * Deletes a file or folder (recursively) inside the active vault. Same
@@ -496,6 +626,15 @@ export interface DreyApi {
   listTags(): Promise<TagEntry[]>;
 
   /**
+   * Every checkbox / `#task` line in the vault (`shared/tasks`), for the
+   * Tasks panel in "whole vault" scope. Same index lifecycle as
+   * `listTags`: rebuilt on vault open, re-indexed per file on `saveNote`
+   * and on delete; external edits wait for the next vault load / refresh
+   * (no file watcher). Resolves to `[]` when no vault is active.
+   */
+  listTasks(): Promise<TaskRecord[]>;
+
+  /**
    * Runs the tag search: sections where every `query.tags` entry is present
    * and every whitespace-split term of `query.text` appears (body or
    * heading). Each hit carries a path, heading, 1-based line and a compact
@@ -518,6 +657,27 @@ export interface DreyApi {
    * cancellable. Rejects when LLM features are off.
    */
   suggestTags(entryText: string, taskId?: string): Promise<string[]>;
+
+  /** Current MCP vault server state for the Settings pane (ADR-0021). */
+  getMcpStatus(): Promise<McpStatus>;
+
+  /**
+   * Subscribes to `vault_write` requests from an MCP client. The renderer
+   * shows the shared confirmation diff and answers with
+   * `resolveMcpWrite(request.id, approved)`. Never fires in YOLO mode.
+   * Returns an unsubscribe; the raw IPC event is never forwarded.
+   */
+  onMcpWriteRequest(listener: (request: McpWriteRequest) => void): () => void;
+
+  /** Answers an `onMcpWriteRequest` (approve / reject the write). */
+  resolveMcpWrite(id: number, approved: boolean): Promise<void>;
+
+  /**
+   * Fires after an MCP `vault_write` changed a file, so the renderer can
+   * refresh the tag index / file tree (there is no file watcher, ADR-0018).
+   * Returns an unsubscribe.
+   */
+  onVaultChanged(listener: () => void): () => void;
 }
 
 declare global {

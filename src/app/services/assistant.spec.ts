@@ -64,28 +64,18 @@ describe('AssistantService', () => {
   afterEach(() => {
     delete (window as { dreyApi?: unknown }).dreyApi;
     localStorage.removeItem('drey.editor');
-    localStorage.removeItem('drey.assistant');
   });
 
-  it('hides the panel while LLM features are off, and offers no toggle', async () => {
+  it('reflects the LLM master switch through llmEnabled (off)', async () => {
     setup({ llm: false });
     await settle();
-
-    expect(assistant.panelVisible()).toBe(false);
-    expect(assistant.panelAvailable()).toBe(false);
+    expect(assistant.llmEnabled()).toBe(false);
   });
 
-  it('shows the panel when the assistant is usable, and remembers hiding it', async () => {
+  it('reflects the LLM master switch through llmEnabled (on)', async () => {
     setup();
     await settle();
-    expect(assistant.panelVisible()).toBe(true);
-
-    assistant.togglePanel();
-    expect(assistant.panelVisible()).toBe(false);
-    expect(localStorage.getItem('drey.assistant')).toBe('{"open":false}');
-
-    assistant.togglePanel();
-    expect(assistant.panelVisible()).toBe(true);
+    expect(assistant.llmEnabled()).toBe(true);
   });
 
   it('survives a preload that predates the assistant channels', async () => {

@@ -130,7 +130,8 @@ describe('Editor', () => {
 
     const pill = cm().querySelector('.cm-fm-pill') as HTMLButtonElement;
     expect(pill).toBeTruthy();
-    expect(pill.textContent).toContain('1 field');
+    expect(pill.textContent).toContain('Frontmatter');
+    expect(pill.textContent).not.toContain('field');
     expect(cmText()).not.toContain('type: notiz');
     expect(cmText()).toContain('Real heading');
 

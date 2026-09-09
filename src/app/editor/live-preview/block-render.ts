@@ -3,9 +3,11 @@ import { EditorState, Extension, Range, StateField } from '@codemirror/state';
 import { Decoration, DecorationSet, EditorView } from '@codemirror/view';
 import type { SyntaxNode } from '@lezer/common';
 import MarkdownIt from 'markdown-it';
+import { clampEmbedWidth, parseImageEmbed, setEmbedWidth } from '../../../../shared/image-embed';
 import { frontmatterEnd } from '../markdown-frontmatter';
+import { fenceLang } from './fenced-code';
 import { htmlTagBalance, sanitizeHtml } from './sanitize-html';
-import { HtmlBlockWidget, ImageWidget, TableWidget } from './widgets';
+import { HtmlBlockWidget, ImageWidget, MermaidWidget, TableWidget } from './widgets';
 
 /**
  * The widget half of Live Preview (ADR-0009): constructs that cannot be
@@ -29,6 +31,18 @@ export interface LivePreviewConfig {
    * `resolveVaultImageUrl` with the active document's path.
    */
   resolveImage: (url: string) => string | null;
+  /**
+   * Opens a resolved image `src` in the full-app viewer (ADR-0026) --
+   * the hover lens button on a rendered image. Optional: a surface that
+   * doesn't want the lens (none today) omits it.
+   */
+  onOpenImage?: (src: string) => void;
+  /**
+   * Opens a rendered mermaid diagram (handed over as a `data:` SVG URL) in
+   * the same viewer -- the hover lens on a diagram. Optional, like
+   * `onOpenImage`.
+   */
+  onZoomDiagram?: (dataUrl: string) => void;
 }
 
 const PARSE_BUDGET_MS = 50;
@@ -74,12 +88,35 @@ export function blockDecorations(state: EditorState, config: LivePreviewConfig):
         }
         return false;
       }
-      if (node.name === 'Image') {
-        if (node.from >= fmEnd && !touches(node.from, node.to)) {
-          const { alt, url } = parseImage(state, node.node);
+      if (node.name === 'FencedCode') {
+        const infoNode = node.node.getChild('CodeInfo');
+        const lang = fenceLang(infoNode ? state.sliceDoc(infoNode.from, infoNode.to) : '');
+        if (lang === 'mermaid' && node.from >= fmEnd && !touches(node.from, node.to)) {
+          const textNode = node.node.getChild('CodeText');
+          const body = textNode ? state.sliceDoc(textNode.from, textNode.to) : '';
+          const from = doc.lineAt(node.from).from;
+          const to = doc.lineAt(node.to).to;
           deco.push(
             Decoration.replace({
-              widget: new ImageWidget(url === null ? null : config.resolveImage(url), alt),
+              widget: new MermaidWidget(body, config.onZoomDiagram),
+              block: true,
+            }).range(from, to),
+          );
+        }
+        return false; // never descend into a fence
+      }
+      if (node.name === 'Image') {
+        if (node.from >= fmEnd && !touches(node.from, node.to)) {
+          const { alt, url, width, height } = parseImage(state, node.node);
+          deco.push(
+            Decoration.replace({
+              widget: new ImageWidget(
+                url === null ? null : config.resolveImage(url),
+                alt,
+                width,
+                height,
+                config.onOpenImage,
+              ),
             }).range(node.from, node.to),
           );
         }
@@ -135,12 +172,33 @@ export function blockDecorations(state: EditorState, config: LivePreviewConfig):
   return Decoration.set(deco, true);
 }
 
-/** Alt text sits between the first two link marks (`![` and `]`). */
-function parseImage(state: EditorState, node: SyntaxNode): { alt: string; url: string | null } {
+/**
+ * Alt text sits between the first two link marks (`![` and `]`); an
+ * Obsidian-style `|W` / `|WxH` suffix on it sets the display size and is
+ * stripped from `alt` (`shared/image-embed.ts`). `altFrom`/`altTo` are the
+ * exact doc offsets of that span -- the resize handle rewrites it in place.
+ */
+function parseImage(
+  state: EditorState,
+  node: SyntaxNode,
+): {
+  alt: string;
+  url: string | null;
+  width: number | null;
+  height: number | null;
+  altFrom: number;
+  altTo: number;
+} {
   const url = node.getChild('URL');
   const marks = node.getChildren('LinkMark');
-  const alt = marks.length >= 2 ? state.sliceDoc(marks[0].to, marks[1].from) : '';
-  return { alt, url: url ? state.sliceDoc(url.from, url.to) : null };
+  const altFrom = marks.length >= 2 ? marks[0].to : node.from;
+  const altTo = marks.length >= 2 ? marks[1].from : node.from;
+  const { alt, width, height } = parseImageEmbed(state.sliceDoc(altFrom, altTo));
+  // CommonMark angle-bracket destination `![](<path with spaces>)` -- the
+  // sliced `URL` node keeps the `<>`; drop them so the resolver sees the
+  // bare path.
+  const rawUrl = url ? state.sliceDoc(url.from, url.to).replace(/^<|>$/g, '') : null;
+  return { alt, url: rawUrl, width, height, altFrom, altTo };
 }
 
 export function livePreviewBlocks(config: LivePreviewConfig): Extension {
@@ -148,20 +206,27 @@ export function livePreviewBlocks(config: LivePreviewConfig): Extension {
     create: (state) => blockDecorations(state, config),
     update: (value, tr) =>
       tr.docChanged || tr.selection ? blockDecorations(tr.state, config) : value,
-    provide: (f) => EditorView.decorations.from(f),
+    provide: (f) => [
+      EditorView.decorations.from(f),
+      // Rendered tables / diagrams / HTML blocks / images are single atoms:
+      // arrow keys step over them in one move instead of the selection
+      // snapping to the document start when ArrowUp lands on a block widget.
+      EditorView.atomicRanges.of((view) => view.state.field(f, false) ?? Decoration.none),
+    ],
   });
   // The `✎` button on a rendered table/HTML block moves the cursor into
   // it, which reveals the raw source (the selection then touches the
   // node). Only the button: other clicks belong to the widget content
   // (toggling a <details>, selecting table text) -- its `ignoreEvent`
-  // keeps CodeMirror out of those.
+  // keeps CodeMirror out of those. Exception: a mermaid *error* box is
+  // clickable anywhere -- the whole point is to get back into the fence.
   const clickToReveal = EditorView.domEventHandlers({
     mousedown(event, view) {
       const target = event.target as HTMLElement | null;
-      if (!target?.closest('.lp-edit')) {
+      if (!target?.closest('.lp-edit') && !target?.closest('.lp-mermaid-error')) {
         return false;
       }
-      const widget = target.closest('.lp-table, .lp-html');
+      const widget = target.closest('.lp-table, .lp-html, .lp-mermaid');
       if (!widget) {
         return false;
       }
@@ -171,5 +236,89 @@ export function livePreviewBlocks(config: LivePreviewConfig): Extension {
       return true;
     },
   });
-  return [field, clickToReveal];
+
+  // The `.lp-resize` corner grip on a rendered image: dragging it live-
+  // sizes the `<img>` and, on release, rewrites the note's `![alt|W](url)`
+  // (ADR-0026). Returning `true` from `pointerdown`/`mousedown` suppresses
+  // CodeMirror's caret placement, so `touches()` never reveals the raw
+  // text mid-drag.
+  const imageResize = EditorView.domEventHandlers({
+    mousedown(event) {
+      const target = event.target as HTMLElement | null;
+      return target?.closest('.lp-resize') != null;
+    },
+    pointerdown(event, view) {
+      const target = event.target as HTMLElement | null;
+      const grip = target?.closest('.lp-resize') as HTMLElement | null;
+      if (!grip || event.button !== 0) {
+        return false;
+      }
+      event.preventDefault();
+      startImageResize(view, grip, event);
+      return true;
+    },
+  });
+
+  return [field, clickToReveal, imageResize];
+}
+
+/**
+ * Runs an image resize gesture: locate the `Image` node from the grip's
+ * `.lp-image` span, live-size `img.style.width` during the drag (no
+ * transaction), and on `pointerup` dispatch **one** `changes` transaction
+ * rewriting the alt span to `alt|<width>` (no `selection`, so the widget
+ * swaps in place instead of the raw text revealing). Offsets are cached at
+ * `pointerdown` -- the pointer is captured and nothing edits the doc until
+ * release, so they stay valid.
+ */
+function startImageResize(view: EditorView, grip: HTMLElement, event: PointerEvent): void {
+  const span = grip.closest('.lp-image');
+  const img = span?.querySelector('img') as HTMLImageElement | null;
+  if (!span || !img) {
+    return;
+  }
+
+  let node: SyntaxNode | null = syntaxTree(view.state).resolveInner(view.posAtDOM(span) + 1, 1);
+  while (node && node.name !== 'Image') {
+    node = node.parent;
+  }
+  const marks = node?.getChildren('LinkMark');
+  if (!node || !marks || marks.length < 2) {
+    return;
+  }
+  const altFrom = marks[0].to;
+  const altTo = marks[1].from;
+  const startAlt = view.state.sliceDoc(altFrom, altTo);
+  const startWidth = img.getBoundingClientRect().width || img.naturalWidth || 300;
+  const startX = event.clientX;
+
+  grip.setPointerCapture?.(event.pointerId);
+  const prevCursor = document.body.style.cursor;
+  const prevSelect = document.body.style.userSelect;
+  document.body.style.cursor = 'nwse-resize';
+  document.body.style.userSelect = 'none';
+
+  let liveWidth = clampEmbedWidth(startWidth);
+  const move = (ev: PointerEvent): void => {
+    liveWidth = clampEmbedWidth(startWidth + (ev.clientX - startX));
+    img.style.width = `${liveWidth}px`;
+    img.style.height = ''; // width-only: aspect ratio comes from the image
+  };
+  const end = (): void => {
+    grip.releasePointerCapture?.(event.pointerId);
+    window.removeEventListener('pointermove', move);
+    window.removeEventListener('pointerup', end);
+    window.removeEventListener('pointercancel', end);
+    document.body.style.cursor = prevCursor;
+    document.body.style.userSelect = prevSelect;
+
+    if (parseImageEmbed(startAlt).width !== liveWidth) {
+      view.dispatch({
+        changes: { from: altFrom, to: altTo, insert: setEmbedWidth(startAlt, liveWidth) },
+      });
+    }
+  };
+  window.addEventListener('pointermove', move);
+  window.addEventListener('pointerup', end);
+  window.addEventListener('pointercancel', end);
 }

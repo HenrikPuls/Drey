@@ -115,15 +115,6 @@
   color: var(--text-primary);
 }
 
-/* The assistant toggle stays lit while its panel is expanded. */
-.sparkle.on {
-  color: var(--accent);
-}
-
-.sparkle.on:hover {
-  color: var(--accent-hover);
-}
-
 .ctx-backdrop {
   position: fixed;
   inset: 0;

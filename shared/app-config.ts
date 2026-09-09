@@ -117,6 +117,103 @@ export interface ActionTrigger {
   enabled: boolean;
 }
 
+/**
+ * Settings category "Add entry": the Markdown block the capture drawer
+ * appends is a chosen template. Placeholders: `{{time}}`, `{{date}}`,
+ * `{{datetime}}`, `{{title}}` (empty or ` — <Topic>`), `{{tags}}` (empty
+ * or `#a #b`), `{{content}}` (the body). `shared/entry-compose.ts`
+ * substitutes them and collapses blank lines.
+ */
+export interface EntryTemplate {
+  id: string;
+  name: string;
+  pattern: string;
+  /** `'classic'` / `'ruled'` for a built-in (editable, not deletable); `null` otherwise. */
+  builtin: 'classic' | 'ruled' | null;
+}
+
+export interface EntryConfig {
+  templates: EntryTemplate[];
+  /** Id of the template the drawer uses; falls back to the classic built-in. */
+  activeId: string;
+}
+
+/** Reproduces the pre-template output: heading, body, tag line. */
+export const CLASSIC_ENTRY_PATTERN = '## {{time}}{{title}}\n{{content}}\n{{tags}}';
+/** Heading, a rule, the tags, then the body. */
+export const RULED_ENTRY_PATTERN = '## {{time}}{{title}}\n---\n{{tags}}\n\n{{content}}';
+
+export const BUILTIN_ENTRY_TEMPLATE_IDS: Record<'classic' | 'ruled', string> = {
+  classic: 'builtin:entry-classic',
+  ruled: 'builtin:entry-ruled',
+};
+
+function classicEntryTemplate(): EntryTemplate {
+  return {
+    id: BUILTIN_ENTRY_TEMPLATE_IDS.classic,
+    name: 'Classic',
+    pattern: CLASSIC_ENTRY_PATTERN,
+    builtin: 'classic',
+  };
+}
+
+function ruledEntryTemplate(): EntryTemplate {
+  return {
+    id: BUILTIN_ENTRY_TEMPLATE_IDS.ruled,
+    name: 'Ruled',
+    pattern: RULED_ENTRY_PATTERN,
+    builtin: 'ruled',
+  };
+}
+
+/** The pattern of the active template, or the classic pattern as a floor. */
+export function activeEntryPattern(entry: EntryConfig): string {
+  return (
+    entry.templates.find((template) => template.id === entry.activeId)?.pattern ??
+    CLASSIC_ENTRY_PATTERN
+  );
+}
+
+/** Settings category "Daily notes". */
+export interface DailyConfig {
+  /**
+   * Open today's daily note automatically on app start. It opens as an
+   * unsaved draft tab (nothing is written until the user types and saves),
+   * exactly like clicking today in the calendar.
+   */
+  openOnStartup: boolean;
+}
+
+export const DEFAULT_DAILY_CONFIG: DailyConfig = { openOnStartup: true };
+
+/**
+ * Settings category "Widgets": which dock widgets are switched off entirely
+ * (removed from every dock *and* the View menu). Stored as the exception
+ * list -- every registered widget is enabled unless its id is here -- so a
+ * widget added by an app update shows up without a migration. The id space
+ * is the renderer's `WIDGETS` registry; unknown ids are kept verbatim (the
+ * renderer ignores them) so a downgrade doesn't lose the user's choice.
+ */
+export interface WidgetsConfig {
+  disabled: string[];
+}
+
+export const DEFAULT_WIDGETS_CONFIG: WidgetsConfig = { disabled: [] };
+
+/**
+ * Settings category "Templates": the vault folder whose `.md` files back
+ * the Templates panel and the `Mod+T` picker. Folders are categories,
+ * sub-folders sub-categories; a template is inserted at the cursor with its
+ * YAML frontmatter stripped and `{{date}}`/`{{time}}`/`{{datetime}}`/`{{title}}`
+ * substituted.
+ */
+export interface TemplatesConfig {
+  /** Vault-relative folder, forward-slash, no leading/trailing slash. */
+  dir: string;
+}
+
+export const DEFAULT_TEMPLATES_CONFIG: TemplatesConfig = { dir: 'templates' };
+
 /** Settings category "KI-Assistent": the note assistant panel's defaults. */
 export interface AssistantConfig {
   /**
@@ -154,6 +251,16 @@ export interface SpellcheckConfig {
   language: string;
   /** User-added dictionaries, offered alongside the bundled ones. */
   dictionaries: CustomDictionary[];
+  /**
+   * Words accepted in **every** dictionary -- project names, people, terms
+   * that are not language-specific. Shown in Settings as "Personal words".
+   */
+  personalWords: string[];
+  /**
+   * Words accepted only under a specific dictionary id (`de`, `en`, or a
+   * custom id). Keys with an empty list are dropped on normalisation.
+   */
+  languageWords: Record<string, string[]>;
 }
 
 /**
@@ -255,14 +362,22 @@ export function clampEditorFontScale(value: unknown): number {
  *   stay consistent). A preset, not a free number: four steps are enough and
  *   a slider invites fiddling.
  * - `accent` is the highlight colour. Either a preset id from
- *   `ACCENT_PRESETS`, or a `#rrggbb` hex for a custom pick. `AppearanceService`
- *   writes the resolved hex onto `--accent` at the document root; the
- *   `--accent-*` tint tokens in `styles.css` are `color-mix()`ed off it, so
- *   one value re-colours everything.
+ *   `ACCENT_PRESETS`, a `#rrggbb` hex for a custom pick, or the sentinel
+ *   `'theme'` (the default) meaning "follow the active theme's seed accent".
+ *   `AppearanceService` writes the resolved hex onto `--accent` at the
+ *   document root; the `--accent-*` tint tokens in `styles.css` are
+ *   `color-mix()`ed off it, so one value re-colours everything.
+ * - `theme` is an id from the renderer's theme catalog
+ *   (`src/app/editor/themes/theme-catalog.ts`) -- `'drey'` is the built-in
+ *   look, every other id is a published CodeMirror 6 theme whose editor
+ *   colours are swapped in a compartment and whose shell palette is derived
+ *   from a seed. `shared/` cannot import the catalog, so this is a plain
+ *   string; the catalog resolves an unknown id back to `'drey'`.
  */
 export interface AppearanceConfig {
   uiScale: UiScale;
   accent: string;
+  theme: string;
 }
 
 export type UiScale = 'small' | 'default' | 'large' | 'xlarge';
@@ -298,9 +413,20 @@ export const ACCENT_PRESETS: readonly AccentPreset[] = [
   { id: 'teal', label: 'Teal', hex: '#4f9a90' },
 ];
 
+/**
+ * The `accent` sentinel: follow the active theme's own seed accent rather
+ * than a fixed preset / hex. `resolveAccentHex` needs the theme accent
+ * passed in to turn this into a concrete colour.
+ */
+export const THEME_ACCENT = 'theme';
+
+/** Built-in theme id -- the bespoke "Drey v3" look, no shell derivation. */
+export const DEFAULT_THEME = 'drey';
+
 export const DEFAULT_APPEARANCE: AppearanceConfig = {
   uiScale: 'default',
-  accent: ACCENT_PRESETS[0].id,
+  accent: THEME_ACCENT,
+  theme: DEFAULT_THEME,
 };
 
 const HEX_RE = /^#[0-9a-fA-F]{6}$/;
@@ -312,19 +438,34 @@ export function normalizeUiScale(value: unknown): UiScale {
     : DEFAULT_APPEARANCE.uiScale;
 }
 
-/** A known preset id or a `#rrggbb` hex; anything else falls back to the default. */
+/**
+ * The `'theme'` sentinel, a known preset id, or a `#rrggbb` hex; anything
+ * else falls back to the default (`'theme'`).
+ */
 export function normalizeAccent(value: unknown): string {
   if (typeof value !== 'string') {
     return DEFAULT_APPEARANCE.accent;
   }
-  if (ACCENT_PRESETS.some((preset) => preset.id === value)) {
+  if (value === THEME_ACCENT || ACCENT_PRESETS.some((preset) => preset.id === value)) {
     return value;
   }
   return HEX_RE.test(value) ? value.toLowerCase() : DEFAULT_APPEARANCE.accent;
 }
 
-/** The concrete `#rrggbb` for an `accent` value (preset id -> its hex; hex -> itself). */
-export function resolveAccentHex(accent: string): string {
+/** Non-empty string, else `'drey'`. The renderer catalog does the real resolve. */
+export function normalizeTheme(value: unknown): string {
+  return typeof value === 'string' && value.trim().length > 0 ? value : DEFAULT_THEME;
+}
+
+/**
+ * The concrete `#rrggbb` for an `accent` value: preset id -> its hex,
+ * hex -> itself, and the `'theme'` sentinel -> `themeAccent` (the active
+ * theme's seed accent, supplied by the caller) or the first preset.
+ */
+export function resolveAccentHex(accent: string, themeAccent?: string): string {
+  if (accent === THEME_ACCENT) {
+    return themeAccent && HEX_RE.test(themeAccent) ? themeAccent.toLowerCase() : ACCENT_PRESETS[0].hex;
+  }
   const preset = ACCENT_PRESETS.find((entry) => entry.id === accent);
   if (preset) {
     return preset.hex;
@@ -337,8 +478,49 @@ function normalizeAppearance(raw: unknown): AppearanceConfig {
   return {
     uiScale: normalizeUiScale(source['uiScale']),
     accent: normalizeAccent(source['accent']),
+    theme: normalizeTheme(source['theme']),
   };
 }
+
+/**
+ * The vault MCP server (`electron/mcp/`,
+ * `docs/09_architecture_decisions/0021-*.md`). One tool set --
+ * `vault_search` (with a regex filter), `vault_read`, `vault_write` --
+ * exposed two ways and also callable by the built-in assistant.
+ */
+export interface McpConfig {
+  /**
+   * Master switch. Off: no MCP server, and the assistant does not call
+   * vault tools. On: the tool set is available in-process to the
+   * assistant, and (with `httpEnabled`) over the network.
+   */
+  enabled: boolean;
+  /**
+   * Also open the localhost Streamable-HTTP endpoint
+   * (`http://127.0.0.1:<httpPort>/mcp`) that any network MCP client -- and
+   * the bundled stdio bridge -- connects to. A listening socket, so it is
+   * opt-in on top of `enabled`.
+   */
+  httpEnabled: boolean;
+  /** Port for the localhost HTTP endpoint. */
+  httpPort: number;
+  /**
+   * "YOLO mode": apply a `vault_write` tool call WITHOUT the confirmation
+   * diff. Off by default and meant to stay off -- a model (local or a
+   * remote client's) can otherwise overwrite vault files unattended.
+   */
+  yolo: boolean;
+}
+
+export const MCP_PORT_MIN = 1024;
+export const MCP_PORT_MAX = 65535;
+
+export const DEFAULT_MCP_CONFIG: McpConfig = {
+  enabled: false,
+  httpEnabled: false,
+  httpPort: 4319,
+  yolo: false,
+};
 
 export interface AppConfig {
   /** Bumped only on a breaking shape change; `normalizeAppConfig` migrates. */
@@ -348,6 +530,11 @@ export interface AppConfig {
   spellcheck: SpellcheckConfig;
   editor: EditorConfig;
   appearance: AppearanceConfig;
+  mcp: McpConfig;
+  entry: EntryConfig;
+  daily: DailyConfig;
+  templates: TemplatesConfig;
+  widgets: WidgetsConfig;
   actions: {
     templates: ActionTemplate[];
     triggers: ActionTrigger[];
@@ -443,12 +630,22 @@ export const DEFAULT_APP_CONFIG: AppConfig = {
     enabled: true,
     language: 'de',
     dictionaries: [],
+    personalWords: [],
+    languageWords: {},
   },
   editor: {
     fontScale: 1,
     fontFamily: DEFAULT_EDITOR_FONT_FAMILY,
   },
   appearance: { ...DEFAULT_APPEARANCE },
+  mcp: { ...DEFAULT_MCP_CONFIG },
+  entry: {
+    templates: [classicEntryTemplate(), ruledEntryTemplate()],
+    activeId: BUILTIN_ENTRY_TEMPLATE_IDS.classic,
+  },
+  daily: { ...DEFAULT_DAILY_CONFIG },
+  templates: { ...DEFAULT_TEMPLATES_CONFIG },
+  widgets: { disabled: [] },
   actions: {
     templates: [noteSummaryTemplate(), searchSummaryTemplate(), autotagTemplate()],
     triggers: [],
@@ -512,6 +709,96 @@ function normalizeDictionaries(raw: unknown): CustomDictionary[] {
   return out;
 }
 
+/** Trimmed, de-duplicated, blank-free string list; a non-array yields `[]`. */
+function normalizeWordList(raw: unknown): string[] {
+  const list = Array.isArray(raw) ? raw : [];
+  const out: string[] = [];
+  const seen = new Set<string>();
+  for (const item of list) {
+    if (typeof item !== 'string') {
+      continue;
+    }
+    const word = item.trim();
+    if (word !== '' && !seen.has(word)) {
+      seen.add(word);
+      out.push(word);
+    }
+  }
+  return out;
+}
+
+/**
+ * `{ <dictionaryId>: string[] }` -- per-dictionary accepted words. Any key
+ * is allowed (custom dictionary ids are user-defined); a key whose list
+ * normalises to empty is dropped so the default `{}` round-trips.
+ */
+function normalizeLanguageWords(raw: unknown): Record<string, string[]> {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {
+    return {};
+  }
+  const out: Record<string, string[]> = {};
+  for (const [key, value] of Object.entries(raw as Record<string, unknown>)) {
+    const words = normalizeWordList(value);
+    if (words.length > 0) {
+      out[key] = words;
+    }
+  }
+  return out;
+}
+
+function normalizeMcp(raw: unknown): McpConfig {
+  const source = (raw ?? {}) as Record<string, unknown>;
+  const port =
+    typeof source['httpPort'] === 'number' && Number.isInteger(source['httpPort'])
+      ? Math.min(MCP_PORT_MAX, Math.max(MCP_PORT_MIN, source['httpPort']))
+      : DEFAULT_MCP_CONFIG.httpPort;
+  return {
+    enabled: bool(source['enabled'], DEFAULT_MCP_CONFIG.enabled),
+    httpEnabled: bool(source['httpEnabled'], DEFAULT_MCP_CONFIG.httpEnabled),
+    httpPort: port,
+    yolo: bool(source['yolo'], DEFAULT_MCP_CONFIG.yolo),
+  };
+}
+
+function normalizeDaily(raw: unknown): DailyConfig {
+  const source = (raw ?? {}) as Record<string, unknown>;
+  return {
+    openOnStartup: bool(source['openOnStartup'], DEFAULT_DAILY_CONFIG.openOnStartup),
+  };
+}
+
+function normalizeWidgets(raw: unknown): WidgetsConfig {
+  const source = (raw ?? {}) as Record<string, unknown>;
+  const list = Array.isArray(source['disabled']) ? source['disabled'] : [];
+  const disabled = [
+    ...new Set(
+      list.filter((x): x is string => typeof x === 'string' && x.trim().length > 0),
+    ),
+  ];
+  return { disabled };
+}
+
+/**
+ * A vault-relative folder: trimmed, back-slashes folded, no leading/trailing
+ * slash, and no `.`/`..` segment (so it can never point outside the vault).
+ * Anything malformed falls back to the default `templates`.
+ */
+export function normalizeTemplatesDir(raw: unknown): string {
+  const cleaned = (typeof raw === 'string' ? raw : '')
+    .trim()
+    .replace(/\\/g, '/')
+    .replace(/^\/+|\/+$/g, '');
+  if (cleaned === '' || cleaned.split('/').some((seg) => seg === '' || seg === '.' || seg === '..')) {
+    return DEFAULT_TEMPLATES_CONFIG.dir;
+  }
+  return cleaned;
+}
+
+function normalizeTemplatesConfig(raw: unknown): TemplatesConfig {
+  const source = (raw ?? {}) as Record<string, unknown>;
+  return { dir: normalizeTemplatesDir(source['dir']) };
+}
+
 function normalizeEditor(raw: unknown): EditorConfig {
   const source = (raw ?? {}) as Record<string, unknown>;
   return {
@@ -534,6 +821,8 @@ function normalizeSpellcheck(raw: unknown): SpellcheckConfig {
     // default rather than leaving the checker pointed at nothing.
     language: known.has(language) ? language : DEFAULT_APP_CONFIG.spellcheck.language,
     dictionaries,
+    personalWords: normalizeWordList(source['personalWords']),
+    languageWords: normalizeLanguageWords(source['languageWords']),
   };
 }
 
@@ -593,6 +882,58 @@ function normalizeTemplates(raw: unknown): ActionTemplate[] {
 }
 
 /**
+ * Rebuilds the entry-template list, same rule as `normalizeTemplates`:
+ * both built-ins present exactly once (keeping the user's `name` /
+ * `pattern` edits, matched by id), then well-formed user templates.
+ */
+function normalizeEntryTemplates(raw: unknown): EntryTemplate[] {
+  const list = Array.isArray(raw) ? raw : [];
+  const byId = new Map<string, Record<string, unknown>>();
+  for (const item of list) {
+    if (item && typeof item === 'object' && typeof (item as { id?: unknown }).id === 'string') {
+      byId.set((item as { id: string }).id, item as Record<string, unknown>);
+    }
+  }
+
+  const out: EntryTemplate[] = [];
+  for (const base of [classicEntryTemplate(), ruledEntryTemplate()]) {
+    const saved = byId.get(base.id);
+    byId.delete(base.id);
+    out.push(
+      saved
+        ? {
+            ...base,
+            name: str(saved['name'], base.name),
+            pattern: str(saved['pattern'], base.pattern),
+          }
+        : base,
+    );
+  }
+
+  for (const saved of byId.values()) {
+    const name = str(saved['name'], '').trim();
+    const pattern = str(saved['pattern'], '');
+    if (!name || !pattern) {
+      continue;
+    }
+    out.push({ id: str(saved['id'], ''), name, pattern, builtin: null });
+  }
+  return out;
+}
+
+function normalizeEntryConfig(raw: unknown): EntryConfig {
+  const source = (raw ?? {}) as Record<string, unknown>;
+  const templates = normalizeEntryTemplates(source['templates']);
+  const activeId = optionalText(source['activeId']) ?? '';
+  return {
+    templates,
+    activeId: templates.some((template) => template.id === activeId)
+      ? activeId
+      : BUILTIN_ENTRY_TEMPLATE_IDS.classic,
+  };
+}
+
+/**
  * Keeps every well-formed trigger whose `templateId` still resolves. A
  * missing `triggers` key (a fresh config) seeds the two built-in manual
  * triggers; an explicit empty array is respected (the user removed them).
@@ -637,6 +978,11 @@ export function normalizeAppConfig(raw: unknown): AppConfig {
     spellcheck: normalizeSpellcheck(source['spellcheck']),
     editor: normalizeEditor(source['editor']),
     appearance: normalizeAppearance(source['appearance']),
+    mcp: normalizeMcp(source['mcp']),
+    entry: normalizeEntryConfig(source['entry']),
+    daily: normalizeDaily(source['daily']),
+    templates: normalizeTemplatesConfig(source['templates']),
+    widgets: normalizeWidgets(source['widgets']),
     actions: {
       templates,
       triggers: normalizeTriggers(actionsSource['triggers'], templates),

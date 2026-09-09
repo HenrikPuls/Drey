@@ -1,0 +1,27 @@
+<app-settings-pane
+  title="Templates"
+  description="A vault folder of reusable Markdown snippets, grouped by sub-folder."
+>
+  @if (templates(); as templates) {
+    <div class="field">
+      <label for="templates-dir">Template folder (vault-relative)</label>
+      <input
+        id="templates-dir"
+        type="text"
+        [value]="templates.dir"
+        placeholder="templates"
+        (change)="onDirChange($any($event.target).value)"
+      />
+      <p class="field-hint">
+        Default <span class="mono">templates</span>. Each sub-folder is a category, nested
+        sub-folders are sub-categories, and every <span class="mono">.md</span> file appears in the
+        Templates panel and the <span class="mono">Ctrl+T</span> picker. Inserting one drops its
+        body at the cursor with the YAML frontmatter removed and the
+        <span class="mono" ngNonBindable>{{date}}</span>,
+        <span class="mono" ngNonBindable>{{time}}</span>,
+        <span class="mono" ngNonBindable>{{datetime}}</span> and
+        <span class="mono" ngNonBindable>{{title}}</span> placeholders filled in.
+      </p>
+    </div>
+  }
+</app-settings-pane>

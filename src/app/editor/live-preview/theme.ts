@@ -8,10 +8,21 @@ import { EditorView } from '@codemirror/view';
  */
 export const livePreviewTheme = EditorView.theme(
   {
+    // The expanded frontmatter block (`---` ... `---`) reads as plain grey
+    // body text, matching `.cm-fm-line` in source mode -- no mono, no dimming.
+    // The `span` rule (0,0,1,1) overrides the per-token highlight spans:
+    // without a frontmatter parser, Lezer-Markdown tags the block as a Setext
+    // H2, so each line otherwise gets heading weight/size + inline colours.
     '.lp-frontmatter': {
-      color: 'var(--text-faint)',
-      fontFamily: 'var(--font-mono)',
-      fontSize: '0.85em',
+      color: 'var(--text-3)',
+    },
+    '.lp-frontmatter span': {
+      color: 'var(--text-3)',
+      fontWeight: '400',
+      fontStyle: 'normal',
+      fontSize: '1em',
+      fontFamily: 'var(--font-sans)',
+      textDecoration: 'none',
     },
 
     '.lp-quote': {
@@ -64,6 +75,14 @@ export const livePreviewTheme = EditorView.theme(
       cursor: 'pointer',
     },
 
+    // A checked `- [x]` task: strike the text and mute it, the way a
+    // done item reads in Obsidian / a paper list.
+    '.lp-task-done': {
+      textDecoration: 'line-through',
+      textDecorationThickness: '1px',
+      color: 'var(--text-6)',
+    },
+
     '.lp-hr': {
       display: 'inline-block',
       width: '100%',
@@ -71,6 +90,11 @@ export const livePreviewTheme = EditorView.theme(
       borderTop: '1px solid var(--border-strong)',
     },
 
+    '.lp-image': {
+      position: 'relative',
+      display: 'inline-block',
+      lineHeight: '0',
+    },
     '.lp-image img': {
       maxWidth: '100%',
       borderRadius: 'var(--radius-xs)',
@@ -79,6 +103,82 @@ export const livePreviewTheme = EditorView.theme(
     '.lp-image-missing': {
       color: 'var(--text-faint)',
       fontStyle: 'italic',
+    },
+    // Hover lens -> open the full-app viewer (ADR-0026). Same recipe as `.lp-edit`.
+    '.lp-lens': {
+      position: 'absolute',
+      top: '4px',
+      right: '4px',
+      display: 'inline-flex',
+      padding: '3px',
+      border: '0',
+      borderRadius: 'var(--radius-sm)',
+      background: 'var(--hover-bg)',
+      color: 'var(--text-6)',
+      cursor: 'pointer',
+      opacity: '0',
+      transition: 'opacity 0.12s ease',
+    },
+    '.lp-image:hover .lp-lens': {
+      opacity: '1',
+    },
+    '.lp-lens:hover': {
+      color: 'var(--text-primary)',
+      background: 'var(--hover-bg-strong)',
+    },
+    // Corner grip -> drag to resize (rewrites `![alt|W]`, ADR-0026).
+    '.lp-resize': {
+      position: 'absolute',
+      right: '-4px',
+      bottom: '-4px',
+      width: '14px',
+      height: '14px',
+      borderRadius: '3px',
+      background: 'var(--accent)',
+      border: '2px solid var(--bg-editor)',
+      cursor: 'nwse-resize',
+      opacity: '0',
+      transition: 'opacity 0.12s ease',
+      touchAction: 'none',
+    },
+    '.lp-image:hover .lp-resize': {
+      opacity: '1',
+    },
+
+    // A rendered ```mermaid diagram (ADR-0025).
+    '.lp-mermaid': {
+      position: 'relative',
+      display: 'block',
+      margin: '6px 0',
+      padding: '10px 12px',
+      background: 'var(--bg-bar)',
+      borderRadius: 'var(--radius)',
+      overflowX: 'auto',
+      textAlign: 'center',
+    },
+    // Hover lens -> open the diagram in the shared viewer. Shares the
+    // `.lp-lens` look (defined above); only the reveal trigger differs.
+    '.lp-mermaid:hover .lp-mermaid-lens': {
+      opacity: '1',
+    },
+    '.lp-mermaid svg': {
+      maxWidth: '100%',
+      height: 'auto',
+    },
+    '.lp-mermaid-pending': {
+      color: 'var(--text-faint)',
+      fontStyle: 'italic',
+      fontSize: '0.9em',
+    },
+    '.lp-mermaid-error': {
+      margin: '0',
+      textAlign: 'left',
+      whiteSpace: 'pre-wrap',
+      fontFamily: 'var(--font-mono)',
+      fontSize: '0.85em',
+      color: 'var(--danger, #e06c75)',
+      // The whole box is a hit target back into the fenced source.
+      cursor: 'pointer',
     },
 
     '.lp-table': {
@@ -121,7 +221,7 @@ export const livePreviewTheme = EditorView.theme(
     },
 
     // The hover `✎` on rendered blocks: jump to the source (Obsidian-style).
-    '.lp-table, .lp-html': {
+    '.lp-table, .lp-html, .lp-mermaid': {
       position: 'relative',
     },
     '.lp-edit': {
@@ -138,7 +238,7 @@ export const livePreviewTheme = EditorView.theme(
       opacity: '0',
       transition: 'opacity 0.12s ease',
     },
-    '.lp-table:hover .lp-edit, .lp-html:hover .lp-edit': {
+    '.lp-table:hover .lp-edit, .lp-html:hover .lp-edit, .lp-mermaid:hover .lp-edit': {
       opacity: '1',
     },
     '.lp-edit:hover': {

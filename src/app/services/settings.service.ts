@@ -4,17 +4,27 @@ import {
   ActionTemplate,
   AppConfig,
   AssistantConfig,
+  BUILTIN_ENTRY_TEMPLATE_IDS,
+  CLASSIC_ENTRY_PATTERN,
   CustomDictionary,
+  DailyConfig,
   DEFAULT_APPEARANCE,
   DEFAULT_EDITOR_FONT_FAMILY,
+  DEFAULT_THEME,
+  DEFAULT_TEMPLATES_CONFIG,
+  EntryTemplate,
   LlmConfig,
   LlmEndpoint,
+  McpConfig,
   SpellcheckConfig,
+  TemplatesConfig,
   UiScale,
+  activeEntryPattern,
   clampEditorFontScale,
   normalizeAccent,
   normalizeAppConfig,
   normalizeEditorFontFamily,
+  normalizeTheme,
   normalizeUiScale,
 } from '../../../shared/app-config';
 import { ResolvedAction, resolveActions } from '../../../shared/llm';
@@ -75,23 +85,76 @@ export class SettingsService {
 
   readonly llmEnabled = computed<boolean>(() => this._config()?.llm.enabled ?? false);
 
+  /** True once the initial `load()` has resolved -- `null` config means "not loaded yet". */
+  readonly loaded = computed<boolean>(() => this._config() !== null);
+
+  /** Whether to open today's daily note on app start. Persisted config, never the draft. */
+  readonly dailyOpenOnStartup = computed<boolean>(() => this._config()?.daily.openOnStartup ?? true);
+
+  /** The vault-relative templates folder. Persisted config, never the draft. */
+  readonly templatesDir = computed<string>(
+    () => this._config()?.templates.dir ?? DEFAULT_TEMPLATES_CONFIG.dir,
+  );
+
+  /**
+   * Ids of the dock widgets switched off in Settings -> Widgets. **Persisted
+   * config, never the draft** -- a disable takes effect on Save, like every
+   * other category, so the dock / View menu don't churn while the screen is
+   * open. `DockService` and `MenuService` read this.
+   */
+  readonly widgetsDisabled = computed<ReadonlySet<string>>(
+    () => new Set(this._config()?.widgets.disabled ?? []),
+  );
+
+  /** Whether a dock widget id is currently enabled (persisted config). */
+  widgetEnabled(id: string): boolean {
+    return !this.widgetsDisabled().has(id);
+  }
+
+  /** The Settings -> Widgets draft's disabled ids (drives the checkboxes). */
+  readonly widgetsDisabledDraft = computed<ReadonlySet<string>>(
+    () => new Set(this._draft()?.widgets.disabled ?? []),
+  );
+
   /** Editor content zoom multiplier (Ctrl +/-/0). Persisted config, never the draft. */
   readonly editorFontScale = computed<number>(() => this._config()?.editor.fontScale ?? 1);
 
-  /** Editor font-family id (Settings -> Appearance). Persisted config, never the draft. */
+  /**
+   * What the Appearance controls (typeface, base font size, highlight
+   * colour) should reflect right now: the **draft** while the Settings
+   * screen is open, so a change previews live before Save, and the saved
+   * **config** otherwise. Discard / close resets the draft, which rolls
+   * the preview back. (ADR-0020, "Later change".)
+   */
+  private readonly appearanceSource = computed<AppConfig | null>(() =>
+    this.screenOpen() ? (this._draft() ?? this._config()) : this._config(),
+  );
+
+  /** Editor font-family id (Settings -> Appearance). Draft-previewed while the screen is open. */
   readonly editorFontFamily = computed<string>(
-    () => this._config()?.editor.fontFamily ?? DEFAULT_EDITOR_FONT_FAMILY,
+    () => this.appearanceSource()?.editor.fontFamily ?? DEFAULT_EDITOR_FONT_FAMILY,
   );
 
-  /** App-wide UI scale step (Settings -> Appearance). Persisted config only. */
+  /** App-wide UI scale step (Settings -> Appearance). Draft-previewed while the screen is open. */
   readonly appearanceUiScale = computed<UiScale>(
-    () => this._config()?.appearance.uiScale ?? DEFAULT_APPEARANCE.uiScale,
+    () => this.appearanceSource()?.appearance.uiScale ?? DEFAULT_APPEARANCE.uiScale,
   );
 
-  /** App-wide highlight colour -- a preset id or `#rrggbb` (Settings -> Appearance). */
+  /** App-wide highlight colour -- `'theme'`, a preset id, or `#rrggbb`. Draft-previewed while the screen is open. */
   readonly appearanceAccent = computed<string>(
-    () => this._config()?.appearance.accent ?? DEFAULT_APPEARANCE.accent,
+    () => this.appearanceSource()?.appearance.accent ?? DEFAULT_APPEARANCE.accent,
   );
+
+  /** Active theme id (Settings -> Appearance). Draft-previewed while the screen is open. */
+  readonly appearanceTheme = computed<string>(
+    () => this.appearanceSource()?.appearance.theme ?? DEFAULT_THEME,
+  );
+
+  /** The active "Add entry" template's pattern. Persisted config, never the draft. */
+  readonly activeEntryPattern = computed<string>(() => {
+    const config = this._config();
+    return config ? activeEntryPattern(config.entry) : CLASSIC_ENTRY_PATTERN;
+  });
 
   /** Manual-trigger actions, for the editor's run menu. Persisted config only. */
   readonly manualActions = computed<ResolvedAction[]>(() => {
@@ -206,6 +269,37 @@ export class SettingsService {
     });
   }
 
+  patchMcp(patch: Partial<McpConfig>): void {
+    this.mutate((config) => {
+      config.mcp = { ...config.mcp, ...patch };
+    });
+  }
+
+  patchDaily(patch: Partial<DailyConfig>): void {
+    this.mutate((config) => {
+      config.daily = { ...config.daily, ...patch };
+    });
+  }
+
+  patchTemplates(patch: Partial<TemplatesConfig>): void {
+    this.mutate((config) => {
+      config.templates = { ...config.templates, ...patch };
+    });
+  }
+
+  /** Settings -> Widgets: toggle a dock widget on / off (draft edit; saved on Save). */
+  setWidgetEnabled(id: string, enabled: boolean): void {
+    this.mutate((config) => {
+      const set = new Set(config.widgets.disabled);
+      if (enabled) {
+        set.delete(id);
+      } else {
+        set.add(id);
+      }
+      config.widgets = { disabled: [...set] };
+    });
+  }
+
   patchSpellcheck(patch: Partial<SpellcheckConfig>): void {
     this.mutate((config) => {
       config.spellcheck = { ...config.spellcheck, ...patch };
@@ -234,6 +328,49 @@ export class SettingsService {
       );
       if (config.spellcheck.language === id) {
         config.spellcheck.language = 'de';
+      }
+    });
+  }
+
+  /**
+   * Adds an accepted word to the personal list (`target: 'personal'`) or
+   * to the active dictionary's list (`target: 'language'`). Draft edit --
+   * persisted on Save; the editor popup uses the immediate IPC path instead.
+   */
+  addSpellWord(word: string, target: 'language' | 'personal'): void {
+    const trimmed = word.trim();
+    if (trimmed === '') {
+      return;
+    }
+    this.mutate((config) => {
+      const sc = config.spellcheck;
+      if (target === 'personal') {
+        if (!sc.personalWords.includes(trimmed)) {
+          sc.personalWords = [...sc.personalWords, trimmed];
+        }
+      } else {
+        const list = sc.languageWords[sc.language] ?? [];
+        if (!list.includes(trimmed)) {
+          sc.languageWords = { ...sc.languageWords, [sc.language]: [...list, trimmed] };
+        }
+      }
+    });
+  }
+
+  removeSpellWord(word: string, target: 'language' | 'personal'): void {
+    this.mutate((config) => {
+      const sc = config.spellcheck;
+      if (target === 'personal') {
+        sc.personalWords = sc.personalWords.filter((entry) => entry !== word);
+      } else {
+        const list = (sc.languageWords[sc.language] ?? []).filter((entry) => entry !== word);
+        const next = { ...sc.languageWords };
+        if (list.length > 0) {
+          next[sc.language] = list;
+        } else {
+          delete next[sc.language];
+        }
+        sc.languageWords = next;
       }
     });
   }
@@ -359,6 +496,54 @@ export class SettingsService {
     });
   }
 
+  // -- "Add entry" templates (draft) -------------------------------------
+
+  /** Picks which entry template the drawer uses. */
+  setActiveEntryTemplate(id: string): void {
+    this.mutate((config) => {
+      if (config.entry.templates.some((template) => template.id === id)) {
+        config.entry.activeId = id;
+      }
+    });
+  }
+
+  /** Adds a blank user template (seeded with the Classic pattern) and returns its id. */
+  addEntryTemplate(): string {
+    const id = `entry-template:${uid()}`;
+    this.mutate((config) => {
+      config.entry.templates.push({
+        id,
+        name: 'New template',
+        pattern: CLASSIC_ENTRY_PATTERN,
+        builtin: null,
+      });
+    });
+    return id;
+  }
+
+  updateEntryTemplate(id: string, patch: Partial<Pick<EntryTemplate, 'name' | 'pattern'>>): void {
+    this.mutate((config) => {
+      const template = config.entry.templates.find((t) => t.id === id);
+      if (template) {
+        Object.assign(template, patch);
+      }
+    });
+  }
+
+  /** User templates only; if it was active, the selection falls back to Classic. */
+  removeEntryTemplate(id: string): void {
+    this.mutate((config) => {
+      const template = config.entry.templates.find((t) => t.id === id);
+      if (!template || template.builtin) {
+        return;
+      }
+      config.entry.templates = config.entry.templates.filter((t) => t.id !== id);
+      if (config.entry.activeId === id) {
+        config.entry.activeId = BUILTIN_ENTRY_TEMPLATE_IDS.classic;
+      }
+    });
+  }
+
   // -- Outside the Settings screen ----------------------------------------
 
   /**
@@ -435,90 +620,39 @@ export class SettingsService {
     }
   }
 
-  /**
-   * Editor font family (Settings -> Appearance). Persists immediately and
-   * mirrors the edit into an open draft, exactly like `setEditorFontScale`:
-   * the choice applies to the editor host on the next frame and the Settings
-   * screen stays in step without adding dirty state. An unknown id is pinned
-   * to the sans default by `normalizeEditorFontFamily`.
-   */
-  async setEditorFontFamily(id: string): Promise<void> {
-    const config = this._config();
-    if (!config) {
-      return;
-    }
-    const fontFamily = normalizeEditorFontFamily(id);
-    if (fontFamily === config.editor.fontFamily) {
-      return;
-    }
-
-    const next = structuredClone(config);
-    next.editor.fontFamily = fontFamily;
-    this._config.set(next);
-    this.mutate((draft) => {
-      draft.editor.fontFamily = fontFamily;
-    });
-
-    if (!this.api) {
-      return;
-    }
-    try {
-      this._config.set(normalizeAppConfig(await this.api.setConfig(next)));
-    } catch (err) {
-      this.saveError.set(err instanceof Error ? err.message : String(err));
-      void this.load();
-    }
-  }
+  // -- Appearance category (draft, ADR-0020 "Later change") --------------
 
   /**
-   * App-wide UI scale (Settings -> Appearance "Base font size"). Immediate,
-   * like the editor knobs: updates `_config` now, mirrors into an open draft,
-   * and persists. `AppearanceService` reacts to `appearanceUiScale`.
+   * Editor typeface (Settings -> Appearance). A draft edit, like every
+   * other category: `editorFontFamily()` previews it live while the
+   * Settings screen is open, and it reaches disk only on Save. An unknown
+   * id is pinned to the sans default by `normalizeEditorFontFamily`.
    */
-  async setAppearanceUiScale(scale: string): Promise<void> {
-    await this.applyImmediate('uiScale', normalizeUiScale(scale), (config, value) => {
-      config.appearance.uiScale = value as UiScale;
+  setEditorFontFamily(id: string): void {
+    this.mutate((config) => {
+      config.editor.fontFamily = normalizeEditorFontFamily(id);
     });
   }
 
-  /** App-wide highlight colour (a preset id or `#rrggbb`). Same immediate path. */
-  async setAppearanceAccent(accent: string): Promise<void> {
-    await this.applyImmediate('accent', normalizeAccent(accent), (config, value) => {
-      config.appearance.accent = value as string;
-    });
+  /** App-wide base font size (Settings -> Appearance). Draft edit; live-previewed; saved on Save. */
+  setAppearanceUiScale(scale: string): void {
+    this.patchAppearance({ uiScale: normalizeUiScale(scale) });
   }
 
-  /**
-   * Shared body for the "outside a Settings session, persist right away"
-   * mutators (`setAppearanceUiScale` / `setAppearanceAccent`): no-op when the
-   * value is unchanged, update `_config` so the runtime reacts next frame,
-   * mirror the edit into any open draft, then write through. On a write
-   * error, surface it and reload from disk.
-   */
-  private async applyImmediate<T>(
-    field: keyof AppConfig['appearance'],
-    value: T,
-    patch: (config: AppConfig, value: T) => void,
-  ): Promise<void> {
-    const config = this._config();
-    if (!config || config.appearance[field] === value) {
-      return;
-    }
+  /** App-wide highlight colour: `'theme'`, a preset id, or `#rrggbb` (Settings -> Appearance). Draft edit. */
+  setAppearanceAccent(accent: string): void {
+    this.patchAppearance({ accent: normalizeAccent(accent) });
+  }
 
-    const next = structuredClone(config);
-    patch(next, value);
-    this._config.set(next);
-    this.mutate((draft) => patch(draft, value));
+  /** Active theme id (Settings -> Appearance). Draft edit; live-previewed; saved on Save. */
+  setAppearanceTheme(theme: string): void {
+    this.patchAppearance({ theme: normalizeTheme(theme) });
+  }
 
-    if (!this.api) {
-      return;
-    }
-    try {
-      this._config.set(normalizeAppConfig(await this.api.setConfig(next)));
-    } catch (err) {
-      this.saveError.set(err instanceof Error ? err.message : String(err));
-      void this.load();
-    }
+  private patchAppearance(patch: Partial<AppConfig['appearance']>): void {
+    this.mutate((config) => {
+      config.appearance = { ...config.appearance, ...patch };
+    });
   }
 
   /** Applies `change` to a clone of the draft. No IPC -- `save()` does that. */

@@ -6,8 +6,13 @@ import { SettingsAbout } from './about/settings-about';
 import { SettingsActions } from './actions/settings-actions';
 import { SettingsAppearance } from './appearance/settings-appearance';
 import { SettingsAssistant } from './assistant/settings-assistant';
+import { SettingsDaily } from './daily/settings-daily';
+import { SettingsDockWidgets } from './dock-widgets/settings-dock-widgets';
+import { SettingsEntry } from './entry/settings-entry';
 import { SettingsLlm } from './llm/settings-llm';
+import { SettingsMcp } from './mcp/settings-mcp';
 import { SettingsSpellcheck } from './spellcheck/settings-spellcheck';
+import { SettingsTemplates } from './templates/settings-templates';
 import { SettingsCategory } from './settings-category';
 
 /**
@@ -43,6 +48,14 @@ export class Settings {
       hint: 'Note summary panel',
       component: SettingsAssistant,
     },
+    { id: 'entry', label: 'Add entry', hint: 'Append template', component: SettingsEntry },
+    { id: 'daily', label: 'Daily notes', hint: 'Open on startup', component: SettingsDaily },
+    {
+      id: 'templates',
+      label: 'Templates',
+      hint: 'Snippet library folder',
+      component: SettingsTemplates,
+    },
     {
       id: 'spellcheck',
       label: 'Spelling',
@@ -56,11 +69,18 @@ export class Settings {
       component: SettingsAppearance,
     },
     {
+      id: 'widgets',
+      label: 'Widgets',
+      hint: 'Panels & capabilities',
+      component: SettingsDockWidgets,
+    },
+    {
       id: 'actions',
       label: 'Actions',
       hint: 'Prompt templates & triggers',
       component: SettingsActions,
     },
+    { id: 'mcp', label: 'MCP', hint: 'Vault server & tools', component: SettingsMcp },
     { id: 'about', label: 'About', hint: 'Version & licenses', component: SettingsAbout },
   ];
 

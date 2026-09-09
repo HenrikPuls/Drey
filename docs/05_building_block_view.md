@@ -110,7 +110,7 @@ graph TB
         IpcHandlers["ipcMain.handle(...)"]
         Protocol["app:// protocol handler\n(serves the built renderer)"]
         Hotkey["globalShortcut (Ctrl+Alt+N)\n+ single-instance lock\n-> openTodayDailyNote()"]
-        VaultManager["VaultManager (electron/vault-manager.ts)\nactive vault + directory listing +\nfile read/write/create + dir create\n(path-guarded)"]
+        VaultManager["VaultManager (electron/vault-manager.ts)\nactive vault + directory listing +\nfile read/write/create + dir create +\nrename/copy/duplicate (sidecar-aware) +\nbinary asset write (attachments/)\n(path-guarded)"]
         DailyNoteManager["DailyNoteManager (electron/daily-note.ts)\nensureTodayNote(): create daily/ note from\ntemplates/daily.md, scaffold template;\nnoteContentFor(date): substituted template, no write"]
         TagIndex["TagIndex (electron/tag-index.ts)\nin-memory tag vocabulary + master metadata;\nrebuild() scans all .md frontmatter\n(skips daily/ + templates/); tag:list / tag:registry"]
         NoteManager["NoteManager (electron/note-manager.ts)\nnote:save pipeline: merge inline #tags -> frontmatter,\nbump updated:, (6b) route entries to master docs"]
@@ -232,7 +232,18 @@ src/                Angular renderer (standalone components, esbuild via Angular
                             commands even after the menu click stole DOM focus.
       appearance.service.ts  Applies AppearanceConfig (ADR-0020): writes the resolved
                             accent hex onto --accent at :root and pushes the UI-scale
-                            preset through dreyApi.setUiZoomFactor. Instantiated by App.
+                            preset through dreyApi.setUiZoomFactor. Reads
+                            SettingsService's effective getters, which preview the
+                            draft while the Settings screen is open (ADR-0020 later
+                            change) — Discard rolls the look back. Instantiated by App.
+                            The 'theme' accent sentinel resolves against ThemeService.
+      theme.service.ts     Applies the selected theme (ADR-0035). For a published
+                            theme writes the seed's bg/fg onto --_bg/--_fg + a
+                            data-theme attribute at :root (activates styles.css's
+                            :root[data-theme] color-mix() block); for Drey clears them.
+                            Exposes the resolved ThemeCatalogEntry as a signal that
+                            MarkdownSurface reads to swap its CM6 theme compartment.
+                            Instantiated by App.
       tag.service.ts       tags signal (TagEntry[] = { tag, count }) from tags:list;
                             refreshed on construction and after every save. Source
                             for the editor's #tag autocomplete and the search
@@ -243,6 +254,13 @@ src/                Angular renderer (standalone components, esbuild via Angular
     keybindings/         Feature module (ADR-0016), barrel index.ts: KeybindingService
                           (one capture-phase keydown listener mapping chord strings
                           -> Command.run) + the Command type. §5.14
+    image-viewer/        Feature module (ADR-0026), barrel index.ts. ImageViewer
+                          (shared zoom/pan canvas: plain-wheel zoom toward the
+                          cursor, pointer-drag pan, +/-/0, fit); ImageLightbox +
+                          ImageLightboxService (the full-app inset:0 overlay at
+                          --z-lightbox, opened from the Live Preview lens button
+                          and the image tab); ImageTab (centre-column view for a
+                          kind:'image' OpenDoc, picked by editor.activeKind()).
       settings.service.ts  Two signals: `config` (persisted) and `draft` (what the
                             Settings screen edits). Pane mutators write the draft
                             only; save() sends it via setConfig and adopts the
@@ -278,8 +296,11 @@ src/                Angular renderer (standalone components, esbuild via Angular
                         colour (preset or custom hex -> --accent at :root, tints
                         color-mix'd off it; ADR-0020) + the document editor's typeface
                         (SettingsService.setEditorFontFamily -> --font-sans /
-                        --drey-heading-font on the Editor host). All three persist at
-                        once, like the editor zoom. actions/ SettingsActions:
+                        --drey-heading-font on the Editor host) + the theme picker
+                        (ADR-0035: ThemeService writes the seed vars / data-theme).
+                        dock-widgets/ SettingsDockWidgets: a checkbox per WIDGETS
+                        entry -> AppConfig.widgets.disabled (ADR-0034); DockService
+                        reconciles on Save. actions/ SettingsActions:
                         trigger rows (event / confirm / enabled) + template library CRUD.
                         about/ SettingsAbout: read-only -- app/Electron/Chromium/Node
                         version (app:get-info IPC) + a scrollable list of production
@@ -314,18 +335,29 @@ src/                Angular renderer (standalone components, esbuild via Angular
                          Markdown); spellcheck = the inline checker's source;
                          foldFrontmatter = mount the frontmatter fold (full editor
                          only), mirrored into a frontmatterExpanded signal;
-                         onTagActivate = wire the tag-pill extension (full editor only).
+                         onTagActivate = wire the tag-pill extension (full editor only);
+                         onLinkActivate = wire the link-open extension (full editor only).
       tag-complete.ts   Pure #tag autocomplete completion source (vocabulary from
                          the live TagService signal).
       tag-pill.ts       ViewPlugin rendering inline #tags as pills in both modes;
                          Ctrl/Cmd-click -> onTagActivate(tag). Matching delegated to
                          shared/tags extractTagOccurrences. Pure tagPillDecorations
                          split out for tests (like conceal.ts). §5.14
+      link-open.ts      ViewPlugin marking Markdown links ([..](..), <autolink>,
+                         bare URL) in both modes; Ctrl/Cmd-click -> onLinkActivate(href):
+                         web/mail via the app:open-external IPC (shell.openExternal),
+                         a vault path via EditorService.openFile. Pure
+                         linkTargetDecorations + resolveVaultLinkPath split out for
+                         tests. ADR-0031
       frontmatter-fold.ts  ADR-0009. StateField<boolean> + block-replace pill
-                         ("Frontmatter . N fields") folding the leading YAML in BOTH
-                         modes; expand -> dim editable YAML + collapse chevron.
-                         Mounted outside the mode compartment; Editor remembers the
-                         state per document path across tab switches.
+                         ("Frontmatter . N fields", no box, accent > marker)
+                         folding the leading YAML in BOTH modes; expand -> dim
+                         editable YAML + accent collapse chevron; clicking the
+                         pill expands without moving the caret. Provides
+                         EditorView.atomicRanges for the collapsed block so
+                         ArrowUp/Down step over it. Mounted outside the mode
+                         compartment; Editor remembers the state per document
+                         path across tab switches.
       spellcheck/       ADR-0013. spellcheck.ts: the inline spellchecker -- StateField
                          holding wavy-underline decorations + flagged words (mapped
                          through edits), a debounced/version-guarded ViewPlugin that
@@ -333,16 +365,38 @@ src/                Angular renderer (standalone components, esbuild via Angular
                          suggestions replace the word on click.
       live-preview/     ADR-0009. conceal.ts: ViewPlugin hiding syntax markers away
                          from the selection (+ bullet/checkbox/rule widgets, quote/
-                         code/frontmatter line classes). block-render.ts: StateField
-                         rendering tables (block widgets via markdown-it), images
-                         (resolveVaultImageUrl) and sanitized HTML blocks.
-                         sanitize-html.ts: allowlist HTML sanitizer. theme.ts:
-                         EditorView.theme for the lp-* classes. widgets.ts: the
-                         WidgetType classes.
+                         code/frontmatter line classes; yields a ```mermaid fence to
+                         block-render). block-render.ts: StateField rendering tables
+                         (block widgets via markdown-it), images (resolveVaultImageUrl),
+                         sanitized HTML blocks, and ```mermaid fences (MermaidWidget,
+                         ADR-0025). fenced-code.ts: pure fenceLang(). sanitize-html.ts:
+                         allowlist HTML sanitizer. theme.ts: EditorView.theme for the
+                         lp-* classes. widgets.ts: the WidgetType classes, incl.
+                         MermaidWidget (lazy import('mermaid'), async render, inline
+                         error box, hover zoom lens -> onZoomDiagram via
+                         svgToDataUrl, ADR-0025/0026) and ImageWidget's lens.
+      image-paste.ts    ADR-0024 / ADR-0028. imagePaste(): CodeMirror
+                         domEventHandlers for paste + drop into the editor. An image
+                         (paste, OS drag) -> bytes saved via VaultService.saveAsset
+                         (vault:save-asset) into the per-note `attachments/`, `![](…)`
+                         inserted behind a `![](uploading:…)` placeholder. A file
+                         dragged from the Files panel (application/x-drey-vault-path):
+                         an image is linked in place (noteRelativeLink -> `![](../…)`,
+                         no copy), a text file's contents are inlined raw at the drop
+                         point (2 MB cap). A web image dragged from a browser -> URL
+                         pulled from text/uri-list / an <img> in text/html, downloaded
+                         via saveVaultAssetFromUrl (main-process fetch), inserted with
+                         a `[Source](<url>)` caption line. Mounted on the full-page
+                         editor and the "Add entry" drawer (imageCapture input).
       editor-theme.ts   dreyEditorLook: EditorView.theme + HighlightStyle from the design
                          tokens (sans headings by default -- overridable in Settings ->
                          Appearance, mono code, accent links; dark token colors for
-                         code inside fences) -- both modes' typography.
+                         code inside fences) -- both modes' typography. The default
+                         entry of themes/theme-catalog.ts (ADR-0035).
+      themes/theme-catalog.ts  THEME_CATALOG: Drey (local dreyEditorLook) + ~18
+                         published @uiw/codemirror-themes-all entries, each a lazy
+                         load() + a { bg, fg, accent, dark } seed for the shell.
+                         resolveTheme(id) -> entry, unknown -> Drey.
       markdown-frontmatter.ts  Pure. stripFrontmatter() + frontmatterEnd() +
                          frontmatterFieldCount() (the fold pill's label); shared by
                          EditorService and the editor.
@@ -350,7 +404,10 @@ src/                Angular renderer (standalone components, esbuild via Angular
                          `drey-asset://` URL served from inside the vault, or null.
   index.html
   main.ts             Angular bootstrap
-  styles.css          Global dark theme + design tokens (palette / type / spacing)
+  styles.css          Global theme + design tokens (palette / type / spacing). :root is
+                       the Drey (default) palette; :root[data-theme] re-derives every
+                       surface / text / border token as a color-mix() of --_bg / --_fg
+                       for a published theme (ADR-0035).
 
 public/
   fonts/README.md    Where to drop the self-hosted Newsreader / IBM Plex Mono .woff2
@@ -419,20 +476,23 @@ env.ps1             Puts .tools/node on PATH for the current shell session
 | `vault:list-files`                   | Recursively lists the active vault's contents (`VaultFileEntry[]`); rejects if no vault is active or the folder is unreadable.                                                                                                                                                                                                                                                                                                                                                |
 | `vault:read-file`                    | Reads one vault-relative file (`VaultFileContent` = `{ content, modifiedMs }`); rejects if no vault is active, the path escapes the vault, or the file is unreadable.                                                                                                                                                                                                                                                                                                         |
 | `vault:write-file`                   | Overwrites one vault-relative file with UTF-8 `content`; creates intermediate folders (`daily/` on a draft's first save); same guards; resolves to the new `modifiedMs`.                                                                                                                                                                                                                                                                                                      |
+| `vault:save-asset`                   | ADR-0024. Writes binary `bytes` (a pasted/dropped image) into `<dir(noteRelPath)>/attachments/` (vault root when the note has no folder), named `YYYY-MM-DD-HHmmss-<6 hex sha256>.<ext>`, never overwriting; same path guard. Resolves to the note-relative `attachments/<name>` to drop into `![](...)`.                                                                                                                                                                        |
+| `vault:save-asset-from-url`          | ADR-0028. Downloads a web image dragged from a browser: main-process `fetch` (http(s) only, redirects + final-protocol re-check, 15 s timeout, 25 MB cap, image content-type / extension), then `saveAsset`. Rejects with a user-facing message.                                                                                                                                                                                                                                 |
 | `vault:create-file`                  | Creates an empty vault-relative file (missing parent folders included, `wx` flag); rejects if anything already exists there, the path escapes the vault, or no vault is active; resolves to the created path. Backs the file-tree right-click "New file".                                                                                                                                                                                                                     |
 | `vault:create-directory`             | Creates a vault-relative directory; same guards/rejections as `vault:create-file`. Backs "New folder".                                                                                                                                                                                                                                                                                                                                                                        |
 | `vault:delete`                       | Deletes one vault-relative file or folder (`fs.rm` recursive) plus its `.{name}.chat.json` sidecar; same path guard. Backs the file-tree "Delete". The renderer closes any open tab(s) under it first and refreshes the tag index after.                                                                                                                                                                                                                                      |
 | `vault:pick-save-path`               | Native save dialog rooted at the vault; forces a `.md` extension and **rejects a target outside the vault**. Returns the vault-relative path, or `null` on cancel. Backs `EditorService.saveAs()` / the first save of an export scratch tab.                                                                                                                                                                                                                                  |
 | `daily:build-content`                | Returns the substituted `templates/daily.md` for a given `YYYY-MM-DD`, **without** creating the file or scaffolding the template. Backs the calendar's "open a draft for a day with no note yet". Rejects if no vault is active or the date is malformed.                                                                                                                                                                                                                     |
 | `daily:open`                         | `webContents.send` / `ipcRenderer.on` — **main → renderer** push, fired by the quick-capture hotkey after `DailyNoteManager.ensureTodayNote()`. Payload: the vault-relative path of today's daily note. Preload exposes it as `onOpenDailyNote(listener)` returning an unsubscribe.                                                                                                                                                                                           |
-| `note:save`                          | Saves a `.md` note through `NoteManager`: on a file with a `---` fence, bump `updated:` / fill `created:` and rewrite; no fence → bytes verbatim. Then `TagIndex.reindexFile` and the `on-save` Actions (§5.10). **No `#tag`→frontmatter merge and no routing** (ADR-0017). Takes `NoteSaveRequest` (`{ path, body (LF), eol, runOnSaveActions? }`), returns `NoteSaveResult` (`{ path, content (LF), modifiedMs, pendingActions? }`). Replaces `vault:write-file` for notes. |
+| `note:save`                          | Saves a `.md` note through `NoteManager`: on a file with a `---` fence, bump `updated:` / fill `created:` and rewrite; no fence → bytes verbatim. Then `TagIndex.reindexFile` + `TaskIndex.reindexFile` and the `on-save` Actions (§5.10). **No `#tag`→frontmatter merge and no routing** (ADR-0017). Takes `NoteSaveRequest` (`{ path, body (LF), eol, runOnSaveActions? }`), returns `NoteSaveResult` (`{ path, content (LF), modifiedMs, pendingActions? }`). Replaces `vault:write-file` for notes. |
 | `tags:list`                          | The vault-wide tag vocabulary (`TagEntry[]` = `{ tag, count }`) from `TagIndex`, for `#tag` autocomplete and the search tag picker. `[]` when no vault is active.                                                                                                                                                                                                                                                                                                             |
-| `tags:search`                        | `TagSearchQuery` (`{ tags, text }`) → `TagSearchHit[]` (`{ path, heading, line, snippet, text }`), matched over `TagIndex`'s tagged `SectionRecord[]`. Fast, no LLM.                                                                                                                                                                                                                                                                                                          |
+| `tags:search`                        | `TagSearchQuery` (`{ tags, text }`) → `TagSearchHit[]` (`{ path, heading, line, snippet, text }`), matched over `TagIndex`'s tagged `SectionRecord[]` (files on disk). Fast, no LLM. `TagSearchService` then folds in hits from open tabs' unsaved buffers — same `sectionRecordsFor` + `runTagSearch` routines — replacing a dirty file's on-disk hits and tagging them `unsaved`.                                                                                                 |
+| `tasks:list`                         | Every checkbox / `#task` line in the vault (`TaskRecord[]` = `{ path, line, text, done, kind, heading }`) from `TaskIndex` — the Tasks panel in "whole vault" scope. Same lifecycle as `tags:list` (rebuild on vault open, `reindexFile` on `note:save`, no watcher). `[]` when no vault is active. Document scope is scanned live in the renderer, not via this channel (§5.20).                                                                                                    |
 | `tags:summarise-results`             | `TagSearchQuery` + a task id → a prose digest of the matching sections (`search-summary` built-in). **Backend wired, panel UI parked** (ADR-0017).                                                                                                                                                                                                                                                                                                                            |
 | `tags:suggest`                       | Entry text + a task id → up to four suggested tags (`{"tags":[…]}`), using the current vocabulary. Backs the drawer's **Autotag** button.                                                                                                                                                                                                                                                                                                                                     |
 | `config:get` / `config:set`          | Read / replace the whole `AppConfig` (`shared/app-config.ts`) held in `app-config.json` under `userData`. `set` normalises via `normalizeAppConfig` and returns what was stored. Backs the Settings screen (ADR-0010).                                                                                                                                                                                                                                                        |
-| `edit:exec`                          | Runs a standard editing command (`undo`/`redo`/`cut`/`copy`/`paste`/`selectAll`) against the focused editable via `mainWindow.webContents`. Backs the HTML Edit-menu clicks (the accelerators already worked). CodeMirror and native fields both honour it.                                                                                                                                                                                                                    |
-| `ui:set-zoom`                        | `mainWindow.webContents.setZoomFactor(factor)` — the app-wide "Base font size" preset in Settings → Appearance (ADR-0020). Resets on reload, so `AppearanceService` re-sends it from config on startup.                                                                                                                                                                                                                                                                      |
+| `edit:exec`                          | Runs a standard editing command (`undo`/`redo`/`cut`/`copy`/`paste`/`selectAll`) against the focused editable via `mainWindow.webContents`. Backs the HTML Edit-menu clicks (the accelerators already worked). CodeMirror and native fields both honour it.                                                                                                                                                                                                                   |
+| `ui:set-zoom`                        | `mainWindow.webContents.setZoomFactor(factor)` — the app-wide "Base font size" preset in Settings → Appearance (ADR-0020). Resets on reload, so `AppearanceService` re-sends it from config on startup.                                                                                                                                                                                                                                                                       |
 | `llm:list-models`                    | Live `GET {baseUrl}/models`, with the bearer API key when one is set; `string[]` of model ids. Takes an optional `LlmEndpoint` override so the Settings screen can probe the URL/key currently _typed_ rather than the saved one. Rejects on transport/HTTP error.                                                                                                                                                                                                            |
 | `llm:test-connection`                | Probe the endpoint (saved, or the same override); never rejects — `{ ok, message, models }` for the Settings "test connection" feedback. A 401/403 is reported as an API-key problem.                                                                                                                                                                                                                                                                                         |
 | `llm:debug-list` / `llm:debug-clear` | Read / empty the session's LLM traffic log (`LlmDebugEntry[]`, oldest first) shown at the bottom of the LLM settings pane. Bearer tokens are already masked.                                                                                                                                                                                                                                                                                                                  |
@@ -717,16 +777,26 @@ Follow-up polish on the visual shell, driven by direct UX feedback.
   bows out (`return` before `preventDefault`) when the target is the
   inline name `<input>`, so the native editing menu still works there.
   Chosen over the native menu after flagging the trade-off.
-- **New-file naming: inline input, `.md` appended when no extension is
-  typed.** `window.prompt` is disabled in Electron, so the name is entered
-  in a small input at the top of the Files panel (Enter commits, Esc/blur
-  cancels). Appending `.md` to an extension-less name is an assumption
-  (these notes are Markdown), not something the specs state.
-- **Create errors surface as a one-off `alert()`, not `VaultService.error()`.**
-  A name clash or a bad name shouldn't blank the whole file tree the way a
-  failed initial load does; `createEntry()` lets the error propagate and
-  the sidebar shows it transiently (consistent with the existing
-  `confirm()` on closing a dirty tab).
+- **New-file / rename naming: inline input, `.md` appended when no extension
+  is typed.** `window.prompt` is disabled in Electron, so the name is
+  entered in a small input at the top of the Files panel (Enter commits,
+  Esc/blur cancels). Rename reuses the same inline-input pattern
+  (`renaming` signal, name stem pre-selected). Appending `.md` to an
+  extension-less name is an assumption (these notes are Markdown), not
+  something the specs state.
+- **Copy / paste / duplicate / rename** (Files panel context menu): the
+  clipboard is a `{ path, name }` signal on `VaultService` (survives the
+  panel being re-mounted while dragged between docks). `VaultManager`
+  does the fs work (`renameEntry` / `copyEntry` / `duplicateEntry`,
+  `fsp.cp`/`fsp.rename`, `shared/unique-name.ts` for the `" copy"` suffix,
+  the `.md` assistant sidecar carried along); the three IPC handlers
+  rebuild the tag index like `vault:delete`. A rename re-points open tabs
+  via `EditorService.retargetTabs` (unsaved buffers survive).
+- **Create / copy / rename errors surface as a one-off `alert()`, not
+  `VaultService.error()`.** A name clash or a bad name shouldn't blank the
+  whole file tree the way a failed initial load does; the mutating methods
+  let the error propagate and the panel shows it transiently (consistent
+  with the existing `confirm()` on closing a dirty tab).
 - **Open-windows list capped at `max-height: 33%`** of the sidebar with its
   own scroll, and each row carries a close `x` (reusing the tab-bar close
   affordance → `EditorService.closeTab`, which already prompts on a dirty
@@ -1057,19 +1127,20 @@ The bottom of the main area, replacing the old capture bar.
   not a boolean.
 - **The appended block is composed by pure shared code**
   (`shared/entry-compose.ts`), so the preview and the real insertion cannot
-  drift:
-
-  ```
-  ## HH:mm — <Thema>
-  <Markdown-Text>
-  #tag #tag · [[Person]] · [[Meeting]]
-  ```
-
-  The topic (with its dash) and the meta line are each omitted when empty,
-  which keeps a bare entry byte-identical to what the old capture bar
-  wrote. `entryInsertion()` returns a `{from, to, insert}` range rather
-  than a new document, so the editor dispatches it as an ordinary
-  CodeMirror change — undo, caret and scroll position survive.
+  drift. Since [ADR-0022](09_architecture_decisions/0022-configurable-entry-templates.md)
+  the shape is a **template** from `AppConfig.entry` (Settings → Add
+  entry): `composeEntry(draft, pattern, now?)` fills `{{time}} {{date}}
+  {{datetime}} {{title}} {{tags}} {{content}}` (via
+  `shared/placeholders.ts`, shared with the daily-note template) and
+  `substituteEntryTemplate` collapses blank lines / drops a trailing rule.
+  Two built-ins — **Classic** (the old fixed shape, byte-identical) and
+  **Ruled** (heading / `---` / tags / body). The renderer resolves the
+  active pattern in `SettingsService.activeEntryPattern()` and threads it
+  through `NewEntryRequest.pattern`. `entryInsertion()` returns a
+  `{from, to, insert}` range rather than a new document, so the editor
+  dispatches it as an ordinary CodeMirror change — undo, caret and scroll
+  position survive. `SettingsEntry` is the Settings pane (mirrors
+  `SettingsActions`).
 
 - **`shared/entries.ts` learned the topic suffix.** The routing parser had
   to, not a second parser: routing, `untaggedEntryText` and the master
@@ -1157,7 +1228,7 @@ graph TB
             ActionRunner["ActionRunner\nsummarize / ask / runGeneric /\nsummariseSearchResults (parked) /\nsuggestTags"]
         end
         NoteManager["NoteManager\nnote:save -> bump updated: (fenced only),\nwrite, TagIndex.reindexFile, on-save Actions"]
-        VaultManager["VaultManager\ndeleteEntry(), pickSavePath()"]
+        VaultManager["VaultManager\ndeleteEntry() / renameEntry() /\ncopyEntry() / duplicateEntry(), pickSavePath()"]
         NoteManager --> TagIndex
     end
 
@@ -1248,23 +1319,30 @@ holding an ordered list of panels, the main column between them, and a
 Assistant** — are dragged between docks by their header, resized by
 splitters, and collapsed to their 32px header. `Sidebar` is deleted; its
 file tree + context menu + inline-create flow moved into `FilesPanel`.
+`FilesPanel`'s context menu now also does copy / paste / duplicate /
+rename (`VaultService.copyEntry` / `duplicateEntry` / `renameEntry`,
+clipboard signal on `VaultService`).
 
 ```mermaid
 graph TB
     subgraph Renderer["Renderer (src/app/)"]
         App["App\ntitlebar / [dock left | main | dock right] / status bar;\nregisters note.new/save/saveAs/saveAll + editor.toggleLineNumbers;\ndock-edge resizers -> DockService"]
         subgraph tb["src/app/titlebar/ (barrel)"]
-            Titlebar["Titlebar\naccent square + Drey + MenuBar + window controls;\n-webkit-app-region drag"]
+            Titlebar["Titlebar\naccent square + MenuBar + window controls;\n-webkit-app-region drag"]
             MenuBar["MenuBar + MenuService\nFile/Edit/Selection/View model;\nwired rows -> KeybindingService.run(id)"]
             WindowChrome["WindowChromeService\nminimize/toggleMaximize/close + maximized signal"]
         end
         subgraph dk["src/app/dock/ (barrel)"]
-            DockService["DockService\nLayoutState (dock/flexes/open/leftW/rightW),\nlocalStorage['drey.dock'];\nstartPanelDrag/onDragMove/move,\nstartSplit, startDockResize, reset, openAndExpand"]
-            Dock["Dock [side]\nrenders panel list; drop-line + splitter;\ndrop-target ring; header status values"]
-            PanelFrame["PanelFrame\nidentical 32px header (chevron/title/status/grip);\nregisters host el; header mousedown -> drag"]
-            Panels["CalendarPanel / FilesPanel / SearchPanelHost /\nWindowsPanel / AssistantPanel\n(PANEL_TITLES + PANEL_COMPONENTS registry)"]
+            DockService["DockService\nDockState (dock/flexes/open/hidden/leftW/rightW/bottomH),\nlocalStorage['drey.dock'];\nbeginHeaderPress (click=collapse / drag=move) + title-chip ghost,\nonDragMove/move, startSplit, startDockResize, reset,\nhide/show/isHidden (View menu), openAndExpand"]
+            Dock["Dock [side]\nrenders widget list; drop-line + splitter;\ndark wash on the drop-target dock; header status values"]
+            PanelFrame["PanelFrame\nidentical 32px low-profile header (title/status/grip, no chevron);\nbody stays mounted + height-animates on collapse;\nregisters host el; header press -> collapse or drag"]
+            WidgetRegistry["widget-registry.ts\nWIDGETS: WidgetDescriptor[] (id/title/component/defaultDock/\ndefaultOpen/defaultFlex/contentHeight/flush/removable/capabilities);\nWIDGET_MAP; ALL_WIDGET_IDS -- single source of truth (ADR-0034)"]
+            Panels["8 panel components\n(CalendarPanel / FilesPanel / TemplatesPanel / SearchPanelHost /\nTasksPanel / WindowsPanel / AssistantPanel / EntryPanel)"]
         end
-        StatusBar["StatusBar\nEditorService.wordCount/charCount,\ndrag hint, Settings entry"]
+        subgraph wg["src/app/widgets/ (barrel, ADR-0034)"]
+            WidgetContext["WidgetContext\ntyped read-facade: active document (path/name/saved/buffer/dirty/\nselection/openFile), fileTree + activeVaultPath, tags,\nsearchSections(), listTasks(), registerCommand(), onVaultChanged();\nWidgetCapability (descriptive)"]
+        end
+        StatusBar["StatusBar\nEditorService.wordCount/charCount,\nSettings entry"]
         EditorService2["EditorService\n+ lineNumbers signal (drey.editor),\nwordCount/charCount, newUntitled(), saveAll()"]
         DockService2["(same DockService)"]
         App --> Titlebar
@@ -1275,6 +1353,10 @@ graph TB
         MenuBar --> DockService
         Dock --> PanelFrame
         Dock --> Panels
+        Dock --> WidgetRegistry
+        PanelFrame --> WidgetRegistry
+        DockService --> WidgetRegistry
+        MenuBar --> WidgetRegistry
         PanelFrame --> DockService
         StatusBar --> DockService2
         StatusBar --> EditorService2
@@ -1295,8 +1377,19 @@ graph TB
   panels have N−1 splitters. Persisted (minus the transient drag fields)
   to `localStorage['drey.dock']`, merged defensively onto the defaults.
 - **`PanelFrame`** renders the header every panel shares (DESIGN.md
-  principle 3). The body scrolls, except the assistant panel, which fills
-  the frame and scrolls internally.
+  principle 3). Title + "fills the frame vs. scrolls" (`flush`) come from
+  the widget descriptor; the body stays mounted while collapsed.
+- **Widget registry + hide/show (ADR-0034).** `dock/widget-registry.ts`
+  `WIDGETS` is the single source of truth (id, title, component, default
+  dock/flex/open, `contentHeight`, `flush`, `removable`, declared
+  `capabilities`); `dock.service.ts`, `PanelFrame` and the View menu all
+  read it, so a ninth widget is one array entry. `DockState.hidden` +
+  `DockService.hide/show/isHidden` back the View menu, which now removes a
+  whole widget from the docks (not just collapses it) and generates its
+  rows from `WIDGETS.filter(w => w.removable)`. **`WidgetContext`**
+  (`src/app/widgets/`) is the typed read-facade a widget uses to reach the
+  active document, the vault tree and the standard tag/task/search queries;
+  the existing panels are ported to it incrementally.
 - **Titlebar / menu bar.** The window is frameless
   (`titleBarStyle: 'hidden'`, `'hiddenInset'` on macOS). `MenuService`
   holds the File/Edit/Selection/View model; a wired row calls a
@@ -1312,8 +1405,183 @@ graph TB
   `Editor` host listener. Line numbers: a `MarkdownSurface` `lineNumbers`
   input un-hides + re-themes the gutter `basicSetup` already mounts (46px,
   Plex Mono 10.5), driven by `EditorService.lineNumbers` (persisted in
-  `drey.editor`); reading width is a centred `max-width: 680px` column
-  (`editor-theme.ts`).
+  `drey.editor`); the text column is full-width and left-aligned (no
+  centred max-width — project owner's call, `editor-theme.ts`) and long
+  lines wrap at the editor width (`EditorView.lineWrapping`, no horizontal
+  scroll).
 - **Deviations** (also in `specs/`): editor stays CodeMirror 6 + Live
   Preview — no `contenteditable` blocks, no per-block gutter offsets; the
   vault switcher is "Open other vault …" only (no backend vault registry).
+
+## 5.16 Bottom dock + "Add entry" as a panel (ADR-0019 later change)
+
+- **`DockSide`** is now `left | right | bottom`. `DockState` gained a
+  `dock.bottom` list and `bottomH`; `defaultState` puts a new `entry`
+  panel there, collapsed. The bottom dock is an `<app-dock side="bottom">`
+  in a `.center-col` under `<main class="main-pane">`, its height bound to
+  `DockService.dockHeight()` and resized by a horizontal edge splitter
+  (`startDockResize('bottom', …)` measures from the dock element's bottom
+  edge). Panels still stack vertically inside it — the drop hit-test just
+  gained a `bottom` branch (any pointer past the band's top that is not
+  horizontally over a side dock).
+- **Every panel is dockable to every dock.** `App` mounts each
+  `<app-dock>` when it has panels **or** `DockService.dragActive()` is set
+  (a header drag is running), so an emptied dock keeps registering as a
+  drop target; such a dock shows a dashed "Drop a panel here" band
+  (`Dock.isEmpty()` + `dragActive()`; bottom gets a fixed 140 px from
+  `Dock.hostHeight()`). Edge-resize splitters still render only for a
+  non-empty dock.
+- **`EntryPanel`** (`src/app/dock/panels/entry-panel.ts`) wraps the
+  existing `EntryDrawer`, whose own toggle strip is gone — `PanelFrame`'s
+  chevron governs show/hide and the unsent-draft indicator is the panel
+  header's status value (`Dock.statusFor('entry')`). `App` lost
+  `startDrawerDrag` / the pointer listeners; `LayoutService.drawerHeight`
+  is unused but kept.
+- **`DockService.contentHeight(id)`** — a small set (currently
+  `calendar`) whose panels take their content height (`flex: 0 0 auto`)
+  instead of a `flex-grow` share, with no splitter on their edges. The
+  calendar body is also width-capped + centred with aspect-locked day
+  cells so it keeps its proportions in a wide dock.
+
+## 5.17 MCP vault server (`electron/mcp/`, ADR-0021)
+
+```
+electron/mcp/
+  index.ts          barrel
+  vault-tools.ts    VaultTools: vault_search (tags/text/regex or a
+                    whole-vault regex line scan) / vault_read /
+                    vault_write (overwrite|append, confirm gate);
+                    openAiToolSpec() for the assistant loop
+  server.ts         McpServer.handle() — JSON-RPC 2.0 dispatch, no IO
+  http-transport.ts McpHttpTransport — POST /mcp on 127.0.0.1:<port>
+  stdio-bridge.ts   standalone: stdin/stdout JSON-RPC <-> the HTTP endpoint
+```
+
+- **One tool set, three consumers**: an external stdio client (via the
+  bridge), an external HTTP client, and the built-in assistant.
+  `LmStudioClient.chat` gained an OpenAI tool-calling loop (`tools` +
+  `onToolCall`, cap 5 rounds, `400`→drop-tools-and-retry fallback);
+  `ActionRunner.ask` passes `VaultTools` only when `mcp.enabled`.
+- **Write confirmation bridge**: `main.ts`'s `ConfirmWrite` sends
+  `mcp:write-request` to the renderer and awaits a `mcp:write-decision`
+  reply (120s timeout / no window → reject). `McpBridgeService`
+  (renderer, started by `App`) runs it through `ConfirmationService` and
+  also refreshes the tag index / file tree on `mcp:vault-changed`.
+  Skipped entirely when `mcp.yolo`.
+- **Config**: `mcp: { enabled, httpEnabled, httpPort, yolo }` in
+  `app-config.json`; `syncMcpHttpTransport` opens/closes the socket on
+  boot and after each `config:set`. Settings → **MCP** category.
+- `server.ts` + `vault-tools.ts` are IO/transport-free at their core and
+  unit-tested (`src/app/services/mcp-vault-tools.spec.ts`) per ADR-0007.
+
+## 5.18 Template library + startup daily note + editor context menu (ADR-0029, ADR-0030)
+
+### `src/app/templates/` (feature module, ADR-0016 barrel)
+
+```
+src/app/templates/
+  index.ts                       public surface (not ESLint-enforced — a plain
+                                 src/app/settings/templates/ folder collides with
+                                 the path pattern, same as `llm`)
+  template-library.service.ts    categories() tree from VaultService.fileTree();
+                                 recent() (localStorage['drey.templates.recent'],
+                                 last 5); insert() = read → stripFrontmatter →
+                                 substitutePlaceholders → EditorService.requestInsertText;
+                                 pickerOpen signal
+  templates-panel/               dock panel, widget id 'templates' (left, collapsed):
+                                 recursive collapsible category groups, rows are
+                                 click-to-insert + draggable (application/x-drey-template)
+                                 + right-click (Insert / Edit template); header refresh
+  template-picker/               the Mod+T overlay: recent 5 on top, filter box +
+                                 full list, Arrow/Enter/Esc
+  editor-context-menu/           .service.ts installs one capture-phase `contextmenu`
+                                 listener (target.closest('.cm-editor') → preventDefault
+                                 + open); the component renders .ctx-menu — clipboard rows
+                                 via MenuService.execEdit + the recent-templates section
+```
+
+- **No new IPC.** The templates folder must live in the vault, so the
+  library reads `VaultService.fileTree()` / `readTextFile()`. Config slice
+  `templates: { dir }` (default `templates`, `normalizeTemplatesConfig`
+  rejects `..`), edited in a one-field **Templates** settings category.
+- **Drag** — `image-paste.ts` gains a `TEMPLATE_DT_TYPE`
+  (`application/x-drey-template`) branch ahead of the vault-path cascade:
+  read → strip → substitute → insert at `posAtCoords`.
+- **Native context menu** — `electron/menu.ts attachContextMenu` bails when
+  `params.isEditable && params.formControlType === 'none'` (CodeMirror's
+  contenteditable); real `<input>`/`<textarea>` keep the OS menu.
+- **TagIndex** — `new TagIndex(vaultManager, () => appConfig.get().templates.dir)`;
+  `excludedPrefixes()` = `['templates/', '<configured>/']`. `config:set`
+  rebuilds the index when `templates.dir` changed.
+
+## 5.19 Field logging + input recovery (ADR-0032)
+
+- `electron/logger.ts` — append-only `<userData>/logs/drey.log` (rotate at
+  ~1 MB). Fed by main `process` `uncaughtException`/`unhandledRejection`,
+  `webContents` `render-process-gone`/`unresponsive`/`preload-error`, and
+  the renderer over `app:log`.
+- `src/app/services/log.service.ts` — `LogService` mirrors
+  `console.error/warn` + `window.onerror` + `unhandledrejection`;
+  `LoggingErrorHandler` is registered as Angular's `ErrorHandler`
+  (`app.config.ts`).
+- `src/app/services/input-recovery.service.ts` — `InputRecoveryService`:
+  `recover(reason)` (View → *Recover input focus* / `Ctrl+Alt+Shift+R`,
+  command id `input.recover`) dispatches a document Escape, clears
+  `document.body` `user-select`/`cursor` + orphan `.ctx-backdrop`, refocuses
+  the editor; a 4 s `startWatchdog()` auto-recovers unambiguous leftovers.
+  `DockService` / `ImageViewer` gestures now set a `data-drey-gesture` body
+  attribute (so a legit `user-select:none` is distinguishable) and end on
+  `window` `blur`.
+
+### Startup daily note (ADR-0002 flow, opened automatically)
+
+- `daily: { openOnStartup }` on `AppConfig` (default `true`), a one-toggle
+  **Daily notes** settings category.
+- `App` runs a one-shot `effect()`: when `VaultService.activeVaultPath()`
+  and `SettingsService.loaded()` are both truthy (guarded by a
+  `dailyNoteStartupDone` boolean so post-save `vault.refresh()` calls do
+  not re-open), it calls the existing `EditorService.openDailyNote(today)`
+  — which opens an **unsaved draft** tab (nothing on disk until the user
+  types and saves), identical to a calendar click.
+
+## 5.20 Tasks panel + task index (ADR-0033)
+
+A third feature-module trio, shaped like the tag stack (§5.14):
+
+- **`shared/tasks/`** (barrel) — pure, Vitest-covered:
+  - `scanTasks(path, content)` → `TaskRecord[]`
+    (`{ path, line, text, done, kind: 'checkbox' | 'tag', heading }`).
+    GFM `- [ ]` / `- [x]` items and lines carrying the reserved `#task`
+    marker; fenced code skipped; a checkbox + `#task` line is reported
+    once as `kind:'checkbox'`. A bare `#task` line is `done` when it also
+    carries `#task/done`.
+  - `setDoneOnLine(content, line, done)` — flips `[ ]`⇄`[x]` or
+    appends/strips a trailing ` #task/done`; no-op on a non-task line.
+- **`electron/tasks/` `TaskIndex`** (barrel) — a near-copy of `TagIndex`:
+  `byPath` map, same `templates/` + configured-folder exclusion, `daily/`
+  included; `rebuild()` on vault open / refresh / rename / copy /
+  duplicate / templates-dir change, `reindexFile()` from `NoteManager` on
+  `note:save`, `removeFile()` on delete; `all()` backs `tasks:list`. No
+  file watcher (ADR-0018) — external edits show in vault scope only after
+  the next rebuild.
+- **`src/app/tasks/` (barrel)** — `TaskService` + `TasksPanel`:
+  - `TaskService` holds `scope` (`'document' | 'vault'`), `hideDone`,
+    `kinds` (`localStorage['drey.tasks']`). `visible` is a computed:
+    document scope runs `scanTasks` over the **live editor buffer**
+    (`EditorService.bufferContent()`), so unsaved edits and a checkbox
+    ticked in the editor show at once; vault scope reads `listTasks()`,
+    refreshed on construct, after each save (an `effect` on
+    `EditorService.savedContent`), and on `mcp:vault-changed`
+    (`McpBridgeService`).
+  - `EditorService.setTaskDone(path, line, done)` does the write-back:
+    an open text tab → edit that buffer (activate if needed) + `save()`;
+    otherwise read → `setDoneOnLine` → `note:save`.
+  - `TasksPanel` — a scope segmented toggle, a "Hide done" checkbox and a
+    kind filter (Checkboxes / `#task`); rows group by file in vault scope,
+    the row checkbox toggles done, the row body calls
+    `EditorService.openFileAt(path, line)` (same as a search hit).
+    Registered as the widget `'tasks'` in `WIDGETS`
+    (`dock/widget-registry.ts`), default home the left dock after Search,
+    collapsed.
+- `eslint.config.mjs` `MODULES` gains `'tasks'` — the three barrels are
+  the only import surface.
