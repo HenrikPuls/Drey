@@ -1,0 +1,23 @@
+<app-settings-pane
+  title="Widgets"
+  description="Turn a dock panel off completely. A disabled panel leaves every dock and the View menu; re-enabling it returns it to its default spot. Applied when you Save."
+>
+  <ul class="widget-list">
+    @for (row of rows(); track row.id) {
+      <li>
+        <label class="switch-row">
+          <input
+            type="checkbox"
+            [checked]="row.enabled"
+            [disabled]="!row.removable"
+            (change)="onToggle(row.id, $any($event.target).checked)"
+          />
+          <span>
+            <span class="switch-label">{{ row.title }}</span>
+            <span class="switch-hint">Uses: {{ row.capabilities }}</span>
+          </span>
+        </label>
+      </li>
+    }
+  </ul>
+</app-settings-pane>

@@ -7,6 +7,7 @@ import { SettingsActions } from './actions/settings-actions';
 import { SettingsAppearance } from './appearance/settings-appearance';
 import { SettingsAssistant } from './assistant/settings-assistant';
 import { SettingsDaily } from './daily/settings-daily';
+import { SettingsDockWidgets } from './dock-widgets/settings-dock-widgets';
 import { SettingsEntry } from './entry/settings-entry';
 import { SettingsLlm } from './llm/settings-llm';
 import { SettingsMcp } from './mcp/settings-mcp';
@@ -66,6 +67,12 @@ export class Settings {
       label: 'Appearance',
       hint: 'Type size, colour & font',
       component: SettingsAppearance,
+    },
+    {
+      id: 'widgets',
+      label: 'Widgets',
+      hint: 'Panels & capabilities',
+      component: SettingsDockWidgets,
     },
     {
       id: 'actions',

@@ -78,6 +78,33 @@ Existing panels are **not** rewritten onto `WidgetContext` in this pass
 (they keep their direct service injections). Porting is mechanical and
 incremental; the facade exists and is the path for anything new.
 
+### Enable / disable in Settings
+
+- **`AppConfig.widgets.disabled: string[]`** — the *exception* list, not an
+  allow-list: a widget is enabled unless its id appears here, so a widget
+  added by an app update needs no migration and a downgrade keeps unknown
+  ids verbatim. `normalizeWidgets` sanitises to a deduped string array;
+  the id space is validated against the renderer registry, not `shared/`.
+- **`SettingsService`** — `widgetsDisabled` / `widgetEnabled(id)` read the
+  **persisted** config (not the draft), so a change lands on Save like
+  every other category; `setWidgetEnabled(id, on)` is a draft mutator;
+  `widgetsDisabledDraft` backs the pane's checkboxes.
+- **`DockService.reconcileEnabled(disabled)`** runs from an `effect` on
+  `SettingsService.widgetsDisabled`: it drops disabled ids from every dock
+  **and** from `hidden`, and re-homes any id that is enabled again and now
+  nowhere (registry-ordered slot). `DockService` gains a
+  `SettingsService` dependency; there is no cycle (`SettingsService` does
+  not import `../dock` — the "all ids" set it would need lives only in
+  `reconcileEnabled`, which is in `DockService`).
+- **`MenuService`** — the generated View rows also filter
+  `settings.widgetEnabled(w.id)`, so a disabled widget has no toggle.
+- **Settings pane** — `src/app/settings/dock-widgets/` (folder deliberately
+  not named `widgets/`, which would collide with the `src/app/widgets/`
+  module in `eslint.config.mjs`'s path patterns — same precedent as `llm`).
+  Category id `widgets`, label "Widgets". A checkbox per `WIDGETS` entry
+  with its capability labels as sub-text; a `removable: false` widget
+  renders disabled.
+
 ### Alternatives considered
 
 - **Keep the `PanelId` union, add only metadata + a toggle.** Rejected —
@@ -100,8 +127,8 @@ incremental; the facade exists and is the path for anything new.
   hidden".
 - `panel-registry.ts` is deleted; `CONTENT_HEIGHT_PANELS` and the
   `defaultState()` literals are gone (derived from `WIDGETS`).
-- Milestone 18 hangs `AppConfig.widgets.disabled` off the same registry —
-  `DockService` and the View menu will additionally filter by "enabled".
+- `AppConfig` gains a `widgets` slice; `Settings` gains a "Widgets"
+  category. `DockService` now depends on `SettingsService`.
 - `dock.service.spec.ts` assertions derive expected ids from `WIDGETS`;
   new specs cover `hide` / `show` / persistence / `openAndExpand` /
-  `move` un-hide / `reset`.
+  `move` un-hide / `reset` / `reconcileEnabled`.

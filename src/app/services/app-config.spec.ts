@@ -153,6 +153,15 @@ describe('normalizeAppConfig', () => {
     expect(normalizeAppConfig({ daily: { openOnStartup: false } }).daily.openOnStartup).toBe(false);
   });
 
+  it('normalises the widgets block: empty default, string list, dedupe, junk drop', () => {
+    expect(normalizeAppConfig({}).widgets).toEqual({ disabled: [] });
+    expect(normalizeAppConfig({ widgets: { disabled: 'nope' } }).widgets.disabled).toEqual([]);
+    expect(
+      normalizeAppConfig({ widgets: { disabled: ['tasks', 'tasks', '', 3, 'calendar'] } }).widgets
+        .disabled,
+    ).toEqual(['tasks', 'calendar']);
+  });
+
   it('normalises the templates folder: default, slash-trim, nested path, .. rejection', () => {
     expect(normalizeAppConfig({}).templates).toEqual({ dir: 'templates' });
     expect(normalizeAppConfig({ templates: { dir: '  /snippets/  ' } }).templates.dir).toBe(

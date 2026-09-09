@@ -1,4 +1,5 @@
-import { Injectable, computed, signal } from '@angular/core';
+import { Injectable, computed, effect, inject, signal } from '@angular/core';
+import { SettingsService } from '../services/settings.service';
 import { ALL_WIDGET_IDS, WIDGETS, WIDGET_MAP, WidgetId } from './widget-registry';
 
 /**
@@ -66,6 +67,11 @@ function defaultState(): DockState {
  * default order among the widgets already present -- used when a widget is
  * un-hidden or re-homed.
  */
+/** Shallow, order-sensitive array equality. */
+function sameList(a: readonly WidgetId[], b: readonly WidgetId[]): boolean {
+  return a.length === b.length && a.every((x, i) => x === b[i]);
+}
+
 function orderedInsertIndex(side: DockSide, id: WidgetId, current: readonly WidgetId[]): number {
   const order = WIDGETS.filter((w) => w.defaultDock === side).map((w) => w.id);
   const target = order.indexOf(id);
@@ -98,6 +104,7 @@ export class DockService {
   /** Extra slack, in px, when deciding a pointer is "over" a dock. */
   private static readonly DOCK_TOLERANCE = 12;
 
+  private readonly settings = inject(SettingsService);
   private readonly state = signal<DockState>(this.read());
 
   /** The panel being dragged by its header, else null. */
@@ -132,6 +139,10 @@ export class DockService {
         }
       });
     }
+
+    // Settings -> Widgets: fold the "disabled" set into the layout whenever
+    // it changes (persisted config, so this fires on Save and on load).
+    effect(() => this.reconcileEnabled(this.settings.widgetsDisabled()));
   }
 
   readonly leftIds = computed(() => this.state().dock.left);
@@ -275,6 +286,40 @@ export class DockService {
   reset(): void {
     this.state.set(defaultState());
     this.persist();
+  }
+
+  /**
+   * Settings -> Widgets: drop every disabled widget from the docks and from
+   * `hidden`, and re-home any widget that has been re-enabled and is now
+   * nowhere. Driven by an effect on `SettingsService.widgetsDisabled`
+   * (persisted config -> fires on Save / on load); exposed for tests.
+   */
+  reconcileEnabled(disabled: ReadonlySet<string>): void {
+    const s = this.state();
+    const lists: Record<DockSide, WidgetId[]> = {
+      left: s.dock.left.filter((id) => !disabled.has(id)),
+      right: s.dock.right.filter((id) => !disabled.has(id)),
+      bottom: s.dock.bottom.filter((id) => !disabled.has(id)),
+    };
+    const hidden = s.hidden.filter((id) => !disabled.has(id));
+    const placed = new Set<WidgetId>([...lists.left, ...lists.right, ...lists.bottom, ...hidden]);
+    for (const w of WIDGETS) {
+      if (!disabled.has(w.id) && !placed.has(w.id)) {
+        lists[w.defaultDock].splice(
+          orderedInsertIndex(w.defaultDock, w.id, lists[w.defaultDock]),
+          0,
+          w.id,
+        );
+      }
+    }
+    const same =
+      sameList(lists.left, s.dock.left) &&
+      sameList(lists.right, s.dock.right) &&
+      sameList(lists.bottom, s.dock.bottom) &&
+      sameList(hidden, s.hidden);
+    if (!same) {
+      this.patch((cur) => ({ ...cur, dock: lists, hidden }));
+    }
   }
 
   /** The first open panel after `id` in the same dock, or null -- what a splitter connects to. */

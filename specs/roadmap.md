@@ -142,7 +142,9 @@ below).
   language), **Appearance** (theme, base font size, highlight colour,
   editor typeface — [ADR-0035](../docs/09_architecture_decisions/0035-named-ui-themes.md):
   a **Drey** built-in look plus the published CodeMirror themes, the app
-  shell re-tinting from a per-theme seed), **Actions**.
+  shell re-tinting from a per-theme seed), **Widgets** (turn a dock panel
+  off entirely — [ADR-0034](../docs/09_architecture_decisions/0034-internal-widget-model.md)),
+  **Actions**.
   - **LLM** — the connection config above, plus a **debug log** of every
     request sent this session (URL, headers, body, status, timing,
     response), each expandable into a runnable `curl` command so a

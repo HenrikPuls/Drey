@@ -187,6 +187,20 @@ export interface DailyConfig {
 export const DEFAULT_DAILY_CONFIG: DailyConfig = { openOnStartup: true };
 
 /**
+ * Settings category "Widgets": which dock widgets are switched off entirely
+ * (removed from every dock *and* the View menu). Stored as the exception
+ * list -- every registered widget is enabled unless its id is here -- so a
+ * widget added by an app update shows up without a migration. The id space
+ * is the renderer's `WIDGETS` registry; unknown ids are kept verbatim (the
+ * renderer ignores them) so a downgrade doesn't lose the user's choice.
+ */
+export interface WidgetsConfig {
+  disabled: string[];
+}
+
+export const DEFAULT_WIDGETS_CONFIG: WidgetsConfig = { disabled: [] };
+
+/**
  * Settings category "Templates": the vault folder whose `.md` files back
  * the Templates panel and the `Mod+T` picker. Folders are categories,
  * sub-folders sub-categories; a template is inserted at the cursor with its
@@ -520,6 +534,7 @@ export interface AppConfig {
   entry: EntryConfig;
   daily: DailyConfig;
   templates: TemplatesConfig;
+  widgets: WidgetsConfig;
   actions: {
     templates: ActionTemplate[];
     triggers: ActionTrigger[];
@@ -630,6 +645,7 @@ export const DEFAULT_APP_CONFIG: AppConfig = {
   },
   daily: { ...DEFAULT_DAILY_CONFIG },
   templates: { ...DEFAULT_TEMPLATES_CONFIG },
+  widgets: { disabled: [] },
   actions: {
     templates: [noteSummaryTemplate(), searchSummaryTemplate(), autotagTemplate()],
     triggers: [],
@@ -749,6 +765,17 @@ function normalizeDaily(raw: unknown): DailyConfig {
   return {
     openOnStartup: bool(source['openOnStartup'], DEFAULT_DAILY_CONFIG.openOnStartup),
   };
+}
+
+function normalizeWidgets(raw: unknown): WidgetsConfig {
+  const source = (raw ?? {}) as Record<string, unknown>;
+  const list = Array.isArray(source['disabled']) ? source['disabled'] : [];
+  const disabled = [
+    ...new Set(
+      list.filter((x): x is string => typeof x === 'string' && x.trim().length > 0),
+    ),
+  ];
+  return { disabled };
 }
 
 /**
@@ -955,6 +982,7 @@ export function normalizeAppConfig(raw: unknown): AppConfig {
     entry: normalizeEntryConfig(source['entry']),
     daily: normalizeDaily(source['daily']),
     templates: normalizeTemplatesConfig(source['templates']),
+    widgets: normalizeWidgets(source['widgets']),
     actions: {
       templates,
       triggers: normalizeTriggers(actionsSource['triggers'], templates),
