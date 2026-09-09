@@ -1,0 +1,39 @@
+:host {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  background: var(--bg-editor);
+}
+
+/* This pane is where a dragged tab would land (dropped on its body, not a
+   strip): a soft dark wash, matching the dock's drop-target. */
+:host(.drop-target)::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: 5;
+  background: rgba(0, 0, 0, 0.18);
+  pointer-events: none;
+}
+
+app-editor {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+}
+
+.empty {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem;
+}
+
+.empty p {
+  color: var(--text-6);
+  font-size: 0.9rem;
+}

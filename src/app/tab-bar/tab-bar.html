@@ -1,26 +1,36 @@
-@for (doc of editor.openDocs(); track doc.path) {
-  <div
-    class="tab"
-    role="tab"
-    [class.active]="doc.path === editor.activePath()"
-    [attr.aria-selected]="doc.path === editor.activePath()"
-    (click)="editor.activate(doc.path)"
-    (contextmenu)="openMenu($event, doc.path)"
-    [title]="doc.path"
-  >
-    <span class="name">{{ doc.name }}</span>
-    @if (doc.bufferContent !== doc.savedContent) {
-      <span class="dirty" aria-label="Unsaved changes"></span>
+@for (path of panes.pane(paneId())?.tabs; track path; let i = $index) {
+  @let doc = editor.docFor(path);
+  @if (doc) {
+    @if (dropBefore(i)) {
+      <div class="drop-line"></div>
     }
-    <button
-      type="button"
-      class="close"
-      (click)="onClose($event, doc.path)"
-      [attr.aria-label]="'Close ' + doc.name"
+    <div
+      class="tab"
+      role="tab"
+      [class.active]="path === panes.pane(paneId())?.active"
+      [class.dragging]="isDragging(path)"
+      [attr.aria-selected]="path === panes.pane(paneId())?.active"
+      (mousedown)="onTabMouseDown($event, path, doc.name, doc.bufferContent !== doc.savedContent)"
+      (contextmenu)="openMenu($event, path)"
+      [title]="doc.path"
     >
-      <app-icon name="x" [size]="8" [strokeWidth]="1.4" />
-    </button>
-  </div>
+      <span class="name">{{ doc.name }}</span>
+      @if (doc.bufferContent !== doc.savedContent) {
+        <span class="dirty" aria-label="Unsaved changes"></span>
+      }
+      <button
+        type="button"
+        class="close"
+        (click)="onClose($event, path)"
+        [attr.aria-label]="'Close ' + doc.name"
+      >
+        <app-icon name="x" [size]="8" [strokeWidth]="1.4" />
+      </button>
+    </div>
+  }
+}
+@if (dropAtEnd()) {
+  <div class="drop-line"></div>
 }
 
 <button type="button" class="add" (click)="editor.newUntitled()" aria-label="New note">
@@ -34,6 +44,9 @@
     (contextmenu)="$event.preventDefault(); closeMenu()"
   ></div>
   <div class="ctx-menu" [style.left.px]="m.x" [style.top.px]="m.y">
+    <button type="button" (click)="split(m.path, 'row')">Split right</button>
+    <button type="button" (click)="split(m.path, 'column')">Split down</button>
+    <div class="ctx-sep" role="separator"></div>
     <button type="button" (click)="closeOthers(m.path)">Close others</button>
     <button type="button" (click)="closeAll()">Close all</button>
   </div>

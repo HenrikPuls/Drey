@@ -47,7 +47,7 @@ describe('EditorService', () => {
 
   it('becomes dirty when the buffer diverges and clean again after save', async () => {
     await service.openFile('note.md');
-    service.updateBuffer('content of note.md + edit');
+    service.updateBuffer('note.md', 'content of note.md + edit');
     expect(service.isDirty()).toBe(true);
 
     await service.save();
@@ -78,7 +78,7 @@ describe('EditorService', () => {
     const rewriteService = TestBed.inject(EditorService);
 
     await rewriteService.openFile('note.md');
-    rewriteService.updateBuffer('---\ntitle: n\n---\n\nBody #sailing edited\n');
+    rewriteService.updateBuffer('note.md', '---\ntitle: n\n---\n\nBody #sailing edited\n');
     await rewriteService.save();
 
     const expected = '---\ntitle: n\nupdated: "2026-09-06T10:00:00"\n---\n\nBody #sailing\n';
@@ -115,7 +115,7 @@ describe('EditorService', () => {
     expect(crlfService.bufferContent()).toBe('line one\nline two\n');
     expect(crlfService.isDirty()).toBe(false);
 
-    crlfService.updateBuffer('line one\nline two\nline three\n');
+    crlfService.updateBuffer('crlf.md', 'line one\nline two\nline three\n');
     await crlfService.save();
 
     // The renderer sends LF + the EOL flag; restoring CRLF on disk is the
@@ -147,7 +147,7 @@ describe('EditorService', () => {
 
     it("preserves each tab's unsaved buffer across a switch (no prompt)", async () => {
       await service.openFile('a.md');
-      service.updateBuffer('content of a.md + edit');
+      service.updateBuffer('a.md', 'content of a.md + edit');
       await service.openFile('b.md');
       expect(service.isDirty()).toBe(false);
 
@@ -175,7 +175,7 @@ describe('EditorService', () => {
     describe('retargetTabs (rename on disk)', () => {
       it('re-points an open tab, keeping its unsaved buffer, and follows the active path', async () => {
         await service.openFile('notes/a.md');
-        service.updateBuffer('content of notes/a.md + edit');
+        service.updateBuffer('notes/a.md', 'content of notes/a.md + edit');
 
         service.retargetTabs('notes/a.md', 'notes/renamed.md');
 
@@ -263,7 +263,10 @@ describe('EditorService', () => {
       await draftService.save();
       expect(draftSaves).toEqual([]);
 
-      draftService.updateBuffer('# 2026-09-06\n\n## 08:00\nEndlich getippt\n');
+      draftService.updateBuffer(
+        'daily/2026/09/2026-09-06.md',
+        '# 2026-09-06\n\n## 08:00\nEndlich getippt\n',
+      );
       expect(draftService.isDirty()).toBe(true);
       const readsBeforeSave = fileListReads;
       await draftService.save();
@@ -425,7 +428,7 @@ describe('EditorService', () => {
 
     it('save / saveAs / updateBuffer / setViewMode are no-ops on an image tab', async () => {
       await service.openFile('a/pic.jpg');
-      service.updateBuffer('junk');
+      service.updateBuffer('a/pic.jpg', 'junk');
       service.setViewMode('source');
       await service.save();
       await service.saveAs();

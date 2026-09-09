@@ -1,4 +1,5 @@
 :host {
+  position: relative;
   display: flex;
   align-items: flex-end;
   gap: 1px;
@@ -9,6 +10,17 @@
   background: var(--bg-dock);
   border-bottom: 1px solid var(--border);
   overflow: hidden;
+}
+
+/* 2px accent bar at the live drop position during a tab drag -- the
+   horizontal-strip analogue of the dock's vertical `.drop-line`. */
+.drop-line {
+  flex: none;
+  align-self: stretch;
+  width: 2px;
+  margin: 5px 0;
+  border-radius: 1px;
+  background: var(--accent);
 }
 
 .tab {
@@ -34,6 +46,10 @@
 .tab.active {
   background: var(--bg-editor);
   color: var(--text-heading);
+}
+
+.tab.dragging {
+  opacity: 0.4;
 }
 
 .name {
@@ -133,4 +149,10 @@
 .ctx-menu button:hover {
   background: var(--hover-bg);
   color: var(--text-primary);
+}
+
+.ctx-sep {
+  height: 1px;
+  margin: 4px 2px;
+  background: var(--border);
 }

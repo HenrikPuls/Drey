@@ -5,6 +5,7 @@ import {
   computed,
   effect,
   inject,
+  input,
   signal,
   viewChild,
 } from '@angular/core';
@@ -13,6 +14,7 @@ import { ActionsService } from '../services/actions.service';
 import { CLASSIC_ENTRY_PATTERN, editorFontFamilyStacks } from '../../../shared/app-config';
 import { EditorService, EditorViewMode, NewEntryRequest } from '../services/editor.service';
 import { EditorZoomService } from '../services/editor-zoom.service';
+import { PaneService } from '../panes/pane.service';
 import { SettingsService } from '../services/settings.service';
 import { SpellcheckService } from '../services/spellcheck.service';
 import { TagSearchService } from '../tags';
@@ -21,18 +23,29 @@ import { resolveVaultLinkPath } from './link-open';
 import { MarkdownSurface } from './markdown-surface/markdown-surface';
 
 /**
- * The full-page document editor: hosts one `MarkdownSurface` (the shared
- * CodeMirror component, also used by the capture input -- ADR-0009) and owns
- * everything document-shaped around it: syncing the active tab's buffer,
- * the `⋯` mode menu, and quick-capture / capture-input entries. Save
- * (`Ctrl+S` / `Ctrl+Shift+S`) is an app-wide command now (`App`).
+ * One pane's document editor (ADR-0037): hosts one `MarkdownSurface` (the
+ * shared CodeMirror component, also used by the capture input -- ADR-0009)
+ * bound to *this pane's* shown document (`shownPath` / `shownDoc`, from
+ * `PaneService.pane(paneId)`), and owns everything document-shaped around
+ * it: syncing that document's buffer, the `⋯` mode menu, and quick-capture
+ * / capture-input entries. Save (`Ctrl+S` / `Ctrl+Shift+S`) is an app-wide
+ * command (`App`) that acts on the *focused* pane -- see `EditorService`'s
+ * doc comment.
+ *
+ * Global per-id requests (`newEntryRequest`, `insertRequest`) are gated on
+ * `PaneService.focusedId() === paneId()`: every open pane's `Editor` sees
+ * the same request, but only the focused one should act on it, or a quick
+ * capture / assistant insert would land in every pane at once.
+ * `revealRequest` needs no such gate -- it is scoped by path instead
+ * (`loadedPath === request.path`), and a path lives in exactly one pane.
  *
  * Two modes over the one always-visible surface, switched from the `⋯`
  * menu: **live** (Live Preview decorations) and **source** (raw Markdown,
  * the escape hatch). The mode travels through the surface's `mode` input.
  *
- * Multi-tab (ADR-0003): one view; a tab switch swaps its document via
- * `loadActiveDoc()`. Undo history does not survive a tab switch.
+ * Multi-tab (ADR-0003): one view per pane; a tab switch within the pane
+ * swaps its document via `loadActiveDoc()`. Undo history does not survive
+ * a tab switch.
  */
 @Component({
   selector: 'app-editor',
@@ -62,8 +75,19 @@ export class Editor implements AfterViewInit {
   protected readonly settings = inject(SettingsService);
   protected readonly zoom = inject(EditorZoomService);
   protected readonly actions = inject(ActionsService);
+  private readonly panes = inject(PaneService);
   private readonly spellcheck = inject(SpellcheckService);
   private readonly tagSearch = inject(TagSearchService);
+
+  /** Which pane this editor belongs to (ADR-0037) -- set once by `PaneLeaf`. */
+  readonly paneId = input.required<string>();
+
+  /** The vault-relative path *this pane* currently shows (its own active tab). */
+  protected readonly shownPath = computed<string | null>(
+    () => this.panes.pane(this.paneId())?.active ?? null,
+  );
+  /** The `OpenDoc` for `shownPath`, or null. */
+  protected readonly shownDoc = computed(() => this.editor.docFor(this.shownPath()));
 
   /**
    * Passed to the surface: a `Ctrl`/`Cmd`-click on a `#tag` pill replaces
@@ -86,7 +110,7 @@ export class Editor implements AfterViewInit {
     if (/^[a-z][a-z0-9+.-]*:/i.test(raw) || raw.startsWith('//')) {
       return; // some other scheme -- leave it alone
     }
-    const target = resolveVaultLinkPath(this.editor.openPath(), raw);
+    const target = resolveVaultLinkPath(this.shownPath(), raw);
     if (target) {
       void this.editor.openFile(target);
     }
@@ -133,42 +157,53 @@ export class Editor implements AfterViewInit {
     return this.surfaceReady ? this.surface().view : undefined;
   }
 
+  /** Whether this pane currently has focus -- gates the global per-id requests below. */
+  private get isFocusedPane(): boolean {
+    return this.panes.focusedId() === this.paneId();
+  }
+
+  /** Previous `isFocusedPane` value, for the "pull the caret in on focus gain" effect. */
+  private wasFocused = false;
+
   constructor() {
-    // Load the active tab's buffer into CodeMirror whenever the active tab
-    // changes (switching tabs keeps each buffer's unsaved text) or its
-    // saved content changes (right after a save). Both signals are read so
-    // the effect subscribes; the guard in loadActiveDoc() makes the common
+    // Load this pane's shown document into CodeMirror whenever it changes
+    // (switching tabs keeps each buffer's unsaved text) or its saved
+    // content changes (right after a save). Both signals are read so the
+    // effect subscribes; the guard in loadActiveDoc() makes the common
     // no-op case cheap and prevents an echo when the user is typing.
     effect(() => {
-      this.editor.activePath();
-      this.editor.savedContent();
+      this.shownPath();
+      this.shownDoc()?.savedContent;
       this.loadActiveDoc();
     });
 
     // New-entry requests: the quick-capture hotkey (no text) and the bottom
-    // capture input (with text). The just-mounting case is picked up in
+    // capture input (with text). Only the focused pane acts -- every open
+    // pane sees the same request id. The just-mounting case is picked up in
     // ngAfterViewInit (the view may not exist yet when a request lands).
     effect(() => {
       const request = this.editor.newEntryRequest();
-      if (this.view) {
+      if (this.view && this.isFocusedPane) {
         this.applyNewEntryRequest(request);
       }
     });
 
     // The note assistant's "insert into note" arrow: drop the card text in
-    // at the caret (replacing any selection).
+    // at the caret (replacing any selection). Focused pane only, same as above.
     effect(() => {
       const request = this.editor.insertRequest();
-      if (this.view) {
+      if (this.view && this.isFocusedPane) {
         this.applyInsertRequest(request);
       }
     });
 
     // Reveal requests from the tag-search panel: jump the caret to a line
-    // once that file's buffer is actually in the view.
+    // once that file's buffer is actually in the view. Scoped by path, not
+    // focus -- a path lives in exactly one pane, so exactly one `Editor`
+    // instance's `loadedPath` will ever match.
     effect(() => {
       const request = this.editor.revealRequest();
-      this.editor.bufferContent(); // re-run after the load settles
+      this.shownDoc()?.bufferContent; // re-run after the load settles
       if (this.view && this.loadedPath === request.path) {
         this.applyRevealRequest(request);
       }
@@ -183,6 +218,19 @@ export class Editor implements AfterViewInit {
         this.surface().recheckSpelling();
       }
     });
+
+    // When this pane gains focus (F6 / the Split command / a click on
+    // another pane) pull the caret into its editor -- otherwise keystrokes
+    // still go to the pane you just left. Skipped on the first run and
+    // while there is only one pane, so app-start focus is unchanged.
+    effect(() => {
+      const focused = this.isFocusedPane;
+      const multiPane = this.panes.paneIds().length > 1;
+      if (focused && !this.wasFocused && multiPane) {
+        this.view?.focus();
+      }
+      this.wasFocused = focused;
+    });
   }
 
   ngAfterViewInit(): void {
@@ -191,7 +239,15 @@ export class Editor implements AfterViewInit {
     // A request may have arrived while this component was still mounting
     // (hotkey or capture on a not-yet-open file) -- the effect ran with no
     // view. Apply whatever is pending now.
-    this.applyNewEntryRequest(this.editor.newEntryRequest());
+    if (this.isFocusedPane) {
+      this.applyNewEntryRequest(this.editor.newEntryRequest());
+    }
+    // A pane created by "Split right/down" mounts already focused: the
+    // focus-gain effect above ran before this view existed, so land the
+    // caret here now.
+    if (this.isFocusedPane && this.panes.paneIds().length > 1) {
+      this.view?.focus();
+    }
   }
 
   /** Ctrl +/-/0 zoom the editor content only (ADR-0015), from any pane. */
@@ -231,18 +287,18 @@ export class Editor implements AfterViewInit {
 
   protected chooseMode(mode: EditorViewMode): void {
     this.closeMenu();
-    this.editor.setViewMode(mode);
+    this.editor.setViewMode(mode, this.shownPath() ?? undefined);
   }
 
   /**
-   * Runs a manual Action against the open document (ADR-0011). Passes the
-   * live CodeMirror text and any selection as context; the outcome goes
-   * through the shared confirmation flow in `ActionsService`.
+   * Runs a manual Action against this pane's open document (ADR-0011).
+   * Passes the live CodeMirror text and any selection as context; the
+   * outcome goes through the shared confirmation flow in `ActionsService`.
    */
   protected runAction(triggerId: string): void {
     this.closeMenu();
     const view = this.view;
-    const path = this.editor.openPath();
+    const path = this.shownPath();
     if (!view || path === null) {
       return;
     }
@@ -288,7 +344,7 @@ export class Editor implements AfterViewInit {
       });
       // `docChanged` has already pushed the new text into the buffer, so
       // the save below writes exactly what was just inserted.
-      void this.editor.save();
+      void this.editor.save({ path: this.shownPath() ?? undefined });
       return;
     }
 
@@ -350,19 +406,20 @@ export class Editor implements AfterViewInit {
   }
 
   /**
-   * Pushes the active tab's buffer into CodeMirror. Called on tab switch
-   * and after a save. Guarded so that the echo from the surface's
-   * docChanged (buffer changes -> effect re-runs) is a no-op, and so
-   * switching to a tab whose text CM already shows costs nothing.
+   * Pushes this pane's shown document's buffer into CodeMirror. Called
+   * whenever the shown path changes and after a save. Guarded so that the
+   * echo from the surface's docChanged (buffer changes -> effect re-runs)
+   * is a no-op, and so switching to a tab whose text CM already shows costs
+   * nothing.
    */
   private loadActiveDoc(): void {
     const view = this.view;
     if (!view) {
       return;
     }
-    const path = this.editor.activePath();
+    const path = this.shownPath();
     const current = view.state.doc.toString();
-    const next = this.editor.bufferContent();
+    const next = this.shownDoc()?.bufferContent ?? '';
     // Same file, new text = an in-place reload (the save pipeline rewrote
     // the frontmatter). Keep the caret roughly where it was instead of
     // snapping to the top; a tab switch still lands at offset 0.

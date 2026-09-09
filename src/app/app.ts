@@ -1,7 +1,6 @@
 import { Component, effect, inject } from '@angular/core';
 import { formatDate } from '../../shared/timestamp';
-import { Editor } from './editor/editor';
-import { ImageLightbox, ImageTab } from './image-viewer';
+import { ImageLightbox } from './image-viewer';
 import { ConfirmationDialog } from './confirmation-dialog/confirmation-dialog';
 import { ActionsService } from './services/actions.service';
 import { AppearanceService } from './services/appearance.service';
@@ -14,6 +13,7 @@ import { EditorZoomService } from './services/editor-zoom.service';
 import { InputRecoveryService } from './services/input-recovery.service';
 import { LogService } from './services/log.service';
 import { McpBridgeService } from './services/mcp-bridge.service';
+import { PaneLayout, PaneService } from './panes';
 import { SettingsService } from './services/settings.service';
 import { VaultService } from './services/vault.service';
 import { KeybindingService } from './keybindings';
@@ -22,7 +22,6 @@ import { Dock, DockService } from './dock';
 import { Titlebar } from './titlebar';
 import { StatusBar } from './status-bar/status-bar';
 import { Settings } from './settings/settings';
-import { TabBar } from './tab-bar/tab-bar';
 import {
   EditorContextMenu,
   EditorContextMenuService,
@@ -48,9 +47,7 @@ import {
     Titlebar,
     Dock,
     StatusBar,
-    TabBar,
-    Editor,
-    ImageTab,
+    PaneLayout,
     Settings,
     ConfirmationDialog,
     ImageLightbox,
@@ -65,10 +62,21 @@ export class App {
   protected readonly editor = inject(EditorService);
   protected readonly settings = inject(SettingsService);
   protected readonly dock = inject(DockService);
+  protected readonly panes = inject(PaneService);
   private readonly vault = inject(VaultService);
 
   /** Guards the one-shot "open today's daily note on startup" effect. */
   private dailyNoteStartupDone = false;
+
+  /** Moves editor focus to the next (`+1`) / previous (`-1`) pane, wrapping. */
+  private stepPaneFocus(dir: 1 | -1): void {
+    const ids = this.panes.paneIds();
+    if (ids.length < 2) {
+      return;
+    }
+    const at = Math.max(0, ids.indexOf(this.panes.focusedId()));
+    this.panes.focus(ids[(at + dir + ids.length) % ids.length]);
+  }
 
   constructor() {
     // Subscribe to the quick-capture hotkey for the app's lifetime.
@@ -159,6 +167,41 @@ export class App {
       label: 'Toggle line numbers',
       keybinding: 'Mod+G',
       run: () => this.editor.toggleLineNumbers(),
+    });
+
+    // Split-view panes (ADR-0037). The layout mechanics already exist
+    // (PaneService + the tab context menu); these are the keyboard / menu
+    // entry points. Chords avoid `Alt+Arrow` (move line) and a bare `\`
+    // (AltGr on a German layout).
+    keys.register({
+      id: 'pane.splitRight',
+      label: 'Split editor right',
+      keybinding: 'Mod+Alt+Enter',
+      run: () =>
+        this.panes.splitPane(this.panes.focusedId(), 'row', this.editor.activePath() ?? undefined),
+    });
+    keys.register({
+      id: 'pane.splitDown',
+      label: 'Split editor down',
+      keybinding: 'Mod+Alt+Shift+Enter',
+      run: () =>
+        this.panes.splitPane(
+          this.panes.focusedId(),
+          'column',
+          this.editor.activePath() ?? undefined,
+        ),
+    });
+    keys.register({
+      id: 'pane.focusNext',
+      label: 'Focus next pane',
+      keybinding: 'F6',
+      run: () => this.stepPaneFocus(1),
+    });
+    keys.register({
+      id: 'pane.focusPrev',
+      label: 'Focus previous pane',
+      keybinding: 'Shift+F6',
+      run: () => this.stepPaneFocus(-1),
     });
 
     const templates = inject(TemplateLibraryService);

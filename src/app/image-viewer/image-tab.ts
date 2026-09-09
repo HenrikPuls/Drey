@@ -4,6 +4,7 @@ import {
   computed,
   effect,
   inject,
+  input,
   OnDestroy,
   viewChild,
 } from '@angular/core';
@@ -13,10 +14,16 @@ import { ImageViewer } from './image-viewer';
 import { ImageLightboxService } from './image-lightbox.service';
 
 /**
- * The centre-column view for a `kind: 'image'` tab (ADR-0026) -- picked
- * over `<app-editor>` by `editor.activeKind()`. A 34px meta bar (path ·
- * zoom % · Fullscreen) over the shared `ImageViewer`; `+` / `-` / `0`
- * drive the viewer unless the lightbox is open over it.
+ * One pane's view for a `kind: 'image'` tab (ADR-0026), picked over
+ * `<app-editor>` by `PaneLeaf` when that pane's shown document is an
+ * image. A 34px meta bar (path · zoom % · Fullscreen) over the shared
+ * `ImageViewer`; `+` / `-` / `0` drive the viewer unless the lightbox is
+ * open over it.
+ *
+ * `focused` (ADR-0037: is *this pane* the focused one) gates the global
+ * `+`/`-`/`0` keydown and the status bar's viewport feed -- with more than
+ * one image pane open, only the focused one should react to a zoom
+ * keystroke or claim the status bar's zoom readout.
  */
 @Component({
   selector: 'app-image-tab',
@@ -31,15 +38,18 @@ export class ImageTab implements OnDestroy {
   private readonly lightbox = inject(ImageLightboxService);
   protected readonly viewer = viewChild.required(ImageViewer);
 
-  protected readonly path = this.editor.activePath;
-  protected readonly url = computed(
-    () => resolveVaultImageUrl(null, this.editor.activePath() ?? '') ?? '',
-  );
+  readonly path = input.required<string>();
+  readonly focused = input(true);
+
+  protected readonly url = computed(() => resolveVaultImageUrl(null, this.path()) ?? '');
 
   constructor() {
-    // Feed the status bar the live viewport.
+    // Feed the status bar the live viewport -- focused pane only.
     effect(() => {
       const v = this.viewer();
+      if (!this.focused()) {
+        return;
+      }
       this.editor.setImageViewport({
         naturalWidth: v.natural().w,
         naturalHeight: v.natural().h,
@@ -49,7 +59,9 @@ export class ImageTab implements OnDestroy {
   }
 
   ngOnDestroy(): void {
-    this.editor.setImageViewport(null);
+    if (this.focused()) {
+      this.editor.setImageViewport(null);
+    }
   }
 
   protected openFullscreen(): void {
@@ -57,8 +69,8 @@ export class ImageTab implements OnDestroy {
   }
 
   protected onKey(event: KeyboardEvent): void {
-    if (this.lightbox.src()) {
-      return; // the overlay owns the keys while it's up
+    if (!this.focused() || this.lightbox.src()) {
+      return; // another pane's keydown, or the overlay owns the keys while it's up
     }
     const v = this.viewer();
     switch (event.key) {

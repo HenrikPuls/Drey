@@ -70,12 +70,6 @@
   background: var(--bg-editor);
 }
 
-app-editor {
-  flex: 1;
-  min-height: 0;
-  display: flex;
-}
-
 .empty {
   flex: 1;
   display: flex;
