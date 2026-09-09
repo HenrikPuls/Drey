@@ -1,4 +1,5 @@
 import { Injectable, computed, effect, inject, signal } from '@angular/core';
+import { endDragChrome, moveDragChrome, startDragChrome } from '../dnd';
 import { SettingsService } from '../services/settings.service';
 import { ALL_WIDGET_IDS, WIDGETS, WIDGET_MAP, WidgetId } from './widget-registry';
 
@@ -369,8 +370,6 @@ export class DockService {
     startY: number;
     promoted: boolean;
   } | null = null;
-  /** The label chip that follows the cursor once a header drag starts. */
-  private dragGhost: HTMLElement | null = null;
   private static readonly DRAG_THRESHOLD_PX = 4;
 
   /**
@@ -403,8 +402,10 @@ export class DockService {
     this.dragging.set(press.id);
     this.dropDock.set(null);
     this.dropIndex.set(null);
-    this.setGlobalGesture('grabbing');
-    this.mountDragGhost(press.title, event);
+    // Shared with the tab drag (ADR-0039): a full-viewport overlay that
+    // owns the cursor and blocks hover/selection underneath, plus the
+    // `.dock-drag-ghost` chip and the `data-drey-gesture` watchdog marker.
+    startDragChrome({ gesture: 'dock', ghostClass: 'dock-drag-ghost', ghostHtml: press.title });
     window.addEventListener('mousemove', this.onDragMove);
     window.addEventListener('mouseup', this.onDragEnd);
     this.onDragMove(event);
@@ -420,31 +421,8 @@ export class DockService {
     }
   };
 
-  private mountDragGhost(title: string, event: MouseEvent): void {
-    if (typeof document === 'undefined') {
-      return;
-    }
-    const ghost = document.createElement('div');
-    ghost.className = 'dock-drag-ghost';
-    ghost.textContent = title;
-    document.body.appendChild(ghost);
-    this.dragGhost = ghost;
-    this.positionDragGhost(event);
-  }
-
-  private positionDragGhost(event: MouseEvent): void {
-    if (this.dragGhost) {
-      this.dragGhost.style.transform = `translate(${event.clientX + 14}px, ${event.clientY + 12}px)`;
-    }
-  }
-
-  private unmountDragGhost(): void {
-    this.dragGhost?.remove();
-    this.dragGhost = null;
-  }
-
   private readonly onDragMove = (event: MouseEvent): void => {
-    this.positionDragGhost(event);
+    moveDragChrome(event.clientX, event.clientY);
     const left = this.dockEls.get('left')?.getBoundingClientRect();
     const right = this.dockEls.get('right')?.getBoundingClientRect();
     const bottom = this.dockEls.get('bottom')?.getBoundingClientRect();
@@ -492,8 +470,7 @@ export class DockService {
   private readonly onDragEnd = (): void => {
     window.removeEventListener('mousemove', this.onDragMove);
     window.removeEventListener('mouseup', this.onDragEnd);
-    this.unmountDragGhost();
-    this.setGlobalGesture(null);
+    endDragChrome();
 
     const id = this.dragging();
     const target = this.dropDock();

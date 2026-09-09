@@ -1,14 +1,16 @@
-@for (path of panes.pane(paneId())?.tabs; track path) {
+@for (path of panes.pane(paneId())?.tabs; track path; let i = $index) {
   @let doc = editor.docFor(path);
   @if (doc) {
+    @if (dropBefore(i)) {
+      <div class="drop-line"></div>
+    }
     <div
       class="tab"
       role="tab"
       [class.active]="path === panes.pane(paneId())?.active"
-      [class.dragging]="path === draggingPath()"
+      [class.dragging]="isDragging(path)"
       [attr.aria-selected]="path === panes.pane(paneId())?.active"
-      (click)="panes.activate(paneId(), path)"
-      (mousedown)="onTabMouseDown($event, path)"
+      (mousedown)="onTabMouseDown($event, path, doc.name, doc.bufferContent !== doc.savedContent)"
       (contextmenu)="openMenu($event, path)"
       [title]="doc.path"
     >
@@ -26,6 +28,9 @@
       </button>
     </div>
   }
+}
+@if (dropAtEnd()) {
+  <div class="drop-line"></div>
 }
 
 <button type="button" class="add" (click)="editor.newUntitled()" aria-label="New note">
