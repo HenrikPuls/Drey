@@ -296,8 +296,11 @@ src/                Angular renderer (standalone components, esbuild via Angular
                         colour (preset or custom hex -> --accent at :root, tints
                         color-mix'd off it; ADR-0020) + the document editor's typeface
                         (SettingsService.setEditorFontFamily -> --font-sans /
-                        --drey-heading-font on the Editor host). All three persist at
-                        once, like the editor zoom. actions/ SettingsActions:
+                        --drey-heading-font on the Editor host) + the theme picker
+                        (ADR-0035: ThemeService writes the seed vars / data-theme).
+                        dock-widgets/ SettingsDockWidgets: a checkbox per WIDGETS
+                        entry -> AppConfig.widgets.disabled (ADR-0034); DockService
+                        reconciles on Save. actions/ SettingsActions:
                         trigger rows (event / confirm / enabled) + template library CRUD.
                         about/ SettingsAbout: read-only -- app/Electron/Chromium/Node
                         version (app:get-info IPC) + a scrollable list of production

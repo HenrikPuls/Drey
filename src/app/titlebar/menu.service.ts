@@ -259,7 +259,9 @@ export class MenuService {
           checked: () => this.editor.lineNumbers(),
           run: () => this.run('editor.toggleLineNumbers'),
         },
-        ...WIDGETS.filter((w) => w.removable).map((w) => this.widgetRow(w.id, w.title)),
+        ...WIDGETS.filter((w) => w.removable && this.settings.widgetEnabled(w.id)).map((w) =>
+          this.widgetRow(w.id, w.title),
+        ),
         SEP,
         {
           kind: 'item',

@@ -96,6 +96,26 @@ export class SettingsService {
     () => this._config()?.templates.dir ?? DEFAULT_TEMPLATES_CONFIG.dir,
   );
 
+  /**
+   * Ids of the dock widgets switched off in Settings -> Widgets. **Persisted
+   * config, never the draft** -- a disable takes effect on Save, like every
+   * other category, so the dock / View menu don't churn while the screen is
+   * open. `DockService` and `MenuService` read this.
+   */
+  readonly widgetsDisabled = computed<ReadonlySet<string>>(
+    () => new Set(this._config()?.widgets.disabled ?? []),
+  );
+
+  /** Whether a dock widget id is currently enabled (persisted config). */
+  widgetEnabled(id: string): boolean {
+    return !this.widgetsDisabled().has(id);
+  }
+
+  /** The Settings -> Widgets draft's disabled ids (drives the checkboxes). */
+  readonly widgetsDisabledDraft = computed<ReadonlySet<string>>(
+    () => new Set(this._draft()?.widgets.disabled ?? []),
+  );
+
   /** Editor content zoom multiplier (Ctrl +/-/0). Persisted config, never the draft. */
   readonly editorFontScale = computed<number>(() => this._config()?.editor.fontScale ?? 1);
 
@@ -264,6 +284,19 @@ export class SettingsService {
   patchTemplates(patch: Partial<TemplatesConfig>): void {
     this.mutate((config) => {
       config.templates = { ...config.templates, ...patch };
+    });
+  }
+
+  /** Settings -> Widgets: toggle a dock widget on / off (draft edit; saved on Save). */
+  setWidgetEnabled(id: string, enabled: boolean): void {
+    this.mutate((config) => {
+      const set = new Set(config.widgets.disabled);
+      if (enabled) {
+        set.delete(id);
+      } else {
+        set.add(id);
+      }
+      config.widgets = { disabled: [...set] };
     });
   }
 

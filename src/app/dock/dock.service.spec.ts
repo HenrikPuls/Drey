@@ -261,4 +261,44 @@ describe('DockService', () => {
       expect(dock.rightIds()).toEqual(['templates', 'assistant']);
     });
   });
+
+  describe('reconcileEnabled (Settings -> Widgets)', () => {
+    it('drops a disabled widget from its dock', () => {
+      const dock = make();
+      dock.reconcileEnabled(new Set(['templates', 'search']));
+      expect(dock.leftIds()).toEqual(['calendar', 'files', 'tasks', 'windows']);
+      expect(dock.sideOf('templates')).toBeNull();
+    });
+
+    it('also drops a disabled widget from the hidden set', () => {
+      const dock = make();
+      dock.hide('tasks');
+      expect(dock.isHidden('tasks')).toBe(true);
+      dock.reconcileEnabled(new Set(['tasks']));
+      expect(dock.isHidden('tasks')).toBe(false);
+      expect(dock.sideOf('tasks')).toBeNull();
+    });
+
+    it('re-homes a widget that is enabled again and now nowhere', () => {
+      const dock = make();
+      dock.reconcileEnabled(new Set(['templates']));
+      expect(dock.leftIds()).not.toContain('templates');
+      dock.reconcileEnabled(new Set());
+      expect(dock.leftIds()).toEqual([
+        'calendar',
+        'files',
+        'templates',
+        'search',
+        'tasks',
+        'windows',
+      ]);
+    });
+
+    it('is a no-op when nothing is disabled', () => {
+      const dock = make();
+      const before = JSON.stringify(localStorage.getItem('drey.dock'));
+      dock.reconcileEnabled(new Set());
+      expect(JSON.stringify(localStorage.getItem('drey.dock'))).toBe(before);
+    });
+  });
 });
