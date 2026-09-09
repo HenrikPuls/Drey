@@ -777,6 +777,40 @@ neighbours constant, min 40px each) and the dock-edge resizers
 write the same `drey.dock` blob. `View → Reset layout` is
 `DockService.reset()`.
 
+### View menu → hide / show a whole widget (ADR-0034)
+
+The View menu rows are generated from `WIDGETS.filter(w => w.removable)`.
+A row's check mark tracks `!DockService.isHidden(id)`; clicking it calls
+`hide(id)` or `show(id)` — distinct from collapsing to the header.
+
+```mermaid
+sequenceDiagram
+    actor User
+    participant Menu as MenuService (View)
+    participant Dock as DockService
+    participant Reg as widget-registry (WIDGETS)
+    participant Cmp as Dock component
+    participant LS as localStorage['drey.dock']
+
+    User->>Menu: click "Add entry" (checked)
+    Menu->>Dock: hide('entry')
+    Dock->>Dock: remove 'entry' from every dock list; hidden += 'entry'
+    Dock->>LS: persist { dock, flexes, open, hidden, … }
+    Dock-->>Cmp: bottomIds() no longer contains 'entry'
+    Cmp-->>User: the panel (and its header) is gone; bottom band collapses
+    User->>Menu: click "Add entry" again (unchecked)
+    Menu->>Dock: show('entry')
+    Dock->>Reg: descriptor.defaultDock = 'bottom'
+    Dock->>Dock: splice 'entry' back at its registry-order slot; open['entry']=true; hidden -= 'entry'
+    Dock->>LS: persist
+    Cmp-->>User: panel returns to the bottom dock, expanded
+```
+
+`DockService.move()` (drag) and `openAndExpand()` (a command that reveals a
+widget, e.g. `search.open`) also drop the id from `hidden`, so dragging a
+hidden widget back or invoking its command un-hides it. `reset()` clears
+`hidden` entirely.
+
 ## 6.15 Titlebar menu action → command (milestone 14)
 
 ```mermaid

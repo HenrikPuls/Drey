@@ -19,7 +19,7 @@ import { TagSearchService } from '../tags';
 import { TaskService } from '../tasks';
 import { DockService, DockSide, PanelId } from './dock.service';
 import { PanelFrame } from './panel-frame';
-import { PANEL_COMPONENTS } from './panels/panel-registry';
+import { WIDGET_MAP } from './widget-registry';
 
 /**
  * One dock column (left or right). Renders its ordered panel list, each in
@@ -85,7 +85,7 @@ export class Dock implements OnInit {
   }
 
   protected component(id: PanelId): Type<unknown> {
-    return PANEL_COMPONENTS[id];
+    return WIDGET_MAP.get(id)!.component;
   }
 
   protected flexStyle(id: PanelId): string {

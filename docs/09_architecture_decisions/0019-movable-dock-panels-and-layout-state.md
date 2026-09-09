@@ -131,3 +131,21 @@ affordance:
   collapse.
 - **Status bar.** The idle "Drag a panel header…" hint (and its drag-state
   variant) is gone; `StatusBar` no longer injects `DockService`.
+
+## Later change — data-driven registry + a true hide/show ([ADR-0034](0034-internal-widget-model.md))
+
+- The closed `PanelId` union and the `Record<PanelId, …>` maps
+  (`panel-registry.ts`, `CONTENT_HEIGHT_PANELS`, the `defaultState()`
+  literals) are replaced by a `WIDGETS: WidgetDescriptor[]` registry
+  (`src/app/dock/widget-registry.ts`). `PanelId` is now an open `WidgetId`
+  string alias; `defaultState()` / `merge()` / `contentHeight()` /
+  `PanelFrame` title + flush all read the registry.
+- `DockState` gains **`hidden: WidgetId[]`**. `DockService.hide(id)` pulls a
+  widget out of every dock; `show(id)` puts it back at its descriptor's
+  default slot, expanded; `isHidden(id)` reports it. `move()` /
+  `openAndExpand()` clear `hidden`. It persists in `localStorage['drey.dock']`.
+- The View menu toggles **visibility** now, not collapse: `widgetRow`'s
+  check mark is `!isHidden(id)`, and the rows are generated from
+  `WIDGETS.filter(w => w.removable)` so every panel — including `tasks` and
+  `entry`, which had none — gets one. Collapsing to the header stays the
+  header-click gesture.

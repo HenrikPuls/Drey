@@ -1,5 +1,6 @@
 import { TestBed } from '@angular/core/testing';
 import { DockService } from './dock.service';
+import { WIDGETS } from './widget-registry';
 
 describe('DockService', () => {
   beforeEach(() => {
@@ -11,22 +12,17 @@ describe('DockService', () => {
     return TestBed.inject(DockService);
   }
 
-  it('starts from the documented defaults', () => {
+  it('starts from the registry defaults', () => {
     const dock = make();
-    expect(dock.leftIds()).toEqual([
-      'calendar',
-      'files',
-      'templates',
-      'search',
-      'tasks',
-      'windows',
-    ]);
-    expect(dock.rightIds()).toEqual(['assistant']);
-    expect(dock.bottomIds()).toEqual(['entry']);
-    expect(dock.collapsed('search')).toBe(true);
-    expect(dock.collapsed('templates')).toBe(true);
-    expect(dock.collapsed('calendar')).toBe(false);
-    expect(dock.collapsed('entry')).toBe(true);
+    const idsOn = (side: 'left' | 'right' | 'bottom') =>
+      WIDGETS.filter((w) => w.defaultDock === side).map((w) => w.id);
+    expect(dock.leftIds()).toEqual(idsOn('left'));
+    expect(dock.rightIds()).toEqual(idsOn('right'));
+    expect(dock.bottomIds()).toEqual(idsOn('bottom'));
+    for (const w of WIDGETS) {
+      expect(dock.collapsed(w.id)).toBe(!w.defaultOpen);
+      expect(dock.isHidden(w.id)).toBe(false);
+    }
     expect(dock.dockWidth('left')).toBe(248);
     expect(dock.dockWidth('right')).toBe(340);
     expect(dock.dockHeight()).toBe(280);
@@ -190,5 +186,79 @@ describe('DockService', () => {
       'windows',
     ]);
     expect(dock.rightIds()).toEqual(['assistant']);
+  });
+
+  describe('hide / show (View menu visibility)', () => {
+    it('hide() removes a widget from every dock and marks it hidden', () => {
+      const dock = make();
+      dock.hide('templates');
+      expect(dock.isHidden('templates')).toBe(true);
+      expect(dock.leftIds()).toEqual(['calendar', 'files', 'search', 'tasks', 'windows']);
+      expect(dock.sideOf('templates')).toBeNull();
+    });
+
+    it('show() puts it back at its default slot, expanded', () => {
+      const dock = make();
+      dock.hide('templates');
+      dock.show('templates');
+      expect(dock.isHidden('templates')).toBe(false);
+      // back between files and search, per the registry order
+      expect(dock.leftIds()).toEqual([
+        'calendar',
+        'files',
+        'templates',
+        'search',
+        'tasks',
+        'windows',
+      ]);
+      expect(dock.collapsed('templates')).toBe(false);
+    });
+
+    it('hides the bottom-dock "entry" widget and restores it', () => {
+      const dock = make();
+      dock.hide('entry');
+      expect(dock.bottomIds()).toEqual([]);
+      expect(dock.isHidden('entry')).toBe(true);
+      dock.show('entry');
+      expect(dock.bottomIds()).toEqual(['entry']);
+    });
+
+    it('round-trips the hidden set through persistence', () => {
+      const first = make();
+      first.hide('search');
+      first.hide('tasks');
+
+      TestBed.resetTestingModule();
+      TestBed.configureTestingModule({});
+      const second = TestBed.inject(DockService);
+      expect(second.isHidden('search')).toBe(true);
+      expect(second.isHidden('tasks')).toBe(true);
+      expect(second.leftIds()).toEqual(['calendar', 'files', 'templates', 'windows']);
+    });
+
+    it('openAndExpand() un-hides a hidden widget', () => {
+      const dock = make();
+      dock.hide('search');
+      dock.openAndExpand('search');
+      expect(dock.isHidden('search')).toBe(false);
+      expect(dock.collapsed('search')).toBe(false);
+      expect(dock.sideOf('search')).toBe('left');
+    });
+
+    it('reset() clears the hidden set', () => {
+      const dock = make();
+      dock.hide('templates');
+      dock.reset();
+      expect(dock.isHidden('templates')).toBe(false);
+      expect(dock.leftIds()).toContain('templates');
+    });
+
+    it('dragging a hidden widget back into a dock un-hides it', () => {
+      const dock = make();
+      dock.hide('templates');
+      dock.move('templates', 'right', 0);
+      expect(dock.isHidden('templates')).toBe(false);
+      expect(dock.rightIds()).toEqual(['templates', 'assistant']);
+    });
   });
 });
