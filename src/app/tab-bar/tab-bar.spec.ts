@@ -29,7 +29,18 @@ describe('TabBar', () => {
 
   afterEach(() => {
     delete (window as { dreyApi?: unknown }).dreyApi;
+    // Belt-and-braces: clear any drag chrome a test left mounted on <body>.
+    document.querySelectorAll('.drag-overlay, .tab-drag-ghost').forEach((el) => el.remove());
+    document.body.style.userSelect = '';
+    document.body.style.cursor = '';
+    document.body.removeAttribute('data-drey-gesture');
   });
+
+  /** A real left-button press (mousedown + mouseup) on `el`, below the drag threshold. */
+  function press(el: HTMLElement): void {
+    el.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, button: 0, clientX: 5, clientY: 0 }));
+    window.dispatchEvent(new MouseEvent('mouseup'));
+  }
 
   it('shows one tab per open document, highlighting the active one', () => {
     const tabs = (fixture.nativeElement as HTMLElement).querySelectorAll('.tab');
@@ -40,9 +51,9 @@ describe('TabBar', () => {
     expect(tabs[1].classList.contains('active')).toBe(true);
   });
 
-  it('activates a tab on click and closes one via its X', () => {
+  it('activates a tab on a plain press and closes one via its X', () => {
     const compiled = fixture.nativeElement as HTMLElement;
-    (compiled.querySelectorAll('.tab')[0] as HTMLElement).click();
+    press(compiled.querySelectorAll('.tab')[0] as HTMLElement);
     fixture.detectChanges();
     expect(editor.openPath()).toBe('a.md');
 
@@ -51,16 +62,16 @@ describe('TabBar', () => {
     expect(editor.openDocs().map((d) => d.path)).toEqual(['a.md']);
   });
 
-  it('drags a tab past its neighbours to reorder it live within the pane', async () => {
+  it('defers a tab reorder to the drop: nothing moves until mouseup (ADR-0039)', async () => {
     await editor.openFile('c.md');
     fixture.detectChanges();
     const compiled = fixture.nativeElement as HTMLElement;
     const tabs = Array.from(compiled.querySelectorAll<HTMLElement>('.tab'));
     expect(tabs.length).toBe(3); // a.md, b.md, c.md
 
-    // jsdom lays out nothing -- stub each tab's rect (and `elementFromPoint`
-    // itself, which jsdom doesn't implement) so the drag's midpoint math has
-    // real numbers to compare against.
+    // jsdom lays out nothing -- stub each tab's rect (and `elementFromPoint`,
+    // which the TabDragService hit-test calls) so the midpoint math has real
+    // numbers.
     const rects = [
       { left: 0, width: 100 },
       { left: 100, width: 100 },
@@ -70,12 +81,7 @@ describe('TabBar', () => {
       el.getBoundingClientRect = () =>
         ({ left: rects[i].left, width: rects[i].width, right: 0, top: 0, bottom: 0, height: 0 }) as DOMRect;
     });
-    // jsdom has no own `elementFromPoint` (only `Document.prototype`'s,
-    // which throws "not implemented") -- stub it as an own property, and
-    // always remove that own property afterward (not just restore an
-    // `undefined` descriptor, which a naive `defineProperty` would turn
-    // into a permanent stub leaking into every later test file).
-    const host = fixture.nativeElement as HTMLElement;
+    const host = fixture.nativeElement as HTMLElement; // the tab strip (data-tabstrip-pane="p1")
     Object.defineProperty(document, 'elementFromPoint', {
       configurable: true,
       value: () => host,
@@ -86,15 +92,24 @@ describe('TabBar', () => {
       fixture.detectChanges();
       expect(panes.pane('p1')!.tabs).toEqual(['a.md', 'b.md', 'c.md']); // not yet promoted
 
-      // Past the drag threshold and past every tab's midpoint -> moves to the end.
+      // Past the threshold and past every tab's midpoint: the drop *would*
+      // land at the end -- a drop-line shows there, but the list is unchanged.
       window.dispatchEvent(new MouseEvent('mousemove', { clientX: 280 }));
       fixture.detectChanges();
-      expect(panes.pane('p1')!.tabs).toEqual(['b.md', 'c.md', 'a.md']);
+      expect(panes.pane('p1')!.tabs).toEqual(['a.md', 'b.md', 'c.md']); // deferred
       expect(compiled.querySelector('.tab.dragging')).not.toBeNull();
+      expect(compiled.querySelector('.drop-line')).not.toBeNull();
+      expect(document.querySelector('.tab-drag-ghost')?.textContent).toContain('a.md');
+      expect(document.querySelector('.drag-overlay')).not.toBeNull();
 
+      // The move commits once, on release.
       window.dispatchEvent(new MouseEvent('mouseup'));
       fixture.detectChanges();
+      expect(panes.pane('p1')!.tabs).toEqual(['b.md', 'c.md', 'a.md']);
       expect(compiled.querySelector('.tab.dragging')).toBeNull();
+      expect(compiled.querySelector('.drop-line')).toBeNull();
+      expect(document.querySelector('.drag-overlay')).toBeNull();
+      expect(document.body.hasAttribute('data-drey-gesture')).toBe(false);
     } finally {
       delete (document as unknown as Record<string, unknown>)['elementFromPoint'];
     }

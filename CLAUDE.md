@@ -220,12 +220,15 @@ Renderer (Angular):
   status bar, MCP tools, keybindings, the calendar, tag search's "open at
   line") needed no change. One pane per open path (not the same note live
   in two panes at once); a tab's own "Split right"/"Split down" (its
-  context menu) creates a sibling pane, and a tab dragged onto another
-  pane's `TabBar` moves it there. `App` also registers `pane.splitRight`
-  (`Ctrl+Alt+Enter`), `pane.splitDown` (`Ctrl+Alt+Shift+Enter`) and
-  `pane.focusNext`/`Prev` (`F6`/`Shift+F6`) commands + View-menu rows.
-  Docking a pane into the left/right/bottom dock is a separate follow-up
-  (ADR-0038), not built yet.
+  context menu) creates a sibling pane. Dragging a tab is real DnD via
+  `TabDragService` + the shared `src/app/dnd/` overlay (ADR-0039): source
+  stays put, ghost chip + drop-line, `no-drop` over an invalid target,
+  commit once on release onto a tab strip (precise slot) or a pane body
+  (append); ESC / window-blur cancel. `App` also registers
+  `pane.splitRight` (`Ctrl+Alt+Enter`), `pane.splitDown`
+  (`Ctrl+Alt+Shift+Enter`) and `pane.focusNext`/`Prev` (`F6`/`Shift+F6`)
+  commands + View-menu rows. Docking a pane into the left/right/bottom dock
+  is a separate follow-up (ADR-0038), not built yet.
 - `EditorComponent` — one CodeMirror 6 view **per pane** (`[paneId]`
   input; `shownPath`/`shownDoc` resolve *that pane's* document via
   `PaneService`) with an inline Live Preview mode (decoration-based,
@@ -484,6 +487,13 @@ assume.
     focusNext/focusPrev` `KeybindingService` commands + View-menu rows
     (the split tree already existed, only the tab context menu reached it),
     and `Editor` pulls the caret into a pane on focus-gain.
+19b. **Drag-and-drop chrome** ([ADR-0039](docs/09_architecture_decisions/0039-drag-and-drop-chrome.md))
+    — the tab drag was a fake drag (committed live on every mousemove). A
+    shared `src/app/dnd/` overlay (kills hover/selection leak, owns the
+    cursor) + ghost, a new `TabDragService` owning the gesture (deferred
+    commit, drop-line, `no-drop` on invalid targets, tab-strip *or*
+    pane-body drop, ESC / blur cancel, the `data-drey-gesture` watchdog
+    marker), and `DockService`'s header drag moved onto the same overlay.
 20. **Editor panes in the docks** — ADR-0037's Phase 2, designed in
     [ADR-0038](docs/09_architecture_decisions/0038-editor-panes-in-docks.md):
     a `PaneService` *region* model (`center` + `dock-left/right/bottom`) and

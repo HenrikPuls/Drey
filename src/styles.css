@@ -208,10 +208,22 @@ textarea::placeholder {
   background: color-mix(in srgb, var(--accent) 30%, transparent);
 }
 
-/* The label chip that follows the cursor while a dock panel header is
-   dragged (created by `DockService`, appended to <body>). Low-profile:
-   just the panel title, no accent fill. */
-.dock-drag-ghost {
+/* Full-viewport layer mounted for the duration of a press-then-promote
+   drag (dock panel header, editor tab -- see `src/app/dnd/`). It captures
+   the pointer so nothing underneath shows a hover state or starts a text
+   selection mid-drag, and it owns the cursor (`grabbing` / `no-drop`, set
+   inline from JS). Sits just below the ghost chip. */
+.drag-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 49;
+}
+
+/* The label chip that follows the cursor while a dock panel header or an
+   editor tab is dragged (created in `src/app/dnd/`, appended to <body>).
+   Low-profile: just the title on a flat surface, no accent fill. */
+.dock-drag-ghost,
+.tab-drag-ghost {
   position: fixed;
   top: 0;
   left: 0;
@@ -224,9 +236,29 @@ textarea::placeholder {
   box-shadow: var(--popover-shadow);
   color: var(--text-2);
   font-family: var(--font-mono);
+}
+
+.dock-drag-ghost {
   font-size: var(--fs-mono-title);
   letter-spacing: var(--ls-mono-title);
   text-transform: uppercase;
+}
+
+/* A tab ghost reads like a tab label: mixed case, the tab font size, and a
+   small dirty dot when the buffer is unsaved. */
+.tab-drag-ghost {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: var(--fs-mono-tab);
+}
+
+.tab-drag-ghost .dirty {
+  width: 5px;
+  height: 5px;
+  flex: none;
+  border-radius: 50%;
+  background: var(--accent);
 }
 
 /* Thin, unobtrusive scrollbars everywhere (DESIGN.md "Maße": 9px, 3px

@@ -59,7 +59,7 @@ graph TB
         Calendar["Calendar (src/app/sidebar/calendar/)\nmini-calendar; day click -> openDailyNote"]
         OpenWindows["OpenWindows (src/app/sidebar/open-windows/)\nmirror of open tabs"]
         PaneLayout["PaneLayout / PaneLeaf (src/app/panes/, ADR-0037)\nrecursive split-tree layout; one TabBar +\nEditor/ImageTab per leaf pane"]
-        TabBar["TabBar (src/app/tab-bar/)\none pane's own tabs (PaneService); activate /\nclose / reorder / drag to another pane"]
+        TabBar["TabBar (src/app/tab-bar/)\none pane's own tabs (PaneService); activate / close;\ndrag = TabDragService (ADR-0039, real DnD via src/app/dnd/)"]
         Editor["Editor (src/app/editor/)\none CodeMirror 6 view per pane, doc swapped per\nthat pane's active tab; Live Preview decorations\nvia Compartment; ⋯ mode menu (ADR-0009)"]
         EntryDrawer["EntryDrawer (src/app/entry-drawer/)\nTOPIC + chip rows + MarkdownSurface\n(compact, inline spellcheck)"]
         NoteAssistant["NoteAssistant (src/app/note-assistant/)\nauto-summary switch + card thread + composer"]
@@ -312,14 +312,26 @@ src/                Angular renderer (standalone components, esbuild via Angular
                         dependencies with their license text (AboutService reads the
                         build-time src/assets/licenses.json)
     tab-bar/           TabBar: [paneId] input (ADR-0037) -- one pane's own tab strip,
-                         reading/mutating PaneService (not the old flat EditorService
-                         list). Drag a tab to reorder it in place (press-then-promote
-                         gesture, live reorder as the pointer crosses a neighbour's
-                         midpoint) or onto another pane's tab bar to move it there
-                         (document.elementFromPoint + a [data-pane-id] host marker).
+                         reading PaneService (not the old flat EditorService list). It
+                         only reports the mousedown + renders the drop-line; the drag
+                         itself is TabDragService (tab-drag.service.ts, ADR-0039) -- the
+                         tab-side analogue of DockService's header drag: real DnD, the
+                         source stays put, a .tab-drag-ghost chip follows the cursor,
+                         dropTarget tracks a tab strip (data-tabstrip-pane, precise slot)
+                         or a pane body (data-pane-id on PaneLeaf, append) else no-drop,
+                         and PaneService.moveToPane commits once on release. ESC /
+                         window-blur cancel. Uses the shared src/app/dnd/ overlay.
                          Context menu: Split right / Split down (PaneService.splitPane)
                          + Close others / Close all (this pane only). "+" opens a blank
                          scratch note in the focused pane.
+    dnd/               (ADR-0039) Shared drag chrome for the press-then-promote gestures
+                         (DockService header drag, TabDragService): a module-level
+                         .drag-overlay that captures the pointer (no hover/selection
+                         leak underneath, owns the cursor grabbing<->no-drop), the ghost
+                         chip, and the <body> user-select / data-drey-gesture flags
+                         (InputRecoveryService watchdog contract, ADR-0032).
+                         startDragChrome / moveDragChrome / setDragCursor /
+                         hitTestUnderPointer / endDragChrome.
     panes/             (ADR-0037) PaneService: the split-view layout -- an arbitrary
                          row/column split tree (pane-tree.ts: leafIds/replaceLeaf/
                          removeLeaf, pure + unit-tested) down to leaf PaneRecords
@@ -1376,7 +1388,7 @@ graph TB
             WindowChrome["WindowChromeService\nminimize/toggleMaximize/close + maximized signal"]
         end
         subgraph dk["src/app/dock/ (barrel)"]
-            DockService["DockService\nDockState (dock/flexes/open/hidden/leftW/rightW/bottomH),\nlocalStorage['drey.dock'];\nbeginHeaderPress (click=collapse / drag=move) + title-chip ghost,\nonDragMove/move, startSplit, startDockResize, reset,\nhide/show/isHidden (View menu), openAndExpand"]
+            DockService["DockService\nDockState (dock/flexes/open/hidden/leftW/rightW/bottomH),\nlocalStorage['drey.dock'];\nbeginHeaderPress (click=collapse / drag=move), shared drag chrome\n(src/app/dnd/, ADR-0039), onDragMove/move, startSplit, startDockResize,\nreset, hide/show/isHidden (View menu), openAndExpand"]
             Dock["Dock [side]\nrenders widget list; drop-line + splitter;\ndark wash on the drop-target dock; header status values"]
             PanelFrame["PanelFrame\nidentical 32px low-profile header (title/status/grip, no chevron);\nbody stays mounted + height-animates on collapse;\nregisters host el; header press -> collapse or drag"]
             WidgetRegistry["widget-registry.ts\nWIDGETS: WidgetDescriptor[] (id/title/component/defaultDock/\ndefaultOpen/defaultFlex/contentHeight/flush/removable/capabilities);\nWIDGET_MAP; ALL_WIDGET_IDS -- single source of truth (ADR-0034)"]
