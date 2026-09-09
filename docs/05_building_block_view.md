@@ -465,9 +465,10 @@ env.ps1             Puts .tools/node on PATH for the current shell session
 | `vault:pick-save-path`               | Native save dialog rooted at the vault; forces a `.md` extension and **rejects a target outside the vault**. Returns the vault-relative path, or `null` on cancel. Backs `EditorService.saveAs()` / the first save of an export scratch tab.                                                                                                                                                                                                                                  |
 | `daily:build-content`                | Returns the substituted `templates/daily.md` for a given `YYYY-MM-DD`, **without** creating the file or scaffolding the template. Backs the calendar's "open a draft for a day with no note yet". Rejects if no vault is active or the date is malformed.                                                                                                                                                                                                                     |
 | `daily:open`                         | `webContents.send` / `ipcRenderer.on` — **main → renderer** push, fired by the quick-capture hotkey after `DailyNoteManager.ensureTodayNote()`. Payload: the vault-relative path of today's daily note. Preload exposes it as `onOpenDailyNote(listener)` returning an unsubscribe.                                                                                                                                                                                           |
-| `note:save`                          | Saves a `.md` note through `NoteManager`: on a file with a `---` fence, bump `updated:` / fill `created:` and rewrite; no fence → bytes verbatim. Then `TagIndex.reindexFile` and the `on-save` Actions (§5.10). **No `#tag`→frontmatter merge and no routing** (ADR-0017). Takes `NoteSaveRequest` (`{ path, body (LF), eol, runOnSaveActions? }`), returns `NoteSaveResult` (`{ path, content (LF), modifiedMs, pendingActions? }`). Replaces `vault:write-file` for notes. |
+| `note:save`                          | Saves a `.md` note through `NoteManager`: on a file with a `---` fence, bump `updated:` / fill `created:` and rewrite; no fence → bytes verbatim. Then `TagIndex.reindexFile` + `TaskIndex.reindexFile` and the `on-save` Actions (§5.10). **No `#tag`→frontmatter merge and no routing** (ADR-0017). Takes `NoteSaveRequest` (`{ path, body (LF), eol, runOnSaveActions? }`), returns `NoteSaveResult` (`{ path, content (LF), modifiedMs, pendingActions? }`). Replaces `vault:write-file` for notes. |
 | `tags:list`                          | The vault-wide tag vocabulary (`TagEntry[]` = `{ tag, count }`) from `TagIndex`, for `#tag` autocomplete and the search tag picker. `[]` when no vault is active.                                                                                                                                                                                                                                                                                                             |
 | `tags:search`                        | `TagSearchQuery` (`{ tags, text }`) → `TagSearchHit[]` (`{ path, heading, line, snippet, text }`), matched over `TagIndex`'s tagged `SectionRecord[]` (files on disk). Fast, no LLM. `TagSearchService` then folds in hits from open tabs' unsaved buffers — same `sectionRecordsFor` + `runTagSearch` routines — replacing a dirty file's on-disk hits and tagging them `unsaved`.                                                                                                 |
+| `tasks:list`                         | Every checkbox / `#task` line in the vault (`TaskRecord[]` = `{ path, line, text, done, kind, heading }`) from `TaskIndex` — the Tasks panel in "whole vault" scope. Same lifecycle as `tags:list` (rebuild on vault open, `reindexFile` on `note:save`, no watcher). `[]` when no vault is active. Document scope is scanned live in the renderer, not via this channel (§5.20).                                                                                                    |
 | `tags:summarise-results`             | `TagSearchQuery` + a task id → a prose digest of the matching sections (`search-summary` built-in). **Backend wired, panel UI parked** (ADR-0017).                                                                                                                                                                                                                                                                                                                            |
 | `tags:suggest`                       | Entry text + a task id → up to four suggested tags (`{"tags":[…]}`), using the current vocabulary. Backs the drawer's **Autotag** button.                                                                                                                                                                                                                                                                                                                                     |
 | `config:get` / `config:set`          | Read / replace the whole `AppConfig` (`shared/app-config.ts`) held in `app-config.json` under `userData`. `set` normalises via `normalizeAppConfig` and returns what was stored. Backs the Settings screen (ADR-0010).                                                                                                                                                                                                                                                        |
@@ -1504,3 +1505,44 @@ src/app/templates/
   not re-open), it calls the existing `EditorService.openDailyNote(today)`
   — which opens an **unsaved draft** tab (nothing on disk until the user
   types and saves), identical to a calendar click.
+
+## 5.20 Tasks panel + task index (ADR-0033)
+
+A third feature-module trio, shaped like the tag stack (§5.14):
+
+- **`shared/tasks/`** (barrel) — pure, Vitest-covered:
+  - `scanTasks(path, content)` → `TaskRecord[]`
+    (`{ path, line, text, done, kind: 'checkbox' | 'tag', heading }`).
+    GFM `- [ ]` / `- [x]` items and lines carrying the reserved `#task`
+    marker; fenced code skipped; a checkbox + `#task` line is reported
+    once as `kind:'checkbox'`. A bare `#task` line is `done` when it also
+    carries `#task/done`.
+  - `setDoneOnLine(content, line, done)` — flips `[ ]`⇄`[x]` or
+    appends/strips a trailing ` #task/done`; no-op on a non-task line.
+- **`electron/tasks/` `TaskIndex`** (barrel) — a near-copy of `TagIndex`:
+  `byPath` map, same `templates/` + configured-folder exclusion, `daily/`
+  included; `rebuild()` on vault open / refresh / rename / copy /
+  duplicate / templates-dir change, `reindexFile()` from `NoteManager` on
+  `note:save`, `removeFile()` on delete; `all()` backs `tasks:list`. No
+  file watcher (ADR-0018) — external edits show in vault scope only after
+  the next rebuild.
+- **`src/app/tasks/` (barrel)** — `TaskService` + `TasksPanel`:
+  - `TaskService` holds `scope` (`'document' | 'vault'`), `hideDone`,
+    `kinds` (`localStorage['drey.tasks']`). `visible` is a computed:
+    document scope runs `scanTasks` over the **live editor buffer**
+    (`EditorService.bufferContent()`), so unsaved edits and a checkbox
+    ticked in the editor show at once; vault scope reads `listTasks()`,
+    refreshed on construct, after each save (an `effect` on
+    `EditorService.savedContent`), and on `mcp:vault-changed`
+    (`McpBridgeService`).
+  - `EditorService.setTaskDone(path, line, done)` does the write-back:
+    an open text tab → edit that buffer (activate if needed) + `save()`;
+    otherwise read → `setDoneOnLine` → `note:save`.
+  - `TasksPanel` — a scope segmented toggle, a "Hide done" checkbox and a
+    kind filter (Checkboxes / `#task`); rows group by file in vault scope,
+    the row checkbox toggles done, the row body calls
+    `EditorService.openFileAt(path, line)` (same as a search hit).
+    Registered as `PanelId` `'tasks'` (`PANEL_COMPONENTS`), default home
+    the left dock after Search, collapsed.
+- `eslint.config.mjs` `MODULES` gains `'tasks'` — the three barrels are
+  the only import surface.

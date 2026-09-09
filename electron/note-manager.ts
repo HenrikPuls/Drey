@@ -21,6 +21,7 @@ import {
 } from '../shared/frontmatter';
 import { ActionRunner } from './llm';
 import { TagIndex } from './tags';
+import { TaskIndex } from './tasks';
 import { VaultManager } from './vault-manager';
 
 /** Structural notes: still get `updated:` bumped, but are not tag-indexed. */
@@ -30,6 +31,7 @@ export class NoteManager {
   constructor(
     private readonly vault: VaultManager,
     private readonly index: TagIndex,
+    private readonly taskIndex: TaskIndex,
     private readonly actions: ActionRunner,
   ) {}
 
@@ -55,6 +57,7 @@ export class NoteManager {
     const modifiedMs = await this.vault.writeFile(relPath, toDisk(written));
     if (!relPath.startsWith(NO_INDEX_PREFIX)) {
       this.index.reindexFile(relPath, written);
+      this.taskIndex.reindexFile(relPath, written);
     }
 
     const onSave = await this.runOnSaveActions(request, written, modifiedMs);

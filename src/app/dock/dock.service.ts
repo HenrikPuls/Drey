@@ -6,6 +6,7 @@ export type PanelId =
   | 'files'
   | 'templates'
   | 'search'
+  | 'tasks'
   | 'windows'
   | 'assistant'
   | 'entry';
@@ -38,6 +39,7 @@ const ALL_PANELS: readonly PanelId[] = [
   'files',
   'templates',
   'search',
+  'tasks',
   'windows',
   'assistant',
   'entry',
@@ -58,7 +60,7 @@ const HEIGHT = { min: 140, max: 680 } as const;
 function defaultState(): DockState {
   return {
     dock: {
-      left: ['calendar', 'files', 'templates', 'search', 'windows'],
+      left: ['calendar', 'files', 'templates', 'search', 'tasks', 'windows'],
       right: ['assistant'],
       bottom: ['entry'],
     },
@@ -67,6 +69,7 @@ function defaultState(): DockState {
       files: 340,
       templates: 200,
       search: 220,
+      tasks: 220,
       windows: 150,
       assistant: 100,
       entry: 200,
@@ -77,6 +80,8 @@ function defaultState(): DockState {
       // The template library opens collapsed -- it is a reach-for-it panel.
       templates: false,
       search: false,
+      // The Tasks panel opens collapsed too -- reached for when needed.
+      tasks: false,
       windows: true,
       assistant: true,
       // The "Add entry" panel keeps the drawer's old habit of opening collapsed.

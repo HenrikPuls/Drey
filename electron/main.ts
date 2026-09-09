@@ -48,6 +48,7 @@ import { attachContextMenu, buildApplicationMenu } from './menu';
 import { NoteManager } from './note-manager';
 import { SpellcheckService } from './spellcheck';
 import { TagIndex } from './tags';
+import { TaskIndex } from './tasks';
 import { VaultManager } from './vault-manager';
 
 /**
@@ -145,6 +146,7 @@ function registerIpcHandlers(
   dailyNotes: DailyNoteManager,
   noteManager: NoteManager,
   tagIndex: TagIndex,
+  taskIndex: TaskIndex,
   appConfig: AppConfigStore,
   lmStudio: LmStudioClient,
   actionRunner: ActionRunner,
@@ -232,6 +234,7 @@ function registerIpcHandlers(
   ipcMain.handle(IPC_CHANNELS.vaultSelect, async (): Promise<string | null> => {
     const selected = await vaultManager.selectVault();
     await tagIndex.rebuild();
+    await taskIndex.rebuild();
     return selected;
   });
   ipcMain.handle(IPC_CHANNELS.vaultListFiles, (): Promise<VaultFileEntry[]> =>
@@ -266,17 +269,19 @@ function registerIpcHandlers(
   );
   ipcMain.handle(IPC_CHANNELS.vaultDelete, async (_event, relativePath: string): Promise<void> => {
     await vaultManager.deleteEntry(relativePath);
-    // No file watcher -- the tag index would otherwise still list tags from
-    // the deleted file until the next full rebuild.
+    // No file watcher -- the tag / task indexes would otherwise still list
+    // entries from the deleted file until the next full rebuild.
     await tagIndex.rebuild();
+    await taskIndex.rebuild();
   });
   // Rename / copy / duplicate can move `.md` content in or out of the
-  // index's scope, so each rebuilds it (same reason as `vault:delete`).
+  // indexes' scope, so each rebuilds them (same reason as `vault:delete`).
   ipcMain.handle(
     IPC_CHANNELS.vaultRename,
     async (_event, fromRel: string, toRel: string): Promise<string> => {
       const next = await vaultManager.renameEntry(fromRel, toRel);
       await tagIndex.rebuild();
+      await taskIndex.rebuild();
       return next;
     },
   );
@@ -285,6 +290,7 @@ function registerIpcHandlers(
     async (_event, srcRel: string, destDirRel: string): Promise<string> => {
       const next = await vaultManager.copyEntry(srcRel, destDirRel);
       await tagIndex.rebuild();
+      await taskIndex.rebuild();
       return next;
     },
   );
@@ -293,6 +299,7 @@ function registerIpcHandlers(
     async (_event, srcRel: string): Promise<string> => {
       const next = await vaultManager.duplicateEntry(srcRel);
       await tagIndex.rebuild();
+      await taskIndex.rebuild();
       return next;
     },
   );
@@ -312,6 +319,7 @@ function registerIpcHandlers(
   ipcMain.handle(IPC_CHANNELS.tagSearch, (_event, query: TagSearchQuery): TagSearchHit[] =>
     tagIndex.search(query),
   );
+  ipcMain.handle(IPC_CHANNELS.taskList, () => taskIndex.all());
   ipcMain.handle(
     IPC_CHANNELS.tagSummariseResults,
     (_event, query: TagSearchQuery, taskId?: string): Promise<string> =>
@@ -336,10 +344,11 @@ function registerIpcHandlers(
     spellcheck.invalidate();
     // The MCP block may have flipped -- open/close the HTTP endpoint to match.
     await syncMcpHttpTransport(mcpHttp, appConfig);
-    // A changed templates folder shifts which files the tag index excludes.
-    // The renderer picks the new vocabulary up on its next refresh / search.
+    // A changed templates folder shifts which files the tag / task indexes
+    // exclude. The renderer picks the new data up on its next refresh.
     if (stored.templates.dir !== prevTemplatesDir) {
       await tagIndex.rebuild();
+      await taskIndex.rebuild();
     }
     return stored;
   });
@@ -740,6 +749,7 @@ if (!app.requestSingleInstanceLock()) {
     // of the always-excluded literal `templates/`), so snippet headings do
     // not leak into tag search.
     const tagIndex = new TagIndex(vaultManager, () => appConfig.get().templates.dir);
+    const taskIndex = new TaskIndex(vaultManager, () => appConfig.get().templates.dir);
     const llmDebug = new LlmDebugLog();
     const lmStudio = new LmStudioClient(appConfig, llmDebug);
     const llmTasks = new LlmTaskRegistry();
@@ -753,13 +763,14 @@ if (!app.requestSingleInstanceLock()) {
       () => mainWindow?.webContents.send(IPC_CHANNELS.mcpVaultChanged),
     );
     const actionRunner = new ActionRunner(appConfig, lmStudio, llmTasks, vaultTools);
-    const noteManager = new NoteManager(vaultManager, tagIndex, actionRunner);
+    const noteManager = new NoteManager(vaultManager, tagIndex, taskIndex, actionRunner);
     const chatStore = new ChatStore(vaultManager);
     const spellcheck = new SpellcheckService(appConfig);
     const mcpServer = new McpServer(vaultTools, app.getVersion());
     const mcpHttp = new McpHttpTransport(mcpServer);
     mcpHttpForShutdown = mcpHttp;
     await tagIndex.rebuild();
+    await taskIndex.rebuild();
     await syncMcpHttpTransport(mcpHttp, appConfig);
 
     // Push each new debug entry to the renderer so the LLM settings pane
@@ -775,6 +786,7 @@ if (!app.requestSingleInstanceLock()) {
       dailyNotes,
       noteManager,
       tagIndex,
+      taskIndex,
       appConfig,
       lmStudio,
       actionRunner,

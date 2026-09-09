@@ -11,6 +11,7 @@ import type { AppConfig, CustomDictionary, LlmEndpoint } from './app-config';
 import type { ActionContext, ActionOutcome, AskOutcome, ChatMessage, LlmDebugEntry } from './llm';
 import type { ChatThread } from './chat-thread';
 import type { TagSearchHit, TagSearchQuery } from './tags';
+import type { TaskRecord } from './tasks';
 
 export type { AppConfig, LlmEndpoint, CustomDictionary } from './app-config';
 export type { ChatCard, ChatCardRole, ChatThread } from './chat-thread';
@@ -23,6 +24,7 @@ export type {
   ResolvedAction,
 } from './llm';
 export type { TagSearchHit, TagSearchQuery } from './tags';
+export type { TaskKind, TaskRecord } from './tasks';
 
 /**
  * Channel names. Most are `ipcMain.handle` / `ipcRenderer.invoke` request
@@ -60,6 +62,7 @@ export const IPC_CHANNELS = {
   noteSave: 'note:save',
   tagList: 'tags:list',
   tagSearch: 'tags:search',
+  taskList: 'tasks:list',
   tagSummariseResults: 'tags:summarise-results',
   tagSuggest: 'tags:suggest',
   configGet: 'config:get',
@@ -621,6 +624,15 @@ export interface DreyApi {
    * (no file watcher). Resolves to `[]` when no vault is active.
    */
   listTags(): Promise<TagEntry[]>;
+
+  /**
+   * Every checkbox / `#task` line in the vault (`shared/tasks`), for the
+   * Tasks panel in "whole vault" scope. Same index lifecycle as
+   * `listTags`: rebuilt on vault open, re-indexed per file on `saveNote`
+   * and on delete; external edits wait for the next vault load / refresh
+   * (no file watcher). Resolves to `[]` when no vault is active.
+   */
+  listTasks(): Promise<TaskRecord[]>;
 
   /**
    * Runs the tag search: sections where every `query.tags` entry is present

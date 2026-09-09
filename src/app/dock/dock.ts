@@ -16,6 +16,7 @@ import { CalendarService } from '../services/calendar.service';
 import { EntryDraftService } from '../services/entry-draft.service';
 import { VaultService } from '../services/vault.service';
 import { TagSearchService } from '../tags';
+import { TaskService } from '../tasks';
 import { DockService, DockSide, PanelId } from './dock.service';
 import { PanelFrame } from './panel-frame';
 import { PANEL_COMPONENTS } from './panels/panel-registry';
@@ -47,6 +48,7 @@ export class Dock implements OnInit {
   private readonly calendar = inject(CalendarService);
   private readonly vault = inject(VaultService);
   private readonly search = inject(TagSearchService);
+  private readonly tasks = inject(TaskService);
   private readonly editor = inject(EditorService);
   private readonly assistant = inject(AssistantService);
   private readonly entryDraft = inject(EntryDraftService);
@@ -125,6 +127,10 @@ export class Dock implements OnInit {
       }
       case 'search':
         return this.search.ran() ? `${this.search.hits().length} hits` : null;
+      case 'tasks': {
+        const open = this.tasks.openCount();
+        return open > 0 ? `${open} open` : null;
+      }
       case 'windows':
         return String(this.editor.openDocs().length);
       case 'assistant': {

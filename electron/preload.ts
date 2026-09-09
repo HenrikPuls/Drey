@@ -23,6 +23,7 @@ import {
   TagEntry,
   TagSearchHit,
   TagSearchQuery,
+  TaskRecord,
   VaultFileContent,
   VaultFileEntry,
 } from '../shared/ipc-api';
@@ -84,6 +85,7 @@ const dreyApi: DreyApi = {
   listTags: (): Promise<TagEntry[]> => ipcRenderer.invoke(IPC_CHANNELS.tagList),
   searchTags: (query: TagSearchQuery): Promise<TagSearchHit[]> =>
     ipcRenderer.invoke(IPC_CHANNELS.tagSearch, query),
+  listTasks: (): Promise<TaskRecord[]> => ipcRenderer.invoke(IPC_CHANNELS.taskList),
   summariseSearchResults: (query: TagSearchQuery, taskId?: string): Promise<string> =>
     ipcRenderer.invoke(IPC_CHANNELS.tagSummariseResults, query, taskId),
   suggestTags: (entryText: string, taskId?: string): Promise<string[]> =>
