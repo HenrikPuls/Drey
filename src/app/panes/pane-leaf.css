@@ -8,9 +8,12 @@
   background: var(--bg-editor);
 }
 
-/* This pane is where a dragged tab would land (dropped on its body, not a
-   strip): a soft dark wash, matching the dock's drop-target. */
-:host(.drop-target)::after {
+/* A soft dark wash, matching the dock's drop-target, when this pane is
+   where a drop would land: a dragged tab on its body (`.drop-target`), or a
+   file drag anywhere but its text (`.file-drop-target`). `pointer-events:
+   none` so the overlay never eats the `dragover` / `drop` it signals. */
+:host(.drop-target)::after,
+:host(.file-drop-target)::after {
   content: '';
   position: absolute;
   inset: 0;

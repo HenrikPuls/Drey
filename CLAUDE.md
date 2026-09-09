@@ -227,8 +227,12 @@ Renderer (Angular):
   (append); ESC / window-blur cancel. `App` also registers
   `pane.splitRight` (`Ctrl+Alt+Enter`), `pane.splitDown`
   (`Ctrl+Alt+Shift+Enter`) and `pane.focusNext`/`Prev` (`F6`/`Shift+F6`)
-  commands + View-menu rows. Docking a pane into the left/right/bottom dock
-  is a separate follow-up (ADR-0038), not built yet.
+  commands + View-menu rows. A **vault file dropped on a pane** but not on
+  `.cm-content` (tab strip, meta bar, empty state, padding) opens as a tab
+  there — `PaneDropService` (`src/app/panes/`), from `PaneLeaf`'s
+  `dragover`/`drop`; out-of-vault OS files stay with `DropGuardService`
+  (ADR-0027 / ADR-0028 amendment). Docking a pane into the
+  left/right/bottom dock is a separate follow-up (ADR-0038), not built yet.
 - `EditorComponent` — one CodeMirror 6 view **per pane** (`[paneId]`
   input; `shownPath`/`shownDoc` resolve *that pane's* document via
   `PaneService`) with an inline Live Preview mode (decoration-based,
@@ -237,7 +241,9 @@ Renderer (Angular):
   A 34px meta bar carries the path, a **Lines** toggle (line-number
   gutter, `Ctrl+G`, an app-wide preference — not per-pane), Save/Saved and
   the `⋯` menu (no assistant toggle — the panel is shown/collapsed from
-  its own dock header). Inline `#tag`s render as pills; `Ctrl`/`Cmd`-click
+  its own dock header). The **fold gutter** is always live (Obsidian-style
+  collapsible headings, hover-revealed chevron); only the line-number
+  column follows the Lines toggle (`editorStructure` / `gutterTheme`). Inline `#tag`s render as pills; `Ctrl`/`Cmd`-click
   runs a tag search. Global per-id requests (quick-capture, the
   assistant's insert-into-note) are gated on `PaneService.focusedId()`, so
   only the focused pane's instance acts on one. `EditorService.requestInsertText` (consumed here) backs the
@@ -494,6 +500,15 @@ assume.
     commit, drop-line, `no-drop` on invalid targets, tab-strip *or*
     pane-body drop, ESC / blur cancel, the `data-drey-gesture` watchdog
     marker), and `DockService`'s header drag moved onto the same overlay.
+19c. **Editor fold gutter + drop-to-open** — two owner-flagged follow-ups.
+    (1) Milestone 19a hid `.cm-foldGutter` outright; the Obsidian-style
+    collapsible headings that killed are back — the fold column is now
+    always-on in `editorStructure` (chevron styled + hover-revealed, same
+    vertical metrics as the line-number element so no drift returns), and
+    only the line-number column follows the "Lines" toggle
+    (`gutterTheme`). (2) A vault file dropped on a pane but not on
+    `.cm-content` opens as a tab there — `PaneDropService`, from
+    `PaneLeaf`'s `dragover`/`drop` (ADR-0027 / ADR-0028 amendment).
 20. **Editor panes in the docks** — ADR-0037's Phase 2, designed in
     [ADR-0038](docs/09_architecture_decisions/0038-editor-panes-in-docks.md):
     a `PaneService` *region* model (`center` + `dock-left/right/bottom`) and

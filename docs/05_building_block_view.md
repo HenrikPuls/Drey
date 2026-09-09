@@ -349,6 +349,13 @@ src/                Angular renderer (standalone components, esbuild via Angular
                          mousedown anywhere in it calls PaneService.focus. App renders
                          <app-pane-layout [node]="panes.root()"> in place of the old
                          single fixed tab-bar + editor pair.
+                       PaneLeaf host also owns dragover/drop: a vault file dropped in
+                         the pane but not on .cm-content opens as a tab there via
+                         PaneDropService (pane-drop.service.ts) -- resolves an
+                         application/x-drey-vault-path drag or an OS file under the
+                         active vault root to a relative path, focuses the pane, calls
+                         EditorService.openFile. Out-of-vault OS files are left to
+                         DropGuardService (ADR-0027 / ADR-0028 amendment).
     entry-drawer/      EntryDrawer: the bottom capture drawer -- TOPIC field first,
                          then Tags / People / Meetings chip rows, then a
                          MarkdownSurface (compact, multi-line, inline spellcheck).
@@ -1457,13 +1464,19 @@ graph TB
 - **Editor chrome.** Tab bar and meta bar are both 34px; the meta bar's
   path is the one shrink child (DESIGN.md layout hardening). `Ctrl+S` /
   `Ctrl+Shift+S` are app-wide `KeybindingService` commands now, not an
-  `Editor` host listener. Line numbers: a `MarkdownSurface` `lineNumbers`
-  input un-hides + re-themes the gutter `basicSetup` already mounts (46px,
-  Plex Mono 10.5), driven by `EditorService.lineNumbers` (persisted in
-  `drey.editor`); the text column is full-width and left-aligned (no
-  centred max-width — project owner's call, `editor-theme.ts`) and long
-  lines wrap at the editor width (`EditorView.lineWrapping`, no horizontal
-  scroll).
+  `Editor` host listener. Gutter: `basicSetup` mounts a line-number gutter
+  and a fold gutter. The **fold column is always live** (Obsidian-style
+  collapsible headings — lang-markdown's `headerIndent` fold service; the
+  chevron is styled + revealed-on-hover in `editorStructure`,
+  `editor-theme.ts`). The **line-number column** follows the meta bar's
+  "Lines" toggle: `editorStructure` hides it, the `Prec.high` `gutterTheme`
+  compartment (`markdown-surface.ts`, driven by
+  `EditorService.lineNumbers`, persisted in `drey.editor`) re-shows +
+  re-themes it (46px, Plex Mono 10.5). Compact surfaces (entry drawer,
+  assistant composer) hide the whole gutter (`compactTheme`). The text
+  column is full-width and left-aligned (no centred max-width — project
+  owner's call, `editor-theme.ts`) and long lines wrap at the editor width
+  (`EditorView.lineWrapping`, no horizontal scroll).
 - **Deviations** (also in `specs/`): editor stays CodeMirror 6 + Live
   Preview — no `contenteditable` blocks, no per-block gutter offsets; the
   vault switcher is "Open other vault …" only (no backend vault registry).

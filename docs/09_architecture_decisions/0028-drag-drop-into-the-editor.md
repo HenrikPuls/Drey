@@ -86,8 +86,17 @@ download.**
 
 ## Consequences
 
-- The Files panel is now a drag source; any drop that misses `.cm-content`
-  is caught by the ADR-0027 window guard.
+- The Files panel is now a drag source. A drop that misses `.cm-content`
+  but lands **inside an editor pane** (its tab strip, meta bar, empty
+  state, or the padding / gutter around the text) now **opens the file as
+  a tab in that pane** — `PaneDropService` (`src/app/panes/`), wired from
+  `PaneLeaf`'s host `dragover` / `drop`. Scope: a Files-panel / calendar
+  drag (`application/x-drey-vault-path`) or an OS file drag whose absolute
+  path resolves inside the active vault root; an out-of-vault OS file, a
+  directory, or a URL-only / web-image drag is left to the ADR-0027 guard
+  (`Doc` is vault-relative throughout, so an arbitrary absolute path is a
+  separate capability — a follow-up, not built). A drop that misses every
+  pane too (titlebar, docks, status bar) is still the ADR-0027 no-op.
 - The download path makes an **outbound network request from
   `VaultManager`** — the first. Threat model: http(s) only, final-protocol
   re-check after redirects (the fetch spec already refuses `file:`/`data:`
