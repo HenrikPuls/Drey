@@ -337,6 +337,13 @@ be called out explicitly (see Working Style below), not introduced silently.
   around the selection, tables/images render as widgets that show their
   raw Markdown while the selection is inside them. Source mode stays in
   the `⋯` menu as the escape hatch, not a separate "edit mode".
+- Revealed embed source is always visibly contained: whenever an embed's
+  Markdown source is shown (via the corner **`</>` View source** button or
+  by moving the caret in), its raw lines sit inside a rounded, bordered
+  container so the active-line highlight reads as in-scope. For an **image**
+  the raw `![alt](path)` line is shown *together with* — above — the
+  still-rendered picture, never replacing it. (`</>` = view source
+  everywhere; the magnifier-with-`+` = zoom. Req-1.)
 - A visual reference mockup for this layout was discussed and shown inline
   during planning, but it was never saved as a file — treat this section
   (plus the component list above) as the source of truth for layout intent,

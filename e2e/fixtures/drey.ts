@@ -18,6 +18,13 @@ interface DreyFixtures {
    * during a test and hit the app's refresh to see them.
    */
   vaultDir: string;
+  /**
+   * Partial `app-config.json` to seed before launch (merged into defaults by
+   * the app's own `normalizeAppConfig`). Override per file/describe with
+   * `test.use({ appConfig: { editor: { fontFamily: 'mono' } } })`; the
+   * default `{}` writes no file, so the app uses its own defaults.
+   */
+  appConfig: Record<string, unknown>;
   /** The launched Electron app. */
   electronApp: ElectronApplication;
   /** The main window's renderer page. */
@@ -38,7 +45,9 @@ export const test = base.extend<DreyFixtures>({
     await use(dir);
   },
 
-  electronApp: async ({ vaultDir }, use, testInfo) => {
+  appConfig: [{}, { option: true }],
+
+  electronApp: async ({ vaultDir, appConfig }, use, testInfo) => {
     if (!fs.existsSync(electronMain)) {
       throw new Error(
         `${electronMain} is missing -- run \`npm run build\` (or \`npm run e2e\`) before the E2E suite.`,
@@ -50,6 +59,12 @@ export const test = base.extend<DreyFixtures>({
       path.join(userDataDir, 'vault-config.json'),
       JSON.stringify({ activeVaultPath: vaultDir }, null, 2),
     );
+    if (Object.keys(appConfig).length > 0) {
+      fs.writeFileSync(
+        path.join(userDataDir, 'app-config.json'),
+        JSON.stringify(appConfig, null, 2),
+      );
+    }
 
     // Electron only checks whether ELECTRON_RUN_AS_NODE *exists*, not its
     // value, so it must be deleted, not blanked. It is commonly present

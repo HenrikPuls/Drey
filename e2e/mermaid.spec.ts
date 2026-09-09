@@ -20,6 +20,17 @@ test.describe('mermaid diagrams in Live Preview (ADR-0025)', () => {
     // A real diagram, not the pending placeholder or an error box.
     await expect(page.locator('app-editor .cm-content .lp-mermaid-pending')).toHaveCount(0);
     await expect(page.locator('app-editor .cm-content .lp-mermaid-error')).toHaveCount(0);
+
+    // Req-1: the </> "view source" button and the zoom lens sit side by
+    // side in the corner cluster, no longer stacked on top of each other.
+    const diagram = page.locator('app-editor .cm-content .lp-mermaid');
+    await diagram.hover();
+    const edit = await diagram.locator('.lp-edit').boundingBox();
+    const lens = await diagram.locator('.lp-mermaid-lens').boundingBox();
+    expect(edit && lens).toBeTruthy();
+    const disjoint =
+      edit!.x + edit!.width <= lens!.x + 0.5 || lens!.x + lens!.width <= edit!.x + 0.5;
+    expect(disjoint).toBe(true);
   });
 
   test('the raw fence comes back when the cursor moves inside it', async ({ page, vaultDir }) => {
@@ -28,7 +39,7 @@ test.describe('mermaid diagrams in Live Preview (ADR-0025)', () => {
       timeout: 15000,
     });
 
-    // The hover ✎ drops the caret into the block's source.
+    // The hover </> drops the caret into the block's source.
     await page.locator('app-editor .cm-content .lp-mermaid .lp-edit').click();
 
     await expect(page.locator('app-editor .cm-content .lp-mermaid')).toHaveCount(0);
@@ -87,5 +98,39 @@ test.describe('mermaid diagrams in Live Preview (ADR-0025)', () => {
     await surface.press('ControlOrMeta+Home');
 
     await expect(surface.locator('.lp-mermaid svg')).toBeVisible({ timeout: 15000 });
+  });
+
+  // Regression: mermaid's config `fontFamily` is `var(--font-sans, …)`, which
+  // it resolves to a fallback sans in its offscreen measuring node while the
+  // diagram paints with the editor's typeface. With a non-sans editor font
+  // (Settings → Appearance) that made every node box too narrow and the label
+  // spilled past its rectangle. `MermaidWidget` now re-pins the resolved font
+  // before each render, so measurement and paint agree.
+  test.describe('non-sans editor typeface', () => {
+    test.use({ appConfig: { editor: { fontFamily: 'mono' } } });
+
+    test('node label boxes fit the rendered monospace text', async ({ page, vaultDir }) => {
+      await openNote(page, vaultDir, 'mono.md', DIAGRAM);
+      await expect(page.locator('app-editor .cm-content .lp-mermaid svg')).toBeVisible({
+        timeout: 15000,
+      });
+      await page.waitForTimeout(300);
+
+      const overflow = await page.evaluate(() => {
+        const svg = document.querySelector('.lp-mermaid .lp-mermaid-svg svg');
+        if (!svg) return ['NO SVG'];
+        const bad: string[] = [];
+        svg.querySelectorAll('foreignObject').forEach((fo) => {
+          const div = fo.querySelector('div');
+          if (!div || !div.textContent?.trim()) return;
+          const boxW = (fo as SVGForeignObjectElement).width.baseVal.value;
+          if (div.scrollWidth > Math.ceil(boxW) + 1) {
+            bad.push(`"${div.textContent.trim()}" text ${div.scrollWidth}px > box ${boxW}px`);
+          }
+        });
+        return bad;
+      });
+      expect(overflow).toEqual([]);
+    });
   });
 });

@@ -90,11 +90,14 @@ The Live Preview layer lives in `src/app/editor/live-preview/`:
   *within* a paragraph stays raw text for now. The HTML *tag autocomplete*
   that `lang-markdown` installs by default (a completion popup on `<`) is
   switched off (`completeHTMLTags: false`) — noise in a prose editor.
-- **Widget content stays interactive; editing goes through a hover `✎`.**
+- **Widget content stays interactive; editing goes through a hover `</>`.**
   Table and HTML widgets keep their events (`ignoreEvent`): a `<details>`
-  summary toggles, table text is selectable. The Obsidian-style `✎` button
-  in the widget's corner is the one element whose click CodeMirror handles
-  — it drops the cursor into the block, revealing the source.
+  summary toggles, table text is selectable. The Obsidian-style **View
+  source** button (`</>`) in the widget's corner is the one element whose
+  click CodeMirror handles — it drops the cursor into the block, revealing
+  the source. It, and the zoom lens where a widget has one, live in a
+  shared `.lp-tools` corner cluster (see the Later change below); images
+  carry the same `</>` button.
 - **Concealed code blocks show their language as a badge** on the block's
   right (the fence's info string via a `data-lang` line attribute +
   `::after`); the badge disappears while the fence is revealed. The token
@@ -197,3 +200,43 @@ The Live Preview `ImageWidget` gained two hover affordances:
   only for a `.lp-resize` target so that handler receives the event; the
   `touches()` reveal is suppressed because the `pointerdown` handler
   returns `true`.
+
+## Later change — `</>` view-source button, tool cluster, revealed-source container, image reveal preview (Req-1)
+
+Follows the roadmap's **Req-1** ("the edit and magnifier icons are on top
+of each other… take `</>` as the symbol to view the code or source").
+
+- **`</>` replaces the pencil.** The corner **View source** button
+  (`widgets.ts` `makeEditButton`, class kept as `.lp-edit`) now carries the
+  Lucide "code" glyph and the title "View source". The magnifier lens is
+  unchanged — it is already "a magnifier with a `+` inside".
+- **`.lp-tools` corner cluster.** The `</>` button and the zoom lens
+  (`.lp-lens`) were both `position:absolute; top:4px; right:4px`, so on a
+  mermaid diagram — the one widget that mounts both — they rendered exactly
+  stacked and the button could not be clicked. They now sit in a shared
+  `<span class="lp-tools">` flex row (`appendTools`), pinned once; a `<span>`,
+  not a `<div>`, because a block-level child inside the *inline* image
+  widget desyncs `view.posAtDOM` (which the resize gesture depends on). The
+  `.lp-resize` grip stays its own separate bottom-corner element. The async
+  mermaid render inserts its SVG *before* `.lp-tools` (the stable
+  synchronous child), not before `.lp-edit`.
+- **Images gain the `</>` button** and a reveal that keeps the picture
+  visible. `ImageWidget.ignoreEvent` also passes `.lp-edit` through, and
+  `.lp-image` joins the `clickToReveal` selector list. While an image's
+  `![alt](path)` line is revealed, a read-only **`ImagePreviewWidget`**
+  (no lens / grip / `</>`) renders as a block directly below the markup —
+  "always show what is in the md itself above the rendered image" (project
+  owner). Tables / mermaid / HTML keep source-only reveal.
+- **Revealed source sits in a container.** The `StateField` value became
+  `{ atoms, reveal }` from one `scanEmbeds` walk: `atoms` (the
+  `Decoration.replace` per un-revealed embed) feeds `EditorView.decorations`
+  **and** `EditorView.atomicRanges`; `reveal` (the `.lp-reveal` /
+  `-first` / `-last` `Decoration.line` container around a touched embed's
+  raw lines, plus the image mirror) feeds `EditorView.decorations` **only**
+  — it must stay non-atomic so the caret can sit in the raw markup. The
+  container gives the active-line highlight a visible scope instead of
+  running full-bleed. `blockDecorations` / `revealDecorations` are thin
+  accessors over the composite.
+- **Known wart:** an inline image inside a paragraph is boxed and mirrored
+  at paragraph granularity (the whole line), since the reveal container
+  wraps whole lines.

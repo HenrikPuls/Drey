@@ -392,8 +392,6 @@ I will ask you to implement certain requirements from the following list, once i
 
 Arch-1 Restructure the programm completely to have a hieracrchical structure and all modules/widgets are self containes only acessing the interfaces.
 
-Req-1 - We need to perform some changes to how images, mermaid and other things are integrated in the text. At the moment the edit and magnifier icons are on top of each other and edit is not usable. please generally take </> as the symbol to view the code or source, magnifier with + inside for the magnification.
-
 Req-2 I would also like to inlcude the following document types whic should be rendered, however as i can not forsee the effort lets discuss this upfront: word, excel, powerpoint, pdf and loop components, i would like to inser a link and it should open it inline. However if I drag a document directly than the document shall be placed within the attachements folder
 
 Req-3 I would like to have a wrapper around copilot m365 for web so that i can use it instead of a local llm.
@@ -406,8 +404,21 @@ bug-1 if a string like 2026-09-09T00:03:48 is shown in the editor then :03: is g
 
 bug-2 Appearance settings does not select the active theme, it always defaults to drey, please always select the active theme
 
+bug-3 Specify the font within the setting is not working any longer, probably because it is not any longer applied as we moved to full theme support. 
+
 Req-6 it would be nice to have the ability to download further themes for cm6 if easily dooable
 
 req-7 widget control elements which are now at the top but inside the widget shall be moved to the title bar of the widget to get rid of the line within the widget
 
 # Completed
+
+Req-1 — Live Preview embed affordances. The corner **View source** button is
+now `</>` (was a pencil) and shares a `.lp-tools` flex cluster with the zoom
+lens, so they no longer stack on top of each other (they did on a mermaid
+diagram, making the button unclickable). Images gained the `</>` button too;
+revealing an image's source now shows the raw `![alt](path)` line inside a
+rounded, bordered container **with the rendered image kept directly below
+it**. Every text embed's revealed source (table / mermaid / HTML / image)
+gets that same container so the active-line highlight reads as in-scope.
+See [ADR-0009](../docs/09_architecture_decisions/0009-live-preview-decorations.md)
+"Later change".
