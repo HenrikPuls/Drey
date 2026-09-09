@@ -201,12 +201,28 @@ const foldTheme = EditorView.theme(
     // Collapsed pill and expanded header render identically -- no box / fill,
     // just the accent chevron and a dim label where the frontmatter sits. Only
     // the chevron direction (`▸` vs `⌄`) differs.
+    //
+    // The vertical gap is `padding`, never `margin`: this element is the root
+    // DOM node of a `block: true` `Decoration.replace` widget, and CodeMirror
+    // measures block-widget height with `getBoundingClientRect()` /
+    // `offsetHeight`, which excludes the element's own margin. A margin here
+    // makes the height map under-count the frontmatter region, so the gutter
+    // and click hit-testing for every line below it drift up by that much.
+    //
+    // `verticalAlign: 'top'` matters just as much: this is an `inline-flex`
+    // element (so it shrink-wraps to a pill, not a full-width bar), and the
+    // *default* `vertical-align: baseline` places its box using the line's
+    // font-metrics baseline, which leaves a few px of "phantom" leading
+    // above it that CodeMirror's height measurement doesn't know about
+    // either -- the same gutter-drift symptom via a different CSS mechanism.
+    // `top` pins the box to the top of its line box, no baseline math.
     '.cm-fm-pill, .cm-fm-collapse': {
       display: 'inline-flex',
+      verticalAlign: 'top',
       alignItems: 'center',
       gap: '6px',
-      margin: '2px 0 12px',
-      padding: '0',
+      margin: '0',
+      padding: '2px 0 12px',
       border: '0',
       background: 'transparent',
       color: 'var(--text-5)',

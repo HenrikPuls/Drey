@@ -54,6 +54,9 @@ describe('Editor', () => {
     await editor.openFile('note.md');
 
     fixture = TestBed.createComponent(Editor);
+    // The single pane `PaneService` starts with -- `EditorService.openFile`
+    // above already put `note.md` there (whichever pane is focused).
+    fixture.componentRef.setInput('paneId', 'p1');
     await fixture.whenStable();
     fixture.detectChanges();
   });
@@ -146,7 +149,7 @@ describe('Editor', () => {
   });
 
   it('shows a dirty marker once the buffer diverges from disk', () => {
-    editor.updateBuffer('# Title\n\nedited');
+    editor.updateBuffer('note.md', '# Title\n\nedited');
     fixture.detectChanges();
     expect(compiled().querySelector('.dirty')).toBeTruthy();
   });
@@ -210,7 +213,7 @@ describe('Editor', () => {
       run: () => void editor.save(),
     });
 
-    editor.updateBuffer('# Title\n\nsome **bold** text edited');
+    editor.updateBuffer('note.md', '# Title\n\nsome **bold** text edited');
     fixture.detectChanges();
 
     window.dispatchEvent(new KeyboardEvent('keydown', { key: 's', ctrlKey: true, bubbles: true }));

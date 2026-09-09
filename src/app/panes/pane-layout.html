@@ -1,0 +1,24 @@
+@if (node(); as n) {
+  @if (n.kind === 'leaf') {
+    <app-pane-leaf [paneId]="n.paneId" />
+  } @else {
+    <div class="split" [class.row]="n.direction === 'row'" [class.column]="n.direction === 'column'">
+      @for (child of n.children; track childKey(child); let i = $index; let last = $last) {
+        <div class="cell" [style.flex-grow]="n.sizes[i]">
+          <app-pane-layout [node]="child" />
+        </div>
+        @if (!last) {
+          <div
+            class="splitter"
+            [class.row]="n.direction === 'row'"
+            [class.column]="n.direction === 'column'"
+            role="separator"
+            [attr.aria-orientation]="n.direction === 'row' ? 'vertical' : 'horizontal'"
+            [attr.aria-label]="n.direction === 'row' ? 'Resize panes' : 'Resize panes vertically'"
+            (pointerdown)="startResize(n, i, $event)"
+          ></div>
+        }
+      }
+    </div>
+  }
+}

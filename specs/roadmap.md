@@ -353,6 +353,7 @@ below).
 
 - OCR for handwritten notes (iPad expansion stage, Apple Vision Framework
   or local Tesseract).
+  Maybe OCR field where you can Drop Images so that they are OCRd
 - iPad/iPhone access via Tailscale to the PC backend.
 - Audio recording in interview mode (local Whisper).
 - Automatic image captioning via a vision model.
@@ -360,6 +361,11 @@ below).
   markdown extension), `Ctrl`-click to open concealed link targets.
 - An additive chokidar file watcher, if manual refresh proves too coarse.
 - playwright m365 copilot über browser automatisierung
+- PDF Export
+- Jira Integration
+- Flow descriptions like Task Description => Sebastian => Peter would mean prepare task which is sent to Sebastian so that he can discuss it with Peter. Automation of current workflows via agentic tools, to stear persons like agents ;)
+Or Description => Jira (Creates a ticket from the description and returns the link to the new jira ticket 
+)
 
 ---
 
@@ -376,3 +382,23 @@ below).
 - Very large vocabularies: the autotag prompt embeds the full tag list.
   Fine for tens to low hundreds of tags; a pre-filter step would be
   needed well beyond that (see `classifier-spec.md`).
+
+---
+
+## Next Steps
+Arch-1 Restructure the programm completely to have a hieracrchical structure and all modules/widgets are self containes only acessing the interfaces.
+
+Req-1 - We need to perform some changes to how images, mermaid and other things are integrated in the text. At the moment the edit and magnifier icons are on top of each other and edit is not usable. please generally take </> as the symbol to view the code or source, magnifier with + inside for the magnification.
+
+Req-2 I would also like to inlcude the following document types whic should be rendered, however as i can not forsee the effort lets discuss this upfront: word, excel, powerpoint, pdf and loop components, i would like to inser a link and it should open it inline. However if I drag a document directly than the document shall be placed within the attachements folder
+
+Req-3 I would like to have a wrapper around copilot m365 for web so that i can use it instead of a local llm.
+
+Req-4 Atlassian Integration, when I paste a link to a workitem then i would like to check if i can retrieve the status of the ticket.
+
+Req-5 Strg+Click on a link shall open the link in an external browser
+
+bug-1 if a string like 2026-09-09T00:03:48 is shown in the editor then :03: is green (don't know why it is detected like this and not normal text (Mac Address filter?))
+
+Req-6 it would be nice to have the ability to download further themes for cm6 if easily dooable
+

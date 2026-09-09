@@ -40,9 +40,12 @@ export class TasksPanel {
         byPath.set(task.path, [task]);
       }
     }
+    // The full vault-relative path (not just the basename): it disambiguates
+    // same-named notes in different folders and matches the Search panel's
+    // `.hit-path`. The header wraps rather than truncating (see the CSS).
     return [...byPath.entries()].map(([path, tasks]) => ({
       path,
-      name: path.split('/').pop() ?? path,
+      name: path,
       tasks,
     }));
   });

@@ -1,6 +1,6 @@
 <div class="chrome">
-  <span class="path" [title]="editor.openPath()">{{ editor.openPath() }}</span>
-  @if (editor.activeIsDraft()) {
+  <span class="path" [title]="shownPath()">{{ shownPath() }}</span>
+  @if (shownDoc()?.existsOnDisk === false) {
     <span class="draft">unsaved draft</span>
   }
 
@@ -16,14 +16,15 @@
       <span>{{ editor.lineNumbers() ? 'Lines on' : 'Lines' }}</span>
     </button>
 
+    @let dirty = shownDoc() && shownDoc()!.bufferContent !== shownDoc()!.savedContent;
     <button
       type="button"
       class="save"
-      [class.dirty]="editor.isDirty()"
-      [disabled]="!editor.isDirty() || editor.isSaving()"
-      (click)="editor.save()"
+      [class.dirty]="dirty"
+      [disabled]="!dirty || editor.isSaving()"
+      (click)="editor.save({ path: shownPath() ?? undefined })"
     >
-      {{ editor.isSaving() ? 'Saving…' : editor.isDirty() ? 'Save' : 'Saved' }}
+      {{ editor.isSaving() ? 'Saving…' : dirty ? 'Save' : 'Saved' }}
     </button>
 
     <button
@@ -59,35 +60,42 @@
     [style.left.px]="menuPos().x"
     [style.top.px]="menuPos().y"
   >
-    <button
-      type="button"
-      role="menuitemradio"
-      [attr.aria-checked]="editor.viewMode() === 'live'"
-      (click)="chooseMode('live')"
-    >
-      <span class="tick">
-        @if (editor.viewMode() === 'live') {
-          <app-icon name="check" [size]="13" />
-        }
-      </span>
-      Live Preview
-    </button>
-    <button
-      type="button"
-      role="menuitemradio"
-      [attr.aria-checked]="editor.viewMode() === 'source'"
-      (click)="chooseMode('source')"
-    >
-      <span class="tick">
-        @if (editor.viewMode() === 'source') {
-          <app-icon name="check" [size]="13" />
-        }
-      </span>
-      Source
-    </button>
+    @let mode = shownDoc()?.viewMode ?? 'live';
+    @if (editor.isMarkdown(shownPath())) {
+      <button
+        type="button"
+        role="menuitemradio"
+        [attr.aria-checked]="mode === 'live'"
+        (click)="chooseMode('live')"
+      >
+        <span class="tick">
+          @if (mode === 'live') {
+            <app-icon name="check" [size]="13" />
+          }
+        </span>
+        Live Preview
+      </button>
+      <button
+        type="button"
+        role="menuitemradio"
+        [attr.aria-checked]="mode === 'source'"
+        (click)="chooseMode('source')"
+      >
+        <span class="tick">
+          @if (mode === 'source') {
+            <app-icon name="check" [size]="13" />
+          }
+        </span>
+        Source
+      </button>
 
-    <div class="menu-sep" role="separator"></div>
-    <button type="button" role="menuitem" (click)="closeMenu(); editor.saveAs()">
+      <div class="menu-sep" role="separator"></div>
+    }
+    <button
+      type="button"
+      role="menuitem"
+      (click)="closeMenu(); editor.saveAs(shownPath() ?? undefined)"
+    >
       <span class="tick"></span>
       Save as…
     </button>
@@ -114,13 +122,14 @@
        extensions swapped in/out via its mode input (ADR-0009). -->
   <app-markdown-surface
     class="cm-host"
-    [mode]="editor.viewMode()"
+    [mode]="shownDoc()?.viewMode ?? 'live'"
     [lineNumbers]="editor.lineNumbers()"
     [foldFrontmatter]="true"
+    [languageFilename]="shownPath()"
     [spellcheck]="spellcheckSource"
     [imageCapture]="true"
     [onTagActivate]="activateTag"
     [onLinkActivate]="activateLink"
-    (docChanged)="editor.updateBuffer($event)"
+    (docChanged)="editor.updateBuffer(shownPath()!, $event)"
   />
 </div>

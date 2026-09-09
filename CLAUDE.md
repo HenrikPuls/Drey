@@ -209,14 +209,35 @@ Renderer (Angular):
   (`Mod+Shift+S`), `note.saveAll` (`Mod+Alt+S`),
   `editor.toggleLineNumbers` (`Mod+G`) — the titlebar menu invokes the
   same ids
-- `EditorComponent` — one CodeMirror 6 view with an inline Live Preview
-  mode (decoration-based, ADR-0009) and a raw source mode, switched via a
-  `⋯` mode menu (ADR-0008); the same `⋯` menu lists the manual Actions
-  and "Save as…". A 34px meta bar carries the path, a **Lines** toggle
-  (line-number gutter, `Ctrl+G`), Save/Saved and the `⋯` menu (no
-  assistant toggle — the panel is shown/collapsed from its own dock
-  header). Inline `#tag`s render as pills; `Ctrl`/`Cmd`-click runs a tag
-  search. `EditorService.requestInsertText` (consumed here) backs the
+- `PaneService` (`src/app/panes/`, ADR-0037) — the split-view editor
+  layout: an arbitrary tree of row/column splits down to leaf panes, each
+  a `{ tabs, active }` record. `PaneLayout` renders the tree recursively
+  (draggable splitters between siblings); `PaneLeaf` renders one pane's
+  own `TabBar` + `EditorComponent`/`ImageTab`. `EditorService` no longer
+  owns tab membership/order itself — it is a facade over the *focused*
+  pane's document (`activePath`, `isDirty`, `save()`, word count, …), so
+  every other "current document" consumer (Assistant, Tasks, Actions, the
+  status bar, MCP tools, keybindings, the calendar, tag search's "open at
+  line") needed no change. One pane per open path (not the same note live
+  in two panes at once); a tab's own "Split right"/"Split down" (its
+  context menu) creates a sibling pane, and a tab dragged onto another
+  pane's `TabBar` moves it there. `App` also registers `pane.splitRight`
+  (`Ctrl+Alt+Enter`), `pane.splitDown` (`Ctrl+Alt+Shift+Enter`) and
+  `pane.focusNext`/`Prev` (`F6`/`Shift+F6`) commands + View-menu rows.
+  Docking a pane into the left/right/bottom dock is a separate follow-up
+  (ADR-0038), not built yet.
+- `EditorComponent` — one CodeMirror 6 view **per pane** (`[paneId]`
+  input; `shownPath`/`shownDoc` resolve *that pane's* document via
+  `PaneService`) with an inline Live Preview mode (decoration-based,
+  ADR-0009) and a raw source mode, switched via a `⋯` mode menu
+  (ADR-0008); the same `⋯` menu lists the manual Actions and "Save as…".
+  A 34px meta bar carries the path, a **Lines** toggle (line-number
+  gutter, `Ctrl+G`, an app-wide preference — not per-pane), Save/Saved and
+  the `⋯` menu (no assistant toggle — the panel is shown/collapsed from
+  its own dock header). Inline `#tag`s render as pills; `Ctrl`/`Cmd`-click
+  runs a tag search. Global per-id requests (quick-capture, the
+  assistant's insert-into-note) are gated on `PaneService.focusedId()`, so
+  only the focused pane's instance acts on one. `EditorService.requestInsertText` (consumed here) backs the
   assistant's insert-into-note arrow
 - `EntryDrawerComponent` — the "Add entry" capture surface: an optional
   TOPIC field, **one** Tags chip row (+ an Autotag button), then the
@@ -436,9 +457,41 @@ assume.
     runtime/third-party plugin loading.
 18. **Settings → Widgets enable/disable** — a `widgets` config slice + a
     Settings category to turn a widget off entirely (ADR-0034).
+19. **Editor polish + split-view panes** — five owner-requested fixes/
+    features built in one pass: the frontmatter-fold block widget's height
+    measurement (`margin` → `padding`) and its `inline-flex` baseline
+    leading (`vertical-align: top`), both of which drifted the gutter and
+    click hit-testing below the fold; per-file syntax highlighting for
+    non-Markdown files via a language `Compartment` on `MarkdownSurface`,
+    forcing source mode and dropping the Markdown-only chrome
+    ([ADR-0036](docs/09_architecture_decisions/0036-code-file-editor-mode.md));
+    the Tasks panel's vault-scope rows/headers sized to content instead of
+    clipping; drag-to-reorder tabs in the tab bar; and split-view editor
+    panes — an arbitrary row/column split tree (`PaneService`,
+    `PaneLayout`/`PaneLeaf`), `EditorService` reframed as a facade over the
+    *focused* pane so every other "current document" consumer needed no
+    change ([ADR-0037](docs/09_architecture_decisions/0037-split-view-editor-panes.md)).
+    Docking a pane into the left/right/bottom dock is its own follow-up
+    (ADR-0037's Phase 2), not built here.
+19a. **Gutter alignment + split-view entry points** — a follow-up after the
+    milestone-19 gutter fixes proved insufficient: the real cause was the
+    line-number element inheriting the unitless `1.72` line-height from
+    `.cm-scroller` (re-multiplied against its 10.5px font) plus an
+    un-hidden markdown fold-arrow column (base theme `.cm-gutter { display:
+    flex !important }` beat a plain `display:none`). Fixed in `gutterTheme`
+    (explicit px `line-height` + `flex-start` top-alignment; `display: none
+    !important` on `.cm-foldGutter`). Same pass: `pane.splitRight/splitDown/
+    focusNext/focusPrev` `KeybindingService` commands + View-menu rows
+    (the split tree already existed, only the tab context menu reached it),
+    and `Editor` pulls the caret into a pane on focus-gain.
+20. **Editor panes in the docks** — ADR-0037's Phase 2, designed in
+    [ADR-0038](docs/09_architecture_decisions/0038-editor-panes-in-docks.md):
+    a `PaneService` *region* model (`center` + `dock-left/right/bottom`) and
+    a dock "editor slot", leaving the `WidgetDescriptor` registry (ADR-0034)
+    untouched. Not built.
 
 Pause after each milestone, show what works, don't push through several
-milestones in one uninterrupted stretch. (Milestones 10, 11 and 15 were
+milestones in one uninterrupted stretch. (Milestones 10, 11, 15 and 19 were
 explicit exceptions — built in one stretch at the project owner's request.)
 
 ## Working Style — important

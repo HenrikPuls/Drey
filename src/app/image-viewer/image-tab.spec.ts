@@ -18,6 +18,8 @@ describe('ImageTab', () => {
     await editor.openFile('sub/dir/shot.png');
 
     fixture = TestBed.createComponent(ImageTab);
+    fixture.componentRef.setInput('path', 'sub/dir/shot.png');
+    fixture.componentRef.setInput('focused', true);
     fixture.detectChanges();
     el = fixture.nativeElement as HTMLElement;
   });
@@ -49,6 +51,22 @@ describe('ImageTab', () => {
     expect(editor.imageViewport()).toEqual({ naturalWidth: 1024, naturalHeight: 768, scale: 1 });
 
     fixture.destroy();
+    expect(editor.imageViewport()).toBeNull();
+  });
+
+  it('an unfocused pane does not claim the status bar viewport or react to zoom keys', () => {
+    // `beforeEach` already mounted with `focused: true`, which wrote an
+    // initial (zeroed) viewport -- clear it before flipping to unfocused so
+    // this test observes only what happens *after* that flip.
+    editor.setImageViewport(null);
+    fixture.componentRef.setInput('focused', false);
+    fixture.detectChanges();
+
+    const img = el.querySelector('app-image-viewer img') as HTMLImageElement;
+    Object.defineProperty(img, 'naturalWidth', { value: 1024, configurable: true });
+    Object.defineProperty(img, 'naturalHeight', { value: 768, configurable: true });
+    img.dispatchEvent(new Event('load'));
+    fixture.detectChanges();
     expect(editor.imageViewport()).toBeNull();
   });
 });
