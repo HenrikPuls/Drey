@@ -386,6 +386,10 @@ Or Description => Jira (Creates a ticket from the description and returns the li
 ---
 
 ## Next Steps
+
+I will ask you to implement certain requirements from the following list, once it is done please move it to the implemented chapter at the end of the list and remove it from here.
+
+
 Arch-1 Restructure the programm completely to have a hieracrchical structure and all modules/widgets are self containes only acessing the interfaces.
 
 Req-1 - We need to perform some changes to how images, mermaid and other things are integrated in the text. At the moment the edit and magnifier icons are on top of each other and edit is not usable. please generally take </> as the symbol to view the code or source, magnifier with + inside for the magnification.
@@ -400,5 +404,10 @@ Req-5 Strg+Click on a link shall open the link in an external browser
 
 bug-1 if a string like 2026-09-09T00:03:48 is shown in the editor then :03: is green (don't know why it is detected like this and not normal text (Mac Address filter?))
 
+bug-2 Appearance settings does not select the active theme, it always defaults to drey, please always select the active theme
+
 Req-6 it would be nice to have the ability to download further themes for cm6 if easily dooable
 
+req-7 widget control elements which are now at the top but inside the widget shall be moved to the title bar of the widget to get rid of the line within the widget
+
+# Completed
