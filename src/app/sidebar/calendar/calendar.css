@@ -89,10 +89,11 @@
 
 .day {
   position: relative;
-  /* Square cells that scale with the (capped) panel width -- the
-     proportions stay constant instead of the day boxes flattening out. */
-  aspect-ratio: 1;
-  min-height: 22px;
+  /* Fixed, compact row height -- the calendar stays as short as the
+     narrowest dock made the square cells (~22px), and never grows taller
+     as the dock widens. Six rows are always rendered, so the whole grid
+     is one constant height in every month and at every width. */
+  height: 22px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -153,8 +154,8 @@
   display: grid;
   grid-template-columns: repeat(3, 1fr);
   gap: 2px;
-  /* Roughly the height of the six-row day grid, so the layout does not
-     jump when the picker opens. */
+  /* The weekday row (18px) + six 22px day rows it replaces, so the panel
+     keeps one height whether the day grid or the picker is showing. */
   min-height: 150px;
   align-content: center;
 }
