@@ -15,7 +15,7 @@ import { test, expect, type Locator, type Page } from './fixtures/drey';
 
 async function open(page: Page, vaultDir: string, name: string): Promise<void> {
   fs.writeFileSync(path.join(vaultDir, name), `# ${name}\n\nbody of ${name}\n`);
-  await page.locator('app-dock[side="left"] .icon-btn.refresh').click();
+  await page.locator('app-dock[side="left"] .hdr-btn[aria-label="Refresh files"]').click();
   await page.locator('app-dock[side="left"] .node.file', { hasText: name }).click();
 }
 
@@ -58,7 +58,11 @@ test.describe('tab drag-and-drop', () => {
 
     await page.mouse.up();
 
-    expect(await abOrder(page)).toEqual(['b.md', 'a.md']); // committed
+    // The commit happens on release; under a loaded machine the render can
+    // lag the mouse-up, so poll instead of reading the DOM exactly once.
+    await expect
+      .poll(() => abOrder(page))
+      .toEqual(['b.md', 'a.md']); // committed
     await expect(page.locator('body > .drag-overlay')).toHaveCount(0);
     await expect(page.locator('app-tab-bar .drop-line')).toHaveCount(0);
   });

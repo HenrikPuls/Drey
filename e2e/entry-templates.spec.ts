@@ -11,7 +11,7 @@ test('switching to the "Ruled" template changes what the drawer appends', async 
   vaultDir,
 }) => {
   fs.writeFileSync(path.join(vaultDir, 'note.md'), '# Note\n');
-  await page.locator('app-dock[side="left"] .icon-btn.refresh').click();
+  await page.locator('app-dock[side="left"] .hdr-btn[aria-label="Refresh files"]').click();
   await page.locator('app-dock[side="left"] .node.file', { hasText: 'note.md' }).click();
   await expect(page.locator('app-editor .cm-content')).toBeVisible();
 

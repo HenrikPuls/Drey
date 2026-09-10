@@ -10,7 +10,7 @@ const PNG_BASE64 =
 async function openNote(page: Page, vaultDir: string, name: string, body: string): Promise<void> {
   fs.mkdirSync(path.dirname(path.join(vaultDir, name)), { recursive: true });
   fs.writeFileSync(path.join(vaultDir, name), body);
-  await page.locator('app-dock[side="left"] .icon-btn.refresh').click();
+  await page.locator('app-dock[side="left"] .hdr-btn[aria-label="Refresh files"]').click();
   await page.locator('app-dock[side="left"] .node.file', { hasText: path.basename(name) }).click();
   await expect(page.locator('app-editor .cm-content')).toBeVisible();
 }

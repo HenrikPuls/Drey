@@ -15,7 +15,7 @@ import { test, expect } from './fixtures/drey';
 
 async function openANote(page: import('@playwright/test').Page, vaultDir: string): Promise<void> {
   fs.writeFileSync(path.join(vaultDir, 'diag.md'), 'alpha beta gamma\nsecond line\nthird line\n');
-  await page.locator('app-dock[side="left"] .icon-btn.refresh').click();
+  await page.locator('app-dock[side="left"] .hdr-btn[aria-label="Refresh files"]').click();
   await page.locator('app-dock[side="left"] .node.file', { hasText: 'diag.md' }).click();
   await expect(page.locator('app-editor .cm-content')).toBeVisible();
 }
@@ -43,7 +43,7 @@ test.describe('finding 1 — Select all target', () => {
 });
 
 test.describe('finding 2 — native context menu params', () => {
-  test('right-click in the editor reports an editable target with paste enabled', async ({
+  test('right-click in the editor opens the renderer-owned context menu (ADR-0030)', async ({
     page,
     electronApp,
     vaultDir,
@@ -51,25 +51,22 @@ test.describe('finding 2 — native context menu params', () => {
     await openANote(page, vaultDir);
     await page.locator('app-editor .cm-content').click();
 
-    const paramsPromise = electronApp.evaluate(({ BrowserWindow }) => {
+    // Since ADR-0030 the editor's context menu is renderer-owned: the
+    // capture-phase service preventDefaults the DOM gesture (which also
+    // means Electron's native webContents 'context-menu' event never fires
+    // over CodeMirror — the old native-params assertion here could no
+    // longer pass). Assert the custom menu with its clipboard rows.
+    const nativeFired = electronApp.evaluate(({ BrowserWindow }) => {
       const wc = BrowserWindow.getAllWindows()[0].webContents;
-      return new Promise<{ isEditable: boolean; canPaste: boolean; canCopy: boolean }>(
-        (resolve) => {
-          wc.once('context-menu', (_e, p) => {
-            resolve({
-              isEditable: p.isEditable,
-              canPaste: p.editFlags.canPaste,
-              canCopy: p.editFlags.canCopy,
-            });
-          });
-        },
-      );
+      return new Promise<boolean>((resolve) => {
+        wc.once('context-menu', () => resolve(true));
+        setTimeout(() => resolve(false), 2000);
+      });
     });
     await page.locator('app-editor .cm-content').click({ button: 'right' });
-    const params = await paramsPromise;
-    console.log('context-menu params:', JSON.stringify(params));
-    expect(params.isEditable).toBe(true);
-    expect(params.canPaste).toBe(true);
+    await expect(page.locator('.ctx-menu')).toBeVisible();
+    await expect(page.locator('.ctx-menu button', { hasText: 'Paste' })).toBeVisible();
+    expect(await nativeFired).toBe(false);
   });
 
   test('an open titlebar menu is dismissed by a right-click (overlay no longer swallows it)', async ({
@@ -204,7 +201,7 @@ test.describe('Live Preview — checked tasks', () => {
       path.join(vaultDir, 'todos.md'),
       '# Todos\n\n- [ ] open task\n- [x] done task\n',
     );
-    await page.locator('app-dock[side="left"] .icon-btn.refresh').click();
+    await page.locator('app-dock[side="left"] .hdr-btn[aria-label="Refresh files"]').click();
     await page.locator('app-dock[side="left"] .node.file', { hasText: 'todos.md' }).click();
     await expect(page.locator('app-editor .cm-content')).toBeVisible();
 
