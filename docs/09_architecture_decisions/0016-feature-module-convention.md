@@ -7,6 +7,12 @@ M0.1–M0.3), extended with the keybinding module, then with the
 `dock` / `titlebar` / `widgets` modules, then with the renderer service
 reorg (see "Later change: renderer feature modules" below).
 
+**Amended by [ADR-0044](0044-runtime-plugin-system.md):** the "explicitly
+a modular monolith — no runtime loading" stance is superseded by the
+runtime plugin system; the barrel/boundary convention itself survives for
+the base app's own code, and the converted feature modules live on as
+plugins under `plugins/`.
+
 ## Context
 
 The process split of [ADR-0001](0001-electron-process-split-contextbridge.md)

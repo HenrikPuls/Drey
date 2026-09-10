@@ -53,12 +53,17 @@ below).
   handoff) live centrally in `src/styles.css`; the editor keeps
   CodeMirror 6 + Live Preview rather than the prototype's block model.
   The panels are a data-driven **widget registry**
-  ([ADR-0034](../docs/09_architecture_decisions/0034-internal-widget-model.md)):
+  ([ADR-0034](../docs/09_architecture_decisions/0034-internal-widget-model.md),
+  now a runtime registry per
+  [ADR-0044](../docs/09_architecture_decisions/0044-runtime-plugin-system.md)):
   each declares its default dock / capabilities, the View menu shows or
-  hides a whole widget (not just collapses it), and a `WidgetContext`
-  facade is the typed surface a widget uses to read the active document,
-  the file tree and the tag / task / search queries. Internal structure
-  only — no runtime plugin loading.
+  hides a whole widget (not just collapses it). Since ADR-0044 the app is
+  split into a **base application** (shell, editor, vault IO, plugin hosts,
+  LLM transport) and **runtime-loadable, in-process plugins** — the tag,
+  task, browser, meeting, template and assistant features are plugins with
+  full document access; `<userData>/plugins/<id>/` holds user-installed
+  ones. (The earlier "internal structure only — no runtime plugin loading"
+  stance is superseded.)
 
 - **Quick-capture:** a global hotkey brings the main window forward and
   opens today's daily note — `daily/<year>/<month>/YYYY-MM-DD.md` — in the

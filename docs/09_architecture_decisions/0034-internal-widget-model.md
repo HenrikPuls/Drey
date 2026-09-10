@@ -7,6 +7,13 @@ Accepted. A scope addition at the project owner's request. **Refines**
 runtime") and **amends** [ADR-0019](0019-movable-dock-panels-and-layout-state.md)
 (closed `PanelId` union, no "hidden" state).
 
+**Partly superseded by [ADR-0044](0044-runtime-plugin-system.md):** the
+"explicitly not wanted: a runtime plugin loader" clause is reversed — the
+registry becomes a runtime `WidgetRegistryService` plugins register into,
+and `WidgetContext` is replaced by the plugin API (it never gained a
+production consumer). The descriptor model, `DockState.hidden`, the
+View-menu rows and the Settings enable/disable flow all stand.
+
 ## Context
 
 The dock panels were wired three ways at once: a closed `PanelId` string

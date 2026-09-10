@@ -51,6 +51,7 @@ package, a minor naming convention).
 | [0041](09_architecture_decisions/0041-calendar-file-drop-meeting-section.md)         | Drag an `.ics` / `.msg` onto the editor → a `#mtg/<slug>`-tagged meeting section: decode in main (`ical.js` + `@kenjiuno/msgreader`), render from an editable `templates/meeting.md`, insert at the drop point | Accepted |
 | [0042](09_architecture_decisions/0042-in-editor-web-browser-tab.md)                | In-editor web browser tab: one main-process `WebContentsView` per `browser://` tab, `persist:webtab` session, `OverlayGuardService` for occlusion | Accepted |
 | [0043](09_architecture_decisions/0043-session-history.md)                          | Session history: restore the pane layout + open tabs on launch; unsaved buffers backed up under user-data (Notepad++-style) | Accepted |
+| [0044](09_architecture_decisions/0044-runtime-plugin-system.md)                    | Runtime plugin system: a base app with runtime-loadable, in-process plugins (supersedes 0016/0034's "no runtime" stance) | Accepted |
 
 Decisions not yet written up (relevant spec already fixes them, but the
 ADR is deferred to the milestone that actually implements them, per
