@@ -1169,6 +1169,47 @@ sequenceDiagram
     Note over Sess: thereafter, one debounced effect writes<br/>drey.session (400ms) + backups (700ms);<br/>beforeunload / visibilitychange flush
 ```
 
+## 6.24 Drag an `.ics` / `.msg` onto the editor → meeting section ([ADR-0041](09_architecture_decisions/0041-calendar-file-drop-meeting-section.md))
+
+```mermaid
+sequenceDiagram
+    participant User
+    participant CM as imagePaste (CodeMirror domEventHandlers)
+    participant MS as MeetingService
+    participant Main as meeting:decode handler
+    participant Imp as MeetingImporter
+    participant Dec as ics-decode / msg-decode
+    participant Tpl as templates/meeting.md
+    participant Render as renderMeetingSection (shared/meeting)
+
+    User->>CM: drop invite.ics / invite.msg on .cm-content
+    CM->>CM: meetingFile(dataTransfer) matches → preventDefault; set caret to drop coord
+    CM->>MS: decodeMeeting(new Uint8Array(await file.arrayBuffer()), file.name)
+    MS->>Main: invoke meeting:decode(bytes, filename)
+    Main->>Imp: decode(bytes, filename)
+    Imp->>Dec: sniff (ext → BEGIN:VCALENDAR → OLE2 magic) → parse
+    Dec->>Dec: ical.js: register embedded VTIMEZONE → DTSTART/DTEND .toJSDate() local
+    Dec-->>Imp: ParsedMeeting  (or throw "not a calendar invite" / "no event")
+    Imp->>Tpl: read templates/meeting.md (scaffold STARTER_MEETING_TEMPLATE on first use)
+    Imp->>Render: renderMeetingSection(meeting, template)
+    Render->>Render: slugifyMeetingTitle, meetingWhen, renderTemplate ({{#if}}/{{#each}})
+    Render-->>Imp: "## 📅 <title>\n#mtg/<slug>\n…"
+    Imp-->>Main: section markdown
+    Main-->>MS: section markdown
+    MS-->>CM: section markdown
+    alt decoded
+        CM->>CM: sectionInsert() at the drop coord (blank line padded); tab goes dirty
+        Note over User: user saves with Ctrl+S; save → re-index picks up #mtg/<slug>
+    else rejected
+        CM->>CM: config.onError(message) → EditorService.error signal
+    end
+```
+
+The **File → Import meeting …** menu row runs the same decode via
+`meeting:import` (native picker in main) and inserts through
+`EditorService.requestInsertText` — the fallback for an Outlook calendar
+drag that delivers no real `File`.
+
 ## Planned flows (added as their milestone is built)
 
 - Dedicated keyword-search / FTS surface — the search panel's free-text

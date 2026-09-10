@@ -11,6 +11,7 @@ import { openSearchPanel } from '@codemirror/search';
 import type { EditorView } from '@codemirror/view';
 import { KeybindingService } from '../keybindings';
 import { DockService, WIDGETS, WidgetId } from '../dock';
+import { MeetingService } from '../meeting';
 import { PaneService } from '../panes';
 import { EditorService } from '../services/editor.service';
 import { EditTargetService } from '../services/edit-target.service';
@@ -66,6 +67,7 @@ export class MenuService {
   private readonly editTarget = inject(EditTargetService);
   private readonly settings = inject(SettingsService);
   private readonly vault = inject(VaultService);
+  private readonly meeting = inject(MeetingService);
 
   readonly open = signal<MenuId | null>(null);
 
@@ -201,6 +203,17 @@ export class MenuService {
             void this.vault.selectVault();
             this.dock.openAndExpand('files');
           },
+        },
+        {
+          kind: 'item',
+          label: 'Import meeting …',
+          run:
+            this.editor.activePath() !== null
+              ? () => {
+                  this.close();
+                  void this.meeting.importIntoNote();
+                }
+              : undefined,
         },
         SEP,
         { kind: 'item', label: 'Save', hint: 'Ctrl S', run: () => this.run('note.save') },

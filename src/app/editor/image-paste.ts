@@ -35,12 +35,46 @@ export interface ImagePasteConfig {
   readTextFile?: (vaultPath: string) => Promise<string>;
   /** Downloads a web image into the vault; resolves to the path for `![](...)`. */
   saveFromUrl?: (url: string) => Promise<string>;
+  /**
+   * Decodes a dropped `.ics` / `.msg` calendar invite into a
+   * ready-to-insert Markdown meeting section (ADR-0041). Rejects with a
+   * user-facing message.
+   */
+  decodeMeeting?: (bytes: Uint8Array, filename: string) => Promise<string>;
   /** Shown to the user when a save / read fails, or a file is too large. */
   onError?: (message: string) => void;
 }
 
 /** The DataTransfer type the Files panel sets on `dragstart`. */
 export const VAULT_PATH_DT_TYPE = 'application/x-drey-vault-path';
+
+/** Calendar-invite extensions decoded into a meeting section on drop (ADR-0041). */
+const MEETING_EXTENSIONS = new Set(['ics', 'msg']);
+
+/** True for a `.ics` / `.msg` file name (case-insensitive). */
+function isMeetingName(name: string | undefined): boolean {
+  const dot = (name ?? '').lastIndexOf('.');
+  return dot !== -1 && MEETING_EXTENSIONS.has(name!.slice(dot + 1).toLowerCase());
+}
+
+/** The first `.ics` / `.msg` file carried by a drag `DataTransfer`, if any. */
+function meetingFile(data: DataTransfer | null): File | undefined {
+  for (const item of Array.from(data?.items ?? [])) {
+    if (item.kind !== 'file') {
+      continue;
+    }
+    const file = item.getAsFile();
+    if (file && isMeetingName(file.name)) {
+      return file;
+    }
+  }
+  for (const file of Array.from(data?.files ?? [])) {
+    if (isMeetingName(file.name)) {
+      return file;
+    }
+  }
+  return undefined;
+}
 
 /**
  * The DataTransfer type a Templates-panel row sets on `dragstart` -- a
@@ -105,6 +139,24 @@ function ownLineInsert(
 ): { from: number; insert: string; anchor: number } {
   const atLineStart = view.state.doc.lineAt(at).from === at;
   const insert = `${atLineStart ? '' : '\n'}${text}\n`;
+  return { from: at, insert, anchor: at + insert.length };
+}
+
+/**
+ * Like `ownLineInsert` but pads a blank line on both sides -- for a large
+ * multi-line block (the meeting section, ADR-0041) that should not fuse to
+ * the paragraph above or below it.
+ */
+function sectionInsert(
+  view: EditorView,
+  at: number,
+  text: string,
+): { from: number; insert: string; anchor: number } {
+  const line = view.state.doc.lineAt(at);
+  const atLineStart = line.from === at;
+  const prevBlank = !atLineStart || line.number === 1 || view.state.doc.line(line.number - 1).length === 0;
+  const lead = atLineStart ? (prevBlank ? '' : '\n') : '\n\n';
+  const insert = `${lead}${text}\n`;
   return { from: at, insert, anchor: at + insert.length };
 }
 
@@ -296,6 +348,31 @@ export function imagePaste(config: ImagePasteConfig): Extension {
               config,
             ),
           )
+          .catch((error: unknown) =>
+            config.onError?.(error instanceof Error ? error.message : String(error)),
+          );
+        return true;
+      }
+
+      // A calendar invite (`.ics` / `.msg`) dragged from Outlook or the file
+      // system: decode it in the main process and drop the meeting section
+      // at the pointer (ADR-0041). Sub-second, so no upload placeholder.
+      const invite = config.decodeMeeting ? meetingFile(data) : undefined;
+      if (invite) {
+        event.preventDefault();
+        const dropAt =
+          view.posAtCoords({ x: event.clientX, y: event.clientY }) ??
+          view.state.selection.main.from;
+        view.dispatch({ selection: { anchor: dropAt } });
+        const decode = config.decodeMeeting!;
+        void invite
+          .arrayBuffer()
+          .then((buffer) => decode(new Uint8Array(buffer), invite.name))
+          .then((block) => {
+            const pos = view.state.selection.main.from;
+            const { from, insert, anchor } = sectionInsert(view, pos, block);
+            view.dispatch({ changes: { from, insert }, selection: { anchor }, scrollIntoView: true });
+          })
           .catch((error: unknown) =>
             config.onError?.(error instanceof Error ? error.message : String(error)),
           );

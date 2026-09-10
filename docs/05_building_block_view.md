@@ -1801,3 +1801,65 @@ The editor relaunches into its previous layout + tabs.
   `nextPaneNum` / `nextSplitNum` past the restored ids; returns `false`
   (keeping the fresh single-pane default) when nothing survives.
 - `eslint.config.mjs` `MODULES` gains `'session'`.
+
+## 5.23 Calendar file drop → meeting section (`*/meeting/`, ADR-0041)
+
+Dragging an Outlook `.ics` / `.msg` onto the editor (or **File → Import
+meeting …**) decodes the invite and inserts a `#mtg/<slug>`-tagged
+**meeting section** at the drop point. Three feature modules, decode in
+the main process, finished Markdown returned over one IPC call.
+
+- **`shared/meeting/` (barrel)** — pure, Vitest-covered, no dependencies:
+  - `types.ts` — the normalised `ParsedMeeting` (`title`, local
+    wall-clock `start` / `end`, `allDay`, `location`, `organizer`,
+    `attendees[]`, `joinUrl`, `description`, `attachments[]`, `source`).
+  - `slug.ts` — `slugifyMeetingTitle` (umlaut transliteration, NFKD
+    accent strip, `Re:` / `Fwd:` prefix removal, ~60-char cap, `''` →
+    `meeting`). Only the tag is slugified; the heading keeps the title.
+  - `when.ts` — `meetingWhen`: start/end/`end_date`/`start_time`/`end_time`
+    plus a ready-made range phrase (`… · 14:00–15:00`, `… (all day)`).
+  - `template.ts` — a ~120-line `{{key}}` / `{{#if}}` / `{{#each}}`
+    evaluator (`renderTemplate`) with Handlebars-style standalone-line
+    stripping and blank-line tidy, plus `STARTER_MEETING_TEMPLATE`
+    (English labels — the language convention applies; the user's own
+    `templates/meeting.md` may be anything).
+  - `render.ts` — `renderMeetingSection(meeting, template)` builds the
+    placeholder model and renders.
+- **`electron/meeting/` (barrel)** — the only holder of `ical.js`
+  (dynamic `import()`, ESM-only) and `@kenjiuno/msgreader`:
+  - `meeting-importer.ts` — `MeetingImporter` (constructed in `main.ts`
+    with just `VaultManager`). `decode(bytes, filename)` sniffs the
+    format (extension → `BEGIN:VCALENDAR` → OLE2 magic), parses, loads /
+    scaffolds `templates/meeting.md` (frontmatter stripped), renders.
+  - `ics-decode.ts` — `ical.js` → `ParsedMeeting`; registers the embedded
+    `VTIMEZONE`s so `DTSTART` / `DTEND` `.toJSDate()` land in local time;
+    first non-recurring `VEVENT`; all-day `DTEND` stepped back one day.
+  - `msg-decode.ts` — `@kenjiuno/msgreader` → `ParsedMeeting`
+    (`apptStartWhole` / recipients / attachments); an appointment `.msg`
+    with no event fields but an `.ics` attachment is delegated to
+    `ics-decode`.
+  - `join-url.ts` — the "find the online-meeting link" heuristic (known
+    conferencing hosts first, then any `http(s)` URL, from `X-` join
+    props / location / body).
+- **`src/app/meeting/` (barrel)** — `MeetingService`: `decodeToMarkdown`
+  (the editor drop path → `meeting:decode`) and `importIntoNote` (the
+  menu fallback → `meeting:import` → `EditorService.requestInsertText`).
+- **`src/app/editor/image-paste.ts`** — a new `drop()` branch (after the
+  template branch, before image files): a `.ics` / `.msg` `File` →
+  `config.decodeMeeting(bytes, name)` → `sectionInsert` at the drop
+  coordinate. `ImagePasteConfig` gains `decodeMeeting?`; `markdown-surface`
+  wires it to `MeetingService`.
+- **`src/app/titlebar/menu.service.ts`** — a **File → Import meeting …**
+  row (disabled with no open note), the guaranteed path for Outlook
+  calendar drags that yield no real `File` on Windows.
+- **IPC** — `meeting:decode(bytes, filename) → string` and
+  `meeting:import() → string | null` (native picker). Compute-only,
+  no index / watcher impact — the `daily:build-content` pattern.
+- `eslint.config.mjs` `MODULES` gains `'meeting'`.
+
+The section is one `##` block (peer of `## HH:mm` entries) with
+`#mtg/<slug>` on its own line directly under the heading, so the tag
+section index attributes it to the meeting name. The invite file itself is
+**not** copied into the vault. The context-menu "add meeting log" +
+per-day appointment picker (roadmap `req-22`) is a follow-up on top of
+this.

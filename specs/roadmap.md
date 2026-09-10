@@ -430,6 +430,11 @@ bug-6: still there are problems with the focus also for the drowpdown boxes in a
 req-20 [[]] links shoudl work in the document
 req-21 dataview.js support
 req-22 integrate ical calender support. I would like to have in the context menu add meeting log, and then i would like to have a drop down of all apointments for that specific day, the one in which the current time falls shall be preselected, If i select one the meeting documentation like we did it with the drag and drop shall be used.
+  → Drag-and-drop / **File → Import meeting** half done (ADR-0041, see
+    Completed): a dropped `.ics`/`.msg` becomes a `#mtg/<slug>` meeting
+    section from `templates/meeting.md`. Still open: the context-menu
+    "add meeting log" entry and the per-day appointment picker (needs a
+    live calendar source, not just a dropped file).
 
 Urgent UX Improvements (shall be done first after bugs):
 req-23 drag and drop of folders and files within the files widget
@@ -510,19 +515,23 @@ text/heading. `TasksPanel` renders a tag-chip input (`<datalist>`
 autocomplete over `TagService.tags()`, mirroring the Search panel) + a
 free-text field as the first body row.
 
-Calendar drop — drag an Outlook `.ics` / `.msg` (from the calendar or the
-file system) onto the editor to insert a formatted **meeting section** at
-the drop point: title, date/time, participants, invitation body and
-attachment names, auto-tagged `#mtg/<kebab-case-title>` so it lands in the
-tag section index. Also **File → Import meeting …** (native picker) as the
-fallback for Outlook drags that deliver no real file. The section is
-rendered from an editable `templates/meeting.md` (scaffolded from an
-English default on first use) via a tiny `{{#if}}` / `{{#each}}` evaluator;
-`.ics` / `.msg` are decoded in the main process (`electron/meeting/`,
-`ical.js` + `@kenjiuno/msgreader`, the invert's `VTIMEZONE` resolved to
-local time). Decode-only — the invite file itself is not copied into the
-vault. New `shared/meeting` / `electron/meeting` / `src/app/meeting`
-feature modules; the drop branch lives in `image-paste.ts`.
+req-22 (drag-and-drop half) — Calendar drop: drag an Outlook `.ics` / `.msg`
+(from the calendar or the file system) onto the editor to insert a
+formatted **meeting section** at the drop point: title, date/time,
+participants, invitation body and attachment names, auto-tagged
+`#mtg/<kebab-case-title>` so it lands in the tag section index. Also
+**File → Import meeting …** (native picker) as the fallback for Outlook
+drags that deliver no real file (new Outlook / OWA drags do not — save as
+`.ics` first, or use Import meeting). The section is rendered from an
+editable `templates/meeting.md` (scaffolded from an English default on
+first use) via a tiny `{{#if}}` / `{{#each}}` evaluator; `.ics` / `.msg`
+are decoded in the main process (`electron/meeting/`, `ical.js` +
+`@kenjiuno/msgreader`, the invite's `VTIMEZONE` resolved to local time).
+Decode-only — the invite file itself is not copied into the vault. New
+`shared/meeting` / `electron/meeting` / `src/app/meeting` feature modules;
+the drop branch lives in `image-paste.ts`. The remaining `req-22` scope
+(a context-menu "add meeting log" with a per-day appointment picker) is a
+follow-up on top of this.
 See [ADR-0041](../docs/09_architecture_decisions/0041-calendar-file-drop-meeting-section.md).
 
 In-editor web browser tab (ADR-0042). `File -> New browser tab` /
