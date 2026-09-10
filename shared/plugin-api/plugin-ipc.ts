@@ -54,6 +54,8 @@ export interface PluginDescriptorForRenderer {
   readonly permissions: readonly PluginPermission[];
   readonly status: PluginStatus;
   readonly error?: string;
+  /** The validated manifest, handed back so `api.manifest` is the real thing. */
+  readonly manifest: PluginManifest;
   /** Present when the plugin has a renderer entry and activated far enough to expose it. */
   readonly rendererUrl?: string;
   readonly css?: readonly string[];

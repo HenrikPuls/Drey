@@ -27,6 +27,8 @@ import {
   McpWriteRequest,
   NoteSaveRequest,
   NoteSaveResult,
+  PluginDescriptorForRenderer,
+  PluginIpcEventPayload,
   SpellCheckResult,
   SpellLanguage,
   TagEntry,
@@ -208,6 +210,20 @@ const dreyApi: DreyApi = {
   listSessionBackups: (): Promise<string[]> => ipcRenderer.invoke(IPC_CHANNELS.sessionListBackups),
   deleteSessionBackups: (ids: string[]): Promise<void> =>
     ipcRenderer.invoke(IPC_CHANNELS.sessionDeleteBackups, ids),
+  // Plugin host (ADR-0044). Exactly three members: the discovery report and
+  // the two generic primitives. Per-plugin surface lives behind the plugin
+  // host services, not in this bridge.
+  listPlugins: (): Promise<PluginDescriptorForRenderer[]> =>
+    ipcRenderer.invoke(IPC_CHANNELS.pluginList),
+  invokePlugin: (pluginId: string, method: string, payload?: unknown): Promise<unknown> =>
+    ipcRenderer.invoke(IPC_CHANNELS.pluginInvoke, { pluginId, method, payload }),
+  onPluginEvent: (listener: (event: PluginIpcEventPayload) => void): (() => void) => {
+    // Forward only the payload, never the IpcRendererEvent (ADR-0001).
+    const wrapped = (_event: IpcRendererEvent, payload: PluginIpcEventPayload): void =>
+      listener(payload);
+    ipcRenderer.on(IPC_CHANNELS.pluginEvent, wrapped);
+    return () => ipcRenderer.removeListener(IPC_CHANNELS.pluginEvent, wrapped);
+  },
 };
 
 contextBridge.exposeInMainWorld('dreyApi', dreyApi);

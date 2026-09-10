@@ -20,11 +20,19 @@ interface DreyFixtures {
   vaultDir: string;
   /**
    * Partial `app-config.json` to seed before launch (merged into defaults by
-   * the app's own `normalizeAppConfig`). Override per file/describe with
+   * the app's own `normalizeAppConfig`). Overridden per file/describe with
    * `test.use({ appConfig: { editor: { fontFamily: 'mono' } } })`; the
-   * default `{}` writes no file, so the app uses its own defaults.
+   * fixture merges it over `{ plugins: { disabled: ['sample'] } }` so the
+   * built-in sample plugin (an extra right-dock panel) stays out of every
+   * layout-sensitive test unless a test explicitly re-enables it.
    */
   appConfig: Record<string, unknown>;
+  /**
+   * A plugin directory exposed to the app via `DREY_EXTRA_PLUGIN_DIR`
+   * (ADR-0044), or null. `plugins.spec.ts` writes a self-contained plugin
+   * (plain JS, no build step) into it before launch.
+   */
+  extraPluginDir: string | null;
   /** The launched Electron app. */
   electronApp: ElectronApplication;
   /** The main window's renderer page. */
@@ -47,7 +55,9 @@ export const test = base.extend<DreyFixtures>({
 
   appConfig: [{}, { option: true }],
 
-  electronApp: async ({ vaultDir, appConfig }, use, testInfo) => {
+  extraPluginDir: [null, { option: true }],
+
+  electronApp: async ({ vaultDir, appConfig, extraPluginDir }, use, testInfo) => {
     if (!fs.existsSync(electronMain)) {
       throw new Error(
         `${electronMain} is missing -- run \`npm run build\` (or \`npm run e2e\`) before the E2E suite.`,
@@ -59,10 +69,11 @@ export const test = base.extend<DreyFixtures>({
       path.join(userDataDir, 'vault-config.json'),
       JSON.stringify({ activeVaultPath: vaultDir }, null, 2),
     );
-    if (Object.keys(appConfig).length > 0) {
+    const seededConfig = { plugins: { disabled: ['sample'] }, ...appConfig };
+    if (Object.keys(seededConfig).length > 0) {
       fs.writeFileSync(
         path.join(userDataDir, 'app-config.json'),
-        JSON.stringify(appConfig, null, 2),
+        JSON.stringify(seededConfig, null, 2),
       );
     }
 
@@ -81,6 +92,9 @@ export const test = base.extend<DreyFixtures>({
     // Force the production `app://` renderer even if the caller's shell
     // still has DREY_RENDERER_URL exported from `npm run dev`.
     env['DREY_RENDERER_URL'] = '';
+    if (extraPluginDir !== null) {
+      env['DREY_EXTRA_PLUGIN_DIR'] = extraPluginDir;
+    }
 
     const app = await electron.launch({
       args: [repoRoot, `--user-data-dir=${userDataDir}`],

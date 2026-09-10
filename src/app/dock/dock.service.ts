@@ -2,7 +2,8 @@ import { Injectable, computed, effect, inject, signal } from '@angular/core';
 import { endDragChrome, moveDragChrome, startDragChrome } from '../dnd';
 import { LayoutGestureService } from '../services/layout-gesture.service';
 import { SettingsService } from '../services/settings.service';
-import { ALL_WIDGET_IDS, WIDGETS, WIDGET_MAP, WidgetId } from './widget-registry';
+import { WidgetId, type WidgetDescriptor } from './widget-registry';
+import { WidgetRegistryService } from './widget-registry.service';
 
 /**
  * A dockable widget id. Kept as an alias for continuity -- the registry
@@ -44,45 +45,9 @@ const DEFAULT_LEFT_W = 248;
 const DEFAULT_RIGHT_W = 340;
 const DEFAULT_BOTTOM_H = 280;
 
-function defaultState(): DockState {
-  const dock: Record<DockSide, WidgetId[]> = { left: [], right: [], bottom: [] };
-  const flexes: Record<WidgetId, number> = {};
-  const open: Record<WidgetId, boolean> = {};
-  for (const w of WIDGETS) {
-    dock[w.defaultDock].push(w.id);
-    flexes[w.id] = w.defaultFlex;
-    open[w.id] = w.defaultOpen;
-  }
-  return {
-    dock,
-    flexes,
-    open,
-    hidden: [],
-    leftW: DEFAULT_LEFT_W,
-    rightW: DEFAULT_RIGHT_W,
-    bottomH: DEFAULT_BOTTOM_H,
-  };
-}
-
-/**
- * Where `id` slots into `current` (a live dock list) to keep the registry's
- * default order among the widgets already present -- used when a widget is
- * un-hidden or re-homed.
- */
 /** Shallow, order-sensitive array equality. */
 function sameList(a: readonly WidgetId[], b: readonly WidgetId[]): boolean {
   return a.length === b.length && a.every((x, i) => x === b[i]);
-}
-
-function orderedInsertIndex(side: DockSide, id: WidgetId, current: readonly WidgetId[]): number {
-  const order = WIDGETS.filter((w) => w.defaultDock === side).map((w) => w.id);
-  const target = order.indexOf(id);
-  for (let i = 0; i < current.length; i++) {
-    if (order.indexOf(current[i]) > target) {
-      return i;
-    }
-  }
-  return current.length;
 }
 
 /**
@@ -108,6 +73,7 @@ export class DockService {
 
   private readonly settings = inject(SettingsService);
   private readonly layoutGesture = inject(LayoutGestureService);
+  private readonly registry = inject(WidgetRegistryService);
   private readonly state = signal<DockState>(this.read());
 
   /** The panel being dragged by its header, else null. */
@@ -151,10 +117,48 @@ export class DockService {
     // Settings -> Widgets: fold the "disabled" set into the layout whenever
     // it changes (persisted config, so this fires on Save and on load).
     effect(() => this.reconcileEnabled(this.settings.widgetsDisabled()));
+
+    // The registry is runtime (ADR-0044): a plugin widget may register after
+    // this service was first injected (the plugin API factory injects
+    // DockService during the app initializer itself). Whatever the
+    // construction order, converge: every registered widget gets a dock slot
+    // (or keeps its hidden one) and default flex/open values.
+    effect(() => this.absorbRegistry(this.registry.widgets()));
   }
 
-  readonly leftIds = computed(() => this.state().dock.left);
-  readonly rightIds = computed(() => this.state().dock.right);
+  /** Adds dock-list slots + default flex/open for widgets the state doesn't know yet. */
+  private absorbRegistry(widgets: readonly WidgetDescriptor[]): void {
+    this.patch((s) => {
+      const dock = {
+        left: [...s.dock.left],
+        right: [...s.dock.right],
+        bottom: [...s.dock.bottom],
+      };
+      const flexes = { ...s.flexes };
+      const open = { ...s.open };
+      let changed = false;
+      for (const w of widgets) {
+        const placed =
+          dock.left.includes(w.id) || dock.right.includes(w.id) || dock.bottom.includes(w.id) ||
+          s.hidden.includes(w.id);
+        if (flexes[w.id] === undefined) {
+          flexes[w.id] = w.defaultFlex;
+          changed = true;
+        }
+        if (open[w.id] === undefined) {
+          open[w.id] = w.defaultOpen;
+          changed = true;
+        }
+        if (!placed) {
+          dock[w.defaultDock].splice(this.orderedInsertIndex(w.defaultDock, w.id, dock[w.defaultDock]), 0, w.id);
+          changed = true;
+        }
+      }
+      return changed ? { ...s, dock, flexes, open } : s;
+    });
+  }
+
+  readonly leftIds = computed(() => this.state().dock.left);  readonly rightIds = computed(() => this.state().dock.right);
   readonly bottomIds = computed(() => this.state().dock.bottom);
   readonly hasLeft = computed(() => this.state().dock.left.length > 0);
   readonly hasRight = computed(() => this.state().dock.right.length > 0);
@@ -180,7 +184,7 @@ export class DockService {
 
   /** True for a panel sized to its content rather than a `flex-grow` share. */
   contentHeight(id: WidgetId): boolean {
-    return WIDGET_MAP.get(id)?.contentHeight ?? false;
+    return this.registry.descriptor(id)?.contentHeight ?? false;
   }
 
   /**
@@ -270,14 +274,53 @@ export class DockService {
 
   /** A copy of `dock` with `id` inserted into its default dock at the ordered slot. */
   private withInserted(dock: Record<DockSide, WidgetId[]>, id: WidgetId): Record<DockSide, WidgetId[]> {
-    const side = WIDGET_MAP.get(id)?.defaultDock ?? 'left';
+    const side = this.registry.descriptor(id)?.defaultDock ?? 'left';
     const lists: Record<DockSide, WidgetId[]> = {
       left: [...dock.left],
       right: [...dock.right],
       bottom: [...dock.bottom],
     };
-    lists[side].splice(orderedInsertIndex(side, id, lists[side]), 0, id);
+    lists[side].splice(this.orderedInsertIndex(side, id, lists[side]), 0, id);
     return lists;
+  }
+
+  private defaultState(): DockState {
+    const dock: Record<DockSide, WidgetId[]> = { left: [], right: [], bottom: [] };
+    const flexes: Record<WidgetId, number> = {};
+    const open: Record<WidgetId, boolean> = {};
+    for (const w of this.registry.widgets()) {
+      dock[w.defaultDock].push(w.id);
+      flexes[w.id] = w.defaultFlex;
+      open[w.id] = w.defaultOpen;
+    }
+    return {
+      dock,
+      flexes,
+      open,
+      hidden: [],
+      leftW: DEFAULT_LEFT_W,
+      rightW: DEFAULT_RIGHT_W,
+      bottomH: DEFAULT_BOTTOM_H,
+    };
+  }
+
+  /**
+   * Where `id` slots into `current` (a live dock list) to keep the registry's
+   * default order among the widgets already present -- used when a widget is
+   * un-hidden or re-homed.
+   */
+  private orderedInsertIndex(side: DockSide, id: WidgetId, current: readonly WidgetId[]): number {
+    const order = this.registry
+      .widgets()
+      .filter((w) => w.defaultDock === side)
+      .map((w) => w.id);
+    const target = order.indexOf(id);
+    for (let i = 0; i < current.length; i++) {
+      if (order.indexOf(current[i]) > target) {
+        return i;
+      }
+    }
+    return current.length;
   }
 
   setDockWidth(side: DockSide, px: number): void {
@@ -292,7 +335,7 @@ export class DockService {
 
   /** View -> "Reset layout": everything back to the defaults. */
   reset(): void {
-    this.state.set(defaultState());
+    this.state.set(this.defaultState());
     this.persist();
   }
 
@@ -311,10 +354,10 @@ export class DockService {
     };
     const hidden = s.hidden.filter((id) => !disabled.has(id));
     const placed = new Set<WidgetId>([...lists.left, ...lists.right, ...lists.bottom, ...hidden]);
-    for (const w of WIDGETS) {
+    for (const w of this.registry.widgets()) {
       if (!disabled.has(w.id) && !placed.has(w.id)) {
         lists[w.defaultDock].splice(
-          orderedInsertIndex(w.defaultDock, w.id, lists[w.defaultDock]),
+          this.orderedInsertIndex(w.defaultDock, w.id, lists[w.defaultDock]),
           0,
           w.id,
         );
@@ -608,7 +651,7 @@ export class DockService {
   }
 
   private read(): DockState {
-    const base = defaultState();
+    const base = this.defaultState();
     let raw: string | null = null;
     try {
       raw = localStorage.getItem(DockService.KEY);
@@ -628,7 +671,7 @@ export class DockService {
 
   /** Fold a stored blob onto the defaults, dropping anything unrecognised. */
   private merge(base: DockState, saved: Partial<DockState>): DockState {
-    const known = new Set<WidgetId>(ALL_WIDGET_IDS);
+    const known = new Set<WidgetId>(this.registry.allWidgetIds());
     const clean = (list: unknown): WidgetId[] =>
       Array.isArray(list) ? list.filter((x): x is WidgetId => known.has(x as WidgetId)) : [];
 
@@ -640,9 +683,9 @@ export class DockService {
     const placed = new Set<WidgetId>([...left, ...right, ...bottom, ...hidden]);
     // Any widget missing from the stored blob (e.g. one added by an app
     // update) goes back to its descriptor's default dock, in order.
-    for (const w of WIDGETS) {
+    for (const w of this.registry.widgets()) {
       if (!placed.has(w.id)) {
-        lists[w.defaultDock].splice(orderedInsertIndex(w.defaultDock, w.id, lists[w.defaultDock]), 0, w.id);
+        lists[w.defaultDock].splice(this.orderedInsertIndex(w.defaultDock, w.id, lists[w.defaultDock]), 0, w.id);
       }
     }
 
@@ -652,10 +695,10 @@ export class DockService {
     return {
       dock: lists,
       flexes: Object.fromEntries(
-        ALL_WIDGET_IDS.map((id) => [id, num(saved.flexes?.[id], base.flexes[id])]),
+        this.registry.allWidgetIds().map((id) => [id, num(saved.flexes?.[id], base.flexes[id])]),
       ) as Record<WidgetId, number>,
       open: Object.fromEntries(
-        ALL_WIDGET_IDS.map((id) => [
+        this.registry.allWidgetIds().map((id) => [
           id,
           typeof saved.open?.[id] === 'boolean' ? saved.open[id] : base.open[id],
         ]),

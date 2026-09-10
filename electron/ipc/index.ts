@@ -13,6 +13,7 @@ import { ActionRunner, LlmDebugLog, LmStudioClient } from '../llm';
 import { McpHttpTransport } from '../mcp';
 import { MeetingImporter } from '../meeting';
 import { NoteManager } from '../note-manager';
+import { PluginHost } from '../plugin-host';
 import { SessionBackupStore } from '../session';
 import { SpellcheckService } from '../spellcheck';
 import { TagIndex } from '../tags';
@@ -25,6 +26,7 @@ import { registerLlmHandlers } from './llm-handlers';
 import { registerMcpHandlers } from './mcp-handlers';
 import { McpWriteBridge } from './mcp-write-bridge';
 import { registerMeetingHandlers } from './meeting-handlers';
+import { registerPluginHandlers } from './plugin-handlers';
 import { registerQueryHandlers } from './query-handlers';
 import { registerSessionHandlers } from './session-handlers';
 import { registerSpellHandlers } from './spell-handlers';
@@ -52,6 +54,7 @@ export interface IpcHandlerDeps {
   mcpWriteBridge: McpWriteBridge;
   stdioBridgePath: () => string;
   syncMcpHttp: () => Promise<void>;
+  pluginHost: PluginHost;
 }
 
 export function registerIpcHandlers(deps: IpcHandlerDeps): void {
@@ -65,4 +68,5 @@ export function registerIpcHandlers(deps: IpcHandlerDeps): void {
   registerMcpHandlers(deps);
   registerSpellHandlers(deps);
   registerMeetingHandlers(deps);
+  registerPluginHandlers(deps);
 }

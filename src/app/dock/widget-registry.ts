@@ -14,18 +14,33 @@ import { WindowsPanel } from './panels/windows-panel';
 export type WidgetId = string;
 
 /**
- * One dockable widget. The registry (`WIDGETS`) is the single source of
- * truth the dock, the `PanelFrame` header and the View menu all read from,
- * so adding another widget later is one array entry -- no union to widen,
- * no `Record<PanelId, …>` maps to keep in sync (ADR-0034).
+ * What a header status callback may read. Carried as a parameter (not a
+ * service injection) so the registry does not need `DockService` — which
+ * needs the registry.
+ */
+export interface WidgetStatusContext {
+  /** True while the panel is collapsed to its 32px header. */
+  readonly collapsed: boolean;
+}
+
+/**
+ * One dockable widget. The runtime registry
+ * (`WidgetRegistryService`) is the single source of truth the dock, the
+ * `PanelFrame` header and the View menu all read from, so adding another
+ * widget is one registration -- core widgets come from `CORE_WIDGETS`
+ * below, plugin widgets from `api.ui.registerWidget` (ADR-0034, extended by
+ * ADR-0044).
  */
 export interface WidgetDescriptor {
   /** Stored in `DockState` and (milestone 18) `AppConfig.widgets`. */
   id: WidgetId;
   /** Mono-uppercase header label. */
   title: string;
-  /** Body component, rendered via `*ngComponentOutlet`. */
-  component: Type<unknown>;
+  /**
+   * Body component, rendered via `*ngComponentOutlet`. Unset for a
+   * plugin-registered widget — `Dock` renders `PluginWidgetHost` for those.
+   */
+  component?: Type<unknown>;
   /** Where it lives on a fresh layout / after `View → Reset layout`. */
   defaultDock: DockSide;
   /** Expanded (`true`) or collapsed to its header (`false`) by default. */
@@ -40,14 +55,18 @@ export interface WidgetDescriptor {
   removable: boolean;
   /** Read surfaces it declares (descriptive; see `WidgetCapability`). */
   capabilities: readonly WidgetCapability[];
+  /** Header status value (right-aligned, dimmed); recomputed on change detection. */
+  status?(context: WidgetStatusContext): string | null;
 }
 
 /**
- * The built-in widgets, in per-dock default order. Values carried over
- * verbatim from the old `dock.service.ts` `defaultState()` +
- * `panel-registry.ts`.
+ * The built-in core widgets, in per-dock default order (ADR-0044: the
+ * features that are becoming plugins will leave this list as they
+ * convert, registering through the same runtime registry instead).
+ * Status callbacks are attached by `WidgetRegistryService`, which owns
+ * the feature services they read.
  */
-export const WIDGETS: readonly WidgetDescriptor[] = [
+export const CORE_WIDGETS: readonly WidgetDescriptor[] = [
   {
     id: 'calendar',
     title: 'Calendar',
@@ -135,10 +154,3 @@ export const WIDGETS: readonly WidgetDescriptor[] = [
     capabilities: ['active-document', 'tag-queries'],
   },
 ];
-
-export const WIDGET_MAP: ReadonlyMap<WidgetId, WidgetDescriptor> = new Map(
-  WIDGETS.map((w) => [w.id, w]),
-);
-
-/** Every registered widget id, in registry order. */
-export const ALL_WIDGET_IDS: readonly WidgetId[] = WIDGETS.map((w) => w.id);

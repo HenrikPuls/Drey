@@ -10,15 +10,10 @@ import {
   input,
 } from '@angular/core';
 import { NgComponentOutlet } from '@angular/common';
-import { EditorService } from '../services/editor.service';
-import { AssistantService } from '../assistant';
-import { CalendarService } from '../calendar';
-import { EntryDraftService } from '../entry';
-import { TagSearchService } from '../tags';
-import { TaskService } from '../tasks';
 import { DockService, DockSide, PanelId } from './dock.service';
 import { PanelFrame } from './panel-frame';
-import { WIDGET_MAP } from './widget-registry';
+import { WidgetRegistryService } from './widget-registry.service';
+import { PluginWidgetHost } from '../plugin-host/plugin-widget-host';
 
 /**
  * One dock column (left or right). Renders its ordered panel list, each in
@@ -44,12 +39,7 @@ import { WIDGET_MAP } from './widget-registry';
 })
 export class Dock implements OnInit {
   protected readonly dock = inject(DockService);
-  private readonly calendar = inject(CalendarService);
-  private readonly search = inject(TagSearchService);
-  private readonly tasks = inject(TaskService);
-  private readonly editor = inject(EditorService);
-  private readonly assistant = inject(AssistantService);
-  private readonly entryDraft = inject(EntryDraftService);
+  private readonly registry = inject(WidgetRegistryService);
   private readonly el = inject<ElementRef<HTMLElement>>(ElementRef).nativeElement;
 
   readonly side = input.required<DockSide>();
@@ -83,7 +73,16 @@ export class Dock implements OnInit {
   }
 
   protected component(id: PanelId): Type<unknown> {
-    return WIDGET_MAP.get(id)!.component;
+    // Plugin widgets render through the generic DOM host (no Angular
+    // coupling for plugin code, ADR-0044); core widgets are components.
+    return this.registry.isPlugin(id)
+      ? PluginWidgetHost
+      : this.registry.widgetMap().get(id)!.component!;
+  }
+
+  /** `PluginWidgetHost` needs the widget id; core panels take no inputs. */
+  protected componentInputs(id: PanelId): Record<string, unknown> | undefined {
+    return this.registry.isPlugin(id) ? { widgetId: id } : undefined;
   }
 
   protected flexStyle(id: PanelId): string {
@@ -112,29 +111,6 @@ export class Dock implements OnInit {
 
   /** The value shown in the panel header, right before the grip. */
   protected statusFor(id: PanelId): string | null {
-    switch (id) {
-      case 'calendar':
-        // The expanded calendar shows the month in its own header row, so
-        // only surface it in the panel header while collapsed.
-        return this.dock.collapsed('calendar')
-          ? `${String(this.calendar.viewMonth() + 1).padStart(2, '0')}/${this.calendar.viewYear()}`
-          : null;
-      case 'search':
-        return this.search.ran() ? `${this.search.hits().length} hits` : null;
-      case 'tasks': {
-        const open = this.tasks.openCount();
-        return open > 0 ? `${open} open` : null;
-      }
-      case 'windows':
-        return String(this.editor.openDocs().length);
-      case 'assistant': {
-        const p = this.assistant.notePath();
-        return p ? (p.split('/').pop() ?? null) : null;
-      }
-      case 'entry':
-        return this.entryDraft.hasContent() ? 'unsent draft' : null;
-      default:
-        return null;
-    }
+    return this.registry.descriptor(id)?.status?.({ collapsed: this.dock.collapsed(id) }) ?? null;
   }
 }

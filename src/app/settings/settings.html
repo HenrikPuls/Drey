@@ -9,7 +9,7 @@
     <div class="head">
       <span class="title">Settings</span>
     </div>
-    @for (category of categories; track category.id) {
+    @for (category of categories(); track category.id) {
       <button
         type="button"
         class="category"
@@ -25,7 +25,9 @@
   <div class="right">
     <section class="detail">
       @if (settings.draft()) {
-        <ng-container *ngComponentOutlet="selectedComponent()" />
+        <ng-container
+          *ngComponentOutlet="selectedComponent(); inputs: selectedInputs()"
+        />
       } @else {
         <p class="loading">Loading settings…</p>
       }

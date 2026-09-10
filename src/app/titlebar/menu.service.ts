@@ -10,7 +10,7 @@ import {
 import { openSearchPanel } from '@codemirror/search';
 import type { EditorView } from '@codemirror/view';
 import { KeybindingService } from '../keybindings';
-import { DockService, WIDGETS, WidgetId } from '../dock';
+import { DockService, WidgetId, WidgetRegistryService } from '../dock';
 import { MeetingService } from '../meeting';
 import { PaneService } from '../panes';
 import { EditorService } from '../services/editor.service';
@@ -68,6 +68,7 @@ export class MenuService {
   private readonly settings = inject(SettingsService);
   private readonly vault = inject(VaultService);
   private readonly meeting = inject(MeetingService);
+  private readonly widgets = inject(WidgetRegistryService);
 
   readonly open = signal<MenuId | null>(null);
 
@@ -280,9 +281,10 @@ export class MenuService {
           checked: () => this.editor.lineNumbers(),
           run: () => this.run('editor.toggleLineNumbers'),
         },
-        ...WIDGETS.filter((w) => w.removable && this.settings.widgetEnabled(w.id)).map((w) =>
-          this.widgetRow(w.id, w.title),
-        ),
+        ...this.widgets
+          .widgets()
+          .filter((w) => w.removable && this.settings.widgetEnabled(w.id))
+          .map((w) => this.widgetRow(w.id, w.title)),
         SEP,
         {
           kind: 'item',

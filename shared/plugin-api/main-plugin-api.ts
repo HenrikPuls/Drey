@@ -131,7 +131,8 @@ export interface MainPluginContext {
     /** The enabled `on-save` triggers (id + confirm), so a save hook can run them. */
     actionsForEvent(event: 'on-save'): readonly { triggerId: string; confirm: boolean }[];
     runAction(triggerId: string, context: ActionContext, taskId?: string): Promise<ActionOutcome>;
-    suggestTags(text: string, taskId?: string): Promise<string[]>;
+    /** The vocabulary-carrying tag suggestion (the `autotag` prompt); plugin supplies its vocabulary. */
+    suggestTags(entryText: string, vocabulary: readonly string[], taskId?: string): Promise<string[]>;
     onDebugEntry(cb: (entry: LlmDebugEntry) => void): Unsubscribe;
   };
 

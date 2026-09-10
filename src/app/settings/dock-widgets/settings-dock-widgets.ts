@@ -1,5 +1,5 @@
 import { ChangeDetectionStrategy, Component, computed, inject } from '@angular/core';
-import { WIDGETS } from '../../dock';
+import { WidgetRegistryService } from '../../dock';
 import { WIDGET_CAPABILITY_LABELS } from '../../widgets';
 import { SettingsService } from '../../services/settings.service';
 import { SettingsPane } from '../settings-pane/settings-pane';
@@ -20,11 +20,12 @@ import { SettingsPane } from '../settings-pane/settings-pane';
 })
 export class SettingsDockWidgets {
   protected readonly settings = inject(SettingsService);
+  private readonly widgets = inject(WidgetRegistryService);
 
   /** Every registered widget, with its resolved enabled state + capability labels. */
   protected readonly rows = computed(() => {
     const disabled = this.settings.widgetsDisabledDraft();
-    return WIDGETS.map((w) => ({
+    return this.widgets.widgets().map((w) => ({
       id: w.id,
       title: w.title,
       removable: w.removable,

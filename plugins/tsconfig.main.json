@@ -1,0 +1,20 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "Node16",
+    "moduleResolution": "Node16",
+    "lib": ["ES2022"],
+    "outDir": "../dist-electron",
+    "rootDir": "..",
+    "strict": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "noImplicitOverride": true,
+    "noImplicitReturns": true,
+    "noFallthroughCasesInSwitch": true,
+    "types": ["node"]
+  },
+  "//": "Plugin main entries compile to CommonJS under dist-electron/plugins/<id>/main/ (the host imports them with import(pathToFileURL(...))). Type-only imports from shared/ are erased; the emitted dist-electron/shared copies are the same dead weight electron/tsconfig.json already produces.",
+  "include": ["./**/main/**/*.ts", "../shared/plugin-api/**/*.ts"],
+  "exclude": ["../shared/plugin-api/plugin-api.ts", "../shared/plugin-api/renderer.ts"]
+}

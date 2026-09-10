@@ -1,15 +1,17 @@
 /**
  * `shared/plugin-api` — the plugin SDK contract (ADR-0044), the plugin
  * analogue of `shared/ipc-api.ts`: a cross-layer contract outside the
- * feature-module rules. Both plugin hosts (electron + renderer) and every
- * plugin import from here.
+ * feature-module rules.
  *
- * Import from `shared/plugin-api`, never from a file inside it.
+ * THIS BARREL IS DOM-FREE and is the import surface for the main process
+ * (electron main + plugin `main` entries): manifest, version gate, the two
+ * IPC payload shapes, and the main-process context.
  *
- * NOTE for main-process code: `plugin-api.ts` is DOM-typed (the renderer
- * contribution surface) and is excluded from electron/tsconfig.json — the
- * main side imports `manifest` / `versions` / `plugin-ipc` /
- * `main-plugin-api` shapes only.
+ * The renderer contribution surface (`DreyPluginApi`, DOM-typed) lives in
+ * `plugin-api.ts` and is re-exported by `renderer.ts` — import THAT from
+ * renderer-side code. `electron/tsconfig.json` excludes the DOM-typed
+ * files from its no-DOM compile, so an accidental main-side import of
+ * `renderer.ts` is a compile error, not silent leakage.
  */
 export type { PluginStatus } from './versions';
 export { PLUGIN_API_VERSION } from './versions';
@@ -36,24 +38,3 @@ export type {
   VaultChangeEvent,
   VaultChangeEventKind,
 } from './main-plugin-api';
-
-export type {
-  ActiveDocument,
-  CodeMirrorModules,
-  DocumentChangeEvent,
-  DropDecoderContrib,
-  DreyPluginApi,
-  EditorExtensionSlot,
-  EditorSurfaceContext,
-  MenuContribution,
-  OpenDocumentInfo,
-  PluginChatOptions,
-  PluginCommand,
-  PluginDocKindContrib,
-  PluginDockSide,
-  PluginRendererModule,
-  PluginSelection,
-  PluginSettingsPageContrib,
-  PluginWidgetContrib,
-  RewriteRequest,
-} from './plugin-api';

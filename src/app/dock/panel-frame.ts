@@ -11,7 +11,7 @@ import {
 import { NgTemplateOutlet } from '@angular/common';
 import { DockService, PanelId } from './dock.service';
 import { PanelHeaderActionsStore } from './panel-header-actions';
-import { WIDGET_MAP } from './widget-registry';
+import { WidgetRegistryService } from './widget-registry.service';
 
 /**
  * The chrome every dock panel shares (DESIGN.md principle 3): a 32px
@@ -40,13 +40,14 @@ import { WIDGET_MAP } from './widget-registry';
 export class PanelFrame implements OnInit {
   private readonly dock = inject(DockService);
   private readonly headerActionsStore = inject(PanelHeaderActionsStore);
+  private readonly registry = inject(WidgetRegistryService);
   private readonly el = inject<ElementRef<HTMLElement>>(ElementRef).nativeElement;
 
   readonly panelId = input.required<PanelId>();
   readonly status = input<string | null>(null);
 
   protected readonly title = computed(
-    () => WIDGET_MAP.get(this.panelId())?.title ?? this.panelId(),
+    () => this.registry.descriptor(this.panelId())?.title ?? this.panelId(),
   );
   /** The panel's own control row, moved into this header (req-7); null if it has none. */
   protected readonly headerActions = computed(() =>
@@ -58,7 +59,9 @@ export class PanelFrame implements OnInit {
    * scrolling: the assistant (own header + composer stay put) and the
    * "Add entry" drawer (its text field grows with the panel).
    */
-  protected readonly flush = computed(() => WIDGET_MAP.get(this.panelId())?.flush ?? false);
+  protected readonly flush = computed(
+    () => this.registry.descriptor(this.panelId())?.flush ?? false,
+  );
   protected readonly isDragging = computed(() => this.dock.dragging() === this.panelId());
 
   constructor() {

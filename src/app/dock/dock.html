@@ -8,7 +8,7 @@
   }
 
   <app-panel-frame [panelId]="id" [status]="statusFor(id)" [style.flex]="flexStyle(id)">
-    <ng-container *ngComponentOutlet="component(id)" />
+    <ng-container *ngComponentOutlet="component(id); inputs: componentInputs(id)" />
   </app-panel-frame>
 
   @if (splitTarget(id); as next) {

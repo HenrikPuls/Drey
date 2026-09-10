@@ -81,6 +81,12 @@ export interface RewriteRequest {
 /** Where a widget docks. Same three sides the shell has. */
 export type PluginDockSide = 'left' | 'right' | 'bottom';
 
+/** What a widget's header-status callback may read. */
+export interface PluginStatusContext {
+  /** True while the panel is collapsed to its 32px header. */
+  readonly collapsed: boolean;
+}
+
 /**
  * A dock panel contribution. `id` is dock-state identity
  * (`localStorage['drey.dock']` + `widgets.disabled` key on it) — a plugin
@@ -99,7 +105,7 @@ export interface PluginWidgetContrib {
   /** Body fills the frame instead of scrolling (no second scrollbar). */
   readonly flush?: boolean;
   /** Header status value (right-aligned, dimmed) — recomputed on shell change detection. */
-  status?(): string | null;
+  status?(context: PluginStatusContext): string | null;
   /** Build the panel body; return cleanup (called on unregister). */
   mount(el: HTMLElement): () => void;
 }

@@ -40,6 +40,7 @@ import {
   THEME_ACCENT,
   UiScale,
   WidgetsConfig,
+  PluginsConfig,
   AssistantConfig,
 } from './schema';
 import {
@@ -255,15 +256,24 @@ function normalizeDaily(raw: unknown): DailyConfig {
   };
 }
 
-function normalizeWidgets(raw: unknown): WidgetsConfig {
-  const source = (raw ?? {}) as Record<string, unknown>;
-  const list = Array.isArray(source['disabled']) ? source['disabled'] : [];
-  const disabled = [
+/** Deduped list of non-empty strings -- the shape of both `*.disabled` lists. */
+function normalizeDisabledList(raw: unknown): string[] {
+  const list = Array.isArray(raw) ? raw : [];
+  return [
     ...new Set(
       list.filter((x): x is string => typeof x === 'string' && x.trim().length > 0),
     ),
   ];
-  return { disabled };
+}
+
+function normalizeWidgets(raw: unknown): WidgetsConfig {
+  const source = (raw ?? {}) as Record<string, unknown>;
+  return { disabled: normalizeDisabledList(source['disabled']) };
+}
+
+function normalizePlugins(raw: unknown): PluginsConfig {
+  const source = (raw ?? {}) as Record<string, unknown>;
+  return { disabled: normalizeDisabledList(source['disabled']) };
 }
 
 /**
@@ -471,6 +481,7 @@ export function normalizeAppConfig(raw: unknown): AppConfig {
     daily: normalizeDaily(source['daily']),
     templates: normalizeTemplatesConfig(source['templates']),
     widgets: normalizeWidgets(source['widgets']),
+    plugins: normalizePlugins(source['plugins']),
     actions: {
       templates,
       triggers: normalizeTriggers(actionsSource['triggers'], templates),

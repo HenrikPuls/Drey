@@ -1,0 +1,20 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ES2022",
+    "moduleResolution": "bundler",
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "outDir": "../dist-plugins",
+    "rootDir": "..",
+    "strict": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "noImplicitOverride": true,
+    "noImplicitReturns": true,
+    "noFallthroughCasesInSwitch": true,
+    "types": []
+  },
+  "//": "Plugin renderer entries compile to plain ES modules under dist-plugins/<id>/renderer/, served file-per-file over plugin:// (ADR-0044). They must contain NO bare-specifier runtime imports: type-only imports are erased, and anything the plugin needs from the host comes through api.* (CodeMirror instances via api.editor.cm from stage 2). The emitted dist-plugins/shared copies are dead weight — imports are type-only — kept because tsc needs the sources for typechecking.",
+  "include": ["./**/renderer/**/*.ts", "../shared/**/*.ts"],
+  "exclude": ["../shared/**/*.spec.ts"]
+}

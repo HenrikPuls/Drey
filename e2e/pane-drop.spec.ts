@@ -11,7 +11,7 @@ import { test, expect, type Page } from './fixtures/drey';
  */
 
 async function refresh(page: Page): Promise<void> {
-  await page.locator('app-dock[side="left"] .icon-btn.refresh').click();
+  await page.locator('app-dock[side="left"] .hdr-btn[aria-label="Refresh files"]').click();
 }
 
 /** Fire a real `DataTransfer`-carrying dragover + drop on `selector`. */

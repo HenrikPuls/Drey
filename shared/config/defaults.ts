@@ -126,6 +126,7 @@ export const DEFAULT_APP_CONFIG: AppConfig = {
   daily: { ...DEFAULT_DAILY_CONFIG },
   templates: { ...DEFAULT_TEMPLATES_CONFIG },
   widgets: { disabled: [] },
+  plugins: { disabled: [] },
   actions: {
     templates: [noteSummaryTemplate(), searchSummaryTemplate(), autotagTemplate()],
     triggers: [],

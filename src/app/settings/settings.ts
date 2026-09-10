@@ -3,18 +3,7 @@ import { NgComponentOutlet } from '@angular/common';
 import { Icon } from '../icons/icon';
 import { OverlayGuardDirective } from '../services/overlay-guard.directive';
 import { SettingsService } from '../services/settings.service';
-import { SettingsAbout } from './about/settings-about';
-import { SettingsActions } from './actions/settings-actions';
-import { SettingsAppearance } from './appearance/settings-appearance';
-import { SettingsAssistant } from './assistant/settings-assistant';
-import { SettingsDaily } from './daily/settings-daily';
-import { SettingsDockWidgets } from './dock-widgets/settings-dock-widgets';
-import { SettingsEntry } from './entry/settings-entry';
-import { SettingsLlm } from './llm/settings-llm';
-import { SettingsMcp } from './mcp/settings-mcp';
-import { SettingsSpellcheck } from './spellcheck/settings-spellcheck';
-import { SettingsTemplates } from './templates/settings-templates';
-import { SettingsCategory } from './settings-category';
+import { SettingsCategoryRegistry } from './settings-registry.service';
 
 /**
  * The Settings screen: master-detail per CLAUDE.md's "UI/UX Design" -- a
@@ -40,58 +29,20 @@ import { SettingsCategory } from './settings-category';
 })
 export class Settings {
   protected readonly settings = inject(SettingsService);
+  private readonly registry = inject(SettingsCategoryRegistry);
 
-  protected readonly categories: readonly SettingsCategory[] = [
-    { id: 'llm', label: 'LLM', hint: 'Local model connection', component: SettingsLlm },
-    {
-      id: 'assistant',
-      label: 'Assistant',
-      hint: 'Note summary panel',
-      component: SettingsAssistant,
-    },
-    { id: 'entry', label: 'Add entry', hint: 'Append template', component: SettingsEntry },
-    { id: 'daily', label: 'Daily notes', hint: 'Open on startup', component: SettingsDaily },
-    {
-      id: 'templates',
-      label: 'Templates',
-      hint: 'Snippet library folder',
-      component: SettingsTemplates,
-    },
-    {
-      id: 'spellcheck',
-      label: 'Spelling',
-      hint: 'Dictionaries & language',
-      component: SettingsSpellcheck,
-    },
-    {
-      id: 'appearance',
-      label: 'Appearance',
-      hint: 'Type size, colour & font',
-      component: SettingsAppearance,
-    },
-    {
-      id: 'widgets',
-      label: 'Widgets',
-      hint: 'Panels & capabilities',
-      component: SettingsDockWidgets,
-    },
-    {
-      id: 'actions',
-      label: 'Actions',
-      hint: 'Prompt templates & triggers',
-      component: SettingsActions,
-    },
-    { id: 'mcp', label: 'MCP', hint: 'Vault server & tools', component: SettingsMcp },
-    { id: 'about', label: 'About', hint: 'Version & licenses', component: SettingsAbout },
-  ];
+  /** Core categories + plugin-contributed pages, from the registry. */
+  protected readonly categories = this.registry.categories;
 
-  protected readonly selected = signal<string>(this.categories[0].id);
+  protected readonly selected = signal<string>(this.categories()[0].id);
 
   protected readonly selectedComponent = computed(
     () =>
-      (this.categories.find((category) => category.id === this.selected()) ?? this.categories[0])
-        .component,
+      (this.registry.categoryFor(this.selected()) ?? this.categories()[0]).component,
   );
+
+  /** `{ contrib }` for a plugin page, `undefined` for a core one. */
+  protected readonly selectedInputs = computed(() => this.registry.inputsFor(this.selected()));
 
   /** True while the "you have unsaved changes" bar is showing. */
   protected readonly confirmingClose = signal(false);

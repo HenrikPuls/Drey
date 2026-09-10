@@ -16,6 +16,18 @@ interface DreyApiForE2E {
   listVaultFiles(): Promise<
     Array<{ name: string; relativePath: string; type: 'file' | 'directory' }>
   >;
+  listPlugins(): Promise<
+    Array<{
+      id: string;
+      name: string;
+      version: string;
+      status: 'active' | 'incompatible' | 'failed' | 'disabled';
+      error?: string;
+      rendererUrl?: string;
+      builtin: boolean;
+    }>
+  >;
+  invokePlugin(pluginId: string, method: string, payload?: unknown): Promise<unknown>;
 }
 
 interface Window {

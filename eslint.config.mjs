@@ -12,7 +12,7 @@ import tseslint from 'typescript-eslint';
  * directly.
  */
 
-const MODULES = ['llm', 'tags', 'tasks', 'mcp', 'browser', 'session', 'meeting'];
+const MODULES = ['llm', 'tags', 'tasks', 'mcp', 'browser', 'session', 'meeting', 'plugin-host'];
 
 /** Reaching into `shared/<mod>/` from anywhere by its `shared/`-qualified path. */
 const sharedModulePatterns = MODULES.map((mod) => ({
@@ -94,6 +94,7 @@ export default tseslint.config(
               'calendar',
               'vault',
               'meeting',
+              'plugin-host',
             ]),
             ...relativeModulePatternsDeepOnly(['llm', 'assistant', 'entry']),
           ],
@@ -111,6 +112,7 @@ export default tseslint.config(
       'electron/tasks/**/*.ts',
       'shared/tasks/**/*.ts',
       'electron/mcp/**/*.ts',
+      'electron/plugin-host/**/*.ts',
       'electron/browser/**/*.ts',
       'shared/browser/**/*.ts',
       'src/app/browser/**/*.ts',
@@ -131,6 +133,7 @@ export default tseslint.config(
       'src/app/entry/**/*.ts',
       'src/app/calendar/**/*.ts',
       'src/app/vault/**/*.ts',
+      'src/app/plugin-host/**/*.ts',
     ],
     rules: {
       'no-restricted-imports': 'off',

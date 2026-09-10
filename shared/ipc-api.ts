@@ -23,6 +23,13 @@ import type {
   BrowserStopFindArgs,
   BrowserTabRef,
 } from './browser';
+import type { PluginDescriptorForRenderer, PluginIpcEventPayload } from './plugin-api/plugin-ipc';
+
+export type {
+  PluginDescriptorForRenderer,
+  PluginIpcEventPayload,
+  PluginIpcInvokePayload,
+} from './plugin-api/plugin-ipc';
 
 export type { AppConfig, LlmEndpoint, CustomDictionary } from './app-config';
 export type { ChatCard, ChatCardRole, ChatThread } from './chat-thread';
@@ -138,6 +145,13 @@ export const IPC_CHANNELS = {
   sessionReadBackup: 'session:read-backup',
   sessionListBackups: 'session:list-backups',
   sessionDeleteBackups: 'session:delete-backups',
+  // Plugin host (ADR-0044). Two FIXED channels, not per-plugin names: the
+  // invoke payload carries { pluginId, method, payload } and main routes it
+  // to that plugin's registered method allowlist; events fan out
+  // renderer-side. pluginList is the discovery report for Settings.
+  pluginInvoke: 'plugin:invoke',
+  pluginEvent: 'plugin:event', // push main -> renderer
+  pluginList: 'plugin:list',
 } as const;
 
 /**
@@ -824,6 +838,25 @@ export interface DreyApi {
 
   /** Deletes the named backups (ignored if already gone). */
   deleteSessionBackups(ids: string[]): Promise<void>;
+
+  // --- Plugin host (ADR-0044) ---------------------------------------------
+  //
+  // The renderer never talks to a plugin's IPC channels directly: it sees
+  // the discovery report plus two generic primitives, and the plugin host
+  // services build everything else on top.
+
+  /** Every discovered plugin with its status (for the Settings → Plugins pane). */
+  listPlugins(): Promise<PluginDescriptorForRenderer[]>;
+
+  /** Invokes `method` on `pluginId`'s registered main-process handler. */
+  invokePlugin(pluginId: string, method: string, payload?: unknown): Promise<unknown>;
+
+  /**
+   * Subscribes to the single plugin event push. `pluginOnEvent` receives
+   * every plugin's events; the renderer plugin host fans them out by
+   * `pluginId`. Returns an unsubscribe.
+   */
+  onPluginEvent(listener: (event: PluginIpcEventPayload) => void): () => void;
 }
 
 declare global {

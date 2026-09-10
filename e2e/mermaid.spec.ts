@@ -4,7 +4,7 @@ import { test, expect, type Page } from './fixtures/drey';
 
 async function openNote(page: Page, vaultDir: string, name: string, body: string): Promise<void> {
   fs.writeFileSync(path.join(vaultDir, name), body);
-  await page.locator('app-dock[side="left"] .icon-btn.refresh').click();
+  await page.locator('app-dock[side="left"] .hdr-btn[aria-label="Refresh files"]').click();
   await page.locator('app-dock[side="left"] .node.file', { hasText: name }).click();
   await expect(page.locator('app-editor .cm-content')).toBeVisible();
 }

@@ -1,6 +1,6 @@
 import { TestBed } from '@angular/core/testing';
 import { DockService } from './dock.service';
-import { WIDGETS } from './widget-registry';
+import { CORE_WIDGETS } from './widget-registry';
 
 describe('DockService', () => {
   beforeEach(() => {
@@ -15,11 +15,11 @@ describe('DockService', () => {
   it('starts from the registry defaults', () => {
     const dock = make();
     const idsOn = (side: 'left' | 'right' | 'bottom') =>
-      WIDGETS.filter((w) => w.defaultDock === side).map((w) => w.id);
+      CORE_WIDGETS.filter((w) => w.defaultDock === side).map((w) => w.id);
     expect(dock.leftIds()).toEqual(idsOn('left'));
     expect(dock.rightIds()).toEqual(idsOn('right'));
     expect(dock.bottomIds()).toEqual(idsOn('bottom'));
-    for (const w of WIDGETS) {
+    for (const w of CORE_WIDGETS) {
       expect(dock.collapsed(w.id)).toBe(!w.defaultOpen);
       expect(dock.isHidden(w.id)).toBe(false);
     }

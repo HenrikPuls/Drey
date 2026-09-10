@@ -10,7 +10,7 @@ import { test, expect } from './fixtures/drey';
 test.describe('split-view entry points', () => {
   test('Ctrl+Alt+Enter splits the editor into two panes', async ({ page, vaultDir }) => {
     fs.writeFileSync(path.join(vaultDir, 'one.md'), '# one\n\nbody\n');
-    await page.locator('app-dock[side="left"] .icon-btn.refresh').click();
+    await page.locator('app-dock[side="left"] .hdr-btn[aria-label="Refresh files"]').click();
     await page.locator('app-dock[side="left"] .node.file', { hasText: 'one.md' }).click();
     await expect(page.locator('app-editor')).toHaveCount(1);
 
@@ -24,7 +24,7 @@ test.describe('split-view entry points', () => {
 
   test('the View menu exposes the split rows', async ({ page, vaultDir }) => {
     fs.writeFileSync(path.join(vaultDir, 'two.md'), '# two\n');
-    await page.locator('app-dock[side="left"] .icon-btn.refresh').click();
+    await page.locator('app-dock[side="left"] .hdr-btn[aria-label="Refresh files"]').click();
     await page.locator('app-dock[side="left"] .node.file', { hasText: 'two.md' }).click();
     await expect(page.locator('app-editor')).toHaveCount(1);
 

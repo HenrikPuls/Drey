@@ -158,9 +158,11 @@ registering through the same API plugins use.)
   output roots; `eslint.config.mjs`'s module lists shrink to the base
   modules, with `shared/plugin-api` exempt like `ipc-api.ts`.
 - The renderer API must stay out of the main process's compilation graph
-  (it is DOM-typed; `electron/tsconfig.json` excludes
-  `shared/plugin-api/plugin-api.ts` and its barrel, so an accidental
-  main-side import is a compile error, not silent leakage).
+  (it is DOM-typed; `shared/plugin-api/index.ts` stays DOM-free and is the
+  main-side surface, while the DOM-typed contribution surface
+  (`plugin-api.ts`, re-exported by `renderer.ts`) is excluded from
+  `electron/tsconfig.json`'s no-DOM compile — an accidental main-side
+  import of the renderer surface is a compile error, not silent leakage).
 - Every base seam a plugin needs is a registry: widgets, Settings
   categories, commands, menu rows, editor extensions, drop decoders,
   context-menu items, doc kinds, save hooks, vault hooks, section-search

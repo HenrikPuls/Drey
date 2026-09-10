@@ -171,6 +171,17 @@ export interface WidgetsConfig {
 }
 
 /**
+ * Settings category "Plugins": which plugins are switched off entirely
+ * (never imported, main or renderer side; ADR-0044). Same exception-list
+ * pattern as `WidgetsConfig` -- a plugin is enabled unless its id is here,
+ * and unknown ids are kept verbatim so a downgrade doesn't lose the
+ * choice. A toggle lands on the next app start (restart to apply).
+ */
+export interface PluginsConfig {
+  disabled: string[];
+}
+
+/**
  * Settings category "Templates": the vault folder whose `.md` files back
  * the Templates panel and the `Mod+T` picker. Folders are categories,
  * sub-folders sub-categories; a template is inserted at the cursor with its
@@ -413,6 +424,7 @@ export interface AppConfig {
   daily: DailyConfig;
   templates: TemplatesConfig;
   widgets: WidgetsConfig;
+  plugins: PluginsConfig;
   actions: {
     templates: ActionTemplate[];
     triggers: ActionTrigger[];

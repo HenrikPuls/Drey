@@ -23,6 +23,7 @@ import { McpHttpTransport, McpServer, VaultTools } from './mcp';
 import { MeetingImporter } from './meeting';
 import { attachContextMenu, buildApplicationMenu } from './menu';
 import { NoteManager } from './note-manager';
+import { PluginHost } from './plugin-host';
 import { SessionBackupStore } from './session';
 import { SpellcheckService } from './spellcheck';
 import { TagIndex } from './tags';
@@ -82,6 +83,22 @@ protocol.registerSchemesAsPrivileged([
     scheme: 'drey-asset',
     privileges: { standard: true, secure: true, supportFetchAPI: true, stream: true },
   },
+  // Serves built renderer modules for plugins (ADR-0044):
+  // `plugin://<pluginId>/<path under the plugin's renderer/ dir>`. `standard`
+  // so the URL parses with host = plugin id (ids are lowercase by the id
+  // pattern); `corsEnabled` because an ES-module import from the `app://`
+  // page is a CORS-mode fetch, and the handler answers with explicit
+  // Content-Type / Access-Control-Allow-Origin headers.
+  {
+    scheme: 'plugin',
+    privileges: {
+      standard: true,
+      secure: true,
+      supportFetchAPI: true,
+      corsEnabled: true,
+      stream: true,
+    },
+  },
 ]);
 
 function registerAppProtocol(): void {
@@ -120,6 +137,70 @@ function registerAssetProtocol(vaultManager: VaultManager): void {
 }
 
 let mainWindow: BrowserWindow | null = null;
+
+/** Module-scope handle so `createMainWindow` / `will-quit` can reach the host. */
+let pluginHost: PluginHost | null = null;
+
+/**
+ * `plugin://<pluginId>/<path under the plugin root>` -> that file
+ * (built-ins: `<dist-electron>/plugins/<id>`; user-installed:
+ * `<userData>/plugins/<id>`). The path is root-relative exactly like the
+ * manifest's `renderer` / `css` entries, so `plugin://<id>/renderer/index.js`
+ * serves `<root>/renderer/index.js`.
+ *
+ * Unlike the `app://` handler's `startsWith` guard, the escape check here
+ * is `path.relative`-based: it also rejects a target on another drive /
+ * a sibling prefix (e.g. a root of `C:\x\plugins` vs `C:\x\plugins-evil`),
+ * which `startsWith` lets through. Module fetches are CORS-mode, so the
+ * response carries explicit `Content-Type` (Chromium refuses a module
+ * without a JS MIME type) and a permissive `Access-Control-Allow-Origin`.
+ */
+function registerPluginProtocol(): void {
+  const MIME_BY_EXT: Record<string, string> = {
+    '.js': 'text/javascript; charset=utf-8',
+    '.mjs': 'text/javascript; charset=utf-8',
+    '.css': 'text/css; charset=utf-8',
+    '.json': 'application/json; charset=utf-8',
+    '.html': 'text/html; charset=utf-8',
+    '.svg': 'image/svg+xml',
+    '.png': 'image/png',
+    '.woff2': 'font/woff2',
+  };
+  protocol.handle('plugin', async (request) => {
+    let url: URL;
+    try {
+      url = new URL(request.url);
+    } catch {
+      return new Response('Bad request', { status: 400 });
+    }
+    const pluginId = url.hostname;
+    const rootDir = pluginHost?.rendererRootFor(pluginId) ?? null;
+    if (rootDir === null) {
+      return new Response('Not found', { status: 404 });
+    }
+    const relativePath = decodeURIComponent(url.pathname);
+    const filePath = path.normalize(path.join(rootDir, relativePath));
+    // `path.relative(rootDir, filePath)` is `..`-prefixed (or empty->same
+    // file) exactly when the join escaped the plugin root.
+    if (path.relative(rootDir, filePath).startsWith('..')) {
+      return new Response('Forbidden', { status: 403 });
+    }
+    try {
+      const fileResponse = await net.fetch(pathToFileURL(filePath).toString());
+      const body = await fileResponse.arrayBuffer();
+      const ext = path.extname(filePath).toLowerCase();
+      return new Response(body, {
+        status: 200,
+        headers: {
+          'Content-Type': MIME_BY_EXT[ext] ?? 'application/octet-stream',
+          'Access-Control-Allow-Origin': '*',
+        },
+      });
+    } catch {
+      return new Response('Not found', { status: 404 });
+    }
+  });
+}
 
 /**
  * The BrowserWindow / taskbar icon. Packaged, it is an `extraResources`
@@ -311,6 +392,9 @@ function createMainWindow(getUiScaleFactor?: () => number): BrowserWindow {
   // Bind the browser-tab view manager to this window (it was constructed
   // before the window so the IPC layer could take it as a dep).
   browserViews?.attach(window);
+  // Plugins activated before the window existed; deliver it to the ones
+  // that subscribed via `ctx.app.onMainWindowCreated`.
+  pluginHost?.notifyMainWindowCreated(window);
 
   window.on('closed', () => {
     mainWindow = null;
@@ -383,6 +467,33 @@ if (!app.requestSingleInstanceLock()) {
     // bound to the window later in `createMainWindow` via `attach()`.
     browserViews = new BrowserViewManager(() => mainWindow);
     const sessionBackups = new SessionBackupStore();
+    // The plugin host activates main entries before the window exists and
+    // before IPC registration — plugins register their method handlers in
+    // activate(), and the window-created callback reaches them afterwards.
+    pluginHost = new PluginHost({
+      // `__dirname` is `dist-electron/electron`, so the built-ins the plugin
+      // build script emits live one level up.
+      builtinRoot: path.join(__dirname, '..', 'plugins'),
+      userRoot: path.join(app.getPath('userData'), 'plugins'),
+      extraRoot: process.env['DREY_EXTRA_PLUGIN_DIR'] ?? null,
+      getMainWindow: () => mainWindow,
+      vaultManager,
+      appConfig,
+      lmStudio,
+      llmTasks,
+      actionRunner,
+      llmDebug,
+      log: (message, level) => {
+        if (level === 'error') {
+          console.error(message);
+        } else if (level === 'warn') {
+          console.warn(message);
+        } else {
+          console.log(message);
+        }
+      },
+    });
+    await pluginHost.discoverAndActivate();
     await tagIndex.rebuild();
     await taskIndex.rebuild();
     await syncMcpHttpTransport(mcpHttp, appConfig);
@@ -395,6 +506,7 @@ if (!app.requestSingleInstanceLock()) {
 
     registerAppProtocol();
     registerAssetProtocol(vaultManager);
+    registerPluginProtocol();
     registerIpcHandlers({
       getMainWindow: () => mainWindow,
       browserViews,
@@ -415,6 +527,7 @@ if (!app.requestSingleInstanceLock()) {
       mcpWriteBridge,
       stdioBridgePath,
       syncMcpHttp: () => syncMcpHttpTransport(mcpHttp, appConfig),
+      pluginHost,
     });
     // The File/Edit/Selection/View menus are drawn by the renderer titlebar
     // now (ADR-0019). Keep a native menu only on macOS, where the menu bar
@@ -445,6 +558,10 @@ if (!app.requestSingleInstanceLock()) {
     globalShortcut.unregisterAll();
     void mcpHttpForShutdown?.stop();
     browserViews?.destroyAll();
+    // Plugin will-quit hooks first (native teardown, e.g. the browser
+    // plugin's WebContentsViews), then deactivate.
+    void pluginHost?.runWillQuitHooks();
+    void pluginHost?.deactivateAll();
   });
 
   app.on('window-all-closed', () => {
