@@ -1,4 +1,4 @@
-<div class="backdrop" (click)="requestClose()"></div>
+<div class="backdrop" appOverlayGuard (click)="requestClose()"></div>
 
 <div class="panel" role="dialog" aria-modal="true" aria-label="Settings">
   <button type="button" class="close" (click)="requestClose()" aria-label="Close settings">

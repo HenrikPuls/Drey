@@ -95,8 +95,11 @@ toolchain is removable by deleting `.tools/`). Never assume a bare `node`,
   purely additive future option
   ([ADR-0018](docs/09_architecture_decisions/0018-manual-refresh-no-file-watcher.md)).
 - **Feature modules** ([ADR-0016](docs/09_architecture_decisions/0016-feature-module-convention.md)):
-  `electron/llm/`, `electron/tags/`, `electron/tasks/`, `shared/llm/`,
-  `shared/tags/`, `shared/tasks/`, `src/app/tags/`, `src/app/tasks/`,
+  `electron/llm/`, `electron/tags/`, `electron/tasks/`, `electron/browser/`,
+  `electron/session/`, `shared/llm/`, `shared/tags/`, `shared/tasks/`,
+  `shared/browser/`, `src/app/tags/`, `src/app/tasks/`, `src/app/browser/`
+  (in-editor web browser tab, ADR-0042), `src/app/session/`
+  (layout + open-tab restore, ADR-0043),
   `src/app/keybindings/` each expose a thin `index.ts`
   barrel; `eslint.config.mjs` (`no-restricted-imports`, `npm run lint`)
   makes a deep import from outside a module a CI error. `shared/ipc-api.ts`

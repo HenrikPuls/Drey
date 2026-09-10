@@ -1702,3 +1702,102 @@ A third feature-module trio, shaped like the tag stack (§5.14):
     the list scrolls, so the panel body has no second scrollbar.
 - `eslint.config.mjs` `MODULES` gains `'tasks'` — the three barrels are
   the only import surface.
+
+## 5.21 In-editor web browser tab (ADR-0042)
+
+A browser tab is a fileless `OpenDoc` keyed `browser://<n>`
+(`OpenDoc.kind: 'browser'`, alongside `'text'` / `'image'`); its page is a
+main-process `WebContentsView`, never renderer DOM.
+
+- **`electron/browser/` (barrel, ADR-0016)** — `BrowserViewManager` owns a
+  `Map<tabId, WebContentsView>` added to `mainWindow.contentView`.
+  `create()` builds a sandboxed view on the isolated `persist:webtab`
+  session (no preload, no Node), wires its own `will-navigate` (http(s) /
+  about only), `setWindowOpenHandler` (http(s) popup -> `browser:open-tab`
+  push; else deny) and a `context-menu` handler (nav / clipboard /
+  open-link-or-image-in-tab / search-selection / inspect), and forwards
+  `webContents` events as `browser:event`.
+  `setBounds()` multiplies the renderer rect by `webContents.getZoomFactor()`
+  and clamps to the content size; `setVisible()` respects a window-obscured
+  flag (blur / minimize / hide). `destroyAll()` on `window 'closed'` /
+  `app 'will-quit'`. Constructed in `whenReady` before
+  `registerIpcHandlers` (it is an `IpcHandlerDeps` member), bound to the
+  window in `createMainWindow` via `attach()`.
+- **`electron/ipc/browser-handlers.ts`** — eleven thin `ipcMain.handle`
+  delegates (create / destroy / set-bounds / set-visible / navigate /
+  go-back / go-forward / reload / stop / find / stop-find). Pushes:
+  `browser:event`, `browser:open-tab`.
+- **`shared/browser/` (barrel)** — the payload / event types
+  (`BrowserCreateArgs`, `BrowserEvent` discriminated union,
+  `BrowserTabState`, ...); `shared/ipc-api.ts` re-exports them and adds the
+  `browser*` `IPC_CHANNELS` keys + `DreyApi` methods.
+- **`src/app/browser/` (barrel)**:
+  - `BrowserViewService` (`providedIn: 'root'`) — per-tab `BrowserTabState`
+    signal, `openTab(rawInput?)` mints `browser://<n>` (`normalizeAddress`
+    -> DuckDuckGo for non-URL input), calls `EditorService.addBrowserDoc`
+    and `dreyApi.createBrowserView`. Reduces `browser:event` into state and
+    mirrors `title` / `favicon` / `url` into the `OpenDoc` via
+    `EditorService.setBrowserMeta`. An `effect` diffs `editor.openDocs()`
+    and calls `destroyBrowserView` for any `browser://` key that vanished
+    (one path for every close route). Another `effect` + a `layoutGesture`
+    signal fan out `setBrowserViewVisible(false)` while an overlay is up or
+    a splitter / dock drag runs.
+  - `BrowserTab` — the pane's chrome only: back / forward / reload-stop /
+    address `<input>` / find bar, plus a `.viewport` placeholder whose
+    `getBoundingClientRect()` it streams (ResizeObserver + rAF, coalesced)
+    as the view bounds. Mount -> visible + measure; `ngOnDestroy` ->
+    hidden (never destroyed). `Ctrl/Cmd+F` opens the find bar.
+  - `normalizeAddress(input)` — pure: `about:` / `http(s)://` pass through;
+    host-shaped input (`example.com`, `localhost:3000`, IPv4) gets
+    `https://`; anything else is a DuckDuckGo search.
+- **`OverlayGuardService` + `[appOverlayGuard]`** (`src/app/services/`) —
+  a `WebContentsView` paints above all DOM, so this ref-counts "an overlay
+  is on screen". The directive holds a guard while its `@if`-gated host is
+  mounted; it sits on the confirmation dialog, Settings overlay, image
+  lightbox, template picker, editor mode menu, editor context menu,
+  titlebar menu dropdowns and tab-bar context menu. `suppressed()` ->
+  every browser view hidden.
+- **Shell touch-points** — `PaneLeaf` renders `<app-browser-tab>` for
+  `kind: 'browser'`; `TabBar` shows the favicon (globe fallback);
+  `StatusBar` shows the URL; the seven text-only `EditorService`
+  short-circuits widened `=== 'image'` -> `!== 'text'`; `TaskService` /
+  `TemplateLibraryService` guards likewise; `app.ts` registers the
+  `browser.new` keybinding (`Ctrl+Shift+B`); `MenuService` adds the File
+  menu row.
+- `eslint.config.mjs` `MODULES` gains `'browser'`; the three barrels are
+  the only import surface.
+
+## 5.22 Session history (ADR-0043)
+
+The editor relaunches into its previous layout + tabs.
+
+- **`localStorage['drey.session']`** — one `SessionSnapshot` (`version`,
+  `savedAt`, `vault`, `layout`, `tabs`). `layout` is
+  `PaneService.snapshot()` (split tree + per-pane tab strip + focused id);
+  each `tabs` entry is `{ path, kind }` (+ `url` for a browser tab,
+  `onDisk` + optional `backupId` for a text tab).
+- **`electron/session/` (barrel, ADR-0016)** — `SessionBackupStore`:
+  `<userData>/session-backups/<uuid>.txt`, one file per unsaved buffer
+  (`write` / `read` / `list` / `delete`, UUID-validated so a crafted id
+  can't escape the dir). IPC `session:*` via
+  `electron/ipc/session-handlers.ts`.
+- **`src/app/session/` (barrel)** — `SessionService` (`providedIn: 'root'`):
+  - one `effect` on `EditorService.openDocs()` + `PaneService.snapshot()`;
+    no-ops until `restore()` has run, then debounces a layout write
+    (400 ms) and a backup write (700 ms). `beforeunload` flushes the
+    layout; `visibilitychange` -> hidden flushes both.
+  - `restore()` — called once from `App` after the vault + config are known
+    and before the daily-note fallback (skipped when it restored >= 1 tab,
+    or when `snapshot.vault` differs from the active vault). Per kind:
+    browser -> `BrowserViewService.restoreTab(id, url)` (same `browser://`
+    key); image / clean disk text -> `EditorService.openFile`; dirty disk
+    text -> `openFile` then `updateBuffer(<backup>)`; never-saved scratch
+    -> `openScratch(<backup>)` (dropped if the backup is gone).
+  - backups are reference-counted against live tabs (deleted on save /
+    close) and orphans pruned on launch.
+- **`PaneService`** gained `snapshot()` / `restore(snapshot, keepPath)` —
+  reversing the ADR-0037 "not persisted" note. `restore` drops tabs that
+  fail `keepPath`, prunes emptied panes (`removeLeaf`), and advances
+  `nextPaneNum` / `nextSplitNum` past the restored ids; returns `false`
+  (keeping the fresh single-pane default) when nothing survives.
+- `eslint.config.mjs` `MODULES` gains `'session'`.

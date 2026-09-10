@@ -19,7 +19,9 @@ An AI-powered knowledge hub for note-taking and task automation.
   model. Unsloth Desktop is the default; any server speaking that dialect
   works (Unsloth Desktop, llama.cpp, vLLM, Ollama, LM Studio), with an
   optional bearer API key for the ones that require auth. Still no cloud
-  calls.
+  calls — **with one documented, opt-in exception**: the removable
+  `copilot-web` provider (Req-3 / req-15, ADR-0040), off by default, which
+  drives Microsoft Copilot's website through browser automation.
 - Interactive requests (capture, chat) always take priority over
   background jobs.
 
@@ -183,6 +185,24 @@ below).
   default. Headings use the app's sans typeface by default; a different
   face (serif, mono, …) is selectable in Settings → Appearance. Footnotes
   render as plain text for now (no Lezer footnote extension).
+
+- **In-editor web browser tab
+  ([ADR-0042](../docs/09_architecture_decisions/0042-in-editor-web-browser-tab.md)):**
+  `File → New browser tab` (`Ctrl+Shift+B`) opens a `browser://<n>` tab
+  next to the notes — a toolbar (back / forward / reload / address bar /
+  find) over a main-process `WebContentsView`, with a native right-click
+  menu (nav / clipboard / open-link-in-tab / search selection / inspect).
+  Non-URL address input is a DuckDuckGo search; logins persist in an
+  isolated `persist:webtab` session; `Ctrl+F` finds in the page. The tab
+  shows the page favicon + title and never prompts on close.
+
+- **Session history ([ADR-0043](../docs/09_architecture_decisions/0043-session-history.md)):** the app relaunches into the exact editor state it was closed in — the
+  pane split tree, which tabs sit in which pane, the active tab and focused
+  pane (layout in `localStorage['drey.session']`, like the dock layout).
+  Tabs that were never saved anywhere keep their text across a restart,
+  Notepad++-style, via a backup store under the user-data dir
+  (`<userData>/session-backups/`). Skipped when the active vault changed;
+  a corrupt session file never blocks startup.
 
 - **Images ([ADR-0024](../docs/09_architecture_decisions/0024-binary-vault-asset-write.md),
   pulled forward from Phase 3):** an image pasted or dropped into the
@@ -373,13 +393,16 @@ below).
 
 I will ask you to implement certain requirements from the following list, once it is done please move it to the implemented chapter at the end of the list and remove it from here.
 
-bug-4 within the task view we have as scroll bar which is fine, but on the outside we have one as well, but the inside shall always shrink or expand to fit the outer
-
 Arch-1 Restructure the programm completely to have a hieracrchical structure and all modules/widgets are self containes only acessing the interfaces.
 
 Req-2 I would also like to inlcude the following document types whic should be rendered, however as i can not forsee the effort lets discuss this upfront: word, excel, powerpoint, pdf and loop components, i would like to inser a link and it should open it inline. However if I drag a document directly than the document shall be placed within the attachements folder
 
 Req-3 I would like to have a wrapper around copilot m365 for web so that i can use it instead of a local llm.
+  → Prototyped on branch `feat/copilot-web-provider` (ADR-0040), together
+    with req-15: an `llm.provider = 'copilot-web'` switch, Playwright +
+    system Edge, removable `electron/copilot/` module. Opt-in, off by
+    default; not merged into the default LLM behaviour. Fragile PoC — URL /
+    selectors / timing are all editable in Settings.
 
 Req-4 Atlassian Integration, when I paste a link to a workitem then i would like to check if i can retrieve the status of the ticket.
 
@@ -395,12 +418,24 @@ req-13 Editor: footnote rendering in Live Preview (needs a custom Lezer
   markdown extension), `Ctrl`-click to open concealed link targets.
 req-14 An additive chokidar file watcher, if manual refresh proves too coarse.
 req-15 playwright m365 copilot über browser automatisierung
+  → See Req-3 above — same feature, prototyped on `feat/copilot-web-provider` (ADR-0040).
 req-16 PDF Export
 req-17 Jira Integration
 req-18 Flow descriptions like Task Description => Sebastian => Peter would mean prepare task which is sent to Sebastian so that he can discuss it with Peter. Automation of current workflows via agentic tools, to stear persons like agents ;)
 Or Description => Jira (Creates a ticket from the description and returns the link to the new jira ticket 
 )
+req-19: Integrate draw.io view and edit
+bug-5: when the program is exited it should ask the user if he would like to save dirty documents, cancel or exit without saving
+bug-6: still there are problems with the focus also for the drowpdown boxes in appearance settings tab theme and editor. Normally it works fine however when things get stuck thos can not be changed any longer
+req-20 [[]] links shoudl work in the document
+req-21 dataview.js support
+req-22 integrate ical calender support. I would like to have in the context menu add meeting log, and then i would like to have a drop down of all apointments for that specific day, the one in which the current time falls shall be preselected, If i select one the meeting documentation like we did it with the drag and drop shall be used.
 
+Urgent UX Improvements (shall be done first after bugs):
+req-23 drag and drop of folders and files within the files widget
+req-24 Editor, the Lines On shall just contain the image but not text an ylonger
+req-25 Editor written status informations like unsaved draft or Saved shall be removed. I opt to go the way of saving all changes to the document, so that it is guaranteed that they are stored.
+req-26 frontmatter needs to be updated on save
 
 
 
@@ -474,3 +509,51 @@ shared `tagSetMatches`) and every whitespace term is a substring of its
 text/heading. `TasksPanel` renders a tag-chip input (`<datalist>`
 autocomplete over `TagService.tags()`, mirroring the Search panel) + a
 free-text field as the first body row.
+
+Calendar drop — drag an Outlook `.ics` / `.msg` (from the calendar or the
+file system) onto the editor to insert a formatted **meeting section** at
+the drop point: title, date/time, participants, invitation body and
+attachment names, auto-tagged `#mtg/<kebab-case-title>` so it lands in the
+tag section index. Also **File → Import meeting …** (native picker) as the
+fallback for Outlook drags that deliver no real file. The section is
+rendered from an editable `templates/meeting.md` (scaffolded from an
+English default on first use) via a tiny `{{#if}}` / `{{#each}}` evaluator;
+`.ics` / `.msg` are decoded in the main process (`electron/meeting/`,
+`ical.js` + `@kenjiuno/msgreader`, the invert's `VTIMEZONE` resolved to
+local time). Decode-only — the invite file itself is not copied into the
+vault. New `shared/meeting` / `electron/meeting` / `src/app/meeting`
+feature modules; the drop branch lives in `image-paste.ts`.
+See [ADR-0041](../docs/09_architecture_decisions/0041-calendar-file-drop-meeting-section.md).
+
+In-editor web browser tab (ADR-0042). `File -> New browser tab` /
+`Ctrl+Shift+B` opens a fileless `browser://<n>` tab
+(`OpenDoc.kind: 'browser'`) whose page is a main-process `WebContentsView`
+(`electron/browser/BrowserViewManager`), floated over the Angular layout by
+streaming the chrome placeholder's client rect as bounds. `src/app/browser/`
+holds `BrowserTab` (toolbar only) and `BrowserViewService` (state, event
+reducer, lifecycle -- destroys a view when its `browser://` key leaves
+`editor.openDocs()`). `normalizeAddress` sends non-URL input to DuckDuckGo;
+the session is an isolated `persist:webtab` partition; each view's
+`webContents` gets its own `will-navigate` / `setWindowOpenHandler` (http(s)
+popups reopen as tabs) / `context-menu` (nav, clipboard, open-link/image in
+a tab, search selection, inspect) and denies every permission request.
+`WebContentsView` paints above all DOM, so `OverlayGuardService` + the
+`[appOverlayGuard]` directive (+ a `LayoutGestureService` for splitter /
+dock drags) hide every view while an overlay or layout drag is active.
+Find-in-page via `webContents.findInPage` (`Ctrl+F`). New IPC channels in
+`shared/browser` + `electron/ipc/browser-handlers.ts`. Follow-up: restore
+open tabs + layout on restart (session history).
+
+Session history (ADR-0043). `SessionService` (`src/app/session/`) persists
+the pane layout + open-tab list to `localStorage['drey.session']` and
+restores it once at startup (before the daily-note fallback; skipped if the
+vault changed). `PaneService` gained `snapshot()` / `restore(keepPath)` —
+reversing ADR-0037's 'not persisted' note — which prunes tabs that no
+longer resolve and empty panes. Unsaved buffer text is kept in a
+main-process backup store (`electron/session/SessionBackupStore`, one
+`<uuid>.txt` per tab under `<userData>/session-backups/`, IPC `session:*`):
+a never-saved scratch buffer, or unsaved edits re-applied over the fresh
+disk read. Persist runs off one debounced effect + `beforeunload` /
+`visibilitychange` flushes; backups are reference-counted and orphans
+pruned on launch. Browser tabs restore under their exact `browser://<n>`
+key. New feature modules `electron/session/` + `src/app/session/`.

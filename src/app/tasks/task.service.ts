@@ -128,7 +128,7 @@ export class TaskService {
 
   private scanActiveDocument(): TaskRecord[] {
     const path = this.editor.openPath();
-    if (path === null || this.editor.activeKind() === 'image') {
+    if (path === null || this.editor.activeKind() !== 'text') {
       return [];
     }
     return scanTasks(path, this.editor.bufferContent());

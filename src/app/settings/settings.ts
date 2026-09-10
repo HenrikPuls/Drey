@@ -1,6 +1,7 @@
 import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
 import { NgComponentOutlet } from '@angular/common';
 import { Icon } from '../icons/icon';
+import { OverlayGuardDirective } from '../services/overlay-guard.directive';
 import { SettingsService } from '../services/settings.service';
 import { SettingsAbout } from './about/settings-about';
 import { SettingsActions } from './actions/settings-actions';
@@ -32,7 +33,7 @@ import { SettingsCategory } from './settings-category';
 @Component({
   selector: 'app-settings',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [Icon, NgComponentOutlet],
+  imports: [Icon, NgComponentOutlet, OverlayGuardDirective],
   templateUrl: './settings.html',
   styleUrl: './settings.css',
   host: { '(document:keydown.escape)': 'requestClose()' },

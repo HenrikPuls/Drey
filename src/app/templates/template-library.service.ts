@@ -170,7 +170,7 @@ export class TemplateLibraryService {
    * selection). No-op with no active text document.
    */
   async insert(relativePath: string): Promise<void> {
-    if (this.editor.activePath() === null || this.editor.activeKind() === 'image') {
+    if (this.editor.activePath() === null || this.editor.activeKind() !== 'text') {
       this.editor.error.set('Open a note before inserting a template.');
       return;
     }

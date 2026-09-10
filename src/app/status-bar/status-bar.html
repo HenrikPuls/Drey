@@ -1,5 +1,7 @@
 @if (editor.activeKind() === 'image') {
   <span class="count">{{ imageInfo() }}</span>
+} @else if (editor.activeKind() === 'browser') {
+  <span class="count url" [title]="browserUrl()">{{ browserUrl() }}</span>
 } @else {
   <span class="count">{{ editor.wordCount() }} words</span>
   <span class="dot">·</span>

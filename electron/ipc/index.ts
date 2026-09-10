@@ -6,21 +6,25 @@
  */
 import { BrowserWindow } from 'electron';
 import { AppConfigStore } from '../app-config';
+import { BrowserViewManager } from '../browser';
 import { ChatStore } from '../chat-store';
 import { DailyNoteManager } from '../daily-note';
 import { ActionRunner, LlmDebugLog, LmStudioClient } from '../llm';
 import { McpHttpTransport } from '../mcp';
 import { NoteManager } from '../note-manager';
+import { SessionBackupStore } from '../session';
 import { SpellcheckService } from '../spellcheck';
 import { TagIndex } from '../tags';
 import { TaskIndex } from '../tasks';
 import { VaultManager } from '../vault-manager';
 import { registerAppHandlers } from './app-handlers';
+import { registerBrowserHandlers } from './browser-handlers';
 import { registerConfigHandlers } from './config-handlers';
 import { registerLlmHandlers } from './llm-handlers';
 import { registerMcpHandlers } from './mcp-handlers';
 import { McpWriteBridge } from './mcp-write-bridge';
 import { registerQueryHandlers } from './query-handlers';
+import { registerSessionHandlers } from './session-handlers';
 import { registerSpellHandlers } from './spell-handlers';
 import { registerVaultHandlers } from './vault-handlers';
 
@@ -28,6 +32,8 @@ export { McpWriteBridge } from './mcp-write-bridge';
 
 export interface IpcHandlerDeps {
   getMainWindow: () => BrowserWindow | null;
+  browserViews: BrowserViewManager;
+  sessionBackups: SessionBackupStore;
   vaultManager: VaultManager;
   dailyNotes: DailyNoteManager;
   noteManager: NoteManager;
@@ -47,6 +53,8 @@ export interface IpcHandlerDeps {
 
 export function registerIpcHandlers(deps: IpcHandlerDeps): void {
   registerAppHandlers(deps.getMainWindow);
+  registerBrowserHandlers(deps);
+  registerSessionHandlers(deps);
   registerVaultHandlers(deps);
   registerQueryHandlers(deps);
   registerLlmHandlers(deps);

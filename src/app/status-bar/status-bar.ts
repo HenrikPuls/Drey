@@ -29,4 +29,11 @@ export class StatusBar {
     const dims = v.naturalWidth && v.naturalHeight ? `${v.naturalWidth} × ${v.naturalHeight}` : '—';
     return `${dims} · ${Math.round(v.scale * 100)}%`;
   });
+
+  /** Current page URL of the active browser tab (ADR-0042). */
+  protected readonly browserUrl = computed(() => {
+    const doc = this.editor.openDocs().find((d) => d.path === this.editor.activePath());
+    const url = doc?.url ?? '';
+    return url && url !== 'about:blank' ? url : 'New tab';
+  });
 }

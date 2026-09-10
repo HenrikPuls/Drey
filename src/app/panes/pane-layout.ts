@@ -1,4 +1,5 @@
 import { ChangeDetectionStrategy, Component, inject, input } from '@angular/core';
+import { LayoutGestureService } from '../services/layout-gesture.service';
 import { PaneLeaf } from './pane-leaf';
 import { PaneNode } from './pane-tree';
 import { PaneService } from './pane.service';
@@ -28,6 +29,7 @@ export class PaneLayout {
   readonly node = input.required<PaneNode>();
 
   private readonly panes = inject(PaneService);
+  private readonly layoutGesture = inject(LayoutGestureService);
 
   private static readonly MIN_CELL_PX = 120;
 
@@ -65,6 +67,9 @@ export class PaneLayout {
     handle.setPointerCapture?.(event.pointerId);
     document.body.style.cursor = horizontal ? 'col-resize' : 'row-resize';
     document.body.style.userSelect = 'none';
+    // Hide any in-editor browser view for the drag -- its native bounds
+    // trail the DOM by a frame otherwise (ADR-0042).
+    this.layoutGesture.set('pane-splitter', true);
 
     const move = (ev: PointerEvent): void => {
       const cur = horizontal ? ev.clientX : ev.clientY;
@@ -81,6 +86,7 @@ export class PaneLayout {
       window.removeEventListener('pointercancel', up);
       document.body.style.cursor = '';
       document.body.style.userSelect = '';
+      this.layoutGesture.set('pane-splitter', false);
     };
     window.addEventListener('pointermove', move);
     window.addEventListener('pointerup', up);

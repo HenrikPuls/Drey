@@ -233,4 +233,42 @@ describe('PaneService', () => {
       expect(panes.paneIds()).toContain(p3);
     });
   });
+
+  describe('snapshot / restore (ADR-0043)', () => {
+    it('round-trips a split layout through snapshot -> restore', () => {
+      panes.open('a.md');
+      panes.open('b.md');
+      const p2 = panes.splitPane('p1', 'row', 'b.md')!;
+      panes.open('c.md'); // in p2
+      panes.focus('p1');
+      const snap = panes.snapshot();
+
+      const fresh = TestBed.inject(PaneService); // same singleton; reset via restore
+      const restored = fresh.restore(snap, () => true);
+
+      expect(restored).toBe(true);
+      expect(panes.pane('p1')).toEqual({ id: 'p1', tabs: ['a.md'], active: 'a.md' });
+      expect(panes.pane(p2)?.tabs).toEqual(['b.md', 'c.md']);
+      expect(panes.focusedId()).toBe('p1');
+    });
+
+    it('drops tabs that fail keepPath and prunes an emptied pane', () => {
+      panes.open('keep.md');
+      const p2 = panes.splitPane('p1', 'row', 'keep.md')!;
+      panes.open('gone.md'); // p1's only tab
+      const snap = panes.snapshot();
+
+      const restored = panes.restore(snap, (p) => p !== 'gone.md');
+
+      expect(restored).toBe(true);
+      expect(panes.paneIds()).toEqual([p2]);
+      expect(panes.pane(p2)?.tabs).toEqual(['keep.md']);
+    });
+
+    it('returns false when nothing survives', () => {
+      panes.open('gone.md');
+      const snap = panes.snapshot();
+      expect(panes.restore(snap, () => false)).toBe(false);
+    });
+  });
 });

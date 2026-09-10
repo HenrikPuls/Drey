@@ -51,6 +51,7 @@
 @if (menuOpen()) {
   <div
     class="ctx-backdrop"
+    appOverlayGuard
     (click)="closeMenu()"
     (contextmenu)="$event.preventDefault(); closeMenu()"
   ></div>

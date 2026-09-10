@@ -1,5 +1,5 @@
 @if (pending(); as req) {
-  <div class="backdrop" (click)="onCancel()"></div>
+  <div class="backdrop" appOverlayGuard (click)="onCancel()"></div>
   <div class="dialog" role="dialog" aria-modal="true" aria-labelledby="confirm-title">
     <header>
       <h2 id="confirm-title">{{ req.title }}</h2>

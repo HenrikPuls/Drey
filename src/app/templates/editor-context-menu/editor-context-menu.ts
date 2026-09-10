@@ -1,6 +1,7 @@
 import { ChangeDetectionStrategy, Component, HostListener, computed, inject } from '@angular/core';
 import { MenuService } from '../../titlebar';
 import { EditorService } from '../../services/editor.service';
+import { OverlayGuardDirective } from '../../services/overlay-guard.directive';
 import { TemplateLibraryService } from '../template-library.service';
 import { EditorContextMenuService } from './editor-context-menu.service';
 
@@ -14,6 +15,7 @@ import { EditorContextMenuService } from './editor-context-menu.service';
 @Component({
   selector: 'app-editor-context-menu',
   changeDetection: ChangeDetectionStrategy.OnPush,
+  imports: [OverlayGuardDirective],
   templateUrl: './editor-context-menu.html',
   styleUrl: './editor-context-menu.css',
 })

@@ -7,6 +7,7 @@ import {
   input,
   signal,
 } from '@angular/core';
+import { BrowserTab } from '../browser';
 import { Editor } from '../editor/editor';
 import { ImageTab } from '../image-viewer';
 import { EditorService } from '../services/editor.service';
@@ -43,7 +44,7 @@ const OWNS_DROP = '.cm-content, input, textarea, [contenteditable="true"]';
 @Component({
   selector: 'app-pane-leaf',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [TabBar, Editor, ImageTab],
+  imports: [TabBar, Editor, ImageTab, BrowserTab],
   templateUrl: './pane-leaf.html',
   styleUrl: './pane-leaf.css',
   host: {

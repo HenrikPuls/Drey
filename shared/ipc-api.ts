@@ -12,6 +12,17 @@ import type { ActionContext, ActionOutcome, AskOutcome, ChatMessage, LlmDebugEnt
 import type { ChatThread } from './chat-thread';
 import type { TagSearchHit, TagSearchQuery } from './tags';
 import type { TaskRecord } from './tasks';
+import type {
+  BrowserCreateArgs,
+  BrowserEvent,
+  BrowserFindArgs,
+  BrowserNavigateArgs,
+  BrowserOpenTabRequest,
+  BrowserSetBoundsArgs,
+  BrowserSetVisibleArgs,
+  BrowserStopFindArgs,
+  BrowserTabRef,
+} from './browser';
 
 export type { AppConfig, LlmEndpoint, CustomDictionary } from './app-config';
 export type { ChatCard, ChatCardRole, ChatThread } from './chat-thread';
@@ -25,6 +36,20 @@ export type {
 } from './llm';
 export type { TagSearchHit, TagSearchQuery } from './tags';
 export type { TaskKind, TaskRecord } from './tasks';
+export type {
+  BrowserCreateArgs,
+  BrowserEvent,
+  BrowserFindArgs,
+  BrowserNavigateArgs,
+  BrowserOpenTabRequest,
+  BrowserRect,
+  BrowserSetBoundsArgs,
+  BrowserSetVisibleArgs,
+  BrowserStopFindArgs,
+  BrowserTabId,
+  BrowserTabRef,
+  BrowserTabState,
+} from './browser';
 
 /**
  * Channel names. Most are `ipcMain.handle` / `ipcRenderer.invoke` request
@@ -87,6 +112,29 @@ export const IPC_CHANNELS = {
   mcpWriteRequest: 'mcp:write-request',
   mcpWriteDecision: 'mcp:write-decision',
   mcpVaultChanged: 'mcp:vault-changed',
+  // In-editor web browser tab (Req-19, ADR-0040). One WebContentsView per
+  // tab, owned by the main process; the renderer drives it over these.
+  browserCreate: 'browser:create',
+  browserDestroy: 'browser:destroy',
+  browserSetBounds: 'browser:set-bounds',
+  browserSetVisible: 'browser:set-visible',
+  browserNavigate: 'browser:navigate',
+  browserGoBack: 'browser:go-back',
+  browserGoForward: 'browser:go-forward',
+  browserReload: 'browser:reload',
+  browserStop: 'browser:stop',
+  browserFind: 'browser:find',
+  browserStopFind: 'browser:stop-find',
+  browserEvent: 'browser:event', // push main -> renderer
+  browserOpenTab: 'browser:open-tab', // push main -> renderer
+  // Session history (ADR-0043): a backup store under the user-data dir for
+  // the text of tabs that have no file on disk (or unsaved edits), so they
+  // survive a restart. The layout / tab list itself lives in the
+  // renderer's localStorage, like the dock layout.
+  sessionWriteBackup: 'session:write-backup',
+  sessionReadBackup: 'session:read-backup',
+  sessionListBackups: 'session:list-backups',
+  sessionDeleteBackups: 'session:delete-backups',
 } as const;
 
 /**
@@ -678,6 +726,81 @@ export interface DreyApi {
    * Returns an unsubscribe.
    */
   onVaultChanged(listener: () => void): () => void;
+
+  // --- In-editor web browser tab (Req-19, ADR-0040) ----------------
+  //
+  // Each browser tab is backed by one main-process `WebContentsView`
+  // floating over the Angular layout. The renderer owns only the chrome
+  // (address bar, nav buttons) and a placeholder <div> whose client rect
+  // it streams here as the view's bounds; the page itself never enters the
+  // renderer's DOM. All request calls resolve `void`.
+
+  /** Creates the native view for `tabId` and loads `url` (`about:blank` ok). */
+  createBrowserView(args: BrowserCreateArgs): Promise<void>;
+
+  /** Destroys the native view. Called when the tab closes (or on a diff of `openDocs()`). */
+  destroyBrowserView(ref: BrowserTabRef): Promise<void>;
+
+  /**
+   * Positions the view over the renderer's placeholder. High-frequency --
+   * the renderer coalesces to one call per animation frame and skips it
+   * entirely while a splitter / dock drag is in progress.
+   */
+  setBrowserViewBounds(args: BrowserSetBoundsArgs): Promise<void>;
+
+  /**
+   * Shows / hides the view without destroying it -- used when the tab is
+   * not the focused pane's active tab, the window is blurred, or an
+   * Angular overlay is open on top (a `WebContentsView` paints above all
+   * DOM, so it must yield to menus and dialogs).
+   */
+  setBrowserViewVisible(args: BrowserSetVisibleArgs): Promise<void>;
+
+  /** Navigates the view to `url` (already normalised by `normalizeAddress`). */
+  navigateBrowserView(args: BrowserNavigateArgs): Promise<void>;
+
+  browserViewGoBack(ref: BrowserTabRef): Promise<void>;
+  browserViewGoForward(ref: BrowserTabRef): Promise<void>;
+  browserViewReload(ref: BrowserTabRef): Promise<void>;
+  browserViewStop(ref: BrowserTabRef): Promise<void>;
+
+  /** In-page find (`webContents.findInPage`); results arrive via `onBrowserEvent`. */
+  browserViewFind(args: BrowserFindArgs): Promise<void>;
+  browserViewStopFind(args: BrowserStopFindArgs): Promise<void>;
+
+  /**
+   * Subscribes to per-view `webContents` events (navigation, title,
+   * favicon, loading, find results, crash). Returns an unsubscribe; the
+   * raw IPC event is never forwarded (ADR-0001).
+   */
+  onBrowserEvent(listener: (event: BrowserEvent) => void): () => void;
+
+  /**
+   * Fires when the embedded page tried a `target="_blank"` / `window.open`
+   * to an http(s) URL -- the renderer opens it as a new browser tab.
+   * Returns an unsubscribe.
+   */
+  onBrowserOpenTab(listener: (request: BrowserOpenTabRequest) => void): () => void;
+
+  // --- Session history (ADR-0043) ---------------------------------------
+  //
+  // The layout + open-tab list is persisted by the renderer in
+  // `localStorage['drey.session']`. These channels only back the text of
+  // buffers with nothing on disk to reload from (a never-saved scratch
+  // tab, or unsaved edits to a real file) -- one file per `id` under
+  // `<userData>/session-backups/`.
+
+  /** Writes (or overwrites) the backup for `id`. `id` must be a UUID. */
+  writeSessionBackup(id: string, content: string): Promise<void>;
+
+  /** Reads a backup, or `null` if it is gone. */
+  readSessionBackup(id: string): Promise<string | null>;
+
+  /** Every backup id currently on disk -- for pruning orphans on restore. */
+  listSessionBackups(): Promise<string[]>;
+
+  /** Deletes the named backups (ignored if already gone). */
+  deleteSessionBackups(ids: string[]): Promise<void>;
 }
 
 declare global {

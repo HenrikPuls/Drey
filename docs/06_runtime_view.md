@@ -1067,6 +1067,108 @@ sequenceDiagram
     Panel->>Ed: openFileAt(path, line)
 ```
 
+## 6.22 Open a web tab, navigate, and yield to an overlay (ADR-0042)
+
+`File -> New browser tab` / `Ctrl+Shift+B` opens a `browser://<n>` tab. The
+page is a main-process `WebContentsView`; the renderer holds only the
+chrome and streams the placeholder rect as the view's bounds. While any
+Angular overlay is open the view is hidden so it cannot paint over it.
+
+```mermaid
+sequenceDiagram
+    actor User
+    participant Menu as MenuService / keybinding
+    participant BVS as BrowserViewService
+    participant Ed as EditorService
+    participant Tab as BrowserTab
+    participant IPC as browser-handlers
+    participant Mgr as BrowserViewManager
+    participant WCV as WebContentsView
+    participant Guard as OverlayGuardService
+
+    User->>Menu: New browser tab
+    Menu->>BVS: openTab()
+    BVS->>Ed: addBrowserDoc("browser://1", "New tab")
+    Ed-->>Tab: PaneLeaf renders <app-browser-tab> for kind:'browser'
+    BVS->>IPC: browser:create { tabId, url: "about:blank" }
+    IPC->>Mgr: create()
+    Mgr->>WCV: new WebContentsView(persist:webtab) · addChildView · loadURL
+
+    Tab->>BVS: setBounds(rect)  (ResizeObserver + rAF)
+    BVS->>IPC: browser:set-bounds
+    IPC->>Mgr: setBounds() → rect × getZoomFactor(), clamp
+    Mgr->>WCV: setBounds(...)
+
+    User->>Tab: type "example.com" ↵
+    Tab->>BVS: navigate(tabId, "example.com")
+    BVS->>IPC: browser:navigate { url: "https://example.com" }
+    IPC->>Mgr: navigate() → WCV.loadURL
+    WCV-->>Mgr: did-navigate / page-title-updated / page-favicon-updated
+    Mgr-->>BVS: browser:event (push)
+    BVS->>BVS: reduce() → BrowserTabState
+    BVS->>Ed: setBrowserMeta(tabId, { name, favicon, url })
+    Ed-->>Tab: TabBar shows favicon + title; StatusBar shows URL
+
+    User->>Guard: opens a dialog / Settings / a menu ([appOverlayGuard])
+    Guard->>BVS: suppressed() = true
+    BVS->>IPC: browser:set-visible { visible: false } (every tab)
+    IPC->>Mgr: setVisible(false) → WCV.setVisible(false)
+    User->>Guard: closes it
+    Guard->>Tab: suppressed() = false → effect re-runs
+    Tab->>BVS: setVisible(true) + measure()
+
+    User->>Tab: close the tab (X)
+    Tab->>Ed: closeTab("browser://1")
+    Ed-->>BVS: openDocs() effect: key gone
+    BVS->>IPC: browser:destroy
+    IPC->>Mgr: destroy() → removeChildView + webContents.close()
+```
+
+
+## 6.23 Restore the previous session on launch (ADR-0043)
+
+```mermaid
+sequenceDiagram
+    actor User
+    participant App as App (startup effect)
+    participant Sess as SessionService
+    participant LS as localStorage['drey.session']
+    participant IPC as session-handlers
+    participant Store as SessionBackupStore
+    participant Ed as EditorService
+    participant BVS as BrowserViewService
+    participant Panes as PaneService
+
+    App->>Sess: restore()  (vault + config ready)
+    Sess->>LS: getItem -> SessionSnapshot
+    alt no session / other vault / corrupt
+        Sess-->>App: false  -> App opens today's daily note
+    else
+        loop each tab
+            alt browser
+                Sess->>BVS: restoreTab("browser://n", url)
+            else text with backupId
+                Sess->>IPC: session:read-backup(id)
+                IPC->>Store: read(id)
+                Store-->>Sess: buffer text
+                alt onDisk
+                    Sess->>Ed: openFile(path) then updateBuffer(backup)
+                else scratch
+                    Sess->>Ed: openScratch(path, backup)
+                end
+            else clean disk file / image
+                Sess->>Ed: openFile(path)
+            end
+        end
+        Sess->>Panes: restore(layout, keepPath = restored)
+        Panes-->>Sess: prune dropped tabs + empty panes
+        Sess-->>App: true  -> daily-note fallback skipped
+        Sess->>IPC: session:list-backups -> delete orphans
+    end
+
+    Note over Sess: thereafter, one debounced effect writes<br/>drey.session (400ms) + backups (700ms);<br/>beforeunload / visibilitychange flush
+```
+
 ## Planned flows (added as their milestone is built)
 
 - Dedicated keyword-search / FTS surface — the search panel's free-text

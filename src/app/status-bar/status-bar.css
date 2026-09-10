@@ -18,6 +18,13 @@
   color: var(--text-3);
 }
 
+.count.url {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 .dot {
   flex: none;
   font-family: var(--font-mono);

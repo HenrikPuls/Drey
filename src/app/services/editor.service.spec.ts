@@ -456,6 +456,49 @@ describe('EditorService', () => {
     });
   });
 
+  describe('browser tabs (kind: browser)', () => {
+    it('addBrowserDoc yields a non-dirty, non-text doc', () => {
+      service.addBrowserDoc('browser://1', 'New tab');
+      const doc = service.docFor('browser://1')!;
+      expect(doc.kind).toBe('browser');
+      expect(service.isDirty()).toBe(false);
+      expect(service.activeKind()).toBe('browser');
+    });
+
+    it('save() and saveAll() skip a browser tab', async () => {
+      service.addBrowserDoc('browser://1', 'New tab');
+      await service.save();
+      await service.saveAll();
+      expect(saves).toEqual([]);
+    });
+
+    it('closeTab on a browser tab closes cleanly (never dirty, no prompt)', () => {
+      service.addBrowserDoc('browser://1', 'New tab');
+      // A browser doc has savedContent === bufferContent === '' so the
+      // dirty check that would `confirm()` is never reached.
+      service.closeTab('browser://1');
+      expect(service.openDocs().some((d) => d.path === 'browser://1')).toBe(false);
+    });
+
+    it('setBrowserMeta follows the page title / favicon', () => {
+      service.addBrowserDoc('browser://1', 'New tab');
+      service.setBrowserMeta('browser://1', { name: 'Example', favicon: 'f.ico', url: 'https://e/' });
+      const doc = service.docFor('browser://1')!;
+      expect(doc.name).toBe('Example');
+      expect(doc.favicon).toBe('f.ico');
+      expect(doc.url).toBe('https://e/');
+    });
+
+    it('updateBuffer / setViewMode are no-ops on a browser tab', () => {
+      service.addBrowserDoc('browser://1', 'New tab');
+      service.updateBuffer('browser://1', 'nope');
+      service.setViewMode('source', 'browser://1');
+      const doc = service.docFor('browser://1')!;
+      expect(doc.bufferContent).toBe('');
+      expect(doc.viewMode).toBe('live');
+    });
+  });
+
   describe('stripFrontmatter', () => {
     it('drops a leading YAML block and the blank line after it', () => {
       const text = '---\ntype: notiz\ntitle: "x"\n---\n\n# Heading\n\nBody';

@@ -16,11 +16,13 @@ import { AppConfigStore } from './app-config';
 import { ChatStore } from './chat-store';
 import { DailyNoteManager } from './daily-note';
 import { installMainProcessLogging, watchWebContents } from './logger';
+import { BrowserViewManager } from './browser';
 import { ActionRunner, LlmDebugLog, LlmTaskRegistry, LmStudioClient } from './llm';
 import { registerIpcHandlers, McpWriteBridge } from './ipc';
 import { McpHttpTransport, McpServer, VaultTools } from './mcp';
 import { attachContextMenu, buildApplicationMenu } from './menu';
 import { NoteManager } from './note-manager';
+import { SessionBackupStore } from './session';
 import { SpellcheckService } from './spellcheck';
 import { TagIndex } from './tags';
 import { TaskIndex } from './tasks';
@@ -146,6 +148,13 @@ function stdioBridgePath(): string {
 
 /** Module-scope handle so the `will-quit` listener can close the socket. */
 let mcpHttpForShutdown: McpHttpTransport | null = null;
+
+/**
+ * The in-editor browser tab views (Req-19, ADR-0040). Held at module scope
+ * so `will-quit` / `window 'closed'` can tear every native `WebContentsView`
+ * down -- an orphaned one keeps its renderer process alive.
+ */
+let browserViews: BrowserViewManager | null = null;
 
 /**
  * The main<->renderer bridge for confirming an MCP `vault_write` (ADR-0011 /
@@ -298,9 +307,15 @@ function createMainWindow(getUiScaleFactor?: () => number): BrowserWindow {
     });
   }
   mainWindow = window;
+  // Bind the browser-tab view manager to this window (it was constructed
+  // before the window so the IPC layer could take it as a dep).
+  browserViews?.attach(window);
 
   window.on('closed', () => {
     mainWindow = null;
+    // Every browser-tab WebContentsView belonged to this window -- drop
+    // them so no renderer process is orphaned.
+    browserViews?.destroyAll();
   });
 
   if (rendererDevServerUrl) {
@@ -362,6 +377,10 @@ if (!app.requestSingleInstanceLock()) {
     const mcpServer = new McpServer(vaultTools, app.getVersion());
     const mcpHttp = new McpHttpTransport(mcpServer);
     mcpHttpForShutdown = mcpHttp;
+    // Constructed here (before `registerIpcHandlers`, which needs it) but
+    // bound to the window later in `createMainWindow` via `attach()`.
+    browserViews = new BrowserViewManager(() => mainWindow);
+    const sessionBackups = new SessionBackupStore();
     await tagIndex.rebuild();
     await taskIndex.rebuild();
     await syncMcpHttpTransport(mcpHttp, appConfig);
@@ -376,6 +395,8 @@ if (!app.requestSingleInstanceLock()) {
     registerAssetProtocol(vaultManager);
     registerIpcHandlers({
       getMainWindow: () => mainWindow,
+      browserViews,
+      sessionBackups,
       vaultManager,
       dailyNotes,
       noteManager,
@@ -420,6 +441,7 @@ if (!app.requestSingleInstanceLock()) {
   app.on('will-quit', () => {
     globalShortcut.unregisterAll();
     void mcpHttpForShutdown?.stop();
+    browserViews?.destroyAll();
   });
 
   app.on('window-all-closed', () => {

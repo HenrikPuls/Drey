@@ -1,0 +1,87 @@
+<div class="toolbar">
+  <button
+    type="button"
+    class="nav"
+    (click)="back()"
+    [disabled]="!state()?.canGoBack"
+    aria-label="Back"
+    title="Back"
+  >
+    <app-icon name="chevron-left" [size]="16" />
+  </button>
+  <button
+    type="button"
+    class="nav"
+    (click)="forward()"
+    [disabled]="!state()?.canGoForward"
+    aria-label="Forward"
+    title="Forward"
+  >
+    <app-icon name="chevron-right" [size]="16" />
+  </button>
+  <button
+    type="button"
+    class="nav"
+    (click)="reloadOrStop()"
+    [attr.aria-label]="state()?.loading ? 'Stop' : 'Reload'"
+    [title]="state()?.loading ? 'Stop' : 'Reload'"
+  >
+    <app-icon [name]="state()?.loading ? 'x' : 'refresh-cw'" [size]="14" />
+  </button>
+
+  <input
+    class="address"
+    type="text"
+    spellcheck="false"
+    autocapitalize="off"
+    autocomplete="off"
+    placeholder="Enter a URL or search"
+    [value]="addressDraft()"
+    (input)="addressDraft.set($any($event.target).value)"
+    (focus)="onAddressFocus()"
+    (blur)="onAddressBlur()"
+    (keydown.enter)="submitAddress()"
+  />
+</div>
+
+@if (state()?.find?.open) {
+  <div class="findbar">
+    <input
+      class="find-input"
+      type="text"
+      spellcheck="false"
+      placeholder="Find in page"
+      autofocus
+      [value]="state()?.find?.query"
+      (input)="onFindInput($any($event.target).value)"
+      (keydown.enter)="findNext(false)"
+      (keydown.shift.enter)="findNext(true)"
+      (keydown.escape)="closeFind()"
+    />
+    <span class="find-count">
+      @if ((state()?.find?.matches ?? 0) > 0) {
+        {{ state()?.find?.activeMatch }} / {{ state()?.find?.matches }}
+      } @else if (state()?.find?.query) {
+        0 / 0
+      }
+    </span>
+    <button type="button" class="nav" (click)="findNext(true)" aria-label="Previous match">
+      <app-icon name="chevron-left" [size]="14" />
+    </button>
+    <button type="button" class="nav" (click)="findNext(false)" aria-label="Next match">
+      <app-icon name="chevron-right" [size]="14" />
+    </button>
+    <button type="button" class="nav" (click)="closeFind()" aria-label="Close find">
+      <app-icon name="x" [size]="12" />
+    </button>
+  </div>
+}
+
+<div class="viewport" #anchor>
+  @if (state()?.crashed) {
+    <div class="crashed">
+      <p>This page crashed.</p>
+      <button type="button" (click)="reloadOrStop()">Reload</button>
+    </div>
+  }
+</div>

@@ -2,7 +2,12 @@
   <!-- pointerdown (not click) so a right-click dismisses the menu too,
        instead of the overlay swallowing it — the next right-click then
        reaches the editor's native context menu. -->
-  <div class="overlay" (pointerdown)="menu.close()" (contextmenu)="menu.close()"></div>
+  <div
+    class="overlay"
+    appOverlayGuard
+    (pointerdown)="menu.close()"
+    (contextmenu)="menu.close()"
+  ></div>
 }
 
 <div class="bar">

@@ -186,6 +186,12 @@ export class MenuService {
       label: 'File',
       rows: [
         { kind: 'item', label: 'New note', hint: 'Ctrl N', run: () => this.run('note.new') },
+        {
+          kind: 'item',
+          label: 'New browser tab',
+          hint: 'Ctrl Shift B',
+          run: () => this.run('browser.new'),
+        },
         SEP,
         {
           kind: 'item',

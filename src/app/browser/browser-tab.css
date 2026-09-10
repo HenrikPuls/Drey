@@ -1,0 +1,120 @@
+:host {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  height: 100%;
+}
+
+.toolbar {
+  height: var(--bar-h);
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 0 8px;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-bar);
+}
+
+.nav {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  flex: none;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-6);
+  cursor: pointer;
+}
+
+.nav:hover:not(:disabled) {
+  background: var(--hover-bg-strong);
+  color: var(--text-primary);
+}
+
+.nav:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
+.address {
+  flex: 1;
+  min-width: 0;
+  height: 24px;
+  margin-left: 4px;
+  padding: 0 10px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--bg-input, var(--hover-bg));
+  color: var(--text-primary);
+  font-family: var(--font-mono);
+  font-size: var(--fs-mono-path);
+}
+
+.address:focus {
+  outline: none;
+  border-color: var(--accent, var(--text-6));
+}
+
+.findbar {
+  height: 30px;
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 0 8px;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-bar);
+}
+
+.find-input {
+  width: 220px;
+  height: 22px;
+  padding: 0 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-input, var(--hover-bg));
+  color: var(--text-primary);
+  font: inherit;
+}
+
+.find-count {
+  min-width: 52px;
+  font-family: var(--font-mono);
+  font-size: var(--fs-mono-path);
+  color: var(--text-6);
+  font-variant-numeric: tabular-nums;
+}
+
+.viewport {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  /* The page is a native view painted on top; this is just the anchor
+     rect. A neutral fill shows during load / while the view is hidden. */
+  background: var(--bg-editor, var(--bg-bar));
+}
+
+.crashed {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  color: var(--text-6);
+}
+
+.crashed button {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--hover-bg);
+  color: var(--text-primary);
+  font: inherit;
+  padding: 5px 12px;
+  cursor: pointer;
+}

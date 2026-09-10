@@ -1,6 +1,7 @@
 import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
 import { DiffRow, lineDiff } from '../../../shared/text-diff';
 import { ConfirmationService } from '../llm';
+import { OverlayGuardDirective } from '../services/overlay-guard.directive';
 
 /** A collapsed run of unchanged lines between edits (localized preview). */
 interface DiffGap {
@@ -115,6 +116,7 @@ function collapseContext(rows: readonly DiffRow[], pad = 3): DiffLine[] {
 @Component({
   selector: 'app-confirmation-dialog',
   changeDetection: ChangeDetectionStrategy.OnPush,
+  imports: [OverlayGuardDirective],
   templateUrl: './confirmation-dialog.html',
   styleUrl: './confirmation-dialog.css',
   host: { '(document:keydown.escape)': 'onCancel()' },

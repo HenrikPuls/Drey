@@ -1,5 +1,6 @@
 import { Injectable, computed, effect, inject, signal } from '@angular/core';
 import { endDragChrome, moveDragChrome, startDragChrome } from '../dnd';
+import { LayoutGestureService } from '../services/layout-gesture.service';
 import { SettingsService } from '../services/settings.service';
 import { ALL_WIDGET_IDS, WIDGETS, WIDGET_MAP, WidgetId } from './widget-registry';
 
@@ -106,6 +107,7 @@ export class DockService {
   private static readonly DOCK_TOLERANCE = 12;
 
   private readonly settings = inject(SettingsService);
+  private readonly layoutGesture = inject(LayoutGestureService);
   private readonly state = signal<DockState>(this.read());
 
   /** The panel being dragged by its header, else null. */
@@ -140,6 +142,11 @@ export class DockService {
         }
       });
     }
+
+    // Mirror "a dock resize / panel drag is in flight" into the shared
+    // layout-gesture flag so an in-editor browser view hides for it
+    // (ADR-0042).
+    effect(() => this.layoutGesture.set('dock', this.resizing() || this.dragActive()));
 
     // Settings -> Widgets: fold the "disabled" set into the layout whenever
     // it changes (persisted config, so this fires on Save and on load).

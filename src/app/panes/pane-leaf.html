@@ -3,6 +3,8 @@
     <app-tab-bar [paneId]="paneId()" />
     @if (activeDoc()?.kind === 'image') {
       <app-image-tab [path]="p.active!" [focused]="focused()" />
+    } @else if (activeDoc()?.kind === 'browser') {
+      <app-browser-tab [tabId]="p.active!" [focused]="focused()" />
     } @else {
       <app-editor [paneId]="paneId()" />
     }

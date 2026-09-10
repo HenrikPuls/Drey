@@ -3,6 +3,7 @@ import { EditorService } from '../services/editor.service';
 import { PaneService } from '../panes/pane.service';
 import { TabDragService } from './tab-drag.service';
 import { Icon } from '../icons/icon';
+import { OverlayGuardDirective } from '../services/overlay-guard.directive';
 
 interface TabMenu {
   x: number;
@@ -29,7 +30,7 @@ interface TabMenu {
 @Component({
   selector: 'app-tab-bar',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [Icon],
+  imports: [Icon, OverlayGuardDirective],
   templateUrl: './tab-bar.html',
   styleUrl: './tab-bar.css',
   host: {
@@ -48,9 +49,21 @@ export class TabBar {
 
   protected readonly menu = signal<TabMenu | null>(null);
 
+  /** Favicon URLs that 404'd -- those tabs fall back to the globe glyph. */
+  private readonly brokenFavicons = signal<ReadonlySet<string>>(new Set());
+
+  protected faviconOk(url: string | null | undefined): url is string {
+    return !!url && !this.brokenFavicons().has(url);
+  }
+
   protected onClose(event: MouseEvent, path: string): void {
     event.stopPropagation();
     this.editor.closeTab(path);
+  }
+
+  /** A browser tab's favicon failed to load -- fall back to the globe glyph. */
+  protected onFaviconError(url: string): void {
+    this.brokenFavicons.update((set) => new Set(set).add(url));
   }
 
   /** Left-button press on a tab: a plain click until the pointer clears the drag threshold. */

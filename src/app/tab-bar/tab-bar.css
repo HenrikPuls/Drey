@@ -52,6 +52,14 @@
   opacity: 0.4;
 }
 
+.favicon {
+  width: 12px;
+  height: 12px;
+  flex: none;
+  object-fit: contain;
+  opacity: 0.85;
+}
+
 .name {
   flex: 1;
   min-width: 0;

@@ -48,6 +48,8 @@ package, a minor naming convention).
 | [0037](09_architecture_decisions/0037-split-view-editor-panes.md)                  | Split-view editor panes: a `PaneService` split tree, `EditorService` as a facade over the focused pane | Accepted |
 | [0038](09_architecture_decisions/0038-editor-panes-in-docks.md)                    | Editor panes in the docks (split-view Phase 2): a `PaneService` region model, a dock "editor slot", no `WidgetDescriptor` involvement | Proposed |
 | [0039](09_architecture_decisions/0039-drag-and-drop-chrome.md)                      | Drag-and-drop chrome: a shared `src/app/dnd/` overlay + ghost, deferred commit, `no-drop` feedback, `TabDragService` | Accepted |
+| [0042](09_architecture_decisions/0042-in-editor-web-browser-tab.md)                | In-editor web browser tab: one main-process `WebContentsView` per `browser://` tab, `persist:webtab` session, `OverlayGuardService` for occlusion | Accepted |
+| [0043](09_architecture_decisions/0043-session-history.md)                          | Session history: restore the pane layout + open tabs on launch; unsaved buffers backed up under user-data (Notepad++-style) | Accepted |
 
 Decisions not yet written up (relevant spec already fixes them, but the
 ADR is deferred to the milestone that actually implements them, per

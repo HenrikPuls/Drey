@@ -1,5 +1,5 @@
 @if (library.pickerOpen()) {
-  <div class="backdrop" (click)="library.closePicker()"></div>
+  <div class="backdrop" appOverlayGuard (click)="library.closePicker()"></div>
   <div class="panel" role="dialog" aria-label="Insert template">
     <input
       #filterInput

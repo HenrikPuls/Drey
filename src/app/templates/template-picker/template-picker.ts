@@ -9,6 +9,7 @@ import {
   signal,
   viewChild,
 } from '@angular/core';
+import { OverlayGuardDirective } from '../../services/overlay-guard.directive';
 import { TemplateEntry, TemplateLibraryService } from '../template-library.service';
 
 /**
@@ -20,6 +21,7 @@ import { TemplateEntry, TemplateLibraryService } from '../template-library.servi
 @Component({
   selector: 'app-template-picker',
   changeDetection: ChangeDetectionStrategy.OnPush,
+  imports: [OverlayGuardDirective],
   templateUrl: './template-picker.html',
   styleUrl: './template-picker.css',
 })

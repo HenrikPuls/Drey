@@ -2,6 +2,8 @@ import { Component, effect, inject } from '@angular/core';
 import { formatDate } from '../../shared/timestamp';
 import { ImageLightbox } from './image-viewer';
 import { ConfirmationDialog } from './confirmation-dialog/confirmation-dialog';
+import { BrowserViewService } from './browser';
+import { SessionService } from './session';
 import { ActionsService } from './llm';
 import { AppearanceService } from './services/appearance.service';
 import { ThemeService } from './services/theme.service';
@@ -108,11 +110,12 @@ export class App {
     // its own right-click menu in place of the OS one (ADR-0030).
     inject(EditorContextMenuService).start();
 
-    // Open today's daily note once, after both the vault path and the
-    // persisted config are known. `vault.refresh()` re-runs after saves, so
-    // the boolean guard (not just the signal) keeps this to a single open;
-    // it is consumed even when the setting is off, so flipping it on later
-    // in the session does not retroactively open a tab.
+    // Startup, once, after both the vault path and the persisted config are
+    // known: restore the previous session's layout + tabs (ADR-0043), then
+    // fall back to opening today's daily note only if nothing was restored.
+    // `vault.refresh()` re-runs after saves, so the boolean guard (not just
+    // the signal) keeps this to a single pass.
+    const session = inject(SessionService);
     effect(() => {
       const vaultPath = this.vault.activeVaultPath();
       const loaded = this.settings.loaded();
@@ -120,9 +123,12 @@ export class App {
         return;
       }
       this.dailyNoteStartupDone = true;
-      if (this.settings.dailyOpenOnStartup()) {
-        void this.editor.openDailyNote(formatDate(new Date()));
-      }
+      void (async () => {
+        const restored = await session.restore();
+        if (!restored && this.settings.dailyOpenOnStartup()) {
+          void this.editor.openDailyNote(formatDate(new Date()));
+        }
+      })();
     });
 
     // App-wide keyboard commands. Features register here the same way; the
@@ -143,6 +149,13 @@ export class App {
       label: 'New note',
       keybinding: 'Mod+N',
       run: () => this.editor.newUntitled(),
+    });
+    const browser = inject(BrowserViewService);
+    keys.register({
+      id: 'browser.new',
+      label: 'New browser tab',
+      keybinding: 'Mod+Shift+B',
+      run: () => browser.openTab(),
     });
     keys.register({
       id: 'note.save',

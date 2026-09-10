@@ -1,6 +1,7 @@
 @if (svc.anchor(); as a) {
   <div
     class="ctx-backdrop"
+    appOverlayGuard
     (click)="svc.close()"
     (contextmenu)="$event.preventDefault(); svc.close()"
   ></div>

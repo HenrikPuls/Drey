@@ -7,6 +7,7 @@ import {
   viewChild,
 } from '@angular/core';
 import { Icon } from '../icons/icon';
+import { OverlayGuardDirective } from '../services/overlay-guard.directive';
 import { ImageViewer } from './image-viewer';
 import { ImageLightboxService } from './image-lightbox.service';
 
@@ -22,7 +23,7 @@ import { ImageLightboxService } from './image-lightbox.service';
 @Component({
   selector: 'app-image-lightbox',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [ImageViewer, Icon],
+  imports: [ImageViewer, Icon, OverlayGuardDirective],
   templateUrl: './image-lightbox.html',
   styleUrl: './image-lightbox.css',
   host: {

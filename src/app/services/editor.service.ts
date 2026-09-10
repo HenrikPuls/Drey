@@ -29,16 +29,24 @@ export type { NewEntryRequest } from '../editor/editor-commands.service';
  * flips `existsOnDisk`.
  */
 export interface OpenDoc {
-  /** Vault-relative path, e.g. `daily/2026-09-05.md`. Unique per tab. */
+  /**
+   * Vault-relative path, e.g. `daily/2026-09-05.md`. Unique per tab. For a
+   * `kind: 'browser'` tab this is the synthetic key `browser://<n>` -- not
+   * a real path, but still the identity string every pane / tab-bar / close
+   * path uses. `://` guarantees it never collides with a vault path.
+   */
   readonly path: string;
+  /** For a browser tab this follows the page title as it loads (via `patchDoc`). */
   readonly name: string;
   /**
-   * `'text'` (a Markdown buffer, the default) or `'image'` -- a viewer tab
-   * for a `.png`/`.jpg`/… file (ADR-0026). An image tab carries no buffer
-   * (`savedContent === bufferContent === ''`, never dirty) and skips every
+   * `'text'` (a Markdown buffer, the default), `'image'` -- a viewer tab
+   * for a `.png`/`.jpg`/… file (ADR-0026), or `'browser'` -- an in-editor
+   * web browser tab whose page lives in a main-process `WebContentsView`
+   * (ADR-0042). Neither `'image'` nor `'browser'` carries a buffer
+   * (`savedContent === bufferContent === ''`, never dirty); both skip every
    * text-only path (`save`, `saveAs`, `setViewMode`, `updateBuffer`).
    */
-  readonly kind: 'text' | 'image';
+  readonly kind: 'text' | 'image' | 'browser';
   savedContent: string;
   bufferContent: string;
   viewMode: EditorViewMode;
@@ -53,6 +61,10 @@ export interface OpenDoc {
    * Daily-note drafts leave this `false` -- they save to their own path.
    */
   askOnSave?: boolean;
+  /** Browser tab only: current page URL, mirrored from `browser:event` for the status bar. */
+  url?: string;
+  /** Browser tab only: current favicon URL (or null), for the tab strip. */
+  favicon?: string | null;
 }
 
 function baseName(relativePath: string): string {
@@ -127,8 +139,15 @@ export class EditorService {
   readonly bufferContent = computed<string>(() => this.activeDoc()?.bufferContent ?? '');
   readonly viewMode = computed<EditorViewMode>(() => this.activeDoc()?.viewMode ?? 'live');
 
-  /** `'image'` when the active tab is an image viewer -- the centre column swaps components. */
-  readonly activeKind = computed<'text' | 'image'>(() => this.activeDoc()?.kind ?? 'text');
+  /**
+   * The active tab's kind -- `'image'` / `'browser'` make the centre column
+   * swap `<app-editor>` for `<app-image-tab>` / `<app-browser-tab>`, and
+   * every text-only consumer (save, tasks, templates, insert-into-note)
+   * treats a non-`'text'` kind as "no buffer".
+   */
+  readonly activeKind = computed<'text' | 'image' | 'browser'>(
+    () => this.activeDoc()?.kind ?? 'text',
+  );
 
   /**
    * `true` for a Markdown path (or `null`/nothing open). `false` for a code
@@ -225,7 +244,7 @@ export class EditorService {
 
   /** The assistant card's "insert into note" button. No-op with no open (text) document. */
   requestInsertText(text: string): void {
-    if (text.trim() === '' || this.activePath() === null || this.activeKind() === 'image') {
+    if (text.trim() === '' || this.activePath() === null || this.activeKind() !== 'text') {
       return;
     }
     this.commands.requestInsertText(text);
@@ -486,7 +505,7 @@ export class EditorService {
   /** Called by a pane's editor surface on every buffer change; `path` is that pane's shown document. */
   updateBuffer(path: string, content: string): void {
     const doc = this.docs().find((d) => d.path === path);
-    if (!doc || doc.kind === 'image') {
+    if (!doc || doc.kind !== 'text') {
       return;
     }
     this.patchDoc(path, { bufferContent: content });
@@ -501,7 +520,7 @@ export class EditorService {
    */
   setViewMode(mode: EditorViewMode, path?: string): void {
     const doc = path !== undefined ? this.docFor(path) : this.activeDoc();
-    if (!doc || doc.kind === 'image') {
+    if (!doc || doc.kind !== 'text') {
       return;
     }
     // Live Preview is Markdown-only; a code tab stays in source (its menu
@@ -528,7 +547,7 @@ export class EditorService {
    */
   async save(options: { runOnSaveActions?: boolean; path?: string } = {}): Promise<void> {
     const doc = options.path !== undefined ? this.docFor(options.path) : this.activeDoc();
-    if (!this.api || doc === null || doc.kind === 'image' || this.isSaving()) {
+    if (!this.api || doc === null || doc.kind !== 'text' || this.isSaving()) {
       return;
     }
     // A generated scratch doc has no destination yet -- ask for one, even
@@ -587,7 +606,7 @@ export class EditorService {
   async saveAll(): Promise<void> {
     for (const path of this.docs().map((d) => d.path)) {
       const doc = this.docs().find((d) => d.path === path);
-      if (!doc || (doc.bufferContent === doc.savedContent && !doc.askOnSave)) {
+      if (!doc || doc.kind !== 'text' || (doc.bufferContent === doc.savedContent && !doc.askOnSave)) {
         continue;
       }
       await this.save({ path });
@@ -617,7 +636,7 @@ export class EditorService {
    */
   async saveAs(path?: string): Promise<void> {
     const doc = path !== undefined ? this.docFor(path) : this.activeDoc();
-    if (!this.api?.pickSavePath || doc === null || doc.kind === 'image' || this.isSaving()) {
+    if (!this.api?.pickSavePath || doc === null || doc.kind !== 'text' || this.isSaving()) {
       return;
     }
     this.error.set(null);
@@ -681,6 +700,11 @@ export class EditorService {
    * (which re-indexes it). A no-op when the line does not parse as a task.
    */
   async setTaskDone(path: string, line: number, done: boolean): Promise<void> {
+    // A browser tab is keyed `browser://<n>`, not a real path -- never read
+    // it off disk (no task row references one, but be explicit).
+    if (this.docFor(path)?.kind === 'browser') {
+      return;
+    }
     const open = this.docs().find((d) => d.path === path && d.kind === 'text');
     if (open) {
       const next = setDoneOnLine(open.bufferContent, line, done);
@@ -759,6 +783,41 @@ export class EditorService {
       modifiedMs: 0,
       existsOnDisk: true,
     };
+  }
+
+  /**
+   * Registers a browser tab (ADR-0042). Called by
+   * `BrowserViewService`, which mints the `browser://<n>` key and owns the
+   * matching `WebContentsView` over IPC; `EditorService` only tracks the
+   * tab's existence, its (page-title) name and favicon for the tab strip,
+   * and its URL for the status bar. No buffer, never dirty, never saved.
+   */
+  addBrowserDoc(key: string, name: string): void {
+    if (this.docs().some((d) => d.path === key)) {
+      this.panes.open(key);
+      return;
+    }
+    this.addDoc({
+      path: key,
+      name,
+      kind: 'browser',
+      savedContent: '',
+      bufferContent: '',
+      viewMode: 'live',
+      eol: '\n',
+      modifiedMs: 0,
+      existsOnDisk: true,
+      url: '',
+      favicon: null,
+    });
+  }
+
+  /** Updates a browser tab's title / favicon / URL as the page loads. */
+  setBrowserMeta(key: string, patch: { name?: string; favicon?: string | null; url?: string }): void {
+    if (this.docFor(key)?.kind !== 'browser') {
+      return;
+    }
+    this.patchDoc(key, patch);
   }
 
   private addDoc(doc: OpenDoc): void {

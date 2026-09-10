@@ -1,4 +1,5 @@
 import { ChangeDetectionStrategy, Component, inject } from '@angular/core';
+import { OverlayGuardDirective } from '../services/overlay-guard.directive';
 import { MenuService } from './menu.service';
 
 /**
@@ -10,6 +11,7 @@ import { MenuService } from './menu.service';
 @Component({
   selector: 'app-menu-bar',
   changeDetection: ChangeDetectionStrategy.OnPush,
+  imports: [OverlayGuardDirective],
   templateUrl: './menu-bar.html',
   styleUrl: './menu-bar.css',
 })

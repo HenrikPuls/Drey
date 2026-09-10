@@ -37,10 +37,10 @@ const FIRST_PANE_ID = 'p1';
  */
 @Injectable({ providedIn: 'root' })
 export class PaneService {
-  // Not session-persisted, same as `EditorService.docs` -- there is no
-  // open-tab restore across a restart today, so a restored *layout* with no
-  // tabs in it would just be empty panes cluttering the screen. Always
-  // starts as one pane, exactly like the single-pane tab bar did before.
+  // The layout is restored across a restart by `SessionService` (ADR-0043),
+  // which calls `restore()` once at startup after re-opening the same
+  // documents. Until then it starts as one empty pane, exactly like the
+  // single-pane tab bar did before.
   private readonly _root = signal<PaneNode>({ kind: 'leaf', paneId: FIRST_PANE_ID });
   private readonly _panes = signal<Record<string, PaneRecord>>({
     [FIRST_PANE_ID]: { id: FIRST_PANE_ID, tabs: [], active: null },
@@ -290,6 +290,69 @@ export class PaneService {
       return next;
     });
   }
+
+  // --- session restore (ADR-0043) -------------------------------------
+
+  /** The full layout, for `SessionService` to persist. */
+  snapshot(): PaneLayoutSnapshot {
+    return { root: this._root(), panes: this._panes(), focusedId: this._focusedId() };
+  }
+
+  /**
+   * Rebuilds the layout from a persisted `snapshot()`. `keepPath` is asked
+   * for every tab path -- one that no longer resolves (a deleted file whose
+   * backup is also gone) is dropped, and a pane left with no tabs is pruned
+   * from the tree (unless it is the last one). Returns `true` when a
+   * non-empty layout was restored, so the caller can skip its default
+   * "open today's note" behaviour.
+   */
+  restore(snap: PaneLayoutSnapshot, keepPath: (path: string) => boolean): boolean {
+    const ids = leafIds(snap.root);
+    const kept: Record<string, PaneRecord> = {};
+    for (const id of ids) {
+      const src = snap.panes[id] ?? { id, tabs: [], active: null };
+      const tabs = src.tabs.filter(keepPath);
+      const active = tabs.includes(src.active ?? '') ? src.active : (tabs[0] ?? null);
+      kept[id] = { id, tabs, active };
+    }
+
+    let root = snap.root;
+    for (const id of ids) {
+      if (kept[id].tabs.length === 0) {
+        root = removeLeaf(root, id);
+      }
+    }
+    const surviving = leafIds(root);
+    const panes: Record<string, PaneRecord> = {};
+    for (const id of surviving) {
+      panes[id] = kept[id] ?? { id, tabs: [], active: null };
+    }
+    if (surviving.every((id) => panes[id].tabs.length === 0)) {
+      return false; // nothing worth restoring -- keep the fresh default
+    }
+
+    this._root.set(root);
+    this._panes.set(panes);
+    this._focusedId.set(surviving.includes(snap.focusedId) ? snap.focusedId : surviving[0]);
+    this.nextPaneNum =
+      Math.max(1, ...surviving.map((id) => Number(id.replace(/^p/, '')) || 0)) + 1;
+    this.nextSplitNum = maxSplitNum(root) + 1;
+    return true;
+  }
+}
+
+export interface PaneLayoutSnapshot {
+  readonly root: PaneNode;
+  readonly panes: Record<string, PaneRecord>;
+  readonly focusedId: string;
+}
+
+function maxSplitNum(node: PaneNode): number {
+  if (node.kind === 'leaf') {
+    return 0;
+  }
+  const own = Number(node.id.replace(/^s/, '')) || 0;
+  return Math.max(own, ...node.children.map(maxSplitNum));
 }
 
 function resizeSplitNode(node: PaneNode, splitId: string, sizes: readonly number[]): PaneNode {

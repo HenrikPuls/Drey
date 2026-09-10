@@ -14,6 +14,7 @@ import { ActionsService } from '../llm';
 import { CLASSIC_ENTRY_PATTERN, editorFontFamilyStacks } from '../../../shared/app-config';
 import { EditorService, EditorViewMode, NewEntryRequest } from '../services/editor.service';
 import { EditorZoomService } from '../services/editor-zoom.service';
+import { OverlayGuardDirective } from '../services/overlay-guard.directive';
 import { PaneService } from '../panes/pane.service';
 import { SettingsService } from '../services/settings.service';
 import { SpellcheckService } from '../services/spellcheck.service';
@@ -51,7 +52,7 @@ import { MarkdownSurface } from './markdown-surface/markdown-surface';
   selector: 'app-editor',
   templateUrl: './editor.html',
   styleUrl: './editor.css',
-  imports: [Icon, MarkdownSurface],
+  imports: [Icon, MarkdownSurface, OverlayGuardDirective],
   host: {
     '(wheel)': 'onWheel($event)',
     // Editor content zoom (Ctrl +/-/0, ADR-0015). The keydown is bound on
