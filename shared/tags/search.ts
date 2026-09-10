@@ -63,7 +63,7 @@ export function runTagSearch(
     const sectionTags = new Set(section.tags.map((t) => t.toLowerCase()));
     // A requested tag matches exactly OR as the parent of a nested tag:
     // searching `#project` also returns `#project/frontend` sections.
-    if (!tags.every((t) => sectionHasTagOrChild(sectionTags, t))) {
+    if (!tags.every((t) => tagSetMatches(sectionTags, t))) {
       continue;
     }
     const hay = `${section.heading}\n${section.text}`.toLowerCase();
@@ -138,13 +138,19 @@ function makeSnippet(text: string, needles: readonly string[]): string {
   return snippet;
 }
 
-/** `wanted` is present exactly, or a `wanted/…` nested tag is (label hierarchy). */
-function sectionHasTagOrChild(sectionTags: ReadonlySet<string>, wanted: string): boolean {
-  if (sectionTags.has(wanted)) {
+/**
+ * Whether a tag set satisfies a single query tag: `wanted` is present
+ * exactly, or a `wanted/…` nested tag is (label hierarchy) -- so a query
+ * for `#project` is also matched by a `#project/frontend` tag. `tags` is
+ * expected to be lower-cased already. Shared by the section search and the
+ * Tasks panel filter so the "nested tag" rule stays single-sourced.
+ */
+export function tagSetMatches(tags: ReadonlySet<string>, wanted: string): boolean {
+  if (tags.has(wanted)) {
     return true;
   }
   const prefix = `${wanted}/`;
-  for (const t of sectionTags) {
+  for (const t of tags) {
     if (t.startsWith(prefix)) {
       return true;
     }

@@ -4,8 +4,8 @@ describe('scanTasks', () => {
   it('finds checkbox tasks with their done-state and text', () => {
     const doc = '- [ ] buy milk\n- [x] call Anna\n  - [X] nested and done\n';
     expect(scanTasks('n.md', doc)).toEqual([
-      { path: 'n.md', line: 1, text: 'buy milk', done: false, kind: 'checkbox', heading: null },
-      { path: 'n.md', line: 2, text: 'call Anna', done: true, kind: 'checkbox', heading: null },
+      { path: 'n.md', line: 1, text: 'buy milk', done: false, kind: 'checkbox', heading: null, tags: [] },
+      { path: 'n.md', line: 2, text: 'call Anna', done: true, kind: 'checkbox', heading: null, tags: [] },
       {
         path: 'n.md',
         line: 3,
@@ -13,6 +13,7 @@ describe('scanTasks', () => {
         done: true,
         kind: 'checkbox',
         heading: null,
+        tags: [],
       },
     ]);
   });
@@ -21,15 +22,15 @@ describe('scanTasks', () => {
     const doc = 'Fix the roof #task\nMow the lawn #task #task/done\n';
     const tasks = scanTasks('n.md', doc);
     expect(tasks).toEqual([
-      { path: 'n.md', line: 1, text: 'Fix the roof', done: false, kind: 'tag', heading: null },
-      { path: 'n.md', line: 2, text: 'Mow the lawn', done: true, kind: 'tag', heading: null },
+      { path: 'n.md', line: 1, text: 'Fix the roof', done: false, kind: 'tag', heading: null, tags: [] },
+      { path: 'n.md', line: 2, text: 'Mow the lawn', done: true, kind: 'tag', heading: null, tags: [] },
     ]);
   });
 
   it('reports a checkbox+#task line once, as a checkbox', () => {
     const tasks = scanTasks('n.md', '- [ ] ship it #task\n');
     expect(tasks).toEqual([
-      { path: 'n.md', line: 1, text: 'ship it', done: false, kind: 'checkbox', heading: null },
+      { path: 'n.md', line: 1, text: 'ship it', done: false, kind: 'checkbox', heading: null, tags: [] },
     ]);
   });
 
@@ -54,6 +55,37 @@ describe('scanTasks', () => {
 
   it('does not treat a timestamp heading as a #task', () => {
     expect(scanTasks('n.md', '## 14:32\ntext without markers\n')).toEqual([]);
+  });
+
+  describe('section tags', () => {
+    it('attaches the containing section’s inline tags to a task', () => {
+      const doc = '## Projekt Alpha #project #kunde\n\n- [ ] draft the brief\n- [x] send invoice #buchhaltung\n';
+      const tasks = scanTasks('n.md', doc);
+      expect(tasks[0].tags).toEqual(['project', 'kunde', 'buchhaltung']);
+      expect(tasks[1].tags).toEqual(['project', 'kunde', 'buchhaltung']);
+    });
+
+    it('scopes tags to the section a task sits in', () => {
+      const doc = '## A #alpha\n\n- [ ] one\n\n## B #beta\n\n- [ ] two\n';
+      const tasks = scanTasks('n.md', doc);
+      expect(tasks.map((t) => [t.text, t.tags])).toEqual([
+        ['one', ['alpha']],
+        ['two', ['beta']],
+      ]);
+    });
+
+    it('captures a tag written directly on the task line', () => {
+      const doc = '# Notes\n\n- [ ] call plumber #haus #dringend\n';
+      expect(scanTasks('n.md', doc)[0].tags).toEqual(['haus', 'dringend']);
+    });
+
+    it('is empty for a task before the first heading with no tags around it', () => {
+      expect(scanTasks('n.md', '- [ ] loose task\n\n# Later\n')[0].tags).toEqual([]);
+    });
+
+    it('does not treat the #task marker as a section tag', () => {
+      expect(scanTasks('n.md', '## Roof #dach\n\nrepair gutter #task\n')[0].tags).toEqual(['dach']);
+    });
   });
 });
 

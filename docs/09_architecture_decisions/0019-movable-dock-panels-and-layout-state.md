@@ -149,3 +149,26 @@ affordance:
   `WIDGETS.filter(w => w.removable)` so every panel — including `tasks` and
   `entry`, which had none — gets one. Collapsing to the header stays the
   header-click gesture.
+
+## Later change — controls in the panel header (req-7)
+
+Panels no longer draw their own control band under the shared 32px header
+(the Tasks scope/hide-done/kind toggles, the Files/Templates refresh
+buttons). Instead a panel
+body may mark one `<ng-template>` with the `[appPanelHeaderActions]="<id>"`
+directive; `PanelFrame` renders it inside a `.head-actions` slot in the
+header, pinned to the right edge immediately left of the drag grip (only
+`.head-actions` takes the `auto` margin — `.head-actions + .grip` resets
+the grip's, so the controls don't drift toward the centre). The slot stops
+`mousedown` / `keydown` so operating a control never triggers the header
+collapse/drag gesture (the idiom DESIGN.md §193 describes for the old
+chevron).
+
+The template is relayed through `PanelHeaderActionsStore` — a leaf
+`providedIn: 'root'` service (`src/app/dock/panel-header-actions.ts`,
+a `Map<widgetId, TemplateRef>` signal) rather than `DockService`, so a
+panel component can import the directive without an import cycle back
+through `widget-registry.ts` (which references every panel class). The
+directive registers on `afterNextRender` and clears (identity-guarded, for
+the destroy/recreate of a panel move) on destroy. Not a new mechanism for
+the widget registry — `WidgetDescriptor` is untouched.

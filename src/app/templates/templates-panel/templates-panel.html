@@ -1,20 +1,19 @@
-<div class="templates">
-  <div class="bar">
-    <span class="dir mono">{{ settingsDir() }}</span>
-    @if (vault.activeVaultPath()) {
-      <button
-        type="button"
-        class="icon-btn"
-        (click)="onRefresh()"
-        [disabled]="vault.isLoading()"
-        title="Re-read the vault from disk"
-        aria-label="Refresh templates"
-      >
-        <app-icon name="refresh-cw" [size]="12" />
-      </button>
-    }
-  </div>
+<ng-template appPanelHeaderActions="templates">
+  @if (vault.activeVaultPath()) {
+    <button
+      type="button"
+      class="hdr-btn"
+      (click)="onRefresh()"
+      [disabled]="vault.isLoading()"
+      title="Re-read the vault from disk"
+      aria-label="Refresh templates"
+    >
+      <app-icon name="refresh-cw" [size]="12" />
+    </button>
+  }
+</ng-template>
 
+<div class="templates">
   @if (!vault.activeVaultPath()) {
     <p class="hint">No vault selected.</p>
   } @else if (isEmpty()) {

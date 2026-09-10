@@ -349,23 +349,7 @@ below).
   change, export), status/progress, persisted against crashes,
   auto-pauses on interactive use.
 
-## Future Scope (noted, no target date)
 
-- OCR for handwritten notes (iPad expansion stage, Apple Vision Framework
-  or local Tesseract).
-  Maybe OCR field where you can Drop Images so that they are OCRd
-- iPad/iPhone access via Tailscale to the PC backend.
-- Audio recording in interview mode (local Whisper).
-- Automatic image captioning via a vision model.
-- Editor: footnote rendering in Live Preview (needs a custom Lezer
-  markdown extension), `Ctrl`-click to open concealed link targets.
-- An additive chokidar file watcher, if manual refresh proves too coarse.
-- playwright m365 copilot über browser automatisierung
-- PDF Export
-- Jira Integration
-- Flow descriptions like Task Description => Sebastian => Peter would mean prepare task which is sent to Sebastian so that he can discuss it with Peter. Automation of current workflows via agentic tools, to stear persons like agents ;)
-Or Description => Jira (Creates a ticket from the description and returns the link to the new jira ticket 
-)
 
 ---
 
@@ -389,6 +373,7 @@ Or Description => Jira (Creates a ticket from the description and returns the li
 
 I will ask you to implement certain requirements from the following list, once it is done please move it to the implemented chapter at the end of the list and remove it from here.
 
+bug-4 within the task view we have as scroll bar which is fine, but on the outside we have one as well, but the inside shall always shrink or expand to fit the outer
 
 Arch-1 Restructure the programm completely to have a hieracrchical structure and all modules/widgets are self containes only acessing the interfaces.
 
@@ -400,9 +385,24 @@ Req-4 Atlassian Integration, when I paste a link to a workitem then i would like
 
 Req-6 it would be nice to have the ability to download further themes for cm6 if easily dooable
 
-req-7 widget control elements which are now at the top but inside the widget shall be moved to the title bar of the widget to get rid of the line within the widget
+req-9 OCR for handwritten notes (iPad expansion stage, Apple Vision Framework
+  or local Tesseract).
+  Maybe OCR field where you can Drop Images so that they are OCRd
+req-10 iPad/iPhone access via Tailscale to the PC backend.
+req-11 Audio recording in interview mode (local Whisper). <= Probably using Windows integrated speech to text Win+H first.
+req-12 Automatic image captioning via a vision model.
+req-13 Editor: footnote rendering in Live Preview (needs a custom Lezer
+  markdown extension), `Ctrl`-click to open concealed link targets.
+req-14 An additive chokidar file watcher, if manual refresh proves too coarse.
+req-15 playwright m365 copilot über browser automatisierung
+req-16 PDF Export
+req-17 Jira Integration
+req-18 Flow descriptions like Task Description => Sebastian => Peter would mean prepare task which is sent to Sebastian so that he can discuss it with Peter. Automation of current workflows via agentic tools, to stear persons like agents ;)
+Or Description => Jira (Creates a ticket from the description and returns the link to the new jira ticket 
+)
 
-req-8 Task Widget: Die Tasks sollen zusätzlich um freitext oder mehrere tags erweitert werden  einzugeben. Autocomplete der Tags soll funktionieren. 
+
+
 
 # Completed
 
@@ -447,3 +447,30 @@ it**. Every text embed's revealed source (table / mermaid / HTML / image)
 gets that same container so the active-line highlight reads as in-scope.
 See [ADR-0009](../docs/09_architecture_decisions/0009-live-preview-decorations.md)
 "Later change".
+
+req-7 — a dock panel's own control row moved into the shared 32px
+`PanelFrame` header instead of a band below it. New leaf module
+`src/app/dock/panel-header-actions.ts`: `PanelHeaderActionsStore`
+(`Map<widgetId, TemplateRef>` signal) + an `[appPanelHeaderActions]="<id>"`
+directive on an `<ng-template>` in the panel body; `PanelFrame` renders the
+matching template in a `.head-actions` slot — right-aligned, immediately
+left of the drag grip — that swallows `mousedown` / `keydown` so a control
+click never collapses/drags the panel. Applied to **Tasks** (scope · hide-done · kind
+toggles) and **Files** / **Templates** (refresh; Files also collapse-all).
+The `files` / `templates` panels' header status values (vault name /
+templates dir) were dropped in the same pass so the header reads as
+controls, not chrome. Assistant / Search / Calendar left as-is.
+See [ADR-0019](../docs/09_architecture_decisions/0019-movable-dock-panels-and-layout-state.md)
+"Later change — controls in the panel header".
+
+req-8 — the Tasks panel gained a free-text + multi-tag filter with tag
+autocomplete. `TaskRecord` now carries `tags` = the inline `#tags` of the
+task's heading-section (`scanTasks` reuses `splitSections` +
+`extractInlineTags` from `shared/tags`), so `tasks:list` and the live
+document scan both provide it. `TaskService` holds `queryTags` / `queryText`
+(persisted in `localStorage['drey.tasks']`); `visible` keeps a task when
+every query tag matches its section tags (nested tags included, via the
+shared `tagSetMatches`) and every whitespace term is a substring of its
+text/heading. `TasksPanel` renders a tag-chip input (`<datalist>`
+autocomplete over `TagService.tags()`, mirroring the Search panel) + a
+free-text field as the first body row.

@@ -12,6 +12,15 @@
   @if (status(); as s) {
     <span class="status">{{ s }}</span>
   }
+  @if (!collapsed() && headerActions(); as tpl) {
+    <div
+      class="head-actions"
+      (mousedown)="$event.stopPropagation()"
+      (keydown)="$event.stopPropagation()"
+    >
+      <ng-container [ngTemplateOutlet]="tpl" />
+    </div>
+  }
   <span class="grip" aria-hidden="true"> <i></i><i></i><i></i><i></i><i></i><i></i> </span>
 </div>
 

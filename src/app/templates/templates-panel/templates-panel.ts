@@ -1,6 +1,7 @@
 import { ChangeDetectionStrategy, Component, HostListener, computed, inject, signal } from '@angular/core';
 import { NgTemplateOutlet } from '@angular/common';
 import { Icon } from '../../icons/icon';
+import { PanelHeaderActions } from '../../dock/panel-header-actions';
 import { EditorService } from '../../services/editor.service';
 import { SettingsService } from '../../services/settings.service';
 import { VaultService } from '../../vault';
@@ -23,7 +24,7 @@ interface RowMenu {
 @Component({
   selector: 'app-templates-panel',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [NgTemplateOutlet, Icon],
+  imports: [NgTemplateOutlet, Icon, PanelHeaderActions],
   templateUrl: './templates-panel.html',
   styleUrl: './templates-panel.css',
 })

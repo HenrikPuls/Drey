@@ -1,5 +1,6 @@
 import { Injectable, computed, effect, inject, signal } from '@angular/core';
 import { TaskKind, TaskRecord, scanTasks } from '../../../shared/tasks';
+import { tagSetMatches } from '../../../shared/tags';
 import { EditorService } from '../services/editor.service';
 
 /** Which set of task lines the panel shows. */
@@ -12,20 +13,39 @@ interface TaskPrefs {
   scope: TaskScope;
   hideDone: boolean;
   kinds: TaskKind[];
+  /** Tags that must all be present on a task's section (AND). */
+  queryTags: string[];
+  /** Free text; whitespace-split into terms that must all appear. */
+  queryText: string;
+}
+
+function normalizeTag(raw: string): string {
+  return raw.trim().replace(/^#/, '').toLowerCase();
 }
 
 function readPrefs(): TaskPrefs {
-  const base: TaskPrefs = { scope: 'document', hideDone: false, kinds: [...ALL_KINDS] };
+  const base: TaskPrefs = {
+    scope: 'document',
+    hideDone: false,
+    kinds: [...ALL_KINDS],
+    queryTags: [],
+    queryText: '',
+  };
   try {
     const raw = JSON.parse(localStorage.getItem(PREFS_KEY) ?? '{}') as Partial<TaskPrefs>;
     const kinds = Array.isArray(raw.kinds)
       ? raw.kinds.filter((k): k is TaskKind => ALL_KINDS.includes(k))
       : base.kinds;
+    const queryTags = Array.isArray(raw.queryTags)
+      ? [...new Set(raw.queryTags.map(normalizeTag).filter((t) => t !== ''))]
+      : base.queryTags;
     return {
       scope: raw.scope === 'vault' ? 'vault' : 'document',
       hideDone: raw.hideDone === true,
       // An empty selection would hide everything with no way back -- keep the default.
       kinds: kinds.length > 0 ? kinds : base.kinds,
+      queryTags,
+      queryText: typeof raw.queryText === 'string' ? raw.queryText : base.queryText,
     };
   } catch {
     return base;
@@ -54,6 +74,12 @@ export class TaskService {
   readonly scope = signal<TaskScope>(this.prefs.scope);
   readonly hideDone = signal<boolean>(this.prefs.hideDone);
   readonly kinds = signal<TaskKind[]>(this.prefs.kinds);
+  /** Free-text + multi-tag filter (req-8), matched against each task's section tags / text. */
+  readonly queryTags = signal<string[]>(this.prefs.queryTags);
+  readonly queryText = signal<string>(this.prefs.queryText);
+  readonly hasFilter = computed<boolean>(
+    () => this.queryTags().length > 0 || this.queryText().trim() !== '',
+  );
 
   private get api() {
     return typeof window !== 'undefined' ? window.dreyApi : undefined;
@@ -71,7 +97,7 @@ export class TaskService {
     effect(() => this.persist());
   }
 
-  /** The tasks to render, after scope / kind / done filtering, sorted. */
+  /** The tasks to render, after scope / kind / done / text+tag filtering, sorted. */
   readonly visible = computed<TaskRecord[]>(() => {
     const kinds = this.kinds();
     const base =
@@ -81,6 +107,18 @@ export class TaskService {
     let list = base.filter((t) => kinds.includes(t.kind));
     if (this.hideDone()) {
       list = list.filter((t) => !t.done);
+    }
+    const qTags = this.queryTags();
+    const terms = this.queryText().toLowerCase().split(/\s+/).filter((t) => t !== '');
+    if (qTags.length > 0 || terms.length > 0) {
+      list = list.filter((t) => {
+        const tset = new Set(t.tags.map((x) => x.toLowerCase()));
+        if (!qTags.every((q) => tagSetMatches(tset, q))) {
+          return false;
+        }
+        const hay = `${t.text}\n${t.heading ?? ''}`.toLowerCase();
+        return terms.every((term) => hay.includes(term));
+      });
     }
     return [...list].sort((a, b) => a.path.localeCompare(b.path) || a.line - b.line);
   });
@@ -127,6 +165,29 @@ export class TaskService {
     return this.kinds().includes(kind);
   }
 
+  /** Add a tag to the filter (leading `#` and case are normalised; dupes ignored). */
+  addTag(raw: string): void {
+    const tag = normalizeTag(raw);
+    if (tag === '' || this.queryTags().includes(tag)) {
+      return;
+    }
+    this.queryTags.update((list) => [...list, tag]);
+  }
+
+  removeTag(tag: string): void {
+    this.queryTags.update((list) => list.filter((t) => t !== tag));
+  }
+
+  setText(value: string): void {
+    this.queryText.set(value);
+  }
+
+  /** Drop the whole free-text + tag filter. */
+  clearFilter(): void {
+    this.queryTags.set([]);
+    this.queryText.set('');
+  }
+
   /** Tick / untick a task in its source file (`EditorService.setTaskDone`). */
   async toggle(task: TaskRecord): Promise<void> {
     await this.editor.setTaskDone(task.path, task.line, !task.done);
@@ -146,6 +207,8 @@ export class TaskService {
           scope: this.scope(),
           hideDone: this.hideDone(),
           kinds: this.kinds(),
+          queryTags: this.queryTags(),
+          queryText: this.queryText(),
         } satisfies TaskPrefs),
       );
     } catch {

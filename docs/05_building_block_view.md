@@ -570,7 +570,7 @@ env.ps1             Puts .tools/node on PATH for the current shell session
 | `note:save`                          | Saves a `.md` note through `NoteManager`: on a file with a `---` fence, bump `updated:` / fill `created:` and rewrite; no fence → bytes verbatim. Then `TagIndex.reindexFile` + `TaskIndex.reindexFile` and the `on-save` Actions (§5.10). **No `#tag`→frontmatter merge and no routing** (ADR-0017). Takes `NoteSaveRequest` (`{ path, body (LF), eol, runOnSaveActions? }`), returns `NoteSaveResult` (`{ path, content (LF), modifiedMs, pendingActions? }`). Replaces `vault:write-file` for notes. |
 | `tags:list`                          | The vault-wide tag vocabulary (`TagEntry[]` = `{ tag, count }`) from `TagIndex`, for `#tag` autocomplete and the search tag picker. `[]` when no vault is active.                                                                                                                                                                                                                                                                                                             |
 | `tags:search`                        | `TagSearchQuery` (`{ tags, text }`) → `TagSearchHit[]` (`{ path, heading, line, snippet, text }`), matched over `TagIndex`'s tagged `SectionRecord[]` (files on disk). Fast, no LLM. `TagSearchService` then folds in hits from open tabs' unsaved buffers — same `sectionRecordsFor` + `runTagSearch` routines — replacing a dirty file's on-disk hits and tagging them `unsaved`.                                                                                                 |
-| `tasks:list`                         | Every checkbox / `#task` line in the vault (`TaskRecord[]` = `{ path, line, text, done, kind, heading }`) from `TaskIndex` — the Tasks panel in "whole vault" scope. Same lifecycle as `tags:list` (rebuild on vault open, `reindexFile` on `note:save`, no watcher). `[]` when no vault is active. Document scope is scanned live in the renderer, not via this channel (§5.20).                                                                                                    |
+| `tasks:list`                         | Every checkbox / `#task` line in the vault (`TaskRecord[]` = `{ path, line, text, done, kind, heading, tags }`; `tags` = the task's heading-section inline `#tags`) from `TaskIndex` — the Tasks panel in "whole vault" scope. Same lifecycle as `tags:list` (rebuild on vault open, `reindexFile` on `note:save`, no watcher). `[]` when no vault is active. Document scope is scanned live in the renderer, not via this channel (§5.20).                                                                                                    |
 | `tags:summarise-results`             | `TagSearchQuery` + a task id → a prose digest of the matching sections (`search-summary` built-in). **Backend wired, panel UI parked** (ADR-0017).                                                                                                                                                                                                                                                                                                                            |
 | `tags:suggest`                       | Entry text + a task id → up to four suggested tags (`{"tags":[…]}`), using the current vocabulary. Backs the drawer's **Autotag** button.                                                                                                                                                                                                                                                                                                                                     |
 | `config:get` / `config:set`          | Read / replace the whole `AppConfig` (`shared/app-config.ts`) held in `app-config.json` under `userData`. `set` normalises via `normalizeAppConfig` and returns what was stored. Backs the Settings screen (ADR-0010).                                                                                                                                                                                                                                                        |
@@ -1468,6 +1468,20 @@ graph TB
 - **`PanelFrame`** renders the header every panel shares (DESIGN.md
   principle 3). Title + "fills the frame vs. scrolls" (`flush`) come from
   the widget descriptor; the body stays mounted while collapsed.
+- **Panel header actions (req-7).** A panel's own control row (Tasks scope /
+  hide-done / kind toggles, Files/Templates refresh) sits in the shared
+  `PanelFrame` header, not as a band under it.
+  `dock/panel-header-actions.ts` is a leaf module —
+  `PanelHeaderActionsStore` (`providedIn: 'root'`, a `Map<widgetId,
+  TemplateRef>` signal) + the `[appPanelHeaderActions]` structural directive
+  on an `<ng-template>` in the panel body. The directive registers the
+  template with the store on `afterNextRender` and clears it (identity-
+  guarded) on destroy; `PanelFrame` renders the one for its id inside
+  `.head-actions`, right-aligned before the grip, stopping
+  `mousedown`/`keydown` so a control click never starts the header
+  collapse/drag gesture. The leaf module imports nothing from `dock/`
+  (no `DockService`, no `widget-registry`), so a panel can depend on it
+  without an import cycle back through the registry.
 - **Widget registry + hide/show (ADR-0034).** `dock/widget-registry.ts`
   `WIDGETS` is the single source of truth (id, title, component, default
   dock/flex/open, `contentHeight`, `flush`, `removable`, declared
@@ -1645,11 +1659,15 @@ A third feature-module trio, shaped like the tag stack (§5.14):
 
 - **`shared/tasks/`** (barrel) — pure, Vitest-covered:
   - `scanTasks(path, content)` → `TaskRecord[]`
-    (`{ path, line, text, done, kind: 'checkbox' | 'tag', heading }`).
+    (`{ path, line, text, done, kind: 'checkbox' | 'tag', heading, tags }`).
     GFM `- [ ]` / `- [x]` items and lines carrying the reserved `#task`
     marker; fenced code skipped; a checkbox + `#task` line is reported
     once as `kind:'checkbox'`. A bare `#task` line is `done` when it also
-    carries `#task/done`.
+    carries `#task/done`. `tags` is the inline `#tags` of the task's
+    heading-section (via `splitSections` + `extractInlineTags` from
+    `shared/tags`) — the same unit the tag search reports on, so the Tasks
+    panel filter (req-8) matches a task by its section's tags, nested tags
+    included.
   - `setDoneOnLine(content, line, done)` — flips `[ ]`⇄`[x]` or
     appends/strips a trailing ` #task/done`; no-op on a non-task line.
 - **`electron/tasks/` `TaskIndex`** (barrel) — a near-copy of `TagIndex`:
@@ -1661,7 +1679,8 @@ A third feature-module trio, shaped like the tag stack (§5.14):
   the next rebuild.
 - **`src/app/tasks/` (barrel)** — `TaskService` + `TasksPanel`:
   - `TaskService` holds `scope` (`'document' | 'vault'`), `hideDone`,
-    `kinds` (`localStorage['drey.tasks']`). `visible` is a computed:
+    `kinds`, plus the req-8 filter `queryTags` / `queryText`
+    (all in `localStorage['drey.tasks']`). `visible` is a computed:
     document scope runs `scanTasks` over the **live editor buffer**
     (`EditorService.bufferContent()`), so unsaved edits and a checkbox
     ticked in the editor show at once; vault scope reads `listTasks()`,
@@ -1671,12 +1690,15 @@ A third feature-module trio, shaped like the tag stack (§5.14):
   - `EditorService.setTaskDone(path, line, done)` does the write-back:
     an open text tab → edit that buffer (activate if needed) + `save()`;
     otherwise read → `setDoneOnLine` → `note:save`.
-  - `TasksPanel` — a scope segmented toggle, a "Hide done" checkbox and a
-    kind filter (Checkboxes / `#task`); rows group by file in vault scope,
-    the row checkbox toggles done, the row body calls
+  - `TasksPanel` — the scope toggle, "hide done" and the kind filter sit
+    in the `PanelFrame` header (`appPanelHeaderActions`, req-7); the body
+    carries a tag-chip + free-text filter row (req-8, `<datalist>`
+    autocomplete over `TagService.tags()`) and the list. Rows group by
+    file in vault scope, the row checkbox toggles done, the row body calls
     `EditorService.openFileAt(path, line)` (same as a search hit).
     Registered as the widget `'tasks'` in `WIDGETS`
     (`dock/widget-registry.ts`), default home the left dock after Search,
-    collapsed.
+    collapsed. The widget is `flush` — the filter row stays pinned and only
+    the list scrolls, so the panel body has no second scrollbar.
 - `eslint.config.mjs` `MODULES` gains `'tasks'` — the three barrels are
   the only import surface.

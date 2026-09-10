@@ -14,6 +14,6 @@ export { splitSections } from './sections';
 export { extractInlineTags, extractTagOccurrences, TAG_NAME_SOURCE } from './tags';
 
 export type { SearchableSection, TagSearchHit, TagSearchQuery } from './search';
-export { formatSearchResultsDoc, runTagSearch } from './search';
+export { formatSearchResultsDoc, runTagSearch, tagSetMatches } from './search';
 
 export { sectionRecordsFor } from './section-records';

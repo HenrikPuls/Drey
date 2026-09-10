@@ -8,7 +8,9 @@ import {
   inject,
   input,
 } from '@angular/core';
+import { NgTemplateOutlet } from '@angular/common';
 import { DockService, PanelId } from './dock.service';
+import { PanelHeaderActionsStore } from './panel-header-actions';
 import { WIDGET_MAP } from './widget-registry';
 
 /**
@@ -28,6 +30,7 @@ import { WIDGET_MAP } from './widget-registry';
 @Component({
   selector: 'app-panel-frame',
   changeDetection: ChangeDetectionStrategy.OnPush,
+  imports: [NgTemplateOutlet],
   templateUrl: './panel-frame.html',
   styleUrl: './panel-frame.css',
   host: {
@@ -36,6 +39,7 @@ import { WIDGET_MAP } from './widget-registry';
 })
 export class PanelFrame implements OnInit {
   private readonly dock = inject(DockService);
+  private readonly headerActionsStore = inject(PanelHeaderActionsStore);
   private readonly el = inject<ElementRef<HTMLElement>>(ElementRef).nativeElement;
 
   readonly panelId = input.required<PanelId>();
@@ -43,6 +47,10 @@ export class PanelFrame implements OnInit {
 
   protected readonly title = computed(
     () => WIDGET_MAP.get(this.panelId())?.title ?? this.panelId(),
+  );
+  /** The panel's own control row, moved into this header (req-7); null if it has none. */
+  protected readonly headerActions = computed(() =>
+    this.headerActionsStore.get(this.panelId()),
   );
   protected readonly collapsed = computed(() => this.dock.collapsed(this.panelId()));
   /**

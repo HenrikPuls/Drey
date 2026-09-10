@@ -1,3 +1,27 @@
+<ng-template appPanelHeaderActions="files">
+  @if (vault.activeVaultPath()) {
+    <button
+      type="button"
+      class="hdr-btn"
+      (click)="collapseAll()"
+      title="Collapse all folders"
+      aria-label="Collapse all folders"
+    >
+      <app-icon name="chevrons-down-up" [size]="12" />
+    </button>
+    <button
+      type="button"
+      class="hdr-btn"
+      (click)="onRefresh()"
+      [disabled]="vault.isLoading()"
+      title="Re-read the vault from disk"
+      aria-label="Refresh files"
+    >
+      <app-icon name="refresh-cw" [size]="12" />
+    </button>
+  }
+</ng-template>
+
 <div class="files" (contextmenu)="openMenu($event)">
   <div class="vault-bar">
     <button
@@ -17,28 +41,6 @@
         [style.transform]="vaultMenuOpen() ? 'rotate(180deg)' : 'none'"
       />
     </button>
-
-    @if (vault.activeVaultPath()) {
-      <button
-        type="button"
-        class="icon-btn"
-        (click)="collapseAll()"
-        title="Collapse all folders"
-        aria-label="Collapse all folders"
-      >
-        <app-icon name="chevrons-down-up" [size]="12" />
-      </button>
-      <button
-        type="button"
-        class="icon-btn refresh"
-        (click)="onRefresh()"
-        [disabled]="vault.isLoading()"
-        title="Re-read the vault from disk"
-        aria-label="Refresh files"
-      >
-        <app-icon name="refresh-cw" [size]="12" />
-      </button>
-    }
   </div>
 
   @if (vaultMenuOpen()) {

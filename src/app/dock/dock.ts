@@ -14,7 +14,6 @@ import { EditorService } from '../services/editor.service';
 import { AssistantService } from '../assistant';
 import { CalendarService } from '../calendar';
 import { EntryDraftService } from '../entry';
-import { VaultService } from '../vault';
 import { TagSearchService } from '../tags';
 import { TaskService } from '../tasks';
 import { DockService, DockSide, PanelId } from './dock.service';
@@ -46,7 +45,6 @@ import { WIDGET_MAP } from './widget-registry';
 export class Dock implements OnInit {
   protected readonly dock = inject(DockService);
   private readonly calendar = inject(CalendarService);
-  private readonly vault = inject(VaultService);
   private readonly search = inject(TagSearchService);
   private readonly tasks = inject(TaskService);
   private readonly editor = inject(EditorService);
@@ -116,15 +114,11 @@ export class Dock implements OnInit {
   protected statusFor(id: PanelId): string | null {
     switch (id) {
       case 'calendar':
-        return `${String(this.calendar.viewMonth() + 1).padStart(2, '0')}/${this.calendar.viewYear()}`;
-      case 'files': {
-        const path = this.vault.activeVaultPath();
-        if (!path) {
-          return null;
-        }
-        const parts = path.split(/[\\/]/).filter(Boolean);
-        return parts[parts.length - 1] ?? null;
-      }
+        // The expanded calendar shows the month in its own header row, so
+        // only surface it in the panel header while collapsed.
+        return this.dock.collapsed('calendar')
+          ? `${String(this.calendar.viewMonth() + 1).padStart(2, '0')}/${this.calendar.viewYear()}`
+          : null;
       case 'search':
         return this.search.ran() ? `${this.search.hits().length} hits` : null;
       case 'tasks': {

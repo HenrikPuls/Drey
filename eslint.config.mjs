@@ -110,6 +110,7 @@ export default tseslint.config(
       'electron/mcp/**/*.ts',
       'src/app/tags/**/*.ts',
       'src/app/tasks/**/*.ts',
+      'src/app/templates/**/*.ts',
       'src/app/keybindings/**/*.ts',
       'src/app/dock/**/*.ts',
       'src/app/titlebar/**/*.ts',

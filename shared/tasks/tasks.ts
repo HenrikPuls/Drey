@@ -19,6 +19,8 @@
  * written inside an example does not become a real task.
  */
 
+import { extractInlineTags, splitSections } from '../tags';
+
 export type TaskKind = 'checkbox' | 'tag';
 
 /** One task line found in a note. */
@@ -33,6 +35,12 @@ export interface TaskRecord {
   kind: TaskKind;
   /** Nearest heading (any level) above the task, or `null` before the first one. */
   heading: string | null;
+  /**
+   * Distinct inline `#tags` of the heading-section the task sits in,
+   * lower-cased (same unit the tag search reports on). Includes a tag
+   * written directly on the task line. Empty when the section carries none.
+   */
+  tags: readonly string[];
 }
 
 const FENCE = /^[ \t]*(```|~~~)/;
@@ -57,10 +65,27 @@ function stripTaskMarkers(text: string): string {
     .trim();
 }
 
+/**
+ * The heading-sections of `content` as `[startLine, endLine, tags]`, so a
+ * task line can be mapped to the inline tags of the section it sits in.
+ * Reuses `splitSections` -- the exact unit the tag search reports on.
+ */
+function sectionTagRanges(content: string): { start: number; end: number; tags: readonly string[] }[] {
+  const sections = splitSections(content);
+  return sections.map((s, i) => ({
+    start: s.line,
+    end: i + 1 < sections.length ? sections[i + 1].line - 1 : Number.MAX_SAFE_INTEGER,
+    tags: extractInlineTags(`${s.heading}\n${s.text}`),
+  }));
+}
+
 /** Every task line in `content`, in document order. */
 export function scanTasks(path: string, content: string): TaskRecord[] {
   const lines = content.split('\n');
   const out: TaskRecord[] = [];
+  const ranges = sectionTagRanges(content);
+  const tagsForLine = (ln: number): readonly string[] =>
+    ranges.find((r) => ln >= r.start && ln <= r.end)?.tags ?? [];
   let inFence = false;
   let heading: string | null = null;
 
@@ -90,6 +115,7 @@ export function scanTasks(path: string, content: string): TaskRecord[] {
         done: box[2].toLowerCase() === 'x',
         kind: 'checkbox',
         heading,
+        tags: tagsForLine(i + 1),
       });
       continue;
     }
@@ -102,6 +128,7 @@ export function scanTasks(path: string, content: string): TaskRecord[] {
         done: TASK_DONE.test(raw),
         kind: 'tag',
         heading,
+        tags: tagsForLine(i + 1),
       });
     }
   }

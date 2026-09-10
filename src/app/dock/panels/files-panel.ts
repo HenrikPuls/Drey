@@ -14,6 +14,7 @@ import { EditorService } from '../../services/editor.service';
 import { VaultService } from '../../vault';
 import { VaultFileEntry } from '../../../../shared/ipc-api';
 import { Icon } from '../../icons/icon';
+import { PanelHeaderActions } from '../panel-header-actions';
 
 /** Anchor + target for the file-tree right-click menu. */
 interface TreeMenu {
@@ -46,7 +47,7 @@ interface PendingRename {
 @Component({
   selector: 'app-files-panel',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [NgTemplateOutlet, Icon],
+  imports: [NgTemplateOutlet, Icon, PanelHeaderActions],
   templateUrl: './files-panel.html',
   styleUrl: './files-panel.css',
 })

@@ -1,57 +1,116 @@
-<div class="controls">
-  <div class="seg" role="tablist" aria-label="Task scope">
+<ng-template appPanelHeaderActions="tasks">
+  <div class="hdr">
+    <span class="seg" role="tablist" aria-label="Task scope">
+      <button
+        type="button"
+        role="tab"
+        [class.on]="tasks.scope() === 'document'"
+        [attr.aria-selected]="tasks.scope() === 'document'"
+        title="Tasks in the open document"
+        (click)="tasks.setScope('document')"
+      >
+        Doc
+      </button>
+      <button
+        type="button"
+        role="tab"
+        [class.on]="tasks.scope() === 'vault'"
+        [attr.aria-selected]="tasks.scope() === 'vault'"
+        title="Tasks across the whole vault"
+        (click)="tasks.setScope('vault')"
+      >
+        Vault
+      </button>
+    </span>
+
     <button
       type="button"
-      role="tab"
-      [class.on]="tasks.scope() === 'document'"
-      [attr.aria-selected]="tasks.scope() === 'document'"
-      (click)="tasks.setScope('document')"
+      class="tgl"
+      [class.on]="tasks.hideDone()"
+      [attr.aria-pressed]="tasks.hideDone()"
+      title="Hide completed tasks"
+      aria-label="Hide completed tasks"
+      (click)="tasks.toggleHideDone()"
     >
-      Document
+      done
     </button>
     <button
       type="button"
-      role="tab"
-      [class.on]="tasks.scope() === 'vault'"
-      [attr.aria-selected]="tasks.scope() === 'vault'"
-      (click)="tasks.setScope('vault')"
+      class="tgl"
+      [class.on]="tasks.hasKind('checkbox')"
+      [attr.aria-pressed]="tasks.hasKind('checkbox')"
+      title="Show - [ ] checkbox tasks"
+      aria-label="Show checkbox tasks"
+      (click)="tasks.toggleKind('checkbox')"
     >
-      Vault
+      [ ]
     </button>
+    <button
+      type="button"
+      class="tgl"
+      [class.on]="tasks.hasKind('tag')"
+      [attr.aria-pressed]="tasks.hasKind('tag')"
+      title="Show lines tagged #task"
+      aria-label="Show #task lines"
+      (click)="tasks.toggleKind('tag')"
+    >
+      #
+    </button>
+  </div>
+</ng-template>
+
+<div class="filter">
+  <div class="chip-field">
+    @for (tag of tasks.queryTags(); track tag) {
+      <span class="chip">
+        #{{ tag }}
+        <button
+          type="button"
+          class="x"
+          [attr.aria-label]="'Remove ' + tag"
+          (click)="tasks.removeTag(tag)"
+        >
+          ×
+        </button>
+      </span>
+    }
+    <input
+      class="chip-input"
+      type="text"
+      list="tasks-tag-vocab"
+      autocomplete="off"
+      placeholder="+ tag"
+      (keydown)="onTagKeydown($event)"
+      (blur)="onTagBlur($event)"
+    />
+    <datalist id="tasks-tag-vocab">
+      @for (entry of vocab.tags(); track entry.tag) {
+        <option [value]="entry.tag">{{ entry.count }}×</option>
+      }
+    </datalist>
   </div>
 
-  <div class="filters">
-    <label class="chk">
-      <input
-        type="checkbox"
-        [checked]="tasks.hideDone()"
-        (change)="tasks.toggleHideDone()"
-      />
-      Hide done
-    </label>
-    <span class="sep"></span>
-    <label class="chk" title="Show `- [ ]` checkbox tasks">
-      <input
-        type="checkbox"
-        [checked]="tasks.hasKind('checkbox')"
-        (change)="tasks.toggleKind('checkbox')"
-      />
-      Checkboxes
-    </label>
-    <label class="chk" title="Show lines tagged #task">
-      <input
-        type="checkbox"
-        [checked]="tasks.hasKind('tag')"
-        (change)="tasks.toggleKind('tag')"
-      />
-      #task
-    </label>
-  </div>
+  <input
+    class="text-input"
+    type="text"
+    autocomplete="off"
+    placeholder="filter text…"
+    [value]="tasks.queryText()"
+    (input)="tasks.setText($any($event.target).value)"
+  />
+
+  @if (tasks.hasFilter()) {
+    <button type="button" class="clear" (click)="tasks.clearFilter()">Clear filter</button>
+  }
 </div>
 
 @if (empty()) {
   <p class="empty">
-    {{ tasks.scope() === 'document' ? 'No tasks in this document.' : 'No tasks in the vault.' }}
+    @if (tasks.hasFilter()) {
+      No tasks match the filter.
+    } @else {
+      {{ tasks.scope() === 'document' ? 'No tasks in this document.' : 'No tasks in the vault.' }}
+    }
   </p>
 } @else {
   <div class="list">

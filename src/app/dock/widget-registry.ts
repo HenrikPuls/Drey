@@ -96,6 +96,9 @@ export const WIDGETS: readonly WidgetDescriptor[] = [
     defaultDock: 'left',
     defaultOpen: false,
     defaultFlex: 220,
+    // The filter row stays pinned; only the task list scrolls (no second
+    // scrollbar on the panel body).
+    flush: true,
     removable: true,
     capabilities: ['task-queries', 'active-document'],
   },

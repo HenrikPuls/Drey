@@ -50,6 +50,22 @@
   color: var(--text-6);
 }
 
+/* A panel's own controls, moved into this header (req-7). Pinned to the
+   right, immediately left of the grip: the `auto` margin here eats all the
+   free space so the controls + grip sit together against the edge. The
+   controls themselves are styled by the panel that contributes them (its
+   emulated-encapsulation styles reach the projected template); this only
+   lays them out inside the 32px header. */
+.head-actions {
+  margin-left: auto;
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  /* Undo the header's grab cursor for the interactive strip. */
+  cursor: default;
+}
+
 .grip {
   margin-left: auto;
   flex: none;
@@ -57,6 +73,14 @@
   grid-template-columns: repeat(2, 2px);
   gap: 2px;
   opacity: 0.3;
+}
+
+/* When the panel contributes header controls, only `.head-actions` claims
+   the free space -- otherwise flexbox splits it between the two `auto`
+   margins and the controls drift toward the centre. The grip then just
+   trails the controls by the header `gap`. */
+.head-actions + .grip {
+  margin-left: 0;
 }
 
 .grip i {
