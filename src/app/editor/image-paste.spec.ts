@@ -362,4 +362,85 @@ describe('imagePaste', () => {
       expect(view.state.doc.toString()).toBe('# note\n');
     });
   });
+
+  describe('meeting drop (.ics / .msg)', () => {
+    function calendarFile(name = 'invite.ics'): File {
+      return {
+        type: name.endsWith('.msg') ? 'application/vnd.ms-outlook' : 'text/calendar',
+        name,
+        size: 5,
+        arrayBuffer: async () => new Uint8Array([1, 2, 3, 4, 5]).buffer,
+        text: async () => 'BEGIN:VCALENDAR',
+      } as unknown as File;
+    }
+
+    it('decodes a dropped .ics and inserts the section on its own line at the drop point', async () => {
+      const seen: Array<{ bytes: number; name: string }> = [];
+      view = mount('# note\ntail\n', {
+        save: async () => 'x',
+        decodeMeeting: async (bytes, filename) => {
+          seen.push({ bytes: bytes.length, name: filename });
+          return '## 📅 Sync\n\n#mtg/sync';
+        },
+      });
+      view.dispatch({ selection: { anchor: view.state.doc.length } });
+
+      const event = fireDrop(view, transfer([calendarFile()]));
+      await settle();
+
+      expect(event.defaultPrevented).toBe(true);
+      expect(seen).toEqual([{ bytes: 5, name: 'invite.ics' }]);
+      const text = view.state.doc.toString();
+      expect(text).toContain('## 📅 Sync\n\n#mtg/sync');
+      expect(text).toContain('# note\ntail');
+      // The block sits on its own lines, not fused to surrounding text.
+      expect(text).not.toMatch(/\S## 📅|#mtg\/sync\S/);
+    });
+
+    it('recognises a .msg the same way', async () => {
+      const names: string[] = [];
+      view = mount('# note\n', {
+        save: async () => 'x',
+        decodeMeeting: async (_bytes, filename) => {
+          names.push(filename);
+          return '## meeting';
+        },
+      });
+
+      fireDrop(view, transfer([calendarFile('Meeting.MSG')]));
+      await settle();
+
+      expect(names).toEqual(['Meeting.MSG']);
+      expect(view.state.doc.toString()).toContain('## meeting');
+    });
+
+    it('routes a decode failure to onError and inserts nothing', async () => {
+      const errors: string[] = [];
+      view = mount('# note\n', {
+        save: async () => 'x',
+        decodeMeeting: async () => {
+          throw new Error('The invite has no event in it.');
+        },
+        onError: (m) => errors.push(m),
+      });
+
+      fireDrop(view, transfer([calendarFile()]));
+      await settle();
+
+      expect(errors).toEqual(['The invite has no event in it.']);
+      expect(view.state.doc.toString()).toBe('# note\n');
+    });
+
+    it('inserts nothing when decodeMeeting is not configured', async () => {
+      view = mount('# note\n', { save: async () => 'x' });
+
+      const event = fireDrop(view, transfer([calendarFile()]));
+      await settle();
+
+      // No meeting branch and `.ics` is not a text extension: the drop is
+      // swallowed, same as any other unrecognised binary file.
+      expect(event.defaultPrevented).toBe(true);
+      expect(view.state.doc.toString()).toBe('# note\n');
+    });
+  });
 });

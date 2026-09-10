@@ -89,6 +89,9 @@ const dreyApi: DreyApi = {
     ipcRenderer.invoke(IPC_CHANNELS.vaultPickSavePath, suggestedName),
   buildDailyNoteContent: (date: string): Promise<string> =>
     ipcRenderer.invoke(IPC_CHANNELS.dailyBuildContent, date),
+  decodeMeeting: (bytes: Uint8Array, filename: string): Promise<string> =>
+    ipcRenderer.invoke(IPC_CHANNELS.meetingDecode, bytes, filename),
+  importMeeting: (): Promise<string | null> => ipcRenderer.invoke(IPC_CHANNELS.meetingImport),
   saveNote: (request: NoteSaveRequest): Promise<NoteSaveResult> =>
     ipcRenderer.invoke(IPC_CHANNELS.noteSave, request),
   listTags: (): Promise<TagEntry[]> => ipcRenderer.invoke(IPC_CHANNELS.tagList),

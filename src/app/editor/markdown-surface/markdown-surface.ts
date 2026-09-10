@@ -22,6 +22,7 @@ import { EditorService, EditorViewMode } from '../../services/editor.service';
 import { EditTargetService } from '../../services/edit-target.service';
 import { EditorZoomService } from '../../services/editor-zoom.service';
 import { ImageLightboxService } from '../../image-viewer';
+import { MeetingService } from '../../meeting';
 import { TagService } from '../../services/tag.service';
 import { VaultService } from '../../vault';
 import { ThemeService } from '../../services/theme.service';
@@ -72,6 +73,7 @@ export class MarkdownSurface implements AfterViewInit, OnDestroy {
   private readonly editTarget = inject(EditTargetService);
   private readonly tags = inject(TagService);
   private readonly vault = inject(VaultService);
+  private readonly meeting = inject(MeetingService);
   private readonly themes = inject(ThemeService);
   private readonly zoom = inject(EditorZoomService);
   private readonly lightbox = inject(ImageLightboxService);
@@ -404,6 +406,7 @@ export class MarkdownSurface implements AfterViewInit, OnDestroy {
                 readTextFile: (path) => this.vault.readTextFile(path),
                 saveFromUrl: (url) =>
                   this.vault.saveAssetFromUrl(url, this.editor.openPath() ?? ''),
+                decodeMeeting: (bytes, filename) => this.meeting.decodeToMarkdown(bytes, filename),
                 onError: (message) => this.editor.error.set(message),
               })
             : [],

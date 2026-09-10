@@ -107,6 +107,9 @@ export const IPC_CHANNELS = {
   spellLanguages: 'spell:languages',
   spellAddDictionary: 'spell:add-dictionary',
   spellAddWord: 'spell:add-word',
+  // Calendar invite drop -> meeting section (ADR-0041).
+  meetingDecode: 'meeting:decode',
+  meetingImport: 'meeting:import',
   // MCP vault server (ADR-0021).
   mcpStatus: 'mcp:status',
   mcpWriteRequest: 'mcp:write-request',
@@ -642,6 +645,26 @@ export interface DreyApi {
    * `date` is not a `YYYY-MM-DD` string.
    */
   buildDailyNoteContent(date: string): Promise<string>;
+
+  /**
+   * Decodes a dropped `.ics` / `.msg` calendar invite (`bytes` = the
+   * file's raw contents) into the Markdown "meeting section" that the
+   * editor inserts at the drop point — heading, date/time, participants,
+   * invitation body and attachment names, tagged `#mtg/<slug>`, filled
+   * from `templates/meeting.md` (scaffolded from an English default on
+   * first use). No file is written. Rejects with a user-facing message
+   * when the file is not a recognised invite or has no event in it
+   * (ADR-0041).
+   */
+  decodeMeeting(bytes: Uint8Array, filename: string): Promise<string>;
+
+  /**
+   * Opens a native file picker for a `.ics` / `.msg` and returns the same
+   * meeting section `decodeMeeting` produces, or `null` when the user
+   * cancels. The "File → Import meeting …" fallback for when an Outlook
+   * calendar drag delivers no real file (ADR-0041).
+   */
+  importMeeting(): Promise<string | null>;
 
   /**
    * Subscribes to the quick-capture hotkey signal from the main process.
