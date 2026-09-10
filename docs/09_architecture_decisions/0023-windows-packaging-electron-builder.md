@@ -67,9 +67,11 @@ targeted `asarUnpack`, an explicit `files` allow-list, and a
   (`node node_modules/electron-builder/cli.js --win [--dir]`, PATH-
   independent per the no-global-node convention), `make:icon`.
 - **Icon**: `scripts/make-icon.mjs` (`sharp` + `png-to-ico`, devDeps)
-  crops `build/logo-source.png` (the supplied logo) tight to the mark,
-  drops the wordmark, and writes `build/icon.ico` (16–256 px) +
-  `build/icon.png`. All three committed; re-runnable.
+  trims `build/logo-source.png` (the supplied logo) to the mark's
+  bounding box and recentres it near edge-to-edge in a transparent
+  square, then writes `build/icon.ico` (16–256 px) + `build/icon.png`
+  plus `public/icon.png` + `public/favicon.ico`. All committed;
+  re-runnable.
 
 ## Consequences
 

@@ -1,12 +1,16 @@
 /**
  * Builds the app icons from the supplied logo `build/logo-source.png` --
- * cropped tight to the chipmunk "D" mark, dropping the "drey" wordmark and
- * most of the black margin. Writes:
- *   - build/icon.ico     electron-builder win.icon (exe + installer)
- *   - build/icon.png     512px, the BrowserWindow / taskbar icon
- *   - public/favicon.ico the renderer favicon
- *   - public/icon.png    512px, the in-app mark (titlebar, About)
- * Re-run after changing the source or the crop box:  npm run make:icon
+ * a transparent, roughly framed rendering of the chipmunk mark. The mark
+ * is trimmed to its bounding box and recentred near edge-to-edge in a
+ * square (Windows/macOS/Linux and the taskbar all add their own padding),
+ * kept fully transparent, then written out as:
+ *   - build/icon.ico     electron-builder win.icon (exe + installer) + the
+ *                        BrowserWindow / taskbar icon
+ *   - build/icon.png     512 px -- packaged fallback (Linux)
+ *   - public/favicon.ico the renderer <link rel="icon"> (Electron never
+ *                        paints it, kept in sync for a browser context)
+ *   - public/icon.png    512 px -- the in-app mark (titlebar, About)
+ * Re-run after changing the source art:  npm run make:icon
  *
  * Uses `sharp` (prebuilt binary, build-time only) + `png-to-ico`.
  */
@@ -23,25 +27,41 @@ const PNG = path.join(root, 'build', 'icon.png');
 const FAVICON = path.join(root, 'public', 'favicon.ico');
 const PUBLIC_PNG = path.join(root, 'public', 'icon.png');
 
-// Tight square around the mark in the 1254x1254 source (tune by eye).
-const CROP = { left: 336, top: 236, width: 540, height: 540 };
-// The source's near-black background, so a resized frame has no seam.
-const BG = { r: 13, g: 13, b: 13, alpha: 1 };
+const TRANSPARENT = { r: 0, g: 0, b: 0, alpha: 0 };
 const ICO_SIZES = [256, 128, 64, 48, 32, 16];
+const CANVAS = 1024; // working square before the final resizes
+// Tiny breathing room only so the trim's anti-aliased edge is not clipped;
+// the OS shells add the real padding around a taskbar / dock icon.
+const MARGIN = 0.02;
 
-const base = sharp(await readFile(SOURCE))
-  .extract(CROP)
-  .flatten({ background: BG });
+// Trim the transparent border off the source art, then fit the mark
+// near edge-to-edge into a centred square. Replaces the old hand-tuned
+// pixel crop box, which assumed the previous logo's fixed wordmark layout.
+const trimmed = await sharp(await readFile(SOURCE))
+  .ensureAlpha()
+  .trim({ threshold: 12 })
+  .toBuffer();
 
-const frames = await Promise.all(
-  ICO_SIZES.map((size) => base.clone().resize(size, size, { fit: 'cover' }).png().toBuffer()),
-);
+const inner = Math.round(CANVAS * (1 - 2 * MARGIN));
+const pad = Math.round((CANVAS - inner) / 2);
+const markPng = await sharp(
+  await sharp(trimmed)
+    .resize(inner, inner, { fit: 'contain', background: TRANSPARENT })
+    .toBuffer(),
+)
+  .extend({ top: pad, bottom: pad, left: pad, right: pad, background: TRANSPARENT })
+  .png()
+  .toBuffer();
+
+const frame = (size) =>
+  sharp(markPng).resize(size, size, { fit: 'contain', background: TRANSPARENT }).png().toBuffer();
+
+const frames = await Promise.all(ICO_SIZES.map(frame));
 const ico = await pngToIco(frames);
 await writeFile(ICO, ico);
 await writeFile(FAVICON, ico);
-const png512 = await base.clone().resize(512, 512, { fit: 'cover' }).png().toBuffer();
-await writeFile(PNG, png512);
-await writeFile(PUBLIC_PNG, png512);
+await writeFile(PNG, await frame(512));
+await writeFile(PUBLIC_PNG, await frame(512));
 
 console.log(
   `build/icon.ico + build/icon.png + public/favicon.ico + public/icon.png written (${ICO_SIZES.join(

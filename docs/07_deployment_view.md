@@ -74,6 +74,9 @@ No native modules anywhere (`nspell` and `yaml` are pure JS), so there is
   Windows SmartScreen shows an "unknown publisher" prompt. Acceptable for
   personal / small-team use; a real cert is a later step. No auto-update
   channel either.
-- `build/icon.ico` is generated from `build/logo-source.png` by
+- `build/icon.ico` / `build/icon.png` and `public/icon.png` /
+  `public/favicon.ico` are generated from `build/logo-source.png` by
   `npm run make:icon` (`scripts/make-icon.mjs`, `sharp` + `png-to-ico`),
-  committed. Re-run after changing the source or its crop box.
+  all committed. The script trims the source art to its bounding box and
+  recentres it near edge-to-edge in a transparent square — re-run after
+  changing the source.
