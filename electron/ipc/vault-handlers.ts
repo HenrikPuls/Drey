@@ -8,6 +8,7 @@ import {
 } from '../../shared/ipc-api';
 import { DailyNoteManager } from '../daily-note';
 import { NoteManager } from '../note-manager';
+import { PluginHost } from '../plugin-host';
 import { TagIndex } from '../tags';
 import { TaskIndex } from '../tasks';
 import { VaultManager } from '../vault-manager';
@@ -18,6 +19,7 @@ export interface VaultHandlerDeps {
   noteManager: NoteManager;
   tagIndex: TagIndex;
   taskIndex: TaskIndex;
+  pluginHost: PluginHost;
 }
 
 /**
@@ -35,10 +37,13 @@ export function registerVaultHandlers({
   noteManager,
   tagIndex,
   taskIndex,
+  pluginHost,
 }: VaultHandlerDeps): void {
   const rebuildIndexes = async (): Promise<void> => {
     await tagIndex.rebuild();
     await taskIndex.rebuild();
+    // Plugins re-read whatever they cache on any index-affecting change.
+    pluginHost.emitVaultChange({ kind: 'refresh' });
   };
 
   ipcMain.handle(IPC_CHANNELS.vaultGetActive, (): string | null =>
@@ -59,8 +64,12 @@ export function registerVaultHandlers({
   );
   ipcMain.handle(
     IPC_CHANNELS.vaultWriteFile,
-    (_event, relativePath: string, content: string): Promise<number> =>
-      vaultManager.writeFile(relativePath, content),
+    async (_event, relativePath: string, content: string): Promise<number> => {
+      const modifiedMs = await vaultManager.writeFile(relativePath, content);
+      // A raw write bypasses the note:save pipeline — tell plugins directly.
+      pluginHost.emitVaultChange({ kind: 'write', path: relativePath });
+      return modifiedMs;
+    },
   );
   ipcMain.handle(
     IPC_CHANNELS.vaultSaveAsset,
@@ -92,6 +101,7 @@ export function registerVaultHandlers({
     async (_event, fromRel: string, toRel: string): Promise<string> => {
       const next = await vaultManager.renameEntry(fromRel, toRel);
       await rebuildIndexes();
+      pluginHost.emitVaultChange({ kind: 'rename', path: next });
       return next;
     },
   );

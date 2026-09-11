@@ -1,7 +1,7 @@
 import { McpServer } from '../../../electron/mcp/server';
 import { VaultTools } from '../../../electron/mcp/vault-tools';
 import type { AppConfig } from '../../../shared/app-config';
-import type { TagIndex } from '../../../electron/tags';
+import type { SectionSearchProvider } from '../../../shared/plugin-api';
 import type { VaultManager } from '../../../electron/vault-manager';
 
 /**
@@ -33,12 +33,15 @@ function fakeVault(files: Record<string, string>): VaultManager {
   } as unknown as VaultManager;
 }
 
-function fakeIndex(hits: unknown[] = []): TagIndex {
+function fakeProvider(hits: unknown[] = []): SectionSearchProvider {
   return {
-    search: () => hits,
-    getSections: () => [],
-    reindexFile: () => undefined,
-  } as unknown as TagIndex;
+    search: async () => hits as never[],
+    vocabulary: () => [],
+  };
+}
+
+function reindexed(paths: Array<{ path: string; content: string }>): (p: string, c: string) => void {
+  return (path, content) => paths.push({ path, content });
 }
 
 describe('McpServer.handle', () => {
@@ -87,7 +90,8 @@ describe('VaultTools', () => {
   it('rejects an invalid regex', async () => {
     const tools = new VaultTools(
       fakeVault({}),
-      fakeIndex(),
+      () => fakeProvider(),
+      () => undefined,
       () => config(),
       async () => true,
     );
@@ -99,7 +103,8 @@ describe('VaultTools', () => {
   it('scans every file line-by-line for a regex-only search', async () => {
     const tools = new VaultTools(
       fakeVault({ 'a.md': 'alpha\nBETA\n', 'b.md': 'gamma\n' }),
-      fakeIndex(),
+      () => fakeProvider(),
+      () => undefined,
       () => config(),
       async () => true,
     );
@@ -111,7 +116,8 @@ describe('VaultTools', () => {
   it('reads a file and errors on a missing one', async () => {
     const tools = new VaultTools(
       fakeVault({ 'a.md': 'hi' }),
-      fakeIndex(),
+      () => fakeProvider(),
+      () => undefined,
       () => config(),
       async () => true,
     );
@@ -124,7 +130,8 @@ describe('VaultTools', () => {
     let asked = 0;
     const tools = new VaultTools(
       fakeVault(files),
-      fakeIndex(),
+      () => fakeProvider(),
+      () => undefined,
       () => config(),
       async () => {
         asked++;
@@ -140,7 +147,8 @@ describe('VaultTools', () => {
     const files = { 'note.md': 'keep me' };
     const tools = new VaultTools(
       fakeVault(files),
-      fakeIndex(),
+      () => fakeProvider(),
+      () => undefined,
       () => config(),
       async () => false,
     );
@@ -154,7 +162,8 @@ describe('VaultTools', () => {
     let asked = 0;
     const tools = new VaultTools(
       fakeVault(files),
-      fakeIndex(),
+      () => fakeProvider(),
+      () => undefined,
       () => config({ yolo: true }),
       async () => {
         asked++;
@@ -164,5 +173,32 @@ describe('VaultTools', () => {
     await tools.call('vault_write', { path: 'note.md', content: 'new' });
     expect(files['note.md']).toBe('new');
     expect(asked).toBe(0);
+  });
+
+  it('re-indexes a written file so a follow-up search sees it', async () => {
+    const files = { 'note.md': 'old' };
+    const reindexedFiles: Array<{ path: string; content: string }> = [];
+    const tools = new VaultTools(
+      fakeVault(files),
+      () => fakeProvider(),
+      reindexed(reindexedFiles),
+      () => config({ yolo: true }),
+      async () => true,
+    );
+    await tools.call('vault_write', { path: 'note.md', content: 'new' });
+    expect(reindexedFiles).toEqual([{ path: 'note.md', content: 'new' }]);
+  });
+
+  it('degrades vault_search with a clear error when no provider is registered', async () => {
+    const tools = new VaultTools(
+      fakeVault({}),
+      () => null,
+      () => undefined,
+      () => config(),
+      async () => true,
+    );
+    const res = await tools.call('vault_search', { tags: ['a'] });
+    expect(res.isError).toBe(true);
+    expect(res.content[0].text).toContain('no plugin providing the tag/section index');
   });
 });

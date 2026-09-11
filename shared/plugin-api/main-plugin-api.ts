@@ -42,11 +42,14 @@ export interface NoteSavedEvent {
 /**
  * What a save hook may return. `content` replaces the note's final content
  * (the hook rewrites, the pipeline adopts — mirroring how the renderer
- * adopts `NoteSaveResult.content` today); `pendingActions` are confirmations
- * queued for the renderer's dialog.
+ * adopts `NoteSaveResult.content` today); `modifiedMs` is the hook's own
+ * write time for that rewrite (the pipeline hands it to the renderer as the
+ * save result); `pendingActions` are confirmations queued for the renderer's
+ * dialog.
  */
 export interface SaveHookResult {
   content?: string;
+  modifiedMs?: number;
   pendingActions?: readonly ActionOutcome[];
 }
 

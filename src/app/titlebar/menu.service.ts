@@ -11,6 +11,10 @@ import { openSearchPanel } from '@codemirror/search';
 import type { EditorView } from '@codemirror/view';
 import { KeybindingService } from '../keybindings';
 import { DockService, WidgetId, WidgetRegistryService } from '../dock';
+import {
+  MenuContributionsService,
+  type ContributableMenu,
+} from '../plugin-host/menu-contributions.service';
 import { MeetingService } from '../meeting';
 import { PaneService } from '../panes';
 import { EditorService } from '../services/editor.service';
@@ -69,6 +73,7 @@ export class MenuService {
   private readonly vault = inject(VaultService);
   private readonly meeting = inject(MeetingService);
   private readonly widgets = inject(WidgetRegistryService);
+  private readonly contributions = inject(MenuContributionsService);
 
   readonly open = signal<MenuId | null>(null);
 
@@ -183,6 +188,34 @@ export class MenuService {
     };
   }
 
+  /**
+   * Plugin-contributed rows for one menu (ADR-0044 stage 2), appended after
+   * the built-ins behind a separator. A row runs a registered command or
+   * the contribution's own closure; `run` absent renders it disabled.
+   */
+  private contributionRows(menu: ContributableMenu): MenuRow[] {
+    const items = this.contributions.itemsFor(menu);
+    if (items.length === 0) {
+      return [];
+    }
+    return [
+      SEP,
+      ...items.map((item) => ({
+        kind: 'item' as const,
+        label: item.label,
+        ...(item.hint !== undefined ? { hint: item.hint } : {}),
+        run: item.commandId
+          ? () => this.run(item.commandId!)
+          : item.run
+            ? () => {
+                this.close();
+                item.run!();
+              }
+            : undefined,
+      })),
+    ];
+  }
+
   readonly menus = computed<readonly MenuDef[]>(() => [
     {
       id: 'file',
@@ -234,6 +267,7 @@ export class MenuService {
             this.settings.openScreen();
           },
         },
+        ...this.contributionRows('file'),
       ],
     },
     {
@@ -254,6 +288,7 @@ export class MenuService {
           hint: 'Ctrl Shift F',
           run: () => this.run('search.open'),
         },
+        ...this.contributionRows('edit'),
       ],
     },
     {
@@ -268,6 +303,7 @@ export class MenuService {
         this.editorRow('Move line down', 'Alt Down', moveLineDown),
         SEP,
         this.editorRow('Toggle task done', 'Ctrl Enter', (view) => toggleTaskDone(view)),
+        ...this.contributionRows('selection'),
       ],
     },
     {
@@ -325,6 +361,7 @@ export class MenuService {
             this.dock.reset();
           },
         },
+        ...this.contributionRows('view'),
       ],
     },
   ]);

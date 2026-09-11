@@ -3,36 +3,42 @@
  * `writeVaultFile` with:
  *  - a `updated:` bump (and `created:` fill) when the file has a
  *    frontmatter fence -- otherwise the bytes are written verbatim;
- *  - the `on-save` Action hook (`docs/09_architecture_decisions/0011-*.md`);
- *  - an incremental re-index of the file in `TagIndex` (no file watcher).
+ *  - the plugin save hooks (`docs/09_architecture_decisions/0044-*.md`),
+ *    which return optional content rewrites + pending confirmations.
  *
  * No `#tag` -> frontmatter merge and no routing any more -- tags are free
  * inline labels the tag search reads from the body directly (see the plan,
  * "Tag-Index + Tag-Suche"). Every decision (`splitFrontmatter`,
  * `readFrontmatter`, `bumpUpdated`, `writeFrontmatter`) is a pure
- * `shared/frontmatter` function; this class only sequences filesystem calls.
+ * `shared/frontmatter` function; this class only sequences filesystem calls
+ * and knows nothing about indexes or Actions -- those are hooks now
+ * (registered by the base adapters until their plugins exist).
  */
-import { ActionOutcome, Frontmatter, NoteSaveRequest, NoteSaveResult } from '../shared/ipc-api';
+import type { NoteSavedEvent, SaveHookResult, Unsubscribe } from '../shared/plugin-api';
+import type { VaultManager } from './vault-manager';
+import { Frontmatter, NoteSaveRequest, NoteSaveResult } from '../shared/ipc-api';
 import {
   bumpUpdated,
   readFrontmatter,
   splitFrontmatter,
   writeFrontmatter,
 } from '../shared/frontmatter';
-import { ActionRunner } from './llm';
-import { TagIndex } from './tags';
-import { TaskIndex } from './tasks';
-import { VaultManager } from './vault-manager';
 
-/** Structural notes: still get `updated:` bumped, but are not tag-indexed. */
-const NO_INDEX_PREFIX = 'templates/';
+/**
+ * The save-hook seam (ADR-0044 rule 4): what the pipeline offers, and what
+ * `PluginHost` implements. A hook may rewrite the final content (the
+ * pipeline adopts it, exactly as the renderer adopts `NoteSaveResult`)
+ * and/or queue confirmations for the renderer's dialog.
+ */
+export interface NoteSaveHooks {
+  onNoteSaved(hook: (event: NoteSavedEvent) => Promise<SaveHookResult | void>): Unsubscribe;
+  emitNoteSaved(event: NoteSavedEvent): Promise<SaveHookResult[]>;
+}
 
 export class NoteManager {
   constructor(
     private readonly vault: VaultManager,
-    private readonly index: TagIndex,
-    private readonly taskIndex: TaskIndex,
-    private readonly actions: ActionRunner,
+    private readonly hooks: NoteSaveHooks,
   ) {}
 
   async saveNote(request: NoteSaveRequest): Promise<NoteSaveResult> {
@@ -55,65 +61,43 @@ export class NoteManager {
     }
 
     const modifiedMs = await this.vault.writeFile(relPath, toDisk(written));
-    if (!relPath.startsWith(NO_INDEX_PREFIX)) {
-      this.index.reindexFile(relPath, written);
-      this.taskIndex.reindexFile(relPath, written);
-    }
 
-    const onSave = await this.runOnSaveActions(request, written, modifiedMs);
-    return {
-      path: relPath,
-      content: onSave.content,
-      modifiedMs: onSave.modifiedMs,
-      pendingActions: onSave.pendingActions,
-    };
-  }
-
-  /**
-   * Runs the enabled `on-save` Actions against the just-written file
-   * (`docs/09_architecture_decisions/0011-*.md`). A trigger that still
-   * needs confirmation contributes its `'edit'` outcome to `pendingActions`
-   * for the renderer's confirmation dialog; a trigger with confirmation
-   * switched off is applied here and now (the file is written again, and
-   * the next action in the chain sees the updated text). `'noop'` /
-   * `'error'` outcomes are dropped -- an unreachable LLM must not fail a
-   * save. Skipped entirely when LLM features are off, or when the save is
-   * itself applying an action result (`runOnSaveActions === false`).
-   */
-  private async runOnSaveActions(
-    request: NoteSaveRequest,
-    content: string,
-    modifiedMs: number,
-  ): Promise<{ content: string; modifiedMs: number; pendingActions: ActionOutcome[] }> {
-    const pendingActions: ActionOutcome[] = [];
-    if (request.runOnSaveActions === false || !this.actions.isLlmEnabled()) {
-      return { content, modifiedMs, pendingActions };
-    }
-
-    const toDisk = (text: string): string =>
-      request.eol === '\r\n' ? text.replace(/\n/g, '\r\n') : text;
-
-    let current = content;
+    // Save hooks fire unless this save IS the application of a confirmed
+    // rewrite (`runOnSaveActions: false` semantics -- a hook must not
+    // re-trigger on the change it proposed). A hook's content rewrite is
+    // adopted as the save result; its pending confirmations are handed to
+    // the renderer untouched.
+    let content = written;
     let currentMs = modifiedMs;
-    for (const action of this.actions.actionsForEvent('on-save')) {
-      const outcome = await this.actions.run(action.triggerId, {
-        path: request.path,
-        body: current,
+    let pendingActions: NoteSaveResult['pendingActions'];
+    if (request.runOnSaveActions !== false) {
+      const results = await this.hooks.emitNoteSaved({
+        path: relPath,
+        content: written,
+        modifiedMs,
+        eol,
+        applyingAction: false,
       });
-      if (outcome.kind !== 'edit') {
-        continue;
-      }
-      if (action.confirm) {
-        pendingActions.push({ ...outcome, before: current });
-      } else {
-        current = outcome.after;
-        currentMs = await this.vault.writeFile(request.path, toDisk(current));
-        // Keep the index in step after a non-confirm on-save edit.
-        if (!request.path.startsWith(NO_INDEX_PREFIX)) {
-          this.index.reindexFile(request.path, current);
+      for (const result of results) {
+        if (result.content !== undefined) {
+          content = result.content;
+          // The hook wrote the file itself; adopt its write time when it
+          // reported one (the legacy on-save Actions path does).
+          if (result.modifiedMs !== undefined) {
+            currentMs = result.modifiedMs;
+          }
+        }
+        if (result.pendingActions !== undefined && result.pendingActions.length > 0) {
+          pendingActions = [...(pendingActions ?? []), ...result.pendingActions];
         }
       }
     }
-    return { content: current, modifiedMs: currentMs, pendingActions };
+
+    return {
+      path: relPath,
+      content,
+      modifiedMs: currentMs,
+      ...(pendingActions !== undefined ? { pendingActions } : {}),
+    };
   }
 }

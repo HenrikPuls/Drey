@@ -19,6 +19,7 @@ import {
   type PluginDescriptorForRenderer,
   type PluginIpcEventPayload,
   type PluginIpcInvokePayload,
+  type NoteSavedEvent,
   type SaveHook,
   type SaveHookResult,
   type SectionSearchProvider,
@@ -74,8 +75,33 @@ export class PluginHost {
   private readonly saveHooks: Array<SaveHook> = [];
   private searchProvider: SectionSearchProvider | null = null;
 
+  /**
+   * Public registration facades — what `MainPluginContext` exposes to a
+   * plugin and what the base adapters (and `NoteManager`, via the host
+   * satisfying `NoteSaveHooks`) use from the outside.
+   */
+  readonly save: { onNoteSaved(hook: SaveHook): Unsubscribe };
+
+  readonly search: { registerSectionSearch(provider: SectionSearchProvider): Unsubscribe };
+
   constructor(private readonly deps: PluginHostDeps) {
     this.configStore = new PluginConfigStore(deps.userRoot);
+    this.save = {
+      onNoteSaved: (hook) => {
+        this.saveHooks.push(hook);
+        return () => removeItem(this.saveHooks, hook);
+      },
+    };
+    this.search = {
+      registerSectionSearch: (provider) => {
+        this.searchProvider = provider;
+        return () => {
+          if (this.searchProvider === provider) {
+            this.searchProvider = null;
+          }
+        };
+      },
+    };
   }
 
   /** Scans the roots, then imports + activates every main entry that may load. */
@@ -344,20 +370,10 @@ export class PluginHost {
         set: <T>(key: string, value: T) => this.configStore.set(id, key, value),
       },
       save: {
-        onNoteSaved: (hook) => {
-          this.saveHooks.push(hook);
-          return track(() => removeItem(this.saveHooks, hook));
-        },
+        onNoteSaved: (hook) => track(this.save.onNoteSaved(hook)),
       },
       search: {
-        registerSectionSearch: (provider) => {
-          this.searchProvider = provider;
-          return track(() => {
-            if (this.searchProvider === provider) {
-              this.searchProvider = null;
-            }
-          });
-        },
+        registerSectionSearch: (provider) => track(this.search.registerSectionSearch(provider)),
       },
       llm: {
         enabled: () => actionRunner.isLlmEnabled(),

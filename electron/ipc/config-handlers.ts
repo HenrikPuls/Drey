@@ -1,6 +1,7 @@
 import { ipcMain } from 'electron';
 import { AppConfig, IPC_CHANNELS } from '../../shared/ipc-api';
 import { AppConfigStore } from '../app-config';
+import { PluginHost } from '../plugin-host';
 import { SpellcheckService } from '../spellcheck';
 import { TagIndex } from '../tags';
 import { TaskIndex } from '../tasks';
@@ -10,6 +11,7 @@ export interface ConfigHandlerDeps {
   spellcheck: SpellcheckService;
   tagIndex: TagIndex;
   taskIndex: TaskIndex;
+  pluginHost: PluginHost;
   /** Opens / closes the localhost MCP HTTP endpoint to match the stored config. */
   syncMcpHttp: () => Promise<void>;
 }
@@ -20,6 +22,7 @@ export function registerConfigHandlers({
   spellcheck,
   tagIndex,
   taskIndex,
+  pluginHost,
   syncMcpHttp,
 }: ConfigHandlerDeps): void {
   ipcMain.handle(IPC_CHANNELS.configGet, (): AppConfig => appConfig.get());
@@ -36,6 +39,7 @@ export function registerConfigHandlers({
     if (stored.templates.dir !== prevTemplatesDir) {
       await tagIndex.rebuild();
       await taskIndex.rebuild();
+      pluginHost.emitVaultChange({ kind: 'refresh' });
     }
     return stored;
   });

@@ -42,6 +42,7 @@ import { pasteUrlAsMarkdownLink } from '../paste-link';
 import { makeTagCompletionSource } from '../tag-complete';
 import { tagPills } from '../tag-pill';
 import { resolveVaultImageUrl } from '../vault-image';
+import { EditorExtensionRegistry, DropDecoderRegistry } from '../../plugin-host';
 
 /**
  * The one reusable CodeMirror Markdown surface: the full-page editor and the
@@ -77,6 +78,8 @@ export class MarkdownSurface implements AfterViewInit, OnDestroy {
   private readonly themes = inject(ThemeService);
   private readonly zoom = inject(EditorZoomService);
   private readonly lightbox = inject(ImageLightboxService);
+  private readonly pluginExtensions = inject(EditorExtensionRegistry);
+  private readonly dropDecoders = inject(DropDecoderRegistry);
   private readonly host = viewChild.required<ElementRef<HTMLDivElement>>('host');
 
   readonly mode = input<EditorViewMode>('live');
@@ -164,6 +167,8 @@ export class MarkdownSurface implements AfterViewInit, OnDestroy {
   private readonly lineNumberCompartment = new Compartment();
   /** Swaps the whole CM6 theme (chrome + syntax) when Settings -> Appearance changes. */
   private readonly themeCompartment = new Compartment();
+  /** Holds the plugins' contributed extensions (ADR-0044 stage 2); reconfigured on registry change. */
+  private readonly pluginCompartment = new Compartment();
   /** Guards against an out-of-order theme `load()` resolving after a newer pick. */
   private themeToken = 0;
   /** Holds the language grammar (+ Markdown chrome) for the active tab; see `languageFilename`. */
@@ -229,6 +234,31 @@ export class MarkdownSurface implements AfterViewInit, OnDestroy {
       this.zoom.scale();
       this._view?.requestMeasure();
     });
+    // Plugin-contributed extensions (ADR-0044): reconfigure whenever the
+    // registry's set changes. A factory is evaluated per reconfigure with
+    // this surface's context.
+    effect(() => {
+      void this.pluginExtensions.revision();
+      this._view?.dispatch({
+        effects: this.pluginCompartment.reconfigure(this.collectPluginExtensions()),
+      });
+    });
+  }
+
+  /**
+   * Evaluates the registered plugin extension factories for this surface.
+   * `compact` surfaces are composer slots; the full-page editor is the
+   * document slot. `path`/`filename` read the ACTIVE file at call time
+   * (both from `languageFilename`, which carries the tab's path-like name).
+   */
+  private collectPluginExtensions(): Extension {
+    const slot = this.compact() ? 'composer' : 'document';
+    const filename = (): string | null => this.languageFilename();
+    return this.pluginExtensions.extensionsFor(slot, {
+      slot,
+      path: filename,
+      filename,
+    }) as Extension[];
   }
 
   /**
@@ -353,6 +383,10 @@ export class MarkdownSurface implements AfterViewInit, OnDestroy {
           // with the Markdown bundle; `applyLanguage()` swaps in a code
           // grammar (and drops the Markdown chrome) for a non-`.md` tab.
           this.languageCompartment.of(this.markdownBundle()),
+          // Plugin-contributed extensions (ADR-0044 stage 2), in their own
+          // compartment so a (de)registration reconfigures without touching
+          // the language state.
+          this.pluginCompartment.of(this.collectPluginExtensions()),
           // Track this surface as the Edit/Selection menu's target while it
           // holds focus (see `EditTargetService` -- "last focused", so a
           // menu-bar click doesn't drop it).
@@ -407,6 +441,9 @@ export class MarkdownSurface implements AfterViewInit, OnDestroy {
                 saveFromUrl: (url) =>
                   this.vault.saveAssetFromUrl(url, this.editor.openPath() ?? ''),
                 decodeMeeting: (bytes, filename) => this.meeting.decodeToMarkdown(bytes, filename),
+                // Plugin drop decoders claim a drop before the base cascade.
+                dropClaimed: (data) => this.dropDecoders.claims(data),
+                decodeDropped: async (data) => (await this.dropDecoders.decode(data)) ?? '',
                 onError: (message) => this.editor.error.set(message),
               })
             : [],

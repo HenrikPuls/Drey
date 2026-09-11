@@ -21,5 +21,12 @@
       }
       <button type="button" class="more" (click)="openPicker()">All templates…</button>
     }
+
+    @if (pluginItems().length > 0) {
+      <div class="ctx-sep"></div>
+      @for (item of pluginItems(); track item.label; let i = $index) {
+        <button type="button" (click)="runPluginItem(i)">{{ item.label }}</button>
+      }
+    }
   </div>
 }

@@ -15,3 +15,11 @@ export {
   type PluginModuleLoader,
 } from './plugin-module-loader';
 export { PluginApiFactory, type PluginApiContext } from './plugin-api-impl';
+export { EditorExtensionRegistry } from './editor-extension-registry.service';
+export { DropDecoderRegistry } from './drop-decoder-registry.service';
+export {
+  MenuContributionsService,
+  EditorContextMenuRegistry,
+  type ContributableMenu,
+} from './menu-contributions.service';
+export { HOST_CODEMIRROR } from './runtime-exports';

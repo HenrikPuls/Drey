@@ -23,7 +23,7 @@ import { McpHttpTransport, McpServer, VaultTools } from './mcp';
 import { MeetingImporter } from './meeting';
 import { attachContextMenu, buildApplicationMenu } from './menu';
 import { NoteManager } from './note-manager';
-import { PluginHost } from './plugin-host';
+import { PluginHost, registerBaseSaveHooks, registerBaseSearchProvider } from './plugin-host';
 import { SessionBackupStore } from './session';
 import { SpellcheckService } from './spellcheck';
 import { TagIndex } from './tags';
@@ -450,26 +450,22 @@ if (!app.requestSingleInstanceLock()) {
     // server and the assistant's in-process tool-calling loop.
     const vaultTools = new VaultTools(
       vaultManager,
-      tagIndex,
+      // The section-search seam (ADR-0044 stage 2): reads whichever provider
+      // is registered (the base adapter registers the tag index until the
+      // tags plugin exists). The closure reads the module variable lazily,
+      // so construction order between the tools and the host stays free.
+      () => pluginHost?.getSectionSearchProvider() ?? null,
+      (path, content) => tagIndex.reindexFile(path, content),
       () => appConfig.get(),
       (request) => mcpWriteBridge.requestConfirmation(request),
       () => mainWindow?.webContents.send(IPC_CHANNELS.mcpVaultChanged),
     );
     const actionRunner = new ActionRunner(appConfig, lmStudio, llmTasks, vaultTools);
-    const noteManager = new NoteManager(vaultManager, tagIndex, taskIndex, actionRunner);
-    const meetingImporter = new MeetingImporter(vaultManager);
-    const chatStore = new ChatStore(vaultManager);
-    const spellcheck = new SpellcheckService(appConfig);
-    const mcpServer = new McpServer(vaultTools, app.getVersion());
-    const mcpHttp = new McpHttpTransport(mcpServer);
-    mcpHttpForShutdown = mcpHttp;
-    // Constructed here (before `registerIpcHandlers`, which needs it) but
-    // bound to the window later in `createMainWindow` via `attach()`.
-    browserViews = new BrowserViewManager(() => mainWindow);
-    const sessionBackups = new SessionBackupStore();
     // The plugin host activates main entries before the window exists and
     // before IPC registration — plugins register their method handlers in
     // activate(), and the window-created callback reaches them afterwards.
+    // It sits between the ActionRunner (its LLM facade needs it) and the
+    // NoteManager (whose save hooks it carries).
     pluginHost = new PluginHost({
       // `__dirname` is `dist-electron/electron`, so the built-ins the plugin
       // build script emits live one level up.
@@ -494,8 +490,34 @@ if (!app.requestSingleInstanceLock()) {
       },
     });
     await pluginHost.discoverAndActivate();
+    // Until the tags/tasks/assistant plugins exist, the base behaviours
+    // participate in the seams like plugins would (ADR-0044 stage 2).
+    const pluginHostRef = pluginHost;
+    registerBaseSaveHooks(pluginHostRef, {
+      vault: vaultManager,
+      tagIndex,
+      taskIndex,
+      actions: actionRunner,
+    });
+    registerBaseSearchProvider(pluginHostRef, tagIndex);
+    const noteManager = new NoteManager(vaultManager, {
+      onNoteSaved: (hook) => pluginHostRef.save.onNoteSaved(hook),
+      emitNoteSaved: (event) => pluginHostRef.emitNoteSaved(event),
+    });
+    const meetingImporter = new MeetingImporter(vaultManager);
+    const chatStore = new ChatStore(vaultManager);
+    const spellcheck = new SpellcheckService(appConfig);
+    const mcpServer = new McpServer(vaultTools, app.getVersion());
+    const mcpHttp = new McpHttpTransport(mcpServer);
+    mcpHttpForShutdown = mcpHttp;
+    // Constructed here (before `registerIpcHandlers`, which needs it) but
+    // bound to the window later in `createMainWindow` via `attach()`.
+    browserViews = new BrowserViewManager(() => mainWindow);
+    const sessionBackups = new SessionBackupStore();
     await tagIndex.rebuild();
     await taskIndex.rebuild();
+    // Plugins can react to the initial vault load like any later refresh.
+    pluginHost.emitVaultChange({ kind: 'refresh' });
     await syncMcpHttpTransport(mcpHttp, appConfig);
 
     // Push each new debug entry to the renderer so the LLM settings pane

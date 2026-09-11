@@ -17,8 +17,8 @@
  */
 import type { AppConfig } from '../../shared/app-config';
 import type { TagSearchHit } from '../../shared/tags';
+import type { SectionSearchProvider } from '../../shared/plugin-api';
 import type { VaultManager } from '../vault-manager';
-import type { TagIndex } from '../tags';
 
 /** JSON-Schema-ish tool descriptor, as MCP `tools/list` returns it. */
 export interface McpToolDef {
@@ -140,7 +140,15 @@ function compileRegex(source: unknown, flags: unknown): RegExp | { error: string
 export class VaultTools {
   constructor(
     private readonly vault: VaultManager,
-    private readonly tagIndex: TagIndex,
+    /**
+     * The section-search seam (ADR-0044 stage 2): `vault_search` reads
+     * whichever provider a plugin registered (until stage 5, the base
+     * adapter registers the tag index). `null` degrades the tool with a
+     * clear error instead of crashing.
+     */
+    private readonly getSearchProvider: () => SectionSearchProvider | null,
+    /** Keeps the section index current after an MCP write (no watcher). */
+    private readonly reindexWrittenFile: (path: string, content: string) => void,
     private readonly getConfig: () => AppConfig,
     private readonly confirmWrite: ConfirmWrite,
     /** Called after a write lands, so the renderer can refresh (no watcher). */
@@ -211,7 +219,14 @@ export class VaultTools {
       return this.regexScan(regex, limit);
     }
 
-    let hits = this.tagIndex.search({ tags, text });
+    const provider = this.getSearchProvider();
+    if (provider === null) {
+      return textResult(
+        'Section search is unavailable: no plugin providing the tag/section index is enabled.',
+        true,
+      );
+    }
+    let hits = await provider.search({ tags, text });
     if (regex) {
       const re = regex;
       hits = hits.filter((hit) => {
@@ -298,9 +313,9 @@ export class VaultTools {
     }
 
     await this.vault.writeFile(path, after);
-    // No file watcher (ADR-0018) -- keep the tag index current so a
+    // No file watcher (ADR-0018) -- keep the section index current so a
     // follow-up search sees the write, and nudge the renderer to refresh.
-    this.tagIndex.reindexFile(path, after);
+    this.reindexWrittenFile(path, after);
     this.onVaultChanged();
     return textResult(`Wrote ${path} (${after.length} chars, mode: ${mode}).`);
   }

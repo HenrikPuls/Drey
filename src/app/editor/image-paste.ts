@@ -41,6 +41,15 @@ export interface ImagePasteConfig {
    * user-facing message.
    */
   decodeMeeting?: (bytes: Uint8Array, filename: string) => Promise<string>;
+  /**
+   * Plugin drop decoders (ADR-0044 stage 2): `dropClaimed` is a SYNCHRONOUS
+   * check (a decoder's `match()`) so an unclaimed drop still reaches the
+   * base cascade below; `decodeDropped` runs the claiming decoder and
+   * resolves the Markdown to insert at the pointer. Rejects with a
+   * user-facing message.
+   */
+  dropClaimed?: (data: DataTransfer) => boolean;
+  decodeDropped?: (data: DataTransfer) => Promise<string>;
   /** Shown to the user when a save / read fails, or a file is too large. */
   onError?: (message: string) => void;
 }
@@ -329,6 +338,32 @@ export function imagePaste(config: ImagePasteConfig): Extension {
         return false;
       }
       const data = event.dataTransfer;
+
+      // Plugin drop decoders (ADR-0044 stage 2) claim a drop BEFORE the
+      // base cascade. The claim check is synchronous (a decoder's
+      // `match()`), so an unclaimed drop still reaches the base handling;
+      // only a claimed one is prevented and decoded async.
+      if (data && config.dropClaimed?.(data)) {
+        event.preventDefault();
+        const dropAt =
+          view.posAtCoords({ x: event.clientX, y: event.clientY }) ??
+          view.state.selection.main.from;
+        view.dispatch({ selection: { anchor: dropAt } });
+        const decode = config.decodeDropped;
+        if (!decode) {
+          return false;
+        }
+        void decode(data)
+          .then((decoded) => {
+            const pos = view.state.selection.main.from;
+            const { from, insert, anchor } = sectionInsert(view, pos, decoded);
+            view.dispatch({ changes: { from, insert }, selection: { anchor }, scrollIntoView: true });
+          })
+          .catch((error: unknown) =>
+            config.onError?.(error instanceof Error ? error.message : String(error)),
+          );
+        return true;
+      }
 
       // A template dragged from the Templates panel: read it, strip the
       // frontmatter, substitute placeholders, drop the body at the pointer.

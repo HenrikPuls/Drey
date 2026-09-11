@@ -22,6 +22,13 @@ import { EditorService } from '../services/editor.service';
 import { LogService } from '../services/log.service';
 import { OverlayGuardService } from '../services/overlay-guard.service';
 import { SettingsService } from '../services/settings.service';
+import { HOST_CODEMIRROR } from './runtime-exports';
+import { EditorExtensionRegistry } from './editor-extension-registry.service';
+import { DropDecoderRegistry } from './drop-decoder-registry.service';
+import {
+  EditorContextMenuRegistry,
+  MenuContributionsService,
+} from './menu-contributions.service';
 
 /** Listener channels the host service backs with its own `effect()`s. */
 export interface PluginApiContext {
@@ -52,6 +59,10 @@ export class PluginApiFactory {
   private readonly confirm = inject(ConfirmationService);
   private readonly settings = inject(SettingsService);
   private readonly overlayGuard = inject(OverlayGuardService);
+  private readonly extensions = inject(EditorExtensionRegistry);
+  private readonly dropDecoders = inject(DropDecoderRegistry);
+  private readonly menuContributions = inject(MenuContributionsService);
+  private readonly contextMenuItems = inject(EditorContextMenuRegistry);
   private readonly log = inject(LogService);
 
   create(
@@ -173,8 +184,8 @@ export class PluginApiFactory {
         registerSettingsPage: (page: PluginSettingsPageContrib) =>
           track(this.settingsPages.registerPluginPage(page)),
         registerDocKind: (_kind: PluginDocKindContrib) => notYet('ui.registerDocKind'),
-        registerMenuContributions: (_items: readonly MenuContribution[]) =>
-          notYet('ui.registerMenuContributions'),
+        registerMenuContributions: (items: readonly MenuContribution[]) =>
+          track(this.menuContributions.register(pluginId, items)),
         registerComposerContribution: (_mount: (el: HTMLElement) => () => void) =>
           notYet('ui.registerComposerContribution'),
         revealWidget: (id) => this.dock.openAndExpand(id),
@@ -210,12 +221,11 @@ export class PluginApiFactory {
         },
       },
       editor: {
-        get cm(): never {
-          return notYet('editor.cm');
-        },
-        registerExtension: () => notYet('editor.registerExtension'),
-        registerDropDecoder: () => notYet('editor.registerDropDecoder'),
-        registerContextMenuItems: () => notYet('editor.registerContextMenuItems'),
+        cm: HOST_CODEMIRROR,
+        registerExtension: (slot, factory) =>
+          track(this.extensions.register(pluginId, slot, factory)),
+        registerDropDecoder: (decoder) => track(this.dropDecoders.register(decoder)),
+        registerContextMenuItems: (items) => track(this.contextMenuItems.register(items)),
       },
       search: {
         vocabulary: () => window.dreyApi.listTags(),
