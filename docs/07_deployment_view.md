@@ -69,6 +69,17 @@ entries plus an explicit `dist-electron/plugins/**/*.css`.
   fetches modules in CORS mode), and a `path.relative` escape guard that
   rejects any URL resolving outside the plugin root (stricter than
   `app://`'s prefix check, Windows-safe).
+- **Verified packed** (stage 10): everything plugin-related works from
+  **inside the asar** — no `asarUnpack` entry for plugins. Discovery
+  reads the manifests through the asar-patched `fs`, the CommonJS mains
+  load with a plain `import(pathToFileURL(...))` (Electron ≥ 28's ESM
+  loader is asar-aware; verified on Electron 44), and `plugin://` serves
+  renderer modules + CSS. `node scripts/verify-pack.mjs` (`npm run
+  verify:pack`, run after `pack:dir`) checks the asar contents and boots
+  the packed exe from a throwaway profile with every built-in enabled,
+  asserting all plugins `active`, a `plugin://` renderer executing (the
+  sample plugin's File-menu row) and `plugin:invoke` roundtrips, plus
+  startup timings.
 - **User-installed plugins** are *not* packaged: discovery also scans
   `%APPDATA%\drey\plugins\<id>\` (beside `app-config.json`, ADR-0010) and
   a `DREY_EXTRA_PLUGIN_DIR` override for dev/test. A user plugin shadows
