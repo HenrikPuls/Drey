@@ -1,5 +1,6 @@
 import { Injectable, computed, signal } from '@angular/core';
 import type {
+  ContextMenuItem,
   MenuContribution,
   Unsubscribe,
 } from '../../../shared/plugin-api/renderer';
@@ -48,7 +49,7 @@ export class MenuContributionsService {
  */
 @Injectable({ providedIn: 'root' })
 export class EditorContextMenuRegistry {
-  private readonly providers = signal<readonly (() => readonly MenuContribution[])[]>([]);
+  private readonly providers = signal<readonly (() => readonly ContextMenuItem[])[]>([]);
 
   /**
    * Deliberately a METHOD, not a computed: the callback form is meant to be
@@ -56,11 +57,11 @@ export class EditorContextMenuRegistry {
    * its open-state signal, calls this fresh). A cached derivation would
    * freeze the items until a provider (un)registers.
    */
-  items(): readonly MenuContribution[] {
+  items(): readonly ContextMenuItem[] {
     return this.providers().flatMap((provide) => provide());
   }
 
-  register(items: () => readonly MenuContribution[]): Unsubscribe {
+  register(items: () => readonly ContextMenuItem[]): Unsubscribe {
     this.providers.update((list) => [...list, items]);
     return () => {
       this.providers.update((list) => list.filter((p) => p !== items));

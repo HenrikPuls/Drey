@@ -36,6 +36,7 @@ export type { TagSearchHit, TagSearchQuery } from '../tags';
 export type {
   ActiveDocument,
   CodeMirrorModules,
+  ContextMenuItem,
   DocumentChangeEvent,
   DropDecoderContrib,
   DreyPluginApi,

@@ -106,6 +106,12 @@ export interface PluginWidgetContrib {
   readonly flush?: boolean;
   /** Header status value (right-aligned, dimmed) — recomputed on shell change detection. */
   status?(context: PluginStatusContext): string | null;
+  /**
+   * Builds the panel's own control row into the shared 32px header
+   * (right-aligned before the grip, e.g. a refresh button). The element is
+   * styled by the shell; return cleanup. Rendered only while expanded.
+   */
+  headerActions?(el: HTMLElement): () => void;
   /** Build the panel body; return cleanup (called on unregister). */
   mount(el: HTMLElement): () => void;
 }
@@ -143,6 +149,16 @@ export interface MenuContribution {
   readonly hint?: string;
   readonly commandId?: string;
   run?(): void;
+}
+
+/**
+ * One row in the renderer-owned editor context menu (ADR-0030). No `menu`
+ * field — this is not a titlebar menu; items are appended after the
+ * built-in clipboard/template rows.
+ */
+export interface ContextMenuItem {
+  readonly label: string;
+  run(): void;
 }
 
 /**
@@ -246,8 +262,12 @@ export interface DreyPluginApi {
     registerComposerContribution(mount: (el: HTMLElement) => () => void): Unsubscribe;
     /** Un-hide, open and focus a dock widget (e.g. a tag pill click revealing Search). */
     revealWidget(id: string): void;
-    /** Modal overlay inside the shell's overlay container (guards still apply). */
-    showModal(mount: (el: HTMLElement) => () => void): void;
+    /**
+     * Modal overlay inside the shell's overlay container (guards still
+     * apply). Backdrop click closes it; the returned function closes it
+     * programmatically (picker Enter/Esc). Idempotent.
+     */
+    showModal(mount: (el: HTMLElement) => void): () => void;
   };
 
   readonly editor: {
@@ -263,7 +283,7 @@ export interface DreyPluginApi {
     ): Unsubscribe;
     registerDropDecoder(decoder: DropDecoderContrib): Unsubscribe;
     /** Items appended to the editor context menu, re-evaluated per open. */
-    registerContextMenuItems(items: () => readonly MenuContribution[]): Unsubscribe;
+    registerContextMenuItems(items: () => readonly ContextMenuItem[]): Unsubscribe;
   };
 
   /** Section search + vocabulary, backed by whichever plugin registered the provider. */

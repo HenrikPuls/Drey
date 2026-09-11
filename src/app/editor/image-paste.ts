@@ -2,10 +2,7 @@ import { Extension } from '@codemirror/state';
 import { EditorView } from '@codemirror/view';
 import { imageExtension } from '../../../shared/asset-name';
 import { noteRelativeLink } from '../../../shared/note-link';
-import { substitutePlaceholders } from '../../../shared/placeholders';
 import { textExtension } from '../../../shared/text-extension';
-import { formatDate, formatDateTime, formatTime } from '../../../shared/timestamp';
-import { stripFrontmatter } from './markdown-frontmatter';
 
 /**
  * Paste / drop into the editor (ADR-0024, ADR-0027, ADR-0028). One
@@ -87,9 +84,10 @@ function meetingFile(data: DataTransfer | null): File | undefined {
 
 /**
  * The DataTransfer type a Templates-panel row sets on `dragstart` -- a
- * vault-relative `.md` path. Unlike a plain Files-panel drag, the body is
- * inserted with its YAML frontmatter stripped and `{{date}}`/`{{time}}`/
- * `{{datetime}}`/`{{title}}` substituted (ADR-0029).
+ * vault-relative `.md` path (ADR-0029). Since ADR-0044 stage 3 the drop is
+ * DECODED by the Templates plugin's drop decoder; the constant stays here
+ * because this extension's `dragover` must allow the type for the plugin's
+ * handler to ever see the event — it is the shell<->plugin drop protocol.
  */
 export const TEMPLATE_DT_TYPE = 'application/x-drey-template';
 
@@ -295,19 +293,6 @@ async function insertFromUrl(
   );
 }
 
-/** `{{date}}`/`{{time}}`/`{{datetime}}`/`{{title}}` for a template dropped now. */
-function templatePlaceholders(config: ImagePasteConfig): Record<string, string> {
-  const now = new Date();
-  const note = config.notePath?.() ?? null;
-  const title = note ? (note.split('/').pop() ?? '').replace(/\.md$/i, '') : '';
-  return {
-    date: formatDate(now),
-    time: formatTime(now),
-    datetime: formatDateTime(now),
-    title,
-  };
-}
-
 /** A text file (Files panel or OS drag): its contents, raw, at the drop point. */
 function insertText(view: EditorView, text: string, config: ImagePasteConfig): void {
   if (text.length > TEXT_DROP_MAX) {
@@ -365,29 +350,8 @@ export function imagePaste(config: ImagePasteConfig): Extension {
         return true;
       }
 
-      // A template dragged from the Templates panel: read it, strip the
-      // frontmatter, substitute placeholders, drop the body at the pointer.
-      const templatePath = data?.getData(TEMPLATE_DT_TYPE) ?? '';
-      if (templatePath && config.readTextFile) {
-        event.preventDefault();
-        const dropAt =
-          view.posAtCoords({ x: event.clientX, y: event.clientY }) ??
-          view.state.selection.main.from;
-        view.dispatch({ selection: { anchor: dropAt } });
-        const read = config.readTextFile;
-        void read(templatePath)
-          .then((raw) =>
-            insertText(
-              view,
-              substitutePlaceholders(stripFrontmatter(raw), templatePlaceholders(config)),
-              config,
-            ),
-          )
-          .catch((error: unknown) =>
-            config.onError?.(error instanceof Error ? error.message : String(error)),
-          );
-        return true;
-      }
+      // (The template drop moved to the Templates plugin's drop decoder,
+      // ADR-0044 stage 3 — the base cascade no longer knows the MIME type.)
 
       // A calendar invite (`.ics` / `.msg`) dragged from Outlook or the file
       // system: decode it in the main process and drop the meeting section

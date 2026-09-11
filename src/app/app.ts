@@ -24,12 +24,8 @@ import { Dock, DockService } from './dock';
 import { Titlebar } from './titlebar';
 import { StatusBar } from './status-bar/status-bar';
 import { Settings } from './settings/settings';
-import {
-  EditorContextMenu,
-  EditorContextMenuService,
-  TemplateLibraryService,
-  TemplatePicker,
-} from './templates';
+import { EditorContextMenu } from './editor-context-menu/editor-context-menu';
+import { EditorContextMenuService } from './editor-context-menu/editor-context-menu.service';
 
 /**
  * Root shell (ADR-0019): a custom titlebar with the HTML menu bar, then a
@@ -53,7 +49,6 @@ import {
     Settings,
     ConfirmationDialog,
     ImageLightbox,
-    TemplatePicker,
     EditorContextMenu,
   ],
   templateUrl: './app.html',
@@ -217,13 +212,6 @@ export class App {
       run: () => this.stepPaneFocus(-1),
     });
 
-    const templates = inject(TemplateLibraryService);
-    keys.register({
-      id: 'template.insert',
-      label: 'Insert template',
-      keybinding: 'Mod+T',
-      run: () => templates.openPicker(),
-    });
     keys.register({
       id: 'input.recover',
       label: 'Recover input focus',

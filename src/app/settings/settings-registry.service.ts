@@ -11,7 +11,6 @@ import { SettingsEntry } from './entry/settings-entry';
 import { SettingsLlm } from './llm/settings-llm';
 import { SettingsMcp } from './mcp/settings-mcp';
 import { SettingsSpellcheck } from './spellcheck/settings-spellcheck';
-import { SettingsTemplates } from './templates/settings-templates';
 import { SettingsCategory } from './settings-category';
 
 /**
@@ -86,12 +85,6 @@ const CORE_CATEGORIES: readonly SettingsCategory[] = [
   },
   { id: 'entry', label: 'Add entry', hint: 'Append template', component: SettingsEntry },
   { id: 'daily', label: 'Daily notes', hint: 'Open on startup', component: SettingsDaily },
-  {
-    id: 'templates',
-    label: 'Templates',
-    hint: 'Snippet library folder',
-    component: SettingsTemplates,
-  },
   {
     id: 'spellcheck',
     label: 'Spelling',

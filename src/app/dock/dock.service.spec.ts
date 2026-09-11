@@ -32,7 +32,7 @@ describe('DockService', () => {
     const dock = make();
     dock.move('calendar', 'bottom', 0);
     expect(dock.bottomIds()).toEqual(['calendar', 'entry']);
-    expect(dock.leftIds()).toEqual(['files', 'templates', 'search', 'tasks', 'windows']);
+    expect(dock.leftIds()).toEqual(['files', 'search', 'tasks', 'windows']);
     dock.setBottomHeight(10);
     expect(dock.dockHeight()).toBe(140);
     dock.setBottomHeight(9000);
@@ -83,9 +83,9 @@ describe('DockService', () => {
 
   it('nextOpenId skips collapsed neighbours and stops at the end', () => {
     const dock = make();
-    // left: [calendar, files, templates(collapsed), search(collapsed), tasks(collapsed), windows]
+    // left: [calendar, files, search(collapsed), tasks(collapsed), windows]
     expect(dock.nextOpenId('calendar')).toBe('files');
-    expect(dock.nextOpenId('files')).toBe('windows'); // templates + search + tasks are collapsed
+    expect(dock.nextOpenId('files')).toBe('windows'); // search + tasks are collapsed
     expect(dock.nextOpenId('windows')).toBeNull();
     expect(dock.nextOpenId('assistant')).toBeNull(); // alone in the right dock
   });
@@ -93,7 +93,7 @@ describe('DockService', () => {
   it('moves a panel across docks at the requested slot', () => {
     const dock = make();
     dock.move('calendar', 'right', 0);
-    expect(dock.leftIds()).toEqual(['files', 'templates', 'search', 'tasks', 'windows']);
+    expect(dock.leftIds()).toEqual(['files', 'search', 'tasks', 'windows']);
     expect(dock.rightIds()).toEqual(['calendar', 'assistant']);
   });
 
@@ -104,7 +104,6 @@ describe('DockService', () => {
     expect(dock.leftIds()).toEqual([
       'files',
       'calendar',
-      'templates',
       'search',
       'tasks',
       'windows',
@@ -136,7 +135,6 @@ describe('DockService', () => {
     expect(dock.leftIds()).toEqual([
       'calendar',
       'files',
-      'templates',
       'search',
       'tasks',
       'windows',
@@ -163,7 +161,6 @@ describe('DockService', () => {
     expect(dock.leftIds()).toEqual([
       'calendar',
       'files',
-      'templates',
       'search',
       'tasks',
       'windows',
@@ -176,11 +173,10 @@ describe('DockService', () => {
       JSON.stringify({ dock: { left: ['calendar', 'files'], right: [] } }),
     );
     const dock = make();
-    // templates + search + tasks + windows (left by default) and assistant (right) come back.
+    // search + tasks + windows (left by default) and assistant (right) come back.
     expect(dock.leftIds()).toEqual([
       'calendar',
       'files',
-      'templates',
       'search',
       'tasks',
       'windows',
@@ -191,30 +187,23 @@ describe('DockService', () => {
   describe('hide / show (View menu visibility)', () => {
     it('hide() removes a widget from every dock and marks it hidden', () => {
       const dock = make();
-      dock.hide('templates');
-      expect(dock.isHidden('templates')).toBe(true);
-      expect(dock.leftIds()).toEqual(['calendar', 'files', 'search', 'tasks', 'windows']);
-      expect(dock.sideOf('templates')).toBeNull();
+      dock.hide('search');
+      expect(dock.isHidden('search')).toBe(true);
+      expect(dock.leftIds()).toEqual(['calendar', 'files', 'tasks', 'windows']);
+      expect(dock.sideOf('search')).toBeNull();
     });
 
     it('show() puts it back at its default slot, expanded', () => {
       const dock = make();
-      dock.hide('templates');
-      dock.show('templates');
-      expect(dock.isHidden('templates')).toBe(false);
-      // back between files and search, per the registry order
-      expect(dock.leftIds()).toEqual([
-        'calendar',
-        'files',
-        'templates',
-        'search',
-        'tasks',
-        'windows',
-      ]);
-      expect(dock.collapsed('templates')).toBe(false);
+      dock.hide('search');
+      dock.show('search');
+      expect(dock.isHidden('search')).toBe(false);
+      // back between files and tasks, per the registry order
+      expect(dock.leftIds()).toEqual(['calendar', 'files', 'search', 'tasks', 'windows']);
+      expect(dock.collapsed('search')).toBe(false);
     });
 
-    it('hides the bottom-dock "entry" widget and restores it', () => {
+    it('hides the bottom-dock entry widget and restores it', () => {
       const dock = make();
       dock.hide('entry');
       expect(dock.bottomIds()).toEqual([]);
@@ -233,7 +222,7 @@ describe('DockService', () => {
       const second = TestBed.inject(DockService);
       expect(second.isHidden('search')).toBe(true);
       expect(second.isHidden('tasks')).toBe(true);
-      expect(second.leftIds()).toEqual(['calendar', 'files', 'templates', 'windows']);
+      expect(second.leftIds()).toEqual(['calendar', 'files', 'windows']);
     });
 
     it('openAndExpand() un-hides a hidden widget', () => {
@@ -247,27 +236,28 @@ describe('DockService', () => {
 
     it('reset() clears the hidden set', () => {
       const dock = make();
-      dock.hide('templates');
+      dock.hide('tasks');
       dock.reset();
-      expect(dock.isHidden('templates')).toBe(false);
-      expect(dock.leftIds()).toContain('templates');
+      expect(dock.isHidden('tasks')).toBe(false);
+      expect(dock.leftIds()).toContain('tasks');
     });
 
     it('dragging a hidden widget back into a dock un-hides it', () => {
       const dock = make();
-      dock.hide('templates');
-      dock.move('templates', 'right', 0);
-      expect(dock.isHidden('templates')).toBe(false);
-      expect(dock.rightIds()).toEqual(['templates', 'assistant']);
+      dock.hide('tasks');
+      dock.move('tasks', 'right', 0);
+      expect(dock.isHidden('tasks')).toBe(false);
+      expect(dock.rightIds()).toEqual(['tasks', 'assistant']);
     });
   });
 
   describe('reconcileEnabled (Settings -> Widgets)', () => {
     it('drops a disabled widget from its dock', () => {
       const dock = make();
-      dock.reconcileEnabled(new Set(['templates', 'search']));
-      expect(dock.leftIds()).toEqual(['calendar', 'files', 'tasks', 'windows']);
-      expect(dock.sideOf('templates')).toBeNull();
+      dock.reconcileEnabled(new Set(['tasks', 'search']));
+      expect(dock.leftIds()).toEqual(['calendar', 'files', 'windows']);
+      expect(dock.sideOf('tasks')).toBeNull();
+      expect(dock.sideOf('search')).toBeNull();
     });
 
     it('also drops a disabled widget from the hidden set', () => {
@@ -281,19 +271,11 @@ describe('DockService', () => {
 
     it('re-homes a widget that is enabled again and now nowhere', () => {
       const dock = make();
-      dock.reconcileEnabled(new Set(['templates']));
-      expect(dock.leftIds()).not.toContain('templates');
+      dock.reconcileEnabled(new Set(['tasks']));
+      expect(dock.leftIds()).not.toContain('tasks');
       dock.reconcileEnabled(new Set());
-      expect(dock.leftIds()).toEqual([
-        'calendar',
-        'files',
-        'templates',
-        'search',
-        'tasks',
-        'windows',
-      ]);
+      expect(dock.leftIds()).toEqual(['calendar', 'files', 'search', 'tasks', 'windows']);
     });
-
     it('is a no-op when nothing is disabled', () => {
       const dock = make();
       const before = JSON.stringify(localStorage.getItem('drey.dock'));

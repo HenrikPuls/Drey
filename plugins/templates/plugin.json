@@ -1,0 +1,11 @@
+{
+  "id": "templates",
+  "name": "Templates",
+  "version": "1.0.0",
+  "apiVersion": 1,
+  "description": "The vault template library: a dock panel, the Mod+T picker, drag-into-editor, and recent-template context-menu items.",
+  "author": "Drey",
+  "renderer": "renderer/index.js",
+  "css": ["renderer/templates.css"],
+  "permissions": ["documents", "vault", "commands", "settings", "editor"]
+}

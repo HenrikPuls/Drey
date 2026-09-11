@@ -1,6 +1,5 @@
 import { Type } from '@angular/core';
 import type { WidgetCapability } from '../widgets';
-import { TemplatesPanel } from '../templates';
 import { TasksPanel } from '../tasks';
 import type { DockSide } from './dock.service';
 import { AssistantPanel } from './panels/assistant-panel';
@@ -57,6 +56,12 @@ export interface WidgetDescriptor {
   capabilities: readonly WidgetCapability[];
   /** Header status value (right-aligned, dimmed); recomputed on change detection. */
   status?(context: WidgetStatusContext): string | null;
+  /**
+   * Builds the panel's own control row into the shared header (plugin
+   * widgets only — core panels use the `[appPanelHeaderActions]` template).
+   * Only rendered while the panel is expanded.
+   */
+  headerActionsMount?(el: HTMLElement): () => void;
 }
 
 /**
@@ -87,16 +92,6 @@ export const CORE_WIDGETS: readonly WidgetDescriptor[] = [
     defaultFlex: 340,
     removable: true,
     capabilities: ['file-tree', 'active-document'],
-  },
-  {
-    id: 'templates',
-    title: 'Templates',
-    component: TemplatesPanel,
-    defaultDock: 'left',
-    defaultOpen: false,
-    defaultFlex: 200,
-    removable: true,
-    capabilities: ['active-document'],
   },
   {
     id: 'search',

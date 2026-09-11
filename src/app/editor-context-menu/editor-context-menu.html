@@ -11,17 +11,6 @@
     <button type="button" (click)="paste()">Paste</button>
     <button type="button" (click)="selectAll()">Select all</button>
 
-    @if (hasNote()) {
-      <div class="ctx-sep"></div>
-      <div class="ctx-heading">Insert template</div>
-      @for (t of library.recent(); track t.relativePath) {
-        <button type="button" (click)="insert(t.relativePath)">{{ t.name }}</button>
-      } @empty {
-        <div class="ctx-empty">No recent templates</div>
-      }
-      <button type="button" class="more" (click)="openPicker()">All templates…</button>
-    }
-
     @if (pluginItems().length > 0) {
       <div class="ctx-sep"></div>
       @for (item of pluginItems(); track item.label; let i = $index) {

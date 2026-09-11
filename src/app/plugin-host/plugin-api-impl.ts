@@ -198,26 +198,26 @@ export class PluginApiFactory {
           const box = document.createElement('div');
           box.className = 'plugin-modal';
           backdrop.appendChild(box);
-          let dispose: (() => void) | undefined;
+          let closed = false;
+          const teardown = (): void => {
+            if (closed) {
+              return;
+            }
+            closed = true;
+            backdrop.remove();
+            release();
+          };
           try {
-            dispose = mount(box) ?? undefined;
+            mount(box);
           } catch (error) {
             this.log.record('error', `plugin "${pluginId}" modal mount failed: ${String(error)}`);
           }
           document.body.appendChild(backdrop);
-          const teardown = (): void => {
-            try {
-              dispose?.();
-            } catch (error) {
-              this.log.record('error', `plugin "${pluginId}" modal dispose failed: ${String(error)}`);
-            }
-            backdrop.remove();
-            release();
-          };
-          // A plugin modal has no close affordance of its own: backdrop
-          // click dismisses, and `track` also cleans it up on deactivate.
+          // Backdrop click dismisses; the returned close() lets the plugin
+          // close it programmatically (picker Enter/Esc).
           backdrop.addEventListener('mousedown', teardown);
           track(teardown);
+          return teardown;
         },
       },
       editor: {

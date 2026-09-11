@@ -8,6 +8,11 @@ import { livePreview } from './index';
  * document, driven by synthetic pointer events, must rewrite the note's
  * `![alt|W](url)` on release. jsdom has no layout, so `startWidth` falls
  * back to 300 and the assertions are delta-based.
+ *
+ * Assertions POLL: the rewrite lands through CodeMirror's update cycle and
+ * (for the widget geometry) the browser's frame scheduling, so a
+ * single-shot read after `pointerup` intermittently beats it on a loaded
+ * machine.
  */
 function makeView(doc: string): EditorView {
   return new EditorView({
@@ -39,38 +44,48 @@ describe('image resize handle', () => {
     view = undefined;
   });
 
-  it('adds a |W suffix to an image that had none (startWidth 300 + delta)', () => {
+  it('adds a |W suffix to an image that had none (startWidth 300 + delta)', async () => {
     view = makeView('# t\n\n![a boat](x.png)\n');
     drag(view, 80);
-    expect(view.state.doc.toString()).toBe('# t\n\n![a boat|380](x.png)\n');
+    await vi.waitFor(() =>
+      expect(view!.state.doc.toString()).toBe('# t\n\n![a boat|380](x.png)\n'),
+    );
   });
 
-  it('updates an existing |W', () => {
+  it('updates an existing |W', async () => {
     view = makeView('# t\n\n![a boat|150](x.png)\n');
     drag(view, -40);
-    expect(view.state.doc.toString()).toBe('# t\n\n![a boat|260](x.png)\n');
+    await vi.waitFor(() =>
+      expect(view!.state.doc.toString()).toBe('# t\n\n![a boat|260](x.png)\n'),
+    );
   });
 
-  it('collapses an existing |WxH to width only', () => {
+  it('collapses an existing |WxH to width only', async () => {
     view = makeView('# t\n\n![plan|150x90](x.png)\n');
     drag(view, 20);
-    expect(view.state.doc.toString()).toBe('# t\n\n![plan|320](x.png)\n');
+    await vi.waitFor(() =>
+      expect(view!.state.doc.toString()).toBe('# t\n\n![plan|320](x.png)\n'),
+    );
   });
 
-  it('does not touch the selection or reveal the widget', () => {
+  it('does not touch the selection or reveal the widget', async () => {
     const doc = '# t\n\n![a](x.png)\n';
     view = makeView(doc);
     const anchorBefore = view.state.selection.main.anchor;
     drag(view, 30);
     // one changes transaction, selection mapped through it but not set
+    await vi.waitFor(() =>
+      expect(view!.state.doc.toString()).toBe('# t\n\n![a|330](x.png)\n'),
+    );
     expect(view.state.selection.main.anchor).toBe(anchorBefore + '|330'.length);
     expect(view.dom.querySelector('.lp-image')).not.toBeNull();
   });
 
-  it('makes no edit when the width is unchanged', () => {
-    view = makeView('# t\n\n![a|300](x.png)\n');
-    const before = view.state.doc.toString();
+  it('makes no edit when the width is unchanged', async () => {
+    view = makeView('# t\n\n![a boat|300](x.png)\n');
     drag(view, 0);
-    expect(view.state.doc.toString()).toBe(before);
+    // Give the handler every chance to misfire before asserting the no-op.
+    await new Promise((resolve) => setTimeout(resolve, 25));
+    expect(view.state.doc.toString()).toBe('# t\n\n![a boat|300](x.png)\n');
   });
 });

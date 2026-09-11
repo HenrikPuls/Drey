@@ -1,0 +1,205 @@
+/* Templates plugin (ADR-0044): all classes prefixed `tpl-`. Uses the
+   shell's global design tokens so the panel matches the theme. */
+
+/* -- panel ---------------------------------------------------------------- */
+
+.tpl-panel {
+  height: 100%;
+  overflow: auto;
+  padding: 6px 4px;
+  font-size: 12.5px;
+}
+
+.tpl-list {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.tpl-empty {
+  padding: 8px 10px;
+  opacity: 0.6;
+  font-size: 12px;
+}
+
+.tpl-cat-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  padding: 4px 10px;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-weight: 600;
+  text-align: left;
+  cursor: pointer;
+  border-radius: 6px;
+}
+.tpl-cat-head:hover {
+  background: color-mix(in srgb, var(--accent) 8%, transparent);
+}
+
+.tpl-chevron {
+  width: 10px;
+  opacity: 0.6;
+  flex: 0 0 auto;
+}
+
+.tpl-cat-children {
+  display: block;
+}
+
+.tpl-row {
+  padding: 4px 10px 4px 22px;
+  cursor: pointer;
+  border-radius: 6px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.tpl-row:hover {
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
+}
+.tpl-row-error {
+  color: #e06c60;
+}
+
+.tpl-row-menu-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: var(--z-menu, 900);
+}
+.tpl-row-menu {
+  position: fixed;
+  min-width: 160px;
+  padding: 4px;
+  background: var(--surface-raised, var(--surface, #222));
+  border: 1px solid color-mix(in srgb, currentColor 15%, transparent);
+  border-radius: 8px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+}
+.tpl-row-menu-item {
+  display: block;
+  width: 100%;
+  padding: 5px 10px;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  border-radius: 6px;
+}
+.tpl-row-menu-item:hover {
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+}
+
+/* header refresh button (mounted into the shared panel header) */
+.tpl-hdr-btn {
+  border: 0;
+  background: transparent;
+  color: inherit;
+  opacity: 0.7;
+  cursor: pointer;
+  padding: 2px;
+  border-radius: 4px;
+  font-size: 12px;
+}
+.tpl-hdr-btn::before {
+  content: '⟳';
+  font-size: 13px;
+}
+.tpl-hdr-btn:hover {
+  opacity: 1;
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+}
+
+/* -- picker --------------------------------------------------------------- */
+
+.plugin-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: var(--z-modal, 1000);
+  background: rgba(0, 0, 0, 0.35);
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding-top: 12vh;
+}
+
+.tpl-picker-host .plugin-modal {
+  width: min(480px, 90vw);
+  background: var(--surface-raised, var(--surface, #222));
+  border: 1px solid color-mix(in srgb, currentColor 15%, transparent);
+  border-radius: 10px;
+  overflow: hidden;
+  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.45);
+}
+
+.tpl-picker {
+  display: flex;
+  flex-direction: column;
+}
+
+.tpl-picker-input {
+  padding: 10px 14px;
+  border: 0;
+  border-bottom: 1px solid color-mix(in srgb, currentColor 12%, transparent);
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  outline: none;
+}
+
+.tpl-picker-list {
+  max-height: 46vh;
+  overflow: auto;
+  padding: 4px;
+}
+
+.tpl-picker-row {
+  padding: 6px 10px;
+  border-radius: 6px;
+  cursor: pointer;
+}
+.tpl-picker-row.recent::after {
+  content: 'recent';
+  float: right;
+  opacity: 0.5;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+.tpl-picker-row.active {
+  background: color-mix(in srgb, var(--accent) 16%, transparent);
+}
+
+/* -- settings ------------------------------------------------------------- */
+
+.tpl-settings {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  max-width: 420px;
+  font-size: 13px;
+}
+.tpl-settings-label {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.tpl-settings-input {
+  padding: 7px 10px;
+  border-radius: 6px;
+  border: 1px solid color-mix(in srgb, currentColor 25%, transparent);
+  background: transparent;
+  color: inherit;
+  font: inherit;
+}
+.tpl-settings-note {
+  opacity: 0.65;
+  font-size: 12px;
+  line-height: 1.5;
+}
