@@ -259,6 +259,11 @@ export interface DreyPluginApi {
      * already open. Throws when the kind is not registered.
      */
     addDoc(kind: string, key: string, name: string): void;
+    /**
+     * Rename a contributed doc's tab label (e.g. the browser tab following
+     * the page title). No-op for text docs.
+     */
+    rename(path: string, name: string): void;
     /** Insert at the caret of the FOCUSED pane. False when nothing is focused/editable. */
     insertAtCursor(text: string): boolean;
     /** Patch an open tab's buffer (unsaved edit, exactly as if typed). False when not open. */

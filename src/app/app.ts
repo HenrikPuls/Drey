@@ -2,7 +2,6 @@ import { Component, effect, inject } from '@angular/core';
 import { formatDate } from '../../shared/timestamp';
 import { ImageLightbox } from './image-viewer';
 import { ConfirmationDialog } from './confirmation-dialog/confirmation-dialog';
-import { BrowserViewService } from './browser';
 import { SessionService } from './session';
 import { AppearanceService } from './services/appearance.service';
 import { ThemeService } from './services/theme.service';
@@ -127,13 +126,6 @@ export class App {
       label: 'New note',
       keybinding: 'Mod+N',
       run: () => this.editor.newUntitled(),
-    });
-    const browser = inject(BrowserViewService);
-    keys.register({
-      id: 'browser.new',
-      label: 'New browser tab',
-      keybinding: 'Mod+Shift+B',
-      run: () => browser.openTab(),
     });
     keys.register({
       id: 'note.save',

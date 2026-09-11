@@ -178,3 +178,52 @@ test.describe('plugin doc kinds', () => {
     await expect(page.locator('app-tab-bar .tab', { hasText: 'Sample clock' })).toBeVisible();
   });
 });
+
+/**
+ * The browser plugin (ADR-0044 stage 8B): the in-editor browser tab is no
+ * longer a base feature -- it registers the `browser` doc kind, the
+ * `browser.new` command and its File-menu row from the plugin. The native
+ * `WebContentsView` itself is not asserted here (it floats above the DOM
+ * and stays invisible in CI); what the spec proves is the seam: tab
+ * creation through the plugin's command, the registry-driven chrome
+ * (glyph, status line, pane body) and the session restore.
+ */
+test.describe('browser plugin', () => {
+  async function openBrowserTab(page: Page): Promise<void> {
+    await page
+      .locator('app-menu-bar .menu', { hasText: 'File' })
+      .first()
+      .locator('.menu-label')
+      .click();
+    await page.locator('app-menu-bar .popover .row', { hasText: 'New browser tab' }).click();
+  }
+
+  test('opens a browser tab through the plugin command and drives the seam', async ({ page }) => {
+    await openBrowserTab(page);
+
+    const tab = page.locator('app-tab-bar .tab', { hasText: 'New tab' });
+    await expect(tab).toBeVisible();
+    // No favicon yet -> the kind's fallback globe glyph (not an img).
+    await expect(tab.locator('img.favicon')).toHaveCount(0);
+    await expect(tab.locator('app-icon.favicon')).toBeVisible();
+
+    // The pane body is the plugin's mounted chrome (toolbar + viewport).
+    await expect(page.locator('.drey-browser-toolbar')).toBeVisible();
+    await expect(page.locator('.drey-browser-viewport')).toBeVisible();
+    // The status bar slot reads the kind's statusText (about:blank -> "New tab").
+    await expect(page.locator('app-status-bar .count.url')).toHaveText('New tab');
+  });
+
+  test('a browser tab survives a reload through the session', async ({ page }) => {
+    await openBrowserTab(page);
+    await expect(page.locator('.drey-browser-toolbar')).toBeVisible();
+    // The session layout save is debounced -- wait it out before reloading.
+    await page.waitForTimeout(700);
+    await page.reload();
+
+    // Plugins load first (bootstrap gating), then the session restores the
+    // browser tab through the registry and the plugin recreates the tab.
+    await expect(page.locator('app-tab-bar .tab', { hasText: 'New tab' })).toBeVisible();
+    await expect(page.locator('.drey-browser-toolbar')).toBeVisible();
+  });
+});

@@ -1,11 +1,18 @@
-:host {
+/*
+ * The browser plugin's pane chrome (ADR-0042). Global CSS -- every class
+ * is prefixed with the plugin id (ADR-0044 rule 2). Ported from the old
+ * Angular component styles; the root element is the PluginDocHost mount
+ * div, carrying `drey-browser`.
+ */
+
+.drey-browser {
   display: flex;
   flex-direction: column;
   min-height: 0;
   height: 100%;
 }
 
-.toolbar {
+.drey-browser-toolbar {
   height: var(--bar-h);
   flex: none;
   display: flex;
@@ -16,7 +23,7 @@
   background: var(--bg-bar);
 }
 
-.nav {
+.drey-browser-nav {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -28,19 +35,20 @@
   background: transparent;
   color: var(--text-6);
   cursor: pointer;
+  padding: 0;
 }
 
-.nav:hover:not(:disabled) {
+.drey-browser-nav:hover:not(:disabled) {
   background: var(--hover-bg-strong);
   color: var(--text-primary);
 }
 
-.nav:disabled {
+.drey-browser-nav:disabled {
   opacity: 0.35;
   cursor: default;
 }
 
-.address {
+.drey-browser-address {
   flex: 1;
   min-width: 0;
   height: 24px;
@@ -54,12 +62,12 @@
   font-size: var(--fs-mono-path);
 }
 
-.address:focus {
+.drey-browser-address:focus {
   outline: none;
   border-color: var(--accent, var(--text-6));
 }
 
-.findbar {
+.drey-browser-findbar {
   height: 30px;
   flex: none;
   display: flex;
@@ -70,7 +78,11 @@
   background: var(--bg-bar);
 }
 
-.find-input {
+.drey-browser-findbar[hidden] {
+  display: none;
+}
+
+.drey-browser-find-input {
   width: 220px;
   height: 22px;
   padding: 0 8px;
@@ -81,7 +93,7 @@
   font: inherit;
 }
 
-.find-count {
+.drey-browser-find-count {
   min-width: 52px;
   font-family: var(--font-mono);
   font-size: var(--fs-mono-path);
@@ -89,7 +101,7 @@
   font-variant-numeric: tabular-nums;
 }
 
-.viewport {
+.drey-browser-viewport {
   position: relative;
   flex: 1;
   min-height: 0;
@@ -98,7 +110,7 @@
   background: var(--bg-editor, var(--bg-bar));
 }
 
-.crashed {
+.drey-browser-crashed {
   position: absolute;
   inset: 0;
   display: flex;
@@ -109,7 +121,11 @@
   color: var(--text-6);
 }
 
-.crashed button {
+.drey-browser-crashed[hidden] {
+  display: none;
+}
+
+.drey-browser-crashed button {
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
   background: var(--hover-bg);

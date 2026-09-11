@@ -5,9 +5,10 @@ import { Injectable, computed, signal } from '@angular/core';
  *
  * A browser tab's page lives in a main-process `WebContentsView` composited
  * *above* the entire renderer DOM, so it would paint over any menu, dialog
- * or drag ghost. While `suppressed()` is true, `BrowserViewService` forces
- * every browser view hidden; each overlay site holds a guard for as long as
- * it is mounted.
+ * or drag ghost. While `suppressed()` is true, every native surface hides --
+ * the plugin host synthesizes the visibility push for plugins (ADR-0044,
+ * `env.onNativeSurfaceVisibility`); each overlay site holds a guard for as
+ * long as it is mounted.
  *
  * Two ways to hold a guard:
  *  - the `[appOverlayGuard]` attribute directive on an overlay's (already

@@ -7,8 +7,9 @@ import { OverlayGuardService } from './overlay-guard.service';
  * screen, a drag ghost (ADR-0042). The element is expected to be
  * `@if`-gated already, so its lifetime *is* "the overlay is open": the
  * directive takes an `OverlayGuardService` guard on construct and releases
- * it on destroy, and `BrowserViewService` hides every `WebContentsView`
- * while any guard is held.
+ * it on destroy, and every native surface (the browser plugin's
+ * `WebContentsView`s) hides while any guard is held (ADR-0044's
+ * `env.onNativeSurfaceVisibility` push).
  */
 @Directive({ selector: '[appOverlayGuard]' })
 export class OverlayGuardDirective implements OnDestroy {

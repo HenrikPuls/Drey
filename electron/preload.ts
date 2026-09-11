@@ -1,15 +1,6 @@
 import { contextBridge, ipcRenderer, IpcRendererEvent } from 'electron';
 import {
   AppConfig,
-  BrowserCreateArgs,
-  BrowserEvent,
-  BrowserFindArgs,
-  BrowserNavigateArgs,
-  BrowserOpenTabRequest,
-  BrowserSetBoundsArgs,
-  BrowserSetVisibleArgs,
-  BrowserStopFindArgs,
-  BrowserTabRef,
   CustomDictionary,
   DreyApi,
   EditCommand,
@@ -133,41 +124,6 @@ const dreyApi: DreyApi = {
     const wrapped = (): void => listener();
     ipcRenderer.on(IPC_CHANNELS.mcpVaultChanged, wrapped);
     return () => ipcRenderer.removeListener(IPC_CHANNELS.mcpVaultChanged, wrapped);
-  },
-  // In-editor web browser tab (Req-19, ADR-0040).
-  createBrowserView: (args: BrowserCreateArgs): Promise<void> =>
-    ipcRenderer.invoke(IPC_CHANNELS.browserCreate, args),
-  destroyBrowserView: (ref: BrowserTabRef): Promise<void> =>
-    ipcRenderer.invoke(IPC_CHANNELS.browserDestroy, ref),
-  setBrowserViewBounds: (args: BrowserSetBoundsArgs): Promise<void> =>
-    ipcRenderer.invoke(IPC_CHANNELS.browserSetBounds, args),
-  setBrowserViewVisible: (args: BrowserSetVisibleArgs): Promise<void> =>
-    ipcRenderer.invoke(IPC_CHANNELS.browserSetVisible, args),
-  navigateBrowserView: (args: BrowserNavigateArgs): Promise<void> =>
-    ipcRenderer.invoke(IPC_CHANNELS.browserNavigate, args),
-  browserViewGoBack: (ref: BrowserTabRef): Promise<void> =>
-    ipcRenderer.invoke(IPC_CHANNELS.browserGoBack, ref),
-  browserViewGoForward: (ref: BrowserTabRef): Promise<void> =>
-    ipcRenderer.invoke(IPC_CHANNELS.browserGoForward, ref),
-  browserViewReload: (ref: BrowserTabRef): Promise<void> =>
-    ipcRenderer.invoke(IPC_CHANNELS.browserReload, ref),
-  browserViewStop: (ref: BrowserTabRef): Promise<void> =>
-    ipcRenderer.invoke(IPC_CHANNELS.browserStop, ref),
-  browserViewFind: (args: BrowserFindArgs): Promise<void> =>
-    ipcRenderer.invoke(IPC_CHANNELS.browserFind, args),
-  browserViewStopFind: (args: BrowserStopFindArgs): Promise<void> =>
-    ipcRenderer.invoke(IPC_CHANNELS.browserStopFind, args),
-  onBrowserEvent: (listener: (event: BrowserEvent) => void): (() => void) => {
-    // Forward only the payload, never the IpcRendererEvent (ADR-0001).
-    const wrapped = (_event: IpcRendererEvent, payload: BrowserEvent): void => listener(payload);
-    ipcRenderer.on(IPC_CHANNELS.browserEvent, wrapped);
-    return () => ipcRenderer.removeListener(IPC_CHANNELS.browserEvent, wrapped);
-  },
-  onBrowserOpenTab: (listener: (request: BrowserOpenTabRequest) => void): (() => void) => {
-    const wrapped = (_event: IpcRendererEvent, payload: BrowserOpenTabRequest): void =>
-      listener(payload);
-    ipcRenderer.on(IPC_CHANNELS.browserOpenTab, wrapped);
-    return () => ipcRenderer.removeListener(IPC_CHANNELS.browserOpenTab, wrapped);
   },
   // Session history (ADR-0043).
   writeSessionBackup: (id: string, content: string): Promise<void> =>

@@ -4,11 +4,11 @@ import { LogService } from '../services/log.service';
 
 /**
  * The doc-kind seam (ADR-0044 stage 8A): every open tab that is neither a
- * text buffer nor an image viewer resolves through this registry — today
- * the built-in browser (registered by `BrowserViewService`, still a base
- * feature), from stage 8B the browser plugin and any other plugin tab.
- * The pane body (`PaneLeaf`), the tab strip's favicon and the status-bar
- * line all read the contribution instead of switching on a hardcoded kind.
+ * text buffer nor an image viewer resolves through this registry — every
+ * kind is plugin-contributed (the browser since stage 8B, the sample
+ * clock, …). The pane body (`PaneLeaf`), the tab strip's favicon and the
+ * status-bar line all read the contribution instead of switching on a
+ * hardcoded kind.
  *
  * The map is a signal so consumers' `computed`s re-run when a kind (un-)
  * registers. `favicon`/`statusText` calls are guarded: a throwing plugin

@@ -1,6 +1,6 @@
-import { normalizeAddress } from './normalize-address';
+import { normalizeAddress } from '../../../plugins/browser/renderer/normalize-address';
 
-describe('normalizeAddress', () => {
+describe('normalizeAddress (browser plugin)', () => {
   it('passes through an existing http(s) URL', () => {
     expect(normalizeAddress('https://x.dev')).toBe('https://x.dev');
     expect(normalizeAddress('http://example.com/a?b=1')).toBe('http://example.com/a?b=1');

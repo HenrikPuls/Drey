@@ -1,0 +1,12 @@
+{
+  "id": "browser",
+  "name": "Web browser",
+  "version": "1.0.0",
+  "apiVersion": 1,
+  "description": "The in-editor web browser tab (ADR-0042): one native WebContentsView per tab, floated over the pane behind an address-bar chrome, with in-page find.",
+  "author": "Drey",
+  "main": "main/index.js",
+  "renderer": "renderer/index.js",
+  "css": ["renderer/browser.css"],
+  "permissions": ["documents", "commands", "main-process"]
+}

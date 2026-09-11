@@ -5,11 +5,12 @@ import { Injectable, computed, signal } from '@angular/core';
  * (ADR-0042) -- a pane splitter, a dock edge, or a dock panel
  * header.
  *
- * Its only consumer is `BrowserViewService`: an in-editor browser tab's
- * native `WebContentsView` trails a fast drag by a frame, so it is hidden
- * for the gesture's duration and re-measured on release. This lives in a
+ * Its consumer is the plugin host's native-surface visibility synthesis
+ * (ADR-0044): an in-editor browser tab's native `WebContentsView` (the
+ * browser plugin) trails a fast drag by a frame, so it is hidden for the
+ * gesture's duration and re-measured on release. This lives in a
  * dependency-free leaf service (not on `DockService` / `PaneService`) so
- * `BrowserViewService` can read it without pulling the dock component tree
+ * the synthesis can read it without pulling the dock component tree
  * into an import cycle.
  *
  * Sources are named so two independent gesture owners (the pane layout and

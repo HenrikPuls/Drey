@@ -1,15 +1,15 @@
 /**
- * Types for the in-editor web browser tab (ADR-0042). One
- * main-process `WebContentsView` per browser tab, driven over the
- * `browser:*` IPC channels; this module is the shared contract both sides
- * compile against.
+ * Types for the in-editor web browser tab (ADR-0042, the browser plugin
+ * since ADR-0044 stage 8B). One main-process `WebContentsView` per browser
+ * tab; this module is the contract between the plugin's main and renderer
+ * entries (it compiles into both plugin trees).
  *
- * A browser tab is a fileless `OpenDoc` keyed `browser://<n>` -- the same
- * key is its `BrowserTabId` here. `://` guarantees it never collides with
- * a vault path.
+ * A browser tab is a fileless doc keyed `browser://<n>` -- the same key is
+ * its `BrowserTabId` here. `://` guarantees it never collides with a vault
+ * path.
  */
 
-/** The `OpenDoc.path` of a browser tab, always `browser://<n>`. */
+/** The doc key of a browser tab, always `browser://<n>`. */
 export type BrowserTabId = string;
 
 /**
@@ -65,8 +65,9 @@ export interface BrowserStopFindArgs {
 }
 
 /**
- * Main -> renderer, one per meaningful `webContents` event. A discriminated
- * union on `kind` so the renderer reducer stays exhaustive.
+ * Main -> renderer (`ctx.ipc.emit('event', …)`), one per meaningful
+ * `webContents` event. A discriminated union on `kind` so the renderer
+ * reducer stays exhaustive.
  */
 export type BrowserEvent =
   | {
@@ -83,14 +84,15 @@ export type BrowserEvent =
   | { tabId: BrowserTabId; kind: 'crashed'; reason: string };
 
 /**
- * Main -> renderer: a `target="_blank"` / `window.open` the embedded page
- * tried to open. The renderer opens it as a new browser tab.
+ * Main -> renderer (`ctx.ipc.emit('open-tab', …)`): a `target="_blank"` /
+ * `window.open` the embedded page tried to open. The renderer opens it as a
+ * new browser tab.
  */
 export interface BrowserOpenTabRequest {
   url: string;
 }
 
-/** Per-tab UI state the renderer holds (`BrowserViewService`). */
+/** Per-tab UI state the renderer holds (`createBrowserStore`). */
 export interface BrowserTabState {
   tabId: BrowserTabId;
   url: string;

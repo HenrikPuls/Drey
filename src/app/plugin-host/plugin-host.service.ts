@@ -182,6 +182,11 @@ export class PluginHostService {
     if (listeners === undefined) {
       return;
     }
+    // The shell can't track plugin state, so a plugin main's push is also
+    // the refresh signal for whatever its doc-kind slots answer from it
+    // (the browser's favicon / status line ride its `event` pushes) -- same
+    // tick the document events use.
+    this.docKinds.bump();
     for (const listener of [...listeners]) {
       this.guarded(() => listener(data), `${pluginId} event "${event}" listener`);
     }

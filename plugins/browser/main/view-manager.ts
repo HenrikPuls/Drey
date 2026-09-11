@@ -9,27 +9,28 @@ import {
   type MenuItemConstructorOptions,
   type WebContents,
 } from 'electron';
-import { IPC_CHANNELS } from '../../shared/ipc-api';
 import type {
   BrowserEvent,
   BrowserRect,
   BrowserStopFindArgs,
   BrowserTabId,
-} from '../../shared/browser';
+} from '../shared/browser.js';
 
 /**
- * Owns one `WebContentsView` per in-editor browser tab (ADR-0042).
+ * Owns one `WebContentsView` per in-editor browser tab (ADR-0042; the
+ * browser plugin's main side since ADR-0044 stage 8B).
  *
- * Each view is a native surface composited *above* the whole Angular DOM,
- * so this class is deliberately dumb about layout: the renderer streams the
- * client rect of its chrome placeholder (`setBounds`) and a visibility flag
+ * Each view is a native surface composited *above* the whole DOM, so this
+ * class is deliberately dumb about layout: the renderer streams the client
+ * rect of its chrome placeholder (`setBounds`) and a visibility flag
  * (`setVisible`, driven by pane focus / window blur / open overlays), and
  * the manager just applies them. It also runs the per-view security
  * handlers -- the main window's own `will-navigate` / `setWindowOpenHandler`
  * are on a different `webContents` and do not cover these.
  *
- * Constructed in `whenReady` *before* `registerIpcHandlers` (the IPC layer
- * needs it in its deps); the window is bound later via `attach()`.
+ * Pushes go through the callbacks the plugin's `activate` provides (`send`
+ * / `requestOpenTab`) instead of fixed IPC channels -- everything crosses
+ * the generic plugin bridge (`plugin:event`).
  */
 
 /** Cookies + storage for every browser tab. Isolated from the app's own session. */
@@ -50,7 +51,11 @@ export class BrowserViewManager {
   private windowObscured = false;
   private partitionPrepared = false;
 
-  constructor(private readonly getMainWindow: () => BrowserWindow | null) {}
+  constructor(
+    private readonly getMainWindow: () => BrowserWindow | null,
+    private readonly send: (event: BrowserEvent) => void,
+    private readonly requestOpenTab: (url: string) => void,
+  ) {}
 
   /**
    * Binds the live window and its focus lifecycle. Safe to call again on
@@ -256,10 +261,6 @@ export class BrowserViewManager {
     });
   }
 
-  private send(event: BrowserEvent): void {
-    (this.win ?? this.getMainWindow())?.webContents.send(IPC_CHANNELS.browserEvent, event);
-  }
-
   private preparePartition(): void {
     if (this.partitionPrepared) {
       return;
@@ -289,7 +290,7 @@ export class BrowserViewManager {
     });
     wc.setWindowOpenHandler(({ url }) => {
       if (/^https?:/i.test(url)) {
-        (this.win ?? this.getMainWindow())?.webContents.send(IPC_CHANNELS.browserOpenTab, { url });
+        this.requestOpenTab(url);
       } else if (/^mailto:/i.test(url)) {
         void shell.openExternal(url);
       }
@@ -302,7 +303,7 @@ export class BrowserViewManager {
    * menu of its own, so this is the whole thing: navigation, the standard
    * clipboard verbs (gated on `params.editFlags`), link / image actions,
    * and "search the selection" -- link and search actions open a new
-   * browser tab via the same `browser:open-tab` push as a popup.
+   * browser tab via the same `open-tab` push as a popup.
    */
   private wireContextMenu(wc: WebContents): void {
     wc.on('context-menu', (_event, params: ContextMenuParams) => {
@@ -310,8 +311,7 @@ export class BrowserViewManager {
       if (!win) {
         return;
       }
-      const openTab = (url: string): void =>
-        win.webContents.send(IPC_CHANNELS.browserOpenTab, { url });
+      const openTab = (url: string): void => this.requestOpenTab(url);
       const sep: MenuItemConstructorOptions = { type: 'separator' };
       const items: MenuItemConstructorOptions[] = [];
 

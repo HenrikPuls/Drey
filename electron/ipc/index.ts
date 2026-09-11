@@ -6,7 +6,6 @@
  */
 import { BrowserWindow } from 'electron';
 import { AppConfigStore } from '../app-config';
-import { BrowserViewManager } from '../browser';
 import { DailyNoteManager } from '../daily-note';
 import { LlmDebugLog, LlmTaskRegistry, LmStudioClient, TagSuggester } from '../llm';
 import { McpHttpTransport } from '../mcp';
@@ -16,7 +15,6 @@ import { SessionBackupStore } from '../session';
 import { SpellcheckService } from '../spellcheck';
 import { VaultManager } from '../vault-manager';
 import { registerAppHandlers } from './app-handlers';
-import { registerBrowserHandlers } from './browser-handlers';
 import { registerConfigHandlers } from './config-handlers';
 import { registerLlmHandlers } from './llm-handlers';
 import { registerMcpHandlers } from './mcp-handlers';
@@ -31,7 +29,6 @@ export { McpWriteBridge } from './mcp-write-bridge';
 
 export interface IpcHandlerDeps {
   getMainWindow: () => BrowserWindow | null;
-  browserViews: BrowserViewManager;
   sessionBackups: SessionBackupStore;
   vaultManager: VaultManager;
   dailyNotes: DailyNoteManager;
@@ -51,7 +48,6 @@ export interface IpcHandlerDeps {
 
 export function registerIpcHandlers(deps: IpcHandlerDeps): void {
   registerAppHandlers(deps.getMainWindow);
-  registerBrowserHandlers(deps);
   registerSessionHandlers(deps);
   registerVaultHandlers(deps);
   registerQueryHandlers(deps);

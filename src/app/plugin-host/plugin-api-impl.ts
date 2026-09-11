@@ -150,6 +150,7 @@ export class PluginApiFactory {
           }
           this.editor.addPluginDoc(kind, key, name);
         },
+        rename: (path, name) => this.editor.renameDoc(path, name),
         insertAtCursor: (text) => {
           if (text === '' || this.editor.activePath() === null || this.editor.activeKind() !== 'text') {
             return false;
