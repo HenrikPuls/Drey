@@ -2,9 +2,7 @@ import { Injectable, Signal, computed, inject, signal } from '@angular/core';
 import type { PluginSettingsPageContrib, Unsubscribe } from '../../../shared/plugin-api/renderer';
 import { PluginSettingsHost } from '../plugin-host';
 import { SettingsAbout } from './about/settings-about';
-import { SettingsActions } from './actions/settings-actions';
 import { SettingsAppearance } from './appearance/settings-appearance';
-import { SettingsAssistant } from './assistant/settings-assistant';
 import { SettingsDaily } from './daily/settings-daily';
 import { SettingsDockWidgets } from './dock-widgets/settings-dock-widgets';
 import { SettingsEntry } from './entry/settings-entry';
@@ -77,12 +75,6 @@ export class SettingsCategoryRegistry {
 
 const CORE_CATEGORIES: readonly SettingsCategory[] = [
   { id: 'llm', label: 'LLM', hint: 'Local model connection', component: SettingsLlm },
-  {
-    id: 'assistant',
-    label: 'Assistant',
-    hint: 'Note summary panel',
-    component: SettingsAssistant,
-  },
   { id: 'entry', label: 'Add entry', hint: 'Append template', component: SettingsEntry },
   { id: 'daily', label: 'Daily notes', hint: 'Open on startup', component: SettingsDaily },
   {
@@ -102,12 +94,6 @@ const CORE_CATEGORIES: readonly SettingsCategory[] = [
     label: 'Widgets',
     hint: 'Panels & capabilities',
     component: SettingsDockWidgets,
-  },
-  {
-    id: 'actions',
-    label: 'Actions',
-    hint: 'Prompt templates & triggers',
-    component: SettingsActions,
   },
   { id: 'mcp', label: 'MCP', hint: 'Vault server & tools', component: SettingsMcp },
   { id: 'about', label: 'About', hint: 'Version & licenses', component: SettingsAbout },

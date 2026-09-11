@@ -43,11 +43,14 @@ describe('DockService', () => {
     localStorage.setItem(
       'drey.dock',
       JSON.stringify({
+        // `assistant` is a plugin widget id now (ADR-0044) -- unknown to the
+        // core registry, so it folds out of the stored blob.
         dock: { left: ['calendar', 'files', 'search', 'windows'], right: ['assistant'] },
       }),
     );
     const dock = make();
     expect(dock.bottomIds()).toEqual(['entry']);
+    expect(dock.rightIds()).toEqual([]);
   });
 
   it('promotes a header press to a drag only past the movement threshold', () => {
@@ -86,15 +89,14 @@ describe('DockService', () => {
     // left: [calendar, files, windows]; entry sits collapsed in the bottom dock.
     expect(dock.nextOpenId('calendar')).toBe('files');
     expect(dock.nextOpenId('files')).toBe('windows');
-    expect(dock.nextOpenId('windows')).toBeNull();
-    expect(dock.nextOpenId('assistant')).toBeNull(); // alone in the right dock
+    expect(dock.nextOpenId('windows')).toBeNull(); // last open panel
   });
 
   it('moves a panel across docks at the requested slot', () => {
     const dock = make();
     dock.move('calendar', 'right', 0);
     expect(dock.leftIds()).toEqual(['files', 'windows']);
-    expect(dock.rightIds()).toEqual(['calendar', 'assistant']);
+    expect(dock.rightIds()).toEqual(['calendar']);
   });
 
   it('reorders within a dock (drop-line index is pre-removal)', () => {
@@ -147,7 +149,7 @@ describe('DockService', () => {
     TestBed.resetTestingModule();
     TestBed.configureTestingModule({});
     const second = TestBed.inject(DockService);
-    expect(second.rightIds()).toEqual(['calendar', 'assistant']);
+    expect(second.rightIds()).toEqual(['calendar']);
     expect(second.dockWidth('right')).toBe(400);
   });
 
@@ -167,13 +169,14 @@ describe('DockService', () => {
       JSON.stringify({ dock: { left: ['calendar', 'files'], right: [] } }),
     );
     const dock = make();
-    // windows (left by default) and assistant (right) come back.
+    // windows (left by default) comes back; the right dock stays empty
+    // (its default resident, `assistant`, is a plugin widget now).
     expect(dock.leftIds()).toEqual([
       'calendar',
       'files',
       'windows',
     ]);
-    expect(dock.rightIds()).toEqual(['assistant']);
+    expect(dock.rightIds()).toEqual([]);
   });
 
   describe('hide / show (View menu visibility)', () => {
@@ -239,7 +242,7 @@ describe('DockService', () => {
       dock.hide('windows');
       dock.move('windows', 'right', 0);
       expect(dock.isHidden('windows')).toBe(false);
-      expect(dock.rightIds()).toEqual(['windows', 'assistant']);
+      expect(dock.rightIds()).toEqual(['windows']);
     });
   });
 

@@ -11,13 +11,7 @@
  * - no Angular types (main has none, and plugins are framework-agnostic).
  */
 import type { BrowserWindow, WebContents } from 'electron';
-import type {
-  ActionContext,
-  ActionOutcome,
-  AskOutcome,
-  ChatMessage,
-  LlmDebugEntry,
-} from '../llm';
+import type { ActionOutcome, ChatMessage, LlmDebugEntry } from '../llm';
 import type { AppConfig } from '../app-config';
 import type { TagEntry, TagSearchHit, TagSearchQuery } from './search-types';
 import type { VaultFileEntry } from '../ipc-api';
@@ -80,6 +74,14 @@ export type Unsubscribe = () => void;
 export interface MainChatOptions {
   readonly temperature?: number;
   readonly taskId?: string;
+  /**
+   * Opts this ONE call into the vault tool loop (ADR-0021): the model may
+   * call `vault_search`/`vault_read`/`vault_write` before its final answer
+   * (a write still goes through the user's confirmation). Only meaningful
+   * when the base MCP switch is on; the tools stay base — the plugin never
+   * gets the `VaultTools` instance itself.
+   */
+  readonly vaultTools?: boolean;
 }
 
 /**
@@ -126,14 +128,19 @@ export interface MainPluginContext {
   /** The section-search seam MCP's `vault_search` reads; null provider = tool degrades. */
   readonly search: { registerSectionSearch(provider: SectionSearchProvider): Unsubscribe };
 
-  /** The LLM transport facade (transport stays base; feature logic is plugin-side). */
+  /**
+   * The LLM transport facade (transport stays base; feature logic is
+   * plugin-side since ADR-0044 stage 7 — a plugin enumerates triggers from
+   * `appConfig` via the shared `resolveActions` and runs them through
+   * `chat`, which is exactly what the assistant plugin's engine does).
+   */
   readonly llm: {
     enabled(): boolean;
-    /** One non-streamed completion; rejects when disabled (ADR-0014: no timeout — cancel via taskId). */
+    /**
+     * One non-streamed completion; rejects when disabled (ADR-0014: no
+     * timeout — cancel via the renderer's `llm.cancelTask(taskId)`).
+     */
     chat(messages: readonly ChatMessage[], options?: MainChatOptions): Promise<string>;
-    /** The enabled `on-save` triggers (id + confirm), so a save hook can run them. */
-    actionsForEvent(event: 'on-save'): readonly { triggerId: string; confirm: boolean }[];
-    runAction(triggerId: string, context: ActionContext, taskId?: string): Promise<ActionOutcome>;
     /** The vocabulary-carrying tag suggestion (the `autotag` prompt); plugin supplies its vocabulary. */
     suggestTags(entryText: string, vocabulary: readonly string[], taskId?: string): Promise<string[]>;
     onDebugEntry(cb: (entry: LlmDebugEntry) => void): Unsubscribe;

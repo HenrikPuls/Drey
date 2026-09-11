@@ -27,7 +27,8 @@ import {
   type VaultChangeEvent,
 } from '../../shared/plugin-api';
 import type { AppConfigStore } from '../app-config';
-import type { ActionRunner, LlmDebugLog, LlmTaskRegistry, LmStudioClient } from '../llm';
+import type { LlmDebugLog, LlmTaskRegistry, LmStudioClient, TagSuggester } from '../llm';
+import type { VaultTools } from '../mcp';
 import type { VaultManager } from '../vault-manager';
 import { PluginConfigStore } from './plugin-config-store';
 import {
@@ -61,7 +62,16 @@ export interface PluginHostDeps {
   readonly appConfig: AppConfigStore;
   readonly lmStudio: LmStudioClient;
   readonly llmTasks: LlmTaskRegistry;
-  readonly actionRunner: ActionRunner;
+  /**
+   * The base vault tool set (ADR-0021), wired into `ctx.llm.chat` when a
+   * plugin asks for it (`vaultTools: true`) — the assistant plugin's Ask
+   * loop runs `vault_search`/`vault_read`/`vault_write` in-process, exactly
+   * as the pre-conversion ActionRunner did. The tools stay base; the plugin
+   * never gets the instance itself.
+   */
+  readonly vaultTools: VaultTools;
+  /** The vocabulary-based tag suggestion (the drawer's Autotag; also `ctx.llm.suggestTags`). */
+  readonly tagSuggester: TagSuggester;
   readonly llmDebug: LlmDebugLog;
   readonly log: (message: string, level?: 'info' | 'warn' | 'error') => void;
 }
@@ -190,7 +200,11 @@ export class PluginHost {
       case 'drey.config.set':
         await this.configStore.set(pluginId, String(shape['key'] ?? ''), shape['value']);
         return undefined;
-      case 'drey.llm.chat':
+      case 'drey.llm.chat': {
+        // `vaultTools: true` opts the ONE call into the ADR-0021 vault tool
+        // loop (the model may call vault_search/read/write before its final
+        // answer; a vault_write still goes through the confirmation bridge).
+        const withTools = shape['vaultTools'] === true && this.deps.vaultTools !== undefined;
         return this.deps.llmTasks.run(
           typeof shape['taskId'] === 'string' ? shape['taskId'] : undefined,
           (signal) =>
@@ -200,16 +214,17 @@ export class PluginHost {
                 ...(typeof shape['temperature'] === 'number'
                   ? { temperature: shape['temperature'] }
                   : {}),
+                ...(withTools
+                  ? {
+                      tools: this.deps.vaultTools.openAiToolSpec(),
+                      onToolCall: (name, argsJson) => this.runVaultTool(name, argsJson),
+                    }
+                  : {}),
                 signal,
               },
             ),
         );
-      case 'drey.llm.ask':
-        return this.deps.actionRunner.ask(
-          shape['context'] as never,
-          String(shape['question'] ?? ''),
-          typeof shape['taskId'] === 'string' ? shape['taskId'] : undefined,
-        );
+      }
       case 'drey.search.sections': {
         const provider = this.searchProvider;
         if (provider === null) {
@@ -354,7 +369,7 @@ export class PluginHost {
       }
       return unsubscribe;
     };
-    const { vaultManager, appConfig, lmStudio, llmTasks, actionRunner, llmDebug } = this.deps;
+    const { vaultManager, appConfig, lmStudio, llmTasks, tagSuggester, llmDebug } = this.deps;
 
     return {
       pluginId: id,
@@ -394,19 +409,24 @@ export class PluginHost {
         registerSectionSearch: (provider) => track(this.search.registerSectionSearch(provider)),
       },
       llm: {
-        enabled: () => actionRunner.isLlmEnabled(),
+        enabled: () => appConfig.get().llm.enabled,
         chat: (messages, options) =>
           llmTasks.run(options?.taskId, (signal) =>
-            lmStudio.chat([...messages], { temperature: options?.temperature, signal }),
+            lmStudio.chat([...messages], {
+              temperature: options?.temperature,
+              ...(options?.vaultTools === true && this.deps.vaultTools !== undefined
+                ? {
+                    tools: this.deps.vaultTools.openAiToolSpec(),
+                    onToolCall: (name, argsJson) => this.runVaultTool(name, argsJson),
+                  }
+                : {}),
+              signal,
+            }),
           ),
-        actionsForEvent: (event) =>
-          actionRunner.actionsForEvent(event).map((a) => ({
-            triggerId: a.triggerId,
-            confirm: a.confirm,
-          })),
-        runAction: (triggerId, context, taskId) => actionRunner.run(triggerId, context, taskId),
+        // The vocabulary-based Autotag — a base surface (drawer + Tags
+        // plugin vocabulary) also reachable from plugins.
         suggestTags: (entryText, vocabulary, taskId) =>
-          actionRunner.suggestTags(entryText, [...vocabulary], taskId),
+          tagSuggester.suggest(entryText, [...vocabulary], taskId),
         onDebugEntry: (cb) => track(llmDebug.onEntry(cb)),
       },
       ipc: {
@@ -420,6 +440,24 @@ export class PluginHost {
       },
       log: (message, level) => this.deps.log(`plugin "${id}": ${message}`, level ?? 'info'),
     };
+  }
+
+  /** Bridges one model tool call to the base `VaultTools`, flattening the result to text. */
+  private async runVaultTool(name: string, argsJson: string): Promise<string> {
+    if (!this.deps.vaultTools) {
+      return 'Vault tools are not available.';
+    }
+    let args: Record<string, unknown> = {};
+    try {
+      const parsed: unknown = JSON.parse(argsJson || '{}');
+      if (parsed && typeof parsed === 'object') {
+        args = parsed as Record<string, unknown>;
+      }
+    } catch {
+      return `Could not parse arguments for ${name}: ${argsJson}`;
+    }
+    const result = await this.deps.vaultTools.call(name, args);
+    return result.content.map((block) => block.text).join('\n');
   }
 
   private runGuarded(fn: () => void, what: string): void {

@@ -1,6 +1,5 @@
 import { Injectable, Injector, inject } from '@angular/core';
 import type {
-  AskOutcome,
   DocumentChangeEvent,
   DreyPluginApi,
   MenuContribution,
@@ -168,7 +167,9 @@ export class PluginApiFactory {
             previewStyle: request.previewStyle,
             before: request.before,
             after: request.after,
-            triggerId: null,
+            // The trigger binding enables the dialog's "don't ask again for
+            // this action" checkbox (ADR-0011); null hides it.
+            triggerId: request.triggerId ?? null,
           });
           if (!confirmed) {
             return false;
@@ -287,11 +288,8 @@ export class PluginApiFactory {
             messages,
             temperature: options?.temperature,
             taskId: options?.taskId,
+            vaultTools: options?.vaultTools,
           })) as string,
-        ask: async (context, question, taskId) =>
-          (await invokeBackend('drey.llm.ask', { context, question, taskId })) as AskOutcome,
-        runAction: async (triggerId, context, taskId) =>
-          await window.dreyApi.runAction(triggerId, context, taskId),
         cancelTask: (taskId) => window.dreyApi.cancelLlmTask(taskId),
         onDebugEntry: (listener) => track(window.dreyApi.onLlmDebugEntry(listener)),
       },

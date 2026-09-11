@@ -197,8 +197,10 @@ export class EditorService {
 
   /**
    * `'edit'` outcomes from `on-save` Actions that still need confirmation
-   * (ADR-0011). Set by `save()`, drained by `ActionsService` (an effect) so
-   * `EditorService` needn't depend on it -- that would be a DI cycle.
+   * (ADR-0011). Set by `save()`; the plugin host consumes the queue when it
+   * synthesizes the `pending-actions` document event, so the assistant
+   * plugin (the queue's owner since ADR-0044 stage 7) routes them through
+   * the shared confirmation dialog.
    */
   readonly pendingActions = signal<ActionOutcome[]>([]);
 
@@ -221,9 +223,8 @@ export class EditorService {
 
   /**
    * The deferred editor-command bus (`EditorCommandsService`), re-exposed
-   * here so the ~5 callers (`Editor`, `DailyNoteService`, `EntryDraftService`,
-   * `AssistantService`, `TemplateLibraryService`) keep going through
-   * `EditorService`.
+   * here so its callers (`Editor`, `DailyNoteService`, `EntryDraftService`)
+   * keep going through `EditorService`.
    *
    * `newEntryRequest` is bumped by the quick-capture hotkey flow and the
    * entry drawer to ask the `Editor` component to start a fresh `## HH:mm`

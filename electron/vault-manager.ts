@@ -4,7 +4,7 @@ import * as fs from 'node:fs';
 import * as fsp from 'node:fs/promises';
 import * as path from 'node:path';
 import { assetFileName, ATTACHMENTS_DIR, imageExtension } from '../shared/asset-name';
-import { sidecarPathFor } from '../shared/chat-thread';
+import { sidecarPathFor } from '../shared/sidecar';
 import { VaultFileContent, VaultFileEntry } from '../shared/ipc-api';
 import { uniqueCopyName } from '../shared/unique-name';
 

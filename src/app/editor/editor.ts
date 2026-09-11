@@ -10,10 +10,11 @@ import {
   viewChild,
 } from '@angular/core';
 import { EditorView } from '@codemirror/view';
-import { ActionsService } from '../llm';
 import { CLASSIC_ENTRY_PATTERN, editorFontFamilyStacks } from '../../../shared/app-config';
+import type { MenuContribution } from '../../../shared/plugin-api/renderer';
 import { EditorService, EditorViewMode, NewEntryRequest } from '../services/editor.service';
 import { EditorZoomService } from '../services/editor-zoom.service';
+import { MenuContributionsService } from '../plugin-host';
 import { OverlayGuardDirective } from '../services/overlay-guard.directive';
 import { PaneService } from '../panes/pane.service';
 import { SettingsService } from '../services/settings.service';
@@ -74,7 +75,7 @@ export class Editor implements AfterViewInit {
   protected readonly editor = inject(EditorService);
   protected readonly settings = inject(SettingsService);
   protected readonly zoom = inject(EditorZoomService);
-  protected readonly actions = inject(ActionsService);
+  protected readonly menuContributions = inject(MenuContributionsService);
   private readonly panes = inject(PaneService);
   private readonly spellcheck = inject(SpellcheckService);
 
@@ -283,29 +284,14 @@ export class Editor implements AfterViewInit {
     this.menuOpen.set(false);
   }
 
+  /** Runs a plugin-contributed menu row; rows carrying a commandId instead of a closure are not expected here. */
+  protected runContributedRow(row: MenuContribution): void {
+    row.run?.();
+  }
+
   protected chooseMode(mode: EditorViewMode): void {
     this.closeMenu();
     this.editor.setViewMode(mode, this.shownPath() ?? undefined);
-  }
-
-  /**
-   * Runs a manual Action against this pane's open document (ADR-0011).
-   * Passes the live CodeMirror text and any selection as context; the
-   * outcome goes through the shared confirmation flow in `ActionsService`.
-   */
-  protected runAction(triggerId: string): void {
-    this.closeMenu();
-    const view = this.view;
-    const path = this.shownPath();
-    if (!view || path === null) {
-      return;
-    }
-    const range = view.state.selection.main;
-    void this.actions.run(triggerId, {
-      path,
-      body: view.state.doc.toString(),
-      selection: range.empty ? undefined : view.state.sliceDoc(range.from, range.to),
-    });
   }
 
   /**

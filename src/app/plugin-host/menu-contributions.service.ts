@@ -27,6 +27,8 @@ export class MenuContributionsService {
   readonly itemsForEdit = computed(() => this.itemsFor('edit'));
   readonly itemsForSelection = computed(() => this.itemsFor('selection'));
   readonly itemsForView = computed(() => this.itemsFor('view'));
+  /** The editor meta-bar `⋯` menu's plugin rows (the manual Actions' home). */
+  readonly itemsForEditorMore = computed(() => this.itemsFor('editor-more'));
 
   register(owner: string, items: readonly MenuContribution[]): Unsubscribe {
     const entry: RegisteredContribution = { owner, items };

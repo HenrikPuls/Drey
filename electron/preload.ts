@@ -1,9 +1,6 @@
 import { contextBridge, ipcRenderer, IpcRendererEvent } from 'electron';
 import {
-  ActionContext,
-  ActionOutcome,
   AppConfig,
-  AskOutcome,
   BrowserCreateArgs,
   BrowserEvent,
   BrowserFindArgs,
@@ -13,8 +10,6 @@ import {
   BrowserSetVisibleArgs,
   BrowserStopFindArgs,
   BrowserTabRef,
-  ChatMessage,
-  ChatThread,
   CustomDictionary,
   DreyApi,
   EditCommand,
@@ -107,23 +102,8 @@ const dreyApi: DreyApi = {
     ipcRenderer.on(IPC_CHANNELS.llmDebugEntry, wrapped);
     return () => ipcRenderer.removeListener(IPC_CHANNELS.llmDebugEntry, wrapped);
   },
-  runAction: (triggerId: string, context: ActionContext, taskId?: string): Promise<ActionOutcome> =>
-    ipcRenderer.invoke(IPC_CHANNELS.actionRun, triggerId, context, taskId),
-  askChat: (
-    context: ActionContext,
-    question: string,
-    taskId?: string,
-    history?: ChatMessage[],
-  ): Promise<AskOutcome> =>
-    ipcRenderer.invoke(IPC_CHANNELS.chatAsk, context, question, taskId, history),
   cancelLlmTask: (taskId: string): Promise<boolean> =>
     ipcRenderer.invoke(IPC_CHANNELS.llmCancel, taskId),
-  readChatThread: (notePath: string): Promise<ChatThread> =>
-    ipcRenderer.invoke(IPC_CHANNELS.threadRead, notePath),
-  writeChatThread: (thread: ChatThread): Promise<void> =>
-    ipcRenderer.invoke(IPC_CHANNELS.threadWrite, thread),
-  summarizeNote: (context: ActionContext, taskId?: string): Promise<string> =>
-    ipcRenderer.invoke(IPC_CHANNELS.threadSummarize, context, taskId),
   checkSpelling: (words: string[]): Promise<SpellCheckResult> =>
     ipcRenderer.invoke(IPC_CHANNELS.spellCheck, words),
   listSpellLanguages: (): Promise<SpellLanguage[]> =>

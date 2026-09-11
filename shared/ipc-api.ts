@@ -8,8 +8,7 @@
  * not a runtime surprise. See docs/09_architecture_decisions/0001-*.md.
  */
 import type { AppConfig, CustomDictionary, LlmEndpoint } from './app-config';
-import type { ActionContext, ActionOutcome, AskOutcome, ChatMessage, LlmDebugEntry } from './llm';
-import type { ChatThread } from './chat-thread';
+import type { ActionOutcome, LlmDebugEntry } from './llm';
 import type {
   BrowserCreateArgs,
   BrowserEvent,
@@ -30,15 +29,7 @@ export type {
 } from './plugin-api/plugin-ipc';
 
 export type { AppConfig, LlmEndpoint, CustomDictionary } from './app-config';
-export type { ChatCard, ChatCardRole, ChatThread } from './chat-thread';
-export type {
-  ActionContext,
-  ActionOutcome,
-  AskOutcome,
-  ChatMessage,
-  LlmDebugEntry,
-  ResolvedAction,
-} from './llm';
+export type { ActionOutcome, LlmDebugEntry } from './llm';
 export type {
   BrowserCreateArgs,
   BrowserEvent,
@@ -90,7 +81,6 @@ export const IPC_CHANNELS = {
   noteSave: 'note:save',
   tagList: 'tags:list',
   tagSearch: 'tags:search',
-  tagSummariseResults: 'tags:summarise-results',
   tagSuggest: 'tags:suggest',
   configGet: 'config:get',
   configSet: 'config:set',
@@ -99,12 +89,7 @@ export const IPC_CHANNELS = {
   llmDebugList: 'llm:debug-list',
   llmDebugClear: 'llm:debug-clear',
   llmDebugEntry: 'llm:debug-entry',
-  actionRun: 'action:run',
-  chatAsk: 'chat:ask',
   llmCancel: 'llm:cancel',
-  threadRead: 'thread:read',
-  threadWrite: 'thread:write',
-  threadSummarize: 'thread:summarize',
   spellCheck: 'spell:check',
   spellLanguages: 'spell:languages',
   spellAddDictionary: 'spell:add-dictionary',
@@ -441,33 +426,6 @@ export interface DreyApi {
   onLlmDebugEntry(listener: (entry: LlmDebugEntry) => void): () => void;
 
   /**
-   * Runs one Action (by trigger id) against `context` (the active
-   * document). An `'edit'` outcome is handed to the confirmation flow; the
-   * renderer applies the `after` text on confirm.
-   *
-   * `taskId` (see `cancelLlmTask`) makes the run abortable. Cancelling
-   * comes back as a `'noop'` outcome, not an error -- it is the user's
-   * decision, not a failure.
-   */
-  runAction(triggerId: string, context: ActionContext, taskId?: string): Promise<ActionOutcome>;
-
-  /**
-   * Chat Ask mode: sends `question` plus the document (and any selection)
-   * to the LLM. Returns an answer to display, or an edit to confirm.
-   * Abortable via `taskId`; a cancelled call rejects.
-   *
-   * `history` is the note's prior thread as chat turns
-   * (`historyForAsk`) so a follow-up is answered in context; omitted or
-   * `[]` reproduces the old one-shot behaviour.
-   */
-  askChat(
-    context: ActionContext,
-    question: string,
-    taskId?: string,
-    history?: ChatMessage[],
-  ): Promise<AskOutcome>;
-
-  /**
    * Aborts a running generation. `taskId` is minted by the **renderer**
    * (`crypto.randomUUID`) and passed into the call being started, because
    * the UI has to be able to offer Cancel before that call returns.
@@ -475,26 +433,11 @@ export interface DreyApi {
    *
    * This is why `/chat/completions` carries no timeout: a local model can
    * legitimately think for minutes, so the user decides when waiting is
-   * over, not a constant (`electron/llm-tasks.ts`).
+   * over, not a constant (`electron/llm-tasks.ts`). The registry is base
+   * even after the assistant conversion (ADR-0044 stage 7): any surface
+   * that passed a `taskId` can cancel it.
    */
   cancelLlmTask(taskId: string): Promise<boolean>;
-
-  /**
-   * The note assistant's sidecar thread for `notePath`
-   * (`shared/chat-thread.ts`). Resolves to an empty thread when no sidecar
-   * file exists yet -- "no thread" is a normal state, not an error.
-   */
-  readChatThread(notePath: string): Promise<ChatThread>;
-
-  /** Writes the sidecar thread back. Rejects only on a filesystem error. */
-  writeChatThread(thread: ChatThread): Promise<void>;
-
-  /**
-   * Summarises a note for the assistant panel's first card, using the
-   * `note-summary` built-in template's prompt. Rejects when LLM features
-   * are off or the endpoint is unreachable -- the panel shows the message.
-   */
-  summarizeNote(context: ActionContext, taskId?: string): Promise<string>;
 
   /**
    * Checks `words` against the active dictionary and returns only the ones

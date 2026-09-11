@@ -1,10 +1,10 @@
 import { ipcMain } from 'electron';
 import { IPC_CHANNELS } from '../../shared/ipc-api';
-import type { ActionRunner } from '../llm';
+import type { TagSuggester } from '../llm';
 import type { PluginHost } from '../plugin-host';
 
 export interface QueryHandlerDeps {
-  actionRunner: ActionRunner;
+  tagSuggester: TagSuggester;
   /** The tags feature's vocabulary comes from whichever plugin registered it. */
   pluginHost: PluginHost;
 }
@@ -13,10 +13,11 @@ export interface QueryHandlerDeps {
  * Read-side index IPC: the LLM-backed `tags:suggest` (the drawer's
  * Autotag). The suggestion's vocabulary comes from the section-search
  * provider -- the Tags plugin -- and the Autotag stays a base surface
- * because it writes into the entry drawer's draft. (The whole-vault task
- * list moved to the Tasks plugin, `tasks:list` -> `plugin:invoke`.)
+ * because it writes into the entry drawer's draft (ADR-0044 stage 7: the
+ * engine moved to the assistant plugin, the Autotag did not — it is a
+ * tags/drawer feature on base transport).
  */
-export function registerQueryHandlers({ actionRunner, pluginHost }: QueryHandlerDeps): void {
+export function registerQueryHandlers({ tagSuggester, pluginHost }: QueryHandlerDeps): void {
   ipcMain.handle(
     IPC_CHANNELS.tagSuggest,
     (_event, entryText: string, taskId?: string): Promise<string[]> => {
@@ -24,7 +25,7 @@ export function registerQueryHandlers({ actionRunner, pluginHost }: QueryHandler
       if (provider === null) {
         return Promise.reject(new Error('Tag suggestions need the Tags plugin to be enabled.'));
       }
-      return actionRunner.suggestTags(
+      return tagSuggester.suggest(
         entryText,
         provider.vocabulary().map((entry) => entry.tag),
         taskId,

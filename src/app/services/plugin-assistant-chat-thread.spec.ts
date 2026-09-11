@@ -6,7 +6,10 @@ import {
   parseChatThread,
   serializeChatThread,
   sidecarPathFor,
-} from '../../../shared/chat-thread';
+// The sidecar thread model moved into the assistant plugin (ADR-0044
+// stage 7); the Angular runner ignores `plugins/**` sources, so plugin
+// specs live under `src/app/services/` and import the plugin sources.
+} from '../../../plugins/assistant/shared/chat-thread';
 
 describe('sidecarPathFor', () => {
   it('hides the sidecar next to its note', () => {

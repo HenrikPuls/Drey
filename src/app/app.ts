@@ -4,10 +4,8 @@ import { ImageLightbox } from './image-viewer';
 import { ConfirmationDialog } from './confirmation-dialog/confirmation-dialog';
 import { BrowserViewService } from './browser';
 import { SessionService } from './session';
-import { ActionsService } from './llm';
 import { AppearanceService } from './services/appearance.service';
 import { ThemeService } from './services/theme.service';
-import { AssistantService } from './assistant';
 import { DailyNoteService } from './vault';
 import { EditorService } from './services/editor.service';
 import { DropGuardService } from './services/drop-guard.service';
@@ -77,8 +75,6 @@ export class App {
   constructor() {
     // Subscribe to the quick-capture hotkey for the app's lifetime.
     inject(DailyNoteService).start();
-    // Instantiate so its effect drains on-save Action outcomes (ADR-0011).
-    inject(ActionsService);
     // Instantiate at startup so its global Ctrl+wheel guard is installed
     // even before the first document (and its editor) opens (ADR-0015).
     inject(EditorZoomService);
@@ -90,8 +86,6 @@ export class App {
 
     // Install the window-level drag/drop navigation guard (ADR-0027).
     inject(DropGuardService);
-    // Instantiate so the assistant panel reacts to the active note.
-    inject(AssistantService);
     // Instantiate so the selected theme's shell palette is applied on
     // startup and kept in sync (the editor swaps its own CM theme).
     inject(ThemeService);

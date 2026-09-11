@@ -12,9 +12,15 @@
  * Parsing is defensive in the same style as `normalizeAppConfig`: a
  * hand-edited or half-written file degrades to an empty thread rather than
  * throwing, because the assistant panel must still open.
+ *
+ * Lives in the assistant plugin since ADR-0044 stage 7 (both of its
+ * consumers — the sidecar store in the plugin main and the panel in the
+ * plugin renderer — are plugin-side now). The `ChatMessage` import is
+ * type-only from the app's `shared/llm`, so it is erased in both compile
+ * targets and the file stays runtime-self-contained.
  */
 
-import type { ChatMessage } from './llm';
+import type { ChatMessage } from '../../../shared/llm';
 
 /** Who produced a card. `summary` is the automatic note summary. */
 export type ChatCardRole = 'summary' | 'question' | 'answer';

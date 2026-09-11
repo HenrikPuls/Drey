@@ -14,4 +14,3 @@ export {
   type DiscoveryInput,
 } from './plugin-discovery';
 export { PluginConfigStore } from './plugin-config-store';
-export { registerBaseSaveHooks } from './base-adapters';

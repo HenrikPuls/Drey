@@ -1,7 +1,6 @@
 import { Type } from '@angular/core';
 import type { WidgetCapability } from '../widgets';
 import type { DockSide } from './dock.service';
-import { AssistantPanel } from './panels/assistant-panel';
 import { CalendarPanel } from './panels/calendar-panel';
 import { EntryPanel } from './panels/entry-panel';
 import { FilesPanel } from './panels/files-panel';
@@ -93,7 +92,8 @@ export const CORE_WIDGETS: readonly WidgetDescriptor[] = [
   },
   // `tasks` and `search` were core widgets until the ADR-0044 conversions;
   // the Tasks and Tags plugins register them at bootstrap through the same
-  // runtime registry, keeping the ids (and so every persisted layout).
+  // runtime registry, keeping the ids (and so every persisted layout). The
+  // `assistant` widget (right dock, flush) joined them in stage 7.
   {
     id: 'windows',
     title: 'Open windows',
@@ -101,17 +101,6 @@ export const CORE_WIDGETS: readonly WidgetDescriptor[] = [
     defaultDock: 'left',
     defaultOpen: true,
     defaultFlex: 150,
-    removable: true,
-    capabilities: ['active-document'],
-  },
-  {
-    id: 'assistant',
-    title: 'Assistant',
-    component: AssistantPanel,
-    defaultDock: 'right',
-    defaultOpen: true,
-    defaultFlex: 100,
-    flush: true,
     removable: true,
     capabilities: ['active-document'],
   },

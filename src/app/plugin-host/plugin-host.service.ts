@@ -192,9 +192,9 @@ export class PluginHostService {
    * event kind; each fires only when its own value changed.
    * `buffer-changed` is debounced per path — per-keystroke plugin callbacks
    * would make every plugin a perf hazard (ADR-0044). `pending-actions` is
-   * deliberately NOT synthesized yet: the queue is drained by
-   * `ActionsService`, and a second consumer would steal from it (stage 7
-   * owns that handover).
+   * a **handover**: the effect consumes the save pipeline's queue and fires
+   * it once, so the listening plugins own the outcomes afterwards (the
+   * assistant plugin drains them into the confirmation dialog).
    */
   private synthesizeDocumentEvents(): void {
     let lastPath = this.editor.activePath();
@@ -237,6 +237,13 @@ export class PluginHostService {
       if (path !== null && dirty !== lastDirty) {
         lastDirty = dirty;
         this.emitDocumentEvent({ type: 'dirty-changed', path, dirty });
+      }
+    });
+
+    effect(() => {
+      if (this.editor.pendingActions().length > 0) {
+        const actions = this.editor.consumePendingActions();
+        this.emitDocumentEvent({ type: 'pending-actions', actions });
       }
     });
   }

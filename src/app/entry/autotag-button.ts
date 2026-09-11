@@ -1,6 +1,5 @@
 import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
 import { EntryDraftService } from './entry-draft.service';
-import { LlmTaskService } from '../llm';
 import { Icon } from '../icons/icon';
 
 /**
@@ -49,7 +48,6 @@ import { Icon } from '../icons/icon';
 })
 export class AutotagButton {
   private readonly draft = inject(EntryDraftService);
-  private readonly llmTasks = inject(LlmTaskService);
 
   protected readonly busy = signal(false);
   protected readonly error = signal<string | null>(null);
@@ -70,10 +68,15 @@ export class AutotagButton {
     this.busy.set(true);
     this.error.set(null);
     try {
-      const { value } = await this.llmTasks.run('Suggesting tags', (taskId) =>
-        this.api!.suggestTags(text, taskId),
-      );
-      for (const tag of value) {
+      // The renderer mints the taskId (the cancel registry is base); the
+      // button shows no running label or Cancel, so the id is only plumbed
+      // through for symmetry with the other generation surfaces.
+      const taskId =
+        typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
+          ? crypto.randomUUID()
+          : `tag-${Date.now().toString(36)}`;
+      const tags = await this.api.suggestTags(text, taskId);
+      for (const tag of tags) {
         this.draft.addChip(tag);
       }
     } catch (err) {

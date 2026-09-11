@@ -44,9 +44,6 @@
 @if (editor.error(); as error) {
   <p class="err">{{ error }}</p>
 }
-@if (actions.message(); as message) {
-  <p class="err notice" (click)="actions.message.set(null)" title="Dismiss">{{ message }}</p>
-}
 
 @if (menuOpen()) {
   <div
@@ -101,19 +98,14 @@
       Save as…
     </button>
 
-    @if (settings.manualActions().length > 0) {
-      <div class="menu-sep" role="separator"></div>
-      @for (action of settings.manualActions(); track action.triggerId) {
-        <button
-          type="button"
-          role="menuitem"
-          [disabled]="actions.busy() !== null"
-          (click)="runAction(action.triggerId)"
-        >
-          <span class="tick"></span>
-          {{ actions.busy() === action.triggerId ? action.name + ' …' : action.name }}
-        </button>
-      }
+    <!-- Plugin-contributed rows (ADR-0044): the manual Actions live in the
+         assistant plugin since stage 7 and register through
+         `api.ui.registerMenuContributions(menu: 'editor-more')`. -->
+    @for (row of menuContributions.itemsForEditorMore(); track row.label) {
+      <button type="button" role="menuitem" (click)="closeMenu(); runContributedRow(row)">
+        <span class="tick"></span>
+        {{ row.label }}
+      </button>
     }
   </div>
 }

@@ -8,7 +8,12 @@ import { SettingsService } from './settings.service';
  * `normalizeAppConfig`, exactly like `AppConfigStore` does, so the tests
  * exercise the true round-trip shape.
  */
-function fakeApi(): { api: Partial<DreyApi>; stored: () => AppConfig; setCalls: () => number } {
+function fakeApi(): {
+  api: Partial<DreyApi>;
+  stored: () => AppConfig;
+  setCalls: () => number;
+  seed: (partial: Partial<AppConfig>) => void;
+} {
   let disk = normalizeAppConfig({});
   let calls = 0;
   return {
@@ -22,6 +27,9 @@ function fakeApi(): { api: Partial<DreyApi>; stored: () => AppConfig; setCalls: 
     },
     stored: () => disk,
     setCalls: () => calls,
+    seed: (partial) => {
+      disk = normalizeAppConfig(partial);
+    },
   };
 }
 
@@ -162,11 +170,20 @@ describe('SettingsService (draft model)', () => {
     let triggerId: string;
 
     beforeEach(async () => {
-      // No default triggers any more -- seed one and save it.
-      const templateId = service.addTemplate();
-      service.updateTemplate(templateId, { name: 'Reformat', prompt: 'tidy' });
-      service.addTrigger(templateId, 'manual');
-      await service.save();
+      // The Actions editing lives in the assistant plugin now; seed one
+      // manual trigger straight onto disk and re-read it.
+      harness.seed({
+        actions: {
+          templates: [
+            { id: 't1', name: 'Reformat', prompt: 'tidy', resultKind: 'document', builtin: null },
+          ],
+          triggers: [
+            { id: 'trigger:test', templateId: 't1', event: 'manual', confirm: true, enabled: true },
+          ],
+        },
+      });
+      await service.load();
+      service.openScreen();
       triggerId = service.config()!.actions.triggers[0].id;
     });
 

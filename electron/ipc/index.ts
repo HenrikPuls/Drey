@@ -7,9 +7,8 @@
 import { BrowserWindow } from 'electron';
 import { AppConfigStore } from '../app-config';
 import { BrowserViewManager } from '../browser';
-import { ChatStore } from '../chat-store';
 import { DailyNoteManager } from '../daily-note';
-import { ActionRunner, LlmDebugLog, LmStudioClient } from '../llm';
+import { LlmDebugLog, LlmTaskRegistry, LmStudioClient, TagSuggester } from '../llm';
 import { McpHttpTransport } from '../mcp';
 import { NoteManager } from '../note-manager';
 import { PluginHost } from '../plugin-host';
@@ -39,9 +38,9 @@ export interface IpcHandlerDeps {
   noteManager: NoteManager;
   appConfig: AppConfigStore;
   lmStudio: LmStudioClient;
-  actionRunner: ActionRunner;
+  llmTasks: LlmTaskRegistry;
+  tagSuggester: TagSuggester;
   llmDebug: LlmDebugLog;
-  chatStore: ChatStore;
   spellcheck: SpellcheckService;
   mcpHttp: McpHttpTransport;
   mcpWriteBridge: McpWriteBridge;

@@ -1,5 +1,4 @@
 import { Injectable, Signal, computed, inject, signal } from '@angular/core';
-import { AssistantService } from '../assistant';
 import { CalendarService } from '../calendar';
 import { EntryDraftService } from '../entry';
 import { EditorService } from '../services/editor.service';
@@ -54,7 +53,6 @@ export class WidgetRegistryService {
     // widget; a converted plugin brings its own `status()` callback.
     const calendar = inject(CalendarService);
     const editor = inject(EditorService);
-    const assistant = inject(AssistantService);
     const entryDraft = inject(EntryDraftService);
 
     const statusCallbacks: Record<WidgetId, (context: WidgetStatusContext) => string | null> = {
@@ -65,10 +63,6 @@ export class WidgetRegistryService {
           ? `${String(calendar.viewMonth() + 1).padStart(2, '0')}/${calendar.viewYear()}`
           : null,
       windows: () => String(editor.openDocs().length),
-      assistant: () => {
-        const p = assistant.notePath();
-        return p ? (p.split('/').pop() ?? null) : null;
-      },
       entry: () => (entryDraft.hasContent() ? 'unsent draft' : null),
     };
 

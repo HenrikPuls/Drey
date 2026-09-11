@@ -1,9 +1,6 @@
 import { Injectable, computed, inject, signal } from '@angular/core';
 import {
-  ActionEvent,
-  ActionTemplate,
   AppConfig,
-  AssistantConfig,
   BUILTIN_ENTRY_TEMPLATE_IDS,
   CLASSIC_ENTRY_PATTERN,
   CustomDictionary,
@@ -27,7 +24,6 @@ import {
   normalizeTheme,
   normalizeUiScale,
 } from '../../../shared/app-config';
-import { ResolvedAction, resolveActions } from '../../../shared/llm';
 import { deepEqual } from '../../../shared/deep-equal';
 import { LlmConnectionTest } from '../../../shared/ipc-api';
 
@@ -156,14 +152,6 @@ export class SettingsService {
     return config ? activeEntryPattern(config.entry) : CLASSIC_ENTRY_PATTERN;
   });
 
-  /** Manual-trigger actions, for the editor's run menu. Persisted config only. */
-  readonly manualActions = computed<ResolvedAction[]>(() => {
-    const config = this._config();
-    return config
-      ? resolveActions(config).filter((action) => action.enabled && action.event === 'manual')
-      : [];
-  });
-
   // LLM connection UI state (transient, not part of the config).
   readonly models = signal<string[]>([]);
   readonly modelsLoading = signal(false);
@@ -261,13 +249,7 @@ export class SettingsService {
     });
   }
 
-  // -- Assistant / spellcheck categories (draft) ---------------------------
-
-  patchAssistant(patch: Partial<AssistantConfig>): void {
-    this.mutate((config) => {
-      config.assistant = { ...config.assistant, ...patch };
-    });
-  }
+  // -- Spellcheck category (draft) ------------------------------------------
 
   patchMcp(patch: Partial<McpConfig>): void {
     this.mutate((config) => {
@@ -409,91 +391,6 @@ export class SettingsService {
     } finally {
       this.testing.set(false);
     }
-  }
-
-  // -- Actions category (draft) -------------------------------------------
-
-  addTrigger(templateId: string, event: ActionEvent): void {
-    this.mutate((config) => {
-      config.actions.triggers.push({
-        id: `trigger:${uid()}`,
-        templateId,
-        event,
-        confirm: true,
-        enabled: true,
-      });
-    });
-  }
-
-  removeTrigger(triggerId: string): void {
-    this.mutate((config) => {
-      config.actions.triggers = config.actions.triggers.filter((t) => t.id !== triggerId);
-    });
-  }
-
-  setTriggerConfirm(triggerId: string, confirm: boolean): void {
-    this.mutate((config) => {
-      const trigger = config.actions.triggers.find((t) => t.id === triggerId);
-      if (trigger) {
-        trigger.confirm = confirm;
-      }
-    });
-  }
-
-  setTriggerEnabled(triggerId: string, enabled: boolean): void {
-    this.mutate((config) => {
-      const trigger = config.actions.triggers.find((t) => t.id === triggerId);
-      if (trigger) {
-        trigger.enabled = enabled;
-      }
-    });
-  }
-
-  setTriggerEvent(triggerId: string, event: ActionEvent): void {
-    this.mutate((config) => {
-      const trigger = config.actions.triggers.find((t) => t.id === triggerId);
-      if (trigger) {
-        trigger.event = event;
-      }
-    });
-  }
-
-  /** Adds a blank user template and returns its id so the UI can open it for editing. */
-  addTemplate(): string {
-    const id = `template:${uid()}`;
-    this.mutate((config) => {
-      config.actions.templates.push({
-        id,
-        name: 'New action',
-        prompt: '',
-        resultKind: 'document',
-        builtin: null,
-      });
-    });
-    return id;
-  }
-
-  updateTemplate(templateId: string, patch: Partial<Omit<ActionTemplate, 'id' | 'builtin'>>): void {
-    this.mutate((config) => {
-      const template = config.actions.templates.find((t) => t.id === templateId);
-      if (template) {
-        Object.assign(template, patch);
-      }
-    });
-  }
-
-  /** User templates only -- `normalizeAppConfig` re-injects a removed built-in. */
-  removeTemplate(templateId: string): void {
-    this.mutate((config) => {
-      const template = config.actions.templates.find((t) => t.id === templateId);
-      if (!template || template.builtin) {
-        return;
-      }
-      config.actions.templates = config.actions.templates.filter((t) => t.id !== templateId);
-      config.actions.triggers = config.actions.triggers.filter(
-        (trigger) => trigger.templateId !== templateId,
-      );
-    });
   }
 
   // -- "Add entry" templates (draft) -------------------------------------

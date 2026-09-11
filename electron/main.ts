@@ -13,16 +13,15 @@ import { pathToFileURL } from 'node:url';
 import { IPC_CHANNELS } from '../shared/ipc-api';
 import { UI_SCALE_FACTORS } from '../shared/app-config';
 import { AppConfigStore } from './app-config';
-import { ChatStore } from './chat-store';
 import { DailyNoteManager } from './daily-note';
 import { installMainProcessLogging, watchWebContents } from './logger';
 import { BrowserViewManager } from './browser';
-import { ActionRunner, LlmDebugLog, LlmTaskRegistry, LmStudioClient } from './llm';
+import { LlmDebugLog, LlmTaskRegistry, LmStudioClient, TagSuggester } from './llm';
 import { registerIpcHandlers, McpWriteBridge } from './ipc';
 import { McpHttpTransport, McpServer, VaultTools } from './mcp';
 import { attachContextMenu, buildApplicationMenu } from './menu';
 import { NoteManager } from './note-manager';
-import { PluginHost, registerBaseSaveHooks } from './plugin-host';
+import { PluginHost } from './plugin-host';
 import { SessionBackupStore } from './session';
 import { SpellcheckService } from './spellcheck';
 import { VaultManager } from './vault-manager';
@@ -454,11 +453,11 @@ if (!app.requestSingleInstanceLock()) {
         pluginHostRef?.emitVaultChange({ kind: 'write' });
       },
     );
-    const actionRunner = new ActionRunner(appConfig, lmStudio, llmTasks, vaultTools);
+    const tagSuggester = new TagSuggester(appConfig, lmStudio, llmTasks);
     // The plugin host activates main entries before the window exists and
     // before IPC registration — plugins register their method handlers in
     // activate(), and the window-created callback reaches them afterwards.
-    // It sits between the ActionRunner (its LLM facade needs it) and the
+    // It sits between the LLM facade (which plugins consume) and the
     // NoteManager (whose save hooks it carries).
     pluginHost = new PluginHost({
       // `__dirname` is `dist-electron/electron`, so the built-ins the plugin
@@ -471,7 +470,8 @@ if (!app.requestSingleInstanceLock()) {
       appConfig,
       lmStudio,
       llmTasks,
-      actionRunner,
+      vaultTools,
+      tagSuggester,
       llmDebug,
       log: (message, level) => {
         if (level === 'error') {
@@ -484,16 +484,13 @@ if (!app.requestSingleInstanceLock()) {
       },
     });
     await pluginHost.discoverAndActivate();
-    // Until the assistant plugin exists, its base behaviour (the on-save
-    // Actions) participates in the seams like a plugin would
-    // (ADR-0044 stage 7 removes this adapter).
+    // The on-save Actions are the assistant plugin's save hook since
+    // ADR-0044 stage 7 — the last base adapter is gone.
     const pluginHostRef = pluginHost;
-    registerBaseSaveHooks(pluginHostRef, { vault: vaultManager, actions: actionRunner });
     const noteManager = new NoteManager(vaultManager, {
       onNoteSaved: (hook) => pluginHostRef.save.onNoteSaved(hook),
       emitNoteSaved: (event) => pluginHostRef.emitNoteSaved(event),
     });
-    const chatStore = new ChatStore(vaultManager);
     const spellcheck = new SpellcheckService(appConfig);
     const mcpServer = new McpServer(vaultTools, app.getVersion());
     const mcpHttp = new McpHttpTransport(mcpServer);
@@ -525,9 +522,9 @@ if (!app.requestSingleInstanceLock()) {
       noteManager,
       appConfig,
       lmStudio,
-      actionRunner,
+      llmTasks,
+      tagSuggester,
       llmDebug,
-      chatStore,
       spellcheck,
       mcpHttp,
       mcpWriteBridge,

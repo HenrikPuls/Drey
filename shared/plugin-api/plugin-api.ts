@@ -15,13 +15,7 @@
  *   at runtime — a second copy composes wrong, silently. `import type` for
  *   CM types is fine.
  */
-import type {
-  ActionContext,
-  ActionOutcome,
-  AskOutcome,
-  ChatMessage,
-  LlmDebugEntry,
-} from '../llm';
+import type { ActionOutcome, ChatMessage, LlmDebugEntry } from '../llm';
 import type { AppConfig } from '../app-config';
 import type { TagSearchHit, TagSearchQuery } from './search-types';
 import type { TagEntry, VaultFileEntry } from '../ipc-api';
@@ -56,6 +50,10 @@ export interface ActiveDocument extends OpenDocumentInfo {
 /**
  * Document events. `buffer-changed` is debounced (~150 ms) by the host —
  * per-keystroke callbacks would make every plugin a perf hazard.
+ * `pending-actions` is a handover, not a broadcast: the host consumes the
+ * save pipeline's queue when it fires, so exactly the listening plugins
+ * own the outcomes afterwards (the assistant plugin drains them into the
+ * confirmation dialog).
  */
 export type DocumentChangeEvent =
   | { type: 'active-changed'; path: string | null }
@@ -76,6 +74,12 @@ export interface RewriteRequest {
   readonly summary?: string;
   /** `'document'` renders the aligned side-by-side diff, `'localized'` the line diff. */
   readonly previewStyle: 'localized' | 'document';
+  /**
+   * The Action trigger this rewrite came from, if any — enables the
+   * dialog's "don't ask again for this action" checkbox (it flips that
+   * trigger's `confirm` in the app config). Omit/null for ad-hoc rewrites.
+   */
+  readonly triggerId?: string | null;
 }
 
 /** Where a widget docks. Same three sides the shell has. */
@@ -144,7 +148,13 @@ export interface PluginDocKindContrib {
 
 /** One menu row. Either run a registered command or pass a closure. */
 export interface MenuContribution {
-  readonly menu: 'file' | 'edit' | 'selection' | 'view';
+  /**
+   * `file`/`edit`/`selection`/`view` are the titlebar menus;
+   * `editor-more` is the per-pane editor meta-bar `⋯` menu, where the
+   * rows render after "Save as…" (the manual Actions rows' home since
+   * the assistant conversion, ADR-0044 stage 7).
+   */
+  readonly menu: 'file' | 'edit' | 'selection' | 'view' | 'editor-more';
   readonly label: string;
   readonly hint?: string;
   readonly commandId?: string;
@@ -209,6 +219,13 @@ export interface PluginCommand {
 export interface PluginChatOptions {
   readonly temperature?: number;
   readonly taskId?: string;
+  /**
+   * Opts this ONE call into the vault tool loop (ADR-0021): the model may
+   * call `vault_search`/`vault_read`/`vault_write` before its final answer
+   * (a write still goes through the user's confirmation). Only meaningful
+   * when the base MCP switch is on.
+   */
+  readonly vaultTools?: boolean;
 }
 
 /**
@@ -310,15 +327,19 @@ export interface DreyPluginApi {
     on(event: string, listener: (data: unknown) => void): Unsubscribe;
   };
 
-  /** LLM facade; `null` while the master switch is off (the surface hides itself). */
+  /**
+   * LLM transport facade. Feature logic (actions, Ask, summaries) is
+   * plugin-side since ADR-0044 stage 7 — the assistant plugin exposes its
+   * own `backend.invoke` methods — so the facade is the completion call
+   * (with the optional vault tool loop), the master switch, task cancel
+   * and the debug feed.
+   */
   readonly llm: {
     enabled(): boolean;
     chat(messages: readonly ChatMessage[], options?: PluginChatOptions): Promise<string>;
-    ask(context: ActionContext, question: string, taskId?: string): Promise<AskOutcome>;
-    runAction(triggerId: string, context: ActionContext, taskId?: string): Promise<ActionOutcome>;
     cancelTask(taskId: string): Promise<boolean>;
     onDebugEntry(listener: (entry: LlmDebugEntry) => void): Unsubscribe;
-  } | null;
+  };
 
   readonly env: {
     /** True while an overlay is up or a dock/split drag runs (native surfaces must hide). */
