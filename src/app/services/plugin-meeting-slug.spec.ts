@@ -1,4 +1,4 @@
-import { slugifyMeetingTitle } from '../../../shared/meeting';
+import { slugifyMeetingTitle } from '../../../plugins/meeting/main/slug';
 
 describe('slugifyMeetingTitle', () => {
   it('lower-cases and hyphenates', () => {

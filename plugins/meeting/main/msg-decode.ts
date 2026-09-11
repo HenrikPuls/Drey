@@ -11,8 +11,8 @@
 
 import MsgReader from '@kenjiuno/msgreader';
 import type { FieldsData } from '@kenjiuno/msgreader';
-import type { MeetingPerson, ParsedMeeting } from '../../shared/meeting';
-import { formatDate, formatTimestamp } from '../../shared/timestamp';
+import type { MeetingPerson, ParsedMeeting } from './types';
+import { formatDate, formatTimestamp } from './timestamp';
 import { decodeIcs } from './ics-decode';
 import { findJoinUrl } from './join-url';
 

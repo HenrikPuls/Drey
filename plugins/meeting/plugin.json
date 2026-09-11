@@ -1,0 +1,11 @@
+{
+  "id": "meeting",
+  "name": "Meeting import",
+  "version": "1.0.0",
+  "apiVersion": 1,
+  "description": "Drag an .ics / .msg calendar invite onto the editor to insert a tagged meeting section (ADR-0041).",
+  "author": "Drey",
+  "main": "main/index.js",
+  "renderer": "renderer/index.js",
+  "permissions": ["documents", "main-process"]
+}

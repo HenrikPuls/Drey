@@ -1,18 +1,15 @@
 /**
  * Decodes a dropped / picked `.ics` or `.msg` invite into the Markdown
- * meeting section that gets inserted into the open note. Compute-only and
- * side-effect free apart from scaffolding `templates/meeting.md` on first
- * use — deliberately the same shape as `DailyNoteManager`, and kept out of
- * `VaultManager` for the same reason (template knowledge is not raw file
- * IO).
+ * meeting section that gets inserted into the open note. Ported from
+ * `electron/meeting/meeting-importer.ts` (ADR-0041); the raw fs + vault-path
+ * access became the plugin context's `vault.read` / `vault.write`.
  */
 
-import * as fsp from 'node:fs/promises';
-import * as path from 'node:path';
-import { splitFrontmatter } from '../../shared/frontmatter';
-import { renderMeetingSection, STARTER_MEETING_TEMPLATE } from '../../shared/meeting';
-import type { ParsedMeeting } from '../../shared/meeting';
-import { VaultManager } from '../vault-manager';
+import { splitFrontmatter } from '../../../shared/frontmatter';
+import type { MainPluginContext } from '../../../shared/plugin-api';
+import { renderMeetingSection } from './render';
+import { STARTER_MEETING_TEMPLATE } from './template';
+import type { ParsedMeeting } from './types';
 import { decodeIcs } from './ics-decode';
 import { decodeMsg } from './msg-decode';
 
@@ -23,7 +20,7 @@ const MEETING_TEMPLATE_FILE = 'meeting.md';
 const OLE2_MAGIC = [0xd0, 0xcf, 0x11, 0xe0, 0xa1, 0xb1, 0x1a, 0xe1];
 
 export class MeetingImporter {
-  constructor(private readonly vaultManager: VaultManager) {}
+  constructor(private readonly vault: MainPluginContext['vault']) {}
 
   /**
    * `bytes` + `filename` -> the ready-to-insert meeting section (no
@@ -38,18 +35,12 @@ export class MeetingImporter {
 
   /** Current `templates/meeting.md` (frontmatter stripped), scaffolding the starter on first use. */
   private async loadOrScaffoldTemplate(): Promise<string> {
-    const vaultRoot = this.vaultManager.getActiveVaultPath();
-    if (!vaultRoot) {
-      // No vault to read from / write to — render from the built-in default.
-      return stripFrontmatter(STARTER_MEETING_TEMPLATE);
-    }
-    const templatePath = path.join(vaultRoot, TEMPLATE_DIR, MEETING_TEMPLATE_FILE);
+    const templatePath = `${TEMPLATE_DIR}/${MEETING_TEMPLATE_FILE}`;
     try {
-      return stripFrontmatter(await fsp.readFile(templatePath, 'utf-8'));
+      return stripFrontmatter(await this.vault.read(templatePath));
     } catch {
       try {
-        await fsp.mkdir(path.dirname(templatePath), { recursive: true });
-        await fsp.writeFile(templatePath, STARTER_MEETING_TEMPLATE, 'utf-8');
+        await this.vault.write(templatePath, STARTER_MEETING_TEMPLATE);
       } catch {
         // A read-only vault still gets a rendered section from the default.
       }
@@ -64,7 +55,7 @@ function stripFrontmatter(template: string): string {
 }
 
 function parse(bytes: Uint8Array, filename: string): Promise<ParsedMeeting> {
-  const ext = path.extname(filename).toLowerCase();
+  const ext = filename.slice(filename.lastIndexOf('.')).toLowerCase();
   if (ext === '.msg' || (ext !== '.ics' && looksLikeOle2(bytes))) {
     return decodeMsg(bytes);
   }

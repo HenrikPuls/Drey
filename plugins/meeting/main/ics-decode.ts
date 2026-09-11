@@ -11,8 +11,8 @@
  * handful of members this file touches).
  */
 
-import type { MeetingPerson, ParsedMeeting } from '../../shared/meeting';
-import { formatDate, formatTimestamp } from '../../shared/timestamp';
+import type { MeetingPerson, ParsedMeeting } from './types';
+import { formatDate, formatTimestamp } from './timestamp';
 import { findJoinUrl } from './join-url';
 
 interface IcalTime {

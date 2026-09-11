@@ -1,4 +1,4 @@
-import { renderTemplate } from '../../../shared/meeting';
+import { renderTemplate } from '../../../plugins/meeting/main/template';
 
 describe('renderTemplate (meeting mini-evaluator)', () => {
   it('interpolates scalars and leaves missing keys empty', () => {

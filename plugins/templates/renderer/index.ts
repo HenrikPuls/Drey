@@ -3,8 +3,8 @@ import type {
   DreyPluginApi,
   PluginRendererModule,
 } from '../../../shared/plugin-api/renderer';
-import { TemplateLibrary, type TemplateCategory, type TemplateEntry } from './library';
-import { formatDate, formatDateTime, formatTime, stripFrontmatter, substitutePlaceholders } from './pure';
+import { TemplateLibrary, type TemplateCategory, type TemplateEntry } from './library.js';
+import { formatDate, formatDateTime, formatTime, stripFrontmatter, substitutePlaceholders } from './pure.js';
 
 /** The DataTransfer type template rows set on dragstart (drop side: our decoder). */
 const TEMPLATE_DT_TYPE = 'application/x-drey-template';

@@ -12,7 +12,7 @@ import tseslint from 'typescript-eslint';
  * directly.
  */
 
-const MODULES = ['llm', 'tags', 'tasks', 'mcp', 'browser', 'session', 'meeting', 'plugin-host'];
+const MODULES = ['llm', 'tags', 'tasks', 'mcp', 'browser', 'session', 'plugin-host'];
 
 /** Reaching into `shared/<mod>/` from anywhere by its `shared/`-qualified path. */
 const sharedModulePatterns = MODULES.map((mod) => ({
@@ -118,9 +118,6 @@ export default tseslint.config(
       'src/app/browser/**/*.ts',
       'electron/session/**/*.ts',
       'src/app/session/**/*.ts',
-      'electron/meeting/**/*.ts',
-      'shared/meeting/**/*.ts',
-      'src/app/meeting/**/*.ts',
       'src/app/tags/**/*.ts',
       'src/app/tasks/**/*.ts',
       'src/app/templates/**/*.ts',

@@ -11,7 +11,6 @@ import { ChatStore } from '../chat-store';
 import { DailyNoteManager } from '../daily-note';
 import { ActionRunner, LlmDebugLog, LmStudioClient } from '../llm';
 import { McpHttpTransport } from '../mcp';
-import { MeetingImporter } from '../meeting';
 import { NoteManager } from '../note-manager';
 import { PluginHost } from '../plugin-host';
 import { SessionBackupStore } from '../session';
@@ -25,7 +24,6 @@ import { registerConfigHandlers } from './config-handlers';
 import { registerLlmHandlers } from './llm-handlers';
 import { registerMcpHandlers } from './mcp-handlers';
 import { McpWriteBridge } from './mcp-write-bridge';
-import { registerMeetingHandlers } from './meeting-handlers';
 import { registerPluginHandlers } from './plugin-handlers';
 import { registerQueryHandlers } from './query-handlers';
 import { registerSessionHandlers } from './session-handlers';
@@ -41,7 +39,6 @@ export interface IpcHandlerDeps {
   vaultManager: VaultManager;
   dailyNotes: DailyNoteManager;
   noteManager: NoteManager;
-  meetingImporter: MeetingImporter;
   tagIndex: TagIndex;
   taskIndex: TaskIndex;
   appConfig: AppConfigStore;
@@ -67,6 +64,5 @@ export function registerIpcHandlers(deps: IpcHandlerDeps): void {
   registerConfigHandlers(deps);
   registerMcpHandlers(deps);
   registerSpellHandlers(deps);
-  registerMeetingHandlers(deps);
   registerPluginHandlers(deps);
 }

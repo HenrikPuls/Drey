@@ -1,4 +1,4 @@
-import { meetingWhen } from '../../../shared/meeting';
+import { meetingWhen } from '../../../plugins/meeting/main/when';
 
 describe('meetingWhen', () => {
   it('formats a same-day timed meeting', () => {

@@ -20,7 +20,6 @@ import { BrowserViewManager } from './browser';
 import { ActionRunner, LlmDebugLog, LlmTaskRegistry, LmStudioClient } from './llm';
 import { registerIpcHandlers, McpWriteBridge } from './ipc';
 import { McpHttpTransport, McpServer, VaultTools } from './mcp';
-import { MeetingImporter } from './meeting';
 import { attachContextMenu, buildApplicationMenu } from './menu';
 import { NoteManager } from './note-manager';
 import { PluginHost, registerBaseSaveHooks, registerBaseSearchProvider } from './plugin-host';
@@ -504,7 +503,6 @@ if (!app.requestSingleInstanceLock()) {
       onNoteSaved: (hook) => pluginHostRef.save.onNoteSaved(hook),
       emitNoteSaved: (event) => pluginHostRef.emitNoteSaved(event),
     });
-    const meetingImporter = new MeetingImporter(vaultManager);
     const chatStore = new ChatStore(vaultManager);
     const spellcheck = new SpellcheckService(appConfig);
     const mcpServer = new McpServer(vaultTools, app.getVersion());
@@ -536,7 +534,6 @@ if (!app.requestSingleInstanceLock()) {
       vaultManager,
       dailyNotes,
       noteManager,
-      meetingImporter,
       tagIndex,
       taskIndex,
       appConfig,

@@ -30,7 +30,9 @@
                 "output": "assets"
               }
             ],
-            "styles": ["src/styles.css"],
+            "styles": [
+              "src/styles.css"
+            ],
             "allowedCommonJsDependencies": [
               "cytoscape-cose-bilkent",
               "cytoscape-fcose",
@@ -81,7 +83,13 @@
           "defaultConfiguration": "development"
         },
         "test": {
-          "builder": "@angular/build:unit-test"
+          "builder": "@angular/build:unit-test",
+          "options": {
+            "include": [
+              "src/**/*.spec.ts",
+              "plugins/**/*.spec.ts"
+            ]
+          }
         }
       }
     }

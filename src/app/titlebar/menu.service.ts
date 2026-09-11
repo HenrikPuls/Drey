@@ -15,7 +15,6 @@ import {
   MenuContributionsService,
   type ContributableMenu,
 } from '../plugin-host/menu-contributions.service';
-import { MeetingService } from '../meeting';
 import { PaneService } from '../panes';
 import { EditorService } from '../services/editor.service';
 import { EditTargetService } from '../services/edit-target.service';
@@ -71,7 +70,6 @@ export class MenuService {
   private readonly editTarget = inject(EditTargetService);
   private readonly settings = inject(SettingsService);
   private readonly vault = inject(VaultService);
-  private readonly meeting = inject(MeetingService);
   private readonly widgets = inject(WidgetRegistryService);
   private readonly contributions = inject(MenuContributionsService);
 
@@ -237,17 +235,6 @@ export class MenuService {
             void this.vault.selectVault();
             this.dock.openAndExpand('files');
           },
-        },
-        {
-          kind: 'item',
-          label: 'Import meeting …',
-          run:
-            this.editor.activePath() !== null
-              ? () => {
-                  this.close();
-                  void this.meeting.importIntoNote();
-                }
-              : undefined,
         },
         SEP,
         { kind: 'item', label: 'Save', hint: 'Ctrl S', run: () => this.run('note.save') },

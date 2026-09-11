@@ -5,7 +5,7 @@ import {
   formatTime,
   stripFrontmatter,
   substitutePlaceholders,
-} from './pure';
+} from './pure.js';
 
 /**
  * The template library (ADR-0029), plugin-side: the configured vault folder
