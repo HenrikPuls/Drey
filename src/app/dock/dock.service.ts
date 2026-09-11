@@ -118,11 +118,10 @@ export class DockService {
     // it changes (persisted config, so this fires on Save and on load).
     effect(() => this.reconcileEnabled(this.settings.widgetsDisabled()));
 
-    // The registry is runtime (ADR-0044): a plugin widget may register after
-    // this service was first injected (the plugin API factory injects
-    // DockService during the app initializer itself). Whatever the
-    // construction order, converge: every registered widget gets a dock slot
-    // (or keeps its hidden one) and default flex/open values.
+    // The registry is runtime (ADR-0044): a plugin widget could register
+    // after this service was first injected. Whatever the construction
+    // order, converge: every registered widget gets a dock slot (or keeps
+    // its hidden one) and default flex/open values.
     effect(() => this.absorbRegistry(this.registry.widgets()));
   }
 

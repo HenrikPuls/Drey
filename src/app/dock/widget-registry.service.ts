@@ -2,7 +2,6 @@ import { Injectable, Signal, computed, inject, signal } from '@angular/core';
 import { AssistantService } from '../assistant';
 import { CalendarService } from '../calendar';
 import { EntryDraftService } from '../entry';
-import { TaskService } from '../tasks';
 import { EditorService } from '../services/editor.service';
 import type { PluginWidgetContrib, Unsubscribe } from '../../../shared/plugin-api/renderer';
 import { CORE_WIDGETS, type WidgetDescriptor, type WidgetId, type WidgetStatusContext } from './widget-registry';
@@ -21,6 +20,19 @@ import { CORE_WIDGETS, type WidgetDescriptor, type WidgetId, type WidgetStatusCo
 export class WidgetRegistryService {
   private readonly pluginWidgets = signal<readonly WidgetDescriptor[]>([]);
   private readonly contribs = new Map<WidgetId, PluginWidgetContrib>();
+
+  /**
+   * Bumped whenever an event plugins react to lands (document changes,
+   * vault pushes). A plugin's `status()` reads plain plugin state -- no
+   * signal the shell could track -- so the dock reads this tick instead:
+   * every bump re-renders the headers, re-evaluating every status callback
+   * (core statuses re-read their services the same way).
+   */
+  private readonly statusTick = signal(0);
+  readonly statusVersion = this.statusTick.asReadonly();
+  bumpStatusTick(): void {
+    this.statusTick.update((v) => v + 1);
+  }
 
   /** All registerable widgets, core first, then plugin contributions in registration order. */
   readonly widgets: Signal<readonly WidgetDescriptor[]> = computed(() => [
@@ -41,7 +53,6 @@ export class WidgetRegistryService {
     // shrinking place) that knows which feature service backs which core
     // widget; a converted plugin brings its own `status()` callback.
     const calendar = inject(CalendarService);
-    const tasks = inject(TaskService);
     const editor = inject(EditorService);
     const assistant = inject(AssistantService);
     const entryDraft = inject(EntryDraftService);
@@ -53,10 +64,6 @@ export class WidgetRegistryService {
         collapsed
           ? `${String(calendar.viewMonth() + 1).padStart(2, '0')}/${calendar.viewYear()}`
           : null,
-      tasks: () => {
-        const open = tasks.openCount();
-        return open > 0 ? `${open} open` : null;
-      },
       windows: () => String(editor.openDocs().length),
       assistant: () => {
         const p = assistant.notePath();

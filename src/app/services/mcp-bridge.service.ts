@@ -1,7 +1,6 @@
 import { Injectable, inject } from '@angular/core';
 import { McpWriteRequest } from '../../../shared/ipc-api';
 import { pickPreviewStyle } from '../../../shared/text-diff';
-import { TaskService } from '../tasks';
 import { ConfirmationService } from '../llm';
 import { VaultService } from '../vault';
 
@@ -12,8 +11,9 @@ import { VaultService } from '../vault';
  *    `McpWriteRequest`; it goes through the shared confirmation diff and
  *    the decision is sent back (`resolveMcpWrite`). YOLO mode skips this
  *    entirely -- the main process never sends the request.
- *  - after any MCP write lands, the tag index / file tree are refreshed
- *    (there is no file watcher, ADR-0018).
+ *  - after any MCP write lands, the file tree is refreshed (there is no
+ *    file watcher, ADR-0018); the plugins refresh from the same push on
+ *    their own `api.vault.onChanged`.
  *
  * Instantiated once from `App`; the subscriptions live for the app's
  * lifetime, so there is no teardown.
@@ -21,7 +21,6 @@ import { VaultService } from '../vault';
 @Injectable({ providedIn: 'root' })
 export class McpBridgeService {
   private readonly confirmation = inject(ConfirmationService);
-  private readonly taskList = inject(TaskService);
   private readonly vault = inject(VaultService);
 
   private started = false;
@@ -34,7 +33,6 @@ export class McpBridgeService {
 
     window.dreyApi.onMcpWriteRequest?.((request) => void this.confirm(request));
     window.dreyApi.onVaultChanged?.(() => {
-            void this.taskList.refresh();
       void this.vault.refresh();
     });
   }

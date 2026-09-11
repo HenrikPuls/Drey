@@ -9,14 +9,12 @@ import {
 import { DailyNoteManager } from '../daily-note';
 import { NoteManager } from '../note-manager';
 import { PluginHost } from '../plugin-host';
-import { TaskIndex } from '../tasks';
 import { VaultManager } from '../vault-manager';
 
 export interface VaultHandlerDeps {
   vaultManager: VaultManager;
   dailyNotes: DailyNoteManager;
   noteManager: NoteManager;
-  taskIndex: TaskIndex;
   pluginHost: PluginHost;
 }
 
@@ -26,18 +24,17 @@ export interface VaultHandlerDeps {
  * daily-note content builder, and `note:save`.
  *
  * There is no file watcher (ADR-0018): any op that can move `.md` content in
- * or out of the tag / task index scope rebuilds both indexes here, so the
- * renderer sees a consistent picture on its next refresh.
+ * or out of the plugins' index scope emits a vault-change event, so the
+ * plugins rebuild and the renderer sees a consistent picture on its next
+ * refresh.
  */
 export function registerVaultHandlers({
   vaultManager,
   dailyNotes,
   noteManager,
-  taskIndex,
   pluginHost,
 }: VaultHandlerDeps): void {
   const rebuildIndexes = async (): Promise<void> => {
-    await taskIndex.rebuild();
     // Plugins re-read whatever they cache on any index-affecting change.
     pluginHost.emitVaultChange({ kind: 'refresh' });
   };

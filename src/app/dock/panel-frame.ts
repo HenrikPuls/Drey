@@ -4,12 +4,10 @@ import {
   DestroyRef,
   ElementRef,
   OnInit,
-  afterNextRender,
   computed,
   effect,
   inject,
   input,
-  signal,
   viewChild,
 } from '@angular/core';
 import { NgTemplateOutlet } from '@angular/common';
@@ -70,23 +68,21 @@ export class PanelFrame implements OnInit {
   protected readonly headerActionsMount = computed(
     () => this.registry.descriptor(this.panelId())?.headerActionsMount,
   );
-  private readonly pluginActionsEl = signal<HTMLElement | null>(null);
   private readonly pluginActionsView = viewChild<ElementRef<HTMLDivElement>>('pluginActions');
   protected readonly isDragging = computed(() => this.dock.dragging() === this.panelId());
 
   constructor() {
     inject(DestroyRef).onDestroy(() => this.dock.unregisterPanelEl(this.panelId(), this.el));
     // Mount a plugin widget's header controls once their container exists.
-    // The effect re-runs when the panel id changes or the container
-    // re-appears after a collapse/expand cycle (the old container, and the
-    // controls mounted into it, go away with the `@if`); `onCleanup`
-    // disposes the previous mount so listeners never pile up.
-    afterNextRender(() => {
-      this.pluginActionsEl.set(this.pluginActionsView()?.nativeElement ?? null);
-    });
+    // Reading the signal-based `viewChild` INSIDE the effect tracks it: the
+    // effect (re-)runs when the panel id changes or the container re-appears
+    // after a collapse/expand cycle (a panel that starts collapsed mounts
+    // its controls on first expand -- the old container, and the controls
+    // mounted into it, go away with the `@if`); `onCleanup` disposes the
+    // previous mount so listeners never pile up.
     effect((onCleanup) => {
       const mount = this.headerActionsMount();
-      const host = this.pluginActionsEl();
+      const host = this.pluginActionsView()?.nativeElement ?? null;
       if (mount === undefined || host === null) {
         return;
       }

@@ -28,6 +28,13 @@ interface DreyFixtures {
    */
   appConfig: Record<string, unknown>;
   /**
+   * Files written into `vaultDir` before the app launches (`relativePath ->
+   * content`), so they are on disk for the startup vault scan -- plugin
+   * indexes (tasks/tags) and the file tree see them from the first build,
+   * with no in-app refresh needed.
+   */
+  seedVault: Record<string, string>;
+  /**
    * A plugin directory exposed to the app via `DREY_EXTRA_PLUGIN_DIR`
    * (ADR-0044), or null. `plugins.spec.ts` writes a self-contained plugin
    * (plain JS, no build step) into it before launch.
@@ -55,13 +62,22 @@ export const test = base.extend<DreyFixtures>({
 
   appConfig: [{}, { option: true }],
 
+  seedVault: [{}, { option: true }],
+
   extraPluginDir: [null, { option: true }],
 
-  electronApp: async ({ vaultDir, appConfig, extraPluginDir }, use, testInfo) => {
+  electronApp: async ({ vaultDir, appConfig, seedVault, extraPluginDir }, use, testInfo) => {
     if (!fs.existsSync(electronMain)) {
       throw new Error(
         `${electronMain} is missing -- run \`npm run build\` (or \`npm run e2e\`) before the E2E suite.`,
       );
+    }
+
+    // Pre-launch vault seeding (see the `seedVault` fixture docstring).
+    for (const [relativePath, content] of Object.entries(seedVault)) {
+      const target = path.join(vaultDir, relativePath);
+      fs.mkdirSync(path.dirname(target), { recursive: true });
+      fs.writeFileSync(target, content);
     }
 
     const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'drey-e2e-'));

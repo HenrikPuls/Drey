@@ -1,4 +1,11 @@
-import { scanTasks, setDoneOnLine } from '../../../shared/tasks';
+import { scanTasks, setDoneOnLine } from '../../../plugins/tasks/shared/tasks';
+
+/**
+ * The Tasks plugin's pure scanner (`plugins/tasks/shared/tasks`), relocated
+ * from `src/app/tasks/` at the ADR-0044 stage-6 conversion: the ng test
+ * runner ignores `plugins/**`, so the spec lives here and imports the
+ * plugin source directly.
+ */
 
 describe('scanTasks', () => {
   it('finds checkbox tasks with their done-state and text', () => {

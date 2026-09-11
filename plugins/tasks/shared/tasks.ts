@@ -1,16 +1,15 @@
 /**
- * Pure task scanning + line editing, shared by the main-process `TaskIndex`
- * and the renderer's `TaskService` (so an on-disk task and one read from an
- * open buffer are shaped identically).
+ * Pure task scanning + line editing, shared by the plugin's main-side
+ * `TaskIndex` and its renderer panel (so an on-disk task and one read from
+ * an open buffer are shaped identically).
  *
  * Two kinds of task line are recognised:
  *
  *  - **checkbox** -- a GFM task list item (`- [ ]` / `- [x]`, also `*` / `+`
  *    bullets, any indentation). `done` is the `[x]`.
- *  - **tag** -- any line carrying the reserved `#task` marker (see
- *    `shared/tags/tags.ts`: `#task` and its `#task/*` subtree are structural,
- *    never ordinary tags). A tag task with no checkbox is `done` when the
- *    line also carries `#task/done`.
+ *  - **tag** -- any line carrying the reserved `#task` marker (`#task` and
+ *    its `#task/*` subtree are structural, never ordinary tags). A tag task
+ *    with no checkbox is `done` when the line also carries `#task/done`.
  *
  * A line that is *both* a checkbox and `#task` is reported once, as
  * `kind: 'checkbox'`, with `done` taken from the box.
@@ -19,7 +18,7 @@
  * written inside an example does not become a real task.
  */
 
-import { extractInlineTags, splitSections } from './tag-support';
+import { extractInlineTags, splitSections } from './support.js';
 
 export type TaskKind = 'checkbox' | 'tag';
 

@@ -1,6 +1,13 @@
-:host {
-  /* Fills the (flush) PanelFrame body as a flex column: the filter stays
-     pinned, only `.list` scrolls -- no second scrollbar on the panel. */
+/*
+ * Tasks plugin styles (ADR-0044: plugin CSS is global — every rule is
+ * scoped under the plugin's own root classes `.tasks-panel` /
+ * `.tasks-hdr`).
+ */
+
+/* ---- body: fills the (flush) PanelFrame as a flex column; the filter
+        stays pinned, only the list scrolls -- no second scrollbar. ---- */
+
+.tasks-panel {
   flex: 1;
   min-height: 0;
   display: flex;
@@ -8,15 +15,30 @@
   padding: 8px 12px 12px;
 }
 
-/* ---- header-strip controls (rendered in the PanelFrame header, req-7) ---- */
+.tasks-panel .filter {
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  margin-bottom: 8px;
+}
 
-.hdr {
+.tasks-panel .content {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+/* ---- header-strip controls (rendered in the PanelFrame header) ---- */
+
+.tasks-hdr {
   display: flex;
   align-items: center;
   gap: 5px;
 }
 
-.hdr .seg {
+.tasks-hdr .seg {
   display: inline-flex;
   gap: 1px;
   padding: 1px;
@@ -25,7 +47,7 @@
   border-radius: var(--radius-sm);
 }
 
-.hdr .seg button {
+.tasks-hdr .seg button {
   height: 18px;
   padding: 0 6px;
   border: 0;
@@ -38,17 +60,17 @@
   cursor: pointer;
 }
 
-.hdr .seg button:hover:not(.on) {
+.tasks-hdr .seg button:hover:not(.on) {
   color: var(--text-2);
 }
 
-.hdr .seg button.on {
+.tasks-hdr .seg button.on {
   /* A quiet accent tint, not a solid fill -- matches the kind toggles. */
   background: var(--accent-surface);
   color: var(--accent-text);
 }
 
-.hdr .tgl {
+.tasks-hdr .tgl {
   height: 20px;
   min-width: 20px;
   padding: 0 5px;
@@ -62,27 +84,19 @@
   cursor: pointer;
 }
 
-.hdr .tgl:hover:not(.on) {
+.tasks-hdr .tgl:hover:not(.on) {
   color: var(--text-2);
 }
 
-.hdr .tgl.on {
+.tasks-hdr .tgl.on {
   background: var(--accent-surface);
   border-color: var(--accent-quote);
   color: var(--accent-text);
 }
 
-/* ---- body: free-text + tag filter (req-8) ---- */
+/* ---- body: free-text + tag filter ---- */
 
-.filter {
-  flex: none;
-  display: flex;
-  flex-direction: column;
-  gap: 5px;
-  margin-bottom: 8px;
-}
-
-.chip-field {
+.tasks-panel .chip-field {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
@@ -94,7 +108,7 @@
   border-radius: var(--radius);
 }
 
-.chip {
+.tasks-panel .chip {
   display: inline-flex;
   align-items: center;
   gap: 4px;
@@ -108,7 +122,7 @@
   white-space: nowrap;
 }
 
-.chip .x {
+.tasks-panel .chip .x {
   display: flex;
   align-items: center;
   justify-content: center;
@@ -124,12 +138,12 @@
   opacity: 0.65;
 }
 
-.chip .x:hover {
+.tasks-panel .chip .x:hover {
   opacity: 1;
   background: var(--hover-bg-loud);
 }
 
-.chip-input {
+.tasks-panel .chip-input {
   flex: 1;
   min-width: 60px;
   border: 0;
@@ -140,7 +154,7 @@
   padding: 1px 0;
 }
 
-.text-input {
+.tasks-panel .text-input {
   height: 28px;
   background: var(--bg-search);
   border: 1px solid var(--field-border);
@@ -152,12 +166,12 @@
   outline: none;
 }
 
-.text-input:focus,
-.chip-field:focus-within {
+.tasks-panel .text-input:focus,
+.tasks-panel .chip-field:focus-within {
   border-color: var(--accent-ring);
 }
 
-.clear {
+.tasks-panel .clear {
   align-self: flex-start;
   height: 20px;
   padding: 0 8px;
@@ -169,23 +183,21 @@
   cursor: pointer;
 }
 
-.clear:hover {
+.tasks-panel .clear:hover {
   background: var(--hover-bg-strong);
   color: var(--text-primary);
 }
 
 /* ---- list ---- */
 
-.empty {
+.tasks-panel .empty {
   flex: none;
   margin: 6px 2px;
   font-size: 11.5px;
   color: var(--text-6);
 }
 
-.list {
-  /* Takes the remaining panel height and scrolls on its own -- the panel
-     body itself does not (widget is `flush`). */
+.tasks-panel .list {
   flex: 1;
   min-height: 0;
   display: flex;
@@ -195,7 +207,7 @@
   overflow-x: hidden;
 }
 
-.group {
+.tasks-panel .group {
   flex: 0 0 auto;
   margin: 8px 0 2px;
   font-family: var(--font-mono);
@@ -206,11 +218,11 @@
   overflow-wrap: anywhere;
 }
 
-.group:first-child {
+.tasks-panel .group:first-child {
   margin-top: 0;
 }
 
-.task {
+.tasks-panel .task {
   flex: 0 0 auto;
   display: flex;
   align-items: flex-start;
@@ -219,11 +231,11 @@
   border-radius: var(--radius);
 }
 
-.task:hover {
+.tasks-panel .task:hover {
   background: var(--hover-bg);
 }
 
-.task .box {
+.tasks-panel .task .box {
   flex: none;
   width: 13px;
   height: 13px;
@@ -232,7 +244,7 @@
   cursor: pointer;
 }
 
-.task .body {
+.tasks-panel .task .body {
   flex: 1;
   min-width: 0;
   display: flex;
@@ -247,7 +259,7 @@
   cursor: pointer;
 }
 
-.task .text {
+.tasks-panel .task .text {
   font-size: 12px;
   line-height: 1.4;
   color: var(--text-2);
@@ -257,12 +269,12 @@
   overflow-wrap: anywhere;
 }
 
-.task.done .text {
+.tasks-panel .task.done .text {
   text-decoration: line-through;
   color: var(--text-6);
 }
 
-.task .meta {
+.tasks-panel .task .meta {
   display: flex;
   align-items: center;
   gap: 6px;
@@ -274,17 +286,17 @@
   white-space: nowrap;
 }
 
-.task .meta .kind {
+.tasks-panel .task .meta .kind {
   flex: none;
   color: var(--accent-text);
 }
 
-.task .meta .heading {
+.tasks-panel .task .meta .heading {
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 
-.task .meta .loc {
+.tasks-panel .task .meta .loc {
   flex: none;
 }

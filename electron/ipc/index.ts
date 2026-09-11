@@ -15,7 +15,6 @@ import { NoteManager } from '../note-manager';
 import { PluginHost } from '../plugin-host';
 import { SessionBackupStore } from '../session';
 import { SpellcheckService } from '../spellcheck';
-import { TaskIndex } from '../tasks';
 import { VaultManager } from '../vault-manager';
 import { registerAppHandlers } from './app-handlers';
 import { registerBrowserHandlers } from './browser-handlers';
@@ -38,7 +37,6 @@ export interface IpcHandlerDeps {
   vaultManager: VaultManager;
   dailyNotes: DailyNoteManager;
   noteManager: NoteManager;
-  taskIndex: TaskIndex;
   appConfig: AppConfigStore;
   lmStudio: LmStudioClient;
   actionRunner: ActionRunner;

@@ -111,6 +111,10 @@ export class Dock implements OnInit {
 
   /** The value shown in the panel header, right before the grip. */
   protected statusFor(id: PanelId): string | null {
+    // Reading the tick here tracks it for this view: a bump (any document /
+    // vault event the host fanned out) re-renders the headers, so plugin
+    // statuses go stale only until the next event they could react to.
+    this.registry.statusVersion();
     return this.registry.descriptor(id)?.status?.({ collapsed: this.dock.collapsed(id) }) ?? null;
   }
 }

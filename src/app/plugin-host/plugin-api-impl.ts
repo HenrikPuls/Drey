@@ -1,4 +1,4 @@
-import { Injectable, inject } from '@angular/core';
+import { Injectable, Injector, inject } from '@angular/core';
 import type {
   AskOutcome,
   DocumentChangeEvent,
@@ -57,7 +57,6 @@ export class PluginApiFactory {
   private readonly keys = inject(KeybindingService);
   private readonly widgets = inject(WidgetRegistryService);
   private readonly settingsPages = inject(SettingsCategoryRegistry);
-  private readonly dock = inject(DockService);
   private readonly confirm = inject(ConfirmationService);
   private readonly settings = inject(SettingsService);
   private readonly overlayGuard = inject(OverlayGuardService);
@@ -66,6 +65,22 @@ export class PluginApiFactory {
   private readonly menuContributions = inject(MenuContributionsService);
   private readonly contextMenuItems = inject(EditorContextMenuRegistry);
   private readonly log = inject(LogService);
+
+  /**
+   * DockService, resolved on FIRST USE, not at construction: the factory is
+   * built during the app initializer (bootstrap gating, ADR-0044), and an
+   * eager inject here would construct `DockService` BEFORE the plugin
+   * widgets have registered — its constructor then folds the persisted
+   * layout onto an incomplete registry, dropping every plugin panel's
+   * stored slot/collapse state (absorbRegistry re-adds the widgets at
+   * defaults and persists the clobber). First use is a plugin's
+   * `revealWidget()`, long after bootstrap, when the registry is complete.
+   */
+  private readonly injector = inject(Injector);
+  private dockRef: DockService | null = null;
+  private get dock(): DockService {
+    return (this.dockRef ??= this.injector.get(DockService));
+  }
 
   create(
     plugin: PluginDescriptorForRenderer,
@@ -168,7 +183,14 @@ export class PluginApiFactory {
         readFile: (path) => window.dreyApi.readVaultFile(path),
         writeFile: (path, content) => window.dreyApi.writeVaultFile(path, content),
         listFiles: () => window.dreyApi.listVaultFiles(),
-        onChanged: (listener) => track(window.dreyApi.onVaultChanged(listener)),
+        onChanged: (listener) =>
+          track(
+            window.dreyApi.onVaultChanged(() => {
+              // The plugins will react -- refresh the dock's plugin statuses.
+              this.widgets.bumpStatusTick();
+              listener();
+            }),
+          ),
       },
       commands: {
         register: (command: PluginCommand) => {

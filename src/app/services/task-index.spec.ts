@@ -1,11 +1,12 @@
-import { TaskIndex } from '../../../electron/tasks';
-import type { VaultManager } from '../../../electron/vault-manager';
+import { TaskIndex } from '../../../plugins/tasks/main/task-index';
 
 /**
- * `TaskIndex` is the whole-vault task cache behind `tasks:list`. Like
- * `TagIndex` it always excludes the literal `templates/` folder and the
- * user-configured templates folder, includes `daily/`, and re-indexes one
- * file on save.
+ * The Tasks plugin's whole-vault index (`plugins/tasks/main/task-index`),
+ * formerly `electron/tasks/TaskIndex` (ADR-0044 stage 6). Like the Tags
+ * plugin's index it always excludes the literal `templates/` folder and
+ * the user-configured templates folder, includes `daily/`, and re-indexes
+ * one file on save. The spec lives under `src/app/services/` because the
+ * ng test runner ignores `plugins/**`.
  */
 
 const FILES: Record<string, string> = {
@@ -15,16 +16,15 @@ const FILES: Record<string, string> = {
   'notes/real.md': 'Follow up with the landlord #task\n',
 };
 
-function fakeVault(): VaultManager {
-  return {
-    listMarkdownFiles: async () => Object.keys(FILES),
-    readFile: async (p: string) => ({ content: FILES[p] ?? '', modifiedMs: 0 }),
-  } as unknown as VaultManager;
+function makeIndex(): TaskIndex {
+  const index = new TaskIndex(async () => Object.keys(FILES), () => 'meta/templates');
+  index.setReadContent(async (p) => FILES[p] ?? '');
+  return index;
 }
 
 describe('TaskIndex', () => {
   it('collects tasks from real notes and daily notes, skipping template folders', async () => {
-    const index = new TaskIndex(fakeVault(), () => 'meta/templates');
+    const index = makeIndex();
     await index.rebuild();
     const texts = index.all().map((t) => `${t.text}:${t.done}`);
     expect(texts).toEqual(
@@ -34,7 +34,7 @@ describe('TaskIndex', () => {
   });
 
   it('re-indexes one file on save and drops it when it moves under a template folder', async () => {
-    const index = new TaskIndex(fakeVault(), () => 'meta/templates');
+    const index = makeIndex();
     await index.rebuild();
 
     index.reindexFile('notes/real.md', '- [ ] new one\n- [x] done one\n');
@@ -48,7 +48,7 @@ describe('TaskIndex', () => {
   });
 
   it('forgets a deleted file', async () => {
-    const index = new TaskIndex(fakeVault());
+    const index = makeIndex();
     await index.rebuild();
     expect(index.all().some((t) => t.path === 'notes/real.md')).toBe(true);
     index.removeFile('notes/real.md');

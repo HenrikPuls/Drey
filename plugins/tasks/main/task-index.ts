@@ -1,17 +1,17 @@
 /**
- * The vault's task index -- a per-file cache of every checkbox / `#task`
- * line, derived purely by `shared/tasks/scanTasks`. Backs the `tasks:list`
- * IPC channel that feeds the renderer's Tasks panel in "whole vault" scope
+ * The vault's task index, plugin-side (ADR-0033, converted in ADR-0044
+ * stage 6): a per-file cache of every checkbox / `#task` line, derived
+ * purely by `shared/tasks`. Backs the renderer panel's "whole vault" scope
  * (document scope is scanned live from the open buffer).
  *
- * Same lifecycle and exclusion rules as `TagIndex` (`electron/tags/`):
- * `templates/` and the user-configured templates folder are skipped,
- * `daily/` is included; full rebuild on vault open / manual refresh, one
- * file re-indexed on `note:save`, dropped on delete. There is no file
- * watcher (ADR-0018), so an external edit is picked up on the next rebuild.
+ * Same lifecycle and exclusion rules as the Tags plugin's index: the
+ * literal `templates/` folder is always skipped, and so is the
+ * user-configured templates folder when that differs; everything else,
+ * `daily/` included, is scanned. Full rebuild on vault open / refresh, one
+ * file re-indexed on `note:save` (a save hook) and on a raw vault write,
+ * dropped on delete -- there is no file watcher (ADR-0018).
  */
-import { scanTasks, TaskRecord } from '../../shared/tasks';
-import { VaultManager } from '../vault-manager';
+import { scanTasks, TaskRecord } from '../shared/tasks';
 
 const ALWAYS_EXCLUDED_PREFIX = 'templates/';
 
@@ -20,12 +20,14 @@ export class TaskIndex {
   private byPath = new Map<string, TaskRecord[]>();
 
   /**
+   * @param listMarkdownFiles flattens the vault tree to `.md` paths
+   *   (vault-relative, forward-slash).
    * @param getTemplatesDir the configured templates folder (vault-relative,
-   *   no slashes) -- its files are excluded too, on top of the always-excluded
-   *   literal `templates/`.
+   *   no slashes) -- its files are excluded too. Optional; the literal
+   *   `templates/` is always excluded regardless.
    */
   constructor(
-    private readonly vault: VaultManager,
+    private readonly listMarkdownFiles: () => Promise<string[]>,
     private readonly getTemplatesDir?: () => string,
   ) {}
 
@@ -44,7 +46,7 @@ export class TaskIndex {
     this.byPath.clear();
     let paths: string[];
     try {
-      paths = await this.vault.listMarkdownFiles();
+      paths = await this.listMarkdownFiles();
     } catch {
       return;
     }
@@ -53,12 +55,19 @@ export class TaskIndex {
         continue;
       }
       try {
-        const { content } = await this.vault.readFile(path);
+        const content = await this.readContent(path);
         this.byPath.set(path, scanTasks(path, content));
       } catch {
         // Unreadable -- skip; the next rebuild picks it up.
       }
     }
+  }
+
+  private readContent: (path: string) => Promise<string> = async () => '';
+
+  /** The plugin entry wires its vault `read` here before the first rebuild. */
+  setReadContent(read: (path: string) => Promise<string>): void {
+    this.readContent = read;
   }
 
   /** Re-indexes one file after a save (or drops it if it now sits under an excluded folder). */

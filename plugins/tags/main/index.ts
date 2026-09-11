@@ -35,7 +35,7 @@ function markdownPaths(entries: readonly VaultNode[]): string[] {
  * `vault_search` and the SDK's `api.search` read.
  */
 const plugin: MainPluginModule = {
-  activate(ctx: MainPluginContext) {
+  async activate(ctx: MainPluginContext) {
     const index = new TagIndex(async () => markdownPaths(await ctx.vault.list()), () =>
       ctx.appConfig.get().templates.dir,
     );
@@ -81,8 +81,11 @@ const plugin: MainPluginModule = {
 
     ctx.log('activated');
 
-    // Initial build, after activation (the vault may already be open).
-    void index.rebuild();
+    // Initial build before activation completes: the window (and so the
+    // Search panel's first vocabulary pull / MCP's first vault_search)
+    // comes up after the host awaited activate. Vault-change events keep
+    // it current from here.
+    await index.rebuild();
   },
 };
 

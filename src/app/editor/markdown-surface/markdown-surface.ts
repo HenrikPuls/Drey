@@ -26,7 +26,6 @@ import { VaultService } from '../../vault';
 import { ThemeService } from '../../services/theme.service';import { ThemeCatalogEntry } from '../themes/theme-catalog';
 import { dreyEditorLook, editorStructure } from '../editor-theme';
 import { imagePaste } from '../image-paste';
-import { toggleTaskDone } from '../markdown-commands';
 import {
   frontmatterExpandedOf,
   frontmatterFold,
@@ -358,9 +357,6 @@ export class MarkdownSurface implements AfterViewInit, OnDestroy {
             ? Prec.highest(keymap.of(this.submitKeymap()))
             : [],
           basicSetup,
-          // `Ctrl/Cmd+Enter` toggles the task checkbox on the selected
-          // line(s) (also the Selection menu's "Toggle task done").
-          keymap.of([{ key: 'Mod-Enter', run: (view) => toggleTaskDone(view) }]),
           // The language grammar + (for Markdown) the `#tag` autocomplete /
           // pills / link activation / spellcheck / frontmatter fold. Seeded
           // with the Markdown bundle; `applyLanguage()` swaps in a code

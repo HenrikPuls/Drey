@@ -3,7 +3,6 @@ import { imageExtension } from '../../../shared/asset-name';
 import { dailyPathFor } from '../../../shared/daily';
 import { EntryDraft } from '../../../shared/entry-compose';
 import { ActionOutcome } from '../../../shared/ipc-api';
-import { setDoneOnLine } from '../../../shared/tasks';
 import { EditorCommandsService } from '../editor/editor-commands.service';
 import { EditorPrefsService, EditorViewMode } from '../editor/editor-prefs.service';
 import { PaneService } from '../panes/pane.service';
@@ -683,52 +682,6 @@ export class EditorService {
     this.panes.open(path); // reveal: focuses + activates wherever it is
     this.patchDoc(path, { bufferContent: content });
     await this.save({ runOnSaveActions: false, path });
-  }
-
-  /**
-   * Forces the done-state of the task on 1-based `line` of `path`
-   * (`shared/tasks/setDoneOnLine`) -- the Tasks panel's checkbox.
-   *
-   * If the file is open as a text tab the edit goes through that buffer
-   * (activating the tab if needed) and is saved like any edit, so an
-   * unsaved change in it is never lost. Otherwise the file is read,
-   * patched and written straight back through the `note:save` pipeline
-   * (which re-indexes it). A no-op when the line does not parse as a task.
-   */
-  async setTaskDone(path: string, line: number, done: boolean): Promise<void> {
-    // A browser tab is keyed `browser://<n>`, not a real path -- never read
-    // it off disk (no task row references one, but be explicit).
-    if (this.docFor(path)?.kind === 'browser') {
-      return;
-    }
-    const open = this.docs().find((d) => d.path === path && d.kind === 'text');
-    if (open) {
-      const next = setDoneOnLine(open.bufferContent, line, done);
-      if (next === open.bufferContent) {
-        return;
-      }
-      this.panes.open(path); // reveal: focuses + activates wherever it is
-      this.patchDoc(path, { bufferContent: next });
-      await this.save({ path });
-      return;
-    }
-
-    if (!this.api) {
-      return;
-    }
-    this.error.set(null);
-    try {
-      const { content } = await this.api.readVaultFile(path);
-      const eol: '\n' | '\r\n' = content.includes('\r\n') ? '\r\n' : '\n';
-      const normalized = content.replace(/\r\n/g, '\n');
-      const next = setDoneOnLine(normalized, line, done);
-      if (next === normalized) {
-        return;
-      }
-      await this.api.saveNote({ path, body: next, eol });
-          } catch (err) {
-      this.error.set(err instanceof Error ? err.message : String(err));
-    }
   }
 
   private makeDoc(

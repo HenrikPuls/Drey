@@ -9,6 +9,7 @@ import { EditorService } from '../services/editor.service';
 import { LayoutGestureService } from '../services/layout-gesture.service';
 import { LogService } from '../services/log.service';
 import { OverlayGuardService } from '../services/overlay-guard.service';
+import { WidgetRegistryService } from '../dock/widget-registry.service';
 import { PluginApiFactory } from './plugin-api-impl';
 import { PLUGIN_MODULE_LOADER, moduleDefault } from './plugin-module-loader';
 
@@ -47,6 +48,7 @@ export class PluginHostService {
   private readonly overlay = inject(OverlayGuardService);
   private readonly layoutGesture = inject(LayoutGestureService);
   private readonly log = inject(LogService);
+  private readonly widgets = inject(WidgetRegistryService);
 
   /** Every discovered plugin with its status; the Settings plugin pane reads this. */
   readonly plugins = signal<readonly PluginDescriptorForRenderer[]>([]);
@@ -263,6 +265,10 @@ export class PluginHostService {
   }
 
   private emitDocumentEvent(event: DocumentChangeEvent): void {
+    // Plugins react to this event -- their widgets/statuses may change, so
+    // give the dock's header statuses a refresh signal (they read plain
+    // plugin state, nothing the shell could otherwise track).
+    this.widgets.bumpStatusTick();
     for (const plugin of this.activated.values()) {
       for (const listener of [...plugin.documentListeners]) {
         this.guarded(() => listener(event), 'document listener');

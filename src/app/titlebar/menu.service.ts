@@ -20,7 +20,7 @@ import { EditorService } from '../services/editor.service';
 import { EditTargetService } from '../services/edit-target.service';
 import { SettingsService } from '../services/settings.service';
 import { VaultService } from '../vault';
-import { duplicateSelection, toggleTaskDone } from '../editor/markdown-commands';
+import { duplicateSelection } from '../editor/markdown-commands';
 import type { EditCommand } from '../../../shared/ipc-api';
 
 export type MenuId = 'file' | 'edit' | 'selection' | 'view';
@@ -289,7 +289,7 @@ export class MenuService {
         this.editorRow('Move line up', 'Alt Up', moveLineUp),
         this.editorRow('Move line down', 'Alt Down', moveLineDown),
         SEP,
-        this.editorRow('Toggle task done', 'Ctrl Enter', (view) => toggleTaskDone(view)),
+        // "Toggle task done" is a Tasks-plugin menu contribution now.
         ...this.contributionRows('selection'),
       ],
     },

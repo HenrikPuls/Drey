@@ -25,7 +25,6 @@ import { NoteManager } from './note-manager';
 import { PluginHost, registerBaseSaveHooks } from './plugin-host';
 import { SessionBackupStore } from './session';
 import { SpellcheckService } from './spellcheck';
-import { TaskIndex } from './tasks';
 import { VaultManager } from './vault-manager';
 
 /**
@@ -436,7 +435,6 @@ if (!app.requestSingleInstanceLock()) {
     const vaultManager = new VaultManager();
     const dailyNotes = new DailyNoteManager(vaultManager);
     const appConfig = new AppConfigStore();
-    const taskIndex = new TaskIndex(vaultManager, () => appConfig.get().templates.dir);
     const llmDebug = new LlmDebugLog();
     const lmStudio = new LmStudioClient(appConfig, llmDebug);
     const llmTasks = new LlmTaskRegistry();
@@ -486,10 +484,11 @@ if (!app.requestSingleInstanceLock()) {
       },
     });
     await pluginHost.discoverAndActivate();
-    // Until the tasks/assistant plugins exist, their base behaviours
-    // participate in the seams like plugins would (ADR-0044 stage 5).
+    // Until the assistant plugin exists, its base behaviour (the on-save
+    // Actions) participates in the seams like a plugin would
+    // (ADR-0044 stage 7 removes this adapter).
     const pluginHostRef = pluginHost;
-    registerBaseSaveHooks(pluginHostRef, { vault: vaultManager, taskIndex, actions: actionRunner });
+    registerBaseSaveHooks(pluginHostRef, { vault: vaultManager, actions: actionRunner });
     const noteManager = new NoteManager(vaultManager, {
       onNoteSaved: (hook) => pluginHostRef.save.onNoteSaved(hook),
       emitNoteSaved: (event) => pluginHostRef.emitNoteSaved(event),
@@ -503,9 +502,8 @@ if (!app.requestSingleInstanceLock()) {
     // bound to the window later in `createMainWindow` via `attach()`.
     browserViews = new BrowserViewManager(() => mainWindow);
     const sessionBackups = new SessionBackupStore();
-    await taskIndex.rebuild();
     // Plugins can react to the initial vault load like any later refresh
-    // (the tags plugin rebuilds its index from this event).
+    // (the tags and tasks plugins rebuild their indexes from this event).
     pluginHostRef.emitVaultChange({ kind: 'refresh' });
     await syncMcpHttpTransport(mcpHttp, appConfig);
 
@@ -525,7 +523,6 @@ if (!app.requestSingleInstanceLock()) {
       vaultManager,
       dailyNotes,
       noteManager,
-      taskIndex,
       appConfig,
       lmStudio,
       actionRunner,

@@ -1,15 +1,12 @@
 /**
- * Local copies of the two pure tag helpers `scanTasks` needs
- * (`splitSections`, `extractInlineTags`) plus `tagSetMatches` for the
- * Tasks panel's tag filter.
- *
- * TEMPORARY duplication (ADR-0044 stage 5): the originals moved into the
- * Tags plugin (`plugins/tags/shared/`), but the Tasks feature is still
- * base until stage 6 — when it converts, this file merges into the tasks
- * plugin and the duplication disappears. Keep in sync until then.
+ * Pure tag/section helpers the task scanner builds on: heading sections,
+ * inline tag extraction and nested-tag matching. Self-contained copies of
+ * the same routines the Tags plugin ships (ADR-0044: plugins are
+ * self-contained — no cross-plugin imports), so a task's section tags are
+ * the exact unit the tag search reports on.
  */
 
-/** Splits a Markdown body into heading-delimited sections (see Tags plugin). */
+/** Splits a Markdown body into heading-delimited sections. */
 export interface Section {
   heading: string;
   level: number;

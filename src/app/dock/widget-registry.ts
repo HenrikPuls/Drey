@@ -1,6 +1,5 @@
 import { Type } from '@angular/core';
 import type { WidgetCapability } from '../widgets';
-import { TasksPanel } from '../tasks';
 import type { DockSide } from './dock.service';
 import { AssistantPanel } from './panels/assistant-panel';
 import { CalendarPanel } from './panels/calendar-panel';
@@ -92,19 +91,9 @@ export const CORE_WIDGETS: readonly WidgetDescriptor[] = [
     removable: true,
     capabilities: ['file-tree', 'active-document'],
   },
-  {
-    id: 'tasks',
-    title: 'Tasks',
-    component: TasksPanel,
-    defaultDock: 'left',
-    defaultOpen: false,
-    defaultFlex: 220,
-    // The filter row stays pinned; only the task list scrolls (no second
-    // scrollbar on the panel body).
-    flush: true,
-    removable: true,
-    capabilities: ['task-queries', 'active-document'],
-  },
+  // `tasks` and `search` were core widgets until the ADR-0044 conversions;
+  // the Tasks and Tags plugins register them at bootstrap through the same
+  // runtime registry, keeping the ids (and so every persisted layout).
   {
     id: 'windows',
     title: 'Open windows',

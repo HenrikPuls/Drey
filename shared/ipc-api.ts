@@ -10,7 +10,6 @@
 import type { AppConfig, CustomDictionary, LlmEndpoint } from './app-config';
 import type { ActionContext, ActionOutcome, AskOutcome, ChatMessage, LlmDebugEntry } from './llm';
 import type { ChatThread } from './chat-thread';
-import type { TaskRecord } from './tasks';
 import type {
   BrowserCreateArgs,
   BrowserEvent,
@@ -40,7 +39,6 @@ export type {
   LlmDebugEntry,
   ResolvedAction,
 } from './llm';
-export type { TaskKind, TaskRecord } from './tasks';
 export type {
   BrowserCreateArgs,
   BrowserEvent,
@@ -92,7 +90,6 @@ export const IPC_CHANNELS = {
   noteSave: 'note:save',
   tagList: 'tags:list',
   tagSearch: 'tags:search',
-  taskList: 'tasks:list',
   tagSummariseResults: 'tags:summarise-results',
   tagSuggest: 'tags:suggest',
   configGet: 'config:get',
@@ -684,9 +681,6 @@ export interface DreyApi {
    * cancellable. Rejects when LLM features are off.
    */
   suggestTags(entryText: string, taskId?: string): Promise<string[]>;
-
-  /** Every checkbox / `#task` line in the vault (the Tasks panel's vault scope). */
-  listTasks(): Promise<TaskRecord[]>;
 
   /** Current MCP vault server state for the Settings pane (ADR-0021). */
   getMcpStatus(): Promise<McpStatus>;
