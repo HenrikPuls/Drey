@@ -1,3 +1,8 @@
+export interface TagEntry {
+  tag: string;
+  count: number;
+}
+
 /**
  * The tag search matcher: given the tagged sections and a query, return the
  * sections where **every** requested tag is present and **every** free-text

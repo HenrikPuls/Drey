@@ -23,7 +23,7 @@ import type {
   LlmDebugEntry,
 } from '../llm';
 import type { AppConfig } from '../app-config';
-import type { TagSearchHit, TagSearchQuery } from '../tags';
+import type { TagSearchHit, TagSearchQuery } from './search-types';
 import type { TagEntry, VaultFileEntry } from '../ipc-api';
 import type { PluginManifest } from './manifest';
 import type { Unsubscribe } from './main-plugin-api';

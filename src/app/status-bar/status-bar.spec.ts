@@ -10,9 +10,7 @@ describe('StatusBar', () => {
 
   beforeEach(async () => {
     window.dreyApi = {
-      readVaultFile: () => Promise.resolve({ content: 'one two three', modifiedMs: 1 }),
-      listTags: () => Promise.resolve([]),
-    } as unknown as DreyApi;
+      readVaultFile: () => Promise.resolve({ content: 'one two three', modifiedMs: 1 }),    } as unknown as DreyApi;
     await TestBed.configureTestingModule({ imports: [StatusBar] }).compileComponents();
     editor = TestBed.inject(EditorService);
     fixture = TestBed.createComponent(StatusBar);

@@ -23,9 +23,7 @@ describe('EditorService', () => {
       saveNote: (request: NoteSaveRequest) => {
         saves.push(request);
         return echoSave(request);
-      },
-      listTags: () => Promise.resolve([]),
-    };
+      },    };
     window.dreyApi = fakeApi as DreyApi;
     service = TestBed.inject(EditorService);
   });
@@ -59,7 +57,6 @@ describe('EditorService', () => {
 
   it('adopts the frontmatter the save pipeline rewrites and refreshes the tag list', async () => {
     TestBed.resetTestingModule();
-    let tagListCalls = 0;
     const rewriteApi: Partial<DreyApi> = {
       readVaultFile: () =>
         Promise.resolve({ content: '---\ntitle: n\n---\n\nBody #sailing\n', modifiedMs: 1 }),
@@ -69,10 +66,6 @@ describe('EditorService', () => {
           content: '---\ntitle: n\nupdated: "2026-09-06T10:00:00"\n---\n\nBody #sailing\n',
           modifiedMs: 2,
         }),
-      listTags: () => {
-        tagListCalls += 1;
-        return Promise.resolve([]);
-      },
     };
     window.dreyApi = rewriteApi as DreyApi;
     const rewriteService = TestBed.inject(EditorService);
@@ -85,8 +78,6 @@ describe('EditorService', () => {
     expect(rewriteService.savedContent()).toBe(expected);
     expect(rewriteService.bufferContent()).toBe(expected);
     expect(rewriteService.isDirty()).toBe(false);
-    // once from the service constructor, once after the save
-    expect(tagListCalls).toBeGreaterThanOrEqual(2);
   });
 
   it('save is a no-op when nothing changed', async () => {
@@ -103,9 +94,7 @@ describe('EditorService', () => {
       saveNote: (request: NoteSaveRequest) => {
         crlfSaves.push(request);
         return echoSave(request);
-      },
-      listTags: () => Promise.resolve([]),
-    };
+      },    };
     window.dreyApi = crlfApi as DreyApi;
     const crlfService = TestBed.inject(EditorService);
 
@@ -222,9 +211,7 @@ describe('EditorService', () => {
         readVaultFile: (relativePath: string) =>
           relativePath === 'daily/2026-09-05.md'
             ? Promise.resolve({ content: 'legacy body', modifiedMs: 1 })
-            : Promise.reject(new Error('ENOENT')),
-        listTags: () => Promise.resolve([]),
-      };
+            : Promise.reject(new Error('ENOENT')),      };
       window.dreyApi = legacyApi as DreyApi;
       const legacyService = TestBed.inject(EditorService);
 
@@ -243,9 +230,7 @@ describe('EditorService', () => {
         saveNote: (request: NoteSaveRequest) => {
           draftSaves.push(request);
           return echoSave(request);
-        },
-        listTags: () => Promise.resolve([]),
-        getActiveVault: () => Promise.resolve('E:/vault'),
+        },        getActiveVault: () => Promise.resolve('E:/vault'),
         listVaultFiles: () => {
           fileListReads += 1;
           return Promise.resolve([]);
@@ -318,9 +303,7 @@ describe('EditorService', () => {
         saveNote: (req: NoteSaveRequest) => {
           saved.push(req);
           return echoSave(req);
-        },
-        listTags: () => Promise.resolve([]),
-        getActiveVault: () => Promise.resolve('E:/vault'),
+        },        getActiveVault: () => Promise.resolve('E:/vault'),
         listVaultFiles: () => Promise.resolve([]),
         pickSavePath: () => Promise.resolve(picked),
       };

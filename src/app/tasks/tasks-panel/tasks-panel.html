@@ -77,17 +77,11 @@
     <input
       class="chip-input"
       type="text"
-      list="tasks-tag-vocab"
       autocomplete="off"
       placeholder="+ tag"
       (keydown)="onTagKeydown($event)"
       (blur)="onTagBlur($event)"
     />
-    <datalist id="tasks-tag-vocab">
-      @for (entry of vocab.tags(); track entry.tag) {
-        <option [value]="entry.tag">{{ entry.count }}×</option>
-      }
-    </datalist>
   </div>
 
   <input

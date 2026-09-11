@@ -43,9 +43,7 @@ describe('Editor', () => {
           path: request.path,
           content: request.body,
           modifiedMs: 2,
-        }),
-      listTags: () => Promise.resolve([]),
-    };
+        }),    };
     window.dreyApi = fakeApi as DreyApi;
 
     await TestBed.configureTestingModule({ imports: [Editor] }).compileComponents();

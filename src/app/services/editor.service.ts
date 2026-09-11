@@ -7,7 +7,6 @@ import { setDoneOnLine } from '../../../shared/tasks';
 import { EditorCommandsService } from '../editor/editor-commands.service';
 import { EditorPrefsService, EditorViewMode } from '../editor/editor-prefs.service';
 import { PaneService } from '../panes/pane.service';
-import { TagService } from '../services/tag.service';
 import { VaultService } from '../vault';
 
 /** Re-exported for existing importers (`Editor`, specs); defined in `markdown-frontmatter.ts`. */
@@ -107,7 +106,6 @@ function isMarkdownPath(path: string): boolean {
  */
 @Injectable({ providedIn: 'root' })
 export class EditorService {
-  private readonly tags = inject(TagService);
   private readonly vault = inject(VaultService);
   private readonly panes = inject(PaneService);
   private readonly prefs = inject(EditorPrefsService);
@@ -579,8 +577,7 @@ export class EditorService {
       });
       // The main process re-indexed this file on save; pull the vocabulary
       // so `#tag` autocomplete and the search picker stay current.
-      void this.tags.refresh();
-      // A first save of a draft (a daily note opened from the calendar, or
+            // A first save of a draft (a daily note opened from the calendar, or
       // the quick-capture hotkey) creates a file the sidebar tree does not
       // know about yet -- no watcher, so pull the tree in.
       if (wasDraft) {
@@ -669,8 +666,7 @@ export class EditorService {
     // buffer, mtime and `existsOnDisk` come from disk.
     this.closeTab(doc.path, { silent: true });
     await this.openFile(target);
-    void this.tags.refresh();
-    void this.vault.refresh();
+        void this.vault.refresh();
   }
 
   /**
@@ -730,8 +726,7 @@ export class EditorService {
         return;
       }
       await this.api.saveNote({ path, body: next, eol });
-      void this.tags.refresh();
-    } catch (err) {
+          } catch (err) {
       this.error.set(err instanceof Error ? err.message : String(err));
     }
   }

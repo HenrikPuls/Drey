@@ -30,8 +30,9 @@ export type {
   ChatMessage,
   LlmDebugEntry,
 } from '../llm';
-export type { TagEntry, VaultFileEntry } from '../ipc-api';
-export type { TagSearchHit, TagSearchQuery } from '../tags';
+export type { TagEntry } from './search-types';
+export type { VaultFileEntry } from '../ipc-api';
+export type { TagSearchHit, TagSearchQuery } from './search-types';
 
 export type {
   ActiveDocument,

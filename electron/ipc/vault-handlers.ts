@@ -9,7 +9,6 @@ import {
 import { DailyNoteManager } from '../daily-note';
 import { NoteManager } from '../note-manager';
 import { PluginHost } from '../plugin-host';
-import { TagIndex } from '../tags';
 import { TaskIndex } from '../tasks';
 import { VaultManager } from '../vault-manager';
 
@@ -17,7 +16,6 @@ export interface VaultHandlerDeps {
   vaultManager: VaultManager;
   dailyNotes: DailyNoteManager;
   noteManager: NoteManager;
-  tagIndex: TagIndex;
   taskIndex: TaskIndex;
   pluginHost: PluginHost;
 }
@@ -35,12 +33,10 @@ export function registerVaultHandlers({
   vaultManager,
   dailyNotes,
   noteManager,
-  tagIndex,
   taskIndex,
   pluginHost,
 }: VaultHandlerDeps): void {
   const rebuildIndexes = async (): Promise<void> => {
-    await tagIndex.rebuild();
     await taskIndex.rebuild();
     // Plugins re-read whatever they cache on any index-affecting change.
     pluginHost.emitVaultChange({ kind: 'refresh' });

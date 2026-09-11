@@ -19,7 +19,6 @@ import { PaneLayout, PaneService } from './panes';
 import { SettingsService } from './services/settings.service';
 import { VaultService } from './vault';
 import { KeybindingService } from './keybindings';
-import { TagSearchService } from './tags';
 import { Dock, DockService } from './dock';
 import { Titlebar } from './titlebar';
 import { StatusBar } from './status-bar/status-bar';
@@ -129,16 +128,6 @@ export class App {
     // App-wide keyboard commands. Features register here the same way; the
     // titlebar menu bar invokes the same command ids.
     const keys = inject(KeybindingService);
-    const tagSearch = inject(TagSearchService);
-    keys.register({
-      id: 'search.open',
-      label: 'Search notes',
-      keybinding: 'Mod+Shift+F',
-      run: () => {
-        this.dock.openAndExpand('search');
-        tagSearch.openPanel();
-      },
-    });
     keys.register({
       id: 'note.new',
       label: 'New note',
@@ -178,6 +167,9 @@ export class App {
     });
 
     // Split-view panes (ADR-0037). The layout mechanics already exist
+    // (PaneService + the tab context menu); these are the keyboard / menu
+    // entry points. Chords avoid `Alt+Arrow` (move line) and a bare `\`
+    // (AltGr on a German layout).
     // (PaneService + the tab context menu); these are the keyboard / menu
     // entry points. Chords avoid `Alt+Arrow` (move line) and a bare `\`
     // (AltGr on a German layout).

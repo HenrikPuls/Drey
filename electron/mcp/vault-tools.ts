@@ -16,8 +16,7 @@
  * guard (`..`, absolute paths, no active vault) applies unchanged.
  */
 import type { AppConfig } from '../../shared/app-config';
-import type { TagSearchHit } from '../../shared/tags';
-import type { SectionSearchProvider } from '../../shared/plugin-api';
+import type { SectionSearchProvider, TagSearchHit } from '../../shared/plugin-api';
 import type { VaultManager } from '../vault-manager';
 
 /** JSON-Schema-ish tool descriptor, as MCP `tools/list` returns it. */
@@ -147,8 +146,6 @@ export class VaultTools {
      * clear error instead of crashing.
      */
     private readonly getSearchProvider: () => SectionSearchProvider | null,
-    /** Keeps the section index current after an MCP write (no watcher). */
-    private readonly reindexWrittenFile: (path: string, content: string) => void,
     private readonly getConfig: () => AppConfig,
     private readonly confirmWrite: ConfirmWrite,
     /** Called after a write lands, so the renderer can refresh (no watcher). */
@@ -315,7 +312,6 @@ export class VaultTools {
     await this.vault.writeFile(path, after);
     // No file watcher (ADR-0018) -- keep the section index current so a
     // follow-up search sees the write, and nudge the renderer to refresh.
-    this.reindexWrittenFile(path, after);
     this.onVaultChanged();
     return textResult(`Wrote ${path} (${after.length} chars, mode: ${mode}).`);
   }

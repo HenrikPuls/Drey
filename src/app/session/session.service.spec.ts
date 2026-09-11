@@ -15,7 +15,6 @@ describe('SessionService', () => {
     localStorage.clear();
     const fakeApi: Partial<DreyApi> = {
       readVaultFile: (p: string) => Promise.resolve({ content: `disk of ${p}`, modifiedMs: 1 }),
-      listTags: () => Promise.resolve([]),
       onBrowserEvent: () => () => undefined,
       onBrowserOpenTab: () => () => undefined,
       createBrowserView: () => Promise.resolve(),

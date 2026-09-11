@@ -1,4 +1,4 @@
-import { extractInlineTags } from '../../../shared/tags';
+import { extractInlineTags } from '../../../plugins/tags/shared/tags';
 import { renderMeetingSection } from '../../../plugins/meeting/main/render';
 import { STARTER_MEETING_TEMPLATE } from '../../../plugins/meeting/main/template';
 import type { ParsedMeeting } from '../../../plugins/meeting/main/types';

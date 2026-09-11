@@ -31,9 +31,6 @@ import {
   PluginIpcEventPayload,
   SpellCheckResult,
   SpellLanguage,
-  TagEntry,
-  TagSearchHit,
-  TagSearchQuery,
   TaskRecord,
   VaultFileContent,
   VaultFileEntry,
@@ -93,12 +90,7 @@ const dreyApi: DreyApi = {
     ipcRenderer.invoke(IPC_CHANNELS.dailyBuildContent, date),
   saveNote: (request: NoteSaveRequest): Promise<NoteSaveResult> =>
     ipcRenderer.invoke(IPC_CHANNELS.noteSave, request),
-  listTags: (): Promise<TagEntry[]> => ipcRenderer.invoke(IPC_CHANNELS.tagList),
-  searchTags: (query: TagSearchQuery): Promise<TagSearchHit[]> =>
-    ipcRenderer.invoke(IPC_CHANNELS.tagSearch, query),
   listTasks: (): Promise<TaskRecord[]> => ipcRenderer.invoke(IPC_CHANNELS.taskList),
-  summariseSearchResults: (query: TagSearchQuery, taskId?: string): Promise<string> =>
-    ipcRenderer.invoke(IPC_CHANNELS.tagSummariseResults, query, taskId),
   suggestTags: (entryText: string, taskId?: string): Promise<string[]> =>
     ipcRenderer.invoke(IPC_CHANNELS.tagSuggest, entryText, taskId),
   getConfig: (): Promise<AppConfig> => ipcRenderer.invoke(IPC_CHANNELS.configGet),

@@ -1,6 +1,6 @@
 import { Injectable, computed, effect, inject, signal } from '@angular/core';
 import { TaskKind, TaskRecord, scanTasks } from '../../../shared/tasks';
-import { tagSetMatches } from '../../../shared/tags';
+import { tagSetMatches } from '../../../shared/tasks/tag-support';
 import { EditorService } from '../services/editor.service';
 
 /** Which set of task lines the panel shows. */

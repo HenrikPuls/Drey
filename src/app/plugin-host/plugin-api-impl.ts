@@ -11,6 +11,8 @@ import type {
   PluginWidgetContrib,
   RewriteRequest,
   Unsubscribe,
+  TagEntry,
+  TagSearchHit,
 } from '../../../shared/plugin-api/renderer';
 import { DockService } from '../dock/dock.service';
 import { WidgetRegistryService } from '../dock/widget-registry.service';
@@ -228,8 +230,11 @@ export class PluginApiFactory {
         registerContextMenuItems: (items) => track(this.contextMenuItems.register(items)),
       },
       search: {
-        vocabulary: () => window.dreyApi.listTags(),
-        searchSections: (query) => window.dreyApi.searchTags(query),
+        // Routed through the host's reserved methods so the surface reads
+        // whichever plugin registered the section-search provider.
+        vocabulary: () => invokeBackend('drey.search.vocabulary') as Promise<readonly TagEntry[]>,
+        searchSections: (query) =>
+          invokeBackend('drey.search.sections', { query }) as Promise<readonly TagSearchHit[]>,
       },
       settings: {
         get: async <T>(key: string) => (await invokeBackend('drey.config.get', { key })) as

@@ -1,7 +1,6 @@
 import { ChangeDetectionStrategy, Component, computed, inject } from '@angular/core';
 import { TaskRecord } from '../../../../shared/tasks';
 import { PanelHeaderActions } from '../../dock/panel-header-actions';
-import { TagService } from '../../services/tag.service';
 import { TaskService } from '../task.service';
 
 /** A file's tasks, for the grouped "whole vault" list. */
@@ -29,8 +28,6 @@ interface TaskGroup {
 })
 export class TasksPanel {
   protected readonly tasks = inject(TaskService);
-  /** Vault tag vocabulary for the `<datalist>` autocomplete. */
-  protected readonly vocab = inject(TagService);
 
   /** Flat in document scope; grouped by file in vault scope. */
   protected readonly groups = computed<TaskGroup[]>(() => {

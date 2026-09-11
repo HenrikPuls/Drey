@@ -12,7 +12,6 @@
  * `../widgets`, never a file inside it (enforced by `eslint.config.mjs`).
  */
 
-export { WidgetContext, type WidgetSelection } from './widget-context';
 export {
   type WidgetCapability,
   WIDGET_CAPABILITY_LABELS,

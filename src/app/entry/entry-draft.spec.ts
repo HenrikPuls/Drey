@@ -9,9 +9,7 @@ describe('EntryDraftService', () => {
 
   beforeEach(async () => {
     window.dreyApi = {
-      readVaultFile: () => Promise.resolve({ content: '# Note\n', modifiedMs: 1 }),
-      listTags: () => Promise.resolve([]),
-    } as unknown as DreyApi;
+      readVaultFile: () => Promise.resolve({ content: '# Note\n', modifiedMs: 1 }),    } as unknown as DreyApi;
 
     editor = TestBed.inject(EditorService);
     drawer = TestBed.inject(EntryDraftService);

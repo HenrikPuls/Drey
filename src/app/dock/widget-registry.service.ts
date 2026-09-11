@@ -2,7 +2,6 @@ import { Injectable, Signal, computed, inject, signal } from '@angular/core';
 import { AssistantService } from '../assistant';
 import { CalendarService } from '../calendar';
 import { EntryDraftService } from '../entry';
-import { TagSearchService } from '../tags';
 import { TaskService } from '../tasks';
 import { EditorService } from '../services/editor.service';
 import type { PluginWidgetContrib, Unsubscribe } from '../../../shared/plugin-api/renderer';
@@ -42,7 +41,6 @@ export class WidgetRegistryService {
     // shrinking place) that knows which feature service backs which core
     // widget; a converted plugin brings its own `status()` callback.
     const calendar = inject(CalendarService);
-    const search = inject(TagSearchService);
     const tasks = inject(TaskService);
     const editor = inject(EditorService);
     const assistant = inject(AssistantService);
@@ -55,7 +53,6 @@ export class WidgetRegistryService {
         collapsed
           ? `${String(calendar.viewMonth() + 1).padStart(2, '0')}/${calendar.viewYear()}`
           : null,
-      search: () => (search.ran() ? `${search.hits().length} hits` : null),
       tasks: () => {
         const open = tasks.openCount();
         return open > 0 ? `${open} open` : null;

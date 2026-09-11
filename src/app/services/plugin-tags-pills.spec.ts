@@ -1,14 +1,42 @@
 import { markdown, markdownLanguage } from '@codemirror/lang-markdown';
 import { EditorState } from '@codemirror/state';
-import type { DecorationSet } from '@codemirror/view';
-import { tagPillDecorations } from './tag-pill';
+import { Decoration, type DecorationSet } from '@codemirror/view';
+import { tagPillDecorations } from '../../../plugins/tags/renderer/extensions';
+import { HOST_CODEMIRROR } from '../plugin-host';
 
+/**
+ * The tags plugin's pill decorations (port of the old tag-pill.spec — the
+ * implementation moved to `plugins/tags/renderer/extensions.ts`). The
+ * syntax-tree check runs against a real Markdown parse, so fenced/inline
+ * code cases are covered for real.
+ */
 function pills(doc: string): { from: number; to: number; tag: string }[] {
   const state = EditorState.create({
     doc,
     extensions: [markdown({ base: markdownLanguage })],
   });
-  const set: DecorationSet = tagPillDecorations(state, [{ from: 0, to: state.doc.length }]);
+  const insideCode = (s: object, pos: number): boolean => {
+    interface NodeLike {
+      name: string;
+      parent: NodeLike | null;
+    }
+    const language = HOST_CODEMIRROR.language as unknown as {
+      syntaxTree(state: object): { resolveInner(pos: number, side: number): NodeLike };
+    };
+    let node: NodeLike | null = language.syntaxTree(s).resolveInner(pos, 1);
+    for (; node !== null; node = node.parent) {
+      if (/Code|Comment/.test(node.name)) {
+        return true;
+      }
+    }
+    return false;
+  };
+  const set = tagPillDecorations(
+    Decoration as never,
+    insideCode,
+    state,
+    [{ from: 0, to: state.doc.length }],
+  ) as DecorationSet;
   const out: { from: number; to: number; tag: string }[] = [];
   set.between(0, Number.MAX_SAFE_INTEGER, (from, to, deco) => {
     const attrs = deco.spec['attributes'] as Record<string, string>;
@@ -17,7 +45,7 @@ function pills(doc: string): { from: number; to: number; tag: string }[] {
   return out;
 }
 
-describe('tagPillDecorations', () => {
+describe('tagPillDecorations (tags plugin)', () => {
   it('marks an inline #tag with its bare name', () => {
     expect(pills('a #sailing note')).toEqual([{ from: 2, to: 10, tag: 'sailing' }]);
   });

@@ -36,9 +36,7 @@ describe('AssistantService', () => {
 
     window.dreyApi = {
       getConfig: () => Promise.resolve(config),
-      readVaultFile: () => Promise.resolve({ content: '# Note\n\nInhalt\n', modifiedMs: 1 }),
-      listTags: () => Promise.resolve([]),
-      readChatThread: (notePath: string) =>
+      readVaultFile: () => Promise.resolve({ content: '# Note\n\nInhalt\n', modifiedMs: 1 }),      readChatThread: (notePath: string) =>
         Promise.resolve(stored[notePath] ?? { version: 1, notePath, cards: [] }),
       writeChatThread: (thread: ChatThread) => {
         written.push(thread);
@@ -84,7 +82,6 @@ describe('AssistantService', () => {
     window.dreyApi = {
       getConfig: window.dreyApi.getConfig,
       readVaultFile: window.dreyApi.readVaultFile,
-      listTags: window.dreyApi.listTags,
     } as unknown as DreyApi;
 
     await settle();

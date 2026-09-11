@@ -6,7 +6,8 @@ import {
   hasEntryContent,
 } from '../../../shared/entry-compose';
 import { formatDate } from '../../../shared/timestamp';
-import { TAG_NAME_SOURCE } from '../../../shared/tags';
+/** The tag-name grammar (local copy: the tags feature is a plugin now). */
+const TAG_NAME_SOURCE = String.raw`\p{L}[\p{L}\p{N}_-]*(?:/[\p{L}\p{N}_-]+)*`;
 import { EditorService } from '../services/editor.service';
 import { SettingsService } from '../services/settings.service';
 

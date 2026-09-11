@@ -1,60 +1,41 @@
 import { ipcMain } from 'electron';
-import { IPC_CHANNELS, TagEntry, TagSearchHit, TagSearchQuery } from '../../shared/ipc-api';
-import { ActionRunner } from '../llm';
-import { TagIndex } from '../tags';
-import { TaskIndex } from '../tasks';
+import { IPC_CHANNELS } from '../../shared/ipc-api';
+import type { ActionRunner } from '../llm';
+import type { PluginHost } from '../plugin-host';
+import type { TaskIndex } from '../tasks';
 
 export interface QueryHandlerDeps {
-  tagIndex: TagIndex;
   taskIndex: TaskIndex;
   actionRunner: ActionRunner;
+  /** The tags feature's vocabulary comes from whichever plugin registered it. */
+  pluginHost: PluginHost;
 }
 
 /**
- * Read-side index IPC: the tag vocabulary, tag search, the whole-vault task
- * list, and the two LLM-backed helpers that run over search hits
- * (`tag:summarise-results`) or entry text (`tag:suggest`).
+ * Read-side index IPC: the whole-vault task list, and the LLM-backed
+ * `tags:suggest` (the drawer's Autotag). The suggestion's vocabulary comes
+ * from the section-search provider — the Tags plugin until the tasks
+ * plugin takes its own path — and the Autotag stays a base surface because
+ * it writes into the entry drawer's draft.
  */
 export function registerQueryHandlers({
-  tagIndex,
   taskIndex,
   actionRunner,
+  pluginHost,
 }: QueryHandlerDeps): void {
-  ipcMain.handle(IPC_CHANNELS.tagList, (): TagEntry[] => tagIndex.getVocabulary());
-  ipcMain.handle(IPC_CHANNELS.tagSearch, (_event, query: TagSearchQuery): TagSearchHit[] =>
-    tagIndex.search(query),
-  );
   ipcMain.handle(IPC_CHANNELS.taskList, () => taskIndex.all());
   ipcMain.handle(
-    IPC_CHANNELS.tagSummariseResults,
-    (_event, query: TagSearchQuery, taskId?: string): Promise<string> =>
-      actionRunner.summariseSearchResults(formatHitsForSummary(tagIndex.search(query)), taskId),
-  );
-  ipcMain.handle(
     IPC_CHANNELS.tagSuggest,
-    (_event, entryText: string, taskId?: string): Promise<string[]> =>
-      actionRunner.suggestTags(
+    (_event, entryText: string, taskId?: string): Promise<string[]> => {
+      const provider = pluginHost.getSectionSearchProvider();
+      if (provider === null) {
+        return Promise.reject(new Error('Tag suggestions need the Tags plugin to be enabled.'));
+      }
+      return actionRunner.suggestTags(
         entryText,
-        tagIndex.getVocabulary().map((entry) => entry.tag),
+        provider.vocabulary().map((entry) => entry.tag),
         taskId,
-      ),
+      );
+    },
   );
-}
-
-/**
- * Flattens search hits into the user message for the result summary: one
- * `## <heading> (<path>)` block per hit followed by its snippet, capped so
- * a very broad search does not blow the model's context.
- */
-function formatHitsForSummary(hits: readonly TagSearchHit[]): string {
-  const MAX_HITS = 40;
-  const MAX_CHARS = 8000;
-  const blocks = hits
-    .slice(0, MAX_HITS)
-    .map((hit) => `## ${hit.heading} (${hit.path})\n${hit.snippet}`);
-  let out = blocks.join('\n\n');
-  if (out.length > MAX_CHARS) {
-    out = `${out.slice(0, MAX_CHARS)}\n…`;
-  }
-  return out;
 }

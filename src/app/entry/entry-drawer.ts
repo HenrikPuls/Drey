@@ -10,7 +10,7 @@ import { MarkdownSurface } from '../editor/markdown-surface/markdown-surface';
 import { EntryDraftService } from './entry-draft.service';
 import { EditorService } from '../services/editor.service';
 import { SpellcheckService } from '../services/spellcheck.service';
-import { AutotagButton } from '../tags';
+import { AutotagButton } from './autotag-button';
 
 /**
  * The "Add entry" panel body: an optional TOPIC, a row of tag chips, then

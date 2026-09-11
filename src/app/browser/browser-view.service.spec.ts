@@ -31,9 +31,7 @@ describe('BrowserViewService', () => {
         eventListener = listener;
         return () => undefined;
       },
-      onBrowserOpenTab: () => () => undefined,
-      listTags: () => Promise.resolve([]),
-    };
+      onBrowserOpenTab: () => () => undefined,    };
     window.dreyApi = fakeApi as DreyApi;
     svc = TestBed.inject(BrowserViewService);
     editor = TestBed.inject(EditorService);

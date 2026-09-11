@@ -3,7 +3,6 @@ import { McpWriteRequest } from '../../../shared/ipc-api';
 import { pickPreviewStyle } from '../../../shared/text-diff';
 import { TaskService } from '../tasks';
 import { ConfirmationService } from '../llm';
-import { TagService } from './tag.service';
 import { VaultService } from '../vault';
 
 /**
@@ -22,7 +21,6 @@ import { VaultService } from '../vault';
 @Injectable({ providedIn: 'root' })
 export class McpBridgeService {
   private readonly confirmation = inject(ConfirmationService);
-  private readonly tags = inject(TagService);
   private readonly taskList = inject(TaskService);
   private readonly vault = inject(VaultService);
 
@@ -36,8 +34,7 @@ export class McpBridgeService {
 
     window.dreyApi.onMcpWriteRequest?.((request) => void this.confirm(request));
     window.dreyApi.onVaultChanged?.(() => {
-      void this.tags.refresh();
-      void this.taskList.refresh();
+            void this.taskList.refresh();
       void this.vault.refresh();
     });
   }

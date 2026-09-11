@@ -10,7 +10,6 @@
 import type { AppConfig, CustomDictionary, LlmEndpoint } from './app-config';
 import type { ActionContext, ActionOutcome, AskOutcome, ChatMessage, LlmDebugEntry } from './llm';
 import type { ChatThread } from './chat-thread';
-import type { TagSearchHit, TagSearchQuery } from './tags';
 import type { TaskRecord } from './tasks';
 import type {
   BrowserCreateArgs,
@@ -41,7 +40,6 @@ export type {
   LlmDebugEntry,
   ResolvedAction,
 } from './llm';
-export type { TagSearchHit, TagSearchQuery } from './tags';
 export type { TaskKind, TaskRecord } from './tasks';
 export type {
   BrowserCreateArgs,
@@ -678,40 +676,7 @@ export interface DreyApi {
    */
   saveNote(request: NoteSaveRequest): Promise<NoteSaveResult>;
 
-  /**
-   * The vault-wide tag vocabulary (`tag` + section count) for `#tag`
-   * autocomplete and the search panel's tag picker. Rebuilt when a vault
-   * is selected, re-indexed per file on each `saveNote` and on delete;
-   * external edits are picked up on the next vault load / manual refresh
-   * (no file watcher). Resolves to `[]` when no vault is active.
-   */
-  listTags(): Promise<TagEntry[]>;
-
-  /**
-   * Every checkbox / `#task` line in the vault (`shared/tasks`), for the
-   * Tasks panel in "whole vault" scope. Same index lifecycle as
-   * `listTags`: rebuilt on vault open, re-indexed per file on `saveNote`
-   * and on delete; external edits wait for the next vault load / refresh
-   * (no file watcher). Resolves to `[]` when no vault is active.
-   */
-  listTasks(): Promise<TaskRecord[]>;
-
-  /**
-   * Runs the tag search: sections where every `query.tags` entry is present
-   * and every whitespace-split term of `query.text` appears (body or
-   * heading). Each hit carries a path, heading, 1-based line and a compact
-   * snippet. Fast -- no LLM. `[]` when the query is empty or no vault.
-   */
-  searchTags(query: TagSearchQuery): Promise<TagSearchHit[]>;
-
-  /**
-   * Runs the same search, then asks the local model for a short prose
-   * digest of the matching sections. `taskId` makes it cancellable
-   * (`cancelLlmTask`); no timeout (ADR-0014). Rejects when LLM features are
-   * off, the query is empty, or the model errors.
-   */
-  summariseSearchResults(query: TagSearchQuery, taskId?: string): Promise<string>;
-
+  
   /**
    * The drawer's "Autotag" button: `entryText` plus the vault tag
    * vocabulary in, up to four suggested tags out. Only pre-fills the tag
@@ -719,6 +684,9 @@ export interface DreyApi {
    * cancellable. Rejects when LLM features are off.
    */
   suggestTags(entryText: string, taskId?: string): Promise<string[]>;
+
+  /** Every checkbox / `#task` line in the vault (the Tasks panel's vault scope). */
+  listTasks(): Promise<TaskRecord[]>;
 
   /** Current MCP vault server state for the Settings pane (ADR-0021). */
   getMcpStatus(): Promise<McpStatus>;

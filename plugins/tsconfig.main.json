@@ -15,7 +15,7 @@
     "types": ["node"]
   },
   "//": "Plugin main entries compile to CommonJS under dist-electron/plugins/<id>/main/ (the host imports them with import(pathToFileURL(...))). Type-only imports from shared/ are erased; the emitted dist-electron/shared copies are the same dead weight electron/tsconfig.json already produces.",
-  "include": ["./**/main/**/*.ts", "../shared/plugin-api/**/*.ts"],
+  "include": ["./**/main/**/*.ts", "./**/shared/**/*.ts", "../shared/plugin-api/**/*.ts"],
   "exclude": [
     "../shared/plugin-api/plugin-api.ts",
     "../shared/plugin-api/renderer.ts",

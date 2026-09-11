@@ -1,0 +1,12 @@
+{
+  "id": "tags",
+  "name": "Tags",
+  "version": "1.0.0",
+  "apiVersion": 1,
+  "description": "Inline #tag vocabulary and section index: the Search dock panel, editor #tag autocomplete and pills, and the section search behind MCP vault_search.",
+  "author": "Drey",
+  "main": "main/index.js",
+  "renderer": "renderer/index.js",
+  "css": ["renderer/tags.css"],
+  "permissions": ["documents", "vault", "editor", "commands", "main-process"]
+}

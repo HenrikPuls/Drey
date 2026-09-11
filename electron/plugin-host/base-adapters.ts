@@ -1,26 +1,23 @@
 /**
- * TEMPORARY base adapters (ADR-0044 stage 2): the tag/task index maintenance
+ * TEMPORARY base adapters (ADR-0044 stages 2/5): the task index maintenance
  * and the on-save Actions still live in the base app until their plugins
- * exist (stages 5-7). Until then they participate in the plugin seams like
- * any plugin would — registered here as hooks/provider — so that the
- * pipeline itself is already feature-agnostic and each later conversion is
- * a deletion, not a rewire.
+ * exist (stages 6-7); they participate in the save-hook registry like any
+ * plugin would, so each later conversion is a deletion, not a rewire.
+ * (The tag index already converted — its hooks/provider live in the Tags
+ * plugin.)
  *
- * Behaviour here is byte-for-byte what `NoteManager` used to do inline:
- * index re-indexing skipped under `templates/`, on-save Actions gated on
- * the LLM master switch and `runOnSaveActions`, non-confirm edits written
- * back (and re-indexed) before the next trigger runs.
+ * Behaviour is what `NoteManager` used to do inline: task re-indexing
+ * skipped under `templates/`, on-save Actions gated on the LLM master
+ * switch and `runOnSaveActions`, non-confirm edits written back before
+ * the next trigger runs.
  */
 import type { ActionOutcome } from '../../shared/llm';
 import type {
   NoteSavedEvent,
   SaveHookResult,
-  SectionSearchProvider,
   Unsubscribe,
 } from '../../shared/plugin-api';
-import type { TagSearchHit, TagSearchQuery } from '../../shared/tags';
 import type { ActionRunner } from '../llm';
-import type { TagIndex } from '../tags';
 import type { TaskIndex } from '../tasks';
 import type { VaultManager } from '../vault-manager';
 import type { PluginHost } from './plugin-host';
@@ -33,15 +30,13 @@ export function registerBaseSaveHooks(
   host: PluginHost,
   deps: {
     readonly vault: VaultManager;
-    readonly tagIndex: TagIndex;
     readonly taskIndex: TaskIndex;
     readonly actions: ActionRunner;
   },
 ): Unsubscribe {
   const hook = async (event: NoteSavedEvent): Promise<SaveHookResult | void> => {
-    // Index maintenance (the tags/tasks plugins will bring their own).
+    // Task index maintenance (the tasks plugin will bring its own).
     if (!event.path.startsWith(NO_INDEX_PREFIX)) {
-      deps.tagIndex.reindexFile(event.path, event.content);
       deps.taskIndex.reindexFile(event.path, event.content);
     }
 
@@ -66,7 +61,6 @@ export function registerBaseSaveHooks(
         current = outcome.after;
         currentMs = await deps.vault.writeFile(event.path, toDisk(current, event.eol));
         if (!event.path.startsWith(NO_INDEX_PREFIX)) {
-          deps.tagIndex.reindexFile(event.path, current);
         }
       }
     }
@@ -75,20 +69,6 @@ export function registerBaseSaveHooks(
       : { ...(pendingActions.length > 0 ? { pendingActions } : {}) };
   };
   return host.save.onNoteSaved(hook);
-}
-
-/** Registers the tag index as the section-search provider MCP reads. */
-export function registerBaseSearchProvider(host: PluginHost, tagIndex: TagIndex): Unsubscribe {
-  const provider: SectionSearchProvider & {
-    /** Kept for `VaultTools`' post-write re-index until the tags plugin owns it. */
-    reindexFile(path: string, content: string): void;
-  } = {
-    search: (query: TagSearchQuery): Promise<readonly TagSearchHit[]> =>
-      Promise.resolve(tagIndex.search(query)),
-    vocabulary: () => tagIndex.getVocabulary(),
-    reindexFile: (path: string, content: string) => tagIndex.reindexFile(path, content),
-  };
-  return host.search.registerSectionSearch(provider);
 }
 
 function toDisk(text: string, eol: '\n' | '\r\n'): string {

@@ -19,7 +19,7 @@
  * written inside an example does not become a real task.
  */
 
-import { extractInlineTags, splitSections } from '../tags';
+import { extractInlineTags, splitSections } from './tag-support';
 
 export type TaskKind = 'checkbox' | 'tag';
 

@@ -6,7 +6,6 @@ import { AssistantPanel } from './panels/assistant-panel';
 import { CalendarPanel } from './panels/calendar-panel';
 import { EntryPanel } from './panels/entry-panel';
 import { FilesPanel } from './panels/files-panel';
-import { SearchPanelHost } from './panels/search-panel-host';
 import { WindowsPanel } from './panels/windows-panel';
 
 /** A widget id. Was the closed `PanelId` union; now the registry is the source of truth. */
@@ -92,16 +91,6 @@ export const CORE_WIDGETS: readonly WidgetDescriptor[] = [
     defaultFlex: 340,
     removable: true,
     capabilities: ['file-tree', 'active-document'],
-  },
-  {
-    id: 'search',
-    title: 'Search',
-    component: SearchPanelHost,
-    defaultDock: 'left',
-    defaultOpen: false,
-    defaultFlex: 220,
-    removable: true,
-    capabilities: ['tag-queries', 'search', 'active-document'],
   },
   {
     id: 'tasks',

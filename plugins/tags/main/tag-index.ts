@@ -1,7 +1,7 @@
 /**
- * The vault's tag index (replaces the old frontmatter-scanning
- * `electron/tag-index.ts`). Two things, both derived purely from inline
- * `#tag`s in note bodies:
+ * The vault's tag index, plugin-side (ADR-0017, converted in ADR-0044
+ * stage 5). Two things, both derived purely from inline `#tag`s in note
+ * bodies:
  *
  *  - a **vocabulary** (`tag` + how many sections carry it) for `#tag`
  *    autocomplete and the search panel's tag picker;
@@ -10,13 +10,19 @@
  *
  * The literal `templates/` folder is always skipped, and so is the
  * user-configured templates folder when that differs; everything else,
- * `daily/` included, is scanned. Full rebuild on vault open / manual
- * refresh; a single file is re-indexed on `note:save` and dropped on
- * delete -- there is no file watcher.
+ * `daily/` included, is scanned. Full rebuild on vault open / refresh /
+ * vault-change events; a single file is re-indexed on `note:save` (a save
+ * hook) and dropped on delete -- there is no file watcher.
  */
-import { runTagSearch, sectionRecordsFor } from '../../shared/tags';
-import { TagEntry, TagSearchHit, TagSearchQuery } from '../../shared/ipc-api';
-import { VaultManager } from '../vault-manager';
+import { runTagSearch } from '../shared/search';
+import { sectionRecordsFor } from '../shared/section-records';
+import type { TagSearchHit, TagSearchQuery } from '../shared/search';
+
+/** `{ tag, count }` for the vocabulary — the SDK's `TagEntry` shape. */
+export interface TagEntry {
+  tag: string;
+  count: number;
+}
 
 /**
  * One heading-delimited section of a note that carries at least one tag.
@@ -44,13 +50,14 @@ export class TagIndex {
   private byPath = new Map<string, SectionRecord[]>();
 
   /**
+   * @param listMarkdownFiles flattens the vault tree to `.md` paths
+   *   (vault-relative, forward-slash).
    * @param getTemplatesDir the configured templates folder (vault-relative,
-   *   no slashes) -- its files are excluded too. Optional so existing
-   *   call-sites / tests keep working; the literal `templates/` is always
-   *   excluded regardless.
+   *   no slashes) -- its files are excluded too. Optional; the literal
+   *   `templates/` is always excluded regardless.
    */
   constructor(
-    private readonly vault: VaultManager,
+    private readonly listMarkdownFiles: () => Promise<string[]>,
     private readonly getTemplatesDir?: () => string,
   ) {}
 
@@ -70,7 +77,7 @@ export class TagIndex {
     this.byPath.clear();
     let paths: string[];
     try {
-      paths = await this.vault.listMarkdownFiles();
+      paths = await this.listMarkdownFiles();
     } catch {
       return;
     }
@@ -79,12 +86,19 @@ export class TagIndex {
         continue;
       }
       try {
-        const { content } = await this.vault.readFile(path);
+        const content = await this.readContent(path);
         this.byPath.set(path, recordsFor(path, content));
       } catch {
         // Unreadable -- skip; the next rebuild picks it up.
       }
     }
+  }
+
+  private readContent: (path: string) => Promise<string> = async () => '';
+
+  /** The plugin entry wires its vault `read` here before the first rebuild. */
+  setReadContent(read: (path: string) => Promise<string>): void {
+    this.readContent = read;
   }
 
   /** Re-indexes one file after a save (or drops it if it now sits under an excluded folder). */
@@ -121,7 +135,7 @@ export class TagIndex {
     return [...this.byPath.values()].flat();
   }
 
-  /** Tag + free-text search over the tagged sections (`shared/tags/runTagSearch`). */
+  /** Tag + free-text search over the tagged sections (`shared/search/runTagSearch`). */
   search(query: TagSearchQuery): TagSearchHit[] {
     return runTagSearch(this.getSections(), query);
   }

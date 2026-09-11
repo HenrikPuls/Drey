@@ -1,5 +1,4 @@
-import { TagIndex } from '../../../electron/tags';
-import type { VaultManager } from '../../../electron/vault-manager';
+import { TagIndex } from '../../../plugins/tags/main/tag-index';
 
 /**
  * `TagIndex` excludes the literal `templates/` folder always, and the
@@ -14,16 +13,17 @@ const FILES: Record<string, string> = {
   'notes/real.md': '## Real #keeper\nz\n',
 };
 
-function fakeVault(): VaultManager {
-  return {
-    listMarkdownFiles: async () => Object.keys(FILES),
-    readFile: async (p: string) => ({ content: FILES[p] ?? '', modifiedMs: 0 }),
-  } as unknown as VaultManager;
+function listMarkdownFiles(): Promise<string[]> {
+  return Promise.resolve(Object.keys(FILES));
 }
+
+/** The plugin's index reads file contents through the injected reader. */
+const readContent = (p: string): Promise<string> => Promise.resolve(FILES[p] ?? '');
 
 describe('TagIndex templates exclusion', () => {
   it('excludes both the literal templates/ folder and the configured one', async () => {
-    const index = new TagIndex(fakeVault(), () => 'meta/templates');
+    const index = new TagIndex(listMarkdownFiles, () => 'meta/templates');
+    index.setReadContent(readContent);
     await index.rebuild();
     const tags = index.getVocabulary().map((e) => e.tag);
     expect(tags).toContain('work');
@@ -33,7 +33,8 @@ describe('TagIndex templates exclusion', () => {
   });
 
   it('falls back to only the literal templates/ folder with no getter', async () => {
-    const index = new TagIndex(fakeVault());
+    const index = new TagIndex(listMarkdownFiles);
+    index.setReadContent(readContent);
     await index.rebuild();
     const tags = index.getVocabulary().map((e) => e.tag);
     expect(tags).not.toContain('meeting');
@@ -41,7 +42,8 @@ describe('TagIndex templates exclusion', () => {
   });
 
   it('drops a file from the index when a save moves it under the configured folder', async () => {
-    const index = new TagIndex(fakeVault(), () => 'meta/templates');
+    const index = new TagIndex(listMarkdownFiles, () => 'meta/templates');
+    index.setReadContent(readContent);
     await index.rebuild();
     expect(index.getVocabulary().map((e) => e.tag)).toContain('keeper');
 

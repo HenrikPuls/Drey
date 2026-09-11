@@ -18,7 +18,6 @@ import { OverlayGuardDirective } from '../services/overlay-guard.directive';
 import { PaneService } from '../panes/pane.service';
 import { SettingsService } from '../services/settings.service';
 import { SpellcheckService } from '../services/spellcheck.service';
-import { TagSearchService } from '../tags';
 import { Icon } from '../icons/icon';
 import { resolveVaultLinkPath } from './link-open';
 import { MarkdownSurface } from './markdown-surface/markdown-surface';
@@ -78,7 +77,6 @@ export class Editor implements AfterViewInit {
   protected readonly actions = inject(ActionsService);
   private readonly panes = inject(PaneService);
   private readonly spellcheck = inject(SpellcheckService);
-  private readonly tagSearch = inject(TagSearchService);
 
   /** Which pane this editor belongs to (ADR-0037) -- set once by `PaneLeaf`. */
   readonly paneId = input.required<string>();
@@ -95,7 +93,6 @@ export class Editor implements AfterViewInit {
    * the sidebar search query with that tag and runs it. An arrow function
    * so it keeps its `this` when the extension calls it.
    */
-  protected readonly activateTag = (tag: string): void => this.tagSearch.searchTag(tag);
 
   /**
    * Passed to the surface: a `Ctrl`/`Cmd`-click on a Markdown link. Web /

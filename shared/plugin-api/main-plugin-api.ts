@@ -19,8 +19,8 @@ import type {
   LlmDebugEntry,
 } from '../llm';
 import type { AppConfig } from '../app-config';
-import type { TagSearchHit, TagSearchQuery } from '../tags';
-import type { TagEntry, VaultFileEntry } from '../ipc-api';
+import type { TagEntry, TagSearchHit, TagSearchQuery } from './search-types';
+import type { VaultFileEntry } from '../ipc-api';
 import type { PluginManifest } from './manifest';
 
 /** Fired after a note save has been written to disk (ADR-0044 rule 4). */

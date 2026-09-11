@@ -22,10 +22,9 @@ import { registerIpcHandlers, McpWriteBridge } from './ipc';
 import { McpHttpTransport, McpServer, VaultTools } from './mcp';
 import { attachContextMenu, buildApplicationMenu } from './menu';
 import { NoteManager } from './note-manager';
-import { PluginHost, registerBaseSaveHooks, registerBaseSearchProvider } from './plugin-host';
+import { PluginHost, registerBaseSaveHooks } from './plugin-host';
 import { SessionBackupStore } from './session';
 import { SpellcheckService } from './spellcheck';
-import { TagIndex } from './tags';
 import { TaskIndex } from './tasks';
 import { VaultManager } from './vault-manager';
 
@@ -437,10 +436,6 @@ if (!app.requestSingleInstanceLock()) {
     const vaultManager = new VaultManager();
     const dailyNotes = new DailyNoteManager(vaultManager);
     const appConfig = new AppConfigStore();
-    // The tag index also skips the user-configured templates folder (on top
-    // of the always-excluded literal `templates/`), so snippet headings do
-    // not leak into tag search.
-    const tagIndex = new TagIndex(vaultManager, () => appConfig.get().templates.dir);
     const taskIndex = new TaskIndex(vaultManager, () => appConfig.get().templates.dir);
     const llmDebug = new LlmDebugLog();
     const lmStudio = new LmStudioClient(appConfig, llmDebug);
@@ -449,15 +444,17 @@ if (!app.requestSingleInstanceLock()) {
     // server and the assistant's in-process tool-calling loop.
     const vaultTools = new VaultTools(
       vaultManager,
-      // The section-search seam (ADR-0044 stage 2): reads whichever provider
-      // is registered (the base adapter registers the tag index until the
-      // tags plugin exists). The closure reads the module variable lazily,
-      // so construction order between the tools and the host stays free.
+      // The section-search seam (ADR-0044): reads whichever provider a
+      // plugin registered (the Tags plugin). The closure reads the module
+      // variable lazily, so construction order stays free.
       () => pluginHost?.getSectionSearchProvider() ?? null,
-      (path, content) => tagIndex.reindexFile(path, content),
       () => appConfig.get(),
       (request) => mcpWriteBridge.requestConfirmation(request),
-      () => mainWindow?.webContents.send(IPC_CHANNELS.mcpVaultChanged),
+      () => {
+        mainWindow?.webContents.send(IPC_CHANNELS.mcpVaultChanged);
+        // An MCP write bypasses note:save — plugin vault listeners rebuild.
+        pluginHostRef?.emitVaultChange({ kind: 'write' });
+      },
     );
     const actionRunner = new ActionRunner(appConfig, lmStudio, llmTasks, vaultTools);
     // The plugin host activates main entries before the window exists and
@@ -489,16 +486,10 @@ if (!app.requestSingleInstanceLock()) {
       },
     });
     await pluginHost.discoverAndActivate();
-    // Until the tags/tasks/assistant plugins exist, the base behaviours
-    // participate in the seams like plugins would (ADR-0044 stage 2).
+    // Until the tasks/assistant plugins exist, their base behaviours
+    // participate in the seams like plugins would (ADR-0044 stage 5).
     const pluginHostRef = pluginHost;
-    registerBaseSaveHooks(pluginHostRef, {
-      vault: vaultManager,
-      tagIndex,
-      taskIndex,
-      actions: actionRunner,
-    });
-    registerBaseSearchProvider(pluginHostRef, tagIndex);
+    registerBaseSaveHooks(pluginHostRef, { vault: vaultManager, taskIndex, actions: actionRunner });
     const noteManager = new NoteManager(vaultManager, {
       onNoteSaved: (hook) => pluginHostRef.save.onNoteSaved(hook),
       emitNoteSaved: (event) => pluginHostRef.emitNoteSaved(event),
@@ -512,10 +503,10 @@ if (!app.requestSingleInstanceLock()) {
     // bound to the window later in `createMainWindow` via `attach()`.
     browserViews = new BrowserViewManager(() => mainWindow);
     const sessionBackups = new SessionBackupStore();
-    await tagIndex.rebuild();
     await taskIndex.rebuild();
-    // Plugins can react to the initial vault load like any later refresh.
-    pluginHost.emitVaultChange({ kind: 'refresh' });
+    // Plugins can react to the initial vault load like any later refresh
+    // (the tags plugin rebuilds its index from this event).
+    pluginHostRef.emitVaultChange({ kind: 'refresh' });
     await syncMcpHttpTransport(mcpHttp, appConfig);
 
     // Push each new debug entry to the renderer so the LLM settings pane
@@ -534,7 +525,6 @@ if (!app.requestSingleInstanceLock()) {
       vaultManager,
       dailyNotes,
       noteManager,
-      tagIndex,
       taskIndex,
       appConfig,
       lmStudio,

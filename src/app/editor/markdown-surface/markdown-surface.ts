@@ -22,10 +22,8 @@ import { EditorService, EditorViewMode } from '../../services/editor.service';
 import { EditTargetService } from '../../services/edit-target.service';
 import { EditorZoomService } from '../../services/editor-zoom.service';
 import { ImageLightboxService } from '../../image-viewer';
-import { TagService } from '../../services/tag.service';
 import { VaultService } from '../../vault';
-import { ThemeService } from '../../services/theme.service';
-import { ThemeCatalogEntry } from '../themes/theme-catalog';
+import { ThemeService } from '../../services/theme.service';import { ThemeCatalogEntry } from '../themes/theme-catalog';
 import { dreyEditorLook, editorStructure } from '../editor-theme';
 import { imagePaste } from '../image-paste';
 import { toggleTaskDone } from '../markdown-commands';
@@ -38,8 +36,6 @@ import { livePreview } from '../live-preview';
 import { inlineSpellcheck, requestSpellcheck, SpellcheckSource } from '../spellcheck/spellcheck';
 import { linkActivation } from '../link-open';
 import { pasteUrlAsMarkdownLink } from '../paste-link';
-import { makeTagCompletionSource } from '../tag-complete';
-import { tagPills } from '../tag-pill';
 import { resolveVaultImageUrl } from '../vault-image';
 import { EditorExtensionRegistry, DropDecoderRegistry } from '../../plugin-host';
 
@@ -71,7 +67,6 @@ import { EditorExtensionRegistry, DropDecoderRegistry } from '../../plugin-host'
 export class MarkdownSurface implements AfterViewInit, OnDestroy {
   private readonly editor = inject(EditorService);
   private readonly editTarget = inject(EditTargetService);
-  private readonly tags = inject(TagService);
   private readonly vault = inject(VaultService);
   private readonly themes = inject(ThemeService);
   private readonly zoom = inject(EditorZoomService);
@@ -135,14 +130,6 @@ export class MarkdownSurface implements AfterViewInit, OnDestroy {
    * turns this off.
    */
   readonly submitOnEnter = input(true);
-  /**
-   * When set, inline `#tag`s render as pills and a `Ctrl`/`Cmd`-click on
-   * one calls this with the bare tag. Read once at construction. The full-
-   * page editor wires it to the tag search; the entry drawer leaves it
-   * unset (composing a note, not navigating it).
-   */
-  readonly onTagActivate = input<(tag: string) => void>();
-
   /**
    * When set, a `Ctrl`/`Cmd`-click on a Markdown link calls this with the
    * raw target. Read once at construction. The full-page editor wires it to
@@ -296,10 +283,8 @@ export class MarkdownSurface implements AfterViewInit, OnDestroy {
         // stays plain.
         extensions: [{ remove: ['Emoji'] }],
       }),
-      markdownLanguage.data.of({
-        autocomplete: makeTagCompletionSource(() => this.tags.tags()),
-      }),
-      this.onTagActivate() ? tagPills(this.onTagActivate()!) : [],
+      // `#tag` completion + pills are plugin extensions now (the Tags
+      // plugin's `registerExtension('both')`, ADR-0044 stage 5).
       this.onLinkActivate() ? linkActivation(this.onLinkActivate()!) : [],
       // Paste a bare URL onto an empty caret -> `[url](url)` (lang-markdown's
       // own pasteURLAsLink only handles the wrap-a-selection case).
@@ -454,9 +439,6 @@ export class MarkdownSurface implements AfterViewInit, OnDestroy {
         ],
       }),
     });
-    // Pick up any tags registered after TagService first constructed
-    // (e.g. a vault selected later in the session).
-    void this.tags.refresh();
     // The compartment is seeded with the Markdown bundle; if this surface
     // opened straight onto a code file, swap the grammar now rather than
     // waiting for the first `languageFilename` change.

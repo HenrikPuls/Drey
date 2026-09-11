@@ -1,7 +1,7 @@
 import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
-import { EntryDraftService } from '../../entry';
-import { LlmTaskService } from '../../llm';
-import { Icon } from '../../icons/icon';
+import { EntryDraftService } from './entry-draft.service';
+import { LlmTaskService } from '../llm';
+import { Icon } from '../icons/icon';
 
 /**
  * The drawer's "Autotag" button: sends the current entry text to the local

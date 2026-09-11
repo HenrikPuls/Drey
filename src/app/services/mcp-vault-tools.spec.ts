@@ -40,9 +40,6 @@ function fakeProvider(hits: unknown[] = []): SectionSearchProvider {
   };
 }
 
-function reindexed(paths: Array<{ path: string; content: string }>): (p: string, c: string) => void {
-  return (path, content) => paths.push({ path, content });
-}
 
 describe('McpServer.handle', () => {
   const tools = {
@@ -91,7 +88,6 @@ describe('VaultTools', () => {
     const tools = new VaultTools(
       fakeVault({}),
       () => fakeProvider(),
-      () => undefined,
       () => config(),
       async () => true,
     );
@@ -104,7 +100,6 @@ describe('VaultTools', () => {
     const tools = new VaultTools(
       fakeVault({ 'a.md': 'alpha\nBETA\n', 'b.md': 'gamma\n' }),
       () => fakeProvider(),
-      () => undefined,
       () => config(),
       async () => true,
     );
@@ -117,7 +112,6 @@ describe('VaultTools', () => {
     const tools = new VaultTools(
       fakeVault({ 'a.md': 'hi' }),
       () => fakeProvider(),
-      () => undefined,
       () => config(),
       async () => true,
     );
@@ -131,7 +125,6 @@ describe('VaultTools', () => {
     const tools = new VaultTools(
       fakeVault(files),
       () => fakeProvider(),
-      () => undefined,
       () => config(),
       async () => {
         asked++;
@@ -148,7 +141,6 @@ describe('VaultTools', () => {
     const tools = new VaultTools(
       fakeVault(files),
       () => fakeProvider(),
-      () => undefined,
       () => config(),
       async () => false,
     );
@@ -163,7 +155,6 @@ describe('VaultTools', () => {
     const tools = new VaultTools(
       fakeVault(files),
       () => fakeProvider(),
-      () => undefined,
       () => config({ yolo: true }),
       async () => {
         asked++;
@@ -175,25 +166,10 @@ describe('VaultTools', () => {
     expect(asked).toBe(0);
   });
 
-  it('re-indexes a written file so a follow-up search sees it', async () => {
-    const files = { 'note.md': 'old' };
-    const reindexedFiles: Array<{ path: string; content: string }> = [];
-    const tools = new VaultTools(
-      fakeVault(files),
-      () => fakeProvider(),
-      reindexed(reindexedFiles),
-      () => config({ yolo: true }),
-      async () => true,
-    );
-    await tools.call('vault_write', { path: 'note.md', content: 'new' });
-    expect(reindexedFiles).toEqual([{ path: 'note.md', content: 'new' }]);
-  });
-
   it('degrades vault_search with a clear error when no provider is registered', async () => {
     const tools = new VaultTools(
       fakeVault({}),
       () => null,
-      () => undefined,
       () => config(),
       async () => true,
     );

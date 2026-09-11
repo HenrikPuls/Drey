@@ -210,6 +210,24 @@ export class PluginHost {
           String(shape['question'] ?? ''),
           typeof shape['taskId'] === 'string' ? shape['taskId'] : undefined,
         );
+      case 'drey.search.sections': {
+        const provider = this.searchProvider;
+        if (provider === null) {
+          throw new Error('no section-search provider is registered');
+        }
+        const query = (shape['query'] ?? {}) as { tags?: string[]; text?: string };
+        return provider.search({
+          tags: Array.isArray(query.tags) ? query.tags : [],
+          text: typeof query.text === 'string' ? query.text : '',
+        });
+      }
+      case 'drey.search.vocabulary': {
+        const provider = this.searchProvider;
+        if (provider === null) {
+          throw new Error('no section-search provider is registered');
+        }
+        return provider.vocabulary();
+      }
       default:
         throw new Error(`unknown host method "${method}"`);
     }
