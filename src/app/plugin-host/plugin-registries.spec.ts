@@ -1,4 +1,5 @@
 import { TestBed } from '@angular/core/testing';
+import { DocKindRegistry } from './doc-kind-registry.service';
 import { EditorExtensionRegistry } from './editor-extension-registry.service';
 import { DropDecoderRegistry } from './drop-decoder-registry.service';
 import {
@@ -128,6 +129,57 @@ describe('MenuContributionsService + EditorContextMenuRegistry', () => {
     expect(registry.items()).toEqual([]);
     enabled = true;
     expect(registry.items().map((i) => i.label)).toEqual(['x']);
+  });
+});
+
+describe('DocKindRegistry', () => {
+  let registry: DocKindRegistry;
+
+  beforeEach(() => {
+    TestBed.configureTestingModule({});
+    registry = TestBed.inject(DocKindRegistry);
+  });
+
+  const kind = (name: string): import('../../../shared/plugin-api/renderer').PluginDocKindContrib => ({
+    kind: name,
+    serialize: () => null,
+    restore: () => undefined,
+    mount: () => () => undefined,
+  });
+
+  it('registers and unregisters kinds; a later duplicate replaces the first', () => {
+    const first = kind('browser');
+    const unsub = registry.register(first);
+    expect(registry.get('browser')).toBe(first);
+
+    const second = kind('browser');
+    registry.register(second);
+    expect(registry.get('browser')).toBe(second); // later wins, warned
+
+    unsub();
+    expect(registry.get('browser')).toBe(second); // only the owner's own unsubscribe removes
+  });
+
+  it('answers favicon/statusText and guards a throwing callback', () => {
+    registry.register({
+      ...kind('bad'),
+      favicon: () => {
+        throw new Error('boom');
+      },
+      statusText: () => null,
+    });
+    registry.register({
+      ...kind('good'),
+      icon: 'globe',
+      favicon: () => 'f.ico',
+      statusText: () => 'url text',
+    });
+
+    expect(registry.faviconFor('good', 'k://1')).toBe('f.ico');
+    expect(registry.statusTextFor('good', 'k://1')).toBe('url text');
+    expect(registry.faviconFor('bad', 'k://1')).toBeNull(); // throw -> logged, null
+    expect(registry.faviconFor('plain', 'k://1')).toBeNull(); // no slot at all
+    expect(registry.statusTextFor('plain', 'k://1')).toBeNull();
   });
 });
 

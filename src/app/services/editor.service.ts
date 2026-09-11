@@ -37,14 +37,16 @@ export interface OpenDoc {
   /** For a browser tab this follows the page title as it loads (via `patchDoc`). */
   readonly name: string;
   /**
-   * `'text'` (a Markdown buffer, the default), `'image'` -- a viewer tab
-   * for a `.png`/`.jpg`/… file (ADR-0026), or `'browser'` -- an in-editor
-   * web browser tab whose page lives in a main-process `WebContentsView`
-   * (ADR-0042). Neither `'image'` nor `'browser'` carries a buffer
+   * `'text'` (a Markdown/code buffer, the default) and `'image'` (a viewer
+   * tab for a `.png`/`.jpg`/… file, ADR-0026) are the base kinds. Anything
+   * else is a registered doc kind (ADR-0044 stage 8A) -- the browser tab
+   * (`browser://<n>`, ADR-0042) today, plugin tabs from stage 8B --
+   * resolved through the `DocKindRegistry` by the pane body, the tab strip
+   * and the session. Neither non-text kind carries a buffer
    * (`savedContent === bufferContent === ''`, never dirty); both skip every
    * text-only path (`save`, `saveAs`, `setViewMode`, `updateBuffer`).
    */
-  readonly kind: 'text' | 'image' | 'browser';
+  readonly kind: string;
   savedContent: string;
   bufferContent: string;
   viewMode: EditorViewMode;
@@ -56,13 +58,10 @@ export interface OpenDoc {
   /**
    * `true` for a generated scratch doc (the tag-search export) that has no
    * intended location: `save()` routes to `saveAs()` so the user picks one.
-   * Daily-note drafts leave this `false` -- they save to their own path.
+   * Daily-note drafts leave this `false` -- they save to their own path. A
+   * plugin doc kind tab does not carry this either -- it saves nothing.
    */
   askOnSave?: boolean;
-  /** Browser tab only: current page URL, mirrored from `browser:event` for the status bar. */
-  url?: string;
-  /** Browser tab only: current favicon URL (or null), for the tab strip. */
-  favicon?: string | null;
 }
 
 function baseName(relativePath: string): string {
@@ -137,14 +136,12 @@ export class EditorService {
   readonly viewMode = computed<EditorViewMode>(() => this.activeDoc()?.viewMode ?? 'live');
 
   /**
-   * The active tab's kind -- `'image'` / `'browser'` make the centre column
-   * swap `<app-editor>` for `<app-image-tab>` / `<app-browser-tab>`, and
-   * every text-only consumer (save, tasks, templates, insert-into-note)
+   * The active tab's kind -- a non-text kind makes the centre column swap
+   * `<app-editor>` for the kind's registered surface (`DocKindRegistry`),
+   * and every text-only consumer (save, tasks, templates, insert-into-note)
    * treats a non-`'text'` kind as "no buffer".
    */
-  readonly activeKind = computed<'text' | 'image' | 'browser'>(
-    () => this.activeDoc()?.kind ?? 'text',
-  );
+  readonly activeKind = computed<string>(() => this.activeDoc()?.kind ?? 'text');
 
   /**
    * `true` for a Markdown path (or `null`/nothing open). `false` for a code
@@ -735,13 +732,14 @@ export class EditorService {
   }
 
   /**
-   * Registers a browser tab (ADR-0042). Called by
-   * `BrowserViewService`, which mints the `browser://<n>` key and owns the
-   * matching `WebContentsView` over IPC; `EditorService` only tracks the
-   * tab's existence, its (page-title) name and favicon for the tab strip,
-   * and its URL for the status bar. No buffer, never dirty, never saved.
+   * Registers a tab of a registered (plugin or core) doc kind
+   * (`DocKindRegistry`). The kind's owner mints the key (`browser://<n>`
+   * for browser tabs) and owns everything behind it -- the view, the
+   * chrome state, the favicon/status slots; `EditorService` only tracks
+   * the tab's existence and its display name. No buffer, never dirty,
+   * never saved.
    */
-  addBrowserDoc(key: string, name: string): void {
+  addPluginDoc(kind: string, key: string, name: string): void {
     if (this.docs().some((d) => d.path === key)) {
       this.panes.open(key);
       return;
@@ -749,24 +747,23 @@ export class EditorService {
     this.addDoc({
       path: key,
       name,
-      kind: 'browser',
+      kind,
       savedContent: '',
       bufferContent: '',
       viewMode: 'live',
       eol: '\n',
       modifiedMs: 0,
       existsOnDisk: true,
-      url: '',
-      favicon: null,
     });
   }
 
-  /** Updates a browser tab's title / favicon / URL as the page loads. */
-  setBrowserMeta(key: string, patch: { name?: string; favicon?: string | null; url?: string }): void {
-    if (this.docFor(key)?.kind !== 'browser') {
+  /** Updates a plugin-doc tab's display name (e.g. the browser's page title). */
+  renameDoc(key: string, name: string): void {
+    const doc = this.docFor(key);
+    if (doc === null || doc.kind === 'text') {
       return;
     }
-    this.patchDoc(key, patch);
+    this.patchDoc(key, { name });
   }
 
   private addDoc(doc: OpenDoc): void {

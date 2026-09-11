@@ -14,11 +14,11 @@
       (contextmenu)="openMenu($event, path)"
       [title]="doc.path"
     >
-      @if (doc.kind === 'browser') {
-        @if (faviconOk(doc.favicon)) {
-          <img class="favicon" [src]="doc.favicon" alt="" (error)="onFaviconError(doc.favicon!)" />
+      @if (tabIcon(doc); as icon) {
+        @if (faviconOk(icon.url)) {
+          <img class="favicon" [src]="icon.url" alt="" (error)="onFaviconError(icon.url)" />
         } @else {
-          <app-icon class="favicon" name="globe" [size]="12" [strokeWidth]="1.6" />
+          <app-icon class="favicon" [name]="icon.glyph" [size]="12" [strokeWidth]="1.6" />
         }
       }
       <span class="name">{{ doc.name }}</span>

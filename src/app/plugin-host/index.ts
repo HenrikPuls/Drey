@@ -8,6 +8,8 @@
 export { PluginHostService } from './plugin-host.service';
 export { PluginWidgetHost } from './plugin-widget-host';
 export { PluginSettingsHost } from './plugin-settings-host';
+export { PluginDocHost } from './plugin-doc-host';
+export { DocKindRegistry } from './doc-kind-registry.service';
 export {
   PLUGIN_MODULE_LOADER,
   DynamicImportLoader,

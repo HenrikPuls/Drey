@@ -77,10 +77,10 @@ describe('BrowserViewService', () => {
     expect(editor.docFor('browser://1')?.name).toBe('Example Domain');
   });
 
-  it('a favicon event mirrors into the doc', () => {
+  it('a favicon event lands in the tab state (the doc-kind slot reads it)', () => {
     svc.openTab();
     eventListener!({ tabId: 'browser://1', kind: 'favicon', favicon: 'https://x/f.ico' });
-    expect(editor.docFor('browser://1')?.favicon).toBe('https://x/f.ico');
+    expect(svc.tabState('browser://1')?.favicon).toBe('https://x/f.ico');
   });
 
   it('a did-navigate event updates url and nav state', () => {
@@ -95,7 +95,6 @@ describe('BrowserViewService', () => {
     const state = svc.tabState('browser://1');
     expect(state?.url).toBe('https://example.com/page');
     expect(state?.canGoBack).toBe(true);
-    expect(editor.docFor('browser://1')?.url).toBe('https://example.com/page');
   });
 
   it('closing the tab destroys the native view and drops its state', () => {

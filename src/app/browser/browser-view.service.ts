@@ -1,8 +1,22 @@
-import { Injectable, computed, effect, inject, signal, untracked } from '@angular/core';
+import {
+  Injectable,
+  ApplicationRef,
+  ComponentRef,
+  computed,
+  createComponent,
+  effect,
+  EnvironmentInjector,
+  inject,
+  signal,
+  untracked,
+} from '@angular/core';
 import type { BrowserEvent, BrowserTabState } from '../../../shared/ipc-api';
+import type { PluginDocKindContrib } from '../../../shared/plugin-api/renderer';
 import { EditorService } from '../services/editor.service';
+import { DocKindRegistry } from '../plugin-host';
 import { LayoutGestureService } from '../services/layout-gesture.service';
 import { OverlayGuardService } from '../services/overlay-guard.service';
+import { BrowserTab } from './browser-tab';
 import { normalizeAddress } from './normalize-address';
 
 const DEFAULT_STATE = (tabId: string): BrowserTabState => ({
@@ -33,6 +47,9 @@ export class BrowserViewService {
   private readonly editor = inject(EditorService);
   private readonly overlayGuard = inject(OverlayGuardService);
   private readonly layout = inject(LayoutGestureService);
+  private readonly docKinds = inject(DocKindRegistry);
+  private readonly envInjector = inject(EnvironmentInjector);
+  private readonly appRef = inject(ApplicationRef);
 
   private readonly _state = signal<Record<string, BrowserTabState>>({});
   readonly state = this._state.asReadonly();
@@ -47,6 +64,8 @@ export class BrowserViewService {
 
   private seq = 0;
   private readonly lastFindQuery = new Map<string, string>();
+  /** The imperatively-mounted `BrowserTab` per open tab, for the focus slot. */
+  private readonly mounted = new Map<string, ComponentRef<BrowserTab>>();
 
   private get api() {
     return typeof window !== 'undefined' ? window.dreyApi : undefined;
@@ -55,6 +74,13 @@ export class BrowserViewService {
   constructor() {
     this.api?.onBrowserEvent((event) => this.reduce(event));
     this.api?.onBrowserOpenTab(({ url }) => this.openTab(url));
+
+    // The browser tab as a doc kind (ADR-0044 stage 8A): still a base
+    // feature, but it reaches the pane through the same registry a plugin
+    // will use in stage 8B -- the pane body, the tab-strip favicon and the
+    // status-bar line resolve through it, and the session persists browser
+    // tabs through its serialize/restore.
+    this.docKinds.register(this.browserDocKind());
 
     // A browser tab removed from the registry (closed via the tab X, "close
     // all", …) -- tear its native view down. One authoritative path for
@@ -99,7 +125,7 @@ export class BrowserViewService {
     const tabId = `browser://${++this.seq}`;
     const url = normalizeAddress(rawInput ?? '') || 'about:blank';
     this._state.update((s) => ({ ...s, [tabId]: { ...DEFAULT_STATE(tabId), url } }));
-    this.editor.addBrowserDoc(tabId, 'New tab');
+    this.editor.addPluginDoc('browser', tabId, 'New tab');
     void this.api?.createBrowserView({ tabId, url });
   }
 
@@ -115,7 +141,7 @@ export class BrowserViewService {
     }
     const url = lastUrl && lastUrl !== 'about:blank' ? lastUrl : 'about:blank';
     this._state.update((s) => ({ ...s, [tabId]: { ...DEFAULT_STATE(tabId), url } }));
-    this.editor.addBrowserDoc(tabId, 'New tab');
+    this.editor.addPluginDoc('browser', tabId, 'New tab');
     void this.api?.createBrowserView({ tabId, url });
   }
 
@@ -188,7 +214,6 @@ export class BrowserViewService {
           canGoForward: event.canGoForward,
           crashed: false,
         });
-        this.editor.setBrowserMeta(tabId, { url: event.url });
         break;
       case 'loading':
         this.patch(tabId, { loading: event.loading });
@@ -196,12 +221,11 @@ export class BrowserViewService {
       case 'title': {
         const title = event.title.trim() || 'New tab';
         this.patch(tabId, { title });
-        this.editor.setBrowserMeta(tabId, { name: title });
+        this.editor.renameDoc(tabId, title);
         break;
       }
       case 'favicon':
         this.patch(tabId, { favicon: event.favicon });
-        this.editor.setBrowserMeta(tabId, { favicon: event.favicon });
         break;
       case 'found-in-page':
         this.patchFind(tabId, { activeMatch: event.activeMatchOrdinal, matches: event.matches });
@@ -210,6 +234,48 @@ export class BrowserViewService {
         this.patch(tabId, { crashed: true, loading: false });
         break;
     }
+  }
+
+  /**
+   * The `DocKindRegistry` contribution (ADR-0044 stage 8A): everything the
+   * pane body, tab strip, status bar and session need from a browser tab,
+   * answered from the service's own chrome state. `mount` brings the
+   * Angular `BrowserTab` in imperatively -- plugin kinds mount plain DOM,
+   * but the seam must carry the built-in first.
+   */
+  private browserDocKind(): PluginDocKindContrib {
+    return {
+      kind: 'browser',
+      icon: 'globe',
+      serialize: (path) => ({ url: this.tabState(path)?.url ?? '' }),
+      restore: (path, data) => {
+        const url =
+          typeof data === 'object' && data !== null && typeof (data as { url?: unknown }).url === 'string'
+            ? (data as { url: string }).url
+            : '';
+        this.restoreTab(path, url);
+      },
+      favicon: (path) => this.tabState(path)?.favicon ?? null,
+      statusText: (path) => {
+        const url = this.tabState(path)?.url ?? '';
+        return url && url !== 'about:blank' ? url : 'New tab';
+      },
+      onFocused: (path, focused) => this.mounted.get(path)?.setInput('focused', focused),
+      mount: (el, path) => {
+        const ref = createComponent(BrowserTab, {
+          hostElement: el,
+          environmentInjector: this.envInjector,
+        });
+        ref.setInput('tabId', path);
+        this.appRef.attachView(ref.hostView);
+        this.mounted.set(path, ref);
+        return () => {
+          this.mounted.delete(path);
+          this.appRef.detachView(ref.hostView);
+          ref.destroy();
+        };
+      },
+    };
   }
 
   /** Drops a tab's chrome state and its native view. */

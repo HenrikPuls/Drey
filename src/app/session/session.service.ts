@@ -1,19 +1,23 @@
 import { Injectable, effect, inject } from '@angular/core';
-import { BrowserViewService } from '../browser';
+import { DocKindRegistry } from '../plugin-host';
 import { PaneLayoutSnapshot, PaneService } from '../panes';
 import { EditorService } from '../services/editor.service';
+import { LogService } from '../services/log.service';
 import { VaultService } from '../vault';
 
 /**
- * One persisted open tab. A `text` tab with nothing on disk to reload from
- * (a never-saved scratch buffer, or unsaved edits to a real file) carries a
- * `backupId` -- the name of its content file under
- * `<userData>/session-backups/` (main process, ADR-0043).
+ * One persisted open tab. The `text` / `image` members are the base kinds
+ * (a text tab with nothing on disk to reload from -- a never-saved scratch
+ * buffer, or unsaved edits to a real file -- carries a `backupId`, the name
+ * of its content file under `<userData>/session-backups/`, ADR-0043). Any
+ * other kind is a registered doc kind (ADR-0044 stage 8A): its owner's
+ * `serialize`/`restore` answer the payload, and a kind that is not
+ * registered at restore time closes silently.
  */
 export type SessionTab =
   | { path: string; kind: 'text'; onDisk: boolean; backupId?: string }
   | { path: string; kind: 'image' }
-  | { path: string; kind: 'browser'; url: string };
+  | { path: string; kind: string; data: unknown };
 
 export interface SessionSnapshot {
   version: 1;
@@ -47,8 +51,9 @@ const BACKUP_DEBOUNCE = 700;
 export class SessionService {
   private readonly editor = inject(EditorService);
   private readonly panes = inject(PaneService);
-  private readonly browser = inject(BrowserViewService);
+  private readonly docKinds = inject(DocKindRegistry);
   private readonly vault = inject(VaultService);
+  private readonly log = inject(LogService);
 
   /** path -> backup id, for tabs whose text is only in a backup file. */
   private readonly backupIds = new Map<string, string>();
@@ -126,42 +131,61 @@ export class SessionService {
   }
 
   private async restoreTab(tab: SessionTab): Promise<boolean> {
-    if (tab.kind === 'browser') {
-      this.browser.restoreTab(tab.path, tab.url);
-      return true;
-    }
     if (tab.kind === 'image') {
       await this.editor.openFile(tab.path);
       return this.editor.openDocs().some((d) => d.path === tab.path);
     }
-
-    // text
-    const backup = tab.backupId ? await this.api?.readSessionBackup(tab.backupId) : null;
-
-    if (tab.onDisk) {
-      await this.editor.openFile(tab.path);
-      const open = this.editor.openDocs().some((d) => d.path === tab.path);
-      if (open && backup != null) {
-        // Re-apply the unsaved edits over the freshly-read disk content.
-        this.editor.updateBuffer(tab.path, backup.replace(/\r\n/g, '\n'));
-        if (tab.backupId) {
-          this.backupIds.set(tab.path, tab.backupId);
-          this.written.add(tab.backupId);
-        }
+    if (tab.kind !== 'text') {
+      // A registered doc kind (ADR-0044): its owner recreates the tab from
+      // the payload. Unregistered kinds (a plugin disabled since) close
+      // silently. Snapshots written before the registry carried the
+      // payload at the top level -- the browser tab's `url` -- so hand the
+      // whole tab over; new snapshots carry it in `data`.
+      const contrib = this.docKinds.get(tab.kind);
+      if (contrib === undefined) {
+        return false;
       }
-      return open;
+      const data = 'data' in tab ? tab.data : tab;
+      try {
+        contrib.restore(tab.path, data);
+        return true;
+      } catch (error) {
+        this.log.record('error', `doc kind "${tab.kind}" restore failed: ${String(error)}`);
+        return false;
+      }
     }
 
-    // never-saved scratch buffer -- only restorable from its backup
-    if (backup == null) {
-      return false;
+    // text (the `data`-carrying member is the doc-kind one; the `in` check
+    // discriminates what the string-typed `kind` cannot)
+    if (!('data' in tab)) {
+      const backup = tab.backupId ? await this.api?.readSessionBackup(tab.backupId) : null;
+
+      if (tab.onDisk) {
+        await this.editor.openFile(tab.path);
+        const open = this.editor.openDocs().some((d) => d.path === tab.path);
+        if (open && backup != null) {
+          // Re-apply the unsaved edits over the freshly-read disk content.
+          this.editor.updateBuffer(tab.path, backup.replace(/\r\n/g, '\n'));
+          if (tab.backupId) {
+            this.backupIds.set(tab.path, tab.backupId);
+            this.written.add(tab.backupId);
+          }
+        }
+        return open;
+      }
+
+      // never-saved scratch buffer -- only restorable from its backup
+      if (backup == null) {
+        return false;
+      }
+      this.editor.openScratch(tab.path, backup.replace(/\r\n/g, '\n'));
+      if (tab.backupId) {
+        this.backupIds.set(tab.path, tab.backupId);
+        this.written.add(tab.backupId);
+      }
+      return true;
     }
-    this.editor.openScratch(tab.path, backup.replace(/\r\n/g, '\n'));
-    if (tab.backupId) {
-      this.backupIds.set(tab.path, tab.backupId);
-      this.written.add(tab.backupId);
-    }
-    return true;
+    return false; // a text tab never carries `data` -- unreachable
   }
 
   // --- persistence ---------------------------------------------------
@@ -180,10 +204,21 @@ export class SessionService {
       if (!doc) {
         continue;
       }
-      if (doc.kind === 'browser') {
-        tabs.push({ path, kind: 'browser', url: doc.url || '' });
-      } else if (doc.kind === 'image') {
+      if (doc.kind === 'image') {
         tabs.push({ path, kind: 'image' });
+      } else if (doc.kind !== 'text') {
+        // A registered doc kind: its owner answers the payload. A kind that
+        // lost its contribution (plugin disabled mid-session) is skipped --
+        // nothing could restore it.
+        const contrib = this.docKinds.get(doc.kind);
+        if (contrib === undefined) {
+          continue;
+        }
+        try {
+          tabs.push({ path, kind: doc.kind, data: contrib.serialize(path) });
+        } catch (error) {
+          this.log.record('error', `doc kind "${doc.kind}" serialize failed: ${String(error)}`);
+        }
       } else {
         const needsBackup = !doc.existsOnDisk || doc.bufferContent !== doc.savedContent;
         let backupId: string | undefined;

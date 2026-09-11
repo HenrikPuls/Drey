@@ -1,5 +1,6 @@
 import { ChangeDetectionStrategy, Component, computed, inject } from '@angular/core';
 import { Icon } from '../icons/icon';
+import { DocKindRegistry } from '../plugin-host';
 import { EditorService } from '../services/editor.service';
 import { SettingsService } from '../services/settings.service';
 
@@ -19,6 +20,7 @@ import { SettingsService } from '../services/settings.service';
 export class StatusBar {
   protected readonly editor = inject(EditorService);
   protected readonly settings = inject(SettingsService);
+  private readonly docKinds = inject(DocKindRegistry);
 
   /** `"<W> × <H> · <zoom>%"` for the active image tab; `—` before it loads. */
   protected readonly imageInfo = computed(() => {
@@ -30,10 +32,17 @@ export class StatusBar {
     return `${dims} · ${Math.round(v.scale * 100)}%`;
   });
 
-  /** Current page URL of the active browser tab (ADR-0042). */
-  protected readonly browserUrl = computed(() => {
+  /**
+   * The active tab's status line when its kind is a registered doc kind
+   * (the browser's URL, ADR-0044 stage 8A -- was the hardcoded
+   * `kind === 'browser'` branch); null for the base kinds, which fall
+   * through to the word/char count.
+   */
+  protected readonly docKindStatus = computed<string | null>(() => {
     const doc = this.editor.openDocs().find((d) => d.path === this.editor.activePath());
-    const url = doc?.url ?? '';
-    return url && url !== 'about:blank' ? url : 'New tab';
+    if (doc === undefined || doc.kind === 'text' || doc.kind === 'image') {
+      return null;
+    }
+    return this.docKinds.statusTextFor(doc.kind, doc.path);
   });
 }

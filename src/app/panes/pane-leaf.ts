@@ -7,9 +7,9 @@ import {
   input,
   signal,
 } from '@angular/core';
-import { BrowserTab } from '../browser';
 import { Editor } from '../editor/editor';
 import { ImageTab } from '../image-viewer';
+import { DocKindRegistry, PluginDocHost } from '../plugin-host';
 import { EditorService } from '../services/editor.service';
 import { TabBar } from '../tab-bar/tab-bar';
 import { TabDragService } from '../tab-bar/tab-drag.service';
@@ -44,7 +44,7 @@ const OWNS_DROP = '.cm-content, input, textarea, [contenteditable="true"]';
 @Component({
   selector: 'app-pane-leaf',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [TabBar, Editor, ImageTab, BrowserTab],
+  imports: [TabBar, Editor, ImageTab, PluginDocHost],
   templateUrl: './pane-leaf.html',
   styleUrl: './pane-leaf.css',
   host: {
@@ -61,6 +61,7 @@ export class PaneLeaf {
   protected readonly panes = inject(PaneService);
   protected readonly tabDrag = inject(TabDragService);
   private readonly editor = inject(EditorService);
+  private readonly docKinds = inject(DocKindRegistry);
   private readonly paneDrop = inject(PaneDropService);
   private readonly host = inject<ElementRef<HTMLElement>>(ElementRef).nativeElement;
 
@@ -68,6 +69,21 @@ export class PaneLeaf {
 
   protected readonly pane = computed(() => this.panes.pane(this.paneId()));
   protected readonly activeDoc = computed(() => this.editor.docFor(this.pane()?.active ?? null));
+
+  /**
+   * The active doc's `DocKindRegistry` contribution, if its kind is neither
+   * of the base kinds. `null` marks a kind that is *not registered* -- a
+   * plugin tab whose plugin is disabled (the session drops those on
+   * restore; this state is the live safety net).
+   */
+  protected readonly pluginDocKind = computed(() => {
+    const kind = this.activeDoc()?.kind;
+    if (kind === undefined || kind === 'text' || kind === 'image') {
+      return undefined;
+    }
+    return this.docKinds.get(kind) ?? null;
+  });
+
   protected readonly focused = computed(() => this.panes.focusedId() === this.paneId());
 
   /** A tab is being dragged over this pane's body (not its strip) -- show the wash. */

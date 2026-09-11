@@ -26,6 +26,7 @@ import { SettingsService } from '../services/settings.service';
 import { HOST_CODEMIRROR } from './runtime-exports';
 import { EditorExtensionRegistry } from './editor-extension-registry.service';
 import { DropDecoderRegistry } from './drop-decoder-registry.service';
+import { DocKindRegistry } from './doc-kind-registry.service';
 import {
   EditorContextMenuRegistry,
   MenuContributionsService,
@@ -44,10 +45,11 @@ export interface PluginApiContext {
  * service reference, only this async/callback surface.
  *
  * Stage-1 note (honest scaffolding, per the conversion plan): the surfaces
- * whose base seams land with a later stage — the editor-extension /
- * doc-kind / menu / composer registries (stages 2, 3 and 8) — throw a clear
- * "not yet available" error instead of silently doing nothing, so a plugin
- * that reaches for one fails loudly at its own call site.
+ * whose base seams land with a later stage — the composer-contribution slot
+ * is the last one standing (the editor-extension / doc-kind / menu
+ * registries landed with stages 2, 3 and 8A) — throw a clear "not yet
+ * available" error instead of silently doing nothing, so a plugin that
+ * reaches for one fails loudly at its own call site.
  */
 @Injectable({ providedIn: 'root' })
 export class PluginApiFactory {
@@ -61,6 +63,7 @@ export class PluginApiFactory {
   private readonly overlayGuard = inject(OverlayGuardService);
   private readonly extensions = inject(EditorExtensionRegistry);
   private readonly dropDecoders = inject(DropDecoderRegistry);
+  private readonly docKinds = inject(DocKindRegistry);
   private readonly menuContributions = inject(MenuContributionsService);
   private readonly contextMenuItems = inject(EditorContextMenuRegistry);
   private readonly log = inject(LogService);
@@ -139,6 +142,14 @@ export class PluginApiFactory {
           return this.editor.openFileAt(path, line);
         },
         openScratch: (path, content) => this.editor.openScratch(path, content),
+        addDoc: (kind, key, name) => {
+          // A clear failure at the plugin's own call site beats a tab that
+          // renders the "kind not available" empty state (ADR-0044).
+          if (this.docKinds.get(kind) === undefined) {
+            throw new Error(`documents.addDoc: doc kind "${kind}" is not registered`);
+          }
+          this.editor.addPluginDoc(kind, key, name);
+        },
         insertAtCursor: (text) => {
           if (text === '' || this.editor.activePath() === null || this.editor.activeKind() !== 'text') {
             return false;
@@ -208,7 +219,7 @@ export class PluginApiFactory {
         registerWidget: (widget: PluginWidgetContrib) => track(this.widgets.registerPluginWidget(widget)),
         registerSettingsPage: (page: PluginSettingsPageContrib) =>
           track(this.settingsPages.registerPluginPage(page)),
-        registerDocKind: (_kind: PluginDocKindContrib) => notYet('ui.registerDocKind'),
+        registerDocKind: (kind: PluginDocKindContrib) => track(this.docKinds.register(kind)),
         registerMenuContributions: (items: readonly MenuContribution[]) =>
           track(this.menuContributions.register(pluginId, items)),
         registerComposerContribution: (_mount: (el: HTMLElement) => () => void) =>

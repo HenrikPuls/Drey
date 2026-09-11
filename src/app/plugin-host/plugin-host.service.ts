@@ -6,6 +6,7 @@ import type {
   Unsubscribe,
 } from '../../../shared/plugin-api/renderer';
 import { EditorService } from '../services/editor.service';
+import { DocKindRegistry } from './doc-kind-registry.service';
 import { LayoutGestureService } from '../services/layout-gesture.service';
 import { LogService } from '../services/log.service';
 import { OverlayGuardService } from '../services/overlay-guard.service';
@@ -49,6 +50,7 @@ export class PluginHostService {
   private readonly layoutGesture = inject(LayoutGestureService);
   private readonly log = inject(LogService);
   private readonly widgets = inject(WidgetRegistryService);
+  private readonly docKinds = inject(DocKindRegistry);
 
   /** Every discovered plugin with its status; the Settings plugin pane reads this. */
   readonly plugins = signal<readonly PluginDescriptorForRenderer[]>([]);
@@ -274,8 +276,10 @@ export class PluginHostService {
   private emitDocumentEvent(event: DocumentChangeEvent): void {
     // Plugins react to this event -- their widgets/statuses may change, so
     // give the dock's header statuses a refresh signal (they read plain
-    // plugin state, nothing the shell could otherwise track).
+    // plugin state, nothing the shell could otherwise track). Doc-kind tabs
+    // are the same: their favicon/statusText answers re-read on the tick.
     this.widgets.bumpStatusTick();
+    this.docKinds.bump();
     for (const plugin of this.activated.values()) {
       for (const listener of [...plugin.documentListeners]) {
         this.guarded(() => listener(event), 'document listener');

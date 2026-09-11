@@ -1,8 +1,9 @@
 import { ChangeDetectionStrategy, Component, HostListener, inject, input, signal } from '@angular/core';
-import { EditorService } from '../services/editor.service';
+import { EditorService, type OpenDoc } from '../services/editor.service';
+import { DocKindRegistry } from '../plugin-host';
 import { PaneService } from '../panes/pane.service';
 import { TabDragService } from './tab-drag.service';
-import { Icon } from '../icons/icon';
+import { Icon, type IconName } from '../icons/icon';
 import { OverlayGuardDirective } from '../services/overlay-guard.directive';
 
 interface TabMenu {
@@ -44,10 +45,26 @@ export class TabBar {
   protected readonly editor = inject(EditorService);
   protected readonly panes = inject(PaneService);
   protected readonly tabDrag = inject(TabDragService);
+  private readonly docKinds = inject(DocKindRegistry);
 
   readonly paneId = input.required<string>();
 
   protected readonly menu = signal<TabMenu | null>(null);
+
+  /**
+   * The tab's favicon slot: null for the base kinds (no glyph), otherwise
+   * the kind's favicon URL plus its fallback glyph (ADR-0044 stage 8A --
+   * was the hardcoded `kind === 'browser'` branch).
+   */
+  protected tabIcon(doc: OpenDoc): { url: string | null; glyph: IconName } | null {
+    if (doc.kind === 'text' || doc.kind === 'image') {
+      return null;
+    }
+    return {
+      url: this.docKinds.faviconFor(doc.kind, doc.path),
+      glyph: (this.docKinds.get(doc.kind)?.icon ?? 'square') as IconName,
+    };
+  }
 
   /** Favicon URLs that 404'd -- those tabs fall back to the globe glyph. */
   private readonly brokenFavicons = signal<ReadonlySet<string>>(new Set());

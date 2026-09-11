@@ -14,8 +14,9 @@ import { Icon } from '../icons/icon';
 import { BrowserViewService } from './browser-view.service';
 
 /**
- * One pane's chrome for a `kind: 'browser'` tab (ADR-0042), picked
- * over `<app-editor>` by `PaneLeaf`. It renders *only* the toolbar (back /
+ * One pane's chrome for a `kind: 'browser'` tab (ADR-0042), mounted by the
+ * browser's `DocKindRegistry` contribution (ADR-0044 stage 8A) through
+ * `PluginDocHost`. It renders *only* the toolbar (back /
  * forward / reload / address bar / find) and an empty `.viewport`
  * placeholder -- the page itself is a main-process `WebContentsView`
  * floated on top, matched frame-by-frame to `.viewport`'s client rect.

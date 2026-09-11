@@ -131,7 +131,8 @@ export interface PluginSettingsPageContrib {
 /**
  * A contributed document kind — a tab that is not a text or image file
  * (the browser tab is the built-in example). `serialize`/`restore` back the
- * session history; `mount` builds the pane body.
+ * session history; `mount` builds the pane body. Recreate tabs from a
+ * snapshot with `documents.addDoc(kind, path, name)` inside `restore`.
  */
 export interface PluginDocKindContrib {
   readonly kind: string;
@@ -139,11 +140,16 @@ export interface PluginDocKindContrib {
   serialize(path: string): unknown;
   /** Recreate one doc of this kind from its snapshot data. */
   restore(path: string, data: unknown): void;
+  /** Build the pane body; return cleanup (called when the tab unmounts). */
   mount(el: HTMLElement, path: string): () => void;
   /** Tab-strip favicon (any img-able URL), or null for the fallback glyph. */
   favicon?(path: string): string | null;
+  /** Tab-strip fallback glyph — an icon name from the host's vendored set. */
+  icon?: string;
   /** Status-bar text for the active doc of this kind, or null. */
   statusText?(path: string): string | null;
+  /** The doc's pane gained/lost focus (e.g. to gate a find-in-page chord). */
+  onFocused?(path: string, focused: boolean): void;
 }
 
 /** One menu row. Either run a registered command or pass a closure. */
@@ -246,6 +252,13 @@ export interface DreyPluginApi {
     open(path: string, line?: number): Promise<void>;
     /** Open an unsaved, dirty-from-the-start scratch tab (Save-as on first save). */
     openScratch(path: string, content: string): void;
+    /**
+     * Register a tab of a contributed doc kind (`kind` as given to
+     * `ui.registerDocKind`). `key` must not collide with a vault path — a
+     * scheme key like `browser://1` is safe. Focuses the tab if the key is
+     * already open. Throws when the kind is not registered.
+     */
+    addDoc(kind: string, key: string, name: string): void;
     /** Insert at the caret of the FOCUSED pane. False when nothing is focused/editable. */
     insertAtCursor(text: string): boolean;
     /** Patch an open tab's buffer (unsaved edit, exactly as if typed). False when not open. */

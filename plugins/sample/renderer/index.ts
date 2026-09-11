@@ -3,7 +3,8 @@ import type { DreyPluginApi, PluginRendererModule } from '../../../shared/plugin
 /**
  * The sample plugin's renderer entry (ADR-0044). Plain DOM, no framework:
  * a dock widget (live active-document read + observe + insert), a command,
- * a settings page (own config + a backend roundtrip), and an event log.
+ * a settings page (own config + a backend roundtrip), a contributed doc
+ * kind (the clock tab, ADR-0044 stage 8A), and an event log.
  */
 let bufferEvents = 0;
 
@@ -99,8 +100,7 @@ function buildWidget(api: DreyPluginApi): HTMLElement {
   return root;
 }
 
-function buildSettingsPage(api: DreyPluginApi): HTMLElement {
-  const root = el('div', null, {
+function buildSettingsPage(api: DreyPluginApi): HTMLElement {  const root = el('div', null, {
     display: 'flex',
     flexDirection: 'column',
     gap: '10px',
@@ -160,6 +160,55 @@ function buildSettingsPage(api: DreyPluginApi): HTMLElement {
 
 const plugin: PluginRendererModule = {
   activate(api: DreyPluginApi) {
+    // A plugin-contributed doc kind (ADR-0044 stage 8A): the pane body, the
+    // tab-strip favicon/status slots and the session persist/restore all
+    // resolve through this registration.
+    let clockSeq = 0;
+    api.ui.registerDocKind({
+      kind: 'sample-clock',
+      icon: 'sparkles',
+      serialize: () => null, // stateless -- a restored clock just restarts
+      restore: (path) => {
+        api.documents.addDoc('sample-clock', path, 'Sample clock');
+      },
+      statusText: () => 'sample clock',
+      mount: (host, path) => {
+        const root = el('div', null, {
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          justifyContent: 'center',
+          flex: '1',
+          gap: '8px',
+          font: '13px/1.6 sans-serif',
+        });
+        const face = el('div', '', { fontSize: '40px', fontVariantNumeric: 'tabular-nums' });
+        const sub = el('div', `tab ${path} - contributed by the sample plugin`, {
+          opacity: '0.7',
+        });
+        root.appendChild(face);
+        root.appendChild(sub);
+        const tick = (): void => {
+          face.textContent = new Date().toLocaleTimeString();
+        };
+        tick();
+        const timer = window.setInterval(tick, 1000);
+        host.appendChild(root);
+        return () => window.clearInterval(timer);
+      },
+    });
+
+    // The tab-strip entry point: a File menu row minting a fresh clock key.
+    api.ui.registerMenuContributions([
+      {
+        menu: 'file',
+        label: 'Sample: open clock tab',
+        run: () => {
+          api.documents.addDoc('sample-clock', `sample-clock://${++clockSeq}`, 'Sample clock');
+        },
+      },
+    ]);
+
     api.ui.registerWidget({
       id: 'sample',
       title: 'Sample',

@@ -1,6 +1,6 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import { test, expect } from './fixtures/drey';
+import { test, expect, type Page } from './fixtures/drey';
 
 /**
  * The runtime plugin system end to end (ADR-0044): discovery from the
@@ -120,5 +120,61 @@ test.describe('plugin system', () => {
     await expect(page.locator('[data-e2e-plugin="settings"]')).toHaveText(
       'e2e plugin settings page',
     );
+  });
+});
+
+/**
+ * The doc-kind seam (ADR-0044 stage 8A), exercised through the bundled
+ * sample plugin's clock tab: the pane body, the tab-strip glyph and the
+ * status-bar slot resolve through `DocKindRegistry`, and a plugin tab
+ * survives a restart through the session.
+ */
+test.describe('plugin doc kinds', () => {
+  // Re-enable the bundled sample plugin (the fixture default disables it).
+  test.use({ appConfig: { plugins: { disabled: [] } } });
+
+  async function openClockTab(page: Page): Promise<void> {
+    await page
+      .locator('app-menu-bar .menu', { hasText: 'File' })
+      .first()
+      .locator('.menu-label')
+      .click();
+    await page.locator('app-menu-bar .popover .row', { hasText: 'Sample: open clock tab' }).click();
+  }
+
+  test('a plugin doc kind opens as a tab and drives the pane, tab strip and status bar', async ({
+    page,
+  }) => {
+    await openClockTab(page);
+
+    const tab = page.locator('app-tab-bar .tab', { hasText: 'Sample clock' });
+    await expect(tab).toBeVisible();
+    // No favicon slot -> the kind's fallback glyph (not an img).
+    await expect(tab.locator('img.favicon')).toHaveCount(0);
+    await expect(tab.locator('app-icon.favicon')).toBeVisible();
+
+    // The pane body is the plugin's mounted DOM (the PluginDocHost div).
+    await expect(
+      page.locator('app-pane-leaf').getByText('contributed by the sample plugin'),
+    ).toBeVisible();
+    // The status bar slot reads the kind's statusText.
+    await expect(page.locator('app-status-bar .count.url')).toHaveText('sample clock');
+  });
+
+  test('a plugin doc-kind tab survives a reload through the session', async ({ page }) => {
+    await openClockTab(page);
+    await expect(
+      page.locator('app-pane-leaf').getByText('contributed by the sample plugin'),
+    ).toBeVisible();
+    // The session layout save is debounced -- wait it out before reloading.
+    await page.waitForTimeout(700);
+    await page.reload();
+
+    // Plugins load first (bootstrap gating), then the session restores the
+    // plugin tab through the registry.
+    await expect(
+      page.locator('app-pane-leaf').getByText('contributed by the sample plugin'),
+    ).toBeVisible();
+    await expect(page.locator('app-tab-bar .tab', { hasText: 'Sample clock' })).toBeVisible();
   });
 });

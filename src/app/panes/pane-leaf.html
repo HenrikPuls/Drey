@@ -3,8 +3,12 @@
     <app-tab-bar [paneId]="paneId()" />
     @if (activeDoc()?.kind === 'image') {
       <app-image-tab [path]="p.active!" [focused]="focused()" />
-    } @else if (activeDoc()?.kind === 'browser') {
-      <app-browser-tab [tabId]="p.active!" [focused]="focused()" />
+    } @else if (pluginDocKind(); as dk) {
+      <app-plugin-doc-host [contrib]="dk" [path]="p.active!" [focused]="focused()" />
+    } @else if (pluginDocKind() === null) {
+      <div class="empty">
+        <p>This tab's kind is not available - its plugin is disabled or failed to load.</p>
+      </div>
     } @else {
       <app-editor [paneId]="paneId()" />
     }
