@@ -3,27 +3,35 @@ import tseslint from 'typescript-eslint';
 
 /**
  * This config is intentionally narrow. It is not a full lint pass over the
- * codebase -- it exists to enforce the feature-module boundaries introduced
- * with the path-based-tags restructure: code outside a feature module
- * (`electron/llm/`, `shared/llm/`, `electron/tags/`, `shared/tags/`,
- * `src/app/tags/`, `src/app/keybindings/`) must import through the
- * module's `index.ts` barrel,
- * never reach into a file inside it. Internal files import their siblings
- * directly.
+ * codebase -- it enforces two things:
+ *
+ * 1. The feature-module barrels (ADR-0016): code outside a module must
+ *    import through the module's `index.ts`, never reach into a file inside
+ *    it. Since ADR-0044 the feature modules (tags, tasks, templates,
+ *    meeting, assistant, browser) are runtime plugins under `plugins/` --
+ *    what remains are the *base* modules listed below.
+ * 2. The plugin authoring rules (ADR-0044): plugins never import
+ *    `@codemirror/*` or `@angular/*` at runtime (extensions compose from
+ *    the host's CM module instances -- a plugin's own copies break facets
+ *    silently -- and plugin UI is plain DOM, not Angular), and a plugin's
+ *    renderer entry has no Node access.
  */
 
-const MODULES = ['llm', 'tasks', 'mcp', 'session', 'plugin-host'];
+const MODULES = ['llm', 'mcp', 'session', 'plugin-host'];
+
+/** `shared/<mod>/` folders that actually exist (the shared half of `llm`). */
+const SHARED_MODULES = ['llm'];
 
 /** Reaching into `shared/<mod>/` from anywhere by its `shared/`-qualified path. */
-const sharedModulePatterns = MODULES.map((mod) => ({
+const sharedModulePatterns = SHARED_MODULES.map((mod) => ({
   group: [`**/shared/${mod}/*`, `**/shared/${mod}/*/*`, `!**/shared/${mod}/index`],
   message: `Import from the module barrel (\`shared/${mod}\`), not a file inside it. The barrel is the module's only public surface.`,
 }));
 
 /**
  * Reaching into a sibling `<mod>/` folder by a relative path. Safe to apply
- * inside `electron/` and `shared/` (no innocent `llm/` or `tags/` subfolder
- * exists there).
+ * inside `electron/` and `shared/` (no innocent `llm/` subfolder exists
+ * there).
  */
 const relativeModulePatterns = (mods) =>
   mods.map((mod) => ({
@@ -32,12 +40,12 @@ const relativeModulePatterns = (mods) =>
   }));
 
 /**
- * Same, minus the `./${mod}/*` form. For a renderer feature module whose
- * name also exists as a `src/app/settings/<mod>/` *plain* folder (`llm`,
- * `assistant`, `entry`): from `src/app/settings/settings.ts` a
- * `./​<mod>/settings-<mod>` import is that settings folder, not the feature
- * module, and must not be flagged. Deep imports from further out
- * (`../<mod>/x`, `../../<mod>/x`) are still caught.
+ * Same, minus the `./${mod}/*` form. For a renderer module whose name also
+ * exists as a `src/app/settings/<mod>/` *plain* folder (`llm`, `entry`):
+ * from `src/app/settings/settings.ts` a `./<mod>/settings-<mod>` import is
+ * that settings folder, not the module, and must not be flagged. Deep
+ * imports from further out (`../<mod>/x`, `../../<mod>/x`) are still
+ * caught.
  */
 const relativeModulePatternsDeepOnly = (mods) =>
   mods.map((mod) => ({
@@ -47,7 +55,7 @@ const relativeModulePatternsDeepOnly = (mods) =>
 
 export default tseslint.config(
   {
-    ignores: ['dist/**', 'dist-electron/**', '.angular/**', '.tools/**', 'node_modules/**'],
+    ignores: ['dist/**', 'dist-electron/**', 'dist-plugins/**', '.angular/**', '.tools/**', 'node_modules/**'],
   },
   {
     // A full lint pass (which would use these directives) is not set up yet;
@@ -57,7 +65,7 @@ export default tseslint.config(
   },
   {
     // Register the plugin so rule names in existing inline disable
-    // directives resolve; no @typescript-eslint rules are enabled here.
+    // directives resolve.
     files: ['**/*.ts'],
     plugins: { '@typescript-eslint': tseslint.plugin },
     languageOptions: {
@@ -83,8 +91,6 @@ export default tseslint.config(
           patterns: [
             ...sharedModulePatterns,
             ...relativeModulePatterns([
-              'tags',
-              'tasks',
               'session',
               'keybindings',
               'dock',
@@ -92,37 +98,28 @@ export default tseslint.config(
               'widgets',
               'calendar',
               'vault',
-              'meeting',
               'plugin-host',
             ]),
-            ...relativeModulePatternsDeepOnly(['llm', 'assistant', 'entry']),
+            ...relativeModulePatternsDeepOnly(['llm', 'entry']),
           ],
         },
       ],
     },
   },
   {
-    // A feature module's own files reach their siblings directly.
+    // A module's own files reach their siblings directly.
     files: [
       'electron/llm/**/*.ts',
       'shared/llm/**/*.ts',
-      'electron/tags/**/*.ts',
-      'shared/tags/**/*.ts',
-      'electron/tasks/**/*.ts',
-      'shared/tasks/**/*.ts',
       'electron/mcp/**/*.ts',
       'electron/plugin-host/**/*.ts',
       'electron/session/**/*.ts',
       'src/app/session/**/*.ts',
-      'src/app/tags/**/*.ts',
-      'src/app/tasks/**/*.ts',
-      'src/app/templates/**/*.ts',
       'src/app/keybindings/**/*.ts',
       'src/app/dock/**/*.ts',
       'src/app/titlebar/**/*.ts',
       'src/app/widgets/**/*.ts',
       'src/app/llm/**/*.ts',
-      'src/app/assistant/**/*.ts',
       'src/app/entry/**/*.ts',
       'src/app/calendar/**/*.ts',
       'src/app/vault/**/*.ts',
@@ -130,6 +127,52 @@ export default tseslint.config(
     ],
     rules: {
       'no-restricted-imports': 'off',
+    },
+  },
+  {
+    // Plugin authoring rules (ADR-0044 rules 1 + 2). `allowTypeImports`
+    // keeps the ADR's escape hatch: a plugin may *type* against the host's
+    // CodeMirror classes (`import type { EditorView } from '@codemirror/view'`),
+    // it just can't load its own runtime copy.
+    files: ['plugins/**/*.ts'],
+    rules: {
+      '@typescript-eslint/no-restricted-imports': [
+        'error',
+        {
+          patterns: [
+            {
+              group: ['@codemirror/*', '@codemirror'],
+              allowTypeImports: true,
+              message:
+                'Plugins must not load their own CodeMirror runtime copy -- extensions only compose from the host instances via `api.editor.cm` (ADR-0044 rule 1); `import type` is fine.',
+            },
+            {
+              group: ['@angular/*', '@angular'],
+              message:
+                'Plugin UI is plain DOM mounted into host-provided elements, not Angular components (ADR-0044 rule 2).',
+            },
+          ],
+        },
+      ],
+    },
+  },
+  {
+    // A plugin's renderer entry runs in the browser context: no Node, no
+    // electron. (Its main entry may -- that's the trusted-model split.)
+    files: ['plugins/*/renderer/**/*.ts'],
+    rules: {
+      'no-restricted-imports': [
+        'error',
+        {
+          patterns: [
+            {
+              group: ['electron', 'node:*', 'fs', 'path', 'os'],
+              message:
+                "A plugin's renderer runs in the browser context with no Node integration -- go through `api.backend` / `api.vault` (ADR-0044).",
+            },
+          ],
+        },
+      ],
     },
   },
 );

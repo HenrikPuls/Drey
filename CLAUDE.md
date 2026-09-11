@@ -50,13 +50,20 @@ toolchain is removable by deleting `.tools/`). Never assume a bare `node`,
   - Emit the main process: `node node_modules/typescript/bin/tsc -p electron/tsconfig.json`
 - VS Code tasks and debug configs don't inherit `env.ps1`; `.vscode/` works
   around that three ways (see `docs/11`, "Environment gotchas").
-- **`npm run dev` builds `dist-electron/` only once, at startup**, while
-  `ng serve` hot-reloads the renderer forever. Since `shared/` compiles into
-  both contexts, touching `shared/` or `electron/` leaves the two sides
-  disagreeing about the IPC contract _at runtime_ even though `tsc` is
-  clean — fields the stale main process doesn't know get silently stripped
-  from IPC payloads. After such a change, rebuild and restart Electron;
-  verify with `grep <new-field> dist-electron/shared/*.js`.
+- **`npm run dev` builds `dist-electron/` only once, at startup** (the
+  `dev:electron` leg runs `tsc` *and* `build:plugins` then starts
+  Electron), while `ng serve` hot-reloads the renderer forever. Since
+  `shared/` compiles into both contexts, touching `shared/` or
+  `electron/` leaves the two sides disagreeing about the IPC contract _at
+  runtime_ even though `tsc` is clean — fields the stale main process
+  doesn't know get silently stripped from IPC payloads. The same applies
+  to plugins (ADR-0044): touching `plugins/**` or `shared/plugin-api/**`
+  leaves the running app on the previously built
+  `dist-electron/plugins/<id>/` — a changed renderer module 404s or
+  misbehaves until rebuilt. After any such change, rebuild and restart
+  Electron; verify with
+  `grep <new-symbol> dist-electron/plugins/<id> -r` (and
+  `grep <new-field> dist-electron/shared/*.js` for base IPC).
 
 ## Architecture & Design Decisions
 
@@ -64,9 +71,10 @@ toolchain is removable by deleting `.tools/`). Never assume a bare `node`,
   filesystem and LLM access goes through a `contextBridge` IPC boundary.
 - No server/backend process. A vault is just a folder on disk (can live on
   OneDrive); the app reads/writes files directly, no client-server split.
-- Editor: CodeMirror 6 in the renderer. Chosen specifically because its
-  extension model natively covers "plugin"-style features (spellcheck,
-  syntax highlighting) — no custom plugin-loader framework needed or wanted.
+- Editor: CodeMirror 6 in the renderer, extended via Compartments. Plugins
+  build editor extensions from the **host's** CM module instances
+  (`api.editor.cm`) — never their own runtime copy (a second CM instance
+  breaks facets silently; lint-banned under `plugins/**`, ADR-0044 rule 1).
 - Storage format: plain Markdown + YAML frontmatter. No proprietary format,
   no database as source of truth (see `specs/frontmatter-schema.md`).
 - Folder structure is the user's own — the app imposes only `templates/`
@@ -74,13 +82,17 @@ toolchain is removable by deleting `.tools/`). Never assume a bare `node`,
   ([ADR-0017](docs/09_architecture_decisions/0017-tags-as-labels-and-section-index.md);
   supersedes the old master-document / routing design).
 - Tags are free inline `#tag`s in the note body. No creation flow, no
-  routing, no frontmatter `tags[]`. A main-process `TagIndex` holds the
-  tag vocabulary (autocomplete + the search tag picker) and an inverted
-  index of tagged `##`/`###` sections; a sidebar **tag search** (AND over
-  tags, AND over free-text terms) returns section-level hits with
-  clickable links and a Markdown Export. `#task` is reserved; the LLM
-  only _suggests_ tags (the drawer's Autotag button). See
-  `specs/classifier-spec.md`.
+  routing, no frontmatter `tags[]`. The **tags plugin** (`plugins/tags/`)
+  holds the vocabulary (autocomplete + the search panel's tag picker) and
+  an inverted index of tagged `##`/`###` sections in its main-process
+  `TagIndex`, kept fresh through the save/vault hook registries; its
+  **search** panel (AND over tags, AND over free-text terms) returns
+  section-level hits with clickable links and a Markdown Export. The MCP
+  server's `vault_search` reads the section index through the registered
+  `SectionSearchProvider` and degrades with a clear error when the tags
+  plugin is disabled. `#task` is reserved; the LLM only _suggests_ tags
+  (the drawer's Autotag button — base transport `suggestTags` joined with
+  the tags plugin's vocabulary). See `specs/classifier-spec.md`.
 - Local LLM over an OpenAI-compatible HTTP API — LM Studio is the default,
   but the client is generic (Unsloth Desktop, llama.cpp, vLLM, Ollama all
   work) with an optional `Authorization: Bearer` API key for servers that
@@ -89,24 +101,45 @@ toolchain is removable by deleting `.tools/`). Never assume a bare `node`,
   (the model id must stay hand-enterable).
 - sqlite-vec for vector search, transformers.js for embeddings (Phase 2,
   not part of the MVP).
-- **No file watcher.** A manual refresh button re-reads the vault and
-  rebuilds the `TagIndex`; the app also refreshes after its own writes
+- **No file watcher.** A manual refresh button re-reads the vault; the
+  base fires a vault-change event and the plugins re-index from it
+  (vault-hook registry). The app also refreshes after its own writes
   (save, first daily-draft save, create/delete). chokidar stays a
   purely additive future option
   ([ADR-0018](docs/09_architecture_decisions/0018-manual-refresh-no-file-watcher.md)).
-- **Feature modules** ([ADR-0016](docs/09_architecture_decisions/0016-feature-module-convention.md)):
-  `electron/llm/`, `electron/tags/`, `electron/tasks/`, `electron/browser/`,
-  `electron/session/`, `shared/llm/`, `shared/tags/`, `shared/tasks/`,
-  `shared/browser/`, `src/app/tags/`, `src/app/tasks/`, `src/app/browser/`
-  (in-editor web browser tab, ADR-0042), `src/app/session/`
-  (layout + open-tab restore, ADR-0043),
-  `src/app/keybindings/` each expose a thin `index.ts`
-  barrel; `eslint.config.mjs` (`no-restricted-imports`, `npm run lint`)
-  makes a deep import from outside a module a CI error. `shared/ipc-api.ts`
-  stays the cross-layer contract, outside any module. Modular monolith —
-  no plugin runtime.
+- **Runtime plugin system**
+  ([ADR-0044](docs/09_architecture_decisions/0044-runtime-plugin-system.md),
+  supersedes the "modular monolith — no plugin runtime" stance of
+  ADR-0016/0034): a **base application** (shell, editor + panes, vault/note
+  IO, session restore, keybindings, spellcheck, MCP server, LLM
+  *transport*, and the two plugin hosts) plus **runtime-loadable,
+  in-process, trusted plugins** under `plugins/<id>/` — templates,
+  meeting, tags, tasks, assistant (Assistant + Actions), browser, plus a
+  `sample` plugin exercising every surface. Each plugin is a full stack:
+  `plugin.json` manifest + `main/` (CommonJS, Node) + `renderer/`
+  (browser-context ESM + CSS served over `plugin://`, **plain DOM — no
+  Angular**) + `shared/` types, built by `scripts/build-plugins.mjs` into
+  `dist-electron/plugins/<id>/`. Discovery: built-in root +
+  `<userData>/plugins/<id>/` + `DREY_EXTRA_PLUGIN_DIR` (dev). Every
+  extension point is a base-owned registry — dock panels, doc kinds,
+  Settings pages, menu rows, commands, editor extensions, drop decoders,
+  context-menu items, composer slot, save hooks, vault hooks, section
+  search — and the SDK in `shared/plugin-api/` is the frozen contract
+  (major `apiVersion` gate). IPC is two fixed channels
+  (`plugin:invoke` / `plugin:event`); toggling a plugin is
+  `plugins.disabled` in app-config (Settings → Panels & plugins) and
+  applies on restart. ADR-0016's barrel convention survives for the base
+  app's own modules (`eslint.config.mjs` deep-import ban).
+  `shared/ipc-api.ts` stays the base cross-layer contract.
 
 ## Relevant Components (expected module boundaries)
+
+Base components below; the feature *panels and backends* (tags/search,
+tasks, templates, assistant + Actions, meeting import, browser tab) are
+**runtime plugins** now — `plugins/<id>/` owns them and
+[docs/05 §5.0](docs/05_building_block_view.md) has the seam table. Where
+a component moved into a plugin, the entry here says so and stays for the
+behavioural contract, not the location.
 
 Main process:
 
@@ -114,46 +147,41 @@ Main process:
   `deleteEntry()` and `pickSavePath()` (native save dialog rooted at the
   vault)
 - ~~`FileWatcher`~~ — not built; manual refresh instead (ADR-0018)
-- `TagIndex` (`electron/tags/`) — in-memory tag vocabulary
-  (`Map<tag,count>`) **plus** an inverted index of tagged `##`/`###`
-  sections (`SectionRecord[]`); `rebuild` on vault open / refresh,
-  `reindexFile` on save, `removeFile` on delete; backs `tags:list` and
-  `tags:search`. `templates/` excluded, `daily/` included
-- `TaskIndex` (`electron/tasks/`, ADR-0033) — same shape/lifecycle as
-  `TagIndex`: a per-file cache of every checkbox / `#task` line
-  (`shared/tasks/scanTasks`), `rebuild` on vault open / refresh /
-  rename / copy / duplicate, `reindexFile` from `NoteManager` on save,
-  `removeFile` on delete; backs `tasks:list` (the Tasks panel's "whole
-  vault" scope). `templates/` excluded, `daily/` included
+- `electron/plugin-host/` — discovery (built-ins +
+  `<userData>/plugins/*` + `DREY_EXTRA_PLUGIN_DIR`; manifest validation;
+  `plugins.disabled` + `apiVersion` gating), main-side activation
+  (quarantine on throw), per-plugin config store, and the registries the
+  plugins fill: **save hooks** (`onNoteSaved → {content?,
+  pendingActions?}`; skipped when the save applies a confirmed rewrite),
+  **vault hooks** (open/refresh/write/delete/rename) and the
+  **section-search provider** (the MCP `vault_search` backend)
+- `TagIndex`, `TaskIndex`, `ActionRunner`/`ChatStore` — **moved into the
+  tags / tasks / assistant plugins** (same shapes and lifecycles:
+  `rebuild` on vault open/refresh via vault hooks, `reindexFile` on save
+  via save hooks; the assistant's engine keeps trigger→prompt-template
+  Actions, Ask and the per-note sidecar thread). `suggestTags` (the
+  Autotag prompt) stayed base in `electron/llm/tag-suggest.ts`
 - `LmStudioClient` — thin HTTP client for the local OpenAI-compatible
   endpoint (`GET /models`, `POST /chat/completions`), with an optional
   bearer API key; name kept for continuity, but not LM-Studio-specific.
   **No timeout on generation** — a local model may think for minutes; the
-  user cancels instead ([ADR-0014](docs/09_architecture_decisions/0014-no-chat-timeout-cancellable-tasks.md))
+  user cancels instead ([ADR-0014](docs/09_architecture_decisions/0014-no-chat-timeout-cancellable-tasks.md)).
+  Its optional tool loop (`vaultTools` chat option) still backs the
+  assistant plugin's vault tool use when `mcp.enabled`
 - `LlmTaskRegistry` — one `AbortController` per in-flight generation, so
   `llm:cancel` can abort it
-- `ClassifierService` (`electron/llm/`) — wraps classifier Prompt 1 (task
-  vs. note) and a described-registry tag-suggestion form; both currently
-  unwired. The live tag suggestion is `ActionRunner.suggestTags`
-  (vocabulary-based, behind the drawer's Autotag button)
 - `AppConfigStore` — reads/persists `app-config.json` under the OS user-data
-  dir (LLM connection + Actions config); app config, never in the vault
+  dir (LLM connection + spellcheck + appearance + MCP + `widgets` +
+  `plugins` slices); app config, never in the vault
   ([ADR-0010](docs/09_architecture_decisions/0010-app-settings-storage.md))
-- `ActionRunner` (`electron/llm/`) — runs an Action (trigger → prompt
-  template) against the active document → an edit / no-op / error
-  outcome; also hosts Ask, the note assistant's summary,
-  `summariseSearchResults` (search digest — backend wired, UI parked) and
-  `suggestTags` (Autotag)
-- `ChatStore` — reads/writes the assistant's per-note sidecar thread
-  (`.{name}.chat.json` beside the note, ADR-0012)
 - `electron/mcp/` ([ADR-0021](docs/09_architecture_decisions/0021-mcp-vault-server.md)) —
   the vault MCP server. `VaultTools` (`vault_search` with a regex filter /
   `vault_read` / `vault_write`), `McpServer` (hand-rolled JSON-RPC 2.0),
   `McpHttpTransport` (opt-in localhost `POST /mcp`) and a standalone
   `stdio-bridge.ts` script. `vault_write` routes through the ADR-0011
   confirmation dialog (main→renderer bridge) unless "YOLO mode" is on.
-  The same `VaultTools` backs the assistant's tool-calling loop in
-  `LmStudioClient.chat` / `ActionRunner.ask` when `mcp.enabled`
+  `vault_search` degrades to a clear "tags plugin disabled" error when no
+  section-search provider is registered
 - `SpellcheckService` (main) — nspell + the bundled/added Hunspell
   dictionaries; answers `spell:check` with misspelled words + suggestions
 
@@ -168,12 +196,15 @@ Renderer (Angular):
   which dock, order, `flexes`, collapse, `leftW`/`rightW`, `bottomH`;
   `localStorage['drey.dock']`) and runs the header-drag / splitter /
   dock-edge-resize gestures. Three docks — `left | right | bottom` (the
-  bottom one a resizable band under the editor). **Eight** panels via a
-  `PANEL_COMPONENTS` registry: `CalendarPanel`, `FilesPanel` (the old
+  bottom one a resizable band under the editor). Panels come from the
+  runtime **`WidgetRegistryService`** (ADR-0044): core panels register via
+  `registerCoreWidgets()` — `CalendarPanel`, `FilesPanel` (the old
   sidebar's vault switcher + file tree + right-click new/delete + inline
-  create), `TemplatesPanel` (ADR-0029), `SearchPanelHost`, `TasksPanel`
-  (ADR-0033), `WindowsPanel`, `AssistantPanel`, and `EntryPanel` (the
-  "Add entry" drawer — default home: the bottom dock).
+  create), `WindowsPanel`, `SearchPanelHost`, and `EntryPanel` (the
+  "Add entry" drawer — default home: the bottom dock) — while the
+  templates / search / tasks / assistant panels are **plugin widgets**
+  mounting plain DOM into `PluginWidgetHost`. Same ids as before (the
+  persisted layout keys on them).
   `PanelFrame` is the identical 32px header every panel shares.
   `DockService.contentHeight(id)` marks a panel (currently `calendar`)
   that sizes to its content rather than a flex share.
@@ -191,20 +222,18 @@ Renderer (Angular):
 - `StatusBarComponent` (`src/app/status-bar/`) — the 26px bottom bar:
   word/char count, a context hint (the drag instruction while a panel is
   moving), and the Settings entry.
-- `SearchPanel` + `TagSearchService` (`src/app/tags/`) — the tag search
-  (now the **Search** dock panel, `embedded` mode): tag chips + free text
-  → section hits (click opens the file at the line via
-  `EditorService.openFileAt`), and an **Export** button that dumps the
-  hits into an unsaved `search-results.md` scratch tab
-- `TasksPanel` + `TaskService` (`src/app/tasks/`, ADR-0033) — the **Tasks**
-  dock panel: checkbox / `#task` lines in the open document or the whole
+- _Search panel_ — **moved into `plugins/tags/`** (a DOM dock widget):
+  tag chips + free text → section hits (click opens the file at the line
+  through the document API), and an **Export** button that dumps the hits
+  into an unsaved `search-results.md` scratch tab
+- _Tasks panel_ — **moved into `plugins/tasks/`** (a DOM dock widget,
+  ADR-0033): checkbox / `#task` lines in the open document or the whole
   vault, a scope toggle · "hide done" · a kind filter (all persisted to
   `localStorage['drey.tasks']`). Document scope scans the live editor
-  buffer via `shared/tasks/scanTasks`; vault scope reads `tasks:list`
-  (`TaskIndex`), refreshed after each save and on `mcp:vault-changed`. A
-  row's checkbox calls `EditorService.setTaskDone(path,line,done)`
-  (`shared/tasks/setDoneOnLine` → buffer edit + save, or read → patch →
-  `note:save`); a row click opens the file at the line
+  buffer through the document API; vault scope calls the plugin's own
+  `backend.invoke('list', …)` (its `TaskIndex`, refreshed via save/vault
+  hooks). A row's checkbox rewrites the buffer line through
+  `documents.setBuffer` + save; a row click opens the file at the line
 - `KeybindingService` (`src/app/keybindings/`) — one capture-phase
   `keydown` listener mapping chord strings onto `Command`s; features
   register from `App`. Commands: `search.open` (`Mod+Shift+F`),
@@ -259,23 +288,33 @@ Renderer (Angular):
   It is now the body of `EntryPanel`, a movable dock panel (default
   home: the bottom dock) — no self-toggle button; `PanelFrame`'s chevron
   collapses it
-- `NoteAssistantComponent` — the right-hand panel (replaced the old chat
-  bar's Ask mode): the per-note "Automatic summary" switch, the
-  summary/question/answer card thread, and the question composer
-  ([ADR-0012](docs/09_architecture_decisions/0012-note-assistant-sidecar-thread.md)).
-  Ask now sends the prior thread as chat turns (`historyForAsk`), and each
-  answer/summary card has an **insert-into-note** arrow beside Copy
+- _Assistant panel_ — **moved into `plugins/assistant/`** (a DOM dock
+  widget, ADR-0012): the per-note "Automatic summary" switch, the
+  summary/question/answer card thread, and the question composer. Ask
+  sends the prior thread as chat turns, each card has Copy +
+  **insert-into-note**, and the manual Actions live in the editor `⋯`
+  menu as `editor-more` menu contributions
 - `McpBridgeService` — renderer side of the vault MCP server: shows an
   MCP client's `vault_write` in the shared confirmation diff and replies;
-  refreshes the tag index / file tree on `mcp:vault-changed`
+  refreshes the file tree on the vault-change push (the plugins re-index
+  from the same push)
   ([ADR-0021](docs/09_architecture_decisions/0021-mcp-vault-server.md))
+- `src/app/plugin-host/` — the renderer-side plugin host (ADR-0044):
+  `plugin-host.service.ts` (activation before bootstrap, quarantine,
+  the `plugin:event` fan-out, native-surface visibility synthesis),
+  `plugin-api-impl.ts` (implements `DreyPluginApi` over the base
+  services), the registries (editor extensions, drop decoders, doc kinds,
+  menu contributions, settings pages) and the three DOM mount hosts for
+  widgets / settings pages / doc kinds
 - `SettingsComponent` — master-detail settings screen (category list +
-  detail pane), categories "LLM", "Assistant" (auto-summary default),
-  "Spelling" (dictionaries + language), "Appearance" (app-wide base font
-  size + highlight colour + editor typeface,
-  [ADR-0020](docs/09_architecture_decisions/0020-app-wide-appearance-accent-and-ui-scale.md)),
-  "Actions", and "MCP" (vault server: enable, HTTP port, YOLO switch,
-  client config snippet — ADR-0021); opened from the status-bar entry.
+  detail pane), core categories "LLM", "Add entry", "Daily notes",
+  "Spelling", "Appearance",
+  [ADR-0020](docs/09_architecture_decisions/0020-app-wide-appearance-accent-and-ui-scale.md),
+  "Panels & plugins" (`widgets.disabled` + `plugins.disabled` + each
+  discovered plugin's live status), and "MCP"; **plugin-contributed
+  categories** (templates, assistant, actions) append before "About" and
+  render through `PluginSettingsHost`, saving immediately rather than via
+  the footer bar (ADR-0044 rule 3). Opened from the status-bar entry.
   Category list is descriptor-driven (`*ngComponentOutlet`, ADR-0016). The
   close (X) is top-right; the footer Discard is always enabled and closes,
   warning first when the draft is dirty
@@ -304,9 +343,11 @@ be called out explicitly (see Working Style below), not introduced silently.
   status bar** (word/char count · context hint · Settings entry).
   - **Docks**: three (`left`, `right`, `bottom`), each an ordered list of
     the eight panels — **Calendar, Files, Templates, Search, Tasks, Open
-    windows, Assistant, Add entry**. A panel is dragged between docks by
-    its header, resized against its neighbour by a splitter, and collapsed
-    to its 32px header. Every panel header is built the same way (chevron +
+    windows, Assistant, Add entry** (the core ones registered by the base;
+    Templates/Search/Tasks/Assistant are provided by plugins, ADR-0044). A
+    panel is dragged between docks by its header, resized against its
+    neighbour by a splitter, and collapsed to its 32px header. Every
+    panel header is built the same way (chevron +
     mono-uppercase title + optional status value + drag grip). Default:
     Calendar/Files/Templates/Search/Tasks/Open windows left, Assistant
     right, Add entry in the bottom band, Templates + Search + Tasks + Add
@@ -326,15 +367,16 @@ be called out explicitly (see Working Style below), not introduced silently.
     context. No bottom chat bar; capture lives in the Add entry panel.
   - **Settings**: a full-surface overlay opened from the status-bar entry
     — master-detail (category list on the left, detail pane on the
-    right), categories "LLM", "Assistant", "Spelling", "Appearance"
-    (app-wide base font size + highlight colour + editor typeface,
-    ADR-0020), "Actions" and "MCP" (vault server, ADR-0021) (ADR-0010;
-    descriptor-driven list, ADR-0016).
+    right), core categories "LLM", "Add entry", "Daily notes",
+    "Spelling", "Appearance" (app-wide base font size + highlight colour
+    + editor typeface, ADR-0020), "Panels & plugins" and "MCP"
+    (ADR-0010; descriptor-driven list, ADR-0016); plugin-contributed
+    categories (templates, assistant, actions) append before "About".
     The X sits top-right; Discard is always active and closes (with a
     dirty-state warning). The
-    confirmation dialog (Actions / Ask edits) is a centred modal: inline
-    line diff for small changes, side-by-side before/after for
-    whole-document rewrites (ADR-0011).
+    confirmation dialog (Actions / Ask edits / MCP writes) is a centred
+    modal: inline line diff for small changes, side-by-side before/after
+    for whole-document rewrites (ADR-0011).
 - Editing model: true in-place Live Preview (Obsidian-style, ADR-0009) —
   the cursor sits in the rendered document, syntax markers reveal only
   around the selection, tables/images render as widgets that show their
@@ -524,6 +566,18 @@ assume.
     a `PaneService` *region* model (`center` + `dock-left/right/bottom`) and
     a dock "editor slot", leaving the `WidgetDescriptor` registry (ADR-0034)
     untouched. Not built.
+21. **The runtime plugin program**
+    ([ADR-0044](docs/09_architecture_decisions/0044-runtime-plugin-system.md)) —
+    the modular monolith became a base application plus runtime-loadable,
+    in-process plugins. SDK freeze → hosts + `plugin://` + sample plugin →
+    base seams (editor extensions, drop decoders, save/vault hooks,
+    section search) → the six feature modules converted one by one
+    (templates, meeting, tags, tasks, assistant+Actions, browser — the
+    browser's doc-kind registry shipped first, shippable alone) → cleanup
+    + docs. `eslint.config.mjs` shrank to the base modules and gained the
+    plugin authoring rules (no `@codemirror/*` / `@angular/*` runtime
+    imports, no Node in plugin renderers); Settings → "Panels & plugins"
+    manages both panels and plugins.
 
 Pause after each milestone, show what works, don't push through several
 milestones in one uninterrupted stretch. (Milestones 10, 11, 15 and 19 were

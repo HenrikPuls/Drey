@@ -102,7 +102,7 @@ sequenceDiagram
     VaultManager-->>Main: { content, modifiedMs }
     Main-->>Preload: { content, modifiedMs }
     Preload-->>EditorService: { content, modifiedMs }
-    EditorService->>EditorService: savedContent = bufferContent = content;\nopenPath = relativePath; viewMode = readDefaultMode() (preview by default)
+    EditorService->>EditorService: savedContent = bufferContent = content,\nopenPath = relativePath, viewMode = readDefaultMode() (preview by default)
     Note over Editor: effect() sees openPath/savedContent change
     Editor->>Editor: dispatch full-doc replace into EditorView
 
@@ -165,7 +165,7 @@ sequenceDiagram
     Daily-->>Main: "daily/2026-09-05.md"
     Main->>DailyService: send('daily:open', relativePath)
     DailyService->>EditorService: openFile(relativePath)
-    EditorService->>EditorService: savedContent = bufferContent = file; openPath set
+    EditorService->>EditorService: savedContent = bufferContent = file, openPath set
     Note over Editor: effect() reloads the CM document
     DailyService->>EditorService: requestNewDailyEntry()  (bumps newEntryRequest)
     Note over Editor: effect (or ngAfterViewInit for a just-opened file)
@@ -207,7 +207,7 @@ sequenceDiagram
     participant EditorService
     participant CM as CodeMirror 6 view
 
-    Note over Preview: viewMode = 'preview' -- markdown-it output;\nevery top-level block carries data-line (token.map, 0-based in the\nfrontmatter-stripped text)
+    Note over Preview: viewMode = 'preview' -- markdown-it output,\nevery top-level block carries data-line (token.map, 0-based in the\nfrontmatter-stripped text)
     User->>Preview: click inside a block
     Preview->>Editor: (click) -> onPreviewClick(event)
     Editor->>Editor: event.target.closest('[data-line]') -> dataLine
@@ -215,7 +215,7 @@ sequenceDiagram
     Note over Editor: setTimeout 0 -- after CD swaps the views in:
     Editor->>CM: dispatch { selection: line(dataLine + lineShift + 1).from, scrollIntoView }
     Editor->>CM: view.focus()
-    Note over CM: user edits the raw Markdown; updateListener -> updateBuffer
+    Note over CM: user edits the raw Markdown, updateListener -> updateBuffer
 ```
 
 Line granularity only -- the caret lands at the start of the block's line,
@@ -295,7 +295,7 @@ sequenceDiagram
         Note over NoteManager: daily/ + templates/ -> keep tags, still bump updated
         NoteManager->>Pure: bumpUpdated(fm)  ->  { updated: now, created }
         NoteManager->>Pure: writeFrontmatter(body, { tags, updated, created })
-        Note over Pure: yaml parseDocument -> mutate only those keys;\ncomments + styles preserved; dates double-quoted
+        Note over Pure: yaml parseDocument -> mutate only those keys,\ncomments + styles preserved, dates double-quoted
         NoteManager->>VaultManager: writeFile(path, newText with EOL)
         VaultManager->>FS: writeFile + stat
 
@@ -392,7 +392,7 @@ sequenceDiagram
             end
             Confirm-->>ActionsService: true
             ActionsService->>EditorService: applyRewrite(path, after)
-            EditorService->>EditorService: buffer = after; save({ runOnSaveActions: false })
+            EditorService->>EditorService: buffer = after, save({ runOnSaveActions: false })
             Note over EditorService: note:save runs, on-save Actions suppressed → no recursion
         end
     end
@@ -580,7 +580,7 @@ sequenceDiagram
         Ext->>Ext: publish([]) -- underlines cleared
     else
         Ext->>Words: collectWords(text)  (whole doc, or the visible ranges past 60 kB)
-        Note over Words: masks frontmatter, code, #tags, [[links]], URLs;<br/>splits hyphenated compounds; skips acronyms
+        Note over Words: masks frontmatter, code, #tags, [[links]], URLs,\nsplits hyphenated compounds, skips acronyms
         Words-->>Ext: WordSpan[]
         Ext->>Service: check(distinctWords(spans))
         Service->>Service: answer what the per-language cache knows
@@ -649,7 +649,7 @@ sequenceDiagram
     NoteManager-->>EditorService: NoteSaveResult { path, content, modifiedMs, pendingActions? }
     EditorService->>EditorService: savedContent = bufferContent = content -> isDirty = false
     EditorService->>TagService: refresh()  (re-reads tags:list)
-    EditorService->>EditorService: vault.refresh()  (tree + full TagIndex not needed; tree only)
+    EditorService->>EditorService: vault.refresh()  (tree + full TagIndex not needed, tree only)
 ```
 
 ## 6.12 Tag search → hits → open-at-line / Export → Save-as (milestone 11)
@@ -700,7 +700,7 @@ sequenceDiagram
         User->>Panel: Export
         Panel->>Pure: formatSearchResultsDoc({ tags, text }, hits)
         Panel->>EditorService: openScratch('search-results.md', doc)
-        EditorService->>EditorService: makeDoc(existsOnDisk:false, askOnSave:true); savedContent='' (dirty)
+        EditorService->>EditorService: makeDoc(existsOnDisk:false, askOnSave:true), savedContent='' (dirty)
         User->>Editor: Ctrl+S
         Editor->>EditorService: save()  ->  askOnSave -> saveAs()
         EditorService->>Preload: pickSavePath('search-results.md')
@@ -764,23 +764,23 @@ sequenceDiagram
 
     User->>Frame: mousedown on header
     Frame->>Dock: beginHeaderPress(id, title, event)
-    Dock->>Dock: record start x/y; add temp window mousemove/mouseup
+    Dock->>Dock: record start x/y, add temp window mousemove/mouseup
     alt released before ~4px move
         Win->>Dock: onHeaderPressUp() → toggleCollapse(id)
     else moved past threshold
-        Dock->>Dock: dragging=id; body cursor=grabbing; mount title-chip ghost
+        Dock->>Dock: dragging=id, body cursor=grabbing, mount title-chip ghost
         loop while dragging
             Win->>Dock: onDragMove(event)
             Dock->>Dock: dropDock = X in a dock box (±12px) else window midline
             Dock->>Dock: dropIndex = first panel whose Y-midpoint is below the pointer
             Dock-->>Cmp: dragging / dropDock / dropIndex signals
-            Cmp-->>User: 2px accent drop-line + dark wash over the target dock;\ndragged panel opacity .4; title chip follows the cursor
+            Cmp-->>User: 2px accent drop-line + dark wash over the target dock,\ndragged panel opacity .4, title chip follows the cursor
         end
         User->>Win: mouseup
         Win->>Dock: onDragEnd()
         Dock->>Dock: move(id, dropDock, dropIndex) — remove from both docks,\nsplice into target at the pre-removal slot
         Dock->>LS: persist { dock, flexes, open, leftW, rightW }
-        Dock->>Dock: clear transient state; unmount ghost; body cursor=''
+        Dock->>Dock: clear transient state, unmount ghost, body cursor=''
     end
 ```
 
@@ -807,14 +807,14 @@ sequenceDiagram
 
     User->>Menu: click "Add entry" (checked)
     Menu->>Dock: hide('entry')
-    Dock->>Dock: remove 'entry' from every dock list; hidden += 'entry'
+    Dock->>Dock: remove 'entry' from every dock list, hidden += 'entry'
     Dock->>LS: persist { dock, flexes, open, hidden, … }
     Dock-->>Cmp: bottomIds() no longer contains 'entry'
-    Cmp-->>User: the panel (and its header) is gone; bottom band collapses
+    Cmp-->>User: the panel (and its header) is gone, bottom band collapses
     User->>Menu: click "Add entry" again (unchecked)
     Menu->>Dock: show('entry')
     Dock->>Reg: descriptor.defaultDock = 'bottom'
-    Dock->>Dock: splice 'entry' back at its registry-order slot; open['entry']=true; hidden -= 'entry'
+    Dock->>Dock: splice 'entry' back at its registry-order slot, open['entry']=true, hidden -= 'entry'
     Dock->>LS: persist
     Cmp-->>User: panel returns to the bottom dock, expanded
 ```
@@ -870,7 +870,7 @@ sequenceDiagram
     Client->>HTTP: POST /mcp  tools/call vault_write {path, content, mode}
     HTTP->>Srv: handle(message)
     Srv->>Tools: call('vault_write', args)
-    Tools->>Vault: readFile(path)  (before; '' if new)
+    Tools->>Vault: readFile(path)  (before, '' if new)
     alt mcp.yolo is off
         Tools->>Main: confirmWrite({path, before, after, mode})
         Main->>Bridge: send mcp:write-request {id, …}
@@ -911,12 +911,12 @@ sequenceDiagram
     participant Vault as VaultManager
 
     User->>CM: paste / drop an image blob
-    CM->>CM: preventDefault; insert `![](uploading:<id>)` on its own line, caret on the next
+    CM->>CM: preventDefault, insert `![](uploading:<id>)` on its own line, caret on the next
     CM->>Surface: save(bytes, ext)  (config callback)
     Surface->>VS: saveAsset(bytes, ext, editor.openPath() ?? '')
     VS->>Main: invoke vault:save-asset(bytes, ext, noteRelPath)
     Main->>Vault: saveAsset(bytes, ext, noteRelPath)
-    Vault->>Vault: sha256(bytes) → name; mkdir <dir(note)>/attachments/; write (no overwrite)
+    Vault->>Vault: sha256(bytes) → name, mkdir <dir(note)>/attachments/, write (no overwrite)
     Vault-->>Main: "attachments/<name>"
     Main-->>VS: "attachments/<name>"
     VS->>VS: loadFileTree()  (the new attachments/ folder shows)
@@ -1069,6 +1069,14 @@ sequenceDiagram
 
 ## 6.22 Open a web tab, navigate, and yield to an overlay (ADR-0042)
 
+> _(Since [ADR-0044](09_architecture_decisions/0044-runtime-plugin-system.md)
+> stage 8B the browser is the `plugins/browser/` plugin: the
+> `WebContentsView` lives in the plugin's main entry, the chrome is a
+> plugin-contributed `browser` doc kind, and the view↔chrome traffic runs
+> over the generic plugin bridge (`backend.invoke` / `backend.on`) instead
+> of the old dedicated `browser:*` channels. The flow below is unchanged
+> in shape; §6.26 shows the transport it now rides.)_
+
 `File -> New browser tab` / `Ctrl+Shift+B` opens a `browser://<n>` tab. The
 page is a main-process `WebContentsView`; the renderer holds only the
 chrome and streams the placeholder rect as the view's bounds. While any
@@ -1107,7 +1115,7 @@ sequenceDiagram
     Mgr-->>BVS: browser:event (push)
     BVS->>BVS: reduce() → BrowserTabState
     BVS->>Ed: setBrowserMeta(tabId, { name, favicon, url })
-    Ed-->>Tab: TabBar shows favicon + title; StatusBar shows URL
+    Ed-->>Tab: TabBar shows favicon + title StatusBar shows URL
 
     User->>Guard: opens a dialog / Settings / a menu ([appOverlayGuard])
     Guard->>BVS: suppressed() = true
@@ -1166,7 +1174,7 @@ sequenceDiagram
         Sess->>IPC: session:list-backups -> delete orphans
     end
 
-    Note over Sess: thereafter, one debounced effect writes<br/>drey.session (400ms) + backups (700ms);<br/>beforeunload / visibilitychange flush
+    Note over Sess: thereafter, one debounced effect writes<br/>drey.session (400ms) + backups (700ms),<br/>beforeunload / visibilitychange flush
 ```
 
 ## 6.24 Drag an `.ics` / `.msg` onto the editor → meeting section ([ADR-0041](09_architecture_decisions/0041-calendar-file-drop-meeting-section.md))
@@ -1183,7 +1191,7 @@ sequenceDiagram
     participant Render as renderMeetingSection (shared/meeting)
 
     User->>CM: drop invite.ics / invite.msg on .cm-content
-    CM->>CM: meetingFile(dataTransfer) matches → preventDefault; set caret to drop coord
+    CM->>CM: meetingFile(dataTransfer) matches → preventDefault, set caret to drop coord
     CM->>MS: decodeMeeting(new Uint8Array(await file.arrayBuffer()), file.name)
     MS->>Main: invoke meeting:decode(bytes, filename)
     Main->>Imp: decode(bytes, filename)
@@ -1198,8 +1206,8 @@ sequenceDiagram
     Main-->>MS: section markdown
     MS-->>CM: section markdown
     alt decoded
-        CM->>CM: sectionInsert() at the drop coord (blank line padded); tab goes dirty
-        Note over User: user saves with Ctrl+S; save → re-index picks up #mtg/<slug>
+        CM->>CM: sectionInsert() at the drop coord (blank line padded), tab goes dirty
+        Note over User: user saves with Ctrl+S, save → re-index picks up #mtg/<slug>
     else rejected
         CM->>CM: config.onError(message) → EditorService.error signal
     end
@@ -1209,6 +1217,203 @@ The **File → Import meeting …** menu row runs the same decode via
 `meeting:import` (native picker in main) and inserts through
 `EditorService.requestInsertText` — the fallback for an Outlook calendar
 drag that delivers no real `File`.
+
+## 6.25 Plugin discovery + activation ([ADR-0044](09_architecture_decisions/0044-runtime-plugin-system.md))
+
+Before the window and long before Angular bootstraps, the main process
+scans the plugin roots; the renderer activates inside
+`provideAppInitializer`, so every registry is complete before the shell,
+menus or session restore read them.
+
+```mermaid
+sequenceDiagram
+    participant Main as main.ts
+    participant Disc as plugin-discovery
+    participant HostM as plugin-host (main)
+    participant HostR as PluginHostService
+    participant Mod as plugin renderer module
+
+    Main->>Disc: discover(roots, pluginsConfig)
+    Note over Disc: roots: dist-electron/plugins/<id> (built-ins),<br/><userData>/plugins/*, DREY_EXTRA_PLUGIN_DIR
+    Disc->>Disc: read plugin.json -> validateManifest<br/>(id ^[a-z][a-z0-9-]{1,63}$, apiVersion)
+    Note over Disc: invalid manifest -> skip + log;<br/>built-in wins an id collision
+    Disc->>Disc: disabled id -> status 'disabled';<br/>apiVersion major mismatch -> 'incompatible'
+    Disc-->>Main: DiscoveredPlugin[]
+    loop each active plugin with a main entry
+        Main->>HostM: activate(plugin)
+        HostM->>HostM: await import(pathToFileURL(entry)) -> mod.default
+        HostM->>HostM: activate(ctx) -- ctx.app/vault/llm/ipc/save/search...
+        alt activate throws
+            Note over HostM: status 'failed', logged, app continues
+        end
+    end
+    Main->>HostM: rendererRootFor(id) -- for the plugin:// scheme
+    Note over Main: window created -> notifyMainWindowCreated<br/>(plugins bind BrowserWindows / views now)
+    HostR->>HostR: provideAppInitializer -> loadAll() -- gates bootstrap
+    HostR->>Main: pluginList()
+    Main-->>HostR: PluginDescriptorForRenderer[]
+    HostR->>HostR: plugins.set(descriptors) -- Settings reads these
+    loop each descriptor with status 'active' + rendererUrl
+        HostR->>Mod: import('plugin://<id>/renderer/index.js')
+        HostR->>Mod: activate(api) -- registers widgets/pages/kinds/extensions
+        alt activate throws
+            Note over HostR: quarantine: run disposables,<br/>status 'failed' + error (Settings shows it)
+        end
+        HostR->>HostR: injectStyles(descriptor) -- css list over plugin://
+    end
+    Note over HostR: loaded.set(true)
+    Note over Main: Angular bootstraps NOW -- DockService.defaultState(),<br/>the View menu and session restore see complete registries
+```
+
+## 6.26 Plugin IPC: `backend.invoke` roundtrip + `backend.on` push ([ADR-0044](09_architecture_decisions/0044-runtime-plugin-system.md))
+
+Two **fixed** channels serve every plugin — the hand-written preload can
+only expose those, so per-plugin traffic is namespaced in the payload,
+not in the channel name.
+
+```mermaid
+sequenceDiagram
+    participant PR as plugin renderer code
+    participant API as api.backend
+    participant Pre as preload (dreyApi)
+    participant R as ipcMain 'plugin:invoke'
+    participant PM as plugin main handler
+
+    PR->>API: invoke('tasks:list', { scope: 'vault' })
+    API->>Pre: pluginInvoke({ pluginId, method, payload })
+    Pre->>R: ipcRenderer.invoke('plugin:invoke', payload)
+    R->>R: pluginId matches the id pattern?<br/>method registered by THAT plugin?
+    alt unknown plugin or method
+        R-->>API: rejection (stringified error)
+    else registered
+        R->>PM: fn(payload)
+        PM-->>R: result
+        R-->>Pre: result (structured clone)
+        Pre-->>API: resolves
+        API-->>PR: Promise<TaskEntry[]>
+    end
+
+    note over PM,PR: Main -> renderer push (one channel, fanned out per plugin):
+    PM->>R: ctx.ipc.emit('event', browserEvent)
+    R->>Pre: webContents.send('plugin:event', { pluginId, event, data })
+    Pre->>API: pluginOnEvent listener
+    API->>API: PluginHostService: single subscription -><br/>that plugin's backendListeners.get(event) fan-out
+    API-->>PR: listener(data)
+```
+
+Errors cross the bridge as **strings** (a structured clone cannot carry
+an `Error`), and every plugin callback the host invokes is wrapped in
+try/catch so a throwing plugin quarantines instead of breaking the app.
+
+## 6.27 Editor extension registration + reconfigure ([ADR-0044](09_architecture_decisions/0044-runtime-plugin-system.md))
+
+Plugins never build CodeMirror extensions from their own `@codemirror`
+copies — they compose from the **host's** module instances
+(`api.editor.cm`) and register factories; the surface reconfigures a
+Compartment when the registry changes.
+
+```mermaid
+sequenceDiagram
+    participant TP as plugins/tags renderer
+    participant Reg as EditorExtensionRegistry
+    participant MS as MarkdownSurface
+    participant CM as CodeMirror EditorView
+
+    TP->>TP: const { state, view, ... } = api.editor.cm (host instances)
+    TP->>Reg: registerExtension('document', (ctx) => tagExtensions(ctx))
+    Reg-->>TP: Unsubscribe
+    Note over Reg: revision bump
+    MS->>Reg: extensions signal re-reads on revision
+    MS->>MS: pluginCompartment.reconfigure([factory(ctx), ...])
+    MS->>CM: dispatch effects -- tag pills + completion live on the surface
+    Note over MS,CM: A factory runs per reconfigure with the host's CM module<br/>instances -- a plugin's own copy would break facets silently,<br/>so plugins/ is lint-banned from runtime @codemirror imports.
+    TP->>Reg: unsubscribe() -- registry bumps, surface reconfigures clean
+```
+
+The same pattern drives the other editor seams: a drop decoder is
+consulted by the base paste/drop pipeline *before* the base file/image
+branches, and context-menu items / menu rows append to their menus.
+
+## 6.28 Save → save-hook chain → pending Actions (plugin era, extends §6.11)
+
+`NoteManager` keeps the frontmatter bump + write; every feature indexes
+(or acts) through the async **save-hook registry**. The `applyingAction`
+short-circuit keeps a rewrite-applying save from re-firing hooks.
+
+```mermaid
+sequenceDiagram
+    participant Ed as EditorService
+    participant NM as NoteManager
+    participant HK as plugin-host (main) saveHooks
+    participant TP as tags plugin hook
+    participant TK as tasks plugin hook
+    participant AP as assistant plugin hook
+    participant HR as PluginHostService (renderer)
+
+    Ed->>NM: note:save { path, body, eol }
+    NM->>NM: frontmatter bump (updated:) + write
+    NM->>HK: emitNoteSaved({ path, content, ... })
+    Note over HK: event.applyingAction? -> return [] (no recursion)
+    par tags
+        HK->>TP: await hook(event)
+        TP-->>HK: TagIndex.reindexFile(path)
+    and tasks
+        HK->>TK: await hook(event)
+        TK-->>HK: TaskIndex.reindexFile(path)
+    and on-save Actions
+        HK->>AP: await hook(event)
+        AP->>AP: LLM edit (if configured) -> confirmed rewrite
+        AP-->>HK: { content, pendingActions } (or void)
+    end
+    HK-->>NM: SaveHookResult[]
+    NM-->>Ed: NoteSaveResult { content, modifiedMs, pendingActions? }
+    Ed->>Ed: adopt returned content; queue pendingActions
+    Ed->>HR: emitDocumentEvent('pending-actions')
+    HR->>HR: handlePluginEvent -> drains into the owner plugin
+    Note over AP,Ed: each pending Action -> documents.requestRewrite -><br/>ConfirmationDialog -> applyRewrite -> save(applyingAction)
+```
+
+A throwing hook is logged and skipped — one plugin's failure must not
+lose the user's save.
+
+## 6.29 Session restore with a plugin doc kind ([ADR-0044](09_architecture_decisions/0044-runtime-plugin-system.md), ADR-0043)
+
+A plugin tab persists as the generic `{ path, kind, data }` session
+member; the kind's owner recreates it from the payload. Because plugin
+activation gates bootstrap (§6.25), every kind is registered *before*
+`App` runs `SessionService.restore()`.
+
+```mermaid
+sequenceDiagram
+    participant App as App (startup effect)
+    participant SS as SessionService
+    participant DK as DocKindRegistry
+    participant BP as plugins/browser renderer
+    participant Ed as EditorService
+
+    App->>SS: restore() -- after plugins loaded, once vault + config known
+    SS->>Main: session:read-backup
+    Main-->>SS: SessionState { vaultPath, tabs: SessionTab[] }
+    loop each tab
+        alt kind 'image'
+            SS->>Ed: openFile(path)
+        else kind 'text'
+            SS->>Ed: openFile(path) (+ line/pane placement)
+        else plugin kind (e.g. 'browser')
+            SS->>DK: get('browser')
+            alt not registered (plugin disabled since)
+                Note over SS: tab dropped silently
+            else registered
+                DK-->>SS: contrib.restore
+                SS->>BP: restore(path, data) -- data = { url }
+                BP->>BP: store.restoreTab(path, url) -> new browser://<n> key
+                BP->>Ed: documents.addDoc('browser', key, 'New tab')
+                Note over SS: legacy snapshots carried the payload at the<br/>top level -- handed to the kind as-is
+            end
+        end
+    end
+    SS-->>App: restoredAny -- false lets the daily-note fallback run
+```
 
 ## Planned flows (added as their milestone is built)
 

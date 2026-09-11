@@ -1,13 +1,152 @@
 # 5. Building Block View
 
-> **Reading order.** This file is layered by milestone: each
+> **Reading order.** **§5.0 is the current structure** (base application
+> + runtime plugins, [ADR-0044](09_architecture_decisions/0044-runtime-plugin-system.md)).
+> The rest of this file is layered by milestone: each
 > "§5.x Notable implementation decisions" section is a point-in-time
 > record, with `_(Superseded …)_` notes where a later section changed
 > course. The tag system was rebuilt in milestone 11
 > ([ADR-0017](09_architecture_decisions/0017-tags-as-labels-and-section-index.md)):
-> **§5.14** has the current tag / search / feature-module picture; the
+> **§5.14** has the tag / search picture as of that milestone; the
 > `TagIndex` / routing / master-document material in §5.1 and §5.9 is
-> kept for the record but superseded.
+> kept for the record but superseded. The feature sections (§5.10–§5.23)
+> predate the plugin conversion — where a feature is now a runtime
+> plugin, its section carries a note and §5.0 describes the seam it
+> plugs into today.
+
+## 5.0 Whitebox overall system — base application + runtime plugins (current, ADR-0044)
+
+Since [ADR-0044](09_architecture_decisions/0044-runtime-plugin-system.md)
+the app is a **base application** plus **runtime-loadable, in-process
+plugins** — in-process and trusted (Obsidian's model), discovered at
+startup, activated before Angular bootstraps. Every former feature module
+is now a plugin; the base keeps the shell, the editor, vault IO, session
+restore, keybindings, spellcheck, the MCP vault server, the LLM
+*transport*, and the two plugin hosts.
+
+### The blocks
+
+**Base, main process** (`electron/`):
+
+- `main.ts` — composition root: window creation, the privileged schemes
+  (`app://`, `drey-asset://`, `plugin://`), single-instance lock,
+  quick-capture hotkey, and the slimmed IPC handler registration.
+- `plugin-host/` — discovery (`plugin-discovery.ts`: built-in root,
+  `<userData>/plugins/*`, `DREY_EXTRA_PLUGIN_DIR`; manifest validation;
+  `plugins.disabled` + `apiVersion` gating), the host
+  (`plugin-host.ts`: activate/quarantine, `plugin://` root resolution),
+  per-plugin config store (`plugin-config-store.ts`).
+- Vault + note IO: `vault-manager.ts`, `note-manager.ts` (frontmatter
+  bump + write; feature work rides the **save-hook / vault-hook
+  registries**), `daily-note.ts`, `session/` (backup store),
+  `llm/` (transport: `lm-studio-client.ts`, debug log, task registry,
+  tag-suggest), `mcp/` (vault server; `vault_search` reads the
+  section-search provider the tags plugin registers).
+- `ipc/` — the base channel handlers (thin, feature-free).
+
+**Base, renderer** (`src/app/`):
+
+- Shell: `titlebar/`, `dock/` (+ `WidgetRegistryService` — core widgets
+  register through the same API plugins use), `status-bar/`,
+  `settings/` (framework + core categories; plugin pages append),
+  `panes/`, `tab-bar/`, `editor/` (+ the editor-extension /
+  drop-decoder / context-menu / doc-kind registries behind it),
+  `entry/`, `calendar/`, `vault/`, `image-viewer/`,
+  `confirmation-dialog/`, `services/`.
+- `plugin-host/` — `plugin-host.service.ts` (activation, quarantine,
+  event fan-out, visibility synthesis), `plugin-api-impl.ts` (the
+  `DreyPluginApi` implementation), the registries
+  (`editor-extension-registry`, `doc-kind-registry.service`,
+  `menu-contributions`, `drop-decoder-registry`,
+  `settings-registry.service`), and the three DOM mount hosts
+  (`plugin-widget-host`, `plugin-settings-host`, `plugin-doc-host`).
+
+**SDK** (`shared/plugin-api/`) — the frozen contract both sides compile
+against: `manifest.ts` (`PluginManifest` + `validateManifest`),
+`plugin-api.ts` (renderer `DreyPluginApi`), `main-plugin-api.ts`
+(`MainPluginContext`), `plugin-ipc.ts` (the bridge payload types +
+`PluginDescriptorForRenderer`), `versions.ts` (`PLUGIN_API_VERSION`;
+major mismatch ⇒ `incompatible`). Exempt from module-boundary lint, like
+`shared/ipc-api.ts`.
+
+**Plugins** (`plugins/<id>/`, seven shipped): `sample` (exercises every
+surface), `templates`, `meeting`, `tags`, `tasks`, `assistant`
+(Assistant + Actions), `browser`. Each is a full stack: `plugin.json` +
+`main/` (CommonJS, Node access — `electron/` and app-`shared/` CJS
+allowed) + `renderer/` (browser-context ES modules + CSS, served over
+`plugin://`, plain DOM — no Angular, no `@codemirror/*` runtime imports)
++ `shared/` (its own types). Built by `scripts/build-plugins.mjs` into
+`dist-electron/plugins/<id>/` — built-ins and user-installed plugins are
+the same thing to the hosts.
+
+```mermaid
+graph TB
+    subgraph PR["Base renderer (src/app/)"]
+        Shell["Shell: titlebar / dock+panels /\nstatus bar / settings framework"]
+        Editor["Editor + panes + tab bar\n(CodeMirror 6, Live Preview)"]
+        Registries["Registries: widgets · doc kinds ·\nsettings pages · menu rows · commands ·\neditor extensions · drop decoders ·\ncontext-menu items · composer slot"]
+        HostR["plugin-host (renderer)\nplugin-api-impl = DreyPluginApi;\nactivation + quarantine; event fan-out;\nDOM mount hosts"]
+        Services["Base services: EditorService ·\nVaultService · PaneService ·\nConfirmationDialog · KeybindingService"]
+    end
+    subgraph Preload["Preload"]
+        Bridge["dreyApi (base channels)\n+ pluginList / pluginInvoke / pluginOnEvent"]
+    end
+    subgraph Main["Base main process (electron/)"]
+        MainTs["main.ts: window + schemes\n(app:// · drey-asset:// · plugin://)"]
+        HostM["plugin-host (main)\ndiscovery · activation · quarantine ·\nplugin:// root resolution · config store"]
+        IO["VaultManager · NoteManager\n(save/vault hook registries) ·\nDailyNote · Session backups"]
+        LLM["llm/: LmStudioClient · debug log ·\ntask registry · tag-suggest"]
+        MCP["mcp/: VaultTools (vault_search via\nregistered SectionSearchProvider)"]
+    end
+    subgraph Plugins["plugins/<id>/  (dist-electron/plugins/<id>/)"]
+        P1["templates · meeting · tags ·\ntasks · assistant · browser · sample"]
+        P2["each: plugin.json + main/ (CJS,\nNode ok) + renderer/ (ESM + CSS over\nplugin://, plain DOM) + shared/"]
+    end
+    SDK["shared/plugin-api/\nmanifest · DreyPluginApi ·\nMainPluginContext · PLUGIN_API_VERSION"]
+
+    Shell --> Registries
+    Registries --> HostR
+    Editor --> Registries
+    HostR -->|"plugin:invoke"| Bridge
+    Bridge -->|"plugin:event"| HostR
+    Bridge --> HostM
+    HostM --> P1
+    MainTs --> HostM
+    HostM --> IO
+    Services --> HostR
+    LLM --> HostM
+    MCP --> HostM
+    SDK -.->|types| HostR
+    SDK -.->|types| HostM
+    SDK -.->|types| P1
+```
+
+### The seams (what a plugin can be)
+
+Every base extension point is a **registry the base owns and a plugin
+fills** — base knows the interfaces, not the features:
+
+| Seam | Renderer API | Main context |
+| --- | --- | --- |
+| Dock panels + status values | `ui.registerWidget` | — |
+| Non-file editor tabs (doc kinds) | `ui.registerDocKind` | — |
+| Settings pages | `ui.registerSettingsPage` | — |
+| Menu rows (`file`/`edit`/`selection`/`view`/`editor-more`) | `ui.registerMenuContributions` | — |
+| Commands + keybindings | `commands.register` / `run` | — |
+| Editor extensions (host CM instances), drop decoders, context-menu items, composer slot | `editor.*` | — |
+| Document read/observe/insert/confirmed rewrite/open | `documents.*` | — |
+| Vault IO + change push | `vault.*` | `ctx.vault.*` |
+| Backend methods + pushes (the plugin's own IPC) | `backend.invoke` / `backend.on` | `ctx.ipc.handle` / `ctx.ipc.emit` |
+| Save pipeline (`{content?, pendingActions?}`), vault lifecycle, section search | — | `ctx.save`, `ctx.vault` hooks, `ctx.search` |
+| LLM transport | `llm.chat/cancelTask/onDebugEntry` | `ctx.llm.chat/suggestTags` |
+| Per-plugin config, app config read/patch | `settings.*`, `appConfig.*` | `ctx.config`, `ctx.appConfig` |
+| Native-surface hide (overlays/gestures) | `env.onNativeSurfaceVisibility` | — |
+
+Runtime sequences (discovery/activation, the IPC roundtrip, extension
+registration, the save-hook chain, doc-kind session restore) are in
+[docs/06 §6.25–§6.29](06_runtime_view.md); packaging in
+[docs/07](07_deployment_view.md).
+
 
 ## 5.1 Whitebox Overall System (as of the "visual shell" milestone)
 
@@ -978,6 +1117,11 @@ its topic's master-document `## History`.
 
 ## 5.10 Notable implementation decisions — Settings, Actions, chat Ask mode
 
+> _(The Actions engine and the assistant are now the `plugins/assistant/`
+> runtime plugin — [ADR-0044](09_architecture_decisions/0044-runtime-plugin-system.md),
+> §5.0. The Settings screen, the LLM connection category and the shared
+> confirmation flow stayed base.)_
+
 The Settings screen (LLM connection + an Actions engine), a single shared
 confirmation flow, and an Input/Ask toggle on the bottom bar. Two ADRs:
 [0010](09_architecture_decisions/0010-app-settings-storage.md) (settings
@@ -1131,6 +1275,8 @@ ActionsService` dependency, which would be a DI cycle).
 
 ## 5.11 Note assistant panel (Feature A)
 
+> _(Assistant + Actions are now the `plugins/assistant/` runtime plugin — [ADR-0044](09_architecture_decisions/0044-runtime-plugin-system.md), §5.0. This section describes the pre-plugin panel.)_
+
 The right-hand column. Per open note it shows an automatic summary card,
 then the question/answer cards that follow, and a composer.
 
@@ -1267,6 +1413,8 @@ whose answer time depends on the prompt (see
   `durationMs` on the card, so `took 8s` survives a restart.
 
 ## 5.14 Tag index + tag search, feature modules, keybindings (milestones 11–12)
+
+> _(The tag/search feature is now the `plugins/tags/` runtime plugin — [ADR-0044](09_architecture_decisions/0044-runtime-plugin-system.md), §5.0; the feature-module convention it introduced survives for the base app.)_
 
 The milestone-6 tag layer (§5.9) was replaced
 ([ADR-0017](09_architecture_decisions/0017-tags-as-labels-and-section-index.md)).
@@ -1585,6 +1733,8 @@ electron/mcp/
 
 ## 5.18 Template library + startup daily note + editor context menu (ADR-0029, ADR-0030)
 
+> _(The template library is now the `plugins/templates/` runtime plugin — [ADR-0044](09_architecture_decisions/0044-runtime-plugin-system.md), §5.0; `templates.dir` stays base config.)_
+
 ### `src/app/templates/` (feature module, ADR-0016 barrel)
 
 ```
@@ -1655,6 +1805,8 @@ src/app/templates/
 
 ## 5.20 Tasks panel + task index (ADR-0033)
 
+> _(The tasks feature is now the `plugins/tasks/` runtime plugin — [ADR-0044](09_architecture_decisions/0044-runtime-plugin-system.md), §5.0.)_
+
 A third feature-module trio, shaped like the tag stack (§5.14):
 
 - **`shared/tasks/`** (barrel) — pure, Vitest-covered:
@@ -1704,6 +1856,8 @@ A third feature-module trio, shaped like the tag stack (§5.14):
   the only import surface.
 
 ## 5.21 In-editor web browser tab (ADR-0042)
+
+> _(The browser is now the `plugins/browser/` runtime plugin — [ADR-0044](09_architecture_decisions/0044-runtime-plugin-system.md), §5.0; the WebContentsView lives in the plugin's main entry, the chrome is a plugin doc kind.)_
 
 A browser tab is a fileless `OpenDoc` keyed `browser://<n>`
 (`OpenDoc.kind: 'browser'`, alongside `'text'` / `'image'`); its page is a

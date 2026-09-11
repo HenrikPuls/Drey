@@ -10,7 +10,7 @@
     "start": "ng serve",
     "watch": "ng build --watch --configuration development",
     "test": "ng test",
-    "lint": "eslint \"electron/**/*.ts\" \"shared/**/*.ts\" \"src/**/*.ts\"",
+    "lint": "eslint \"electron/**/*.ts\" \"shared/**/*.ts\" \"src/**/*.ts\" \"plugins/**/*.ts\"",
     "build:renderer": "ng build",
     "build:electron": "tsc -p electron/tsconfig.json",
     "build:plugins": "node scripts/build-plugins.mjs",

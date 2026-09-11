@@ -40,6 +40,12 @@ interface DreyFixtures {
    * (plain JS, no build step) into it before launch.
    */
   extraPluginDir: string | null;
+  /**
+   * Plugins to install the way a user would: `{ pluginId: { relativePath:
+   * content } }`, written under `<userDataDir>/plugins/<pluginId>/` before
+   * launch — the app-level discovery root, not a dev override.
+   */
+  userDataPlugins: Record<string, Record<string, string>> | null;
   /** The launched Electron app. */
   electronApp: ElectronApplication;
   /** The main window's renderer page. */
@@ -66,7 +72,13 @@ export const test = base.extend<DreyFixtures>({
 
   extraPluginDir: [null, { option: true }],
 
-  electronApp: async ({ vaultDir, appConfig, seedVault, extraPluginDir }, use, testInfo) => {
+  userDataPlugins: [null, { option: true }],
+
+  electronApp: async (
+    { vaultDir, appConfig, seedVault, extraPluginDir, userDataPlugins },
+    use,
+    testInfo,
+  ) => {
     if (!fs.existsSync(electronMain)) {
       throw new Error(
         `${electronMain} is missing -- run \`npm run build\` (or \`npm run e2e\`) before the E2E suite.`,
@@ -85,6 +97,16 @@ export const test = base.extend<DreyFixtures>({
       path.join(userDataDir, 'vault-config.json'),
       JSON.stringify({ activeVaultPath: vaultDir }, null, 2),
     );
+    // User-installed plugins land in the app-level discovery root
+    // (`<userData>/plugins/<id>/`, ADR-0044) — indistinguishable from a
+    // real install from the app's point of view.
+    for (const [pluginId, files] of Object.entries(userDataPlugins ?? {})) {
+      for (const [relativePath, content] of Object.entries(files)) {
+        const target = path.join(userDataDir, 'plugins', pluginId, relativePath);
+        fs.mkdirSync(path.dirname(target), { recursive: true });
+        fs.writeFileSync(target, content);
+      }
+    }
     const seededConfig = { plugins: { disabled: ['sample'] }, ...appConfig };
     if (Object.keys(seededConfig).length > 0) {
       fs.writeFileSync(

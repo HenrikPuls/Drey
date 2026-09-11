@@ -112,6 +112,11 @@ export class SettingsService {
     () => new Set(this._draft()?.widgets.disabled ?? []),
   );
 
+  /** The Settings -> Panels & plugins draft's disabled plugin ids (drives the checkboxes). */
+  readonly pluginsDisabledDraft = computed<ReadonlySet<string>>(
+    () => new Set(this._draft()?.plugins.disabled ?? []),
+  );
+
   /** Editor content zoom multiplier (Ctrl +/-/0). Persisted config, never the draft. */
   readonly editorFontScale = computed<number>(() => this._config()?.editor.fontScale ?? 1);
 
@@ -279,6 +284,23 @@ export class SettingsService {
         set.add(id);
       }
       config.widgets = { disabled: [...set] };
+    });
+  }
+
+  /**
+   * Settings -> Panels & plugins: enable / disable a plugin (draft edit;
+   * saved on Save). Takes effect on the next app start -- discovery runs
+   * before either side activates, so a restart is the honest v1 cut.
+   */
+  setPluginEnabled(id: string, enabled: boolean): void {
+    this.mutate((config) => {
+      const set = new Set(config.plugins.disabled);
+      if (enabled) {
+        set.delete(id);
+      } else {
+        set.add(id);
+      }
+      config.plugins = { disabled: [...set] };
     });
   }
 

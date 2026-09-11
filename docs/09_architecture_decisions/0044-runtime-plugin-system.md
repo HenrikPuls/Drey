@@ -2,13 +2,18 @@
 
 ## Status
 
-Accepted (decision + SDK contract stage of the plugin program; host and
-conversions follow in the same program). **Supersedes** the "modular
+Accepted. **Supersedes** the "modular
 monolith — no plugin runtime" stance of
 [ADR-0016](0016-feature-module-convention.md) and the "internal widget
 model only, no runtime loading" clause of
 [ADR-0034](0034-internal-widget-model.md). ADR-0016's barrel/boundary
 convention itself survives for the *base* app's own code.
+
+Shipped in the staged program this ADR planned: all six feature modules
+(tags, tasks, meeting, templates, assistant+actions, browser) are runtime
+plugins, plus a `sample` plugin exercising every surface. "As shipped"
+below records where the conversions *reshaped* the frozen v1 SDK — the
+frozen-contract stage did its job exactly there.
 
 ## Context
 
@@ -151,6 +156,55 @@ registering through the same API plugins use.)
   "identical treatment" false. The whole point is one code path.
 - **Hot enable/disable**: postponed; restart-to-apply is the honest v1.
 
+## As shipped — where the conversions reshaped the SDK
+
+The v1 contract above was frozen before any host existed; building the six
+plugins against it surfaced a handful of deliberate changes, each made at
+the stage that needed it:
+
+- **The LLM facade lost `ask` / `runAction` / `actionsForEvent`.** The
+  assistant plugin took its Actions engine *into* the plugin (prompt
+  templates, trigger resolution, the on-save hook) with the base
+  transport injected as `{ getConfig, chat }`; a facade mirroring
+  ActionRunner would only have re-created the old coupling one seam over.
+  What remains: renderer `llm = { enabled, chat(+vaultTools option),
+  cancelTask, onDebugEntry }`; main-side additionally `chat` +
+  `suggestTags` (the vocabulary-carrying Autotag prompt — the Autotag
+  button stays a base surface that joins the tags plugin's vocabulary with
+  base transport).
+- **`RewriteRequest.triggerId?`** — the confirmation dialog attributes an
+  edit to its requesting surface (a plugin command, an on-save Action, an
+  MCP write), which the base dialog renders as context.
+- **Doc-kind contributions grew `icon` and `onFocused`** beyond the v1
+  `serialize/restore/mount/favicon/statusText` shape: a plugin tab needs a
+  tab-strip fallback glyph named from the host's icon set, and a
+  keyboard-driven kind (the browser's Ctrl+F) must know when its host
+  surface gains/loses focus without polling.
+- **`documents.addDoc(kind, key, name)` and `documents.rename(path,
+  name)`** — a plugin-contributed tab is not a file, so opening one (the
+  browser's "New tab") and following a page title with the tab label
+  needed first-class registry-doc calls. `OpenDoc.kind` widened from a
+  closed union to `string` — the base cannot enumerate plugin kinds.
+- **A new `editor-more` menu slot** (the per-pane meta-bar `⋯` menu):
+  manual Actions moved there as contributions when the assistant plugin
+  absorbed Actions.
+- **Menu contribution rows append at the end of a menu, behind a
+  separator.** There is no insertion-order API — the browser's "New
+  browser tab" consequently moved from the File menu's second row to the
+  bottom section (same command id, same keybinding). If a core-menu
+  position ever matters, that is a small SDK addition, not a redesign.
+- **Plugin main-process entries may import `electron` and the app's
+  CJS-emitted `shared/` modules** (the meeting importer takes `dialog`,
+  the browser takes `WebContentsView`/`session`/…); plugin *renderer*
+  entries can import neither at runtime — they are browser-context ES
+  modules served over `plugin://`, which is why small helpers get copied
+  into a plugin's own `shared/` folder instead of imported from `shared/`.
+- **A plugin main's push is a doc-kind refresh signal.** The doc-kind
+  registry's re-read tick is fed from document events *and* from
+  `plugin:event` dispatch — the browser's favicon/status ride its `event`
+  pushes, and a plugin can update its own tab-strip slots from any backend
+  state change.
+
 ## Consequences
 
 - The six feature modules move to `plugins/<id>/` (manifest + `main/` +
@@ -174,6 +228,11 @@ registering through the same API plugins use.)
 - `npm run dev` staleness now also covers `dist-plugins/` — plugin or
   `shared/plugin-api` changes require a plugin rebuild + restart, same
   class as the existing `shared/` gotcha.
+- The Settings "Widgets" category became **"Panels & plugins"**: one page
+  toggles dock panels (`widgets.disabled`) and whole plugins
+  (`plugins.disabled`), and shows every discovered plugin's live status
+  (active / failed / incompatible / disabled, plus the host's error).
+  Plugin *pages* still append as their own categories, before "About".
 - Milestone staging: ADR/SDK → hosts + `plugin://` spike + sample plugin
   → editor/save/vault/search seams (pure refactor) → templates → meeting
   → tags → tasks → assistant+actions → browser (base doc-kind

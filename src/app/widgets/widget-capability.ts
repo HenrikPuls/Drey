@@ -1,9 +1,9 @@
 /**
- * The read surfaces a dock widget declares it uses. Purely descriptive for
- * now -- surfaced in Settings -> Widgets (milestone 18) and documented as
- * the seam a future capability check would enforce. There is no runtime
- * gating and no sandbox: every registered widget can reach all of
- * `WidgetContext` (ADR-0034).
+ * The read surfaces a dock widget (base panel or plugin panel, ADR-0044)
+ * declares it uses. Purely descriptive -- surfaced in Settings → Panels &
+ * plugins and documented as the seam a future capability check would
+ * enforce. There is no runtime gating and no sandbox: every registered
+ * widget runs in-process with full API access.
  */
 export type WidgetCapability =
   | 'active-document'

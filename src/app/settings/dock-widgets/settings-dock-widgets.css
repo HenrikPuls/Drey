@@ -9,3 +9,39 @@
 .widget-list li + li {
   border-top: 1px solid var(--border);
 }
+
+.section-title {
+  margin: 20px 0 8px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+}
+
+.section-title + .widget-list {
+  margin-bottom: 4px;
+}
+
+.plugin-status {
+  margin-left: 8px;
+  padding: 1px 6px;
+  border-radius: 8px;
+  font-size: 10px;
+  letter-spacing: 0.04em;
+  color: var(--text-faint);
+  background: color-mix(in srgb, var(--border) 55%, transparent);
+}
+
+.plugin-status[data-status='failed'],
+.plugin-status[data-status='incompatible'] {
+  color: var(--accent-hover);
+  background: color-mix(in srgb, var(--accent-hover) 14%, transparent);
+}
+
+.plugin-error {
+  display: block;
+  margin-top: 2px;
+  color: var(--accent-hover);
+  font-size: 11px;
+}

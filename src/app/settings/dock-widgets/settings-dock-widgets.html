@@ -1,7 +1,8 @@
 <app-settings-pane
-  title="Widgets"
-  description="Turn a dock panel off completely. A disabled panel leaves every dock and the View menu; re-enabling it returns it to its default spot. Applied when you Save."
+  title="Panels & plugins"
+  description="Turn a dock panel or a whole plugin off. A disabled panel leaves every dock and the View menu; a disabled plugin is skipped on the next start — plugin toggles apply after you Save and restart Drey."
 >
+  <h3 class="section-title">Panels</h3>
   <ul class="widget-list">
     @for (row of rows(); track row.id) {
       <li>
@@ -18,6 +19,33 @@
           </span>
         </label>
       </li>
+    }
+  </ul>
+
+  <h3 class="section-title">Plugins</h3>
+  <ul class="widget-list">
+    @for (row of pluginRows(); track row.id) {
+      <li>
+        <label class="switch-row">
+          <input
+            type="checkbox"
+            [checked]="row.enabled"
+            (change)="onPluginToggle(row.id, $any($event.target).checked)"
+          />
+          <span>
+            <span class="switch-label">
+              {{ row.name }}
+              <span class="plugin-status" [attr.data-status]="row.status">{{ row.status }}</span>
+            </span>
+            <span class="switch-hint">v{{ row.version }} · {{ row.source }}@if (row.permissions) {<span> · {{ row.permissions }}</span>}</span>
+            @if (row.error && row.status !== 'disabled') {
+              <span class="plugin-error">{{ row.error }}</span>
+            }
+          </span>
+        </label>
+      </li>
+    } @empty {
+      <li class="switch-hint">No plugins discovered.</li>
     }
   </ul>
 </app-settings-pane>

@@ -180,6 +180,55 @@ test.describe('plugin doc kinds', () => {
 });
 
 /**
+ * A plugin installed the way a user would -- dropped into
+ * `<userData>/plugins/<id>/` (the app-level discovery root, not a dev
+ * override) -- is discovered, activates, reports `builtin: false`, and
+ * shows up with its status in Settings -> Panels & plugins. Also the
+ * only suite coverage of that settings page.
+ */
+test.describe('user-installed plugin', () => {
+  const USER_MANIFEST = {
+    ...MANIFEST,
+    id: 'e2e-user',
+    name: 'E2E user plugin',
+    description: 'Installed into <userData>/plugins',
+  };
+
+  test.use({
+    userDataPlugins: {
+      'e2e-user': {
+        'plugin.json': JSON.stringify(USER_MANIFEST, null, 2),
+        'main/index.js':
+          'module.exports = { activate(ctx) { ctx.ipc.handle("ping", () => ({ ok: true })); } };',
+        'renderer/index.js': `
+const mod = {
+  activate(api) {
+    void api; // discovery + listing is what the spec asserts
+  },
+};
+export default mod;
+`,
+      },
+    },
+  });
+
+  test('is discovered from <userData>/plugins and listed in Settings', async ({ page }) => {
+    const plugins = await page.evaluate(() => window.dreyApi.listPlugins());
+    const installed = plugins.find((p) => p.id === 'e2e-user');
+    expect(installed).toMatchObject({ status: 'active', builtin: false });
+    expect(installed?.rendererUrl).toBe('plugin://e2e-user/renderer/index.js');
+
+    // The Panels & plugins settings page lists it with its status.
+    await page.locator('app-status-bar .settings').click();
+    await page.locator('.category', { hasText: 'Panels & plugins' }).click();
+    const row = page.locator('.switch-row', { hasText: 'E2E user plugin' });
+    await expect(row).toBeVisible();
+    await expect(row.locator('.plugin-status')).toHaveText('active');
+    await expect(row).toContainText('installed');
+  });
+});
+
+/**
  * The browser plugin (ADR-0044 stage 8B): the in-editor browser tab is no
  * longer a base feature -- it registers the `browser` doc kind, the
  * `browser.new` command and its File-menu row from the plugin. The native

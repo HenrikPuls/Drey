@@ -26,6 +26,9 @@ asarUnpack:
 files:
   - 'dist-electron/**/*.js'
   - 'dist-electron/**/*.json'
+  # Plugin renderer stylesheets (the .js/.json globs above already carry
+  # the plugin mains, manifests and renderer modules).
+  - 'dist-electron/plugins/**/*.css'
   - 'dist/drey/browser/**'
   - 'package.json'
   - '!dist-electron/**/*.map'

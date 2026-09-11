@@ -52,7 +52,7 @@ export class PluginHostService {
   private readonly widgets = inject(WidgetRegistryService);
   private readonly docKinds = inject(DocKindRegistry);
 
-  /** Every discovered plugin with its status; the Settings plugin pane reads this. */
+  /** Every discovered plugin with its status; Settings → Panels & plugins reads this. */
   readonly plugins = signal<readonly PluginDescriptorForRenderer[]>([]);
   /** True once `loadAll()` finished (successfully or not) — session restore waits for it. */
   readonly loaded = signal(false);

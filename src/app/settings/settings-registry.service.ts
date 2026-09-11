@@ -91,8 +91,8 @@ const CORE_CATEGORIES: readonly SettingsCategory[] = [
   },
   {
     id: 'widgets',
-    label: 'Widgets',
-    hint: 'Panels & capabilities',
+    label: 'Panels & plugins',
+    hint: 'Toggle panels & plugins',
     component: SettingsDockWidgets,
   },
   { id: 'mcp', label: 'MCP', hint: 'Vault server & tools', component: SettingsMcp },

@@ -156,9 +156,6 @@ export class App {
     // (PaneService + the tab context menu); these are the keyboard / menu
     // entry points. Chords avoid `Alt+Arrow` (move line) and a bare `\`
     // (AltGr on a German layout).
-    // (PaneService + the tab context menu); these are the keyboard / menu
-    // entry points. Chords avoid `Alt+Arrow` (move line) and a bare `\`
-    // (AltGr on a German layout).
     keys.register({
       id: 'pane.splitRight',
       label: 'Split editor right',

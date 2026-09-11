@@ -20,8 +20,11 @@ electron-builder ([ADR-0023](09_architecture_decisions/0023-windows-packaging-el
    (`scripts/generate-licenses.mjs`, production deps only — a superset of
    Angular's `3rdpartylicenses.txt` because it also covers the
    main-process packages `yaml` / `nspell` / `dictionary-*`), then
-   `ng build` (→ `dist/drey/browser/`) and `tsc -p electron/tsconfig.json`
-   (→ `dist-electron/`).
+   `ng build` (→ `dist/drey/browser/`), `tsc -p electron/tsconfig.json`
+   (→ `dist-electron/`) and `build:plugins`
+   (`scripts/build-plugins.mjs`, which compiles each plugin's `main/` and
+   `renderer/` with its own tsconfig and merges everything into one tree
+   per plugin, → `dist-electron/plugins/<id>/`).
 3. `electron-builder --win` reads `electron-builder.yml`.
 
 ## Artifacts (`release/`)
@@ -46,6 +49,32 @@ and served through the privileged **`app://`** scheme
 and `dist/drey/browser/` ship side by side under the app root with that
 exact `../../` relationship; the `files` list in `electron-builder.yml`
 keeps it.
+
+## Plugins in the package ([ADR-0044](09_architecture_decisions/0044-runtime-plugin-system.md))
+
+The **built-in plugins ship inside the app**: each is a complete tree —
+`plugin.json` (manifest), `main/` (CommonJS, loaded by the main process
+with a plain `import()`), `renderer/` (ES2022 modules + CSS) and `shared/`
+(types erased at build) — merged into `dist-electron/plugins/<id>/` by
+`scripts/build-plugins.mjs`. The `files` globs carry the `.js`/`.json`
+entries plus an explicit `dist-electron/plugins/**/*.css`.
+
+- **Serving**: the privileged **`plugin://<id>/<path>`** scheme resolves
+  against the plugin's `renderer/` folder (the main process asks the
+  plugin host which root belongs to an id). It is served through the same
+  asar-aware `net.fetch(pathToFileURL(...))` pattern as `app://` — plugin
+  files read fine out of the asar — with an explicit `Content-Type`
+  (`.js` → `text/javascript`, `.css` → `text/css` — a wrong MIME breaks ES
+  module loading) and `Access-Control-Allow-Origin: *` (the renderer
+  fetches modules in CORS mode), and a `path.relative` escape guard that
+  rejects any URL resolving outside the plugin root (stricter than
+  `app://`'s prefix check, Windows-safe).
+- **User-installed plugins** are *not* packaged: discovery also scans
+  `%APPDATA%\drey\plugins\<id>\` (beside `app-config.json`, ADR-0010) and
+  a `DREY_EXTRA_PLUGIN_DIR` override for dev/test. A user plugin shadows
+  nothing — built-ins win id collisions. Disabling is
+  `plugins.disabled` in `app-config.json` (Settings → Panels & plugins);
+  an `apiVersion` mismatch marks the plugin `incompatible` and skips it.
 
 ## asar and `asarUnpack`
 
