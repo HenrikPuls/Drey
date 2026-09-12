@@ -475,16 +475,28 @@ export class PaneService {
 
   /** The full layout, for `SessionService` to persist. */
   snapshot(): PaneLayoutSnapshot {
-    return { root: this._root(), panes: this._panes(), focusedId: this._focusedId() };
+    const dock = this._dockPanes();
+    const heights = this._bandHeights();
+    const entries: Partial<Record<PaneDockSide, DockedPaneSnapshot>> = {};
+    for (const side of DOCK_SIDES) {
+      const id = dock[side];
+      if (id !== null) {
+        entries[side] = { paneId: id, height: heights[side] };
+      }
+    }
+    const base = { root: this._root(), panes: this._panes(), focusedId: this._focusedId() };
+    return Object.keys(entries).length > 0 ? { ...base, dock: entries } : base;
   }
 
   /**
    * Rebuilds the layout from a persisted `snapshot()`. `keepPath` is asked
    * for every tab path -- one that no longer resolves (a deleted file whose
    * backup is also gone) is dropped, and a pane left with no tabs is pruned
-   * from the tree (unless it is the last one). Returns `true` when a
-   * non-empty layout was restored, so the caller can skip its default
-   * "open today's note" behaviour.
+   * from the tree (unless it is the last one). A dock region whose pane
+   * lost its last tab is dropped too (ADR-0038), as is an entry that is no
+   * longer valid (its pane is a centre leaf, unknown, or used twice).
+   * Returns `true` when a non-empty layout was restored, so the caller can
+   * skip its default "open today's note" behaviour.
    */
   restore(snap: PaneLayoutSnapshot, keepPath: (path: string) => boolean): boolean {
     const ids = leafIds(snap.root);
@@ -507,24 +519,94 @@ export class PaneService {
     for (const id of surviving) {
       panes[id] = kept[id] ?? { id, tabs: [], active: null };
     }
-    if (surviving.every((id) => panes[id].tabs.length === 0)) {
-      return false; // nothing worth restoring -- keep the fresh default
+
+    // Dock regions (ADR-0038): an entry survives only if its pane is not a
+    // centre leaf, unknown, or already used -- and still holds a tab.
+    const dockIn = snap.dock ?? {};
+    const restoredDock: Partial<Record<PaneDockSide, DockedPaneSnapshot>> = {};
+    const heights: Partial<Record<PaneDockSide, number>> = {};
+    const used = new Set<string>(surviving);
+    for (const side of DOCK_SIDES) {
+      const entry = dockIn[side];
+      const id = entry?.paneId;
+      if (typeof id !== 'string' || used.has(id)) {
+        continue;
+      }
+      const src = snap.panes[id];
+      if (!src) {
+        continue;
+      }
+      const tabs = src.tabs.filter(keepPath);
+      if (tabs.length === 0) {
+        continue;
+      }
+      const active = tabs.includes(src.active ?? '') ? src.active : tabs[0];
+      panes[id] = { id, tabs, active: active ?? null };
+      used.add(id);
+      const raw = Number(entry?.height);
+      heights[side] = Number.isFinite(raw)
+        ? Math.max(BAND_HEIGHT.min, Math.min(BAND_HEIGHT.max, raw))
+        : BAND_HEIGHT.default;
+      restoredDock[side] = { paneId: id, height: heights[side] };
+    }
+
+    const centreEmpty = surviving.every((id) => panes[id].tabs.length === 0);
+    const dockIds = DOCK_SIDES.map((s) => restoredDock[s]?.paneId).filter(
+      (id): id is string => id !== undefined,
+    );
+    if (centreEmpty && dockIds.length === 0) {
+      // Nothing worth restoring -- hand back the fresh default,
+      // deterministically, whatever the service held before.
+      this._root.set({ kind: 'leaf', paneId: FIRST_PANE_ID });
+      this._panes.set({ [FIRST_PANE_ID]: { id: FIRST_PANE_ID, tabs: [], active: null } });
+      this._focusedId.set(FIRST_PANE_ID);
+      this._dockPanes.set({ left: null, right: null, bottom: null });
+      this._bandHeights.set({
+        left: BAND_HEIGHT.default,
+        right: BAND_HEIGHT.default,
+        bottom: BAND_HEIGHT.default,
+      });
+      this.nextPaneNum = 2;
+      this.nextSplitNum = 1;
+      return false;
     }
 
     this._root.set(root);
     this._panes.set(panes);
-    this._focusedId.set(surviving.includes(snap.focusedId) ? snap.focusedId : surviving[0]);
+    this._dockPanes.set({
+      left: restoredDock.left?.paneId ?? null,
+      right: restoredDock.right?.paneId ?? null,
+      bottom: restoredDock.bottom?.paneId ?? null,
+    });
+    this._bandHeights.set({
+      left: heights.left ?? BAND_HEIGHT.default,
+      right: heights.right ?? BAND_HEIGHT.default,
+      bottom: heights.bottom ?? BAND_HEIGHT.default,
+    });
+
+    const focusCandidates = [...surviving, ...dockIds];
+    this._focusedId.set(
+      focusCandidates.includes(snap.focusedId) ? snap.focusedId : (focusCandidates[0] ?? FIRST_PANE_ID),
+    );
     this.nextPaneNum =
-      Math.max(1, ...surviving.map((id) => Number(id.replace(/^p/, '')) || 0)) + 1;
+      Math.max(1, ...focusCandidates.map((id) => Number(id.replace(/^p/, '')) || 0)) + 1;
     this.nextSplitNum = maxSplitNum(root) + 1;
     return true;
   }
+}
+
+/** One docked pane in the persisted layout (ADR-0038): which pane, and the band height. */
+export interface DockedPaneSnapshot {
+  readonly paneId: string;
+  readonly height: number;
 }
 
 export interface PaneLayoutSnapshot {
   readonly root: PaneNode;
   readonly panes: Record<string, PaneRecord>;
   readonly focusedId: string;
+  /** The docked editors (ADR-0038, as shipped); absent = no docked editors. */
+  readonly dock?: Partial<Record<PaneDockSide, DockedPaneSnapshot>>;
 }
 
 function dockSideOf(region: PaneRegion): PaneDockSide {

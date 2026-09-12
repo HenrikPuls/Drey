@@ -454,10 +454,116 @@ describe('PaneService', () => {
       expect(leafIdsOf(panes.root())).toEqual(['p1', 'p2']);
       expect(panes.focusedId()).toBe('p1'); // deterministic: the first centre pane
     });
+
+    describe('snapshot / restore with dock regions', () => {
+      it('round-trips a docked pane, including focus and band height', () => {
+        panes.open('a.md');
+        panes.detachToDock('p1', 'right');
+        panes.setBandHeight('right', 420);
+
+        const snap = panes.snapshot();
+        expect(snap.dock?.right).toEqual({ paneId: 'p1', height: 420 });
+        expect(panes.restore(snap, () => true)).toBe(true);
+        expect(panes.dockPane('right')).toBe('p1');
+        expect(panes.bandHeight('right')).toBe(420);
+        expect(panes.focusedId()).toBe('p1');
+        expect(panes.pane('p1')!.tabs).toEqual(['a.md']);
+      });
+
+      it('omits the dock field when nothing is docked', () => {
+        panes.open('a.md');
+        expect(panes.snapshot().dock).toBeUndefined();
+      });
+
+      it('advances nextPaneNum past a restored dock pane id', () => {
+        panes.open('a.md');
+        panes.detachToDock('p1', 'left');
+        const snap = panes.snapshot();
+
+        panes.restore(snap, () => true);
+        // p2 is the placeholder centre pane minted by detach; a new split
+        // must not collide with any restored id.
+        const p3 = panes.splitPane('p2', 'row', undefined);
+        expect(p3).not.toBeNull();
+        expect(panes.pane(p3!)).not.toBeNull();
+        expect(panes.dockPane('left')).toBe('p1');
+      });
+
+      it('drops a dock region whose pane lost its last tab to keepPath', () => {
+        panes.open('gone.md');
+        panes.detachToDock('p1', 'bottom');
+        const snap = panes.snapshot();
+
+        const restored = panes.restore(snap, (p) => p !== 'gone.md');
+        expect(restored).toBe(false); // nothing else was open
+        // A failed restore hands back the fresh single-pane default.
+        expect(panes.dockPane('bottom')).toBeNull();
+        expect(panes.pane('p1')).toEqual({ id: 'p1', tabs: [], active: null });
+        expect(panes.paneIds()).toEqual(['p1']);
+      });
+
+      it('keeps a valid centre layout when only the dock region is dropped', () => {
+        panes.open('a.md');
+        panes.open('b.md');
+        const p2 = panes.splitPane('p1', 'row', 'b.md')!;
+        panes.detachToDock(p2, 'bottom'); // centre keeps p1
+        const snap = panes.snapshot();
+
+        const restored = panes.restore(snap, (p) => p !== 'b.md');
+        expect(restored).toBe(true);
+        expect(panes.dockPane('bottom')).toBeNull();
+        expect(panes.pane('p1')!.tabs).toEqual(['a.md']);
+      });
+
+      it('drops corrupt entries: a centre leaf or an unknown pane as dock occupant', () => {
+        panes.open('a.md');
+        const snap = panes.snapshot();
+        const corrupted = {
+          ...snap,
+          dock: {
+            left: { paneId: leafIdOf(snap.root), height: 300 }, // the centre leaf
+            right: { paneId: 'p99', height: 300 }, // unknown
+          },
+        };
+
+        expect(panes.restore(corrupted, () => true)).toBe(true);
+        expect(panes.dockPane('left')).toBeNull();
+        expect(panes.dockPane('right')).toBeNull();
+        expect(panes.regionOf('p1')).toBe('center');
+      });
+
+      it('restores an old snapshot without a dock field exactly as before', () => {
+        panes.open('a.md');
+        panes.open('b.md');
+        const p2 = panes.splitPane('p1', 'row', 'b.md')!;
+        const snap = panes.snapshot();
+
+        expect(panes.restore(snap, () => true)).toBe(true);
+        expect(panes.dockPane('left')).toBeNull();
+        expect(panes.dockPane('right')).toBeNull();
+        expect(panes.dockPane('bottom')).toBeNull();
+        expect(panes.pane(p2)?.tabs).toEqual(['b.md']);
+      });
+
+      it('clamps an out-of-range restored band height', () => {
+        panes.open('a.md');
+        panes.detachToDock('p1', 'right');
+        const snap = panes.snapshot();
+        const withBadHeight = { ...snap, dock: { right: { paneId: 'p1', height: 99_999 } } };
+
+        panes.restore(withBadHeight, () => true);
+        expect(panes.bandHeight('right')).toBe(680);
+      });
+    });
   });
 });
 
 /** `leafIds` for the test assertions, without exporting the helper through the barrel. */
 function leafIdsOf(node: ReturnType<PaneService['root']>): string[] {
   return node.kind === 'leaf' ? [node.paneId] : node.children.flatMap(leafIdsOf);
+}
+
+/** The (single) centre leaf's id, for building corrupt snapshot fixtures. */
+function leafIdOf(node: ReturnType<PaneService['root']>): string {
+  return leafIdsOf(node)[0];
 }
