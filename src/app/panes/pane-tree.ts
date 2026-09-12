@@ -67,6 +67,19 @@ function removeLeafUnchecked(node: PaneNode, paneId: string): PaneNode {
   return { ...node, children: kept, sizes: keptSizes };
 }
 
+/**
+ * Appends `child` as a new sibling of `node`: a lone leaf is wrapped in a
+ * fresh row split (id `splitId`), a split simply gains one more child (its
+ * direction kept, a default weight of 1). Used by `PaneService`'s dock
+ * reattach to hand a docked pane its place back in the centre column.
+ */
+export function appendChild(node: PaneNode, child: PaneNode, splitId: string): PaneNode {
+  if (node.kind === 'leaf') {
+    return { kind: 'split', id: splitId, direction: 'row', children: [node, child], sizes: [1, 1] };
+  }
+  return { ...node, children: [...node.children, child], sizes: [...node.sizes, 1] };
+}
+
 /** Moves `item` within `list` to `toIndex` (clamped). Same array if already there or `item` is absent. */
 export function moveWithinArray<T>(list: readonly T[], item: T, toIndex: number): T[] {
   const from = list.indexOf(item);

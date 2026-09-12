@@ -1,4 +1,4 @@
-import { leafIds, moveWithinArray, PaneNode, removeLeaf, replaceLeaf } from './pane-tree';
+import { appendChild, leafIds, moveWithinArray, PaneNode, removeLeaf, replaceLeaf } from './pane-tree';
 
 const leaf = (paneId: string): PaneNode => ({ kind: 'leaf', paneId });
 
@@ -103,6 +103,34 @@ describe('pane-tree', () => {
         children: [leaf('p1'), leaf('p2')],
       };
       expect(removeLeaf(tree, 'nope')).toEqual(tree);
+    });
+  });
+
+  describe('appendChild', () => {
+    it('wraps a lone leaf in a fresh row split with the child beside it', () => {
+      const next = appendChild(leaf('p1'), leaf('p2'), 's9');
+      expect(next).toEqual({
+        kind: 'split',
+        id: 's9',
+        direction: 'row',
+        sizes: [1, 1],
+        children: [leaf('p1'), leaf('p2')],
+      });
+    });
+
+    it('appends to a split root, keeping its direction and growing the sizes', () => {
+      const tree: PaneNode = {
+        kind: 'split',
+        id: 's1',
+        direction: 'column',
+        sizes: [2, 1],
+        children: [leaf('p1'), leaf('p2')],
+      };
+      const next = appendChild(tree, leaf('p3'), 's9') as Extract<PaneNode, { kind: 'split' }>;
+      expect(next.id).toBe('s1');
+      expect(next.direction).toBe('column');
+      expect(next.children).toEqual([leaf('p1'), leaf('p2'), leaf('p3')]);
+      expect(next.sizes).toEqual([2, 1, 1]);
     });
   });
 

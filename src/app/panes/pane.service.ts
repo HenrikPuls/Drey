@@ -1,5 +1,12 @@
 import { Injectable, computed, signal } from '@angular/core';
-import { leafIds, moveWithinArray, PaneNode, removeLeaf, replaceLeaf } from './pane-tree';
+import {
+  appendChild,
+  leafIds,
+  moveWithinArray,
+  PaneNode,
+  removeLeaf,
+  replaceLeaf,
+} from './pane-tree';
 
 /** One editor pane's tab strip: an ordered subset of `EditorService`'s open paths, plus which is active. */
 export interface PaneRecord {
@@ -8,7 +15,16 @@ export interface PaneRecord {
   readonly active: string | null;
 }
 
+/** The three docks that can host an editor pane (same union as `DockSide` in `src/app/dock`). */
+export type PaneDockSide = 'left' | 'right' | 'bottom';
+
+/** Where a pane lives: the centre split tree, or one dock's editor band (ADR-0038). */
+export type PaneRegion = 'center' | `dock-${PaneDockSide}`;
+
 const FIRST_PANE_ID = 'p1';
+const DOCK_SIDES: readonly PaneDockSide[] = ['left', 'right', 'bottom'];
+/** Band height bounds -- same numbers as `DockService`'s `HEIGHT` for the bottom dock. */
+const BAND_HEIGHT = { min: 140, max: 680, default: 280 } as const;
 
 /**
  * Owns the editor pane layout: an arbitrary tree of row/column splits down
@@ -23,7 +39,7 @@ const FIRST_PANE_ID = 'p1';
  * read `EditorService`'s "active document", which is now simply "the
  * focused pane's active path" (see `EditorService.activePath`).
  *
- * Deliberate scope for this first pass (see ADR-0037):
+ * Deliberate scope (see ADR-0037):
  * - **One pane per path.** A note open in pane A is not also open in B --
  *   opening it while B is focused just focuses A. Avoids two independent
  *   CodeMirror views racing over one shared buffer's cursor/scroll/undo.
@@ -31,9 +47,13 @@ const FIRST_PANE_ID = 'p1';
  *   right" / "Split down" command on a tab; a tab *can* be dragged from one
  *   existing pane's strip into another's to move it. Dragging to an edge to
  *   auto-split is a documented follow-up, not built here.
- * - **Docking a pane into the left/right/bottom dock is a separate, later
- *   piece of work** (ADR-0037's Phase 2) -- this service only knows about
- *   the centre-column split tree.
+ *
+ * Since milestone 20 (ADR-0038) the service also knows *regions*: beside the
+ * centre tree, each dock (`left` / `right` / `bottom`) can host exactly one
+ * pane in its editor band -- a single leaf, never a subtree. Docking is
+ * `detachToDock`, the way back `reattachToCenter`; an occupied dock's
+ * occupant is reattached to the centre first, so a pane is never lost. A
+ * docked pane whose last tab closes takes its band with it.
  */
 @Injectable({ providedIn: 'root' })
 export class PaneService {
@@ -46,13 +66,30 @@ export class PaneService {
     [FIRST_PANE_ID]: { id: FIRST_PANE_ID, tabs: [], active: null },
   });
   private readonly _focusedId = signal<string>(FIRST_PANE_ID);
+  /** Which pane (if any) lives in each dock's editor band. */
+  private readonly _dockPanes = signal<Record<PaneDockSide, string | null>>({
+    left: null,
+    right: null,
+    bottom: null,
+  });
+  private readonly _bandHeights = signal<Record<PaneDockSide, number>>({
+    left: BAND_HEIGHT.default,
+    right: BAND_HEIGHT.default,
+    bottom: BAND_HEIGHT.default,
+  });
   private nextPaneNum = 2;
   private nextSplitNum = 1;
 
-  /** The split-tree layout (row/column splits down to leaf panes). */
+  /** The split-tree layout (row/column splits down to leaf panes) of the centre region. */
   readonly root = this._root.asReadonly();
-  /** Every leaf pane, in document (reading) order. */
-  readonly paneIds = computed(() => leafIds(this._root()));
+  /** Every leaf pane, centre in document order first, then the dock bands left -> right -> bottom. */
+  readonly paneIds = computed(() => {
+    const dock = this._dockPanes();
+    return [
+      ...leafIds(this._root()),
+      ...DOCK_SIDES.map((side) => dock[side]).filter((id): id is string => id !== null),
+    ];
+  });
   readonly focusedId = this._focusedId.asReadonly();
   readonly focusedPane = computed<PaneRecord | null>(() => this._panes()[this._focusedId()] ?? null);
 
@@ -202,11 +239,16 @@ export class PaneService {
    * Splits `paneId` in `direction`. `path` (if it's a tab there) moves into
    * the brand-new sibling pane, which becomes focused; otherwise the new
    * pane opens empty (an internal building block -- the UI always passes a
-   * tab to split off).
+   * tab to split off). A docked pane refuses: a dock region hosts a single
+   * leaf, never a subtree (ADR-0038) -- returns `null`.
    */
   splitPane(paneId: string, direction: 'row' | 'column', path?: string): string | null {
     const pane = this._panes()[paneId];
     if (!pane) {
+      return null;
+    }
+    const region = this.regionOf(paneId);
+    if (region !== null && region !== 'center') {
       return null;
     }
     const newId = `p${this.nextPaneNum++}`;
@@ -242,6 +284,129 @@ export class PaneService {
     this._root.update((root) => resizeSplitNode(root, splitId, sizes));
   }
 
+  // --- dock regions (ADR-0038) ------------------------------------------
+
+  /** The pane living in `side`'s editor band, or `null`. */
+  dockPane(side: PaneDockSide): string | null {
+    return this._dockPanes()[side];
+  }
+
+  /** Which region hosts `paneId`; `null` for an unknown id. */
+  regionOf(paneId: string): PaneRegion | null {
+    const dock = this._dockPanes();
+    if (dock.left === paneId) {
+      return 'dock-left';
+    }
+    if (dock.right === paneId) {
+      return 'dock-right';
+    }
+    if (dock.bottom === paneId) {
+      return 'dock-bottom';
+    }
+    return leafIds(this._root()).includes(paneId) ? 'center' : null;
+  }
+
+  /** The editor band's height for `side`, in px. */
+  bandHeight(side: PaneDockSide): number {
+    return this._bandHeights()[side];
+  }
+
+  /** Band-height splitter drag; clamped to the same bounds as a dock band. */
+  setBandHeight(side: PaneDockSide, px: number): void {
+    const clamped = Math.max(BAND_HEIGHT.min, Math.min(BAND_HEIGHT.max, px));
+    this._bandHeights.update((h) => ({ ...h, [side]: clamped }));
+  }
+
+  /**
+   * Moves `paneId` into `side`'s editor band. If that dock already hosts a
+   * pane, the occupant is reattached to the centre first -- a dock hosts one
+   * editor, and no drag ever loses a pane. The moved pane ends focused.
+   */
+  detachToDock(paneId: string, side: PaneDockSide): void {
+    if (!this._panes()[paneId]) {
+      return;
+    }
+    const current = this.regionOf(paneId);
+    if (current === `dock-${side}`) {
+      return;
+    }
+    const occupant = this._dockPanes()[side];
+    if (occupant !== null && occupant !== paneId) {
+      this.reattachToCenter(occupant);
+    }
+    if (current === 'center') {
+      this.removeFromCenter(paneId);
+    } else if (current !== null) {
+      this._dockPanes.update((d) => ({ ...d, [dockSideOf(current)]: null }));
+    }
+    this._dockPanes.update((d) => ({ ...d, [side]: paneId }));
+    this._focusedId.set(paneId);
+  }
+
+  /**
+   * Moves a docked pane back into the centre split tree: it replaces the
+   * centre's lone *tabless* placeholder pane, is wrapped into a fresh row
+   * split beside a lone populated leaf, or is appended as the last child of
+   * an existing split root. Focuses the returned pane.
+   */
+  reattachToCenter(paneId: string): void {
+    const region = this.regionOf(paneId);
+    if (region === null || region === 'center') {
+      return;
+    }
+    this._dockPanes.update((d) => ({ ...d, [dockSideOf(region)]: null }));
+
+    const leaf: PaneNode = { kind: 'leaf', paneId };
+    const root = this._root();
+    const centreIds = leafIds(root);
+    const sole = centreIds.length === 1 ? this._panes()[centreIds[0]] : undefined;
+    if (sole !== undefined && sole.tabs.length === 0) {
+      // The centre's lone empty pane is just a placeholder -- replace it.
+      this._root.set(replaceLeaf(root, centreIds[0], leaf));
+      this.mutatePanes((panes) => {
+        delete panes[centreIds[0]];
+      });
+    } else {
+      this._root.set(appendChild(root, leaf, `s${this.nextSplitNum++}`));
+    }
+    this._focusedId.set(paneId);
+  }
+
+  /** View → Reset layout's editor half: every docked pane back to the centre, band heights reset. */
+  resetRegions(): void {
+    for (const side of DOCK_SIDES) {
+      const id = this._dockPanes()[side];
+      if (id !== null) {
+        this.reattachToCenter(id);
+      }
+    }
+    this._bandHeights.set({ left: BAND_HEIGHT.default, right: BAND_HEIGHT.default, bottom: BAND_HEIGHT.default });
+    // A reset reads better with a deterministic focus, not "whatever was docked last".
+    this._focusedId.set(leafIds(this._root())[0] ?? FIRST_PANE_ID);
+  }
+
+  /**
+   * The centre-tree half of `detachToDock`: remove the leaf, keep the tree
+   * valid. The pane's `PaneRecord` stays -- the pane lives on in its dock.
+   */
+  private removeFromCenter(paneId: string): void {
+    const root = this._root();
+    if (root.kind === 'leaf' && root.paneId === paneId) {
+      // The tree's only leaf is never removed (pane-tree's invariant): mint
+      // a fresh empty one so the centre column keeps an editor empty state.
+      const emptyId = `p${this.nextPaneNum++}`;
+      this._root.set({ kind: 'leaf', paneId: emptyId });
+      this.mutatePanes((panes) => {
+        panes[emptyId] = { id: emptyId, tabs: [], active: null };
+      });
+      return;
+    }
+    const next = removeLeaf(root, paneId);
+    if (next !== root) {
+      this._root.set(next);
+    }
+  }
+
   /**
    * A file/folder rename or `EditorService.saveAs()` fork: re-points every
    * pane's reference to `oldPath` at `newPath`, keeping tab position and
@@ -264,8 +429,23 @@ export class PaneService {
     });
   }
 
-  /** Removes `paneId` from the tree (or empties it, if it's the tree's only pane). */
+  /**
+   * Removes `paneId` from the layout once its last tab is gone: a docked
+   * pane takes its band with it (region -> null); a centre pane is removed
+   * from the tree (or emptied, if it's the tree's only pane).
+   */
   private collapse(paneId: string): void {
+    const region = this.regionOf(paneId);
+    if (region !== null && region !== 'center') {
+      this._dockPanes.update((d) => ({ ...d, [dockSideOf(region)]: null }));
+      this.mutatePanes((panes) => {
+        delete panes[paneId];
+      });
+      if (this._focusedId() === paneId) {
+        this._focusedId.set(this.paneIds()[0] ?? FIRST_PANE_ID);
+      }
+      return;
+    }
     const root = this._root();
     if (root.kind === 'leaf' && root.paneId === paneId) {
       // The last pane never disappears -- it just has no tabs.
@@ -345,6 +525,10 @@ export interface PaneLayoutSnapshot {
   readonly root: PaneNode;
   readonly panes: Record<string, PaneRecord>;
   readonly focusedId: string;
+}
+
+function dockSideOf(region: PaneRegion): PaneDockSide {
+  return region === 'dock-left' ? 'left' : region === 'dock-right' ? 'right' : 'bottom';
 }
 
 function maxSplitNum(node: PaneNode): number {
