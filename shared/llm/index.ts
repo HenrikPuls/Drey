@@ -34,6 +34,7 @@ export type {
 } from './adapters';
 export {
   buildOpenAiUserContent,
+  flattenMessages,
   toAnthropicMessages,
   toAnthropicToolUse,
   toAnthropicTools,

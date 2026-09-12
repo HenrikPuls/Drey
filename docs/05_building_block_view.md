@@ -2116,9 +2116,15 @@ sits behind them.
   OpenRouter's 200-with-error-body mapped onto `LlmError('http')`),
   `anthropic-messages.ts` serves `anthropic` / `zai-glm` (top-level
   `system`, required `max_tokens`, `tool_use`/`tool_result` adapters,
-  SSE `content_block_delta`). `presets.ts` is the factory
-  (`buildClients`); CLI providers (Claude Code, Copilot CLI) and
-  copilot-web land in later milestones and reject until then.
+  SSE `content_block_delta`). The CLI backends share
+  `cli-base.ts` — spawn, prompt on stdin, line-wise parsing, abort →
+  process-tree kill (`AbortError`), no timeout, strict-token validation
+  for anything user-controlled in argv (Windows spawns shell:true for
+  the `.cmd` shims); `claude-code-cli.ts` serves `claude-code`
+  (stream-json events, session id from `init`, `--resume`, no Drey-side
+  tool loop — `-p` runs Claude Code's own agent loop).
+  `presets.ts` is the factory (`buildClients`); `copilot-cli` and
+  copilot-web land in a later milestone and reject until then.
 - **`shared/llm/adapters.ts`** — the pure wire adapters under the Vitest
   suite (ADR-0007): `toOpenAiTools` / `toAnthropicTools`,
   `buildOpenAiUserContent` (vision parts), and `toAnthropicMessages`

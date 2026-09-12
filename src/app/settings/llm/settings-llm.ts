@@ -164,7 +164,6 @@ export class SettingsLlm implements OnInit, OnDestroy {
   /** The not-yet-wired presets (their providers land in later milestones). */
   protected readonly pendingProviderNote = computed<string | null>(() => {
     const notes: Partial<Record<LlmProviderId, string>> = {
-      'claude-code': 'The Claude Code CLI provider is not wired into this build yet (milestone 23) — requests with it selected are refused with a clear error.',
       'copilot-cli': 'The GitHub Copilot CLI provider is not wired into this build yet (milestone 26).',
       'copilot-web': 'The Copilot Web provider (browser automation) is not merged into this build yet (milestone 26).',
     };

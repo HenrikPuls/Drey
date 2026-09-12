@@ -1,5 +1,6 @@
 import {
   buildOpenAiUserContent,
+  flattenMessages,
   toAnthropicMessages,
   toAnthropicTools,
   toOpenAiTools,
@@ -135,5 +136,43 @@ describe('toAnthropicMessages', () => {
     ];
     const { messages: out } = toAnthropicMessages(messages);
     expect(out[0].content[0]).toMatchObject({ type: 'tool_use', input: {} });
+  });
+});
+
+describe('flattenMessages', () => {
+  it('lifts system messages into an Instructions block and keeps the turn order', () => {
+    const messages: ChatMessage[] = [
+      { role: 'system', content: 'Be brief.' },
+      { role: 'user', content: 'first question' },
+      { role: 'assistant', content: 'first answer' },
+      { role: 'user', content: 'second question' },
+    ];
+    expect(flattenMessages(messages)).toBe(
+      'Instructions:\nBe brief.\n\n' +
+        'User: first question\n\nAssistant: first answer\n\nUser: second question',
+    );
+  });
+
+  it('keeps tool context as bracketed call + result lines', () => {
+    const messages: ChatMessage[] = [
+      { role: 'user', content: 'search' },
+      {
+        role: 'assistant',
+        content: null,
+        tool_calls: [
+          { id: 'call_1', type: 'function', function: { name: 'vault_search', arguments: '{"text":"mill"}' } },
+        ],
+      },
+      { role: 'tool', tool_call_id: 'call_1', content: 'daily/2026-09-10.md:12' },
+      { role: 'assistant', content: 'Found it.' },
+    ];
+    const text = flattenMessages(messages);
+    expect(text).toContain('[tool call vault_search({"text":"mill"})]');
+    expect(text).toContain('Tool result (call_1): daily/2026-09-10.md:12');
+    expect(text).toContain('Assistant: Found it.');
+  });
+
+  it('returns an empty string for an empty transcript', () => {
+    expect(flattenMessages([])).toBe('');
   });
 });

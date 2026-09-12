@@ -75,11 +75,32 @@ const plugin: MainPluginModule = {
       if (typeof context !== 'object' || context === null || typeof question !== 'string') {
         throw new Error('malformed ask payload');
       }
+      // bug-10 (interim): a missing or malformed `history` must fail
+      // VISIBLY, not silently degrade to an empty-context answer -- the
+      // renderer always sends an array, so reaching this branch means a
+      // version mismatch or a corrupted payload, and either deserves an
+      // error card, not a confidently wrong answer.
+      if (!Array.isArray(history)) {
+        throw new Error(
+          'malformed ask payload: history must be an array (stale renderer or main process? restart the app)',
+        );
+      }
+      for (const item of history) {
+        const message = item as { role?: unknown; content?: unknown } | null;
+        if (
+          !message ||
+          typeof message !== 'object' ||
+          typeof message.role !== 'string' ||
+          typeof message.content !== 'string'
+        ) {
+          throw new Error('malformed ask payload: history entries must be { role, content }');
+        }
+      }
       return engine.ask(
         context as ActionContext,
         question,
         typeof taskId === 'string' ? taskId : undefined,
-        Array.isArray(history) ? (history as ChatMessage[]) : undefined,
+        history as ChatMessage[],
       );
     });
 

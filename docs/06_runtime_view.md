@@ -1640,6 +1640,51 @@ Cancellation cuts across the diagram: the renderer's Cancel aborts the
 milestone 23) rejects with an `AbortError`, which the engine converts to
 a `noop` outcome. No provider applies a generation timeout (ADR-0014).
 
+## 6.35 One chat completion through a CLI provider (Claude Code, milestone 23,
+[ADR-0047](09_architecture_decisions/0047-llm-provider-abstraction.md))
+
+Same consumers as §6.34; the difference is the provider's back end: no
+HTTP, a process. The router picks `claude-code`; the CLI base spawns,
+feeds stdin, kills the tree on Cancel, and the provider only describes
+its argv and its event dialect.
+
+```mermaid
+sequenceDiagram
+    participant AM as Assistant main (ActionEngine)
+    participant PH as PluginHost (ctx.llm.chat)
+    participant R as LlmRouter
+    participant CC as ClaudeCodeCliProvider
+    participant CB as CliProviderBase
+    participant CLI as claude -p (child process)
+
+    AM->>PH: ctx.llm.chat(messages, { taskId, sessionRef? })
+    PH->>R: chat(messages, options)
+    R->>CC: chat(messages, options)
+    CC->>CC: buildArgs: -p --output-format stream-json --verbose<br/>[--include-partial-messages] [--model id] [--resume sessionRef]
+    note over CC: model id + session ref are strict-token validated;<br/>the flattened prompt (shared/llm flattenMessages) rides stdin, never argv
+    CC->>CB: spawn + stdin + line loop
+    CB->>CLI: spawn (shell:true on win32, windowsHide)
+    CLI-->>CB: {"type":"system","subtype":"init","session_id":"..."}
+    CB-->>AM: (sessionRef captured for the next call)
+    CLI-->>CB: stream_event content_block_delta frames
+    CB-->>AM: onDelta(delta) -> llm:delta push
+    CLI-->>CB: {"type":"assistant"...} then {"type":"result","result":"...","usage":{...}}
+    CB->>CLI: stdin end / process exit 0
+    CB-->>R: LlmChatResult { text, sessionRef, usage }
+    R-->>PH: resolve
+    PH-->>AM: resolve
+```
+
+Cancellation: the renderer's Cancel aborts the signal; `CliProviderBase`
+kills the process tree (`taskkill /pid <pid> /T /F` on Windows) and
+rejects with `name: 'AbortError'` -- the exact shape `isAbortError`
+already matches, so the engine's noop path is unchanged. No timeout
+(ADR-0014). There is no Drey-side tool loop (`capabilities().tools` is
+false -- `-p` runs Claude Code's own agent loop with write-class tools
+auto-denied), and no model listing (`modelListing` false -- the id is
+typed by hand). A nonzero exit or a missing executable surfaces as
+`LlmError('spawn')` on the error card.
+
 ## Planned flows (added as their milestone is built)
 
 - Dedicated keyword-search / FTS surface — the search panel's free-text

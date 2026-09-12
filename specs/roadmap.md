@@ -479,10 +479,11 @@ Req-31 MCP client: connect the app TO external MCP servers
   `mcp__<server>__<tool>`), confirmation-gated per server. Builds on the
   Req-29 interface — every tool-capable provider can drive them.
 
-bug-10 (open) — the assistant's Ask history has two real defects behind
+bug-10 — the assistant's Ask history has two real defects behind
   the "incomplete history" symptom: (a) a missing/not-an-array `history`
-  IPC payload silently degrades to NO context (contract defect — interim
-  fix: validate + visible error); (b) tool calls/results and applied-edit
+  IPC payload silently degraded to NO context — **fixed (milestone 23)**:
+  the ask handler now validates the payload and fails visibly, and the
+  renderer always sends an array; (b) tool calls/results and applied-edit
   content are never persisted, so follow-ups lose that context
   (persistence defect — unfixable in the sidecar format; resolved by
   Req-30's chat notes with `drey-tool` blocks and full-history replay).

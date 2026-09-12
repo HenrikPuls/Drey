@@ -73,24 +73,3 @@ export interface LlmClient {
    */
   chat(messages: ChatMessage[], options?: LlmChatOptions): Promise<LlmChatResult>;
 }
-
-/** Narrow helper so the router/clients keep a single sentence about capabilities. */
-export function describeCapabilities(caps: LlmCapabilities): string {
-  const gaps: string[] = [];
-  if (!caps.tools) {
-    gaps.push('no in-app tool use');
-  }
-  if (!caps.streaming) {
-    gaps.push('no streaming');
-  }
-  if (!caps.sessions) {
-    gaps.push('no session resume');
-  }
-  if (!caps.modelListing) {
-    gaps.push('type the model id by hand');
-  }
-  if (!caps.imageAttachments) {
-    gaps.push('no image attachments');
-  }
-  return gaps.length === 0 ? 'Full capability.' : `Limitations: ${gaps.join(', ')}.`;
-}

@@ -82,6 +82,12 @@ export interface MainChatOptions {
    */
   readonly onDelta?: (delta: string) => void;
   /**
+   * Continue a provider-side session (Claude Code's `--resume`). Only
+   * honoured by providers with the `sessions` capability; the result's
+   * `sessionRef` is the handle to pass back here.
+   */
+  readonly sessionRef?: string;
+  /**
    * Opts this ONE call into the vault tool loop (ADR-0021): the model may
    * call `vault_search`/`vault_read`/`vault_write` before its final answer
    * (a write still goes through the user's confirmation). Only meaningful

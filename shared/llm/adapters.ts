@@ -186,3 +186,56 @@ export function toAnthropicMessages(
 
   return { system: systemParts.length > 0 ? systemParts.join('\n\n') : null, messages: out };
 }
+
+// -- CLI dialects ------------------------------------------------------------
+
+/**
+ * Flattens the canonical transcript into one prompt string for a CLI
+ * backend that has no message-array wire format (`claude -p`, `copilot -p`):
+ * system parts become an `Instructions:` block, the turns a `User:` /
+ * `Assistant:` transcript. Drey-side tool activity survives as bracketed
+ * lines (the call with its arguments, the result with its id) so a replayed
+ * conversation keeps its tool context in readable form.
+ */
+export function flattenMessages(messages: readonly ChatMessage[]): string {
+  const system: string[] = [];
+  const turns: string[] = [];
+  for (const message of messages) {
+    switch (message.role) {
+      case 'system':
+        if (message.content !== null && message.content !== '') {
+          system.push(message.content);
+        }
+        break;
+      case 'user':
+        if (message.content !== null && message.content !== '') {
+          turns.push(`User: ${message.content}`);
+        }
+        break;
+      case 'assistant': {
+        const parts: string[] = [];
+        if (message.content !== null && message.content !== '') {
+          parts.push(message.content);
+        }
+        for (const call of message.tool_calls ?? []) {
+          parts.push(`[tool call ${call.function.name}(${call.function.arguments})]`);
+        }
+        if (parts.length > 0) {
+          turns.push(`Assistant: ${parts.join('\n')}`);
+        }
+        break;
+      }
+      case 'tool':
+        turns.push(`Tool result (${message.tool_call_id ?? 'unknown'}): ${message.content ?? ''}`);
+        break;
+    }
+  }
+  const blocks: string[] = [];
+  if (system.length > 0) {
+    blocks.push(`Instructions:\n${system.join('\n\n')}`);
+  }
+  if (turns.length > 0) {
+    blocks.push(turns.join('\n\n'));
+  }
+  return blocks.join('\n\n');
+}

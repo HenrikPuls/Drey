@@ -426,6 +426,7 @@ export class PluginHost {
             llm.chat([...messages], {
               temperature: options?.temperature,
               ...(options?.onDelta !== undefined ? { onDelta: options.onDelta } : {}),
+              ...(options?.sessionRef !== undefined ? { sessionRef: options.sessionRef } : {}),
               ...(options?.vaultTools === true && this.deps.vaultTools !== undefined
                 ? {
                     tools: this.deps.vaultTools.toolSpecs(),
