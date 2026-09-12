@@ -262,28 +262,8 @@
   border-left-color: var(--text-faint);
 }
 
-/* thread|composer drag handle. Mirrors the shell's dividers: a 1px line
-   inside a 7px hit area, accent on hover/drag. */
-.assistant-divider {
-  flex: 0 0 auto;
-  position: relative;
-  height: 1px;
-  background: var(--border);
-  cursor: row-resize;
-  z-index: 5;
-}
-
-.assistant-divider::before {
-  content: '';
-  position: absolute;
-  inset: -3px;
-}
-
-.assistant-divider:hover,
-.assistant-divider:active {
-  background: var(--resize-hover);
-}
-
+/* The composer grows with its content (panel.ts sizes the input); the
+   thread above keeps `flex: 1` and scrolls. No drag divider any more. */
 .assistant-composer {
   flex: 0 0 auto;
   min-height: 0;
@@ -294,39 +274,99 @@
   gap: 8px;
 }
 
-.assistant-composer .summarize {
-  align-self: flex-start;
-  background: transparent;
-  border: 1px solid var(--border-strong);
-  border-radius: var(--radius);
-  color: var(--text-4);
-  font-family: var(--font-sans);
-  font-size: 12px;
-  padding: 4px 10px;
-  cursor: pointer;
-}
-
-.assistant-composer .summarize:hover:not(:disabled) {
-  color: var(--text-primary);
-  background: var(--hover-bg);
-}
-
 .assistant-composer .composer-box {
   display: flex;
-  align-items: flex-end;
-  gap: 8px;
-  flex: 1 1 auto;
-  min-height: 0;
+  flex-direction: column;
+  gap: 6px;
   background: var(--bg-input);
   border: 1px solid var(--border-strong);
   border-radius: 10px;
   padding: 8px 8px 8px 12px;
 }
 
-/* The host CodeMirror view as the composer. It fills the resizable
-   composer area (the thread|composer divider drags that height); the
-   scrollbar appears once the text outgrows it -- same feel as a chat
-   input. */
+/* Context chips: the open note (accent border) + attached files. */
+.assistant-composer .composer-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  max-height: 96px;
+  overflow-y: auto;
+}
+
+.assistant-composer .composer-chips:empty {
+  display: none;
+}
+
+.assistant-composer .chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  max-width: 200px;
+  padding: 1px 3px 1px 8px;
+  border: 1px solid var(--border-strong);
+  border-radius: 999px;
+  background: var(--hover-bg);
+  font-size: 11px;
+  color: var(--text-3);
+}
+
+.assistant-composer .chip.note {
+  border-color: var(--accent-quote);
+}
+
+.assistant-composer .chip .chip-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.assistant-composer .chip .chip-x {
+  flex: none;
+  width: 14px;
+  height: 14px;
+  padding: 0;
+  border: none;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--text-6);
+  font-size: 11px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.assistant-composer .chip .chip-x:hover {
+  color: var(--text-primary);
+}
+
+.assistant-composer .composer-row {
+  display: flex;
+  align-items: flex-end;
+  gap: 6px;
+}
+
+/* The "+" that opens the file picker. */
+.assistant-composer .plus {
+  flex: 0 0 auto;
+  width: 24px;
+  height: 24px;
+  margin-bottom: 2px;
+  border: none;
+  border-radius: var(--radius);
+  background: transparent;
+  color: var(--text-5);
+  font-size: 15px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.assistant-composer .plus:hover {
+  color: var(--text-3);
+  background: var(--hover-bg);
+}
+
+/* The host CodeMirror view as the composer. Its height is set inline by
+   the auto-grow logic (content height up to a cap); the scrollbar appears
+   once the text outgrows that cap -- same feel as a chat input. */
 .assistant-composer .composer-input {
   display: block;
   flex: 1;
@@ -343,6 +383,11 @@
 .assistant-composer .composer-input .cm-content {
   font-size: 12.5px;
   padding: 2px 0;
+}
+
+/* CodeMirror's base theme hardcodes the placeholder to #888. */
+.assistant-composer .composer-input .cm-placeholder {
+  color: var(--text-6);
 }
 
 .assistant-composer .send {
@@ -363,6 +408,188 @@
   background: var(--hover-bg-loud);
   color: var(--text-6);
   cursor: default;
+}
+
+/* Meta row: model picker left, Summarise now right. */
+.assistant-composer .composer-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 20px;
+}
+
+.assistant-composer .model-btn {
+  padding: 2px 4px;
+  border: none;
+  background: transparent;
+  color: var(--text-6);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: var(--ls-mono-title);
+  max-width: 60%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.assistant-composer .model-btn:hover {
+  color: var(--text-3);
+}
+
+.assistant-composer .summarize {
+  margin-left: auto;
+  background: transparent;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+  color: var(--text-4);
+  font-family: var(--font-sans);
+  font-size: 12px;
+  padding: 4px 10px;
+  cursor: pointer;
+}
+
+.assistant-composer .summarize:hover:not(:disabled) {
+  color: var(--text-primary);
+  background: var(--hover-bg);
+}
+
+/* -- pickers (file + model; api.ui.showModal, centred overlay) ---------------
+   The modal box (.plugin-modal) gets .assistant-picker-host added by the
+   panel; plugin CSS is global, so the assistant ships its own backdrop copy
+   (the templates plugin's copy only loads when that plugin is enabled). */
+.plugin-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: var(--z-modal, 1000);
+  background: rgba(0, 0, 0, 0.35);
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding-top: 12vh;
+}
+
+.plugin-modal.assistant-picker-host {
+  width: min(440px, 90vw);
+  background: var(--surface-raised, var(--bg-bar, #222));
+  border: 1px solid var(--border-strong);
+  border-radius: 10px;
+  overflow: hidden;
+  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.45);
+}
+
+.assistant-picker {
+  display: flex;
+  flex-direction: column;
+  color: var(--text-2);
+}
+
+.assistant-picker-head {
+  padding: 10px 14px 6px;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: var(--ls-mono-title);
+  text-transform: uppercase;
+  color: var(--text-faint);
+}
+
+.assistant-picker-body {
+  display: flex;
+  flex-direction: column;
+}
+
+.assistant-picker-input {
+  padding: 8px 14px;
+  border: 0;
+  border-bottom: 1px solid var(--border);
+  background: transparent;
+  color: var(--text-primary);
+  font: inherit;
+  font-size: 13px;
+  outline: none;
+}
+
+.assistant-picker-list {
+  max-height: 46vh;
+  overflow: auto;
+  padding: 4px;
+}
+
+.assistant-picker-row {
+  position: relative;
+  padding: 6px 10px;
+  border-radius: 6px;
+  font-size: 13px;
+  cursor: pointer;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.assistant-picker-row .assistant-picker-detail {
+  margin-left: 8px;
+  font-size: 11px;
+  color: var(--text-6);
+}
+
+.assistant-picker-row.this-note::after {
+  content: 'this note';
+  float: right;
+  opacity: 0.5;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.assistant-picker-row.current {
+  color: var(--accent);
+}
+
+.assistant-picker-row.active {
+  background: var(--hover-bg);
+}
+
+.assistant-picker-empty,
+.assistant-picker-note {
+  padding: 6px 10px;
+  font-size: 11.5px;
+  color: var(--text-6);
+}
+
+.assistant-picker-note {
+  padding: 4px 14px 8px;
+  color: var(--accent-hover);
+}
+
+.assistant-picker-hand {
+  display: flex;
+  gap: 6px;
+  padding: 8px 10px;
+  border-top: 1px solid var(--border);
+}
+
+.assistant-picker-hand .assistant-picker-input {
+  flex: 1;
+  padding: 6px 8px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+  font-size: 12px;
+}
+
+.assistant-picker-use {
+  flex: none;
+  padding: 4px 12px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+  background: transparent;
+  color: var(--text-3);
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.assistant-picker-use:hover {
+  color: var(--text-primary);
+  background: var(--hover-bg);
 }
 
 /* -- Settings pages ---------------------------------------------------------- */

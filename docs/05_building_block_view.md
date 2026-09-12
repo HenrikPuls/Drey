@@ -146,7 +146,7 @@ fills** — base knows the interfaces, not the features:
 | Vault IO + change push | `vault.*` | `ctx.vault.*` |
 | Backend methods + pushes (the plugin's own IPC) | `backend.invoke` / `backend.on` | `ctx.ipc.handle` / `ctx.ipc.emit` |
 | Save pipeline (`{content?, pendingActions?}`), vault lifecycle, section search | — | `ctx.save`, `ctx.vault` hooks, `ctx.search` |
-| LLM transport | `llm.chat/cancelTask/onDebugEntry` | `ctx.llm.chat/suggestTags` |
+| LLM transport | `llm.chat/cancelTask/onDebugEntry/onDelta/listModels` | `ctx.llm.chat/suggestTags` |
 | Per-plugin config, app config read/patch | `settings.*`, `appConfig.*` | `ctx.config`, `ctx.appConfig` |
 | Native-surface hide (overlays/gestures) | `env.onNativeSurfaceVisibility` | — |
 

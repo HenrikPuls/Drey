@@ -42,8 +42,19 @@ const plugin: PluginRendererModule = {
         api.backend.invoke('thread:write', { thread }) as Promise<void>,
       summarize: (context, taskId) =>
         api.backend.invoke('summarize', { context, taskId }) as Promise<string>,
-      ask: (context, question, taskId, history) =>
-        api.backend.invoke('ask', { context, question, taskId, history }) as Promise<AskOutcome>,
+      ask: (request, taskId, history) =>
+        api.backend.invoke('ask', { ...request, taskId, history }) as Promise<AskOutcome>,
+      readVaultFile: async (path) => {
+        const open = api.documents.get(path);
+        if (open !== null && open.kind === 'text') {
+          return open.buffer;
+        }
+        try {
+          return (await api.vault.readFile(path)).content;
+        } catch {
+          return null; // Gone from the vault (or unreadable).
+        }
+      },
       cancel: (taskId) => tasks.cancel(taskId),
       activeDoc: () => {
         const active = api.documents.active();

@@ -22,6 +22,8 @@ import {
   SEARCH_SUMMARY_PROMPT,
 } from '../../../shared/app-config';
 import { pickPreviewStyle } from '../../../shared/text-diff';
+import type { AskRequest } from '../shared/ask';
+import { MAX_EXTRA_FILES } from '../shared/ask.js';
 
 /** The message a cancelled generation reports (kept in step with the base transport). */
 const CANCELLED_MESSAGE = 'Generation cancelled.';
@@ -35,7 +37,7 @@ export type ChatFn = (
 const GENERIC_SYSTEM_SUFFIX =
   '\n\nReturn the complete, revised Markdown document — no code fence, no explanation.';
 
-const ASK_SYSTEM = `You are working on a Markdown document. The user either asks a question about it or gives an instruction to change it.
+const ASK_SYSTEM = `You are working on a Markdown document. The user either asks a question about it or gives an instruction to change it. Further files may be attached below the document; treat them as read-only reference for this reply.
 
 Respond ONLY with JSON, no prose around it:
 - Question (answer only, change nothing): {"kind":"answer","text":"<answer>"}
@@ -43,6 +45,18 @@ Respond ONLY with JSON, no prose around it:
 
 For a change you ALWAYS return the whole document, not just the changed part.
 Earlier turns of this conversation are shown as plain text; your reply must still be one of the JSON forms above.`;
+
+/**
+ * Answer-only variant, used when the note chip is deselected (`note:
+ * null`): there is no document to edit, so the edit JSON form is dropped
+ * entirely — the model has nothing to return a whole document against.
+ */
+const ASK_ANSWER_SYSTEM = `You are answering the user's questions about their note vault. The attached files are read-only context for this reply -- there is no document to edit.
+
+Respond ONLY with JSON, no prose around it:
+- {"kind":"answer","text":"<answer>"}
+
+Earlier turns of this conversation are shown as plain text; your reply must still be the JSON form above.`;
 
 /** Appended to `ASK_SYSTEM` when the vault tool set is available (ADR-0021). */
 const ASK_TOOLS_NOTE = `You may call the vault tools (vault_search, vault_read, vault_write) to look things up in the wider vault or to make changes elsewhere before you give your final JSON answer. A vault_write is confirmed by the user unless the app is in YOLO mode.`;
@@ -125,8 +139,7 @@ export class ActionEngine {
 
   /** Chat Ask mode: an answer to display, or an edit to confirm. */
   async ask(
-    context: ActionContext,
-    question: string,
+    request: AskRequest,
     taskId?: string,
     history?: ChatMessage[],
   ): Promise<AskOutcome> {
@@ -137,22 +150,29 @@ export class ActionEngine {
     // the slice here is defence in depth against an over-long payload.
     const prior = (history ?? []).slice(-MAX_HISTORY_MESSAGES);
     const toolsOn = this.getConfig().mcp.enabled;
+    // `note: null` (the note chip is off) means there is nothing to edit:
+    // the answer-only prompt drops the edit JSON form, and an `edit` reply
+    // below degrades to the plain-text answer fallback.
+    const note = request.note;
+    const answerOnly = note === null;
+    const system = answerOnly ? ASK_ANSWER_SYSTEM : ASK_SYSTEM;
     const messages: ChatMessage[] = [
-      { role: 'system', content: toolsOn ? `${ASK_SYSTEM}\n${ASK_TOOLS_NOTE}` : ASK_SYSTEM },
+      { role: 'system', content: toolsOn ? `${system}\n${ASK_TOOLS_NOTE}` : system },
       ...prior,
-      { role: 'user', content: buildAskUserMessage(context, question) },
+      { role: 'user', content: buildAskUserMessage(request) },
     ];
     const reply = await this.chat(messages, { taskId, ...(toolsOn ? { vaultTools: true } : {}) });
     const obj = parseJsonObject(reply);
 
-    if (obj?.['kind'] === 'edit' && typeof obj['document'] === 'string') {
+    if (note !== null && obj?.['kind'] === 'edit' && typeof obj['document'] === 'string') {
+      const body = note.body;
       const after = normalizeDoc(obj['document']);
       return {
         kind: 'edit',
-        before: context.body,
+        before: body,
         after,
-        previewStyle: pickPreviewStyle(context.body, after),
-        summary: question.trim(),
+        previewStyle: pickPreviewStyle(body, after),
+        summary: request.question.trim(),
       };
     }
     const text = typeof obj?.['text'] === 'string' ? obj['text'] : reply.trim();
@@ -213,11 +233,15 @@ function normalizeDoc(text: string): string {
   return `${out}\n`;
 }
 
-function buildAskUserMessage(context: ActionContext, question: string): string {
-  const parts = [`INSTRUCTION / QUESTION:\n${question.trim()}`];
-  if (context.selection?.trim()) {
-    parts.push(`CURRENT SELECTION:\n${context.selection}`);
+function buildAskUserMessage(request: AskRequest): string {
+  const parts = [`INSTRUCTION / QUESTION:\n${request.question.trim()}`];
+  if (request.note !== null) {
+    parts.push(`DOCUMENT (${request.note.path}):\n${request.note.body}`);
   }
-  parts.push(`DOCUMENT (${context.path}):\n${context.body}`);
+  // The renderer already caps the count (`MAX_EXTRA_FILES`); the slice is
+  // defence in depth against an over-long payload, same as the history cap.
+  for (const file of request.extraFiles.slice(0, MAX_EXTRA_FILES)) {
+    parts.push(`FILE (${file.path}):\n${file.body}`);
+  }
   return parts.join('\n\n');
 }

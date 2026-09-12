@@ -498,11 +498,12 @@ in.
 
 ## Milestones
 
-The completed milestone log (1–21) is archived in
+The completed milestone log (1–24) is archived in
 [docs/milestones-done.md](docs/milestones-done.md).
 
-- **Last completed:** milestone 20 — editor panes in the docks
-  ([ADR-0038](docs/09_architecture_decisions/0038-editor-panes-in-docks.md)).
+- **Last completed:** milestone 24 — assistant composer rework
+  (scrollbar-corner fix, panel model picker, context chips,
+  auto-growing composer).
 - **Next:** not chosen — see "Current State & Next Steps" above.
 
 Pause after each milestone, show what works, don't push through several

@@ -243,6 +243,8 @@ export interface PluginChatOptions {
  */
 export type { LlmDeltaEvent } from '../ipc-api';
 import type { LlmDeltaEvent } from '../ipc-api';
+export type { LlmModelListing } from '../llm';
+import type { LlmModelListing } from '../llm';
 
 /**
  * The object handed to a plugin's renderer entry. Every registration
@@ -365,6 +367,13 @@ export interface DreyPluginApi {
   readonly llm: {
     enabled(): boolean;
     chat(messages: readonly ChatMessage[], options?: PluginChatOptions): Promise<string>;
+    /**
+     * The ACTIVE provider's label, listing capability and best-effort model
+     * list (ADR-0047). Never rejects -- a failed listing lands in `error`,
+     * a provider without a listing endpoint resolves `models: []` +
+     * `modelListing: false`; the model id stays hand-enterable either way.
+     */
+    listModels(): Promise<LlmModelListing>;
     cancelTask(taskId: string): Promise<boolean>;
     onDebugEntry(listener: (entry: LlmDebugEntry) => void): Unsubscribe;
     /**

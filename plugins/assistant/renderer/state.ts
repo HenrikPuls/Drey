@@ -5,7 +5,10 @@
  * plugin logic stays framework-free; the DOM layer is `panel.ts`).
  *
  * One chat thread per note, persisted as a sidecar file
- * (`shared/chat-thread.ts`), plus the per-note "Automatic summary" switch.
+ * (`shared/chat-thread.ts`), plus the per-note "Automatic summary" switch
+ * and the per-note context chips (the note itself — on by default — and
+ * extra files, milestone 24). Both chip kinds are *session state*, not
+ * config and not persisted: they are a per-question choice.
  *
  * The switch is deliberately *session state*, not config: it is seeded from
  * `assistant.autoSummaryDefault` when a note is first opened and overrides
@@ -17,6 +20,11 @@
  * a summary that already exists.
  */
 import type { ActionOutcome } from '../../../shared/plugin-api';
+import type { AskRequest } from '../shared/ask';
+import {
+  MAX_EXTRA_FILES,
+  truncateFileBody,
+} from '../shared/ask.js';
 import type { ChatCard, ChatThread } from '../shared/chat-thread';
 import { emptyThread, hasSummary, historyForAsk } from '../shared/chat-thread.js';
 import { formatDateTime, ipcErrorMessage } from '../shared/format.js';
@@ -36,11 +44,15 @@ export interface AssistantPorts {
   writeThread(thread: ChatThread): Promise<void>;
   summarize(context: { path: string; body: string }, taskId?: string): Promise<string>;
   ask(
-    context: { path: string; body: string },
-    question: string,
+    request: AskRequest,
     taskId?: string,
     history?: ReturnType<typeof historyForAsk>,
   ): Promise<{ kind: 'answer'; text: string } | { kind: 'edit'; before: string; after: string; previewStyle: 'localized' | 'document'; summary: string }>;
+  /**
+   * A file's text for attachment: the live buffer when the file is open,
+   * else its vault content; `null` when it is gone from the vault.
+   */
+  readVaultFile(path: string): Promise<string | null>;
   cancel(taskId?: string): Promise<void>;
   /** The active document's path + buffer, or null. */
   activeDoc(): { path: string; body: string } | null;
@@ -82,6 +94,18 @@ export interface AssistantState {
   dismissActionMessage(): void;
   /** The panel switch. Applies to this note only; the default is untouched. */
   setAutoSummary(on: boolean): void;
+  /**
+   * Context chips, per open note (session state like the switch): whether
+   * the note itself rides along (default on) and which extra files are
+   * attached. Neither is persisted — the chips are a per-question choice,
+   * not a note property.
+   */
+  noteIncluded(): boolean;
+  setNoteIncluded(on: boolean): void;
+  extraFiles(): readonly string[];
+  /** Adds a file chip; resolves to a reason string when refused. */
+  addFile(path: string): { ok: boolean; reason?: string };
+  removeFile(path: string): void;
   /** Runs the openNote rule: load the sidecar, then maybe auto-summarise. */
   openNote(path: string): Promise<void>;
   /** Nothing text-shaped is active (a browser tab, or no pane). */
@@ -108,6 +132,10 @@ export function createAssistantState(ports: AssistantPorts, tasks: RunningTasks)
   const toggles = new Map<string, boolean>();
   /** Notes whose auto-summary attempt already happened this session. */
   const attempted = new Set<string>();
+  /** Notes whose note chip the user turned off (absent = included). */
+  const noteExcluded = new Set<string>();
+  /** Extra file chips per note path, in add order. */
+  const filesByNote = new Map<string, string[]>();
 
   let activePath: string | null = null;
   let summarizing = false;
@@ -249,6 +277,59 @@ export function createAssistantState(ports: AssistantPorts, tasks: RunningTasks)
       }
     },
 
+    noteIncluded: () => activePath !== null && !noteExcluded.has(activePath),
+
+    setNoteIncluded(on) {
+      if (activePath === null) {
+        return;
+      }
+      if (on) {
+        noteExcluded.delete(activePath);
+      } else {
+        noteExcluded.add(activePath);
+      }
+      notify();
+    },
+
+    extraFiles: () => (activePath === null ? [] : (filesByNote.get(activePath) ?? [])),
+
+    addFile(path) {
+      if (activePath === null) {
+        return { ok: false, reason: 'No note is open.' };
+      }
+      if (path === activePath) {
+        // The note itself — @ or + found the open note: include it rather
+        // than attaching it twice under two mechanisms.
+        if (noteExcluded.has(activePath)) {
+          noteExcluded.delete(activePath);
+          notify();
+          return { ok: true };
+        }
+        return { ok: false, reason: 'This note is already attached.' };
+      }
+      const files = filesByNote.get(activePath) ?? [];
+      if (files.includes(path)) {
+        return { ok: false, reason: 'Already attached.' };
+      }
+      if (files.length >= MAX_EXTRA_FILES) {
+        return { ok: false, reason: `At most ${MAX_EXTRA_FILES} files per question.` };
+      }
+      filesByNote.set(activePath, [...files, path]);
+      notify();
+      return { ok: true };
+    },
+
+    removeFile(path) {
+      if (activePath === null) {
+        return;
+      }
+      const files = filesByNote.get(activePath);
+      if (files !== undefined && files.includes(path)) {
+        filesByNote.set(activePath, files.filter((entry) => entry !== path));
+        notify();
+      }
+    },
+
     async openNote(path) {
       activePath = path;
       notify();
@@ -289,6 +370,13 @@ export function createAssistantState(ports: AssistantPorts, tasks: RunningTasks)
       if (text === '' || path === null || asking) {
         return false;
       }
+      const includeNote = noteExcluded.has(path) === false;
+      const attached = filesByNote.get(path) ?? [];
+      if (!includeNote && attached.length === 0) {
+        notice = 'No context attached — include the note or add a file.';
+        notify();
+        return false;
+      }
       asking = true;
       error = null;
       notice = null;
@@ -299,12 +387,37 @@ export function createAssistantState(ports: AssistantPorts, tasks: RunningTasks)
       const history = historyForAsk(threads.get(path) ?? emptyThread(path));
       await appendCard(path, 'question', text);
       try {
-        const doc = ports.activeDoc();
-        if (doc === null || doc.path !== path) {
-          throw new Error('This note is not open.');
+        // The note chip rides with the live, unsaved buffer — the same
+        // "what you see is what the model gets" rule as before chips.
+        let note: AskRequest['note'] = null;
+        if (includeNote) {
+          const doc = ports.activeDoc();
+          if (doc === null || doc.path !== path) {
+            throw new Error('This note is not open.');
+          }
+          note = { path, body: doc.body };
+        }
+        // Extra files are read at send time (open tabs as their live
+        // buffer, the rest from disk); ones that vanished from the vault
+        // are skipped with a quiet notice as long as context remains.
+        const extraFiles: NonNullable<AskRequest['note']>[] = [];
+        const missing: string[] = [];
+        for (const file of attached) {
+          const body = await ports.readVaultFile(file);
+          if (body === null) {
+            missing.push(file);
+          } else {
+            extraFiles.push({ path: file, body: truncateFileBody(body) });
+          }
+        }
+        if (missing.length > 0) {
+          if (note === null && extraFiles.length === 0) {
+            throw new Error('The attached files are no longer in the vault.');
+          }
+          notice = `Skipped ${missing.join(', ')} — no longer in the vault.`;
         }
         const { value: outcome, durationMs } = await tasks.run('Thinking', (taskId) =>
-          ports.ask({ path, body: doc.body }, text, taskId, history),
+          ports.ask({ question: text, note, extraFiles }, taskId, history),
         );
         if (outcome.kind === 'answer') {
           await appendCard(path, 'answer', outcome.text, durationMs);

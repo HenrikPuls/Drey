@@ -283,3 +283,10 @@ textarea::placeholder {
 ::-webkit-scrollbar-track {
   background: transparent;
 }
+
+/* Styling any scrollbar part switches Chromium to custom painting; the
+   otherwise unstyled corner between both axes would render as a solid
+   white square (e.g. the assistant panel's composer). */
+::-webkit-scrollbar-corner {
+  background: transparent;
+}

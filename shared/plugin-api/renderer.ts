@@ -29,6 +29,7 @@ export type {
   AskOutcome,
   ChatMessage,
   LlmDebugEntry,
+  LlmModelListing,
 } from '../llm';
 export type { TagEntry } from './search-types';
 export type { VaultFileEntry } from '../ipc-api';

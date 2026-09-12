@@ -407,54 +407,57 @@ applied in the main process before the save result returns.
 
 ## 6.7 Assistant panel Ask (answer vs. document edit)
 
-The assistant panel's composer sends the active document plus the user's
-question to the LLM. A question comes back as text and becomes an answer
-card; a "change the document" instruction comes back as a full rewrite that
-reuses the 6.6 confirmation flow (`triggerId: null`, so no "don't ask
-again" checkbox), and what the user decided is recorded as a card too.
+The assistant panel's composer sends the user's question plus the attached
+context to the LLM. The context is chip-shaped (milestone 24): the open
+note rides along **by default** and can be deselected, and extra vault
+files join via the composer's `@`-completion or the "+" picker — their
+bodies are read at send time (open tabs as their live buffer, the rest
+from disk) and capped per file. A question comes back as text and becomes
+an answer card; with the note chip **on**, a "change the document"
+instruction comes back as a full rewrite that reuses the 6.6 confirmation
+flow (`triggerId: null`, so no "don't ask again" checkbox), and what the
+user decided is recorded as a card too. With the chip **off** the turn is
+answer-only: there is no document to edit, so the engine picks a
+system prompt without the edit JSON form.
 
-This flow used to live in the bottom chat bar's Ask mode. The bar is gone
-(§5.11/5.12); the plumbing below is unchanged apart from its caller.
+Since ADR-0044 stage 7 the whole flow lives in the assistant plugin; the
+renderer reaches the plugin main through the fixed `plugin:invoke` channel.
 
 ```mermaid
 sequenceDiagram
     actor User
-    participant Panel as NoteAssistant (composer)
-    participant AssistantService
-    participant Preload as preload (dreyApi)
-    participant Runner as ActionRunner.ask (main)
-    participant LM as LmStudioClient
+    participant Panel as panel.ts (composer, chips)
+    participant State as state.ts (plugin renderer)
+    participant Engine as engine.ask (plugin main)
+    participant LM as LlmRouter (base)
     participant Pure as shared/ (llm, text-diff)
     participant Confirm as ConfirmationService + Dialog
     participant EditorService
-    participant Store as ChatStore (sidecar)
+    participant Store as sidecar thread .{name}.chat.json
 
     User->>Panel: type question, Enter
-    Panel->>AssistantService: ask(question)
-    AssistantService->>Store: append question card -> .{name}.chat.json
-    alt no document open OR master switch off
-        AssistantService->>AssistantService: error signal set
-    else
-        AssistantService->>Preload: askChat({ path, body }, question)
-        Preload->>Runner: ask(context, question)
-        Runner->>LM: POST /chat/completions (ASK_SYSTEM + doc + question)
-        LM-->>Runner: reply
-        Runner->>Pure: parseJsonObject(reply)
-        alt { kind: 'answer', text }
-            Runner-->>AssistantService: { kind: 'answer', text }
-            AssistantService->>Store: append answer card
-        else { kind: 'edit', document }
-            Runner->>Pure: pickPreviewStyle(before, after)
-            Runner-->>AssistantService: { kind: 'edit', before, after, previewStyle, summary }
-            AssistantService->>Confirm: request({ ..., triggerId: null })
-            Confirm-->>User: dialog (localized or side-by-side)
-            User-->>Confirm: Apply / Cancel
-            Confirm-->>AssistantService: boolean
-            opt confirmed
-                AssistantService->>EditorService: applyRewrite(path, after)
-            end
-            AssistantService->>Store: append answer card ("übernommen" / "verworfen")
+    Panel->>State: ask(question)
+    State->>State: guards (note open? context attached? already asking?)
+    State->>Store: append question card
+    State->>State: read extra files (live buffer / vault, truncated)
+    State->>Engine: plugin:invoke 'ask' { question, note|null, extraFiles, history }
+    Engine->>LM: ctx.llm.chat (ASK_SYSTEM | ASK_ANSWER_SYSTEM + doc/FILE blocks)
+    LM-->>Engine: reply
+    Engine->>Pure: parseJsonObject(reply)
+    alt note chip on AND { kind: 'edit', document }
+        Engine->>Pure: pickPreviewStyle(before, after)
+        Engine-->>State: { kind: 'edit', before, after, previewStyle, summary }
+        State->>Confirm: request({ ..., triggerId: null })
+        Confirm-->>User: dialog (localized or side-by-side)
+        User-->>Confirm: Apply / Cancel
+        Confirm-->>State: boolean
+        opt confirmed
+            State->>EditorService: requestRewrite applied by the host
         end
+        State->>Store: append answer card ("Change applied." / "Change discarded.")
+    else { kind: 'answer', text }
+        Engine-->>State: { kind: 'answer', text }
+        State->>Store: append answer card
     end
 ```
 

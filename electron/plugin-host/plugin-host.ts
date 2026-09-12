@@ -25,7 +25,9 @@ import {
   type SectionSearchProvider,
   type Unsubscribe,
   type VaultChangeEvent,
+  type LlmModelListing,
 } from '../../shared/plugin-api';
+import { PROVIDER_PRESETS } from '../../shared/app-config';
 import type { AppConfigStore } from '../app-config';
 import type { LlmClient, LlmDebugLog, LlmTaskRegistry, TagSuggester } from '../llm';
 import { IPC_CHANNELS } from '../../shared/ipc-api';
@@ -235,6 +237,28 @@ export class PluginHost {
           }),
         );
         return result.text;
+      }
+      case 'drey.llm.listModels': {
+        // Model-picker data for the ACTIVE provider (ADR-0047): label +
+        // listing capability from the static preset, the list itself from
+        // the router (saved config — no override). Never rejects; a failed
+        // listing lands in `error` so the picker can fall back to
+        // hand-entry.
+        const llmConfig = this.deps.appConfig.get().llm;
+        const preset = PROVIDER_PRESETS[llmConfig.provider];
+        let models: string[] = [];
+        let error: string | null = null;
+        try {
+          models = await this.deps.llm.listModels();
+        } catch (err) {
+          error = err instanceof Error ? err.message : String(err);
+        }
+        return {
+          providerLabel: preset.label,
+          modelListing: preset.capabilities.modelListing,
+          models,
+          error,
+        } satisfies LlmModelListing;
       }
       case 'drey.search.sections': {
         const provider = this.searchProvider;

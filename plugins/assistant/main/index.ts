@@ -1,7 +1,6 @@
 import type {
   ActionContext,
   ActionOutcome,
-  ChatMessage,
   MainPluginContext,
   MainPluginModule,
   NoteSavedEvent,
@@ -14,6 +13,7 @@ import {
   serializeChatThread,
   sidecarPathFor,
 } from '../shared/chat-thread.js';
+import { parseAskPayload } from '../shared/ask.js';
 import { ActionEngine, type ChatFn } from './action-engine';
 
 /**
@@ -66,42 +66,11 @@ const plugin: MainPluginModule = {
     });
 
     ctx.ipc.handle('ask', (payload) => {
-      const { context, question, taskId, history } = shape(payload) as {
-        context?: unknown;
-        question?: unknown;
-        taskId?: unknown;
-        history?: unknown;
-      };
-      if (typeof context !== 'object' || context === null || typeof question !== 'string') {
-        throw new Error('malformed ask payload');
-      }
-      // bug-10 (interim): a missing or malformed `history` must fail
-      // VISIBLY, not silently degrade to an empty-context answer -- the
-      // renderer always sends an array, so reaching this branch means a
-      // version mismatch or a corrupted payload, and either deserves an
-      // error card, not a confidently wrong answer.
-      if (!Array.isArray(history)) {
-        throw new Error(
-          'malformed ask payload: history must be an array (stale renderer or main process? restart the app)',
-        );
-      }
-      for (const item of history) {
-        const message = item as { role?: unknown; content?: unknown } | null;
-        if (
-          !message ||
-          typeof message !== 'object' ||
-          typeof message.role !== 'string' ||
-          typeof message.content !== 'string'
-        ) {
-          throw new Error('malformed ask payload: history entries must be { role, content }');
-        }
-      }
-      return engine.ask(
-        context as ActionContext,
-        question,
-        typeof taskId === 'string' ? taskId : undefined,
-        history as ChatMessage[],
-      );
+      // Validation lives in the shared contract (`shared/ask.ts`) so the
+      // renderer's tests cover it; the bug-10 visible-failure rule and its
+      // messages came with it.
+      const { request, taskId, history } = parseAskPayload(payload);
+      return engine.ask(request, taskId, history);
     });
 
     ctx.ipc.handle('summarize', (payload) => {

@@ -31,7 +31,13 @@ export type { TagEntry, TagSearchHit, TagSearchQuery } from './search-types';
 // The shared payload types the main-side surface references (`llm.chat`,
 // `save.onNoteSaved`'s `pendingActions`), re-exported so a plugin main
 // imports them from one place.
-export type { ActionContext, ActionOutcome, ChatMessage, LlmDebugEntry } from '../llm';
+export type {
+  ActionContext,
+  ActionOutcome,
+  ChatMessage,
+  LlmDebugEntry,
+  LlmModelListing,
+} from '../llm';
 
 export type {
   MainChatOptions,

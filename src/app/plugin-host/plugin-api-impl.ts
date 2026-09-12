@@ -12,6 +12,7 @@ import type {
   Unsubscribe,
   TagEntry,
   TagSearchHit,
+  LlmModelListing,
 } from '../../../shared/plugin-api/renderer';
 import { DockService } from '../dock/dock.service';
 import { WidgetRegistryService } from '../dock/widget-registry.service';
@@ -302,6 +303,8 @@ export class PluginApiFactory {
             taskId: options?.taskId,
             vaultTools: options?.vaultTools,
           })) as string,
+        listModels: () =>
+          invokeBackend('drey.llm.listModels') as Promise<LlmModelListing>,
         cancelTask: (taskId) => window.dreyApi.cancelLlmTask(taskId),
         onDebugEntry: (listener) => track(window.dreyApi.onLlmDebugEntry(listener)),
         onDelta: (listener) => track(window.dreyApi.onLlmDelta(listener)),

@@ -115,6 +115,24 @@ export interface LlmCapabilities {
 }
 
 /**
+ * What a model picker needs from the ACTIVE provider (ADR-0047): identity,
+ * listing capability, best-effort model list. The plugin-API facade
+ * (`api.llm.listModels`) resolves one of these -- it never rejects, a
+ * failed listing attempt lands in `error` so a picker can fall back to
+ * hand-entry instead of surfacing a rejection.
+ */
+export interface LlmModelListing {
+  /** The active provider preset's display label, e.g. "LM Studio (local)". */
+  readonly providerLabel: string;
+  /** Whether the provider talks to a real listing endpoint (CLI/web: `false`). */
+  readonly modelListing: boolean;
+  /** Listed ids; empty when none or unavailable -- the id stays hand-enterable. */
+  readonly models: readonly string[];
+  /** Why a listing attempt failed (unreachable `/models`, bad key); `null` otherwise. */
+  readonly error: string | null;
+}
+
+/**
  * Small local models occasionally wrap their JSON in a ```json fence or
  * surround it with a sentence of prose, even when told not to
  * (`specs/classifier-spec.md`, "enforcing structured output"). This pulls

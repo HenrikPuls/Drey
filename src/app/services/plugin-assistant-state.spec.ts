@@ -5,6 +5,7 @@ import {
 } from '../../../plugins/assistant/renderer/running-tasks';
 import type { ChatThread } from '../../../plugins/assistant/shared/chat-thread';
 import { emptyThread } from '../../../plugins/assistant/shared/chat-thread';
+import type { AskRequest } from '../../../plugins/assistant/shared/ask';
 
 /**
  * Specs for the assistant plugin's renderer state (`plugins/assistant/`):
@@ -24,6 +25,10 @@ interface Harness {
   written: ChatThread[];
   summaries: Array<string | undefined>;
   cancelled: string[];
+  /** Ask requests the port received (the new `{ question, note, extraFiles }` shape). */
+  asks: AskRequest[];
+  /** Vault files the readVaultFile port serves; anything else reads as null. */
+  vaultFiles: Map<string, string>;
   /** The "active document" the ports report; null = nothing text-shaped open. */
   setActive(path: string | null, body?: string): void;
   llm: { on: boolean };
@@ -35,11 +40,15 @@ function setup(options: { autoSummary?: boolean; llm?: boolean } = {}): Harness 
   const written: ChatThread[] = [];
   const summaries: Array<string | undefined> = [];
   const cancelled: string[] = [];
+  const asks: AskRequest[] = [];
+  const vaultFiles = new Map<string, string>();
   const h: Harness = {
     threads,
     written,
     summaries,
     cancelled,
+    asks,
+    vaultFiles,
     llm: { on: options.llm !== false },
     defaultAutoSummary: options.autoSummary !== false,
     setActive: (path, body) => {
@@ -67,7 +76,11 @@ function setup(options: { autoSummary?: boolean; llm?: boolean } = {}): Harness 
       summaries.push(taskId);
       return 'Kurze Zusammenfassung.';
     },
-    ask: async () => ({ kind: 'answer', text: 'Antwort.' }),
+    ask: async (request) => {
+      asks.push(request);
+      return { kind: 'answer', text: 'Antwort.' };
+    },
+    readVaultFile: async (path) => vaultFiles.get(path) ?? null,
     cancel: async (taskId) => {
       if (taskId !== undefined) {
         cancelled.push(taskId);
@@ -242,6 +255,116 @@ describe('assistant plugin state (plugins/assistant/renderer/state)', () => {
     h.setActive(null);
 
     expect(await h.state.ask('Frage?')).toBe(false);
+  });
+
+  it('sends the note with its live buffer by default and no extra files', async () => {
+    const h = setup({ autoSummary: false });
+    h.setActive('a.md', 'Lebendiger Puffer.');
+    await h.state.openNote('a.md');
+
+    const sent = await h.state.ask('Was steht hier?');
+
+    expect(sent).toBe(true);
+    expect(h.asks).toHaveLength(1);
+    expect(h.asks[0]).toEqual({
+      question: 'Was steht hier?',
+      note: { path: 'a.md', body: 'Lebendiger Puffer.' },
+      extraFiles: [],
+    });
+  });
+
+  it('sends an answer-only turn when the note chip is off and a file is attached', async () => {
+    const h = setup({ autoSummary: false });
+    h.setActive('a.md');
+    await h.state.openNote('a.md');
+    h.vaultFiles.set('b.md', 'B-Kontext.');
+    expect(h.state.addFile('b.md').ok).toBe(true);
+    h.state.setNoteIncluded(false);
+
+    const sent = await h.state.ask('Was steht in b.md?');
+
+    expect(sent).toBe(true);
+    expect(h.asks[0]?.note).toBeNull();
+    expect(h.asks[0]?.extraFiles).toEqual([{ path: 'b.md', body: 'B-Kontext.' }]);
+    expect(h.state.cards().map((card) => card.role)).toEqual(['question', 'answer']);
+  });
+
+  it('refuses to send with no context attached at all, without writing a card', async () => {
+    const h = setup({ autoSummary: false });
+    h.setActive('a.md');
+    await h.state.openNote('a.md');
+    h.state.setNoteIncluded(false);
+
+    const sent = await h.state.ask('Frage?');
+
+    expect(sent).toBe(false);
+    expect(h.state.notice()).toContain('No context attached');
+    expect(h.state.cards()).toEqual([]);
+    expect(h.written).toHaveLength(0);
+  });
+
+  it('skips a file that vanished from the vault, and fails when nothing is left', async () => {
+    const h = setup({ autoSummary: false });
+    h.setActive('a.md');
+    await h.state.openNote('a.md');
+
+    // The note rides along: the vanished file is skipped with a notice.
+    h.vaultFiles.set('c.md', 'C.');
+    h.state.addFile('weg.md');
+    h.state.addFile('c.md');
+    const sent = await h.state.ask('Frage?');
+    expect(sent).toBe(true);
+    expect(h.asks[0]?.extraFiles).toEqual([{ path: 'c.md', body: 'C.' }]);
+    expect(h.state.notice()).toContain('weg.md');
+
+    // Everything gone and the chip off: the send is refused.
+    const h2 = setup({ autoSummary: false });
+    h2.setActive('a.md');
+    await h2.state.openNote('a.md');
+    h2.state.setNoteIncluded(false);
+    h2.state.addFile('weg.md');
+    expect(await h2.state.ask('Frage?')).toBe(false);
+    expect(h2.state.error()).toContain('no longer in the vault');
+  });
+
+  it('keeps the chips per note and restores them on switching back', async () => {
+    const h = setup({ autoSummary: false });
+    h.setActive('a.md');
+    await h.state.openNote('a.md');
+    h.vaultFiles.set('b.md', 'B.');
+    h.state.addFile('b.md');
+    h.state.setNoteIncluded(false);
+
+    h.setActive('c.md');
+    await h.state.openNote('c.md');
+    expect(h.state.noteIncluded()).toBe(true); // c.md starts clean
+    expect(h.state.extraFiles()).toEqual([]);
+
+    h.setActive('a.md');
+    await h.state.openNote('a.md');
+    expect(h.state.noteIncluded()).toBe(false);
+    expect(h.state.extraFiles()).toEqual(['b.md']);
+  });
+
+  it('dedupes attachments, caps the count, and re-includes the note through addFile', async () => {
+    const h = setup({ autoSummary: false });
+    h.setActive('a.md');
+    await h.state.openNote('a.md');
+
+    expect(h.state.addFile('a.md')).toEqual({ ok: false, reason: 'This note is already attached.' });
+    expect(h.state.addFile('b.md').ok).toBe(true);
+    expect(h.state.addFile('b.md')).toEqual({ ok: false, reason: 'Already attached.' });
+
+    // With the chip off, @/plus finding the open note turns the chip on.
+    h.state.setNoteIncluded(false);
+    expect(h.state.addFile('a.md')).toEqual({ ok: true });
+    expect(h.state.noteIncluded()).toBe(true);
+
+    // b.md already fills one slot: nine more fit, the eleventh is refused.
+    for (let i = 0; i < 9; i++) {
+      expect(h.state.addFile(`f${i}.md`).ok).toBe(true);
+    }
+    expect(h.state.addFile('zu-viel.md').reason).toContain('At most 10');
   });
 
   it('records a manual Action noop/error as the action message', () => {

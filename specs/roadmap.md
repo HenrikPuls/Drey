@@ -133,14 +133,18 @@ refresh" below), with an opt-in chokidar watcher for external changes
   editable built-in Action template.
 
 - **Local LLM — purpose:** the local model answers questions about an open
-  document, generates summaries, and carries out edits to the document on
-  request. The connection lives in **Settings → LLM**: an enable switch
+  document (plus any extra vault files attached to the question via the
+  assistant composer's `@`-completion or "+" picker — the note itself rides
+  along by default and can be deselected), generates summaries, and carries
+  out edits to the document on request. The connection lives in
+  **Settings → LLM**: an enable switch
   (the master off-switch for Actions and the assistant's Ask mode), base
   URL, an optional **API key**, and the model — loaded from a live
   `GET /v1/models` or typed by hand for a server that doesn't expose it.
-  The key goes out as `Authorization: Bearer <key>` (the OpenAI
-  convention), so besides LM Studio (which ignores it) any compatible
-  server works: Unsloth Desktop (`sk-unsloth-…` keys on
+  The assistant panel's model row edits this same global model without a
+  detour through Settings. The key goes out as `Authorization: Bearer <key>`
+  (the OpenAI convention), so besides LM Studio (which ignores it) any
+  compatible server works: Unsloth Desktop (`sk-unsloth-…` keys on
   `http://127.0.0.1:8888/v1`), llama.cpp, vLLM, Ollama.
 
 - **Settings & Actions:** a master-detail settings screen (category list +

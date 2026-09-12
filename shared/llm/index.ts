@@ -19,6 +19,7 @@ export type {
   ChatToolCall,
   LlmCapabilities,
   LlmChatResult,
+  LlmModelListing,
   LlmUsage,
   ToolParameters,
   ToolSpec,

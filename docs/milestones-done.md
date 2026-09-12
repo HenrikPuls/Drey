@@ -135,3 +135,21 @@ milestone before being built.
     gained the plugin authoring rules (no `@codemirror/*` / `@angular/*`
     runtime imports, no Node in plugin renderers); Settings → "Panels &
     plugins" manages both panels and plugins.
+24. **Assistant composer rework** — the Claude-Code-style composer: a
+    global `::-webkit-scrollbar-corner` fix (the white square in any
+    scroll container's lower right — styling any scrollbar part switches
+    Chromium to custom painting, and the unstyled corner rendered solid
+    white), a **model row** on the panel that edits the one global
+    `llm.model` through the new `api.llm.listModels()` facade (provider
+    label + listing capability + best-effort list; hand-entry always
+    available, `PLUGIN_API_VERSION` minor → 1), **context chips** (the
+    open note attached by default and deselectable; extra vault files via
+    `@`-completion or the "+" picker, read at send time as live
+    buffer/vault content, capped per file), and an **auto-growing
+    composer** (content height up to a cap, then it scrolls inside; the
+    drag divider and its persisted height pref are gone). The ask payload
+    became `{ question, note | null, extraFiles, history }`
+    (`plugins/assistant/shared/ask.ts` — note `null` turns the turn
+    answer-only via a second system prompt); the templates picker's modal
+    selector (descendant where only a compound could match) fixed in
+    passing.

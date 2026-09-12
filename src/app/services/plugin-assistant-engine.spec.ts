@@ -1,4 +1,5 @@
 import { ActionEngine, type ChatFn } from '../../../plugins/assistant/main/action-engine';
+import { MAX_EXTRA_FILES } from '../../../plugins/assistant/shared/ask';
 import { DEFAULT_APP_CONFIG, normalizeAppConfig } from '../../../shared/app-config';
 
 /**
@@ -135,21 +136,81 @@ describe('assistant plugin action engine (plugins/assistant/main)', () => {
 
   it('ask parses an answer reply and shapes an edit reply for the confirmation flow', async () => {
     const answered = engineWith('{"kind":"answer","text":"Es geht um Titel."}');
-    const answer = await answered.engine.ask({ path: 'a.md', body: DOC }, 'Worum geht es?');
+    const answer = await answered.engine.ask({
+      question: 'Worum geht es?',
+      note: { path: 'a.md', body: DOC },
+      extraFiles: [],
+    });
     expect(answer).toEqual({ kind: 'answer', text: 'Es geht um Titel.' });
 
     const edited = engineWith(
       '{"kind":"edit","document":"# Titel\\n\\nGeändert.\\n"}',
       { mcp: true },
     );
-    const edit = await edited.engine.ask({ path: 'a.md', body: DOC }, 'Ändere den Text.');
+    const edit = await edited.engine.ask({
+      question: 'Ändere den Text.',
+      note: { path: 'a.md', body: DOC },
+      extraFiles: [],
+    });
     expect(edit.kind).toBe('edit');
     if (edit.kind === 'edit') {
       expect(edit.after).toBe('# Titel\n\nGeändert.\n');
       expect(edit.summary).toBe('Ändere den Text.');
+      expect(edit.before).toBe(DOC);
     }
     // With the MCP switch on, the ask call opts into the vault tool loop.
     expect(edited.calls[0]?.opts).toMatchObject({ vaultTools: true });
+  });
+
+  it('ask sends the document first, then attached files as read-only reference', async () => {
+    const { engine, calls } = engineWith('{"kind":"answer","text":"ok"}');
+    await engine.ask({
+      question: 'Vergleiche.',
+      note: { path: 'a.md', body: DOC },
+      extraFiles: [{ path: 'notes/b.md', body: 'B-Kontext.' }],
+    });
+
+    const user = (calls[0]?.messages as Array<{ role: string; content: string }>)[1];
+    expect(user.content).toContain('DOCUMENT (a.md):');
+    expect(user.content).toContain('FILE (notes/b.md):');
+    expect(user.content.indexOf('DOCUMENT (a.md):')).toBeLessThan(
+      user.content.indexOf('FILE (notes/b.md):'),
+    );
+    const system = (calls[0]?.messages as Array<{ role: string; content: string }>)[0];
+    expect(system.content).toContain('read-only reference');
+  });
+
+  it('ask with the note chip off uses the answer-only prompt and degrades an edit reply', async () => {
+    const { engine, calls } = engineWith(
+      '{"kind":"edit","document":"# Anders\\n"}',
+    );
+    const outcome = await engine.ask({
+      question: 'Was steht in b.md?',
+      note: null,
+      extraFiles: [{ path: 'b.md', body: 'B.' }],
+    });
+
+    // No document to edit: the system prompt drops the edit JSON form ...
+    const system = (calls[0]?.messages as Array<{ role: string; content: string }>)[0];
+    expect(system.content).toContain('no document to edit');
+    expect(system.content).not.toContain('"kind":"edit"');
+    // ... and a disobedient edit reply degrades to the plain-text fallback.
+    expect(outcome.kind).toBe('answer');
+    if (outcome.kind === 'answer') {
+      expect(outcome.text).toContain('"kind":"edit"');
+    }
+  });
+
+  it('ask clamps the attached-file count defensively', async () => {
+    const { engine, calls } = engineWith('{"kind":"answer","text":"ok"}');
+    const many = Array.from({ length: 25 }, (_, i) => ({
+      path: `f${i}.md`,
+      body: 'x',
+    }));
+    await engine.ask({ question: 'q', note: null, extraFiles: many });
+
+    const user = (calls[0]?.messages as Array<{ role: string; content: string }>)[1];
+    expect(user.content.match(/FILE \(/g)).toHaveLength(MAX_EXTRA_FILES);
   });
 
   it('the on-save enumeration only lists enabled on-save triggers', () => {

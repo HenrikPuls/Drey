@@ -129,7 +129,9 @@
   padding-top: 12vh;
 }
 
-.tpl-picker-host .plugin-modal {
+/* showModal adds both classes to the SAME element (the mount IS the
+   .plugin-modal box), so this must be a compound selector. */
+.plugin-modal.tpl-picker-host {
   width: min(480px, 90vw);
   background: var(--surface-raised, var(--surface, #222));
   border: 1px solid color-mix(in srgb, currentColor 15%, transparent);
