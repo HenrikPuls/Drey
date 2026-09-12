@@ -22,6 +22,7 @@ import {
   AUTOTAG_PROMPT,
   TemplatesConfig,
   THEME_ACCENT,
+  VaultConfig,
   WidgetsConfig,
 } from './schema';
 
@@ -30,6 +31,8 @@ export const DEFAULT_DAILY_CONFIG: DailyConfig = { openOnStartup: true };
 export const DEFAULT_WIDGETS_CONFIG: WidgetsConfig = { disabled: [] };
 
 export const DEFAULT_TEMPLATES_CONFIG: TemplatesConfig = { dir: 'templates' };
+
+export const DEFAULT_VAULT_CONFIG: VaultConfig = { watch: false };
 
 export const DEFAULT_APPEARANCE: AppearanceConfig = {
   uiScale: 'default',
@@ -125,6 +128,7 @@ export const DEFAULT_APP_CONFIG: AppConfig = {
   },
   daily: { ...DEFAULT_DAILY_CONFIG },
   templates: { ...DEFAULT_TEMPLATES_CONFIG },
+  vault: { ...DEFAULT_VAULT_CONFIG },
   widgets: { disabled: [] },
   plugins: { disabled: [] },
   actions: {

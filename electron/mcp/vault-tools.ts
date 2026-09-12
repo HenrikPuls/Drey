@@ -148,8 +148,9 @@ export class VaultTools {
     private readonly getSearchProvider: () => SectionSearchProvider | null,
     private readonly getConfig: () => AppConfig,
     private readonly confirmWrite: ConfirmWrite,
-    /** Called after a write lands, so the renderer can refresh (no watcher). */
-    private readonly onVaultChanged: () => void = () => {},
+    /** Called with the written path after a write lands, so the plugins'
+     * index stays current and the renderer refreshes (ADR-0045 round). */
+    private readonly onVaultChanged: (path: string) => void = () => {},
   ) {}
 
   /** The `tools/list` payload (MCP shape). */
@@ -310,9 +311,10 @@ export class VaultTools {
     }
 
     await this.vault.writeFile(path, after);
-    // No file watcher (ADR-0018) -- keep the section index current so a
-    // follow-up search sees the write, and nudge the renderer to refresh.
-    this.onVaultChanged();
+    // The write itself went through the vault manager (own-write ledger),
+    // so the watcher suppresses the echo; this announcement keeps the
+    // section index current for a follow-up search and nudges the renderer.
+    this.onVaultChanged(path);
     return textResult(`Wrote ${path} (${after.length} chars, mode: ${mode}).`);
   }
 }

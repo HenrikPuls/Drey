@@ -11,9 +11,11 @@ import { VaultService } from '../vault';
  *    `McpWriteRequest`; it goes through the shared confirmation diff and
  *    the decision is sent back (`resolveMcpWrite`). YOLO mode skips this
  *    entirely -- the main process never sends the request.
- *  - after any MCP write lands, the file tree is refreshed (there is no
- *    file watcher, ADR-0018); the plugins refresh from the same push on
- *    their own `api.vault.onChanged`.
+ *
+ * The tree refresh after a write used to live here too; since ADR-0045
+ * the `vault:changed` push is subscribed by `VaultService` for every
+ * change source (watcher, manual refresh, MCP write), so this service
+ * only handles the confirmation flow.
  *
  * Instantiated once from `App`; the subscriptions live for the app's
  * lifetime, so there is no teardown.
@@ -21,7 +23,6 @@ import { VaultService } from '../vault';
 @Injectable({ providedIn: 'root' })
 export class McpBridgeService {
   private readonly confirmation = inject(ConfirmationService);
-  private readonly vault = inject(VaultService);
 
   private started = false;
 
@@ -32,9 +33,6 @@ export class McpBridgeService {
     this.started = true;
 
     window.dreyApi.onMcpWriteRequest?.((request) => void this.confirm(request));
-    window.dreyApi.onVaultChanged?.(() => {
-      void this.vault.refresh();
-    });
   }
 
   private async confirm(request: McpWriteRequest): Promise<void> {

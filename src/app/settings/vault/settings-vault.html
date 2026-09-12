@@ -1,0 +1,23 @@
+<app-settings-pane
+  title="Vault"
+  description="How the app keeps up with changes made outside the app."
+>
+  @if (vault(); as vault) {
+    <label class="switch-row">
+      <input
+        type="checkbox"
+        [checked]="vault.watch"
+        (change)="onWatchChange($any($event.target).checked)"
+      />
+      <span>
+        <span class="switch-label">Watch the vault for external changes</span>
+        <span class="switch-hint">
+          When another program (a sync service, a second editor) changes a file in the vault, the
+          file tree, the search and task indexes update on their own, and open tabs without
+          unsaved edits reload from disk. Tabs with unsaved edits are never overwritten. Off by
+          default — the refresh button does the same thing manually.
+        </span>
+      </span>
+    </label>
+  }
+</app-settings-pane>

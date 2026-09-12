@@ -16,6 +16,10 @@ export interface VaultHandlerDeps {
   dailyNotes: DailyNoteManager;
   noteManager: NoteManager;
   pluginHost: PluginHost;
+  /** Restarts the vault watcher to match the (possibly new) vault + config. */
+  syncVaultWatcher: () => Promise<void>;
+  /** One full external-change round: index rebuild + `vault:changed` push. */
+  fullVaultRefresh: () => void;
 }
 
 /**
@@ -23,16 +27,18 @@ export interface VaultHandlerDeps {
  * saves, create/delete/rename/copy/duplicate, the native save dialog, the
  * daily-note content builder, and `note:save`.
  *
- * There is no file watcher (ADR-0018): any op that can move `.md` content in
- * or out of the plugins' index scope emits a vault-change event, so the
- * plugins rebuild and the renderer sees a consistent picture on its next
- * refresh.
+ * Ops that move `.md` content in or out of the plugins' index scope emit
+ * vault-change events, so the plugins rebuild and the renderer sees a
+ * consistent picture on its next refresh. External changes reach the same
+ * machinery through the vault watcher / `vault:refresh` (ADR-0045).
  */
 export function registerVaultHandlers({
   vaultManager,
   dailyNotes,
   noteManager,
   pluginHost,
+  syncVaultWatcher,
+  fullVaultRefresh,
 }: VaultHandlerDeps): void {
   const rebuildIndexes = async (): Promise<void> => {
     // Plugins re-read whatever they cache on any index-affecting change.
@@ -45,7 +51,16 @@ export function registerVaultHandlers({
   ipcMain.handle(IPC_CHANNELS.vaultSelect, async (): Promise<string | null> => {
     const selected = await vaultManager.selectVault();
     await rebuildIndexes();
+    // The watcher follows the active vault -- stop on the old root, start
+    // on the new one (no-op when disabled).
+    await syncVaultWatcher();
     return selected;
+  });
+  // The manual refresh (Files panel button / ADR-0045): one full round in
+  // main -- index rebuild plus the renderer push -- instead of the old
+  // tree-only pull that left the tag/task indexes stale.
+  ipcMain.handle(IPC_CHANNELS.vaultRefresh, async (): Promise<void> => {
+    fullVaultRefresh();
   });
   ipcMain.handle(IPC_CHANNELS.vaultListFiles, (): Promise<VaultFileEntry[]> =>
     vaultManager.listFiles(),

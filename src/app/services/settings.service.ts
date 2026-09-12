@@ -16,6 +16,7 @@ import {
   SpellcheckConfig,
   TemplatesConfig,
   UiScale,
+  VaultConfig,
   activeEntryPattern,
   clampEditorFontScale,
   normalizeAccent,
@@ -271,6 +272,12 @@ export class SettingsService {
   patchTemplates(patch: Partial<TemplatesConfig>): void {
     this.mutate((config) => {
       config.templates = { ...config.templates, ...patch };
+    });
+  }
+
+  patchVault(patch: Partial<VaultConfig>): void {
+    this.mutate((config) => {
+      config.vault = { ...config.vault, ...patch };
     });
   }
 

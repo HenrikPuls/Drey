@@ -39,6 +39,7 @@ import {
   TemplatesConfig,
   THEME_ACCENT,
   UiScale,
+  VaultConfig,
   WidgetsConfig,
   PluginsConfig,
   AssistantConfig,
@@ -51,6 +52,7 @@ import {
   DEFAULT_DAILY_CONFIG,
   DEFAULT_MCP_CONFIG,
   DEFAULT_TEMPLATES_CONFIG,
+  DEFAULT_VAULT_CONFIG,
   noteSummaryTemplate,
   ruledEntryTemplate,
   searchSummaryTemplate,
@@ -297,6 +299,11 @@ function normalizeTemplatesConfig(raw: unknown): TemplatesConfig {
   return { dir: normalizeTemplatesDir(source['dir']) };
 }
 
+function normalizeVault(raw: unknown): VaultConfig {
+  const source = (raw ?? {}) as Record<string, unknown>;
+  return { watch: bool(source['watch'], DEFAULT_VAULT_CONFIG.watch) };
+}
+
 function normalizeEditor(raw: unknown): EditorConfig {
   const source = (raw ?? {}) as Record<string, unknown>;
   return {
@@ -480,6 +487,7 @@ export function normalizeAppConfig(raw: unknown): AppConfig {
     entry: normalizeEntryConfig(source['entry']),
     daily: normalizeDaily(source['daily']),
     templates: normalizeTemplatesConfig(source['templates']),
+    vault: normalizeVault(source['vault']),
     widgets: normalizeWidgets(source['widgets']),
     plugins: normalizePlugins(source['plugins']),
     actions: {

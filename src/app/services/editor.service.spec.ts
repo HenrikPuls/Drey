@@ -501,4 +501,91 @@ describe('EditorService', () => {
       expect(stripFrontmatter('# Just a note\n')).toBe('# Just a note\n');
     });
   });
+
+  describe('reloadFromVaultChange (ADR-0045 external-change auto-reload)', () => {
+    function serviceWithDisk(
+      files: Record<string, { content: string; modifiedMs: number } | null>,
+    ): EditorService {
+      TestBed.resetTestingModule();
+      const diskApi: Partial<DreyApi> = {
+        readVaultFile: (relativePath: string) => {
+          const file = files[relativePath];
+          if (file === undefined || file === null) {
+            return Promise.reject(new Error(`not found: ${relativePath}`));
+          }
+          return Promise.resolve(file);
+        },
+        saveNote: (request: NoteSaveRequest) => echoSave(request),
+      };
+      window.dreyApi = diskApi as DreyApi;
+      return TestBed.inject(EditorService);
+    }
+
+    it('reloads a clean tab from disk and stays clean', async () => {
+      const files: Record<string, { content: string; modifiedMs: number }> = {
+        'a.md': { content: 'version one', modifiedMs: 100 },
+      };
+      const diskService = serviceWithDisk(files);
+      await diskService.openFile('a.md');
+      expect(diskService.bufferContent()).toBe('version one');
+
+      files['a.md'] = { content: 'version two', modifiedMs: 500 };
+      await diskService.reloadFromVaultChange(['a.md']);
+
+      expect(diskService.bufferContent()).toBe('version two');
+      expect(diskService.savedContent()).toBe('version two');
+      expect(diskService.isDirty()).toBe(false);
+    });
+
+    it('leaves a dirty tab untouched', async () => {
+      const diskService = serviceWithDisk({
+        'a.md': { content: 'version two', modifiedMs: 500 },
+      });
+      await diskService.openFile('a.md');
+      diskService.updateBuffer('a.md', 'my local edits');
+
+      await diskService.reloadFromVaultChange(['a.md']);
+
+      expect(diskService.bufferContent()).toBe('my local edits');
+      expect(diskService.isDirty()).toBe(true);
+    });
+
+    it('marks a tab draft-like when the file is gone', async () => {
+      const files: Record<string, { content: string; modifiedMs: number } | null> = {
+        'gone.md': { content: 'on disk', modifiedMs: 100 },
+      };
+      const diskService = serviceWithDisk(files);
+      await diskService.openFile('gone.md');
+      expect(diskService.bufferContent()).toBe('on disk');
+
+      files['gone.md'] = null; // external delete
+      await diskService.reloadFromVaultChange(['gone.md']);
+
+      const doc = diskService.docFor('gone.md');
+      expect(doc?.existsOnDisk).toBe(false);
+      expect(diskService.bufferContent()).toBe('on disk');
+    });
+
+    it('is a no-op when the push carries no paths (full refresh)', async () => {
+      const diskService = serviceWithDisk({
+        'a.md': { content: 'version two', modifiedMs: 500 },
+      });
+      await diskService.openFile('a.md');
+
+      await diskService.reloadFromVaultChange(undefined);
+
+      expect(diskService.bufferContent()).toBe('version two');
+    });
+
+    it('ignores tabs that are not in the changed set', async () => {
+      const diskService = serviceWithDisk({
+        'a.md': { content: 'version two', modifiedMs: 500 },
+      });
+      await diskService.openFile('a.md');
+
+      await diskService.reloadFromVaultChange(['other.md']);
+
+      expect(diskService.bufferContent()).toBe('version two');
+    });
+  });
 });

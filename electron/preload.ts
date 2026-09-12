@@ -20,6 +20,7 @@ import {
   PluginIpcEventPayload,
   SpellCheckResult,
   SpellLanguage,
+  VaultChangedPush,
   VaultFileContent,
   VaultFileEntry,
 } from '../shared/ipc-api';
@@ -137,11 +138,13 @@ const dreyApi: DreyApi = {
   },
   resolveMcpWrite: (id: number, approved: boolean): Promise<void> =>
     ipcRenderer.invoke(IPC_CHANNELS.mcpWriteDecision, id, approved),
-  onVaultChanged: (listener: () => void): (() => void) => {
-    const wrapped = (): void => listener();
-    ipcRenderer.on(IPC_CHANNELS.mcpVaultChanged, wrapped);
-    return () => ipcRenderer.removeListener(IPC_CHANNELS.mcpVaultChanged, wrapped);
+  onVaultChanged: (listener: (push: VaultChangedPush) => void): (() => void) => {
+    // Forward only the payload, never the IpcRendererEvent (ADR-0001).
+    const wrapped = (_event: IpcRendererEvent, push: VaultChangedPush): void => listener(push);
+    ipcRenderer.on(IPC_CHANNELS.vaultChanged, wrapped);
+    return () => ipcRenderer.removeListener(IPC_CHANNELS.vaultChanged, wrapped);
   },
+  refreshVault: (): Promise<void> => ipcRenderer.invoke(IPC_CHANNELS.vaultRefresh),
   // Session history (ADR-0043).
   writeSessionBackup: (id: string, content: string): Promise<void> =>
     ipcRenderer.invoke(IPC_CHANNELS.sessionWriteBackup, id, content),

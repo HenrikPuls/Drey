@@ -391,7 +391,7 @@ export class FilesPanel {
     void this.vault.selectVault();
   }
 
-  /** Manual "re-read the vault from disk" -- there is no file watcher. */
+  /** Manual "re-read the vault from disk" (a full round in main, ADR-0045). */
   protected onRefresh(): void {
     void this.vault.refresh();
   }

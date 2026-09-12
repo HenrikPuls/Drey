@@ -30,8 +30,9 @@ An AI-powered knowledge hub for note-taking and task automation.
 Electron + Angular/TypeScript, CodeMirror 6 (editor), transformers.js
 (embeddings, Phase 2), sqlite-vec (vector search, Phase 2),
 OpenAI-API-compatible backend (LLM backend), Electron Builder (packaging).
-No file watcher — the vault is re-read on demand (see "Manual refresh"
-below).
+No file watcher by default — the vault is re-read on demand (see "Manual
+refresh" below), with an opt-in chokidar watcher for external changes
+(ADR-0045).
 
 ---
 
@@ -322,14 +323,20 @@ below).
   no watcher). This delivers the interactive slice of the Phase-2 "Daily
   tasks" / Phase-4 "Task center" ideas below.
 
-- **Manual refresh:** there is no file watcher. A refresh button in the
-  sidebar re-reads the vault from disk and rebuilds the tag index; the
-  app also refreshes itself after the writes it makes (note save, first
-  save of a daily-note draft, file/folder create or delete). Rationale:
-  with thin, optional frontmatter there is no "frontmatter-only vs. body"
-  distinction left to justify a watcher, and chokidar's per-write
-  ignore-window, debounce and lifecycle are strictly more moving parts. A
-  watcher stays a purely additive future option.
+- **Manual refresh:** there is no file watcher by default. A refresh
+  button in the Files panel runs one full refresh round in main — the
+  tag/task indexes rebuild and a `vault:changed` push reloads the tree,
+  the plugin panels and clean open tabs; the app also refreshes itself
+  after the writes it makes (note save, first save of a daily-note
+  draft, file/folder create or delete). Rationale: with thin, optional
+  frontmatter there is no "frontmatter-only vs. body" distinction left
+  to justify a watcher, and chokidar's per-write ignore-window, debounce
+  and lifecycle are strictly more moving parts. The purely additive
+  watcher ADR-0018 left open now exists as an opt-in (req-14, Settings →
+  Vault → "Watch the vault for external changes", off by default):
+  chokidar + an own-write ledger (mtime matching, so the app's own saves
+  don't echo) feeding the same refresh round; clean open tabs reload
+  from disk, dirty tabs stay last-writer-wins. See ADR-0045.
 
 ---
 
@@ -380,9 +387,12 @@ below).
 
 ## Open Risks / Undecided Details
 
-- Stale view without a watcher: an external tool changing vault files is
-  not noticed until the next manual refresh. Acceptable for a
-  single-user, single-machine tool; revisit if it bites.
+- Stale view with the watcher off: an external tool changing vault files
+  is not noticed until the next manual refresh. Acceptable for a
+  single-user, single-machine tool; the opt-in watcher (req-14,
+  ADR-0045) covers it when it bites. With the watcher on, a *dirty* open
+  tab still wins over an external change on save (last-writer-wins; no
+  conflict dialog).
 - Model contention: assistant usage vs. any benchmarking models running
   in parallel — needs an availability check before every call.
 - Tag sprawl: nothing prevents near-duplicate tags (`sailing` vs.
@@ -419,7 +429,6 @@ req-11 Audio recording in interview mode (local Whisper). <= Probably using Wind
 req-12 Automatic image captioning via a vision model.
 req-13 Editor: footnote rendering in Live Preview (needs a custom Lezer
   markdown extension), `Ctrl`-click to open concealed link targets.
-req-14 An additive chokidar file watcher, if manual refresh proves too coarse.
 req-15 playwright m365 copilot über browser automatisierung
   → See Req-3 above — same feature, prototyped on `feat/copilot-web-provider` (ADR-0040).
 req-16 PDF Export
@@ -446,6 +455,28 @@ req-26 frontmatter needs to be updated on save
 
 
 # Completed
+
+req-14 — an **optional** chokidar file watcher (Settings → Vault →
+"Watch the vault for external changes", off by default — ADR-0045,
+amends ADR-0018's "purely additive" clause). One external-change round
+in main, shared by all change sources: `VaultWatcher` (chokidar v3 CJS,
+`ignoreInitial` + ready gate, dot-entry ignore, `awaitWriteFinish`,
+~300 ms debounce for OneDrive bursts) → `OwnWriteLedger` (every
+`VaultManager` mutation records itself: content writes as post-write
+mtime, structural ops as path+TTL; a match drops the app's own echo —
+a missed match costs one redundant refresh, never corruption) →
+`VaultChangeAnnouncer` (per-file `write`/`delete` plugin events for
+`.md`, then one `vault:changed` renderer push with the changed paths,
+capped at 200). The push is the renamed, payload-carrying
+`mcp:vault-changed`; `EditorService` auto-reloads **clean** open tabs
+among the changed paths (`modifiedMs` finally earning its keep) and
+flips tabs of externally deleted files to draft semantics; dirty tabs
+stay last-writer-wins, no conflict dialog. The manual refresh button
+now runs the same full round in main (`vault:refresh`) — fixing the old
+gap where it re-pulled the tree but left the tag/task indexes stale.
+New modules `electron/own-write-ledger.ts`, `electron/vault-watcher.ts`,
+`electron/vault-change-announcer.ts`; the tags plugin re-indexes a
+single file on scoped `write` events (mirroring tasks).
 
 Req-5 — `Ctrl`/`Cmd`-click a link opens it in the OS browser. Already wired
 for the document editor (`link-open.ts` `linkActivation` → `Editor.activateLink`

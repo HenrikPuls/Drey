@@ -97,10 +97,12 @@ export default tseslint.config(
               'titlebar',
               'widgets',
               'calendar',
-              'vault',
               'plugin-host',
             ]),
-            ...relativeModulePatternsDeepOnly(['llm', 'entry']),
+            // `llm` / `entry` / `vault` also exist as `src/app/settings/<mod>/`
+            // plain folders -- from the settings screen the `./` form is that
+            // folder, not the module.
+            ...relativeModulePatternsDeepOnly(['llm', 'entry', 'vault']),
           ],
         },
       ],

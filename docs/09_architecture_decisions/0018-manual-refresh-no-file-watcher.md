@@ -3,6 +3,9 @@
 ## Status
 
 Accepted — implemented with the milestone-10 follow-up items.
+Amended by [ADR-0045](0045-optional-vault-file-watcher.md): an optional,
+off-by-default chokidar watcher on top of this design (req-14), and the
+manual refresh button now runs a full round (indexes included).
 
 ## Context
 

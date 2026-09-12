@@ -47,6 +47,8 @@ export interface IpcHandlerDeps {
   exitBridge: ExitBridge;
   stdioBridgePath: () => string;
   syncMcpHttp: () => Promise<void>;
+  syncVaultWatcher: () => Promise<void>;
+  fullVaultRefresh: () => void;
   pluginHost: PluginHost;
 }
 

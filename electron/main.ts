@@ -13,6 +13,7 @@ import { pathToFileURL } from 'node:url';
 import { IPC_CHANNELS } from '../shared/ipc-api';
 import { UI_SCALE_FACTORS } from '../shared/app-config';
 import { AppConfigStore } from './app-config';
+import chokidar from 'chokidar';
 import { DailyNoteManager } from './daily-note';
 import { installMainProcessLogging, watchWebContents } from './logger';
 import { LlmDebugLog, LlmTaskRegistry, LmStudioClient, TagSuggester } from './llm';
@@ -20,10 +21,13 @@ import { registerIpcHandlers, ExitBridge, McpWriteBridge } from './ipc';
 import { McpHttpTransport, McpServer, VaultTools } from './mcp';
 import { attachContextMenu, buildApplicationMenu } from './menu';
 import { NoteManager } from './note-manager';
+import { OwnWriteLedger } from './own-write-ledger';
 import { PluginHost } from './plugin-host';
 import { SessionBackupStore } from './session';
 import { SpellcheckService } from './spellcheck';
+import { VaultChangeAnnouncer } from './vault-change-announcer';
 import { VaultManager } from './vault-manager';
+import { VaultWatcher } from './vault-watcher';
 
 /**
  * Global hotkey for quick-capture (milestone 4). One constant here until a
@@ -225,6 +229,9 @@ function stdioBridgePath(): string {
 
 /** Module-scope handle so the `will-quit` listener can close the socket. */
 let mcpHttpForShutdown: McpHttpTransport | null = null;
+
+/** Module-scope handle so the `will-quit` listener can stop the watcher. */
+let vaultWatcherForShutdown: VaultWatcher | null = null;
 
 /**
  * The main<->renderer bridge for confirming an MCP `vault_write` (ADR-0011 /
@@ -467,9 +474,46 @@ if (!app.requestSingleInstanceLock()) {
   });
 
   app.whenReady().then(async () => {
-    const vaultManager = new VaultManager();
-    const dailyNotes = new DailyNoteManager(vaultManager);
+    // The own-write ledger records every mutating vault-manager call so the
+    // watcher can drop the app's own echoes (ADR-0045). Must exist before
+    // the manager; the announcer closes over module state lazily, so
+    // construction order stays free.
+    const ownWrites = new OwnWriteLedger();
+    const vaultManager = new VaultManager(ownWrites);
     const appConfig = new AppConfigStore();
+    const vaultAnnouncer = new VaultChangeAnnouncer(
+      () => pluginHost,
+      () => mainWindow,
+    );
+    const vaultWatcher = new VaultWatcher({
+      getRoot: () => vaultManager.getActiveVaultPath(),
+      isEnabled: () => appConfig.get().vault.watch,
+      ledger: ownWrites,
+      announcer: vaultAnnouncer,
+      watchFactory: (root) =>
+        chokidar.watch(root, {
+          // The initial scan must not announce every existing file as a
+          // change; the `ready` gate covers anything that slips through.
+          ignoreInitial: true,
+          // Same dot-entries the file tree and the indexes exclude
+          // (.git, .obsidian, .drafts/, .<name>.chat.json sidecars).
+          ignored: /(^|[\\/])\./,
+          // OneDrive & friends deliver files in flux; wait for the write
+          // to settle so indexes never see half a file.
+          awaitWriteFinish: { stabilityThreshold: 500, pollInterval: 100 },
+        }),
+      log: (message, level) => {
+        if (level === 'error') {
+          console.error(message);
+        } else if (level === 'warn') {
+          console.warn(message);
+        } else {
+          console.log(message);
+        }
+      },
+    });
+    vaultWatcherForShutdown = vaultWatcher;
+    const dailyNotes = new DailyNoteManager(vaultManager);
     const llmDebug = new LlmDebugLog();
     const lmStudio = new LmStudioClient(appConfig, llmDebug);
     const llmTasks = new LlmTaskRegistry();
@@ -483,11 +527,11 @@ if (!app.requestSingleInstanceLock()) {
       () => pluginHost?.getSectionSearchProvider() ?? null,
       () => appConfig.get(),
       (request) => mcpWriteBridge.requestConfirmation(request),
-      () => {
-        mainWindow?.webContents.send(IPC_CHANNELS.mcpVaultChanged);
-        // An MCP write bypasses note:save — plugin vault listeners rebuild.
-        pluginHostRef?.emitVaultChange({ kind: 'write' });
-      },
+      // An MCP write bypasses note:save -- run the same external-change
+      // round the watcher uses (index events + renderer push, scoped to
+      // the written file).
+      (writtenPath) =>
+        vaultAnnouncer.announceExternal({ changedPaths: [writtenPath], deletedPaths: [] }),
     );
     const tagSuggester = new TagSuggester(appConfig, lmStudio, llmTasks);
     // The plugin host activates main entries before the window exists and
@@ -536,6 +580,8 @@ if (!app.requestSingleInstanceLock()) {
     // (the tags and tasks plugins rebuild their indexes from this event).
     pluginHostRef.emitVaultChange({ kind: 'refresh' });
     await syncMcpHttpTransport(mcpHttp, appConfig);
+    // Start watching if the stored config enables it (ADR-0045).
+    await vaultWatcher.syncFromConfig();
 
     // Push each new debug entry to the renderer so the LLM settings pane
     // updates live while a request is in flight.
@@ -563,6 +609,8 @@ if (!app.requestSingleInstanceLock()) {
       exitBridge,
       stdioBridgePath,
       syncMcpHttp: () => syncMcpHttpTransport(mcpHttp, appConfig),
+      syncVaultWatcher: () => vaultWatcher.syncFromConfig(),
+      fullVaultRefresh: () => vaultAnnouncer.announceFullRefresh(),
       pluginHost,
     });
     // The File/Edit/Selection/View menus are drawn by the renderer titlebar
@@ -609,6 +657,7 @@ if (!app.requestSingleInstanceLock()) {
   app.on('will-quit', () => {
     globalShortcut.unregisterAll();
     void mcpHttpForShutdown?.stop();
+    void vaultWatcherForShutdown?.stop();
     // Plugin will-quit hooks first (native teardown, e.g. the browser
     // plugin's WebContentsViews), then deactivate.
     void pluginHost?.runWillQuitHooks();

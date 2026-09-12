@@ -883,7 +883,7 @@ sequenceDiagram
     end
     alt approved (or YOLO)
         Tools->>Vault: writeFile(path, after) + reindexFile(path, after)
-        Tools->>Bridge: send mcp:vault-changed → TagService/VaultService.refresh()
+        Tools->>Bridge: send vault:changed → VaultService refreshes tree/panels (ADR-0045)
         Tools-->>Srv: { content:[{text:"Wrote …"}] }
     else declined
         Tools-->>Srv: { content:[{text:"The user declined the write."}], isError:true }
@@ -1031,7 +1031,7 @@ The panel shows `TaskService.visible()`. In **document** scope that is
 `scanTasks` over the live editor buffer, so it tracks unsaved edits with no
 IPC. In **vault** scope it is `listTasks()` from the main-process
 `TaskIndex`, refreshed on construct / after each save / on
-`mcp:vault-changed`. Ticking a row toggles the source line and saves.
+`vault:changed` (ADR-0045). Ticking a row toggles the source line and saves.
 
 ```mermaid
 sequenceDiagram
@@ -1470,12 +1470,53 @@ sequenceDiagram
     end
 ```
 
+## 6.31 External vault change → watcher round → clean-tab reload ([ADR-0045](09_architecture_decisions/0045-optional-vault-file-watcher.md))
+
+The watcher is off by default (Settings → Vault). When on, chokidar
+events flow through the own-write ledger (so the app's own saves never
+echo) into one debounced round: per-file plugin index events for `.md`
+changes, then the `vault:changed` push — the same push the manual
+refresh button (`vault:refresh`) and an MCP `vault_write` produce. The
+renderer's half: `VaultService` reloads the tree, the plugin panels
+re-pull on their `api.vault.onChanged`, and `EditorService` re-reads
+every **clean** open tab among the changed paths (a dirty tab is never
+touched; a vanished file flips its tab to draft semantics).
+
+```mermaid
+sequenceDiagram
+    participant OS as Filesystem (OneDrive / other editor)
+    participant CW as chokidar (VaultWatcher)
+    participant L as OwnWriteLedger
+    participant A as VaultChangeAnnouncer
+    participant P as PluginHost (tags/tasks indexes)
+    participant R as Renderer (VaultService / EditorService / panels)
+
+    OS->>CW: add / change / unlink (after awaitWriteFinish)
+    CW->>L: isOwnEvent(path, kind, mtimeMs)?
+    alt own echo (mtime match / structural TTL)
+        L-->>CW: drop
+    else external
+        CW->>CW: accumulate; (re)arm 300 ms debounce
+    end
+    Note over CW: on debounce fire: one round per burst
+    CW->>A: announceExternal({ changedPaths, deletedPaths })
+    A->>P: emitVaultChange({ kind:'write'|'delete', path }) per .md
+    A->>R: push vault:changed { paths }
+    R->>R: VaultService reloads file tree; panels re-pull
+    R->>R: EditorService re-reads clean tabs in paths<br/>(read failure -> existsOnDisk=false, draft semantics)
+```
+
+The manual refresh button runs the same round without the watcher
+(`vault:refresh` → `announceFullRefresh()`: a whole-vault `refresh`
+plugin event + a payload-less push).
+
 ## Planned flows (added as their milestone is built)
 
 - Dedicated keyword-search / FTS surface — the search panel's free-text
   mode covers the common case for now (`specs/roadmap.md` Phase 2)
 - Chat/RAG scope resolution for a vault-wide scope (Phase 2)
 
-_(Dropped: the batch-tag-suggestion inbox and the chokidar file-watcher
-reaction — see [ADR-0017] and
-[ADR-0018](09_architecture_decisions/0018-manual-refresh-no-file-watcher.md).)_
+_(Dropped: the batch-tag-suggestion inbox — see [ADR-0017] and
+[ADR-0018](09_architecture_decisions/0018-manual-refresh-no-file-watcher.md).
+The chokidar file-watcher reaction, originally dropped with ADR-0018,
+came back as the opt-in §6.31 / [ADR-0045](09_architecture_decisions/0045-optional-vault-file-watcher.md).)_

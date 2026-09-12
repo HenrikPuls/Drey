@@ -153,6 +153,12 @@ describe('normalizeAppConfig', () => {
     expect(normalizeAppConfig({ daily: { openOnStartup: false } }).daily.openOnStartup).toBe(false);
   });
 
+  it('defaults the vault block to not watching and coerces a junk value', () => {
+    expect(normalizeAppConfig({}).vault).toEqual({ watch: false });
+    expect(normalizeAppConfig({ vault: { watch: 'yes' } }).vault.watch).toBe(false);
+    expect(normalizeAppConfig({ vault: { watch: true } }).vault.watch).toBe(true);
+  });
+
   it('normalises the widgets block: empty default, string list, dedupe, junk drop', () => {
     expect(normalizeAppConfig({}).widgets).toEqual({ disabled: [] });
     expect(normalizeAppConfig({ widgets: { disabled: 'nope' } }).widgets.disabled).toEqual([]);

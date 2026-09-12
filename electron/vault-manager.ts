@@ -7,6 +7,7 @@ import { assetFileName, ATTACHMENTS_DIR, imageExtension } from '../shared/asset-
 import { sidecarPathFor } from '../shared/sidecar';
 import { VaultFileContent, VaultFileEntry } from '../shared/ipc-api';
 import { uniqueCopyName } from '../shared/unique-name';
+import { OwnWriteLedger } from './own-write-ledger';
 
 interface VaultConfig {
   activeVaultPath: string | null;
@@ -48,7 +49,15 @@ function writeConfig(config: VaultConfig): void {
 export class VaultManager {
   private activeVaultPath: string | null;
 
-  constructor() {
+  /**
+   * When present, every mutating method reports itself here so the vault
+   * watcher (ADR-0045) can drop the app's own echoes. Optional so test
+   * fakes and non-watcher setups construct the manager unchanged.
+   */
+  private readonly ownWrites?: OwnWriteLedger;
+
+  constructor(ownWrites?: OwnWriteLedger) {
+    this.ownWrites = ownWrites;
     const configured = readConfig().activeVaultPath;
     // Don't trust a stale config blindly: the folder may have been moved,
     // renamed, or (if it lives on OneDrive/an external drive, see
@@ -154,6 +163,7 @@ export class VaultManager {
     await fsp.mkdir(path.dirname(filePath), { recursive: true });
     await fsp.writeFile(filePath, content, 'utf-8');
     const stat = await fsp.stat(filePath);
+    this.ownWrites?.recordWrite(relativePath, stat.mtimeMs);
     return stat.mtimeMs;
   }
 
@@ -186,6 +196,10 @@ export class VaultManager {
       name = `${baseName.slice(0, dot)}-${i}${baseName.slice(dot)}`;
     }
     await fsp.writeFile(path.join(absDir, name), bytes);
+    // Record the attachments folder: its own `addDir` echo (first paste
+    // ever) and every file event under it both match it -- the file via
+    // the ledger's directory-prefix rule.
+    this.ownWrites?.recordStructural(dirRelToVault);
     return `${ATTACHMENTS_DIR}/${name}`;
   }
 
@@ -273,6 +287,7 @@ export class VaultManager {
     }
     await fsp.mkdir(path.dirname(filePath), { recursive: true });
     await fsp.writeFile(filePath, '', { encoding: 'utf-8', flag: 'wx' });
+    this.ownWrites?.recordStructural(relativePath);
     return this.toRelative(filePath);
   }
 
@@ -283,6 +298,7 @@ export class VaultManager {
       throw new Error(`Already exists: ${relativePath}`);
     }
     await fsp.mkdir(dirPath, { recursive: true });
+    this.ownWrites?.recordStructural(relativePath);
     return this.toRelative(dirPath);
   }
 
@@ -298,6 +314,9 @@ export class VaultManager {
     if (!this.activeVaultPath || target === path.resolve(this.activeVaultPath)) {
       throw new Error('Refusing to delete the vault root.');
     }
+    // Before the rm: the watcher's unlink echoes arrive right behind it,
+    // and the record covers the children via the prefix rule.
+    this.ownWrites?.recordStructural(relativePath);
     await fsp.rm(target, { recursive: true, force: true });
     if (relativePath.toLowerCase().endsWith('.md')) {
       const sidecar = this.resolveInVault(sidecarPathFor(relativePath));
@@ -326,6 +345,9 @@ export class VaultManager {
     if (fs.existsSync(to)) {
       throw new Error(`Already exists: ${toRel}`);
     }
+    // Both ends: the source's unlink echo and the target's add echo.
+    this.ownWrites?.recordStructural(fromRel);
+    this.ownWrites?.recordStructural(toRel);
     await fsp.mkdir(path.dirname(to), { recursive: true });
     await fsp.rename(from, to);
     if (fromRel.toLowerCase().endsWith('.md') && toRel.toLowerCase().endsWith('.md')) {
@@ -374,6 +396,7 @@ export class VaultManager {
         await fsp.cp(sidecarSrc, sidecarDest, { force: false }).catch(() => undefined);
       }
     }
+    this.ownWrites?.recordStructural(this.toRelative(dest));
     return this.toRelative(dest);
   }
 

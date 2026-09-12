@@ -48,10 +48,19 @@ const plugin: MainPluginModule = {
       index.reindexFile(event.path, event.content);
     });
 
-    // Vault lifecycle -> full rebuild (refresh/select), removal on delete.
+    // Vault lifecycle -> full rebuild (refresh/select), removal on delete,
+    // single-file re-index on a scoped write (the watcher's per-file events
+    // and MCP writes land here -- same shape as the tasks plugin).
     ctx.vault.onChanged((event) => {
       if (event.kind === 'delete' && event.path !== undefined) {
         index.removeFile(event.path);
+        return;
+      }
+      if (event.kind === 'write' && event.path !== undefined) {
+        void ctx.vault
+          .read(event.path)
+          .then((content) => index.reindexFile(event.path as string, content))
+          .catch(() => index.removeFile(event.path as string));
         return;
       }
       if (event.kind === 'rename' && event.path !== undefined) {

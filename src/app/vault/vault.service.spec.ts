@@ -135,4 +135,90 @@ describe('VaultService', () => {
       await expect(service.duplicateEntry('a')).rejects.toThrow(/desktop app/);
     });
   });
+
+  describe('vault-change push / refresh round (ADR-0045)', () => {
+    interface Harness {
+      service: VaultService;
+      listCalls: () => number;
+      refreshCalls: () => number;
+      notify: () => void;
+    }
+
+    function harnessWith(): Harness {
+      TestBed.resetTestingModule();
+      let lists = 0;
+      let refreshes = 0;
+      let pushListener: (() => void) | null = null;
+      const api = {
+        getActiveVault: () => Promise.resolve('E:/vault'),
+        listVaultFiles: () => {
+          lists++;
+          return Promise.resolve([] as VaultFileEntry[]);
+        },
+        refreshVault: () => {
+          refreshes++;
+          // Mirror main: the round pushes before the invoke resolves.
+          pushListener?.();
+          return Promise.resolve();
+        },
+        onVaultChanged: (listener: () => void) => {
+          pushListener = listener;
+          return () => {
+            pushListener = null;
+          };
+        },
+      } as unknown as DreyApi;
+      window.dreyApi = api;
+      const service = TestBed.inject(VaultService);
+      return {
+        service,
+        listCalls: () => lists,
+        refreshCalls: () => refreshes,
+        notify: () => pushListener?.(),
+      };
+    }
+
+    it('refresh() routes through the main-process round and reloads via the push', async () => {
+      const h = harnessWith();
+      await Promise.resolve(); // the constructor's own refresh settles
+      const refreshesBefore = h.refreshCalls();
+      const listsBefore = h.listCalls();
+
+      await h.service.refresh();
+
+      expect(h.refreshCalls()).toBe(refreshesBefore + 1);
+      // The round's push (not the invoke) does the tree reload.
+      expect(h.listCalls()).toBe(listsBefore + 1);
+    });
+
+    it('reloads the tree when a push arrives', async () => {
+      const h = harnessWith();
+      await Promise.resolve();
+      const before = h.listCalls();
+
+      h.notify();
+      await Promise.resolve();
+      await Promise.resolve();
+
+      expect(h.listCalls()).toBeGreaterThan(before);
+    });
+
+    it('falls back to the plain pull when main predates refreshVault', async () => {
+      TestBed.resetTestingModule();
+      let lists = 0;
+      window.dreyApi = {
+        getActiveVault: () => Promise.resolve('E:/vault'),
+        listVaultFiles: () => {
+          lists++;
+          return Promise.resolve([] as VaultFileEntry[]);
+        },
+      } as unknown as DreyApi;
+      const service = TestBed.inject(VaultService);
+      await Promise.resolve();
+
+      await service.refresh();
+
+      expect(lists).toBeGreaterThanOrEqual(2); // constructor + refresh, both as pulls
+    });
+  });
 });

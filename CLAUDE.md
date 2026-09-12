@@ -97,11 +97,17 @@ toolchain is removable by deleting `.tools/`). Never assume a bare `node`,
   (the model id must stay hand-enterable).
 - sqlite-vec for vector search, transformers.js for embeddings (Phase 2,
   not part of the MVP).
-- **No file watcher.** A manual refresh re-reads the vault; the base fires
-  a vault-change event and the plugins re-index from it (vault-hook
-  registry). The app also refreshes after its own writes (save, first
-  daily-draft save, create/delete)
-  ([ADR-0018](docs/09_architecture_decisions/0018-manual-refresh-no-file-watcher.md)).
+- **Manual refresh, plus an opt-in watcher.** By default there is no file
+  watcher ([ADR-0018](docs/09_architecture_decisions/0018-manual-refresh-no-file-watcher.md)):
+  a manual refresh runs one full round in main (index rebuild + a
+  `vault:changed` renderer push), and the app refreshes after its own
+  writes (save, first daily-draft save, create/delete). The purely
+  additive watcher ADR-0018 left open now exists as an **opt-in**
+  (`vault.watch`, Settings → Vault, off by default —
+  [ADR-0045](docs/09_architecture_decisions/0045-optional-vault-file-watcher.md)):
+  chokidar + an own-write ledger (mtime matching, so the app's own saves
+  never echo) feed the same external-change round; clean open tabs
+  auto-reload from disk, dirty tabs stay last-writer-wins.
 - **Runtime plugin system**
   ([ADR-0044](docs/09_architecture_decisions/0044-runtime-plugin-system.md)):
   a **base application** (shell, editor + panes, vault/note IO, session
@@ -137,7 +143,18 @@ Main process:
 
 - `VaultManager` — vault registration, active vault, path resolution,
   `deleteEntry()` and `pickSavePath()` (native save dialog rooted at the
-  vault)
+  vault); every mutating method records itself in the own-write ledger so
+  the watcher can drop its own echoes
+- `VaultWatcher` + `OwnWriteLedger` +
+  `VaultChangeAnnouncer` (`electron/vault-watcher.ts`,
+  `own-write-ledger.ts`, `vault-change-announcer.ts`) — the opt-in vault
+  watcher ([ADR-0045](docs/09_architecture_decisions/0045-optional-vault-file-watcher.md)):
+  chokidar (injected via a `watchFactory`) → ledger suppression → one
+  debounced round (per-`.md` plugin vault-change events + the
+  `vault:changed` renderer push with changed paths). The same round backs
+  the manual refresh (`vault:refresh`) and MCP writes.
+  `EditorService.reloadFromVaultChange` auto-reloads **clean** tabs among
+  the changed paths; dirty tabs stay last-writer-wins
 - `electron/plugin-host/` — discovery (built-ins +
   `<userData>/plugins/*` + `DREY_EXTRA_PLUGIN_DIR`; manifest validation;
   `plugins.disabled` + `apiVersion` gating), main-side activation
@@ -274,9 +291,10 @@ Renderer (Angular):
   It is the body of `EntryPanel`, a movable dock panel (default home: the
   bottom dock) — no self-toggle button; `PanelFrame`'s chevron collapses it
 - `McpBridgeService` — renderer side of the vault MCP server: shows an
-  MCP client's `vault_write` in the shared confirmation diff and replies;
-  refreshes the file tree on the vault-change push (the plugins re-index
-  from the same push)
+  MCP client's `vault_write` in the shared confirmation diff and replies
+  (the tree/index refresh after that write rides the shared
+  `vault:changed` push, subscribed by `VaultService` for every change
+  source — ADR-0045)
   ([ADR-0021](docs/09_architecture_decisions/0021-mcp-vault-server.md))
 - `src/app/plugin-host/` — the renderer-side plugin host (ADR-0044):
   `plugin-host.service.ts` (activation before bootstrap, quarantine,
@@ -290,7 +308,8 @@ Renderer (Angular):
   "Spelling", "Appearance",
   [ADR-0020](docs/09_architecture_decisions/0020-app-wide-appearance-accent-and-ui-scale.md),
   "Panels & plugins" (`widgets.disabled` + `plugins.disabled` + each
-  discovered plugin's live status), and "MCP"; **plugin-contributed
+  discovered plugin's live status), "Vault" (`vault.watch`, the opt-in
+  external-change watcher, ADR-0045), and "MCP"; **plugin-contributed
   categories** append before "About" and render through
   `PluginSettingsHost`, saving immediately rather than via the footer bar
   (ADR-0044 rule 3). Opened from the status-bar entry.
@@ -345,7 +364,8 @@ be called out explicitly (see Working Style below), not introduced silently.
     — master-detail (category list on the left, detail pane on the
     right), core categories "LLM", "Add entry", "Daily notes",
     "Spelling", "Appearance" (app-wide base font size + highlight colour
-    + editor typeface, ADR-0020), "Panels & plugins" and "MCP"
+    + editor typeface, ADR-0020), "Panels & plugins", "Vault"
+    (ADR-0045) and "MCP"
     (ADR-0010; descriptor-driven list, ADR-0016); plugin-contributed
     categories (templates, assistant, actions) append before "About".
     The X sits top-right; Discard is always active and closes (with a

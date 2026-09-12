@@ -9,6 +9,7 @@ import { SettingsEntry } from './entry/settings-entry';
 import { SettingsLlm } from './llm/settings-llm';
 import { SettingsMcp } from './mcp/settings-mcp';
 import { SettingsSpellcheck } from './spellcheck/settings-spellcheck';
+import { SettingsVault } from './vault/settings-vault';
 import { SettingsCategory } from './settings-category';
 
 /**
@@ -95,6 +96,7 @@ const CORE_CATEGORIES: readonly SettingsCategory[] = [
     hint: 'Toggle panels & plugins',
     component: SettingsDockWidgets,
   },
+  { id: 'vault', label: 'Vault', hint: 'External change detection', component: SettingsVault },
   { id: 'mcp', label: 'MCP', hint: 'Vault server & tools', component: SettingsMcp },
   { id: 'about', label: 'About', hint: 'Version & licenses', component: SettingsAbout },
 ];

@@ -54,6 +54,7 @@ export const IPC_CHANNELS = {
   vaultDuplicate: 'vault:duplicate-entry',
   vaultDelete: 'vault:delete',
   vaultDeleteMany: 'vault:delete-many',
+  vaultRefresh: 'vault:refresh',
   draftSave: 'draft:save',
   vaultPickSavePath: 'vault:pick-save-path',
   dailyOpen: 'daily:open',
@@ -78,7 +79,10 @@ export const IPC_CHANNELS = {
   mcpStatus: 'mcp:status',
   mcpWriteRequest: 'mcp:write-request',
   mcpWriteDecision: 'mcp:write-decision',
-  mcpVaultChanged: 'mcp:vault-changed',
+  // Vault change push (ADR-0045): main -> renderer after any external or
+  // MCP write lands -- formerly the MCP-only 'mcp:vault-changed'. Carries
+  // the changed paths when a scoped reload is possible.
+  vaultChanged: 'vault:changed',
   // Session history (ADR-0043): a backup store under the user-data dir for
   // the text of tabs that have no file on disk (or unsaved edits), so they
   // survive a restart. The layout / tab list itself lives in the
@@ -108,6 +112,19 @@ export interface McpWriteRequest {
   before: string;
   after: string;
   mode: 'overwrite' | 'append';
+}
+
+/**
+ * Payload of the `vault:changed` push (ADR-0045): external vault changes
+ * landed (watcher batch, manual refresh, or an MCP write). `paths` lists
+ * the changed/deleted `.md` files, vault-relative and forward-slash, so
+ * consumers can scope their work -- `EditorService` auto-reloads the
+ * matching clean tabs. Omitted when the batch is too big to be worth
+ * listing (over 200 paths); consumers then treat the push as a full
+ * refresh and must not touch open tabs.
+ */
+export interface VaultChangedPush {
+  readonly paths?: readonly string[];
 }
 
 /**
@@ -505,6 +522,16 @@ export interface DreyApi {
   listVaultFiles(): Promise<VaultFileEntry[]>;
 
   /**
+   * Runs one full vault refresh round in main (ADR-0045): the plugins'
+   * indexes rebuild and a `vault:changed` push follows, so the tree,
+   * plugin panels and clean open tabs all reload from it. This is what
+   * the Files panel's refresh button invokes -- it fixes the old gap
+   * where a manual refresh re-pulled the tree but left the tag/task
+   * indexes stale. Harmless with no vault active.
+   */
+  refreshVault(): Promise<void>;
+
+  /**
    * Reads one file inside the active vault. `relativePath` is a
    * forward-slash path relative to the vault root (as delivered by
    * `listVaultFiles`). Rejects if no vault is active, if the path resolves
@@ -669,11 +696,13 @@ export interface DreyApi {
   resolveMcpWrite(id: number, approved: boolean): Promise<void>;
 
   /**
-   * Fires after an MCP `vault_write` changed a file, so the renderer can
-   * refresh the tag index / file tree (there is no file watcher, ADR-0018).
+   * Fires when vault changes have landed in main (ADR-0045): a watcher
+   * batch of external edits, a manual refresh, or an MCP `vault_write`.
+   * The payload's `paths` (when present) scope the reaction -- reload the
+   * file tree, re-pull panel data, auto-reload the matching clean tabs.
    * Returns an unsubscribe.
    */
-  onVaultChanged(listener: () => void): () => void;
+  onVaultChanged(listener: (push: VaultChangedPush) => void): () => void;
 
   // --- Session history (ADR-0043) ---------------------------------------
   //

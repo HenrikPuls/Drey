@@ -272,6 +272,56 @@ export class EditorService {
     return typeof window !== 'undefined' ? window.dreyApi : undefined;
   }
 
+  constructor() {
+    // External-change auto-reload (ADR-0045): the `vault:changed` push
+    // carries the changed `.md` paths; clean tabs among them re-read from
+    // disk here. Lives for the app's lifetime -- no teardown.
+    if (typeof window !== 'undefined' && typeof window.dreyApi?.onVaultChanged === 'function') {
+      window.dreyApi.onVaultChanged((push) => void this.reloadFromVaultChange(push.paths));
+    }
+  }
+
+  /**
+   * Re-reads every open **clean** text tab whose file is in `paths` from
+   * disk -- the renderer half of the watcher round (ADR-0045, req-14).
+   * Dirty tabs are untouched: last-writer-wins on save stays (ADR-0018's
+   * deferred conflict dialog is deliberately not built). A file that no
+   * longer exists flips its tab to draft semantics (`existsOnDisk: false`)
+   * -- the tab stays open and the next edit + save resurrects the file.
+   * `paths === undefined` (a full refresh -- huge batch or manual refresh)
+   * never touches tabs.
+   */
+  async reloadFromVaultChange(paths: readonly string[] | undefined): Promise<void> {
+    if (!paths || paths.length === 0 || typeof this.api?.readVaultFile !== 'function') {
+      return;
+    }
+    const changed = new Set(paths);
+    const targets = this.docs().filter(
+      (d) =>
+        d.kind === 'text' &&
+        d.existsOnDisk &&
+        changed.has(d.path) &&
+        d.bufferContent === d.savedContent,
+    );
+    for (const doc of targets) {
+      try {
+        const { content, modifiedMs } = await this.api.readVaultFile(doc.path);
+        // Same normalization as `makeDoc`: hold `\n` in the buffer, keep
+        // the file's dominant ending for the write-back.
+        const normalized = content.replace(/\r\n/g, '\n');
+        this.patchDoc(doc.path, {
+          savedContent: normalized,
+          bufferContent: normalized,
+          eol: content.includes('\r\n') ? '\r\n' : '\n',
+          modifiedMs,
+          existsOnDisk: true,
+        });
+      } catch {
+        this.patchDoc(doc.path, { existsOnDisk: false });
+      }
+    }
+  }
+
   /**
    * Opens a file in a tab. If it's already open, just activates that tab.
    * Never prompts -- a dirty buffer for another file stays in memory.

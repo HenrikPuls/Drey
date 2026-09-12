@@ -411,6 +411,18 @@ export interface McpConfig {
 export const MCP_PORT_MIN = 1024;
 export const MCP_PORT_MAX = 65535;
 
+/** Settings category "Vault": how the app keeps up with external changes. */
+export interface VaultConfig {
+  /**
+   * Watch the active vault for external changes (chokidar, ADR-0045) and
+   * turn them into the same refresh round a manual refresh runs: the
+   * plugins' indexes update, the file tree reloads, and clean open tabs
+   * re-read from disk (dirty tabs stay last-writer-wins). Off by default
+   * -- manual refresh stays the norm (ADR-0018).
+   */
+  watch: boolean;
+}
+
 export interface AppConfig {
   /** Bumped only on a breaking shape change; `normalizeAppConfig` migrates. */
   version: 1;
@@ -423,6 +435,7 @@ export interface AppConfig {
   entry: EntryConfig;
   daily: DailyConfig;
   templates: TemplatesConfig;
+  vault: VaultConfig;
   widgets: WidgetsConfig;
   plugins: PluginsConfig;
   actions: {

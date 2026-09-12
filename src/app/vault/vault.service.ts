@@ -25,9 +25,23 @@ export class VaultService {
 
   constructor() {
     void this.refresh();
+    // The vault-change push (ADR-0045): main announces external changes
+    // (watcher batch), a manual refresh, or an MCP write after its plugin
+    // index events -- the tree reload here is the renderer half of that
+    // round. Lives on the service so every panel follows along, wherever
+    // it is docked.
+    if (typeof window !== 'undefined' && typeof window.dreyApi?.onVaultChanged === 'function') {
+      window.dreyApi.onVaultChanged(() => void this.reloadFromPush());
+    }
   }
 
-  /** Re-reads the active vault path and, if one is set, its file tree. */
+  /**
+   * Re-reads the active vault path and, if one is set, its file tree.
+   * Asks main to run one full refresh round first (index rebuild + the
+   * `vault:changed` push this service subscribes to); the tree reload
+   * then happens via that push. Falls back to the plain pull on a main
+   * process from before ADR-0045.
+   */
   async refresh(): Promise<void> {
     // No bridge at all (plain `ng serve` / a test that doesn't stub it), or
     // a main process too old to expose `getActiveVault` -- nothing to load.
@@ -39,6 +53,20 @@ export class VaultService {
       return;
     }
 
+    try {
+      if (typeof window.dreyApi.refreshVault === 'function') {
+        // The push arrives (and the tree reload lands) before this resolves.
+        await window.dreyApi.refreshVault();
+        return;
+      }
+      await this.reloadFromPush();
+    } catch (err) {
+      this.error.set(err instanceof Error ? err.message : String(err));
+    }
+  }
+
+  /** The pull half: re-read the active vault and its file tree from disk. */
+  private async reloadFromPush(): Promise<void> {
     try {
       const activePath = await window.dreyApi.getActiveVault();
       this.activeVaultPath.set(activePath);

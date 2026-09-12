@@ -36,11 +36,14 @@ restore, keybindings, spellcheck, the MCP vault server, the LLM
   `plugins.disabled` + `apiVersion` gating), the host
   (`plugin-host.ts`: activate/quarantine, `plugin://` root resolution),
   per-plugin config store (`plugin-config-store.ts`).
-- Vault + note IO: `vault-manager.ts`, `note-manager.ts` (frontmatter
+- Vault + note IO: `vault-manager.ts` (mutations record themselves in the
+  own-write ledger), `note-manager.ts` (frontmatter
   bump + write; feature work rides the **save-hook / vault-hook
   registries**), `daily-note.ts`, `session/` (backup store),
-  `llm/` (transport: `lm-studio-client.ts`, debug log, task registry,
-  tag-suggest), `mcp/` (vault server; `vault_search` reads the
+  `own-write-ledger.ts` + `vault-watcher.ts` +
+  `vault-change-announcer.ts` (the opt-in external-change round,
+  ADR-0045), `llm/` (transport: `lm-studio-client.ts`, debug log, task
+  registry, tag-suggest), `mcp/` (vault server; `vault_search` reads the
   section-search provider the tags plugin registers).
 - `ipc/` — the base channel handlers (thin, feature-free).
 
@@ -304,6 +307,17 @@ electron/           Main process + preload (compiled to dist-electron/, CommonJS
   preload.ts        contextBridge exposure only -- no other logic
   vault-manager.ts  Active vault (persisted in userData), directory listing,
                      path-guarded file read/write, file/dir creation
+  own-write-ledger.ts OwnWriteLedger: records the app's own mutations (content
+                     writes as post-write mtimeMs, structural ops as path+TTL)
+                     so the watcher can drop its echoes (ADR-0045)
+  vault-watcher.ts  VaultWatcher: the opt-in chokidar watch over the active
+                     vault (ready gate, dot-ignore, awaitWriteFinish, debounce)
+                     -> one announcer round per external burst; chokidar itself
+                     is injected (watchFactory) so the class stays testable
+  vault-change-announcer.ts VaultChangeAnnouncer: one external-change round --
+                     per-file plugin vault-change events for .md + the
+                     vault:changed renderer push (ADR-0045); shared by watcher,
+                     manual refresh (vault:refresh) and MCP writes
   daily-note.ts     DailyNoteManager: ensureTodayNote() -- creates daily/<date>.md
                      from templates/daily.md (scaffolds a starter template on
                      first use); noteContentFor(date) -- substituted template
@@ -1726,8 +1740,10 @@ electron/mcp/
 - **Write confirmation bridge**: `main.ts`'s `ConfirmWrite` sends
   `mcp:write-request` to the renderer and awaits a `mcp:write-decision`
   reply (120s timeout / no window → reject). `McpBridgeService`
-  (renderer, started by `App`) runs it through `ConfirmationService` and
-  also refreshes the tag index / file tree on `mcp:vault-changed`.
+  (renderer, started by `App`) runs it through `ConfirmationService`;
+  the tree/index refresh after a write rides the shared `vault:changed`
+  push now (ADR-0045), which `VaultService` subscribes to for every
+  change source.
   Skipped entirely when `mcp.yolo`.
 - **Config**: `mcp: { enabled, httpEnabled, httpPort, yolo }` in
   `app-config.json`; `syncMcpHttpTransport` opens/closes the socket on
@@ -1836,9 +1852,10 @@ A third feature-module trio, shaped like the tag stack (§5.14):
   `byPath` map, same `templates/` + configured-folder exclusion, `daily/`
   included; `rebuild()` on vault open / refresh / rename / copy /
   duplicate / templates-dir change, `reindexFile()` from `NoteManager` on
-  `note:save`, `removeFile()` on delete; `all()` backs `tasks:list`. No
-  file watcher (ADR-0018) — external edits show in vault scope only after
-  the next rebuild.
+  `note:save` and (with a re-read) on a scoped `write` vault-change event,
+  `removeFile()` on delete; `all()` backs `tasks:list`. With the watcher
+  off (ADR-0018/0045) external edits show in vault scope only after the
+  next rebuild; with it on they arrive as per-file vault-change events.
 - **`src/app/tasks/` (barrel)** — `TaskService` + `TasksPanel`:
   - `TaskService` holds `scope` (`'document' | 'vault'`), `hideDone`,
     `kinds`, plus the req-8 filter `queryTags` / `queryText`
