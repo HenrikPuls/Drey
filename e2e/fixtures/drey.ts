@@ -141,7 +141,21 @@ export const test = base.extend<DreyFixtures>({
 
     await use(app);
 
-    await app.close();
+    // The save-before-exit prompt (bug-5): a test that leaves a dirty
+    // document makes main's intercepted close show the exit dialog, which
+    // would hang `app.close()` forever with nobody to answer it. Race the
+    // close against a click on "Exit without saving" -- the session backups
+    // (ADR-0043) already keep those buffers restorable, which is exactly
+    // what that button promises. For a clean exit the click finds nothing
+    // and times out into the void.
+    const closing = app.close().catch(() => undefined);
+    const win = app.windows()[0];
+    await win
+      ?.locator('app-exit-confirm-dialog .dialog button', { hasText: 'Exit without saving' })
+      .click({ timeout: 5_000 })
+      .catch(() => undefined);
+    await closing;
+
     fs.rmSync(userDataDir, { recursive: true, force: true });
   },
 
