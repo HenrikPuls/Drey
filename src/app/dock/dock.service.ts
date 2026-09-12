@@ -1,5 +1,6 @@
 import { Injectable, computed, effect, inject, signal } from '@angular/core';
 import { endDragChrome, moveDragChrome, startDragChrome } from '../dnd';
+import { PaneService } from '../panes/pane.service';
 import { LayoutGestureService } from '../services/layout-gesture.service';
 import { SettingsService } from '../services/settings.service';
 import { WidgetId, type WidgetDescriptor } from './widget-registry';
@@ -74,6 +75,8 @@ export class DockService {
   private readonly settings = inject(SettingsService);
   private readonly layoutGesture = inject(LayoutGestureService);
   private readonly registry = inject(WidgetRegistryService);
+  /** Owns the editor band's side + height (ADR-0038) -- a read-only consumer here. */
+  private readonly panes = inject(PaneService);
   private readonly state = signal<DockState>(this.read());
 
   /** The panel being dragged by its header, else null. */
@@ -591,6 +594,27 @@ export class DockService {
     }
     this.beginPointerGesture(event, 'col-resize', (ev) => {
       this.setDockWidth(side, side === 'left' ? ev.clientX : window.innerWidth - ev.clientX);
+    });
+  }
+
+  /**
+   * The editor band's splitter (ADR-0038): grows the band as the pointer
+   * moves up, anchored on the band's own bottom edge -- the widget list
+   * below just flexes. Height state lives in `PaneService`.
+   */
+  startEditorBandResize(side: DockSide, event: PointerEvent): void {
+    if (event.button !== 0) {
+      return;
+    }
+    event.preventDefault();
+    event.stopPropagation();
+    const band = (event.target as HTMLElement).previousElementSibling as HTMLElement | null;
+    const anchor = band?.getBoundingClientRect().bottom;
+    if (anchor === undefined) {
+      return;
+    }
+    this.beginPointerGesture(event, 'row-resize', (ev) => {
+      this.panes.setBandHeight(side, anchor - ev.clientY);
     });
   }
 

@@ -1,5 +1,24 @@
-@if (isEmpty() && dock.dragActive()) {
+@if (isEmpty() && !bandPaneId() && dock.dragActive()) {
   <div class="drop-hint">Drop a panel here</div>
+}
+
+@if (bandPaneId(); as bpid) {
+  <div
+    class="editor-band"
+    [class.resizes]="ids().length > 0"
+    [style.flexBasis.px]="ids().length > 0 ? panes.bandHeight(side()) : null"
+  >
+    <div class="head" role="button" tabindex="0" (mousedown)="panes.focus(bpid)">
+      <span class="title">{{ bandTitle(bpid) }}</span>
+      <span class="grip" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i></span>
+    </div>
+    <div class="band-pane">
+      <ng-container *ngComponentOutlet="bandLeaf(); inputs: { paneId: bpid }" />
+    </div>
+  </div>
+  @if (ids().length > 0) {
+    <div class="split" title="Drag to resize" (pointerdown)="dock.startEditorBandResize(side(), $event)"></div>
+  }
 }
 
 @for (id of ids(); track id; let i = $index, count = $count) {

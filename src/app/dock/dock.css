@@ -78,3 +78,75 @@ app-panel-frame {
 .split:hover {
   background: var(--resize-hover);
 }
+
+/* --- The dock's editor band (ADR-0038) --------------------------------
+   One pane living in the dock, above the widget stack: a 32px header
+   (title = the pane's active tab name) over that pane's own PaneLeaf.
+   Same chrome as the widget panel headers (panel-frame.css), minus the
+   collapse behaviour and the uppercase -- a document name, not a label.
+   With no widget below, the band flexes to fill the dock; the stored px
+   height applies again once a widget arrives. */
+.editor-band {
+  flex: 1 1 0%;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  border-bottom: 1px solid var(--border);
+  overflow: hidden;
+}
+
+.editor-band.resizes {
+  flex: 0 0 auto;
+}
+
+.editor-band .head {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  flex: none;
+  height: var(--panel-head-h);
+  padding: 0 10px 0 12px;
+  color: var(--text-4);
+  cursor: grab;
+  user-select: none;
+  outline: none;
+}
+
+.editor-band .head:hover,
+.editor-band .head:focus-visible {
+  color: var(--text-2);
+}
+
+.editor-band .title {
+  flex: none;
+  max-width: calc(100% - 24px);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-family: var(--font-mono);
+  font-size: var(--fs-mono-title);
+  letter-spacing: var(--ls-mono-title);
+}
+
+.editor-band .grip {
+  margin-left: auto;
+  flex: none;
+  display: grid;
+  grid-template-columns: repeat(2, 2px);
+  gap: 2px;
+  opacity: 0.3;
+}
+
+.editor-band .grip i {
+  width: 2px;
+  height: 2px;
+  border-radius: 50%;
+  background: currentColor;
+}
+
+.editor-band .band-pane {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}

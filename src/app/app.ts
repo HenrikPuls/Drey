@@ -1,4 +1,4 @@
-import { Component, effect, inject } from '@angular/core';
+import { Component, computed, effect, inject } from '@angular/core';
 import { formatDate } from '../../shared/timestamp';
 import { ImageLightbox } from './image-viewer';
 import { ConfirmationDialog } from './confirmation-dialog/confirmation-dialog';
@@ -60,6 +60,8 @@ export class App {
   protected readonly dock = inject(DockService);
   protected readonly panes = inject(PaneService);
   private readonly vault = inject(VaultService);
+
+  /** The pane docked in each dock's editor band -- extends the dock render gates beyond widgets. */
 
   /** Guards the one-shot "open today's daily note on startup" effect. */
   private dailyNoteStartupDone = false;
