@@ -25,6 +25,7 @@ import { ImageLightboxService } from '../../image-viewer';
 import { VaultService } from '../../vault';
 import { ThemeService } from '../../services/theme.service';import { ThemeCatalogEntry } from '../themes/theme-catalog';
 import { dreyEditorLook, editorStructure } from '../editor-theme';
+import { editorIndentation } from '../editor-indent';
 import { imagePaste } from '../image-paste';
 import {
   frontmatterExpandedOf,
@@ -356,6 +357,10 @@ export class MarkdownSurface implements AfterViewInit, OnDestroy {
           this.compact() && this.submitOnEnter()
             ? Prec.highest(keymap.of(this.submitKeymap()))
             : [],
+          // Tab = insert a tab / indent the selection (bug-9); above
+          // basicSetup, which ships no Tab binding at all -- unbound, the
+          // key fell through to the browser's focus navigation.
+          editorIndentation,
           basicSetup,
           // The language grammar + (for Markdown) the `#tag` autocomplete /
           // pills / link activation / spellcheck / frontmatter fold. Seeded

@@ -569,3 +569,17 @@ disk read. Persist runs off one debounced effect + `beforeunload` /
 `visibilitychange` flushes; backups are reference-counted and orphans
 pruned on launch. Browser tabs restore under their exact `browser://<n>`
 key. New feature modules `electron/session/` + `src/app/session/`.
+
+bug-9 — Tab inside the editor moved keyboard focus to the next control
+instead of inserting anything: `basicSetup` ships no Tab binding at all
+(`indentWithTab` is not part of it), so the unbound key fell through to the
+browser's focus navigation. `Tab` is now bound on the shared
+`MarkdownSurface` (`src/app/editor/editor-indent.ts`, `Prec.highest` so
+plugin-contributed keymaps can't shadow it): an empty caret inserts a
+literal tab character, a selection indents the selected lines
+(`indentMore`), Shift+Tab outdents (`indentLess`); the indent unit is a
+literal tab. The binding is gated on `view.editable`, so the read-only
+assistant composer stays inert. Deliberate a11y tradeoff (project owner's
+call): Tab no longer leaves the editor — `F6` / `Shift+F6` (pane focus)
+remain the way out. Covers the full-page editor and the "Add entry" drawer
+body (same surface).
