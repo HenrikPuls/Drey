@@ -50,6 +50,7 @@ export const IPC_CHANNELS = {
   vaultCopy: 'vault:copy-entry',
   vaultDuplicate: 'vault:duplicate-entry',
   vaultDelete: 'vault:delete',
+  vaultDeleteMany: 'vault:delete-many',
   vaultPickSavePath: 'vault:pick-save-path',
   dailyOpen: 'daily:open',
   dailyBuildContent: 'daily:build-content',
@@ -532,6 +533,15 @@ export interface DreyApi {
    * or a real filesystem failure.
    */
   deleteVaultEntry(relativePath: string): Promise<void>;
+
+  /**
+   * Deletes several files / folders (recursively) inside the active vault in
+   * one round trip -- the Files panel's multi-select delete (bug-8). Same
+   * per-path rules as `deleteVaultEntry`; overlapping paths (a folder and a
+   * file inside it) are fine because a missing target is not an error. One
+   * vault-change re-index fires for the whole batch, not per path.
+   */
+  deleteVaultEntries(relativePaths: string[]): Promise<void>;
 
   /**
    * Opens the native "Save note" dialog rooted at the vault. Resolves to

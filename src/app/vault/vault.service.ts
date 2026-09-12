@@ -121,10 +121,20 @@ export class VaultService {
    * rather than blanking the whole list.
    */
   async deleteEntry(relativePath: string): Promise<void> {
-    if (typeof window === 'undefined' || !window.dreyApi?.deleteVaultEntry) {
+    await this.deleteEntries([relativePath]);
+  }
+
+  /**
+   * Deletes several files / folders in one round trip and reloads the tree
+   * once (the Files panel's multi-select delete, bug-8). The main process
+   * fires a single vault-change re-index for the whole batch; per-path
+   * errors propagate to the caller like `deleteEntry`.
+   */
+  async deleteEntries(relativePaths: string[]): Promise<void> {
+    if (typeof window === 'undefined' || !window.dreyApi?.deleteVaultEntries) {
       return;
     }
-    await window.dreyApi.deleteVaultEntry(relativePath);
+    await window.dreyApi.deleteVaultEntries(relativePaths);
     await this.loadFileTree();
   }
 

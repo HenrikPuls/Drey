@@ -592,3 +592,17 @@ focus stayed on the originally-clicked row and Enter natively re-activated
 (roving `tabindex`, focus-follow in `select()`), so Enter/Space activate the
 highlighted row; as a side effect the tree collapses to a single Tab stop
 instead of one per row.
+
+bug-8 — the Files panel gained a **multi-selection** (project request):
+Ctrl+click toggles rows into the set, Shift+click / Shift+arrow extend a
+range over the visible rows, Ctrl+arrow moves the cursor without changing
+the selection, Escape collapses back to the cursor row, and right-clicking
+inside a multi-selection makes the context menu act on all of it (outside
+one, it collapses to the right-clicked row, so Delete can't surprise).
+Enter opens every selected file (folders skipped), Delete removes the whole
+selection after one count-aware `confirm` — as a single batched IPC call
+(`vault:delete-many`, one vault-change re-index for the whole batch, not
+per path). Tab-close and clipboard invalidation run per deleted path; a
+selection row that lived under a deleted folder is deselected. Dragging a
+row still carries that single row's path (multi-file drag stays with
+req-23).

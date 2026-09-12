@@ -87,6 +87,18 @@ export function registerVaultHandlers({
     // entries from the deleted file until the next full rebuild.
     await rebuildIndexes();
   });
+  // Multi-select delete (bug-8): one round trip, one re-index for the whole
+  // batch. Missing targets are not errors, so overlapping paths (a folder
+  // and a file inside it) just work.
+  ipcMain.handle(
+    IPC_CHANNELS.vaultDeleteMany,
+    async (_event, relativePaths: string[]): Promise<void> => {
+      for (const relativePath of relativePaths) {
+        await vaultManager.deleteEntry(relativePath);
+      }
+      await rebuildIndexes();
+    },
+  );
   // Rename / copy / duplicate can move `.md` content in or out of the
   // indexes' scope, so each rebuilds them (same reason as `vault:delete`).
   ipcMain.handle(

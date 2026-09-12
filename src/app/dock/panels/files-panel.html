@@ -146,10 +146,10 @@
       <button
         type="button"
         class="node folder"
-        [class.selected]="selected() === entry.relativePath"
+        [class.selected]="selection().has(entry.relativePath)"
         [attr.tabindex]="selected() === entry.relativePath ? 0 : -1"
         [style.padding-left.px]="8 + depth * 13"
-        (click)="onFolderClick(entry)"
+        (click)="onFolderClick(entry, $event)"
         (contextmenu)="openMenu($event, entry)"
       >
         <app-icon
@@ -173,10 +173,10 @@
         class="node file"
         draggable="true"
         [class.active]="editor.openPath() === entry.relativePath"
-        [class.selected]="selected() === entry.relativePath"
+        [class.selected]="selection().has(entry.relativePath)"
         [attr.tabindex]="selected() === entry.relativePath ? 0 : -1"
         [style.padding-left.px]="8 + depth * 13"
-        (click)="onFileClick(entry)"
+        (click)="onFileClick(entry, $event)"
         (dragstart)="onFileDragStart($event, entry)"
         (contextmenu)="openMenu($event, entry)"
       >

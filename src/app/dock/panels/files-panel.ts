@@ -69,6 +69,18 @@ export class FilesPanel {
   protected readonly selected = signal<string | null>(null);
 
   /**
+   * The multi-selection (bug-8): every highlighted `relativePath`, cursor
+   * row included. A plain click / plain arrow key collapses it back to
+   * `{selected}`; Ctrl+click toggles rows and Shift+click / Shift+arrow
+   * extend a range over the visible rows (the anchor is where the range
+   * grows from).
+   */
+  protected readonly selection = signal<ReadonlySet<string>>(new Set());
+
+  /** The row a Shift-range extends from (the last plain-selected row). */
+  private readonly anchor = signal<string | null>(null);
+
+  /**
    * `vault.fileTree()` flattened to the rows that are actually visible
    * (a folder's children are dropped while it is collapsed), in display
    * order -- the model the arrow keys step through.
@@ -161,16 +173,24 @@ export class FilesPanel {
     this.collapsed.set(paths);
   }
 
-  protected onFolderClick(entry: VaultFileEntry): void {
-    this.selected.set(entry.relativePath);
-    this.toggleFolder(entry.relativePath);
+  protected onFolderClick(entry: VaultFileEntry, event?: MouseEvent): void {
+    const mod = pointerModifiers(event);
+    this.applyPointerSelection(entry, mod);
+    // Ctrl/Shift clicks adjust the selection only -- they must not fold the
+    // folder out from under the user.
+    if (!mod?.shiftKey && !mod?.ctrlKey) {
+      this.toggleFolder(entry.relativePath);
+    }
   }
 
   /**
    * File-explorer keyboard navigation on the tree container: Up/Down move
-   * the selection one visible row, Right/Left expand/collapse a folder (or
-   * step in/out), Enter/Space open a file or toggle a folder. Every handled
-   * key calls `preventDefault()` so the container does not also scroll.
+   * the cursor one visible row (Shift extends the selection's range, Ctrl
+   * moves the cursor alone), Right/Left expand/collapse a folder (or step
+   * in/out), Enter opens the cursor file -- every selected file, when the
+   * selection is multi-row -- and Space toggles a folder, Delete deletes the
+   * selection. Every handled key calls `preventDefault()` so the container
+   * does not also scroll.
    */
   protected onTreeKeydown(event: KeyboardEvent): void {
     const nodes = this.visibleNodes();
@@ -179,15 +199,16 @@ export class FilesPanel {
     }
     const idx = nodes.findIndex((n) => n.entry.relativePath === this.selected());
     const current = idx >= 0 ? nodes[idx].entry : null;
+    const mod = { shiftKey: event.shiftKey, ctrlKey: event.ctrlKey || event.metaKey };
 
     switch (event.key) {
       case 'ArrowDown':
         event.preventDefault();
-        this.selectAt(nodes, idx < 0 ? 0 : Math.min(idx + 1, nodes.length - 1));
+        this.selectAt(nodes, idx < 0 ? 0 : Math.min(idx + 1, nodes.length - 1), mod);
         break;
       case 'ArrowUp':
         event.preventDefault();
-        this.selectAt(nodes, idx < 0 ? nodes.length - 1 : Math.max(idx - 1, 0));
+        this.selectAt(nodes, idx < 0 ? nodes.length - 1 : Math.max(idx - 1, 0), mod);
         break;
       case 'ArrowRight': {
         event.preventDefault();
@@ -201,7 +222,7 @@ export class FilesPanel {
           } else {
             const child = nodes[idx + 1];
             if (child && child.entry.relativePath.startsWith(`${current.relativePath}/`)) {
-              this.selectAt(nodes, idx + 1);
+              this.selectAt(nodes, idx + 1, mod);
             }
           }
         }
@@ -224,38 +245,138 @@ export class FilesPanel {
         break;
       }
       case 'Enter':
-      case ' ':
+      case ' ': {
+        const multi = this.selection().size > 1;
         // A focused node <button> activates itself -- only act here when the
-        // scroll container itself has focus, to avoid a double toggle.
-        if (!current || event.target !== event.currentTarget) {
+        // scroll container itself has focus, or when the selection is
+        // multi-row (native activation would open just the focused row).
+        if (!current || (event.target !== event.currentTarget && !multi)) {
           break;
         }
         event.preventDefault();
+        if (multi && event.key === 'Enter') {
+          this.openSelection(nodes);
+          break;
+        }
         if (current.type === 'directory') {
           this.toggleFolder(current.relativePath);
         } else {
           this.onFileClick(current);
         }
         break;
+      }
+      case 'Delete': {
+        event.preventDefault();
+        const targets = this.selectedEntries(nodes);
+        if (targets.length > 0) {
+          void this.deleteEntries(targets);
+        }
+        break;
+      }
     }
   }
 
-  private selectAt(nodes: { entry: VaultFileEntry }[], i: number): void {
+  private selectAt(
+    nodes: { entry: VaultFileEntry }[],
+    i: number,
+    mod?: { shiftKey: boolean; ctrlKey: boolean },
+  ): void {
     const entry = nodes[i]?.entry;
-    if (entry) {
+    if (!entry) {
+      return;
+    }
+    if (mod?.ctrlKey) {
+      // Ctrl+Arrow: move the keyboard cursor; the selection set stays put.
+      this.selected.set(entry.relativePath);
+      this.followFocus();
+    } else if (mod?.shiftKey && this.anchor()) {
+      this.selected.set(entry.relativePath);
+      this.selection.set(this.rangeOver(nodes, this.anchor()!, entry.relativePath));
+      this.followFocus();
+    } else {
       this.select(entry.relativePath);
     }
   }
 
   private select(path: string): void {
     this.selected.set(path);
-    // Wait for the `.selected` class to land, then keep the row in view and
-    // move DOM focus onto it (bug-7): rows are `<button>`s, so Enter/Space
-    // activate whatever row holds focus -- without this, focus stayed on the
-    // originally-clicked row and Enter re-activated *that* instead of the
-    // highlighted one. Roving tabindex keeps the tree at one tab stop.
+    this.selection.set(new Set([path]));
+    this.anchor.set(path);
+    this.followFocus();
+  }
+
+  /**
+   * Ctrl+click toggles a row in the set; Shift+click extends the range from
+   * the anchor; anything plain collapses back to the single clicked row.
+   */
+  private applyPointerSelection(
+    entry: VaultFileEntry,
+    mod?: { shiftKey: boolean; ctrlKey: boolean },
+  ): void {
+    if (mod?.ctrlKey) {
+      const next = new Set(this.selection());
+      if (next.has(entry.relativePath)) {
+        next.delete(entry.relativePath);
+      } else {
+        next.add(entry.relativePath);
+      }
+      this.selection.set(next);
+      this.selected.set(entry.relativePath);
+      this.anchor.set(entry.relativePath);
+      return;
+    }
+    if (mod?.shiftKey) {
+      const anchor = this.anchor() ?? entry.relativePath;
+      this.selected.set(entry.relativePath);
+      this.selection.set(this.rangeOver(this.visibleNodes(), anchor, entry.relativePath));
+      return;
+    }
+    this.select(entry.relativePath);
+  }
+
+  /** The paths from `from` to `to`, both included, over the visible rows. */
+  private rangeOver(
+    nodes: { entry: VaultFileEntry }[],
+    from: string,
+    to: string,
+  ): ReadonlySet<string> {
+    const i = nodes.findIndex((n) => n.entry.relativePath === from);
+    const j = nodes.findIndex((n) => n.entry.relativePath === to);
+    if (i < 0 || j < 0) {
+      return new Set([to]);
+    }
+    const [lo, hi] = i <= j ? [i, j] : [j, i];
+    return new Set(nodes.slice(lo, hi + 1).map((n) => n.entry.relativePath));
+  }
+
+  /** The visible entries currently in the multi-selection (cursor row only when single). */
+  private selectedEntries(nodes: { entry: VaultFileEntry }[]): VaultFileEntry[] {
+    const selection = this.selection();
+    if (selection.size <= 1) {
+      return nodes.filter((n) => n.entry.relativePath === this.selected()).map((n) => n.entry);
+    }
+    return nodes.filter((n) => selection.has(n.entry.relativePath)).map((n) => n.entry);
+  }
+
+  /** Opens every selected *file*; folders in the selection are skipped. */
+  private openSelection(nodes: { entry: VaultFileEntry }[]): void {
+    for (const entry of this.selectedEntries(nodes)) {
+      if (entry.type === 'file') {
+        void this.editor.openFile(entry.relativePath);
+      }
+    }
+  }
+
+  /**
+   * Wait for the `.selected` class to land, then keep the cursor row in view
+   * and move DOM focus onto it (bug-7): rows are `<button>`s, so Enter/Space
+   * activate whatever row holds focus -- without this, focus stayed on the
+   * originally-clicked row and Enter re-activated *that* instead of the
+   * highlighted one. Roving tabindex keeps the tree at one tab stop.
+   */
+  private followFocus(): void {
     setTimeout(() => {
-      const row = this.host.querySelector<HTMLElement>('.node.selected');
+      const row = this.host.querySelector<HTMLElement>('.node.selected[tabindex="0"]');
       row?.scrollIntoView({ block: 'nearest' });
       row?.focus({ preventScroll: true });
     }, 0);
@@ -275,9 +396,13 @@ export class FilesPanel {
     void this.vault.refresh();
   }
 
-  protected onFileClick(entry: VaultFileEntry): void {
-    if (entry.type === 'file') {
-      this.selected.set(entry.relativePath);
+  protected onFileClick(entry: VaultFileEntry, event?: MouseEvent): void {
+    if (entry.type !== 'file') {
+      return;
+    }
+    const mod = pointerModifiers(event);
+    this.applyPointerSelection(entry, mod);
+    if (!mod?.shiftKey && !mod?.ctrlKey) {
       void this.editor.openFile(entry.relativePath);
     }
   }
@@ -303,6 +428,12 @@ export class FilesPanel {
     }
     event.preventDefault();
     event.stopPropagation();
+    // Right-clicking outside a multi-selection collapses it onto that row,
+    // so "Delete" can't surprise-delete rows the user doesn't see. Inside a
+    // multi-selection the menu acts on all of it (see `onDelete`).
+    if (entry && this.selection().size > 1 && !this.selection().has(entry.relativePath)) {
+      this.select(entry.relativePath);
+    }
     const dir = !entry
       ? ''
       : entry.type === 'directory'
@@ -440,20 +571,54 @@ export class FilesPanel {
     if (!entry) {
       return;
     }
-    const what = entry.type === 'directory' ? 'folder' : 'file';
-    if (!confirm(`Delete ${what} "${entry.relativePath}"? This cannot be undone.`)) {
+    // Right-clicking inside a multi-selection deletes the whole selection;
+    // anywhere else it stays a single-entry delete.
+    const selection = this.selection();
+    const targets =
+      selection.size > 1 && selection.has(entry.relativePath)
+        ? this.selectedEntries(this.visibleNodes())
+        : [entry];
+    await this.deleteEntries(targets);
+  }
+
+  /** One `confirm`, per-path tab/clipboard cleanup, one batched IPC delete. */
+  private async deleteEntries(entries: VaultFileEntry[]): Promise<void> {
+    if (entries.length === 0) {
       return;
     }
-    this.editor.closeTabsUnder(entry.relativePath);
-    const clip = this.vault.clipboard()?.path;
-    if (clip && (clip === entry.relativePath || clip.startsWith(`${entry.relativePath}/`))) {
-      this.vault.clipboard.set(null);
+    const what =
+      entries.length === 1
+        ? entries[0].type === 'directory'
+          ? 'folder'
+          : 'file'
+        : `${entries.length} items`;
+    const names = entries.map((entry) => `"${entry.relativePath}"`).join(', ');
+    if (!confirm(`Delete ${what} ${names}? This cannot be undone.`)) {
+      return;
+    }
+    for (const entry of entries) {
+      this.editor.closeTabsUnder(entry.relativePath);
+      const clip = this.vault.clipboard()?.path;
+      if (clip && (clip === entry.relativePath || clip.startsWith(`${entry.relativePath}/`))) {
+        this.vault.clipboard.set(null);
+      }
     }
     try {
-      await this.vault.deleteEntry(entry.relativePath);
+      await this.vault.deleteEntries(entries.map((entry) => entry.relativePath));
     } catch (err) {
       alert(err instanceof Error ? err.message : String(err));
     }
+    // Deselect whatever lived under a deleted path (the tree reloads without
+    // it; a stale cursor would point at a ghost row).
+    const selected = this.selected();
+    if (
+      selected &&
+      entries.some((entry) => selected === entry.relativePath || selected.startsWith(`${entry.relativePath}/`))
+    ) {
+      this.selected.set(null);
+      this.anchor.set(null);
+    }
+    this.selection.set(new Set());
   }
 
   protected async commitCreate(rawName: string): Promise<void> {
@@ -490,10 +655,25 @@ export class FilesPanel {
     this.menu.set(null);
     this.vaultMenuOpen.set(false);
     this.renaming.set(null);
+    // A second Escape (or one with no menu open) collapses a multi-selection
+    // back to the cursor row.
+    const selected = this.selected();
+    if (this.selection().size > 1 && selected) {
+      this.selection.set(new Set([selected]));
+      this.anchor.set(selected);
+    }
   }
 }
 
 function parentDir(relativePath: string): string {
   const i = relativePath.lastIndexOf('/');
   return i === -1 ? '' : relativePath.slice(0, i);
+}
+
+/** The modifier half of a pointer event that adjusts the selection. */
+function pointerModifiers(event?: MouseEvent): { shiftKey: boolean; ctrlKey: boolean } | undefined {
+  if (!event) {
+    return undefined;
+  }
+  return { shiftKey: event.shiftKey, ctrlKey: event.ctrlKey || event.metaKey };
 }
