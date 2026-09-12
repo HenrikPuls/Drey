@@ -75,4 +75,16 @@ describe('InputRecoveryService', () => {
       document.hasFocus = origHasFocus;
     }
   });
+
+  it('recover() asks main to close a stuck native popup (bug-6)', async () => {
+    const recoverInputFocus = vi.fn().mockResolvedValue(true);
+    (window as { dreyApi?: unknown }).dreyApi = { recoverInputFocus };
+    try {
+      recovery.recover('test');
+      expect(recoverInputFocus).toHaveBeenCalledTimes(1);
+      await Promise.resolve(); // let the floating .then (logging) settle
+    } finally {
+      delete (window as { dreyApi?: unknown }).dreyApi;
+    }
+  });
 });

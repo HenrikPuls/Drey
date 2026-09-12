@@ -451,20 +451,30 @@ function startImageResize(view: EditorView, grip: HTMLElement, event: PointerEve
   const prevSelect = document.body.style.userSelect;
   document.body.style.cursor = 'nwse-resize';
   document.body.style.userSelect = 'none';
+  // The input-recovery watchdog reads this marker: `user-select:none` on
+  // <body> is only legitimate while a gesture flag is set (ADR-0032).
+  document.body.setAttribute('data-drey-gesture', 'image-resize');
 
   let liveWidth = clampEmbedWidth(startWidth);
+  let ended = false;
   const move = (ev: PointerEvent): void => {
     liveWidth = clampEmbedWidth(startWidth + (ev.clientX - startX));
     img.style.width = `${liveWidth}px`;
     img.style.height = ''; // width-only: aspect ratio comes from the image
   };
   const end = (): void => {
+    if (ended) {
+      return; // pointerup + blur can both land; one teardown only
+    }
+    ended = true;
     grip.releasePointerCapture?.(event.pointerId);
     window.removeEventListener('pointermove', move);
     window.removeEventListener('pointerup', end);
     window.removeEventListener('pointercancel', end);
+    window.removeEventListener('blur', end);
     document.body.style.cursor = prevCursor;
     document.body.style.userSelect = prevSelect;
+    document.body.removeAttribute('data-drey-gesture');
 
     if (parseImageEmbed(startAlt).width !== liveWidth) {
       view.dispatch({
@@ -475,4 +485,7 @@ function startImageResize(view: EditorView, grip: HTMLElement, event: PointerEve
   window.addEventListener('pointermove', move);
   window.addEventListener('pointerup', end);
   window.addEventListener('pointercancel', end);
+  // A pointerup lost to an alt-tab must not leave `user-select: none`
+  // stuck on <body> (bug-6); the `ended` guard keeps the single rewrite.
+  window.addEventListener('blur', end);
 }

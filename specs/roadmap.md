@@ -429,7 +429,6 @@ Or Description => Jira (Creates a ticket from the description and returns the li
 )
 req-19: Integrate draw.io view and edit
 bug-5: when the program is exited it should ask the user if he would like to save dirty documents, cancel or exit without saving
-bug-6: still there are problems with the focus also for the drowpdown boxes in appearance settings tab theme and editor. Normally it works fine however when things get stuck thos can not be changed any longer
 req-20 [[]] links shoudl work in the document
 req-21 dataview.js support
 req-22 integrate ical calender support. I would like to have in the context menu add meeting log, and then i would like to have a drop down of all apointments for that specific day, the one in which the current time falls shall be preselected, If i select one the meeting documentation like we did it with the drag and drop shall be used.
@@ -592,6 +591,30 @@ focus stayed on the originally-clicked row and Enter natively re-activated
 (roving `tabindex`, focus-follow in `select()`), so Enter/Space activate the
 highlighted row; as a side effect the tree collapses to a single Tab stop
 instead of one per row.
+
+bug-6 — intermittent stuck input in the packaged build (no field accepts
+text, the Appearance dropdowns stop changing, mouse still works, only a
+restart clears it; the Appearance `<select>` blur that closed an open
+dropdown under the user was one visible symptom). **Root cause remains
+unconfirmed** — the renderer's DOM was exonerated (the keybinding service is
+stateless exact-chord matching and never swallows unmatched keys; no focus
+trap exists; `user-select: none` does not block typing) — so this pass is
+hardening + diagnosability at every plausible layer:
+(1) two pointer gestures that set `body { user-select: none }` without the
+`data-drey-gesture` marker and without window-blur cleanup — the pane
+splitter and the Live-Preview image resize — now carry the marker and end
+themselves on window blur, so an alt-tab mid-drag can no longer leak the
+style, and the input-recovery watchdog no longer false-positives mid-gesture
+(its `recover()` blurs the active element, which is what could close an open
+native dropdown);
+(2) native context-menu popups (`electron/menu.ts`) are now tracked per
+window, closed on window blur/minimize, and logged — an Electron popup whose
+capture loop never unwinds is the leading hypothesis for the full symptom
+set (invisible, swallows all keyboard, renderer can neither see nor fix it);
+(3) "Recover input focus" (View menu / `Mod+Alt+Shift+R`) now also reaches
+main (`window:recover-input`) to force-close such a popup, and every step
+logs to `drey.log` so a field occurrence finally leaves a trace;
+(4) a dead `.menu-backdrop` selector in `InputRecoveryService` was removed.
 
 bug-8 — the Files panel gained a **multi-selection** (project request):
 Ctrl+click toggles rows into the set, Shift+click / Shift+arrow extend a

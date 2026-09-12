@@ -1,4 +1,5 @@
 import { BrowserWindow, Menu, MenuItemConstructorOptions } from 'electron';
+import { logLine } from './logger';
 
 /**
  * Clipboard / editing support for the renderer.
@@ -102,6 +103,56 @@ export function attachContextMenu(window: BrowserWindow): void {
         ]
       : [{ role: 'copy', enabled: editFlags.canCopy }];
 
-    Menu.buildFromTemplate(template).popup({ window });
+    popupTracked(window, Menu.buildFromTemplate(template));
   });
+
+  // Bug-6 hardening: if a popup's capture loop never unwinds, it swallows
+  // every keystroke while the mouse keeps working. Losing window focus is
+  // the moment a native popup has no reason to stay open.
+  window.on('blur', () => closeTrackedPopups(window, 'window blur'));
+  window.on('minimize', () => closeTrackedPopups(window, 'window minimize'));
+}
+
+/**
+ * The context menus currently popped over each window. A native popup whose
+ * capture loop never unwinds is invisible but swallows all keyboard input --
+ * the leading suspect for the packaged build's stuck-input state (bug-6),
+ * which the renderer can neither see nor fix. Tracking them here gives main
+ * an escape hatch: `closePopup` on blur / on the renderer's "recover input"
+ * command, and a log trace a field occurrence finally leaves behind.
+ */
+const trackedPopups = new Map<BrowserWindow, Menu>();
+
+function popupTracked(window: BrowserWindow, menu: Menu): void {
+  // A window tracks one popup at a time; a stale entry (close event missed)
+  // is simply replaced.
+  trackedPopups.set(window, menu);
+  menu.once('menu-will-close', () => {
+    if (trackedPopups.get(window) === menu) {
+      trackedPopups.delete(window);
+    }
+  });
+  logLine('[main/context-menu] popup opened');
+  menu.popup({ window });
+}
+
+/**
+ * Closes any context menu still popped over `window` (no-op when none).
+ * Returns `true` when one was actually closed -- the recover-input handler
+ * logs that, so a stuck-input session shows whether this was the culprit.
+ */
+export function closeTrackedPopups(window: BrowserWindow, reason: string): boolean {
+  const menu = trackedPopups.get(window);
+  if (!menu) {
+    return false;
+  }
+  trackedPopups.delete(window);
+  try {
+    menu.closePopup(window);
+    logLine(`[main/context-menu] closed a still-tracked popup (${reason})`);
+    return true;
+  } catch (err) {
+    logLine(`[main/context-menu] closePopup failed (${reason}): ${String(err)}`);
+    return false;
+  }
 }

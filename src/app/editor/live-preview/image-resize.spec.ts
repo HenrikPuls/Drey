@@ -88,4 +88,27 @@ describe('image resize handle', () => {
     await new Promise((resolve) => setTimeout(resolve, 25));
     expect(view.state.doc.toString()).toBe('# t\n\n![a boat|300](x.png)\n');
   });
+
+  it('window blur mid-drag ends the gesture: body chrome restored, no leak (bug-6)', async () => {
+    view = makeView('# t\n\n![a boat](x.png)\n');
+    const grip = view.dom.querySelector('.lp-resize') as HTMLElement;
+    grip.dispatchEvent(
+      new PointerEvent('pointerdown', { bubbles: true, button: 0, pointerId: 1, clientX: 0 }),
+    );
+    window.dispatchEvent(new PointerEvent('pointermove', { pointerId: 1, clientX: 80 }));
+    expect(document.body.getAttribute('data-drey-gesture')).toBe('image-resize');
+    expect(document.body.style.userSelect).toBe('none');
+
+    // An alt-tab mid-drag: the pointerup may never fire, so the blur itself
+    // must tear the gesture down instead of leaving <body> unselectable.
+    window.dispatchEvent(new Event('blur'));
+
+    expect(document.body.getAttribute('data-drey-gesture')).toBeNull();
+    expect(document.body.style.userSelect).toBe('');
+    expect(document.body.style.cursor).toBe('');
+    // Blur counts as the gesture's end -- the buffered rewrite still lands.
+    await vi.waitFor(() =>
+      expect(view!.state.doc.toString()).toBe('# t\n\n![a boat|380](x.png)\n'),
+    );
+  });
 });

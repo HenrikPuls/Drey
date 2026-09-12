@@ -54,11 +54,23 @@ export class InputRecoveryService {
 
     // 3. Remove a backdrop element that outlived its menu (its click
     //    handler is gone, so it just sits over the app swallowing events).
-    document
-      .querySelectorAll('.ctx-backdrop, .menu-backdrop')
-      .forEach((el) => el.remove());
+    document.querySelectorAll('.ctx-backdrop').forEach((el) => el.remove());
 
-    // 4. Move focus off whatever holds it and back into the editor (or the
+    // 4. Ask main to close a native context-menu popup that never unwound
+    //    (bug-6): invisible to the renderer, it swallows every keystroke
+    //    while the mouse keeps working. Best-effort -- no bridge (plain
+    //    `ng serve`, tests) simply skips it.
+    try {
+      void window.dreyApi?.recoverInputFocus?.().then((closed) => {
+        if (closed) {
+          this.log.record('warn', 'input recovery: main closed a stuck native popup', undefined);
+        }
+      });
+    } catch {
+      /* ignore */
+    }
+
+    // 5. Move focus off whatever holds it and back into the editor (or the
     //    body), so the next keystroke lands somewhere live.
     try {
       (document.activeElement as HTMLElement | null)?.blur();
@@ -134,7 +146,7 @@ export class InputRecoveryService {
             inEditor: !!active.closest?.('.cm-editor'),
           }
         : null,
-      backdrops: document.querySelectorAll('.ctx-backdrop, .menu-backdrop').length,
+      backdrops: document.querySelectorAll('.ctx-backdrop').length,
       ctxMenus: document.querySelectorAll('.ctx-menu').length,
       lightboxSrcSet: this.lightbox.src() != null,
       bodyUserSelect: document.body.style.userSelect || undefined,

@@ -1,6 +1,7 @@
 import { app, BrowserWindow, ipcMain, shell } from 'electron';
 import { AppInfo, EditCommand, IPC_CHANNELS } from '../../shared/ipc-api';
-import { logFromRenderer } from '../logger';
+import { logFromRenderer, logLine } from '../logger';
+import { closeTrackedPopups } from '../menu';
 
 /**
  * App-shell IPC: version info, the frameless-titlebar window controls
@@ -30,6 +31,16 @@ export function registerAppHandlers(getMainWindow: () => BrowserWindow | null): 
     }
   });
   ipcMain.handle(IPC_CHANNELS.windowClose, (): void => getMainWindow()?.close());
+  // "Recover input focus" (View menu / Mod+Alt+Shift+R), main-side half:
+  // close a native context-menu popup whose capture loop never unwound --
+  // the leading stuck-input suspect the renderer cannot see (bug-6).
+  ipcMain.handle(IPC_CHANNELS.windowRecoverInput, (): boolean => {
+    const win = getMainWindow();
+    if (!win) {
+      return false;
+    }
+    return closeTrackedPopups(win, 'recover input focus');
+  });
   ipcMain.handle(
     IPC_CHANNELS.windowIsMaximized,
     (): boolean => getMainWindow()?.isMaximized() ?? false,

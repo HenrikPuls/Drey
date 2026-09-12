@@ -31,6 +31,7 @@ export const IPC_CHANNELS = {
   windowMinimize: 'window:minimize',
   windowToggleMaximize: 'window:toggle-maximize',
   windowClose: 'window:close',
+  windowRecoverInput: 'window:recover-input',
   windowIsMaximized: 'window:is-maximized',
   windowMaximizeChanged: 'window:maximize-changed',
   editExec: 'edit:exec',
@@ -308,6 +309,15 @@ export interface DreyApi {
   toggleMaximizeWindow(): Promise<void>;
   closeWindow(): Promise<void>;
   isWindowMaximized(): Promise<boolean>;
+
+  /**
+   * Asks main to close any native context-menu popup still popped over the
+   * window and log the attempt (bug-6): a popup whose capture loop never
+   * unwinds swallows every keystroke -- invisible to the renderer, so the
+   * "Recover input focus" command forwards here as the escape hatch.
+   * Resolves to `true` when a popup was actually closed.
+   */
+  recoverInputFocus(): Promise<boolean>;
 
   /**
    * Fires whenever the window is maximized or restored, so the titlebar's

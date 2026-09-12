@@ -31,6 +31,7 @@ const dreyApi: DreyApi = {
   minimizeWindow: (): Promise<void> => ipcRenderer.invoke(IPC_CHANNELS.windowMinimize),
   toggleMaximizeWindow: (): Promise<void> => ipcRenderer.invoke(IPC_CHANNELS.windowToggleMaximize),
   closeWindow: (): Promise<void> => ipcRenderer.invoke(IPC_CHANNELS.windowClose),
+  recoverInputFocus: (): Promise<boolean> => ipcRenderer.invoke(IPC_CHANNELS.windowRecoverInput),
   isWindowMaximized: (): Promise<boolean> => ipcRenderer.invoke(IPC_CHANNELS.windowIsMaximized),
   onWindowMaximizeChange: (listener: (maximized: boolean) => void): (() => void) => {
     // Forward only the payload, never the IpcRendererEvent (ADR-0001).
