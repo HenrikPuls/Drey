@@ -107,7 +107,13 @@
   } @else if (vault.fileTree().length === 0) {
     <p class="hint">Vault is empty.</p>
   } @else {
-    <div class="tree-scroll" tabindex="0" (keydown)="onTreeKeydown($event)">
+    <div
+      class="tree-scroll"
+      tabindex="0"
+      (keydown)="onTreeKeydown($event)"
+      (dragover)="onRootDragOver($event)"
+      (drop)="onRootDrop($event)"
+    >
       <ng-container *ngTemplateOutlet="tree; context: { $implicit: vault.fileTree(), depth: 0 }" />
     </div>
   }
@@ -146,11 +152,18 @@
       <button
         type="button"
         class="node folder"
+        draggable="true"
         [class.selected]="selection().has(entry.relativePath)"
+        [class.drop-target]="dropHover() === entry.relativePath"
         [attr.tabindex]="selected() === entry.relativePath ? 0 : -1"
         [style.padding-left.px]="8 + depth * 13"
         (click)="onFolderClick(entry, $event)"
         (contextmenu)="openMenu($event, entry)"
+        (dragstart)="onFolderDragStart($event, entry)"
+        (dragover)="onRowDragOver($event, entry)"
+        (dragleave)="onRowDragLeave($event, entry)"
+        (drop)="onRowDrop($event, entry)"
+        (dragend)="onDragEnd()"
       >
         <app-icon
           class="twist"
@@ -174,11 +187,16 @@
         draggable="true"
         [class.active]="editor.openPath() === entry.relativePath"
         [class.selected]="selection().has(entry.relativePath)"
+        [class.drop-target]="dropHover() === entry.relativePath"
         [attr.tabindex]="selected() === entry.relativePath ? 0 : -1"
         [style.padding-left.px]="8 + depth * 13"
         (click)="onFileClick(entry, $event)"
-        (dragstart)="onFileDragStart($event, entry)"
         (contextmenu)="openMenu($event, entry)"
+        (dragstart)="onFileDragStart($event, entry)"
+        (dragover)="onRowDragOver($event, entry)"
+        (dragleave)="onRowDragLeave($event, entry)"
+        (drop)="onRowDrop($event, entry)"
+        (dragend)="onDragEnd()"
       >
         <span class="bullet" aria-hidden="true"></span>
         <span class="node-name">{{ entry.name }}</span>

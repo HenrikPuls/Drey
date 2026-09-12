@@ -321,3 +321,10 @@
   box-shadow: inset 0 0 0 1px var(--accent-edge);
   color: var(--text-primary);
 }
+
+/* Hover target of an in-panel drag (req-23): the accent-tinted fill the
+   dock drag uses, plus a solid accent left edge -- "drop goes IN here". */
+.node.drop-target {
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+  box-shadow: inset 2px 0 0 var(--accent);
+}

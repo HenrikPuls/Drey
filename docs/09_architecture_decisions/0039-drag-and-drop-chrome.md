@@ -78,3 +78,20 @@ gestures.**
 - The shared `src/app/dnd/` overlay is the natural place to hang the pane
   header drag when [ADR-0038](0038-editor-panes-in-docks.md) (editor panes
   in docks) is built.
+
+## Later change (req-23)
+
+The Files panel's *intra-tree* move (drag a file/folder onto a folder, a
+file row, or the tree background) deliberately stays on **HTML5 drag and
+drop**, not this chrome: it is the same gesture family as the panel's
+existing file-row drags into the editor ([ADR-0028](0028-drag-drop-into-the-editor.md)),
+so one drag can end either way — drop on the editor inserts/opens, drop on
+a tree row moves. No ghost chip / ESC cancel (the native drag image is
+used instead); a folder carries **no** `application/x-drey-vault-path`
+type, so a pane can never try to open a folder as a tab — the dragged
+entry travels in a component signal the row handlers read. Validity (same
+folder no-op, folder into its own subtree) is decided per `dragover`;
+invalid targets never `preventDefault`, which gives the native no-drop
+cursor and suppresses the drop. `VaultManager.renameEntry` gained the
+missing "target inside source subtree" guard so the IPC surface enforces
+it too.

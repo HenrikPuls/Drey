@@ -345,6 +345,12 @@ export class VaultManager {
     if (fs.existsSync(to)) {
       throw new Error(`Already exists: ${toRel}`);
     }
+    // A folder must not land inside itself or its own subtree (the OS
+    // rename would fail with something cryptic; copyEntry has the same
+    // guard). Prefix + separator, so `a/b` -> `a/bc` stays legal.
+    if (to.toLowerCase().startsWith(from.toLowerCase() + path.sep)) {
+      throw new Error('Cannot move a folder into itself.');
+    }
     // Both ends: the source's unlink echo and the target's add echo.
     this.ownWrites?.recordStructural(fromRel);
     this.ownWrites?.recordStructural(toRel);

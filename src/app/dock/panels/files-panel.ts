@@ -108,6 +108,18 @@ export class FilesPanel {
   protected readonly creating = signal<PendingCreate | null>(null);
   protected readonly renaming = signal<PendingRename | null>(null);
 
+  /**
+   * The tree entry being dragged inside the panel (req-23): folders cannot
+   * carry the editor-drop's `application/x-drey-vault-path` (a pane would
+   * try to open a folder as a tab), so the drop target reads the dragged
+   * entry from here instead of `dataTransfer`. Files set it too -- the same
+   * gesture still drags into the editor via the dataTransfer types.
+   */
+  protected readonly dragEntry = signal<VaultFileEntry | null>(null);
+
+  /** The row currently showing the drop highlight (its `relativePath`). */
+  protected readonly dropHover = signal<string | null>(null);
+
   private readonly createInput = viewChild<ElementRef<HTMLInputElement>>('createInput');
   private readonly renameInput = viewChild<ElementRef<HTMLInputElement>>('renameInput');
 
@@ -411,7 +423,8 @@ export class FilesPanel {
    * Drag a file onto the editor to insert it (ADR-0028): carry the vault
    * path on a private type the editor's drop handler reads (an image gets
    * linked in place, a text file's contents inlined). Set for any file;
-   * the editor decides what to do from the extension.
+   * the editor decides what to do from the extension. The same gesture is
+   * also an intra-panel move candidate -- `dragEntry` arms that half.
    */
   protected onFileDragStart(event: DragEvent, entry: VaultFileEntry): void {
     if (entry.type !== 'file' || !event.dataTransfer) {
@@ -420,6 +433,125 @@ export class FilesPanel {
     event.dataTransfer.setData('application/x-drey-vault-path', entry.relativePath);
     event.dataTransfer.setData('text/plain', entry.relativePath);
     event.dataTransfer.effectAllowed = 'copyLink';
+    this.dragEntry.set(entry);
+  }
+
+  /**
+   * A folder drag is intra-panel only: no dataTransfer types at all (with
+   * none, nothing outside this panel reacts; `effectAllowed: 'move'` shows
+   * the move cursor), the dragged entry lives in `dragEntry`.
+   */
+  protected onFolderDragStart(event: DragEvent, entry: VaultFileEntry): void {
+    if (!event.dataTransfer) {
+      return;
+    }
+    event.dataTransfer.effectAllowed = 'move';
+    this.dragEntry.set(entry);
+  }
+
+  /** Fires after a completed *or* cancelled drag -- always clears the state. */
+  protected onDragEnd(): void {
+    this.dragEntry.set(null);
+    this.dropHover.set(null);
+  }
+
+  /** Where a drop on `entry` lands: a folder takes the entry in, a file's row means its parent folder. */
+  private destinationDir(entry: VaultFileEntry): string {
+    return entry.type === 'directory' ? entry.relativePath : parentDir(entry.relativePath);
+  }
+
+  /** False for a no-op (same folder) and for a folder dropped into itself / its own subtree. */
+  private canDropOnto(entry: VaultFileEntry): boolean {
+    const dragged = this.dragEntry();
+    if (!dragged) {
+      return false;
+    }
+    const dest = this.destinationDir(entry);
+    if (dest === parentDir(dragged.relativePath)) {
+      return false;
+    }
+    return dest !== dragged.relativePath && !dest.startsWith(`${dragged.relativePath}/`);
+  }
+
+  protected onRowDragOver(event: DragEvent, entry: VaultFileEntry): void {
+    if (!this.canDropOnto(entry)) {
+      return; // no preventDefault -> the browser shows no-drop, drop won't fire
+    }
+    event.preventDefault();
+    if (event.dataTransfer) {
+      event.dataTransfer.dropEffect = 'move';
+    }
+    this.dropHover.set(entry.relativePath);
+  }
+
+  protected onRowDragLeave(event: DragEvent, entry: VaultFileEntry): void {
+    if (this.dropHover() === entry.relativePath) {
+      this.dropHover.set(null);
+    }
+  }
+
+  protected onRowDrop(event: DragEvent, entry: VaultFileEntry): void {
+    event.stopPropagation(); // the tree container's root drop must not double-handle
+    this.dropHover.set(null);
+    // Validate BEFORE clearing the armed drag -- `canDropOnto` reads it.
+    const dragged = this.dragEntry();
+    const valid = dragged !== null && this.canDropOnto(entry);
+    this.dragEntry.set(null);
+    if (!valid) {
+      return;
+    }
+    event.preventDefault();
+    void this.commitMove(dragged!.relativePath, this.destinationDir(entry));
+  }
+
+  /** The `.tree-scroll` background: a drop target for the vault root. */
+  protected onRootDragOver(event: DragEvent): void {
+    if ((event.target as HTMLElement | null)?.closest('.node')) {
+      return; // a row handles (and stops) its own dragover
+    }
+    const dragged = this.dragEntry();
+    if (!dragged || parentDir(dragged.relativePath) === '') {
+      return; // already at the root -- no preventDefault, no-drop cursor
+    }
+    event.preventDefault();
+    if (event.dataTransfer) {
+      event.dataTransfer.dropEffect = 'move';
+    }
+  }
+
+  protected onRootDrop(event: DragEvent): void {
+    if ((event.target as HTMLElement | null)?.closest('.node')) {
+      return;
+    }
+    const dragged = this.dragEntry();
+    this.dragEntry.set(null);
+    this.dropHover.set(null);
+    if (!dragged || parentDir(dragged.relativePath) === '') {
+      return;
+    }
+    event.preventDefault();
+    void this.commitMove(dragged.relativePath, '');
+  }
+
+  /**
+   * The move half of `commitRename` (req-23): rename to the new folder,
+   * re-point open tabs (keeping unsaved buffers), follow the clipboard,
+   * reveal the destination. `VaultService.renameEntry` reloads the tree;
+   * the main process moves the assistant sidecar along.
+   */
+  private async commitMove(fromRel: string, destDir: string): Promise<void> {
+    const name = fromRel.slice(fromRel.lastIndexOf('/') + 1);
+    const toRel = destDir ? `${destDir}/${name}` : name;
+    try {
+      await this.vault.renameEntry(fromRel, toRel);
+      this.editor.retargetTabs(fromRel, toRel);
+      if (this.vault.clipboard()?.path === fromRel) {
+        this.vault.clipboard.set({ path: toRel, name });
+      }
+      this.expand(destDir);
+    } catch (err) {
+      alert(err instanceof Error ? err.message : String(err));
+    }
   }
 
   protected openMenu(event: MouseEvent, entry?: VaultFileEntry): void {

@@ -10,6 +10,20 @@ type DragStartHost = { onFileDragStart(event: DragEvent, entry: VaultFileEntry):
 /** The keyboard selection is `protected` too. */
 type SelectionHost = { selected(): string | null; selection(): ReadonlySet<string> };
 
+/** The in-panel drag state + handlers (req-23), all `protected`. */
+type DragHost = {
+  dragEntry(): VaultFileEntry | null;
+  dropHover(): string | null;
+  onFileDragStart(event: DragEvent, entry: VaultFileEntry): void;
+  onFolderDragStart(event: DragEvent, entry: VaultFileEntry): void;
+  onDragEnd(): void;
+  onRowDragOver(event: DragEvent, entry: VaultFileEntry): void;
+  onRowDragLeave(event: DragEvent, entry: VaultFileEntry): void;
+  onRowDrop(event: DragEvent, entry: VaultFileEntry): void;
+  onRootDragOver(event: DragEvent): void;
+  onRootDrop(event: DragEvent): void;
+};
+
 function fakeDataTransfer(): DataTransfer {
   const store: Record<string, string> = {};
   return {
@@ -353,6 +367,242 @@ describe('FilesPanel multi-select (bug-8)', () => {
     document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
     expect(host().selection()).toEqual(new Set(['notes/b.md'])); // the cursor row
     await settle();
+  });
+});
+
+describe('FilesPanel drag & drop within the tree (req-23)', () => {
+  /** a.md · notes/ · notes/b.md · archive/ -- four visible rows. */
+  function tree(): VaultFileEntry[] {
+    return [
+      { name: 'a.md', relativePath: 'a.md', type: 'file' },
+      {
+        name: 'notes',
+        relativePath: 'notes',
+        type: 'directory',
+        children: [{ name: 'b.md', relativePath: 'notes/b.md', type: 'file' }],
+      },
+      { name: 'archive', relativePath: 'archive', type: 'directory', children: [] },
+    ];
+  }
+
+  let fixture: ComponentFixture<FilesPanel>;
+  let renamed: Array<[string, string]>;
+
+  /** jsdom has no DragEvent -- plain objects with recorded prevent/stop. */
+  function dragEvent(
+    options: { target?: EventTarget | null; dt?: DataTransfer } = {},
+  ): { event: DragEvent; prevented(): boolean; stopped(): boolean } {
+    let prevented = false;
+    let stopped = false;
+    const event = {
+      dataTransfer: options.dt ?? fakeDataTransfer(),
+      target: options.target ?? null,
+      preventDefault: () => {
+        prevented = true;
+      },
+      stopPropagation: () => {
+        stopped = true;
+      },
+    } as unknown as DragEvent;
+    return { event, prevented: () => prevented, stopped: () => stopped };
+  }
+
+  beforeAll(() => {
+    Element.prototype.scrollIntoView = vi.fn();
+  });
+
+  beforeEach(async () => {
+    renamed = [];
+    window.dreyApi = {
+      getActiveVault: () => Promise.resolve('C:/vault'),
+      listVaultFiles: () => Promise.resolve(tree()),
+      renameVaultEntry: (fromRel: string, toRel: string) => {
+        renamed.push([fromRel, toRel]);
+        return Promise.resolve(toRel);
+      },
+    } as unknown as DreyApi;
+    await TestBed.configureTestingModule({ imports: [FilesPanel] }).compileComponents();
+    fixture = TestBed.createComponent(FilesPanel);
+    document.body.appendChild(fixture.nativeElement);
+  });
+
+  afterEach(() => {
+    fixture.nativeElement.remove();
+    delete (window as { dreyApi?: unknown }).dreyApi;
+  });
+
+  function rows(): NodeListOf<HTMLElement> {
+    return fixture.nativeElement.querySelectorAll('.node');
+  }
+
+  function host(): DragHost {
+    return fixture.componentInstance as unknown as DragHost;
+  }
+
+  async function renderTree(): Promise<void> {
+    await vi.waitFor(() => {
+      fixture.detectChanges();
+      expect(rows().length).toBe(4);
+    });
+  }
+
+  it('a folder dragstart arms the move but sets no dataTransfer types', () => {
+    const dt = fakeDataTransfer();
+    host().onFolderDragStart({ dataTransfer: dt } as DragEvent, {
+      name: 'notes',
+      relativePath: 'notes',
+      type: 'directory',
+    });
+    expect(dt.getData('application/x-drey-vault-path')).toBe('');
+    expect(host().dragEntry()?.relativePath).toBe('notes');
+    host().onDragEnd();
+    expect(host().dragEntry()).toBeNull();
+  });
+
+  it('a file dragstart carries the editor-drop types AND arms the move', () => {
+    const dt = fakeDataTransfer();
+    host().onFileDragStart({ dataTransfer: dt } as DragEvent, {
+      name: 'a.md',
+      relativePath: 'a.md',
+      type: 'file',
+    });
+    expect(dt.getData('application/x-drey-vault-path')).toBe('a.md');
+    expect(host().dragEntry()?.relativePath).toBe('a.md');
+  });
+
+  it('dragover marks a valid folder target and leaves a no-op target untouched', async () => {
+    await renderTree();
+    const notes = { name: 'notes', relativePath: 'notes', type: 'directory' } as VaultFileEntry;
+    const a = { name: 'a.md', relativePath: 'a.md', type: 'file' } as VaultFileEntry;
+    host().onFileDragStart({ dataTransfer: fakeDataTransfer() } as DragEvent, a);
+
+    const ontoNotes = dragEvent();
+    host().onRowDragOver(ontoNotes.event, notes);
+    expect(ontoNotes.prevented()).toBe(true); // drop allowed
+    expect(host().dropHover()).toBe('notes');
+
+    const ontoSelf = dragEvent(); // a.md onto a.md: same dir -> no-op
+    host().onRowDragOver(ontoSelf.event, a);
+    expect(ontoSelf.prevented()).toBe(false);
+    expect(host().dropHover()).toBe('notes'); // unchanged
+  });
+
+  it('refuses a folder dropped into itself or its own subtree', async () => {
+    await renderTree();
+    const notes = { name: 'notes', relativePath: 'notes', type: 'directory' } as VaultFileEntry;
+    const b = { name: 'b.md', relativePath: 'notes/b.md', type: 'file' } as VaultFileEntry;
+    host().onFolderDragStart({ dataTransfer: fakeDataTransfer() } as DragEvent, notes);
+
+    const ontoItself = dragEvent();
+    host().onRowDragOver(ontoItself.event, notes); // dest 'notes' === dragged
+    expect(ontoItself.prevented()).toBe(false);
+
+    const intoChild = dragEvent(); // notes onto notes/b.md -> dest is 'notes' again
+    host().onRowDragOver(intoChild.event, b);
+    expect(intoChild.prevented()).toBe(false);
+  });
+
+  it('drop on a folder moves the file, retargets tabs, follows the clipboard', async () => {
+    await renderTree();
+    const editor = TestBed.inject(EditorService);
+    const retarget = vi.spyOn(editor, 'retargetTabs');
+    const vault = TestBed.inject(VaultService);
+    vault.clipboard.set({ path: 'a.md', name: 'a.md' });
+
+    host().onFileDragStart({ dataTransfer: fakeDataTransfer() } as DragEvent, {
+      name: 'a.md',
+      relativePath: 'a.md',
+      type: 'file',
+    });
+    const drop = dragEvent();
+    host().onRowDrop(drop.event, {
+      name: 'notes',
+      relativePath: 'notes',
+      type: 'directory',
+    });
+
+    await vi.waitFor(() => expect(retarget).toHaveBeenCalledWith('a.md', 'notes/a.md'));
+    expect(renamed).toEqual([['a.md', 'notes/a.md']]);
+    expect(vault.clipboard()).toEqual({ path: 'notes/a.md', name: 'a.md' });
+    expect(host().dragEntry()).toBeNull();
+    expect(host().dropHover()).toBeNull();
+    expect(drop.stopped()).toBe(true); // the root drop must not double-handle
+  });
+
+  it('drop on a file row targets the folder that file lives in', async () => {
+    await renderTree();
+    host().onFileDragStart({ dataTransfer: fakeDataTransfer() } as DragEvent, {
+      name: 'a.md',
+      relativePath: 'a.md',
+      type: 'file',
+    });
+    host().onRowDrop(dragEvent().event, {
+      name: 'b.md',
+      relativePath: 'notes/b.md',
+      type: 'file',
+    });
+    await vi.waitFor(() => expect(renamed).toEqual([['a.md', 'notes/a.md']]));
+  });
+
+  it('a collision alerts and leaves tabs and clipboard alone', async () => {
+    await renderTree();
+    window.dreyApi = {
+      ...window.dreyApi,
+      renameVaultEntry: () => Promise.reject(new Error('Already exists: notes/a.md')),
+    } as unknown as DreyApi;
+    const alertBox = vi.spyOn(window, 'alert').mockReturnValue(undefined);
+    const retarget = vi.spyOn(TestBed.inject(EditorService), 'retargetTabs');
+
+    host().onFileDragStart({ dataTransfer: fakeDataTransfer() } as DragEvent, {
+      name: 'a.md',
+      relativePath: 'a.md',
+      type: 'file',
+    });
+    host().onRowDrop(dragEvent().event, {
+      name: 'notes',
+      relativePath: 'notes',
+      type: 'directory',
+    });
+
+    await vi.waitFor(() => expect(alertBox).toHaveBeenCalled());
+    expect(alertBox.mock.calls[0][0]).toContain('Already exists');
+    expect(retarget).not.toHaveBeenCalled();
+  });
+
+  it('a root drop on the container background moves to the vault root', async () => {
+    await renderTree();
+    // `notes/b.md` is nested -- dragging it onto the root hoists it out.
+    host().onFileDragStart({ dataTransfer: fakeDataTransfer() } as DragEvent, {
+      name: 'b.md',
+      relativePath: 'notes/b.md',
+      type: 'file',
+    });
+    const over = dragEvent({ target: { closest: () => null } as unknown as EventTarget });
+    host().onRootDragOver(over.event);
+    expect(over.prevented()).toBe(true);
+
+    const drop = dragEvent({ target: { closest: () => null } as unknown as EventTarget });
+    host().onRootDrop(drop.event);
+    await vi.waitFor(() => expect(renamed).toEqual([['notes/b.md', 'b.md']]));
+    expect(drop.prevented()).toBe(true);
+  });
+
+  it('a top-level entry dropped on the root is a no-op, and a bubbled row drop never reaches it', async () => {
+    await renderTree();
+    host().onFileDragStart({ dataTransfer: fakeDataTransfer() } as DragEvent, {
+      name: 'a.md',
+      relativePath: 'a.md',
+      type: 'file',
+    });
+    const rootDrop = dragEvent({ target: { closest: () => null } as unknown as EventTarget });
+    host().onRootDrop(rootDrop.event); // a.md is already at the root
+    expect(rootDrop.prevented()).toBe(false);
+    expect(renamed).toEqual([]);
+
+    // A drop on a row bubbles to the container -- the `.node` guard ignores it.
+    const bubbled = dragEvent({ target: { closest: () => ({}) } as unknown as EventTarget });
+    host().onRootDrop(bubbled.event);
+    expect(renamed).toEqual([]);
   });
 });
 
