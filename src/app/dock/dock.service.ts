@@ -23,6 +23,15 @@ export type PanelId = WidgetId;
  */
 export type DockSide = 'left' | 'right' | 'bottom';
 
+/**
+ * What a dock-header drag is carrying: a widget id (panel drag, ADR-0019)
+ * or a docked editor pane (ADR-0038's editor band drag).
+ */
+export type DockDragPayload = WidgetId | { readonly kind: 'editor'; readonly paneId: string };
+
+/** The docks, plus the centre column -- an editor drag's "back to the editor area" target. */
+export type DockDropTarget = DockSide | 'center';
+
 const DOCK_SIDES: readonly DockSide[] = ['left', 'right', 'bottom'];
 
 /** Persisted layout state (DESIGN.md "Datenmodell", minus the transient drag fields). */
@@ -79,12 +88,12 @@ export class DockService {
   private readonly panes = inject(PaneService);
   private readonly state = signal<DockState>(this.read());
 
-  /** The panel being dragged by its header, else null. */
-  readonly dragging = signal<WidgetId | null>(null);
+  /** What is being dragged by a dock header: a widget or an editor pane, else null. */
+  readonly dragging = signal<DockDragPayload | null>(null);
   /** True while any panel is being dragged -- docks use it to show themselves as drop targets. */
   readonly dragActive = computed(() => this.dragging() !== null);
-  /** Where the drag would drop it right now. */
-  readonly dropDock = signal<DockSide | null>(null);
+  /** Where the drag would drop it right now (`'center'` only for editor drags). */
+  readonly dropDock = signal<DockDropTarget | null>(null);
   readonly dropIndex = signal<number | null>(null);
   /** True while a splitter or dock-edge is being dragged. */
   readonly resizing = signal(false);
@@ -416,11 +425,13 @@ export class DockService {
 
   /** In-flight header press, before it is promoted to a real drag. */
   private headerPress: {
-    id: WidgetId;
+    payload: DockDragPayload;
     title: string;
     startX: number;
     startY: number;
     promoted: boolean;
+    /** Editor drags focus their pane on a plain click; widget drags collapse. */
+    click: (payload: DockDragPayload) => void;
   } | null = null;
   private static readonly DRAG_THRESHOLD_PX = 4;
 
@@ -430,11 +441,39 @@ export class DockService {
    * past it promotes the gesture to a panel drag between docks.
    */
   beginHeaderPress(id: WidgetId, title: string, event: MouseEvent): void {
+    this.beginPress(id, title, event, () => this.toggleCollapse(id));
+  }
+
+  /**
+   * Mousedown on the editor band's header (ADR-0038). Same press-then-
+   * promote recipe; a plain click just focuses the pane (there is no
+   * collapse), a drag moves the whole editor group to another dock or back
+   * to the centre.
+   */
+  beginEditorBandPress(paneId: string, title: string, event: MouseEvent): void {
+    this.beginPress(
+      { kind: 'editor', paneId },
+      title,
+      event,
+      (payload) => {
+        if (payload !== null && typeof payload === 'object') {
+          this.panes.focus(payload.paneId);
+        }
+      },
+    );
+  }
+
+  private beginPress(
+    payload: DockDragPayload,
+    title: string,
+    event: MouseEvent,
+    click: (payload: DockDragPayload) => void,
+  ): void {
     if (event.button !== 0) {
       return;
     }
     event.preventDefault();
-    this.headerPress = { id, title, startX: event.clientX, startY: event.clientY, promoted: false };
+    this.headerPress = { payload, title, startX: event.clientX, startY: event.clientY, promoted: false, click };
     window.addEventListener('mousemove', this.onHeaderPressMove);
     window.addEventListener('mouseup', this.onHeaderPressUp);
   }
@@ -451,7 +490,7 @@ export class DockService {
     // Promote to a drag: hand off to the move/end listeners.
     press.promoted = true;
     window.removeEventListener('mousemove', this.onHeaderPressMove);
-    this.dragging.set(press.id);
+    this.dragging.set(press.payload);
     this.dropDock.set(null);
     this.dropIndex.set(null);
     // Shared with the tab drag (ADR-0039): a full-viewport overlay that
@@ -469,12 +508,18 @@ export class DockService {
     const press = this.headerPress;
     this.headerPress = null;
     if (press && !press.promoted) {
-      this.toggleCollapse(press.id);
+      press.click(press.payload);
     }
   };
 
   private readonly onDragMove = (event: MouseEvent): void => {
     moveDragChrome(event.clientX, event.clientY);
+    const payload = this.dragging();
+    if (payload !== null && typeof payload === 'object') {
+      this.onEditorDragMove(payload, event);
+      return;
+    }
+
     const left = this.dockEls.get('left')?.getBoundingClientRect();
     const right = this.dockEls.get('right')?.getBoundingClientRect();
     const bottom = this.dockEls.get('bottom')?.getBoundingClientRect();
@@ -519,21 +564,73 @@ export class DockService {
     }
   };
 
+  /**
+   * The editor band's drag (ADR-0038): the centre column is a target --
+   * "not over any dock" is exactly the centre -- and a drag never shows a
+   * widget drop-line (`dropIndex` stays null).
+   */
+  private readonly onEditorDragMove = (
+    payload: { readonly kind: 'editor'; readonly paneId: string },
+    event: MouseEvent,
+  ): void => {
+    const left = this.dockEls.get('left')?.getBoundingClientRect();
+    const right = this.dockEls.get('right')?.getBoundingClientRect();
+    const bottom = this.dockEls.get('bottom')?.getBoundingClientRect();
+    const t = DockService.DOCK_TOLERANCE;
+
+    const overLeft = !!left && event.clientX <= left.right + t;
+    const overRight = !!right && event.clientX >= right.left - t;
+    const inBottomBand = !!bottom && event.clientY >= bottom.top - t;
+
+    let target: DockDropTarget;
+    if (overLeft) {
+      target = 'left';
+    } else if (overRight) {
+      target = 'right';
+    } else if (inBottomBand) {
+      target = 'bottom';
+    } else {
+      target = 'center';
+    }
+
+    if (this.dropDock() !== target) {
+      this.dropDock.set(target);
+    }
+    if (this.dropIndex() !== null) {
+      this.dropIndex.set(null);
+    }
+  };
+
   private readonly onDragEnd = (): void => {
     window.removeEventListener('mousemove', this.onDragMove);
     window.removeEventListener('mouseup', this.onDragEnd);
     endDragChrome();
 
-    const id = this.dragging();
+    const payload = this.dragging();
     const target = this.dropDock();
     const index = this.dropIndex();
     this.dragging.set(null);
     this.dropDock.set(null);
     this.dropIndex.set(null);
-    if (!id || !target || index === null) {
+
+    if (payload !== null && typeof payload === 'object') {
+      // The editor band's drag: a dock takes the pane (an occupied dock's
+      // occupant goes back to the centre, inside PaneService); the centre
+      // takes it back into the split tree.
+      if (target !== null) {
+        if (target === 'center') {
+          this.panes.reattachToCenter(payload.paneId);
+        } else {
+          this.panes.detachToDock(payload.paneId, target);
+        }
+      }
       return;
     }
-    this.move(id, target, index);
+
+    if (!payload || !target || target === 'center' || index === null) {
+      return; // 'center' is never a widget target -- widget drags keep the screen-half fallback
+    }
+    this.move(payload, target, index);
   };
 
   /** Move `id` to `dock` so it lands at visual slot `index` (drop-line position). */

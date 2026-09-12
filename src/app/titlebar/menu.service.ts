@@ -340,6 +340,9 @@ export class MenuService {
           run: () => {
             this.close();
             this.dock.reset();
+            // The editor half of the reset: docked panes back to the
+            // centre, band heights back to default (ADR-0038).
+            this.panes.resetRegions();
           },
         },
         ...this.contributionRows('view'),

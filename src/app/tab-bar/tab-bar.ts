@@ -1,7 +1,7 @@
-import { ChangeDetectionStrategy, Component, HostListener, inject, input, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, HostListener, computed, inject, input, signal } from '@angular/core';
 import { EditorService, type OpenDoc } from '../services/editor.service';
 import { DocKindRegistry } from '../plugin-host';
-import { PaneService } from '../panes/pane.service';
+import { PaneService, type PaneRegion } from '../panes/pane.service';
 import { TabDragService } from './tab-drag.service';
 import { Icon, type IconName } from '../icons/icon';
 import { OverlayGuardDirective } from '../services/overlay-guard.directive';
@@ -50,6 +50,14 @@ export class TabBar {
   readonly paneId = input.required<string>();
 
   protected readonly menu = signal<TabMenu | null>(null);
+
+  /** This pane's region (ADR-0038) -- drives the dock-move menu entries. */
+  protected readonly region = computed<PaneRegion | null>(() => this.panes.regionOf(this.paneId()));
+  /** True while this tab bar's pane lives in a dock's editor band. */
+  protected readonly docked = computed(() => {
+    const r = this.region();
+    return r !== null && r !== 'center';
+  });
 
   /**
    * The tab's favicon slot: null for the base kinds (no glyph), otherwise
@@ -115,7 +123,8 @@ export class TabBar {
     event.stopPropagation();
     this.menu.set({
       x: Math.min(event.clientX, window.innerWidth - 168),
-      y: Math.min(event.clientY, window.innerHeight - 80),
+      // The menu grew to seven rows with the dock-move entries (ADR-0038).
+      y: Math.min(event.clientY, window.innerHeight - 240),
       path,
     });
   }
@@ -133,6 +142,18 @@ export class TabBar {
   protected split(path: string, direction: 'row' | 'column'): void {
     this.closeMenu();
     this.panes.splitPane(this.paneId(), direction, path);
+  }
+
+  /** Moves this whole pane into a dock's editor band (ADR-0038). */
+  protected moveToDock(side: 'left' | 'right' | 'bottom'): void {
+    this.closeMenu();
+    this.panes.detachToDock(this.paneId(), side);
+  }
+
+  /** Moves this docked pane back into the centre split tree. */
+  protected backToCenter(): void {
+    this.closeMenu();
+    this.panes.reattachToCenter(this.paneId());
   }
 
   protected closeOthers(path: string): void {

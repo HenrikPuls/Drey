@@ -127,13 +127,16 @@ describe('TabBar', () => {
 
     const items = compiled.querySelectorAll('.ctx-menu button');
     expect(Array.from(items).map((b) => b.textContent?.trim())).toEqual([
+      'Move to left dock',
+      'Move to right dock',
+      'Move to bottom dock',
       'Split right',
       'Split down',
       'Close others',
       'Close all',
     ]);
 
-    (items[2] as HTMLButtonElement).click(); // "Close others" (keeps b.md, the row that was right-clicked)
+    (items[5] as HTMLButtonElement).click(); // "Close others" (keeps b.md, the row that was right-clicked)
     fixture.detectChanges();
     expect(editor.openDocs().map((d) => d.path)).toEqual(['b.md']);
     expect(compiled.querySelector('.ctx-menu')).toBeNull();
@@ -146,7 +149,10 @@ describe('TabBar', () => {
       .dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, clientX: 20, clientY: 20 }));
     fixture.detectChanges();
 
-    (compiled.querySelector('.ctx-menu button') as HTMLButtonElement).click(); // "Split right"
+    const splitRight = [...compiled.querySelectorAll('.ctx-menu button')].find(
+      (b) => b.textContent?.trim() === 'Split right',
+    ) as HTMLButtonElement;
+    splitRight.click();
     fixture.detectChanges();
 
     expect(panes.pane('p1')!.tabs).toEqual(['b.md']);

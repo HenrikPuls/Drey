@@ -52,10 +52,30 @@
     (contextmenu)="$event.preventDefault(); closeMenu()"
   ></div>
   <div class="ctx-menu" [style.left.px]="m.x" [style.top.px]="m.y">
-    <button type="button" (click)="split(m.path, 'row')">Split right</button>
-    <button type="button" (click)="split(m.path, 'column')">Split down</button>
-    <div class="ctx-sep" role="separator"></div>
-    <button type="button" (click)="closeOthers(m.path)">Close others</button>
-    <button type="button" (click)="closeAll()">Close all</button>
+    @if (docked()) {
+      @if (region() !== 'dock-left') {
+        <button type="button" (click)="moveToDock('left')">Move to left dock</button>
+      }
+      @if (region() !== 'dock-right') {
+        <button type="button" (click)="moveToDock('right')">Move to right dock</button>
+      }
+      @if (region() !== 'dock-bottom') {
+        <button type="button" (click)="moveToDock('bottom')">Move to bottom dock</button>
+      }
+      <div class="ctx-sep" role="separator"></div>
+      @if (region() !== 'center') {
+        <button type="button" (click)="backToCenter()">Move back to editor area</button>
+      }
+    } @else {
+      <button type="button" (click)="moveToDock('left')">Move to left dock</button>
+      <button type="button" (click)="moveToDock('right')">Move to right dock</button>
+      <button type="button" (click)="moveToDock('bottom')">Move to bottom dock</button>
+      <div class="ctx-sep" role="separator"></div>
+      <button type="button" (click)="split(m.path, 'row')">Split right</button>
+      <button type="button" (click)="split(m.path, 'column')">Split down</button>
+      <div class="ctx-sep" role="separator"></div>
+      <button type="button" (click)="closeOthers(m.path)">Close others</button>
+      <button type="button" (click)="closeAll()">Close all</button>
+    }
   </div>
 }

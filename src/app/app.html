@@ -24,7 +24,7 @@
     }
 
     <div class="center-col">
-      <main class="main-pane">
+      <main class="main-pane" [class.editor-drop]="dock.dropDock() === 'center'">
         @if (editor.openDocs().length > 0) {
           <app-pane-layout [node]="panes.root()" />
         } @else {

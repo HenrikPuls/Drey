@@ -1,7 +1,7 @@
 import { Injectable, computed, inject } from '@angular/core';
 import { VaultFileEntry } from '../../../../shared/ipc-api';
 import { EditorService } from '../../services/editor.service';
-import { VaultService } from '../../vault/vault.service';
+import { VaultService } from '../../vault';
 import type { WikilinkCandidate } from './wikilink';
 
 /**

@@ -1,4 +1,5 @@
 import { TestBed } from '@angular/core/testing';
+import { PaneService } from '../panes/pane.service';
 import { DockService } from './dock.service';
 import { CORE_WIDGETS } from './widget-registry';
 
@@ -65,6 +66,72 @@ describe('DockService', () => {
     expect(dock.dragActive()).toBe(true);
     window.dispatchEvent(new MouseEvent('mouseup'));
     expect(dock.dragActive()).toBe(false);
+  });
+
+  describe('editor band drag (ADR-0038)', () => {
+    it('promotes past the threshold and focuses the pane on a plain click', () => {
+      const dock = make();
+      const panes = TestBed.inject(PaneService);
+      panes.open('a.md');
+      panes.detachToDock('p1', 'right');
+
+      dock.beginEditorBandPress('p1', 'a.md', new MouseEvent('mousedown', { button: 0 }));
+      panes.focus('p2'); // the centre placeholder -- a click must pull focus back
+      window.dispatchEvent(new MouseEvent('mousemove', { clientX: 1, clientY: 1 }));
+      window.dispatchEvent(new MouseEvent('mouseup'));
+      expect(dock.dragActive()).toBe(false);
+      expect(panes.focusedId()).toBe('p1');
+    });
+
+    it('carries the editor payload and never shows a widget drop index', () => {
+      const dock = make();
+      const panes = TestBed.inject(PaneService);
+      panes.open('a.md');
+      panes.detachToDock('p1', 'right');
+
+      dock.beginEditorBandPress('p1', 'a.md', new MouseEvent('mousedown', { button: 0 }));
+      window.dispatchEvent(new MouseEvent('mousemove', { clientX: 40, clientY: 30 }));
+      expect(dock.dragActive()).toBe(true);
+      expect(dock.dropDock()).not.toBeNull();
+      expect(dock.dropIndex()).toBeNull(); // no widget drop-lines during an editor drag
+      window.dispatchEvent(new MouseEvent('mouseup'));
+      expect(dock.dragActive()).toBe(false);
+    });
+
+    it('re-docks to the target side on drop', () => {
+      const dock = make();
+      const panes = TestBed.inject(PaneService);
+      panes.open('a.md');
+      panes.detachToDock('p1', 'right');
+
+      dock.beginEditorBandPress('p1', 'a.md', new MouseEvent('mousedown', { button: 0 }));
+      // Simulate the move/end pair over the left dock's registered element.
+      const leftEl = document.createElement('div');
+      Object.defineProperty(leftEl, 'getBoundingClientRect', {
+        value: () => ({ left: 0, right: 200, top: 0, bottom: 800, width: 200, height: 800 }),
+      });
+      window.dispatchEvent(new MouseEvent('mousemove', { clientX: 40, clientY: 30 }));
+      dock.registerDockEl('left', leftEl);
+      window.dispatchEvent(new MouseEvent('mousemove', { clientX: 100, clientY: 30 }));
+      window.dispatchEvent(new MouseEvent('mouseup'));
+      expect(panes.dockPane('left')).toBe('p1');
+      expect(panes.dockPane('right')).toBeNull();
+    });
+
+    it('reattaches to the centre on a centre drop', () => {
+      const dock = make();
+      const panes = TestBed.inject(PaneService);
+      panes.open('a.md');
+      panes.detachToDock('p1', 'right');
+
+      dock.beginEditorBandPress('p1', 'a.md', new MouseEvent('mousedown', { button: 0 }));
+      // No dock element covers the pointer -- the editor fallback is 'center'.
+      window.dispatchEvent(new MouseEvent('mousemove', { clientX: 40, clientY: 30 }));
+      expect(dock.dropDock()).toBe('center');
+      window.dispatchEvent(new MouseEvent('mouseup'));
+      expect(panes.dockPane('right')).toBeNull();
+      expect(panes.regionOf('p1')).toBe('center');
+    });
   });
 
   it('treats a header press with no movement as a collapse toggle', () => {

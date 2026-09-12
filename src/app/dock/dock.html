@@ -8,7 +8,7 @@
     [class.resizes]="ids().length > 0"
     [style.flexBasis.px]="ids().length > 0 ? panes.bandHeight(side()) : null"
   >
-    <div class="head" role="button" tabindex="0" (mousedown)="panes.focus(bpid)">
+    <div class="head" role="button" tabindex="0" (mousedown)="dock.beginEditorBandPress(bpid, bandTitle(bpid), $event)">
       <span class="title">{{ bandTitle(bpid) }}</span>
       <span class="grip" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i></span>
     </div>

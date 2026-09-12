@@ -82,3 +82,19 @@
   color: var(--text-6);
   font-size: 0.9rem;
 }
+
+/* While an editor band is dragged over the centre column, the whole main
+   pane shows the same soft dark wash the docks get (dock.css) -- "drop
+   here to bring the editor back". */
+.main-pane.editor-drop {
+  position: relative;
+}
+
+.main-pane.editor-drop::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.18);
+  pointer-events: none;
+  z-index: 5;
+}
