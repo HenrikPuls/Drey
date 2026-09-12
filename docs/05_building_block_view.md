@@ -555,11 +555,13 @@ src/                Angular renderer (standalone components, esbuild via Angular
                          frontmatter fold (full editor only), mirrored into a
                          frontmatterExpanded signal; onTagActivate = wire the tag-pill
                          extension (full editor only); onLinkActivate = wire the
-                         link-open extension (full editor only).
+                         link-open extension (full editor only);
+                         onWikilinkActivate = wire the wikilink extension (full
+                         editor resolves/creates, the drawer follows only).
                          languageFilename: the active tab's path -> its extension picks
                          the language compartment's contents. .md / null = the Markdown
                          bundle (grammar + #tag autocomplete + pills + link activation
-                         + spellcheck + frontmatter fold); a code file (.cpp/.json/.ts)
+                         + wikilinks + spellcheck + frontmatter fold); a code file (.cpp/.json/.ts)
                          = that language's grammar alone (lazy LanguageDescription.load,
                          @codemirror/language-data), source mode forced, none of the
                          Markdown chrome (ADR-0036). Compact composers pass nothing.
@@ -574,7 +576,25 @@ src/                Angular renderer (standalone components, esbuild via Angular
                          web/mail via the app:open-external IPC (shell.openExternal),
                          a vault path via EditorService.openFile. Pure
                          linkTargetDecorations + resolveVaultLinkPath split out for
-                         tests. ADR-0031
+                         tests. ADR-0031. Skips spans the wikilink regex claimed
+                         (lezer sees `[[x]]`'s middle as a shortcut-reference Link).
+      wikilinks/        ADR-0046 (req-20). wikilink.ts: pure extractWikilinks
+                         ([[target]], [[t#heading]], [[t|alias]], [[t#h|a]],
+                         [[#heading]]) + wikilinkDecorations (cm-wikilink /
+                         -unresolved marks with data-wikilink/-anchor/-alias,
+                         frontmatter + code guarded) + the wikilinks() ViewPlugin
+                         (Ctrl/Cmd-click -> onActivate(target, anchor)) +
+                         makeWikilinkCompletionSource (note names after `[[`).
+                         wikilink.service.ts: WikilinkService -- a renderer note
+                         index derived from vault.fileTree(); resolve() by path
+                         (case-insensitive, `.md` appended) or basename (ambiguous:
+                         linking note's folder first, then shortest, then locale
+                         compare); open() = openFileAt at the #heading's line
+                         (open buffer first) or create-missing via
+                         createVaultFile + open; openResolvedOnly() for the drawer.
+                         Mounted in the Markdown bundle's language compartment
+                         (both modes); the conceal layer hides the brackets /
+                         alias prefix.
       frontmatter-fold.ts  ADR-0009. StateField<boolean> + block-replace pill
                          ("Frontmatter . N fields", no box, accent > marker)
                          folding the leading YAML in BOTH modes; expand -> dim
@@ -1032,6 +1052,17 @@ Follow-up polish on the visual shell, driven by direct UX feedback.
   the `.md` assistant sidecar carried along); the three IPC handlers
   rebuild the tag index like `vault:delete`. A rename re-points open tabs
   via `EditorService.retargetTabs` (unsaved buffers survive).
+- **Drag & drop within the tree (req-23)**: HTML5 DnD (the same gesture
+  family as the ADR-0028 drags into the editor, not the ADR-0039 chrome —
+  see its "Later change"). Rows expose `dragover`/`drop`; a folder row
+  takes the entry in, a file row means its parent folder, the tree
+  background means the vault root. Folders are draggable but carry no
+  `application/x-drey-vault-path` (a pane must not open one) — the
+  dragged entry travels in a component signal (`dragEntry`), validity
+  (same-dir no-op, folder-into-own-subtree) is decided per `dragover` and
+  mirrored by a new guard in `VaultManager.renameEntry`. The commit is
+  the rename sequence (IPC → `retargetTabs` → clipboard remap → expand
+  destination); collisions surface as the usual one-off `alert`.
 - **Create / copy / rename errors surface as a one-off `alert()`, not
   `VaultService.error()`.** A name clash or a bad name shouldn't blank the
   whole file tree the way a failed initial load does; the mutating methods

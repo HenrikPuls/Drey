@@ -53,6 +53,7 @@ package, a minor naming convention).
 | [0043](09_architecture_decisions/0043-session-history.md)                          | Session history: restore the pane layout + open tabs on launch; unsaved buffers backed up under user-data (Notepad++-style) | Accepted |
 | [0044](09_architecture_decisions/0044-runtime-plugin-system.md)                    | Runtime plugin system: a base app with runtime-loadable, in-process plugins (supersedes 0016/0034's "no runtime" stance) | Accepted |
 | [0045](09_architecture_decisions/0045-optional-vault-file-watcher.md)              | Optional vault file watcher: opt-in chokidar + own-write ledger + one shared external-change round; manual refresh becomes a full round (amends 0018) | Accepted |
+| [0046](09_architecture_decisions/0046-wikilinks.md)                                | `[[Wikilinks]]`: regex mark decorations + Ctrl/Cmd-click (resolve by name/path, `#heading` jumps, `|alias`, create-missing) | Accepted |
 
 Decisions not yet written up (relevant spec already fixes them, but the
 ADR is deferred to the milestone that actually implements them, per

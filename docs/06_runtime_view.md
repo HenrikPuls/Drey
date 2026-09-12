@@ -1025,6 +1025,19 @@ sequenceDiagram
     Note over User,Idx: Rename: prompt-less inline input → renameEntry(from,to)<br/>→ VM.fsp.rename (+ sidecar) → Idx.rebuild → loadFileTree<br/>→ EditorService.retargetTabs(from,to) keeps unsaved buffers
 ```
 
+**Drag & drop within the tree (req-23, ADR-0039 later change):** the same
+`renameEntry` round, triggered by an HTML5 drag inside the panel instead
+of the context menu. Folder rows are draggable too; a folder carries no
+`application/x-drey-vault-path` (a pane must not open a folder), so the
+dragged entry rides a component signal the row handlers read.
+`dragover` on a row prevents default only when the move is valid (not a
+same-folder no-op, not a folder into its own subtree — the main process
+guards the latter as well), which drives the native no-drop cursor; drop
+destinations are the folder row (into it), a file row (its parent) and
+the tree background (vault root). The commit is exactly the rename
+sequence above: `renameEntry` → `retargetTabs` → clipboard remap → expand
+destination → tree reload.
+
 ## 6.21 Tasks panel: list + tick a task ([ADR-0033](09_architecture_decisions/0033-tasks-panel-and-index.md))
 
 The panel shows `TaskService.visible()`. In **document** scope that is
@@ -1509,6 +1522,40 @@ sequenceDiagram
 The manual refresh button runs the same round without the watcher
 (`vault:refresh` → `announceFullRefresh()`: a whole-vault `refresh`
 plugin event + a payload-less push).
+
+## 6.32 Ctrl+click a `[[wikilink]]` → resolve → open at heading / create ([ADR-0046](09_architecture_decisions/0046-wikilinks.md))
+
+Everything below the decoration layer happens in the renderer: the
+`WikilinkService` keeps a note index derived from `vault.fileTree()`, so
+resolution needs no vault-side index and no IPC unless the target must
+be created or the `#heading` anchor's line has to be read from disk.
+
+```mermaid
+sequenceDiagram
+    participant U as User
+    participant CM as Editor (wikilinks ViewPlugin)
+    participant W as WikilinkService
+    participant V as VaultService / dreyApi
+    participant E as EditorService
+
+    Note over CM: marks carry data-wikilink / data-anchor
+    U->>CM: Ctrl/Cmd-mousedown on .cm-wikilink
+    CM->>W: open(target, anchor, fromPath)
+    W->>W: resolve(target, fromPath)<br/>(fileTree-derived index)
+    alt resolved
+        W->>W: headingLine(path, anchor)?<br/>open buffer, else vault.read-file
+        W->>E: openFileAt(path, line ?? 1)
+        E->>E: revealRequest -> caret + scroll
+    else unresolved (editor only)
+        W->>V: createVaultFile("<target>.md")<br/>(parents auto-created)
+        V-->>W: ok / "Already exists" (race -> just open)
+        W->>V: loadFileTree (tree shows the note)
+        W->>E: openFile(path)
+    end
+```
+
+The entry drawer binds `openResolvedOnly` instead: an unresolved target
+is inert (no file creation from text that may be discarded).
 
 ## Planned flows (added as their milestone is built)
 

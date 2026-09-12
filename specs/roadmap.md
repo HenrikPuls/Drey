@@ -437,7 +437,6 @@ req-18 Flow descriptions like Task Description => Sebastian => Peter would mean 
 Or Description => Jira (Creates a ticket from the description and returns the link to the new jira ticket 
 )
 req-19: Integrate draw.io view and edit
-req-20 [[]] links shoudl work in the document
 req-21 dataview.js support
 req-22 integrate ical calender support. I would like to have in the context menu add meeting log, and then i would like to have a drop down of all apointments for that specific day, the one in which the current time falls shall be preselected, If i select one the meeting documentation like we did it with the drag and drop shall be used.
   → Drag-and-drop / **File → Import meeting** half done (ADR-0041, see
@@ -447,14 +446,60 @@ req-22 integrate ical calender support. I would like to have in the context menu
     live calendar source, not just a dropped file).
 
 Urgent UX Improvements (shall be done first after bugs):
-req-23 drag and drop of folders and files within the files widget
+
+
+
+## Won't do (decided against, kept for the record)
+
 req-24 Editor, the Lines On shall just contain the image but not text an ylonger
+  → Dropped after inspection (2026-09-12): the Live Preview image embed
+    already renders as the image only while the caret is elsewhere; the
+    caret-in / `</>` reveal of the raw `![alt](path)` line (with the
+    rendered picture kept below, Req-1) is the intended editing affordance.
+
 req-25 Editor written status informations like unsaved draft or Saved shall be removed. I opt to go the way of saving all changes to the document, so that it is guaranteed that they are stored.
+  → Decided against (2026-09-12): we stay with **manual save** (Ctrl+S /
+    Save button). An autosave design was drafted and shelved.
+
 req-26 frontmatter needs to be updated on save
-
-
+  → Dropped after inspection (2026-09-12): already implemented exactly as
+    specified — `note:save` bumps `updated:` and fills `created:` whenever
+    the file has a frontmatter fence, and fence-less files are written
+    back byte-for-byte (the app never adds a header that wasn't there,
+    `specs/frontmatter-schema.md`).
 
 # Completed
+
+req-20 — `[[wikilinks]]` ([ADR-0046](../docs/09_architecture_decisions/0046-wikilinks.md)):
+`[[target]]`, `[[target#heading]]`, `[[target|alias]]`,
+`[[target#heading|alias]]` and same-file `[[#heading]]` render as internal
+links in Live Preview *and* source mode (accent; unresolved targets muted
+with a dotted underline); Live Preview conceals the brackets — with an
+alias, everything but the alias. `Ctrl`/`Cmd`-click resolves by
+vault-relative path (`.md` appended, case-insensitive) or note basename
+(ambiguous → the linking note's folder first, then the shortest path) and
+opens the note at the `#heading` anchor's line (open buffer first).
+Ctrl-clicking an unresolved link **creates** the note (parents
+auto-created) and opens it. Typing after `[[` autocompletes note names
+(basename when unique, else the extension-less path). The "Add entry"
+drawer renders, completes and follows wikilinks but never creates files.
+Built as a base module `src/app/editor/wikilinks/` — regex mark
+decorations + completion over the file-tree-derived index, no Lezer node
+(the tag-pill route); the conceal layer and `link-open` skip spans the
+regex claimed.
+
+req-23 — drag & drop of files **and folders** within the Files panel
+(HTML5 DnD, [ADR-0039](../docs/09_architecture_decisions/0039-drag-and-drop-chrome.md)
+"Later change"): drop on a folder row moves into it, on a file row into
+that file's folder, on the tree background to the vault root. Same-dir
+drops and a folder into its own subtree are no-ops (no-drop cursor;
+`VaultManager.renameEntry` now guards the subtree case main-side too).
+Valid drops run the rename sequence — `renameEntry` (sidecar moves along)
+→ `retargetTabs` (open tabs re-point, unsaved buffers survive) →
+clipboard remap → the destination expands — and a name collision alerts
+without touching anything. Files keep dragging into the editor
+(ADR-0028); a folder carries no vault-path data type, so it can only move
+inside the panel.
 
 req-14 — an **optional** chokidar file watcher (Settings → Vault →
 "Watch the vault for external changes", off by default — ADR-0045,
@@ -657,8 +702,8 @@ selection after one count-aware `confirm` — as a single batched IPC call
 (`vault:delete-many`, one vault-change re-index for the whole batch, not
 per path). Tab-close and clipboard invalidation run per deleted path; a
 selection row that lived under a deleted folder is deselected. Dragging a
-row still carries that single row's path (multi-file drag stays with
-req-23).
+row still carries that single row's path (req-23 ships single-entry drag;
+a drag of the whole multi-selection is still open).
 
 bug-5 — the app now asks before exiting with unsaved changes. Every close
 path (titlebar X, Alt+F4, taskbar close/Quit, macOS role close/quit) funnels

@@ -200,7 +200,8 @@ Renderer (Angular):
   bottom one a resizable band under the editor). Panels come from the
   runtime **`WidgetRegistryService`**: core panels via
   `registerCoreWidgets()` — `CalendarPanel`, `FilesPanel` (vault
-  switcher + file tree + right-click new/delete + inline create),
+  switcher + file tree + right-click new/delete + inline create + drag
+  & drop of files/folders within the tree, req-23),
   `WindowsPanel`, `SearchPanelHost`, `EntryPanel` (the "Add entry"
   drawer — default home: the bottom dock) — while the templates / search
   / tasks / assistant panels are plugin widgets mounting plain DOM into
@@ -279,6 +280,12 @@ Renderer (Angular):
   collapsible headings, hover-revealed chevron); only the line-number
   column follows the Lines toggle (`editorStructure` / `gutterTheme`).
   Inline `#tag`s render as pills; `Ctrl`/`Cmd`-click runs a tag search.
+  `[[wikilinks]]` (ADR-0046) render as internal links in both modes
+  (unresolved ones muted + dotted; Live Preview conceals the brackets, an
+  alias leaving only its text); `Ctrl`/`Cmd`-click opens the target by
+  name/path — at a `#heading` anchor's line when given — and **creates**
+  a missing note; typing after `[[` autocompletes note names
+  (`src/app/editor/wikilinks/`, a base feature over the file tree).
   Global per-id requests (quick-capture, the assistant's
   insert-into-note) are gated on `PaneService.focusedId()`, so only the
   focused pane's instance acts on one. `EditorService.requestInsertText`
@@ -351,7 +358,9 @@ be called out explicitly (see Working Style below), not introduced silently.
     Layout state persists (`localStorage['drey.dock']`).
   - **Files panel**: a vault-switcher row (name + "Open other vault …",
     with the refresh button on the same row) above the vault file tree
-    (clicking a file opens it; right-click → new file/folder/delete).
+    (clicking a file opens it; right-click → new file/folder/delete;
+    dragging a row onto a folder / file row / the tree background moves
+    it — req-23, no-drop on a same-dir no-op or a folder into itself).
   - **Centre column**: a 34px tab bar for open documents, a 34px meta bar
     (path · Lines toggle · Save/Saved · `⋯` — no assistant sparkle
     button any more), the editor (Live Preview ⇄ source via the `⋯` menu
