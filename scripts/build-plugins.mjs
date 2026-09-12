@@ -16,9 +16,20 @@
  * The renderer output must contain no bare-specifier runtime imports — a
  * dynamic `import()` of `plugin://…` in the renderer would fail loudly on
  * one, which is exactly the failure mode we want (ADR-0044 rule 1).
+ *
+ * One output tree also means one directory mixing module systems: main/ is
+ * CommonJS, while shared/ is emitted as ES modules — the renderer imports
+ * it at runtime over `plugin://`, and the plugin main sides `require()` the
+ * same files (supported by the Node inside Electron >= 22). Node decides
+ * how to parse a .js file from the nearest package.json's `type`; with none
+ * present it sniffs the syntax and warns MODULE_TYPELESS_PACKAGE_JSON plus
+ * reparses every file. The merge step therefore drops a
+ * {"type":"module"} marker at the plugin root and {"type":"commonjs"} into
+ * main/, so no file is typeless and nothing needs sniffing. The browser
+ * ignores package.json entirely, so renderer/ over `plugin://` is unaffected.
  */
 import { spawnSync } from 'node:child_process';
-import { cpSync, existsSync, mkdirSync, readdirSync, renameSync, rmSync, statSync } from 'node:fs';
+import { cpSync, existsSync, mkdirSync, readdirSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -60,6 +71,12 @@ for (const entry of readdirSync(pluginsDir)) {
   }
   const pluginOut = path.join(mainOut, 'plugins', entry);
   mkdirSync(pluginOut, { recursive: true });
+  // Module-type markers, see the header note: shared/ + renderer/ are ESM,
+  // main/ is CJS. Rewritten every build (clean wipes dist-electron/).
+  writeFileSync(path.join(pluginOut, 'package.json'), `${JSON.stringify({ type: 'module' })}\n`);
+  const mainOutDir = path.join(pluginOut, 'main');
+  mkdirSync(mainOutDir, { recursive: true });
+  writeFileSync(path.join(mainOutDir, 'package.json'), `${JSON.stringify({ type: 'commonjs' })}\n`);
   // The manifest is read by discovery from the rootDir.
   cpSync(path.join(pluginDir, 'plugin.json'), path.join(pluginOut, 'plugin.json'));
   // Merge the renderer tree (modules + css + anything else static) next to
