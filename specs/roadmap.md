@@ -398,8 +398,6 @@ below).
 
 I will ask you to implement certain requirements from the following list, once it is done please move it to the implemented chapter at the end of the list and remove it from here.
 
-Arch-1 Restructure the programm completely to have a hieracrchical structure and all modules/widgets are self containes only acessing the interfaces.
-
 Req-2 I would also like to inlcude the following document types whic should be rendered, however as i can not forsee the effort lets discuss this upfront: word, excel, powerpoint, pdf and loop components, i would like to inser a link and it should open it inline. However if I drag a document directly than the document shall be placed within the attachements folder
 
 Req-3 I would like to have a wrapper around copilot m365 for web so that i can use it instead of a local llm.
