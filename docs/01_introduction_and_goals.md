@@ -7,23 +7,24 @@ land in Markdown files via quick-capture, a local LLM classifies them
 automatically (topic/person/task), and asks when unsure instead of
 misfiling silently.
 
-See [`specs/roadmap.md`](../specs/roadmap.md) for the full concept and
-phased scope.
+See [`specs/roadmap.md`](../specs/roadmap.md) for the concept, the
+binding architectural principles and the open requirements.
 
 ## 1.2 Requirements Overview
 
 The binding requirements live in `specs/`, not duplicated here:
 
-- [`specs/roadmap.md`](../specs/roadmap.md) — phased feature scope
-  (Phase 1 MVP through Phase 4 and Future Scope)
+- [`specs/roadmap.md`](../specs/roadmap.md) — concept, architectural
+  principles, tech stack and the not-yet-implemented requirements
+- [`specs/changelog.md`](../specs/changelog.md) — what is already
+  implemented
 - [`specs/frontmatter-schema.md`](../specs/frontmatter-schema.md) — file
   and frontmatter format
 - [`specs/classifier-spec.md`](../specs/classifier-spec.md) — LLM prompts
   for task/note detection and tag suggestions
 
-Current build scope is Phase 1 (MVP) only — see the roadmap's "Phase 1"
-section and `CLAUDE.md`'s "Current Scope" / "Build Order" for the
-milestone breakdown.
+The current build state is tracked in `CLAUDE.md` ("Current State & Next
+Steps") and `docs/milestones-done.md`.
 
 ## 1.3 Quality Goals
 

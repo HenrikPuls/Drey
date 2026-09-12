@@ -1,0 +1,411 @@
+# Drey — Changelog
+
+The record of everything **implemented**, newest first. Open work lives in
+[`roadmap.md`](roadmap.md) → "Not yet implemented"; when an item ships it
+moves here. The finer-grained history is not duplicated: the
+milestone-by-milestone build log is archived in
+[`docs/milestones-done.md`](../docs/milestones-done.md), lasting decisions
+live in the ADRs
+([`docs/09_architecture_decisions/`](../docs/09_architecture_decisions/)),
+and the current architecture in
+[`docs/05_building_block_view.md`](../docs/05_building_block_view.md).
+
+---
+
+## Recent milestones
+
+### Milestone 24 — assistant composer rework
+
+The Claude-Code-style composer in the assistant panel: a **model row** that
+edits the one global `llm.model` through the new `api.llm.listModels()`
+facade (provider label + listing capability + best-effort list; hand-entry
+always available, `PLUGIN_API_VERSION` minor → 1), **context chips** (the
+open note attached by default and deselectable; extra vault files via
+`@`-completion or the "+" picker, read at send time as live buffer/vault
+content, capped per file), and an **auto-growing composer** (content height
+up to a cap, then it scrolls inside; the drag divider and its persisted
+height pref are gone). The ask payload became
+`{ question, note | null, extraFiles, history }`
+(`plugins/assistant/shared/ask.ts` — `note: null` turns the turn
+answer-only via a second system prompt). Plus a global
+`::-webkit-scrollbar-corner` fix (styling any scrollbar part switches
+Chromium to custom painting, and the unstyled corner rendered solid white)
+and a templates-picker modal selector fix in passing.
+
+### Milestone 23 — Claude Code CLI provider + visible ask-history validation
+
+The **Claude Code CLI provider** joined the req-29 abstraction
+(`electron/llm/providers/claude-code-cli.ts` on `cli-base.ts`):
+`claude -p` headless with stream-json output and provider-side session
+continuation via `--resume` (`sessionRef`), opt-in and off by default
+(ADR-0047). **bug-10(a)** fixed in the same pass: the ask handler validates
+the `history` IPC payload and fails visibly instead of silently degrading
+to no context, and the renderer always sends an array.
+
+### Milestone 22 — LLM provider abstraction (Req-29 core, ADR-0047)
+
+One provider-neutral `LlmClient` interface with a per-call `LlmRouter`
+over `electron/llm/providers/`: the **local OpenAI-compatible** provider
+(LM Studio / Ollama / vLLM / llama.cpp / Unsloth, optional bearer key)
+plus hosted presets (**OpenRouter**, **Anthropic API**, **Z.ai GLM** —
+opt-in, off by default) on one OpenAI-compat client, and an
+**Anthropic-Messages** client. Streaming (`onDelta`), provider-side
+session continuation (`sessionRef`), a capability descriptor
+(tools / streaming / sessions / model listing / image attachments) and a
+canonical `ToolSpec` so MCP tools are provider-neutral. No hardcoded model
+id — the model stays hand-enterable; `copilot-cli` / `copilot-web` remain
+unrouted until their milestones land (see roadmap).
+
+---
+
+## Requirements & fixes
+
+Moved here from the roadmap's former "Completed" chapter.
+
+req-20 — `[[wikilinks]]`
+([ADR-0046](../docs/09_architecture_decisions/0046-wikilinks.md)):
+`[[target]]`, `[[target#heading]]`, `[[target|alias]]`,
+`[[target#heading|alias]]` and same-file `[[#heading]]` render as internal
+links in Live Preview *and* source mode (accent; unresolved targets muted
+with a dotted underline); Live Preview conceals the brackets — with an
+alias, everything but the alias. `Ctrl`/`Cmd`-click resolves by
+vault-relative path (`.md` appended, case-insensitive) or note basename
+(ambiguous → the linking note's folder first, then the shortest path) and
+opens the note at the `#heading` anchor's line (open buffer first).
+Ctrl-clicking an unresolved link **creates** the note (parents
+auto-created) and opens it. Typing after `[[` autocompletes note names
+(basename when unique, else the extension-less path). The "Add entry"
+drawer renders, completes and follows wikilinks but never creates files.
+Built as a base module `src/app/editor/wikilinks/` — regex mark
+decorations + completion over the file-tree-derived index, no Lezer node
+(the tag-pill route); the conceal layer and `link-open` skip spans the
+regex claimed.
+
+req-23 — drag & drop of files **and folders** within the Files panel
+(HTML5 DnD,
+[ADR-0039](../docs/09_architecture_decisions/0039-drag-and-drop-chrome.md)
+"Later change"): drop on a folder row moves into it, on a file row into
+that file's folder, on the tree background to the vault root. Same-dir
+drops and a folder into its own subtree are no-ops (no-drop cursor;
+`VaultManager.renameEntry` now guards the subtree case main-side too).
+Valid drops run the rename sequence — `renameEntry` (sidecar moves along)
+→ `retargetTabs` (open tabs re-point, unsaved buffers survive) →
+clipboard remap → the destination expands — and a name collision alerts
+without touching anything. Files keep dragging into the editor
+(ADR-0028); a folder carries no vault-path data type, so it can only move
+inside the panel.
+
+req-14 — an **optional** chokidar file watcher (Settings → Vault →
+"Watch the vault for external changes", off by default — ADR-0045,
+amends ADR-0018's "purely additive" clause). One external-change round
+in main, shared by all change sources: `VaultWatcher` (chokidar v3 CJS,
+`ignoreInitial` + ready gate, dot-entry ignore, `awaitWriteFinish`,
+~300 ms debounce for OneDrive bursts) → `OwnWriteLedger` (every
+`VaultManager` mutation records itself: content writes as post-write
+mtime, structural ops as path+TTL; a match drops the app's own echo —
+a missed match costs one redundant refresh, never corruption) →
+`VaultChangeAnnouncer` (per-file `write`/`delete` plugin events for
+`.md`, then one `vault:changed` renderer push with the changed paths,
+capped at 200). The push is the renamed, payload-carrying
+`mcp:vault-changed`; `EditorService` auto-reloads **clean** open tabs
+among the changed paths (`modifiedMs` finally earning its keep) and
+flips tabs of externally deleted files to draft semantics; dirty tabs
+stay last-writer-wins, no conflict dialog. The manual refresh button
+now runs the same full round in main (`vault:refresh`) — fixing the old
+gap where it re-pulled the tree but left the tag/task indexes stale.
+New modules `electron/own-write-ledger.ts`, `electron/vault-watcher.ts`,
+`electron/vault-change-announcer.ts`; the tags plugin re-indexes a
+single file on scoped `write` events (mirroring tasks).
+
+Req-5 — `Ctrl`/`Cmd`-click a link opens it in the OS browser. Already wired
+for the document editor (`link-open.ts` `linkActivation` → `Editor.activateLink`
+→ `shell.openExternal`, allow-listed to `http(s):` / `mailto:`); extended to
+the "Add entry" capture surface (`EntryDrawer.activateLink`, web/mail only —
+the drawer has no note path to resolve a relative link against).
+
+Paste-a-URL → Markdown link. Pasting a bare URL onto an **empty** caret now
+inserts `[url](url)` with the label pre-selected (`paste-link.ts`
+`pasteUrlAsMarkdownLink`, Markdown-only). `@codemirror/lang-markdown`'s own
+`pasteURLAsLink` still handles the wrap-a-selection case (`[selection](url)`);
+the new handler only fills the empty-caret gap and stays clear of code /
+existing links / frontmatter and image pastes.
+
+bug-1 — a bare timestamp (`2026-09-09T00:03:48`) had its `:03:` slice
+coloured. Cause: `markdownLanguage` bundles `@lezer/markdown`'s `Emoji`
+inline parser, whose `:name:` rule (`/^[a-zA-Z_0-9]+:/`) accepts digits, so
+`:03:` parsed as an `Emoji` node. We never render `:shortcode:` emoji — the
+parser is now dropped (`markdown({ extensions: [{ remove: ['Emoji'] }] })`).
+
+bug-2 — the Appearance **Theme** (and Editor font) `<select>` always showed
+the first option. `<select [value]>` is set before `@for` renders the
+`<option>`s, so the browser can't match it. Fixed with `[selected]` on each
+option.
+
+bug-3 — the editor typeface stopped applying under a published `@uiw` theme.
+Those themes emit `&.cm-editor .cm-scroller { font-family: <mono> }` — the
+exact selector `editorStructure` used for `var(--font-sans)` — and the theme
+compartment wins at equal specificity regardless of declaration order. The
+app rule is now one class heavier (`&.cm-editor.cm-editor .cm-scroller`) so
+it outranks any theme outright.
+
+Req-1 — Live Preview embed affordances. The corner **View source** button is
+now `</>` (was a pencil) and shares a `.lp-tools` flex cluster with the zoom
+lens, so they no longer stack on top of each other (they did on a mermaid
+diagram, making the button unclickable). Images gained the `</>` button too;
+revealing an image's source now shows the raw `![alt](path)` line inside a
+rounded, bordered container **with the rendered image kept directly below
+it**. Every text embed's revealed source (table / mermaid / HTML / image)
+gets that same container so the active-line highlight reads as in-scope.
+See [ADR-0009](../docs/09_architecture_decisions/0009-live-preview-decorations.md)
+"Later change".
+
+req-7 — a dock panel's own control row moved into the shared 32px
+`PanelFrame` header instead of a band below it. New leaf module
+`src/app/dock/panel-header-actions.ts`: `PanelHeaderActionsStore`
+(`Map<widgetId, TemplateRef>` signal) + an `[appPanelHeaderActions]="<id>"`
+directive on an `<ng-template>` in the panel body; `PanelFrame` renders the
+matching template in a `.head-actions` slot — right-aligned, immediately
+left of the drag grip — that swallows `mousedown` / `keydown` so a control
+click never collapses/drags the panel. Applied to **Tasks** (scope · hide-done · kind
+toggles) and **Files** / **Templates** (refresh; Files also collapse-all).
+The `files` / `templates` panels' header status values (vault name /
+templates dir) were dropped in the same pass so the header reads as
+controls, not chrome. Assistant / Search / Calendar left as-is.
+See [ADR-0019](../docs/09_architecture_decisions/0019-movable-dock-panels-and-layout-state.md)
+"Later change — controls in the panel header".
+
+req-8 — the Tasks panel gained a free-text + multi-tag filter with tag
+autocomplete. `TaskRecord` now carries `tags` = the inline `#tags` of the
+task's heading-section (`scanTasks` reuses `splitSections` +
+`extractInlineTags` from `shared/tags`), so `tasks:list` and the live
+document scan both provide it. `TaskService` holds `queryTags` / `queryText`
+(persisted in `localStorage['drey.tasks']`); `visible` keeps a task when
+every query tag matches its section tags (nested tags included, via the
+shared `tagSetMatches`) and every whitespace term is a substring of its
+text/heading. `TasksPanel` renders a tag-chip input (`<datalist>`
+autocomplete over `TagService.tags()`, mirroring the Search panel) + a
+free-text field as the first body row.
+
+req-22 (drag-and-drop half) — Calendar drop: drag an Outlook `.ics` / `.msg`
+(from the calendar or the file system) onto the editor to insert a
+formatted **meeting section** at the drop point: title, date/time,
+participants, invitation body and attachment names, auto-tagged
+`#mtg/<kebab-case-title>` so it lands in the tag section index. Also
+**File → Import meeting …** (native picker) as the fallback for Outlook
+drags that deliver no real file (new Outlook / OWA drags do not — save as
+`.ics` first, or use Import meeting). The section is rendered from an
+editable `templates/meeting.md` (scaffolded from an English default on
+first use) via a tiny `{{#if}}` / `{{#each}}` evaluator; `.ics` / `.msg`
+are decoded in the main process (`electron/meeting/`, `ical.js` +
+`@kenjiuno/msgreader`, the invite's `VTIMEZONE` resolved to local time).
+Decode-only — the invite file itself is not copied into the vault. New
+`shared/meeting` / `electron/meeting` / `src/app/meeting` feature modules;
+the drop branch lives in `image-paste.ts`. The remaining `req-22` scope
+(a context-menu "add meeting log" with a per-day appointment picker) is a
+follow-up on top of this.
+See [ADR-0041](../docs/09_architecture_decisions/0041-calendar-file-drop-meeting-section.md).
+
+In-editor web browser tab (ADR-0042). `File -> New browser tab` /
+`Ctrl+Shift+B` opens a fileless `browser://<n>` tab
+(`OpenDoc.kind: 'browser'`) whose page is a main-process `WebContentsView`
+(`electron/browser/BrowserViewManager`), floated over the Angular layout by
+streaming the chrome placeholder's client rect as bounds. `src/app/browser/`
+holds `BrowserTab` (toolbar only) and `BrowserViewService` (state, event
+reducer, lifecycle -- destroys a view when its `browser://` key leaves
+`editor.openDocs()`). `normalizeAddress` sends non-URL input to DuckDuckGo;
+the session is an isolated `persist:webtab` partition; each view's
+`webContents` gets its own `will-navigate` / `setWindowOpenHandler` (http(s)
+popups reopen as tabs) / `context-menu` (nav, clipboard, open-link/image in
+a tab, search selection, inspect) and denies every permission request.
+`WebContentsView` paints above all DOM, so `OverlayGuardService` + the
+`[appOverlayGuard]` directive (+ a `LayoutGestureService` for splitter /
+dock drags) hide every view while an overlay or layout drag is active.
+Find-in-page via `webContents.findInPage` (`Ctrl+F`). New IPC channels in
+`shared/browser` + `electron/ipc/browser-handlers.ts`. Follow-up: restore
+open tabs + layout on restart (session history).
+
+Session history (ADR-0043). `SessionService` (`src/app/session/`) persists
+the pane layout + open-tab list to `localStorage['drey.session']` and
+restores it once at startup (before the daily-note fallback; skipped if the
+vault changed). `PaneService` gained `snapshot()` / `restore(keepPath)` —
+reversing ADR-0037's 'not persisted' note — which prunes tabs that no
+longer resolve and empty panes. Unsaved buffer text is kept in a
+main-process backup store (`electron/session/SessionBackupStore`, one
+`<uuid>.txt` per tab under `<userData>/session-backups/`, IPC `session:*`):
+a never-saved scratch buffer, or unsaved edits re-applied over the fresh
+disk read. Persist runs off one debounced effect + `beforeunload` /
+`visibilitychange` flushes; backups are reference-counted and orphans
+pruned on launch. Browser tabs restore under their exact `browser://<n>`
+key. New feature modules `electron/session/` + `src/app/session/`.
+
+bug-9 — Tab inside the editor moved keyboard focus to the next control
+instead of inserting anything: `basicSetup` ships no Tab binding at all
+(`indentWithTab` is not part of it), so the unbound key fell through to the
+browser's focus navigation. `Tab` is now bound on the shared
+`MarkdownSurface` (`src/app/editor/editor-indent.ts`, `Prec.highest` so
+plugin-contributed keymaps can't shadow it): an empty caret inserts a
+literal tab character, a selection indents the selected lines
+(`indentMore`), Shift+Tab outdents (`indentLess`); the indent unit is a
+literal tab. The binding is gated on `view.editable`, so the read-only
+assistant composer stays inert. Deliberate a11y tradeoff (project owner's
+call): Tab no longer leaves the editor — `F6` / `Shift+F6` (pane focus)
+remain the way out. Covers the full-page editor and the "Add entry" drawer
+body (same surface).
+
+bug-7 — the Files panel's arrow keys moved the highlight, but **Enter did
+not open** the highlighted file. The rows are focusable `<button>`s and the
+selection was only a visual signal — `select()` never moved DOM focus, so
+focus stayed on the originally-clicked row and Enter natively re-activated
+*that* one. The selected row now takes DOM focus on every keyboard move
+(roving `tabindex`, focus-follow in `select()`), so Enter/Space activate the
+highlighted row; as a side effect the tree collapses to a single Tab stop
+instead of one per row.
+
+bug-6 — intermittent stuck input in the packaged build (no field accepts
+text, the Appearance dropdowns stop changing, mouse still works, only a
+restart clears it; the Appearance `<select>` blur that closed an open
+dropdown under the user was one visible symptom). **Root cause remains
+unconfirmed** — the renderer's DOM was exonerated (the keybinding service is
+stateless exact-chord matching and never swallows unmatched keys; no focus
+trap exists; `user-select: none` does not block typing) — so this pass is
+hardening + diagnosability at every plausible layer:
+(1) two pointer gestures that set `body { user-select: none }` without the
+`data-drey-gesture` marker and without window-blur cleanup — the pane
+splitter and the Live-Preview image resize — now carry the marker and end
+themselves on window blur, so an alt-tab mid-drag can no longer leak the
+style, and the input-recovery watchdog no longer false-positives mid-gesture
+(its `recover()` blurs the active element, which is what could close an open
+native dropdown);
+(2) native context-menu popups (`electron/menu.ts`) are now tracked per
+window, closed on window blur/minimize, and logged — an Electron popup whose
+capture loop never unwinds is the leading hypothesis for the full symptom
+set (invisible, swallows all keyboard, renderer can neither see nor fix it);
+(3) "Recover input focus" (View menu / `Mod+Alt+Shift+R`) now also reaches
+main (`window:recover-input`) to force-close such a popup, and every step
+logs to `drey.log` so a field occurrence finally leaves a trace;
+(4) a dead `.menu-backdrop` selector in `InputRecoveryService` was removed.
+
+bug-8 — the Files panel gained a **multi-selection** (project request):
+Ctrl+click toggles rows into the set, Shift+click / Shift+arrow extend a
+range over the visible rows, Ctrl+arrow moves the cursor without changing
+the selection, Escape collapses back to the cursor row, and right-clicking
+inside a multi-selection makes the context menu act on all of it (outside
+one, it collapses to the right-clicked row, so Delete can't surprise).
+Enter opens every selected file (folders skipped), Delete removes the whole
+selection after one count-aware `confirm` — as a single batched IPC call
+(`vault:delete-many`, one vault-change re-index for the whole batch, not
+per path). Tab-close and clipboard invalidation run per deleted path; a
+selection row that lived under a deleted folder is deselected. Dragging a
+row still carries that single row's path (req-23 ships single-entry drag;
+a drag of the whole multi-selection is still open).
+
+bug-5 — the app now asks before exiting with unsaved changes. Every close
+path (titlebar X, Alt+F4, taskbar close/Quit, macOS role close/quit) funnels
+into one `BrowserWindow 'close'` interception (`electron/main.ts`): main
+holds the window and asks the renderer — which owns the dirty-document
+registry — over the `exit:confirm-request` / `exit:decision` bridge pair
+(`ExitBridge`, a `McpWriteBridge` copy **without** the 120 s timeout: a
+timeout would auto-decide the user's exit; a hung renderer leaves the
+window open, and the session backups have the text regardless). Clean
+state answers "proceed" without any dialog. With dirty documents an
+in-app dialog offers **Save all / Exit without saving / Cancel**:
+*Save all* runs `saveAll({ drafts: true, runOnSaveActions: false })` —
+real files save straight through, and untitled scratch tabs commit into a
+new hidden `<vault>/.drafts/` folder as `unnamed-N.md` (the Notepad++
+model, project owner's call: no Save-As dialogs on exit; an explicit
+"Save as…" away from `.drafts/` later **moves** the file and deletes the
+draft). On-save Actions are suppressed on the exit path only — no LLM
+round trips during shutdown (deviation from `saveAll`'s menu behaviour,
+flagged here rather than in an ADR). If anything stays dirty after saving
+(a failed write), the answer is "cancel" and the app stays open with the
+error visible. "Exit without saving" flushes the session backups
+(`SessionService.flushNow()` is now public/awaited) before answering —
+ADR-0043 keeps the buffers restorable either way. `before-quit` routes an
+app-level quit through the same prompt (`quitIntent` flag; the
+`!mainWindow` clause keeps the post-approved quit cascade from
+re-intercepting).
+
+---
+
+## Phase 1 — MVP & foundation (milestones 1–21)
+
+Condensed to one line per feature area; the full narrative per milestone
+is in [`docs/milestones-done.md`](../docs/milestones-done.md), the
+behavioural detail in the linked ADRs and the arc42 docs.
+
+- **Shell & dock system** — frameless window, custom titlebar with an HTML
+  menu bar, three docks (left/right/bottom) of draggable/resizable/
+  collapsible panels, status bar, persisted layout, content-height
+  calendar ([ADR-0019](../docs/09_architecture_decisions/0019-movable-dock-panels-and-layout-state.md),
+  [ADR-0034](../docs/09_architecture_decisions/0034-internal-widget-model.md)).
+- **Editor** — CodeMirror 6 with in-place Live Preview (decoration-based,
+  conceal-around-selection, mermaid, tables/images as widgets,
+  clickable task checkboxes, `#tag` pills) plus a source mode
+  ([ADR-0008](../docs/09_architecture_decisions/0008-editor-mode-menu-and-rendered-preview.md),
+  [ADR-0009](../docs/09_architecture_decisions/0009-live-preview-decorations.md),
+  [ADR-0025](../docs/09_architecture_decisions/0025-mermaid-live-preview.md)),
+  named themes incl. the published CM6 set
+  ([ADR-0035](../docs/09_architecture_decisions/0035-named-ui-themes.md)),
+  per-file syntax highlighting for non-Markdown
+  ([ADR-0036](../docs/09_architecture_decisions/0036-code-file-editor-mode.md)),
+  fold gutter, line-number toggle, Tab handling, spellcheck
+  ([ADR-0013](../docs/09_architecture_decisions/0013-inline-spellcheck.md)).
+- **Split-view panes** — arbitrary row/column split tree, per-pane tabs,
+  focused-pane facade, tab drag & drop, editor panes dockable into the
+  three docks
+  ([ADR-0037](../docs/09_architecture_decisions/0037-split-view-editor-panes.md),
+  [ADR-0038](../docs/09_architecture_decisions/0038-editor-panes-in-docks.md),
+  [ADR-0039](../docs/09_architecture_decisions/0039-drag-and-drop-chrome.md)).
+- **Quick-capture & daily notes** — global hotkey, `daily/<y>/<m>/` paths,
+  timed entries, startup draft, configurable entry templates (Classic /
+  Ruled / own).
+- **Template library** — category folders, Templates panel, insert
+  (click/drag/context menu/`Ctrl+T` picker), placeholder substitution
+  ([ADR-0029](../docs/09_architecture_decisions/0029-template-library.md)).
+- **Tags & section search** — free inline `#tag`s (nested), vocabulary +
+  inverted section index, tags-AND + free-text search with open-at-line
+  and Markdown Export, Autotag button
+  ([ADR-0017](../docs/09_architecture_decisions/0017-tags-as-labels-and-section-index.md)).
+- **Tasks panel** — GFM checkbox / `#task` lines, document or vault scope,
+  hide-done, kind filter, tag+text filter, tick-back writes to the source
+  file ([ADR-0033](../docs/09_architecture_decisions/0033-tasks-panel-and-index.md)).
+- **Assistant & Actions** — per-note sidecar threads, automatic summary,
+  Ask with running history, insert-into-note, no-timeout generation with
+  cancel ([ADR-0012](../docs/09_architecture_decisions/0012-note-assistant-sidecar-thread.md)),
+  trigger→template Actions with the shared confirmation flow
+  (inline/split diff, "don't ask again")
+  ([ADR-0011](../docs/09_architecture_decisions/0011-unified-confirmation-flow.md)).
+- **Settings** — master-detail screen, draft-until-save, `app-config.json`
+  under the OS user-data dir
+  ([ADR-0010](../docs/09_architecture_decisions/0010-app-settings-storage.md)).
+- **Images & attachments** — paste/drop into `attachments/` beside the
+  note, `drey-asset://` serving, size syntax + resize grip, zoom/pan
+  lightbox, image tabs
+  ([ADR-0024](../docs/09_architecture_decisions/0024-binary-vault-asset-write.md),
+  [ADR-0026](../docs/09_architecture_decisions/0026-image-viewer-and-lightbox.md),
+  [ADR-0028](../docs/09_architecture_decisions/0028-drag-drop-into-the-editor.md),
+  [ADR-0027](../docs/09_architecture_decisions/0027-window-dnd-navigation-guard.md)).
+- **Meeting import** — `.ics` / `.msg` drop / File → Import meeting →
+  templated `#mtg/…` meeting section
+  ([ADR-0041](../docs/09_architecture_decisions/0041-calendar-file-drop-meeting-section.md)).
+- **In-editor browser tab** — `browser://<n>` tabs over a main-process
+  `WebContentsView`
+  ([ADR-0042](../docs/09_architecture_decisions/0042-in-editor-web-browser-tab.md)).
+- **Session history & exit guard** — restore panes/tabs/unsaved buffers
+  across restarts, `.drafts/` auto-save of untitled tabs, the
+  exit-with-unsaved-changes prompt
+  ([ADR-0043](../docs/09_architecture_decisions/0043-session-history.md)).
+- **Refresh model** — manual refresh round, no watcher by default, opt-in
+  chokidar watcher with own-write suppression
+  ([ADR-0018](../docs/09_architecture_decisions/0018-manual-refresh-no-file-watcher.md),
+  [ADR-0045](../docs/09_architecture_decisions/0045-optional-vault-file-watcher.md)).
+- **Vault MCP server** — `vault_search` / `vault_read` / `vault_write`
+  over hand-rolled JSON-RPC, stdio bridge + opt-in HTTP transport,
+  confirmation dialog or YOLO mode, assistant vault tool use
+  ([ADR-0021](../docs/09_architecture_decisions/0021-mcp-vault-server.md)).
+- **Runtime plugin system** — base application + in-process plugins under
+  `plugins/<id>/`, the SDK contract, registries, two-channel IPC,
+  Settings → "Panels & plugins", packaging from inside `app.asar`
+  ([ADR-0044](../docs/09_architecture_decisions/0044-runtime-plugin-system.md)).
+- **Packaging** — electron-builder for Windows, plugins verified from
+  `app.asar` (`docs/07_deployment_view.md`).

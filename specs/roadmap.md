@@ -39,356 +39,109 @@ refresh" below), with an opt-in chokidar watcher for external changes
 
 ---
 
-## Phase 1 — MVP
+## Not yet implemented
 
-**Goal: usable day to day, smallest viable feature set**
+Everything implemented lives in [`changelog.md`](changelog.md). When an
+item below ships, move it there and remove it from this list.
 
-- **UI shell (v3 dock layout, milestone 14 — `handoff/DESIGN.md`,
-  [ADR-0019](../docs/09_architecture_decisions/0019-movable-dock-panels-and-layout-state.md)):**
-  a frameless window with a custom titlebar (accent square + "Drey" + an
-  HTML File/Edit/Selection/View menu bar + window controls), a left and a
-  right **dock**, the editor column between them, and a 26px status bar
-  (word/char count · context hint · Settings). The former sidebar
-  contents — calendar, file tree, tag search, open-windows — plus the note
-  assistant are **five panels** the user drags between the two docks,
-  resizes with splitters, and collapses to their header; the arrangement
-  persists per machine. "Sidebar" in the feature bullets below now means
-  the relevant dock panel. Design tokens (exact hex / px / type from the
-  handoff) live centrally in `src/styles.css`; the editor keeps
-  CodeMirror 6 + Live Preview rather than the prototype's block model.
-  The panels are a data-driven **widget registry**
-  ([ADR-0034](../docs/09_architecture_decisions/0034-internal-widget-model.md),
-  now a runtime registry per
-  [ADR-0044](../docs/09_architecture_decisions/0044-runtime-plugin-system.md)):
-  each declares its default dock / capabilities, the View menu shows or
-  hides a whole widget (not just collapses it). Since ADR-0044 the app is
-  split into a **base application** (shell, editor, vault IO, plugin hosts,
-  LLM transport) and **runtime-loadable, in-process plugins** — the tag,
-  task, browser, meeting, template and assistant features are plugins with
-  full document access; `<userData>/plugins/<id>/` holds user-installed
-  ones. (The earlier "internal structure only — no runtime plugin loading"
-  stance is superseded.)
+### Feature requests
 
-- **Quick-capture:** a global hotkey brings the main window forward and
-  opens today's daily note — `daily/<year>/<month>/YYYY-MM-DD.md` — in the
-  editor. On open, a fresh `## HH:mm` entry is appended, ready to type
-  into. There's no separate popup window — capture happens in the full
-  editor, so inline `#tag` autocomplete (from the tag vocabulary, see the
-  tag index below) and the editor mode menu are always available. Older
-  flat `daily/YYYY-MM-DD.md` files are still opened if present.
-  On app start, today's daily note is opened automatically (as an unsaved
-  draft tab — nothing is written until you type and save), toggleable in
-  Settings → **Daily notes** ([ADR-0029](../docs/09_architecture_decisions/0029-template-library.md)).
+- **Req-2** — render Office documents inline: Word, Excel, PowerPoint,
+  PDF and Loop components. Insert a link that opens the document inline;
+  dragging a document directly places it in the `attachments/` folder.
+  (Effort to be discussed before implementation.)
+- **Req-3 / req-15** — `copilot-web` provider: drive Microsoft 365
+  Copilot's website via Playwright + system Edge as an LLM provider.
+  Prototyped on branch `feat/copilot-web-provider` (ADR-0040) — fragile
+  PoC, URL / selectors / timing editable in Settings. Unmerged; tracked
+  with the Req-29 remainder below.
+- **Req-17** — Jira integration: when a ticket link is inserted into a
+  document, fetch its current status on load and render it inline with the
+  text; plus the ability to create new tickets directly.
+- **Req-6** — download further CodeMirror 6 themes on demand (a bundled
+  set — the Drey look plus the published `@uiw` themes — ships since
+  milestone 16).
+- **Req-18** — flow descriptions / agentic workflow automation:
+  "Task Description => Sebastian => Peter" (prepare a task, send it to
+  Sebastian to discuss with Peter), "Description => Jira" (create a ticket
+  from the description, return the new ticket's link).
+- **req-9** — OCR for handwritten notes (iPad expansion stage; Apple
+  Vision Framework or local Tesseract). Maybe an OCR field where images
+  can be dropped so they are OCR'd.
+- **req-10** — iPad/iPhone access via Tailscale to the PC backend.
+- **req-11** — audio recording in interview mode (local Whisper; Windows
+  integrated speech-to-text via Win+H as the likely first step).
+- **req-12** — automatic image captioning via a vision model.
+- **req-13** — editor: footnote rendering in Live Preview (needs a custom
+  Lezer markdown extension); `Ctrl`-click to open concealed link targets.
+- **req-16** — PDF export.
+- **req-19** — integrate draw.io view and edit.
+- **req-21** — dataview.js support.
+- **Req-30** — chat as vault note: conversations persist as Markdown notes
+  in a `chats/` folder (notebook format — one `##` heading per turn with
+  role, timestamp, optional `<!-- drey: … -->` meta, `drey-tool` fenced
+  blocks for tool calls/results, attachment link blocks). The assistant
+  panel becomes chat-first (chat picker + composer); a note can be
+  attached as context; resuming a chat replays the full persisted history
+  provider-aware (full replay, or Claude Code's `--resume` when the
+  session matches). Supersedes ADR-0012's per-note sidecar threads for
+  conversations (the sidecar stays for the auto-summary until decided
+  otherwise).
+- **Req-31** — MCP client: connect the app TO external MCP servers
+  (`@modelcontextprotocol/sdk`, stdio + Streamable-HTTP transports),
+  configured in an `mcpServers` config slice; their tools join the vault
+  tools in one provider-neutral tool pool (namespaced
+  `mcp__<server>__<tool>`), confirmation-gated per server. Builds on the
+  Req-29 interface — every tool-capable provider can drive them.
 
-- **Note templates:** a `templates/` folder in the vault holds Markdown
-  templates with `{{date}}` / `{{time}}` / `{{datetime}}` / `{{title}}`
-  placeholders. `templates/daily.md` seeds new daily notes and is
-  scaffolded with a starter layout on first use; editing it changes how
-  future daily notes look.
+### Known-defect remainder
 
-- **Template library** ([ADR-0029](../docs/09_architecture_decisions/0029-template-library.md)):
-  the same folder (configurable, Settings → **Templates**, default
-  `templates`) is a browsable library. Every sub-folder is a category,
-  nested sub-folders sub-categories, and each `.md` a template labelled by
-  its filename. A **Templates** dock panel lists them; inserting one
-  (click, drag into the editor, the editor's right-click menu, or the
-  `Ctrl+T` picker showing the last 5 used) drops its body at the cursor
-  with the YAML frontmatter stripped and the four placeholders substituted.
-  The configured folder is kept out of the tag index.
+- **bug-10(b)** — tool calls/results and applied-edit content are never
+  persisted in the sidecar format, so Ask follow-ups lose that context.
+  Persistence defect, unfixable in the sidecar format; resolves with
+  Req-30's chat notes (`drey-tool` blocks + full-history replay). The
+  ~12-message cap is documented-intended behaviour and goes away with
+  Req-30's replay, not before. (bug-10(a), the payload validation, is
+  fixed — see changelog.)
 
-- **Tags & tag index:** topics are free inline `#tag`s in the note body
-  (`#` + a letter, then letters/digits/`_`/`-`, lower-cased; nestable with
-  `/` as in `#project/frontend`). No creation flow, no "unknown tag"
-  concept, no folders, no routing. `#task` (and any `#task/*`) is a
-  reserved structural marker and is never a tag; `#important` is an
-  ordinary, searchable tag. A tag search for a parent tag also returns its
-  nested `#parent/*` sections. A main-process **tag index** scans every `.md`
-  in the vault (`templates/` excluded, `daily/` **included**) and holds
-  - the **tag vocabulary** with per-tag counts — feeds `#tag` autocomplete
-    and the search panel's tag picker;
-  - an **inverted index of tagged sections** (`##` / `###` granularity):
-    for every section containing at least one tag, its file path, heading,
-    start line, tag set and text.
+### Partials — the shipped half is in the changelog
 
-  Full rebuild on vault open and on manual refresh; a single file is
-  re-indexed on save.
+- **Req-29 remainder** — the **`copilot-cli`** provider (GitHub Copilot
+  CLI, `-p`) and the **`copilot-web`** routing (Req-3/req-15) are not on
+  main; both ids stay unrouted in `electron/llm/providers/presets.ts`.
+  Shipped: the abstraction itself, the local OpenAI-compatible provider,
+  the hosted presets (OpenRouter / Anthropic API / Z.ai GLM), the
+  Anthropic-Messages client and the Claude Code CLI provider.
+- **req-22 remainder** — the context-menu **"add meeting log"** entry and
+  the per-day **appointment picker** (the one covering the current time
+  preselected; picking one inserts the meeting documentation). Needs a
+  live calendar source, not just a dropped file. Shipped: `.ics`/`.msg`
+  drag-and-drop and File → Import meeting (ADR-0041).
 
-- **Tag search:** a collapsible "Search" section in the sidebar. The query
-  is one or more tags (AND) plus optional free text (AND over
-  whitespace-split terms, each matched in a section's body **or** its
-  heading); free text alone is allowed. Results are section-level hits —
-  file path, heading, line, snippet — ordered by path then line; clicking
-  one opens that file at that line. An **Export** button writes the full
-  hits (`## <path>:<line>` heading + the whole section text per hit) into
-  an unsaved `search-results.md` tab. `Ctrl+Shift+F` opens and focuses the
-  panel (through the app keybinding registry); `Ctrl`/`Cmd`-clicking a
-  `#tag` pill in the editor replaces the query with that tag and runs it.
-  An on-demand LLM digest of the results exists in the backend
-  (`SEARCH_SUMMARY_PROMPT`) but its panel UI is currently parked.
+### Phase 2 leftovers
 
-- **Autotagging:** a button beside the drawer's tag field. Explicit call
-  only — no on-save, no `⋯` trigger. It sends the current entry text plus
-  the tag vocabulary to the local model; the reply **pre-fills** the tag
-  field and the user confirms by saving. The prompt is an English,
-  editable built-in Action template.
+- Dedicated keyword search / FTS index — a standalone SQLite FTS index
+  over whole files; the free-text mode of tag search covers the common
+  case over section text and headings.
+- Daily tasks day view — a generated (read-only) aggregate view built from
+  timestamp scanning, distinct from the editable daily note file. (The
+  task-collection + tick-back part shipped early as the Tasks panel.)
+- Semantic search — embeddings via transformers.js + sqlite-vec, RAG for
+  the "all notes" chat scope.
+- Daily wrap-up — yesterday done/worked-on, a prioritized list for today;
+  triggered by date rollover, not by app start.
 
-- **Local LLM — purpose:** the local model answers questions about an open
-  document (plus any extra vault files attached to the question via the
-  assistant composer's `@`-completion or "+" picker — the note itself rides
-  along by default and can be deselected), generates summaries, and carries
-  out edits to the document on request. The connection lives in
-  **Settings → LLM**: an enable switch
-  (the master off-switch for Actions and the assistant's Ask mode), base
-  URL, an optional **API key**, and the model — loaded from a live
-  `GET /v1/models` or typed by hand for a server that doesn't expose it.
-  The assistant panel's model row edits this same global model without a
-  detour through Settings. The key goes out as `Authorization: Bearer <key>`
-  (the OpenAI convention), so besides LM Studio (which ignores it) any
-  compatible server works: Unsloth Desktop (`sk-unsloth-…` keys on
-  `http://127.0.0.1:8888/v1`), llama.cpp, vLLM, Ollama.
+### Phase 4 leftovers
 
-- **Settings & Actions:** a master-detail settings screen (category list +
-  detail pane, opened from the sidebar entry). Settings are app config,
-  **not vault content** — stored in `app-config.json` under the OS
-  user-data dir, independent of the active vault. Edits live in a draft
-  and are written only on **Save**; closing with unsaved changes asks
-  first (save / discard / keep editing). Categories: **LLM**,
-  **Assistant** (auto-summary default), **Spelling** (dictionaries +
-  language), **Appearance** (theme, base font size, highlight colour,
-  editor typeface — [ADR-0035](../docs/09_architecture_decisions/0035-named-ui-themes.md):
-  a **Drey** built-in look plus the published CodeMirror themes, the app
-  shell re-tinting from a per-theme seed), **Widgets** (turn a dock panel
-  off entirely — [ADR-0034](../docs/09_architecture_decisions/0034-internal-widget-model.md)),
-  **Actions**.
-  - **LLM** — the connection config above, plus a **debug log** of every
-    request sent this session (URL, headers, body, status, timing,
-    response), each expandable into a runnable `curl` command so a
-    failing connection can be reproduced outside the app. The API key is
-    masked in the panel; copying the curl substitutes the real one.
-    In-memory only, not persisted.
-  - **Actions** — trigger → prompt-template mappings. Trigger types: "on
-    save" and "manual button"; each mapping has its own "confirmation
-    required" toggle (default on). A template library (name, prompt text,
-    result kind) with three built-in, editable but not deletable entries:
-    **Summarise note** (the assistant panel's automatic summary),
-    **Summarise search results** (the parked search digest), and
-    **Autotag** (above). A document-modifying action's result is previewed
-    and confirmed through the shared confirmation flow: an inline line
-    diff for small localized changes, side-by-side before/after for
-    whole-document rewrites; a "don't ask again for this action" checkbox
-    flips the mapping's confirmation toggle.
-
-- **A single active vault** (no sensitive/general separation yet — that
-  comes in Phase 3). The Files panel's vault row offers only "Open other
-  vault …", which re-points the one active vault through the directory
-  picker; there is no known-vaults registry.
-
-- **Editor:** one CodeMirror 6 view with a true **Live Preview** mode
-  (Obsidian-/Typora-style): syntax markers conceal everywhere except
-  around the selection, fenced code is highlighted via nested language
-  parsing, tables/images render as widgets, a ` ```mermaid ` fence
-  renders as a diagram
-  ([ADR-0025](../docs/09_architecture_decisions/0025-mermaid-live-preview.md);
-  the cursor inside it reveals the raw source), task markers are clickable
-  checkboxes (a checked `- [x]` line's text is struck through), inline
-  `#tag`s render as pills; the cursor sits directly in the rendered
-  document. A `⋯` menu on the chrome switches to a raw
-  **Source** mode as the escape hatch (no toggle buttons); the last
-  choice is the per-machine default for new notes, Live Preview by
-  default. Headings use the app's sans typeface by default; a different
-  face (serif, mono, …) is selectable in Settings → Appearance. Footnotes
-  render as plain text for now (no Lezer footnote extension).
-
-- **In-editor web browser tab
-  ([ADR-0042](../docs/09_architecture_decisions/0042-in-editor-web-browser-tab.md)):**
-  `File → New browser tab` (`Ctrl+Shift+B`) opens a `browser://<n>` tab
-  next to the notes — a toolbar (back / forward / reload / address bar /
-  find) over a main-process `WebContentsView`, with a native right-click
-  menu (nav / clipboard / open-link-in-tab / search selection / inspect).
-  Non-URL address input is a DuckDuckGo search; logins persist in an
-  isolated `persist:webtab` session; `Ctrl+F` finds in the page. The tab
-  shows the page favicon + title and never prompts on close.
-
-- **Session history ([ADR-0043](../docs/09_architecture_decisions/0043-session-history.md)):** the app relaunches into the exact editor state it was closed in — the
-  pane split tree, which tabs sit in which pane, the active tab and focused
-  pane (layout in `localStorage['drey.session']`, like the dock layout).
-  Tabs that were never saved anywhere keep their text across a restart,
-  Notepad++-style, via a backup store under the user-data dir
-  (`<userData>/session-backups/`). Skipped when the active vault changed;
-  a corrupt session file never blocks startup.
-
-- **Images ([ADR-0024](../docs/09_architecture_decisions/0024-binary-vault-asset-write.md),
-  pulled forward from Phase 3):** an image pasted or dropped into the
-  editor **or** the "Add entry" drawer is written into an `attachments/`
-  folder **beside the referencing note** (vault root when no note is
-  open), named `YYYY-MM-DD-HHmmss-<short hash>.<ext>`, and an
-  `![](attachments/…)` link is inserted at the caret. Rendering was
-  already in place — the privileged `drey-asset://` scheme served from
-  inside the vault, `resolveVaultImageUrl`, and the Live Preview image
-  widget. No vault open → the paste is reported, not saved. No
-  auto-caption.
-  - **Drag-and-drop ([ADR-0028](../docs/09_architecture_decisions/0028-drag-drop-into-the-editor.md)):**
-    dropping an image from the OS file manager works like paste; dragging a
-    file from the Files panel links an image in place (relative path, no
-    copy) or inlines a text file's contents; dragging an image from a web
-    browser downloads it into `attachments/` with a `[Source](url)` line.
-    A window-level guard
-    ([ADR-0027](../docs/09_architecture_decisions/0027-window-dnd-navigation-guard.md))
-    makes a stray drop a no-op instead of navigating the app away.
-  - **Viewing ([ADR-0026](../docs/09_architecture_decisions/0026-image-viewer-and-lightbox.md)):**
-    a rendered image honours an Obsidian-style `![alt|W]` / `![alt|WxH]`
-    size and has a hover **resize grip** (drag → rewrites the `|W` in the
-    note) and a hover **lens** button that opens a whole-app zoom/pan
-    viewer (plain-wheel zoom, drag pan, `+`/`-`/`0`). Opening an image
-    file from the Files panel opens it as a `kind:'image'` **tab** with
-    the same viewer + a Fullscreen button; the status bar shows its pixel
-    size and zoom.
-
-- **"Add entry" drawer** at the bottom of the main area — the capture
-  surface. Starts collapsed. Contains an optional **TOPIC** field, a
-  single **Tags** chip row, the Markdown text (the same editor component
-  as the main editor, compact, with Live Preview and `#tag` autocomplete),
-  inline spellcheck, and the Autotag button.
-  - The appended block is a **chosen template** (`AppConfig.entry`,
-    Settings → Add entry) with `{{time}} {{date}} {{datetime}} {{title}}
-    {{tags}} {{content}}` substituted; blank lines collapse and a trailing
-    rule is dropped, so an entry with nothing filled in stays
-    byte-identical to a bare `## HH:mm`. Two built-ins ship —
-    **Classic** (`## HH:mm[ — Topic]` / text / `#tag` line, the old fixed
-    shape) and **Ruled** (heading / `---` / `#tags` / body) — plus the
-    user's own; one is active. `parseDatedEntries` strips a leading rule
-    (and, on the Ruled signature, a leading tag line) so entries still
-    round-trip. Appending saves immediately.
-  - **Inline spellcheck**, active from the first word typed — in both this
-    text field and the document editor: misspelled words get a red wavy
-    underline, clicking one offers corrections or an "Add to dictionary"
-    action. German and English ship with the app; further Hunspell
-    dictionaries are addable, and the active language is picked in
-    Settings → Spelling. Accepted words are kept in two lists —
-    **personal** (every dictionary) and **per-dictionary** — editable
-    from the popup and from Settings.
-
-- **Note assistant panel** on the right — per open note.
-  - An **"Automatic summary"** switch in the panel header. When a note is
-    opened for the first time, has no sidecar thread yet, and the switch
-    is on, its summary is generated and stored as the first card of the
-    thread. Off means nothing happens automatically; a manual "Summarise
-    now" button covers changing your mind afterwards.
-  - The switch is seeded from a global default (Settings → Assistant,
-    "Summarise notes automatically by default") and overrides it **for
-    the open note only** — it never changes the default itself.
-  - Below it, **Ask**: a question about the note goes to the LLM with the
-    full document as context. An answer becomes a card; a
-    document-modifying instruction goes through the same confirmation
-    flow as Actions. Disabled when the LLM master switch is off. No RAG —
-    the editor buffer goes straight into the prompt.
-  - **Generation has no timeout.** While the model works, the panel shows
-    how long it has been thinking and a Cancel button; a finished card
-    keeps "took 8s". A local model legitimately needs minutes, so the
-    user ends the wait, not a fixed timeout.
-  - The thread is persisted next to the note as `.{name}.chat.json`,
-    never into the note itself.
-  - **Ask carries the running conversation.** A follow-up question sends
-    the note's earlier cards as chat turns (`historyForAsk`, capped at
-    ~12), so the model answers in context rather than re-reading the
-    document cold each time.
-  - Each answer / summary card has an **insert-into-note** arrow beside
-    Copy — drops the card text into the editor at the caret.
-
-- **Vault MCP server ([ADR-0021](../docs/09_architecture_decisions/0021-mcp-vault-server.md)):**
-  a local Model Context Protocol server exposing three tools over the
-  active vault — `vault_search` (tags + free text + an optional **regex**
-  filter, or a standalone whole-vault regex line scan), `vault_read`,
-  `vault_write` (overwrite / append). Hand-rolled JSON-RPC (no SDK
-  dependency), two transports: a bundled **stdio bridge** script for
-  desktop clients and an **opt-in localhost HTTP endpoint** for network
-  clients. A `vault_write` is shown in the shared diff dialog for
-  confirmation before it touches disk, unless **"YOLO mode"** (Settings →
-  MCP, off by default) is on. The built-in assistant uses the same tool
-  set during Ask when the server is enabled (an OpenAI tool-calling loop
-  in `LmStudioClient`, with a capability fallback). Settings gains an
-  **MCP** category (enable switch, HTTP port, YOLO switch, client config
-  snippet).
-
-- **"Add entry" is a dock panel.** The capture drawer is no longer a
-  fixed strip: it is a movable/collapsible panel whose default home is a
-  new **bottom dock** (a band under the editor). See
-  [ADR-0019](../docs/09_architecture_decisions/0019-movable-dock-panels-and-layout-state.md)'s
-  "Later change".
-
-- **Tasks panel ([ADR-0033](../docs/09_architecture_decisions/0033-tasks-panel-and-index.md),
-  pulled forward from Phase 2/4):** a dock panel listing task lines in the
-  open document **or** the whole vault, with a "hide done" toggle and a
-  configurable definition of "task" — GFM checkbox items (`- [ ]` / `- [x]`),
-  lines carrying the reserved `#task` marker, or both. A `#task` line with
-  no checkbox counts as done when it also carries `#task/done`. A row's
-  checkbox writes the done-state straight back to the source file
-  (`note:save` pipeline); clicking a row opens that file at the line.
-  Document scope is scanned live from the editor buffer (unsaved edits
-  show); vault scope comes from a main-process `TaskIndex` that mirrors the
-  tag index's lifecycle (rebuild on vault open, re-index per file on save,
-  no watcher). This delivers the interactive slice of the Phase-2 "Daily
-  tasks" / Phase-4 "Task center" ideas below.
-
-- **Manual refresh:** there is no file watcher by default. A refresh
-  button in the Files panel runs one full refresh round in main — the
-  tag/task indexes rebuild and a `vault:changed` push reloads the tree,
-  the plugin panels and clean open tabs; the app also refreshes itself
-  after the writes it makes (note save, first save of a daily-note
-  draft, file/folder create or delete). Rationale: with thin, optional
-  frontmatter there is no "frontmatter-only vs. body" distinction left
-  to justify a watcher, and chokidar's per-write ignore-window, debounce
-  and lifecycle are strictly more moving parts. The purely additive
-  watcher ADR-0018 left open now exists as an opt-in (req-14, Settings →
-  Vault → "Watch the vault for external changes", off by default):
-  chokidar + an own-write ledger (mtime matching, so the app's own saves
-  don't echo) feeding the same refresh round; clean open tabs reload
-  from disk, dirty tabs stay last-writer-wins. See ADR-0045.
-
----
-
-## Phase 2
-
-- **Dedicated keyword search / FTS index** — the free-text mode of tag
-  search already covers the common case over section text and headings; a
-  standalone SQLite FTS index over whole files is the deferred step.
-- **Daily tasks:** inline `#task` syntax in any note file, a generated
-  (read-only) day view built from timestamp scanning — distinct from the
-  daily note file itself (that's a normal editable file; this is an
-  aggregate view). _The task-collection + tick-back part shipped early as
-  the Phase-1 Tasks panel (ADR-0033); what remains here is the
-  timestamp-driven **day** view specifically._
-- Semantic search (embeddings via transformers.js + sqlite-vec, RAG for
-  the "all notes" chat scope).
-- Daily wrap-up (yesterday done/worked-on, prioritized list for today) —
-  triggered by date rollover, not by app start (the app may run
-  continuously in the tray).
-
-## Phase 3
-
-- Multi-vault (primary purpose: separating sensitive content — personnel
-  topics, interviews — from general notes), a fixed default vault, manual
-  switch before capture.
-- Optional cross-vault search mode (default: scoped per vault).
-- ~~Image paste~~ — **pulled forward, done.** See Phase 1 ("Images")
-  below and [ADR-0024](../docs/09_architecture_decisions/0024-binary-vault-asset-write.md).
-
-## Phase 4 — Experiments
-
-- Interview mode: templates with starter questions, the model drafts
+- Interview mode — templates with starter questions, the model drafts
   adaptive follow-up questions, text-only, result feeds into the normal
   processing pipeline (primarily lands in the sensitive vault).
-- Task center: an active, writable task overview across all files
-  (checking a box here writes back to the source file, using the
-  mandatory `#task id:` instead of line numbers). _A first cut of the
-  writable overview shipped as the Phase-1 Tasks panel (ADR-0033); it
-  writes back by line number, not a stable `#task id:` — the id-based
-  addressing is what's still open here._
-- Job queue: configurable background processes (re-indexing after a model
-  change, export), status/progress, persisted against crashes,
-  auto-pauses on interactive use.
-
-
+- Task center — the active, writable cross-file task overview with stable
+  `#task id:` addressing instead of line numbers (the Tasks panel writes
+  back by line number today).
+- Job queue — configurable background processes (re-indexing after a model
+  change, export), status/progress, persisted against crashes, auto-pauses
+  on interactive use.
 
 ---
 
@@ -411,93 +164,6 @@ refresh" below), with an opt-in chokidar watcher for external changes
 
 ---
 
-## Next Steps
-
-I will ask you to implement certain requirements from the following list, once it is done please move it to the implemented chapter at the end of the list and remove it from here.
-
-Req-2 I would also like to inlcude the following document types whic should be rendered, however as i can not forsee the effort lets discuss this upfront: word, excel, powerpoint, pdf and loop components, i would like to inser a link and it should open it inline. However if I drag a document directly than the document shall be placed within the attachements folder
-
-Req-3 I would like to have a wrapper around copilot m365 for web so that i can use it instead of a local llm.
-  → Prototyped on branch `feat/copilot-web-provider` (ADR-0040), together
-    with req-15: an `llm.provider = 'copilot-web'` switch, Playwright +
-    system Edge, removable `electron/copilot/` module. Opt-in, off by
-    default; not merged into the default LLM behaviour. Fragile PoC — URL /
-    selectors / timing are all editable in Settings.
-
-Req-4 Atlassian Integration, when I paste a link to a workitem then i would like to check if i can retrieve the status of the ticket.
-
-Req-6 it would be nice to have the ability to download further themes for cm6 if easily dooable
-
-req-9 OCR for handwritten notes (iPad expansion stage, Apple Vision Framework
-  or local Tesseract).
-  Maybe OCR field where you can Drop Images so that they are OCRd
-req-10 iPad/iPhone access via Tailscale to the PC backend.
-req-11 Audio recording in interview mode (local Whisper). <= Probably using Windows integrated speech to text Win+H first.
-req-12 Automatic image captioning via a vision model.
-req-13 Editor: footnote rendering in Live Preview (needs a custom Lezer
-  markdown extension), `Ctrl`-click to open concealed link targets.
-req-15 playwright m365 copilot über browser automatisierung
-  → See Req-3 above — same feature, prototyped on `feat/copilot-web-provider` (ADR-0040).
-req-16 PDF Export
-req-17 Jira Integration
-req-18 Flow descriptions like Task Description => Sebastian => Peter would mean prepare task which is sent to Sebastian so that he can discuss it with Peter. Automation of current workflows via agentic tools, to stear persons like agents ;)
-Or Description => Jira (Creates a ticket from the description and returns the link to the new jira ticket 
-)
-req-19: Integrate draw.io view and edit
-req-21 dataview.js support
-req-22 integrate ical calender support. I would like to have in the context menu add meeting log, and then i would like to have a drop down of all apointments for that specific day, the one in which the current time falls shall be preselected, If i select one the meeting documentation like we did it with the drag and drop shall be used.
-  → Drag-and-drop / **File → Import meeting** half done (ADR-0041, see
-    Completed): a dropped `.ics`/`.msg` becomes a `#mtg/<slug>` meeting
-    section from `templates/meeting.md`. Still open: the context-menu
-    "add meeting log" entry and the per-day appointment picker (needs a
-    live calendar source, not just a dropped file).
-
-Req-29 LLM provider abstraction: one provider-neutral interface for the
-  local model server (LM Studio/Ollama/vLLM/llama.cpp/Unsloth), OpenRouter
-  (OpenAI-compatible, vendor-prefixed model slugs), Z.ai/GLM and the
-  Anthropic API (one Anthropic-Messages client, two presets), Claude Code
-  headless (`claude -p`, `--resume` sessions / stream-json), and the
-  GitHub Copilot CLI (`-p`) — with the existing `copilot-web` scraper
-  (Req-3/req-15, ADR-0040) fitting the same interface. Streaming
-  (`onDelta`), provider-side session continuation (`sessionRef`), a
-  capability descriptor (tools/streaming/sessions/model
-  listing/image attachments) and a canonical `ToolSpec` so MCP tools are
-  provider-neutral. Base-owned (`electron/llm/providers/` + a per-call
-  router), cloud presets opt-in and off by default (ADR-0047).
-
-Req-30 Chat as vault note: conversations persist as Markdown notes in a
-  `chats/` folder (notebook format — one `##` heading per turn with role,
-  timestamp, optional `<!-- drey: … -->` meta, `drey-tool` fenced blocks
-  for tool calls/results, attachment link blocks for vault files, staged
-  external files and images). The assistant panel becomes chat-first
-  (chat picker + composer); a note can be attached as context;
-  resuming a chat replays the full persisted history provider-aware
-  (full replay, or Claude Code's `--resume` when the session matches).
-  Supersedes ADR-0012's per-note sidecar threads for conversations
-  (sidecar stays for the auto-summary until decided otherwise).
-
-Req-31 MCP client: connect the app TO external MCP servers
-  (`@modelcontextprotocol/sdk`, stdio + Streamable-HTTP transports),
-  configured in a `mcpServers` config slice; their tools join the
-  vault tools in one provider-neutral tool pool (namespaced
-  `mcp__<server>__<tool>`), confirmation-gated per server. Builds on the
-  Req-29 interface — every tool-capable provider can drive them.
-
-bug-10 — the assistant's Ask history has two real defects behind
-  the "incomplete history" symptom: (a) a missing/not-an-array `history`
-  IPC payload silently degraded to NO context — **fixed (milestone 23)**:
-  the ask handler now validates the payload and fails visibly, and the
-  renderer always sends an array; (b) tool calls/results and applied-edit
-  content are never persisted, so follow-ups lose that context
-  (persistence defect — unfixable in the sidecar format; resolved by
-  Req-30's chat notes with `drey-tool` blocks and full-history replay).
-  The ~12-message cap itself is documented-intended behaviour and goes
-  away with Req-30's replay, not before.
-
-Urgent UX Improvements (shall be done first after bugs):
-
-
-
 ## Won't do (decided against, kept for the record)
 
 req-24 Editor, the Lines On shall just contain the image but not text an ylonger
@@ -516,266 +182,3 @@ req-26 frontmatter needs to be updated on save
     the file has a frontmatter fence, and fence-less files are written
     back byte-for-byte (the app never adds a header that wasn't there,
     `specs/frontmatter-schema.md`).
-
-# Completed
-
-req-20 — `[[wikilinks]]` ([ADR-0046](../docs/09_architecture_decisions/0046-wikilinks.md)):
-`[[target]]`, `[[target#heading]]`, `[[target|alias]]`,
-`[[target#heading|alias]]` and same-file `[[#heading]]` render as internal
-links in Live Preview *and* source mode (accent; unresolved targets muted
-with a dotted underline); Live Preview conceals the brackets — with an
-alias, everything but the alias. `Ctrl`/`Cmd`-click resolves by
-vault-relative path (`.md` appended, case-insensitive) or note basename
-(ambiguous → the linking note's folder first, then the shortest path) and
-opens the note at the `#heading` anchor's line (open buffer first).
-Ctrl-clicking an unresolved link **creates** the note (parents
-auto-created) and opens it. Typing after `[[` autocompletes note names
-(basename when unique, else the extension-less path). The "Add entry"
-drawer renders, completes and follows wikilinks but never creates files.
-Built as a base module `src/app/editor/wikilinks/` — regex mark
-decorations + completion over the file-tree-derived index, no Lezer node
-(the tag-pill route); the conceal layer and `link-open` skip spans the
-regex claimed.
-
-req-23 — drag & drop of files **and folders** within the Files panel
-(HTML5 DnD, [ADR-0039](../docs/09_architecture_decisions/0039-drag-and-drop-chrome.md)
-"Later change"): drop on a folder row moves into it, on a file row into
-that file's folder, on the tree background to the vault root. Same-dir
-drops and a folder into its own subtree are no-ops (no-drop cursor;
-`VaultManager.renameEntry` now guards the subtree case main-side too).
-Valid drops run the rename sequence — `renameEntry` (sidecar moves along)
-→ `retargetTabs` (open tabs re-point, unsaved buffers survive) →
-clipboard remap → the destination expands — and a name collision alerts
-without touching anything. Files keep dragging into the editor
-(ADR-0028); a folder carries no vault-path data type, so it can only move
-inside the panel.
-
-req-14 — an **optional** chokidar file watcher (Settings → Vault →
-"Watch the vault for external changes", off by default — ADR-0045,
-amends ADR-0018's "purely additive" clause). One external-change round
-in main, shared by all change sources: `VaultWatcher` (chokidar v3 CJS,
-`ignoreInitial` + ready gate, dot-entry ignore, `awaitWriteFinish`,
-~300 ms debounce for OneDrive bursts) → `OwnWriteLedger` (every
-`VaultManager` mutation records itself: content writes as post-write
-mtime, structural ops as path+TTL; a match drops the app's own echo —
-a missed match costs one redundant refresh, never corruption) →
-`VaultChangeAnnouncer` (per-file `write`/`delete` plugin events for
-`.md`, then one `vault:changed` renderer push with the changed paths,
-capped at 200). The push is the renamed, payload-carrying
-`mcp:vault-changed`; `EditorService` auto-reloads **clean** open tabs
-among the changed paths (`modifiedMs` finally earning its keep) and
-flips tabs of externally deleted files to draft semantics; dirty tabs
-stay last-writer-wins, no conflict dialog. The manual refresh button
-now runs the same full round in main (`vault:refresh`) — fixing the old
-gap where it re-pulled the tree but left the tag/task indexes stale.
-New modules `electron/own-write-ledger.ts`, `electron/vault-watcher.ts`,
-`electron/vault-change-announcer.ts`; the tags plugin re-indexes a
-single file on scoped `write` events (mirroring tasks).
-
-Req-5 — `Ctrl`/`Cmd`-click a link opens it in the OS browser. Already wired
-for the document editor (`link-open.ts` `linkActivation` → `Editor.activateLink`
-→ `shell.openExternal`, allow-listed to `http(s):` / `mailto:`); extended to
-the "Add entry" capture surface (`EntryDrawer.activateLink`, web/mail only —
-the drawer has no note path to resolve a relative link against).
-
-Paste-a-URL → Markdown link. Pasting a bare URL onto an **empty** caret now
-inserts `[url](url)` with the label pre-selected (`paste-link.ts`
-`pasteUrlAsMarkdownLink`, Markdown-only). `@codemirror/lang-markdown`'s own
-`pasteURLAsLink` still handles the wrap-a-selection case (`[selection](url)`);
-the new handler only fills the empty-caret gap and stays clear of code /
-existing links / frontmatter and image pastes.
-
-bug-1 — a bare timestamp (`2026-09-09T00:03:48`) had its `:03:` slice
-coloured. Cause: `markdownLanguage` bundles `@lezer/markdown`'s `Emoji`
-inline parser, whose `:name:` rule (`/^[a-zA-Z_0-9]+:/`) accepts digits, so
-`:03:` parsed as an `Emoji` node. We never render `:shortcode:` emoji — the
-parser is now dropped (`markdown({ extensions: [{ remove: ['Emoji'] }] })`).
-
-bug-2 — the Appearance **Theme** (and Editor font) `<select>` always showed
-the first option. `<select [value]>` is set before `@for` renders the
-`<option>`s, so the browser can't match it. Fixed with `[selected]` on each
-option.
-
-bug-3 — the editor typeface stopped applying under a published `@uiw` theme.
-Those themes emit `&.cm-editor .cm-scroller { font-family: <mono> }` — the
-exact selector `editorStructure` used for `var(--font-sans)` — and the theme
-compartment wins at equal specificity regardless of declaration order. The
-app rule is now one class heavier (`&.cm-editor.cm-editor .cm-scroller`) so
-it outranks any theme outright.
-
-Req-1 — Live Preview embed affordances. The corner **View source** button is
-now `</>` (was a pencil) and shares a `.lp-tools` flex cluster with the zoom
-lens, so they no longer stack on top of each other (they did on a mermaid
-diagram, making the button unclickable). Images gained the `</>` button too;
-revealing an image's source now shows the raw `![alt](path)` line inside a
-rounded, bordered container **with the rendered image kept directly below
-it**. Every text embed's revealed source (table / mermaid / HTML / image)
-gets that same container so the active-line highlight reads as in-scope.
-See [ADR-0009](../docs/09_architecture_decisions/0009-live-preview-decorations.md)
-"Later change".
-
-req-7 — a dock panel's own control row moved into the shared 32px
-`PanelFrame` header instead of a band below it. New leaf module
-`src/app/dock/panel-header-actions.ts`: `PanelHeaderActionsStore`
-(`Map<widgetId, TemplateRef>` signal) + an `[appPanelHeaderActions]="<id>"`
-directive on an `<ng-template>` in the panel body; `PanelFrame` renders the
-matching template in a `.head-actions` slot — right-aligned, immediately
-left of the drag grip — that swallows `mousedown` / `keydown` so a control
-click never collapses/drags the panel. Applied to **Tasks** (scope · hide-done · kind
-toggles) and **Files** / **Templates** (refresh; Files also collapse-all).
-The `files` / `templates` panels' header status values (vault name /
-templates dir) were dropped in the same pass so the header reads as
-controls, not chrome. Assistant / Search / Calendar left as-is.
-See [ADR-0019](../docs/09_architecture_decisions/0019-movable-dock-panels-and-layout-state.md)
-"Later change — controls in the panel header".
-
-req-8 — the Tasks panel gained a free-text + multi-tag filter with tag
-autocomplete. `TaskRecord` now carries `tags` = the inline `#tags` of the
-task's heading-section (`scanTasks` reuses `splitSections` +
-`extractInlineTags` from `shared/tags`), so `tasks:list` and the live
-document scan both provide it. `TaskService` holds `queryTags` / `queryText`
-(persisted in `localStorage['drey.tasks']`); `visible` keeps a task when
-every query tag matches its section tags (nested tags included, via the
-shared `tagSetMatches`) and every whitespace term is a substring of its
-text/heading. `TasksPanel` renders a tag-chip input (`<datalist>`
-autocomplete over `TagService.tags()`, mirroring the Search panel) + a
-free-text field as the first body row.
-
-req-22 (drag-and-drop half) — Calendar drop: drag an Outlook `.ics` / `.msg`
-(from the calendar or the file system) onto the editor to insert a
-formatted **meeting section** at the drop point: title, date/time,
-participants, invitation body and attachment names, auto-tagged
-`#mtg/<kebab-case-title>` so it lands in the tag section index. Also
-**File → Import meeting …** (native picker) as the fallback for Outlook
-drags that deliver no real file (new Outlook / OWA drags do not — save as
-`.ics` first, or use Import meeting). The section is rendered from an
-editable `templates/meeting.md` (scaffolded from an English default on
-first use) via a tiny `{{#if}}` / `{{#each}}` evaluator; `.ics` / `.msg`
-are decoded in the main process (`electron/meeting/`, `ical.js` +
-`@kenjiuno/msgreader`, the invite's `VTIMEZONE` resolved to local time).
-Decode-only — the invite file itself is not copied into the vault. New
-`shared/meeting` / `electron/meeting` / `src/app/meeting` feature modules;
-the drop branch lives in `image-paste.ts`. The remaining `req-22` scope
-(a context-menu "add meeting log" with a per-day appointment picker) is a
-follow-up on top of this.
-See [ADR-0041](../docs/09_architecture_decisions/0041-calendar-file-drop-meeting-section.md).
-
-In-editor web browser tab (ADR-0042). `File -> New browser tab` /
-`Ctrl+Shift+B` opens a fileless `browser://<n>` tab
-(`OpenDoc.kind: 'browser'`) whose page is a main-process `WebContentsView`
-(`electron/browser/BrowserViewManager`), floated over the Angular layout by
-streaming the chrome placeholder's client rect as bounds. `src/app/browser/`
-holds `BrowserTab` (toolbar only) and `BrowserViewService` (state, event
-reducer, lifecycle -- destroys a view when its `browser://` key leaves
-`editor.openDocs()`). `normalizeAddress` sends non-URL input to DuckDuckGo;
-the session is an isolated `persist:webtab` partition; each view's
-`webContents` gets its own `will-navigate` / `setWindowOpenHandler` (http(s)
-popups reopen as tabs) / `context-menu` (nav, clipboard, open-link/image in
-a tab, search selection, inspect) and denies every permission request.
-`WebContentsView` paints above all DOM, so `OverlayGuardService` + the
-`[appOverlayGuard]` directive (+ a `LayoutGestureService` for splitter /
-dock drags) hide every view while an overlay or layout drag is active.
-Find-in-page via `webContents.findInPage` (`Ctrl+F`). New IPC channels in
-`shared/browser` + `electron/ipc/browser-handlers.ts`. Follow-up: restore
-open tabs + layout on restart (session history).
-
-Session history (ADR-0043). `SessionService` (`src/app/session/`) persists
-the pane layout + open-tab list to `localStorage['drey.session']` and
-restores it once at startup (before the daily-note fallback; skipped if the
-vault changed). `PaneService` gained `snapshot()` / `restore(keepPath)` —
-reversing ADR-0037's 'not persisted' note — which prunes tabs that no
-longer resolve and empty panes. Unsaved buffer text is kept in a
-main-process backup store (`electron/session/SessionBackupStore`, one
-`<uuid>.txt` per tab under `<userData>/session-backups/`, IPC `session:*`):
-a never-saved scratch buffer, or unsaved edits re-applied over the fresh
-disk read. Persist runs off one debounced effect + `beforeunload` /
-`visibilitychange` flushes; backups are reference-counted and orphans
-pruned on launch. Browser tabs restore under their exact `browser://<n>`
-key. New feature modules `electron/session/` + `src/app/session/`.
-
-bug-9 — Tab inside the editor moved keyboard focus to the next control
-instead of inserting anything: `basicSetup` ships no Tab binding at all
-(`indentWithTab` is not part of it), so the unbound key fell through to the
-browser's focus navigation. `Tab` is now bound on the shared
-`MarkdownSurface` (`src/app/editor/editor-indent.ts`, `Prec.highest` so
-plugin-contributed keymaps can't shadow it): an empty caret inserts a
-literal tab character, a selection indents the selected lines
-(`indentMore`), Shift+Tab outdents (`indentLess`); the indent unit is a
-literal tab. The binding is gated on `view.editable`, so the read-only
-assistant composer stays inert. Deliberate a11y tradeoff (project owner's
-call): Tab no longer leaves the editor — `F6` / `Shift+F6` (pane focus)
-remain the way out. Covers the full-page editor and the "Add entry" drawer
-body (same surface).
-
-bug-7 — the Files panel's arrow keys moved the highlight, but **Enter did
-not open** the highlighted file. The rows are focusable `<button>`s and the
-selection was only a visual signal — `select()` never moved DOM focus, so
-focus stayed on the originally-clicked row and Enter natively re-activated
-*that* one. The selected row now takes DOM focus on every keyboard move
-(roving `tabindex`, focus-follow in `select()`), so Enter/Space activate the
-highlighted row; as a side effect the tree collapses to a single Tab stop
-instead of one per row.
-
-bug-6 — intermittent stuck input in the packaged build (no field accepts
-text, the Appearance dropdowns stop changing, mouse still works, only a
-restart clears it; the Appearance `<select>` blur that closed an open
-dropdown under the user was one visible symptom). **Root cause remains
-unconfirmed** — the renderer's DOM was exonerated (the keybinding service is
-stateless exact-chord matching and never swallows unmatched keys; no focus
-trap exists; `user-select: none` does not block typing) — so this pass is
-hardening + diagnosability at every plausible layer:
-(1) two pointer gestures that set `body { user-select: none }` without the
-`data-drey-gesture` marker and without window-blur cleanup — the pane
-splitter and the Live-Preview image resize — now carry the marker and end
-themselves on window blur, so an alt-tab mid-drag can no longer leak the
-style, and the input-recovery watchdog no longer false-positives mid-gesture
-(its `recover()` blurs the active element, which is what could close an open
-native dropdown);
-(2) native context-menu popups (`electron/menu.ts`) are now tracked per
-window, closed on window blur/minimize, and logged — an Electron popup whose
-capture loop never unwinds is the leading hypothesis for the full symptom
-set (invisible, swallows all keyboard, renderer can neither see nor fix it);
-(3) "Recover input focus" (View menu / `Mod+Alt+Shift+R`) now also reaches
-main (`window:recover-input`) to force-close such a popup, and every step
-logs to `drey.log` so a field occurrence finally leaves a trace;
-(4) a dead `.menu-backdrop` selector in `InputRecoveryService` was removed.
-
-bug-8 — the Files panel gained a **multi-selection** (project request):
-Ctrl+click toggles rows into the set, Shift+click / Shift+arrow extend a
-range over the visible rows, Ctrl+arrow moves the cursor without changing
-the selection, Escape collapses back to the cursor row, and right-clicking
-inside a multi-selection makes the context menu act on all of it (outside
-one, it collapses to the right-clicked row, so Delete can't surprise).
-Enter opens every selected file (folders skipped), Delete removes the whole
-selection after one count-aware `confirm` — as a single batched IPC call
-(`vault:delete-many`, one vault-change re-index for the whole batch, not
-per path). Tab-close and clipboard invalidation run per deleted path; a
-selection row that lived under a deleted folder is deselected. Dragging a
-row still carries that single row's path (req-23 ships single-entry drag;
-a drag of the whole multi-selection is still open).
-
-bug-5 — the app now asks before exiting with unsaved changes. Every close
-path (titlebar X, Alt+F4, taskbar close/Quit, macOS role close/quit) funnels
-into one `BrowserWindow 'close'` interception (`electron/main.ts`): main
-holds the window and asks the renderer — which owns the dirty-document
-registry — over the `exit:confirm-request` / `exit:decision` bridge pair
-(`ExitBridge`, a `McpWriteBridge` copy **without** the 120 s timeout: a
-timeout would auto-decide the user's exit; a hung renderer leaves the
-window open, and the session backups have the text regardless). Clean
-state answers "proceed" without any dialog. With dirty documents an
-in-app dialog offers **Save all / Exit without saving / Cancel**:
-*Save all* runs `saveAll({ drafts: true, runOnSaveActions: false })` —
-real files save straight through, and untitled scratch tabs commit into a
-new hidden `<vault>/.drafts/` folder as `unnamed-N.md` (the Notepad++
-model, project owner's call: no Save-As dialogs on exit; an explicit
-"Save as…" away from `.drafts/` later **moves** the file and deletes the
-draft). On-save Actions are suppressed on the exit path only — no LLM
-round trips during shutdown (deviation from `saveAll`'s menu behaviour,
-flagged here rather than in an ADR). If anything stays dirty after saving
-(a failed write), the answer is "cancel" and the app stays open with the
-error visible. "Exit without saving" flushes the session backups
-(`SessionService.flushNow()` is now public/awaited) before answering —
-ADR-0043 keeps the buffers restorable either way. `before-quit` routes an
-app-level quit through the same prompt (`quitIntent` flag; the
-`!mainWindow` clause keeps the post-approved quit cascade from
-re-intercepting).
