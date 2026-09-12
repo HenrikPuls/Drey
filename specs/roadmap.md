@@ -583,3 +583,12 @@ assistant composer stays inert. Deliberate a11y tradeoff (project owner's
 call): Tab no longer leaves the editor — `F6` / `Shift+F6` (pane focus)
 remain the way out. Covers the full-page editor and the "Add entry" drawer
 body (same surface).
+
+bug-7 — the Files panel's arrow keys moved the highlight, but **Enter did
+not open** the highlighted file. The rows are focusable `<button>`s and the
+selection was only a visual signal — `select()` never moved DOM focus, so
+focus stayed on the originally-clicked row and Enter natively re-activated
+*that* one. The selected row now takes DOM focus on every keyboard move
+(roving `tabindex`, focus-follow in `select()`), so Enter/Space activate the
+highlighted row; as a side effect the tree collapses to a single Tab stop
+instead of one per row.

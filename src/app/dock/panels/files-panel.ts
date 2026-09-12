@@ -62,7 +62,9 @@ export class FilesPanel {
   /**
    * The tree entry the keyboard cursor sits on (a `relativePath`). Distinct
    * from `editor.openPath()` (the open file) -- this is a roving selection
-   * for Up/Down/Left/Right navigation, like a file explorer.
+   * for Up/Down/Left/Right navigation, like a file explorer. The selected
+   * row also holds DOM focus (roving `tabindex`, see `select()`), which is
+   * what makes Enter/Space activate the highlighted row.
    */
   protected readonly selected = signal<string | null>(null);
 
@@ -247,9 +249,15 @@ export class FilesPanel {
 
   private select(path: string): void {
     this.selected.set(path);
-    // Wait for the `.selected` class to land, then keep the row in view.
+    // Wait for the `.selected` class to land, then keep the row in view and
+    // move DOM focus onto it (bug-7): rows are `<button>`s, so Enter/Space
+    // activate whatever row holds focus -- without this, focus stayed on the
+    // originally-clicked row and Enter re-activated *that* instead of the
+    // highlighted one. Roving tabindex keeps the tree at one tab stop.
     setTimeout(() => {
-      this.host.querySelector('.node.selected')?.scrollIntoView({ block: 'nearest' });
+      const row = this.host.querySelector<HTMLElement>('.node.selected');
+      row?.scrollIntoView({ block: 'nearest' });
+      row?.focus({ preventScroll: true });
     }, 0);
   }
 
