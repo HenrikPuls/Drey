@@ -1415,6 +1415,61 @@ sequenceDiagram
     SS-->>App: restoredAny -- false lets the daily-note fallback run
 ```
 
+## 6.30 Close/quit with dirty documents — the exit confirm bridge (bug-5)
+
+Every close path funnels into one `BrowserWindow 'close'` interception.
+Main holds the window and asks the renderer — which owns the dirty-document
+registry — over `exit:confirm-request` / `exit:decision` (`ExitBridge`, no
+timeout: a hung renderer keeps the window open, and the ADR-0043 backups
+have the buffer text regardless). An app-level quit (`before-quit`: taskbar
+"Quit", Cmd+Q) is routed through the same prompt via the `quitIntent` flag;
+the `!mainWindow` clause keeps the post-approved quit cascade from
+re-intercepting. An untitled scratch tab saves into the hidden
+`.drafts/` (§5.3 `draft:save`) instead of a Save-As dialog, and on-save
+Actions are suppressed on this path — no LLM round trips during shutdown.
+
+```mermaid
+sequenceDiagram
+    participant User
+    participant Main as main (BrowserWindow 'close')
+    participant EB as ExitBridge
+    participant XC as ExitConfirmService
+    participant Ed as EditorService
+    participant SS as SessionService
+
+    User->>Main: close intent (X / Alt+F4 / taskbar Quit)
+    Main->>Main: exitApproved? no -> event.preventDefault()
+    Main->>EB: requestDecision()
+    EB->>XC: exit:confirm-request { id }
+    alt no dirty text documents
+        XC->>EB: exit:decision 'discard' (no dialog)
+    else dirty documents
+        XC->>User: dialog (Save all / Exit without saving / Cancel)
+        alt Save all
+            XC->>Ed: saveAll({ drafts: true, runOnSaveActions: false })
+            Note over Ed: real files via note:save;<br/>scratch tabs via draft:save -> .drafts/unnamed-N.md
+            alt still dirty afterwards (a save failed)
+                XC->>EB: 'cancel' -- the app stays open
+            else clean
+                XC->>SS: flushNow() (layout + backup writes, awaited)
+                XC->>EB: 'save'
+            end
+        else Exit without saving
+            XC->>SS: flushNow()
+            XC->>EB: 'discard'
+        else Cancel
+            XC->>EB: 'cancel'
+        end
+    end
+    EB-->>Main: decision
+    alt cancel
+        Main->>User: window stays open (quitIntent reset)
+    else save / discard
+        Main->>Main: exitApproved = true; window.close()
+        Note over Main: non-darwin quits via window-all-closed;<br/>darwin finishes an app-level quit via quitIntent
+    end
+```
+
 ## Planned flows (added as their milestone is built)
 
 - Dedicated keyword-search / FTS surface — the search panel's free-text

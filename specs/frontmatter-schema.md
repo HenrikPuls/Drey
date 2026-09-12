@@ -178,3 +178,13 @@ for daily notes). Unknown `{{...}}` tokens are left untouched.
   a first `## {{time}}` entry; edit it to change how future daily notes
   look.
 - `templates/` is excluded from the tag index and tag search.
+
+## Drafts (`.drafts/`) — structural folder
+
+Where the exit prompt's "Save all" commits **untitled** (scratch) buffers
+(roadmap bug-5, the Notepad++ model): each becomes `.drafts/unnamed-N.md`,
+continuing past the highest existing index. A dot-folder, so — like the
+sidecars above — the file tree, the tag/task indexes and tag search never
+list it. Only an explicit "Save as…" asks for a location; moving a file out
+of `.drafts/` that way deletes the draft original (move semantics). A user
+can open and edit `.drafts/` files like any note.

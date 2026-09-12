@@ -89,7 +89,7 @@ export class SessionService {
       document.addEventListener('visibilitychange', () => {
         if (document.visibilityState === 'hidden') {
           this.saveLayoutNow();
-          this.flushBackups();
+          void this.flushBackups();
         }
       });
     }
@@ -263,10 +263,21 @@ export class SessionService {
     if (this.backupTimer) {
       clearTimeout(this.backupTimer);
     }
-    this.backupTimer = setTimeout(() => this.flushBackups(), BACKUP_DEBOUNCE);
+    this.backupTimer = setTimeout(() => void this.flushBackups(), BACKUP_DEBOUNCE);
   }
 
-  private flushBackups(): void {
+  /**
+   * Persists the layout + every dirty-buffer backup RIGHT NOW and waits for
+   * the backup writes (bug-5): the exit flow awaits this before answering
+   * "save" / "exit without saving", so the debounce window can't be lost to
+   * the closing window.
+   */
+  async flushNow(): Promise<void> {
+    this.saveLayoutNow();
+    await this.flushBackups();
+  }
+
+  private async flushBackups(): Promise<void> {
     if (this.backupTimer) {
       clearTimeout(this.backupTimer);
       this.backupTimer = null;
@@ -274,6 +285,7 @@ export class SessionService {
     if (!this.api) {
       return;
     }
+    const writes: Promise<unknown>[] = [];
     const live = new Set<string>();
     for (const [path, id] of this.backupIds) {
       const doc = this.editor.docFor(path);
@@ -281,17 +293,19 @@ export class SessionService {
         continue;
       }
       live.add(id);
-      void this.api.writeSessionBackup(id, doc.bufferContent);
+      writes.push(this.api.writeSessionBackup(id, doc.bufferContent));
       this.written.add(id);
     }
     // Drop backup files no tab needs any more (saved, or closed).
     const stale = [...this.written].filter((id) => !live.has(id));
     if (stale.length > 0) {
-      void this.api.deleteSessionBackups(stale);
+      writes.push(this.api.deleteSessionBackups(stale));
       for (const id of stale) {
         this.written.delete(id);
       }
     }
+    // allSettled: a failed backup write must not abort its siblings.
+    await Promise.allSettled(writes);
   }
 
   /** On startup: delete backup files not referenced by the restored session. */

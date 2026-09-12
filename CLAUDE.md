@@ -75,8 +75,10 @@ toolchain is removable by deleting `.tools/`). Never assume a bare `node`,
   (`api.editor.cm`), never their own runtime copy (ADR-0044 rule 1).
 - Storage format: plain Markdown + YAML frontmatter. No proprietary format,
   no database as source of truth (see `specs/frontmatter-schema.md`).
-- Folder structure is the user's own — the app imposes only `templates/`
-  and `daily/`. Topics are free inline `#tag` labels, never directories
+- Folder structure is the user's own — the app imposes only `templates/`,
+  `daily/`, and the hidden `.drafts/` (bug-5's exit-time auto-saves of
+  untitled tabs, Notepad++-style; invisible to the file tree and indexes,
+  see `specs/frontmatter-schema.md`). Topics are free inline `#tag` labels, never directories
   ([ADR-0017](docs/09_architecture_decisions/0017-tags-as-labels-and-section-index.md)).
 - Tags are free inline `#tag`s in the note body — no frontmatter `tags[]`.
   The **tags plugin** (`plugins/tags/`) holds the vocabulary and the

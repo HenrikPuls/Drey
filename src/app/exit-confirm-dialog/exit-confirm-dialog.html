@@ -1,0 +1,32 @@
+@if (pending()) {
+  <div class="backdrop" appOverlayGuard (click)="service.cancel()"></div>
+  <div class="dialog" role="dialog" aria-modal="true" aria-labelledby="exit-confirm-title">
+    <header>
+      <h2 id="exit-confirm-title">Unsaved changes</h2>
+      <p class="summary">
+        {{ dirtyCount() }} document{{ dirtyCount() === 1 ? '' : 's' }} with unsaved changes.
+      </p>
+    </header>
+
+    <p class="hint">
+      Saving commits your edits to the vault (untitled tabs are kept as
+      <code>.drafts/unnamed-N.md</code>). Exiting without saving still recovers the text on the
+      next start.
+    </p>
+
+    <footer>
+      <button type="button" class="ghost" (click)="service.cancel()">Cancel</button>
+      <span class="spacer"></span
+      ><button type="button" class="ghost" [disabled]="busy()" (click)="service.choose('discard')">
+        Exit without saving
+      </button>
+      <button type="button" class="primary" [disabled]="busy()" (click)="service.choose('save')">
+        @if (busy()) {
+          Saving…
+        } @else {
+          Save all
+        }
+      </button>
+    </footer>
+  </div>
+}

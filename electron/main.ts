@@ -16,7 +16,7 @@ import { AppConfigStore } from './app-config';
 import { DailyNoteManager } from './daily-note';
 import { installMainProcessLogging, watchWebContents } from './logger';
 import { LlmDebugLog, LlmTaskRegistry, LmStudioClient, TagSuggester } from './llm';
-import { registerIpcHandlers, McpWriteBridge } from './ipc';
+import { registerIpcHandlers, ExitBridge, McpWriteBridge } from './ipc';
 import { McpHttpTransport, McpServer, VaultTools } from './mcp';
 import { attachContextMenu, buildApplicationMenu } from './menu';
 import { NoteManager } from './note-manager';
@@ -233,6 +233,24 @@ let mcpHttpForShutdown: McpHttpTransport | null = null;
  */
 const mcpWriteBridge = new McpWriteBridge(() => mainWindow);
 
+/**
+ * The main<->renderer bridge for the save-before-exit prompt (bug-5). The
+ * renderer owns the dirty-document registry, so a close just asks it.
+ */
+const exitBridge = new ExitBridge(() => mainWindow);
+
+/**
+ * Exit-prompt state machine (bug-5):
+ * - `exitApproved` -- the renderer answered "save"/"exit without saving";
+ *   the next `close` event is the real one and passes.
+ * - `quitIntent` -- a quit was requested at app level (Cmd+Q, taskbar Quit)
+ *   and routed through the prompt; `app.quit()` is called after the window
+ *   actually closes. Reset when the user cancels (and when a fresh window
+ *   opens, so a later close always prompts).
+ */
+let exitApproved = false;
+let quitIntent = false;
+
 /** Starts / stops the localhost MCP HTTP endpoint to match the current config. */
 async function syncMcpHttpTransport(
   transport: McpHttpTransport,
@@ -281,6 +299,8 @@ async function openTodayDailyNote(dailyNotes: DailyNoteManager): Promise<void> {
 }
 
 function createMainWindow(getUiScaleFactor?: () => number): BrowserWindow {
+  // A fresh window is a fresh session: the next close prompts again.
+  quitIntent = false;
   const window = new BrowserWindow({
     width: 1280,
     height: 800,
@@ -381,8 +401,38 @@ function createMainWindow(getUiScaleFactor?: () => number): BrowserWindow {
   // that subscribed via `ctx.app.onMainWindowCreated`.
   pluginHost?.notifyMainWindowCreated(window);
 
+  // Save-before-exit prompt (bug-5). Every close path -- the titlebar X
+  // (window:close IPC), Alt+F4, the taskbar, a macOS role close -- ends up
+  // here, so this is the one interception point: hold the window, ask the
+  // renderer (which owns the dirty-document registry), and only let the
+  // close through once it answers "save" or "exit without saving".
+  window.on('close', (event) => {
+    if (exitApproved) {
+      return; // the deliberate second close() after the prompt
+    }
+    event.preventDefault();
+    if (exitBridge.hasPending()) {
+      return; // a second X while the dialog is up -- keep waiting
+    }
+    void exitBridge.requestDecision().then((decision) => {
+      if (decision === 'cancel') {
+        quitIntent = false;
+        return;
+      }
+      exitApproved = true;
+      window.close();
+      // Non-darwin quits by itself via window-all-closed; on macOS closing
+      // the window is not quitting -- finish an app-level quit explicitly.
+      if (quitIntent) {
+        app.quit();
+      }
+    });
+  });
+
   window.on('closed', () => {
     mainWindow = null;
+    // A fresh window (macOS reopen) prompts again.
+    exitApproved = false;
   });
 
   if (rendererDevServerUrl) {
@@ -510,6 +560,7 @@ if (!app.requestSingleInstanceLock()) {
       spellcheck,
       mcpHttp,
       mcpWriteBridge,
+      exitBridge,
       stdioBridgePath,
       syncMcpHttp: () => syncMcpHttpTransport(mcpHttp, appConfig),
       pluginHost,
@@ -537,6 +588,22 @@ if (!app.requestSingleInstanceLock()) {
         createMainWindow(uiScaleFactor);
       }
     });
+  });
+
+  // An app-level quit (taskbar "Quit", Cmd+Q / role quit) with the window
+  // still open routes through the same prompt: intercept once, close the
+  // window -- the close handler above asks the renderer -- and re-issue the
+  // quit (`quitIntent`) after the window is really gone. The `!mainWindow`
+  // clause is load-bearing: after an approved plain window close,
+  // window-all-closed -> app.quit() fires this with no window to ask
+  // through, and it must not re-intercept.
+  app.on('before-quit', (event) => {
+    if (exitApproved || quitIntent || !mainWindow || mainWindow.isDestroyed()) {
+      return;
+    }
+    event.preventDefault();
+    quitIntent = true;
+    mainWindow.close();
   });
 
   app.on('will-quit', () => {

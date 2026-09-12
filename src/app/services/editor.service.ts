@@ -596,14 +596,59 @@ export class EditorService {
    * at all (unlike the single-pane version this replaced), since `save()`
    * now takes the path directly. Each goes through `save()`, so a scratch
    * tab still routes to `saveAs()` and an untouched draft is skipped.
+   *
+   * The exit prompt (bug-5) passes `drafts: true`: an `askOnSave` scratch
+   * tab is committed into the vault's hidden `.drafts/` folder instead of
+   * opening a Save-As dialog nobody can meaningfully answer per-tab while
+   * the app is going down, and `runOnSaveActions: false` keeps on-save
+   * Actions (LLM round trips) out of shutdown.
    */
-  async saveAll(): Promise<void> {
+  async saveAll(options: { runOnSaveActions?: boolean; drafts?: boolean } = {}): Promise<void> {
     for (const path of this.docs().map((d) => d.path)) {
       const doc = this.docs().find((d) => d.path === path);
       if (!doc || doc.kind !== 'text' || (doc.bufferContent === doc.savedContent && !doc.askOnSave)) {
         continue;
       }
-      await this.save({ path });
+      if (options.drafts && doc.askOnSave) {
+        await this.saveDraft(path);
+        continue;
+      }
+      await this.save({ path, runOnSaveActions: options.runOnSaveActions });
+    }
+  }
+
+  /**
+   * Commits an untitled ("scratch") buffer into the vault's hidden
+   * `.drafts/` folder as the next `unnamed-N.md`, with no dialog (bug-5).
+   * The tab is re-keyed to the real path (`retargetTabs` moves the pane
+   * placement with it) and marked clean/on-disk, so the session snapshot
+   * then restores the real file on the next start. An empty buffer saves
+   * nothing -- there is nothing worth keeping. Errors land in `error` and
+   * the tab stays a scratch one.
+   */
+  private async saveDraft(path: string): Promise<void> {
+    const doc = this.docFor(path);
+    if (!this.api?.saveDraftNote || !doc || doc.kind !== 'text' || doc.bufferContent.trim() === '') {
+      return;
+    }
+    this.isSaving.set(true);
+    this.error.set(null);
+    try {
+      const result = await this.api.saveDraftNote({ body: doc.bufferContent, eol: doc.eol });
+      this.retargetTabs(doc.path, result.path);
+      this.patchDoc(result.path, {
+        savedContent: result.content,
+        bufferContent: result.content,
+        modifiedMs: result.modifiedMs,
+        existsOnDisk: true,
+        askOnSave: false,
+      });
+      // No vault.refresh(): `.drafts/` is a dot-folder, the file tree (and
+      // the plugins' indexes) never list it.
+    } catch (err) {
+      this.error.set(err instanceof Error ? err.message : String(err));
+    } finally {
+      this.isSaving.set(false);
     }
   }
 
@@ -661,9 +706,19 @@ export class EditorService {
 
     // Swap the scratch/old tab for the real file, then load it fresh so the
     // buffer, mtime and `existsOnDisk` come from disk.
+    const previousPath = doc.path;
     this.closeTab(doc.path, { silent: true });
     await this.openFile(target);
-        void this.vault.refresh();
+    // Moving a file out of `.drafts/` (bug-5's exit auto-saves) deletes the
+    // draft original -- move semantics, so drafts don't linger in two places.
+    if (previousPath.startsWith('.drafts/') && previousPath !== target) {
+      try {
+        await this.vault.deleteEntry(previousPath);
+      } catch {
+        // The original staying behind is annoying, not fatal.
+      }
+    }
+    void this.vault.refresh();
   }
 
   /**

@@ -3,7 +3,10 @@ import {
   AppConfig,
   CustomDictionary,
   DreyApi,
+  DraftSaveRequest,
   EditCommand,
+  ExitConfirmRequest,
+  ExitDecision,
   IPC_CHANNELS,
   LlmConnectionTest,
   LlmDebugEntry,
@@ -32,6 +35,17 @@ const dreyApi: DreyApi = {
   toggleMaximizeWindow: (): Promise<void> => ipcRenderer.invoke(IPC_CHANNELS.windowToggleMaximize),
   closeWindow: (): Promise<void> => ipcRenderer.invoke(IPC_CHANNELS.windowClose),
   recoverInputFocus: (): Promise<boolean> => ipcRenderer.invoke(IPC_CHANNELS.windowRecoverInput),
+  onExitConfirmRequest: (listener: (request: ExitConfirmRequest) => void): (() => void) => {
+    // Forward only the payload, never the IpcRendererEvent (ADR-0001).
+    const wrapped = (_event: IpcRendererEvent, request: ExitConfirmRequest): void =>
+      listener(request);
+    ipcRenderer.on(IPC_CHANNELS.exitConfirmRequest, wrapped);
+    return () => ipcRenderer.removeListener(IPC_CHANNELS.exitConfirmRequest, wrapped);
+  },
+  resolveExitConfirm: (id: number, decision: ExitDecision): Promise<void> =>
+    ipcRenderer.invoke(IPC_CHANNELS.exitDecision, id, decision),
+  saveDraftNote: (request: DraftSaveRequest): Promise<NoteSaveResult> =>
+    ipcRenderer.invoke(IPC_CHANNELS.draftSave, request),
   isWindowMaximized: (): Promise<boolean> => ipcRenderer.invoke(IPC_CHANNELS.windowIsMaximized),
   onWindowMaximizeChange: (listener: (maximized: boolean) => void): (() => void) => {
     // Forward only the payload, never the IpcRendererEvent (ADR-0001).

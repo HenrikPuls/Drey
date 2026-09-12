@@ -16,6 +16,8 @@ import { SpellcheckService } from '../spellcheck';
 import { VaultManager } from '../vault-manager';
 import { registerAppHandlers } from './app-handlers';
 import { registerConfigHandlers } from './config-handlers';
+import { ExitBridge } from './exit-bridge';
+import { registerExitHandlers } from './exit-handlers';
 import { registerLlmHandlers } from './llm-handlers';
 import { registerMcpHandlers } from './mcp-handlers';
 import { McpWriteBridge } from './mcp-write-bridge';
@@ -26,6 +28,7 @@ import { registerSpellHandlers } from './spell-handlers';
 import { registerVaultHandlers } from './vault-handlers';
 
 export { McpWriteBridge } from './mcp-write-bridge';
+export { ExitBridge } from './exit-bridge';
 
 export interface IpcHandlerDeps {
   getMainWindow: () => BrowserWindow | null;
@@ -41,6 +44,7 @@ export interface IpcHandlerDeps {
   spellcheck: SpellcheckService;
   mcpHttp: McpHttpTransport;
   mcpWriteBridge: McpWriteBridge;
+  exitBridge: ExitBridge;
   stdioBridgePath: () => string;
   syncMcpHttp: () => Promise<void>;
   pluginHost: PluginHost;
@@ -50,6 +54,7 @@ export function registerIpcHandlers(deps: IpcHandlerDeps): void {
   registerAppHandlers(deps.getMainWindow);
   registerSessionHandlers(deps);
   registerVaultHandlers(deps);
+  registerExitHandlers(deps);
   registerQueryHandlers(deps);
   registerLlmHandlers(deps);
   registerConfigHandlers(deps);

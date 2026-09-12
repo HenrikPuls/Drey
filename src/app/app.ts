@@ -2,11 +2,13 @@ import { Component, effect, inject } from '@angular/core';
 import { formatDate } from '../../shared/timestamp';
 import { ImageLightbox } from './image-viewer';
 import { ConfirmationDialog } from './confirmation-dialog/confirmation-dialog';
+import { ExitConfirmDialog } from './exit-confirm-dialog/exit-confirm-dialog';
 import { SessionService } from './session';
 import { AppearanceService } from './services/appearance.service';
 import { ThemeService } from './services/theme.service';
 import { DailyNoteService } from './vault';
 import { EditorService } from './services/editor.service';
+import { ExitConfirmService } from './services/exit-confirm.service';
 import { DropGuardService } from './services/drop-guard.service';
 import { EditorZoomService } from './services/editor-zoom.service';
 import { InputRecoveryService } from './services/input-recovery.service';
@@ -44,6 +46,7 @@ import { EditorContextMenuService } from './editor-context-menu/editor-context-m
     PaneLayout,
     Settings,
     ConfirmationDialog,
+    ExitConfirmDialog,
     ImageLightbox,
     EditorContextMenu,
   ],
@@ -93,6 +96,9 @@ export class App {
     inject(AppearanceService);
     // Listen for MCP client write-confirmations / vault-changed pushes (ADR-0021).
     inject(McpBridgeService).start();
+    // Answer main's save-before-exit question (bug-5) and show the dialog
+    // when there are dirty documents.
+    inject(ExitConfirmService).start();
     // Install the capture-phase contextmenu listener that gives the editor
     // its own right-click menu in place of the OS one (ADR-0030).
     inject(EditorContextMenuService).start();

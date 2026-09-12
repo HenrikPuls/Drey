@@ -428,7 +428,6 @@ req-18 Flow descriptions like Task Description => Sebastian => Peter would mean 
 Or Description => Jira (Creates a ticket from the description and returns the link to the new jira ticket 
 )
 req-19: Integrate draw.io view and edit
-bug-5: when the program is exited it should ask the user if he would like to save dirty documents, cancel or exit without saving
 req-20 [[]] links shoudl work in the document
 req-21 dataview.js support
 req-22 integrate ical calender support. I would like to have in the context menu add meeting log, and then i would like to have a drop down of all apointments for that specific day, the one in which the current time falls shall be preselected, If i select one the meeting documentation like we did it with the drag and drop shall be used.
@@ -629,3 +628,29 @@ per path). Tab-close and clipboard invalidation run per deleted path; a
 selection row that lived under a deleted folder is deselected. Dragging a
 row still carries that single row's path (multi-file drag stays with
 req-23).
+
+bug-5 — the app now asks before exiting with unsaved changes. Every close
+path (titlebar X, Alt+F4, taskbar close/Quit, macOS role close/quit) funnels
+into one `BrowserWindow 'close'` interception (`electron/main.ts`): main
+holds the window and asks the renderer — which owns the dirty-document
+registry — over the `exit:confirm-request` / `exit:decision` bridge pair
+(`ExitBridge`, a `McpWriteBridge` copy **without** the 120 s timeout: a
+timeout would auto-decide the user's exit; a hung renderer leaves the
+window open, and the session backups have the text regardless). Clean
+state answers "proceed" without any dialog. With dirty documents an
+in-app dialog offers **Save all / Exit without saving / Cancel**:
+*Save all* runs `saveAll({ drafts: true, runOnSaveActions: false })` —
+real files save straight through, and untitled scratch tabs commit into a
+new hidden `<vault>/.drafts/` folder as `unnamed-N.md` (the Notepad++
+model, project owner's call: no Save-As dialogs on exit; an explicit
+"Save as…" away from `.drafts/` later **moves** the file and deletes the
+draft). On-save Actions are suppressed on the exit path only — no LLM
+round trips during shutdown (deviation from `saveAll`'s menu behaviour,
+flagged here rather than in an ADR). If anything stays dirty after saving
+(a failed write), the answer is "cancel" and the app stays open with the
+error visible. "Exit without saving" flushes the session backups
+(`SessionService.flushNow()` is now public/awaited) before answering —
+ADR-0043 keeps the buffers restorable either way. `before-quit` routes an
+app-level quit through the same prompt (`quitIntent` flag; the
+`!mainWindow` clause keeps the post-approved quit cascade from
+re-intercepting).

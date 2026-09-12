@@ -32,6 +32,8 @@ export const IPC_CHANNELS = {
   windowToggleMaximize: 'window:toggle-maximize',
   windowClose: 'window:close',
   windowRecoverInput: 'window:recover-input',
+  exitConfirmRequest: 'exit:confirm-request',
+  exitDecision: 'exit:decision',
   windowIsMaximized: 'window:is-maximized',
   windowMaximizeChanged: 'window:maximize-changed',
   editExec: 'edit:exec',
@@ -52,6 +54,7 @@ export const IPC_CHANNELS = {
   vaultDuplicate: 'vault:duplicate-entry',
   vaultDelete: 'vault:delete',
   vaultDeleteMany: 'vault:delete-many',
+  draftSave: 'draft:save',
   vaultPickSavePath: 'vault:pick-save-path',
   dailyOpen: 'daily:open',
   dailyBuildContent: 'daily:build-content',
@@ -105,6 +108,33 @@ export interface McpWriteRequest {
   before: string;
   after: string;
   mode: 'overwrite' | 'append';
+}
+
+/**
+ * Pushed to the renderer when the window is about to close with the exit
+ * prompt undecided (bug-5). The renderer owns the dirty-document registry,
+ * so the payload carries only the correlation id: no dirty docs -> it
+ * replies `'discard'` (proceed) without showing anything; otherwise it
+ * shows the exit dialog and replies with the chosen `ExitDecision`.
+ */
+export interface ExitConfirmRequest {
+  id: number;
+}
+
+/** The renderer's answer to an `ExitConfirmRequest`. */
+export type ExitDecision = 'save' | 'discard' | 'cancel';
+
+/**
+ * An untitled ("scratch") buffer to commit into the vault's hidden
+ * `.drafts/` folder as `unnamed-N.md` (bug-5, the Notepad++ model): saving
+ * on exit never opens a Save-As dialog; only an explicit manual save asks
+ * for a location. Main picks the next free index and runs the note through
+ * the normal `note:save` pipeline (frontmatter, save hooks -- minus
+ * Actions), returning the vault-relative path the tab is re-keyed to.
+ */
+export interface DraftSaveRequest {
+  body: string;
+  eol?: '\n' | '\r\n';
 }
 
 /** What `getMcpStatus` reports for the Settings pane. */
@@ -309,6 +339,25 @@ export interface DreyApi {
   toggleMaximizeWindow(): Promise<void>;
   closeWindow(): Promise<void>;
   isWindowMaximized(): Promise<boolean>;
+
+  /**
+   * Fires when the window is about to close and the renderer must decide
+   * (bug-5): save all dirty documents, exit without saving, or cancel the
+   * close. Reply via `resolveExitConfirm`. Returns an unsubscribe.
+   */
+  onExitConfirmRequest(listener: (request: ExitConfirmRequest) => void): () => void;
+
+  /** The renderer's answer to an `ExitConfirmRequest`. */
+  resolveExitConfirm(id: number, decision: ExitDecision): Promise<void>;
+
+  /**
+   * Commits an untitled buffer into the vault's hidden `.drafts/` folder as
+   * the next free `unnamed-N.md` (bug-5). Runs the normal note-save
+   * pipeline (frontmatter bump, save hooks; on-save Actions suppressed).
+   * Resolves with the full save result -- `path` is the vault-relative path
+   * the tab is re-keyed to. Rejects when there is no active vault.
+   */
+  saveDraftNote(request: DraftSaveRequest): Promise<NoteSaveResult>;
 
   /**
    * Asks main to close any native context-menu popup still popped over the
