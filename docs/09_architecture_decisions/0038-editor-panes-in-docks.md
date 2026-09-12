@@ -2,10 +2,8 @@
 
 ## Status
 
-Proposed. The follow-up ADR-0037 named but deferred ("Phase 2"): letting an
-editor pane live inside the left / right / bottom dock, not only the centre
-column. Written now at the owner's request so the milestone is ready to
-pick up; **not yet implemented**.
+Accepted. Built as milestone 20; see "As shipped" at the end for where the
+implementation landed differently from the sketches below.
 
 ## Context
 
@@ -98,3 +96,52 @@ stays widget-only and untouched; `PaneService` grows a notion of *region*.
   `dock.ts` / `dock.html` / `dock.css`, `DockService` drag payload, the tab
   context menu, and a new `drey.panes` persistence path — comparable to
   ADR-0037 itself. Its own milestone, not folded into milestone 19.
+
+## As shipped (milestone 20)
+
+Built essentially as decided, with these differences the later milestones
+forced or testing revealed:
+
+- **Persistence rides the session snapshot, not a `drey.panes` key.**
+  ADR-0043 (open-tab restore) shipped after this ADR was written and
+  removed the "no open-tab restore" restriction in point 3. `PaneService`
+  now persists regions as an optional `dock` field on `PaneLayoutSnapshot`
+  (`{ paneId, height }` per side, present only when a region is occupied),
+  which `SessionService` already stores in `localStorage['drey.session']`
+  and feeds back to `restore()` opaquely — docked editors survive a
+  restart *with their tabs*, like every other pane. The snapshot `version`
+  stays 1: the field is additive and both old and new readers tolerate its
+  absence. A snapshot whose dock pane fails to restore (file gone, backup
+  gone) drops the region like any emptied pane. Rollback artifact: an old
+  build restores a new snapshot's tabs into the registry but not into a
+  band (it ignores the field); the layout self-heals on the next write.
+- **Dock regions are a paneId map, not `_roots`.** The ADR sketched
+  `_roots: Record<PaneRegion, PaneNode | null>`; since a dock hosts a
+  *single leaf* anyway, `PaneService` keeps the centre `_root` as-is and
+  adds `_dockPanes: { left/right/bottom: paneId | null }` — the
+  single-leaf invariant becomes unrepresentable to violate and
+  `pane-tree.removeLeaf`'s "a tree has at least one leaf" guard stays
+  scoped to the centre.
+- **An occupied dock displaces its occupant.** Docking into a dock that
+  already hosts an editor reattaches the occupant to the centre first
+  (inside `detachToDock`), so the primary gesture never needs a no-drop
+  state and no pane is ever lost.
+- **The band header has no collapse.** A plain click focuses the pane;
+  dragging past the 4px threshold moves the whole editor group. The title
+  is the pane's active tab name — mono, but deliberately not uppercase
+  (a document name, not a panel label). The band is rendered inline by
+  `Dock` (header + `PaneLeaf`), not as a separate component: a static
+  `dock.ts → pane components` import was enough to reorder the vitest
+  builder's shared-chunk evaluation and crash TestBed compiles in
+  unrelated spec files, so the band lives in the dock template.
+- **The band splitter is delta-based.** The band's top edge is fixed, so
+  the resize gesture applies the pointer's travel to the captured height
+  (the `startSplit` recipe), not an anchored `bottom − clientY` (that
+  recipe belongs to the bottom dock, whose bottom edge *is* fixed).
+- **Splits refuse on docked panes** (`splitPane` returns `null`); the tab
+  context menu hides the split rows there. `View → Reset layout` also
+  calls `panes.resetRegions()` — every docked pane back to the centre,
+  band heights to default — while `DockService.reset()` itself stays
+  widget-only.
+- **Editor drags have no no-drop state**: the pointer is always over some
+  dock or over the centre; dropping on the band's own dock is a no-op.

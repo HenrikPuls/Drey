@@ -50,9 +50,12 @@ restore, keybindings, spellcheck, the MCP vault server, the LLM
 **Base, renderer** (`src/app/`):
 
 - Shell: `titlebar/`, `dock/` (+ `WidgetRegistryService` — core widgets
-  register through the same API plugins use), `status-bar/`,
+  register through the same API plugins use; each dock also renders its
+  **editor band**, the one pane `PaneService` has docked there —
+  ADR-0038), `status-bar/`,
   `settings/` (framework + core categories; plugin pages append),
-  `panes/`, `tab-bar/`, `editor/` (+ the editor-extension /
+  `panes/` (centre split tree **plus the dock regions**),
+  `tab-bar/`, `editor/` (+ the editor-extension /
   drop-decoder / context-menu / doc-kind registries behind it),
   `entry/`, `calendar/`, `vault/`, `image-viewer/`,
   `confirmation-dialog/`, `services/`.
@@ -501,14 +504,21 @@ src/                Angular renderer (standalone components, esbuild via Angular
                          (InputRecoveryService watchdog contract, ADR-0032).
                          startDragChrome / moveDragChrome / setDragCursor /
                          hitTestUnderPointer / endDragChrome.
-    panes/             (ADR-0037) PaneService: the split-view layout -- an arbitrary
+    panes/             (ADR-0037, ADR-0038) PaneService: the split-view layout -- an arbitrary
                          row/column split tree (pane-tree.ts: leafIds/replaceLeaf/
-                         removeLeaf, pure + unit-tested) down to leaf PaneRecords
+                         removeLeaf/appendChild, pure + unit-tested) down to leaf PaneRecords
                          { tabs, active }; open/activate/reorder/close(InPane|Everywhere|
                          AllInPane|OthersInPane)/moveToPane/splitPane/resizeSplit/
-                         renamePath. Not session-persisted (no tab-restore across a
-                         restart today, so a restored *layout* with no tabs would just
-                         be empty panes). PaneLayout renders the tree recursively
+                         renamePath. Plus regions (milestone 20): each dock
+                         (left/right/bottom) hosts at most one pane in its editor band --
+                         detachToDock / reattachToCenter / resetRegions, regionOf,
+                         bandHeight per side (clamped 140..680); a docked pane whose last
+                         tab closes takes its band with it, and splits refuse on docked
+                         panes (a dock hosts a single leaf, never a subtree).
+                         Session-persisted via snapshot()/restore() (ADR-0043): the
+                         centre tree + an optional `dock` field ({paneId, height} per
+                         occupied side) inside the drey.session layout. PaneLayout
+                         renders the centre tree recursively
                          (imports itself for the split case) with draggable splitters
                          (DockService.startSplit's "measure + redistribute a delta"
                          recipe, resizing only the dragged pair). PaneLeaf renders one

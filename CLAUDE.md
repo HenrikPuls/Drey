@@ -267,8 +267,15 @@ Renderer (Angular):
   `.cm-content` (tab strip, meta bar, empty state, padding) opens as a tab
   there — `PaneDropService` (`src/app/panes/`), from `PaneLeaf`'s
   `dragover`/`drop`; out-of-vault OS files stay with `DropGuardService`
-  (ADR-0027 / ADR-0028 amendment). Docking a pane into the docks is the
-  next milestone (ADR-0038), not built yet.
+  (ADR-0027 / ADR-0028 amendment). **Regions (milestone 20, ADR-0038):**
+  each dock hosts at most one pane in its editor band —
+  `detachToDock`/`reattachToCenter` (an occupied dock's occupant returns
+  to the centre), band heights per side, splits refuse on docked panes, a
+  band whose last tab closes dissolves. Docked editors ride the session
+  snapshot's optional `dock` field and survive a restart with their tabs;
+  `View → Reset layout` also calls `panes.resetRegions()`. `Dock`'s drag
+  carries a widget id *or* an editor pane; the centre is an editor-only
+  drop target.
 - `EditorComponent` — one CodeMirror 6 view **per pane** (`[paneId]`
   input; `shownPath`/`shownDoc` resolve *that pane's* document via
   `PaneService`) with an inline Live Preview mode (decoration-based,
@@ -354,7 +361,12 @@ be called out explicitly (see Working Style below), not introduced silently.
     Calendar/Files/Templates/Search/Tasks/Open windows left, Assistant
     right, Add entry in the bottom band, Templates + Search + Tasks + Add
     entry collapsed. Calendar takes its content height, not a flex share.
-    `View → Reset layout` restores it.
+    Each dock can additionally host one **editor band** above its panels
+    (milestone 20, ADR-0038): a docked editor pane, its 32px header
+    carrying the active tab's name, movable by header drag or the tab
+    context menu, resizable by its own splitter; docked editors persist
+    with the session.
+    `View → Reset layout` restores it (and undocks the editor bands).
     Layout state persists (`localStorage['drey.dock']`).
   - **Files panel**: a vault-switcher row (name + "Open other vault …",
     with the refresh button on the same row) above the vault file tree
@@ -465,27 +477,25 @@ and push details into the per-decision documents.
 The roadmap's Phase 1 (MVP) is complete, and the codebase has since been
 restructured into a **base application with runtime plugins** (milestone
 21, [ADR-0044](docs/09_architecture_decisions/0044-runtime-plugin-system.md);
-packaging verified — see `docs/07_deployment_view.md`). The milestone log
-lives in [docs/milestones-done.md](docs/milestones-done.md).
+packaging verified — see `docs/07_deployment_view.md`), and editor panes
+can dock into the three docks (milestone 20,
+[ADR-0038](docs/09_architecture_decisions/0038-editor-panes-in-docks.md)).
+The milestone log lives in
+[docs/milestones-done.md](docs/milestones-done.md).
 
-**Next — milestone 20, editor panes in the docks** (ADR-0037's Phase 2,
-designed in
-[ADR-0038](docs/09_architecture_decisions/0038-editor-panes-in-docks.md)):
-a `PaneService` *region* model (`center` + `dock-left/right/bottom`) and
-a dock "editor slot", leaving the widget registry untouched. Not built.
-
-Phase 2+ features from `specs/roadmap.md` (vector search, embeddings, a
-dedicated FTS surface, RAG scope resolution) stay out of scope — ask
-before pulling any of them in.
+**No next milestone is chosen yet.** Phase 2+ features from
+`specs/roadmap.md` (vector search, embeddings, a dedicated FTS surface,
+RAG scope resolution) stay out of scope — ask before pulling any of them
+in.
 
 ## Milestones
 
-The completed milestone log (1–19c and 21, the runtime plugin program) is
-archived in [docs/milestones-done.md](docs/milestones-done.md).
+The completed milestone log (1–21) is archived in
+[docs/milestones-done.md](docs/milestones-done.md).
 
-- **Last completed:** milestone 21 — the runtime plugin program
-  ([ADR-0044](docs/09_architecture_decisions/0044-runtime-plugin-system.md)).
-- **Next:** milestone 20 — see "Current State & Next Steps" above.
+- **Last completed:** milestone 20 — editor panes in the docks
+  ([ADR-0038](docs/09_architecture_decisions/0038-editor-panes-in-docks.md)).
+- **Next:** not chosen — see "Current State & Next Steps" above.
 
 Pause after each milestone, show what works, don't push through several
 milestones in one uninterrupted stretch. (Milestones 10, 11, 15 and 19

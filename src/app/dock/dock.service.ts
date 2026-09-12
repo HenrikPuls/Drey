@@ -696,8 +696,9 @@ export class DockService {
 
   /**
    * The editor band's splitter (ADR-0038): grows the band as the pointer
-   * moves up, anchored on the band's own bottom edge -- the widget list
-   * below just flexes. Height state lives in `PaneService`.
+   * moves up -- the widget list below just flexes. Delta-based (like
+   * `startSplit`): the band's top edge is fixed, so only the pointer's
+   * travel matters. Height state lives in `PaneService`.
    */
   startEditorBandResize(side: DockSide, event: PointerEvent): void {
     if (event.button !== 0) {
@@ -706,12 +707,13 @@ export class DockService {
     event.preventDefault();
     event.stopPropagation();
     const band = (event.target as HTMLElement).previousElementSibling as HTMLElement | null;
-    const anchor = band?.getBoundingClientRect().bottom;
-    if (anchor === undefined) {
+    if (!band) {
       return;
     }
+    const startY = event.clientY;
+    const startHeight = band.getBoundingClientRect().height;
     this.beginPointerGesture(event, 'row-resize', (ev) => {
-      this.panes.setBandHeight(side, anchor - ev.clientY);
+      this.panes.setBandHeight(side, startHeight + (startY - ev.clientY));
     });
   }
 

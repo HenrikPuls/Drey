@@ -7,8 +7,9 @@ shipped; the finer-grained record lives in the ADRs
 (`docs/09_architecture_decisions/`) and the arc42 docs. CLAUDE.md tracks
 only the next milestone and the last completed one.
 
-Milestone 20 (editor panes in the docks) is **not built yet** — it is
-tracked in CLAUDE.md as the next milestone and archived here once done.
+Milestone 20 (editor panes in the docks) shipped on 2026-09-12 and is
+archived below; it was briefly tracked in CLAUDE.md as the next
+milestone before being built.
 
 1. Electron shell + Angular scaffold, IPC bridge, docs/ skeleton (including the 09_architecture_decisions/ subfolder)
 2. Vault selection + file listing
@@ -107,6 +108,20 @@ tracked in CLAUDE.md as the next milestone and archived here once done.
     (`gutterTheme`). (2) A vault file dropped on a pane but not on
     `.cm-content` opens as a tab there — `PaneDropService`, from
     `PaneLeaf`'s `dragover`/`drop` (ADR-0027 / ADR-0028 amendment).
+20. **Editor panes in the docks** ([ADR-0038](09_architecture_decisions/0038-editor-panes-in-docks.md),
+    ADR-0037's Phase 2) — a `PaneService` *region* model: each dock
+    (left/right/bottom) hosts at most one pane in an **editor band**
+    above its widget stack (32px header with the active tab's name, its
+    own splitter; the widget registry and `DockState` untouched). Entry
+    points: the tab context menu ("Move to left/right/bottom dock",
+    "Move back to editor area") and dragging the band header — the dock
+    drag payload is now a widget *or* an editor pane, and the centre
+    column became an editor-only drop target. An occupied dock's occupant
+    returns to the centre; splits refuse on docked panes; a band whose
+    last tab closes dissolves. Docked editors ride the session snapshot's
+    optional `dock` field (ADR-0043's `drey.session`, superseding the
+    ADR's original separate-key plan) and survive a restart with their
+    tabs; `View → Reset layout` undocks them too.
 21. **The runtime plugin program**
     ([ADR-0044](09_architecture_decisions/0044-runtime-plugin-system.md)) —
     the modular monolith became a base application plus runtime-loadable,

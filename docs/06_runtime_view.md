@@ -1557,6 +1557,40 @@ sequenceDiagram
 The entry drawer binds `openResolvedOnly` instead: an unresolved target
 is inert (no file creation from text that may be discarded).
 
+## 6.33 Dock an editor pane, drag it back, restore it (milestone 20,
+[ADR-0038](09_architecture_decisions/0038-editor-panes-in-docks.md))
+
+Sibling of §6.14 (a panel dragged between docks) — same drag chrome,
+different payload. The tab context menu or the band header starts the
+move; `PaneService` owns the region state; the session effect persists
+it like any layout change.
+
+```mermaid
+sequenceDiagram
+    participant U as User
+    participant TB as TabBar (context menu)
+    participant P as PaneService
+    participant D as Dock (band)
+    participant S as SessionService
+
+    U->>TB: right-click tab -> "Move to right dock"
+    TB->>P: detachToDock(paneId, 'right')
+    note over P: occupied dock -> reattachToCenter(occupant) first
+    P->>P: removeLeaf(centre tree)<br/>(sole leaf -> fresh empty placeholder)
+    P-->>D: dockPanes.right = paneId (focus follows)
+    D->>D: render .editor-band above the widget stack<br/>(title = active tab name, splitter below)
+
+    U->>D: drag band header over the centre column
+    D->>D: dropDock = 'center' (main-pane shows the drop wash)
+    D->>P: mouseup -> reattachToCenter(paneId)
+    note over P: replaces a tabless placeholder / wraps in a row split<br/>/ appends to a split root
+
+    U->>U: later, quits and relaunches
+    S->>P: restore(layout, keepPath)
+    note over P: layout.dock.right = {paneId, height}; an entry whose<br/>tabs no longer resolve drops the region
+    P-->>D: band re-rendered with its tabs and band height
+```
+
 ## Planned flows (added as their milestone is built)
 
 - Dedicated keyword-search / FTS surface — the search panel's free-text
