@@ -102,6 +102,7 @@ export const DEFAULT_APP_CONFIG: AppConfig = {
   version: 1,
   llm: {
     enabled: false,
+    provider: 'lmstudio',
     baseUrl: LM_STUDIO_DEFAULT_BASE_URL,
     apiKey: null,
     model: null,

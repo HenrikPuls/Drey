@@ -13,13 +13,13 @@
 import { AUTOTAG_PROMPT } from '../../shared/app-config';
 import { parseSuggestedTags } from '../../shared/llm';
 import { AppConfigStore } from '../app-config';
+import { LlmClient } from './llm-client';
 import { LlmTaskRegistry } from './llm-tasks';
-import { LmStudioClient } from './lm-studio-client';
 
 export class TagSuggester {
   constructor(
     private readonly config: AppConfigStore,
-    private readonly llm: LmStudioClient,
+    private readonly llm: LlmClient,
     private readonly tasks: LlmTaskRegistry,
   ) {}
 
@@ -50,6 +50,6 @@ export class TagSuggester {
         { signal },
       ),
     );
-    return parseSuggestedTags(reply);
+    return parseSuggestedTags(reply.text);
   }
 }

@@ -20,6 +20,7 @@
  * `config:set` -- so the shape lives here once, the same rule as
  * `shared/ipc-api.ts`.
  */
+import type { LlmCapabilities } from '../llm';
 
 /** The LM Studio OpenAI-compatible endpoint, default port. */
 export const LM_STUDIO_DEFAULT_BASE_URL = 'http://localhost:1234/v1';
@@ -35,6 +36,142 @@ export interface LlmEndpoint {
   apiKey: string | null;
 }
 
+/**
+ * Which backend the `LlmClient` router picks per call (ADR-0047). The
+ * default stays the local OpenAI-compatible endpoint; every other entry is
+ * a documented, opt-in exception to the app's local-first rule.
+ */
+export type LlmProviderId =
+  | 'lmstudio' // local OpenAI-compat, http://localhost:1234/v1, key optional
+  | 'openai-compat' // same client, any user-typed URL (Ollama/vLLM/llama.cpp/Unsloth/...)
+  | 'openrouter' // openai-compat client, https://openrouter.ai/api/v1, key required
+  | 'anthropic' // Anthropic-Messages client, https://api.anthropic.com
+  | 'zai-glm' // Anthropic-Messages client, https://api.z.ai/api/anthropic (GLM Coding Plan)
+  | 'claude-code' // `claude -p` headless CLI, stream-json + --resume sessions
+  | 'copilot-cli' // `copilot -p` CLI (capabilities per spike)
+  | 'copilot-web'; // Playwright + system Edge scraper (ADR-0040)
+
+/** How a provider is reached -- picks the client class AND the Settings field group. */
+export type LlmProviderClient =
+  | 'openai-compat'
+  | 'anthropic-messages'
+  | 'claude-code-cli'
+  | 'copilot-cli'
+  | 'copilot-web';
+
+/** Which field block the LLM settings page renders for a provider. */
+export type LlmProviderFieldGroup = 'http' | 'cli' | 'copilot-web';
+
+/**
+ * One entry of `PROVIDER_PRESETS`: the static facts the Settings screen
+ * renders from without instantiating anything. `capabilities` is a static
+ * copy for the hint text; `capabilities()` on the live provider is the
+ * runtime truth (they are kept in sync by construction).
+ */
+export interface LlmProviderPreset {
+  label: string;
+  client: LlmProviderClient;
+  /** Initial `baseUrl` when switching to this provider; `null` for field-less groups. */
+  defaultBaseUrl: string | null;
+  requiresApiKey: boolean;
+  capabilities: LlmCapabilities;
+  fieldGroup: LlmProviderFieldGroup;
+}
+
+const HTTP_TOOLS: LlmCapabilities = {
+  tools: true,
+  streaming: true,
+  sessions: false,
+  modelListing: true,
+  imageAttachments: true,
+};
+
+const NO_TOOLS: LlmCapabilities = {
+  tools: false,
+  streaming: true,
+  sessions: false,
+  modelListing: false,
+  imageAttachments: false,
+};
+
+/**
+ * The provider catalogue behind the Settings "LLM" provider select. The
+ * first entry is the app's default and the only one that needs nothing
+ * from the network outside the user's machine.
+ */
+export const PROVIDER_PRESETS: Record<LlmProviderId, LlmProviderPreset> = {
+  lmstudio: {
+    label: 'LM Studio (local)',
+    client: 'openai-compat',
+    defaultBaseUrl: LM_STUDIO_DEFAULT_BASE_URL,
+    requiresApiKey: false,
+    capabilities: HTTP_TOOLS,
+    fieldGroup: 'http',
+  },
+  'openai-compat': {
+    label: 'OpenAI-compatible server',
+    client: 'openai-compat',
+    defaultBaseUrl: LM_STUDIO_DEFAULT_BASE_URL,
+    requiresApiKey: false,
+    capabilities: HTTP_TOOLS,
+    fieldGroup: 'http',
+  },
+  openrouter: {
+    label: 'OpenRouter',
+    client: 'openai-compat',
+    defaultBaseUrl: 'https://openrouter.ai/api/v1',
+    requiresApiKey: true,
+    capabilities: HTTP_TOOLS,
+    fieldGroup: 'http',
+  },
+  anthropic: {
+    label: 'Anthropic API',
+    client: 'anthropic-messages',
+    defaultBaseUrl: 'https://api.anthropic.com',
+    requiresApiKey: true,
+    capabilities: HTTP_TOOLS,
+    fieldGroup: 'http',
+  },
+  'zai-glm': {
+    label: 'Z.ai GLM (Coding Plan)',
+    client: 'anthropic-messages',
+    defaultBaseUrl: 'https://api.z.ai/api/anthropic',
+    requiresApiKey: true,
+    capabilities: HTTP_TOOLS,
+    fieldGroup: 'http',
+  },
+  'claude-code': {
+    label: 'Claude Code (CLI)',
+    client: 'claude-code-cli',
+    defaultBaseUrl: null,
+    requiresApiKey: false,
+    capabilities: { ...NO_TOOLS, sessions: true },
+    fieldGroup: 'cli',
+  },
+  'copilot-cli': {
+    label: 'GitHub Copilot CLI',
+    client: 'copilot-cli',
+    defaultBaseUrl: null,
+    requiresApiKey: false,
+    capabilities: NO_TOOLS,
+    fieldGroup: 'cli',
+  },
+  'copilot-web': {
+    label: 'Copilot Web (M365)',
+    client: 'copilot-web',
+    defaultBaseUrl: null,
+    requiresApiKey: false,
+    capabilities: NO_TOOLS,
+    fieldGroup: 'copilot-web',
+  },
+};
+
+/**
+ * The ids in a form `normalizeLlmProvider` (and a `<select>`) can walk.
+ * Derived, kept next to the record so a new preset cannot forget itself.
+ */
+export const PROVIDER_PRESET_IDS = Object.keys(PROVIDER_PRESETS) as LlmProviderId[];
+
 /** LLM connection settings (the "LLM" settings category). */
 export interface LlmConfig {
   /**
@@ -44,9 +181,19 @@ export interface LlmConfig {
    */
   enabled: boolean;
   /**
-   * OpenAI-compatible base URL, `http://host:port/v1`. LM Studio is the
-   * documented default, but any server speaking that dialect works --
-   * Unsloth Desktop (`http://127.0.0.1:8888/v1`), llama.cpp, vLLM, Ollama.
+   * Which provider preset is active; `LlmRouter` re-reads it per call, so
+   * switching applies on the next request without a restart. Defaults to
+   * the local endpoint.
+   */
+  provider: LlmProviderId;
+  /**
+   * The base URL of the active HTTP preset (`fieldGroup: 'http'`): for the
+   * OpenAI-compat client `http://host:port/v1` (LM Studio is the
+   * documented default; Unsloth Desktop, llama.cpp, vLLM, Ollama speak the
+   * same dialect), for the Anthropic-Messages client the API root
+   * (`https://api.anthropic.com`, `https://api.z.ai/api/anthropic`). CLI
+   * and web presets ignore it. Switching provider in Settings pre-fills
+   * the preset's default.
    */
   baseUrl: string;
   /**

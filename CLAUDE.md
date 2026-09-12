@@ -89,12 +89,20 @@ toolchain is removable by deleting `.tools/`). Never assume a bare `node`,
   `SectionSearchProvider` and degrades with a clear error when the tags
   plugin is disabled. `#task` is reserved; the LLM only _suggests_ tags
   (the drawer's Autotag button). See `specs/classifier-spec.md`.
-- Local LLM over an OpenAI-compatible HTTP API — LM Studio is the default,
-  but the client is generic (Unsloth Desktop, llama.cpp, vLLM, Ollama all
-  work) with an optional `Authorization: Bearer` API key for servers that
-  require auth. No cloud calls, no hardcoded model id — never assume a
-  specific model is loaded, and never assume `/v1/models` is reachable
-  (the model id must stay hand-enterable).
+- LLM transport behind a provider abstraction
+  ([ADR-0047](docs/09_architecture_decisions/0047-llm-provider-abstraction.md)):
+  base-owned `LlmClient` interface + a per-call `LlmRouter` over
+  `electron/llm/providers/`. The default is the **local OpenAI-compatible
+  endpoint** (LM Studio default; Unsloth Desktop, llama.cpp, vLLM, Ollama
+  all work) with an optional `Authorization: Bearer` API key. Hosted
+  presets (OpenRouter, Anthropic API, Z.ai GLM) and CLI providers
+  (Claude Code headless, GitHub Copilot CLI) are **opt-in, off by
+  default** — a documented exception to the old "no cloud calls" rule,
+  same as the removable `copilot-web` scraper (ADR-0040). No hardcoded
+  model id — never assume a specific model is loaded, and never assume
+  `/v1/models` is reachable (the model id must stay hand-enterable;
+  CLI/web providers advertise no model listing at all). API keys sit in
+  `app-config.json` in plain text (`docs/11`).
 - sqlite-vec for vector search, transformers.js for embeddings (Phase 2,
   not part of the MVP).
 - **Manual refresh, plus an opt-in watcher.** By default there is no file

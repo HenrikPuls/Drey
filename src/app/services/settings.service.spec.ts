@@ -83,6 +83,7 @@ describe('SettingsService (draft model)', () => {
 
     expect(harness.stored().llm).toEqual({
       enabled: true,
+      provider: 'lmstudio',
       baseUrl: 'http://127.0.0.1:8888/v1',
       apiKey: 'sk-unsloth-KEY',
       model: 'Bonsai-27B-GGUF',

@@ -235,6 +235,16 @@ export interface PluginChatOptions {
 }
 
 /**
+ * One streamed-text push (ADR-0047): the delta belongs to the chat task
+ * with this renderer-minted `taskId`. A provider that cannot stream
+ * delivers its full text as exactly one event. Shape lives in
+ * `shared/ipc-api.ts` (the push channel's payload); re-exported here so
+ * plugin code has one import point.
+ */
+export type { LlmDeltaEvent } from '../ipc-api';
+import type { LlmDeltaEvent } from '../ipc-api';
+
+/**
  * The object handed to a plugin's renderer entry. Every registration
  * returns an `Unsubscribe`; `deactivate()` runs them all plus the module's
  * own `deactivate`.
@@ -357,6 +367,12 @@ export interface DreyPluginApi {
     chat(messages: readonly ChatMessage[], options?: PluginChatOptions): Promise<string>;
     cancelTask(taskId: string): Promise<boolean>;
     onDebugEntry(listener: (entry: LlmDebugEntry) => void): Unsubscribe;
+    /**
+     * Streamed-text pushes (ADR-0047) for tasks this renderer started with
+     * a matching `taskId`. Serialised IPC cannot carry a callback in the
+     * call, so streaming arrives here instead of through `chat`.
+     */
+    onDelta(listener: (event: LlmDeltaEvent) => void): Unsubscribe;
   };
 
   readonly env: {

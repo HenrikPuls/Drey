@@ -4,7 +4,7 @@
  * Why this exists at all: a local model on consumer hardware regularly
  * thinks for minutes, and there is no honest timeout to pick — too short
  * kills legitimate work, too long is indistinguishable from a hang. So
- * `/chat/completions` has **no** deadline (see `LmStudioClient.chat`), and
+ * no provider applies a generation deadline (ADR-0014), and
  * the user gets an explicit Cancel instead. That trade only works if a
  * running request can actually be aborted, which is what this holds.
  *

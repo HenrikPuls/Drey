@@ -70,6 +70,7 @@ export const IPC_CHANNELS = {
   llmDebugList: 'llm:debug-list',
   llmDebugClear: 'llm:debug-clear',
   llmDebugEntry: 'llm:debug-entry',
+  llmDelta: 'llm:delta',
   llmCancel: 'llm:cancel',
   spellCheck: 'spell:check',
   spellLanguages: 'spell:languages',
@@ -320,6 +321,16 @@ export interface LlmConnectionTest {
 }
 
 /**
+ * One streamed-LLM-text push (ADR-0047), tagged with the renderer-minted
+ * `taskId` of the chat that produced it. A provider that cannot stream
+ * sends its full text as exactly one event.
+ */
+export interface LlmDeltaEvent {
+  taskId: string;
+  text: string;
+}
+
+/**
  * One dictionary the spellchecker can be switched to -- the bundled
  * languages plus whatever the user added (`CustomDictionary`). `loaded`
  * says whether the dictionary files were actually readable, so the
@@ -461,6 +472,13 @@ export interface DreyApi {
    * push, same shape as `onOpenDailyNote`). Returns an unsubscribe.
    */
   onLlmDebugEntry(listener: (entry: LlmDebugEntry) => void): () => void;
+
+  /**
+   * Streamed LLM text (ADR-0047): one push per delta, tagged with the
+   * renderer-minted `taskId` of the chat that produced it. A provider
+   * that cannot stream sends its full text as exactly one event.
+   */
+  onLlmDelta(listener: (event: LlmDeltaEvent) => void): () => void;
 
   /**
    * Aborts a running generation. `taskId` is minted by the **renderer**

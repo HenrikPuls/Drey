@@ -42,8 +42,10 @@ restore, keybindings, spellcheck, the MCP vault server, the LLM
   registries**), `daily-note.ts`, `session/` (backup store),
   `own-write-ledger.ts` + `vault-watcher.ts` +
   `vault-change-announcer.ts` (the opt-in external-change round,
-  ADR-0045), `llm/` (transport: `lm-studio-client.ts`, debug log, task
-  registry, tag-suggest), `mcp/` (vault server; `vault_search` reads the
+  ADR-0045), `llm/` (transport: the provider abstraction — `LlmClient`
+  interface, per-call `LlmRouter`, one client per backend under
+  `providers/` (ADR-0047), debug log, task registry, tag-suggest),
+  `mcp/` (vault server; `vault_search` reads the
   section-search provider the tags plugin registers).
 - `ipc/` — the base channel handlers (thin, feature-free).
 
@@ -2085,3 +2087,59 @@ section index attributes it to the meeting name. The invite file itself is
 **not** copied into the vault. The context-menu "add meeting log" +
 per-day appointment picker (roadmap `req-22`) is a follow-up on top of
 this.
+
+## 5.24 LLM provider abstraction (`electron/llm/`, ADR-0047)
+
+Milestone 22 replaced the concrete `LmStudioClient` with a base-owned
+provider seam. Everything else keeps its shape: the task registry, the
+debug log, the plugin `llm` facades and the IPC handlers only swap what
+sits behind them.
+
+- **`llm-client.ts`** — the `LlmClient` interface
+  (`id`, `capabilities()`, `listModels`, `testConnection`, `chat`) and
+  `LlmChatOptions` (`temperature`, `signal`, `tools?: ToolSpec[]`,
+  `onToolCall`, `maxToolRounds`, `onDelta`, `sessionRef`, `attachments`,
+  `maxOutputTokens`). Main-only (import-cycle note in the ADR). `chat`
+  returns `LlmChatResult { text, sessionRef?, usage? }`.
+- **`llm-errors.ts`** — the small `LlmError` code taxonomy
+  (`disabled | no-model | auth | http | bad-reply | spawn |
+  unsupported`). Cancellation stays outside it: providers reject with
+  the fetch `AbortError` (CLI: `name: 'AbortError'` after a tree kill),
+  so `isAbortError` and every catch path are unchanged.
+- **`llm-router.ts`** — `LlmRouter implements LlmClient`; re-reads
+  `config.get().llm.provider` per call (Settings switch applies on the
+  next request). An id without a registered client rejects with
+  `LlmError('unsupported')` rather than falling back.
+- **`providers/`** (barrel) — one client per backend family:
+  `openai-compat.ts` serves `lmstudio` / `openai-compat` / `openrouter`
+  (SSE streaming when `onDelta` is passed and no tool loop is in play;
+  OpenRouter's 200-with-error-body mapped onto `LlmError('http')`),
+  `anthropic-messages.ts` serves `anthropic` / `zai-glm` (top-level
+  `system`, required `max_tokens`, `tool_use`/`tool_result` adapters,
+  SSE `content_block_delta`). `presets.ts` is the factory
+  (`buildClients`); CLI providers (Claude Code, Copilot CLI) and
+  copilot-web land in later milestones and reject until then.
+- **`shared/llm/adapters.ts`** — the pure wire adapters under the Vitest
+  suite (ADR-0007): `toOpenAiTools` / `toAnthropicTools`,
+  `buildOpenAiUserContent` (vision parts), and `toAnthropicMessages`
+  (system lift-out, tool blocks, consecutive-role merging — Anthropic
+  requires strict alternation).
+- **Config** — `LlmConfig.provider: LlmProviderId` (eight presets in
+  `PROVIDER_PRESETS`: label, client class, default base URL, key
+  requirement, static capabilities, Settings field group);
+  `normalizeAppConfig` migrates absent/unknown ids to `'lmstudio'`.
+- **Wiring** — `main.ts` builds the router and passes it as `llm` to the
+  plugin host and the IPC handlers (both previously held
+  `lmStudio: LmStudioClient`); `TagSuggester` takes `LlmClient` and
+  unwraps `.text`; `VaultTools.toolSpecs(): ToolSpec[]` replaced
+  `openAiToolSpec()` (the OpenAI wrapping moved into the provider).
+- **Streaming push** — `plugin-host` forwards `onDelta` from the
+  serialized renderer bridge onto the new `llm:delta` channel
+  (`{ taskId, text }`, renderer-minted id), exposed as
+  `api.llm.onDelta`; the in-process `ctx.llm.chat` takes the callback
+  directly. Non-streaming providers call it exactly once with the full
+  text, so consumers never branch.
+- **Settings LLM** — provider `<select>` from `PROVIDER_PRESETS`,
+  per-provider field groups (`http` / `cli` / `copilot-web`), capability
+  hints, preset-default base URL pre-fill on switch (draft-side), and a
+  provider chip in each debug-log row.

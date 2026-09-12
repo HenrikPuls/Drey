@@ -1,8 +1,8 @@
 /**
  * The vault tool set exposed over MCP (`electron/mcp/server.ts`) and
- * called in-process by the assistant's tool-calling loop
- * (`electron/llm/action-runner.ts`). One definition, two consumers -- see
- * `docs/09_architecture_decisions/0021-mcp-vault-server.md`.
+ * called in-process by the assistant plugin's tool-calling loop (through
+ * the host's `ctx.llm.chat` vaultTools option). One definition, two
+ * consumers -- see `docs/09_architecture_decisions/0021-mcp-vault-server.md`.
  *
  * Three tools:
  *  - `vault_search` -- tag + free-text search (the same matcher the
@@ -16,6 +16,7 @@
  * guard (`..`, absolute paths, no active vault) applies unchanged.
  */
 import type { AppConfig } from '../../shared/app-config';
+import type { ToolSpec } from '../../shared/llm';
 import type { SectionSearchProvider, TagSearchHit } from '../../shared/plugin-api';
 import type { VaultManager } from '../vault-manager';
 
@@ -158,15 +159,16 @@ export class VaultTools {
     return VAULT_TOOL_DEFS;
   }
 
-  /** The same tools in OpenAI `tools` shape, for the assistant's tool-calling loop. */
-  openAiToolSpec(): Array<{ type: 'function'; function: Record<string, unknown> }> {
+  /**
+   * The same tools as canonical `ToolSpec`s (ADR-0047) for the assistant's
+   * tool-calling loop; the OpenAI/Anthropic wire wrapping happens in the
+   * provider adapters.
+   */
+  toolSpecs(): ToolSpec[] {
     return VAULT_TOOL_DEFS.map((def) => ({
-      type: 'function',
-      function: {
-        name: def.name,
-        description: def.description,
-        parameters: def.inputSchema,
-      },
+      name: def.name,
+      description: def.description,
+      parameters: def.inputSchema,
     }));
   }
 

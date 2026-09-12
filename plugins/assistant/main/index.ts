@@ -34,11 +34,15 @@ const plugin: MainPluginModule = {
   activate(ctx: MainPluginContext) {
     const engine = new ActionEngine(
       () => ctx.appConfig.get(),
+      // The facade now returns `LlmChatResult` (ADR-0047); the engine's
+      // `ChatFn` contract stays plain-string, so unwrap here.
       ((messages, options) =>
-        ctx.llm.chat(messages, {
-          taskId: options?.taskId,
-          ...(options?.vaultTools !== undefined ? { vaultTools: options.vaultTools } : {}),
-        })) satisfies ChatFn,
+        ctx.llm
+          .chat(messages, {
+            taskId: options?.taskId,
+            ...(options?.vaultTools !== undefined ? { vaultTools: options.vaultTools } : {}),
+          })
+          .then((result) => result.text)) satisfies ChatFn,
     );
 
     // -- the on-save Actions save hook -------------------------------------

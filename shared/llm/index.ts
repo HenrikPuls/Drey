@@ -13,8 +13,32 @@
 export type { ActionContext, ActionOutcome, AskOutcome, ResolvedAction } from './actions';
 export { resolveActions } from './actions';
 
-export type { ChatMessage, ChatToolCall } from './llm';
+export type {
+  ChatAttachment,
+  ChatMessage,
+  ChatToolCall,
+  LlmCapabilities,
+  LlmChatResult,
+  LlmUsage,
+  ToolParameters,
+  ToolSpec,
+} from './llm';
 export { extractJsonObject, parseJsonObject } from './llm';
+
+export type {
+  AnthropicBlock,
+  AnthropicMessage,
+  AnthropicToolsWire,
+  OpenAiContentPart,
+  OpenAiToolWire,
+} from './adapters';
+export {
+  buildOpenAiUserContent,
+  toAnthropicMessages,
+  toAnthropicToolUse,
+  toAnthropicTools,
+  toOpenAiTools,
+} from './adapters';
 
 export type { TagSuggestion, TaskClassification, TaskPriority } from './classifier';
 export {

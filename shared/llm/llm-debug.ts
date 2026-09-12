@@ -19,6 +19,8 @@ export interface LlmDebugEntry {
   id: number;
   /** Local wall-clock `HH:mm:ss.mmm` -- these are read next to each other, not sorted. */
   at: string;
+  /** Config id of the provider this exchange went to (ADR-0047), e.g. `lmstudio`. */
+  provider: string;
   method: 'GET' | 'POST';
   url: string;
   /**

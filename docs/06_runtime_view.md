@@ -1591,6 +1591,55 @@ sequenceDiagram
     P-->>D: band re-rendered with its tabs and band height
 ```
 
+## 6.34 One chat completion through the provider router ([ADR-0047](09_architecture_decisions/0047-llm-provider-abstraction.md))
+
+The assistant plugin's Ask is the worked example; every other consumer
+(Autotag, on-save Actions, `drey.llm.chat`) rides the same router. What
+changed with the provider abstraction is only the middle: the router
+picks the backend per call, and the provider owns its dialect — message
+adapters, tool wire format, SSE framing.
+
+```mermaid
+sequenceDiagram
+    participant AR as Assistant renderer (state.ask)
+    participant AM as Assistant main (ActionEngine)
+    participant PH as PluginHost (ctx.llm.chat)
+    participant TR as LlmTaskRegistry
+    participant R as LlmRouter
+    participant P as Provider (openai-compat / anthropic-messages)
+    participant S as Model endpoint
+
+    AR->>AM: backend.invoke('ask', { context, question, taskId, history })
+    AM->>PH: ctx.llm.chat(messages, { taskId, vaultTools?, onDelta? })
+    PH->>TR: run(taskId, work)
+    TR->>R: chat(messages, options) with AbortSignal
+    R->>R: pick() = config.llm.provider (per call, hot-swap)
+    R->>P: chat(messages, options)
+    P->>P: adapt: ToolSpec -> wire format, system lift-out (anthropic)
+    loop tool rounds (max 5, tools only)
+        P->>S: POST /chat/completions | /v1/messages
+        S-->>P: tool_calls / tool_use blocks
+        P-->>PH: onToolCall(name, args)
+        PH-->>P: tool result text (vault_write still confirm-gated)
+    end
+    P->>S: final request (stream: true when onDelta && no tools)
+    loop SSE frames
+        P-->>PH: onDelta(delta)  (non-streamers: exactly once)
+        PH-->>AR: llm:delta push { taskId, text }
+    end
+    P-->>R: LlmChatResult { text, usage? }
+    R-->>TR: resolve
+    TR-->>PH: resolve
+    PH-->>AM: LlmChatResult (engine's ChatFn unwraps .text)
+    AM-->>AR: AskOutcome
+```
+
+Cancellation cuts across the diagram: the renderer's Cancel aborts the
+`AbortController` the registry holds under the renderer-minted
+`taskId`; the provider's fetch (or the CLI's process-tree kill, from
+milestone 23) rejects with an `AbortError`, which the engine converts to
+a `noop` outcome. No provider applies a generation timeout (ADR-0014).
+
 ## Planned flows (added as their milestone is built)
 
 - Dedicated keyword-search / FTS surface — the search panel's free-text

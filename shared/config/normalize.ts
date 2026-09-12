@@ -32,6 +32,8 @@ import {
   EntryConfig,
   EntryTemplate,
   LlmConfig,
+  LlmProviderId,
+  PROVIDER_PRESET_IDS,
   MCP_PORT_MAX,
   MCP_PORT_MIN,
   McpConfig,
@@ -156,10 +158,23 @@ function optionalText(value: unknown): string | null {
   return typeof value === 'string' && value.trim() !== '' ? value.trim() : null;
 }
 
+/**
+ * A stored provider id, or `'lmstudio'` when absent/names nothing (an
+ * older config file has no `provider` key at all). A provider whose
+ * preset was dropped by an upgrade falls back rather than leaving the
+ * router pointed at nothing.
+ */
+export function normalizeLlmProvider(value: unknown): LlmProviderId {
+  return (
+    PROVIDER_PRESET_IDS.find((id) => id === value) ?? DEFAULT_APP_CONFIG.llm.provider
+  );
+}
+
 function normalizeLlm(raw: unknown): LlmConfig {
   const source = (raw ?? {}) as Record<string, unknown>;
   return {
     enabled: bool(source['enabled'], DEFAULT_APP_CONFIG.llm.enabled),
+    provider: normalizeLlmProvider(source['provider']),
     baseUrl:
       str(source['baseUrl'], DEFAULT_APP_CONFIG.llm.baseUrl).trim() ||
       DEFAULT_APP_CONFIG.llm.baseUrl,

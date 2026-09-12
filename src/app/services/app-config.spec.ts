@@ -45,6 +45,14 @@ describe('normalizeAppConfig', () => {
     expect(config.llm.baseUrl).toBe(DEFAULT_APP_CONFIG.llm.baseUrl);
     expect(config.llm.model).toBeNull();
     expect(config.llm.apiKey).toBeNull();
+    // A pre-provider config file has no `provider` key at all.
+    expect(config.llm.provider).toBe('lmstudio');
+  });
+
+  it('falls back to the default provider for an unknown id, keeps a known one', () => {
+    expect(normalizeAppConfig({ llm: { provider: 'zai-glm' } }).llm.provider).toBe('zai-glm');
+    expect(normalizeAppConfig({ llm: { provider: 'skynet' } }).llm.provider).toBe('lmstudio');
+    expect(normalizeAppConfig({}).llm.provider).toBe('lmstudio');
   });
 
   it('defaults the API key to null and keeps a set one, trimmed', () => {
@@ -71,6 +79,7 @@ describe('normalizeAppConfig', () => {
     });
     expect(config.llm).toEqual({
       enabled: true,
+      provider: 'lmstudio',
       baseUrl: 'http://127.0.0.1:8888/v1',
       apiKey: 'sk-unsloth-KEY',
       model: 'Bonsai-27B-GGUF',

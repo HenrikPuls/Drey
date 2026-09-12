@@ -54,6 +54,7 @@ package, a minor naming convention).
 | [0044](09_architecture_decisions/0044-runtime-plugin-system.md)                    | Runtime plugin system: a base app with runtime-loadable, in-process plugins (supersedes 0016/0034's "no runtime" stance) | Accepted |
 | [0045](09_architecture_decisions/0045-optional-vault-file-watcher.md)              | Optional vault file watcher: opt-in chokidar + own-write ledger + one shared external-change round; manual refresh becomes a full round (amends 0018) | Accepted |
 | [0046](09_architecture_decisions/0046-wikilinks.md)                                | `[[Wikilinks]]`: regex mark decorations + Ctrl/Cmd-click (resolve by name/path, `#heading` jumps, `|alias`, create-missing) | Accepted |
+| [0047](09_architecture_decisions/0047-llm-provider-abstraction.md)                 | LLM provider abstraction: base-owned `LlmClient` + per-call router, streaming/sessions/capabilities; opt-in cloud presets (amends the local-only principle and 0044's frozen-SDK rule) | Accepted |
 
 Decisions not yet written up (relevant spec already fixes them, but the
 ADR is deferred to the milestone that actually implements them, per

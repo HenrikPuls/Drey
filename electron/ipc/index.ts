@@ -7,7 +7,7 @@
 import { BrowserWindow } from 'electron';
 import { AppConfigStore } from '../app-config';
 import { DailyNoteManager } from '../daily-note';
-import { LlmDebugLog, LlmTaskRegistry, LmStudioClient, TagSuggester } from '../llm';
+import { LlmClient, LlmDebugLog, LlmTaskRegistry, TagSuggester } from '../llm';
 import { McpHttpTransport } from '../mcp';
 import { NoteManager } from '../note-manager';
 import { PluginHost } from '../plugin-host';
@@ -37,7 +37,7 @@ export interface IpcHandlerDeps {
   dailyNotes: DailyNoteManager;
   noteManager: NoteManager;
   appConfig: AppConfigStore;
-  lmStudio: LmStudioClient;
+  llm: LlmClient;
   llmTasks: LlmTaskRegistry;
   tagSuggester: TagSuggester;
   llmDebug: LlmDebugLog;

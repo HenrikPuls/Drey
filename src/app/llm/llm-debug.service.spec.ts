@@ -6,6 +6,7 @@ function entry(id: number): LlmDebugEntry {
   return {
     id,
     at: '14:00:00.000',
+    provider: 'lmstudio',
     method: 'GET',
     url: 'http://127.0.0.1:8888/v1/models',
     headers: { authorization: 'Bearer sk-unslo…3456' },

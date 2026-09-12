@@ -304,6 +304,7 @@ export class PluginApiFactory {
           })) as string,
         cancelTask: (taskId) => window.dreyApi.cancelLlmTask(taskId),
         onDebugEntry: (listener) => track(window.dreyApi.onLlmDebugEntry(listener)),
+        onDelta: (listener) => track(window.dreyApi.onLlmDelta(listener)),
       },
       env: {
         onNativeSurfaceVisibility: (listener) => track(context.addVisibilityListener(listener)),

@@ -11,7 +11,7 @@
  * - no Angular types (main has none, and plugins are framework-agnostic).
  */
 import type { BrowserWindow, WebContents } from 'electron';
-import type { ActionOutcome, ChatMessage, LlmDebugEntry } from '../llm';
+import type { ActionOutcome, ChatMessage, LlmChatResult, LlmDebugEntry } from '../llm';
 import type { AppConfig } from '../app-config';
 import type { TagEntry, TagSearchHit, TagSearchQuery } from './search-types';
 import type { VaultFileEntry } from '../ipc-api';
@@ -75,6 +75,13 @@ export interface MainChatOptions {
   readonly temperature?: number;
   readonly taskId?: string;
   /**
+   * Incremental text (ADR-0047). A provider that cannot stream delivers
+   * the full text through exactly one call, so consumers never branch.
+   * In-process only -- the renderer-side facade (`api.llm`) cannot take a
+   * callback across the IPC boundary and grows an `onDelta` push instead.
+   */
+  readonly onDelta?: (delta: string) => void;
+  /**
    * Opts this ONE call into the vault tool loop (ADR-0021): the model may
    * call `vault_search`/`vault_read`/`vault_write` before its final answer
    * (a write still goes through the user's confirmation). Only meaningful
@@ -137,10 +144,12 @@ export interface MainPluginContext {
   readonly llm: {
     enabled(): boolean;
     /**
-     * One non-streamed completion; rejects when disabled (ADR-0014: no
-     * timeout — cancel via the renderer's `llm.cancelTask(taskId)`).
+     * One completion through the active provider (ADR-0047); rejects when
+     * disabled (ADR-0014: no timeout — cancel via the renderer's
+     * `llm.cancelTask(taskId)`). Returns the result shape so a provider's
+     * session handle / usage can flow through; the text is `.text`.
      */
-    chat(messages: readonly ChatMessage[], options?: MainChatOptions): Promise<string>;
+    chat(messages: readonly ChatMessage[], options?: MainChatOptions): Promise<LlmChatResult>;
     /** The vocabulary-carrying tag suggestion (the `autotag` prompt); plugin supplies its vocabulary. */
     suggestTags(entryText: string, vocabulary: readonly string[], taskId?: string): Promise<string[]>;
     onDebugEntry(cb: (entry: LlmDebugEntry) => void): Unsubscribe;

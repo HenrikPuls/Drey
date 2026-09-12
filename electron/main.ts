@@ -16,7 +16,7 @@ import { AppConfigStore } from './app-config';
 import chokidar from 'chokidar';
 import { DailyNoteManager } from './daily-note';
 import { installMainProcessLogging, watchWebContents } from './logger';
-import { LlmDebugLog, LlmTaskRegistry, LmStudioClient, TagSuggester } from './llm';
+import { LlmDebugLog, LlmRouter, LlmTaskRegistry, TagSuggester, buildClients } from './llm';
 import { registerIpcHandlers, ExitBridge, McpWriteBridge } from './ipc';
 import { McpHttpTransport, McpServer, VaultTools } from './mcp';
 import { attachContextMenu, buildApplicationMenu } from './menu';
@@ -515,7 +515,10 @@ if (!app.requestSingleInstanceLock()) {
     vaultWatcherForShutdown = vaultWatcher;
     const dailyNotes = new DailyNoteManager(vaultManager);
     const llmDebug = new LlmDebugLog();
-    const lmStudio = new LmStudioClient(appConfig, llmDebug);
+    // The provider router (ADR-0047): one client per implemented backend,
+    // picked per call from `llm.provider` -- switching in Settings applies
+    // on the next request, no restart.
+    const llm = new LlmRouter(appConfig, buildClients(appConfig, llmDebug));
     const llmTasks = new LlmTaskRegistry();
     // The vault tool set (ADR-0021): one instance backs both the MCP
     // server and the assistant's in-process tool-calling loop.
@@ -533,7 +536,7 @@ if (!app.requestSingleInstanceLock()) {
       (writtenPath) =>
         vaultAnnouncer.announceExternal({ changedPaths: [writtenPath], deletedPaths: [] }),
     );
-    const tagSuggester = new TagSuggester(appConfig, lmStudio, llmTasks);
+    const tagSuggester = new TagSuggester(appConfig, llm, llmTasks);
     // The plugin host activates main entries before the window exists and
     // before IPC registration — plugins register their method handlers in
     // activate(), and the window-created callback reaches them afterwards.
@@ -548,7 +551,7 @@ if (!app.requestSingleInstanceLock()) {
       getMainWindow: () => mainWindow,
       vaultManager,
       appConfig,
-      lmStudio,
+      llm,
       llmTasks,
       vaultTools,
       tagSuggester,
@@ -599,7 +602,7 @@ if (!app.requestSingleInstanceLock()) {
       dailyNotes,
       noteManager,
       appConfig,
-      lmStudio,
+      llm,
       llmTasks,
       tagSuggester,
       llmDebug,

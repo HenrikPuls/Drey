@@ -27,7 +27,8 @@ import {
   type VaultChangeEvent,
 } from '../../shared/plugin-api';
 import type { AppConfigStore } from '../app-config';
-import type { LlmDebugLog, LlmTaskRegistry, LmStudioClient, TagSuggester } from '../llm';
+import type { LlmClient, LlmDebugLog, LlmTaskRegistry, TagSuggester } from '../llm';
+import { IPC_CHANNELS } from '../../shared/ipc-api';
 import type { VaultTools } from '../mcp';
 import type { VaultManager } from '../vault-manager';
 import { PluginConfigStore } from './plugin-config-store';
@@ -60,7 +61,8 @@ export interface PluginHostDeps {
   readonly getMainWindow: () => BrowserWindow | null;
   readonly vaultManager: VaultManager;
   readonly appConfig: AppConfigStore;
-  readonly lmStudio: LmStudioClient;
+  /** The provider router (ADR-0047) -- plugins always go through it. */
+  readonly llm: LlmClient;
   readonly llmTasks: LlmTaskRegistry;
   /**
    * The base vault tool set (ADR-0021), wired into `ctx.llm.chat` when a
@@ -204,26 +206,35 @@ export class PluginHost {
         // `vaultTools: true` opts the ONE call into the ADR-0021 vault tool
         // loop (the model may call vault_search/read/write before its final
         // answer; a vault_write still goes through the confirmation bridge).
+        // The renderer bridge stays string-returning: the serialized
+        // `LlmChatResult` is unwrapped here, streaming reaches the renderer
+        // through the `llm:delta` push, not this return value.
         const withTools = shape['vaultTools'] === true && this.deps.vaultTools !== undefined;
-        return this.deps.llmTasks.run(
-          typeof shape['taskId'] === 'string' ? shape['taskId'] : undefined,
-          (signal) =>
-            this.deps.lmStudio.chat(
-              (shape['messages'] as never[]) ?? [],
-              {
-                ...(typeof shape['temperature'] === 'number'
-                  ? { temperature: shape['temperature'] }
-                  : {}),
-                ...(withTools
-                  ? {
-                      tools: this.deps.vaultTools.openAiToolSpec(),
-                      onToolCall: (name, argsJson) => this.runVaultTool(name, argsJson),
-                    }
-                  : {}),
-                signal,
-              },
-            ),
+        const taskId = typeof shape['taskId'] === 'string' ? shape['taskId'] : undefined;
+        const result = await this.deps.llmTasks.run(taskId, (signal) =>
+          this.deps.llm.chat((shape['messages'] as never[]) ?? [], {
+            ...(typeof shape['temperature'] === 'number'
+              ? { temperature: shape['temperature'] }
+              : {}),
+            ...(withTools
+              ? {
+                  tools: this.deps.vaultTools.toolSpecs(),
+                  onToolCall: (name, argsJson) => this.runVaultTool(name, argsJson),
+                }
+              : {}),
+            ...(taskId !== undefined
+              ? {
+                  onDelta: (text: string) =>
+                    this.deps.getMainWindow()?.webContents.send(IPC_CHANNELS.llmDelta, {
+                      taskId,
+                      text,
+                    }),
+                }
+              : {}),
+            signal,
+          }),
         );
+        return result.text;
       }
       case 'drey.search.sections': {
         const provider = this.searchProvider;
@@ -369,7 +380,7 @@ export class PluginHost {
       }
       return unsubscribe;
     };
-    const { vaultManager, appConfig, lmStudio, llmTasks, tagSuggester, llmDebug } = this.deps;
+    const { vaultManager, appConfig, llm, llmTasks, tagSuggester, llmDebug } = this.deps;
 
     return {
       pluginId: id,
@@ -412,11 +423,12 @@ export class PluginHost {
         enabled: () => appConfig.get().llm.enabled,
         chat: (messages, options) =>
           llmTasks.run(options?.taskId, (signal) =>
-            lmStudio.chat([...messages], {
+            llm.chat([...messages], {
               temperature: options?.temperature,
+              ...(options?.onDelta !== undefined ? { onDelta: options.onDelta } : {}),
               ...(options?.vaultTools === true && this.deps.vaultTools !== undefined
                 ? {
-                    tools: this.deps.vaultTools.openAiToolSpec(),
+                    tools: this.deps.vaultTools.toolSpecs(),
                     onToolCall: (name, argsJson) => this.runVaultTool(name, argsJson),
                   }
                 : {}),

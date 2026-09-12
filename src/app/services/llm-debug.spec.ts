@@ -10,6 +10,7 @@ function entry(patch: Partial<LlmDebugEntry> = {}): LlmDebugEntry {
   return {
     id: 1,
     at: '13:45:02.100',
+    provider: 'lmstudio',
     method: 'POST',
     url: 'http://127.0.0.1:8888/v1/chat/completions',
     headers: {

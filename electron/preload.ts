@@ -10,6 +10,7 @@ import {
   IPC_CHANNELS,
   LlmConnectionTest,
   LlmDebugEntry,
+  LlmDeltaEvent,
   LlmEndpoint,
   LogEntry,
   McpStatus,
@@ -110,6 +111,12 @@ const dreyApi: DreyApi = {
     const wrapped = (_event: IpcRendererEvent, entry: LlmDebugEntry): void => listener(entry);
     ipcRenderer.on(IPC_CHANNELS.llmDebugEntry, wrapped);
     return () => ipcRenderer.removeListener(IPC_CHANNELS.llmDebugEntry, wrapped);
+  },
+  onLlmDelta: (listener: (event: LlmDeltaEvent) => void): (() => void) => {
+    // Same rule as onLlmDebugEntry: payload only (ADR-0001).
+    const wrapped = (_event: IpcRendererEvent, event: LlmDeltaEvent): void => listener(event);
+    ipcRenderer.on(IPC_CHANNELS.llmDelta, wrapped);
+    return () => ipcRenderer.removeListener(IPC_CHANNELS.llmDelta, wrapped);
   },
   cancelLlmTask: (taskId: string): Promise<boolean> =>
     ipcRenderer.invoke(IPC_CHANNELS.llmCancel, taskId),

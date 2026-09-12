@@ -1,6 +1,6 @@
 <app-settings-pane
   title="LLM"
-  description="Connection to a local OpenAI-compatible model server, a connection test, and this session's request log."
+  description="Provider selection — the local OpenAI-compatible server by default, hosted APIs and CLIs opt-in — plus a connection test and this session's request log."
 >
   @if (llm(); as llm) {
     <label class="switch-row">
@@ -17,116 +17,180 @@
       </span>
     </label>
 
-    <fieldset [disabled]="!llm.enabled">
-      <div class="field">
-        <label for="llm-base-url">Base URL</label>
-        <input
-          id="llm-base-url"
-          type="text"
-          spellcheck="false"
-          [value]="llm.baseUrl"
-          (input)="onBaseUrlChange($any($event.target).value)"
-          placeholder="http://localhost:1234/v1"
-        />
-        <p class="field-hint">
-          Any OpenAI-compatible endpoint — LM Studio (<span class="mono">:1234/v1</span>), Unsloth
-          Desktop (<span class="mono">:8888/v1</span>), llama.cpp, vLLM, Ollama.
-        </p>
-      </div>
-
-      <div class="field">
-        <label for="llm-api-key">API key</label>
-        <div class="row">
-          <input
-            id="llm-api-key"
-            [type]="showApiKey() ? 'text' : 'password'"
-            spellcheck="false"
-            autocomplete="off"
-            [value]="llm.apiKey ?? ''"
-            (input)="onApiKeyChange($any($event.target).value)"
-            placeholder="optional — e.g. sk-unsloth-…"
-          />
-          <button
-            type="button"
-            class="ghost"
-            (click)="showApiKey.set(!showApiKey())"
-            [attr.aria-pressed]="showApiKey()"
-          >
-            {{ showApiKey() ? 'Hide' : 'Show' }}
-          </button>
-        </div>
-
-        <p class="key-status">
-          @if (savedKeyMask(); as mask) {
-            <span class="ok"
-              >Saved: <span class="mono">{{ mask }}</span></span
-            >
-          } @else {
-            <span class="none">No key saved.</span>
-          }
-          @if (apiKeyUnsaved()) {
-            <span class="pending">
-              — edited, press <strong>Save</strong> to store it (requests use the saved key).
-            </span>
-          }
-        </p>
-
-        <p class="field-hint">
-          Sent as <span class="mono">Authorization: Bearer …</span> on every request — there is no
-          separate login call. Leave empty for servers that don’t need one (LM Studio ignores it);
-          Unsloth Desktop requires it. Stored in plain text in the app config file.
-        </p>
-      </div>
-
-      <div class="field">
-        <label for="llm-model">Model</label>
-        <div class="row">
-          <input
-            id="llm-model"
-            type="text"
-            list="llm-model-options"
-            spellcheck="false"
-            autocomplete="off"
-            [value]="llm.model ?? ''"
-            (input)="onModelChange($any($event.target).value)"
-            placeholder="— none selected —"
-          />
-          <datalist id="llm-model-options">
-            @for (model of modelOptions(); track model) {
-              <option [value]="model"></option>
-            }
-          </datalist>
-          <button
-            type="button"
-            class="ghost"
-            (click)="settings.refreshModels()"
-            [disabled]="settings.modelsLoading()"
-          >
-            {{ settings.modelsLoading() ? 'Loading…' : 'Load models' }}
-          </button>
-        </div>
-        <p class="field-hint">
-          “Load models” pulls the list live from the endpoint; you can also type an id by hand if
-          the server doesn’t expose <span class="mono">/models</span>. No model id is ever assumed.
-        </p>
-      </div>
-
-      <div class="field">
-        <button
-          type="button"
-          class="ghost"
-          (click)="settings.testConnection()"
-          [disabled]="settings.testing()"
-        >
-          {{ settings.testing() ? 'Testing…' : 'Test connection' }}
-        </button>
-        @if (settings.connectionTest(); as test) {
-          <p class="test-result" [class.ok]="test.ok" [class.fail]="!test.ok">
-            {{ test.message }}
-          </p>
+    <div class="field">
+      <label for="llm-provider">Provider</label>
+      <select
+        id="llm-provider"
+        [value]="llm.provider"
+        (change)="onProviderChange($any($event.target).value)"
+      >
+        @for (id of providerIds; track id) {
+          <option [value]="id" [selected]="id === llm.provider">{{ presets[id].label }}</option>
         }
-      </div>
-    </fieldset>
+      </select>
+      @if (capabilityHints(activePreset().capabilities); as hints) {
+        @if (hints.length > 0) {
+          <p class="field-hint">{{ hints.join(' · ') }}.</p>
+        }
+      }
+      @if (pendingProviderNote(); as note) {
+        <p class="field-hint"><strong>{{ note }}</strong></p>
+      }
+    </div>
+
+    @switch (activePreset().fieldGroup) {
+      @case ('http') {
+        <fieldset [disabled]="!llm.enabled">
+          <div class="field">
+            <label for="llm-base-url">Base URL</label>
+            <input
+              id="llm-base-url"
+              type="text"
+              spellcheck="false"
+              [value]="llm.baseUrl"
+              (input)="onBaseUrlChange($any($event.target).value)"
+              [placeholder]="presets[llm.provider].defaultBaseUrl ?? 'https://…'"
+            />
+            <p class="field-hint">
+              @if (llm.provider === 'lmstudio' || llm.provider === 'openai-compat') {
+                Any OpenAI-compatible endpoint — LM Studio (<span class="mono">:1234/v1</span>),
+                Unsloth Desktop (<span class="mono">:8888/v1</span>), llama.cpp, vLLM, Ollama.
+              } @else {
+                The API root for this provider. Switching the provider pre-fills its default.
+              }
+            </p>
+          </div>
+
+          <div class="field">
+            <label for="llm-api-key">API key</label>
+            <div class="row">
+              <input
+                id="llm-api-key"
+                [type]="showApiKey() ? 'text' : 'password'"
+                spellcheck="false"
+                autocomplete="off"
+                [value]="llm.apiKey ?? ''"
+                (input)="onApiKeyChange($any($event.target).value)"
+                [placeholder]="keyRequired() ? 'required for this provider' : 'optional — e.g. sk-unsloth-…'"
+              />
+              <button
+                type="button"
+                class="ghost"
+                (click)="showApiKey.set(!showApiKey())"
+                [attr.aria-pressed]="showApiKey()"
+              >
+                {{ showApiKey() ? 'Hide' : 'Show' }}
+              </button>
+            </div>
+
+            <p class="key-status">
+              @if (savedKeyMask(); as mask) {
+                <span class="ok"
+                  >Saved: <span class="mono">{{ mask }}</span></span
+                >
+              } @else {
+                <span class="none">
+                  {{ keyRequired() ? 'No key saved — this provider needs one.' : 'No key saved.' }}
+                </span>
+              }
+              @if (apiKeyUnsaved()) {
+                <span class="pending">
+                  — edited, press <strong>Save</strong> to store it (requests use the saved key).
+                </span>
+              }
+            </p>
+
+            <p class="field-hint">
+              Sent as <span class="mono">Authorization: Bearer …</span> (OpenAI-compat) or
+              <span class="mono">x-api-key</span> (Anthropic-compat) on every request — there is no
+              separate login call. Stored in plain text in the app config file. The local presets
+              usually need none.
+            </p>
+          </div>
+
+          <div class="field">
+            <label for="llm-model">Model</label>
+            <div class="row">
+              <input
+                id="llm-model"
+                type="text"
+                list="llm-model-options"
+                spellcheck="false"
+                autocomplete="off"
+                [value]="llm.model ?? ''"
+                (input)="onModelChange($any($event.target).value)"
+                placeholder="— none selected —"
+              />
+              <datalist id="llm-model-options">
+                @for (model of modelOptions(); track model) {
+                  <option [value]="model"></option>
+                }
+              </datalist>
+              <button
+                type="button"
+                class="ghost"
+                (click)="settings.refreshModels()"
+                [disabled]="settings.modelsLoading()"
+              >
+                {{ settings.modelsLoading() ? 'Loading…' : 'Load models' }}
+              </button>
+            </div>
+            <p class="field-hint">
+              “Load models” pulls the list live from the endpoint; you can also type an id by hand
+              if the server doesn’t expose one. No model id is ever assumed.
+            </p>
+          </div>
+
+          <div class="field">
+            <button
+              type="button"
+              class="ghost"
+              (click)="settings.testConnection()"
+              [disabled]="settings.testing()"
+            >
+              {{ settings.testing() ? 'Testing…' : 'Test connection' }}
+            </button>
+            @if (settings.connectionTest(); as test) {
+              <p class="test-result" [class.ok]="test.ok" [class.fail]="!test.ok">
+                {{ test.message }}
+              </p>
+            }
+          </div>
+        </fieldset>
+      }
+      @case ('cli') {
+        <fieldset [disabled]="!llm.enabled">
+          <div class="field">
+            <label for="llm-model-cli">Model</label>
+            <input
+              id="llm-model-cli"
+              type="text"
+              spellcheck="false"
+              autocomplete="off"
+              [value]="llm.model ?? ''"
+              (input)="onModelChange($any($event.target).value)"
+              placeholder="— none selected —"
+            />
+            <p class="field-hint">
+              Free-form model id — the CLI must know it (its own login/config applies). Drey never
+              assumes a model.
+            </p>
+          </div>
+          <p class="field-hint">
+            CLI providers run the executable with the conversation on stdin; Drey shows no extra
+            connection fields — authentication and model access are the CLI’s own. Cancelling a
+            request terminates the CLI process.
+          </p>
+        </fieldset>
+      }
+      @case ('copilot-web') {
+        <p class="field-hint">
+          This provider drives Microsoft Copilot’s website through browser automation (system Edge).
+          It ships as a separate, removable module with its own status and login surface — see
+          ADR-0040.
+        </p>
+      }
+    }
 
     <section class="debug">
       <div class="debug-head">
@@ -178,6 +242,9 @@
                   {{ entry.error !== null ? 'ERR' : entry.status }}
                 </span>
                 <span class="method">{{ entry.method }}</span>
+                @if (entry.provider) {
+                  <span class="method">{{ entry.provider }}</span>
+                }
                 <span class="url">{{ entry.url }}</span>
                 <span class="auth" [class.missing]="!entry.authSent">
                   {{ entry.authSent ? 'auth ✓' : 'no auth' }}

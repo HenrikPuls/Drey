@@ -8,18 +8,23 @@ import {
   inject,
   signal,
 } from '@angular/core';
+import {
+  LlmProviderId,
+  PROVIDER_PRESETS,
+  PROVIDER_PRESET_IDS,
+} from '../../../../shared/app-config';
 import { LlmDebugEntry } from '../../../../shared/ipc-api';
-import { maskSecret, toCurl } from '../../../../shared/llm';
+import { LlmCapabilities, maskSecret, toCurl } from '../../../../shared/llm';
 import { LlmDebugService } from '../../llm';
 import { SettingsService } from '../../services/settings.service';
 import { SettingsPane } from '../settings-pane/settings-pane';
 
 /**
- * "LLM" settings category: the master switch, the OpenAI-compatible base
- * URL, an optional bearer API key, a model box filled from a live
- * `GET /models` (but free-form, so a server that doesn't expose that
- * endpoint can still be driven), a connection test, and a debug log of
- * every request the app has sent this session.
+ * "LLM" settings category: the provider select (ADR-0047), then the
+ * per-provider fields -- for the HTTP presets the base URL, the bearer API
+ * key, a model box filled from a live model listing (but free-form, so a
+ * server that doesn't expose one can still be driven), a connection test,
+ * and a debug log of every request the app has sent this session.
  *
  * Pure view -- every config change goes through `SettingsService.patchLlm`,
  * which writes the *draft*; nothing reaches disk until Save.
@@ -34,6 +39,13 @@ import { SettingsPane } from '../settings-pane/settings-pane';
 export class SettingsLlm implements OnInit, OnDestroy {
   protected readonly settings = inject(SettingsService);
   protected readonly debug = inject(LlmDebugService);
+
+  /** The provider catalogue and the draft's active id. */
+  protected readonly providerIds = PROVIDER_PRESET_IDS;
+  protected readonly presets = PROVIDER_PRESETS;
+  protected readonly activePreset = computed(
+    () => PROVIDER_PRESETS[this.llm()?.provider ?? 'lmstudio'],
+  );
 
   /** The draft's LLM block -- edits stay local until the screen is saved. */
   protected readonly llm = computed(() => this.settings.draft()?.llm ?? null);
@@ -108,6 +120,56 @@ export class SettingsLlm implements OnInit, OnDestroy {
       void this.settings.refreshModels();
     }
   }
+
+  /**
+   * Switching provider pre-fills the draft's base URL from the preset
+   * (draft-side only -- `chat()` always uses the saved config, so the
+   * switch needs a Save either way). The model stays as-is: many presets
+   * share id conventions, and blanking a typed id would be rude.
+   */
+  protected onProviderChange(provider: LlmProviderId): void {
+    const preset = PROVIDER_PRESETS[provider];
+    this.settings.patchLlm({
+      provider,
+      ...(preset.defaultBaseUrl !== null ? { baseUrl: preset.defaultBaseUrl } : {}),
+    });
+    if (preset.capabilities.modelListing) {
+      void this.settings.refreshModels();
+    }
+  }
+
+  /** Cloud presets need a key before anything works; local ones usually don't. */
+  protected keyRequired(): boolean {
+    return this.activePreset().requiresApiKey;
+  }
+
+  /** One line per missing capability, so the degradation is visible up front. */
+  protected capabilityHints(capabilities: LlmCapabilities): string[] {
+    const hints: string[] = [];
+    if (!capabilities.tools) {
+      hints.push('no in-app tool use — Ask runs without the vault tools');
+    }
+    if (!capabilities.modelListing) {
+      hints.push('no model listing — type the model id by hand');
+    }
+    if (!capabilities.imageAttachments) {
+      hints.push('no image attachments');
+    }
+    if (!capabilities.streaming) {
+      hints.push('no streaming');
+    }
+    return hints;
+  }
+
+  /** The not-yet-wired presets (their providers land in later milestones). */
+  protected readonly pendingProviderNote = computed<string | null>(() => {
+    const notes: Partial<Record<LlmProviderId, string>> = {
+      'claude-code': 'The Claude Code CLI provider is not wired into this build yet (milestone 23) — requests with it selected are refused with a clear error.',
+      'copilot-cli': 'The GitHub Copilot CLI provider is not wired into this build yet (milestone 26).',
+      'copilot-web': 'The Copilot Web provider (browser automation) is not merged into this build yet (milestone 26).',
+    };
+    return notes[this.llm()?.provider ?? 'lmstudio'] ?? null;
+  });
 
   // These fire on every keystroke and write straight into the draft. The
   // value is stored *verbatim*: trimming here would rewrite the bound

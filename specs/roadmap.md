@@ -18,10 +18,13 @@ An AI-powered knowledge hub for note-taking and task automation.
 - Classification/synthesis via a **local** OpenAI-compatible API, no fixed
   model. Unsloth Desktop is the default; any server speaking that dialect
   works (Unsloth Desktop, llama.cpp, vLLM, Ollama, LM Studio), with an
-  optional bearer API key for the ones that require auth. Still no cloud
-  calls — **with one documented, opt-in exception**: the removable
-  `copilot-web` provider (Req-3 / req-15, ADR-0040), off by default, which
-  drives Microsoft Copilot's website through browser automation.
+  optional bearer API key for the ones that require auth. Cloud calls are
+  **documented, opt-in exceptions only, each off by default** (ADR-0047):
+  the removable `copilot-web` provider (Req-3 / req-15, ADR-0040), which
+  drives Microsoft Copilot's website through browser automation, and the
+  hosted provider presets (`openrouter`, `anthropic`, `zai-glm`) plus the
+  Claude Code / GitHub Copilot CLIs behind the req-29 provider
+  abstraction. The local OpenAI-compatible endpoint stays the default.
 - Interactive requests (capture, chat) always take priority over
   background jobs.
 
@@ -444,6 +447,47 @@ req-22 integrate ical calender support. I would like to have in the context menu
     section from `templates/meeting.md`. Still open: the context-menu
     "add meeting log" entry and the per-day appointment picker (needs a
     live calendar source, not just a dropped file).
+
+Req-29 LLM provider abstraction: one provider-neutral interface for the
+  local model server (LM Studio/Ollama/vLLM/llama.cpp/Unsloth), OpenRouter
+  (OpenAI-compatible, vendor-prefixed model slugs), Z.ai/GLM and the
+  Anthropic API (one Anthropic-Messages client, two presets), Claude Code
+  headless (`claude -p`, `--resume` sessions / stream-json), and the
+  GitHub Copilot CLI (`-p`) — with the existing `copilot-web` scraper
+  (Req-3/req-15, ADR-0040) fitting the same interface. Streaming
+  (`onDelta`), provider-side session continuation (`sessionRef`), a
+  capability descriptor (tools/streaming/sessions/model
+  listing/image attachments) and a canonical `ToolSpec` so MCP tools are
+  provider-neutral. Base-owned (`electron/llm/providers/` + a per-call
+  router), cloud presets opt-in and off by default (ADR-0047).
+
+Req-30 Chat as vault note: conversations persist as Markdown notes in a
+  `chats/` folder (notebook format — one `##` heading per turn with role,
+  timestamp, optional `<!-- drey: … -->` meta, `drey-tool` fenced blocks
+  for tool calls/results, attachment link blocks for vault files, staged
+  external files and images). The assistant panel becomes chat-first
+  (chat picker + composer); a note can be attached as context;
+  resuming a chat replays the full persisted history provider-aware
+  (full replay, or Claude Code's `--resume` when the session matches).
+  Supersedes ADR-0012's per-note sidecar threads for conversations
+  (sidecar stays for the auto-summary until decided otherwise).
+
+Req-31 MCP client: connect the app TO external MCP servers
+  (`@modelcontextprotocol/sdk`, stdio + Streamable-HTTP transports),
+  configured in a `mcpServers` config slice; their tools join the
+  vault tools in one provider-neutral tool pool (namespaced
+  `mcp__<server>__<tool>`), confirmation-gated per server. Builds on the
+  Req-29 interface — every tool-capable provider can drive them.
+
+bug-10 (open) — the assistant's Ask history has two real defects behind
+  the "incomplete history" symptom: (a) a missing/not-an-array `history`
+  IPC payload silently degrades to NO context (contract defect — interim
+  fix: validate + visible error); (b) tool calls/results and applied-edit
+  content are never persisted, so follow-ups lose that context
+  (persistence defect — unfixable in the sidecar format; resolved by
+  Req-30's chat notes with `drey-tool` blocks and full-history replay).
+  The ~12-message cap itself is documented-intended behaviour and goes
+  away with Req-30's replay, not before.
 
 Urgent UX Improvements (shall be done first after bugs):
 
