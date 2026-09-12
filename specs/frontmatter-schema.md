@@ -74,8 +74,11 @@ Kurzes Sync mit Team zu Rollout-Plan, Risiken bei DB-Migration besprochen.
   heading with **no** dash (`## 14:32 Rollout`) is plain prose, not an
   entry heading.
 - The meta line is just `#tag #tag …`. There are no `[[wikilink]]`
-  people/meeting groups any more — a person or a meeting is written as an
-  ordinary tag (`#markus`, `#rollout-sync`).
+  people/meeting groups — a person or a meeting is written as an ordinary
+  tag (`#markus`, `#rollout-sync`). (`[[wikilinks]]` themselves returned
+  in req-20 as ordinary note-to-note links — see
+  `docs/09_architecture_decisions/0046-wikilinks.md` — but that is body
+  syntax, unrelated to this meta line.)
 - Both the topic and the meta line are optional and omitted entirely when
   empty, so an entry with neither is byte-identical to a plain `## HH:mm`
   block. Composition lives in `shared/entry-compose.ts`.

@@ -39,7 +39,19 @@ it" is already `Ctrl`/`Cmd`-click, used for `#tag` pills.
     extension, rejecting a path that climbs above the vault root) and
     `EditorService.openFile` opens it as a tab.
 - `resolveVaultLinkPath` reuses `normalizeRelative` from `vault-image.ts`.
-  `[[wikilinks]]` are out of scope (no Lezer node in the current config).
+  `[[wikilinks]]` are out of scope here (no Lezer node in the current
+  config) — they arrived later as their own feature
+  ([ADR-0046](0046-wikilinks.md)).
+
+## Later change (req-20)
+
+`[[wikilinks]]` landed as a separate base feature
+([ADR-0046](0046-wikilinks.md)): regex mark decorations + a `Ctrl`/
+`Cmd`-click handler in `src/app/editor/wikilinks/`, still without a Lezer
+node. Where lezer-markdown parses the text between the brackets as a
+shortcut-reference `Link`, both `linkTargetDecorations` and the conceal
+layer now skip those spans — the wikilink plugin owns their styling and
+activation.
 
 ## Consequences
 
@@ -49,4 +61,6 @@ it" is already `Ctrl`/`Cmd`-click, used for `#tag` pills.
 - `DreyApi` gains `openExternal`; `AppInfo` is untouched.
 - Internal links only navigate to a file, not to a heading within it —
   acceptable for now, and consistent with the tag-search open-at-line
-  being the only in-file positioning the app does.
+  being the only in-file positioning the app does. (Superseded by
+  [ADR-0046](0046-wikilinks.md), whose `[[note#heading]]` jumps land on
+  the heading's line.)

@@ -1,7 +1,9 @@
 import { ensureSyntaxTree, syntaxTree } from '@codemirror/language';
+import type { SyntaxNode } from '@lezer/common';
 import { EditorState, Range } from '@codemirror/state';
 import { Decoration, DecorationSet, EditorView, ViewPlugin, ViewUpdate } from '@codemirror/view';
 import { frontmatterEnd } from '../markdown-frontmatter';
+import { extractWikilinks } from '../wikilinks/wikilink';
 import { fenceLang } from './fenced-code';
 import { BulletWidget, CheckboxWidget, HrWidget } from './widgets';
 
@@ -93,6 +95,25 @@ export function concealDecorations(
   const lastVisible = ranges.length > 0 ? ranges[ranges.length - 1].to : 0;
   const tree = ensureSyntaxTree(state, lastVisible, PARSE_BUDGET_MS) ?? syntaxTree(state);
 
+  // `[[wikilinks]]` (req-20) are scanned by regex, before the tree walk:
+  // lezer-markdown parses the text between the brackets as an ordinary
+  // (shortcut-reference) `Link`, whose marks must NOT be concealed here --
+  // the wikilink pass below hides the outer `[[`/`]]` instead.
+  const wikiSpans: { start: number; end: number; occ: ReturnType<typeof extractWikilinks>[0] }[] =
+    [];
+  for (const { from, to } of ranges) {
+    const lineFrom = doc.lineAt(from).from;
+    const lineTo = doc.lineAt(to).to;
+    for (const occ of extractWikilinks(state.sliceDoc(lineFrom, lineTo))) {
+      const start = lineFrom + occ.index;
+      if (start >= fmEnd) {
+        wikiSpans.push({ start, end: start + occ.length, occ });
+      }
+    }
+  }
+  const inWiki = (pos: number): boolean =>
+    wikiSpans.some((s) => pos >= s.start && pos < s.end);
+
   for (const { from, to } of ranges) {
     tree.iterate({
       from,
@@ -135,7 +156,8 @@ export function concealDecorations(
             if (
               parent &&
               (parent.name === 'Link' || parent.name === 'Autolink') &&
-              !touches(parent.from, parent.to)
+              !touches(parent.from, parent.to) &&
+              !inWiki(node.from)
             ) {
               hide(node.from, node.to);
             }
@@ -147,7 +169,7 @@ export function concealDecorations(
             // autolink's URL *is* the label, and an Image is replaced whole
             // by the block-render layer.
             const parent = node.node.parent;
-            if (parent?.name === 'Link' && !touches(parent.from, parent.to)) {
+            if (parent?.name === 'Link' && !touches(parent.from, parent.to) && !inWiki(node.from)) {
               hide(node.from, node.to);
             }
             return;
@@ -254,6 +276,32 @@ export function concealDecorations(
         }
       },
     });
+  }
+
+  // The wikilink bracket hiding itself (Live-Preview-only: the link styling
+  // and Ctrl+click live in the language compartment's `wikilinks` plugin).
+  // Revealed like inline formatting -- the selection touching the span
+  // brings the raw syntax back. An alias hides everything left of it, so
+  // only the alias text shows.
+  const inCode = (pos: number): boolean => {
+    let node: SyntaxNode | null = tree.resolveInner(pos, 1);
+    for (; node !== null; node = node.parent) {
+      if (/Code|Comment/.test(node.name)) {
+        return true;
+      }
+    }
+    return false;
+  };
+  for (const { start, end, occ } of wikiSpans) {
+    if (touches(start, end) || inCode(start)) {
+      continue;
+    }
+    if (occ.alias !== null) {
+      hide(start, start + occ.aliasStart); // `[[`, target, `#anchor` and the `|`
+    } else {
+      hide(start, start + 2); // `[[`
+    }
+    hide(end - 2, end); // `]]`
   }
 
   return Decoration.set(deco, true);

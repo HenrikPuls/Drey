@@ -2,6 +2,7 @@ import { syntaxTree } from '@codemirror/language';
 import { EditorState, Extension, Range } from '@codemirror/state';
 import { Decoration, DecorationSet, EditorView, ViewPlugin, ViewUpdate } from '@codemirror/view';
 import { frontmatterEnd } from './markdown-frontmatter';
+import { extractWikilinks } from './wikilinks/wikilink';
 import { normalizeRelative } from './vault-image';
 
 /**
@@ -37,12 +38,27 @@ export function linkTargetDecorations(
   const fmEnd = frontmatterEnd(state.sliceDoc());
   const tree = syntaxTree(state);
 
+  // `[[wikilinks]]` (req-20): lezer-markdown sees the text between the
+  // brackets as a shortcut-reference `Link`; those spans belong to the
+  // wikilink plugin's own click handler, so no `data-href` mark here.
+  const wikiEnds: { from: number; to: number }[] = [];
+  for (const { from, to } of ranges) {
+    const lineFrom = state.doc.lineAt(from).from;
+    const lineTo = state.doc.lineAt(to).to;
+    for (const occ of extractWikilinks(state.sliceDoc(lineFrom, lineTo))) {
+      const start = lineFrom + occ.index;
+      wikiEnds.push({ from: start, to: start + occ.length });
+    }
+  }
+  const inWiki = (pos: number): boolean =>
+    wikiEnds.some((s) => pos >= s.from && pos < s.to);
+
   for (const { from, to } of ranges) {
     tree.iterate({
       from,
       to,
       enter: (node) => {
-        if (node.to <= fmEnd) {
+        if (node.to <= fmEnd || inWiki(node.from)) {
           return;
         }
         if (node.name === 'Link') {

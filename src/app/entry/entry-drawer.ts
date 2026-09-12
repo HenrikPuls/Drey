@@ -7,6 +7,7 @@ import {
   viewChild,
 } from '@angular/core';
 import { MarkdownSurface } from '../editor/markdown-surface/markdown-surface';
+import { WikilinkService } from '../editor/wikilinks';
 import { EntryDraftService } from './entry-draft.service';
 import { EditorService } from '../services/editor.service';
 import { SpellcheckService } from '../services/spellcheck.service';
@@ -34,6 +35,7 @@ export class EntryDrawer {
   protected readonly drawer = inject(EntryDraftService);
   protected readonly editor = inject(EditorService);
   private readonly spellcheck = inject(SpellcheckService);
+  private readonly wikiLinks = inject(WikilinkService);
   private readonly surface = viewChild(MarkdownSurface);
 
   /**
@@ -55,6 +57,15 @@ export class EntryDrawer {
     if (/^(https?:|mailto:)/i.test(raw)) {
       void window.dreyApi.openExternal(raw);
     }
+  };
+
+  /**
+   * A `Ctrl`/`Cmd`-click on a `[[wikilink]]` in the capture body: follows
+   * an existing note (resolved vault-wide -- the drawer has no note of its
+   * own) but never creates one; the text here may yet be discarded.
+   */
+  protected readonly activateWikilink = (target: string, anchor: string | null): void => {
+    void this.wikiLinks.openResolvedOnly(target, anchor);
   };
 
   protected readonly canSubmit = computed<boolean>(

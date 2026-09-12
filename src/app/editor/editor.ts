@@ -21,6 +21,7 @@ import { SettingsService } from '../services/settings.service';
 import { SpellcheckService } from '../services/spellcheck.service';
 import { Icon } from '../icons/icon';
 import { resolveVaultLinkPath } from './link-open';
+import { WikilinkService } from './wikilinks';
 import { MarkdownSurface } from './markdown-surface/markdown-surface';
 
 /**
@@ -78,6 +79,7 @@ export class Editor implements AfterViewInit {
   protected readonly menuContributions = inject(MenuContributionsService);
   private readonly panes = inject(PaneService);
   private readonly spellcheck = inject(SpellcheckService);
+  private readonly wikiLinks = inject(WikilinkService);
 
   /** Which pane this editor belongs to (ADR-0037) -- set once by `PaneLeaf`. */
   readonly paneId = input.required<string>();
@@ -113,6 +115,16 @@ export class Editor implements AfterViewInit {
     if (target) {
       void this.editor.openFile(target);
     }
+  };
+
+  /**
+   * A `Ctrl`/`Cmd`-click on a `[[wikilink]]` (req-20): resolve against this
+   * pane's note (sibling-first for ambiguous basenames), open at the
+   * `#heading` anchor when given, create the note when nothing resolves.
+   * An arrow function so it keeps `this` when the extension calls it.
+   */
+  protected readonly activateWikilink = (target: string, anchor: string | null): void => {
+    void this.wikiLinks.open(target, anchor, this.shownPath());
   };
 
   /**

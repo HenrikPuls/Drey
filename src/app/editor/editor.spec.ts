@@ -1,7 +1,9 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
+import { vi } from 'vitest';
 import { Editor } from './editor';
 import { EditorService } from '../services/editor.service';
 import { KeybindingService } from '../keybindings';
+import { WikilinkService } from './wikilinks';
 import { DreyApi } from '../../../shared/ipc-api';
 
 const RICH = [
@@ -22,6 +24,8 @@ const RICH = [
   '',
 ].join('\n');
 
+const WIKI = 'See [[Plan]] and [[daily/todo|the list]] now.\n';
+
 describe('Editor', () => {
   let fixture: ComponentFixture<Editor>;
   let editor: EditorService;
@@ -34,7 +38,9 @@ describe('Editor', () => {
             ? '---\ntype: notiz\n---\n\n# Real heading\n'
             : relativePath === 'rich.md'
               ? RICH
-              : '# Title\n\nsome **bold** text';
+              : relativePath === 'wiki.md'
+                ? WIKI
+                : '# Title\n\nsome **bold** text';
         return Promise.resolve({ content, modifiedMs: 1 });
       },
       writeVaultFile: () => Promise.resolve(2),
@@ -150,6 +156,49 @@ describe('Editor', () => {
     editor.updateBuffer('note.md', '# Title\n\nedited');
     fixture.detectChanges();
     expect(compiled().querySelector('.dirty')).toBeTruthy();
+  });
+
+  describe('wikilinks (req-20)', () => {
+    async function openWiki(): Promise<void> {
+      await editor.openFile('wiki.md');
+      fixture.detectChanges();
+      await fixture.whenStable();
+      fixture.detectChanges();
+    }
+
+    it('renders [[links]] as marked spans carrying target and alias', async () => {
+      await openWiki();
+
+      const links = [...cm().querySelectorAll('.cm-wikilink')];
+      expect(links).toHaveLength(2);
+      expect(links[0].getAttribute('data-wikilink')).toBe('Plan');
+      expect(links[1].getAttribute('data-wikilink')).toBe('daily/todo');
+      expect(links[1].getAttribute('data-alias')).toBe('the list');
+    });
+
+    it('Ctrl+click activates the wikilink through the service', async () => {
+      await openWiki();
+      const wiki = TestBed.inject(WikilinkService);
+      const spy = vi.spyOn(wiki, 'open');
+
+      const el = cm().querySelector('.cm-wikilink') as HTMLElement;
+      el.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, ctrlKey: true }));
+      fixture.detectChanges();
+
+      expect(spy).toHaveBeenCalledWith('Plan', null, 'wiki.md');
+    });
+
+    it('a plain click does not activate', async () => {
+      await openWiki();
+      const wiki = TestBed.inject(WikilinkService);
+      const spy = vi.spyOn(wiki, 'open');
+
+      const el = cm().querySelector('.cm-wikilink') as HTMLElement;
+      el.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }));
+      fixture.detectChanges();
+
+      expect(spy).not.toHaveBeenCalled();
+    });
   });
 
   describe('the ⋯ mode menu', () => {

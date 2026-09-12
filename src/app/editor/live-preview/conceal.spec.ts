@@ -161,4 +161,43 @@ describe('concealDecorations', () => {
     // ...but the heading below it is still concealed.
     expect(conceals(all).some((e) => e.from === 21)).toBe(true);
   });
+
+  it('hides the [[ ]] brackets of a wikilink, keeping the target visible', () => {
+    const doc = 'see [[Plan]] now';
+    expect(conceals(build(doc, 0)).map((e) => [e.from, e.to])).toEqual([
+      [4, 6], // [[
+      [10, 12], // ]]
+    ]);
+  });
+
+  it('reveals the raw wikilink while the selection touches it', () => {
+    expect(conceals(build('see [[Plan]] now', 8))).toEqual([]);
+  });
+
+  it('shows only the alias of [[target|alias]]', () => {
+    const doc = 'see [[notes/Plan#Head|the plan]] end';
+    const hidden = conceals(build(doc, 0));
+    // `[[` through the `|` (0-based 4..22) plus the closing `]]`.
+    expect(hidden.map((e) => [e.from, e.to])).toEqual([
+      [4, 22],
+      [30, 32],
+    ]);
+  });
+
+  it('never conceals a wikilink inside code or frontmatter', () => {
+    expect(
+      conceals(build('a `[[b]]` c', 0)).map((e) => [e.from, e.to]),
+    ).toEqual([
+      [2, 3],
+      [8, 9],
+    ]); // just the backticks
+    const doc = '---\ntitle: "[[x]]"\n---\n\n[[real]]\n';
+    const hidden = conceals(build(doc)).map((e) => [e.from, e.to]);
+    // fmEnd is 23: nothing inside the frontmatter block, only [[ and ]]
+    // of `[[real]]` at 24.
+    expect(hidden).toEqual([
+      [24, 26],
+      [30, 32],
+    ]);
+  });
 });

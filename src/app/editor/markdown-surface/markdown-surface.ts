@@ -35,6 +35,11 @@ import {
 import { livePreview } from '../live-preview';
 import { inlineSpellcheck, requestSpellcheck, SpellcheckSource } from '../spellcheck/spellcheck';
 import { linkActivation } from '../link-open';
+import {
+  WikilinkService,
+  makeWikilinkCompletionSource,
+  wikilinks,
+} from '../wikilinks';
 import { pasteUrlAsMarkdownLink } from '../paste-link';
 import { resolveVaultImageUrl } from '../vault-image';
 import { EditorExtensionRegistry, DropDecoderRegistry } from '../../plugin-host';
@@ -71,6 +76,7 @@ export class MarkdownSurface implements AfterViewInit, OnDestroy {
   private readonly themes = inject(ThemeService);
   private readonly zoom = inject(EditorZoomService);
   private readonly lightbox = inject(ImageLightboxService);
+  private readonly wikiLinks = inject(WikilinkService);
   private readonly pluginExtensions = inject(EditorExtensionRegistry);
   private readonly dropDecoders = inject(DropDecoderRegistry);
   private readonly host = viewChild.required<ElementRef<HTMLDivElement>>('host');
@@ -137,6 +143,14 @@ export class MarkdownSurface implements AfterViewInit, OnDestroy {
    * leaves it unset.
    */
   readonly onLinkActivate = input<(href: string) => void>();
+  /**
+   * When set, a `Ctrl`/`Cmd`-click on a `[[wikilink]]` calls this with the
+   * target and the `#heading` anchor (or null). Read once at construction.
+   * The full-page editor resolves + opens (creating a missing note); the
+   * entry drawer only follows existing notes. Unset surfaces still render
+   * and complete the links -- they just don't activate on click.
+   */
+  readonly onWikilinkActivate = input<(target: string, anchor: string | null) => void>();
 
   /** The document text after every edit. */
   readonly docChanged = output<string>();
@@ -286,6 +300,18 @@ export class MarkdownSurface implements AfterViewInit, OnDestroy {
       // `#tag` completion + pills are plugin extensions now (the Tags
       // plugin's `registerExtension('both')`, ADR-0044 stage 5).
       this.onLinkActivate() ? linkActivation(this.onLinkActivate()!) : [],
+      // `[[wikilinks]]` (req-20): styled + clickable in both modes (this is
+      // the language compartment; only the bracket concealing is
+      // Live-Preview-only, via the conceal layer). `languageFilename()`
+      // carries the tab's path for sibling-first resolution and is `null`
+      // in the composers.
+      wikilinks({
+        resolve: (target) => this.wikiLinks.resolve(target, this.languageFilename()) !== null,
+        onActivate: this.onWikilinkActivate(),
+      }),
+      markdownLanguage.data.of({
+        autocomplete: makeWikilinkCompletionSource(() => this.wikiLinks.noteNames()),
+      }),
       // Paste a bare URL onto an empty caret -> `[url](url)` (lang-markdown's
       // own pasteURLAsLink only handles the wrap-a-selection case).
       pasteUrlAsMarkdownLink(),

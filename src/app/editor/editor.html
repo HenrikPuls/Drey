@@ -122,6 +122,7 @@
     [spellcheck]="spellcheckSource"
     [imageCapture]="true"
     [onLinkActivate]="activateLink"
+    [onWikilinkActivate]="activateWikilink"
     (docChanged)="editor.updateBuffer(shownPath()!, $event)"
   />
 </div>
