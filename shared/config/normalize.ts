@@ -44,7 +44,6 @@ import {
   VaultConfig,
   WidgetsConfig,
   PluginsConfig,
-  AssistantConfig,
 } from './schema';
 import {
   autotagTemplate,
@@ -55,7 +54,6 @@ import {
   DEFAULT_MCP_CONFIG,
   DEFAULT_TEMPLATES_CONFIG,
   DEFAULT_VAULT_CONFIG,
-  noteSummaryTemplate,
   ruledEntryTemplate,
   searchSummaryTemplate,
 } from './defaults';
@@ -180,16 +178,6 @@ function normalizeLlm(raw: unknown): LlmConfig {
       DEFAULT_APP_CONFIG.llm.baseUrl,
     apiKey: optionalText(source['apiKey']),
     model: optionalText(source['model']),
-  };
-}
-
-function normalizeAssistant(raw: unknown): AssistantConfig {
-  const source = (raw ?? {}) as Record<string, unknown>;
-  return {
-    autoSummaryDefault: bool(
-      source['autoSummaryDefault'],
-      DEFAULT_APP_CONFIG.assistant.autoSummaryDefault,
-    ),
   };
 }
 
@@ -355,6 +343,15 @@ function normalizeEvent(value: unknown): ActionEvent {
 }
 
 /**
+ * A built-in that shipped once but was removed (`note-summary`, the
+ * assistant panel's automatic summary). A stale entry in an existing
+ * config must be DROPPED, not re-emit it through the user-template branch
+ * below -- that would resurrect "Summarise note" as a runnable manual
+ * action that rewrites the note with its own summary.
+ */
+const RETIRED_BUILTIN_TEMPLATE_IDS = new Set(['builtin:note-summary']);
+
+/**
  * Rebuilds the template list: every built-in is always present exactly
  * once (a user's `name` / `prompt` / `resultKind` edits are kept, matched
  * by id), followed by whatever well-formed user templates the file holds.
@@ -369,7 +366,7 @@ function normalizeTemplates(raw: unknown): ActionTemplate[] {
   }
 
   const out: ActionTemplate[] = [];
-  for (const base of [noteSummaryTemplate(), searchSummaryTemplate(), autotagTemplate()]) {
+  for (const base of [searchSummaryTemplate(), autotagTemplate()]) {
     const saved = byId.get(base.id);
     byId.delete(base.id);
     out.push(
@@ -385,13 +382,17 @@ function normalizeTemplates(raw: unknown): ActionTemplate[] {
   }
 
   for (const saved of byId.values()) {
+    const id = str(saved['id'], '');
+    if (RETIRED_BUILTIN_TEMPLATE_IDS.has(id)) {
+      continue; // removed built-in lingering in a stored config -- drop it
+    }
     const name = str(saved['name'], '').trim();
     const prompt = str(saved['prompt'], '');
     if (!name || !prompt) {
       continue; // half-written entry -- drop it rather than surface a broken row
     }
     out.push({
-      id: str(saved['id'], ''),
+      id,
       name,
       prompt,
       resultKind: normalizeResultKind(saved['resultKind']),
@@ -494,7 +495,6 @@ export function normalizeAppConfig(raw: unknown): AppConfig {
   return {
     version: 1,
     llm: normalizeLlm(source['llm']),
-    assistant: normalizeAssistant(source['assistant']),
     spellcheck: normalizeSpellcheck(source['spellcheck']),
     editor: normalizeEditor(source['editor']),
     appearance: normalizeAppearance(source['appearance']),

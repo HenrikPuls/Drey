@@ -13,11 +13,7 @@ describe('normalizeAppConfig', () => {
     expect(config.llm.enabled).toBe(false);
     expect(config.llm.baseUrl).toBe(DEFAULT_APP_CONFIG.llm.baseUrl);
     expect(config.llm.model).toBeNull();
-    expect(config.actions.templates.map((t) => t.builtin)).toEqual([
-      'note-summary',
-      'search-summary',
-      'autotag',
-    ]);
+    expect(config.actions.templates.map((t) => t.builtin)).toEqual(['search-summary', 'autotag']);
     expect(config.actions.triggers).toHaveLength(0);
   });
 
@@ -91,8 +87,8 @@ describe('normalizeAppConfig', () => {
       actions: {
         templates: [
           {
-            id: BUILTIN_TEMPLATE_IDS['note-summary'],
-            name: 'My summary',
+            id: BUILTIN_TEMPLATE_IDS['search-summary'],
+            name: 'My digest',
             prompt: 'do it',
             resultKind: 'document',
           },
@@ -100,18 +96,39 @@ describe('normalizeAppConfig', () => {
         triggers: [],
       },
     });
-    const builtin = config.actions.templates.find((t) => t.builtin === 'note-summary');
-    expect(builtin).toMatchObject({ name: 'My summary', prompt: 'do it', resultKind: 'document' });
-    expect(config.actions.templates.filter((t) => t.builtin === 'note-summary')).toHaveLength(1);
+    const builtin = config.actions.templates.find((t) => t.builtin === 'search-summary');
+    expect(builtin).toMatchObject({ name: 'My digest', prompt: 'do it', resultKind: 'document' });
+    expect(config.actions.templates.filter((t) => t.builtin === 'search-summary')).toHaveLength(1);
   });
 
-  it('re-injects the built-in the user deleted', () => {
+  it('re-injects the built-ins the user deleted', () => {
     const config = normalizeAppConfig({ actions: { templates: [], triggers: [] } });
-    expect(config.actions.templates.map((t) => t.builtin)).toEqual([
-      'note-summary',
-      'search-summary',
-      'autotag',
-    ]);
+    expect(config.actions.templates.map((t) => t.builtin)).toEqual(['search-summary', 'autotag']);
+  });
+
+  it('drops the retired note-summary built-in from a stored config, without resurrecting it', () => {
+    const config = normalizeAppConfig({
+      actions: {
+        templates: [
+          // A config written before the retirement: the built-in (possibly
+          // with user edits) sits in the stored list.
+          { id: 'builtin:note-summary', name: 'Summarise note', prompt: 'sum', resultKind: 'document' },
+          { id: 'u1', name: 'Mine', prompt: 'go', resultKind: 'localized' },
+        ],
+        triggers: [
+          {
+            id: 't1',
+            templateId: 'builtin:note-summary',
+            event: 'on-save',
+            confirm: false,
+            enabled: true,
+          },
+        ],
+      },
+    });
+    expect(config.actions.templates.map((t) => t.builtin)).toEqual(['search-summary', 'autotag', null]);
+    expect(config.actions.templates.filter((t) => t.id === 'builtin:note-summary')).toHaveLength(0);
+    expect(config.actions.triggers).toHaveLength(0);
   });
 
   it('drops a half-written user template but keeps a valid one', () => {
@@ -191,9 +208,8 @@ describe('normalizeAppConfig', () => {
     expect(normalizeAppConfig({ templates: { dir: 42 } }).templates.dir).toBe('templates');
   });
 
-  it('fills the assistant and spellcheck sections from defaults', () => {
+  it('fills the spellcheck section from defaults', () => {
     const config = normalizeAppConfig({});
-    expect(config.assistant).toEqual({ autoSummaryDefault: true });
     expect(config.spellcheck).toEqual({
       enabled: true,
       language: 'de',
@@ -306,7 +322,7 @@ describe('normalizeAppConfig', () => {
           { id: 't1', templateId: 'gone', event: 'manual', confirm: true, enabled: true },
           {
             id: 't2',
-            templateId: BUILTIN_TEMPLATE_IDS['note-summary'],
+            templateId: BUILTIN_TEMPLATE_IDS.autotag,
             event: 'on-save',
             confirm: false,
             enabled: true,

@@ -135,7 +135,7 @@ export function mountPanel(
 ): PanelHandle {
   body.classList.add('assistant-panel');
 
-  // -- head: the chat selector + the per-note auto-summary switch ------------
+  // -- head: the chat selector -----------------------------------------------
   const chatTitleButton = el('button', 'chat-title') as HTMLButtonElement;
   chatTitleButton.type = 'button';
   chatTitleButton.title = 'Switch chat';
@@ -147,21 +147,10 @@ export function mountPanel(
   chatNewButton.appendChild(icon('plus', 13));
   chatNewButton.addEventListener('click', () => state.newChat());
 
-  const switchButton = el('button', 'switch') as HTMLButtonElement;
-  switchButton.type = 'button';
-  switchButton.setAttribute('role', 'switch');
-  switchButton.setAttribute('aria-labelledby', 'assistant-auto-summary-label');
-  switchButton.appendChild(el('span', 'knob'));
-  switchButton.addEventListener('click', () => state.setAutoSummary(!state.autoSummary()));
-
   const head = el('header', 'assistant-head');
-  const switchLabel = el('span', 'toggle-label', 'Automatic summary');
-  switchLabel.id = 'assistant-auto-summary-label';
   const chatHead = el('div', 'chat-head');
   chatHead.append(chatTitleButton, chatNewButton);
-  const summaryHead = el('div', 'summary-head');
-  summaryHead.append(switchLabel, switchButton);
-  head.append(chatHead, summaryHead);
+  head.append(chatHead);
   body.appendChild(head);
 
   // -- thread ----------------------------------------------------------------
@@ -333,7 +322,7 @@ export function mountPanel(
 
   const emptyStateText = (): string => {
     if (!api.llm.enabled()) {
-      return 'LLM features are off — nothing is answered or summarised.';
+      return 'LLM features are off — nothing is answered.';
     }
     return 'New chat — ask anything. A note or file chip gives it context.';
   };
@@ -348,35 +337,9 @@ export function mountPanel(
       thread.scrollHeight - thread.scrollTop - thread.clientHeight < 24;
     thread.textContent = '';
 
-    const summary = state.summaryCard();
-    if (summary !== null) {
-      const pinned = el('article', 'card summary pinned');
-      const label = el('div', 'card-label', 'SUMMARY');
-      if (summary.at !== '') {
-        label.appendChild(el('span', 'at', ` · ${summary.at.slice(11, 16)}`));
-      }
-      pinned.appendChild(label);
-      pinned.appendChild(el('p', 'card-body', summary.text));
-      const insert = el('button', 'card-actions ghost') as HTMLButtonElement;
-      insert.type = 'button';
-      insert.title = 'Insert into note';
-      insert.textContent = 'Insert into note';
-      insert.addEventListener('click', () => api.documents.insertAtCursor(summary.text));
-      pinned.appendChild(insert);
-      thread.appendChild(pinned);
-    }
-
-    if (state.canImportSidecar() && state.activeChatPath() === null) {
-      const importLine = el('button', 'import-line') as HTMLButtonElement;
-      importLine.type = 'button';
-      importLine.textContent = 'Import this note’s earlier conversation into a chat note';
-      importLine.addEventListener('click', () => void state.importSidecar());
-      thread.appendChild(importLine);
-    }
-
     const currentView = state.view();
     const turns = currentView?.turns ?? [];
-    if (turns.length === 0 && !state.summarizing() && summary === null) {
+    if (turns.length === 0 && state.streaming() === null) {
       thread.appendChild(el('p', 'empty', emptyStateText()));
     }
     for (let index = 0; index < turns.length; index++) {
@@ -454,11 +417,8 @@ export function mountPanel(
   modelButton.type = 'button';
   modelButton.title = 'Pick the model';
   modelButton.setAttribute('aria-label', 'Pick the model');
-  const summarizeBtn = el('button', 'summarize', 'Summarise now') as HTMLButtonElement;
-  summarizeBtn.type = 'button';
-  summarizeBtn.addEventListener('click', () => void state.summarizeNow());
   const meta = el('div', 'composer-meta');
-  meta.append(modelButton, summarizeBtn);
+  meta.append(modelButton);
   const box = el('div', 'composer-box');
   box.append(chipsRow, row);
   composer.append(box, meta);
@@ -1125,18 +1085,11 @@ export function mountPanel(
 
   // -- render loop -----------------------------------------------------------
   const render = (): void => {
-    const hasNote = state.notePath() !== null;
     const chatTitle =
       state.chats().find((chat) => chat.path === state.activeChatPath())?.title ?? null;
     chatTitleButton.textContent = chatTitle ?? 'New chat';
     chatTitleButton.classList.toggle('fresh', chatTitle === null);
 
-    switchButton.setAttribute('aria-checked', String(state.autoSummary()));
-    switchButton.classList.toggle('on', state.autoSummary());
-    switchButton.disabled = !hasNote;
-
-    summarizeBtn.style.display = state.canSummarize() ? '' : 'none';
-    summarizeBtn.disabled = state.summarizing();
     sendButton.disabled = state.asking();
     renderChips();
     renderThread();

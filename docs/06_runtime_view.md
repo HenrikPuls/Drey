@@ -474,6 +474,12 @@ sequenceDiagram
 
 ## 6.8 Opening a note: the automatic summary (Feature A)
 
+> **Removed.** The automatic summary is gone — no summary generation on
+> open, no sidecar reads/writes, no `thread:*`/`summarize` IPC
+> ([ADR-0012](09_architecture_decisions/0012-note-assistant-sidecar-thread.md)
+> superseded). The diagram below is kept only as history; today opening a
+> tab touches nothing but the editor.
+
 Opening a tab loads that note's sidecar thread and, under one specific
 condition, generates its summary. The condition is deliberately narrow so
 that re-opening a note never re-bills an LLM call:

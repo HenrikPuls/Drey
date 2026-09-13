@@ -182,7 +182,7 @@ Main process:
   **vault hooks** (open/refresh/write/delete/rename) and the
   **section-search provider** (the MCP `vault_search` backend)
 - The feature backends — `TagIndex`, `TaskIndex`, the assistant's
-  ActionEngine (Actions + summary) and ChatEngine/ChatStore (chat notes,
+  ActionEngine (Actions) and ChatEngine/ChatStore (chat notes,
   ADR-0048) — live in their plugins.
   `suggestTags` (the Autotag prompt) stayed base:
   `electron/llm/tag-suggest.ts`
@@ -259,7 +259,7 @@ Renderer (Angular):
   through `documents.setBuffer` + save; a row click opens the file at the
   line
 - Assistant panel — `plugins/assistant/` (DOM dock widget; conversations
-  since ADR-0048, summary sidecar ADR-0012): **chat-first** — a chat
+  since ADR-0048): **chat-first** — a chat
   picker + new chat in the head, turn cards rendered from the active
   chat note (`chats/<y>/<m>/…`, `kind: chat`; collapsible tool chips for
   the persisted `drey-tool` entries, streamed partial answers), the
@@ -276,10 +276,10 @@ Renderer (Angular):
   follows the disk (an append reloads even a dirty tab) and hand edits
   persist after a short idle (`shared/structural-folders.ts`
   `isAutoSavePath`; also `.drafts/`), so chats and temp files never
-  raise the exit prompt — only the user's own notes do. The per-note
-  auto-summary stays sidecar-based
-  (`thread:read`/`thread:write`, pinned muted card in the panel); a
-  one-shot import turns old sidecar Q/A cards into a chat note. Manual
+  raise the exit prompt — only the user's own notes do. (The old
+  auto-summary sidecar feature was removed entirely — ADR-0012
+  superseded; pre-existing `.{name}.chat.json` files stay on disk,
+  unread.) Manual
   Actions live in the editor `⋯` menu as `editor-more` menu contributions.
   **Live edit** (ADR-0049): a "Live edit" chip in the composer opts one
   ask turn into immediate-apply editing — the model edits the open note
@@ -432,9 +432,10 @@ be called out explicitly (see Working Style below), not introduced silently.
     button any more), the editor (Live Preview ⇄ source via the `⋯` menu
     — no toggle buttons; see ADR-0008/0009), then the **bottom dock** band
     (default: the "Add entry" panel).
-  - **Assistant panel**: chat-first head (chat-title picker + "+ New
-    chat"), turn cards with collapsible tool chips, a streamed partial
-    answer while generating, the pinned auto-summary card, and the
+  - **Assistant panel**: chat-first head (chat-title picker + a "+"
+    icon for a new chat), turn cards with collapsible tool chips, a
+    streamed partial answer while generating (the transcript follows the
+    stream; scrolling up unpins), and the
     composer (context chips incl. images, auto-grow, model row). No
     bottom chat bar; capture lives in the Add entry panel.
   - **Settings**: a full-surface overlay opened from the status-bar entry
@@ -444,7 +445,7 @@ be called out explicitly (see Working Style below), not introduced silently.
     + editor typeface, ADR-0020), "Panels & plugins", "Vault"
     (ADR-0045) and "MCP"
     (ADR-0010; descriptor-driven list, ADR-0016); plugin-contributed
-    categories (templates, assistant, actions) append before "About".
+    categories (templates, actions) append before "About".
     The X sits top-right; Discard is always active and closes (with a
     dirty-state warning). The
     confirmation dialog (Actions / Ask edits / MCP writes) is a centred

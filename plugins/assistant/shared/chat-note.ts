@@ -5,7 +5,7 @@
  * follow-up replays the full persisted history from it (bug-10(b): tool
  * calls/results and applied-edit content survive in `drey-tool` fences).
  *
- * Pure string in, pure string out, like `chat-thread.ts` before it — the
+ * Pure string in, pure string out — the
  * vault IO lives main-side (`main/chat-store.ts`). Parse is defensive in
  * the `parseChatThread` style: malformed pieces degrade (dropped lines,
  * empty turns), `parseChatNote` never throws. Plugin renderers may only
@@ -559,27 +559,6 @@ export function uniqueChatPath(path: string, existing: Iterable<string>): string
       return candidate;
     }
   }
-}
-
-/**
- * Sidecar Q/A cards (`chat-thread.ts`, ADR-0012) → chat-note turns, for
- * the one-shot non-destructive "import into a chat note" action. Summary
- * cards stay in the sidecar (they are the auto-summary, not conversation).
- */
-export function turnsFromSidecarCards(
-  cards: readonly { role: string; text: string; at: string; durationMs?: number }[],
-): ChatNoteTurn[] {
-  return cards
-    .filter((card) => card.role === 'question' || card.role === 'answer')
-    .map((card) => ({
-      role: card.role === 'question' ? ('user' as const) : ('assistant' as const),
-      at: card.at,
-      meta: card.durationMs !== undefined ? { durationMs: card.durationMs } : {},
-      text: card.text,
-      attachments: [],
-      tool: [],
-      start: 0,
-    }));
 }
 
 /**

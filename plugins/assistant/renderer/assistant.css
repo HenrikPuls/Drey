@@ -75,61 +75,6 @@
   background: var(--hover-bg);
 }
 
-/* The per-note auto-summary switch group (secondary since ADR-0048). */
-.assistant-head .summary-head {
-  flex: none;
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
-
-.assistant-head .toggle-label {
-  flex: none;
-  white-space: nowrap;
-  font-size: 12px;
-  color: var(--text-3);
-}
-
-/* Switch: a button, not a checkbox -- it carries no form value and the
-   label is already associated via aria-labelledby. 30x17, knob 13. */
-.assistant-panel .switch {
-  flex: none;
-  position: relative;
-  width: 30px;
-  height: 17px;
-  padding: 0;
-  border: none;
-  border-radius: 9px;
-  background: var(--hover-bg-loud);
-  cursor: pointer;
-  transition: background 0.15s;
-}
-
-.assistant-panel .switch:disabled {
-  opacity: 0.45;
-  cursor: default;
-}
-
-.assistant-panel .switch.on {
-  background: var(--accent);
-}
-
-.assistant-panel .switch .knob {
-  position: absolute;
-  top: 2px;
-  left: 2px;
-  width: 13px;
-  height: 13px;
-  border-radius: 50%;
-  background: var(--text-5);
-  transition: margin-left 0.13s;
-}
-
-.assistant-panel .switch.on .knob {
-  margin-left: 13px;
-  background: var(--accent-contrast);
-}
-
 .assistant-panel .empty,
 .assistant-panel .working,
 .assistant-panel .err {
@@ -293,12 +238,6 @@
   color: var(--text-3);
 }
 
-.assistant-thread .card.summary {
-  background: var(--bg-input);
-  border: 1px solid var(--border);
-  padding: 11px 13px;
-}
-
 /* Question / answer read as a conversation: a thin accent rule instead of
    a filled bubble, which would fight the flat surfaces everywhere else. */
 .assistant-thread .card.q,
@@ -416,49 +355,6 @@
   50% {
     opacity: 0.25;
   }
-}
-
-/* The pinned summary card (the note's auto-summary, sidecar-sourced). */
-.assistant-thread .card.summary.pinned {
-  opacity: 0.92;
-}
-
-.assistant-thread .card.summary.pinned .card-actions {
-  position: static;
-  opacity: 1;
-  margin-top: 6px;
-  border: none;
-}
-
-.assistant-thread .card.summary.pinned .card-actions.ghost {
-  background: transparent;
-  border: none;
-  color: var(--text-5);
-  font-family: var(--font-sans);
-  padding: 0;
-  justify-content: flex-start;
-}
-
-.assistant-thread .card.summary.pinned .card-actions.ghost:hover {
-  color: var(--text-primary);
-}
-
-/* The one-shot sidecar import affordance. */
-.assistant-thread .import-line {
-  border: 1px dashed var(--border-strong);
-  border-radius: var(--radius);
-  background: transparent;
-  color: var(--text-5);
-  font: inherit;
-  font-size: 12px;
-  padding: 6px 10px;
-  cursor: pointer;
-  text-align: left;
-}
-
-.assistant-thread .import-line:hover {
-  color: var(--text-primary);
-  border-color: var(--accent-quote);
 }
 
 /* The composer grows with its content (panel.ts sizes the input); the
@@ -662,23 +558,6 @@
   color: var(--text-3);
 }
 
-.assistant-composer .summarize {
-  margin-left: auto;
-  background: transparent;
-  border: 1px solid var(--border-strong);
-  border-radius: var(--radius);
-  color: var(--text-4);
-  font-family: var(--font-sans);
-  font-size: 12px;
-  padding: 4px 10px;
-  cursor: pointer;
-}
-
-.assistant-composer .summarize:hover:not(:disabled) {
-  color: var(--text-primary);
-  background: var(--hover-bg);
-}
-
 /* -- pickers (file + model; api.ui.showModal, centred overlay) ---------------
    The modal box (.plugin-modal) gets .assistant-picker-host added by the
    panel; plugin CSS is global, so the assistant ships its own backdrop copy
@@ -865,7 +744,6 @@
 
 /* -- Settings pages ---------------------------------------------------------- */
 
-.assistant-settings h2,
 .assistant-actions-settings h3 {
   margin: 0 0 10px;
   font-size: 13px;
@@ -873,46 +751,17 @@
   color: var(--text-primary);
 }
 
-.assistant-settings .switch-row,
 .assistant-actions-settings .add-trigger {
   display: flex;
   align-items: center;
   gap: 10px;
 }
 
-.assistant-settings .switch-row {
-  align-items: flex-start;
-  gap: 8px;
-}
-
-.assistant-settings .switch-label,
-.assistant-settings .switch-hint {
-  display: block;
-}
-
-.assistant-settings .switch-label {
-  font-size: 13px;
-  color: var(--text-primary);
-}
-
-.assistant-settings .switch-hint {
-  font-size: 11.5px;
-  color: var(--text-6);
-  margin-top: 2px;
-}
-
-.assistant-settings .note,
 .assistant-actions-settings .section-hint {
   font-size: 11.5px;
   color: var(--text-6);
 }
 
-.assistant-settings .warn {
-  font-size: 11.5px;
-  color: var(--accent-hover);
-}
-
-.assistant-settings .note.mono,
 .assistant-actions-settings .mono {
   font-family: var(--font-mono);
 }

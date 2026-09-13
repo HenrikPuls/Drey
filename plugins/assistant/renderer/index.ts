@@ -6,27 +6,25 @@ import type {
 } from '../../../shared/plugin-api/renderer';
 import type { AppConfig } from '../../../shared/app-config';
 import type { AssistantOutcome } from '../shared/ask';
-import type { ChatThread } from '../shared/chat-thread.js';
 import type { ChatNoteView, ChatSummary } from '../shared/chat-note';
 import { resolveActions } from '../shared/resolve-actions.js';
 import { mountPanel, type PanelHandle } from './panel.js';
 import { createRunningTasks } from './running-tasks.js';
 import { createAssistantState, type AssistantPorts } from './state.js';
-import { actionsSettingsPage, assistantSettingsPage } from './settings-pages.js';
+import { actionsSettingsPage } from './settings-pages.js';
 
 /**
  * The Assistant plugin's renderer (ADR-0044 stage 7): the assistant dock
- * panel (cards + composer), the two Settings pages, the manual Actions as
- * `⋯`-menu rows, and the pending-actions drain — on-save Action outcomes
- * arrive as a `pending-actions` document event and go through the shared
- * confirmation dialog. The panel reuses the built-in widget id `assistant`
- * so every persisted dock layout and the `widgets.disabled` list survive
- * the conversion (ADR-0044 rule 5).
+ * panel (cards + composer), the Actions Settings page, the manual Actions
+ * as `⋯`-menu rows, and the pending-actions drain — on-save Action
+ * outcomes arrive as a `pending-actions` document event and go through the
+ * shared confirmation dialog. The panel reuses the built-in widget id
+ * `assistant` so every persisted dock layout and the `widgets.disabled`
+ * list survive the conversion (ADR-0044 rule 5).
  */
 const plugin: PluginRendererModule = {
   activate(api: DreyPluginApi) {
-    // The live app config, cached for the pieces the ports read per call
-    // (the Settings -> Assistant default) and for the manual-action rows.
+    // The live app config, cached for the manual-action rows.
     let appConfigCache: AppConfig | undefined;
     const refreshConfig = async (): Promise<void> => {
       appConfigCache = await api.appConfig.get();
@@ -49,8 +47,6 @@ const plugin: PluginRendererModule = {
         api.backend.invoke('chat:appendEdit', { path, applied, after }) as Promise<void>,
       truncate: (path, turnIndex) =>
         api.backend.invoke('chat:truncate', { path, turnIndex }) as Promise<void>,
-      importSidecar: (notePath) =>
-        api.backend.invoke('chat:importSidecar', { notePath }) as Promise<{ chatPath: string }>,
       attachExternal: (referenceNote) =>
         api.backend.invoke('chat:attachExternal', { referenceNote }) as Promise<{
           staged: { path: string; kind: 'file' | 'image' }[];
@@ -63,14 +59,6 @@ const plugin: PluginRendererModule = {
             listener({ taskId: shape.taskId, text: shape.text });
           }
         }),
-
-      // -- summary sidecar (ADR-0012, unchanged) --------------------------------
-      readThread: (notePath) =>
-        api.backend.invoke('thread:read', { path: notePath }) as Promise<ChatThread>,
-      writeThread: (thread) =>
-        api.backend.invoke('thread:write', { thread }) as Promise<void>,
-      summarize: (context, taskId) =>
-        api.backend.invoke('summarize', { context, taskId }) as Promise<string>,
 
       // -- shared -----------------------------------------------------------------
       readVaultFile: async (path) => {
@@ -92,7 +80,6 @@ const plugin: PluginRendererModule = {
           : null;
       },
       llmEnabled: () => api.llm.enabled(),
-      autoSummaryDefault: () => appConfigCache?.assistant.autoSummaryDefault ?? false,
       requestRewrite: (request) => api.documents.requestRewrite(request),
       setEditLock: (path, locked) => {
         api.documents.setEditLock(path, locked);
@@ -248,13 +235,12 @@ const plugin: PluginRendererModule = {
       },
     });
 
-    // -- the two Settings pages ---------------------------------------------------
-    // Both patch the live config; every patch may change the manual-action
-    // rows or the summary default, so the pages announce themselves.
+    // -- the Actions Settings page ------------------------------------------------
+    // Patches the live config; a patch may change the manual-action rows,
+    // so the page announces itself.
     const onConfigPatched = (): void => {
       void refreshConfig();
     };
-    api.ui.registerSettingsPage(assistantSettingsPage(api, onConfigPatched));
     api.ui.registerSettingsPage(actionsSettingsPage(api, onConfigPatched));
 
     void refreshConfig();

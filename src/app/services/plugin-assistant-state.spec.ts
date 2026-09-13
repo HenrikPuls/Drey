@@ -3,8 +3,6 @@ import {
   createRunningTasks,
   type RunningTasks,
 } from '../../../plugins/assistant/renderer/running-tasks';
-import type { ChatThread } from '../../../plugins/assistant/shared/chat-thread';
-import { emptyThread } from '../../../plugins/assistant/shared/chat-thread';
 import type { AskRequest, AssistantOutcome } from '../../../plugins/assistant/shared/ask';
 import type { ChatNoteView, ChatSummary } from '../../../plugins/assistant/shared/chat-note';
 import { parseChatNote } from '../../../plugins/assistant/shared/chat-note';
@@ -12,8 +10,7 @@ import { parseChatNote } from '../../../plugins/assistant/shared/chat-note';
 /**
  * Specs for the assistant plugin's renderer state
  * (`plugins/assistant/renderer/state.ts`): the chat-first flow (ADR-0048)
- * around the chat note + streaming, the auto-summary rule (sidecar,
- * unchanged), the per-note switch, and the context chips. The state
+ * around the chat note + streaming and the context chips. The state
  * factory takes its ports injected, so no `window.dreyApi` or plugin host
  * is involved. The Angular runner ignores `plugins/**`, so plugin specs
  * live here.
@@ -22,8 +19,6 @@ import { parseChatNote } from '../../../plugins/assistant/shared/chat-note';
 interface Harness {
   state: ReturnType<typeof createAssistantState>;
   tasks: RunningTasks;
-  threads: Map<string, ChatThread>;
-  summaries: Array<string | undefined>;
   asks: AskRequest[];
   /** Chat-note texts by path (what `chat:read` parses). */
   chatNotes: Map<string, string>;
@@ -42,7 +37,6 @@ interface Harness {
   /** The "active document" the ports report; null = nothing text-shaped open. */
   setActive(path: string | null, body?: string): void;
   llm: { on: boolean };
-  defaultAutoSummary: boolean;
   /** The outcome the fake ask port returns next. */
   nextOutcome: AssistantOutcome;
   /** When set, the ask port stalls on it (streaming tests). */
@@ -54,12 +48,11 @@ function viewOf(text: string): ChatNoteView {
 }
 
 function summaryOf(path: string, text: string): ChatSummary {
+  void text;
   return { path, title: path, updated: null };
 }
 
-function setup(options: { autoSummary?: boolean; llm?: boolean } = {}): Harness {
-  const threads = new Map<string, ChatThread>();
-  const summaries: Array<string | undefined> = [];
+function setup(options: { llm?: boolean } = {}): Harness {
   const asks: AskRequest[] = [];
   const chatNotes = new Map<string, string>();
   const truncates: Array<{ path: string; turnIndex: number }> = [];
@@ -69,8 +62,6 @@ function setup(options: { autoSummary?: boolean; llm?: boolean } = {}): Harness 
   const vaultFiles = new Map<string, string>();
   const deltaListeners = new Set<(event: { taskId: string; text: string }) => void>();
   const h: Harness = {
-    threads,
-    summaries,
     asks,
     chatNotes,
     truncates,
@@ -84,7 +75,6 @@ function setup(options: { autoSummary?: boolean; llm?: boolean } = {}): Harness 
       }
     },
     llm: { on: options.llm !== false },
-    defaultAutoSummary: options.autoSummary !== false,
     setActive: (path, body) => {
       activePath = path;
       activeBody = body ?? '# Note\n\nInhalt\n';
@@ -136,30 +126,15 @@ function setup(options: { autoSummary?: boolean; llm?: boolean } = {}): Harness 
       const view = viewOf(chatNotes.get(path) ?? '');
       chatNotes.set(path, chatNotes.get(path)!.slice(0, view.turns[turnIndex]?.start ?? 0));
     },
-    importSidecar: async (notePath) => {
-      const path = `chats/2026/09/imported-${notePath.replace(/[/.]/g, '-')}.md`;
-      chatNotes.set(path, '---\nkind: chat\n---\n');
-      return { chatPath: path };
-    },
     attachExternal: async () => ({ staged: [], skipped: [] }),
     onDelta: (listener) => {
       deltaListeners.add(listener);
       return () => deltaListeners.delete(listener);
     },
-    readThread: async (notePath) => threads.get(notePath) ?? emptyThread(notePath),
-    writeThread: async (thread) => {
-      threads.set(thread.notePath, thread);
-    },
-    summarize: async (context, taskId) => {
-      summaries.push(taskId);
-      void context;
-      return 'Kurze Zusammenfassung.';
-    },
     readVaultFile: async (path) => vaultFiles.get(path) ?? null,
     cancel: async () => undefined,
     activeDoc: () => (activePath === null ? null : { path: activePath, body: activeBody }),
     llmEnabled: () => h.llm.on,
-    autoSummaryDefault: () => h.defaultAutoSummary,
     requestRewrite: async (request) => {
       rewrites.push({ path: request.path, title: request.title });
       return true;
@@ -174,71 +149,9 @@ function setup(options: { autoSummary?: boolean; llm?: boolean } = {}): Harness 
   return h;
 }
 
-describe('assistant plugin state — auto summary (sidecar, unchanged)', () => {
-  it('summarises a note opened for the first time when the default is on', async () => {
-    const h = setup();
-    h.setActive('daily/2026-09-26.md');
-    await h.state.openNote('daily/2026-09-26.md');
-
-    expect(h.summaries).toHaveLength(1);
-    expect(h.state.summaryCard()?.text).toBe('Kurze Zusammenfassung.');
-  });
-
-  it('does nothing automatically when the default is off, but offers manual', async () => {
-    const h = setup({ autoSummary: false });
-    h.setActive('a.md');
-    await h.state.openNote('a.md');
-
-    expect(h.summaries).toHaveLength(0);
-    expect(h.state.summaryCard()).toBeNull();
-    expect(h.state.autoSummary()).toBe(false);
-    expect(h.state.canSummarize()).toBe(true);
-    await h.state.summarizeNow();
-    expect(h.summaries).toHaveLength(1);
-    expect(h.state.summaryCard()?.text).toBe('Kurze Zusammenfassung.');
-    expect(h.state.canSummarize()).toBe(false);
-  });
-
-  it('does not re-summarise a note that already has a sidecar thread', async () => {
-    const h = setup();
-    h.threads.set('a.md', {
-      version: 1,
-      notePath: 'a.md',
-      cards: [{ id: 'a', role: 'summary', text: 'Schon da.', at: '' }],
-    });
-    h.setActive('a.md');
-    await h.state.openNote('a.md');
-
-    expect(h.summaries).toHaveLength(0);
-    expect(h.state.summaryCard()?.text).toBe('Schon da.');
-  });
-
-  it('never summarises while LLM features are off', async () => {
-    const h = setup({ llm: false });
-    h.setActive('a.md');
-    await h.state.openNote('a.md');
-
-    expect(h.summaries).toHaveLength(0);
-    expect(h.state.canSummarize()).toBe(false);
-  });
-
-  it('keeps a per-note switch without changing the global default', async () => {
-    const h = setup();
-    h.setActive('a.md');
-    await h.state.openNote('a.md');
-    h.state.setAutoSummary(false);
-
-    h.setActive('b.md');
-    await h.state.openNote('b.md');
-
-    expect(h.state.autoSummary()).toBe(true);
-    expect(h.defaultAutoSummary).toBe(true);
-  });
-});
-
 describe('assistant plugin state — chat-first asks (ADR-0048)', () => {
   it('sends a zero-context ask (no note open, no chips) and lands in a new chat', async () => {
-    const h = setup({ autoSummary: false });
+    const h = setup();
     h.setActive(null);
 
     const sent = await h.state.ask('Was ist ein Rhumb-Linien-Diagramm?');
@@ -252,7 +165,7 @@ describe('assistant plugin state — chat-first asks (ADR-0048)', () => {
   });
 
   it('sends the note with its live buffer by default, plus chips and images', async () => {
-    const h = setup({ autoSummary: false });
+    const h = setup();
     h.setActive('a.md', 'Lebendiger Puffer.');
     await h.state.openNote('a.md');
     h.vaultFiles.set('b.md', 'B-Kontext.');
@@ -273,7 +186,7 @@ describe('assistant plugin state — chat-first asks (ADR-0048)', () => {
   });
 
   it('continues the active chat on the next ask', async () => {
-    const h = setup({ autoSummary: false });
+    const h = setup();
     h.setActive('a.md');
     await h.state.openNote('a.md');
     await h.state.ask('erste');
@@ -285,7 +198,7 @@ describe('assistant plugin state — chat-first asks (ADR-0048)', () => {
   });
 
   it('asks proceed even while the chat tab is dirty (the tab follows the disk)', async () => {
-    const h = setup({ autoSummary: false });
+    const h = setup();
     h.setActive('a.md');
     await h.state.openNote('a.md');
     await h.state.ask('erste');
@@ -298,7 +211,7 @@ describe('assistant plugin state — chat-first asks (ADR-0048)', () => {
   });
 
   it('streams the answer through the delta push into a partial card', async () => {
-    const h = setup({ autoSummary: false });
+    const h = setup();
     let release: () => void = () => undefined;
     h.askGate = new Promise<void>((resolve) => {
       release = resolve;
@@ -327,7 +240,7 @@ describe('assistant plugin state — chat-first asks (ADR-0048)', () => {
   });
 
   it('an edit outcome goes through the confirm flow and persists the result', async () => {
-    const h = setup({ autoSummary: false });
+    const h = setup();
     h.setActive('a.md', 'Dokument');
     await h.state.openNote('a.md');
     h.nextOutcome = {
@@ -347,7 +260,7 @@ describe('assistant plugin state — chat-first asks (ADR-0048)', () => {
   });
 
   it('skips files that vanished, refuses only when nothing is left', async () => {
-    const h = setup({ autoSummary: false });
+    const h = setup();
     h.setActive(null);
     h.vaultFiles.set('c.md', 'C.');
     h.state.addFile('weg.md');
@@ -358,7 +271,7 @@ describe('assistant plugin state — chat-first asks (ADR-0048)', () => {
     expect(h.asks[0]?.extraFiles).toEqual([{ path: 'c.md', body: 'C.' }]);
     expect(h.state.notice()).toContain('weg.md');
 
-    const h2 = setup({ autoSummary: false });
+    const h2 = setup();
     h2.setActive(null);
     h2.state.addFile('weg.md');
     expect(await h2.state.ask('Frage?')).toBe(false);
@@ -366,7 +279,7 @@ describe('assistant plugin state — chat-first asks (ADR-0048)', () => {
   });
 
   it('newChat detaches the active chat so the next ask starts fresh', async () => {
-    const h = setup({ autoSummary: false });
+    const h = setup();
     h.setActive(null);
     await h.state.ask('erste');
     expect(h.state.activeChatPath()).not.toBeNull();
@@ -378,36 +291,17 @@ describe('assistant plugin state — chat-first asks (ADR-0048)', () => {
     await h.state.ask('zweite');
     expect(h.asks[1]?.chatPath).toBeNull();
   });
-
-  it('importSidecar creates and opens a chat for the open note', async () => {
-    const h = setup({ autoSummary: false });
-    h.threads.set('a.md', {
-      version: 1,
-      notePath: 'a.md',
-      cards: [
-        { id: 'q1', role: 'question', text: 'Alt?', at: '' },
-        { id: 'a1', role: 'answer', text: 'Ja.', at: '' },
-      ],
-    });
-    h.setActive('a.md');
-    await h.state.openNote('a.md');
-    expect(h.state.canImportSidecar()).toBe(true);
-
-    await h.state.importSidecar();
-
-    expect(h.state.activeChatPath()).toContain('chats/');
-  });
 });
 
 describe('assistant plugin state — live edit (ADR-0049)', () => {
   it('refuses to toggle without an open note, and on auto-save paths', async () => {
-    const h = setup({ autoSummary: false });
+    const h = setup();
     h.setActive(null);
     h.state.toggleLiveEdit();
     expect(h.state.liveEdit()).toBe(false);
     expect(h.state.notice()).toContain('Open a note');
 
-    const h2 = setup({ autoSummary: false });
+    const h2 = setup();
     h2.setActive('chats/2026/09/chat.md', '---\nkind: chat\n---\n');
     await h2.state.openNote('chats/2026/09/chat.md');
     h2.state.toggleLiveEdit();
@@ -416,7 +310,7 @@ describe('assistant plugin state — live edit (ADR-0049)', () => {
   });
 
   it('turning the chip on re-includes the note; excluding the note turns it off', async () => {
-    const h = setup({ autoSummary: false });
+    const h = setup();
     h.setActive('a.md');
     await h.state.openNote('a.md');
     h.state.setNoteIncluded(false);
@@ -429,7 +323,7 @@ describe('assistant plugin state — live edit (ADR-0049)', () => {
   });
 
   it('a live ask locks the note, sends liveEdit, and reports instead of confirming', async () => {
-    const h = setup({ autoSummary: false });
+    const h = setup();
     h.setActive('a.md', '# Alt\n');
     await h.state.openNote('a.md');
     h.state.toggleLiveEdit();
@@ -450,7 +344,7 @@ describe('assistant plugin state — live edit (ADR-0049)', () => {
   });
 
   it('reports a no-change live turn, and releases the lock when the ask fails', async () => {
-    const h = setup({ autoSummary: false });
+    const h = setup();
     h.setActive('a.md');
     await h.state.openNote('a.md');
     h.state.toggleLiveEdit();
@@ -462,7 +356,7 @@ describe('assistant plugin state — live edit (ADR-0049)', () => {
       { path: 'a.md', locked: false },
     ]);
 
-    const h2 = setup({ autoSummary: false });
+    const h2 = setup();
     h2.setActive('a.md');
     await h2.state.openNote('a.md');
     h2.state.toggleLiveEdit();
@@ -479,7 +373,7 @@ describe('assistant plugin state — live edit (ADR-0049)', () => {
   });
 
   it('clamps the flag when the active document is not live-editable', async () => {
-    const h = setup({ autoSummary: false });
+    const h = setup();
     h.setActive('a.md');
     await h.state.openNote('a.md');
     h.state.toggleLiveEdit();
@@ -503,7 +397,7 @@ describe('assistant plugin state — restart from a turn', () => {
   }
 
   it('truncates from the turn index and returns the removed question', async () => {
-    const h = setup({ autoSummary: false });
+    const h = setup();
     const path = await chatWithTurns(h);
 
     expect(h.state.laterCount(2)).toBe(2);
@@ -515,7 +409,7 @@ describe('assistant plugin state — restart from a turn', () => {
   });
 
   it('returns null when the rewind point is not a user turn', async () => {
-    const h = setup({ autoSummary: false });
+    const h = setup();
     await chatWithTurns(h);
 
     const restored = await h.state.restartFrom(1); // the assistant turn
@@ -523,7 +417,7 @@ describe('assistant plugin state — restart from a turn', () => {
   });
 
   it('refuses while a generation is running', async () => {
-    const h = setup({ autoSummary: false });
+    const h = setup();
     const path = await chatWithTurns(h);
     let release: (value: string) => void = () => undefined;
     const gate = new Promise<string>((resolve) => {
@@ -555,7 +449,7 @@ describe('assistant plugin state — misc surface', () => {
   });
 
   it('refuses an ask while LLM features are off', async () => {
-    const h = setup({ autoSummary: false, llm: false });
+    const h = setup({ llm: false });
     h.setActive('a.md');
     await h.state.openNote('a.md');
 
@@ -564,7 +458,7 @@ describe('assistant plugin state — misc surface', () => {
   });
 
   it('dedupes image chips and caps them', () => {
-    const h = setup({ autoSummary: false });
+    const h = setup();
     h.setActive(null);
     expect(h.state.addImage('a.png').ok).toBe(true);
     expect(h.state.addImage('a.png').reason).toContain('Already');
@@ -573,7 +467,7 @@ describe('assistant plugin state — misc surface', () => {
   });
 
   it('chips stay per note and restore on switching back', async () => {
-    const h = setup({ autoSummary: false });
+    const h = setup();
     h.setActive('a.md');
     await h.state.openNote('a.md');
     h.vaultFiles.set('b.md', 'B.');

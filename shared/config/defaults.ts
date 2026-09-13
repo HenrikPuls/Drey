@@ -16,7 +16,6 @@ import {
   EntryTemplate,
   LM_STUDIO_DEFAULT_BASE_URL,
   McpConfig,
-  NOTE_SUMMARY_PROMPT,
   RULED_ENTRY_PATTERN,
   SEARCH_SUMMARY_PROMPT,
   AUTOTAG_PROMPT,
@@ -65,19 +64,6 @@ export function ruledEntryTemplate(): EntryTemplate {
   };
 }
 
-export function noteSummaryTemplate(): ActionTemplate {
-  return {
-    id: BUILTIN_TEMPLATE_IDS['note-summary'],
-    name: 'Summarise note',
-    prompt: NOTE_SUMMARY_PROMPT,
-    // The result is a panel card, never a document edit -- `resultKind`
-    // is irrelevant for it, but the field is not optional; `'document'`
-    // is the honest value should it ever be run as a plain action.
-    resultKind: 'document',
-    builtin: 'note-summary',
-  };
-}
-
 export function searchSummaryTemplate(): ActionTemplate {
   return {
     id: BUILTIN_TEMPLATE_IDS['search-summary'],
@@ -107,9 +93,6 @@ export const DEFAULT_APP_CONFIG: AppConfig = {
     apiKey: null,
     model: null,
   },
-  assistant: {
-    autoSummaryDefault: true,
-  },
   spellcheck: {
     enabled: true,
     language: 'de',
@@ -133,7 +116,7 @@ export const DEFAULT_APP_CONFIG: AppConfig = {
   widgets: { disabled: [] },
   plugins: { disabled: [] },
   actions: {
-    templates: [noteSummaryTemplate(), searchSummaryTemplate(), autotagTemplate()],
+    templates: [searchSummaryTemplate(), autotagTemplate()],
     triggers: [],
   },
 };

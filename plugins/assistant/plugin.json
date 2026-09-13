@@ -3,7 +3,7 @@
   "name": "Assistant & Actions",
   "version": "1.0.0",
   "apiVersion": 1,
-  "description": "The note assistant panel (automatic summary, per-note Ask thread) and the Actions engine (prompt templates, on-save triggers, manual runs).",
+  "description": "The note assistant panel (chat threads) and the Actions engine (prompt templates, on-save triggers, manual runs).",
   "author": "Drey",
   "main": "main/index.js",
   "renderer": "renderer/index.js",

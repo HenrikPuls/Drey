@@ -7,9 +7,9 @@
  * the vault tool loop is an option on that call, so the engine never sees
  * the `VaultTools` instance.
  *
- * Since ADR-0048 this engine is manual Actions + the note summary only —
- * conversations (Ask) live in `chat-engine.ts` against chat notes, with
- * full-history replay replacing this file's old 12-message cap.
+ * Since ADR-0048 conversations (Ask) live in `chat-engine.ts` against chat
+ * notes, with full-history replay replacing this file's old 12-message
+ * cap.
  */
 import {
   ActionContext,
@@ -18,11 +18,7 @@ import {
   ResolvedAction,
   resolveActions,
 } from '../../../shared/llm';
-import {
-  AppConfig,
-  NOTE_SUMMARY_PROMPT,
-  SEARCH_SUMMARY_PROMPT,
-} from '../../../shared/app-config';
+import { AppConfig } from '../../../shared/app-config';
 
 /** The message a cancelled generation reports (kept in step with the base transport). */
 const CANCELLED_MESSAGE = 'Generation cancelled.';
@@ -56,12 +52,6 @@ export class ActionEngine {
       return { kind: 'error', triggerId, name: action.name, message: 'LLM features are disabled.' };
     }
     try {
-      if (action.builtin === 'note-summary') {
-        // Its result is a panel card, not a document rewrite. Running it
-        // as a generic action would replace the note with its own summary,
-        // so a trigger pointed at it is refused rather than obeyed.
-        return noop(action, 'The note summary is produced by the assistant panel, not as an edit.');
-      }
       return await this.runGeneric(action, context, taskId);
     } catch (err) {
       // Cancelling is the user's decision, not a failure -- it reports as a
@@ -75,38 +65,6 @@ export class ActionEngine {
             message: err instanceof Error ? err.message : String(err),
           };
     }
-  }
-
-  /**
-   * The note assistant's automatic summary: the note in, one short
-   * paragraph out. Uses the `note-summary` built-in template's prompt, so
-   * the wording is editable in Settings -> Actions like every other
-   * built-in and nothing is duplicated. Throws (rather than returning a
-   * `noop`) so the panel can put the reason on the card slot -- there is
-   * no confirmation flow involved here.
-   */
-  async summarize(context: ActionContext, taskId?: string): Promise<string> {
-    if (!this.getConfig().llm.enabled) {
-      throw new Error('LLM features are disabled.');
-    }
-    const template = this.getConfig()
-      .actions.templates.find((entry) => entry.builtin === 'note-summary');
-    const body = context.body.trim();
-    if (body === '') {
-      throw new Error('This note is empty -- nothing to summarise yet.');
-    }
-    const reply = await this.chat(
-      [
-        { role: 'system', content: template?.prompt ?? NOTE_SUMMARY_PROMPT },
-        { role: 'user', content: body },
-      ],
-      { taskId },
-    );
-    const text = reply.trim();
-    if (text === '') {
-      throw new Error('The model returned an empty summary.');
-    }
-    return text;
   }
 
   /** Chat Ask mode moved to `chat-engine.ts` (ADR-0048). */

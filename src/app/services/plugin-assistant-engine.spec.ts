@@ -9,9 +9,9 @@ import type { LlmChatResult, ChatMessage, LlmCapabilities } from '../../../share
 /**
  * Specs for the assistant plugin's engines (`plugins/assistant/main/`).
  * Since ADR-0048 the ask flow lives in `chat-engine.ts` (chat notes +
- * full-history replay, the bug-10(b) resolution); `action-engine.ts` keeps
- * manual Actions + the note summary. The Angular runner ignores
- * `plugins/**`, so plugin specs live here and import the plugin sources.
+ * full-history replay, the bug-10(b) resolution); `action-engine.ts` is
+ * manual Actions only. The Angular runner ignores `plugins/**`, so plugin
+ * specs live here and import the plugin sources.
  */
 
 const DOC = '# Titel\n\nEin Absatz.\n';
@@ -35,8 +35,7 @@ function engineWith(reply: string | Error, options: { llm?: boolean; mcp?: boole
     llm: { ...DEFAULT_APP_CONFIG.llm, enabled: options.llm !== false },
     mcp: { ...DEFAULT_APP_CONFIG.mcp, enabled: options.mcp === true },
   });
-  // One enabled manual trigger over the Reformat-style user template, plus
-  // the built-in note-summary template the summarizer reads.
+  // One enabled manual trigger over the Reformat-style user template.
   config.actions.triggers.push({
     id: 'trigger:test',
     templateId: 'template:test',
@@ -112,32 +111,6 @@ describe('assistant plugin action engine (plugins/assistant/main)', () => {
       expect(outcome.message).toBe('LLM features are disabled.');
     }
     expect(calls).toHaveLength(0);
-  });
-
-  it('the note-summary built-in is not runnable as an edit action', async () => {
-    const { engine } = engineWith(DOC);
-    const config = DEFAULT_APP_CONFIG;
-    const summaryTrigger = normalizeAppConfig(config).actions.templates.find(
-      (t) => t.builtin === 'note-summary',
-    );
-    expect(summaryTrigger).toBeDefined();
-    void engine;
-  });
-
-  it('summarize uses the note-summary template and rejects an empty note', async () => {
-    const { engine, calls } = engineWith('  Kurzfassung.  ');
-    const text = await engine.summarize({ path: 'a.md', body: `${DOC}\n` }, 'task-2');
-
-    expect(text).toBe('Kurzfassung.');
-    const system = (calls[0]?.messages as Array<{ role: string; content: string }>)[0];
-    // The note-summary built-in template's prompt is editable in Settings;
-    // the default wording mentions a summary either way.
-    expect(system.content.length).toBeGreaterThan(20);
-    expect(calls[0]?.opts).toEqual({ taskId: 'task-2' });
-
-    await expect(engine.summarize({ path: 'a.md', body: '   ' })).rejects.toThrow(
-      /nothing to summarise/i,
-    );
   });
 
   it('the on-save enumeration only lists enabled on-save triggers', () => {

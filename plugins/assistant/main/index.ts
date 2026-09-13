@@ -6,15 +6,7 @@ import type {
   NoteSavedEvent,
   SaveHookResult,
 } from '../../../shared/plugin-api';
-import type { ChatThread } from '../shared/chat-thread';
-import {
-  emptyThread,
-  parseChatThread,
-  serializeChatThread,
-  sidecarPathFor,
-} from '../shared/chat-thread.js';
 import { parseAskPayload } from '../shared/ask.js';
-import { ChatNoteTurn, turnsFromSidecarCards } from '../shared/chat-note.js';
 import {
   extensionOf,
   externalFileKind,
@@ -30,10 +22,8 @@ import * as path from 'node:path';
 
 /**
  * The Assistant plugin's main entry (ADR-0044 stage 7): the on-save Actions
- * save hook, the action engine behind the panel's manual actions + note
- * summary, the per-note sidecar thread store for the auto-summary
- * (`.{name}.chat.json`, ADR-0012 — conversations outgrew it), and the chat
- * engine + chat-note store behind the chat-first panel (ADR-0048).
+ * save hook, the action engine behind the panel's manual actions, and the
+ * chat engine + chat-note store behind the chat-first panel (ADR-0048).
  */
 const plugin: MainPluginModule = {
   activate(ctx: MainPluginContext) {
@@ -122,17 +112,6 @@ const plugin: MainPluginModule = {
       return chatEngine.ask(request, taskId);
     });
 
-    ctx.ipc.handle('summarize', (payload) => {
-      const { context, taskId } = shape(payload) as { context?: unknown; taskId?: unknown };
-      if (typeof context !== 'object' || context === null) {
-        throw new Error('malformed summarize payload');
-      }
-      return engine.summarize(
-        context as ActionContext,
-        typeof taskId === 'string' ? taskId : undefined,
-      );
-    });
-
     // -- the chat-note store (ADR-0048) --------------------------------------
     ctx.ipc.handle('chat:list', () => chatStore.listChats());
 
@@ -168,25 +147,6 @@ const plugin: MainPluginModule = {
       return chatStore.truncateFrom(path, turnIndex);
     });
 
-    ctx.ipc.handle('chat:importSidecar', async (payload) => {
-      // One-shot, non-destructive: the per-note Q/A sidecar cards become
-      // the turns of a NEW chat note; the sidecar file stays (it still
-      // holds the auto-summary).
-      const { notePath } = shape(payload) as { notePath?: unknown };
-      if (typeof notePath !== 'string') {
-        throw new Error('malformed chat:importSidecar payload');
-      }
-      const thread = await readThread(ctx, notePath);
-      const turns: ChatNoteTurn[] = turnsFromSidecarCards(thread.cards);
-      const title = notePath.split('/').pop()?.replace(/\.md$/, '') ?? 'Chat';
-      const fresh = await chatStore.create(new Date(), title, ctx.appConfig.get().llm.provider, ctx.appConfig.get().llm.model);
-      await chatStore.save(fresh.path, fresh.content);
-      for (const turn of turns) {
-        await chatStore.appendTurn(fresh.path, turn);
-      }
-      return { chatPath: fresh.path };
-    });
-
     ctx.ipc.handle('chat:attachExternal', (payload) => {
       // Files NOT yet in the vault: a native multi-select dialog, then each
       // pick is staged into the vault (images hash-named via saveAsset,
@@ -198,24 +158,6 @@ const plugin: MainPluginModule = {
         throw new Error('malformed chat:attachExternal payload');
       }
       return stageExternalFiles(ctx, referenceNote);
-    });
-
-    // -- the sidecar thread store (ADR-0012; auto-summary only now) ----------
-    ctx.ipc.handle('thread:read', (payload) => {
-      const { path } = shape(payload) as { path?: unknown };
-      if (typeof path !== 'string') {
-        throw new Error('malformed thread:read payload');
-      }
-      return readThread(ctx, path);
-    });
-
-    ctx.ipc.handle('thread:write', async (payload) => {
-      const { thread } = shape(payload) as { thread?: unknown };
-      if (typeof thread !== 'object' || thread === null) {
-        throw new Error('malformed thread:write payload');
-      }
-      const typed = thread as ChatThread;
-      await ctx.vault.write(sidecarPathFor(typed.notePath), serializeChatThread(typed));
     });
   },
 };
@@ -258,18 +200,6 @@ async function runOnSaveActions(
         ...(pendingActions.length > 0 ? { pendingActions } : {}),
       }
     : { ...(pendingActions.length > 0 ? { pendingActions } : {}) };
-}
-
-/** The sidecar thread for `notePath`, or an empty one when none exists yet. */
-async function readThread(ctx: MainPluginContext, notePath: string): Promise<ChatThread> {
-  try {
-    const content = await ctx.vault.read(sidecarPathFor(notePath));
-    return parseChatThread(content, notePath);
-  } catch {
-    // No sidecar yet (the common case) or an unreadable one -- either
-    // way the panel opens on an empty thread rather than an error.
-    return emptyThread(notePath);
-  }
 }
 
 function toDisk(text: string, eol: '\n' | '\r\n'): string {

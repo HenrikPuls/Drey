@@ -2,11 +2,11 @@ import { test, expect, type Page } from './fixtures/drey';
 
 /**
  * The Assistant plugin (ADR-0044 stage 7): the dock panel mounts with the
- * built-in id, the two plugin Settings pages (Assistant, Actions —
- * immediate-save per rule 3), and a manual Action running from the editor's
- * `⋯` menu through the plugin's engine. No local model is needed: with the
- * LLM switch off the panel degrades to its quiet empty state, and a manual
- * run reports "LLM features are disabled." in the panel.
+ * built-in id, the Actions Settings page (immediate-save per rule 3), and
+ * a manual Action running from the editor's `⋯` menu through the plugin's
+ * engine. No local model is needed: with the LLM switch off the panel
+ * degrades to its quiet empty state, and a manual run reports "LLM
+ * features are disabled." in the panel.
  */
 
 const NOTE = ['---', 'title: Notiz', '---', '', 'Erster Absatz.', ''].join('\n');
@@ -55,35 +55,15 @@ test.describe('Assistant plugin', () => {
     await expect(panel.locator('.head .status')).toHaveText('notiz.md');
     // LLM features are off in the e2e profile: the panel says so quietly.
     await expect(panel.locator('.assistant-thread .empty')).toHaveText(
-      'LLM features are off — nothing is summarised or answered.',
+      'LLM features are off — nothing is answered.',
     );
-    await expect(panel.locator('.assistant-panel .switch')).toBeVisible();
   });
 
-  test('the Assistant and Actions settings pages are plugin-contributed and save immediately', async ({
+  test('the Actions settings page is plugin-contributed and saves immediately', async ({
     page,
   }) => {
     await openNote(page);
     await page.locator('app-status-bar .settings').click();
-
-    const assistantCategory = page.locator('.category', { hasText: 'Assistant' });
-    await assistantCategory.click();
-    const assistantPage = page.locator('.assistant-settings');
-    await expect(assistantPage.locator('.switch-label')).toHaveText(
-      'Summarise notes automatically by default',
-    );
-    const switchBox = assistantPage.locator('input[type="checkbox"]');
-    await expect(switchBox).toBeChecked(); // the app default
-
-    // Rule 3: the patch lands without pressing the base Save button.
-    await switchBox.click();
-    await expect(switchBox).not.toBeChecked();
-
-    // A fresh mount (navigating away and back) reads the live config: the
-    // change persisted.
-    await page.locator('.category', { hasText: 'Appearance' }).click();
-    await assistantCategory.click();
-    await expect(assistantPage.locator('input[type="checkbox"]')).not.toBeChecked();
 
     const actionsCategory = page.locator('.category', { hasText: 'Actions' });
     await actionsCategory.click();
@@ -92,9 +72,6 @@ test.describe('Assistant plugin', () => {
     // The template library lists the built-ins. (Template names live in
     // input values, which text matchers can't see — assert on the picker's
     // option text and the built-in badges instead.)
-    await expect(
-      actionsPage.locator('.add-trigger option', { hasText: 'Summarise note' }),
-    ).toBeAttached();
     await expect(
       actionsPage.locator('.add-trigger option', { hasText: 'Autotag' }),
     ).toBeAttached();

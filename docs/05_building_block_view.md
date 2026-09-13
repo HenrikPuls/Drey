@@ -1343,6 +1343,11 @@ ActionsService` dependency, which would be a DI cycle).
 ## 5.11 Note assistant panel (Feature A)
 
 > _(Assistant + Actions are now the `plugins/assistant/` runtime plugin — [ADR-0044](09_architecture_decisions/0044-runtime-plugin-system.md), §5.0. This section describes the pre-plugin panel.)_
+>
+> _(**Update** — the automatic summary was removed entirely: no summary
+> card, no `thread:read`/`thread:write` sidecar IO, no `summarize` IPC, no
+> `note-summary` built-in template, no Assistant settings page; [ADR-0012](09_architecture_decisions/0012-note-assistant-sidecar-thread.md)
+> is superseded. The panel is chat-first only — §5.25.)_
 
 The right-hand column. Per open note it shows an automatic summary card,
 then the question/answer cards that follow, and a composer.

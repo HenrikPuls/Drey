@@ -226,7 +226,7 @@ export interface LlmConfig {
 export type ActionResultKind = 'localized' | 'document';
 
 /** The built-in templates that carry behaviour beyond "send prompt, replace document". */
-export type BuiltinAction = 'note-summary' | 'search-summary' | 'autotag';
+export type BuiltinAction = 'search-summary' | 'autotag';
 
 /** Trigger kinds available now. `'on-save'` fires from the `note:save` pipeline. */
 export type ActionEvent = 'on-save' | 'manual';
@@ -235,10 +235,7 @@ export type ActionEvent = 'on-save' | 'manual';
  * One entry in the template library (the "Actions" category, CRUD). A
  * user-created template is a name + prompt + result kind: its prompt is
  * sent to the model with the document as context and the reply replaces
- * the document. The `note-summary` built-in additionally routes through
- * dedicated code (the assistant panel's summary card) -- but its `prompt`
- * text is still the real prompt that path uses, so editing it here changes
- * behaviour and nothing is duplicated.
+ * the document.
  */
 export interface ActionTemplate {
   id: string;
@@ -246,7 +243,7 @@ export interface ActionTemplate {
   /** Prompt text sent to the model. */
   prompt: string;
   resultKind: ActionResultKind;
-  /** `'note-summary'` for the built-in (editable, not deletable); `null` otherwise. */
+  /** The built-in id (editable, not deletable); `null` for a user template. */
   builtin: BuiltinAction | null;
 }
 
@@ -338,18 +335,6 @@ export interface PluginsConfig {
 export interface TemplatesConfig {
   /** Vault-relative folder, forward-slash, no leading/trailing slash. */
   dir: string;
-}
-
-/** Settings category "KI-Assistent": the note assistant panel's defaults. */
-export interface AssistantConfig {
-  /**
-   * Pre-set of the panel's "Automatic summary" switch when a
-   * note is opened. The panel switch overrides it for that note only and
-   * never writes back here -- the default is changed in Settings, on
-   * purpose, so a one-off "not for this note" cannot silently become the
-   * new rule.
-   */
-  autoSummaryDefault: boolean;
 }
 
 /**
@@ -574,7 +559,6 @@ export interface AppConfig {
   /** Bumped only on a breaking shape change; `normalizeAppConfig` migrates. */
   version: 1;
   llm: LlmConfig;
-  assistant: AssistantConfig;
   spellcheck: SpellcheckConfig;
   editor: EditorConfig;
   appearance: AppearanceConfig;
@@ -599,18 +583,9 @@ export const BUNDLED_DICTIONARIES: ReadonlyArray<{ id: string; label: string }> 
 
 /** Stable ids so `normalizeAppConfig` can re-attach a user's edits to the built-ins. */
 export const BUILTIN_TEMPLATE_IDS: Record<BuiltinAction, string> = {
-  'note-summary': 'builtin:note-summary',
   'search-summary': 'builtin:search-summary',
   autotag: 'builtin:autotag',
 };
-
-/**
- * The system prompt behind the note assistant's automatic summary (the
- * first card in a note's sidecar thread, `shared/chat-thread.ts`). Short
- * on purpose: the card sits in a 340px panel, so anything longer than a
- * few sentences is scrolled past rather than read.
- */
-export const NOTE_SUMMARY_PROMPT = `Summarise a note for the sidebar. Write 1 to 3 full sentences, no bullet points, no greeting, no heading. Say only what the note is about. Return the summary text and nothing else.`;
 
 /**
  * The system prompt for the tag-search "Summarise" button: the matching

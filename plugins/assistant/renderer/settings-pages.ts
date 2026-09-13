@@ -1,9 +1,9 @@
 /**
- * The Assistant plugin's two Settings pages (ADR-0044 stage 7), ported from
- * `src/app/settings/assistant/` and `src/app/settings/actions/` to plain
- * DOM. Per ADR-0044 rule 3 they save immediately through
- * `api.appConfig.patch` — no draft/Save/Discard (that flow is the base
- * categories'); each patch is a read-modify-write of the live config.
+ * The Assistant plugin's Settings page (ADR-0044 stage 7), ported from
+ * `src/app/settings/actions/` to plain DOM. Per ADR-0044 rule 3 it saves
+ * immediately through `api.appConfig.patch` — no draft/Save/Discard (that
+ * flow is the base categories'); each patch is a read-modify-write of the
+ * live config.
  *
  * The Actions page is the engine's config UI: triggers (which template on
  * which event) and the prompt template library. `normalizeAppConfig`
@@ -42,84 +42,6 @@ async function patchSection<K extends keyof AppConfig>(
   const section = structuredClone(config[key]);
   change(section);
   await api.appConfig.patch({ [key]: section } as unknown as Partial<AppConfig>);
-}
-
-// -- Assistant page ----------------------------------------------------------
-
-/**
- * One switch: the default state of the panel's "Automatic summary" toggle.
- * It is a *default*, not the switch itself — the panel's own toggle
- * overrides it per note and never writes back here. `onPatched` fires after
- * every change so the panel's renderer entry can refresh its cached view of
- * the config (patches are immediate, rule 3).
- */
-export function assistantSettingsPage(
-  api: DreyPluginApi,
-  onPatched: () => void,
-): PluginSettingsPageContrib {
-  return {
-    id: 'assistant',
-    label: 'Assistant',
-    hint: 'Note summary panel',
-    mount(root) {
-      root.classList.add('assistant-settings');
-      root.appendChild(el('h2', undefined, 'Assistant'));
-
-      const switchRow = el('label', 'switch-row');
-      const checkbox = el('input') as HTMLInputElement;
-      checkbox.type = 'checkbox';
-      const text = el('span');
-      text.appendChild(el('span', 'switch-label', 'Summarise notes automatically by default'));
-      text.appendChild(
-        el(
-          'span',
-          'switch-hint',
-          'Pre-sets the switch in each note’s assistant panel. The switch there overrides this default for the open note only — it never changes the default itself.',
-        ),
-      );
-      switchRow.append(checkbox, text);
-      root.appendChild(switchRow);
-
-      root.appendChild(
-        el(
-          'p',
-          'note',
-          'A note is only summarised when it is opened for the first time and has no chat file beside it yet. The summary becomes the first card of the thread and is stored in .<name>.chat.json next to the note — never inside the note.',
-        ),
-      );
-
-      const warn = el(
-        'p',
-        'warn',
-        'LLM features are off — nothing is summarised regardless of this switch.',
-      );
-      root.appendChild(warn);
-
-      root.appendChild(
-        el(
-          'p',
-          'note',
-          'Edit the prompt under Actions → the “Summarise note” template.',
-        ),
-      );
-
-      const render = (config: AppConfig): void => {
-        checkbox.checked = config.assistant.autoSummaryDefault;
-        warn.style.display = config.llm.enabled ? 'none' : '';
-      };
-      checkbox.addEventListener('change', () => {
-        void patchSection(api, 'assistant', (section) => {
-          section.autoSummaryDefault = checkbox.checked;
-        }).then(onPatched);
-      });
-
-      void api.appConfig.get().then(render);
-      // Settings pages save immediately; a patch from the confirmation
-      // dialog's "don't ask again" lands in the live config, so this page
-      // reads fresh on every mount (the Settings screen re-mounts it).
-      return () => {};
-    },
-  };
 }
 
 // -- Actions page ------------------------------------------------------------
@@ -169,7 +91,7 @@ export function actionsSettingsPage(
         el(
           'p',
           'section-hint',
-          'A template is a name, a prompt, and the kind of change it makes. “Autotagging” suggests tags for the entry drawer; “Update summary” rebuilds a master document’s Summary section; “Summarise note” writes the assistant panel’s first card.',
+          'A template is a name, a prompt, and the kind of change it makes. “Autotagging” suggests tags for the entry drawer; “Update summary” rebuilds a master document’s Summary section.',
         ),
       );
       const templateList = el('ul', 'templates');

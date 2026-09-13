@@ -6,27 +6,15 @@
  * Since ADR-0048 the conversation lives in a chat note under `chats/`
  * (the note IS the source of truth; the main-side engine persists every
  * turn and replays the full history). The renderer holds only *session*
- * state: which chat is active, the context chips (the open note — on by
- * default — extra files, images), a streaming buffer, and the per-note
- * auto-summary sidecar logic (ADR-0012, unchanged — summaries never
- * became conversations).
- *
- * The auto-summary switch is deliberately *session state*, not config: it
- * is seeded from `assistant.autoSummaryDefault` when a note is first
- * opened and overrides it for that note only. Auto-summary fires once per
- * note per session and only when there is no sidecar thread yet, so
- * re-opening a note never re-bills an LLM call for a summary that already
- * exists.
+ * state: which chat is active and the context chips (the open note — on
+ * by default — extra files, images), plus a streaming buffer.
  */
 import type { ActionOutcome } from '../../../shared/plugin-api';
 import type { AskRequest, AssistantOutcome } from '../shared/ask';
 import { MAX_EXTRA_FILES, MAX_IMAGES, truncateFileBody } from '../shared/ask.js';
-import type { ChatCard, ChatThread } from '../shared/chat-thread';
-import { emptyThread, hasSummary } from '../shared/chat-thread.js';
 import type { ChatNoteView, ChatSummary } from '../shared/chat-note';
-import { formatDateTime, ipcErrorMessage } from '../shared/format.js';
+import { ipcErrorMessage } from '../shared/format.js';
 import { type RunningTasks } from './running-tasks.js';
-import { uid } from './running-tasks.js';
 
 /** The text a cancelled generation reports. */
 const CANCELLED = 'Generation cancelled.';
@@ -46,8 +34,6 @@ export interface AssistantPorts {
   appendEdit(path: string, applied: boolean, after?: string): Promise<void>;
   /** Drops every turn from `turnIndex` on (restart-from-here). */
   truncate(path: string, turnIndex: number): Promise<void>;
-  /** One-shot sidecar import; returns the created chat note's path. */
-  importSidecar(notePath: string): Promise<{ chatPath: string }>;
   /**
    * Native file dialog for files NOT yet in the vault; each pick is staged
    * into the vault (chat attachments convention) and returned as chip
@@ -60,11 +46,6 @@ export interface AssistantPorts {
   /** Streamed answer text for a task this state started (`chat:delta`). */
   onDelta(listener: (event: { taskId: string; text: string }) => void): () => void;
 
-  // -- summary sidecar (ADR-0012, unchanged) -------------------------------
-  readThread(notePath: string): Promise<ChatThread>;
-  writeThread(thread: ChatThread): Promise<void>;
-  summarize(context: { path: string; body: string }, taskId?: string): Promise<string>;
-
   // -- shared --------------------------------------------------------------
   /**
    * A file's text for attachment: the live buffer when the file is open,
@@ -76,8 +57,6 @@ export interface AssistantPorts {
   activeDoc(): { path: string; body: string } | null;
   /** LLM master switch (live). */
   llmEnabled(): boolean;
-  /** Settings -> Assistant default. */
-  autoSummaryDefault(): boolean;
   /** Confirm-then-apply a rewrite (shared dialog; the host applies on confirm). */
   requestRewrite(request: {
     path: string;
@@ -118,15 +97,6 @@ export interface AssistantState {
   activeChatPath(): string | null;
   /** The active chat's parsed note; null when none is loaded. */
   view(): ChatNoteView | null;
-  /** The pinned auto-summary card of the active note, if any. */
-  summaryCard(): ChatCard | null;
-  /** True when the open note's sidecar has conversation cards to import. */
-  canImportSidecar(): boolean;
-  /** Effective state of the panel's switch for the active note. */
-  autoSummary(): boolean;
-  /** True when a manual "Summarise now" makes sense (no summary card yet). */
-  canSummarize(): boolean;
-  summarizing(): boolean;
   asking(): boolean;
   /** The in-flight generation's streamed text, when one is running. */
   streaming(): { taskId: string; text: string } | null;
@@ -139,8 +109,6 @@ export interface AssistantState {
   /** Clears the error/notice lines. */
   dismiss(): void;
   dismissActionMessage(): void;
-  /** The panel switch. Applies to this note only; the default is untouched. */
-  setAutoSummary(on: boolean): void;
   /**
    * Context chips (session state like the switch): whether the open note
    * itself rides along (default on), which extra files and images are
@@ -171,9 +139,6 @@ export interface AssistantState {
   openChat(path: string): Promise<void>;
   /** Next ask starts a new chat note. */
   newChat(): void;
-  summarizeNow(): Promise<void>;
-  /** One-shot, non-destructive sidecar import for the open note. */
-  importSidecar(): Promise<void>;
   /** Native dialog; stages external files into the vault and adds chips. Returns how many landed. */
   attachExternal(): Promise<number>;
   /** Sends a question; resolves false when it was not sent (so the composer can keep the text). */
@@ -200,12 +165,8 @@ export function createAssistantState(ports: AssistantPorts, tasks: RunningTasks)
   let activeChat: string | null = null;
   let view: ChatNoteView | null = null;
 
-  /** The active NOTE (for chips + auto-summary) — independent of the chat. */
+  /** The active NOTE (for chips + ask context) — independent of the chat. */
   let activePath: string | null = null;
-  /** Per-note summary sidecars, loaded on open. */
-  const threads = new Map<string, ChatThread>();
-  const toggles = new Map<string, boolean>();
-  const attempted = new Set<string>();
 
   /** Chips are keyed by the note path (or '' when no note is open). */
   const chipKey = (): string => activePath ?? '';
@@ -213,7 +174,6 @@ export function createAssistantState(ports: AssistantPorts, tasks: RunningTasks)
   const filesByNote = new Map<string, string[]>();
   const imagesByKey = new Map<string, string[]>();
 
-  let summarizing = false;
   let asking = false;
   /** Live edit (ADR-0049) — session flag, one toggle in the chips row. */
   let liveEdit = false;
@@ -272,109 +232,11 @@ export function createAssistantState(ports: AssistantPorts, tasks: RunningTasks)
     view = await ports.readChat(path);
   };
 
-  const appendCard = async (
-    path: string,
-    role: ChatCard['role'],
-    text: string,
-    durationMs?: number,
-  ): Promise<void> => {
-    const current = threads.get(path) ?? emptyThread(path);
-    const next: ChatThread = {
-      ...current,
-      notePath: path,
-      cards: [
-        ...current.cards,
-        {
-          id: uid(),
-          role,
-          text,
-          at: formatDateTime(new Date()),
-          ...(durationMs === undefined ? {} : { durationMs }),
-        },
-      ],
-    };
-    threads.set(path, next);
-    notify();
-    try {
-      await ports.writeThread(next);
-    } catch (err) {
-      // The thread stays in memory for this session; only persistence failed.
-      error = ipcErrorMessage(err);
-      notify();
-    }
-  };
-
-  const runSummary = async (path: string): Promise<void> => {
-    if (summarizing) {
-      return;
-    }
-    summarizing = true;
-    error = null;
-    notice = null;
-    notify();
-    try {
-      const doc = ports.activeDoc();
-      if (doc === null || doc.path !== path) {
-        throw new Error('This note is not open.');
-      }
-      const { value: text, durationMs } = await tasks.run('Summarising', (taskId) =>
-        ports.summarize({ path, body: doc.body }, taskId),
-      );
-      await appendCard(path, 'summary', text, durationMs);
-    } catch (err) {
-      report(err);
-      notify();
-    } finally {
-      summarizing = false;
-      notify();
-    }
-  };
-
-  /**
-   * The spec's rule: a note opened for the first time, with no sidecar
-   * thread yet and the switch on, gets its summary generated automatically.
-   * Everything else does nothing.
-   */
-  const maybeAutoSummarize = async (path: string): Promise<void> => {
-    if (attempted.has(path) || !autoSummary() || !ports.llmEnabled()) {
-      return;
-    }
-    const thread = threads.get(path);
-    if (!thread || thread.cards.length > 0) {
-      return;
-    }
-    attempted.add(path);
-    await runSummary(path);
-  };
-
-  const autoSummary = (): boolean => {
-    const override = activePath === null ? undefined : toggles.get(activePath);
-    return override ?? ports.autoSummaryDefault();
-  };
-
   return {
     notePath: () => activePath,
     chats: () => chats,
     activeChatPath: () => activeChat,
     view: () => view,
-    summaryCard: () => {
-      if (activePath === null) {
-        return null;
-      }
-      const cards = (threads.get(activePath) ?? emptyThread(activePath)).cards;
-      return [...cards].reverse().find((card) => card.role === 'summary') ?? null;
-    },
-    canImportSidecar: () => {
-      if (activePath === null) {
-        return false;
-      }
-      const cards = (threads.get(activePath) ?? emptyThread(activePath)).cards;
-      return cards.some((card) => card.role === 'question' || card.role === 'answer');
-    },
-
-    autoSummary,
-    canSummarize: () => activePath !== null && ports.llmEnabled() && !hasSummary(assistantThread()),
-    summarizing: () => summarizing,
     asking: () => asking,
     streaming: () => streaming,
     error: () => error,
@@ -388,19 +250,6 @@ export function createAssistantState(ports: AssistantPorts, tasks: RunningTasks)
     dismissActionMessage: () => {
       actionMessage = null;
       notify();
-    },
-
-    setAutoSummary(on) {
-      if (activePath === null) {
-        return;
-      }
-      toggles.set(activePath, on);
-      notify();
-      if (on) {
-        // Turning it on after the fact is the same ask as opening the note
-        // with it on -- summarise now if nothing has been written yet.
-        void maybeAutoSummarize(activePath);
-      }
     },
 
     noteIncluded: () => activePath !== null && !noteExcluded.has(activePath),
@@ -505,20 +354,6 @@ export function createAssistantState(ports: AssistantPorts, tasks: RunningTasks)
     async openNote(path) {
       activePath = path;
       notify();
-      if (!threads.has(path)) {
-        let thread = emptyThread(path);
-        try {
-          thread = await ports.readThread(path);
-        } catch {
-          error = 'Could not read the assistant thread for this note.';
-        }
-        // Another load may have finished first; keep whichever is there.
-        if (!threads.has(path)) {
-          threads.set(path, thread);
-        }
-        notify();
-      }
-      await maybeAutoSummarize(path);
     },
 
     closeNote() {
@@ -554,30 +389,6 @@ export function createAssistantState(ports: AssistantPorts, tasks: RunningTasks)
       error = null;
       notice = null;
       notify();
-    },
-
-    async summarizeNow() {
-      if (activePath === null) {
-        return;
-      }
-      attempted.add(activePath);
-      await runSummary(activePath);
-    },
-
-    async importSidecar() {
-      if (activePath === null || asking) {
-        return;
-      }
-      try {
-        const { chatPath } = await ports.importSidecar(activePath);
-        activeChat = chatPath;
-        notify();
-        await loadView(chatPath);
-        await refreshChats();
-      } catch (err) {
-        report(err);
-        notify();
-      }
     },
 
     async attachExternal() {
@@ -742,7 +553,7 @@ export function createAssistantState(ports: AssistantPorts, tasks: RunningTasks)
     },
 
     async restartFrom(turnIndex) {
-      if (activeChat === null || asking || summarizing || tasks.isRunning()) {
+      if (activeChat === null || asking || tasks.isRunning()) {
         return null;
       }
       const removed = view?.turns[turnIndex] ?? null;
@@ -785,9 +596,4 @@ export function createAssistantState(ports: AssistantPorts, tasks: RunningTasks)
       return () => listeners.delete(listener);
     },
   };
-
-  /** The active note's thread ('' path when nothing is open). */
-  function assistantThread(): ChatThread {
-    return activePath === null ? emptyThread('') : (threads.get(activePath) ?? emptyThread(activePath));
-  }
 }

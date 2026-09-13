@@ -2,10 +2,14 @@
 
 ## Status
 
-Accepted — implemented with the note assistant panel (Feature A).
-Since [ADR-0048](0048-chats-as-vault-notes.md) the sidecar carries only
-the automatic summary; conversations moved into chat notes under
-`chats/` (bug-10(b): the sidecar could not persist tool calls/results).
+**Superseded** — the automatic-summary feature was removed entirely
+(req: no LLM generation on open, no sidecar writes; existing
+`.{name}.chat.json` files stay on disk but nothing reads or writes them).
+Since [ADR-0048](0048-chats-as-vault-notes.md) conversations live in chat
+notes under `chats/` (bug-10(b): the sidecar could not persist tool
+calls/results). The sidecar storage format itself proved the right call
+while the feature existed; the feature — a summary generated on first
+open — is what the owner removed.
 
 ## Context
 

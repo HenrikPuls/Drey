@@ -43,13 +43,6 @@ One file per calendar day, nested by year/month. Created by quick-capture
 from `templates/daily.md`, entries appended as `## HH:mm` headings.
 Indexed for tag search. Path handling: `shared/daily.ts`.
 
-## Assistant sidecars — `.{name}.chat.json`
-
-Store a note's automatic summary beside the note
-(`daily/2026/09/2026-09-26.md` → `.2026-09-26.chat.json`). Not part of the
-note schema; the dot prefix keeps them out of the file tree and tag index.
-The content is derived and can be regenerated.
-
 ## Chat notes — `chats/<year>/<month>/<date>-<slug>.md`
 
 Standalone Markdown notes with `kind: chat` frontmatter (plus assistant
