@@ -279,7 +279,14 @@ Renderer (Angular):
   raise the exit prompt — only the user's own notes do. (The old
   auto-summary sidecar feature was removed entirely — ADR-0012
   superseded; pre-existing `.{name}.chat.json` files stay on disk,
-  unread.) Manual
+  unread.) **Chats are bound to the active document**: a chat note's
+  `note:` frontmatter holds the doc key it was started under, the panel
+  follows tab switches (newest bound chat opens; a non-note focus resets
+  to a fresh chat), and the picker / new-chat button still allow manual
+  chats — honoured until the next document switch. A "Prompts" picker in
+  the composer inserts a prompt from `templates/prompts/*.md`
+  (`# Titel` / `> Beschreibung` / body) into the composer for editing.
+  Manual
   Actions live in the editor `⋯` menu as `editor-more` menu contributions.
   **Live edit** (ADR-0049): a "Live edit" chip in the composer opts one
   ask turn into immediate-apply editing — the model edits the open note
@@ -436,7 +443,9 @@ be called out explicitly (see Working Style below), not introduced silently.
     icon for a new chat), turn cards with collapsible tool chips, a
     streamed partial answer while generating (the transcript follows the
     stream; scrolling up unpins), and the
-    composer (context chips incl. images, auto-grow, model row). No
+    composer (context chips incl. images, a Prompts picker, auto-grow,
+    model row). The panel follows the focused document (each note's
+    newest chat; a non-note focus shows a fresh chat). No
     bottom chat bar; capture lives in the Add entry panel.
   - **Settings**: a full-surface overlay opened from the status-bar entry
     — master-detail (category list on the left, detail pane on the

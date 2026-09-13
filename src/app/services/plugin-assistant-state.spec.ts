@@ -35,7 +35,9 @@ interface Harness {
   /** Vault files the readVaultFile port serves; anything else reads as null. */
   vaultFiles: Map<string, string>;
   /** The "active document" the ports report; null = nothing text-shaped open. */
-  setActive(path: string | null, body?: string): void;
+  setActive(path: string | null, body?: string, vaultId?: string | null): void;
+  /** The vaultId the active document port reports (null = unbound scratch). */
+  setActiveVaultId(vaultId: string | null): void;
   llm: { on: boolean };
   /** The outcome the fake ask port returns next. */
   nextOutcome: AssistantOutcome;
@@ -48,8 +50,10 @@ function viewOf(text: string): ChatNoteView {
 }
 
 function summaryOf(path: string, text: string): ChatSummary {
-  void text;
-  return { path, title: path, updated: null };
+  // Mirrors ChatStore.listChats: parse each note, surface `note:`, sort
+  // by `updated:` descending (newest first).
+  const view = viewOf(text);
+  return { path, title: view.frontmatter.title ?? path, updated: view.frontmatter.updated, note: view.frontmatter.note };
 }
 
 function setup(options: { llm?: boolean } = {}): Harness {
@@ -79,6 +83,9 @@ function setup(options: { llm?: boolean } = {}): Harness {
       activePath = path;
       activeBody = body ?? '# Note\n\nInhalt\n';
     },
+    setActiveVaultId: (vaultId) => {
+      activeVaultId = vaultId;
+    },
     nextOutcome: { kind: 'answer', text: 'Antwort.' },
     askGate: null,
     state: undefined as never,
@@ -86,13 +93,16 @@ function setup(options: { llm?: boolean } = {}): Harness {
   };
   let activePath: string | null = null;
   let activeBody = '';
+  let activeVaultId: string | null = 'v1';
   let chatCounter = 0;
 
   const tasks = createRunningTasks(async () => true);
 
   const ports: AssistantPorts = {
     listChats: async () =>
-      [...chatNotes.keys()].map((path) => summaryOf(path, path)),
+      [...chatNotes.entries()]
+        .map(([path, text]) => summaryOf(path, text))
+        .sort((a, b) => (b.updated ?? '').localeCompare(a.updated ?? '')),
     readChat: async (path) => {
       const text = chatNotes.get(path);
       if (text === undefined) {
@@ -133,7 +143,8 @@ function setup(options: { llm?: boolean } = {}): Harness {
     },
     readVaultFile: async (path) => vaultFiles.get(path) ?? null,
     cancel: async () => undefined,
-    activeDoc: () => (activePath === null ? null : { path: activePath, body: activeBody }),
+    activeDoc: () =>
+      activePath === null ? null : { path: activePath, body: activeBody, vaultId: activeVaultId },
     llmEnabled: () => h.llm.on,
     requestRewrite: async (request) => {
       rewrites.push({ path: request.path, title: request.title });
@@ -182,6 +193,7 @@ describe('assistant plugin state — chat-first asks (ADR-0048)', () => {
       images: ['attachments/pic.png'],
       chatPath: null,
       liveEdit: false,
+      noteKey: 'v1::a.md',
     });
   });
 
@@ -290,6 +302,79 @@ describe('assistant plugin state — chat-first asks (ADR-0048)', () => {
 
     await h.state.ask('zweite');
     expect(h.asks[1]?.chatPath).toBeNull();
+  });
+});
+
+describe('assistant plugin state — following the active document (chat binding)', () => {
+  /** A chat note bound to `v1::a.md`, oldest first. */
+  function boundChat(name: string, updated: string, note: string | null): [string, string] {
+    const noteLine = note === null ? '' : `\nnote: "${note}"`;
+    return [
+      `chats/2026/09/${name}.md`,
+      `---\nkind: chat\ntitle: ${name}${noteLine}\ncreated: 2026-09-13\nupdated: ${updated}\n---\n`,
+    ];
+  }
+
+  it('opens the newest chat bound to the active document', async () => {
+    const h = setup();
+    h.chatNotes.set(...boundChat('old', '2026-09-13T10:00:00', 'v1::a.md'));
+    h.chatNotes.set(...boundChat('new', '2026-09-13T12:00:00', 'v1::a.md'));
+    h.chatNotes.set(...boundChat('other', '2026-09-13T13:00:00', 'v1::b.md'));
+
+    await h.state.followActiveDoc('v1::a.md');
+
+    expect(h.state.activeChatPath()).toBe('chats/2026/09/new.md');
+  });
+
+  it('resets to a fresh chat when no chat is bound to the document', async () => {
+    const h = setup();
+    h.chatNotes.set(...boundChat('other', '2026-09-13T13:00:00', 'v1::b.md'));
+    await h.state.followActiveDoc('v1::a.md'); // binds nothing
+    expect(h.state.activeChatPath()).toBeNull();
+
+    // A previously open chat does not survive the switch to an unbound doc.
+    h.chatNotes.set(...boundChat('mine', '2026-09-13T09:00:00', null));
+    await h.state.openChat('chats/2026/09/mine.md');
+    expect(h.state.activeChatPath()).toBe('chats/2026/09/mine.md');
+
+    await h.state.followActiveDoc('v1::a.md');
+    expect(h.state.activeChatPath()).toBeNull();
+  });
+
+  it('a bound chat already open stays put (no reload churn on docs-changed)', async () => {
+    const h = setup();
+    h.chatNotes.set(...boundChat('mine', '2026-09-13T10:00:00', 'v1::a.md'));
+    await h.state.followActiveDoc('v1::a.md');
+    const before = h.state.activeChatPath();
+
+    await h.state.followActiveDoc('v1::a.md');
+    expect(h.state.activeChatPath()).toBe(before);
+  });
+
+  it('is skipped while a generation runs', async () => {
+    const h = setup();
+    h.chatNotes.set(...boundChat('mine', '2026-09-13T10:00:00', 'v1::a.md'));
+    h.setActive('a.md');
+    h.askGate = new Promise(() => undefined); // the ask never resolves
+    void h.state.ask('wartet');
+    expect(h.state.asking()).toBe(true);
+
+    await h.state.followActiveDoc(null);
+
+    // Not reset to fresh: the running generation's chat stays active.
+    expect(h.state.activeChatPath()).toBeNull(); // still the pre-ask fresh state
+  });
+
+  it('a superseded follow never lands (rapid A → B switches)', async () => {
+    const h = setup();
+    h.chatNotes.set(...boundChat('a-chat', '2026-09-13T10:00:00', 'v1::a.md'));
+
+    const first = h.state.followActiveDoc('v1::a.md');
+    const second = h.state.followActiveDoc('v1::b.md');
+    await Promise.all([first, second]);
+
+    // The b-follow decided "fresh"; the slower a-follow must not reopen.
+    expect(h.state.activeChatPath()).toBeNull();
   });
 });
 

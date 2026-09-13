@@ -77,6 +77,13 @@ export interface ChatNoteFrontmatter {
   title: string | null;
   created: string | null;
   updated: string | null;
+  /**
+   * The document the chat is bound to, as the app's doc key
+   * (`vaultId::relativePath`); null/absent = an unbound chat (req: the
+   * panel follows the active document — switching to a note opens the
+   * newest chat bound to it).
+   */
+  note: string | null;
 }
 
 export interface ChatNoteView {
@@ -89,6 +96,8 @@ export interface ChatSummary {
   path: string;
   title: string;
   updated: string | null;
+  /** The bound document's doc key, or null for an unbound chat. */
+  note: string | null;
 }
 
 const EMPTY_FRONTMATTER: ChatNoteFrontmatter = {
@@ -99,6 +108,7 @@ const EMPTY_FRONTMATTER: ChatNoteFrontmatter = {
   title: null,
   created: null,
   updated: null,
+  note: null,
 };
 
 /**
@@ -173,6 +183,7 @@ export function readChatNoteFrontmatter(noteText: string): ChatNoteFrontmatter {
     title: scalar('title'),
     created: scalar('created'),
     updated: scalar('updated'),
+    note: scalar('note'),
   };
 }
 

@@ -119,6 +119,7 @@ export class ChatEngine {
         request.question,
         config.llm.provider,
         config.llm.model,
+        request.noteKey,
       );
       chatPath = fresh.path;
       await this.store.save(fresh.path, fresh.content);

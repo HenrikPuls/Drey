@@ -76,7 +76,7 @@ const plugin: PluginRendererModule = {
       activeDoc: () => {
         const active = api.documents.active();
         return active !== null && active.kind === 'text'
-          ? { path: active.path, body: active.buffer }
+          ? { path: active.path, body: active.buffer, vaultId: active.vaultId }
           : null;
       },
       llmEnabled: () => api.llm.enabled(),
@@ -102,13 +102,25 @@ const plugin: PluginRendererModule = {
       }
     });
 
-    // -- active-note tracking (the auto-summary rule fires on tab switches) ----
+    // -- active-document tracking (chips) + chat binding (req: the panel
+    // follows the open note — a tab switch opens that document's newest
+    // chat, a non-note focus resets to a fresh unbound chat) --------------
+    /** The last doc key followActiveDoc was called with; undefined = never. */
+    let lastFollowKey: string | null | undefined = undefined;
     const trackActive = (): void => {
       const active = api.documents.active();
       if (active !== null && active.kind === 'text') {
         void state.openNote(active.path);
       } else {
         state.closeNote();
+      }
+      const key =
+        active !== null && active.kind === 'text' && active.vaultId !== null
+          ? `${active.vaultId}::${active.path}`
+          : null;
+      if (key !== lastFollowKey) {
+        lastFollowKey = key;
+        void state.followActiveDoc(key);
       }
     };
     trackActive();

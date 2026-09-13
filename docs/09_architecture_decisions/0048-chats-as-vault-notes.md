@@ -137,3 +137,24 @@ persisted with full fidelity and replayed in full.
   inside the modal (labels, padding, row gaps), tearing the overlay down
   mid-press and swallowing the subsequent `click` (removed-subtree
   suppression), which read as "clicks pass through the modal".
+
+## Later change — chats bound to the active document
+
+- **`note:` frontmatter** (a doc key `vaultId::relativePath`, quoted)
+  records which document a chat belongs to; absent for an unbound chat.
+  `ChatStore.create` writes it from the ask request's `noteKey` — the
+  focused document at send time, regardless of whether the note chip rides
+  along (the binding is the workspace the chat was started in, not a
+  per-turn context choice).
+- **The panel follows the active document**: a tab switch looks up the
+  newest chat bound to that doc key and opens it; a document with no chat
+  (or a non-note focus) resets the panel to a fresh chat. Generation runs
+  are not interrupted, and a stale in-flight follow never lands. Manual
+  chat picks (picker, "+ New chat") stay — honoured until the next
+  document switch. Old unbound chats remain listable and openable.
+- **Prompt picker instead of the summary**: with the ADR-0012 summary
+  removed, the composer's meta row gained a "Prompts" picker over
+  `templates/prompts/*.md` (owner format: `# Titel`, `> Beschreibung`,
+  prompt body; missing description = `""`, missing title = file name).
+  Picking replaces the composer's text — the user reviews and sends it as
+  a normal question; no placeholder substitution.

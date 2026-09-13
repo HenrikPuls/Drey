@@ -46,7 +46,10 @@ Indexed for tag search. Path handling: `shared/daily.ts`.
 ## Chat notes — `chats/<year>/<month>/<date>-<slug>.md`
 
 Standalone Markdown notes with `kind: chat` frontmatter (plus assistant
-fields `provider`, `model`, optionally `session`). Body: one `## User` /
+fields `provider`, `model`, optionally `session`, and `note` — the bound
+document as `vaultId::relativePath`; absent for an unbound chat, and the
+assistant panel follows the active document: switching to a note opens the
+newest chat bound to it). Body: one `## User` /
 `## Assistant` heading per turn, with tool calls persisted in
 ```drey-tool fenced blocks. `chats/` is created on demand and **is**
 indexed. Chat notes are auto-saved by the engine and never trigger the

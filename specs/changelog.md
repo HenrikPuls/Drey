@@ -14,6 +14,34 @@ and the current architecture in
 
 ## Recent milestones
 
+### Milestone 29 — UX batch: icon buttons, tooltips, assistant overhaul, capture fix
+
+Seven owner requests in one pass:
+
+- **Editor meta bar**: the Lines and Save controls are icon-only buttons
+  (state stays visible via the on/dirty tints and the title/aria-label
+  "Saving…"/"Save"/"Saved"); a Lucide `save` glyph joined the icon map.
+- **Files panel**: hovering a file or folder row shows its absolute path
+  (vault root + relative path, separator matched to the root).
+- **Assistant**: the transcript auto-follows the streamed answer
+  (stick-to-bottom, scrolling up unpins); "+ New chat" is an icon button;
+  the automatic summary is **removed entirely** (ADR-0012 superseded — no
+  summary card/switch/IPC/`note-summary` template/Assistant settings
+  page; stale `builtin:note-summary` entries in existing configs are
+  dropped, old `.chat.json` sidecars stay on disk untouched); in its place
+  a **Prompts picker** reads `templates/prompts/*.md` (`# Titel` /
+  `> Beschreibung` / body) and inserts the body into the composer.
+- **Chats bind to the active document**: a chat note's `note:` frontmatter
+  records the doc key it was started under; switching tabs opens that
+  document's newest chat (a non-note focus shows a fresh chat), while the
+  picker and "+ New chat" keep manual chats possible.
+- **Bug fix — files no longer modified on open**: the editor's per-id
+  request signals (quick-capture entry, assistant insert, reveal-at-line)
+  were deduplicated per component instance, so every freshly mounted
+  editor re-applied the last pending request — one quick capture earlier
+  in the session gave *every* later-opened file a `## HH:mm` entry.
+  Consumption is now claimed once, globally, in `EditorCommandsService`.
+
 ### Milestone 28 — multi-vault registry (ADR-0051)
 
 The app knows **several vaults at once**: the Files panel shows one

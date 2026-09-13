@@ -22,6 +22,7 @@ const VALID = {
   images: ['attachments/pic.png'],
   chatPath: 'chats/2026/09/2026-09-13-topic.md',
   liveEdit: false,
+  noteKey: 'v1::a.md',
 };
 
 describe('assistant plugin ask contract (plugins/assistant/shared/ask)', () => {
@@ -46,7 +47,15 @@ describe('assistant plugin ask contract (plugins/assistant/shared/ask)', () => {
     expect(parsed.request.extraFiles).toEqual([]);
     expect(parsed.request.images).toEqual([]);
     expect(parsed.request.chatPath).toBeNull();
+    // An absent noteKey (an older renderer) degrades to an unbound chat.
+    expect(parsed.request.noteKey).toBeNull();
     expect(parsed.taskId).toBeUndefined();
+  });
+
+  it('rejects a non-string noteKey', () => {
+    expect(() => parseAskPayload({ ...VALID, noteKey: 42 })).toThrow(
+      'malformed ask payload: noteKey must be a doc key or null',
+    );
   });
 
   it('rejects a payload without a string question', () => {

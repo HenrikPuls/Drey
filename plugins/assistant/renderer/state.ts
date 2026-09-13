@@ -53,8 +53,8 @@ export interface AssistantPorts {
    */
   readVaultFile(path: string): Promise<string | null>;
   cancel(taskId?: string): Promise<void>;
-  /** The active document's path + buffer, or null. */
-  activeDoc(): { path: string; body: string } | null;
+  /** The active document's path + buffer + owning vault, or null. */
+  activeDoc(): { path: string; body: string; vaultId: string | null } | null;
   /** LLM master switch (live). */
   llmEnabled(): boolean;
   /** Confirm-then-apply a rewrite (shared dialog; the host applies on confirm). */
@@ -131,10 +131,17 @@ export interface AssistantState {
   /** Adds an image chip (a vault-relative path); reason string when refused. */
   addImage(path: string): { ok: boolean; reason?: string };
   removeImage(path: string): void;
-  /** Runs the openNote rule: load the summary sidecar, then maybe auto-summarise. */
+  /** Runs the openNote rule: track the note for the chips. */
   openNote(path: string): Promise<void>;
   /** Nothing text-shaped is active (a browser tab, or no pane). */
   closeNote(): void;
+  /**
+   * Follows the active document (req: the panel is bound to the open
+   * note): opens the NEWEST chat bound to that doc key, or resets to a
+   * fresh chat when none is. Skipped while a generation runs; a stale
+   * in-flight follow (superseded by a newer switch) never lands.
+   */
+  followActiveDoc(noteKey: string | null): Promise<void>;
   /** Loads a chat into the panel (the picker's click). */
   openChat(path: string): Promise<void>;
   /** Next ask starts a new chat note. */
@@ -175,6 +182,8 @@ export function createAssistantState(ports: AssistantPorts, tasks: RunningTasks)
   const imagesByKey = new Map<string, string[]>();
 
   let asking = false;
+  /** Counts followActiveDoc calls so a slow listChats can't clobber a newer switch. */
+  let followSeq = 0;
   /** Live edit (ADR-0049) — session flag, one toggle in the chips row. */
   let liveEdit = false;
   let streaming: { taskId: string; text: string } | null = null;
@@ -363,6 +372,34 @@ export function createAssistantState(ports: AssistantPorts, tasks: RunningTasks)
       }
     },
 
+    async followActiveDoc(noteKey) {
+      if (asking) {
+        return; // a running generation keeps its chat; the next switch re-follows
+      }
+      const seq = ++followSeq;
+      let candidates: ChatSummary[];
+      try {
+        candidates = await ports.listChats();
+      } catch {
+        return; // the picker keeps whatever it had; nothing to follow against
+      }
+      if (seq !== followSeq || asking) {
+        return; // superseded by a newer switch / a generation started meanwhile
+      }
+      chats = candidates;
+      chatsLoaded = true;
+      const bound = noteKey === null
+        ? undefined
+        : chats.find((chat) => chat.note === noteKey); // listChats: newest first
+      if (bound !== undefined && bound.path !== activeChat) {
+        await this.openChat(bound.path);
+        return;
+      }
+      if (bound === undefined && activeChat !== null) {
+        this.newChat();
+      }
+    },
+
     async openChat(path) {
       if (asking) {
         return;
@@ -435,15 +472,20 @@ export function createAssistantState(ports: AssistantPorts, tasks: RunningTasks)
       notice = null;
       notify();
       try {
-        // The note chip rides with the live, unsaved buffer — the same
-        // "what you see is what the model gets" rule as before chips.
+        // The focused document decides both context and binding: the note
+        // chip rides with the live, unsaved buffer (the same "what you see
+        // is what the model gets" rule as before chips), and the chat's
+        // `note:` binding is the focused doc key — even when the chip is
+        // off, the chat belongs to the workspace it was started in.
+        const active = ports.activeDoc();
+        const noteKey =
+          active !== null && active.vaultId !== null ? `${active.vaultId}::${active.path}` : null;
         let note: AskRequest['note'] = null;
         if (includeNote) {
-          const doc = ports.activeDoc();
-          if (doc === null) {
+          if (active === null) {
             throw new Error('This note is not open.');
           }
-          note = { path: doc.path, body: doc.body };
+          note = { path: active.path, body: active.body };
         }
         // Extra files are read at send time (open tabs as their live
         // buffer, the rest from disk); ones that vanished from the vault
@@ -474,6 +516,7 @@ export function createAssistantState(ports: AssistantPorts, tasks: RunningTasks)
           // The flag alone is not enough: after a tab switch the attached
           // note could be a chats/ auto-save note — never a live target.
           liveEdit: liveEdit && note !== null && isLiveEditablePath(note.path),
+          noteKey,
         };
         // While the model edits the document, the user cannot: the lock
         // covers the whole turn and releases on success, error AND cancel.

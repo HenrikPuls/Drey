@@ -64,6 +64,35 @@ describe('ChatStore — create', () => {
     const { path } = await store.create(NOW, 'Topic', 'zai-glm', null);
     expect(path).toBe('chats/2026/09/2026-09-13-topic-2.md');
   });
+
+  it('writes a quoted note: binding when a doc key is given, omits it when null', async () => {
+    const vault = fakeVault();
+    const store = new ChatStore(vault.ports);
+
+    const bound = await store.create(NOW, 'Bound', 'zai-glm', null, 'v1::daily/a.md');
+    expect(bound.content).toContain('note: "v1::daily/a.md"');
+    const boundView = parseChatNote(bound.content);
+    expect(boundView.frontmatter.note).toBe('v1::daily/a.md');
+
+    const unbound = await store.create(NOW, 'Unbound 2', 'zai-glm', null, null);
+    expect(unbound.content).not.toContain('note:');
+    expect(parseChatNote(unbound.content).frontmatter.note).toBeNull();
+  });
+
+  it('listChats surfaces the note binding, newest first', async () => {
+    const vault = fakeVault({
+      'chats/2026/09/2026-09-13-old.md':
+        '---\nkind: chat\ntitle: Old\nnote: "v1::a.md"\nupdated: "2026-09-13T10:00:00"\n---\n',
+      'chats/2026/09/2026-09-13-new.md':
+        '---\nkind: chat\ntitle: New\nupdated: "2026-09-13T11:00:00"\n---\n',
+    });
+    const store = new ChatStore(vault.ports);
+    const chats = await store.listChats();
+
+    expect(chats.map((chat) => chat.title)).toEqual(['New', 'Old']);
+    expect(chats[0]?.note).toBeNull();
+    expect(chats[1]?.note).toBe('v1::a.md');
+  });
 });
 
 describe('ChatStore — append / truncate / outcomes', () => {

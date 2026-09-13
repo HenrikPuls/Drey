@@ -53,13 +53,17 @@ export class ChatStore {
   /**
    * The path for a new chat: date + slug of the first question, uniqued
    * against the current `chats/` siblings. Returns the path and the
-   * initial note text (frontmatter fence, no turns yet).
+   * initial note text (frontmatter fence, no turns yet). `noteKey` — the
+   * focused document's doc key (`vaultId::relativePath`) — is written as
+   * the chat's `note:` binding when present (req: the panel follows the
+   * active document).
    */
   async create(
     now: Date,
     firstQuestion: string,
     provider: string,
     model: string | null,
+    noteKey: string | null = null,
   ): Promise<{ path: string; content: string }> {
     const dateStr = toDateStr(now);
     const path = await this.freePath(dateStr, firstQuestion);
@@ -70,6 +74,10 @@ export class ChatStore {
     }
     doc.set('provider', plainScalar(provider));
     doc.set('title', quotedScalar(firstTitle(firstQuestion)));
+    if (noteKey !== null) {
+      // Quoted: the `::` separator must not parse as a YAML mapping.
+      doc.set('note', quotedScalar(noteKey));
+    }
     doc.set('created', quotedScalar(toDateStr(now)));
     doc.set('updated', quotedScalar(toTimestamp(now)));
     let yaml = doc.toString({ flowCollectionPadding: false, lineWidth: 0 });
@@ -149,6 +157,7 @@ export class ChatStore {
           path,
           title: view.frontmatter.title ?? path,
           updated: view.frontmatter.updated,
+          note: view.frontmatter.note,
         });
       } catch {
         // A vanished or unreadable file just drops from the picker.

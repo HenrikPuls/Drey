@@ -231,6 +231,7 @@ const ASK = {
   images: [] as string[],
   chatPath: null as string | null,
   liveEdit: false,
+  noteKey: 'v1::a.md' as string | null,
 };
 
 describe('assistant plugin chat engine — persistence (bug-10b)', () => {
@@ -243,11 +244,20 @@ describe('assistant plugin chat engine — persistence (bug-10b)', () => {
     const view = parseChatNote(h.files.get(chatPath)!);
     expect(view.frontmatter.kind).toBe('chat');
     expect(view.frontmatter.model).toBe('glm-4.7');
+    // The chat is bound to the focused document (the `noteKey` doc key).
+    expect(view.frontmatter.note).toBe('v1::a.md');
     expect(view.turns).toHaveLength(2);
     expect(view.turns[0]).toMatchObject({ role: 'user', text: 'Worum geht es?' });
     expect(view.turns[1]).toMatchObject({ role: 'assistant', text: 'Antwort.' });
     expect(view.turns[1].meta.model).toBe('glm-4.7');
     expect(view.turns[1].meta.durationMs).toBeGreaterThanOrEqual(0);
+  });
+
+  it('a null noteKey creates an unbound chat (no note: frontmatter)', async () => {
+    const h = chatHarness();
+    const { chatPath } = await h.engine.ask({ ...ASK, noteKey: null });
+    const view = parseChatNote(h.files.get(chatPath)!);
+    expect(view.frontmatter.note).toBeNull();
   });
 
   it('continues the given chatPath and full-replays the persisted history', async () => {

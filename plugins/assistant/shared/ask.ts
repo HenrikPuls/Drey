@@ -46,6 +46,14 @@ export interface AskRequest {
   chatPath: string | null;
   /** Immediate-apply editing for this turn (ADR-0049). */
   liveEdit: boolean;
+  /**
+   * The focused document's doc key (`vaultId::relativePath`) at send time —
+   * the new chat's `note:` binding (req: the panel follows the active
+   * document). Independent of the note chip: even a chat with the chip off
+   * belongs to the workspace it was started in. `null` when nothing
+   * text-shaped is focused or the tab carries no vaultId (scratch).
+   */
+  noteKey: string | null;
 }
 
 /**
@@ -97,7 +105,7 @@ export function parseAskPayload(payload: unknown): {
   taskId?: string;
 } {
   const shape = (payload ?? {}) as Record<string, unknown>;
-  const { question, note, extraFiles, images, chatPath, liveEdit, taskId } = shape;
+  const { question, note, extraFiles, images, chatPath, liveEdit, noteKey, taskId } = shape;
   if (typeof question !== 'string') {
     throw new Error('malformed ask payload');
   }
@@ -119,6 +127,9 @@ export function parseAskPayload(payload: unknown): {
   if (liveEdit && note === null) {
     throw new Error('malformed ask payload: liveEdit requires an attached note');
   }
+  if (noteKey !== undefined && noteKey !== null && typeof noteKey !== 'string') {
+    throw new Error('malformed ask payload: noteKey must be a doc key or null');
+  }
   return {
     request: {
       question,
@@ -127,6 +138,7 @@ export function parseAskPayload(payload: unknown): {
       images: images as string[],
       chatPath,
       liveEdit,
+      noteKey: noteKey === undefined ? null : (noteKey as string | null),
     },
     ...(typeof taskId === 'string' ? { taskId } : {}),
   };
