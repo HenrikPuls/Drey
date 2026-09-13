@@ -1,6 +1,6 @@
 import { test, expect } from './fixtures/drey';
 
-/** The chipmunk mark in the titlebar, and the About pane. */
+/** The app mark in the titlebar, and the About pane. */
 test('the titlebar shows the icon (not a plain square)', async ({ page }) => {
   const mark = page.locator('app-titlebar .brand .mark');
   await expect(mark).toHaveJSProperty('tagName', 'IMG');

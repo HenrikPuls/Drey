@@ -1,6 +1,6 @@
 /**
  * Builds the app icons from the supplied logo `build/logo-source.png` --
- * a transparent, roughly framed rendering of the chipmunk mark. The mark
+ * a transparent, roughly framed rendering of the app mark. The mark
  * is trimmed to its bounding box and recentred near edge-to-edge in a
  * square (Windows/macOS/Linux and the taskbar all add their own padding),
  * kept fully transparent, then written out as:
