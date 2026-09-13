@@ -6,10 +6,11 @@ import type {
 import {
   composeInsertedBelow,
   findImageLine,
-  imageTargetFromLine,
+  imageTargetCandidates,
   imageVaultPathFromUrl,
+  rawImageTargetFromLine,
   type OcrOutcome,
-} from '../shared/ocr';
+} from '../shared/ocr.js';
 
 /**
  * The ocr plugin's renderer entry (ADR-0050): the "Recognize text"
@@ -27,6 +28,14 @@ import {
 /** Synchronously-readable capability cache for the sync menu callback. */
 let vision = false;
 
+/**
+ * Synchronously-readable vault file list, for picking an image target's
+ * interpretation: a raw `![…](…)` path may be note-relative (a normal
+ * note) or vault-relative (an assistant chat note's attachment line) —
+ * the candidate that actually exists in the vault wins.
+ */
+let vaultFiles = new Set<string>();
+
 /** The clicked image, resolved for an editor surface, plus the insert point. */
 interface EmbedTarget {
   readonly docPath: string;
@@ -35,6 +44,25 @@ interface EmbedTarget {
 
 function baseName(path: string): string {
   return path.slice(path.lastIndexOf('/') + 1);
+}
+
+/**
+ * Picks the vault-relative image path for a raw `![…](…)` line: the first
+ * candidate (note-relative, then vault-relative) that exists in the vault
+ * file list; with an empty list the note-relative reading wins (the main
+ * side then fails visibly if it was wrong).
+ */
+function pickImageTarget(
+  api: DreyPluginApi,
+  lineText: string | null,
+  docPath: string,
+): string | null {
+  const raw = lineText !== null ? rawImageTargetFromLine(lineText) : null;
+  if (raw === null) {
+    return null;
+  }
+  const candidates = imageTargetCandidates(raw, docPath);
+  return candidates.find((candidate) => vaultFiles.has(candidate)) ?? candidates[0] ?? null;
 }
 
 /** Resolves the menu target to an image path + insert point, or null. */
@@ -52,11 +80,13 @@ function resolveTarget(
   }
   // Primary signal: a widget's <img src> reverse-maps exactly, in both
   // editor modes. Fallback: the raw `![…](…)` line under the caret
-  // (source mode, or a click on the revealed source container).
+  // (source mode, or a click on the revealed source container) —
+  // interpreted note-relative first, vault-relative when that is what
+  // actually exists (the same candidates the base image widget renders).
   const img = target.target.closest('img');
   const imageVaultPath =
     (img !== null ? imageVaultPathFromUrl(img.getAttribute('src') ?? '') : null) ??
-    (target.lineText !== null ? imageTargetFromLine(target.lineText, target.docPath) : null);
+    pickImageTarget(api, target.lineText, target.docPath);
   if (imageVaultPath === null) {
     return null;
   }
@@ -252,6 +282,20 @@ const plugin: PluginRendererModule = {
     api.llm.onCapabilitiesChanged((caps) => {
       vision = caps.imageAttachments;
     });
+
+    // Seed + keep fresh the vault file list the image-target picker reads.
+    const refreshVaultFiles = (): void => {
+      void api.vault
+        .listFiles()
+        .then((entries) => {
+          vaultFiles = new Set(entries.map((entry) => entry.relativePath));
+        })
+        .catch(() => {
+          vaultFiles = new Set();
+        });
+    };
+    refreshVaultFiles();
+    api.vault.onChanged(refreshVaultFiles);
 
     api.editor.registerContextMenuItems((target) => {
       const resolved = resolveTarget(api, target);

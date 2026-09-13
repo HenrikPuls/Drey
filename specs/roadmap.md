@@ -43,6 +43,7 @@ refresh" below), with an opt-in chokidar watcher for external changes
 
 Everything implemented lives in [`changelog.md`](changelog.md). When an
 item below ships, move it there and remove it from this list.
+Once you start working on one of the feature requests and it didn't had a Id then please assign the next one.
 
 ### Feature requests
 
@@ -87,6 +88,17 @@ item below ships, move it there and remove it from this list.
   tools in one provider-neutral tool pool (namespaced
   `mcp__<server>__<tool>`), confirmation-gated per server. Builds on the
   Req-29 interface — every tool-capable provider can drive them.
+
+  UX:
+  Req - Editor - Lines shall only display the picture but no text, same for save please use a save symbol instead.
+  Req - Files - If the mouse hovers over the file the tooltip shall display the whole path and name of the file
+  Req - Assitant - the text shall automatically scroll when new text is received from the assistant.
+  Req - Assistant - Use image for new text instead of text.
+  Req - Assistant - Remove auto summary
+  Req - Assistant - The assistant shall be bound to an open document, so when you change the document you will
+  automatically get a new chat. If you switch back to another docuemtn, you will get the chat of that document.
+  Of course I can add other files from the vault to the context.
+  Req - Look at the internal prompts and review them
 
 ### Known-defect remainder
 

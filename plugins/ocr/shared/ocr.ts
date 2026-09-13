@@ -54,17 +54,19 @@ export function parseOcrPayload(payload: unknown): OcrRequest {
 }
 
 /**
- * Reverse of the base `resolveVaultImageUrl`: a `drey-asset://asset/<path>`
- * URL back into the vault-relative path, decoding each segment. `null`
- * for http(s):/data:/any other scheme — the row only makes sense for
+ * Reverse of the base `resolveVaultImageUrl`: a `drey-asset://` URL back
+ * into the vault-relative path, decoding each segment. Tolerates both wire
+ * shapes — the legacy `drey-asset://asset/<path>` (host = `asset`) and the
+ * per-vault `drey-asset://<vaultId>/asset/<path>` (ADR-0051). `null` for
+ * http(s):/data:/any other scheme — the row only makes sense for
  * vault-resolved images.
  */
 export function imageVaultPathFromUrl(url: string): string | null {
-  const PREFIX = 'drey-asset://asset/';
-  if (!url.startsWith(PREFIX)) {
+  const match = /^drey-asset:\/\/[^/]+\/(?:asset\/)?(.+)$/.exec(url);
+  if (match === null) {
     return null;
   }
-  const rest = url.slice(PREFIX.length);
+  const rest = match[1];
   if (rest === '') {
     return null;
   }
@@ -105,6 +107,20 @@ function normalizeRelative(pathStr: string): string | null {
  * lines without an image.
  */
 export function imageTargetFromLine(line: string, docPath: string): string | null {
+  const raw = rawImageTargetFromLine(line);
+  if (raw === null) {
+    return null;
+  }
+  const baseDir = docPath.includes('/') ? docPath.slice(0, docPath.lastIndexOf('/')) : '';
+  return normalizeRelative(baseDir !== '' ? `${baseDir}/${raw}` : raw);
+}
+
+/**
+ * The raw `![…](…)` target as written (trimmed), or null for lines without
+ * an image or with an http(s)/data/explicit-scheme target — the caller
+ * decides how to interpret it.
+ */
+export function rawImageTargetFromLine(line: string): string | null {
   const match = /!\[[^\]]*\]\((?:<([^>]+)>|([^)\s]+))\)/.exec(line);
   const raw = match?.[1] ?? match?.[2];
   if (raw === undefined || raw.trim() === '') {
@@ -117,12 +133,29 @@ export function imageTargetFromLine(line: string, docPath: string): string | nul
   if (/^[a-z][a-z0-9+.-]*:/i.test(url)) {
     return null;
   }
+  return url;
+}
+
+/**
+ * Ordered vault-relative interpretations of one raw image target,
+ * mirroring the base `resolveVaultImageCandidates`: note-relative first
+ * (the documented semantics), then the same path read from the vault root
+ * (assistant chat notes embed vault-relative attachment paths). The
+ * renderer picks via the vault file list — a target present under the
+ * note-relative reading wins.
+ */
+export function imageTargetCandidates(rawUrl: string, docPath: string): string[] {
   const baseDir = docPath.includes('/') ? docPath.slice(0, docPath.lastIndexOf('/')) : '';
-  const joined = normalizeRelative(baseDir !== '' ? `${baseDir}/${url}` : url);
-  if (joined === null || joined === '') {
-    return null;
+  const noteRelative = normalizeRelative(baseDir !== '' ? `${baseDir}/${rawUrl}` : rawUrl);
+  const fromRoot = normalizeRelative(rawUrl);
+  const out: string[] = [];
+  if (noteRelative !== null && noteRelative !== '' && !out.includes(noteRelative)) {
+    out.push(noteRelative);
   }
-  return joined;
+  if (fromRoot !== null && fromRoot !== '' && !out.includes(fromRoot)) {
+    out.push(fromRoot);
+  }
+  return out;
 }
 
 /**

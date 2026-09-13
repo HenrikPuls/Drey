@@ -1,8 +1,10 @@
 import {
   findImageLine,
+  imageTargetCandidates,
   imageTargetFromLine,
   imageVaultPathFromUrl,
   parseOcrPayload,
+  rawImageTargetFromLine,
 } from '../../../plugins/ocr/shared/ocr';
 
 /**
@@ -39,6 +41,10 @@ describe('imageVaultPathFromUrl', () => {
   it('reverses a drey-asset URL, decoding each segment', () => {
     expect(imageVaultPathFromUrl('drey-asset://asset/pics/a%20b.png')).toBe('pics/a b.png');
     expect(imageVaultPathFromUrl('drey-asset://asset/pic.png')).toBe('pic.png');
+  });
+
+  it('tolerates the per-vault URL shape (vault id as the host, ADR-0051)', () => {
+    expect(imageVaultPathFromUrl('drey-asset://vault-1/asset/pics/a.png')).toBe('pics/a.png');
   });
 
   it('returns null for http, data and foreign schemes', () => {
@@ -82,6 +88,30 @@ describe('imageTargetFromLine', () => {
     expect(imageTargetFromLine('![a](data:image/png;base64,AA)', 'n.md')).toBeNull();
     expect(imageTargetFromLine('[a link](pic.png)', 'n.md')).toBeNull();
     expect(imageTargetFromLine('plain text', 'n.md')).toBeNull();
+  });
+});
+
+describe('imageTargetCandidates', () => {
+  it('offers note-relative first, then the vault-root reading, deduplicated', () => {
+    expect(imageTargetCandidates('pics/a.png', 'chats/2026/09/chat.md')).toEqual([
+      'chats/2026/09/pics/a.png',
+      'pics/a.png',
+    ]);
+    expect(imageTargetCandidates('pic.png', 'n.md')).toEqual(['pic.png']);
+  });
+
+  it('rejects escapes and scheme targets on both readings', () => {
+    expect(imageTargetCandidates('../../etc/x.png', 'a/n.md')).toEqual([]);
+    expect(imageTargetCandidates('https://x/y.png', 'n.md')).toEqual([]);
+  });
+});
+
+describe('rawImageTargetFromLine', () => {
+  it('extracts the target as written; null for non-image lines', () => {
+    expect(rawImageTargetFromLine('text ![a|300](pics/b.png) more')).toBe('pics/b.png');
+    expect(rawImageTargetFromLine('![a](<my pics/b.png>)')).toBe('my pics/b.png');
+    expect(rawImageTargetFromLine('![a](https://x/y.png)')).toBeNull();
+    expect(rawImageTargetFromLine('no image')).toBeNull();
   });
 });
 
