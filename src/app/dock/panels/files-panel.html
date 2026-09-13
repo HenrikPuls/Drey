@@ -192,6 +192,7 @@
           (dragleave)="onRowDragLeave($event, node.vaultId, node.entry)"
           (drop)="onRowDrop($event, node.vaultId, node.entry)"
           (dragend)="onDragEnd()"
+          [title]="absPathOf(node.vaultId, node.entry.relativePath)"
         >
           <app-icon
             class="twist"
@@ -220,6 +221,7 @@
           (dragleave)="onRowDragLeave($event, node.vaultId, node.entry)"
           (drop)="onRowDrop($event, node.vaultId, node.entry)"
           (dragend)="onDragEnd()"
+          [title]="absPathOf(node.vaultId, node.entry.relativePath)"
         >
           <span class="bullet" aria-hidden="true"></span>
           <span class="node-name">{{ node.entry.name }}</span>

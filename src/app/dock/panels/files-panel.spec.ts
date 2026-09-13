@@ -88,19 +88,65 @@ describe('FilesPanel.onFileDragStart', () => {
   });
 });
 
-describe('FilesPanel keyboard navigation (bug-7)', () => {
-  /** vault row · a.md · notes/ · notes/b.md -- four visible rows in display order. */
-  function tree(): VaultFileEntry[] {
-    return [
-      { name: 'a.md', relativePath: 'a.md', type: 'file' },
-      {
-        name: 'notes',
-        relativePath: 'notes',
-        type: 'directory',
-        children: [{ name: 'b.md', relativePath: 'notes/b.md', type: 'file' }],
-      },
-    ];
+/** vault row · a.md · notes/ · notes/b.md -- four visible rows in display order. */
+function tree(): VaultFileEntry[] {
+  return [
+    { name: 'a.md', relativePath: 'a.md', type: 'file' },
+    {
+      name: 'notes',
+      relativePath: 'notes',
+      type: 'directory',
+      children: [{ name: 'b.md', relativePath: 'notes/b.md', type: 'file' }],
+    },
+  ];
+}
+
+describe('FilesPanel row tooltips (req: full path on hover)', () => {
+  let fixture: ComponentFixture<FilesPanel>;
+
+  function setup(vaultPath: string): void {
+    window.dreyApi = registryApi({
+      listVaults: () =>
+        Promise.resolve([{ id: V, name: 'vault', path: vaultPath, exists: true, active: true }]),
+      listVaultFiles: () => Promise.resolve(tree()),
+    }) as DreyApi;
   }
+
+  async function render(): Promise<NodeListOf<HTMLElement>> {
+    await TestBed.configureTestingModule({ imports: [FilesPanel] }).compileComponents();
+    fixture = TestBed.createComponent(FilesPanel);
+    fixture.detectChanges();
+    await vi.waitFor(() => {
+      fixture.detectChanges();
+      expect(fixture.nativeElement.querySelectorAll('.node').length).toBe(4);
+    });
+    return fixture.nativeElement.querySelectorAll('.node');
+  }
+
+  afterEach(() => {
+    fixture.nativeElement.remove();
+    delete (window as { dreyApi?: unknown }).dreyApi;
+  });
+
+  it('file and folder rows carry the absolute path as their tooltip (posix root)', async () => {
+    setup('C:/vault');
+    const rows = await render();
+
+    expect(rows[1].getAttribute('title')).toBe('C:/vault/a.md');
+    expect(rows[2].getAttribute('title')).toBe('C:/vault/notes');
+    expect(rows[3].getAttribute('title')).toBe('C:/vault/notes/b.md');
+  });
+
+  it('joins with a backslash when the vault root uses one (Windows root)', async () => {
+    setup('E:\\notes');
+    const rows = await render();
+
+    expect(rows[1].getAttribute('title')).toBe('E:\\notes\\a.md');
+    expect(rows[3].getAttribute('title')).toBe('E:\\notes\\notes\\b.md');
+  });
+});
+
+describe('FilesPanel keyboard navigation (bug-7)', () => {
 
   let fixture: ComponentFixture<FilesPanel>;
 

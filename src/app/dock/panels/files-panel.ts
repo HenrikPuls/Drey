@@ -384,6 +384,25 @@ export class FilesPanel {
     return node.kind === 'vault' ? node.vault.id : docKey(node.vaultId, node.entry.relativePath);
   }
 
+  /**
+   * The absolute OS path of a tree row — the row's native tooltip (req: the
+   * hover tooltip shows the whole path and name). Joins the vault root with
+   * the entry's vault-relative path (contract: forward slashes) in the
+   * root's separator style; a vault that vanished from the registry
+   * degrades to the relative path.
+   */
+  protected absPathOf(vaultId: string, relativePath: string): string {
+    const root = this.vault.vaults().find((v) => v.id === vaultId)?.path;
+    if (!root) {
+      return relativePath;
+    }
+    const trimmed = root.endsWith('\\') || root.endsWith('/') ? root.slice(0, -1) : root;
+    if (root.includes('\\')) {
+      return `${trimmed}\\${relativePath.replace(/\//g, '\\')}`;
+    }
+    return `${trimmed}/${relativePath}`;
+  }
+
   private selectAt(nodes: VisibleNode[], i: number, mod?: { shiftKey: boolean; ctrlKey: boolean }): void {
     const node = nodes[i];
     if (!node) {
