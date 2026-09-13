@@ -367,6 +367,7 @@ export class AnthropicMessagesProvider implements LlmClient {
     useTools: boolean,
   ): Promise<LlmChatResult> {
     const convo: ChatMessage[] = [...messages];
+    const toolTrace: ChatMessage[] = [];
     const toolWire = useTools ? toAnthropicTools(options.tools ?? []) : null;
     let toolsAllowed = toolWire !== null;
     const maxRounds = options.maxToolRounds ?? 5;
@@ -409,7 +410,7 @@ export class AnthropicMessagesProvider implements LlmClient {
           const textParts = blocks
             .filter((block): block is Extract<AnthropicBlock, { type: 'text' }> => block.type === 'text')
             .map((block) => block.text);
-          convo.push({
+          const assistantTurn: ChatMessage = {
             role: 'assistant',
             content: textParts.join('') || null,
             tool_calls: toolUses.map((use) => ({
@@ -417,10 +418,14 @@ export class AnthropicMessagesProvider implements LlmClient {
               type: 'function' as const,
               function: { name: use.name, arguments: JSON.stringify(use.input ?? {}) },
             })),
-          });
+          };
+          convo.push(assistantTurn);
+          toolTrace.push(assistantTurn);
           for (const use of toolUses) {
             const result = await options.onToolCall!(use.name, JSON.stringify(use.input ?? {}));
-            convo.push({ role: 'tool', tool_call_id: use.id, content: result });
+            const toolTurn: ChatMessage = { role: 'tool', tool_call_id: use.id, content: result };
+            convo.push(toolTurn);
+            toolTrace.push(toolTurn);
           }
           continue;
         }
@@ -434,16 +439,17 @@ export class AnthropicMessagesProvider implements LlmClient {
         if (textOut === '' && blocks.length === 0) {
           // Empty body -- give back what we can rather than throw, like the
           // OpenAI path does past the round cap.
-          return { text: '' };
+          return { text: '', ...(toolTrace.length > 0 ? { toolTrace } : {}) };
         }
         options.onDelta?.(textOut);
         return {
           text: textOut,
           ...(Object.keys(usage).length > 0 ? { usage } : {}),
+          ...(toolTrace.length > 0 ? { toolTrace } : {}),
         };
       }
       // Only non-text blocks (e.g. tool_use past the round cap) came back.
-      return { text: '' };
+      return { text: '', ...(toolTrace.length > 0 ? { toolTrace } : {}) };
     }
   }
 

@@ -15,7 +15,7 @@
  *   at runtime — a second copy composes wrong, silently. `import type` for
  *   CM types is fine.
  */
-import type { ActionOutcome, ChatMessage, LlmDebugEntry } from '../llm';
+import type { ActionOutcome, ChatMessage, LlmCapabilities, LlmDebugEntry } from '../llm';
 import type { AppConfig } from '../app-config';
 import type { TagSearchHit, TagSearchQuery } from './search-types';
 import type { TagEntry, VaultFileEntry } from '../ipc-api';
@@ -290,6 +290,13 @@ export interface DreyPluginApi {
   readonly vault: {
     readFile(path: string): Promise<{ content: string; modifiedMs: number }>;
     writeFile(path: string, content: string): Promise<number>;
+    /**
+     * Stage binary bytes as a vault asset (ADR-0024): saved under
+     * `attachments/` beside `noteRelPath`, hash-named, collisions
+     * suffixed. Returns the vault-relative path to reference. Structured
+     * clone carries the bytes over the IPC bridge.
+     */
+    saveAsset(bytes: Uint8Array, ext: string, noteRelPath: string): Promise<string>;
     listFiles(): Promise<readonly VaultFileEntry[]>;
     /** Vault content changed (refresh/external write/MCP write) — re-read anything cached. */
     onChanged(listener: () => void): Unsubscribe;
@@ -374,6 +381,8 @@ export interface DreyPluginApi {
      * `modelListing: false`; the model id stays hand-enterable either way.
      */
     listModels(): Promise<LlmModelListing>;
+    /** What the ACTIVE provider can and cannot do (ADR-0047) — gate UI, don't hardcode provider ids. */
+    capabilities(): Promise<LlmCapabilities>;
     cancelTask(taskId: string): Promise<boolean>;
     onDebugEntry(listener: (entry: LlmDebugEntry) => void): Unsubscribe;
     /**

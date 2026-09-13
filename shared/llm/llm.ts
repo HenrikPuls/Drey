@@ -87,12 +87,17 @@ export interface LlmUsage {
  * `sessionRef` carries a provider-side conversation handle (Claude Code's
  * session id) out of the call; passing it back via
  * `options.sessionRef` continues that conversation instead of replaying
- * history. `usage` feeds future context-window policy.
+ * history. `usage` feeds future context-window policy. `toolTrace` holds
+ * the `assistant(tool_calls)` / `tool(result)` messages the provider's
+ * tool loop generated, in order — the chat note persists them as
+ * `drey-tool` lines so a follow-up can replay the whole exchange
+ * (bug-10(b)); providers without a Drey-side loop (the CLIs) omit it.
  */
 export interface LlmChatResult {
   text: string;
   sessionRef?: string;
   usage?: LlmUsage;
+  toolTrace?: readonly ChatMessage[];
 }
 
 /**

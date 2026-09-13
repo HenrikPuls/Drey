@@ -6,55 +6,55 @@ import {
 } from '../../../plugins/assistant/shared/ask';
 
 /**
- * Specs for the ask contract between the assistant panel and its main
+ * Specs for the ask contract between the assistant panel and the chat
  * engine (`plugins/assistant/shared/ask.ts`): the strict payload check the
  * main-side `ask` handler delegates to (the bug-10 visible-failure rule)
- * and the per-file truncation for oversized attachments. The Angular
- * runner ignores `plugins/**`, so plugin specs live here and import the
- * plugin sources.
+ * and the per-file truncation for oversized attachments. Since ADR-0048
+ * there is NO `history` field — the engine replays the persisted chat note
+ * itself; the interim validation from milestone 23 is gone with the field.
+ * The Angular runner ignores `plugins/**`, so plugin specs live here.
  */
 
 const VALID = {
   question: 'Was steht hier?',
   note: { path: 'a.md', body: 'Inhalt.' },
   extraFiles: [{ path: 'b.md', body: 'B.' }],
-  history: [{ role: 'user', content: 'Frage?' }],
+  images: ['attachments/pic.png'],
+  chatPath: 'chats/2026/09/2026-09-13-topic.md',
 };
 
 describe('assistant plugin ask contract (plugins/assistant/shared/ask)', () => {
-  it('parses a valid payload into request, taskId and history', () => {
+  it('parses a valid payload into request and taskId', () => {
     const parsed = parseAskPayload({ ...VALID, taskId: 'task-1' });
 
-    expect(parsed.request).toEqual({
-      question: 'Was steht hier?',
-      note: { path: 'a.md', body: 'Inhalt.' },
-      extraFiles: [{ path: 'b.md', body: 'B.' }],
-    });
+    expect(parsed.request).toEqual(VALID);
     expect(parsed.taskId).toBe('task-1');
-    expect(parsed.history).toEqual([{ role: 'user', content: 'Frage?' }]);
   });
 
-  it('accepts note: null (the note chip deselected) and an empty attachment list', () => {
+  it('accepts note: null (standalone chat), empty attachments, and a null chatPath', () => {
     const parsed = parseAskPayload({
       question: 'q',
       note: null,
       extraFiles: [],
-      history: [],
+      images: [],
+      chatPath: null,
     });
 
     expect(parsed.request.note).toBeNull();
     expect(parsed.request.extraFiles).toEqual([]);
+    expect(parsed.request.images).toEqual([]);
+    expect(parsed.request.chatPath).toBeNull();
     expect(parsed.taskId).toBeUndefined();
   });
 
   it('rejects a payload without a string question', () => {
     expect(() => parseAskPayload({ ...VALID, question: 42 })).toThrow('malformed ask payload');
-    expect(() => parseAskPayload({ note: null, extraFiles: [], history: [] })).toThrow(
+    expect(() => parseAskPayload({ note: null, extraFiles: [], images: [], chatPath: null })).toThrow(
       'malformed ask payload',
     );
   });
 
-  it('rejects a malformed note or attachment entry', () => {
+  it('rejects a malformed note, attachment entry, image list, or chatPath', () => {
     expect(() => parseAskPayload({ ...VALID, note: { path: 'a.md' } })).toThrow(
       /note must be \{ path, body \} or null/,
     );
@@ -62,20 +62,8 @@ describe('assistant plugin ask contract (plugins/assistant/shared/ask)', () => {
     expect(() =>
       parseAskPayload({ ...VALID, extraFiles: [{ path: 1, body: 'x' }] }),
     ).toThrow(/extraFiles/);
-  });
-
-  it('keeps the bug-10 rule: a missing history fails visibly', () => {
-    const { history: _dropped, ...noHistory } = { ...VALID, taskId: 't' } as Record<
-      string,
-      unknown
-    >;
-    void _dropped;
-    expect(() => parseAskPayload(noHistory)).toThrow(
-      'malformed ask payload: history must be an array (stale renderer or main process? restart the app)',
-    );
-    expect(() => parseAskPayload({ ...VALID, history: ['nope'] })).toThrow(
-      'malformed ask payload: history entries must be { role, content }',
-    );
+    expect(() => parseAskPayload({ ...VALID, images: [42] })).toThrow(/images/);
+    expect(() => parseAskPayload({ ...VALID, chatPath: 7 })).toThrow(/chatPath/);
   });
 
   it('truncates an oversized body with a visible marker, and only then', () => {
@@ -89,7 +77,7 @@ describe('assistant plugin ask contract (plugins/assistant/shared/ask)', () => {
     expect(truncated.length).toBeLessThan(big.length);
   });
 
-  it('exposes the attachment cap the composer and the engine agree on', () => {
+  it('exposes the caps the composer and the engine agree on', () => {
     expect(MAX_EXTRA_FILES).toBeGreaterThan(0);
     expect(MAX_FILE_CHARS).toBeGreaterThan(0);
   });

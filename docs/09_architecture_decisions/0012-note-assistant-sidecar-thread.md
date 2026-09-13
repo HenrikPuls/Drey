@@ -3,6 +3,9 @@
 ## Status
 
 Accepted — implemented with the note assistant panel (Feature A).
+Since [ADR-0048](0048-chats-as-vault-notes.md) the sidecar carries only
+the automatic summary; conversations moved into chat notes under
+`chats/` (bug-10(b): the sidecar could not persist tool calls/results).
 
 ## Context
 

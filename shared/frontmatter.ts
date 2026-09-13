@@ -62,6 +62,7 @@ export function readFrontmatter(text: string): Frontmatter | null {
   const obj = parsed && typeof parsed === 'object' ? (parsed as Record<string, unknown>) : {};
   return {
     type: asEnum(obj['type'], NOTE_TYPES),
+    kind: asText(obj['kind']),
     title: asText(obj['title']),
     tags: asStringArray(obj['tags']),
     aliases: asStringArray(obj['aliases']),
@@ -77,7 +78,7 @@ export function readFrontmatter(text: string): Frontmatter | null {
  * Rewrites only the keys named in `patch` and returns the full note text.
  * `tags` / `aliases` become double-quoted flow sequences
  * (`["a", "b"]`); date/text fields become double-quoted scalars;
- * `type` / `art` stay plain. A file with no frontmatter fence, or
+ * `type` / `art` / `kind` stay plain. A file with no frontmatter fence, or
  * unparseable YAML, is returned unchanged.
  */
 export function writeFrontmatter(text: string, patch: Partial<Frontmatter>): string {
@@ -100,7 +101,7 @@ export function writeFrontmatter(text: string, patch: Partial<Frontmatter>): str
       if (doc.has(key)) {
         doc.set(key, null);
       }
-    } else if (key === 'type' || key === 'art') {
+    } else if (key === 'type' || key === 'art' || key === 'kind') {
       setScalar(doc, key, String(value), false);
     } else {
       setScalar(doc, key, String(value), true);

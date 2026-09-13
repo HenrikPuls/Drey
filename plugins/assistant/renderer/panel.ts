@@ -1,13 +1,11 @@
 /**
- * The assistant panel's DOM (ADR-0044 rule 2: plugin UI is plain DOM). Port
- * of `src/app/assistant/note-assistant.{ts,html,css}` — the automatic
- * summary switch, the card thread, and the composer.
- *
- * Milestone 24 composer, modelled on the Claude Code input: context chips
- * above the input (the open note by default, extra files via @-completion
- * or the "+" picker), an auto-growing text area (one line up to a cap,
- * then it scrolls inside — no drag divider any more), and a model row that
- * opens a picker for the globally configured model.
+ * The assistant panel's DOM (ADR-0044 rule 2: plugin UI is plain DOM).
+ * Chat-first since ADR-0048: a chat picker + "New chat" in the head, turn
+ * cards rendered from the active chat note (tool calls/results and edit
+ * outcomes as collapsible chips), a streaming partial card, and the
+ * milestone-24 composer (context chips, auto-grow, model row) extended
+ * with image chips — pasted/dropped images are staged into the vault via
+ * `api.vault.saveAsset`.
  *
  * Deliberate divergences from the old Angular panel, recorded in the
  * stage-7 notes and kept here:
@@ -15,15 +13,15 @@
  *   `api.editor.cm`), so the inline spellchecker (a base Angular service)
  *   does not run here;
  * - a manual Action's noop/error message shows as a quiet line in the panel
- *   (it used to sit in the editor meta bar, which is base UI).
- * - the @-completion opens on a bare `@` (the wikilink source waits for an
- *   explicit request): in a one-line composer the popup IS the affordance.
+ *   (it used to sit in the editor meta bar, which is base UI);
+ * - the @-completion opens on a bare `@`: in a one-line composer the popup
+ *   IS the affordance.
  */
 import type { Extension } from '@codemirror/state';
 import type { Completion, CompletionContext, CompletionResult } from '@codemirror/autocomplete';
 import type { EditorView } from '@codemirror/view';
 import type { DreyPluginApi } from '../../../shared/plugin-api/renderer';
-import type { ChatCard } from '../shared/chat-thread.js';
+import type { ChatNoteTurn, ChatToolEntry } from '../shared/chat-note.js';
 import type { AssistantState } from './state.js';
 import type { RunningTasks } from './running-tasks.js';
 import { createVaultFileCache, type VaultFileCache } from './vault-files.js';
@@ -43,9 +41,9 @@ function el<K extends keyof HTMLElementTagNameMap>(
   return node;
 }
 
-type IconName = 'check' | 'arrow-up' | 'copy' | 'corner-down-left' | 'rotate-ccw';
+type IconName = 'check' | 'arrow-up' | 'copy' | 'corner-down-left' | 'rotate-ccw' | 'wrench';
 
-/** The five Lucide glyphs the panel uses (same paths as `src/app/icons/icon.ts`). */
+/** The Lucide glyphs the panel uses (same paths as `src/app/icons/icon.ts`). */
 const ICON_PATHS: Record<IconName, readonly string[]> = {
   check: ['M20 6 9 17l-5-5'],
   'arrow-up': ['m5 12 7-7 7 7', 'M12 19V5'],
@@ -55,6 +53,9 @@ const ICON_PATHS: Record<IconName, readonly string[]> = {
   ],
   'corner-down-left': ['M20 4v7a4 4 0 0 1-4 4H4', 'm9 10-5 5 5 5'],
   'rotate-ccw': ['M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8', 'M3 3v5h5'],
+  wrench: [
+    'M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z',
+  ],
 };
 
 function icon(name: IconName, size = 12): SVGSVGElement {
@@ -87,6 +88,8 @@ function dirName(path: string): string {
   return slash === -1 ? '' : path.slice(0, slash);
 }
 
+const IMAGE_EXTENSIONS = new Set(['png', 'jpg', 'jpeg', 'webp', 'gif']);
+
 /** The slice of a host CodeMirror view the panel touches. */
 interface ComposerView {
   destroy(): void;
@@ -117,7 +120,17 @@ export function mountPanel(
 ): PanelHandle {
   body.classList.add('assistant-panel');
 
-  // -- header: the per-note automatic-summary switch -------------------------
+  // -- head: the chat selector + the per-note auto-summary switch ------------
+  const chatTitleButton = el('button', 'chat-title') as HTMLButtonElement;
+  chatTitleButton.type = 'button';
+  chatTitleButton.title = 'Switch chat';
+  chatTitleButton.addEventListener('click', openChatPicker);
+  const chatNewButton = el('button', 'chat-new', '+') as HTMLButtonElement;
+  chatNewButton.type = 'button';
+  chatNewButton.title = 'Start a new chat';
+  chatNewButton.setAttribute('aria-label', 'Start a new chat');
+  chatNewButton.addEventListener('click', () => state.newChat());
+
   const switchButton = el('button', 'switch') as HTMLButtonElement;
   switchButton.type = 'button';
   switchButton.setAttribute('role', 'switch');
@@ -128,41 +141,107 @@ export function mountPanel(
   const head = el('header', 'assistant-head');
   const switchLabel = el('span', 'toggle-label', 'Automatic summary');
   switchLabel.id = 'assistant-auto-summary-label';
-  head.append(switchLabel, switchButton);
+  const chatHead = el('div', 'chat-head');
+  chatHead.append(chatTitleButton, chatNewButton);
+  const summaryHead = el('div', 'summary-head');
+  summaryHead.append(switchLabel, switchButton);
+  head.append(chatHead, summaryHead);
   body.appendChild(head);
 
   // -- thread ----------------------------------------------------------------
   const thread = el('div', 'assistant-thread');
   body.appendChild(thread);
 
-  let confirmingRestart: string | null = null;
-  let copiedCardId: string | null = null;
+  let confirmingRestart: number | null = null;
+  let copiedTurnIndex: number | null = null;
+  /** Expanded tool-chip bodies, keyed `${turnIndex}:${i}` (session state). */
+  const expandedChips = new Set<string>();
 
-  const cardNode = (card: ChatCard): HTMLElement => {
+  /** One persisted `drey-tool` entry as a collapsible chip. */
+  const toolChipNode = (entry: ChatToolEntry, key: string): HTMLElement => {
+    const expanded = expandedChips.has(key);
+    const chip = el('div', 'tool-chip' + (expanded ? ' open' : ''));
+    const summary = el('button', 'tool-chip-summary') as HTMLButtonElement;
+    summary.type = 'button';
+    let text: string;
+    if (entry.kind === 'call') {
+      text = `tool · ${entry.name}(${summarizeArguments(entry.arguments)})`;
+    } else if (entry.kind === 'result') {
+      text = `result · ${firstLine(entry.content)}`;
+    } else {
+      text = entry.applied
+        ? `applied change · ${entry.path}`
+        : `discarded proposal · ${entry.path}`;
+    }
+    summary.appendChild(icon('wrench', 10));
+    summary.appendChild(el('span', undefined, text));
+    summary.addEventListener('click', () => {
+      if (expanded) {
+        expandedChips.delete(key);
+      } else {
+        expandedChips.add(key);
+      }
+      render();
+    });
+    chip.appendChild(summary);
+    if (expanded) {
+      const pre = el('pre', 'tool-chip-body');
+      pre.textContent =
+        entry.kind === 'call'
+          ? `vault tool call\n${entry.name}\n\n${formatArguments(entry.arguments)}`
+          : entry.kind === 'result'
+            ? entry.content
+            : (entry.after ?? 'The proposal was discarded without changes.');
+      chip.appendChild(pre);
+    }
+    return chip;
+  };
+
+  const turnNode = (turn: ChatNoteTurn, index: number): HTMLElement => {
     const article = el('article', 'card');
-    article.classList.add(
-      card.role === 'summary' ? 'summary' : card.role === 'question' ? 'q' : 'a',
-    );
+    article.classList.add(turn.role === 'user' ? 'q' : 'a');
 
     const label = el('div', 'card-label');
-    label.appendChild(
-      document.createTextNode(
-        card.role === 'summary' ? 'SUMMARY' : card.role === 'question' ? 'YOU' : 'ANSWER',
-      ),
-    );
-    if (card.at !== '') {
-      label.appendChild(el('span', 'at', ` · ${card.at.slice(11, 16)}`));
+    label.appendChild(document.createTextNode(turn.role === 'user' ? 'YOU' : 'ASSISTANT'));
+    if (turn.at !== null && turn.at.length >= 16) {
+      label.appendChild(el('span', 'at', ` · ${turn.at.slice(11, 16)}`));
     }
-    const took = state.took(card.durationMs);
+    const took = state.took(turn.meta.durationMs);
     if (took !== null) {
       label.appendChild(el('span', 'took', ` · ${took}`));
     }
     article.appendChild(label);
-    article.appendChild(el('p', 'card-body', card.text));
 
-    if (confirmingRestart === card.id) {
+    for (let i = 0; i < turn.tool.length; i++) {
+      article.appendChild(toolChipNode(turn.tool[i], `${index}:${i}`));
+    }
+
+    if (turn.text !== '') {
+      const hasEditChip = turn.tool.some((entry) => entry.kind === 'edit');
+      if (!(hasEditChip && turn.text.startsWith('[Proposed a change to'))) {
+        article.appendChild(el('p', 'card-body', turn.text));
+      }
+    }
+
+    if (turn.role === 'user' && turn.attachments.length > 0) {
+      const att = el('div', 'card-attachments');
+      for (const attachment of turn.attachments) {
+        const link = el('button', 'attachment') as HTMLButtonElement;
+        link.type = 'button';
+        link.textContent =
+          attachment.kind === 'note' ? `[[${baseName(attachment.path)}]]` : `![${attachment.path}]`;
+        link.title = attachment.path;
+        link.addEventListener('click', () => {
+          void api.documents.open(attachment.path);
+        });
+        att.appendChild(link);
+      }
+      article.appendChild(att);
+    }
+
+    if (confirmingRestart === index) {
       const confirm = el('div', 'card-confirm');
-      const count = state.laterCount(card.id);
+      const count = state.laterCount(index);
       confirm.appendChild(
         el('span', undefined, `Remove ${count} message${count === 1 ? '' : 's'}?`),
       );
@@ -170,7 +249,7 @@ export function mountPanel(
       restartBtn.type = 'button';
       restartBtn.addEventListener('click', () => {
         confirmingRestart = null;
-        void state.restartFrom(card.id).then((question) => {
+        void state.restartFrom(index).then((question) => {
           if (question !== null) {
             setComposerText(question);
             composerView?.focus();
@@ -187,41 +266,41 @@ export function mountPanel(
       article.appendChild(confirm);
     } else {
       const actions = el('div', 'card-actions');
-      if (card.role === 'question') {
+      if (turn.role === 'user') {
         const restart = el('button') as HTMLButtonElement;
         restart.type = 'button';
         restart.title = 'Restart chat from here';
         restart.disabled = tasks.isRunning();
         restart.appendChild(icon('rotate-ccw'));
         restart.addEventListener('click', () => {
-          confirmingRestart = card.id;
+          confirmingRestart = index;
           render();
         });
         actions.appendChild(restart);
-      } else {
+      } else if (turn.text !== '') {
         const insert = el('button') as HTMLButtonElement;
         insert.type = 'button';
         insert.title = 'Insert into note';
         insert.disabled = state.notePath() === null;
         insert.appendChild(icon('corner-down-left'));
         insert.addEventListener('click', () => {
-          api.documents.insertAtCursor(card.text);
+          api.documents.insertAtCursor(turn.text);
         });
         actions.appendChild(insert);
       }
       const copy = el('button') as HTMLButtonElement;
       copy.type = 'button';
-      copy.title = copiedCardId === card.id ? 'Copied' : 'Copy to clipboard';
-      copy.replaceChildren(icon(copiedCardId === card.id ? 'check' : 'copy'));
+      copy.title = copiedTurnIndex === index ? 'Copied' : 'Copy to clipboard';
+      copy.replaceChildren(icon(copiedTurnIndex === index ? 'check' : 'copy'));
       copy.addEventListener('click', () => {
         void navigator.clipboard
-          .writeText(card.text)
+          .writeText(turn.text)
           .then(() => {
-            copiedCardId = card.id;
+            copiedTurnIndex = index;
             render();
             setTimeout(() => {
-              if (copiedCardId === card.id) {
-                copiedCardId = null;
+              if (copiedTurnIndex === index) {
+                copiedTurnIndex = null;
                 render();
               }
             }, 1200);
@@ -238,24 +317,58 @@ export function mountPanel(
 
   const emptyStateText = (): string => {
     if (!api.llm.enabled()) {
-      return 'LLM features are off — nothing is summarised or answered.';
+      return 'LLM features are off — nothing is answered or summarised.';
     }
-    if (state.notePath() === null) {
-      return 'Open a note to have it summarised.';
-    }
-    return state.autoSummary()
-      ? 'Nothing summarised yet.'
-      : 'Automatic summary is off for this note.';
+    return 'New chat — ask anything. A note or file chip gives it context.';
   };
 
   const renderThread = (): void => {
     thread.textContent = '';
-    const cards = state.cards();
-    if (cards.length === 0 && !state.summarizing()) {
+
+    const summary = state.summaryCard();
+    if (summary !== null) {
+      const pinned = el('article', 'card summary pinned');
+      const label = el('div', 'card-label', 'SUMMARY');
+      if (summary.at !== '') {
+        label.appendChild(el('span', 'at', ` · ${summary.at.slice(11, 16)}`));
+      }
+      pinned.appendChild(label);
+      pinned.appendChild(el('p', 'card-body', summary.text));
+      const insert = el('button', 'card-actions ghost') as HTMLButtonElement;
+      insert.type = 'button';
+      insert.title = 'Insert into note';
+      insert.textContent = 'Insert into note';
+      insert.addEventListener('click', () => api.documents.insertAtCursor(summary.text));
+      pinned.appendChild(insert);
+      thread.appendChild(pinned);
+    }
+
+    if (state.canImportSidecar() && state.activeChatPath() === null) {
+      const importLine = el('button', 'import-line') as HTMLButtonElement;
+      importLine.type = 'button';
+      importLine.textContent = 'Import this note’s earlier conversation into a chat note';
+      importLine.addEventListener('click', () => void state.importSidecar());
+      thread.appendChild(importLine);
+    }
+
+    const currentView = state.view();
+    const turns = currentView?.turns ?? [];
+    if (turns.length === 0 && !state.summarizing() && summary === null) {
       thread.appendChild(el('p', 'empty', emptyStateText()));
     }
-    for (const card of cards) {
-      thread.appendChild(cardNode(card));
+    for (let index = 0; index < turns.length; index++) {
+      thread.appendChild(turnNode(turns[index], index));
+    }
+
+    // The streamed partial answer: one card that grows while the model
+    // talks. Providers without incremental streaming still call once, so
+    // the card simply appears with the full text near the end.
+    const streaming = state.streaming();
+    if (streaming !== null) {
+      const partial = el('article', 'card a streaming');
+      partial.appendChild(el('div', 'card-label', 'ASSISTANT'));
+      partial.appendChild(el('p', 'card-body', streaming.text === '' ? '…' : streaming.text));
+      thread.appendChild(partial);
     }
 
     // No timeout on a local model (ADR-0014): the elapsed counter says
@@ -294,9 +407,9 @@ export function mountPanel(
   };
 
   // -- composer --------------------------------------------------------------
-  // Claude-Code-style: context chips on top (the note by default, files
-  // added via @ or the + picker), an auto-growing input, and a meta row
-  // with the model picker. The height follows the content — no divider.
+  // Claude-Code-style: context chips on top (the note by default, files via
+  // @ or the + picker, images via the picker's Images tab or paste/drop),
+  // an auto-growing input, and a meta row with the model picker.
   const composer = el('footer', 'assistant-composer');
   const chipsRow = el('div', 'composer-chips');
   const composerHost = el('div', 'composer-input');
@@ -306,8 +419,8 @@ export function mountPanel(
   sendButton.appendChild(icon('arrow-up', 13));
   const plusButton = el('button', 'plus', '+') as HTMLButtonElement;
   plusButton.type = 'button';
-  plusButton.title = 'Add a file to the context';
-  plusButton.setAttribute('aria-label', 'Add a file to the context');
+  plusButton.title = 'Add a file or image to the context';
+  plusButton.setAttribute('aria-label', 'Add a file or image to the context');
   const row = el('div', 'composer-row');
   row.append(plusButton, composerHost, sendButton);
   const modelButton = el('button', 'model-btn', '…') as HTMLButtonElement;
@@ -324,17 +437,20 @@ export function mountPanel(
   composer.append(box, meta);
   body.appendChild(composer);
 
-  const chipNode = (path: string, isNote: boolean): HTMLElement => {
-    const chip = el('span', isNote ? 'chip note' : 'chip');
+  const chipNode = (path: string, kind: 'note' | 'file' | 'image'): HTMLElement => {
+    const chip = el('span', kind === 'file' ? 'chip' : `chip ${kind}`);
     chip.title = path;
     chip.appendChild(el('span', 'chip-name', baseName(path)));
     const remove = el('button', 'chip-x', '×') as HTMLButtonElement;
     remove.type = 'button';
-    remove.title = isNote ? 'Exclude this note from the context' : 'Remove from the context';
+    remove.title =
+      kind === 'note' ? 'Exclude this note from the context' : 'Remove from the context';
     remove.setAttribute('aria-label', remove.title);
     remove.addEventListener('click', () => {
-      if (isNote) {
+      if (kind === 'note') {
         state.setNoteIncluded(false);
+      } else if (kind === 'image') {
+        state.removeImage(path);
       } else {
         state.removeFile(path);
       }
@@ -347,10 +463,13 @@ export function mountPanel(
     chipsRow.textContent = '';
     const path = state.notePath();
     if (path !== null && state.noteIncluded()) {
-      chipsRow.appendChild(chipNode(path, true));
+      chipsRow.appendChild(chipNode(path, 'note'));
     }
     for (const file of state.extraFiles()) {
-      chipsRow.appendChild(chipNode(file, false));
+      chipsRow.appendChild(chipNode(file, 'file'));
+    }
+    for (const image of state.images()) {
+      chipsRow.appendChild(chipNode(image, 'image'));
     }
   };
 
@@ -405,7 +524,63 @@ export function mountPanel(
   plusButton.addEventListener('click', openFilePicker);
   refreshModelLabel();
 
-  // -- the two pickers (api.ui.showModal; same gesture as the templates picker) --
+  // -- the three pickers (api.ui.showModal; same gesture as the templates picker) --
+
+  function openChatPicker(): void {
+    let close: () => void = () => undefined;
+
+    const box = el('div', 'assistant-picker');
+    const headLabel = el('div', 'assistant-picker-head', 'Chats');
+    const bodyArea = el('div', 'assistant-picker-body');
+    box.append(headLabel, bodyArea);
+
+    const listBox = el('div', 'assistant-picker-list');
+    const newRow = el('div', 'assistant-picker-row new-chat', 'New chat');
+    newRow.addEventListener('click', () => {
+      state.newChat();
+      close();
+    });
+    listBox.appendChild(newRow);
+
+    const renderList = (): void => {
+      for (const chat of state.chats()) {
+        const rowEl = el(
+          'div',
+          'assistant-picker-row' + (chat.path === state.activeChatPath() ? ' current' : ''),
+          chat.title,
+        );
+        rowEl.appendChild(
+          el('span', 'assistant-picker-detail', (chat.updated ?? '').slice(0, 16).replace('T', ' ')),
+        );
+        rowEl.title = chat.path;
+        rowEl.addEventListener('click', () => {
+          void state.openChat(chat.path);
+          close();
+        });
+        listBox.appendChild(rowEl);
+      }
+      if (state.chats().length === 0) {
+        listBox.appendChild(
+          el('div', 'assistant-picker-empty', 'No chats yet — the first question creates one.'),
+        );
+      }
+    };
+    renderList();
+    bodyArea.appendChild(listBox);
+
+    box.addEventListener('keydown', (event) => {
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        close();
+      }
+    });
+
+    close = api.ui.showModal((mount) => {
+      mount.classList.add('assistant-picker-host');
+      mount.appendChild(box);
+    });
+    void state.invalidateChats();
+  }
 
   function openModelPicker(): void {
     let close: () => void = () => undefined;
@@ -579,23 +754,41 @@ export function mountPanel(
     let filter = '';
     let activeIndex = 0;
     let files: readonly string[] = [];
+    let images: readonly string[] = [];
+    let tab: 'files' | 'images' = 'files';
     const notePath = state.notePath();
 
     const box = el('div', 'assistant-picker');
-    const headLabel = el('div', 'assistant-picker-head', 'Attach a file');
+    const headLabel = el('div', 'assistant-picker-head', 'Attach');
     const bodyArea = el('div', 'assistant-picker-body');
     box.append(headLabel, bodyArea);
 
+    const tabsRow = el('div', 'assistant-picker-tabs');
+    const filesTab = el('button', 'assistant-picker-tab active', 'Files') as HTMLButtonElement;
+    const imagesTab = el('button', 'assistant-picker-tab', 'Images') as HTMLButtonElement;
+    filesTab.type = 'button';
+    imagesTab.type = 'button';
+    const setTab = (which: 'files' | 'images'): void => {
+      tab = which;
+      filesTab.classList.toggle('active', which === 'files');
+      imagesTab.classList.toggle('active', which === 'images');
+      renderList();
+    };
+    filesTab.addEventListener('click', () => setTab('files'));
+    imagesTab.addEventListener('click', () => setTab('images'));
+    tabsRow.append(filesTab, imagesTab);
+
     const filterInput = el('input', 'assistant-picker-input') as HTMLInputElement;
     filterInput.type = 'text';
-    filterInput.placeholder = 'Filter files …';
+    filterInput.placeholder = 'Filter …';
     const listBox = el('div', 'assistant-picker-list');
-    bodyArea.append(filterInput, listBox);
+    bodyArea.append(tabsRow, filterInput, listBox);
 
-    const visibleFiles = (): readonly string[] => {
+    const visible = (): readonly string[] => {
+      const source = tab === 'files' ? files : images;
       const query = filter.trim().toLowerCase();
-      return files.filter((path) => {
-        if (path === notePath && state.noteIncluded()) {
+      return source.filter((path) => {
+        if (tab === 'files' && path === notePath && state.noteIncluded()) {
           return false; // already attached as the note chip
         }
         if (query === '') {
@@ -607,7 +800,7 @@ export function mountPanel(
     };
 
     const choose = (path: string): void => {
-      const result = state.addFile(path);
+      const result = tab === 'files' ? state.addFile(path) : state.addImage(path);
       if (result.ok) {
         close();
       }
@@ -615,17 +808,17 @@ export function mountPanel(
 
     const renderList = (): void => {
       listBox.textContent = '';
-      const visible = visibleFiles();
-      if (activeIndex >= visible.length) {
-        activeIndex = Math.max(0, visible.length - 1);
+      const visiblePaths = visible();
+      if (activeIndex >= visiblePaths.length) {
+        activeIndex = Math.max(0, visiblePaths.length - 1);
       }
-      visible.forEach((path, index) => {
+      visiblePaths.forEach((path, index) => {
         const rowEl = el(
           'div',
           'assistant-picker-row' + (index === activeIndex ? ' active' : ''),
           baseName(path),
         );
-        if (path === notePath && !state.noteIncluded()) {
+        if (tab === 'files' && path === notePath && !state.noteIncluded()) {
           rowEl.classList.add('this-note');
         }
         const dir = dirName(path);
@@ -642,12 +835,18 @@ export function mountPanel(
         });
         listBox.appendChild(rowEl);
       });
-      if (visible.length === 0) {
+      if (visiblePaths.length === 0) {
         listBox.appendChild(
           el(
             'div',
             'assistant-picker-empty',
-            files.length === 0 ? 'No markdown files in the vault.' : 'No matching file',
+            tab === 'files'
+              ? files.length === 0
+                ? 'No markdown files in the vault.'
+                : 'No matching file'
+              : images.length === 0
+                ? 'No images in the vault — paste or drop one into the composer.'
+                : 'No matching image',
           ),
         );
       }
@@ -664,7 +863,7 @@ export function mountPanel(
         close();
       } else if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
         event.preventDefault();
-        const len = visibleFiles().length;
+        const len = visible().length;
         if (len > 0) {
           const delta = event.key === 'ArrowDown' ? 1 : -1;
           activeIndex = (activeIndex + delta + len) % len;
@@ -672,7 +871,7 @@ export function mountPanel(
         }
       } else if (event.key === 'Enter') {
         event.preventDefault();
-        const path = visibleFiles()[activeIndex];
+        const path = visible()[activeIndex];
         if (path !== undefined) {
           choose(path);
         }
@@ -689,21 +888,58 @@ export function mountPanel(
       files = loaded;
       renderList();
     });
+    void vaultImages.ensureLoaded().then((loaded) => {
+      images = loaded;
+      renderList();
+    });
   }
 
-  // The panel's own view of the vault files (the @ source and the picker).
-  const vaultFiles: VaultFileCache = createVaultFileCache(api);
+  // The panel's own views of the vault (the @ source and the pickers).
+  const vaultFiles: VaultFileCache = createVaultFileCache(api, '.md');
+  const vaultImages: VaultFileCache = createVaultFileCache(api, ...IMAGE_EXTENSIONS);
+
+  // -- image paste/drop staging ------------------------------------------------
+  // Images dropped or pasted onto the composer are staged into the vault
+  // (ADR-0024: attachments/ beside the reference note) and land as chips.
+  const stageImageFile = async (file: File): Promise<void> => {
+    const ext = (file.name.split('.').pop() ?? '').toLowerCase();
+    if (!IMAGE_EXTENSIONS.has(ext)) {
+      return;
+    }
+    try {
+      const bytes = new Uint8Array(await file.arrayBuffer());
+      const reference =
+        state.notePath() ?? state.activeChatPath() ?? 'chats/scratch.md';
+      const assetPath = await api.vault.saveAsset(bytes, ext, reference);
+      state.addImage(assetPath);
+    } catch (err) {
+      // Surfaced as the panel's error line via the notice slot.
+      void err;
+    }
+  };
+
+  const stageFromEvent = (event: DragEvent | ClipboardEvent): void => {
+    const files =
+      event instanceof DragEvent
+        ? event.dataTransfer?.files
+        : (event as ClipboardEvent).clipboardData?.files;
+    if (files === undefined) {
+      return;
+    }
+    for (const file of Array.from(files)) {
+      void stageImageFile(file);
+    }
+  };
 
   // -- the CodeMirror composer -------------------------------------------------
   // The host's CodeMirror in a minimal configuration: @-completion over the
   // vault files (a pick deletes the @token and adds a chip instead of
   // inserting text), Enter sends, Shift+Enter breaks the line. The
   // completion keymap sits BEFORE the send binding, so Enter accepts an
-  // open completion and only sends when none is active. Editability rides
-  // a compartment so "no note open" can flip it without rebuilding.
+  // open completion and only sends when none is active. The composer is
+  // always editable — a standalone chat needs no open note.
   const cm = api.editor.cm;
   let composerView: ComposerView | null = null;
-  let editableCompartment: CompartmentLike | null = null;
 
   const atFileSource = (context: CompletionContext): Promise<CompletionResult | null> =>
     vaultFiles.ensureLoaded().then((files) => {
@@ -775,16 +1011,24 @@ export function mountPanel(
 
   try {
     const EditorView = cm.view.EditorView;
-    editableCompartment = new cm.state.Compartment();
     composerView = new EditorView({
       state: cm.state.EditorState.create({
         doc: '',
         extensions: [
           EditorView.lineWrapping,
           cm.view.placeholder('Ask anything …'),
-          editableCompartment.of(EditorView.editable.of(false)) as Extension,
           cm.view.keymap.of(cm.autocomplete.completionKeymap),
           cm.autocomplete.autocompletion({ override: [atFileSource] }),
+          EditorView.domEventHandlers({
+            paste: (event: DragEvent | ClipboardEvent) => {
+              stageFromEvent(event);
+              return false;
+            },
+            drop: (event: DragEvent) => {
+              stageFromEvent(event);
+              return false;
+            },
+          }) as Extension,
           EditorView.updateListener.of((update) => {
             if (update.docChanged) {
               sizeComposer();
@@ -819,6 +1063,11 @@ export function mountPanel(
   // -- render loop -----------------------------------------------------------
   const render = (): void => {
     const hasNote = state.notePath() !== null;
+    const chatTitle =
+      state.chats().find((chat) => chat.path === state.activeChatPath())?.title ?? null;
+    chatTitleButton.textContent = chatTitle ?? 'New chat';
+    chatTitleButton.classList.toggle('fresh', chatTitle === null);
+
     switchButton.setAttribute('aria-checked', String(state.autoSummary()));
     switchButton.classList.toggle('on', state.autoSummary());
     switchButton.disabled = !hasNote;
@@ -826,11 +1075,6 @@ export function mountPanel(
     summarizeBtn.style.display = state.canSummarize() ? '' : 'none';
     summarizeBtn.disabled = state.summarizing();
     sendButton.disabled = state.asking();
-    if (composerView !== null && editableCompartment !== null) {
-      composerView.dispatch({
-        effects: editableCompartment.reconfigure(cm.view.EditorView.editable.of(hasNote)),
-      });
-    }
     renderChips();
     renderThread();
   };
@@ -847,4 +1091,41 @@ export function mountPanel(
       composerView = null;
     },
   };
+}
+
+/** First line of a tool result, for the chip's summary line. */
+function firstLine(text: string): string {
+  const line = text.split('\n').find((entry) => entry.trim() !== '') ?? '';
+  return line.length > 60 ? `${line.slice(0, 60)}…` : line;
+}
+
+/** Compact argument summary for a call chip. */
+function summarizeArguments(args: unknown): string {
+  if (typeof args === 'string') {
+    const cleaned = args.replace(/^\{|\}$/g, '').trim();
+    return cleaned === '' ? '' : cleaned;
+  }
+  if (args !== null && typeof args === 'object') {
+    const parts = Object.entries(args as Record<string, unknown>).map(
+      ([key, value]) => `${key}: ${typeof value === 'string' ? value : JSON.stringify(value)}`,
+    );
+    const joined = parts.join(', ');
+    return joined.length > 48 ? `${joined.slice(0, 48)}…` : joined;
+  }
+  return '';
+}
+
+function formatArguments(args: unknown): string {
+  if (typeof args === 'string') {
+    try {
+      return JSON.stringify(JSON.parse(args), null, 2);
+    } catch {
+      return args;
+    }
+  }
+  try {
+    return JSON.stringify(args, null, 2);
+  } catch {
+    return String(args);
+  }
 }

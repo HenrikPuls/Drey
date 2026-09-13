@@ -1,7 +1,8 @@
 /**
- * The vault's markdown file paths, cached for the composer's file chips
- * (the @-completion source and the "+" picker). Flattened from
- * `api.vault.listFiles()`'s tree and invalidated on any vault change.
+ * The vault's file paths, cached for the composer's chips (the
+ * @-completion source and the "+" picker's Files/Images tabs). Flattened
+ * from `api.vault.listFiles()`'s tree, filtered by extension, and
+ * invalidated on any vault change.
  *
  * A stale entry's worst case is one skipped read at send time (the state
  * layer drops files that are no longer in the vault), never a wrong
@@ -11,11 +12,17 @@
 import type { DreyPluginApi } from '../../../shared/plugin-api/renderer';
 
 export interface VaultFileCache {
-  /** The sorted `.md` paths, loading the cache on first use. */
+  /** The sorted matching paths, loading the cache on first use. */
   ensureLoaded(): Promise<readonly string[]>;
 }
 
-export function createVaultFileCache(api: DreyPluginApi): VaultFileCache {
+export function createVaultFileCache(
+  api: DreyPluginApi,
+  ...extensions: readonly string[]
+): VaultFileCache {
+  const suffixes = (extensions.length > 0 ? extensions : ['.md']).map((ext) =>
+    ext.startsWith('.') ? ext.toLowerCase() : `.${ext.toLowerCase()}`,
+  );
   let paths: readonly string[] | null = null;
   let loading: Promise<readonly string[]> | null = null;
 
@@ -25,7 +32,7 @@ export function createVaultFileCache(api: DreyPluginApi): VaultFileCache {
       for (const entry of entries) {
         if (entry.type === 'directory') {
           out.push(...collect((entry.children as typeof entries) ?? []));
-        } else if (entry.name.toLowerCase().endsWith('.md')) {
+        } else if (suffixes.some((suffix) => entry.name.toLowerCase().endsWith(suffix))) {
           out.push(entry.relativePath);
         }
       }

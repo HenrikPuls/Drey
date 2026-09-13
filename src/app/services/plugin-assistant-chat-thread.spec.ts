@@ -2,7 +2,6 @@ import {
   ChatThread,
   emptyThread,
   hasSummary,
-  historyForAsk,
   parseChatThread,
   serializeChatThread,
   sidecarPathFor,
@@ -54,44 +53,8 @@ describe('parseChatThread', () => {
   });
 });
 
-describe('historyForAsk', () => {
-  const thread = (...roles: [ChatThread['cards'][number]['role'], string][]): ChatThread => ({
-    version: 1,
-    notePath: 'a.md',
-    cards: roles.map(([role, text], i) => ({ id: `c${i}`, role, text, at: '' })),
-  });
-
-  it('maps question cards to user turns and summary/answer to assistant turns', () => {
-    const messages = historyForAsk(
-      thread(['summary', 'About X.'], ['question', 'Why?'], ['answer', 'Because.']),
-    );
-    expect(messages).toEqual([
-      { role: 'assistant', content: 'Note summary: About X.' },
-      { role: 'user', content: 'Why?' },
-      { role: 'assistant', content: 'Because.' },
-    ]);
-  });
-
-  it('drops a dangling trailing question so no two user turns are sent in a row', () => {
-    const messages = historyForAsk(thread(['question', 'first'], ['answer', 'a'], ['question', 'x']));
-    expect(messages).toEqual([
-      { role: 'user', content: 'first' },
-      { role: 'assistant', content: 'a' },
-    ]);
-  });
-
-  it('caps to the most recent turns but keeps a leading summary', () => {
-    const cards: [ChatThread['cards'][number]['role'], string][] = [['summary', 's']];
-    for (let i = 0; i < 10; i++) {
-      cards.push(['question', `q${i}`], ['answer', `a${i}`]);
-    }
-    const messages = historyForAsk(thread(...cards), 5);
-    expect(messages).toHaveLength(5);
-    expect(messages[0]).toEqual({ role: 'assistant', content: 'Note summary: s' });
-    expect(messages[messages.length - 1]).toEqual({ role: 'assistant', content: 'a9' });
-  });
-
-  it('is empty for a fresh thread', () => {
-    expect(historyForAsk(emptyThread('a.md'))).toEqual([]);
-  });
-});
+// `historyForAsk` (the ~12-message capped sidecar replay) is RETIRED since
+// ADR-0048: conversations replay from chat notes
+// (`plugins-assistant-chat-note.spec.ts` / `plugin-assistant-replay.spec.ts`),
+// and the sidecar carries only the summary card, which is never a
+// conversation turn.

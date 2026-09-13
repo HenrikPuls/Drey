@@ -405,20 +405,19 @@ in a signal, and an `effect` in `ActionsService` drains the queue through
 the exact `ConfirmationService` path above. A non-`confirm` trigger is
 applied in the main process before the save result returns.
 
-## 6.7 Assistant panel Ask (answer vs. document edit)
+## 6.7 Assistant panel Ask (chat note + full-history replay, ADR-0048)
 
-The assistant panel's composer sends the user's question plus the attached
-context to the LLM. The context is chip-shaped (milestone 24): the open
-note rides along **by default** and can be deselected, and extra vault
-files join via the composer's `@`-completion or the "+" picker — their
-bodies are read at send time (open tabs as their live buffer, the rest
-from disk) and capped per file. A question comes back as text and becomes
-an answer card; with the note chip **on**, a "change the document"
-instruction comes back as a full rewrite that reuses the 6.6 confirmation
-flow (`triggerId: null`, so no "don't ask again" checkbox), and what the
-user decided is recorded as a card too. With the chip **off** the turn is
-answer-only: there is no document to edit, so the engine picks a
-system prompt without the edit JSON form.
+Milestone 25: the conversation lives in a **chat note** under `chats/`
+(the source of truth), the panel went chat-first, and a follow-up
+**replays the whole persisted history** — or resumes a provider session
+(claude-code `--resume`) when the capability, the `session:` frontmatter
+and an unchanged provider all line up. Tool calls/results and applied
+edits persist as `drey-tool` entries inside the turn, which is what lets
+the replay rebuild the provider loop exactly (the bug-10(b) resolution;
+the old ~12-message cap and the `history` IPC field are gone). The
+context chips still work as before: the open note rides along by default
+with its live buffer, extra files are read at send time, and the note
+chip off means an answer-only standalone chat.
 
 Since ADR-0044 stage 7 the whole flow lives in the assistant plugin; the
 renderer reaches the plugin main through the fixed `plugin:invoke` channel.
@@ -428,36 +427,48 @@ sequenceDiagram
     actor User
     participant Panel as panel.ts (composer, chips)
     participant State as state.ts (plugin renderer)
-    participant Engine as engine.ask (plugin main)
+    participant Engine as chat-engine.ask (plugin main)
+    participant Store as chat-store (plugin main)
     participant LM as LlmRouter (base)
-    participant Pure as shared/ (llm, text-diff)
+    participant Replay as shared/chat-replay (pure)
     participant Confirm as ConfirmationService + Dialog
     participant EditorService
-    participant Store as sidecar thread .{name}.chat.json
 
     User->>Panel: type question, Enter
     Panel->>State: ask(question)
-    State->>State: guards (note open? context attached? already asking?)
-    State->>Store: append question card
+    State->>State: guards (already asking? chat tab dirty? LLM on?)
     State->>State: read extra files (live buffer / vault, truncated)
-    State->>Engine: plugin:invoke 'ask' { question, note|null, extraFiles, history }
-    Engine->>LM: ctx.llm.chat (ASK_SYSTEM | ASK_ANSWER_SYSTEM + doc/FILE blocks)
-    LM-->>Engine: reply
+    State->>Engine: plugin:invoke 'ask' { question, note|null, extraFiles, images, chatPath }
+    Engine->>Store: create note (null chatPath: slug from question) / read view
+    Engine->>Store: appendTurn(user: question + attachment paths)
+    alt resume (sessions cap + session: + provider unchanged)
+        Engine->>Engine: messages = [system, question] + catch-up line + sessionRef
+    else full replay
+        Engine->>Replay: buildReplayMessages(turns, read fresh)
+        Replay-->>Engine: tool pairs + edits + FILE sections (+ warnings)
+    end
+    Engine->>LM: ctx.llm.chat (tools per mcp, images per capability)
+    LM-->>Engine: LlmChatResult { text, sessionRef?, toolTrace? }
+    alt call failed
+        Engine->>Store: truncateFrom(user turn) — no dangling question
+        Engine-->>State: rejection (renderer keeps the text)
+    end
     Engine->>Pure: parseJsonObject(reply)
     alt note chip on AND { kind: 'edit', document }
         Engine->>Pure: pickPreviewStyle(before, after)
-        Engine-->>State: { kind: 'edit', before, after, previewStyle, summary }
+        Engine-->>State: { chatPath, outcome: edit }
+    else { kind: 'answer', text }
+        Engine-->>State: { chatPath, outcome: answer }
+    end
+    Engine->>Store: appendTurn(assistant: text + toolTrace as drey-tool, meta, session)
+    State->>Store: chat:read — the view re-renders (turn cards, tool chips)
+    opt edit outcome
         State->>Confirm: request({ ..., triggerId: null })
-        Confirm-->>User: dialog (localized or side-by-side)
         User-->>Confirm: Apply / Cancel
-        Confirm-->>State: boolean
+        State->>Store: chat:appendEdit { applied, after? } — the result persists
         opt confirmed
             State->>EditorService: requestRewrite applied by the host
         end
-        State->>Store: append answer card ("Change applied." / "Change discarded.")
-    else { kind: 'answer', text }
-        Engine-->>State: { kind: 'answer', text }
-        State->>Store: append answer card
     end
 ```
 

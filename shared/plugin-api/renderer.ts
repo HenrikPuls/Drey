@@ -27,7 +27,9 @@ export type {
   ActionContext,
   ActionOutcome,
   AskOutcome,
+  ChatAttachment,
   ChatMessage,
+  LlmCapabilities,
   LlmDebugEntry,
   LlmModelListing,
 } from '../llm';

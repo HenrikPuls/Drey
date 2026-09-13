@@ -11,7 +11,14 @@
  * - no Angular types (main has none, and plugins are framework-agnostic).
  */
 import type { BrowserWindow, WebContents } from 'electron';
-import type { ActionOutcome, ChatMessage, LlmChatResult, LlmDebugEntry } from '../llm';
+import type {
+  ActionOutcome,
+  ChatAttachment,
+  ChatMessage,
+  LlmCapabilities,
+  LlmChatResult,
+  LlmDebugEntry,
+} from '../llm';
 import type { AppConfig } from '../app-config';
 import type { TagEntry, TagSearchHit, TagSearchQuery } from './search-types';
 import type { VaultFileEntry } from '../ipc-api';
@@ -95,6 +102,13 @@ export interface MainChatOptions {
    * gets the `VaultTools` instance itself.
    */
   readonly vaultTools?: boolean;
+  /**
+   * Images embedded into the LAST user message of this one call
+   * (`ChatAttachment` is bytes — the caller resolves them; the provider
+   * stays vault-ignorant). Ignored unless the active provider declares the
+   * `imageAttachments` capability.
+   */
+  readonly attachments?: readonly ChatAttachment[];
 }
 
 /**
@@ -118,6 +132,16 @@ export interface MainPluginContext {
   readonly vault: {
     read(path: string): Promise<string>;
     write(path: string, content: string): Promise<number>;
+    /**
+     * A write the app must SEE immediately: after writing, the same
+     * external-change round an MCP write runs fires (per-file plugin index
+     * events + one scoped `vault:changed` renderer push) — the Files tree,
+     * the tag index and any clean open tab of that path refresh. Use for
+     * app-generated first-class notes (the assistant's chat notes); use
+     * plain `write` for hidden bookkeeping (sidecars) where the churn is
+     * unwanted.
+     */
+    writeAnnounced(path: string, content: string): Promise<number>;
     list(): Promise<readonly VaultFileEntry[]>;
     /** Absolute path of a vault-relative asset, or null when it escapes the vault. */
     resolveAssetPath(relativePath: string): string | null;
@@ -153,9 +177,12 @@ export interface MainPluginContext {
      * One completion through the active provider (ADR-0047); rejects when
      * disabled (ADR-0014: no timeout — cancel via the renderer's
      * `llm.cancelTask(taskId)`). Returns the result shape so a provider's
-     * session handle / usage can flow through; the text is `.text`.
+     * session handle / usage / tool trace can flow through; the text is
+     * `.text`.
      */
     chat(messages: readonly ChatMessage[], options?: MainChatOptions): Promise<LlmChatResult>;
+    /** What the ACTIVE provider can and cannot do (ADR-0047 capability descriptor). */
+    capabilities(): LlmCapabilities;
     /** The vocabulary-carrying tag suggestion (the `autotag` prompt); plugin supplies its vocabulary. */
     suggestTags(entryText: string, vocabulary: readonly string[], taskId?: string): Promise<string[]>;
     onDebugEntry(cb: (entry: LlmDebugEntry) => void): Unsubscribe;

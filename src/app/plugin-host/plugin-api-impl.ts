@@ -13,6 +13,7 @@ import type {
   TagEntry,
   TagSearchHit,
   LlmModelListing,
+  LlmCapabilities,
 } from '../../../shared/plugin-api/renderer';
 import { DockService } from '../dock/dock.service';
 import { WidgetRegistryService } from '../dock/widget-registry.service';
@@ -196,6 +197,8 @@ export class PluginApiFactory {
       vault: {
         readFile: (path) => window.dreyApi.readVaultFile(path),
         writeFile: (path, content) => window.dreyApi.writeVaultFile(path, content),
+        saveAsset: (bytes, ext, noteRelPath) =>
+          invokeBackend('drey.vault.saveAsset', { bytes, ext, noteRelPath }) as Promise<string>,
         listFiles: () => window.dreyApi.listVaultFiles(),
         onChanged: (listener) =>
           track(
@@ -305,6 +308,7 @@ export class PluginApiFactory {
           })) as string,
         listModels: () =>
           invokeBackend('drey.llm.listModels') as Promise<LlmModelListing>,
+        capabilities: () => invokeBackend('drey.llm.capabilities') as Promise<LlmCapabilities>,
         cancelTask: (taskId) => window.dreyApi.cancelLlmTask(taskId),
         onDebugEntry: (listener) => track(window.dreyApi.onLlmDebugEntry(listener)),
         onDelta: (listener) => track(window.dreyApi.onLlmDelta(listener)),

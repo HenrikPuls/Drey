@@ -1,34 +1,33 @@
 /**
- * The assistant panel's state — the pre-conversion `AssistantService`
- * (`src/app/assistant/assistant.service.ts`) as a plain-JS factory with its
- * ports injected, so the unit spec can drive it without a DOM (ADR-0044:
- * plugin logic stays framework-free; the DOM layer is `panel.ts`).
+ * The assistant panel's state — a plain-JS factory with its ports
+ * injected, so the unit spec can drive it without a DOM (ADR-0044: plugin
+ * logic stays framework-free; the DOM layer is `panel.ts`).
  *
- * One chat thread per note, persisted as a sidecar file
- * (`shared/chat-thread.ts`), plus the per-note "Automatic summary" switch
- * and the per-note context chips (the note itself — on by default — and
- * extra files, milestone 24). Both chip kinds are *session state*, not
- * config and not persisted: they are a per-question choice.
+ * Since ADR-0048 the conversation lives in a chat note under `chats/`
+ * (the note IS the source of truth; the main-side engine persists every
+ * turn and replays the full history). The renderer holds only *session*
+ * state: which chat is active, the context chips (the open note — on by
+ * default — extra files, images), a streaming buffer, and the per-note
+ * auto-summary sidecar logic (ADR-0012, unchanged — summaries never
+ * became conversations).
  *
- * The switch is deliberately *session state*, not config: it is seeded from
- * `assistant.autoSummaryDefault` when a note is first opened and overrides
- * it for that note only. Writing it back would turn a one-off "not for this
- * note" into a silent change of the global rule.
- *
- * Auto-summary fires once per note per session and only when there is no
- * sidecar thread yet, so re-opening a note never re-bills an LLM call for
- * a summary that already exists.
+ * The auto-summary switch is deliberately *session state*, not config: it
+ * is seeded from `assistant.autoSummaryDefault` when a note is first
+ * opened and overrides it for that note only. Auto-summary fires once per
+ * note per session and only when there is no sidecar thread yet, so
+ * re-opening a note never re-bills an LLM call for a summary that already
+ * exists.
  */
 import type { ActionOutcome } from '../../../shared/plugin-api';
+import type { AskOutcome } from '../../../shared/llm';
 import type { AskRequest } from '../shared/ask';
-import {
-  MAX_EXTRA_FILES,
-  truncateFileBody,
-} from '../shared/ask.js';
+import { MAX_EXTRA_FILES, MAX_IMAGES, truncateFileBody } from '../shared/ask.js';
 import type { ChatCard, ChatThread } from '../shared/chat-thread';
-import { emptyThread, hasSummary, historyForAsk } from '../shared/chat-thread.js';
+import { emptyThread, hasSummary } from '../shared/chat-thread.js';
+import type { ChatNoteView, ChatSummary } from '../shared/chat-note';
 import { formatDateTime, ipcErrorMessage } from '../shared/format.js';
-import { uid, type RunningTasks } from './running-tasks.js';
+import { type RunningTasks } from './running-tasks.js';
+import { uid } from './running-tasks.js';
 
 /** The text a cancelled generation reports. */
 const CANCELLED = 'Generation cancelled.';
@@ -40,14 +39,25 @@ function isCancellation(error: unknown): boolean {
 
 /** Everything the state needs from the host API; injected for testability. */
 export interface AssistantPorts {
+  // -- chat notes (ADR-0048) ----------------------------------------------
+  listChats(): Promise<ChatSummary[]>;
+  readChat(path: string): Promise<ChatNoteView>;
+  ask(request: AskRequest, taskId?: string): Promise<{ chatPath: string; outcome: AskOutcome }>;
+  /** Persists the confirm outcome into the last assistant turn's fence. */
+  appendEdit(path: string, applied: boolean, after?: string): Promise<void>;
+  /** Drops every turn from `turnIndex` on (restart-from-here). */
+  truncate(path: string, turnIndex: number): Promise<void>;
+  /** One-shot sidecar import; returns the created chat note's path. */
+  importSidecar(notePath: string): Promise<{ chatPath: string }>;
+  /** Streamed answer text for a task this state started (`chat:delta`). */
+  onDelta(listener: (event: { taskId: string; text: string }) => void): () => void;
+
+  // -- summary sidecar (ADR-0012, unchanged) -------------------------------
   readThread(notePath: string): Promise<ChatThread>;
   writeThread(thread: ChatThread): Promise<void>;
   summarize(context: { path: string; body: string }, taskId?: string): Promise<string>;
-  ask(
-    request: AskRequest,
-    taskId?: string,
-    history?: ReturnType<typeof historyForAsk>,
-  ): Promise<{ kind: 'answer'; text: string } | { kind: 'edit'; before: string; after: string; previewStyle: 'localized' | 'document'; summary: string }>;
+
+  // -- shared --------------------------------------------------------------
   /**
    * A file's text for attachment: the live buffer when the file is open,
    * else its vault content; `null` when it is gone from the vault.
@@ -75,30 +85,39 @@ export interface AssistantPorts {
 export interface AssistantState {
   /** The active note's path (null = no text document open). */
   notePath(): string | null;
-  cards(): readonly ChatCard[];
-  thread(): ChatThread;
+  /** The picker list (most recently updated chat first). */
+  chats(): readonly ChatSummary[];
+  /** The active chat's path, or null when the next ask starts a NEW chat. */
+  activeChatPath(): string | null;
+  /** The active chat's parsed note; null when none is loaded. */
+  view(): ChatNoteView | null;
+  /** The pinned auto-summary card of the active note, if any. */
+  summaryCard(): ChatCard | null;
+  /** True when the open note's sidecar has conversation cards to import. */
+  canImportSidecar(): boolean;
   /** Effective state of the panel's switch for the active note. */
   autoSummary(): boolean;
   /** True when a manual "Summarise now" makes sense (no summary card yet). */
   canSummarize(): boolean;
   summarizing(): boolean;
   asking(): boolean;
+  /** The in-flight generation's streamed text, when one is running. */
+  streaming(): { taskId: string; text: string } | null;
   /** Something went wrong — shown in the accent colour. */
   error(): string | null;
   /** A cancellation or other non-fault — shown quiet. */
   notice(): string | null;
   /** A manual Action's noop/error message (was the editor meta-bar line). */
   actionMessage(): string | null;
-  /** Clears the error/notice lines (the old `dismiss()`). */
+  /** Clears the error/notice lines. */
   dismiss(): void;
   dismissActionMessage(): void;
   /** The panel switch. Applies to this note only; the default is untouched. */
   setAutoSummary(on: boolean): void;
   /**
-   * Context chips, per open note (session state like the switch): whether
-   * the note itself rides along (default on) and which extra files are
-   * attached. Neither is persisted — the chips are a per-question choice,
-   * not a note property.
+   * Context chips (session state like the switch): whether the open note
+   * itself rides along (default on), which extra files and images are
+   * attached. Not persisted — a per-question choice.
    */
   noteIncluded(): boolean;
   setNoteIncluded(on: boolean): void;
@@ -106,19 +125,31 @@ export interface AssistantState {
   /** Adds a file chip; resolves to a reason string when refused. */
   addFile(path: string): { ok: boolean; reason?: string };
   removeFile(path: string): void;
-  /** Runs the openNote rule: load the sidecar, then maybe auto-summarise. */
+  images(): readonly string[];
+  /** Adds an image chip (a vault-relative path); reason string when refused. */
+  addImage(path: string): { ok: boolean; reason?: string };
+  removeImage(path: string): void;
+  /** Runs the openNote rule: load the summary sidecar, then maybe auto-summarise. */
   openNote(path: string): Promise<void>;
   /** Nothing text-shaped is active (a browser tab, or no pane). */
   closeNote(): void;
+  /** Loads a chat into the panel (the picker's click). */
+  openChat(path: string): Promise<void>;
+  /** Next ask starts a new chat note. */
+  newChat(): void;
   summarizeNow(): Promise<void>;
+  /** One-shot, non-destructive sidecar import for the open note. */
+  importSidecar(): Promise<void>;
   /** Sends a question; resolves false when it was not sent (so the composer can keep the text). */
   ask(question: string): Promise<boolean>;
-  /** How many cards a "restart from here" at `cardId` would drop. */
-  laterCount(cardId: string): number;
-  /** Rewinds to just before `cardId`; returns a removed question's text for the composer. */
-  restartFrom(cardId: string): Promise<string | null>;
+  /** How many turns a "restart from here" at `turnIndex` would drop. */
+  laterCount(turnIndex: number): number;
+  /** Rewinds to just before `turnIndex`; returns the removed question's text. */
+  restartFrom(turnIndex: number): Promise<string | null>;
   /** An Action run reported a noop/error — the panel shows it. */
   reportActionOutcome(outcome: ActionOutcome): void;
+  /** Vault content changed — the chat list cache is stale. */
+  invalidateChats(): void;
   cancelRunning(): Promise<void>;
   took(durationMs: number | undefined): string | null;
   /** Re-renders subscribe here. */
@@ -126,20 +157,29 @@ export interface AssistantState {
 }
 
 export function createAssistantState(ports: AssistantPorts, tasks: RunningTasks): AssistantState {
-  /** Loaded threads by note path. */
-  const threads = new Map<string, ChatThread>();
-  /** Per-note override of the auto-summary default. */
-  const toggles = new Map<string, boolean>();
-  /** Notes whose auto-summary attempt already happened this session. */
-  const attempted = new Set<string>();
-  /** Notes whose note chip the user turned off (absent = included). */
-  const noteExcluded = new Set<string>();
-  /** Extra file chips per note path, in add order. */
-  const filesByNote = new Map<string, string[]>();
+  /** The picker list cache; invalidated on vault changes. */
+  let chats: ChatSummary[] = [];
+  let chatsLoaded = false;
+  /** The active chat note (parsed view cached; re-read after each mutation). */
+  let activeChat: string | null = null;
+  let view: ChatNoteView | null = null;
 
+  /** The active NOTE (for chips + auto-summary) — independent of the chat. */
   let activePath: string | null = null;
+  /** Per-note summary sidecars, loaded on open. */
+  const threads = new Map<string, ChatThread>();
+  const toggles = new Map<string, boolean>();
+  const attempted = new Set<string>();
+
+  /** Chips are keyed by the note path (or '' when no note is open). */
+  const chipKey = (): string => activePath ?? '';
+  const noteExcluded = new Set<string>();
+  const filesByNote = new Map<string, string[]>();
+  const imagesByKey = new Map<string, string[]>();
+
   let summarizing = false;
   let asking = false;
+  let streaming: { taskId: string; text: string } | null = null;
   let error: string | null = null;
   let notice: string | null = null;
   let actionMessage: string | null = null;
@@ -151,6 +191,23 @@ export function createAssistantState(ports: AssistantPorts, tasks: RunningTasks)
     }
   };
 
+  /** Streaming deltas arrive per token — re-render at most every ~100 ms. */
+  let lastStreamNotify = 0;
+  const notifyThrottled = (): void => {
+    const now = Date.now();
+    if (now - lastStreamNotify >= 100) {
+      lastStreamNotify = now;
+      notify();
+    }
+  };
+
+  ports.onDelta((event) => {
+    if (streaming !== null && event.taskId === streaming.taskId) {
+      streaming = { taskId: streaming.taskId, text: streaming.text + event.text };
+      notifyThrottled();
+    }
+  });
+
   /** Routes a rejection to the error line or the quiet notice line. */
   const report = (err: unknown): void => {
     if (isCancellation(err)) {
@@ -160,6 +217,21 @@ export function createAssistantState(ports: AssistantPorts, tasks: RunningTasks)
       error = ipcErrorMessage(err);
       notice = null;
     }
+  };
+
+  const refreshChats = async (): Promise<void> => {
+    try {
+      chats = await ports.listChats();
+      chatsLoaded = true;
+    } catch {
+      // The picker keeps whatever it had; the error line stays reserved
+      // for things the user can act on.
+    }
+    notify();
+  };
+
+  const loadView = async (path: string): Promise<void> => {
+    view = await ports.readChat(path);
   };
 
   const appendCard = async (
@@ -244,13 +316,29 @@ export function createAssistantState(ports: AssistantPorts, tasks: RunningTasks)
 
   return {
     notePath: () => activePath,
-    cards: () => (activePath === null ? [] : (threads.get(activePath) ?? emptyThread('')).cards),
-    thread: () => (activePath === null ? emptyThread('') : (threads.get(activePath) ?? emptyThread(activePath))),
+    chats: () => chats,
+    activeChatPath: () => activeChat,
+    view: () => view,
+    summaryCard: () => {
+      if (activePath === null) {
+        return null;
+      }
+      const cards = (threads.get(activePath) ?? emptyThread(activePath)).cards;
+      return [...cards].reverse().find((card) => card.role === 'summary') ?? null;
+    },
+    canImportSidecar: () => {
+      if (activePath === null) {
+        return false;
+      }
+      const cards = (threads.get(activePath) ?? emptyThread(activePath)).cards;
+      return cards.some((card) => card.role === 'question' || card.role === 'answer');
+    },
 
     autoSummary,
     canSummarize: () => activePath !== null && ports.llmEnabled() && !hasSummary(assistantThread()),
     summarizing: () => summarizing,
     asking: () => asking,
+    streaming: () => streaming,
     error: () => error,
     notice: () => notice,
     actionMessage: () => actionMessage,
@@ -291,41 +379,60 @@ export function createAssistantState(ports: AssistantPorts, tasks: RunningTasks)
       notify();
     },
 
-    extraFiles: () => (activePath === null ? [] : (filesByNote.get(activePath) ?? [])),
+    extraFiles: () => filesByNote.get(chipKey()) ?? [],
 
     addFile(path) {
-      if (activePath === null) {
-        return { ok: false, reason: 'No note is open.' };
-      }
       if (path === activePath) {
         // The note itself — @ or + found the open note: include it rather
         // than attaching it twice under two mechanisms.
-        if (noteExcluded.has(activePath)) {
+        if (activePath !== null && noteExcluded.has(activePath)) {
           noteExcluded.delete(activePath);
           notify();
           return { ok: true };
         }
         return { ok: false, reason: 'This note is already attached.' };
       }
-      const files = filesByNote.get(activePath) ?? [];
+      const key = chipKey();
+      const files = filesByNote.get(key) ?? [];
       if (files.includes(path)) {
         return { ok: false, reason: 'Already attached.' };
       }
       if (files.length >= MAX_EXTRA_FILES) {
         return { ok: false, reason: `At most ${MAX_EXTRA_FILES} files per question.` };
       }
-      filesByNote.set(activePath, [...files, path]);
+      filesByNote.set(key, [...files, path]);
       notify();
       return { ok: true };
     },
 
     removeFile(path) {
-      if (activePath === null) {
-        return;
-      }
-      const files = filesByNote.get(activePath);
+      const files = filesByNote.get(chipKey());
       if (files !== undefined && files.includes(path)) {
-        filesByNote.set(activePath, files.filter((entry) => entry !== path));
+        filesByNote.set(chipKey(), files.filter((entry) => entry !== path));
+        notify();
+      }
+    },
+
+    images: () => imagesByKey.get(chipKey()) ?? [],
+
+    addImage(path) {
+      const key = chipKey();
+      const images = imagesByKey.get(key) ?? [];
+      if (images.includes(path)) {
+        return { ok: false, reason: 'Already attached.' };
+      }
+      if (images.length >= MAX_IMAGES) {
+        return { ok: false, reason: `At most ${MAX_IMAGES} images per question.` };
+      }
+      imagesByKey.set(key, [...images, path]);
+      notify();
+      return { ok: true };
+    },
+
+    removeImage(path) {
+      const images = imagesByKey.get(chipKey());
+      if (images !== undefined && images.includes(path)) {
+        imagesByKey.set(chipKey(), images.filter((entry) => entry !== path));
         notify();
       }
     },
@@ -356,6 +463,34 @@ export function createAssistantState(ports: AssistantPorts, tasks: RunningTasks)
       }
     },
 
+    async openChat(path) {
+      if (asking) {
+        return;
+      }
+      error = null;
+      notice = null;
+      activeChat = path;
+      notify();
+      try {
+        await loadView(path);
+      } catch (err) {
+        view = null;
+        report(err);
+      }
+      notify();
+    },
+
+    newChat() {
+      if (asking) {
+        return;
+      }
+      activeChat = null;
+      view = null;
+      error = null;
+      notice = null;
+      notify();
+    },
+
     async summarizeNow() {
       if (activePath === null) {
         return;
@@ -364,38 +499,50 @@ export function createAssistantState(ports: AssistantPorts, tasks: RunningTasks)
       await runSummary(activePath);
     },
 
+    async importSidecar() {
+      if (activePath === null || asking) {
+        return;
+      }
+      try {
+        const { chatPath } = await ports.importSidecar(activePath);
+        activeChat = chatPath;
+        notify();
+        await loadView(chatPath);
+        await refreshChats();
+      } catch (err) {
+        report(err);
+        notify();
+      }
+    },
+
     async ask(question) {
       const text = question.trim();
-      const path = activePath;
-      if (text === '' || path === null || asking) {
+      if (text === '' || asking) {
         return false;
       }
-      const includeNote = noteExcluded.has(path) === false;
-      const attached = filesByNote.get(path) ?? [];
-      if (!includeNote && attached.length === 0) {
-        notice = 'No context attached — include the note or add a file.';
+      if (!ports.llmEnabled()) {
+        error = 'LLM features are disabled.';
         notify();
         return false;
       }
+      const includeNote = activePath !== null && !noteExcluded.has(activePath);
+      const attached = filesByNote.get(chipKey()) ?? [];
+      const images = imagesByKey.get(chipKey()) ?? [];
+
       asking = true;
       error = null;
       notice = null;
       notify();
-      // Snapshot the thread as chat turns *before* the new question is added
-      // as a card, so the model gets the running conversation as context
-      // rather than re-answering from the document alone.
-      const history = historyForAsk(threads.get(path) ?? emptyThread(path));
-      await appendCard(path, 'question', text);
       try {
         // The note chip rides with the live, unsaved buffer — the same
         // "what you see is what the model gets" rule as before chips.
         let note: AskRequest['note'] = null;
         if (includeNote) {
           const doc = ports.activeDoc();
-          if (doc === null || doc.path !== path) {
+          if (doc === null) {
             throw new Error('This note is not open.');
           }
-          note = { path, body: doc.body };
+          note = { path: doc.path, body: doc.body };
         }
         // Extra files are read at send time (open tabs as their live
         // buffer, the rest from disk); ones that vanished from the vault
@@ -411,33 +558,61 @@ export function createAssistantState(ports: AssistantPorts, tasks: RunningTasks)
           }
         }
         if (missing.length > 0) {
-          if (note === null && extraFiles.length === 0) {
+          if (note === null && extraFiles.length === 0 && images.length === 0) {
             throw new Error('The attached files are no longer in the vault.');
           }
           notice = `Skipped ${missing.join(', ')} — no longer in the vault.`;
         }
-        const { value: outcome, durationMs } = await tasks.run('Thinking', (taskId) =>
-          ports.ask({ question: text, note, extraFiles }, taskId, history),
-        );
-        if (outcome.kind === 'answer') {
-          await appendCard(path, 'answer', outcome.text, durationMs);
+
+        const request: AskRequest = {
+          question: text,
+          note,
+          extraFiles,
+          images: [...images],
+          chatPath: activeChat,
+        };
+        // The task id is minted inside `run` (Cancel must exist while the
+        // call is outstanding); `streaming` is keyed by it so the delta
+        // push lands on the right partial card.
+        const { value: result } = await tasks.run('Thinking', (taskId) => {
+          streaming = { taskId, text: '' };
+          notify();
+          return ports.ask(request, taskId);
+        });
+        streaming = null;
+        activeChat = result.chatPath;
+        await loadView(result.chatPath);
+        notify();
+
+        if (result.outcome.kind === 'answer') {
+          await refreshChats();
           return true;
         }
         // The host's requestRewrite shows the shared dialog and applies the
-        // rewrite itself when confirmed (ADR-0011, one flow).
+        // rewrite itself when confirmed (ADR-0011, one flow). The outcome —
+        // applied document or discarded marker — persists into the turn's
+        // fence so the next replay knows what happened (bug-10(b)).
         const confirmed = await ports.requestRewrite({
-          path,
-          before: outcome.before,
-          after: outcome.after,
+          path: note !== null ? note.path : activePath ?? '',
+          before: result.outcome.before,
+          after: result.outcome.after,
           title: 'Apply change from the assistant',
-          summary: outcome.summary,
-          previewStyle: outcome.previewStyle,
+          summary: result.outcome.summary,
+          previewStyle: result.outcome.previewStyle,
           triggerId: null,
         });
-        await appendCard(path, 'answer', confirmed ? 'Change applied.' : 'Change discarded.');
+        await ports.appendEdit(
+          result.chatPath,
+          confirmed,
+          confirmed ? result.outcome.after : undefined,
+        );
+        await loadView(result.chatPath);
+        notify();
+        await refreshChats();
         return true;
       } catch (err) {
-        error = ipcErrorMessage(err);
+        streaming = null;
+        report(err);
         notify();
         return false;
       } finally {
@@ -446,38 +621,28 @@ export function createAssistantState(ports: AssistantPorts, tasks: RunningTasks)
       }
     },
 
-    laterCount(cardId) {
-      const cards = assistantThread().cards;
-      const index = cards.findIndex((card) => card.id === cardId);
-      return index === -1 ? 0 : cards.length - index;
+    laterCount(turnIndex) {
+      return view === null ? 0 : Math.max(0, view.turns.length - turnIndex);
     },
 
-    async restartFrom(cardId) {
-      const path = activePath;
-      if (path === null || asking || summarizing || tasks.isRunning()) {
+    async restartFrom(turnIndex) {
+      if (activeChat === null || asking || summarizing || tasks.isRunning()) {
         return null;
       }
-      const current = threads.get(path);
-      if (!current) {
-        return null;
-      }
-      const index = current.cards.findIndex((card) => card.id === cardId);
-      if (index === -1) {
-        return null;
-      }
-      const removed = current.cards[index];
-      const next: ChatThread = { ...current, cards: current.cards.slice(0, index) };
-      threads.set(path, next);
+      const removed = view?.turns[turnIndex] ?? null;
       error = null;
       notice = null;
-      notify();
       try {
-        await ports.writeThread(next);
-      } catch (err) {
-        error = ipcErrorMessage(err);
+        await ports.truncate(activeChat, turnIndex);
+        await loadView(activeChat);
         notify();
+        await refreshChats();
+      } catch (err) {
+        report(err);
+        notify();
+        return null;
       }
-      return removed.role === 'question' ? removed.text : null;
+      return removed !== null && removed.role === 'user' ? removed.text : null;
     },
 
     reportActionOutcome(outcome) {
@@ -487,12 +652,20 @@ export function createAssistantState(ports: AssistantPorts, tasks: RunningTasks)
       }
     },
 
+    invalidateChats() {
+      void refreshChats();
+    },
+
     cancelRunning: () => tasks.cancel(),
 
     took: (durationMs) => (durationMs === undefined ? null : tasks.took(durationMs)),
 
     subscribe(listener) {
       listeners.add(listener);
+      if (!chatsLoaded) {
+        chatsLoaded = true; // only the first subscriber triggers the load
+        void refreshChats();
+      }
       return () => listeners.delete(listener);
     },
   };

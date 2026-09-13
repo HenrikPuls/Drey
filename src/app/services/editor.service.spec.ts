@@ -550,6 +550,19 @@ describe('EditorService', () => {
       expect(diskService.isDirty()).toBe(true);
     });
 
+    it('reloads a dirty CHAT tab — the note is the source of truth (ADR-0048)', async () => {
+      const diskService = serviceWithDisk({
+        'chats/2026/09/2026-09-13-topic.md': { content: '## User\n\nasked\n', modifiedMs: 500 },
+      });
+      await diskService.openFile('chats/2026/09/2026-09-13-topic.md');
+      diskService.updateBuffer('chats/2026/09/2026-09-13-topic.md', 'my local edits');
+
+      await diskService.reloadFromVaultChange(['chats/2026/09/2026-09-13-topic.md']);
+
+      expect(diskService.bufferContent()).toBe('## User\n\nasked\n');
+      expect(diskService.isDirty()).toBe(false);
+    });
+
     it('marks a tab draft-like when the file is gone', async () => {
       const files: Record<string, { content: string; modifiedMs: number } | null> = {
         'gone.md': { content: 'on disk', modifiedMs: 100 },
@@ -586,6 +599,45 @@ describe('EditorService', () => {
       await diskService.reloadFromVaultChange(['other.md']);
 
       expect(diskService.bufferContent()).toBe('version two');
+    });
+  });
+
+  describe('auto-save for app-owned files (ADR-0048 chats, .drafts)', () => {
+    const DELAY = EditorService.AUTO_SAVE_DELAY_MS + 50;
+
+    it('auto-saves an edited chat note after the idle and ends clean', async () => {
+      await service.openFile('chats/2026/09/2026-09-13-topic.md');
+      service.updateBuffer('chats/2026/09/2026-09-13-topic.md', 'first turn');
+      expect(service.isDirty()).toBe(true);
+
+      await new Promise((resolve) => setTimeout(resolve, DELAY));
+
+      expect(saves).toHaveLength(1);
+      expect(saves[0].path).toBe('chats/2026/09/2026-09-13-topic.md');
+      expect(service.isDirty()).toBe(false);
+    });
+
+    it('auto-saves an edited .drafts file, but never a regular note', async () => {
+      await service.openFile('.drafts/unnamed-1.md');
+      service.updateBuffer('.drafts/unnamed-1.md', 'draft edit');
+      await service.openFile('note.md');
+      service.updateBuffer('note.md', 'note edit');
+
+      await new Promise((resolve) => setTimeout(resolve, DELAY));
+
+      expect(saves.map((s) => s.path)).toEqual(['.drafts/unnamed-1.md']);
+    });
+
+    it('debounces a typing burst into one save', async () => {
+      await service.openFile('chats/2026/09/x.md');
+      service.updateBuffer('chats/2026/09/x.md', 'one');
+      await new Promise((resolve) => setTimeout(resolve, 100));
+      service.updateBuffer('chats/2026/09/x.md', 'one two');
+
+      await new Promise((resolve) => setTimeout(resolve, DELAY));
+
+      expect(saves).toHaveLength(1);
+      expect(saves[0].body).toBe('one two');
     });
   });
 });

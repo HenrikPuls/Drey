@@ -15,10 +15,71 @@
   flex: 0 0 auto;
   display: flex;
   align-items: center;
+  justify-content: space-between;
   gap: 8px;
   height: var(--bar-h);
   padding: 0 14px;
   border-bottom: 1px solid var(--border);
+}
+
+/* Chat selector (title opens the picker, + starts a new chat). */
+.assistant-head .chat-head {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.assistant-head .chat-title {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  text-align: left;
+  background: transparent;
+  border: none;
+  color: var(--text-primary);
+  font: inherit;
+  font-size: 12.5px;
+  padding: 3px 6px;
+  cursor: pointer;
+}
+
+.assistant-head .chat-title:hover {
+  background: var(--hover-bg);
+  border-radius: var(--radius);
+}
+
+.assistant-head .chat-title.fresh {
+  color: var(--text-4);
+}
+
+.assistant-head .chat-new {
+  flex: none;
+  width: 20px;
+  height: 20px;
+  border: none;
+  border-radius: var(--radius);
+  background: transparent;
+  color: var(--text-5);
+  font-size: 13px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.assistant-head .chat-new:hover {
+  color: var(--text-primary);
+  background: var(--hover-bg);
+}
+
+/* The per-note auto-summary switch group (secondary since ADR-0048). */
+.assistant-head .summary-head {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 6px;
 }
 
 .assistant-head .toggle-label {
@@ -32,7 +93,6 @@
    label is already associated via aria-labelledby. 30x17, knob 13. */
 .assistant-panel .switch {
   flex: none;
-  margin-left: auto;
   position: relative;
   width: 30px;
   height: 17px;
@@ -262,6 +322,144 @@
   border-left-color: var(--text-faint);
 }
 
+/* Tool calls/results and edit outcomes from the note's drey-tool fence:
+   collapsible chips, collapsed by default (name + one-line summary). */
+.assistant-thread .tool-chip {
+  margin: 4px 0;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm, var(--radius-xs));
+  background: var(--bg-input);
+  font-size: 11px;
+  overflow: hidden;
+}
+
+.assistant-thread .tool-chip-summary {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  width: 100%;
+  padding: 3px 7px;
+  border: none;
+  background: transparent;
+  color: var(--text-5);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.assistant-thread .tool-chip-summary:hover {
+  color: var(--text-3);
+}
+
+.assistant-thread .tool-chip.open .tool-chip-summary {
+  color: var(--text-4);
+  border-bottom: 1px solid var(--border);
+  border-bottom-left-radius: 0;
+  border-bottom-right-radius: 0;
+}
+
+.assistant-thread .tool-chip-body {
+  margin: 0;
+  padding: 6px 8px;
+  max-height: 180px;
+  overflow: auto;
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  line-height: 1.5;
+  color: var(--text-5);
+}
+
+/* Attachment links on a user turn (the persisted link block). */
+.assistant-thread .card-attachments {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 6px;
+}
+
+.assistant-thread .card-attachments .attachment {
+  border: 1px solid var(--border-strong);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--text-4);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  padding: 1px 8px;
+  cursor: pointer;
+  max-width: 240px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.assistant-thread .card-attachments .attachment:hover {
+  color: var(--accent-hover);
+  border-color: var(--accent-quote);
+}
+
+/* The streaming partial: same answer card, breathing while it grows. */
+.assistant-thread .card.streaming .card-body {
+  color: var(--text-4);
+}
+
+.assistant-thread .card.streaming .card-body::after {
+  content: '▍';
+  color: var(--accent);
+  animation: assistant-blink 1.1s steps(2) infinite;
+}
+
+@keyframes assistant-blink {
+  50% {
+    opacity: 0.25;
+  }
+}
+
+/* The pinned summary card (the note's auto-summary, sidecar-sourced). */
+.assistant-thread .card.summary.pinned {
+  opacity: 0.92;
+}
+
+.assistant-thread .card.summary.pinned .card-actions {
+  position: static;
+  opacity: 1;
+  margin-top: 6px;
+  border: none;
+}
+
+.assistant-thread .card.summary.pinned .card-actions.ghost {
+  background: transparent;
+  border: none;
+  color: var(--text-5);
+  font-family: var(--font-sans);
+  padding: 0;
+  justify-content: flex-start;
+}
+
+.assistant-thread .card.summary.pinned .card-actions.ghost:hover {
+  color: var(--text-primary);
+}
+
+/* The one-shot sidecar import affordance. */
+.assistant-thread .import-line {
+  border: 1px dashed var(--border-strong);
+  border-radius: var(--radius);
+  background: transparent;
+  color: var(--text-5);
+  font: inherit;
+  font-size: 12px;
+  padding: 6px 10px;
+  cursor: pointer;
+  text-align: left;
+}
+
+.assistant-thread .import-line:hover {
+  color: var(--text-primary);
+  border-color: var(--accent-quote);
+}
+
 /* The composer grows with its content (panel.ts sizes the input); the
    thread above keeps `flex: 1` and scrolls. No drag divider any more. */
 .assistant-composer {
@@ -312,6 +510,10 @@
 
 .assistant-composer .chip.note {
   border-color: var(--accent-quote);
+}
+
+.assistant-composer .chip.image {
+  color: var(--text-4);
 }
 
 .assistant-composer .chip .chip-name {
@@ -496,6 +698,34 @@
 .assistant-picker-body {
   display: flex;
   flex-direction: column;
+}
+
+/* Files/Images tabs in the attach picker. */
+.assistant-picker-tabs {
+  display: flex;
+  gap: 2px;
+  padding: 6px 10px 0;
+}
+
+.assistant-picker-tab {
+  border: none;
+  background: transparent;
+  color: var(--text-6);
+  font: inherit;
+  font-size: 12px;
+  padding: 3px 8px;
+  border-radius: var(--radius-xs) var(--radius-xs) 0 0;
+  cursor: pointer;
+}
+
+.assistant-picker-tab.active {
+  color: var(--text-primary);
+  background: var(--hover-bg);
+}
+
+.assistant-picker-row.new-chat {
+  color: var(--accent);
+  font-weight: 500;
 }
 
 .assistant-picker-input {

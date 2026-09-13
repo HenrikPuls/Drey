@@ -1,8 +1,10 @@
 # File & Frontmatter Schema
 
 Frontmatter is **optional** and app-managed. A note is just Markdown; the
-tag system reads the **body**, not the header. The only fields the app
-understands are `title`, `created` and `updated`.
+tag system reads the **body**, not the header. The fields the app
+understands are `title`, `created` and `updated` — plus, since ADR-0048,
+`kind`, the one document-class marker (`chat` marks an assistant
+conversation note).
 
 ## Frontmatter (optional)
 
@@ -143,9 +145,9 @@ quick-capture hotkey from `templates/daily.md`; entries are appended as
 
 ## Assistant sidecar files — `.{name}.chat.json`
 
-The note assistant panel stores its per-note thread (the automatic summary
-plus the questions and answers about that note) **beside** the note, not
-inside it:
+The note assistant panel stores the note's **automatic summary** beside
+the note, not inside it (since ADR-0048 this is the sidecar's only
+content — conversations live in `chats/` notes, see below):
 
 ```
 daily/2026/09/2026-09-26.md  ->  daily/2026/09/.2026-09-26.chat.json
@@ -161,12 +163,55 @@ daily/2026/09/2026-09-26.md  ->  daily/2026/09/.2026-09-26.chat.json
 }
 ```
 
-`role` is `summary` | `question` | `answer`. These files are **not** part
-of the note schema and never affect it: nothing the assistant does writes
-into a `.md` file. The dot prefix keeps them out of the file tree and the
-tag index, which already skip dotfiles. A note copied without its sidecar
-simply has no thread — the content is derived and can be regenerated. See
+`role` is `summary` | `question` | `answer` (older sidecars may still
+carry `question`/`answer` cards from the pre-ADR-0048 conversation model;
+the panel can import them into a chat note once, non-destructively).
+These files are **not** part of the note schema and never affect it. The
+dot prefix keeps them out of the file tree and the tag index, which
+already skip dotfiles. A note copied without its sidecar simply has no
+summary — the content is derived and can be regenerated. See
 `docs/09_architecture_decisions/0012-note-assistant-sidecar-thread.md`.
+
+## Chat notes — `chats/<year>/<month>/<date>-<slug>.md`
+
+Conversations with the assistant are standalone Markdown notes
+([ADR-0048](../docs/09_architecture_decisions/0048-chats-as-vault-notes.md)),
+nested per year/month like `daily/` and created on the first question of
+a new chat:
+
+```yaml
+---
+kind: chat
+provider: 'zai-glm'
+model: 'glm-4.7'
+title: 'How do I rig the spinnaker'
+created: '2026-09-13'
+updated: '2026-09-13T14:32:00'
+---
+```
+
+- `kind: chat` is the one app-understood document-class marker; written
+  as a plain scalar. `provider`, `model` and (claude-code only) `session`
+  are assistant-plugin fields — the app saves preserve them like any
+  unknown key, and the plugin patches only its own fields plus `updated:`.
+- The body is one `## User` / `## Assistant` heading per turn (ISO
+  timestamp after an en dash), optionally a `<!-- drey: {json} -->` meta
+  line, and ```drey-tool fenced blocks with the persisted tool calls /
+  results / edit outcomes (an applied edit carries the full document).
+  A user turn may end in a link-only attachment block (`[[note]]`,
+  `![alt](path)`); the attachment *bodies* are re-read fresh at send
+  time, only paths are stored.
+- A follow-up replays the full persisted history from the note (or
+  resumes a claude-code session via the `session:` handle). The old
+  ~12-message cap is gone.
+- `chats/` is a structural folder the app creates on demand; unlike
+  `templates/` it **is** indexed (tag search and `vault_search` find
+  conversations). Chat notes are ordinary Markdown — they open, edit and
+  link like any note — but they are **auto-saved**: the engine writes
+  every turn to disk itself, an open tab follows the file, and a hand
+  edit persists after a short idle. Chats never trigger the
+  save-before-exit prompt (that is reserved for the user's own notes;
+  scratch tabs and `.drafts/` files are committed silently at exit too).
 
 ## Templates (`templates/`) — structural folder
 

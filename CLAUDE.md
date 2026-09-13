@@ -76,7 +76,8 @@ toolchain is removable by deleting `.tools/`). Never assume a bare `node`,
 - Storage format: plain Markdown + YAML frontmatter. No proprietary format,
   no database as source of truth (see `specs/frontmatter-schema.md`).
 - Folder structure is the user's own — the app imposes only `templates/`,
-  `daily/`, and the hidden `.drafts/` (bug-5's exit-time auto-saves of
+  `daily/`, `chats/` (assistant conversation notes, ADR-0048, indexed
+  like `daily/`), and the hidden `.drafts/` (bug-5's exit-time auto-saves of
   untitled tabs, Notepad++-style; invisible to the file tree and indexes,
   see `specs/frontmatter-schema.md`). Topics are free inline `#tag` labels, never directories
   ([ADR-0017](docs/09_architecture_decisions/0017-tags-as-labels-and-section-index.md)).
@@ -172,7 +173,8 @@ Main process:
   **vault hooks** (open/refresh/write/delete/rename) and the
   **section-search provider** (the MCP `vault_search` backend)
 - The feature backends — `TagIndex`, `TaskIndex`, the assistant's
-  ActionEngine + ChatStore sidecar thread — live in their plugins.
+  ActionEngine (Actions + summary) and ChatEngine/ChatStore (chat notes,
+  ADR-0048) — live in their plugins.
   `suggestTags` (the Autotag prompt) stayed base:
   `electron/llm/tag-suggest.ts`
 - `LmStudioClient` — HTTP client for the local OpenAI-compatible endpoint
@@ -244,11 +246,27 @@ Renderer (Angular):
   `backend.invoke('list', …)`. A row's checkbox rewrites the buffer line
   through `documents.setBuffer` + save; a row click opens the file at the
   line
-- Assistant panel — `plugins/assistant/` (DOM dock widget, ADR-0012):
-  the per-note "Automatic summary" switch, the card thread (Copy +
-  **insert-into-note**), the question composer. Ask sends the prior
-  thread as chat turns; the manual Actions live in the editor `⋯` menu as
-  `editor-more` menu contributions
+- Assistant panel — `plugins/assistant/` (DOM dock widget; conversations
+  since ADR-0048, summary sidecar ADR-0012): **chat-first** — a chat
+  picker + new chat in the head, turn cards rendered from the active
+  chat note (`chats/<y>/<m>/…`, `kind: chat`; collapsible tool chips for
+  the persisted `drey-tool` entries, streamed partial answers), the
+  milestone-24 composer (context chips, auto-grow, model row) plus
+  image chips (paste/drop staged via `api.vault.saveAsset`, sent as
+  vision parts per provider capability). The chat note is the source of
+  truth: every turn is appended main-side (`chat-engine.ts` +
+  `chat-store.ts` via `ctx.vault.writeAnnounced`), and a follow-up
+  full-replays the persisted history — tool pairs and applied edits
+  included — or resumes a claude-code session; there is no `history`
+  IPC field and no length cap. Chat notes are **auto-saved**: the tab
+  follows the disk (an append reloads even a dirty tab) and hand edits
+  persist after a short idle (`shared/structural-folders.ts`
+  `isAutoSavePath`; also `.drafts/`), so chats and temp files never
+  raise the exit prompt — only the user's own notes do. The per-note
+  auto-summary stays sidecar-based
+  (`thread:read`/`thread:write`, pinned muted card in the panel); a
+  one-shot import turns old sidecar Q/A cards into a chat note. Manual
+  Actions live in the editor `⋯` menu as `editor-more` menu contributions
 - `KeybindingService` (`src/app/keybindings/`) — one capture-phase
   `keydown` listener mapping chord strings onto `Command`s; features
   register from `App`. Commands: `search.open` (`Mod+Shift+F`),
@@ -386,9 +404,11 @@ be called out explicitly (see Working Style below), not introduced silently.
     button any more), the editor (Live Preview ⇄ source via the `⋯` menu
     — no toggle buttons; see ADR-0008/0009), then the **bottom dock** band
     (default: the "Add entry" panel).
-  - **Assistant panel**: auto-summary switch, card thread (each card has
-    Copy + insert-into-note), composer. Ask sends the running thread as
-    context. No bottom chat bar; capture lives in the Add entry panel.
+  - **Assistant panel**: chat-first head (chat-title picker + "+ New
+    chat"), turn cards with collapsible tool chips, a streamed partial
+    answer while generating, the pinned auto-summary card, and the
+    composer (context chips incl. images, auto-grow, model row). No
+    bottom chat bar; capture lives in the Add entry panel.
   - **Settings**: a full-surface overlay opened from the status-bar entry
     — master-detail (category list on the left, detail pane on the
     right), core categories "LLM", "Add entry", "Daily notes",
@@ -498,13 +518,17 @@ in.
 
 ## Milestones
 
-The completed milestone log (1–24) is archived in
+The completed milestone log (1–25) is archived in
 [docs/milestones-done.md](docs/milestones-done.md).
 
-- **Last completed:** milestone 24 — assistant composer rework
-  (scrollbar-corner fix, panel model picker, context chips,
-  auto-growing composer).
+- **Last completed:** milestone 25 — chats as vault notes (Req-30,
+  ADR-0048; resolves bug-10(b) — conversations persist as `chats/`
+  notes with `drey-tool` blocks and full-history replay; chat-first
+  panel with streaming; image attachments). Code-complete, all 966 unit
+  tests green; **not yet manually verified by the owner**.
 - **Next:** not chosen — see "Current State & Next Steps" above.
+  Candidates from the approved provider program: Req-31 MCP client
+  (M-next), then copilot-web re-apply + copilot-cli spike.
 
 Pause after each milestone, show what works, don't push through several
 milestones in one uninterrupted stretch. (Milestones 10, 11, 15 and 19

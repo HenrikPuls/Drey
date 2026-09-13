@@ -429,6 +429,7 @@ export class OpenAiCompatProvider implements LlmClient {
   ): Promise<LlmChatResult> {
     const { llm } = this.config.get();
     const convo: ChatMessage[] = [...messages];
+    const toolTrace: ChatMessage[] = [];
     const toolWire: OpenAiToolWire[] | null = useTools ? toOpenAiTools(options.tools ?? []) : null;
     let toolsAllowed = toolWire !== null;
     const maxRounds = options.maxToolRounds ?? 5;
@@ -485,17 +486,21 @@ export class OpenAiCompatProvider implements LlmClient {
       const toolCalls = message?.tool_calls;
 
       if (toolsAllowed && Array.isArray(toolCalls) && toolCalls.length > 0 && round < maxRounds) {
-        convo.push({
+        const assistantTurn: ChatMessage = {
           role: 'assistant',
           content: typeof message?.content === 'string' ? message.content : null,
           tool_calls: toolCalls,
-        });
+        };
+        convo.push(assistantTurn);
+        toolTrace.push(assistantTurn);
         for (const call of toolCalls) {
           const result = await options.onToolCall!(
             call.function?.name ?? '',
             call.function?.arguments ?? '{}',
           );
-          convo.push({ role: 'tool', tool_call_id: call.id, content: result });
+          const toolTurn: ChatMessage = { role: 'tool', tool_call_id: call.id, content: result };
+          convo.push(toolTurn);
+          toolTrace.push(toolTurn);
         }
         continue;
       }
@@ -506,12 +511,13 @@ export class OpenAiCompatProvider implements LlmClient {
         return {
           text: message.content,
           ...(Object.keys(usage).length > 0 ? { usage } : {}),
+          ...(toolTrace.length > 0 ? { toolTrace } : {}),
         };
       }
       // A model that keeps calling tools past the round cap, or returns an
       // empty message -- give back what we can rather than throw.
       if (round >= maxRounds) {
-        return { text: '' };
+        return { text: '', ...(toolTrace.length > 0 ? { toolTrace } : {}) };
       }
       throw new LlmError('bad-reply', 'The endpoint returned no message content.');
     }

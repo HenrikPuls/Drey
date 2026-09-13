@@ -153,3 +153,37 @@ milestone before being built.
     answer-only via a second system prompt); the templates picker's modal
     selector (descendant where only a compound could match) fixed in
     passing.
+25. **Chats as vault notes** ([ADR-0048](09_architecture_decisions/0048-chats-as-vault-notes.md),
+    Req-30, resolves bug-10(b)) — Ask conversations became standalone
+    Markdown notes under `chats/<yyyy>/<mm>/` (the ADR-0012 sidecar stays
+    for the automatic summary). The note is the source of truth: one
+    `## User`/`## Assistant` heading per turn, a `drey-tool` fence
+    persisting every tool call/result and applied edit in full, and a
+    link-only attachment block (paths, not bodies — re-read fresh at send
+    time). A follow-up **full-replays** the note (tool entries as real
+    `assistant(tool_calls)`/`tool` pairs, applied edits with their
+    document) or resumes a Claude Code session via `--resume` when the
+    provider, capability and `session:` frontmatter all match (stale
+    session → one full-replay retry; a resumed session gets a catch-up
+    line about the confirm result it never saw; truncation clears the
+    session). New plugin modules: `shared/chat-note.ts` (the defensive
+    grammar + slug/path), `shared/chat-replay.ts` (pure replay builder),
+    `main/chat-store.ts` (create/append/truncate/list over announced
+    writes + yaml-targeted frontmatter patches), `main/chat-engine.ts`
+    (the ask flow, prompts extracted to `ask-prompts.ts`); the action
+    engine keeps Actions + summary. Base seams: `kind: chat` frontmatter
+    (first new app-understood field, plain scalar), `ctx.vault.
+    writeAnnounced` (the MCP write's announce round, so tree/index/open
+    tabs stay live), `MainChatOptions.attachments` +
+    `LlmChatResult.toolTrace` (recorded by both HTTP providers' tool
+    loops), `ctx.llm.capabilities()` / `api.llm.capabilities()`,
+    `api.vault.saveAsset` (composer paste/drop image staging,
+    ADR-0024 convention); `PLUGIN_API_VERSION` minor → 2. The panel went
+    chat-first: chat picker + new chat in the head, turn cards with
+    collapsible tool chips, streamed partial answers (the plugin forwards
+    its provider deltas through its own `chat:delta` event — the base
+    `llm:delta` push only covers renderer-initiated chats), pinned
+    summary card, zero-context standalone chats, restart-from-here over
+    note turns (refused while the chat tab is dirty), one-shot
+    non-destructive sidecar import, image chips sent as vision parts per
+    the provider capability.

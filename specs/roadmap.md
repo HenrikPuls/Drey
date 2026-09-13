@@ -39,7 +39,7 @@ refresh" below), with an opt-in chokidar watcher for external changes
 
 ---
 
-## Not yet implemented
+ommit ## Not yet implemented
 
 Everything implemented lives in [`changelog.md`](changelog.md). When an
 item below ships, move it there and remove it from this list.
@@ -77,16 +77,6 @@ item below ships, move it there and remove it from this list.
 - **req-16** — PDF export.
 - **req-19** — integrate draw.io view and edit.
 - **req-21** — dataview.js support.
-- **Req-30** — chat as vault note: conversations persist as Markdown notes
-  in a `chats/` folder (notebook format — one `##` heading per turn with
-  role, timestamp, optional `<!-- drey: … -->` meta, `drey-tool` fenced
-  blocks for tool calls/results, attachment link blocks). The assistant
-  panel becomes chat-first (chat picker + composer); a note can be
-  attached as context; resuming a chat replays the full persisted history
-  provider-aware (full replay, or Claude Code's `--resume` when the
-  session matches). Supersedes ADR-0012's per-note sidecar threads for
-  conversations (the sidecar stays for the auto-summary until decided
-  otherwise).
 - **Req-31** — MCP client: connect the app TO external MCP servers
   (`@modelcontextprotocol/sdk`, stdio + Streamable-HTTP transports),
   configured in an `mcpServers` config slice; their tools join the vault
@@ -96,13 +86,10 @@ item below ships, move it there and remove it from this list.
 
 ### Known-defect remainder
 
-- **bug-10(b)** — tool calls/results and applied-edit content are never
-  persisted in the sidecar format, so Ask follow-ups lose that context.
-  Persistence defect, unfixable in the sidecar format; resolves with
-  Req-30's chat notes (`drey-tool` blocks + full-history replay). The
-  ~12-message cap is documented-intended behaviour and goes away with
-  Req-30's replay, not before. (bug-10(a), the payload validation, is
-  fixed — see changelog.)
+None open. bug-10(a) (payload validation) was fixed in milestone 23;
+bug-10(b) (tool calls/results and applied-edit content never persisted,
+the ~12-message history cap) resolved with Req-30's chat notes in
+milestone 25 — see the changelog.
 
 ### Partials — the shipped half is in the changelog
 

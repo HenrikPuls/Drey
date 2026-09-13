@@ -7,6 +7,7 @@ import type {
 } from '../../../shared/plugin-api/renderer';
 import type { AppConfig } from '../../../shared/app-config';
 import type { ChatThread } from '../shared/chat-thread.js';
+import type { ChatNoteView, ChatSummary } from '../shared/chat-note';
 import { resolveActions } from '../shared/resolve-actions.js';
 import { mountPanel, type PanelHandle } from './panel.js';
 import { createRunningTasks } from './running-tasks.js';
@@ -36,14 +37,37 @@ const plugin: PluginRendererModule = {
     const tasks = createRunningTasks((taskId) => api.llm.cancelTask(taskId));
 
     const ports: AssistantPorts = {
+      // -- chat notes (ADR-0048) ----------------------------------------------
+      listChats: () => api.backend.invoke('chat:list') as Promise<ChatSummary[]>,
+      readChat: (path) => api.backend.invoke('chat:read', { path }) as Promise<ChatNoteView>,
+      ask: (request, taskId) =>
+        api.backend.invoke('ask', { ...request, taskId }) as Promise<{
+          chatPath: string;
+          outcome: AskOutcome;
+        }>,
+      appendEdit: (path, applied, after) =>
+        api.backend.invoke('chat:appendEdit', { path, applied, after }) as Promise<void>,
+      truncate: (path, turnIndex) =>
+        api.backend.invoke('chat:truncate', { path, turnIndex }) as Promise<void>,
+      importSidecar: (notePath) =>
+        api.backend.invoke('chat:importSidecar', { notePath }) as Promise<{ chatPath: string }>,
+      onDelta: (listener) =>
+        api.backend.on('chat:delta', (data) => {
+          const shape = (data ?? {}) as { taskId?: unknown; text?: unknown };
+          if (typeof shape.taskId === 'string' && typeof shape.text === 'string') {
+            listener({ taskId: shape.taskId, text: shape.text });
+          }
+        }),
+
+      // -- summary sidecar (ADR-0012, unchanged) --------------------------------
       readThread: (notePath) =>
         api.backend.invoke('thread:read', { path: notePath }) as Promise<ChatThread>,
       writeThread: (thread) =>
         api.backend.invoke('thread:write', { thread }) as Promise<void>,
       summarize: (context, taskId) =>
         api.backend.invoke('summarize', { context, taskId }) as Promise<string>,
-      ask: (request, taskId, history) =>
-        api.backend.invoke('ask', { ...request, taskId, history }) as Promise<AskOutcome>,
+
+      // -- shared -----------------------------------------------------------------
       readVaultFile: async (path) => {
         const open = api.documents.get(path);
         if (open !== null && open.kind === 'text') {
@@ -68,6 +92,9 @@ const plugin: PluginRendererModule = {
     };
 
     const state = createAssistantState(ports, tasks);
+    // Vault writes elsewhere (or our own chat-note appends) stale the
+    // picker cache; the lazy cache reloads on the next open.
+    api.vault.onChanged(() => state.invalidateChats());
 
     // -- active-note tracking (the auto-summary rule fires on tab switches) ----
     const trackActive = (): void => {
@@ -186,8 +213,12 @@ const plugin: PluginRendererModule = {
       defaultFlex: 100,
       flush: true,
       status: () => {
-        const path = state.notePath();
-        return path !== null ? (path.split('/').pop() ?? null) : null;
+        const active = state.activeChatPath();
+        if (active !== null) {
+          const chat = state.chats().find((entry) => entry.path === active);
+          return chat?.title ?? null;
+        }
+        return 'New chat';
       },
       mount: (body) => {
         panel = mountPanel(body, api, state, tasks);

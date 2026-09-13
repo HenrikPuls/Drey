@@ -42,6 +42,7 @@ describe('readFrontmatter', () => {
       '---\n\nbody\n';
     expect(readFrontmatter(text)).toEqual<Frontmatter>({
       type: 'notiz',
+      kind: null,
       title: 'Boot',
       tags: ['sailing', 'kiel'],
       aliases: [],
@@ -51,6 +52,14 @@ describe('readFrontmatter', () => {
       description: null,
       verweis: null,
     });
+  });
+
+  it('reads kind as a free string and writes it back as a plain scalar', () => {
+    const text = '---\nkind: chat\nprovider: zai-glm\n---\nbody\n';
+    expect(readFrontmatter(text)!.kind).toBe('chat');
+    const out = writeFrontmatter(text, { kind: 'chat' });
+    expect(out).toContain('kind: chat');
+    expect(out).not.toContain('kind: "chat"');
   });
 
   it('reads master-only fields and rejects an unknown type/art', () => {

@@ -3,6 +3,7 @@ import { imageExtension } from '../../../shared/asset-name';
 import { dailyPathFor } from '../../../shared/daily';
 import { EntryDraft } from '../../../shared/entry-compose';
 import { ActionOutcome } from '../../../shared/ipc-api';
+import { isAutoSavePath, isChatNotePath } from '../../../shared/structural-folders';
 import { EditorCommandsService } from '../editor/editor-commands.service';
 import { EditorPrefsService, EditorViewMode } from '../editor/editor-prefs.service';
 import { PaneService } from '../panes/pane.service';
@@ -296,12 +297,18 @@ export class EditorService {
       return;
     }
     const changed = new Set(paths);
+    // Chat notes follow the disk EVEN when the tab is dirty: the chat
+    // engine appends every turn to the file (the note is the source of
+    // truth, ADR-0048), so the tab is a view of it, not an independent
+    // buffer. Only typing inside the auto-save window can be lost —
+    // sub-second, and the conversation content always wins. Every other
+    // file keeps the clean-tab-only rule (last-writer-wins).
     const targets = this.docs().filter(
       (d) =>
         d.kind === 'text' &&
         d.existsOnDisk &&
         changed.has(d.path) &&
-        d.bufferContent === d.savedContent,
+        (d.bufferContent === d.savedContent || isChatNotePath(d.path)),
     );
     for (const doc of targets) {
       try {
@@ -554,6 +561,43 @@ export class EditorService {
       return;
     }
     this.patchDoc(path, { bufferContent: content });
+    this.scheduleAutoSave(path);
+  }
+
+  /**
+   * Auto-save for app-owned files (ADR-0048): edits to a chat note or a
+   * committed draft persist themselves after a short idle — the user never
+   * saves them by hand and they never trip the exit prompt or an assistant
+   * guard. `askOnSave` scratch tabs are deliberately excluded (their save
+   * would open the Save-As dialog — the one prompt auto-save must not
+   * produce); they commit at exit instead. The timer reads the LIVE buffer
+   * at fire time (`save()` re-resolves the doc and no-ops when clean), so
+   * a tab that reloaded from a chat-engine append in the meantime never
+   * writes stale text over it.
+   */
+  /** Idle window before an app-owned file's edit persists itself. */
+  static readonly AUTO_SAVE_DELAY_MS = 800;
+  private readonly autoSaveTimers = new Map<string, ReturnType<typeof setTimeout>>();
+
+  private scheduleAutoSave(path: string): void {
+    if (!isAutoSavePath(path)) {
+      return;
+    }
+    const doc = this.docs().find((d) => d.path === path);
+    if (!doc || doc.kind !== 'text' || doc.askOnSave) {
+      return;
+    }
+    const existing = this.autoSaveTimers.get(path);
+    if (existing !== undefined) {
+      clearTimeout(existing);
+    }
+    this.autoSaveTimers.set(
+      path,
+      setTimeout(() => {
+        this.autoSaveTimers.delete(path);
+        void this.save({ path, runOnSaveActions: false });
+      }, EditorService.AUTO_SAVE_DELAY_MS),
+    );
   }
 
   /**

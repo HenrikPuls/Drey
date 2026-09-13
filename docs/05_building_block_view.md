@@ -143,10 +143,10 @@ fills** — base knows the interfaces, not the features:
 | Commands + keybindings | `commands.register` / `run` | — |
 | Editor extensions (host CM instances), drop decoders, context-menu items, composer slot | `editor.*` | — |
 | Document read/observe/insert/confirmed rewrite/open | `documents.*` | — |
-| Vault IO + change push | `vault.*` | `ctx.vault.*` |
+| Vault IO + change push | `vault.*` (incl. `saveAsset`) | `ctx.vault.*` (incl. `writeAnnounced`) |
 | Backend methods + pushes (the plugin's own IPC) | `backend.invoke` / `backend.on` | `ctx.ipc.handle` / `ctx.ipc.emit` |
 | Save pipeline (`{content?, pendingActions?}`), vault lifecycle, section search | — | `ctx.save`, `ctx.vault` hooks, `ctx.search` |
-| LLM transport | `llm.chat/cancelTask/onDebugEntry/onDelta/listModels` | `ctx.llm.chat/suggestTags` |
+| LLM transport | `llm.chat/cancelTask/onDebugEntry/onDelta/listModels/capabilities` | `ctx.llm.chat/suggestTags/capabilities` |
 | Per-plugin config, app config read/patch | `settings.*`, `appConfig.*` | `ctx.config`, `ctx.appConfig` |
 | Native-surface hide (overlays/gestures) | `env.onNativeSurfaceVisibility` | — |
 
@@ -2149,3 +2149,59 @@ sits behind them.
   per-provider field groups (`http` / `cli` / `copilot-web`), capability
   hints, preset-default base URL pre-fill on switch (draft-side), and a
   provider chip in each debug-log row.
+
+## 5.25 Chats as vault notes (`plugins/assistant/`, ADR-0048)
+
+Milestone 25 moved Ask conversations from the ADR-0012 sidecar into
+standalone Markdown notes under `chats/` — the note IS the source of
+truth, which is what makes full-history replay (and the bug-10(b)
+resolution) possible.
+
+- **`shared/chat-note.ts`** — the grammar: `kind: chat` frontmatter
+  reading (line-based, self-contained), `## User`/`## Assistant` turns
+  (defensive parse, offsets kept absolute so truncation slices the raw
+  text), the `drey-tool` fence (`call` / `result` / `edit` lines), the
+  link-only attachment block, `appendTurn` (raw concatenation —
+  hand-written prose outside turns survives), `appendEditOutcome`
+  (inserts into the last assistant turn's fence), `truncateFrom`,
+  `chatNotePathFor` + `slugifyChatTitle` + `uniqueChatPath` (`chats/`
+  nesting mirrors `daily/`; `-2`/`-3` suffixes, not copy-semantics).
+- **`shared/chat-replay.ts`** — the pure replay builder: full persisted
+  history as messages (tool entries → real `assistant(tool_calls)`/`tool`
+  pairs, applied edits with their document, dangling trailing user turns
+  popped, attachment bodies re-read via an injected reader, missing →
+  warn line; past images degrade to path mentions).
+- **`main/chat-store.ts`** — vault IO over injected ports
+  (`read` / `writeAnnounced` / `list`): create, append (bumps `updated:`,
+  patches `model`/`session` via targeted `yaml` node mutation — user keys
+  survive), appendEditOutcome, truncate (clears `session:`), listChats
+  (title+updated, most recent first, cap 50).
+- **`main/chat-engine.ts`** — the ask flow: ensure/append the user turn →
+  resume-vs-replay decision (capability `sessions` + `session:` +
+  unchanged provider → only the new turn + `sessionRef`, else full
+  replay; stale resumed session → one full-replay retry; catch-up line
+  for the confirm result a resumed session never saw) → one `ctx.llm.chat`
+  (vault tools per `mcp.enabled`, per-turn image attachments per
+  capability, deltas forwarded to the plugin's `chat:delta` event) →
+  parse the reply (answer / edit JSON) → append the assistant turn with
+  `toolTrace` as drey-tool entries → patch `session:`. A failed or
+  cancelled generation truncates back the dangling user turn. Prompts
+  live in `main/ask-prompts.ts`; `action-engine.ts` keeps manual Actions
+  + the summary.
+- **Renderer** — `state.ts` holds only session state (active chat, chips
+  keyed by the open note, a taskId-keyed streaming buffer throttled to
+  ~100 ms re-renders, the unchanged sidecar auto-summary logic);
+  `panel.ts` renders the chat-first UI (picker + new chat, turn cards
+  with collapsible tool chips, streaming partial card, pinned summary
+  card, image chips with paste/drop staging through
+  `api.vault.saveAsset`); `index.ts` wires the ports to the backend
+  methods (`chat:list`, `chat:read`, `chat:appendEdit`,
+  `chat:truncate`, `chat:importSidecar`, rewritten `ask` without any
+  `history` payload).
+- **Base seams gained** — `ctx.vault.writeAnnounced` (write + the MCP
+  write's announce round; keeps tree/index/open tabs live for a
+  first-class note a plugin generates), `api.vault.saveAsset`,
+  `ctx.llm.capabilities()`, `MainChatOptions.attachments`,
+  `LlmChatResult.toolTrace` (recorded by both HTTP providers' tool
+  loops), `api.llm.capabilities()`, and `Frontmatter.kind` (app-written
+  as a plain scalar). `PLUGIN_API_VERSION` minor → 2.

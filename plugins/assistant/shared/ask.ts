@@ -1,20 +1,17 @@
 /**
- * The ask contract between the assistant panel (renderer) and the
- * ActionEngine (main): one `AskRequest` with the note context (nullable —
- * the note chip can be deselected) plus reference-only extra files.
+ * The ask contract between the assistant panel (renderer) and the chat
+ * engine (main), ADR-0048: one `AskRequest` with the note context
+ * (nullable — the note chip can be deselected), reference-only extra
+ * files, image paths, and the chat note to continue (`null` = create a
+ * new one). There is NO `history` field any more — the engine replays
+ * the full persisted chat note itself (the bug-10(b) resolution); the
+ * old field and its interim validation (bug-10(a), milestone 23) are
+ * deleted with it.
  *
- * Replaces the old flat `{ context: { path, body }, question, … }` payload
- * when the panel grew context chips (milestone 24): the note became
- * optional, files became plural. Renderer + main ship in one build, so the
- * switch is a clean break, not a negotiated migration.
- *
- * Lives in the plugin's `shared/` like `chat-thread.ts`: imported by both
- * of its consumers. The `ChatMessage` import is type-only from the app's
- * `shared/llm`, so it is erased in both compile targets and the file stays
- * runtime-self-contained.
+ * Lives in the plugin's `shared/` like `chat-note.ts`: imported by both
+ * of its consumers. Runtime-self-contained (type-only app-shared
+ * imports).
  */
-
-import type { ChatMessage } from '../../../shared/llm';
 
 /** One file attached to an ask turn. `body` is the document text (LF). */
 export interface AskFile {
@@ -25,7 +22,10 @@ export interface AskFile {
 /**
  * One ask turn. `note: null` means the note chip is deselected: there is
  * no document to edit, so the turn is answer-only (the engine picks the
- * matching system prompt and ignores an `edit` reply).
+ * matching system prompt and ignores an `edit` reply) — a zero-context
+ * standalone chat is legitimate now. `images` are vault-relative image
+ * paths: they persist as attachment links in the note and ride the call
+ * as vision parts when the provider supports them.
  */
 export interface AskRequest {
   question: string;
@@ -33,10 +33,17 @@ export interface AskRequest {
   note: AskFile | null;
   /** Reference-only attachments; never an edit target. */
   extraFiles: AskFile[];
+  /** Vault-relative image paths attached to THIS turn. */
+  images: string[];
+  /** The chat note to continue, or `null` to start a new one. */
+  chatPath: string | null;
 }
 
 /** Cap on attached files per ask turn (the composer enforces it, too). */
 export const MAX_EXTRA_FILES = 10;
+
+/** Cap on attached images per ask turn (vision models choke on more). */
+export const MAX_IMAGES = 4;
 
 /**
  * Per-file body cap (~25k tokens): enough for any real note, small enough
@@ -57,16 +64,14 @@ export function truncateFileBody(body: string): string {
  * Strict payload check for the main `ask` handler. The renderer always
  * sends a well-formed `AskRequest`, so reaching a throw means a version
  * mismatch or a corrupted payload — both deserve a visible error card,
- * not a silently degraded answer (the bug-10 rule, same message style the
- * inline handler used before this module existed).
+ * not a silently degraded answer (the bug-10 rule).
  */
 export function parseAskPayload(payload: unknown): {
   request: AskRequest;
   taskId?: string;
-  history: ChatMessage[];
 } {
   const shape = (payload ?? {}) as Record<string, unknown>;
-  const { question, note, extraFiles, taskId, history } = shape;
+  const { question, note, extraFiles, images, chatPath, taskId } = shape;
   if (typeof question !== 'string') {
     throw new Error('malformed ask payload');
   }
@@ -76,35 +81,21 @@ export function parseAskPayload(payload: unknown): {
   if (!Array.isArray(extraFiles) || !extraFiles.every(isAskFile)) {
     throw new Error('malformed ask payload: extraFiles must be an array of { path, body }');
   }
-  // bug-10 (interim): a missing or malformed `history` must fail VISIBLY,
-  // not silently degrade to an empty-context answer -- the renderer always
-  // sends an array, so reaching this branch means a version mismatch or a
-  // corrupted payload, and either deserves an error card, not a
-  // confidently wrong answer.
-  if (!Array.isArray(history)) {
-    throw new Error(
-      'malformed ask payload: history must be an array (stale renderer or main process? restart the app)',
-    );
+  if (!Array.isArray(images) || !images.every((p): p is string => typeof p === 'string')) {
+    throw new Error('malformed ask payload: images must be an array of vault paths');
   }
-  for (const item of history) {
-    const message = item as { role?: unknown; content?: unknown } | null;
-    if (
-      !message ||
-      typeof message !== 'object' ||
-      typeof message.role !== 'string' ||
-      typeof message.content !== 'string'
-    ) {
-      throw new Error('malformed ask payload: history entries must be { role, content }');
-    }
+  if (chatPath !== null && typeof chatPath !== 'string') {
+    throw new Error('malformed ask payload: chatPath must be a path or null');
   }
   return {
     request: {
       question,
       note: note === null ? null : (note as AskFile),
       extraFiles: extraFiles as AskFile[],
+      images: images as string[],
+      chatPath,
     },
     ...(typeof taskId === 'string' ? { taskId } : {}),
-    history: history as ChatMessage[],
   };
 }
 

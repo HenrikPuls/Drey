@@ -14,6 +14,37 @@ and the current architecture in
 
 ## Recent milestones
 
+### Milestone 25 — chats as vault notes (Req-30, resolves bug-10(b))
+
+Conversations with the assistant became **standalone Markdown notes**
+under `chats/<yyyy>/<mm>/<yyyy-mm-dd>-<slug>.md`
+([ADR-0048](../docs/09_architecture_decisions/0048-chats-as-vault-notes.md),
+superseding ADR-0012's per-note sidecars for conversations — the sidecar
+stays for the automatic summary). The note is the conversation's source
+of truth: one `## User`/`## Assistant` heading per turn with a `drey-tool`
+fence persisting every tool call/result and every applied edit **in
+full**, so a follow-up **replays the whole persisted history** (or
+resumes a Claude Code session via `--resume`) — the ~12-message cap and
+the lost-context defect are gone. Chat notes are **auto-saved and
+prompt-free**: an open tab follows the disk (an engine append reloads it
+even when the tab has unsaved typing), hand edits persist after a short
+idle, and dirty temp files (scratch tabs, `.drafts/`) are committed
+silently at exit — the save-before-exit prompt stays reserved for the
+user's own notes. `kind: chat` is the first new
+app-understood frontmatter field; `chats/` is indexed like `daily/`, and
+plugin chat-note writes run the same announce round as MCP writes
+(new `ctx.vault.writeAnnounced`) so the tree, index and open tabs stay
+live. The assistant panel went **chat-first** (picker + new chat, turn
+cards with collapsible tool chips, streamed partial answers through the
+plugin's own `chat:delta` event, zero-context standalone chats,
+restart-from-here over note turns, one-shot non-destructive sidecar
+import), the composer grew **image chips** (vault picker or paste/drop
+staged via the new `api.vault.saveAsset`, sent as vision parts when the
+provider has the capability), and the SDK gained additive surfaces
+(`MainChatOptions.attachments`, `ctx.llm.capabilities()`,
+`api.llm.capabilities()`, `LlmChatResult.toolTrace`;
+`PLUGIN_API_VERSION` minor → 2).
+
 ### Milestone 24 — assistant composer rework
 
 The Claude-Code-style composer in the assistant panel: a **model row** that

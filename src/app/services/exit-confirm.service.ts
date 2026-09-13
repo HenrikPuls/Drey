@@ -1,5 +1,6 @@
 import { Injectable, computed, inject, signal } from '@angular/core';
 import { ExitConfirmRequest, ExitDecision } from '../../../shared/ipc-api';
+import { isAutoSavePath } from '../../../shared/structural-folders';
 import { SessionService } from '../session';
 import { EditorService } from './editor.service';
 import { LogService } from './log.service';
@@ -49,8 +50,19 @@ export class ExitConfirmService {
         .filter((d) => d.kind === 'text' && d.bufferContent !== d.savedContent),
   );
 
+  /**
+   * The dirty documents the exit PROMPT may talk about: the user's own
+   * notes. Auto-saved files (chat notes, `.drafts/`) and untitled scratch
+   * tabs ("temp files") are committed silently instead — they never raise
+   * the dialog, and a chat note is auto-saved away long before exit
+   * anyway (ADR-0048).
+   */
+  private readonly promptableDocs = computed(() =>
+    this.dirtyDocs().filter((d) => !isAutoSavePath(d.path) && !d.askOnSave),
+  );
+
   /** How many documents the exit prompt would talk about (0 -> no dialog). */
-  readonly dirtyCount = computed(() => this.dirtyDocs().length);
+  readonly dirtyCount = computed(() => this.promptableDocs().length);
 
   private started = false;
 
@@ -78,8 +90,31 @@ export class ExitConfirmService {
       void this.api?.resolveExitConfirm(request.id, 'discard');
       return;
     }
-    this.log.record('info', `exit prompt: ${this.dirtyDocs().length} dirty document(s)`);
+    if (this.promptableDocs().length === 0) {
+      // Only temp files are dirty (scratch tabs, drafts, a chat note in
+      // its auto-save window): commit them the way "Save all" would, but
+      // without asking -- that is the whole point of temp files.
+      void this.commitTempThenProceed(request.id);
+      return;
+    }
+    this.log.record('info', `exit prompt: ${this.promptableDocs().length} dirty document(s)`);
     this._pending.set(request.id);
+  }
+
+  /** Silent "Save all" for the temp-only exit; answers 'cancel' when a write fails. */
+  private async commitTempThenProceed(requestId: number): Promise<void> {
+    try {
+      await this.editor.saveAll({ runOnSaveActions: false, drafts: true });
+    } catch {
+      // save() reports through editor.error; don't exit over it.
+    }
+    if (this.dirtyDocs().length > 0) {
+      this.log.record('warn', `exit temp-commit left ${this.dirtyDocs().length} document(s) dirty`);
+      await this.api?.resolveExitConfirm(requestId, 'cancel');
+      return;
+    }
+    await this.session.flushNow();
+    await this.api?.resolveExitConfirm(requestId, 'discard');
   }
 
 

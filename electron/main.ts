@@ -556,6 +556,9 @@ if (!app.requestSingleInstanceLock()) {
       vaultTools,
       tagSuggester,
       llmDebug,
+      // Plugin vault writes that must be visible immediately (chat notes)
+      // run the same external-change round as an MCP write.
+      vaultAnnouncer: () => vaultAnnouncer,
       log: (message, level) => {
         if (level === 'error') {
           console.error(message);

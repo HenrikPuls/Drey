@@ -252,10 +252,14 @@ export type MasterArt = 'thema' | 'person' | 'team' | 'projekt' | 'begriff';
  * A note's parsed YAML frontmatter, normalised. Every field is present:
  * arrays default to `[]`, everything else to `null` when the key is
  * missing or the wrong shape, so consumers never have to null-check the
- * container -- only the values. `tags[0]` is the primary tag.
+ * container -- only the values. `tags[0]` is the primary tag. `kind` is
+ * the one app-understood document-class marker so far (`chat` marks an
+ * assistant conversation note, ADR-0048); everything else describes or
+ * classifies prose the user owns.
  */
 export interface Frontmatter {
   type: NoteType | null;
+  kind: string | null;
   title: string | null;
   tags: string[];
   aliases: string[];

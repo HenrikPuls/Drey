@@ -33,6 +33,7 @@ import type { LlmClient, LlmDebugLog, LlmTaskRegistry, TagSuggester } from '../l
 import { IPC_CHANNELS } from '../../shared/ipc-api';
 import type { VaultTools } from '../mcp';
 import type { VaultManager } from '../vault-manager';
+import type { VaultChangeAnnouncer } from '../vault-change-announcer';
 import { PluginConfigStore } from './plugin-config-store';
 import {
   discoverPlugins,
@@ -77,6 +78,14 @@ export interface PluginHostDeps {
   /** The vocabulary-based tag suggestion (the drawer's Autotag; also `ctx.llm.suggestTags`). */
   readonly tagSuggester: TagSuggester;
   readonly llmDebug: LlmDebugLog;
+  /**
+   * The external-change announcer, as a lazy closure — plugin vault
+   * writes that must reach the tree/index/open tabs go through it (the
+   * same round an MCP write uses). Lazy so construction order in main.ts
+   * stays free; `null` only before the announcer exists (writes still
+   * succeed, nothing is announced).
+   */
+  readonly vaultAnnouncer: () => VaultChangeAnnouncer | null;
   readonly log: (message: string, level?: 'info' | 'warn' | 'error') => void;
 }
 
@@ -260,6 +269,23 @@ export class PluginHost {
           error,
         } satisfies LlmModelListing;
       }
+      case 'drey.llm.capabilities':
+        // The active provider's capability descriptor — a plugin gates its
+        // UI on it (e.g. the image-attach chip) instead of hardcoding
+        // provider ids.
+        return this.deps.llm.capabilities();
+      case 'drey.vault.saveAsset': {
+        // Binary staging for a plugin (composer image paste/drop): same
+        // `attachments/`-beside-the-note convention as the editor's
+        // ADR-0024 path. Bytes arrive structured-cloned (a Uint8Array).
+        const bytes = shape['bytes'];
+        if (!(bytes instanceof Uint8Array)) {
+          throw new Error('saveAsset expects image bytes (Uint8Array)');
+        }
+        const ext = typeof shape['ext'] === 'string' ? shape['ext'] : '';
+        const noteRelPath = typeof shape['noteRelPath'] === 'string' ? shape['noteRelPath'] : '';
+        return this.deps.vaultManager.saveAsset(bytes, ext, noteRelPath);
+      }
       case 'drey.search.sections': {
         const provider = this.searchProvider;
         if (provider === null) {
@@ -424,6 +450,16 @@ export class PluginHost {
       vault: {
         read: (p) => vaultManager.readFile(p).then((f) => f.content),
         write: (p, content) => vaultManager.writeFile(p, content),
+        // A write the tree/index/open tabs must see NOW (chat notes, a
+        // plugin-generated note): same round an MCP write runs — per-file
+        // index events + one scoped `vault:changed` push. A plain `write`
+        // announces nothing (sidecars etc. don't want the churn), and with
+        // the watcher off nothing else would fire for it.
+        writeAnnounced: async (p, content) => {
+          const modifiedMs = await vaultManager.writeFile(p, content);
+          this.deps.vaultAnnouncer()?.announceExternal({ changedPaths: [p], deletedPaths: [] });
+          return modifiedMs;
+        },
         list: () => vaultManager.listFiles(),
         resolveAssetPath: (p) => vaultManager.resolveAssetPath(p),
         onChanged: (cb) => {
@@ -451,6 +487,9 @@ export class PluginHost {
               temperature: options?.temperature,
               ...(options?.onDelta !== undefined ? { onDelta: options.onDelta } : {}),
               ...(options?.sessionRef !== undefined ? { sessionRef: options.sessionRef } : {}),
+              ...(options?.attachments !== undefined
+                ? { attachments: [...options.attachments] }
+                : {}),
               ...(options?.vaultTools === true && this.deps.vaultTools !== undefined
                 ? {
                     tools: this.deps.vaultTools.toolSpecs(),
@@ -460,6 +499,7 @@ export class PluginHost {
               signal,
             }),
           ),
+        capabilities: () => llm.capabilities(),
         // The vocabulary-based Autotag — a base surface (drawer + Tags
         // plugin vocabulary) also reachable from plugins.
         suggestTags: (entryText, vocabulary, taskId) =>

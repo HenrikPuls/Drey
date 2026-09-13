@@ -2,7 +2,13 @@
  * The note assistant's sidecar thread: `.{name}.chat.json` next to the
  * note it belongs to (`daily/2026-09-26.md` -> `daily/.2026-09-26.chat.json`).
  *
- * Why a sidecar and not the note itself: the thread is *about* the note,
+ * Since ADR-0048 this sidecar carries ONLY the automatic note summary:
+ * conversations moved into chat notes under `chats/` (the sidecar could
+ * not persist tool calls/results, which is the bug-10(b) story). The
+ * summary keeps the sidecar — it is derived, per-note, and belongs to no
+ * conversation.
+ *
+ * Why a sidecar and not the note itself: the summary is *about* the note,
  * not part of it. Keeping it out of the Markdown means an auto-summary
  * never edits a document the user did not touch, the note stays clean
  * plain Markdown for any other editor (CLAUDE.md storage format), and the
@@ -13,14 +19,8 @@
  * hand-edited or half-written file degrades to an empty thread rather than
  * throwing, because the assistant panel must still open.
  *
- * Lives in the assistant plugin since ADR-0044 stage 7 (both of its
- * consumers — the sidecar store in the plugin main and the panel in the
- * plugin renderer — are plugin-side now). The `ChatMessage` import is
- * type-only from the app's `shared/llm`, so it is erased in both compile
- * targets and the file stays runtime-self-contained.
+ * Lives in the assistant plugin since ADR-0044 stage 7.
  */
-
-import type { ChatMessage } from '../../../shared/llm';
 
 /** Who produced a card. `summary` is the automatic note summary. */
 export type ChatCardRole = 'summary' | 'question' | 'answer';
@@ -106,36 +106,4 @@ export function serializeChatThread(thread: ChatThread): string {
 
 function normalizeRole(value: unknown): ChatCardRole {
   return value === 'summary' || value === 'question' ? value : 'answer';
-}
-
-/**
- * The prior thread turned into OpenAI-style chat turns so a follow-up
- * question is answered *in context* rather than from scratch. `question`
- * cards become `user` turns, `summary` / `answer` cards `assistant` turns;
- * the summary is prefixed so the model reads it as background rather than
- * as its own last reply.
- *
- * The caller passes the thread **before** appending the new question (that
- * goes to `ActionRunner.ask` as its own argument). A dangling trailing
- * `user` turn -- a question whose generation failed -- is dropped so the
- * request never sends two `user` messages in a row.
- *
- * `maxMessages` caps the replayed turns to keep a long thread from
- * crowding out the document in a local model's context window; when it
- * bites, the oldest turns are dropped but a leading `summary` is kept.
- */
-export function historyForAsk(thread: ChatThread, maxMessages = 12): ChatMessage[] {
-  const messages: ChatMessage[] = thread.cards.map((card) => ({
-    role: card.role === 'question' ? 'user' : 'assistant',
-    content: card.role === 'summary' ? `Note summary: ${card.text}` : card.text,
-  }));
-  while (messages.length > 0 && messages[messages.length - 1].role === 'user') {
-    messages.pop();
-  }
-  if (messages.length <= maxMessages) {
-    return messages;
-  }
-  const keepSummary = thread.cards[0]?.role === 'summary';
-  const head = keepSummary ? [messages[0]] : [];
-  return [...head, ...messages.slice(messages.length - (maxMessages - head.length))];
 }

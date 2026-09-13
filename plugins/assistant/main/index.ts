@@ -14,27 +14,24 @@ import {
   sidecarPathFor,
 } from '../shared/chat-thread.js';
 import { parseAskPayload } from '../shared/ask.js';
+import { ChatNoteTurn, turnsFromSidecarCards } from '../shared/chat-note.js';
 import { ActionEngine, type ChatFn } from './action-engine';
+import { ChatEngine } from './chat-engine';
+import { ChatStore } from './chat-store';
+import { readFile } from 'node:fs/promises';
 
 /**
  * The Assistant plugin's main entry (ADR-0044 stage 7): the on-save Actions
- * save hook (the last base adapter — `base-adapters.ts` was this logic and
- * nothing else), the action engine behind the panel's methods, and the
- * per-note sidecar thread store (`.{name}.chat.json`, ADR-0012).
- *
- * Behaviour is exactly what the base did: the hook runs every enabled
- * `on-save` trigger against the just-written note, adopts non-confirm edits
- * by writing them straight back (before the next trigger runs, so triggers
- * chain), and returns the confirm-edits as `pendingActions` for the
- * renderer's confirmation dialog. The save pipeline applies `content` and
- * hands `pendingActions` to the plugin renderer through the host's
- * `pending-actions` document event.
+ * save hook, the action engine behind the panel's manual actions + note
+ * summary, the per-note sidecar thread store for the auto-summary
+ * (`.{name}.chat.json`, ADR-0012 — conversations outgrew it), and the chat
+ * engine + chat-note store behind the chat-first panel (ADR-0048).
  */
 const plugin: MainPluginModule = {
   activate(ctx: MainPluginContext) {
     const engine = new ActionEngine(
       () => ctx.appConfig.get(),
-      // The facade now returns `LlmChatResult` (ADR-0047); the engine's
+      // The facade returns `LlmChatResult` (ADR-0047); the action engine's
       // `ChatFn` contract stays plain-string, so unwrap here.
       ((messages, options) =>
         ctx.llm
@@ -43,6 +40,43 @@ const plugin: MainPluginModule = {
             ...(options?.vaultTools !== undefined ? { vaultTools: options.vaultTools } : {}),
           })
           .then((result) => result.text)) satisfies ChatFn,
+    );
+
+    const chatStore = new ChatStore({
+      read: (path) => ctx.vault.read(path),
+      writeAnnounced: (path, content) => ctx.vault.writeAnnounced(path, content),
+      list: () => ctx.vault.list(),
+    });
+    const chatEngine = new ChatEngine(
+      chatStore,
+      () => ctx.appConfig.get(),
+      (messages, options) =>
+        ctx.llm.chat(messages, {
+          taskId: options?.taskId,
+          ...(options?.vaultTools !== undefined ? { vaultTools: options.vaultTools } : {}),
+          ...(options?.sessionRef !== undefined ? { sessionRef: options.sessionRef } : {}),
+          ...(options?.attachments !== undefined ? { attachments: options.attachments } : {}),
+          ...(options?.onDelta !== undefined ? { onDelta: options.onDelta } : {}),
+        }),
+      () => ctx.llm.capabilities(),
+      {
+        readVaultText: async (path) => {
+          try {
+            return await ctx.vault.read(path);
+          } catch {
+            return null;
+          }
+        },
+        resolveAssetPath: (path) => ctx.vault.resolveAssetPath(path),
+        readAssetBase64: async (abs) => {
+          try {
+            return Buffer.from(await readFile(abs)).toString('base64');
+          } catch {
+            return null;
+          }
+        },
+        onDelta: (taskId, text) => ctx.ipc.emit('chat:delta', { taskId, text }),
+      },
     );
 
     // -- the on-save Actions save hook -------------------------------------
@@ -67,10 +101,11 @@ const plugin: MainPluginModule = {
 
     ctx.ipc.handle('ask', (payload) => {
       // Validation lives in the shared contract (`shared/ask.ts`) so the
-      // renderer's tests cover it; the bug-10 visible-failure rule and its
-      // messages came with it.
-      const { request, taskId, history } = parseAskPayload(payload);
-      return engine.ask(request, taskId, history);
+      // renderer's tests cover it; the bug-10 visible-failure rule came
+      // with it. The engine persists + replays the chat note itself — no
+      // `history` rides the wire any more.
+      const { request, taskId } = parseAskPayload(payload);
+      return chatEngine.ask(request, taskId);
     });
 
     ctx.ipc.handle('summarize', (payload) => {
@@ -84,7 +119,61 @@ const plugin: MainPluginModule = {
       );
     });
 
-    // -- the sidecar thread store (ADR-0012) ---------------------------------
+    // -- the chat-note store (ADR-0048) --------------------------------------
+    ctx.ipc.handle('chat:list', () => chatStore.listChats());
+
+    ctx.ipc.handle('chat:read', (payload) => {
+      const { path } = shape(payload) as { path?: unknown };
+      if (typeof path !== 'string') {
+        throw new Error('malformed chat:read payload');
+      }
+      return chatStore.read(path);
+    });
+
+    ctx.ipc.handle('chat:appendEdit', (payload) => {
+      const { path, applied, after } = shape(payload) as {
+        path?: unknown;
+        applied?: unknown;
+        after?: unknown;
+      };
+      if (typeof path !== 'string' || typeof applied !== 'boolean') {
+        throw new Error('malformed chat:appendEdit payload');
+      }
+      return chatStore.appendEditOutcome(path, {
+        path,
+        applied,
+        ...(typeof after === 'string' ? { after } : {}),
+      });
+    });
+
+    ctx.ipc.handle('chat:truncate', (payload) => {
+      const { path, turnIndex } = shape(payload) as { path?: unknown; turnIndex?: unknown };
+      if (typeof path !== 'string' || typeof turnIndex !== 'number') {
+        throw new Error('malformed chat:truncate payload');
+      }
+      return chatStore.truncateFrom(path, turnIndex);
+    });
+
+    ctx.ipc.handle('chat:importSidecar', async (payload) => {
+      // One-shot, non-destructive: the per-note Q/A sidecar cards become
+      // the turns of a NEW chat note; the sidecar file stays (it still
+      // holds the auto-summary).
+      const { notePath } = shape(payload) as { notePath?: unknown };
+      if (typeof notePath !== 'string') {
+        throw new Error('malformed chat:importSidecar payload');
+      }
+      const thread = await readThread(ctx, notePath);
+      const turns: ChatNoteTurn[] = turnsFromSidecarCards(thread.cards);
+      const title = notePath.split('/').pop()?.replace(/\.md$/, '') ?? 'Chat';
+      const fresh = await chatStore.create(new Date(), title, ctx.appConfig.get().llm.provider, ctx.appConfig.get().llm.model);
+      await chatStore.save(fresh.path, fresh.content);
+      for (const turn of turns) {
+        await chatStore.appendTurn(fresh.path, turn);
+      }
+      return { chatPath: fresh.path };
+    });
+
+    // -- the sidecar thread store (ADR-0012; auto-summary only now) ----------
     ctx.ipc.handle('thread:read', (payload) => {
       const { path } = shape(payload) as { path?: unknown };
       if (typeof path !== 'string') {
@@ -95,7 +184,7 @@ const plugin: MainPluginModule = {
 
     ctx.ipc.handle('thread:write', async (payload) => {
       const { thread } = shape(payload) as { thread?: unknown };
-      if (typeof thread !== 'object' || thread === null || typeof thread !== 'object') {
+      if (typeof thread !== 'object' || thread === null) {
         throw new Error('malformed thread:write payload');
       }
       const typed = thread as ChatThread;
