@@ -111,6 +111,7 @@ describe('chat-note grammar — defensive parse', () => {
         title: null,
         created: null,
         updated: null,
+        note: null,
       },
       turns: [],
     });
@@ -283,7 +284,9 @@ describe('chat-note grammar — small helpers', () => {
   });
 
   it('reads frontmatter scalars with quote stripping', () => {
-    expect(readChatNoteFrontmatter('---\nsession: "abc"\nmodel: plain\n---\n')).toEqual({
+    expect(
+      readChatNoteFrontmatter('---\nsession: "abc"\nmodel: plain\nnote: "v1::a.md"\n---\n'),
+    ).toEqual({
       kind: null,
       provider: null,
       model: 'plain',
@@ -291,6 +294,7 @@ describe('chat-note grammar — small helpers', () => {
       title: null,
       created: null,
       updated: null,
+      note: 'v1::a.md',
     });
   });
 
