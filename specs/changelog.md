@@ -14,6 +14,67 @@ and the current architecture in
 
 ## Recent milestones
 
+### Milestone 27 — OCR via the vision LLM (req-9 desktop half, ADR-0050)
+
+Right-click an image → **"Recognize text"**: the new `ocr` runtime plugin
+transcribes it through the **connected vision-capable LLM**
+([ADR-0050](../docs/09_architecture_decisions/0050-ocr-via-vision-llm.md) —
+a deliberate deviation from req-9's Apple-Vision/Tesseract sketch; VLMs
+read handwriting far better and the ADR-0047 transport already existed).
+Two surfaces: an **embedded image in a note** (Live Preview widget or the
+raw `![…](…)` line — the widget's `drey-asset://` src reverse-maps, the
+line regex covers source mode) gets its transcription spliced **below the
+image line** through the shared confirmation diff (ADR-0011; confirm
+applies and saves); an **image tab** (`kind: 'image'`, right-click there
+previously produced no menu at all) gets an unsaved scratch tab
+`<image-basename>.md`. While the model streams, a small modal shows the
+partial transcription, an elapsed clock and **Cancel** (ADR-0014; the
+main-side call rides the renderer-minted `taskId`), and errors render in
+the same modal. The row shows on every resolvable image — **enabled** when
+the active provider declares `imageAttachments`, **grayed out**
+otherwise (never gated on provider ids; a not-loaded plugin contributes
+no row). Base grew three feature-agnostic surfaces: the context-menu seam's
+provider callback now receives the click target
+(`EditorContextMenuTarget`: pane doc path + line, or image-tab path —
+the entry drawer's and plugin composers' surfaces carry no doc path), the
+renderer menu also opens on image tabs (clipboard rows suppressed), and
+every app-config write re-pushes the active provider's capabilities
+(`llm:capabilities-changed` via a new `AppConfigStore.onChange`), so the
+row flips enabled/disabled on a Settings save without a restart. Two
+menu-hygiene rules rode along: `ContextMenuItem.disabled` (grayed,
+unclickable) and **a menu with zero rows never opens** (an image tab
+without plugin items stays menu-less; a throwing plugin provider is
+skipped instead of blanking the menu). The SDK gained
+`MainChatOptions.maxOutputTokens` and `api.llm.onCapabilitiesChanged`;
+`PLUGIN_API_VERSION` minor → 5. The verbatim-transcription prompt lives
+in the plugin (`specs/classifier-spec.md` → "Prompt 3").
+
+### Milestone 26 — live edit mode (Req-32, ADR-0049)
+
+The composer gained a **"Live edit" toggle chip**: for one opted-in ask
+turn the model edits the open note **directly and immediately** — no
+confirmation dialog, a deliberate per-turn exception to ADR-0011. It
+edits through the new `doc_*` tools over the provider tool loop:
+**`doc_apply_diff`** carries one or more atomic `{find, replace}` hunks
+(each `find` must match exactly once, else nothing applies and the error
+names the failing hunk), **`doc_write`** replaces whole documents,
+**`doc_read`** verifies with numbered line windows — so large notes are
+never rewritten wholesale. A main-side working copy seeds from the live
+buffer; every mutating call pushes the whole copy through a new
+`chat:liveEdit` plugin event and lands via `documents.setBuffer` as ONE
+undo step (Ctrl+Z walks the turn back push by push, Ctrl+S saves —
+req-25 unchanged). While the model works, the document is **locked for
+user input** ("Assistant is editing…" in the meta bar) — an
+`EditorView.editable` compartment, deliberately not `EditorState.readOnly`,
+so the model's own pushes keep flowing; the lock releases on success,
+error and cancel alike. The applied document persists into the chat
+note's `edit` fence entry, so ADR-0048 replay works unchanged. Base
+seams: `MainChatOptions.tools`/`onToolCall`/`maxToolRounds` (the
+plugin-host facade merges plugin tools with the vault set; the vault
+tools stay confirm-gated) and `api.documents.setEditLock`;
+`PLUGIN_API_VERSION` minor → 4. Providers without tool support (the CLI
+providers) fail with a visible error before anything is persisted.
+
 ### Milestone 25 — chats as vault notes (Req-30, resolves bug-10(b))
 
 Conversations with the assistant became **standalone Markdown notes**
@@ -92,6 +153,28 @@ unrouted until their milestones land (see roadmap).
 ## Requirements & fixes
 
 Moved here from the roadmap's former "Completed" chapter.
+
+Plugin-modal click fix — `ui.showModal`'s backdrop dismissed on **every**
+mousedown, and the modal box is the backdrop's child, so pressing any
+dead spot inside a picker (the "Attach" label, tab-row padding, the gap
+between rows) tore the overlay down mid-press; because that happens
+before the browser synthesizes `click`, row presses were swallowed too
+and the press landed in the app behind — reading as "the modal is
+click-transparent". The backdrop now dismisses only when the press lands
+on the backdrop itself (affects the assistant's three pickers and the
+templates picker alike).
+
+External files as chat context — the assistant's `+` picker gained
+"Add a file from this computer …" (native multi-select) and the
+composer's paste/drop now routes by extension instead of images-only:
+images stage hash-named via `saveAsset` (ADR-0024), text files copy
+name-preserving and uniqued (`report-2.md`) into `attachments/` beside
+the reference note (active chat, else the open note, else `chats/`),
+everything else is skipped with a notice. Staged copies are ordinary
+vault files — the chat note's attachment links resolve and replays
+re-read them like any other attachment (ADR-0048 paths-not-bodies).
+`ctx.vault.saveAsset` joined the plugin SDK (`PLUGIN_API_VERSION` minor
+→ 3).
 
 req-20 — `[[wikilinks]]`
 ([ADR-0046](../docs/09_architecture_decisions/0046-wikilinks.md)):

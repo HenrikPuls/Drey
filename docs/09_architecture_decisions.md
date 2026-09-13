@@ -56,6 +56,8 @@ package, a minor naming convention).
 | [0046](09_architecture_decisions/0046-wikilinks.md)                                | `[[Wikilinks]]`: regex mark decorations + Ctrl/Cmd-click (resolve by name/path, `#heading` jumps, `|alias`, create-missing) | Accepted |
 | [0047](09_architecture_decisions/0047-llm-provider-abstraction.md)                 | LLM provider abstraction: base-owned `LlmClient` + per-call router, streaming/sessions/capabilities; opt-in cloud presets (amends the local-only principle and 0044's frozen-SDK rule) | Accepted |
 | [0048](09_architecture_decisions/0048-chats-as-vault-notes.md)                     | Chats as vault notes: conversations under `chats/` with `drey-tool` blocks and full-history replay (supersedes 0012 for conversations; resolves bug-10(b)) | Accepted |
+| [0049](09_architecture_decisions/0049-live-edit-mode.md)                           | Live edit mode: a composer toggle lets the model edit the open note directly via `doc_*` tools (diff hunks), immediate apply, advisory input lock — a per-turn opt-in exception to 0011 | Accepted |
+| [0050](09_architecture_decisions/0050-ocr-via-vision-llm.md)                       | OCR via the connected vision LLM: a `plugins/ocr/` context-menu row on embedded images + image tabs, capability-gated (deviates from req-9's Tesseract idea) | Accepted |
 
 Decisions not yet written up (relevant spec already fixes them, but the
 ADR is deferred to the milestone that actually implements them, per

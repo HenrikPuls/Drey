@@ -117,6 +117,38 @@ contradictions or open questions last. Return only the digest text.
 
 ---
 
+## Prompt 3 — OCR: Recognize text (plugins/ocr, ADR-0050)
+
+The `ocr` plugin's context-menu row transcribes an image (embedded in a
+note, or opened as an image tab) through the connected vision-capable
+LLM. **The prompt lives in the plugin**
+(`plugins/ocr/shared/ocr-prompt.ts`), not in `shared/app-config.ts` —
+unlike the Autotag prompt it has no user-editable template (v1). The
+image rides `MainChatOptions.attachments` as a base64 `ChatAttachment`
+on the last user message; the call runs in the plugin's main entry
+(`ctx.llm.chat`), gated on the `imageAttachments` capability.
+
+```
+System:
+You are an OCR assistant. Transcribe ALL text visible in the image.
+Rules:
+- Transcribe verbatim. Do not translate, correct, summarize, or comment.
+- Preserve the original line breaks, list markers, and simple structure.
+- Output plain Markdown only. Do not wrap the transcription in a code fence.
+- Mark words you cannot read as [illegible]. If the image shows no text, output [no text].
+
+User:
+Transcribe all text visible in this image.   (image via attachments)
+```
+
+The reply is plain text (no JSON protocol) and goes through a tolerant
+cleanup: one outer code fence is stripped when it wraps the whole reply
+(`stripOuterFence`, same stance as `parseJsonObject`). Embedded results
+are spliced below the image line through the ADR-0011 confirmation
+rewrite; image-tab results open as a scratch tab.
+
+---
+
 ## Other LLM prompts (for completeness)
 
 - **`NOTE_SUMMARY_PROMPT`** (`shared/app-config.ts`, built-in "Summarise

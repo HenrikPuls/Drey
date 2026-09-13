@@ -595,6 +595,18 @@ if (!app.requestSingleInstanceLock()) {
       mainWindow?.webContents.send(IPC_CHANNELS.llmDebugEntry, entry);
     });
 
+    // Push the active provider's capabilities after every config write -- a
+    // provider switch changes them, and plugins cache them for
+    // synchronously-readable UI gating (the ocr plugin's menu row).
+    appConfig.onChange(() => {
+      try {
+        mainWindow?.webContents.send(IPC_CHANNELS.llmCapabilitiesChanged, llm.capabilities());
+      } catch {
+        // Unrouted provider id -- capabilities are meaningless until the
+        // config is fixed; the next successful write re-pushes.
+      }
+    });
+
     registerAppProtocol();
     registerAssetProtocol(vaultManager);
     registerPluginProtocol();

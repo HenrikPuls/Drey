@@ -31,7 +31,12 @@ import { ImageLightboxService } from './image-lightbox.service';
   imports: [ImageViewer],
   templateUrl: './image-tab.html',
   styleUrl: './image-tab.css',
-  host: { '(document:keydown)': 'onKey($event)' },
+  host: {
+    '(document:keydown)': 'onKey($event)',
+    // This tab's vault-relative image path, for the context menu's click
+    // target (ADR-0050).
+    '[attr.data-drey-image]': 'path()',
+  },
 })
 export class ImageTab implements OnDestroy {
   protected readonly editor = inject(EditorService);

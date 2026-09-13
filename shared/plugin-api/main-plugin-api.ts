@@ -18,6 +18,7 @@ import type {
   LlmCapabilities,
   LlmChatResult,
   LlmDebugEntry,
+  ToolSpec,
 } from '../llm';
 import type { AppConfig } from '../app-config';
 import type { TagEntry, TagSearchHit, TagSearchQuery } from './search-types';
@@ -103,12 +104,37 @@ export interface MainChatOptions {
    */
   readonly vaultTools?: boolean;
   /**
+   * The plugin's OWN tool specs for this ONE call (ADR-0049): the model may
+   * call them before its final answer, and `onToolCall` runs each one.
+   * Merged with the vault tool set when `vaultTools` is also set — on a
+   * name collision the plugin's tool wins. Ignored by providers with the
+   * `tools: false` capability (the CLI providers).
+   */
+  readonly tools?: readonly ToolSpec[];
+  /**
+   * Runs one plugin tool call; the resolved text goes back to the model as
+   * the tool result. Return error TEXT rather than throwing — a throw
+   * fails the whole chat call. In-process only (same boundary as `onDelta`).
+   */
+  readonly onToolCall?: (name: string, argsJson: string) => Promise<string>;
+  /**
+   * Loop cap when the model keeps calling tools; the provider default is 5.
+   * A multi-step editing turn (ADR-0049) needs more rounds.
+   */
+  readonly maxToolRounds?: number;
+  /**
    * Images embedded into the LAST user message of this one call
    * (`ChatAttachment` is bytes — the caller resolves them; the provider
    * stays vault-ignorant). Ignored unless the active provider declares the
    * `imageAttachments` capability.
    */
   readonly attachments?: readonly ChatAttachment[];
+  /**
+   * Hard output cap for this one call (a transcription can run long).
+   * Providers without such an option (the OpenAI-compatible dialect) ignore
+   * it; the Anthropic dialect needs it to raise its default.
+   */
+  readonly maxOutputTokens?: number;
 }
 
 /**
@@ -142,6 +168,12 @@ export interface MainPluginContext {
      * unwanted.
      */
     writeAnnounced(path: string, content: string): Promise<number>;
+    /**
+     * Stage binary bytes as a vault asset (the editor's ADR-0024 path):
+     * hash-named under `attachments/` beside `noteRelPath`, collisions
+     * suffixed. Returns the vault-relative path to reference.
+     */
+    saveAsset(bytes: Uint8Array, ext: string, noteRelPath: string): Promise<string>;
     list(): Promise<readonly VaultFileEntry[]>;
     /** Absolute path of a vault-relative asset, or null when it escapes the vault. */
     resolveAssetPath(relativePath: string): string | null;

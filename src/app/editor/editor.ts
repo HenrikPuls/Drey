@@ -69,6 +69,10 @@ import { MarkdownSurface } from './markdown-surface/markdown-surface';
     // defaults. `editor-theme.ts` reads `--drey-heading-font` for headings.
     '[style.--font-sans]': 'fontStacks().body',
     '[style.--drey-heading-font]': 'fontStacks().heading',
+    // This host's open document (vault-relative), for surface-scoped
+    // behaviour that keys off the DOM (the context menu's click target,
+    // ADR-0050). Removed while no document is shown.
+    '[attr.data-drey-doc]': 'shownPath()',
     '(document:keydown.escape)': 'closeMenu()',
   },
 })
@@ -217,6 +221,16 @@ export class Editor implements AfterViewInit {
       this.shownDoc()?.bufferContent; // re-run after the load settles
       if (this.view && this.loadedPath === request.path) {
         this.applyRevealRequest(request);
+      }
+    });
+
+    // The live-edit lock (ADR-0049): while the assistant edits this pane's
+    // document, its surface is non-editable for the user (the model's own
+    // buffer pushes keep flowing -- see markdown-surface.setEditable).
+    effect(() => {
+      const locked = this.editor.isEditLocked(this.shownPath());
+      if (this.surfaceReady) {
+        this.surface().setEditable(!locked);
       }
     });
 

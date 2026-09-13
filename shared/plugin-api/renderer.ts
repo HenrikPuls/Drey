@@ -44,6 +44,7 @@ export type {
   DocumentChangeEvent,
   DropDecoderContrib,
   DreyPluginApi,
+  EditorContextMenuTarget,
   EditorExtensionSlot,
   EditorSurfaceContext,
   MenuContribution,

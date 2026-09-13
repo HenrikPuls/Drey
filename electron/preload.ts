@@ -8,6 +8,7 @@ import {
   ExitConfirmRequest,
   ExitDecision,
   IPC_CHANNELS,
+  LlmCapabilities,
   LlmConnectionTest,
   LlmDebugEntry,
   LlmDeltaEvent,
@@ -117,6 +118,12 @@ const dreyApi: DreyApi = {
     const wrapped = (_event: IpcRendererEvent, event: LlmDeltaEvent): void => listener(event);
     ipcRenderer.on(IPC_CHANNELS.llmDelta, wrapped);
     return () => ipcRenderer.removeListener(IPC_CHANNELS.llmDelta, wrapped);
+  },
+  onLlmCapabilitiesChanged: (listener: (capabilities: LlmCapabilities) => void): (() => void) => {
+    // Same rule as onLlmDebugEntry: payload only (ADR-0001).
+    const wrapped = (_event: IpcRendererEvent, caps: LlmCapabilities): void => listener(caps);
+    ipcRenderer.on(IPC_CHANNELS.llmCapabilitiesChanged, wrapped);
+    return () => ipcRenderer.removeListener(IPC_CHANNELS.llmCapabilitiesChanged, wrapped);
   },
   cancelLlmTask: (taskId: string): Promise<boolean> =>
     ipcRenderer.invoke(IPC_CHANNELS.llmCancel, taskId),

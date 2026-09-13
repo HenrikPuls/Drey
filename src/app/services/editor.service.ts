@@ -117,6 +117,35 @@ export class EditorService {
   /** Vault-relative path of the focused pane's active tab, or null when nothing is open. */
   readonly activePath = computed<string | null>(() => this.panes.focusedPane()?.active ?? null);
 
+  /**
+   * Live-edit locks (ADR-0049): paths whose user input is blocked while the
+   * assistant edits them. Advisory UX protection, not a hard invariant —
+   * held per path, released by the owner (the assistant panel) at turn end.
+   */
+  private readonly editLocks = signal<ReadonlySet<string>>(new Set());
+
+  /** Adds or removes `path`'s user-input lock. Unknown paths are ignored. */
+  setEditLock(path: string, locked: boolean): void {
+    this.editLocks.update((locks) => {
+      const has = locks.has(path);
+      if (locked === has) {
+        return locks;
+      }
+      const next = new Set(locks);
+      if (locked) {
+        next.add(path);
+      } else {
+        next.delete(path);
+      }
+      return next;
+    });
+  }
+
+  /** Whether `path` is currently locked against user input. */
+  isEditLocked(path: string | null): boolean {
+    return path !== null && this.editLocks().has(path);
+  }
+
   private readonly activeDoc = computed<OpenDoc | null>(
     () => this.docs().find((d) => d.path === this.activePath()) ?? null,
   );

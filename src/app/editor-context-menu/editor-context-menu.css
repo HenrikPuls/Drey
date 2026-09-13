@@ -39,6 +39,16 @@
   color: var(--text-primary);
 }
 
+.ctx-menu button:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.ctx-menu button:disabled:hover {
+  background: transparent;
+  color: var(--text-3);
+}
+
 .ctx-menu button.more {
   color: var(--text-5);
 }

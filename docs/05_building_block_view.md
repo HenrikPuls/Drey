@@ -77,9 +77,10 @@ against: `manifest.ts` (`PluginManifest` + `validateManifest`),
 major mismatch ⇒ `incompatible`). Exempt from module-boundary lint, like
 `shared/ipc-api.ts`.
 
-**Plugins** (`plugins/<id>/`, seven shipped): `sample` (exercises every
+**Plugins** (`plugins/<id>/`, eight shipped): `sample` (exercises every
 surface), `templates`, `meeting`, `tags`, `tasks`, `assistant`
-(Assistant + Actions), `browser`. Each is a full stack: `plugin.json` +
+(Assistant + Actions), `browser`, `ocr` (vision-LLM OCR, ADR-0050). Each
+is a full stack: `plugin.json` +
 `main/` (CommonJS, Node access — `electron/` and app-`shared/` CJS
 allowed) + `renderer/` (browser-context ES modules + CSS, served over
 `plugin://`, plain DOM — no Angular, no `@codemirror/*` runtime imports)
@@ -107,7 +108,7 @@ graph TB
         MCP["mcp/: VaultTools (vault_search via\nregistered SectionSearchProvider)"]
     end
     subgraph Plugins["plugins/<id>/  (dist-electron/plugins/<id>/)"]
-        P1["templates · meeting · tags ·\ntasks · assistant · browser · sample"]
+        P1["templates · meeting · tags ·\ntasks · assistant · browser · ocr · sample"]
         P2["each: plugin.json + main/ (CJS,\nNode ok) + renderer/ (ESM + CSS over\nplugin://, plain DOM) + shared/"]
     end
     SDK["shared/plugin-api/\nmanifest · DreyPluginApi ·\nMainPluginContext · PLUGIN_API_VERSION"]
@@ -141,12 +142,12 @@ fills** — base knows the interfaces, not the features:
 | Settings pages | `ui.registerSettingsPage` | — |
 | Menu rows (`file`/`edit`/`selection`/`view`/`editor-more`) | `ui.registerMenuContributions` | — |
 | Commands + keybindings | `commands.register` / `run` | — |
-| Editor extensions (host CM instances), drop decoders, context-menu items, composer slot | `editor.*` | — |
-| Document read/observe/insert/confirmed rewrite/open | `documents.*` | — |
+| Editor extensions (host CM instances), drop decoders, context-menu items (with the click target, ADR-0050), composer slot | `editor.*` | — |
+| Document read/observe/insert/confirmed rewrite/open + the live-edit input lock | `documents.*` (incl. `setEditLock`, ADR-0049) | — |
 | Vault IO + change push | `vault.*` (incl. `saveAsset`) | `ctx.vault.*` (incl. `writeAnnounced`) |
 | Backend methods + pushes (the plugin's own IPC) | `backend.invoke` / `backend.on` | `ctx.ipc.handle` / `ctx.ipc.emit` |
 | Save pipeline (`{content?, pendingActions?}`), vault lifecycle, section search | — | `ctx.save`, `ctx.vault` hooks, `ctx.search` |
-| LLM transport | `llm.chat/cancelTask/onDebugEntry/onDelta/listModels/capabilities` | `ctx.llm.chat/suggestTags/capabilities` |
+| LLM transport | `llm.chat/cancelTask/onDebugEntry/onDelta/listModels/capabilities/onCapabilitiesChanged` | `ctx.llm.chat/suggestTags/capabilities` (chat gains `tools`/`onToolCall`/`maxToolRounds`, ADR-0049; `maxOutputTokens` + the capability push, ADR-0050) |
 | Per-plugin config, app config read/patch | `settings.*`, `appConfig.*` | `ctx.config`, `ctx.appConfig` |
 | Native-surface hide (overlays/gestures) | `env.onNativeSurfaceVisibility` | — |
 
@@ -2205,3 +2206,36 @@ resolution) possible.
   `LlmChatResult.toolTrace` (recorded by both HTTP providers' tool
   loops), `api.llm.capabilities()`, and `Frontmatter.kind` (app-written
   as a plain scalar). `PLUGIN_API_VERSION` minor → 2.
+
+## 5.26 Live edit mode (`plugins/assistant/`, ADR-0049)
+
+The composer's **"Live edit" chip** (pinned first in the chips row)
+opts a single ask turn into immediate-apply editing: the model edits the
+open note through the doc tools, no ADR-0011 confirmation, Ctrl+Z undoes
+one push per press, Ctrl+S saves (req-25 unchanged).
+
+- **`main/live-edit.ts`** (pure, spec-importable) — a `LiveEditSession`
+  owning the working copy: `doc_apply_diff` (atomic, ordered
+  `{find, replace}` hunks — every `find` must match the evolving copy
+  exactly once, else nothing applies and the error names the failing
+  hunk), `doc_write` (whole-document, `normalizeDoc`), `doc_read`
+  (numbered window, 400-line cap). Tool handlers never throw — problems
+  return as text the model can react to. `LIVE_EDIT_SYSTEM` replaces the
+  JSON protocol with "edit via tools, answer with a short summary";
+  `LIVE_EDIT_TOOLS_NOTE` is the vault-tools sentence without the JSON
+  clause.
+- **Engine** — `ChatEngine.ask` gains the live branch: a
+  `capabilities().tools` guard BEFORE anything is persisted (the CLI
+  providers fail visibly), the session seeded from the note's live
+  buffer, `maxToolRounds: 16`, and after each mutating call a
+  `chat:liveEdit` plugin event carrying the whole working copy. The
+  applied document persists as the turn's `edit` fence entry
+  (`applied: true, after`) — replay needs no new grammar. Outcome:
+  `{kind: 'liveEdit', path, applied, text}`.
+- **Base seams** — `MainChatOptions.tools`/`onToolCall`/`maxToolRounds`
+  (the facade merges plugin tools with the vault set; plugin names win;
+  dispatch by name) and `api.documents.setEditLock` — the renderer-side
+  advisory input lock, implemented as an `EditorView.editable`
+  compartment (NOT `EditorState.readOnly`, which would filter the
+  model's own buffer pushes) plus the meta bar's "Assistant is
+  editing…" hint. `PLUGIN_API_VERSION` minor → 4.

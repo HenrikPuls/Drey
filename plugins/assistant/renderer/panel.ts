@@ -22,6 +22,13 @@ import type { Completion, CompletionContext, CompletionResult } from '@codemirro
 import type { EditorView } from '@codemirror/view';
 import type { DreyPluginApi } from '../../../shared/plugin-api/renderer';
 import type { ChatNoteTurn, ChatToolEntry } from '../shared/chat-note.js';
+import {
+  STAGE_IMAGE_EXTENSIONS,
+  extensionOf,
+  externalFileKind,
+  stagedAttachmentsDir,
+  uniqueStagedName,
+} from '../shared/stage.js';
 import type { AssistantState } from './state.js';
 import type { RunningTasks } from './running-tasks.js';
 import { createVaultFileCache, type VaultFileCache } from './vault-files.js';
@@ -41,7 +48,14 @@ function el<K extends keyof HTMLElementTagNameMap>(
   return node;
 }
 
-type IconName = 'check' | 'arrow-up' | 'copy' | 'corner-down-left' | 'rotate-ccw' | 'wrench';
+type IconName =
+  | 'check'
+  | 'arrow-up'
+  | 'copy'
+  | 'corner-down-left'
+  | 'rotate-ccw'
+  | 'wrench'
+  | 'pencil';
 
 /** The Lucide glyphs the panel uses (same paths as `src/app/icons/icon.ts`). */
 const ICON_PATHS: Record<IconName, readonly string[]> = {
@@ -56,6 +70,7 @@ const ICON_PATHS: Record<IconName, readonly string[]> = {
   wrench: [
     'M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z',
   ],
+  pencil: ['M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z'],
 };
 
 function icon(name: IconName, size = 12): SVGSVGElement {
@@ -87,8 +102,6 @@ function dirName(path: string): string {
   const slash = path.lastIndexOf('/');
   return slash === -1 ? '' : path.slice(0, slash);
 }
-
-const IMAGE_EXTENSIONS = new Set(['png', 'jpg', 'jpeg', 'webp', 'gif']);
 
 /** The slice of a host CodeMirror view the panel touches. */
 interface ComposerView {
@@ -461,6 +474,18 @@ export function mountPanel(
 
   const renderChips = (): void => {
     chipsRow.textContent = '';
+    // The live-edit toggle (ADR-0049) is pinned first: when on, the next
+    // ask applies the model's changes to the open note immediately.
+    const live = el('button', `chip live${state.liveEdit() ? ' on' : ''}`) as HTMLButtonElement;
+    live.type = 'button';
+    live.title =
+      'Let the assistant edit this note directly — changes apply immediately (no confirmation). Undo with Ctrl+Z, save with Ctrl+S.';
+    live.setAttribute('aria-label', 'Toggle live edit');
+    live.setAttribute('aria-pressed', String(state.liveEdit()));
+    live.appendChild(icon('pencil', 11));
+    live.appendChild(el('span', 'chip-name', 'Live edit'));
+    live.addEventListener('click', () => state.toggleLiveEdit());
+    chipsRow.appendChild(live);
     const path = state.notePath();
     if (path !== null && state.noteIncluded()) {
       chipsRow.appendChild(chipNode(path, 'note'));
@@ -782,7 +807,21 @@ export function mountPanel(
     filterInput.type = 'text';
     filterInput.placeholder = 'Filter …';
     const listBox = el('div', 'assistant-picker-list');
-    bodyArea.append(tabsRow, filterInput, listBox);
+    const foot = el(
+      'button',
+      'assistant-picker-foot',
+      'Add a file from this computer …',
+    ) as HTMLButtonElement;
+    foot.type = 'button';
+    foot.title = 'Stage a file that is not in the vault yet (copied into the chat attachments)';
+    foot.addEventListener('click', () => {
+      void state.attachExternal().then((landed) => {
+        if (landed > 0) {
+          close();
+        }
+      });
+    });
+    bodyArea.append(tabsRow, filterInput, listBox, foot);
 
     const visible = (): readonly string[] => {
       const source = tab === 'files' ? files : images;
@@ -896,39 +935,55 @@ export function mountPanel(
 
   // The panel's own views of the vault (the @ source and the pickers).
   const vaultFiles: VaultFileCache = createVaultFileCache(api, '.md');
-  const vaultImages: VaultFileCache = createVaultFileCache(api, ...IMAGE_EXTENSIONS);
+  const vaultImages: VaultFileCache = createVaultFileCache(api, ...STAGE_IMAGE_EXTENSIONS);
 
-  // -- image paste/drop staging ------------------------------------------------
-  // Images dropped or pasted onto the composer are staged into the vault
-  // (ADR-0024: attachments/ beside the reference note) and land as chips.
-  const stageImageFile = async (file: File): Promise<void> => {
-    const ext = (file.name.split('.').pop() ?? '').toLowerCase();
-    if (!IMAGE_EXTENSIONS.has(ext)) {
-      return;
+  // -- external-file paste/drop staging ----------------------------------------
+  // Files dropped or pasted onto the composer — vault files OR files from
+  // anywhere — are staged into the vault (attachments/ beside the
+  // reference note, ADR-0024) and land as chips: images hash-named via
+  // saveAsset, text files name-preserving and uniqued, everything else
+  // skipped. Resolves true when at least one file was routed (the event
+  // is consumed so the editor doesn't also handle it).
+  const stageExternalFile = async (file: File): Promise<boolean> => {
+    const kind = externalFileKind(file.name);
+    if (kind === null) {
+      return false;
     }
     try {
-      const bytes = new Uint8Array(await file.arrayBuffer());
-      const reference =
-        state.notePath() ?? state.activeChatPath() ?? 'chats/scratch.md';
-      const assetPath = await api.vault.saveAsset(bytes, ext, reference);
-      state.addImage(assetPath);
-    } catch (err) {
-      // Surfaced as the panel's error line via the notice slot.
-      void err;
+      const reference = state.notePath() ?? state.activeChatPath() ?? 'chats/scratch.md';
+      if (kind === 'image') {
+        const bytes = new Uint8Array(await file.arrayBuffer());
+        const assetPath = await api.vault.saveAsset(bytes, extensionOf(file.name), reference);
+        state.addImage(assetPath);
+        return true;
+      }
+      const dir = stagedAttachmentsDir(reference);
+      const siblings = (await api.vault.listFiles())
+        .filter((entry) => entry.type === 'file' && entry.relativePath.startsWith(`${dir}/`))
+        .map((entry) => entry.relativePath.slice(dir.length + 1));
+      const target = `${dir}/${uniqueStagedName(file.name, siblings)}`;
+      await api.vault.writeFile(target, await file.text());
+      state.addFile(target);
+      return true;
+    } catch {
+      return false;
     }
   };
 
-  const stageFromEvent = (event: DragEvent | ClipboardEvent): void => {
+  const stageFromEvent = (event: DragEvent | ClipboardEvent): boolean => {
     const files =
       event instanceof DragEvent
         ? event.dataTransfer?.files
         : (event as ClipboardEvent).clipboardData?.files;
-    if (files === undefined) {
-      return;
+    if (files === undefined || files.length === 0) {
+      return false;
     }
+    // Consume the event whenever real files ride on it (the editor must
+    // not also insert their content); routing happens async per file.
     for (const file of Array.from(files)) {
-      void stageImageFile(file);
+      void stageExternalFile(file);
     }
+    return true;
   };
 
   // -- the CodeMirror composer -------------------------------------------------
@@ -1020,14 +1075,8 @@ export function mountPanel(
           cm.view.keymap.of(cm.autocomplete.completionKeymap),
           cm.autocomplete.autocompletion({ override: [atFileSource] }),
           EditorView.domEventHandlers({
-            paste: (event: DragEvent | ClipboardEvent) => {
-              stageFromEvent(event);
-              return false;
-            },
-            drop: (event: DragEvent) => {
-              stageFromEvent(event);
-              return false;
-            },
+            paste: (event: DragEvent | ClipboardEvent) => stageFromEvent(event),
+            drop: (event: DragEvent) => stageFromEvent(event),
           }) as Extension,
           EditorView.updateListener.of((update) => {
             if (update.docChanged) {

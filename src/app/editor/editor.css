@@ -39,6 +39,16 @@
   color: var(--accent);
 }
 
+/* The live-edit lock hint (ADR-0049): shown while the assistant edits this
+   document and user input is blocked. */
+.edit-lock {
+  flex: none;
+  white-space: nowrap;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--accent);
+}
+
 .actions {
   flex: none;
   display: flex;

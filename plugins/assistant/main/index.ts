@@ -15,10 +15,18 @@ import {
 } from '../shared/chat-thread.js';
 import { parseAskPayload } from '../shared/ask.js';
 import { ChatNoteTurn, turnsFromSidecarCards } from '../shared/chat-note.js';
+import {
+  extensionOf,
+  externalFileKind,
+  stagedAttachmentsDir,
+  uniqueStagedName,
+} from '../shared/stage.js';
 import { ActionEngine, type ChatFn } from './action-engine';
 import { ChatEngine } from './chat-engine';
 import { ChatStore } from './chat-store';
 import { readFile } from 'node:fs/promises';
+import { dialog } from 'electron';
+import * as path from 'node:path';
 
 /**
  * The Assistant plugin's main entry (ADR-0044 stage 7): the on-save Actions
@@ -54,6 +62,11 @@ const plugin: MainPluginModule = {
         ctx.llm.chat(messages, {
           taskId: options?.taskId,
           ...(options?.vaultTools !== undefined ? { vaultTools: options.vaultTools } : {}),
+          ...(options?.tools !== undefined ? { tools: options.tools } : {}),
+          ...(options?.onToolCall !== undefined ? { onToolCall: options.onToolCall } : {}),
+          ...(options?.maxToolRounds !== undefined
+            ? { maxToolRounds: options.maxToolRounds }
+            : {}),
           ...(options?.sessionRef !== undefined ? { sessionRef: options.sessionRef } : {}),
           ...(options?.attachments !== undefined ? { attachments: options.attachments } : {}),
           ...(options?.onDelta !== undefined ? { onDelta: options.onDelta } : {}),
@@ -76,6 +89,7 @@ const plugin: MainPluginModule = {
           }
         },
         onDelta: (taskId, text) => ctx.ipc.emit('chat:delta', { taskId, text }),
+        onLiveEdit: (path, content) => ctx.ipc.emit('chat:liveEdit', { path, content }),
       },
     );
 
@@ -173,6 +187,19 @@ const plugin: MainPluginModule = {
       return { chatPath: fresh.path };
     });
 
+    ctx.ipc.handle('chat:attachExternal', (payload) => {
+      // Files NOT yet in the vault: a native multi-select dialog, then each
+      // pick is staged into the vault (images hash-named via saveAsset,
+      // text files copied name-preserving under the reference note's
+      // attachments/) so the chat note's attachment links resolve and a
+      // replay re-reads them like any other attachment (ADR-0048).
+      const { referenceNote } = shape(payload) as { referenceNote?: unknown };
+      if (typeof referenceNote !== 'string') {
+        throw new Error('malformed chat:attachExternal payload');
+      }
+      return stageExternalFiles(ctx, referenceNote);
+    });
+
     // -- the sidecar thread store (ADR-0012; auto-summary only now) ----------
     ctx.ipc.handle('thread:read', (payload) => {
       const { path } = shape(payload) as { path?: unknown };
@@ -248,6 +275,85 @@ async function readThread(ctx: MainPluginContext, notePath: string): Promise<Cha
 function toDisk(text: string, eol: '\n' | '\r\n'): string {
   return eol === '\r\n' ? text.replace(/\n/g, '\r\n') : text;
 }
+
+/** One staged external file: the vault path it landed on, and its chip kind. */
+interface StagedFile {
+  path: string;
+  kind: 'file' | 'image';
+}
+
+/**
+ * Native multi-select, then copy each pick into the vault: images through
+ * the hash-named asset path (ADR-0024), text files name-preserving and
+ * uniqued against the target folder (`report.md`, `report-2.md` — also
+ * across one batch). Anything neither text nor image is reported as
+ * skipped. Collisions and unreadable files skip instead of failing the
+ * batch — the renderer surfaces them as a quiet notice.
+ */
+async function stageExternalFiles(
+  ctx: MainPluginContext,
+  referenceNote: string,
+): Promise<{ staged: StagedFile[]; skipped: string[] }> {
+  const win = ctx.app.getMainWindow();
+  const extensions = [...STAGE_DIALOG_EXTENSIONS];
+  const options = {
+    title: 'Attach files to the chat',
+    properties: ['openFile', 'multiSelections'] as Array<'openFile' | 'multiSelections'>,
+    filters: [
+      { name: 'Text and images', extensions },
+      { name: 'All files', extensions: ['*'] },
+    ],
+  };
+  const result =
+    win !== null ? await dialog.showOpenDialog(win, options) : await dialog.showOpenDialog(options);
+  if (result.canceled || result.filePaths.length === 0) {
+    return { staged: [], skipped: [] };
+  }
+
+  const targetDir = stagedAttachmentsDir(referenceNote);
+  const existing = new Set(
+    (await ctx.vault.list())
+      .filter((entry) => entry.type === 'file')
+      .map((entry) => entry.relativePath),
+  );
+  const staged: StagedFile[] = [];
+  const skipped: string[] = [];
+  for (const absolute of result.filePaths) {
+    const name = path.basename(absolute);
+    const kind = externalFileKind(name);
+    if (kind === null) {
+      skipped.push(name);
+      continue;
+    }
+    try {
+      if (kind === 'image') {
+        const bytes = await readFile(absolute);
+        const assetPath = await ctx.vault.saveAsset(
+          new Uint8Array(bytes),
+          extensionOf(name),
+          referenceNote,
+        );
+        staged.push({ path: assetPath, kind });
+        existing.add(assetPath);
+        continue;
+      }
+      const unique = uniqueStagedName(name, [...existing].map((p) => p.split('/').pop() ?? p));
+      const target = `${targetDir}/${unique}`;
+      await ctx.vault.writeAnnounced(target, await readFile(absolute, 'utf8'));
+      staged.push({ path: target, kind });
+      existing.add(target);
+    } catch {
+      skipped.push(name);
+    }
+  }
+  return { staged, skipped };
+}
+
+/** The dialog filter union — staging itself routes per file via `externalFileKind`. */
+const STAGE_DIALOG_EXTENSIONS = [
+  ...'md markdown mdx txt csv json ts js py c h cpp cs xml yaml yml log'.split(' '),
+  ...'png jpg jpeg webp gif'.split(' '),
+];
 
 function shape(payload: unknown): Record<string, unknown> {
   return (payload ?? {}) as Record<string, unknown>;

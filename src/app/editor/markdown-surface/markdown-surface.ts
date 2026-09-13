@@ -163,6 +163,14 @@ export class MarkdownSurface implements AfterViewInit, OnDestroy {
   private readonly modeCompartment = new Compartment();
   private readonly placeholderCompartment = new Compartment();
   private readonly readOnlyCompartment = new Compartment();
+  /**
+   * The live-edit lock (ADR-0049): holds ONLY `EditorView.editable` —
+   * unlike `readOnlyCompartment` it deliberately leaves
+   * `EditorState.readOnly` out, so owner-driven `setContent` (the model's
+   * buffer pushes) keeps flowing AND stays in the undo history while user
+   * typing is blocked.
+   */
+  private readonly editLockCompartment = new Compartment();
   private readonly lineNumberCompartment = new Compartment();
   /** Swaps the whole CM6 theme (chrome + syntax) when Settings -> Appearance changes. */
   private readonly themeCompartment = new Compartment();
@@ -461,6 +469,7 @@ export class MarkdownSurface implements AfterViewInit, OnDestroy {
             this.placeholder() ? cmPlaceholder(this.placeholder()) : [],
           ),
           this.readOnlyCompartment.of(this.readOnly() ? readOnlyExtension : []),
+          this.editLockCompartment.of([]),
           this.lineNumberCompartment.of(this.lineNumbers() ? gutterTheme : []),
           this.modeCompartment.of(this.modeExtensions(this.mode())),
         ],
@@ -504,6 +513,17 @@ export class MarkdownSurface implements AfterViewInit, OnDestroy {
 
   getContent(): string {
     return this._view?.state.doc.toString() ?? '';
+  }
+
+  /**
+   * The live-edit lock (ADR-0049): blocks USER input while the assistant
+   * edits the document. Only the `editable` facet flips — programmatic
+   * `setContent` keeps flowing and each push stays one undo step.
+   */
+  setEditable(editable: boolean): void {
+    this._view?.dispatch({
+      effects: this.editLockCompartment.reconfigure(editable ? [] : EditorView.editable.of(false)),
+    });
   }
 
   focus(): void {

@@ -116,3 +116,24 @@ persisted with full fidelity and replayed in full.
   `ctx.vault.writeAnnounced`, `ctx.llm.capabilities`,
   `MainChatOptions.attachments`, renderer `api.llm.capabilities()`,
   `api.vault.saveAsset`, `LlmChatResult.toolTrace`.
+
+## Later change — external files as context, prompt-free modals
+
+- **Files not yet in the vault** can be attached directly: the `+` picker
+  grew an "Add a file from this computer …" row (native multi-select
+  dialog) and the composer's paste/drop now routes by extension, not just
+  images. Everything is staged into the vault first — images hash-named
+  via `saveAsset`, text files copied name-preserving and uniqued
+  (`report-2.md`) under `attachments/` beside the reference note (the
+  active chat, else the open note, else `chats/`) — so the chat note's
+  attachment links resolve and replays re-read them exactly like
+  vault-native attachments (paths-not-bodies holds). Staging rules in
+  `plugins/assistant/shared/stage.ts`; the dialog + fs work in the
+  plugin main's `chat:attachExternal`. `ctx.vault.saveAsset` joined the
+  SDK (minor → 3, the main-side twin of the renderer facade).
+- The host's plugin-modal backdrop **dismisses only when the press lands
+  on the backdrop itself** — the modal box is the backdrop's child, and
+  the old unconditional `mousedown` teardown fired for presses anywhere
+  inside the modal (labels, padding, row gaps), tearing the overlay down
+  mid-press and swallowing the subsequent `click` (removed-subtree
+  suppression), which read as "clicks pass through the modal".

@@ -233,6 +233,7 @@ function chatHarness(
       resolveAssetPath: (path) => (path === 'attachments/pic.png' ? `C:/abs/${path}` : null),
       readAssetBase64: async () => 'xjaf=',
       onDelta: (taskId, text) => deltas.push({ taskId, text }),
+      onLiveEdit: () => undefined,
     },
   );
 
@@ -256,6 +257,7 @@ const ASK = {
   extraFiles: [] as { path: string; body: string }[],
   images: [] as string[],
   chatPath: null as string | null,
+  liveEdit: false,
 };
 
 describe('assistant plugin chat engine — persistence (bug-10b)', () => {

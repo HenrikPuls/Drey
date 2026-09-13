@@ -1699,6 +1699,93 @@ auto-denied), and no model listing (`modelListing` false -- the id is
 typed by hand). A nonzero exit or a missing executable surfaces as
 `LlmError('spawn')` on the error card.
 
+## 6.36 One live-edit ask turn (ADR-0049)
+
+The composer's "Live edit" chip is on: the ask targets the open note,
+the model edits it through the `doc_*` tools over the provider loop, and
+every mutating call appears in the editor while the model keeps working.
+A per-turn opt-in exception to ADR-0011 — nothing is confirmed; each
+push is one Ctrl+Z step, Ctrl+S saves.
+
+```mermaid
+sequenceDiagram
+    participant P as Assistant panel (renderer)
+    participant ES as EditorService / surface
+    participant M as ChatEngine (plugin main)
+    participant PR as Provider tool loop
+
+    P->>ES: setEditLock(path, true) — input blocked, "Assistant is editing…"
+    P->>M: ask { question, note (live buffer), liveEdit: true, chatPath }
+    M->>M: guard capabilities().tools (visible error when false)
+    M->>M: append user turn; create LiveEditSession(note.body)
+    M->>PR: chat(messages, tools: doc_* (+ vault set), maxToolRounds: 16)
+    loop per mutating tool call
+        PR->>M: onToolCall("doc_apply_diff", hunks)
+        M->>M: validate ALL hunks atomically, apply to session.work
+        M->>P: chat:liveEdit { path, content }
+        P->>ES: documents.setBuffer — one undo step, caret kept
+        M-->>PR: tool result text (touched lines / hunk error)
+    end
+    PR-->>M: LlmChatResult { text (summary), toolTrace }
+    M->>M: append assistant turn + edit fence entry { applied: true, after }
+    M-->>P: outcome { kind: liveEdit, applied, text }
+    P->>ES: setEditLock(path, false) — always (success, error, cancel)
+    P->>P: notice "Applied N edit(s) to <path>."
+```
+
+Cancellation mid-loop aborts the signal (ADR-0014); the engine truncates
+back the dangling user turn, but already-applied edits stay in the
+buffer (undo walks them back one push each). The lock is advisory — the
+model's own pushes keep flowing, which is exactly why the lock uses the
+`editable` facet, not `EditorState.readOnly`.
+
+## 6.37 Recognize text (OCR) via the vision provider ([ADR-0050](09_architecture_decisions/0050-ocr-via-vision-llm.md))
+
+Right-click an image — embedded in a note or opened as its own tab — and
+the `ocr` plugin's "Recognize text" row runs the transcription through
+the connected vision-capable LLM. The row exists only while the active
+provider declares the `imageAttachments` capability; a Settings save
+re-pushes capabilities, so the row flips without a restart.
+
+```mermaid
+sequenceDiagram
+    participant U as Right-click (editor / image tab)
+    participant CM as EditorContextMenuService
+    participant R as ocr plugin (renderer)
+    participant M as ocr plugin (main)
+    participant VM as VaultManager
+    participant PR as Provider (LlmRouter)
+
+    U->>CM: contextmenu (capture)
+    CM->>CM: buildMenuTarget → EditorContextMenuTarget\n(data-drey-doc + findFromDOM/posAtDOM, or data-drey-image)
+    CM->>R: registry.items(target) — row gated on llm.enabled() && vision cache
+    R->>R: resolve image (img src reverse map, else ![…](…) line regex)
+    R->>M: backend.invoke('ocr', { imageVaultPath, taskId })
+    M->>VM: resolveAssetPath(path)
+    VM-->>M: absolute path
+    M->>M: readFile → base64 ChatAttachment
+    M->>PR: chat([system, user], { attachments, taskId, maxOutputTokens, onDelta })
+    loop streaming
+        M-->>R: ctx.ipc.emit('ocr:delta', { taskId, text })
+        R->>R: progress modal appends partial text
+    end
+    PR-->>M: LlmChatResult { text }
+    M-->>R: { kind: 'ok', text } (fence stripped)
+    alt embedded image
+        R->>R: composeInsertedBelow(buffer, lineNumber, text)
+        R->>R: documents.requestRewrite → ADR-0011 dialog → applyRewrite saves
+    else image tab
+        R->>R: documents.openScratch('<basename>.md', text)
+    end
+```
+
+Cancel rides the base registry: the modal's Cancel calls
+`api.llm.cancelTask(taskId)` → `llm:cancel` → the provider rejects with
+an AbortError → main resolves `{ kind: 'cancelled' }` → the modal closes
+quietly, nothing is inserted (ADR-0014: no timeout, the user decides).
+A real error (e.g. a non-vision model behind a vision-capable provider)
+renders in the same modal with a Close button.
+
 ## Planned flows (added as their milestone is built)
 
 - Dedicated keyword-search / FTS surface — the search panel's free-text

@@ -1,11 +1,11 @@
 import type {
   ActionOutcome,
-  AskOutcome,
   DreyPluginApi,
   MenuContribution,
   PluginRendererModule,
 } from '../../../shared/plugin-api/renderer';
 import type { AppConfig } from '../../../shared/app-config';
+import type { AssistantOutcome } from '../shared/ask';
 import type { ChatThread } from '../shared/chat-thread.js';
 import type { ChatNoteView, ChatSummary } from '../shared/chat-note';
 import { resolveActions } from '../shared/resolve-actions.js';
@@ -43,7 +43,7 @@ const plugin: PluginRendererModule = {
       ask: (request, taskId) =>
         api.backend.invoke('ask', { ...request, taskId }) as Promise<{
           chatPath: string;
-          outcome: AskOutcome;
+          outcome: AssistantOutcome;
         }>,
       appendEdit: (path, applied, after) =>
         api.backend.invoke('chat:appendEdit', { path, applied, after }) as Promise<void>,
@@ -51,6 +51,11 @@ const plugin: PluginRendererModule = {
         api.backend.invoke('chat:truncate', { path, turnIndex }) as Promise<void>,
       importSidecar: (notePath) =>
         api.backend.invoke('chat:importSidecar', { notePath }) as Promise<{ chatPath: string }>,
+      attachExternal: (referenceNote) =>
+        api.backend.invoke('chat:attachExternal', { referenceNote }) as Promise<{
+          staged: { path: string; kind: 'file' | 'image' }[];
+          skipped: string[];
+        }>,
       onDelta: (listener) =>
         api.backend.on('chat:delta', (data) => {
           const shape = (data ?? {}) as { taskId?: unknown; text?: unknown };
@@ -89,12 +94,26 @@ const plugin: PluginRendererModule = {
       llmEnabled: () => api.llm.enabled(),
       autoSummaryDefault: () => appConfigCache?.assistant.autoSummaryDefault ?? false,
       requestRewrite: (request) => api.documents.requestRewrite(request),
+      setEditLock: (path, locked) => {
+        api.documents.setEditLock(path, locked);
+      },
     };
 
     const state = createAssistantState(ports, tasks);
     // Vault writes elsewhere (or our own chat-note appends) stale the
     // picker cache; the lazy cache reloads on the next open.
     api.vault.onChanged(() => state.invalidateChats());
+
+    // Live edit (ADR-0049): each mutating doc-tool call pushes the whole
+    // working copy; the host applies it to the open tab as one unsaved edit
+    // (one undo step). Fire-and-forget — the main side owns the working
+    // copy; a closed tab simply no-ops (the chat note keeps the record).
+    api.backend.on('chat:liveEdit', (data) => {
+      const shape = (data ?? {}) as { path?: unknown; content?: unknown };
+      if (typeof shape.path === 'string' && typeof shape.content === 'string') {
+        api.documents.setBuffer(shape.path, shape.content);
+      }
+    });
 
     // -- active-note tracking (the auto-summary rule fires on tab switches) ----
     const trackActive = (): void => {

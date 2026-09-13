@@ -460,6 +460,8 @@ export class PluginHost {
           this.deps.vaultAnnouncer()?.announceExternal({ changedPaths: [p], deletedPaths: [] });
           return modifiedMs;
         },
+        saveAsset: (bytes, ext, noteRelPath) =>
+          vaultManager.saveAsset(bytes, ext, noteRelPath),
         list: () => vaultManager.listFiles(),
         resolveAssetPath: (p) => vaultManager.resolveAssetPath(p),
         onChanged: (cb) => {
@@ -490,11 +492,34 @@ export class PluginHost {
               ...(options?.attachments !== undefined
                 ? { attachments: [...options.attachments] }
                 : {}),
-              ...(options?.vaultTools === true && this.deps.vaultTools !== undefined
-                ? {
-                    tools: this.deps.vaultTools.toolSpecs(),
-                    onToolCall: (name, argsJson) => this.runVaultTool(name, argsJson),
-                  }
+              // Tool sets merge (ADR-0049): the plugin's own tools first, the
+              // vault set (when opted in) filtered to non-colliding names —
+              // a plugin tool wins a name collision.
+              ...(() => {
+                const pluginTools = [...(options?.tools ?? [])];
+                const pluginNames = new Set(pluginTools.map((tool) => tool.name));
+                const vaultSpecs =
+                  options?.vaultTools === true && this.deps.vaultTools !== undefined
+                    ? this.deps.vaultTools
+                        .toolSpecs()
+                        .filter((spec) => !pluginNames.has(spec.name))
+                    : [];
+                const merged = [...pluginTools, ...vaultSpecs];
+                return merged.length > 0
+                  ? {
+                      tools: merged,
+                      onToolCall: (name: string, argsJson: string) =>
+                        pluginNames.has(name) && options?.onToolCall !== undefined
+                          ? options.onToolCall(name, argsJson)
+                          : this.runVaultTool(name, argsJson),
+                    }
+                  : {};
+              })(),
+              ...(options?.maxToolRounds !== undefined
+                ? { maxToolRounds: options.maxToolRounds }
+                : {}),
+              ...(options?.maxOutputTokens !== undefined
+                ? { maxOutputTokens: options.maxOutputTokens }
                 : {}),
               signal,
             }),

@@ -34,6 +34,7 @@ export type { TagEntry, TagSearchHit, TagSearchQuery } from './search-types';
 export type {
   ActionContext,
   ActionOutcome,
+  ChatAttachment,
   ChatMessage,
   LlmDebugEntry,
   LlmModelListing,

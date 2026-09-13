@@ -19,8 +19,7 @@
  * exists.
  */
 import type { ActionOutcome } from '../../../shared/plugin-api';
-import type { AskOutcome } from '../../../shared/llm';
-import type { AskRequest } from '../shared/ask';
+import type { AskRequest, AssistantOutcome } from '../shared/ask';
 import { MAX_EXTRA_FILES, MAX_IMAGES, truncateFileBody } from '../shared/ask.js';
 import type { ChatCard, ChatThread } from '../shared/chat-thread';
 import { emptyThread, hasSummary } from '../shared/chat-thread.js';
@@ -42,13 +41,22 @@ export interface AssistantPorts {
   // -- chat notes (ADR-0048) ----------------------------------------------
   listChats(): Promise<ChatSummary[]>;
   readChat(path: string): Promise<ChatNoteView>;
-  ask(request: AskRequest, taskId?: string): Promise<{ chatPath: string; outcome: AskOutcome }>;
+  ask(request: AskRequest, taskId?: string): Promise<{ chatPath: string; outcome: AssistantOutcome }>;
   /** Persists the confirm outcome into the last assistant turn's fence. */
   appendEdit(path: string, applied: boolean, after?: string): Promise<void>;
   /** Drops every turn from `turnIndex` on (restart-from-here). */
   truncate(path: string, turnIndex: number): Promise<void>;
   /** One-shot sidecar import; returns the created chat note's path. */
   importSidecar(notePath: string): Promise<{ chatPath: string }>;
+  /**
+   * Native file dialog for files NOT yet in the vault; each pick is staged
+   * into the vault (chat attachments convention) and returned as chip
+   * paths. `skipped` names files that are neither text nor image.
+   */
+  attachExternal(referenceNote: string): Promise<{
+    staged: { path: string; kind: 'file' | 'image' }[];
+    skipped: string[];
+  }>;
   /** Streamed answer text for a task this state started (`chat:delta`). */
   onDelta(listener: (event: { taskId: string; text: string }) => void): () => void;
 
@@ -80,6 +88,25 @@ export interface AssistantPorts {
     previewStyle: 'localized' | 'document';
     triggerId?: string | null;
   }): Promise<boolean>;
+  /**
+   * Blocks user input on an open tab while the live-edit turn edits it
+   * (ADR-0049). Released by this state in the ask's `finally`.
+   */
+  setEditLock(path: string, locked: boolean): void;
+}
+
+/**
+ * Live edit only ever targets a user note: never the app-owned auto-save
+ * paths (`chats/`, `.drafts/`). Local copy — plugin renderers cannot
+ * runtime-import the app's `shared/` (same reason as `format.ts`).
+ */
+function isLiveEditablePath(path: string): boolean {
+  return (
+    path !== 'chats' &&
+    !path.startsWith('chats/') &&
+    path !== '.drafts' &&
+    !path.startsWith('.drafts/')
+  );
 }
 
 export interface AssistantState {
@@ -121,6 +148,13 @@ export interface AssistantState {
    */
   noteIncluded(): boolean;
   setNoteIncluded(on: boolean): void;
+  /**
+   * Live edit (ADR-0049): when on, the next ask lets the model edit the
+   * open note directly — changes apply immediately, nothing is confirmed.
+   * Session state like the chips; requires a live-editable open note.
+   */
+  liveEdit(): boolean;
+  toggleLiveEdit(): void;
   extraFiles(): readonly string[];
   /** Adds a file chip; resolves to a reason string when refused. */
   addFile(path: string): { ok: boolean; reason?: string };
@@ -140,6 +174,8 @@ export interface AssistantState {
   summarizeNow(): Promise<void>;
   /** One-shot, non-destructive sidecar import for the open note. */
   importSidecar(): Promise<void>;
+  /** Native dialog; stages external files into the vault and adds chips. Returns how many landed. */
+  attachExternal(): Promise<number>;
   /** Sends a question; resolves false when it was not sent (so the composer can keep the text). */
   ask(question: string): Promise<boolean>;
   /** How many turns a "restart from here" at `turnIndex` would drop. */
@@ -179,6 +215,8 @@ export function createAssistantState(ports: AssistantPorts, tasks: RunningTasks)
 
   let summarizing = false;
   let asking = false;
+  /** Live edit (ADR-0049) — session flag, one toggle in the chips row. */
+  let liveEdit = false;
   let streaming: { taskId: string; text: string } | null = null;
   let error: string | null = null;
   let notice: string | null = null;
@@ -375,6 +413,33 @@ export function createAssistantState(ports: AssistantPorts, tasks: RunningTasks)
         noteExcluded.delete(activePath);
       } else {
         noteExcluded.add(activePath);
+        // No note attached = no edit target; live edit cannot ride along.
+        liveEdit = false;
+      }
+      notify();
+    },
+
+    liveEdit: () => liveEdit,
+
+    toggleLiveEdit() {
+      if (asking) {
+        return;
+      }
+      if (activePath === null) {
+        notice = 'Open a note to use live edit.';
+        notify();
+        return;
+      }
+      if (!isLiveEditablePath(activePath)) {
+        notice = 'Live edit is not available for this document.';
+        notify();
+        return;
+      }
+      liveEdit = !liveEdit;
+      // A live-edit ask needs its target: turning the chip on re-includes
+      // the note; excluding the note turns live edit off.
+      if (liveEdit) {
+        noteExcluded.delete(activePath);
       }
       notify();
     },
@@ -515,6 +580,31 @@ export function createAssistantState(ports: AssistantPorts, tasks: RunningTasks)
       }
     },
 
+    async attachExternal() {
+      // The reference decides where the staged copies land (its
+      // attachments/ folder): the chat being built, else the open note.
+      const reference = activeChat ?? activePath ?? 'chats/scratch.md';
+      let landed = 0;
+      try {
+        const { staged, skipped } = await ports.attachExternal(reference);
+        landed = staged.length;
+        for (const item of staged) {
+          if (item.kind === 'image') {
+            this.addImage(item.path);
+          } else {
+            this.addFile(item.path);
+          }
+        }
+        if (skipped.length > 0) {
+          notice = `Skipped ${skipped.join(', ')} — not a text or image file.`;
+        }
+      } catch (err) {
+        report(err);
+      }
+      notify();
+      return landed;
+    },
+
     async ask(question) {
       const text = question.trim();
       if (text === '' || asking) {
@@ -570,46 +660,72 @@ export function createAssistantState(ports: AssistantPorts, tasks: RunningTasks)
           extraFiles,
           images: [...images],
           chatPath: activeChat,
+          // The flag alone is not enough: after a tab switch the attached
+          // note could be a chats/ auto-save note — never a live target.
+          liveEdit: liveEdit && note !== null && isLiveEditablePath(note.path),
         };
-        // The task id is minted inside `run` (Cancel must exist while the
-        // call is outstanding); `streaming` is keyed by it so the delta
-        // push lands on the right partial card.
-        const { value: result } = await tasks.run('Thinking', (taskId) => {
-          streaming = { taskId, text: '' };
+        // While the model edits the document, the user cannot: the lock
+        // covers the whole turn and releases on success, error AND cancel.
+        const lockedPath = request.liveEdit ? (note?.path ?? null) : null;
+        if (lockedPath !== null) {
+          ports.setEditLock(lockedPath, true);
+        }
+        try {
+          // The task id is minted inside `run` (Cancel must exist while the
+          // call is outstanding); `streaming` is keyed by it so the delta
+          // push lands on the right partial card.
+          const { value: result } = await tasks.run('Thinking', (taskId) => {
+            streaming = { taskId, text: '' };
+            notify();
+            return ports.ask(request, taskId);
+          });
+          streaming = null;
+          activeChat = result.chatPath;
+          await loadView(result.chatPath);
           notify();
-          return ports.ask(request, taskId);
-        });
-        streaming = null;
-        activeChat = result.chatPath;
-        await loadView(result.chatPath);
-        notify();
 
-        if (result.outcome.kind === 'answer') {
+          if (result.outcome.kind === 'answer') {
+            await refreshChats();
+            return true;
+          }
+          // A live turn's changes are already in the tab (pushed per tool
+          // call) and in the chat note (the applied edit entry, persisted
+          // main-side) — nothing to confirm, only to report (ADR-0049).
+          if (result.outcome.kind === 'liveEdit') {
+            notice =
+              result.outcome.applied > 0
+                ? `Applied ${result.outcome.applied} edit(s) to ${result.outcome.path}.`
+                : 'No changes were needed.';
+            await refreshChats();
+            return true;
+          }
+          // The host's requestRewrite shows the shared dialog and applies the
+          // rewrite itself when confirmed (ADR-0011, one flow). The outcome —
+          // applied document or discarded marker — persists into the turn's
+          // fence so the next replay knows what happened (bug-10(b)).
+          const confirmed = await ports.requestRewrite({
+            path: note !== null ? note.path : activePath ?? '',
+            before: result.outcome.before,
+            after: result.outcome.after,
+            title: 'Apply change from the assistant',
+            summary: result.outcome.summary,
+            previewStyle: result.outcome.previewStyle,
+            triggerId: null,
+          });
+          await ports.appendEdit(
+            result.chatPath,
+            confirmed,
+            confirmed ? result.outcome.after : undefined,
+          );
+          await loadView(result.chatPath);
+          notify();
           await refreshChats();
           return true;
+        } finally {
+          if (lockedPath !== null) {
+            ports.setEditLock(lockedPath, false);
+          }
         }
-        // The host's requestRewrite shows the shared dialog and applies the
-        // rewrite itself when confirmed (ADR-0011, one flow). The outcome —
-        // applied document or discarded marker — persists into the turn's
-        // fence so the next replay knows what happened (bug-10(b)).
-        const confirmed = await ports.requestRewrite({
-          path: note !== null ? note.path : activePath ?? '',
-          before: result.outcome.before,
-          after: result.outcome.after,
-          title: 'Apply change from the assistant',
-          summary: result.outcome.summary,
-          previewStyle: result.outcome.previewStyle,
-          triggerId: null,
-        });
-        await ports.appendEdit(
-          result.chatPath,
-          confirmed,
-          confirmed ? result.outcome.after : undefined,
-        );
-        await loadView(result.chatPath);
-        notify();
-        await refreshChats();
-        return true;
       } catch (err) {
         streaming = null;
         report(err);

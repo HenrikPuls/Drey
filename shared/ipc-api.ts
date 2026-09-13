@@ -8,7 +8,7 @@
  * not a runtime surprise. See docs/09_architecture_decisions/0001-*.md.
  */
 import type { AppConfig, CustomDictionary, LlmEndpoint } from './app-config';
-import type { ActionOutcome, LlmDebugEntry } from './llm';
+import type { ActionOutcome, LlmCapabilities, LlmDebugEntry } from './llm';
 import type { PluginDescriptorForRenderer, PluginIpcEventPayload } from './plugin-api/plugin-ipc';
 
 export type {
@@ -18,7 +18,7 @@ export type {
 } from './plugin-api/plugin-ipc';
 
 export type { AppConfig, LlmEndpoint, CustomDictionary } from './app-config';
-export type { ActionOutcome, LlmDebugEntry } from './llm';
+export type { ActionOutcome, LlmCapabilities, LlmDebugEntry } from './llm';
 
 /**
  * Channel names. Most are `ipcMain.handle` / `ipcRenderer.invoke` request
@@ -72,6 +72,7 @@ export const IPC_CHANNELS = {
   llmDebugEntry: 'llm:debug-entry',
   llmDelta: 'llm:delta',
   llmCancel: 'llm:cancel',
+  llmCapabilitiesChanged: 'llm:capabilities-changed',
   spellCheck: 'spell:check',
   spellLanguages: 'spell:languages',
   spellAddDictionary: 'spell:add-dictionary',
@@ -483,6 +484,13 @@ export interface DreyApi {
    * that cannot stream sends its full text as exactly one event.
    */
   onLlmDelta(listener: (event: LlmDeltaEvent) => void): () => void;
+
+  /**
+   * The ACTIVE provider's capabilities, re-pushed after every app-config
+   * write (a provider switch changes them). Lets plugins keep a
+   * synchronously-readable capability cache for UI gating.
+   */
+  onLlmCapabilitiesChanged(listener: (capabilities: LlmCapabilities) => void): () => void;
 
   /**
    * Aborts a running generation. `taskId` is minted by the **renderer**

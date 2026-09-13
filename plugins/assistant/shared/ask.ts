@@ -12,6 +12,7 @@
  * of its consumers. Runtime-self-contained (type-only app-shared
  * imports).
  */
+import type { AskOutcome } from '../../../shared/llm';
 
 /** One file attached to an ask turn. `body` is the document text (LF). */
 export interface AskFile {
@@ -26,6 +27,12 @@ export interface AskFile {
  * standalone chat is legitimate now. `images` are vault-relative image
  * paths: they persist as attachment links in the note and ride the call
  * as vision parts when the provider supports them.
+ *
+ * `liveEdit` opts THIS turn into immediate-apply editing (ADR-0049): the
+ * model edits `note` directly through the doc tools, each change lands in
+ * the editor as it happens, nothing is confirmed. Requires `note !== null`
+ * and only ever travels true for a live-editable target (the renderer
+ * clamps it — never a `chats/`/`.drafts/` auto-save path).
  */
 export interface AskRequest {
   question: string;
@@ -37,7 +44,26 @@ export interface AskRequest {
   images: string[];
   /** The chat note to continue, or `null` to start a new one. */
   chatPath: string | null;
+  /** Immediate-apply editing for this turn (ADR-0049). */
+  liveEdit: boolean;
 }
+
+/**
+ * The result of a live-edit ask turn (ADR-0049): the changes are already
+ * applied — to the open tab (pushed per tool call) and to the chat note
+ * (the turn's applied `edit` entry). `applied` counts the applied hunks /
+ * whole-document replacements, `text` is the model's summary (or a
+ * fallback when the model produced none).
+ */
+export interface LiveEditOutcome {
+  kind: 'liveEdit';
+  path: string;
+  applied: number;
+  text: string;
+}
+
+/** Everything the renderer's `ask` port can come back with. */
+export type AssistantOutcome = AskOutcome | LiveEditOutcome;
 
 /** Cap on attached files per ask turn (the composer enforces it, too). */
 export const MAX_EXTRA_FILES = 10;
@@ -71,7 +97,7 @@ export function parseAskPayload(payload: unknown): {
   taskId?: string;
 } {
   const shape = (payload ?? {}) as Record<string, unknown>;
-  const { question, note, extraFiles, images, chatPath, taskId } = shape;
+  const { question, note, extraFiles, images, chatPath, liveEdit, taskId } = shape;
   if (typeof question !== 'string') {
     throw new Error('malformed ask payload');
   }
@@ -87,6 +113,12 @@ export function parseAskPayload(payload: unknown): {
   if (chatPath !== null && typeof chatPath !== 'string') {
     throw new Error('malformed ask payload: chatPath must be a path or null');
   }
+  if (typeof liveEdit !== 'boolean') {
+    throw new Error('malformed ask payload: liveEdit must be a boolean');
+  }
+  if (liveEdit && note === null) {
+    throw new Error('malformed ask payload: liveEdit requires an attached note');
+  }
   return {
     request: {
       question,
@@ -94,6 +126,7 @@ export function parseAskPayload(payload: unknown): {
       extraFiles: extraFiles as AskFile[],
       images: images as string[],
       chatPath,
+      liveEdit,
     },
     ...(typeof taskId === 'string' ? { taskId } : {}),
   };

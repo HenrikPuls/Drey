@@ -1,0 +1,11 @@
+{
+  "id": "ocr",
+  "name": "OCR",
+  "version": "1.0.0",
+  "apiVersion": 1,
+  "description": "Recognize text in images via the connected vision-capable LLM: a context-menu row on embedded images and image tabs (ADR-0050).",
+  "author": "Drey",
+  "main": "main/index.js",
+  "renderer": "renderer/index.js",
+  "permissions": ["documents", "editor", "llm", "main-process"]
+}

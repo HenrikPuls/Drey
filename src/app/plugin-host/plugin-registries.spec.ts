@@ -120,15 +120,45 @@ describe('MenuContributionsService + EditorContextMenuRegistry', () => {
     expect(service.itemsFor('file')).toEqual([]);
   });
 
-  it('evaluates context-menu providers per open', () => {
+  it('evaluates context-menu providers per open and forwards the click target', () => {
     TestBed.configureTestingModule({});
     const registry = TestBed.inject(EditorContextMenuRegistry);
+    type MenuTarget = import('../../../shared/plugin-api/renderer').EditorContextMenuTarget;
+    const imageTarget: MenuTarget = { surface: 'image', imagePath: 'a.png' };
+    const editorTarget: MenuTarget = {
+      surface: 'editor',
+      docPath: 'n.md',
+      target: document.createElement('div'),
+      lineNumber: 2,
+      lineText: '![x](a.png)',
+    };
     let enabled = false;
-    registry.register(() => (enabled ? [{ menu: 'file', label: 'x', run: () => undefined }] : []));
+    registry.register((target) =>
+      enabled && target.surface === 'image'
+        ? [{ label: 'Recognize text', run: () => undefined }]
+        : [],
+    );
 
-    expect(registry.items()).toEqual([]);
+    expect(registry.items(imageTarget)).toEqual([]);
     enabled = true;
-    expect(registry.items().map((i) => i.label)).toEqual(['x']);
+    expect(registry.items(imageTarget).map((i) => i.label)).toEqual(['Recognize text']);
+    // The target reaches the provider — an editor click gets no image-surface row.
+    expect(registry.items(editorTarget)).toEqual([]);
+  });
+
+  it('skips a throwing context-menu provider and keeps the rest', () => {
+    TestBed.configureTestingModule({});
+    const registry = TestBed.inject(EditorContextMenuRegistry);
+    const target: import('../../../shared/plugin-api/renderer').EditorContextMenuTarget = {
+      surface: 'image',
+      imagePath: 'a.png',
+    };
+    registry.register(() => {
+      throw new Error('boom');
+    });
+    registry.register(() => [{ label: 'ok', run: () => undefined }]);
+
+    expect(registry.items(target).map((i) => i.label)).toEqual(['ok']);
   });
 });
 

@@ -21,6 +21,7 @@ const configFilePath = (): string => path.join(app.getPath('userData'), 'app-con
 
 export class AppConfigStore {
   private config: AppConfig;
+  private readonly changeCallbacks: Array<(config: AppConfig) => void> = [];
 
   constructor() {
     this.config = this.readFromDisk();
@@ -32,6 +33,21 @@ export class AppConfigStore {
   }
 
   /**
+   * Observes every successful write (currently `config:set` and
+   * `spell:add-word`); the callback receives the stored config. One wiring
+   * site instead of one per writer. Returns an unsubscribe.
+   */
+  onChange(cb: (config: AppConfig) => void): () => void {
+    this.changeCallbacks.push(cb);
+    return () => {
+      const i = this.changeCallbacks.indexOf(cb);
+      if (i >= 0) {
+        this.changeCallbacks.splice(i, 1);
+      }
+    };
+  }
+
+  /**
    * Replaces the whole config with `next` (the Settings screen is the only
    * editor and always holds the full object), normalises it, persists, and
    * returns the stored result so the renderer adopts exactly what landed on
@@ -40,6 +56,13 @@ export class AppConfigStore {
   set(next: unknown): AppConfig {
     this.config = normalizeAppConfig(next);
     this.writeToDisk();
+    for (const cb of [...this.changeCallbacks]) {
+      try {
+        cb(this.config);
+      } catch {
+        // An observer must never break the write that notified it.
+      }
+    }
     return this.config;
   }
 

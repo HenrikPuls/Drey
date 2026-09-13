@@ -123,7 +123,8 @@ toolchain is removable by deleting `.tools/`). Never assume a bare `node`,
   restore, keybindings, spellcheck, MCP server, LLM *transport*, and the
   two plugin hosts) plus **runtime-loadable, in-process, trusted plugins**
   under `plugins/<id>/` — templates, meeting, tags, tasks, assistant
-  (Assistant + Actions), browser, `sample`. Each is `plugin.json` +
+  (Assistant + Actions), browser, `ocr` (vision-LLM OCR, ADR-0050),
+  `sample`. Each is `plugin.json` +
   `main/` (CommonJS, Node) + `renderer/` (browser-context ESM + CSS over
   `plugin://`, **plain DOM**) + `shared/` types, built by
   `scripts/build-plugins.mjs` into `dist-electron/plugins/<id>/`.
@@ -252,8 +253,10 @@ Renderer (Angular):
   chat note (`chats/<y>/<m>/…`, `kind: chat`; collapsible tool chips for
   the persisted `drey-tool` entries, streamed partial answers), the
   milestone-24 composer (context chips, auto-grow, model row) plus
-  image chips (paste/drop staged via `api.vault.saveAsset`, sent as
-  vision parts per provider capability). The chat note is the source of
+  image/file chips (paste/drop or a native dialog stage EXTERNAL files
+  into the vault via `api.vault.saveAsset` / `chat:attachExternal` —
+  vision parts per provider capability, text attachments name-preserving).
+  The chat note is the source of
   truth: every turn is appended main-side (`chat-engine.ts` +
   `chat-store.ts` via `ctx.vault.writeAnnounced`), and a follow-up
   full-replays the persisted history — tool pairs and applied edits
@@ -266,7 +269,17 @@ Renderer (Angular):
   auto-summary stays sidecar-based
   (`thread:read`/`thread:write`, pinned muted card in the panel); a
   one-shot import turns old sidecar Q/A cards into a chat note. Manual
-  Actions live in the editor `⋯` menu as `editor-more` menu contributions
+  Actions live in the editor `⋯` menu as `editor-more` menu contributions.
+  **Live edit** (ADR-0049): a "Live edit" chip in the composer opts one
+  ask turn into immediate-apply editing — the model edits the open note
+  through the `doc_*` tools (`doc_apply_diff` atomic find/replace hunks,
+  `doc_write`, `doc_read`) over a main-side working copy; each mutating
+  call pushes via the `chat:liveEdit` event into `documents.setBuffer`
+  (one Ctrl+Z step per push), the document is locked for user input
+  while the turn runs (`documents.setEditLock` → an `EditorView.editable`
+  compartment + the meta bar's "Assistant is editing…" hint), the applied
+  document persists as the turn's `edit` fence entry, and providers
+  without tool support fail visibly
 - `KeybindingService` (`src/app/keybindings/`) — one capture-phase
   `keydown` listener mapping chord strings onto `Command`s; features
   register from `App`. Commands: `search.open` (`Mod+Shift+F`),
@@ -518,14 +531,16 @@ in.
 
 ## Milestones
 
-The completed milestone log (1–25) is archived in
+The completed milestone log (1–26) is archived in
 [docs/milestones-done.md](docs/milestones-done.md).
 
-- **Last completed:** milestone 25 — chats as vault notes (Req-30,
-  ADR-0048; resolves bug-10(b) — conversations persist as `chats/`
-  notes with `drey-tool` blocks and full-history replay; chat-first
-  panel with streaming; image attachments). Code-complete, all 966 unit
-  tests green; **not yet manually verified by the owner**.
+- **Last completed:** milestone 26 — live edit mode (Req-32,
+  ADR-0049 — a composer toggle lets the model edit the open note
+  directly via `doc_*` diff-hunk tools, immediate apply with an
+  advisory input lock, one undo step per push). Code-complete, all 990
+  unit tests green; **not yet manually verified by the owner**.
+  Milestone 25 (chats as vault notes, Req-30, ADR-0048) is likewise
+  code-complete and still awaiting manual verification.
 - **Next:** not chosen — see "Current State & Next Steps" above.
   Candidates from the approved provider program: Req-31 MCP client
   (M-next), then copilot-web re-apply + copilot-cli spike.

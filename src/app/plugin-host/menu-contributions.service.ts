@@ -1,6 +1,7 @@
 import { Injectable, computed, signal } from '@angular/core';
 import type {
   ContextMenuItem,
+  EditorContextMenuTarget,
   MenuContribution,
   Unsubscribe,
 } from '../../../shared/plugin-api/renderer';
@@ -47,23 +48,41 @@ export class MenuContributionsService {
 /**
  * The editor context-menu seam (ADR-0044 stage 2): plugins append items to
  * the renderer-owned editor context menu (ADR-0030). Re-evaluated on every
- * open via the callback form, so items can enable/disable dynamically.
+ * open via the callback form, so items can enable/disable dynamically;
+ * the callback receives the click target (ADR-0050) so rows can be
+ * surface-scoped (embedded image vs image tab vs plain editor position).
  */
 @Injectable({ providedIn: 'root' })
 export class EditorContextMenuRegistry {
-  private readonly providers = signal<readonly (() => readonly ContextMenuItem[])[]>([]);
+  private readonly providers = signal<
+    readonly ((target: EditorContextMenuTarget) => readonly ContextMenuItem[])[]
+  >([]);
 
   /**
    * Deliberately a METHOD, not a computed: the callback form is meant to be
    * re-evaluated on every menu open (the consumer's own computed, keyed on
    * its open-state signal, calls this fresh). A cached derivation would
    * freeze the items until a provider (un)registers.
+   *
+   * A throwing provider is skipped (same defensive stance as
+   * `EditorExtensionRegistry`) — one broken plugin must never blank the
+   * whole menu.
    */
-  items(): readonly ContextMenuItem[] {
-    return this.providers().flatMap((provide) => provide());
+  items(target: EditorContextMenuTarget): readonly ContextMenuItem[] {
+    const out: ContextMenuItem[] = [];
+    for (const provide of this.providers()) {
+      try {
+        out.push(...provide(target));
+      } catch {
+        // a broken plugin contributes nothing this open
+      }
+    }
+    return out;
   }
 
-  register(items: () => readonly ContextMenuItem[]): Unsubscribe {
+  register(
+    items: (target: EditorContextMenuTarget) => readonly ContextMenuItem[],
+  ): Unsubscribe {
     this.providers.update((list) => [...list, items]);
     return () => {
       this.providers.update((list) => list.filter((p) => p !== items));

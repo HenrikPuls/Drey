@@ -5,10 +5,9 @@ import {
 } from '../../../plugins/assistant/renderer/running-tasks';
 import type { ChatThread } from '../../../plugins/assistant/shared/chat-thread';
 import { emptyThread } from '../../../plugins/assistant/shared/chat-thread';
-import type { AskRequest } from '../../../plugins/assistant/shared/ask';
+import type { AskRequest, AssistantOutcome } from '../../../plugins/assistant/shared/ask';
 import type { ChatNoteView, ChatSummary } from '../../../plugins/assistant/shared/chat-note';
 import { parseChatNote } from '../../../plugins/assistant/shared/chat-note';
-import type { AskOutcome } from '../../../shared/llm';
 
 /**
  * Specs for the assistant plugin's renderer state
@@ -32,6 +31,10 @@ interface Harness {
   truncates: Array<{ path: string; turnIndex: number }>;
   /** Edit outcomes the appendEdit port received. */
   editOutcomes: Array<{ path: string; applied: boolean; after?: string }>;
+  /** Rewrite requests the requestRewrite port received (the confirm dialog). */
+  rewrites: Array<{ path: string; title: string }>;
+  /** Edit-lock operations the setEditLock port received, in order. */
+  lockOps: Array<{ path: string; locked: boolean }>;
   /** Delta pushes delivered through the onDelta port. */
   pushDelta(taskId: string, text: string): void;
   /** Vault files the readVaultFile port serves; anything else reads as null. */
@@ -41,7 +44,7 @@ interface Harness {
   llm: { on: boolean };
   defaultAutoSummary: boolean;
   /** The outcome the fake ask port returns next. */
-  nextOutcome: AskOutcome;
+  nextOutcome: AssistantOutcome;
   /** When set, the ask port stalls on it (streaming tests). */
   askGate: Promise<void> | null;
 }
@@ -61,6 +64,8 @@ function setup(options: { autoSummary?: boolean; llm?: boolean } = {}): Harness 
   const chatNotes = new Map<string, string>();
   const truncates: Array<{ path: string; turnIndex: number }> = [];
   const editOutcomes: Array<{ path: string; applied: boolean; after?: string }> = [];
+  const rewrites: Array<{ path: string; title: string }> = [];
+  const lockOps: Array<{ path: string; locked: boolean }> = [];
   const vaultFiles = new Map<string, string>();
   const deltaListeners = new Set<(event: { taskId: string; text: string }) => void>();
   const h: Harness = {
@@ -70,6 +75,8 @@ function setup(options: { autoSummary?: boolean; llm?: boolean } = {}): Harness 
     chatNotes,
     truncates,
     editOutcomes,
+    rewrites,
+    lockOps,
     vaultFiles,
     pushDelta: (taskId, text) => {
       for (const listener of deltaListeners) {
@@ -134,6 +141,7 @@ function setup(options: { autoSummary?: boolean; llm?: boolean } = {}): Harness 
       chatNotes.set(path, '---\nkind: chat\n---\n');
       return { chatPath: path };
     },
+    attachExternal: async () => ({ staged: [], skipped: [] }),
     onDelta: (listener) => {
       deltaListeners.add(listener);
       return () => deltaListeners.delete(listener);
@@ -152,7 +160,13 @@ function setup(options: { autoSummary?: boolean; llm?: boolean } = {}): Harness 
     activeDoc: () => (activePath === null ? null : { path: activePath, body: activeBody }),
     llmEnabled: () => h.llm.on,
     autoSummaryDefault: () => h.defaultAutoSummary,
-    requestRewrite: async () => true,
+    requestRewrite: async (request) => {
+      rewrites.push({ path: request.path, title: request.title });
+      return true;
+    },
+    setEditLock: (path, locked) => {
+      lockOps.push({ path, locked });
+    },
   };
 
   h.tasks = tasks;
@@ -254,6 +268,7 @@ describe('assistant plugin state — chat-first asks (ADR-0048)', () => {
       extraFiles: [{ path: 'b.md', body: 'B-Kontext.' }],
       images: ['attachments/pic.png'],
       chatPath: null,
+      liveEdit: false,
     });
   });
 
@@ -381,6 +396,100 @@ describe('assistant plugin state — chat-first asks (ADR-0048)', () => {
     await h.state.importSidecar();
 
     expect(h.state.activeChatPath()).toContain('chats/');
+  });
+});
+
+describe('assistant plugin state — live edit (ADR-0049)', () => {
+  it('refuses to toggle without an open note, and on auto-save paths', async () => {
+    const h = setup({ autoSummary: false });
+    h.setActive(null);
+    h.state.toggleLiveEdit();
+    expect(h.state.liveEdit()).toBe(false);
+    expect(h.state.notice()).toContain('Open a note');
+
+    const h2 = setup({ autoSummary: false });
+    h2.setActive('chats/2026/09/chat.md', '---\nkind: chat\n---\n');
+    await h2.state.openNote('chats/2026/09/chat.md');
+    h2.state.toggleLiveEdit();
+    expect(h2.state.liveEdit()).toBe(false);
+    expect(h2.state.notice()).toContain('not available');
+  });
+
+  it('turning the chip on re-includes the note; excluding the note turns it off', async () => {
+    const h = setup({ autoSummary: false });
+    h.setActive('a.md');
+    await h.state.openNote('a.md');
+    h.state.setNoteIncluded(false);
+    h.state.toggleLiveEdit();
+    expect(h.state.liveEdit()).toBe(true);
+    expect(h.state.noteIncluded()).toBe(true);
+
+    h.state.setNoteIncluded(false);
+    expect(h.state.liveEdit()).toBe(false);
+  });
+
+  it('a live ask locks the note, sends liveEdit, and reports instead of confirming', async () => {
+    const h = setup({ autoSummary: false });
+    h.setActive('a.md', '# Alt\n');
+    await h.state.openNote('a.md');
+    h.state.toggleLiveEdit();
+    h.nextOutcome = { kind: 'liveEdit', path: 'a.md', applied: 2, text: 'Zwei Hunks angewandt.' };
+
+    const sent = await h.state.ask('Mach es neu.');
+
+    expect(sent).toBe(true);
+    expect(h.asks[0]?.liveEdit).toBe(true);
+    expect(h.asks[0]?.note).toEqual({ path: 'a.md', body: '# Alt\n' });
+    expect(h.lockOps).toEqual([
+      { path: 'a.md', locked: true },
+      { path: 'a.md', locked: false },
+    ]);
+    expect(h.rewrites).toEqual([]);
+    expect(h.editOutcomes).toEqual([]);
+    expect(h.state.notice()).toBe('Applied 2 edit(s) to a.md.');
+  });
+
+  it('reports a no-change live turn, and releases the lock when the ask fails', async () => {
+    const h = setup({ autoSummary: false });
+    h.setActive('a.md');
+    await h.state.openNote('a.md');
+    h.state.toggleLiveEdit();
+    h.nextOutcome = { kind: 'liveEdit', path: 'a.md', applied: 0, text: 'Nichts zu tun.' };
+    await h.state.ask('Nur so.');
+    expect(h.state.notice()).toBe('No changes were needed.');
+    expect(h.lockOps).toEqual([
+      { path: 'a.md', locked: true },
+      { path: 'a.md', locked: false },
+    ]);
+
+    const h2 = setup({ autoSummary: false });
+    h2.setActive('a.md');
+    await h2.state.openNote('a.md');
+    h2.state.toggleLiveEdit();
+    h2.askGate = Promise.reject(new Error('boom'));
+
+    const sent = await h2.state.ask('Kaputt.');
+
+    expect(sent).toBe(false);
+    expect(h2.state.error()).toContain('boom');
+    expect(h2.lockOps).toEqual([
+      { path: 'a.md', locked: true },
+      { path: 'a.md', locked: false },
+    ]);
+  });
+
+  it('clamps the flag when the active document is not live-editable', async () => {
+    const h = setup({ autoSummary: false });
+    h.setActive('a.md');
+    await h.state.openNote('a.md');
+    h.state.toggleLiveEdit();
+    // The tab switched to a chat note after the toggle — the note chip
+    // would attach it; the payload must not carry liveEdit.
+    h.setActive('chats/2026/09/chat.md', '---\nkind: chat\n---\n');
+
+    await h.state.ask('Was steht da?');
+
+    expect(h.asks[0]?.liveEdit).toBe(false);
   });
 });
 

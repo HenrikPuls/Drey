@@ -540,6 +540,28 @@
   color: var(--text-primary);
 }
 
+/* The live-edit toggle (ADR-0049): a button-shaped chip with no × — the
+   whole chip toggles. `.on` carries the accent like the note chip. */
+.assistant-composer .chip.live {
+  padding-right: 8px;
+  border: 1px solid var(--border-strong);
+  background: var(--hover-bg);
+  color: var(--text-3);
+  font: inherit;
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.assistant-composer .chip.live:hover {
+  color: var(--text-primary);
+}
+
+.assistant-composer .chip.live.on {
+  border-color: var(--accent-quote);
+  color: var(--text-primary);
+  background: color-mix(in srgb, var(--accent-quote) 14%, transparent);
+}
+
 .assistant-composer .composer-row {
   display: flex;
   align-items: flex-end;
@@ -726,6 +748,24 @@
 .assistant-picker-row.new-chat {
   color: var(--accent);
   font-weight: 500;
+}
+
+/* "Add a file from this computer …" — external files staged into the vault. */
+.assistant-picker-foot {
+  border: none;
+  border-top: 1px solid var(--border);
+  background: transparent;
+  color: var(--text-4);
+  font: inherit;
+  font-size: 12px;
+  padding: 8px 14px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.assistant-picker-foot:hover {
+  color: var(--text-primary);
+  background: var(--hover-bg);
 }
 
 .assistant-picker-input {

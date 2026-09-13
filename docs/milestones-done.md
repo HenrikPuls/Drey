@@ -187,3 +187,28 @@ milestone before being built.
     note turns (refused while the chat tab is dirty), one-shot
     non-destructive sidecar import, image chips sent as vision parts per
     the provider capability.
+26. **Live edit mode** ([ADR-0049](09_architecture_decisions/0049-live-edit-mode.md),
+    Req-32) — a "Live edit" toggle chip in the composer's chips row opts
+    ONE ask turn into immediate-apply editing (a per-turn exception to
+    ADR-0011): the model edits the open note through the new doc tools
+    over the provider tool loop — `doc_apply_diff` (atomic ordered
+    `{find, replace}` hunks, each `find` matched exactly once or nothing
+    applies), `doc_write` (whole-document restructures), `doc_read`
+    (numbered line windows, 400-line cap) — so large notes are never
+    rewritten wholesale. A pure main-side `LiveEditSession`
+    (`plugins/assistant/main/live-edit.ts`, never-throwing handlers)
+    owns the working copy seeded from the live buffer; every mutating
+    call pushes it through the plugin's `chat:liveEdit` event and lands
+    via `documents.setBuffer` as ONE CodeMirror undo step (caret kept).
+    While the model works the document is locked for user input
+    ("Assistant is editing…" in the meta bar) via an `EditorView.editable`
+    compartment — deliberately not `EditorState.readOnly`, so the model's
+    pushes keep flowing; the lock releases on success, error and cancel.
+    The applied document persists as the turn's `edit` fence entry
+    (`applied: true, after`), so ADR-0048 replay needs no new grammar;
+    the summary text replaces the `EDIT_PROPOSAL_MARKER`. Base seams:
+    `MainChatOptions.tools`/`onToolCall`/`maxToolRounds` (the facade
+    merges plugin tools with the vault set, plugin names win; the vault
+    tools stay confirm-gated) and `api.documents.setEditLock`;
+    `PLUGIN_API_VERSION` minor → 4. `capabilities().tools` is checked
+    before anything is persisted — CLI providers fail visibly.

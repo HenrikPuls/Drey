@@ -26,11 +26,12 @@ export class EditorContextMenu {
   private readonly contributions = inject(EditorContextMenuRegistry);
 
   /** Plugin-contributed rows, evaluated fresh on every menu open. */
-  protected readonly pluginItems = computed(() =>
-    this.svc.anchor() === null
+  protected readonly pluginItems = computed(() => {
+    const target = this.svc.menuTarget();
+    return this.svc.anchor() === null || target === null
       ? []
-      : this.contributions.items().filter((item) => item.run !== undefined),
-  );
+      : this.contributions.items(target).filter((item) => item.run !== undefined);
+  });
 
   // Close the menu (and its full-screen backdrop) FIRST, then run the
   // action -- if the action throws, the backdrop must not be left covering
@@ -58,7 +59,7 @@ export class EditorContextMenu {
   protected runPluginItem(index: number): void {
     const item = this.pluginItems()[index];
     this.svc.close();
-    if (item?.run !== undefined) {
+    if (item?.run !== undefined && item.disabled !== true) {
       item.run();
     }
   }

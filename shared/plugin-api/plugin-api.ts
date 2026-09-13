@@ -174,8 +174,35 @@ export interface MenuContribution {
  */
 export interface ContextMenuItem {
   readonly label: string;
+  /** Grayed out, unclickable — for "this exists, but not right now". */
+  readonly disabled?: boolean;
   run(): void;
 }
+
+/**
+ * What the editor context menu was opened on (where the click landed).
+ * `image` is the `kind: 'image'` tab surface; `editor` is any CodeMirror
+ * surface — `docPath` is null unless the surface IS an open pane text
+ * document (the entry drawer's and plugin composers' editors pass null, so
+ * document-scoped rows stay away from non-document surfaces).
+ */
+export type EditorContextMenuTarget =
+  | {
+      readonly surface: 'editor';
+      /** Vault-relative path of the clicked pane's document, else null. */
+      readonly docPath: string | null;
+      /** The DOM node the click landed on (e.g. an `<img>` inside a widget). */
+      readonly target: Element;
+      /** 1-based line number at the click, when the position maps. */
+      readonly lineNumber: number | null;
+      /** That line's text (LF, no break) — raw source even under a widget. */
+      readonly lineText: string | null;
+    }
+  | {
+      readonly surface: 'image';
+      /** Vault-relative path of the image the tab shows. */
+      readonly imagePath: string;
+    };
 
 /**
  * A drop decoder: consulted BEFORE the base file/image handling, so a
@@ -280,6 +307,12 @@ export interface DreyPluginApi {
     insertAtCursor(text: string): boolean;
     /** Patch an open tab's buffer (unsaved edit, exactly as if typed). False when not open. */
     setBuffer(path: string, content: string): boolean;
+    /**
+     * Block user input on an open tab while a flow (the live-edit turn,
+     * ADR-0049) edits it programmatically. Advisory: programmatic
+     * `setBuffer` calls keep working. False when the tab is not open.
+     */
+    setEditLock(path: string, locked: boolean): boolean;
     save(path?: string, options?: { runOnSaveActions?: boolean }): Promise<void>;
     /** Confirm-then-apply a rewrite (shared confirmation dialog). Resolves to the user's choice. */
     requestRewrite(request: RewriteRequest): Promise<boolean>;
@@ -336,8 +369,14 @@ export interface DreyPluginApi {
       factory: (context: EditorSurfaceContext) => unknown,
     ): Unsubscribe;
     registerDropDecoder(decoder: DropDecoderContrib): Unsubscribe;
-    /** Items appended to the editor context menu, re-evaluated per open. */
-    registerContextMenuItems(items: () => readonly ContextMenuItem[]): Unsubscribe;
+    /**
+     * Items appended to the editor context menu, re-evaluated per open.
+     * The callback receives the click target (embedded image vs image tab
+     * vs plain editor position) so rows can be surface-scoped.
+     */
+    registerContextMenuItems(
+      items: (target: EditorContextMenuTarget) => readonly ContextMenuItem[],
+    ): Unsubscribe;
   };
 
   /** Section search + vocabulary, backed by whichever plugin registered the provider. */
@@ -385,6 +424,12 @@ export interface DreyPluginApi {
     capabilities(): Promise<LlmCapabilities>;
     cancelTask(taskId: string): Promise<boolean>;
     onDebugEntry(listener: (entry: LlmDebugEntry) => void): Unsubscribe;
+    /**
+     * The ACTIVE provider's capabilities re-pushed after every app-config
+     * write (a provider switch changes them) — keeps synchronously-readable
+     * UI caches (context-menu gating) fresh without re-polling.
+     */
+    onCapabilitiesChanged(listener: (capabilities: LlmCapabilities) => void): Unsubscribe;
     /**
      * Streamed-text pushes (ADR-0047) for tasks this renderer started with
      * a matching `taskId`. Serialised IPC cannot carry a callback in the

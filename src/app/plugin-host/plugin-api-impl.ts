@@ -167,6 +167,13 @@ export class PluginApiFactory {
           }
           return exists;
         },
+        setEditLock: (path, locked) => {
+          const exists = this.editor.openDocs().some((d) => d.path === path && d.kind === 'text');
+          if (exists) {
+            this.editor.setEditLock(path, locked);
+          }
+          return exists;
+        },
         save: (path, options) =>
           this.editor.save({
             ...(path !== undefined ? { path } : {}),
@@ -255,8 +262,18 @@ export class PluginApiFactory {
           }
           document.body.appendChild(backdrop);
           // Backdrop click dismisses; the returned close() lets the plugin
-          // close it programmatically (picker Enter/Esc).
-          backdrop.addEventListener('mousedown', teardown);
+          // close it programmatically (picker Enter/Esc). The guard matters:
+          // the box is a CHILD of the backdrop, so without the target check
+          // every mousedown inside the modal (labels, padding, row gaps)
+          // would bubble up and tear the overlay down mid-press — and
+          // because that happens before the browser synthesizes `click`,
+          // row clicks would be swallowed too (removed subtree = no click).
+          backdrop.addEventListener('mousedown', (event) => {
+            if (event.target !== backdrop) {
+              return;
+            }
+            teardown();
+          });
           track(teardown);
           return teardown;
         },
@@ -312,6 +329,8 @@ export class PluginApiFactory {
         cancelTask: (taskId) => window.dreyApi.cancelLlmTask(taskId),
         onDebugEntry: (listener) => track(window.dreyApi.onLlmDebugEntry(listener)),
         onDelta: (listener) => track(window.dreyApi.onLlmDelta(listener)),
+        onCapabilitiesChanged: (listener) =>
+          track(window.dreyApi.onLlmCapabilitiesChanged(listener)),
       },
       env: {
         onNativeSurfaceVisibility: (listener) => track(context.addVisibilityListener(listener)),

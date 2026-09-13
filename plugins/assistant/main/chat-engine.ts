@@ -13,13 +13,13 @@
  * resumed provider session that has gone stale gets ONE full-replay
  * retry before the failure surfaces.
  */
-import type { ChatAttachment, ChatMessage, LlmChatResult } from '../../../shared/llm';
-import { AskOutcome, parseJsonObject } from '../../../shared/llm';
+import type { ChatAttachment, ChatMessage, LlmChatResult, ToolSpec } from '../../../shared/llm';
+import { parseJsonObject } from '../../../shared/llm';
 import { pickPreviewStyle } from '../../../shared/text-diff';
 import { formatDateTime } from '../../../shared/timestamp';
 import type { AppConfig } from '../../../shared/app-config';
 import type { LlmCapabilities } from '../../../shared/llm';
-import type { AskRequest } from '../shared/ask';
+import type { AskRequest, AssistantOutcome } from '../shared/ask';
 import {
   ChatNoteAttachment,
   ChatNoteTurn,
@@ -35,6 +35,12 @@ import {
   buildAskUserMessage,
   editCatchUpLine,
 } from './ask-prompts';
+import {
+  LIVE_EDIT_SYSTEM,
+  LIVE_EDIT_TOOLS_NOTE,
+  LIVE_EDIT_TOOL_SPECS,
+  createLiveEditSession,
+} from './live-edit';
 import { isAbort, normalizeDoc } from './action-engine';
 
 /** One completion call with the engine's needs; abort via `taskId` (ADR-0014). */
@@ -46,6 +52,12 @@ export type ChatFn = (
     sessionRef?: string;
     attachments?: ChatAttachment[];
     onDelta?: (text: string) => void;
+    /** The plugin's own tool specs (ADR-0049), merged into the call's tool set. */
+    tools?: readonly ToolSpec[];
+    /** Runs one plugin tool call; resolved text is the tool result. */
+    onToolCall?: (name: string, argsJson: string) => Promise<string>;
+    /** Loop cap override (provider default 5). */
+    maxToolRounds?: number;
   },
 ) => Promise<LlmChatResult>;
 
@@ -56,11 +68,16 @@ export interface ChatEnginePorts {
   readAssetBase64(absPath: string): Promise<string | null>;
   /** Delta forwarding to the panel (the plugin's own `chat:delta` event). */
   onDelta(taskId: string, text: string): void;
+  /**
+   * One live-edit working-copy push (ADR-0049): fires after each mutating
+   * doc-tool call; the renderer applies it to the open tab (`setBuffer`).
+   */
+  onLiveEdit(path: string, content: string): void;
 }
 
 export interface ChatAskResult {
   chatPath: string;
-  outcome: AskOutcome;
+  outcome: AssistantOutcome;
 }
 
 const IMAGE_MEDIA_TYPES: Record<string, string> = {
@@ -84,6 +101,12 @@ export class ChatEngine {
     const config = this.getConfig();
     if (!config.llm.enabled) {
       throw new Error('LLM features are disabled.');
+    }
+    // Live edit (ADR-0049) needs the provider's tool loop. Checked BEFORE
+    // anything is persisted — a later throw would leave a dangling user
+    // turn in the chat note.
+    if (request.liveEdit && !this.capabilities().tools) {
+      throw new Error('Live edit is unavailable: the active provider has no tool support.');
     }
 
     // 1 · The chat note: continue the given one, or create one titled by
@@ -132,10 +155,24 @@ export class ChatEngine {
       view.frontmatter.provider === config.llm.provider;
 
     const toolsOn = config.mcp.enabled;
+    // Live branch (ADR-0049): the note IS the edit target, edited through
+    // the doc tools over a main-side working copy seeded from the live
+    // buffer. `note !== null` is guaranteed by the payload validation for a
+    // liveEdit ask; the null-narrowing keeps TS happy.
+    const liveSession =
+      request.liveEdit && request.note !== null
+        ? createLiveEditSession(request.note.path, request.note.body)
+        : null;
+    const live = liveSession !== null;
     const answerOnly = request.note === null;
-    const system = answerOnly ? ASK_ANSWER_SYSTEM : ASK_SYSTEM;
+    const system = live
+      ? LIVE_EDIT_SYSTEM
+      : answerOnly
+        ? ASK_ANSWER_SYSTEM
+        : ASK_SYSTEM;
+    const toolsNote = live ? LIVE_EDIT_TOOLS_NOTE : ASK_TOOLS_NOTE;
     const baseMessages: ChatMessage[] = [
-      { role: 'system', content: toolsOn ? `${system}\n${ASK_TOOLS_NOTE}` : system },
+      { role: 'system', content: toolsOn ? `${system}\n${toolsNote}` : system },
     ];
     const catchUp = resume ? this.catchUpLine(view) : '';
     const userBody = buildAskUserMessage(request);
@@ -161,6 +198,21 @@ export class ChatEngine {
     const options = (useSession: boolean) => ({
       taskId,
       ...(toolsOn ? { vaultTools: true } : {}),
+      // The doc tools + a higher round cap: a multi-hunk editing turn
+      // needs more call/answer rounds than the provider default of 5.
+      ...(liveSession !== null
+        ? {
+            tools: LIVE_EDIT_TOOL_SPECS,
+            maxToolRounds: 16,
+            onToolCall: (name: string, argsJson: string) =>
+              liveSession.runTool(name, argsJson).then((run) => {
+                if (run.mutated) {
+                  this.ports.onLiveEdit(liveSession.path, liveSession.work);
+                }
+                return run.text;
+              }),
+          }
+        : {}),
       ...(useSession && view.frontmatter.session !== null
         ? { sessionRef: view.frontmatter.session }
         : {}),
@@ -192,24 +244,40 @@ export class ChatEngine {
     }
     const durationMs = Date.now() - startedAt;
 
-    // 5 · The reply: an answer to display, or an edit to confirm (the
-    // outcome — applied document or discarded marker — is appended to the
-    // turn's fence by `chat:appendEdit` after the user's decision).
-    const obj = parseJsonObject(result.text);
-    let outcome: AskOutcome;
-    if (request.note !== null && obj?.['kind'] === 'edit' && typeof obj['document'] === 'string') {
-      const body = request.note.body;
-      const after = normalizeDoc(obj['document']);
+    // 5 · The reply: a live turn's changes are already applied — the
+    // model's text is the summary (the providers deliver an empty text
+    // when the round cap hit mid-loop, so a fallback names what happened).
+    // Otherwise an answer to display, or an edit to confirm (the outcome —
+    // applied document or discarded marker — is appended to the turn's
+    // fence by `chat:appendEdit` after the user's decision).
+    let outcome: AssistantOutcome;
+    if (liveSession !== null) {
+      const fallback =
+        liveSession.editCount > 0
+          ? `Applied ${liveSession.editCount} edit(s) to ${liveSession.path}.`
+          : 'No changes were needed.';
       outcome = {
-        kind: 'edit',
-        before: body,
-        after,
-        previewStyle: pickPreviewStyle(body, after),
-        summary: request.question.trim(),
+        kind: 'liveEdit',
+        path: liveSession.path,
+        applied: liveSession.editCount,
+        text: result.text.trim() || fallback,
       };
     } else {
-      const text = typeof obj?.['text'] === 'string' ? obj['text'] : result.text.trim();
-      outcome = { kind: 'answer', text };
+      const obj = parseJsonObject(result.text);
+      if (request.note !== null && obj?.['kind'] === 'edit' && typeof obj['document'] === 'string') {
+        const body = request.note.body;
+        const after = normalizeDoc(obj['document']);
+        outcome = {
+          kind: 'edit',
+          before: body,
+          after,
+          previewStyle: pickPreviewStyle(body, after),
+          summary: request.question.trim(),
+        };
+      } else {
+        const text = typeof obj?.['text'] === 'string' ? obj['text'] : result.text.trim();
+        outcome = { kind: 'answer', text };
+      }
     }
 
     // 6 · The assistant turn: text, meta, and the tool trace as drey-tool
@@ -222,7 +290,7 @@ export class ChatEngine {
         durationMs,
       },
       text:
-        outcome.kind === 'answer'
+        outcome.kind === 'answer' || outcome.kind === 'liveEdit'
           ? outcome.text
           : request.note !== null
             ? `${EDIT_PROPOSAL_MARKER} \`${request.note.path}\`]`
@@ -235,6 +303,16 @@ export class ChatEngine {
       ...(config.llm.model ? { model: config.llm.model } : {}),
       ...(result.sessionRef !== undefined ? { session: result.sessionRef } : {}),
     });
+    // A live turn that changed something persists the applied document as
+    // the turn's `edit` entry (applied: true) — the next replay then shows
+    // the model its own result, same as a confirmed proposal.
+    if (liveSession !== null && liveSession.editCount > 0) {
+      await this.store.appendEditOutcome(chatPath, {
+        path: liveSession.path,
+        applied: true,
+        after: liveSession.work,
+      });
+    }
 
     return { chatPath, outcome };
   }

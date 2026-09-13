@@ -21,6 +21,7 @@ const VALID = {
   extraFiles: [{ path: 'b.md', body: 'B.' }],
   images: ['attachments/pic.png'],
   chatPath: 'chats/2026/09/2026-09-13-topic.md',
+  liveEdit: false,
 };
 
 describe('assistant plugin ask contract (plugins/assistant/shared/ask)', () => {
@@ -38,6 +39,7 @@ describe('assistant plugin ask contract (plugins/assistant/shared/ask)', () => {
       extraFiles: [],
       images: [],
       chatPath: null,
+      liveEdit: false,
     });
 
     expect(parsed.request.note).toBeNull();
@@ -64,6 +66,15 @@ describe('assistant plugin ask contract (plugins/assistant/shared/ask)', () => {
     ).toThrow(/extraFiles/);
     expect(() => parseAskPayload({ ...VALID, images: [42] })).toThrow(/images/);
     expect(() => parseAskPayload({ ...VALID, chatPath: 7 })).toThrow(/chatPath/);
+  });
+
+  it('requires liveEdit to be a boolean and to carry a note (ADR-0049)', () => {
+    expect(() => parseAskPayload({ ...VALID, liveEdit: 'yes' })).toThrow(/liveEdit must be a boolean/);
+    expect(() => parseAskPayload({ ...VALID, note: null, liveEdit: true })).toThrow(
+      /liveEdit requires an attached note/,
+    );
+    const parsed = parseAskPayload({ ...VALID, liveEdit: true });
+    expect(parsed.request.liveEdit).toBe(true);
   });
 
   it('truncates an oversized body with a visible marker, and only then', () => {

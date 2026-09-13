@@ -39,7 +39,7 @@ refresh" below), with an opt-in chokidar watcher for external changes
 
 ---
 
-ommit ## Not yet implemented
+## Not yet implemented
 
 Everything implemented lives in [`changelog.md`](changelog.md). When an
 item below ships, move it there and remove it from this list.
@@ -65,9 +65,13 @@ item below ships, move it there and remove it from this list.
   "Task Description => Sebastian => Peter" (prepare a task, send it to
   Sebastian to discuss with Peter), "Description => Jira" (create a ticket
   from the description, return the new ticket's link).
-- **req-9** — OCR for handwritten notes (iPad expansion stage; Apple
-  Vision Framework or local Tesseract). Maybe an OCR field where images
-  can be dropped so they are OCR'd.
+- **req-9** — OCR remainder (iPad expansion stage): handwriting
+  recognition on the tablet itself (Apple Vision Framework or local
+  Tesseract). The **desktop half has shipped** — the `ocr` plugin
+  transcribes embedded images / image tabs via the connected
+  vision-capable LLM (ADR-0050, a deliberate deviation from the
+  Tesseract idea). An "OCR drop field" that batch-processes dropped
+  images stays parked.
 - **req-10** — iPad/iPhone access via Tailscale to the PC backend.
 - **req-11** — audio recording in interview mode (local Whisper; Windows
   integrated speech-to-text via Win+H as the likely first step).
