@@ -558,6 +558,24 @@
   color: var(--text-3);
 }
 
+/* The prompt picker's opener — the slot at the row's right end. */
+.assistant-composer .prompt-btn {
+  margin-left: auto;
+  background: transparent;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+  color: var(--text-4);
+  font-family: var(--font-sans);
+  font-size: 12px;
+  padding: 4px 10px;
+  cursor: pointer;
+}
+
+.assistant-composer .prompt-btn:hover {
+  color: var(--text-primary);
+  background: var(--hover-bg);
+}
+
 /* -- pickers (file + model; api.ui.showModal, centred overlay) ---------------
    The modal box (.plugin-modal) gets .assistant-picker-host added by the
    panel; plugin CSS is global, so the assistant ships its own backdrop copy
@@ -680,6 +698,12 @@
   margin-left: 8px;
   font-size: 11px;
   color: var(--text-6);
+}
+
+/* The prompt picker's row: title strong, description muted (a "" description
+   renders nothing — the row is just the title). */
+.assistant-picker-row .row-title {
+  font-weight: 600;
 }
 
 .assistant-picker-row.this-note::after {

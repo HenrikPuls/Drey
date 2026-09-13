@@ -32,6 +32,7 @@ import {
 import type { AssistantState } from './state.js';
 import type { RunningTasks } from './running-tasks.js';
 import { createVaultFileCache, type VaultFileCache } from './vault-files.js';
+import { PROMPTS_DIR, promptEntriesFrom, type PromptEntry } from './prompts.js';
 
 function el<K extends keyof HTMLElementTagNameMap>(
   tag: K,
@@ -417,8 +418,13 @@ export function mountPanel(
   modelButton.type = 'button';
   modelButton.title = 'Pick the model';
   modelButton.setAttribute('aria-label', 'Pick the model');
+  const promptsButton = el('button', 'prompt-btn', 'Prompts') as HTMLButtonElement;
+  promptsButton.type = 'button';
+  promptsButton.title = 'Pick a prompt from templates/prompts/';
+  promptsButton.setAttribute('aria-label', 'Pick a prompt');
+  promptsButton.addEventListener('click', () => void openPromptPicker());
   const meta = el('div', 'composer-meta');
-  meta.append(modelButton);
+  meta.append(modelButton, promptsButton);
   const box = el('div', 'composer-box');
   box.append(chipsRow, row);
   composer.append(box, meta);
@@ -746,6 +752,82 @@ export function mountPanel(
         models = [];
         buildBody();
       });
+  }
+
+  /**
+   * The prompt picker (req: pick a prompt from the templates folder — the
+   * successor of the removed "Summarise now"): lists `templates/prompts/`
+   * Markdown files (title + description), and inserting one REPLACES the
+   * composer's text — the user reviews and sends it as a normal question.
+   */
+  async function openPromptPicker(): Promise<void> {
+    let close: () => void = () => undefined;
+
+    const box = el('div', 'assistant-picker');
+    const headLabel = el('div', 'assistant-picker-head', 'Prompts');
+    const bodyArea = el('div', 'assistant-picker-body');
+    box.append(headLabel, bodyArea);
+
+    const listBox = el('div', 'assistant-picker-list');
+    bodyArea.appendChild(listBox);
+
+    let prompts: readonly PromptEntry[] = [];
+    const renderList = (): void => {
+      listBox.textContent = '';
+      for (const prompt of prompts) {
+        const rowEl = el('div', 'assistant-picker-row');
+        rowEl.appendChild(el('span', 'row-title', prompt.title));
+        if (prompt.description !== '') {
+          rowEl.appendChild(el('span', 'assistant-picker-detail', prompt.description));
+        }
+        rowEl.title = prompt.path;
+        rowEl.addEventListener('click', () => {
+          close();
+          const view = composerView;
+          if (view === null) {
+            return;
+          }
+          view.dispatch({
+            changes: { from: 0, to: view.state.doc.length, insert: prompt.body },
+          });
+          sizeComposer();
+          view.focus();
+        });
+        listBox.appendChild(rowEl);
+      }
+      if (prompts.length === 0) {
+        listBox.appendChild(
+          el(
+            'div',
+            'assistant-picker-empty',
+            `No prompts in ${PROMPTS_DIR}/ — add .md files there.`,
+          ),
+        );
+      }
+    };
+    renderList();
+
+    box.addEventListener('keydown', (event) => {
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        close();
+      }
+    });
+
+    close = api.ui.showModal((mount) => {
+      mount.classList.add('assistant-picker-host');
+      mount.appendChild(box);
+    });
+
+    // Re-read on every open (the cache invalidates itself on vault changes).
+    try {
+      prompts = await promptEntriesFrom(await vaultFiles.ensureLoaded(), (path) =>
+        api.vault.readFile(path).then((file) => file.content),
+      );
+      renderList();
+    } catch {
+      // The empty state stays; the read failure is not worth an error line.
+    }
   }
 
   function openFilePicker(): void {

@@ -57,7 +57,10 @@ save-before-exit prompt.
 - `templates/` — Markdown templates for new notes; `{{date}}` `{{time}}`
   `{{datetime}}` `{{title}}` placeholders substituted at creation (unknown
   tokens untouched). `templates/daily.md` seeds new daily notes. Excluded
-  from the tag index and tag search.
+  from the tag index and tag search. `templates/prompts/*.md` are the
+  assistant panel's prompt picker entries: `# Titel`, `> Beschreibung`,
+  then the prompt body (no placeholder substitution — the picker inserts
+  the body into the composer).
 - `.drafts/` — untitled scratch buffers are committed here on exit as
   `.drafts/unnamed-N.md`. A dot-folder, hidden from tree and indexes.
   Only "Save as…" moves a draft out (deleting the original).
