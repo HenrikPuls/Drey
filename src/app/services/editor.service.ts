@@ -326,6 +326,21 @@ export class EditorService {
     this.commands.requestNewDailyEntry(text);
   }
 
+  /** @see EditorCommandsService.claimNewEntryRequest */
+  claimNewEntryRequest(id: number): boolean {
+    return this.commands.claimNewEntryRequest(id);
+  }
+
+  /** @see EditorCommandsService.claimInsertRequest */
+  claimInsertRequest(id: number): boolean {
+    return this.commands.claimInsertRequest(id);
+  }
+
+  /** @see EditorCommandsService.claimRevealRequest */
+  claimRevealRequest(id: number): boolean {
+    return this.commands.claimRevealRequest(id);
+  }
+
   /** The assistant card's "insert into note" button. No-op with no open (text) document. */
   requestInsertText(text: string): void {
     if (text.trim() === '' || this.activePath() === null || this.activeKind() !== 'text') {

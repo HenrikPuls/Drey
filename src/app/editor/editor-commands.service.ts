@@ -48,6 +48,46 @@ export class EditorCommandsService {
   }
 
   /**
+   * One-time claims for the three per-id requests above. Consumption is
+   * claimed GLOBALLY, not per component instance: a fresh `Editor` mounts
+   * for every file opened into an empty pane, and a per-instance "already
+   * handled" memory would let every later mount re-apply the last request —
+   * a stale `## HH:mm` entry (or assistant insert) landing in files nobody
+   * captured into. Returns true exactly once per id; id 0 ("nothing
+   * pending") is never claimable.
+   */
+  private claimedEntryId = 0;
+  private claimedInsertId = 0;
+  private claimedRevealId = 0;
+
+  /** @see newEntryRequest */
+  claimNewEntryRequest(id: number): boolean {
+    if (id === 0 || id <= this.claimedEntryId) {
+      return false;
+    }
+    this.claimedEntryId = id;
+    return true;
+  }
+
+  /** @see insertRequest */
+  claimInsertRequest(id: number): boolean {
+    if (id === 0 || id <= this.claimedInsertId) {
+      return false;
+    }
+    this.claimedInsertId = id;
+    return true;
+  }
+
+  /** @see EditorService.revealRequest */
+  claimRevealRequest(id: number): boolean {
+    if (id === 0 || id <= this.claimedRevealId) {
+      return false;
+    }
+    this.claimedRevealId = id;
+    return true;
+  }
+
+  /**
    * Pure: the CodeMirror change that appends `draft` to `currentText`
    * using entry-template `pattern`. Lives here rather than in the `Editor`
    * component, which only dispatches it.

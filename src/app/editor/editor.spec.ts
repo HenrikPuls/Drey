@@ -313,4 +313,49 @@ describe('Editor', () => {
     expect(editor.bufferContent()).toMatch(/\n## \d{2}:\d{2}\n- \[ \] call the marina #sailing\n$/);
     expect(editor.isDirty()).toBe(true);
   });
+
+  describe('stale request claims (files stay untouched without a user edit)', () => {
+    /**
+     * Consumes a request in the mounted editor, then simulates opening
+     * another file -- which remounts `app-editor` in a real pane -- and
+     * asserts the fresh instance does NOT re-apply the consumed request
+     * (the stale `## HH:mm` bug).
+     */
+    async function remountOnOtherFile(): Promise<void> {
+      await editor.openFile('rich.md');
+      fixture.detectChanges();
+      await fixture.whenStable();
+      fixture.destroy();
+
+      const second = TestBed.createComponent(Editor);
+      second.componentRef.setInput('paneId', 'p1');
+      await second.whenStable();
+      second.detectChanges();
+    }
+
+    it('a consumed quick-capture request never reaches a freshly mounted editor', async () => {
+      editor.requestNewDailyEntry();
+      fixture.detectChanges();
+      await fixture.whenStable();
+      expect(editor.bufferContent()).toMatch(/## \d{2}:\d{2}/);
+
+      await remountOnOtherFile();
+
+      expect(editor.activePath()).toBe('rich.md');
+      expect(editor.bufferContent()).toBe(RICH);
+      expect(editor.isDirty()).toBe(false);
+    });
+
+    it('a consumed insert request never reaches a freshly mounted editor', async () => {
+      editor.requestInsertText('hello');
+      fixture.detectChanges();
+      await fixture.whenStable();
+      expect(editor.bufferContent()).toContain('hello');
+
+      await remountOnOtherFile();
+
+      expect(editor.activePath()).toBe('rich.md');
+      expect(editor.bufferContent()).toBe(RICH);
+    });
+  });
 });

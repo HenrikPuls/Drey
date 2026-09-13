@@ -148,13 +148,6 @@ export class Editor implements AfterViewInit {
   private readonly surface = viewChild.required(MarkdownSurface);
   private readonly moreBtn = viewChild.required<ElementRef<HTMLButtonElement>>('moreBtn');
 
-  /** Last `revealRequest` id this component has acted on. */
-  private handledRevealRequest = 0;
-
-  /** Last `newEntryRequest` id this component has acted on. */
-  private handledEntryRequest = 0;
-  /** Last `insertRequest` id this component has acted on. */
-  private handledInsertRequest = 0;
   /** Path whose text CodeMirror currently holds -- distinguishes a tab switch from an in-place reload. */
   private loadedPath: string | null = null;
   /**
@@ -343,10 +336,11 @@ export class Editor implements AfterViewInit {
    */
   private applyNewEntryRequest(request: NewEntryRequest): void {
     const view = this.view;
-    if (!view || request.id === 0 || request.id === this.handledEntryRequest) {
+    // The claim is global (see EditorCommandsService) so a freshly mounted
+    // editor can never re-apply a request an earlier instance consumed.
+    if (!view || !this.editor.claimNewEntryRequest(request.id)) {
       return;
     }
-    this.handledEntryRequest = request.id;
 
     if (request.draft) {
       const edit = this.editor.entryDraftEdit(
@@ -395,10 +389,9 @@ export class Editor implements AfterViewInit {
    */
   private applyInsertRequest(request: { id: number; text: string }): void {
     const view = this.view;
-    if (!view || request.id === 0 || request.id === this.handledInsertRequest) {
+    if (!view || !this.editor.claimInsertRequest(request.id)) {
       return;
     }
-    this.handledInsertRequest = request.id;
     const range = view.state.selection.main;
     view.dispatch({
       changes: { from: range.from, to: range.to, insert: request.text },
@@ -411,10 +404,9 @@ export class Editor implements AfterViewInit {
   /** Puts the caret at the start of 1-based `line` and scrolls it into view. */
   private applyRevealRequest(request: { id: number; key: string; line: number }): void {
     const view = this.view;
-    if (!view || request.id === 0 || request.id === this.handledRevealRequest) {
+    if (!view || !this.editor.claimRevealRequest(request.id)) {
       return;
     }
-    this.handledRevealRequest = request.id;
     const doc = view.state.doc;
     const lineNo = Math.min(Math.max(1, request.line), doc.lines);
     const anchor = doc.line(lineNo).from;
