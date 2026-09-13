@@ -11,6 +11,10 @@
  *                        paints it, kept in sync for a browser context)
  *   - public/icon.png    512 px -- the in-app mark (titlebar, About)
  * Re-run after changing the source art:  npm run make:icon
+ * The exe/installer only pick these up on the next `npm run pack`; when
+ * Explorer then still shows the old icon for the same-named artifact, that
+ * is the Windows icon cache (verify via ExtractAssociatedIcon, refresh with
+ * `ie4uinit.exe -show`), not a stale build.
  *
  * Uses `sharp` (prebuilt binary, build-time only) + `png-to-ico`.
  */
