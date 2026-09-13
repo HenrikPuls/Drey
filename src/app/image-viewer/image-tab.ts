@@ -43,10 +43,15 @@ export class ImageTab implements OnDestroy {
   private readonly lightbox = inject(ImageLightboxService);
   protected readonly viewer = viewChild.required(ImageViewer);
 
+  /** The image's vault-relative path (the shown doc's `path`, not its tab key). */
   readonly path = input.required<string>();
+  /** The image's vault (ADR-0051); the asset URL is served per vault. */
+  readonly vaultId = input<string | null>(null);
   readonly focused = input(true);
 
-  protected readonly url = computed(() => resolveVaultImageUrl(null, this.path()) ?? '');
+  protected readonly url = computed(
+    () => resolveVaultImageUrl(null, this.path(), this.vaultId()) ?? '',
+  );
 
   constructor() {
     // Feed the status bar the live viewport -- focused pane only.

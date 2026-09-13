@@ -32,11 +32,13 @@ import {
 
 export interface LivePreviewConfig {
   /**
-   * Maps a raw `![](url)` target to a servable `src`, or `null` when it
-   * can't be trusted/resolved -- the component wires this to
-   * `resolveVaultImageUrl` with the active document's path.
+   * Maps a raw `![](url)` target to its ordered servable candidates
+   * (note-relative first, then the vault-root reading), or an empty list
+   * when it can't be trusted/resolved -- the component wires this to
+   * `resolveVaultImageCandidates` with the active document's path. The
+   * image widget walks the candidates on load errors.
    */
-  resolveImage: (url: string) => string | null;
+  resolveImage: (url: string) => readonly string[];
   /**
    * Opens a resolved image `src` in the full-app viewer (ADR-0026) --
    * the hover lens button on a rendered image. Optional: a surface that
@@ -156,7 +158,7 @@ function scanEmbeds(state: EditorState, config: LivePreviewConfig): Embed[] {
           const nodeFrom = node.from;
           const nodeTo = node.to;
           const { alt, url, width, height } = parseImage(state, node.node);
-          const resolved = url === null ? null : config.resolveImage(url);
+          const srcs = url === null ? [] : config.resolveImage(url);
           const previewPos = doc.lineAt(nodeTo).to;
           embeds.push({
             kind: 'image',
@@ -166,17 +168,24 @@ function scanEmbeds(state: EditorState, config: LivePreviewConfig): Embed[] {
             lineTo: previewPos,
             atom: () =>
               Decoration.replace({
-                widget: new ImageWidget(resolved, alt, width, height, config.onOpenImage),
+                widget: new ImageWidget(
+                  srcs,
+                  alt,
+                  width,
+                  height,
+                  config.onOpenImage,
+                  url ?? '',
+                ),
               }).range(nodeFrom, nodeTo),
             // While the `![alt](path)` line is revealed, keep a read-only
             // render of the image directly below it (owner's call). A
             // reference that doesn't resolve has nothing to mirror.
             preview:
-              resolved === null
+              srcs.length === 0
                 ? null
                 : () =>
                     Decoration.widget({
-                      widget: new ImagePreviewWidget(resolved, alt, width, height),
+                      widget: new ImagePreviewWidget(srcs, alt, width, height),
                       block: true,
                       side: 1,
                     }).range(previewPos),
@@ -216,7 +225,11 @@ function scanEmbeds(state: EditorState, config: LivePreviewConfig): Embed[] {
     i = end;
 
     const source = state.sliceDoc(regionFrom, regionTo);
-    const html = sanitizeHtml(htmlMd.render(source), config);
+    // HTML-embedded `<img>` keeps the primary (note-relative) candidate —
+    // the candidate walk is the Markdown image widget's concern.
+    const html = sanitizeHtml(htmlMd.render(source), {
+      resolveImage: (url) => config.resolveImage(url)[0] ?? null,
+    });
     if (!html.trim()) {
       continue; // e.g. a stray closing tag -- not an embed, leave it raw
     }

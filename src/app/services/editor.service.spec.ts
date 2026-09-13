@@ -23,7 +23,8 @@ describe('EditorService', () => {
       saveNote: (request: NoteSaveRequest) => {
         saves.push(request);
         return echoSave(request);
-      },    };
+      },
+    };
     window.dreyApi = fakeApi as DreyApi;
     service = TestBed.inject(EditorService);
   });
@@ -94,7 +95,8 @@ describe('EditorService', () => {
       saveNote: (request: NoteSaveRequest) => {
         crlfSaves.push(request);
         return echoSave(request);
-      },    };
+      },
+    };
     window.dreyApi = crlfApi as DreyApi;
     const crlfService = TestBed.inject(EditorService);
 
@@ -211,7 +213,8 @@ describe('EditorService', () => {
         readVaultFile: (relativePath: string) =>
           relativePath === 'daily/2026-09-05.md'
             ? Promise.resolve({ content: 'legacy body', modifiedMs: 1 })
-            : Promise.reject(new Error('ENOENT')),      };
+            : Promise.reject(new Error('ENOENT')),
+      };
       window.dreyApi = legacyApi as DreyApi;
       const legacyService = TestBed.inject(EditorService);
 
@@ -230,7 +233,13 @@ describe('EditorService', () => {
         saveNote: (request: NoteSaveRequest) => {
           draftSaves.push(request);
           return echoSave(request);
-        },        getActiveVault: () => Promise.resolve('E:/vault'),
+        },
+        getActiveVault: () => Promise.resolve('E:/vault'),
+        getActiveVaultId: () => Promise.resolve('v1'),
+        listVaults: () =>
+          Promise.resolve([
+            { id: 'v1', name: 'vault', path: 'E:/vault', exists: true, active: true },
+          ]),
         listVaultFiles: () => {
           fileListReads += 1;
           return Promise.resolve([]);
@@ -303,7 +312,8 @@ describe('EditorService', () => {
         saveNote: (req: NoteSaveRequest) => {
           saved.push(req);
           return echoSave(req);
-        },        getActiveVault: () => Promise.resolve('E:/vault'),
+        },
+        getActiveVault: () => Promise.resolve('E:/vault'),
         listVaultFiles: () => Promise.resolve([]),
         pickSavePath: () => Promise.resolve(picked),
       };
@@ -427,7 +437,7 @@ describe('EditorService', () => {
       await service.openFile('img/a.png');
       expect(service.openDocs().filter((d) => d.path === 'img/a.png')).toHaveLength(1);
 
-      service.closeTabsUnder('img');
+      service.closeTabsUnder(null, 'img');
       expect(service.openDocs().some((d) => d.path === 'img/a.png')).toBe(false);
     });
 
@@ -530,7 +540,7 @@ describe('EditorService', () => {
       expect(diskService.bufferContent()).toBe('version one');
 
       files['a.md'] = { content: 'version two', modifiedMs: 500 };
-      await diskService.reloadFromVaultChange(['a.md']);
+      await diskService.reloadFromVaultChange(undefined, ['a.md']);
 
       expect(diskService.bufferContent()).toBe('version two');
       expect(diskService.savedContent()).toBe('version two');
@@ -544,7 +554,7 @@ describe('EditorService', () => {
       await diskService.openFile('a.md');
       diskService.updateBuffer('a.md', 'my local edits');
 
-      await diskService.reloadFromVaultChange(['a.md']);
+      await diskService.reloadFromVaultChange(undefined, ['a.md']);
 
       expect(diskService.bufferContent()).toBe('my local edits');
       expect(diskService.isDirty()).toBe(true);
@@ -557,7 +567,7 @@ describe('EditorService', () => {
       await diskService.openFile('chats/2026/09/2026-09-13-topic.md');
       diskService.updateBuffer('chats/2026/09/2026-09-13-topic.md', 'my local edits');
 
-      await diskService.reloadFromVaultChange(['chats/2026/09/2026-09-13-topic.md']);
+      await diskService.reloadFromVaultChange(undefined, ['chats/2026/09/2026-09-13-topic.md']);
 
       expect(diskService.bufferContent()).toBe('## User\n\nasked\n');
       expect(diskService.isDirty()).toBe(false);
@@ -572,7 +582,7 @@ describe('EditorService', () => {
       expect(diskService.bufferContent()).toBe('on disk');
 
       files['gone.md'] = null; // external delete
-      await diskService.reloadFromVaultChange(['gone.md']);
+      await diskService.reloadFromVaultChange(undefined, ['gone.md']);
 
       const doc = diskService.docFor('gone.md');
       expect(doc?.existsOnDisk).toBe(false);
@@ -585,7 +595,7 @@ describe('EditorService', () => {
       });
       await diskService.openFile('a.md');
 
-      await diskService.reloadFromVaultChange(undefined);
+      await diskService.reloadFromVaultChange(undefined, undefined);
 
       expect(diskService.bufferContent()).toBe('version two');
     });
@@ -596,7 +606,7 @@ describe('EditorService', () => {
       });
       await diskService.openFile('a.md');
 
-      await diskService.reloadFromVaultChange(['other.md']);
+      await diskService.reloadFromVaultChange(undefined, ['other.md']);
 
       expect(diskService.bufferContent()).toBe('version two');
     });

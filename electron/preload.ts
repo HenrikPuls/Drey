@@ -25,6 +25,8 @@ import {
   VaultChangedPush,
   VaultFileContent,
   VaultFileEntry,
+  VaultRegistration,
+  VaultStatus,
 } from '../shared/ipc-api';
 
 /**
@@ -65,32 +67,54 @@ const dreyApi: DreyApi = {
   logMessage: (entry: LogEntry): Promise<void> =>
     ipcRenderer.invoke(IPC_CHANNELS.appLog, entry),
   getActiveVault: () => ipcRenderer.invoke(IPC_CHANNELS.vaultGetActive),
-  selectVault: () => ipcRenderer.invoke(IPC_CHANNELS.vaultSelect),
-  listVaultFiles: (): Promise<VaultFileEntry[]> => ipcRenderer.invoke(IPC_CHANNELS.vaultListFiles),
-  readVaultFile: (relativePath: string): Promise<VaultFileContent> =>
-    ipcRenderer.invoke(IPC_CHANNELS.vaultReadFile, relativePath),
-  writeVaultFile: (relativePath: string, content: string): Promise<number> =>
-    ipcRenderer.invoke(IPC_CHANNELS.vaultWriteFile, relativePath, content),
-  saveVaultAsset: (bytes: Uint8Array, ext: string, noteRelPath: string): Promise<string> =>
-    ipcRenderer.invoke(IPC_CHANNELS.vaultSaveAsset, bytes, ext, noteRelPath),
-  saveVaultAssetFromUrl: (url: string, noteRelPath: string): Promise<string> =>
-    ipcRenderer.invoke(IPC_CHANNELS.vaultSaveAssetFromUrl, url, noteRelPath),
-  createVaultFile: (relativePath: string): Promise<string> =>
-    ipcRenderer.invoke(IPC_CHANNELS.vaultCreateFile, relativePath),
-  createVaultDirectory: (relativePath: string): Promise<string> =>
-    ipcRenderer.invoke(IPC_CHANNELS.vaultCreateDirectory, relativePath),
-  renameVaultEntry: (fromRelativePath: string, toRelativePath: string): Promise<string> =>
-    ipcRenderer.invoke(IPC_CHANNELS.vaultRename, fromRelativePath, toRelativePath),
-  copyVaultEntry: (sourceRelativePath: string, destDirRelativePath: string): Promise<string> =>
-    ipcRenderer.invoke(IPC_CHANNELS.vaultCopy, sourceRelativePath, destDirRelativePath),
-  duplicateVaultEntry: (sourceRelativePath: string): Promise<string> =>
-    ipcRenderer.invoke(IPC_CHANNELS.vaultDuplicate, sourceRelativePath),
-  deleteVaultEntry: (relativePath: string): Promise<void> =>
-    ipcRenderer.invoke(IPC_CHANNELS.vaultDelete, relativePath),
-  deleteVaultEntries: (relativePaths: string[]): Promise<void> =>
-    ipcRenderer.invoke(IPC_CHANNELS.vaultDeleteMany, relativePaths),
-  pickSavePath: (suggestedName: string): Promise<string | null> =>
-    ipcRenderer.invoke(IPC_CHANNELS.vaultPickSavePath, suggestedName),
+  // Vault registry (ADR-0051).
+  listVaults: (): Promise<VaultStatus[]> => ipcRenderer.invoke(IPC_CHANNELS.vaultList),
+  getActiveVaultId: () => ipcRenderer.invoke(IPC_CHANNELS.vaultGetActiveId),
+  addVault: () => ipcRenderer.invoke(IPC_CHANNELS.vaultAdd),
+  removeVault: (vaultId: string): Promise<void> =>
+    ipcRenderer.invoke(IPC_CHANNELS.vaultRemove, vaultId),
+  renameVault: (vaultId: string, name: string): Promise<VaultRegistration> =>
+    ipcRenderer.invoke(IPC_CHANNELS.vaultRenameVault, vaultId, name),
+  setActiveVault: (vaultId: string): Promise<void> =>
+    ipcRenderer.invoke(IPC_CHANNELS.vaultSetActive, vaultId),
+  revealVaultFolder: (vaultId: string): Promise<void> =>
+    ipcRenderer.invoke(IPC_CHANNELS.vaultRevealFolder, vaultId),
+  listVaultFiles: (vaultId?: string): Promise<VaultFileEntry[]> =>
+    ipcRenderer.invoke(IPC_CHANNELS.vaultListFiles, vaultId),
+  readVaultFile: (relativePath: string, vaultId?: string): Promise<VaultFileContent> =>
+    ipcRenderer.invoke(IPC_CHANNELS.vaultReadFile, relativePath, vaultId),
+  writeVaultFile: (relativePath: string, content: string, vaultId?: string): Promise<number> =>
+    ipcRenderer.invoke(IPC_CHANNELS.vaultWriteFile, relativePath, content, vaultId),
+  saveVaultAsset: (bytes: Uint8Array, ext: string, noteRelPath: string, vaultId?: string): Promise<string> =>
+    ipcRenderer.invoke(IPC_CHANNELS.vaultSaveAsset, bytes, ext, noteRelPath, vaultId),
+  saveVaultAssetFromUrl: (url: string, noteRelPath: string, vaultId?: string): Promise<string> =>
+    ipcRenderer.invoke(IPC_CHANNELS.vaultSaveAssetFromUrl, url, noteRelPath, vaultId),
+  createVaultFile: (relativePath: string, vaultId?: string): Promise<string> =>
+    ipcRenderer.invoke(IPC_CHANNELS.vaultCreateFile, relativePath, vaultId),
+  createVaultDirectory: (relativePath: string, vaultId?: string): Promise<string> =>
+    ipcRenderer.invoke(IPC_CHANNELS.vaultCreateDirectory, relativePath, vaultId),
+  renameVaultEntry: (
+    fromRelativePath: string,
+    toRelativePath: string,
+    fromVaultId?: string,
+    toVaultId?: string,
+  ): Promise<string> =>
+    ipcRenderer.invoke(IPC_CHANNELS.vaultRename, fromRelativePath, toRelativePath, fromVaultId, toVaultId),
+  copyVaultEntry: (
+    sourceRelativePath: string,
+    destDirRelativePath: string,
+    sourceVaultId?: string,
+    destVaultId?: string,
+  ): Promise<string> =>
+    ipcRenderer.invoke(IPC_CHANNELS.vaultCopy, sourceRelativePath, destDirRelativePath, sourceVaultId, destVaultId),
+  duplicateVaultEntry: (sourceRelativePath: string, vaultId?: string): Promise<string> =>
+    ipcRenderer.invoke(IPC_CHANNELS.vaultDuplicate, sourceRelativePath, vaultId),
+  deleteVaultEntry: (relativePath: string, vaultId?: string): Promise<void> =>
+    ipcRenderer.invoke(IPC_CHANNELS.vaultDelete, relativePath, vaultId),
+  deleteVaultEntries: (relativePaths: string[], vaultId?: string): Promise<void> =>
+    ipcRenderer.invoke(IPC_CHANNELS.vaultDeleteMany, relativePaths, vaultId),
+  pickSavePath: (suggestedName: string, vaultId?: string): Promise<string | null> =>
+    ipcRenderer.invoke(IPC_CHANNELS.vaultPickSavePath, suggestedName, vaultId),
   buildDailyNoteContent: (date: string): Promise<string> =>
     ipcRenderer.invoke(IPC_CHANNELS.dailyBuildContent, date),
   saveNote: (request: NoteSaveRequest): Promise<NoteSaveResult> =>

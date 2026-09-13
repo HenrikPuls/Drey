@@ -43,6 +43,9 @@ export class NoteManager {
 
   async saveNote(request: NoteSaveRequest): Promise<NoteSaveResult> {
     const { path: relPath, body, eol } = request;
+    // Resolve once: the vault this note lives in (default: the active
+    // vault), used for the write AND the save-hook event's identity.
+    const vaultId = this.vault.resolveVaultId(request.vaultId);
     const toDisk = (text: string): string => (eol === '\r\n' ? text.replace(/\n/g, '\r\n') : text);
 
     const split = splitFrontmatter(body);
@@ -60,7 +63,7 @@ export class NoteManager {
       written = writeFrontmatter(body, patch);
     }
 
-    const modifiedMs = await this.vault.writeFile(relPath, toDisk(written));
+    const modifiedMs = await this.vault.writeFile(relPath, toDisk(written), vaultId);
 
     // Save hooks fire unless this save IS the application of a confirmed
     // rewrite (`runOnSaveActions: false` semantics -- a hook must not
@@ -72,6 +75,7 @@ export class NoteManager {
     let pendingActions: NoteSaveResult['pendingActions'];
     if (request.runOnSaveActions !== false) {
       const results = await this.hooks.emitNoteSaved({
+        vaultId,
         path: relPath,
         content: written,
         modifiedMs,

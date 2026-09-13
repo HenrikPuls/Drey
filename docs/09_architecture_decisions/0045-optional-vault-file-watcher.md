@@ -97,3 +97,13 @@ root) logs a warning and stops; the next lifecycle event re-arms.
   but the `delete`-kind event the watcher emits is the hook it will use.
 - The deferred conflict UX stays deferred: a dirty tab and an external
   edit still resolve by last-writer-wins, silently.
+
+## Later change — multiple vaults
+
+[ADR-0051](0051-multi-vault-registry.md) generalizes the watcher from
+"the active vault" to **every registered vault**: one chokidar instance
+per registration, reconciled by `syncFromConfig` (start missing, stop
+removed, keep untouched — no restart churn on unrelated registry edits),
+a shared debounce, and per-vault announce batches stamped with the
+vault id. The own-write ledger's keys became `vaultId:path`, so a write
+in one vault can never suppress another vault's echo.

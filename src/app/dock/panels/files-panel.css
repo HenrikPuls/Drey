@@ -13,49 +13,102 @@
   padding: 0 6px 10px;
 }
 
-/* ---- vault switcher ---- */
+/* ---- vault sections (one header row per registered vault, ADR-0051) ---- */
 
-.vault-bar {
-  display: flex;
-  align-items: center;
-  gap: 2px;
-  margin: 0 2px 4px;
-}
-
-.vault-row {
+/* The vault header is a SECTION BAND, one level above the tree: bold
+   heading-colored name on a faint resting tint, extra space before each
+   section. Hierarchy inside the tree: vault (600) > folder (500) > file. */
+.node.vault-row {
   display: flex;
   align-items: center;
   gap: 6px;
-  flex: 1 1 auto;
-  min-width: 0;
-  height: 28px;
-  padding: 0 6px;
+  width: 100%;
   border: 0;
+  background: color-mix(in srgb, var(--text-heading) 3%, transparent);
+  text-align: left;
+  height: 30px;
+  padding: 0 8px;
   border-radius: var(--radius-sm);
-  background: transparent;
-  color: var(--text-2);
   cursor: pointer;
+  color: var(--text-heading);
+  overflow: hidden;
 }
 
-.vault-row:hover,
-.vault-row.open {
+/* Every section after the first separates from the one above it. */
+.node.vault-row:not(:first-child) {
+  margin-top: 6px;
+}
+
+.node.vault-row:hover {
   background: var(--hover-bg);
   color: var(--text-heading);
 }
 
-.vault-name {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  font-size: 12px;
+.node.vault-row .node-name {
+  font-weight: 600;
+  font-size: 12.5px;
+}
+
+/* The active vault's header: the accent-tinted edge marks the vault that
+   daily notes / capture / chats target. */
+.vault-row.active-vault {
+  box-shadow: inset 2px 0 0 var(--accent);
+}
+
+/* A vault whose folder is gone (moved drive, OneDrive unmounted): muted,
+   but still registered -- it recovers on its own when the path returns. */
+.vault-row.missing {
+  opacity: 0.5;
+}
+
+.active-dot {
+  flex: none;
+  margin-left: auto;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--accent);
 }
 
 .vault-row .twist {
   flex: none;
-  margin-left: auto;
-  opacity: 0.75;
+  opacity: 0.9;
   transition: transform 0.12s ease;
+}
+
+.vault-menu-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  height: 26px;
+  padding: 0 6px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-3);
+  font-size: 12px;
+  cursor: pointer;
+  text-align: left;
+}
+
+.vault-menu-item:hover {
+  background: var(--hover-bg-strong);
+  color: var(--text-heading);
+}
+
+.vault-menu-item.active {
+  color: var(--text-heading);
+  cursor: default;
+}
+
+.vault-menu-item .mark {
+  flex: none;
+  width: 10px;
+  text-align: center;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--accent);
 }
 
 .vault-menu {

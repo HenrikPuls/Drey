@@ -19,6 +19,7 @@ function config(overrides: Partial<AppConfig['mcp']> = {}): AppConfig {
 
 function fakeVault(files: Record<string, string>): VaultManager {
   return {
+    resolveVaultId: () => 'vtest',
     listMarkdownFiles: async () => Object.keys(files),
     readFile: async (p: string) => {
       if (!(p in files)) {

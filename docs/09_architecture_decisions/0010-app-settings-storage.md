@@ -29,7 +29,8 @@ the wrong call.
   to a vault would mean re-configuring per vault, or worse, one machine's
   `localhost:1234` leaking into a vault another machine opens.
 - The app already has this exact pattern: `electron/vault-manager.ts`
-  keeps the active-vault path in `vault-config.json` under
+  keeps the vault registry (`{ vaults: [...], activeVaultId }`, v2 since
+  [ADR-0051](0051-multi-vault-registry.md)) in `vault-config.json` under
   `app.getPath('userData')`. Settings are the same kind of thing.
   (Editor content zoom later joined `app-config.json` as
   `editor.fontScale` — see ADR-0015.)

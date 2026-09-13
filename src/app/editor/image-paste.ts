@@ -29,7 +29,7 @@ export interface ImagePasteConfig {
   /** The open document's vault-relative path, for `noteRelativeLink`. */
   notePath?: () => string | null;
   /** Reads a vault file's text (Files-panel drag of a text file). */
-  readTextFile?: (vaultPath: string) => Promise<string>;
+  readTextFile?: (vaultPath: string, vaultId?: string) => Promise<string>;
   /** Downloads a web image into the vault; resolves to the path for `![](...)`. */
   saveFromUrl?: (url: string) => Promise<string>;
   /**
@@ -383,12 +383,21 @@ export function imagePaste(config: ImagePasteConfig): Extension {
       const textFile = files.length
         ? undefined
         : Array.from(data?.files ?? []).find((f) => textExtension(f.name));
-      const vaultPath = files.length || textFile ? '' : (data?.getData(VAULT_PATH_DT_TYPE) ?? '');
+      const tagged = files.length || textFile ? '' : (data?.getData(VAULT_PATH_DT_TYPE) ?? '');
+      // The payload is a tab key (`vaultId::relativePath`, ADR-0051) or a
+      // bare vault-relative path from an older source; `::` cannot occur in
+      // a real path, so the split is unambiguous.
+      const sep = tagged.indexOf('::');
+      const vaultDrop = tagged
+        ? sep > 0
+          ? { vaultId: tagged.slice(0, sep), path: tagged.slice(sep + 2) }
+          : { vaultId: undefined, path: tagged }
+        : null;
       const url =
-        files.length || textFile || vaultPath || !config.saveFromUrl
+        files.length || textFile || vaultDrop || !config.saveFromUrl
           ? ''
           : imageUrlFromTransfer(data);
-      if (files.length === 0 && !hasAnyFile && !vaultPath && !url) {
+      if (files.length === 0 && !hasAnyFile && !vaultDrop && !url) {
         return false; // a plain text / URL drag we won't act on -- let CodeMirror handle it
       }
       event.preventDefault();
@@ -412,12 +421,12 @@ export function imagePaste(config: ImagePasteConfig): Extension {
               config.onError?.(error instanceof Error ? error.message : String(error)),
             );
         }
-      } else if (vaultPath) {
-        if (imageExtension(vaultPath)) {
-          insertRelativeLink(view, vaultPath, config);
-        } else if (textExtension(vaultPath) && config.readTextFile) {
+      } else if (vaultDrop) {
+        if (imageExtension(vaultDrop.path)) {
+          insertRelativeLink(view, vaultDrop.path, config);
+        } else if (textExtension(vaultDrop.path) && config.readTextFile) {
           const read = config.readTextFile;
-          void read(vaultPath)
+          void read(vaultDrop.path, vaultDrop.vaultId)
             .then((text) => insertText(view, text, config))
             .catch((error: unknown) =>
               config.onError?.(error instanceof Error ? error.message : String(error)),

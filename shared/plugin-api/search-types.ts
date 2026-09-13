@@ -29,4 +29,10 @@ export interface TagSearchHit {
   text: string;
   /** Set by the caller when the hit came from an unsaved buffer. */
   unsaved?: boolean;
+  /**
+   * The hit's vault id (ADR-0051). Present on vault-backed hits (so a
+   * cross-vault search can open the right file); may be absent on
+   * unsaved-buffer hits from older callers that don't know it.
+   */
+  vaultId?: string;
 }

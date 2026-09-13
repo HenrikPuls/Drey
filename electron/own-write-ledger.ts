@@ -17,6 +17,12 @@
  *   recursive delete covers the child events). TTL-based because there is
  *   no stable fingerprint to match afterwards.
  *
+ * Every record is **vault-scoped** (ADR-0051): the first key component is
+ * the vault id, so a write in one vault can never suppress a watcher event
+ * in another -- even when both use the same relative path. (`:` cannot
+ * occur in a minted vault id or in a Windows path segment, so the
+ * `${vaultId}:${relPath}` key is unambiguous.)
+ *
  * A missed suppression is never corruption -- it costs one redundant
  * re-index round, so ambiguity always resolves towards "external event".
  * Deliberately free of Electron/chokidar imports so the ng test runner can
@@ -33,14 +39,14 @@ export class OwnWriteLedger {
   private readonly writes = new Map<string, { mtimeMs: number; atMs: number }>();
   private readonly structural = new Map<string, { atMs: number }>();
 
-  /** Records a content write: `relPath` now carries `mtimeMs` on disk. */
-  recordWrite(relPath: string, mtimeMs: number, atMs: number = Date.now()): void {
-    this.writes.set(OwnWriteLedger.key(relPath), { mtimeMs, atMs });
+  /** Records a content write: `relPath` in `vaultId` now carries `mtimeMs` on disk. */
+  recordWrite(vaultId: string, relPath: string, mtimeMs: number, atMs: number = Date.now()): void {
+    this.writes.set(OwnWriteLedger.key(vaultId, relPath), { mtimeMs, atMs });
   }
 
-  /** Records a structural op (create/delete/rename/copy/asset) at `relPath`. */
-  recordStructural(relPath: string, atMs: number = Date.now()): void {
-    this.structural.set(OwnWriteLedger.key(relPath), { atMs });
+  /** Records a structural op (create/delete/rename/copy/asset) at `relPath` in `vaultId`. */
+  recordStructural(vaultId: string, relPath: string, atMs: number = Date.now()): void {
+    this.structural.set(OwnWriteLedger.key(vaultId, relPath), { atMs });
   }
 
   /**
@@ -50,12 +56,13 @@ export class OwnWriteLedger {
    * as external).
    */
   isOwnEvent(
+    vaultId: string,
     relPath: string,
     eventKind: 'add' | 'change' | 'unlink' | 'addDir' | 'unlinkDir',
     mtimeMs?: number,
     now: number = Date.now(),
   ): boolean {
-    const key = OwnWriteLedger.key(relPath);
+    const key = OwnWriteLedger.key(vaultId, relPath);
 
     const structuralHit = this.matchesStructural(key, now);
     if (eventKind === 'add' || eventKind === 'change') {
@@ -94,7 +101,8 @@ export class OwnWriteLedger {
       return true;
     }
     // A folder op covers the child events chokidar delivers for everything
-    // inside it (`notes/x.md` echoes `notes`).
+    // inside it (`notes/x.md` echoes `notes`). Both keys carry the same
+    // vault-id prefix, so the slash check can't leak across vaults.
     for (const [entryKey, entry] of this.structural) {
       if (key.startsWith(`${entryKey}/`) && this.structuralLive(entry, now)) {
         return true;
@@ -107,8 +115,11 @@ export class OwnWriteLedger {
     return now - entry.atMs <= OwnWriteLedger.STRUCTURAL_TTL_MS;
   }
 
-  /** Windows paths are case-insensitive; ledger keys are normalised lowercase. */
-  private static key(relPath: string): string {
-    return relPath.replace(/\\/g, '/').toLowerCase();
+  /**
+   * `${vaultId}:${relPath}`, lowercased with forward slashes -- Windows
+   * paths are case-insensitive, and the vault id scopes the namespace.
+   */
+  private static key(vaultId: string, relPath: string): string {
+    return `${vaultId}:${relPath.replace(/\\/g, '/').toLowerCase()}`;
   }
 }

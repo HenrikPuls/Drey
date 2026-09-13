@@ -21,7 +21,7 @@ function makeView(doc: string): EditorView {
       doc,
       // Selection at the end so the image widget renders (not revealed).
       selection: { anchor: doc.length },
-      extensions: [markdown({ base: markdownLanguage }), livePreview({ resolveImage: (u) => u })],
+      extensions: [markdown({ base: markdownLanguage }), livePreview({ resolveImage: (u) => [u] })],
     }),
   });
 }

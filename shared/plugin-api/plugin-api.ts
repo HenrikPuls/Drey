@@ -17,8 +17,9 @@
  */
 import type { ActionOutcome, ChatMessage, LlmCapabilities, LlmDebugEntry } from '../llm';
 import type { AppConfig } from '../app-config';
+import type { SectionSearchScope, VaultOpOptions } from './main-plugin-api';
 import type { TagSearchHit, TagSearchQuery } from './search-types';
-import type { TagEntry, VaultFileEntry } from '../ipc-api';
+import type { TagEntry, VaultFileEntry, VaultStatus } from '../ipc-api';
 import type { PluginManifest } from './manifest';
 import type { Unsubscribe } from './main-plugin-api';
 
@@ -33,6 +34,11 @@ export interface PluginSelection {
 export interface OpenDocumentInfo {
   /** Vault-relative path, or the synthetic key of a contributed doc (`browser://…`). */
   readonly path: string;
+  /**
+   * The doc's vault id (ADR-0051); null for non-vault docs (a
+   * contributed kind like `browser://…`, or a never-located scratch tab).
+   */
+  readonly vaultId: string | null;
   readonly name: string;
   readonly kind: string;
   readonly dirty: boolean;
@@ -287,8 +293,12 @@ export interface DreyPluginApi {
     active(): ActiveDocument | null;
     get(path: string): OpenDocumentInfo | null;
     list(): readonly OpenDocumentInfo[];
-    /** Open a vault file as a tab; `line` places the caret (1-based). */
-    open(path: string, line?: number): Promise<void>;
+    /**
+     * Open a vault file as a tab; `line` places the caret (1-based);
+     * `opts.vaultId` names the vault (ADR-0051), defaulting to the active
+     * vault.
+     */
+    open(path: string, line?: number, opts?: VaultOpOptions): Promise<void>;
     /** Open an unsaved, dirty-from-the-start scratch tab (Save-as on first save). */
     openScratch(path: string, content: string): void;
     /**
@@ -321,16 +331,18 @@ export interface DreyPluginApi {
   };
 
   readonly vault: {
-    readFile(path: string): Promise<{ content: string; modifiedMs: number }>;
-    writeFile(path: string, content: string): Promise<number>;
+    /** Every registered vault with its live status (ADR-0051). */
+    listVaults(): Promise<readonly VaultStatus[]>;
+    readFile(path: string, opts?: VaultOpOptions): Promise<{ content: string; modifiedMs: number }>;
+    writeFile(path: string, content: string, opts?: VaultOpOptions): Promise<number>;
     /**
      * Stage binary bytes as a vault asset (ADR-0024): saved under
      * `attachments/` beside `noteRelPath`, hash-named, collisions
      * suffixed. Returns the vault-relative path to reference. Structured
      * clone carries the bytes over the IPC bridge.
      */
-    saveAsset(bytes: Uint8Array, ext: string, noteRelPath: string): Promise<string>;
-    listFiles(): Promise<readonly VaultFileEntry[]>;
+    saveAsset(bytes: Uint8Array, ext: string, noteRelPath: string, opts?: VaultOpOptions): Promise<string>;
+    listFiles(opts?: VaultOpOptions): Promise<readonly VaultFileEntry[]>;
     /** Vault content changed (refresh/external write/MCP write) — re-read anything cached. */
     onChanged(listener: () => void): Unsubscribe;
   };
@@ -382,7 +394,8 @@ export interface DreyPluginApi {
   /** Section search + vocabulary, backed by whichever plugin registered the provider. */
   readonly search: {
     vocabulary(): Promise<readonly TagEntry[]>;
-    searchSections(query: TagSearchQuery): Promise<readonly TagSearchHit[]>;
+    /** `scope` defaults to the active vault; `{ kind: 'all' }` spans every vault. */
+    searchSections(query: TagSearchQuery, scope?: SectionSearchScope): Promise<readonly TagSearchHit[]>;
   };
 
   /** The plugin's own config (`<userData>/plugins/<id>/config.json`). Saves immediately. */

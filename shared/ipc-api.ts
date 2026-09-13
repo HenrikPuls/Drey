@@ -41,7 +41,17 @@ export const IPC_CHANNELS = {
   openExternal: 'app:open-external',
   appLog: 'app:log',
   vaultGetActive: 'vault:get-active',
-  vaultSelect: 'vault:select',
+  // Multi-vault registry (ADR-0051): the vaults the app knows about, one
+  // native-picker add, registry-only remove, display-name rename, explicit
+  // active switch, and a shell reveal of the folder. `vault:select` (the
+  // old picker-overwrite switch) is gone -- switching is `set-active`.
+  vaultList: 'vault:list',
+  vaultAdd: 'vault:add',
+  vaultRemove: 'vault:remove',
+  vaultRenameVault: 'vault:rename-vault',
+  vaultSetActive: 'vault:set-active',
+  vaultRevealFolder: 'vault:reveal-folder',
+  vaultGetActiveId: 'vault:get-active-id',
   vaultListFiles: 'vault:list-files',
   vaultReadFile: 'vault:read-file',
   vaultWriteFile: 'vault:write-file',
@@ -103,10 +113,39 @@ export const IPC_CHANNELS = {
 } as const;
 
 /**
+ * One registered vault (ADR-0051). `id` is minted once at registration and
+ * never changes -- it survives folder renames/moves because it lives in
+ * the registry (`<userData>/vault-config.json`), not on disk -- and is the
+ * vault identity carried through IPC payloads, open-tab keys and asset
+ * URLs. `name` is the user-editable display name (defaults to the folder
+ * basename; duplicates allowed). `path` is the absolute OS path of the
+ * vault root.
+ */
+export interface VaultRegistration {
+  readonly id: string;
+  readonly name: string;
+  readonly path: string;
+}
+
+/**
+ * A `VaultRegistration` plus its live status, as `listVaults()` reports it
+ * to the Files panel: `exists` is false for a registration whose folder
+ * has disappeared (moved drive, OneDrive not mounted -- the registration
+ * stays and the row greys out), `active` marks the one vault that new
+ * content (daily notes, capture, chats) targets by default.
+ */
+export interface VaultStatus extends VaultRegistration {
+  readonly exists: boolean;
+  readonly active: boolean;
+}
+
+/**
  * A `vault_write` an MCP client asked for, pushed to the renderer so the
  * user can confirm it in the shared diff dialog before it hits disk
  * (skipped entirely in YOLO mode). The renderer replies via
- * `resolveMcpWrite(id, approved)`.
+ * `resolveMcpWrite(id, approved)`. `vaultId`/`vaultName` name the target
+ * vault for the dialog's header (absent in old payloads / the default
+ * active-vault case).
  */
 export interface McpWriteRequest {
   id: number;
@@ -114,6 +153,8 @@ export interface McpWriteRequest {
   before: string;
   after: string;
   mode: 'overwrite' | 'append';
+  vaultId?: string;
+  vaultName?: string;
 }
 
 /**
@@ -124,8 +165,14 @@ export interface McpWriteRequest {
  * matching clean tabs. Omitted when the batch is too big to be worth
  * listing (over 200 paths); consumers then treat the push as a full
  * refresh and must not touch open tabs.
+ *
+ * `vaultId` (ADR-0051) scopes the push to one vault: only that vault's
+ * tree and tabs react. Absent means registry-level / all vaults -- a
+ * registry mutation (add/remove/rename/set-active) or a refresh round that
+ * covered everything -- and consumers reload all trees (and the registry).
  */
 export interface VaultChangedPush {
+  readonly vaultId?: string;
   readonly paths?: readonly string[];
 }
 
@@ -285,6 +332,11 @@ export interface TagEntry {
 export interface NoteSaveRequest {
   /** Vault-relative path of the file being saved. */
   path: string;
+  /**
+   * Which vault the file lives in (ADR-0051). Default (absent) is the
+   * active vault -- every existing caller means that.
+   */
+  vaultId?: string;
   /** Full buffer, always `\n`-separated (the editor normalises to LF). */
   body: string;
   /** Line ending to restore on disk. */
@@ -533,23 +585,47 @@ export interface DreyApi {
    */
   addSpellWord(word: string, target: 'language' | 'personal'): Promise<AppConfig>;
 
-  /** Currently active vault path, or null if none has been selected yet. */
+  /** Currently active vault path, or null if none is active. */
   getActiveVault(): Promise<string | null>;
 
-  /**
-   * Opens a native folder picker. Returns the resulting active vault path
-   * (the newly picked one, or the previous one unchanged if the user
-   * cancels the dialog) -- never rejects on cancel.
-   */
-  selectVault(): Promise<string | null>;
+  // --- Vault registry (ADR-0051) ----------------------------------------
+
+  /** Every registered vault with live status, in registration order. */
+  listVaults(): Promise<VaultStatus[]>;
+
+  /** The active vault's id, or null when none is active. */
+  getActiveVaultId(): Promise<string | null>;
 
   /**
-   * Recursively lists the active vault's contents. Rejects if no vault is
-   * active, or if the vault folder can't be read (e.g. moved/deleted
-   * since it was selected -- plausible given a vault can live on
+   * Opens a native folder picker and registers the chosen folder as a new
+   * vault (display name defaults to the folder basename). Resolves to the
+   * new registration, or null when the user cancelled. Rejects when the
+   * folder is already registered.
+   */
+  addVault(): Promise<VaultRegistration | null>;
+
+  /**
+   * Removes a vault from the registry -- never touches the folder on disk.
+   * Removing the active vault promotes the first remaining one (or none).
+   */
+  removeVault(vaultId: string): Promise<void>;
+
+  /** Renames a vault's display name (the id and folder are untouched). */
+  renameVault(vaultId: string, name: string): Promise<VaultRegistration>;
+
+  /** Makes `vaultId` the active vault (the default target for new content). */
+  setActiveVault(vaultId: string): Promise<void>;
+
+  /** Shows the vault's folder in the OS file manager. */
+  revealVaultFolder(vaultId: string): Promise<void>;
+
+  /**
+   * Recursively lists a vault's contents. `vaultId` defaults to the active
+   * vault. Rejects if that vault's folder can't be read (e.g. moved/deleted
+   * since it was registered -- plausible given a vault can live on
    * OneDrive, see specs/roadmap.md).
    */
-  listVaultFiles(): Promise<VaultFileEntry[]>;
+  listVaultFiles(vaultId?: string): Promise<VaultFileEntry[]>;
 
   /**
    * Runs one full vault refresh round in main (ADR-0045): the plugins'
@@ -562,19 +638,20 @@ export interface DreyApi {
   refreshVault(): Promise<void>;
 
   /**
-   * Reads one file inside the active vault. `relativePath` is a
-   * forward-slash path relative to the vault root (as delivered by
-   * `listVaultFiles`). Rejects if no vault is active, if the path resolves
+   * Reads one file inside a vault. `relativePath` is a forward-slash path
+   * relative to the vault root (as delivered by `listVaultFiles`);
+   * `vaultId` defaults to the active vault. Rejects if the path resolves
    * outside the vault, or if the file can't be read.
    */
-  readVaultFile(relativePath: string): Promise<VaultFileContent>;
+  readVaultFile(relativePath: string, vaultId?: string): Promise<VaultFileContent>;
 
   /**
-   * Overwrites one file inside the active vault with `content` (UTF-8).
-   * Same `relativePath` rules and rejection conditions as `readVaultFile`.
-   * Resolves to the file's new `modifiedMs` after the write.
+   * Overwrites one file inside a vault with `content` (UTF-8). Same
+   * `relativePath` rules and rejection conditions as `readVaultFile`;
+   * `vaultId` defaults to the active vault. Resolves to the file's new
+   * `modifiedMs` after the write.
    */
-  writeVaultFile(relativePath: string, content: string): Promise<number>;
+  writeVaultFile(relativePath: string, content: string, vaultId?: string): Promise<number>;
 
   /**
    * Saves a binary asset -- a pasted or dropped image -- into an
@@ -582,12 +659,13 @@ export interface DreyApi {
    * `noteRelPath` is the open document's vault-relative path (a bare name /
    * empty string falls back to the vault root's `attachments/`); `ext` is
    * the file extension without a dot (`imageExtension()` from
-   * `shared/asset-name.ts`). Resolves to the path to drop into the
-   * `![](...)` -- relative to the note's own folder, so `resolveVaultImageUrl`
-   * turns it straight back into a `drey-asset://` URL. Rejects if no vault
-   * is active or the resolved folder escapes the vault.
+   * `shared/asset-name.ts`); `vaultId` defaults to the active vault.
+   * Resolves to the path to drop into the `![](...)` -- relative to the
+   * note's own folder, so `resolveVaultImageUrl` turns it straight back
+   * into a `drey-asset://` URL. Rejects if the resolved folder escapes the
+   * vault.
    */
-  saveVaultAsset(bytes: Uint8Array, ext: string, noteRelPath: string): Promise<string>;
+  saveVaultAsset(bytes: Uint8Array, ext: string, noteRelPath: string, vaultId?: string): Promise<string>;
 
   /**
    * Downloads a web image and saves it like `saveVaultAsset` (ADR-0028) --
@@ -598,74 +676,90 @@ export interface DreyApi {
    * `![](...)`. Rejects with a short user-facing message on any of: not a
    * URL, non-http(s), HTTP error, timeout, too large, not an image.
    */
-  saveVaultAssetFromUrl(url: string, noteRelPath: string): Promise<string>;
+  saveVaultAssetFromUrl(url: string, noteRelPath: string, vaultId?: string): Promise<string>;
 
   /**
-   * Creates an empty file inside the active vault (any missing parent
-   * folders are created too). `relativePath` follows the same forward-slash
-   * / no-escape rules as `readVaultFile`. Rejects if a file or folder
-   * already exists at that path, or if no vault is active. Resolves to the
-   * created file's vault-relative path (echoed back so the renderer can
-   * open it in the editor).
+   * Creates an empty file inside a vault (any missing parent folders are
+   * created too). `relativePath` follows the same forward-slash / no-escape
+   * rules as `readVaultFile`; `vaultId` defaults to the active vault.
+   * Rejects if a file or folder already exists at that path. Resolves to
+   * the created file's vault-relative path (echoed back so the renderer
+   * can open it in the editor).
    */
-  createVaultFile(relativePath: string): Promise<string>;
+  createVaultFile(relativePath: string, vaultId?: string): Promise<string>;
 
   /**
-   * Creates a directory inside the active vault (missing parents included).
-   * Same path rules as `createVaultFile`; rejects if anything already
-   * exists at that path. Resolves to the created directory's
-   * vault-relative path.
+   * Creates a directory inside a vault (missing parents included). Same
+   * path rules as `createVaultFile`; `vaultId` defaults to the active
+   * vault. Rejects if anything already exists at that path. Resolves to
+   * the created directory's vault-relative path.
    */
-  createVaultDirectory(relativePath: string): Promise<string>;
+  createVaultDirectory(relativePath: string, vaultId?: string): Promise<string>;
 
   /**
-   * Renames / moves a file or folder inside the active vault. Both paths
-   * follow the `readVaultFile` rules; refuses the vault root, a missing
-   * source and an occupied target. A `.md` note's assistant sidecar moves
-   * with it. Resolves to the new vault-relative path.
+   * Renames / moves a file or folder. Both paths follow the
+   * `readVaultFile` rules; refuses a vault root, a missing source and an
+   * occupied target. When `fromVaultId` and `toVaultId` differ the entry
+   * moves ACROSS vaults (copy + delete under the hood -- a `.md` note's
+   * assistant sidecar comes along); both default to the active vault.
+   * Resolves to the new vault-relative path (inside the target vault).
    */
-  renameVaultEntry(fromRelativePath: string, toRelativePath: string): Promise<string>;
+  renameVaultEntry(
+    fromRelativePath: string,
+    toRelativePath: string,
+    fromVaultId?: string,
+    toVaultId?: string,
+  ): Promise<string>;
 
   /**
    * Copies a file or folder (recursively) into `destDirRelativePath`
    * (`''` = vault root). Keeps the source name, or adds a `" copy"` /
    * `" copy N"` suffix on a collision. Refuses copying a folder into its
    * own subtree. A `.md` note's assistant sidecar is copied along.
-   * Resolves to the new entry's vault-relative path.
+   * `sourceVaultId`/`destVaultId` default to the active vault and may
+   * differ (a cross-vault copy). Resolves to the new entry's
+   * vault-relative path inside the destination vault.
    */
-  copyVaultEntry(sourceRelativePath: string, destDirRelativePath: string): Promise<string>;
+  copyVaultEntry(
+    sourceRelativePath: string,
+    destDirRelativePath: string,
+    sourceVaultId?: string,
+    destVaultId?: string,
+  ): Promise<string>;
 
   /**
    * Copies an entry next to itself, always with a `" copy"` suffix.
-   * Resolves to the new entry's vault-relative path.
+   * `vaultId` defaults to the active vault. Resolves to the new entry's
+   * vault-relative path.
    */
-  duplicateVaultEntry(sourceRelativePath: string): Promise<string>;
+  duplicateVaultEntry(sourceRelativePath: string, vaultId?: string): Promise<string>;
 
   /**
-   * Deletes a file or folder (recursively) inside the active vault. Same
-   * path rules as `readVaultFile`; refuses the vault root. Deleting a
-   * `.md` note also removes its assistant sidecar (`.{name}.chat.json`) if
-   * present. A missing target is not an error. Rejects only on a bad path
-   * or a real filesystem failure.
+   * Deletes a file or folder (recursively) inside a vault. Same path rules
+   * as `readVaultFile`; `vaultId` defaults to the active vault; refuses
+   * the vault root. Deleting a `.md` note also removes its assistant
+   * sidecar (`.{name}.chat.json`) if present. A missing target is not an
+   * error. Rejects only on a bad path or a real filesystem failure.
    */
-  deleteVaultEntry(relativePath: string): Promise<void>;
+  deleteVaultEntry(relativePath: string, vaultId?: string): Promise<void>;
 
   /**
-   * Deletes several files / folders (recursively) inside the active vault in
-   * one round trip -- the Files panel's multi-select delete (bug-8). Same
-   * per-path rules as `deleteVaultEntry`; overlapping paths (a folder and a
-   * file inside it) are fine because a missing target is not an error. One
-   * vault-change re-index fires for the whole batch, not per path.
+   * Deletes several files / folders (recursively) inside one vault in a
+   * single round trip -- the Files panel's multi-select delete (bug-8).
+   * Same per-path rules as `deleteVaultEntry`; `vaultId` defaults to the
+   * active vault; overlapping paths (a folder and a file inside it) are
+   * fine because a missing target is not an error. One vault-change
+   * re-index fires for the whole batch, not per path.
    */
-  deleteVaultEntries(relativePaths: string[]): Promise<void>;
+  deleteVaultEntries(relativePaths: string[], vaultId?: string): Promise<void>;
 
   /**
-   * Opens the native "Save note" dialog rooted at the vault. Resolves to
-   * the chosen location as a forward-slash vault-relative path (`.md`
-   * enforced), or `null` if the user cancelled. Rejects if the chosen
-   * location is outside the active vault.
+   * Opens the native "Save note" dialog rooted at the given vault
+   * (default: the active one). Resolves to the chosen location as a
+   * forward-slash vault-relative path (`.md` enforced), or `null` if the
+   * user cancelled. Rejects if the chosen location is outside that vault.
    */
-  pickSavePath(suggestedName: string): Promise<string | null>;
+  pickSavePath(suggestedName: string, vaultId?: string): Promise<string | null>;
 
   /**
    * Builds the Markdown a fresh daily note for `date` (`YYYY-MM-DD`) would

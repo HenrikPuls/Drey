@@ -43,6 +43,8 @@ class FakeWatcher implements MinimalFsWatcher {
   }
 }
 
+const VAULT_ID = 'vtest';
+
 describe('VaultWatcher', () => {
   let root: string;
   let watcher: FakeWatcher | null;
@@ -66,6 +68,7 @@ describe('VaultWatcher', () => {
     warnings = [];
     subject = new VaultWatcher({
       getRoot: () => root,
+      getVaultId: () => VAULT_ID,
       isEnabled: () => enabled,
       ledger,
       announcer: {
@@ -152,14 +155,14 @@ describe('VaultWatcher', () => {
     vi.advanceTimersByTime(299);
     expect(announced).toEqual([]);
     vi.advanceTimersByTime(1);
-    expect(announced).toEqual([{ changedPaths: ['a.md', 'b.md'], deletedPaths: [] }]);
+    expect(announced).toEqual([{ vaultId: VAULT_ID, changedPaths: ['a.md', 'b.md'], deletedPaths: [] }]);
   });
 
   it('drops the app\'s own echoes via the ledger', async () => {
     const w = await started();
-    ledger.recordWrite('a.md', 42);
+    ledger.recordWrite(VAULT_ID, 'a.md', 42);
     w.file('change', pathOf('a.md'), 42);
-    ledger.recordStructural('gone.md');
+    ledger.recordStructural(VAULT_ID, 'gone.md');
     w.file('unlink', pathOf('gone.md'));
     vi.advanceTimersByTime(300);
     expect(announced).toEqual([]);
@@ -169,7 +172,7 @@ describe('VaultWatcher', () => {
     const w = await started();
     w.file('unlink', pathOf('notes/a.md'));
     vi.advanceTimersByTime(300);
-    expect(announced).toEqual([{ changedPaths: [], deletedPaths: ['notes/a.md'] }]);
+    expect(announced).toEqual([{ vaultId: VAULT_ID, changedPaths: [], deletedPaths: ['notes/a.md'] }]);
   });
 
   it('expands a deleted folder into its child file events, never the folder path', async () => {
@@ -179,7 +182,7 @@ describe('VaultWatcher', () => {
     w.emit('unlinkDir', pathOf('notes'));
     vi.advanceTimersByTime(300);
     expect(announced).toEqual([
-      { changedPaths: [], deletedPaths: ['notes/a.md', 'notes/b.md'] },
+      { vaultId: VAULT_ID, changedPaths: [], deletedPaths: ['notes/a.md', 'notes/b.md'] },
     ]);
   });
 
@@ -188,7 +191,7 @@ describe('VaultWatcher', () => {
     w.file('change', pathOf('attachments/pic.png'), 1);
     w.emit('addDir', pathOf('new-folder'));
     vi.advanceTimersByTime(300);
-    expect(announced).toEqual([{ changedPaths: [], deletedPaths: [] }]);
+    expect(announced).toEqual([{ vaultId: VAULT_ID, changedPaths: [], deletedPaths: [] }]);
   });
 
   it('last event wins when a path flips between changed and deleted', async () => {
@@ -196,7 +199,7 @@ describe('VaultWatcher', () => {
     w.file('unlink', pathOf('a.md'));
     w.file('add', pathOf('a.md'), 1);
     vi.advanceTimersByTime(300);
-    expect(announced).toEqual([{ changedPaths: ['a.md'], deletedPaths: [] }]);
+    expect(announced).toEqual([{ vaultId: VAULT_ID, changedPaths: ['a.md'], deletedPaths: [] }]);
   });
 
   it('ignores paths outside the vault root', async () => {

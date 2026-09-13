@@ -1,27 +1,32 @@
 import { TestBed, ComponentFixture } from '@angular/core/testing';
-import { DreyApi, VaultFileEntry } from '../../../../shared/ipc-api';
+import { DreyApi, VaultFileEntry, VaultStatus } from '../../../../shared/ipc-api';
 import { EditorService } from '../../services/editor.service';
 import { VaultService } from '../../vault';
 import { FilesPanel } from './files-panel';
 
-/** The `dragstart` handler is `protected`; reach it through a cast. */
-type DragStartHost = { onFileDragStart(event: DragEvent, entry: VaultFileEntry): void };
+const V = 'v1';
+const V2 = 'v2';
+
+/** The `dragstart` handlers are `protected`; reach them through a cast. */
+type DragStartHost = {
+  onFileDragStart(event: DragEvent, vaultId: string, entry: VaultFileEntry): void;
+};
 
 /** The keyboard selection is `protected` too. */
 type SelectionHost = { selected(): string | null; selection(): ReadonlySet<string> };
 
-/** The in-panel drag state + handlers (req-23), all `protected`. */
+/** The in-panel drag state + handlers (req-23, ADR-0051), all `protected`. */
 type DragHost = {
-  dragEntry(): VaultFileEntry | null;
+  dragEntry(): { vaultId: string; entry: VaultFileEntry } | null;
   dropHover(): string | null;
-  onFileDragStart(event: DragEvent, entry: VaultFileEntry): void;
-  onFolderDragStart(event: DragEvent, entry: VaultFileEntry): void;
+  onFileDragStart(event: DragEvent, vaultId: string, entry: VaultFileEntry): void;
+  onFolderDragStart(event: DragEvent, vaultId: string, entry: VaultFileEntry): void;
   onDragEnd(): void;
-  onRowDragOver(event: DragEvent, entry: VaultFileEntry): void;
-  onRowDragLeave(event: DragEvent, entry: VaultFileEntry): void;
-  onRowDrop(event: DragEvent, entry: VaultFileEntry): void;
-  onRootDragOver(event: DragEvent): void;
-  onRootDrop(event: DragEvent): void;
+  onRowDragOver(event: DragEvent, vaultId: string, entry: VaultFileEntry): void;
+  onRowDragLeave(event: DragEvent, vaultId: string, entry: VaultFileEntry): void;
+  onRowDrop(event: DragEvent, vaultId: string, entry: VaultFileEntry): void;
+  onVaultRowDragOver(event: DragEvent, vault: VaultStatus): void;
+  onVaultRowDrop(event: DragEvent, vault: VaultStatus): void;
 };
 
 function fakeDataTransfer(): DataTransfer {
@@ -35,35 +40,46 @@ function fakeDataTransfer(): DataTransfer {
   } as unknown as DataTransfer;
 }
 
+/** One active vault so every keyed expectation is `v1::…`. */
+function registryApi(overrides: Partial<DreyApi> = {}): Partial<DreyApi> {
+  return {
+    getActiveVault: () => Promise.resolve('C:/vault'),
+    getActiveVaultId: () => Promise.resolve(V),
+    listVaults: () =>
+      Promise.resolve([
+        { id: V, name: 'vault', path: 'C:/vault', exists: true, active: true },
+      ]),
+    listVaultFiles: () => Promise.resolve([]),
+    ...overrides,
+  };
+}
+
 describe('FilesPanel.onFileDragStart', () => {
   let host: DragStartHost;
 
   beforeEach(async () => {
-    window.dreyApi = {
-      getActiveVault: () => Promise.resolve(null),
-      listVaultFiles: () => Promise.resolve([]),
-    } as unknown as DreyApi;
+    window.dreyApi = registryApi() as DreyApi;
     await TestBed.configureTestingModule({ imports: [FilesPanel] }).compileComponents();
     host = TestBed.createComponent(FilesPanel).componentInstance as unknown as DragStartHost;
   });
 
   afterEach(() => delete (window as { dreyApi?: unknown }).dreyApi);
 
-  it('carries the vault path on the private + text/plain types for a file', () => {
+  it('carries the doc key (vaultId::path) + the bare path for a file', () => {
     const dt = fakeDataTransfer();
-    host.onFileDragStart({ dataTransfer: dt } as DragEvent, {
+    host.onFileDragStart({ dataTransfer: dt } as DragEvent, V, {
       name: 'logo.png',
       relativePath: 'assets/logo.png',
       type: 'file',
     });
-    expect(dt.getData('application/x-drey-vault-path')).toBe('assets/logo.png');
+    expect(dt.getData('application/x-drey-vault-path')).toBe(`${V}::assets/logo.png`);
     expect(dt.getData('text/plain')).toBe('assets/logo.png');
     expect(dt.effectAllowed).toBe('copyLink');
   });
 
   it('sets nothing for a directory', () => {
     const dt = fakeDataTransfer();
-    host.onFileDragStart({ dataTransfer: dt } as DragEvent, {
+    host.onFileDragStart({ dataTransfer: dt } as DragEvent, V, {
       name: 'assets',
       relativePath: 'assets',
       type: 'directory',
@@ -73,7 +89,7 @@ describe('FilesPanel.onFileDragStart', () => {
 });
 
 describe('FilesPanel keyboard navigation (bug-7)', () => {
-  /** a.md · notes/ · notes/b.md -- three visible rows in display order. */
+  /** vault row · a.md · notes/ · notes/b.md -- four visible rows in display order. */
   function tree(): VaultFileEntry[] {
     return [
       { name: 'a.md', relativePath: 'a.md', type: 'file' },
@@ -97,10 +113,7 @@ describe('FilesPanel keyboard navigation (bug-7)', () => {
   });
 
   beforeEach(async () => {
-    window.dreyApi = {
-      getActiveVault: () => Promise.resolve('C:/vault'),
-      listVaultFiles: () => Promise.resolve(tree()),
-    } as unknown as DreyApi;
+    window.dreyApi = registryApi({ listVaultFiles: () => Promise.resolve(tree()) }) as DreyApi;
     await TestBed.configureTestingModule({ imports: [FilesPanel] }).compileComponents();
     fixture = TestBed.createComponent(FilesPanel);
     // `focus()` only takes effect on connected elements (jsdom follows the
@@ -124,7 +137,7 @@ describe('FilesPanel keyboard navigation (bug-7)', () => {
   async function renderTree(): Promise<void> {
     await vi.waitFor(() => {
       fixture.detectChanges();
-      expect(rows().length).toBe(3);
+      expect(rows().length).toBe(4); // vault row + a.md + notes + notes/b.md
     });
   }
 
@@ -144,22 +157,18 @@ describe('FilesPanel keyboard navigation (bug-7)', () => {
     );
   }
 
-  function clickRow(index: number, modifiers?: { shiftKey?: boolean; ctrlKey?: boolean }): void {
-    rows()[index].dispatchEvent(new MouseEvent('click', { bubbles: true, ...modifiers }));
-  }
-
   it('ArrowDown moves the selection AND DOM focus onto the new row', async () => {
     await renderTree();
     const host = fixture.componentInstance as unknown as SelectionHost;
     expect(host.selected()).toBeNull();
 
-    pressKey('ArrowDown');
-    expect(host.selected()).toBe('a.md');
+    pressKey('ArrowDown'); // the vault row
+    expect(host.selected()).toBe(V);
     await settle();
     expect(document.activeElement).toBe(rows()[0]);
 
-    pressKey('ArrowDown');
-    expect(host.selected()).toBe('notes');
+    pressKey('ArrowDown'); // a.md
+    expect(host.selected()).toBe(`${V}::a.md`);
     await settle();
     expect(document.activeElement).toBe(rows()[1]);
   });
@@ -174,22 +183,34 @@ describe('FilesPanel keyboard navigation (bug-7)', () => {
     await settle(); // let select()'s focus timer fire inside the test
   });
 
-  it('Enter from the tree container opens the highlighted file', async () => {
+  it('Enter from the tree container opens the highlighted file in its vault', async () => {
     await renderTree();
     const editor = TestBed.inject(EditorService);
     const openFile = vi.spyOn(editor, 'openFile').mockResolvedValue(undefined);
 
-    pressKey('ArrowDown'); // selection lands on a.md
+    pressKey('ArrowDown'); // vault row
+    pressKey('ArrowDown'); // a.md
     fixture.detectChanges();
     pressKey('Enter', treeScroll()); // container-focused branch (target === currentTarget)
 
-    expect(openFile).toHaveBeenCalledWith('a.md');
+    expect(openFile).toHaveBeenCalledWith('a.md', V);
     await settle(); // let select()'s focus timer fire inside the test
+  });
+
+  it('the active vault row carries the marker; click folds the section', async () => {
+    await renderTree();
+    const vaultRow = fixture.nativeElement.querySelector('.node.vault-row');
+    expect(vaultRow.classList.contains('active-vault')).toBe(true);
+    expect(vaultRow.querySelector('.active-dot')).not.toBeNull();
+
+    vaultRow.click();
+    fixture.detectChanges();
+    expect(rows().length).toBe(1); // the section folded away
   });
 });
 
 describe('FilesPanel multi-select (bug-8)', () => {
-  /** a.md · notes/ · notes/b.md -- three visible rows in display order. */
+  /** vault row · a.md · notes/ · notes/b.md -- four visible rows. */
   function tree(): VaultFileEntry[] {
     return [
       { name: 'a.md', relativePath: 'a.md', type: 'file' },
@@ -203,7 +224,7 @@ describe('FilesPanel multi-select (bug-8)', () => {
   }
 
   let fixture: ComponentFixture<FilesPanel>;
-  let deleted: string[][];
+  let deleted: Array<{ vaultId?: string; paths: string[] }>;
 
   beforeAll(() => {
     Element.prototype.scrollIntoView = vi.fn();
@@ -211,14 +232,13 @@ describe('FilesPanel multi-select (bug-8)', () => {
 
   beforeEach(async () => {
     deleted = [];
-    window.dreyApi = {
-      getActiveVault: () => Promise.resolve('C:/vault'),
+    window.dreyApi = registryApi({
       listVaultFiles: () => Promise.resolve(tree()),
-      deleteVaultEntries: (paths: string[]) => {
-        deleted.push(paths);
+      deleteVaultEntries: (paths: string[], vaultId?: string) => {
+        deleted.push({ vaultId, paths });
         return Promise.resolve();
       },
-    } as unknown as DreyApi;
+    }) as DreyApi;
     await TestBed.configureTestingModule({ imports: [FilesPanel] }).compileComponents();
     fixture = TestBed.createComponent(FilesPanel);
     document.body.appendChild(fixture.nativeElement);
@@ -244,7 +264,7 @@ describe('FilesPanel multi-select (bug-8)', () => {
   async function renderTree(): Promise<void> {
     await vi.waitFor(() => {
       fixture.detectChanges();
-      expect(rows().length).toBe(3);
+      expect(rows().length).toBe(4);
     });
   }
 
@@ -272,15 +292,15 @@ describe('FilesPanel multi-select (bug-8)', () => {
     const editor = TestBed.inject(EditorService);
     vi.spyOn(editor, 'openFile').mockResolvedValue(undefined);
 
-    clickRow(0); // a.md, plain
-    expect(host().selection()).toEqual(new Set(['a.md']));
+    clickRow(1); // a.md, plain
+    expect(host().selection()).toEqual(new Set([`${V}::a.md`]));
 
-    clickRow(2, { ctrlKey: true }); // notes/b.md joins
-    expect(host().selection()).toEqual(new Set(['a.md', 'notes/b.md']));
-    expect(host().selected()).toBe('notes/b.md');
+    clickRow(3, { ctrlKey: true }); // notes/b.md joins
+    expect(host().selection()).toEqual(new Set([`${V}::a.md`, `${V}::notes/b.md`]));
+    expect(host().selected()).toBe(`${V}::notes/b.md`);
 
-    clickRow(2, { ctrlKey: true }); // toggles back out
-    expect(host().selection()).toEqual(new Set(['a.md']));
+    clickRow(3, { ctrlKey: true }); // toggles back out
+    expect(host().selection()).toEqual(new Set([`${V}::a.md`]));
     await settle();
   });
 
@@ -289,23 +309,26 @@ describe('FilesPanel multi-select (bug-8)', () => {
     const editor = TestBed.inject(EditorService);
     vi.spyOn(editor, 'openFile').mockResolvedValue(undefined);
 
-    clickRow(0); // anchor = a.md
-    clickRow(2, { shiftKey: true }); // range a.md..notes/b.md
-    expect(host().selection()).toEqual(new Set(['a.md', 'notes', 'notes/b.md']));
+    clickRow(1); // anchor = a.md
+    clickRow(3, { shiftKey: true }); // range a.md..notes/b.md
+    expect(host().selection()).toEqual(
+      new Set([`${V}::a.md`, `${V}::notes`, `${V}::notes/b.md`]),
+    );
 
     // Fresh anchor, then keyboard extension.
-    clickRow(0);
+    clickRow(1);
     pressKey('ArrowDown', { shiftKey: true });
-    expect(host().selection()).toEqual(new Set(['a.md', 'notes']));
+    expect(host().selection()).toEqual(new Set([`${V}::a.md`, `${V}::notes`]));
     await settle();
   });
 
   it('Ctrl+Arrow moves the cursor without changing the selection', async () => {
     await renderTree();
+    pressKey('ArrowDown'); // vault row
     pressKey('ArrowDown'); // cursor + selection = a.md
     pressKey('ArrowDown', { ctrlKey: true }); // cursor -> notes, selection stays
-    expect(host().selected()).toBe('notes');
-    expect(host().selection()).toEqual(new Set(['a.md']));
+    expect(host().selected()).toBe(`${V}::notes`);
+    expect(host().selection()).toEqual(new Set([`${V}::a.md`]));
     await settle();
   });
 
@@ -314,14 +337,17 @@ describe('FilesPanel multi-select (bug-8)', () => {
     const editor = TestBed.inject(EditorService);
     const openFile = vi.spyOn(editor, 'openFile').mockResolvedValue(undefined);
 
-    clickRow(0); // a.md (the plain click itself opens it)
-    clickRow(2, { ctrlKey: true }); // notes/b.md joins
+    clickRow(1); // a.md (the plain click itself opens it)
+    clickRow(3, { ctrlKey: true }); // notes/b.md joins
     openFile.mockClear(); // count only what Enter opens
     pressKey('Enter', undefined, treeScroll());
 
     await settle();
-    const opened = openFile.mock.calls.map((call) => call[0]);
-    expect(opened).toEqual(['a.md', 'notes/b.md']);
+    const opened = openFile.mock.calls.map((call) => call.slice(0, 2));
+    expect(opened).toEqual([
+      ['a.md', V],
+      ['notes/b.md', V],
+    ]);
   });
 
   it('Delete removes the whole selection in ONE batched IPC call', async () => {
@@ -329,12 +355,12 @@ describe('FilesPanel multi-select (bug-8)', () => {
     const confirmDialog = vi.spyOn(window, 'confirm').mockReturnValue(true);
     const closeTabsUnder = vi.spyOn(TestBed.inject(EditorService), 'closeTabsUnder');
 
-    clickRow(0); // a.md
-    clickRow(2, { ctrlKey: true }); // notes/b.md
+    clickRow(1); // a.md
+    clickRow(3, { ctrlKey: true }); // notes/b.md
     pressKey('Delete');
 
     await vi.waitFor(() => expect(deleted).toHaveLength(1));
-    expect(deleted[0]).toEqual(['a.md', 'notes/b.md']);
+    expect(deleted[0]).toEqual({ vaultId: V, paths: ['a.md', 'notes/b.md'] });
     expect(confirmDialog).toHaveBeenCalledTimes(1);
     expect(closeTabsUnder).toHaveBeenCalledTimes(2);
     await settle();
@@ -344,10 +370,10 @@ describe('FilesPanel multi-select (bug-8)', () => {
     await renderTree();
     vi.spyOn(window, 'confirm').mockReturnValue(true);
     const vault = TestBed.inject(VaultService);
-    vault.clipboard.set({ path: 'notes/b.md', name: 'b.md' });
+    vault.clipboard.set({ vaultId: V, path: 'notes/b.md', name: 'b.md' });
 
-    clickRow(0); // a.md
-    clickRow(2, { ctrlKey: true }); // notes/b.md
+    clickRow(1); // a.md
+    clickRow(3, { ctrlKey: true }); // notes/b.md
     pressKey('Delete');
 
     await vi.waitFor(() => expect(deleted).toHaveLength(1));
@@ -360,18 +386,18 @@ describe('FilesPanel multi-select (bug-8)', () => {
     const editor = TestBed.inject(EditorService);
     vi.spyOn(editor, 'openFile').mockResolvedValue(undefined);
 
-    clickRow(0);
-    clickRow(2, { ctrlKey: true });
+    clickRow(1);
+    clickRow(3, { ctrlKey: true });
     expect(host().selection().size).toBe(2);
 
     document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
-    expect(host().selection()).toEqual(new Set(['notes/b.md'])); // the cursor row
+    expect(host().selection()).toEqual(new Set([`${V}::notes/b.md`])); // the cursor row
     await settle();
   });
 });
 
-describe('FilesPanel drag & drop within the tree (req-23)', () => {
-  /** a.md · notes/ · notes/b.md · archive/ -- four visible rows. */
+describe('FilesPanel drag & drop (req-23 + cross-vault, ADR-0051)', () => {
+  /** vault row · a.md · notes/ · notes/b.md · archive/ -- five visible rows. */
   function tree(): VaultFileEntry[] {
     return [
       { name: 'a.md', relativePath: 'a.md', type: 'file' },
@@ -386,7 +412,8 @@ describe('FilesPanel drag & drop within the tree (req-23)', () => {
   }
 
   let fixture: ComponentFixture<FilesPanel>;
-  let renamed: Array<[string, string]>;
+  let renamed: Array<{ from: string; to: string; fromVaultId?: string; toVaultId?: string }>;
+  let vaults: VaultStatus[];
 
   /** jsdom has no DragEvent -- plain objects with recorded prevent/stop. */
   function dragEvent(
@@ -413,14 +440,18 @@ describe('FilesPanel drag & drop within the tree (req-23)', () => {
 
   beforeEach(async () => {
     renamed = [];
-    window.dreyApi = {
-      getActiveVault: () => Promise.resolve('C:/vault'),
-      listVaultFiles: () => Promise.resolve(tree()),
-      renameVaultEntry: (fromRel: string, toRel: string) => {
-        renamed.push([fromRel, toRel]);
+    vaults = [
+      { id: V, name: 'vault', path: 'C:/vault', exists: true, active: true },
+      { id: V2, name: 'second', path: 'D:/second', exists: true, active: false },
+    ];
+    window.dreyApi = registryApi({
+      listVaults: () => Promise.resolve(vaults),
+      listVaultFiles: (vaultId) => Promise.resolve(vaultId === V2 ? [] : tree()),
+      renameVaultEntry: (fromRel: string, toRel: string, fromVaultId?: string, toVaultId?: string) => {
+        renamed.push({ from: fromRel, to: toRel, fromVaultId, toVaultId });
         return Promise.resolve(toRel);
       },
-    } as unknown as DreyApi;
+    }) as DreyApi;
     await TestBed.configureTestingModule({ imports: [FilesPanel] }).compileComponents();
     fixture = TestBed.createComponent(FilesPanel);
     document.body.appendChild(fixture.nativeElement);
@@ -442,63 +473,55 @@ describe('FilesPanel drag & drop within the tree (req-23)', () => {
   async function renderTree(): Promise<void> {
     await vi.waitFor(() => {
       fixture.detectChanges();
-      expect(rows().length).toBe(4);
+      expect(rows().length).toBe(6); // two vault rows + four entries
     });
   }
 
+  const aMd = { name: 'a.md', relativePath: 'a.md', type: 'file' } as VaultFileEntry;
+  const notes = { name: 'notes', relativePath: 'notes', type: 'directory' } as VaultFileEntry;
+  const bMd = { name: 'b.md', relativePath: 'notes/b.md', type: 'file' } as VaultFileEntry;
+
   it('a folder dragstart arms the move but sets no dataTransfer types', () => {
     const dt = fakeDataTransfer();
-    host().onFolderDragStart({ dataTransfer: dt } as DragEvent, {
-      name: 'notes',
-      relativePath: 'notes',
-      type: 'directory',
-    });
+    host().onFolderDragStart({ dataTransfer: dt } as DragEvent, V, notes);
     expect(dt.getData('application/x-drey-vault-path')).toBe('');
-    expect(host().dragEntry()?.relativePath).toBe('notes');
+    expect(host().dragEntry()).toEqual({ vaultId: V, entry: notes });
     host().onDragEnd();
     expect(host().dragEntry()).toBeNull();
   });
 
   it('a file dragstart carries the editor-drop types AND arms the move', () => {
     const dt = fakeDataTransfer();
-    host().onFileDragStart({ dataTransfer: dt } as DragEvent, {
-      name: 'a.md',
-      relativePath: 'a.md',
-      type: 'file',
-    });
-    expect(dt.getData('application/x-drey-vault-path')).toBe('a.md');
-    expect(host().dragEntry()?.relativePath).toBe('a.md');
+    host().onFileDragStart({ dataTransfer: dt } as DragEvent, V, aMd);
+    expect(dt.getData('application/x-drey-vault-path')).toBe(`${V}::a.md`);
+    expect(host().dragEntry()).toEqual({ vaultId: V, entry: aMd });
   });
 
   it('dragover marks a valid folder target and leaves a no-op target untouched', async () => {
     await renderTree();
-    const notes = { name: 'notes', relativePath: 'notes', type: 'directory' } as VaultFileEntry;
-    const a = { name: 'a.md', relativePath: 'a.md', type: 'file' } as VaultFileEntry;
-    host().onFileDragStart({ dataTransfer: fakeDataTransfer() } as DragEvent, a);
+    host().onFileDragStart({ dataTransfer: fakeDataTransfer() } as DragEvent, V, aMd);
 
     const ontoNotes = dragEvent();
-    host().onRowDragOver(ontoNotes.event, notes);
+    host().onRowDragOver(ontoNotes.event, V, notes);
     expect(ontoNotes.prevented()).toBe(true); // drop allowed
-    expect(host().dropHover()).toBe('notes');
+    expect(host().dropHover()).toBe(`${V}::notes`);
 
     const ontoSelf = dragEvent(); // a.md onto a.md: same dir -> no-op
-    host().onRowDragOver(ontoSelf.event, a);
+    host().onRowDragOver(ontoSelf.event, V, aMd);
     expect(ontoSelf.prevented()).toBe(false);
-    expect(host().dropHover()).toBe('notes'); // unchanged
+    expect(host().dropHover()).toBe(`${V}::notes`); // unchanged
   });
 
   it('refuses a folder dropped into itself or its own subtree', async () => {
     await renderTree();
-    const notes = { name: 'notes', relativePath: 'notes', type: 'directory' } as VaultFileEntry;
-    const b = { name: 'b.md', relativePath: 'notes/b.md', type: 'file' } as VaultFileEntry;
-    host().onFolderDragStart({ dataTransfer: fakeDataTransfer() } as DragEvent, notes);
+    host().onFolderDragStart({ dataTransfer: fakeDataTransfer() } as DragEvent, V, notes);
 
     const ontoItself = dragEvent();
-    host().onRowDragOver(ontoItself.event, notes); // dest 'notes' === dragged
+    host().onRowDragOver(ontoItself.event, V, notes); // dest 'notes' === dragged
     expect(ontoItself.prevented()).toBe(false);
 
     const intoChild = dragEvent(); // notes onto notes/b.md -> dest is 'notes' again
-    host().onRowDragOver(intoChild.event, b);
+    host().onRowDragOver(intoChild.event, V, bMd);
     expect(intoChild.prevented()).toBe(false);
   });
 
@@ -507,41 +530,31 @@ describe('FilesPanel drag & drop within the tree (req-23)', () => {
     const editor = TestBed.inject(EditorService);
     const retarget = vi.spyOn(editor, 'retargetTabs');
     const vault = TestBed.inject(VaultService);
-    vault.clipboard.set({ path: 'a.md', name: 'a.md' });
+    vault.clipboard.set({ vaultId: V, path: 'a.md', name: 'a.md' });
 
-    host().onFileDragStart({ dataTransfer: fakeDataTransfer() } as DragEvent, {
-      name: 'a.md',
-      relativePath: 'a.md',
-      type: 'file',
-    });
+    host().onFileDragStart({ dataTransfer: fakeDataTransfer() } as DragEvent, V, aMd);
     const drop = dragEvent();
-    host().onRowDrop(drop.event, {
-      name: 'notes',
-      relativePath: 'notes',
-      type: 'directory',
-    });
+    host().onRowDrop(drop.event, V, notes);
 
-    await vi.waitFor(() => expect(retarget).toHaveBeenCalledWith('a.md', 'notes/a.md'));
-    expect(renamed).toEqual([['a.md', 'notes/a.md']]);
-    expect(vault.clipboard()).toEqual({ path: 'notes/a.md', name: 'a.md' });
+    await vi.waitFor(() =>
+      expect(retarget).toHaveBeenCalledWith(`${V}::a.md`, `${V}::notes/a.md`),
+    );
+    expect(renamed).toEqual([
+      { from: 'a.md', to: 'notes/a.md', fromVaultId: V, toVaultId: V },
+    ]);
+    expect(vault.clipboard()).toEqual({ vaultId: V, path: 'notes/a.md', name: 'a.md' });
     expect(host().dragEntry()).toBeNull();
     expect(host().dropHover()).toBeNull();
-    expect(drop.stopped()).toBe(true); // the root drop must not double-handle
+    expect(drop.stopped()).toBe(true);
   });
 
   it('drop on a file row targets the folder that file lives in', async () => {
     await renderTree();
-    host().onFileDragStart({ dataTransfer: fakeDataTransfer() } as DragEvent, {
-      name: 'a.md',
-      relativePath: 'a.md',
-      type: 'file',
-    });
-    host().onRowDrop(dragEvent().event, {
-      name: 'b.md',
-      relativePath: 'notes/b.md',
-      type: 'file',
-    });
-    await vi.waitFor(() => expect(renamed).toEqual([['a.md', 'notes/a.md']]));
+    host().onFileDragStart({ dataTransfer: fakeDataTransfer() } as DragEvent, V, aMd);
+    host().onRowDrop(dragEvent().event, V, bMd);
+    await vi.waitFor(() =>
+      expect(renamed).toEqual([{ from: 'a.md', to: 'notes/a.md', fromVaultId: V, toVaultId: V }]),
+    );
   });
 
   it('a collision alerts and leaves tabs and clipboard alone', async () => {
@@ -553,56 +566,42 @@ describe('FilesPanel drag & drop within the tree (req-23)', () => {
     const alertBox = vi.spyOn(window, 'alert').mockReturnValue(undefined);
     const retarget = vi.spyOn(TestBed.inject(EditorService), 'retargetTabs');
 
-    host().onFileDragStart({ dataTransfer: fakeDataTransfer() } as DragEvent, {
-      name: 'a.md',
-      relativePath: 'a.md',
-      type: 'file',
-    });
-    host().onRowDrop(dragEvent().event, {
-      name: 'notes',
-      relativePath: 'notes',
-      type: 'directory',
-    });
+    host().onFileDragStart({ dataTransfer: fakeDataTransfer() } as DragEvent, V, aMd);
+    host().onRowDrop(dragEvent().event, V, notes);
 
     await vi.waitFor(() => expect(alertBox).toHaveBeenCalled());
     expect(alertBox.mock.calls[0][0]).toContain('Already exists');
     expect(retarget).not.toHaveBeenCalled();
   });
 
-  it('a root drop on the container background moves to the vault root', async () => {
+  it('a drop on ANOTHER vault header row moves the entry across vaults', async () => {
     await renderTree();
-    // `notes/b.md` is nested -- dragging it onto the root hoists it out.
-    host().onFileDragStart({ dataTransfer: fakeDataTransfer() } as DragEvent, {
-      name: 'b.md',
-      relativePath: 'notes/b.md',
-      type: 'file',
-    });
-    const over = dragEvent({ target: { closest: () => null } as unknown as EventTarget });
-    host().onRootDragOver(over.event);
-    expect(over.prevented()).toBe(true);
+    host().onFileDragStart({ dataTransfer: fakeDataTransfer() } as DragEvent, V, aMd);
 
-    const drop = dragEvent({ target: { closest: () => null } as unknown as EventTarget });
-    host().onRootDrop(drop.event);
-    await vi.waitFor(() => expect(renamed).toEqual([['notes/b.md', 'b.md']]));
-    expect(drop.prevented()).toBe(true);
+    const second = { id: V2, name: 'second', path: 'D:/second', exists: true, active: false };
+    const over = dragEvent();
+    host().onVaultRowDragOver(over.event, second);
+    expect(over.prevented()).toBe(true);
+    expect(host().dropHover()).toBe(V2);
+
+    const drop = dragEvent();
+    host().onVaultRowDrop(drop.event, second);
+
+    await vi.waitFor(() =>
+      expect(renamed).toEqual([{ from: 'a.md', to: 'a.md', fromVaultId: V, toVaultId: V2 }]),
+    );
+    expect(drop.stopped()).toBe(true);
   });
 
-  it('a top-level entry dropped on the root is a no-op, and a bubbled row drop never reaches it', async () => {
+  it('a drop on the vault\'s OWN header row hoists a nested entry to the root', async () => {
     await renderTree();
-    host().onFileDragStart({ dataTransfer: fakeDataTransfer() } as DragEvent, {
-      name: 'a.md',
-      relativePath: 'a.md',
-      type: 'file',
-    });
-    const rootDrop = dragEvent({ target: { closest: () => null } as unknown as EventTarget });
-    host().onRootDrop(rootDrop.event); // a.md is already at the root
-    expect(rootDrop.prevented()).toBe(false);
-    expect(renamed).toEqual([]);
+    host().onFileDragStart({ dataTransfer: fakeDataTransfer() } as DragEvent, V, bMd);
 
-    // A drop on a row bubbles to the container -- the `.node` guard ignores it.
-    const bubbled = dragEvent({ target: { closest: () => ({}) } as unknown as EventTarget });
-    host().onRootDrop(bubbled.event);
-    expect(renamed).toEqual([]);
+    const own = { id: V, name: 'vault', path: 'C:/vault', exists: true, active: true };
+    const drop = dragEvent();
+    host().onVaultRowDrop(drop.event, own);
+    await vi.waitFor(() =>
+      expect(renamed).toEqual([{ from: 'notes/b.md', to: 'b.md', fromVaultId: V, toVaultId: V }]),
+    );
   });
 });
-

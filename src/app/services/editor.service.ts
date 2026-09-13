@@ -16,6 +16,19 @@ export type { EditorViewMode } from '../editor/editor-prefs.service';
 export type { NewEntryRequest } from '../editor/editor-commands.service';
 
 /**
+ * The tab-identity string for a vault document: `` `${vaultId}::${path}` ``.
+ * The vault id (ADR-0051) scopes the namespace, so the same relative path
+ * in two vaults is two documents. A vault-less doc (a scratch tab, a
+ * registered plugin kind like `browser://1`) uses the bare string as its
+ * key -- `:` cannot occur in a minted vault id, in a Windows path segment,
+ * and `://` keeps plugin keys away from vault paths, so the key space is
+ * collision-free.
+ */
+export function docKey(vaultId: string | null, path: string): string {
+  return vaultId !== null && vaultId !== '' ? `${vaultId}::${path}` : path;
+}
+
+/**
  * One open document (one tab). `savedContent` is what's on disk (in `\n`
  * form); `bufferContent` is the live editor buffer; the two differing is
  * what makes the tab dirty.
@@ -29,12 +42,23 @@ export type { NewEntryRequest } from '../editor/editor-commands.service';
  */
 export interface OpenDoc {
   /**
-   * Vault-relative path, e.g. `daily/2026-09-05.md`. Unique per tab. For a
-   * `kind: 'browser'` tab this is the synthetic key `browser://<n>` -- not
-   * a real path, but still the identity string every pane / tab-bar / close
-   * path uses. `://` guarantees it never collides with a vault path.
+   * The doc's vault id (ADR-0051). `null` for docs that belong to no
+   * vault: a never-located scratch tab, or a registered plugin kind
+   * (`browser://<n>`).
+   */
+  readonly vaultId: string | null;
+  /**
+   * Vault-relative path, e.g. `daily/2026-09-05.md` -- what every IPC call
+   * speaks. What identifies the TAB across panes/sessions is {@link key}.
+   * For a `kind: 'browser'` tab this is the synthetic key `browser://<n>`.
    */
   readonly path: string;
+  /**
+   * Tab identity (see {@link docKey}): every pane / tab-bar / session /
+   * drag consumer keys on this. `path` remains the vault-relative path for
+   * IPC and display.
+   */
+  readonly key: string;
   /** For a browser tab this follows the page title as it loads (via `patchDoc`). */
   readonly name: string;
   /**
@@ -90,15 +114,21 @@ function isMarkdownPath(path: string): boolean {
  * Milestone "visual shell" turned this from one-document-at-a-time into a
  * multi-buffer model so the tab bar has something real to drive (see
  * ADR-0003). ADR-0037 split *tab placement* out into `PaneService`: this
- * class no longer owns which paths are tabs or which is active -- it owns
- * the documents themselves, and `activePath`/`activeDoc` (and everything
+ * class no longer owns which documents are tabs or which is active -- it
+ * owns the documents themselves, and `activePath`/`activeDoc` (and everything
  * derived from them: `isDirty`, `save()`, word count, ...) now mean "the
  * *focused pane's* active document". That is deliberate: ~20 other files
  * (Assistant, Tasks, Actions, the status bar, MCP tools, keybindings, the
  * calendar, tag search's "open at line", ...) all read this single
  * "current document" and none of them need to become pane-aware -- only
  * `TabBar` and `Editor` do (see `PaneService`'s doc comment for the pane
- * model itself: one pane per path, an arbitrary split tree).
+ * model itself: one pane per document, an arbitrary split tree).
+ *
+ * Since ADR-0051 a document knows its vault: `path` stays vault-relative
+ * (what IPC speaks and UI displays), while {@link key} -- `vaultId::path`
+ * -- is the tab identity, so the same relative path from two vaults opens
+ * as two independent tabs. Pane tabs, drag payloads and session snapshots
+ * all carry keys. IPC calls always go out with the doc's own `vaultId`.
  *
  * Switching tabs never prompts -- unsaved buffers are just kept in memory;
  * only closing a dirty tab asks (CLAUDE.md build order, item 5).
@@ -114,45 +144,72 @@ export class EditorService {
 
   /** Every open document (the registry), regardless of which pane shows it. */
   readonly openDocs = this.docs.asReadonly();
-  /** Vault-relative path of the focused pane's active tab, or null when nothing is open. */
+  /**
+   * Tab key of the focused pane's active tab, or null when nothing is
+   * open. (The historical name stays -- most consumers only compare it
+   * against `doc.key` / pass it back into `docFor`.)
+   */
   readonly activePath = computed<string | null>(() => this.panes.focusedPane()?.active ?? null);
 
   /**
-   * Live-edit locks (ADR-0049): paths whose user input is blocked while the
+   * Live-edit locks (ADR-0049): docs whose user input is blocked while the
    * assistant edits them. Advisory UX protection, not a hard invariant —
-   * held per path, released by the owner (the assistant panel) at turn end.
+   * held per doc key, released by the owner (the assistant panel) at turn end.
    */
   private readonly editLocks = signal<ReadonlySet<string>>(new Set());
 
-  /** Adds or removes `path`'s user-input lock. Unknown paths are ignored. */
-  setEditLock(path: string, locked: boolean): void {
+  /** Adds or removes `key`'s user-input lock. Unknown keys are ignored. */
+  setEditLock(key: string, locked: boolean): void {
     this.editLocks.update((locks) => {
-      const has = locks.has(path);
+      const has = locks.has(key);
       if (locked === has) {
         return locks;
       }
       const next = new Set(locks);
       if (locked) {
-        next.add(path);
+        next.add(key);
       } else {
-        next.delete(path);
+        next.delete(key);
       }
       return next;
     });
   }
 
-  /** Whether `path` is currently locked against user input. */
-  isEditLocked(path: string | null): boolean {
-    return path !== null && this.editLocks().has(path);
+  /** Whether `key` is currently locked against user input. */
+  isEditLocked(key: string | null): boolean {
+    return key !== null && this.editLocks().has(key);
   }
 
   private readonly activeDoc = computed<OpenDoc | null>(
-    () => this.docs().find((d) => d.path === this.activePath()) ?? null,
+    () => this.docs().find((d) => d.key === this.activePath()) ?? null,
   );
 
-  /** The `OpenDoc` for `path`, or null if it isn't open. For a specific pane's own chrome (not "the" active doc). */
-  docFor(path: string | null): OpenDoc | null {
-    return path === null ? null : (this.docs().find((d) => d.path === path) ?? null);
+  /** The `OpenDoc` whose TAB is `key`, or null if it isn't open. */
+  docFor(key: string | null): OpenDoc | null {
+    return key === null ? null : (this.docs().find((d) => d.key === key) ?? null);
+  }
+
+  /**
+   * Resolves a doc from what a caller may hold: a full tab key (panes,
+   * session) or a bare vault-relative path (plugin-facing surfaces, which
+   * never see keys). A bare path resolves to the active vault's doc first,
+   * then -- when unambiguous -- to the one open doc with that path in any
+   * vault. Returns null when it matches nothing (or would be ambiguous).
+   */
+  resolveDoc(keyOrPath: string): OpenDoc | null {
+    const byKey = this.docFor(keyOrPath);
+    if (byKey !== null) {
+      return byKey;
+    }
+    const activeVaultId = this.vault.activeVaultId();
+    if (activeVaultId !== null) {
+      const inActive = this.docFor(docKey(activeVaultId, keyOrPath));
+      if (inActive !== null) {
+        return inActive;
+      }
+    }
+    const matches = this.docs().filter((d) => d.path === keyOrPath);
+    return matches.length === 1 ? matches[0] : null;
   }
 
   /**
@@ -161,6 +218,8 @@ export class EditorService {
    * now more than one buffer.
    */
   readonly openPath = computed<string | null>(() => this.activeDoc()?.path ?? null);
+  /** Vault id of the open file (ADR-0051), or null for vault-less docs. */
+  readonly openVaultId = computed<string | null>(() => this.activeDoc()?.vaultId ?? null);
   readonly savedContent = computed<string>(() => this.activeDoc()?.savedContent ?? '');
   readonly bufferContent = computed<string>(() => this.activeDoc()?.bufferContent ?? '');
   readonly viewMode = computed<EditorViewMode>(() => this.activeDoc()?.viewMode ?? 'live');
@@ -304,24 +363,32 @@ export class EditorService {
 
   constructor() {
     // External-change auto-reload (ADR-0045): the `vault:changed` push
-    // carries the changed `.md` paths; clean tabs among them re-read from
-    // disk here. Lives for the app's lifetime -- no teardown.
+    // carries the changed `.md` paths (scoped to one vault since ADR-0051);
+    // clean tabs among them re-read from disk here. Lives for the app's
+    // lifetime -- no teardown.
     if (typeof window !== 'undefined' && typeof window.dreyApi?.onVaultChanged === 'function') {
-      window.dreyApi.onVaultChanged((push) => void this.reloadFromVaultChange(push.paths));
+      window.dreyApi.onVaultChanged((push) =>
+        void this.reloadFromVaultChange(push.vaultId, push.paths),
+      );
     }
   }
 
   /**
    * Re-reads every open **clean** text tab whose file is in `paths` from
    * disk -- the renderer half of the watcher round (ADR-0045, req-14).
-   * Dirty tabs are untouched: last-writer-wins on save stays (ADR-0018's
-   * deferred conflict dialog is deliberately not built). A file that no
-   * longer exists flips its tab to draft semantics (`existsOnDisk: false`)
-   * -- the tab stays open and the next edit + save resurrects the file.
-   * `paths === undefined` (a full refresh -- huge batch or manual refresh)
-   * never touches tabs.
+   * `vaultId` scopes the round to one vault's tabs (ADR-0051); when absent
+   * the paths are matched against every vault's tabs (a push from an older
+   * main). Dirty tabs are untouched: last-writer-wins on save stays
+   * (ADR-0018's deferred conflict dialog is deliberately not built). A file
+   * that no longer exists flips its tab to draft semantics
+   * (`existsOnDisk: false`) -- the tab stays open and the next edit + save
+   * resurrects the file. `paths === undefined` (a full refresh -- huge
+   * batch or manual refresh) never touches tabs.
    */
-  async reloadFromVaultChange(paths: readonly string[] | undefined): Promise<void> {
+  async reloadFromVaultChange(
+    vaultId: string | undefined,
+    paths: readonly string[] | undefined,
+  ): Promise<void> {
     if (!paths || paths.length === 0 || typeof this.api?.readVaultFile !== 'function') {
       return;
     }
@@ -336,16 +403,17 @@ export class EditorService {
       (d) =>
         d.kind === 'text' &&
         d.existsOnDisk &&
+        (vaultId === undefined || d.vaultId === vaultId) &&
         changed.has(d.path) &&
         (d.bufferContent === d.savedContent || isChatNotePath(d.path)),
     );
     for (const doc of targets) {
       try {
-        const { content, modifiedMs } = await this.api.readVaultFile(doc.path);
+        const { content, modifiedMs } = await this.api.readVaultFile(doc.path, doc.vaultId ?? undefined);
         // Same normalization as `makeDoc`: hold `\n` in the buffer, keep
         // the file's dominant ending for the write-back.
         const normalized = content.replace(/\r\n/g, '\n');
-        this.patchDoc(doc.path, {
+        this.patchDoc(doc.key, {
           savedContent: normalized,
           bufferContent: normalized,
           eol: content.includes('\r\n') ? '\r\n' : '\n',
@@ -353,38 +421,41 @@ export class EditorService {
           existsOnDisk: true,
         });
       } catch {
-        this.patchDoc(doc.path, { existsOnDisk: false });
+        this.patchDoc(doc.key, { existsOnDisk: false });
       }
     }
   }
 
   /**
-   * Opens a file in a tab. If it's already open, just activates that tab.
-   * Never prompts -- a dirty buffer for another file stays in memory.
+   * Opens a file in a tab. `vaultId` defaults to the active vault. If it's
+   * already open, just activates that tab. Never prompts -- a dirty buffer
+   * for another file stays in memory.
    */
-  async openFile(relativePath: string): Promise<void> {
+  async openFile(relativePath: string, vaultId?: string): Promise<void> {
     if (!this.api) {
       return;
     }
-    if (this.docs().some((d) => d.path === relativePath)) {
+    const resolvedVault = vaultId ?? this.vault.activeVaultId();
+    const key = docKey(resolvedVault, relativePath);
+    if (this.docs().some((d) => d.key === key)) {
       // Already open -- reveal it (focus + activate whichever pane has it;
-      // a path lives in one pane at a time, see `PaneService`).
-      this.panes.open(relativePath);
+      // a document lives in one pane at a time, see `PaneService`).
+      this.panes.open(key);
       return;
     }
 
     // An image file opens as a viewer tab -- never read as text (that used
     // to open a mojibake buffer that Ctrl+S would write back).
     if (imageExtension(relativePath)) {
-      this.addDoc(this.makeImageDoc(relativePath));
+      this.addDoc(this.makeImageDoc(relativePath, resolvedVault));
       return;
     }
 
     this.isLoading.set(true);
     this.error.set(null);
     try {
-      const { content, modifiedMs } = await this.api.readVaultFile(relativePath);
-      this.addDoc(this.makeDoc(relativePath, content, modifiedMs, true));
+      const { content, modifiedMs } = await this.api.readVaultFile(relativePath, resolvedVault ?? undefined);
+      this.addDoc(this.makeDoc(relativePath, resolvedVault, content, modifiedMs, true));
     } catch (err) {
       this.error.set(err instanceof Error ? err.message : String(err));
     } finally {
@@ -395,19 +466,20 @@ export class EditorService {
   /**
    * Opens `relativePath` and asks the editor to put the caret at the start
    * of 1-based `line` (a tag-search hit lands here). The `Editor` component
-   * consumes `revealRequest` once the buffer for that path is loaded.
+   * consumes `revealRequest` once the buffer for that document is loaded.
    */
-  async openFileAt(relativePath: string, line: number): Promise<void> {
-    await this.openFile(relativePath);
-    if (this.docs().some((d) => d.path === relativePath)) {
-      this.revealRequest.update((r) => ({ id: r.id + 1, path: relativePath, line }));
+  async openFileAt(relativePath: string, line: number, vaultId?: string): Promise<void> {
+    await this.openFile(relativePath, vaultId);
+    const key = docKey(vaultId ?? this.vault.activeVaultId(), relativePath);
+    if (this.docs().some((d) => d.key === key)) {
+      this.revealRequest.update((r) => ({ id: r.id + 1, key, line }));
     }
   }
 
   /** id + target for `openFileAt`; `id === 0` means "nothing pending". */
-  readonly revealRequest = signal<{ id: number; path: string; line: number }>({
+  readonly revealRequest = signal<{ id: number; key: string; line: number }>({
     id: 0,
-    path: '',
+    key: '',
     line: 1,
   });
 
@@ -426,30 +498,33 @@ export class EditorService {
       existsOnDisk: false,
       askOnSave: true,
     };
-    if (this.docs().some((d) => d.path === path)) {
+    if (this.docs().some((d) => d.key === path)) {
       this.patchDoc(path, patch);
       this.panes.open(path);
       return;
     }
-    const doc = this.makeDoc(path, normalized, 0, false, true);
+    const doc = this.makeDoc(path, null, normalized, 0, false, true);
     this.addDoc({ ...doc, savedContent: '' });
   }
 
   /**
-   * Opens the daily note for `dateStr` (`YYYY-MM-DD`). If the file exists
-   * it's opened normally; otherwise a **draft** tab is opened from the
-   * template -- nothing hits disk until the user types and saves.
+   * Opens the daily note for `dateStr` (`YYYY-MM-DD`) in the ACTIVE vault.
+   * If the file exists it's opened normally; otherwise a **draft** tab is
+   * opened from the template -- nothing hits disk until the user types and
+   * saves.
    */
   async openDailyNote(dateStr: string): Promise<void> {
     if (!this.api) {
       return;
     }
+    const vaultId = this.vault.activeVaultId();
     const nestedPath = dailyPathFor(dateStr);
     const legacyPath = `daily/${dateStr}.md`;
     // A note this session may already be open under either layout.
     for (const candidate of [nestedPath, legacyPath]) {
-      if (this.docs().some((d) => d.path === candidate)) {
-        this.panes.open(candidate);
+      const key = docKey(vaultId, candidate);
+      if (this.docs().some((d) => d.key === key)) {
+        this.panes.open(key);
         return;
       }
     }
@@ -460,12 +535,13 @@ export class EditorService {
       // Prefer the nested layout; fall back to a pre-existing flat file;
       // otherwise open an unsaved draft at the nested path.
       const existing =
-        (await this.tryReadDaily(nestedPath)) ?? (await this.tryReadDaily(legacyPath));
+        (await this.tryReadDaily(nestedPath, vaultId)) ??
+        (await this.tryReadDaily(legacyPath, vaultId));
       if (existing) {
-        this.addDoc(this.makeDoc(existing.path, existing.content, existing.modifiedMs, true));
+        this.addDoc(this.makeDoc(existing.path, vaultId, existing.content, existing.modifiedMs, true));
       } else {
         const template = await this.api.buildDailyNoteContent(dateStr);
-        this.addDoc(this.makeDoc(nestedPath, template, 0, false));
+        this.addDoc(this.makeDoc(nestedPath, vaultId, template, 0, false));
       }
     } catch (err) {
       this.error.set(err instanceof Error ? err.message : String(err));
@@ -476,9 +552,10 @@ export class EditorService {
 
   private async tryReadDaily(
     path: string,
+    vaultId: string | null,
   ): Promise<{ path: string; content: string; modifiedMs: number } | null> {
     try {
-      const { content, modifiedMs } = await this.api!.readVaultFile(path);
+      const { content, modifiedMs } = await this.api!.readVaultFile(path, vaultId ?? undefined);
       return { path, content, modifiedMs };
     } catch {
       return null;
@@ -487,14 +564,14 @@ export class EditorService {
 
   /**
    * Reveals a tab app-wide: focuses + activates whichever pane already has
-   * `relativePath` open (the "Open windows" list, File-menu style global
-   * commands). No-op if it isn't open. A pane's *own* tab bar activates
-   * within itself via `PaneService.activate` directly -- it doesn't need
-   * this "search every pane" version of the same idea.
+   * it open (the "Open windows" list, File-menu style global commands).
+   * No-op if it isn't open. A pane's *own* tab bar activates within itself
+   * via `PaneService.activate` directly -- it doesn't need this "search
+   * every pane" version of the same idea.
    */
-  activate(relativePath: string): void {
-    if (this.docs().some((d) => d.path === relativePath)) {
-      this.panes.open(relativePath);
+  activate(key: string): void {
+    if (this.docs().some((d) => d.key === key)) {
+      this.panes.open(key);
     }
   }
 
@@ -503,94 +580,107 @@ export class EditorService {
    * the file watcher forces a real keep-mine / take-external decision).
    * Closing the active tab activates its neighbour. `silent` skips the
    * dirty prompt -- used when the underlying file was just deleted, where
-   * "keep editing" is not an option.
+   * "keep editing" is not an option. Resolves to whether the tab actually
+   * closed (a cancelled dirty prompt leaves it open).
    */
-  closeTab(relativePath: string, options: { silent?: boolean } = {}): void {
-    const doc = this.docs().find((d) => d.path === relativePath);
+  closeTab(key: string, options: { silent?: boolean } = {}): boolean {
+    const doc = this.docs().find((d) => d.key === key);
     if (!doc) {
-      return;
+      return false;
     }
     if (
       !options.silent &&
       doc.bufferContent !== doc.savedContent &&
       !confirm(`Discard unsaved changes to ${doc.name}?`)
     ) {
-      return;
+      return false;
     }
     // Pane placement first (picks the neighbour to activate there), then
-    // drop the buffer -- a path lives in one pane at a time, so this closes
-    // its one and only tab.
-    this.panes.closeEverywhere(relativePath);
-    this.docs.update((list) => list.filter((d) => d.path !== relativePath));
+    // drop the buffer -- a document lives in one pane at a time, so this
+    // closes its one and only tab.
+    this.panes.closeEverywhere(key);
+    this.docs.update((list) => list.filter((d) => d.key !== key));
+    return true;
   }
 
   /**
    * A pane's own tab-bar context menu: close every tab / every tab but one
    * *in that pane* -- a split's other panes are untouched. Each is routed
    * through `closeTab`, so a dirty tab still raises its own `confirm()` and
-   * a cancel there leaves that tab (and the rest) open. The path list is
+   * a cancel there leaves that tab (and the rest) open. The key list is
    * snapshotted first (from `PaneService`) because `closeTab` mutates it.
    */
   closeAll(paneId: string): void {
-    for (const path of this.panes.pane(paneId)?.tabs ?? []) {
-      this.closeTab(path);
+    for (const key of this.panes.pane(paneId)?.tabs ?? []) {
+      this.closeTab(key);
     }
   }
 
-  closeOthers(paneId: string, keepPath: string): void {
-    for (const path of this.panes.pane(paneId)?.tabs ?? []) {
-      if (path !== keepPath) {
-        this.closeTab(path);
+  closeOthers(paneId: string, keepKey: string): void {
+    for (const key of this.panes.pane(paneId)?.tabs ?? []) {
+      if (key !== keepKey) {
+        this.closeTab(key);
       }
     }
   }
 
   /**
-   * Silently closes every open tab for a path that was just deleted -- the
-   * file itself, or (for a folder) anything under it. No dirty prompt: the
-   * file is gone, there is nothing to save it back to.
+   * Silently closes every open tab under a path that was just deleted --
+   * the file itself, or (for a folder) anything under it -- all within the
+   * one vault `vaultId` names. No dirty prompt: the file is gone, there is
+   * nothing to save it back to.
    */
-  closeTabsUnder(deletedPath: string): void {
-    const prefix = `${deletedPath}/`;
-    for (const path of this.docs().map((d) => d.path)) {
-      if (path === deletedPath || path.startsWith(prefix)) {
-        this.closeTab(path, { silent: true });
+  closeTabsUnder(vaultId: string | null, deletedPath: string): void {
+    const prefix = `${docKey(vaultId, deletedPath)}/`;
+    const deletedKey = docKey(vaultId, deletedPath);
+    for (const doc of this.docs()) {
+      if (doc.key === deletedKey || doc.key.startsWith(prefix)) {
+        this.closeTab(doc.key, { silent: true });
       }
     }
   }
 
   /**
    * A file or folder was renamed/moved on disk: re-point any open tab at
-   * its new path, keeping the buffer so unsaved edits survive the rename.
-   * For a folder rename every tab under it moves.
+   * its new key, keeping the buffer so unsaved edits survive the rename.
+   * Both arguments are full TAB KEYS (see {@link docKey}) -- a cross-vault
+   * move retargets the tab into the other vault's namespace the same way a
+   * folder rename moves it under a prefix. For a folder rename every tab
+   * under it moves.
    */
-  retargetTabs(oldPath: string, newPath: string): void {
-    const prefix = `${oldPath}/`;
+  retargetTabs(fromKey: string, toKey: string): void {
+    const prefix = `${fromKey}/`;
     const remap = (p: string): string | null =>
-      p === oldPath ? newPath : p.startsWith(prefix) ? newPath + p.slice(oldPath.length) : null;
+      p === fromKey ? toKey : p.startsWith(prefix) ? toKey + p.slice(fromKey.length) : null;
 
     this.docs.update((list) =>
       list.map((d) => {
-        const next = remap(d.path);
-        if (next === null) {
+        const nextKey = remap(d.key);
+        if (nextKey === null) {
           return d;
         }
-        // Pane placement references the same path string, so re-point it
-        // there too before the registry's own path changes underneath it.
-        this.panes.renamePath(d.path, next);
-        return { ...d, path: next, name: next.slice(next.lastIndexOf('/') + 1) };
+        // Pane placement references the same key string, so re-point it
+        // there too before the registry's own key changes underneath it.
+        this.panes.renamePath(d.key, nextKey);
+        return {
+          ...d,
+          key: nextKey,
+          vaultId: toVaultIdOf(nextKey),
+          path: toPathOf(nextKey),
+          name: baseName(toPathOf(nextKey)),
+        };
       }),
     );
   }
 
-  /** Called by a pane's editor surface on every buffer change; `path` is that pane's shown document. */
-  updateBuffer(path: string, content: string): void {
-    const doc = this.docs().find((d) => d.path === path);
+  /** Called by a pane's editor surface on every buffer change; `key` is that pane's shown document. */
+  updateBuffer(key: string, content: string): void {
+    const doc = this.docs().find((d) => d.key === key);
     if (!doc || doc.kind !== 'text') {
       return;
     }
-    this.patchDoc(path, { bufferContent: content });
-    this.scheduleAutoSave(path);
+    this.patchDoc(key, { bufferContent: content });
+    this.scheduleAutoSave(doc);
   }
 
   /**
@@ -608,36 +698,35 @@ export class EditorService {
   static readonly AUTO_SAVE_DELAY_MS = 800;
   private readonly autoSaveTimers = new Map<string, ReturnType<typeof setTimeout>>();
 
-  private scheduleAutoSave(path: string): void {
-    if (!isAutoSavePath(path)) {
+  private scheduleAutoSave(doc: OpenDoc): void {
+    if (!isAutoSavePath(doc.path)) {
       return;
     }
-    const doc = this.docs().find((d) => d.path === path);
-    if (!doc || doc.kind !== 'text' || doc.askOnSave) {
+    if (doc.kind !== 'text' || doc.askOnSave) {
       return;
     }
-    const existing = this.autoSaveTimers.get(path);
+    const existing = this.autoSaveTimers.get(doc.key);
     if (existing !== undefined) {
       clearTimeout(existing);
     }
     this.autoSaveTimers.set(
-      path,
+      doc.key,
       setTimeout(() => {
-        this.autoSaveTimers.delete(path);
-        void this.save({ path, runOnSaveActions: false });
+        this.autoSaveTimers.delete(doc.key);
+        void this.save({ key: doc.key, runOnSaveActions: false });
       }, EditorService.AUTO_SAVE_DELAY_MS),
     );
   }
 
   /**
    * Switches a tab's mode and remembers it as the default for future opens
-   * (`⋯` menu). `path` defaults to the focused pane's document -- the
+   * (`⋯` menu). `key` defaults to the focused pane's document -- the
    * global Ctrl+S-style callers want that; a pane's own `⋯` menu passes its
-   * own shown path explicitly, since that pane needn't be the focused one.
-   * Persisted per machine, like the pane sizes.
+   * own shown document explicitly, since that pane needn't be the focused
+   * one. Persisted per machine, like the pane sizes.
    */
-  setViewMode(mode: EditorViewMode, path?: string): void {
-    const doc = path !== undefined ? this.docFor(path) : this.activeDoc();
+  setViewMode(mode: EditorViewMode, key?: string): void {
+    const doc = key !== undefined ? this.docFor(key) : this.activeDoc();
     if (!doc || doc.kind !== 'text') {
       return;
     }
@@ -646,32 +735,38 @@ export class EditorService {
     if (mode === 'live' && !isMarkdownPath(doc.path)) {
       return;
     }
-    this.patchDoc(doc.path, { viewMode: mode });
+    this.patchDoc(doc.key, { viewMode: mode });
     this.prefs.setDefaultMode(mode);
   }
 
   /**
-   * Saves the active buffer through the tag pipeline (`note:save`): the
-   * main process merges inline `#tag`s into the frontmatter, bumps
-   * `updated:`, and routes tagged entries into their topic's master
-   * document. The returned `content` is the rewritten note -- adopted as
-   * both saved and buffer text, so the editor shows the merged frontmatter
-   * and the tab is clean. Any master doc that got a routed History entry
-   * and is open in another (clean) tab is reloaded from disk. No-op when
-   * nothing changed.
+   * Saves a buffer through the tag pipeline (`note:save`): the main process
+   * merges inline `#tag`s into the frontmatter, bumps `updated:`, and
+   * routes tagged entries into their topic's master document. The returned
+   * `content` is the rewritten note -- adopted as both saved and buffer
+   * text, so the editor shows the merged frontmatter and the tab is clean.
+   * Any master doc that got a routed History entry and is open in another
+   * (clean) tab is reloaded from disk. No-op when nothing changed.
    *
-   * `options.path` defaults to the focused pane's document (Ctrl+S, the
-   * File menu); a pane's own Save button passes its own shown path.
+   * `options.key` defaults to the focused pane's document (Ctrl+S, the
+   * File menu); a pane's own Save button passes its own shown document.
+   * A caller may instead pass a bare vault-relative `path` (plugin-facing
+   * surfaces) -- resolved via {@link resolveDoc}.
    */
-  async save(options: { runOnSaveActions?: boolean; path?: string } = {}): Promise<void> {
-    const doc = options.path !== undefined ? this.docFor(options.path) : this.activeDoc();
+  async save(options: { runOnSaveActions?: boolean; key?: string; path?: string } = {}): Promise<void> {
+    const doc =
+      options.key !== undefined
+        ? this.docFor(options.key)
+        : options.path !== undefined
+          ? this.resolveDoc(options.path)
+          : this.activeDoc();
     if (!this.api || doc === null || doc.kind !== 'text' || this.isSaving()) {
       return;
     }
     // A generated scratch doc has no destination yet -- ask for one, even
     // if the buffer is untouched (the user wants to keep the export as-is).
     if (doc.askOnSave) {
-      await this.saveAs(doc.path);
+      await this.saveAs(doc.key);
       return;
     }
     if (doc.bufferContent === doc.savedContent) {
@@ -685,19 +780,18 @@ export class EditorService {
     try {
       const result = await this.api.saveNote({
         path: doc.path,
+        vaultId: doc.vaultId ?? undefined,
         body: doc.bufferContent,
         eol: doc.eol,
         runOnSaveActions: options.runOnSaveActions,
       });
-      this.patchDoc(doc.path, {
+      this.patchDoc(doc.key, {
         savedContent: result.content,
         bufferContent: result.content,
         modifiedMs: result.modifiedMs,
         existsOnDisk: true,
       });
-      // The main process re-indexed this file on save; pull the vocabulary
-      // so `#tag` autocomplete and the search picker stay current.
-            // A first save of a draft (a daily note opened from the calendar, or
+      // A first save of a draft (a daily note opened from the calendar, or
       // the quick-capture hotkey) creates a file the sidebar tree does not
       // know about yet -- no watcher, so pull the tree in.
       if (wasDraft) {
@@ -715,9 +809,9 @@ export class EditorService {
 
   /**
    * File -> "Save all". Walks every open document in the registry, saving
-   * the dirty ones, by explicit path -- doesn't touch pane focus/activation
+   * the dirty ones, by explicit key -- doesn't touch pane focus/activation
    * at all (unlike the single-pane version this replaced), since `save()`
-   * now takes the path directly. Each goes through `save()`, so a scratch
+   * now takes the key directly. Each goes through `save()`, so a scratch
    * tab still routes to `saveAs()` and an untouched draft is skipped.
    *
    * The exit prompt (bug-5) passes `drafts: true`: an `askOnSave` scratch
@@ -727,30 +821,30 @@ export class EditorService {
    * Actions (LLM round trips) out of shutdown.
    */
   async saveAll(options: { runOnSaveActions?: boolean; drafts?: boolean } = {}): Promise<void> {
-    for (const path of this.docs().map((d) => d.path)) {
-      const doc = this.docs().find((d) => d.path === path);
-      if (!doc || doc.kind !== 'text' || (doc.bufferContent === doc.savedContent && !doc.askOnSave)) {
+    for (const doc of this.docs()) {
+      if (doc.kind !== 'text' || (doc.bufferContent === doc.savedContent && !doc.askOnSave)) {
         continue;
       }
       if (options.drafts && doc.askOnSave) {
-        await this.saveDraft(path);
+        await this.saveDraft(doc.key);
         continue;
       }
-      await this.save({ path, runOnSaveActions: options.runOnSaveActions });
+      await this.save({ key: doc.key, runOnSaveActions: options.runOnSaveActions });
     }
   }
 
   /**
-   * Commits an untitled ("scratch") buffer into the vault's hidden
+   * Commits an untitled ("scratch") buffer into the ACTIVE vault's hidden
    * `.drafts/` folder as the next `unnamed-N.md`, with no dialog (bug-5).
-   * The tab is re-keyed to the real path (`retargetTabs` moves the pane
-   * placement with it) and marked clean/on-disk, so the session snapshot
-   * then restores the real file on the next start. An empty buffer saves
+   * The tab is re-keyed to the real file (`retargetTabs` moves the pane
+   * placement with it -- from the vault-less scratch namespace into the
+   * vault's) and marked clean/on-disk, so the session snapshot then
+   * restores the real file on the next start. An empty buffer saves
    * nothing -- there is nothing worth keeping. Errors land in `error` and
    * the tab stays a scratch one.
    */
-  private async saveDraft(path: string): Promise<void> {
-    const doc = this.docFor(path);
+  private async saveDraft(key: string): Promise<void> {
+    const doc = this.docFor(key);
     if (!this.api?.saveDraftNote || !doc || doc.kind !== 'text' || doc.bufferContent.trim() === '') {
       return;
     }
@@ -758,8 +852,11 @@ export class EditorService {
     this.error.set(null);
     try {
       const result = await this.api.saveDraftNote({ body: doc.bufferContent, eol: doc.eol });
-      this.retargetTabs(doc.path, result.path);
-      this.patchDoc(result.path, {
+      // The draft materializes in the ACTIVE vault; re-key the tab there.
+      const activeVaultId = this.vault.activeVaultId();
+      const nextKey = docKey(activeVaultId, result.path);
+      this.retargetTabs(doc.key, nextKey);
+      this.patchDoc(nextKey, {
         savedContent: result.content,
         bufferContent: result.content,
         modifiedMs: result.modifiedMs,
@@ -783,28 +880,32 @@ export class EditorService {
   newUntitled(): void {
     let name = 'untitled.md';
     let n = 2;
-    while (this.docs().some((d) => d.path === name)) {
+    while (this.docs().some((d) => d.key === name)) {
       name = `untitled-${n++}.md`;
     }
     this.openScratch(name, '');
   }
 
   /**
-   * "Save as…": pick a destination inside the vault (native dialog), write
-   * the buffer there, and re-key the tab to the new file. For a never-saved
-   * scratch doc this is where `save()` lands; on a normal file it forks the
-   * buffer to a new path (the original on disk is untouched). `path`
-   * defaults to the focused pane's document, like `save()`.
+   * "Save as…": pick a destination inside the document's own vault (a
+   * vault-backed tab saves back into ITS vault so the note stays inside
+   * its tree and index; a vault-less scratch tab roots the dialog at the
+   * active vault), write the buffer there, and re-key the tab to the new
+   * file. For a never-saved scratch doc this is where `save()` lands; on a
+   * normal file it forks the buffer to a new path (the original on disk is
+   * untouched). `key` defaults to the focused pane's document, like
+   * `save()`.
    */
-  async saveAs(path?: string): Promise<void> {
-    const doc = path !== undefined ? this.docFor(path) : this.activeDoc();
+  async saveAs(key?: string): Promise<void> {
+    const doc = key !== undefined ? this.docFor(key) : this.activeDoc();
     if (!this.api?.pickSavePath || doc === null || doc.kind !== 'text' || this.isSaving()) {
       return;
     }
     this.error.set(null);
+    const targetVault = doc.vaultId ?? this.vault.activeVaultId();
     let target: string | null;
     try {
-      target = await this.api.pickSavePath(doc.name);
+      target = await this.api.pickSavePath(doc.name, targetVault ?? undefined);
     } catch (err) {
       this.error.set(err instanceof Error ? err.message : String(err));
       return;
@@ -812,14 +913,19 @@ export class EditorService {
     if (target === null) {
       return; // cancelled
     }
-    if (target === doc.path && !doc.askOnSave) {
-      await this.save({ path: doc.path });
+    if (target === doc.path && doc.vaultId === targetVault && !doc.askOnSave) {
+      await this.save({ key: doc.key });
       return;
     }
 
     this.isSaving.set(true);
     try {
-      await this.api.saveNote({ path: target, body: doc.bufferContent, eol: doc.eol });
+      await this.api.saveNote({
+        path: target,
+        vaultId: targetVault ?? undefined,
+        body: doc.bufferContent,
+        eol: doc.eol,
+      });
     } catch (err) {
       this.error.set(err instanceof Error ? err.message : String(err));
       this.isSaving.set(false);
@@ -829,14 +935,14 @@ export class EditorService {
 
     // Swap the scratch/old tab for the real file, then load it fresh so the
     // buffer, mtime and `existsOnDisk` come from disk.
-    const previousPath = doc.path;
-    this.closeTab(doc.path, { silent: true });
-    await this.openFile(target);
+    const previousKey = doc.key;
+    this.closeTab(doc.key, { silent: true });
+    await this.openFile(target, targetVault ?? undefined);
     // Moving a file out of `.drafts/` (bug-5's exit auto-saves) deletes the
     // draft original -- move semantics, so drafts don't linger in two places.
-    if (previousPath.startsWith('.drafts/') && previousPath !== target) {
+    if (doc.vaultId !== null && doc.path.startsWith('.drafts/') && doc.path !== target) {
       try {
-        await this.vault.deleteEntry(previousPath);
+        await this.vault.deleteEntry(doc.path, doc.vaultId);
       } catch {
         // The original staying behind is annoying, not fatal.
       }
@@ -848,20 +954,22 @@ export class EditorService {
    * Adopts an Action / Ask-mode rewrite of an open document: pushes
    * `content` into the tab's buffer and saves it with the on-save Action
    * hook suppressed (so applying one action can't recurse into another).
-   * No-op when the path isn't open.
+   * `path` is what the plugin surface holds -- a bare vault-relative path,
+   * resolved via {@link resolveDoc}. No-op when it isn't open.
    */
   async applyRewrite(path: string, content: string): Promise<void> {
-    const doc = this.docs().find((d) => d.path === path);
+    const doc = this.resolveDoc(path);
     if (!doc || content === doc.bufferContent) {
       return;
     }
-    this.panes.open(path); // reveal: focuses + activates wherever it is
-    this.patchDoc(path, { bufferContent: content });
-    await this.save({ runOnSaveActions: false, path });
+    this.panes.open(doc.key); // reveal: focuses + activates wherever it is
+    this.patchDoc(doc.key, { bufferContent: content });
+    await this.save({ runOnSaveActions: false, key: doc.key });
   }
 
   private makeDoc(
     relativePath: string,
+    vaultId: string | null,
     rawContent: string,
     modifiedMs: number,
     existsOnDisk: boolean,
@@ -873,7 +981,9 @@ export class EditorService {
     const eol: '\n' | '\r\n' = rawContent.includes('\r\n') ? '\r\n' : '\n';
     const normalized = rawContent.replace(/\r\n/g, '\n');
     return {
+      vaultId,
       path: relativePath,
+      key: docKey(vaultId, relativePath),
       name: baseName(relativePath),
       kind: 'text',
       savedContent: normalized,
@@ -892,12 +1002,14 @@ export class EditorService {
   /**
    * An image viewer tab (ADR-0026): no `readVaultFile`, no buffer, never
    * dirty. The renderer loads the pixels through `drey-asset://` -- the
-   * `ImageTab` component resolves `relativePath` (vault-root-relative)
-   * itself.
+   * `ImageTab` component resolves the image (vault-relative path + vault
+   * id) itself.
    */
-  private makeImageDoc(relativePath: string): OpenDoc {
+  private makeImageDoc(relativePath: string, vaultId: string | null): OpenDoc {
     return {
+      vaultId,
       path: relativePath,
+      key: docKey(vaultId, relativePath),
       name: baseName(relativePath),
       kind: 'image',
       savedContent: '',
@@ -918,12 +1030,14 @@ export class EditorService {
    * never saved.
    */
   addPluginDoc(kind: string, key: string, name: string): void {
-    if (this.docs().some((d) => d.path === key)) {
+    if (this.docs().some((d) => d.key === key)) {
       this.panes.open(key);
       return;
     }
     this.addDoc({
+      vaultId: null,
       path: key,
+      key,
       name,
       kind,
       savedContent: '',
@@ -946,10 +1060,22 @@ export class EditorService {
 
   private addDoc(doc: OpenDoc): void {
     this.docs.update((list) => [...list, doc]);
-    this.panes.open(doc.path);
+    this.panes.open(doc.key);
   }
 
-  private patchDoc(path: string, patch: Partial<OpenDoc>): void {
-    this.docs.update((list) => list.map((d) => (d.path === path ? { ...d, ...patch } : d)));
+  private patchDoc(key: string, patch: Partial<OpenDoc>): void {
+    this.docs.update((list) => list.map((d) => (d.key === key ? { ...d, ...patch } : d)));
   }
+}
+
+/** A retargeted doc's new vault id: the segment before `::` (null when bare). */
+function toVaultIdOf(nextKey: string): string | null {
+  const sep = nextKey.indexOf('::');
+  return sep === -1 ? null : nextKey.slice(0, sep);
+}
+
+/** A retargeted doc's new vault-relative path: everything after `::`, or the bare key itself. */
+function toPathOf(nextKey: string): string {
+  const sep = nextKey.indexOf('::');
+  return sep === -1 ? nextKey : nextKey.slice(sep + 2);
 }

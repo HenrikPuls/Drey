@@ -4,10 +4,12 @@ import { VaultService } from '../vault';
 import { PaneService } from './pane.service';
 
 /**
- * Private DataTransfer type the Files panel / calendar put a vault-relative
- * path on when a file entry is dragged (see `files-panel.ts`,
- * `image-paste.ts`). Duplicated here rather than imported across the editor
- * module boundary -- `DropGuardService` hardcodes the same literal.
+ * Private DataTransfer type the Files panel / calendar put a dragged file's
+ * TAB KEY on -- `${vaultId}::${relativePath}` (ADR-0051), the same composite
+ * `EditorService.docKey` uses; a bare relative path from an older source is
+ * still accepted and resolves against the active vault. Duplicated here
+ * rather than imported across the editor module boundary --
+ * `DropGuardService` hardcodes the same literal.
  */
 const VAULT_PATH_DT_TYPE = 'application/x-drey-vault-path';
 
@@ -48,24 +50,33 @@ export class PaneDropService {
    * carried nothing this service opens (an out-of-vault OS file, a URL).
    */
   async openFromDrop(paneId: string, dt: DataTransfer | null): Promise<boolean> {
-    const rel = this.resolvePath(dt);
-    if (rel === null) {
+    const target = this.resolvePath(dt);
+    if (target === null) {
       return false;
     }
     this.panes.focus(paneId);
-    await this.editor.openFile(rel);
+    await this.editor.openFile(target.path, target.vaultId ?? undefined);
     return true;
   }
 
-  /** The vault-relative path the transfer points at, or `null`. */
-  private resolvePath(dt: DataTransfer | null): string | null {
+  /** The vault file the transfer points at, or `null`. */
+  private resolvePath(dt: DataTransfer | null): { vaultId: string | null; path: string } | null {
     if (!dt) {
       return null;
     }
 
     const tagged = dt.getData(VAULT_PATH_DT_TYPE).trim();
     if (tagged) {
-      return normaliseRelative(tagged);
+      const normalised = normaliseRelative(tagged);
+      // `${vaultId}::${path}` (ADR-0051) or a bare vault-relative path.
+      const sep = normalised.indexOf('::');
+      if (sep > 0) {
+        const vaultId = normalised.slice(0, sep);
+        if (this.vault.vaults().some((v) => v.id === vaultId)) {
+          return { vaultId, path: normalised.slice(sep + 2) };
+        }
+      }
+      return { vaultId: this.vault.activeVaultId(), path: normalised };
     }
 
     const root = this.vault.activeVaultPath();
@@ -76,12 +87,13 @@ export class PaneDropService {
       const absolute = (file as File & { path?: string }).path ?? '';
       const relative = absolute ? relativeToRoot(absolute, root) : null;
       if (relative) {
-        return relative;
+        return { vaultId: this.vault.activeVaultId(), path: relative };
       }
     }
     return null;
   }
 }
+
 
 /** Back-slashes to `/`, no leading `/`, no doubled separators. */
 function normaliseRelative(p: string): string {

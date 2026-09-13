@@ -1,29 +1,30 @@
 import { Injectable, effect, inject } from '@angular/core';
 import { DocKindRegistry } from '../plugin-host';
 import { PaneLayoutSnapshot, PaneService } from '../panes';
-import { EditorService } from '../services/editor.service';
+import { EditorService, docKey } from '../services/editor.service';
 import { LogService } from '../services/log.service';
 import { VaultService } from '../vault';
 
 /**
- * One persisted open tab. The `text` / `image` members are the base kinds
+ * One persisted open tab. `vaultId` is the tab's vault (ADR-0051; null for
+ * vault-less docs -- a scratch tab or a registered doc kind, whose `path`
+ * IS its synthetic key). The `text` / `image` members are the base kinds
  * (a text tab with nothing on disk to reload from -- a never-saved scratch
  * buffer, or unsaved edits to a real file -- carries a `backupId`, the name
  * of its content file under `<userData>/session-backups/`, ADR-0043). Any
  * other kind is a registered doc kind (ADR-0044 stage 8A): its owner's
  * `serialize`/`restore` answer the payload, and a kind that is not
- * registered at restore time closes silently.
+ * registered at restore time closes silently -- as is a tab whose vault is
+ * no longer registered.
  */
 export type SessionTab =
-  | { path: string; kind: 'text'; onDisk: boolean; backupId?: string }
-  | { path: string; kind: 'image' }
-  | { path: string; kind: string; data: unknown };
+  | { vaultId: string | null; path: string; kind: 'text'; onDisk: boolean; backupId?: string }
+  | { vaultId: string | null; path: string; kind: 'image' }
+  | { vaultId: null; path: string; kind: string; data: unknown };
 
 export interface SessionSnapshot {
-  version: 1;
+  version: 2;
   savedAt: number;
-  /** The vault these paths are relative to -- restore is skipped if it changed. */
-  vault: string | null;
   layout: PaneLayoutSnapshot;
   tabs: SessionTab[];
 }
@@ -98,28 +99,74 @@ export class SessionService {
   /**
    * Rebuilds the previous session. Returns `true` when at least one tab was
    * restored, so `App` can skip its "open today's note" fallback.
+   *
+   * v2 snapshots are per-tab (`vaultId` on each): a tab whose vault is no
+   * longer registered is dropped, the rest restore. v1 snapshots (one
+   * global `vault` path) still restore the old way -- all tabs mapped to
+   * the ACTIVE vault, and only when that path still matches; this bridge
+   * can go one release after ADR-0051 ships.
    */
   async restore(): Promise<boolean> {
     let restoredAny = false;
     try {
       const raw = typeof localStorage !== 'undefined' ? localStorage.getItem(KEY) : null;
-      const snap = raw ? (JSON.parse(raw) as SessionSnapshot) : null;
-      if (
-        snap &&
-        snap.version === 1 &&
-        Array.isArray(snap.tabs) &&
-        snap.tabs.length > 0 &&
-        snap.vault === this.vault.activeVaultPath()
-      ) {
-        this.restoring = true;
-        const restoredPaths = new Set<string>();
-        for (const tab of snap.tabs) {
-          if (await this.restoreTab(tab)) {
-            restoredPaths.add(tab.path);
-          }
-        }
-        restoredAny = this.panes.restore(snap.layout, (p) => restoredPaths.has(p));
+      const parsed = raw ? (JSON.parse(raw) as Partial<SessionSnapshot> & { vault?: unknown }) : null;
+      if (!parsed || !Array.isArray(parsed.tabs) || parsed.tabs.length === 0 || !parsed.layout) {
+        return false;
       }
+      let tabs: SessionTab[];
+      let layout: SessionSnapshot['layout'] = parsed.layout;
+      if (parsed.version === 2) {
+        tabs = parsed.tabs as SessionTab[];
+      } else if (parsed.version === 1 && parsed.vault === this.vault.activeVaultPath()) {
+        // v1: on-disk paths were relative to the one vault -- the active
+        // one. Scratch tabs (onDisk: false) and doc-kind tabs were
+        // vault-less even then, so only the on-disk ones get re-keyed into
+        // the vault's namespace -- tabs AND the layout's tab strings.
+        const activeVaultId = this.vault.activeVaultId();
+        if (activeVaultId === null || !layout) {
+          return false;
+        }
+        const raw = parsed.tabs as Array<{ kind: string; path: string; onDisk?: boolean }>;
+        const scratchPaths = new Set(
+          raw.filter((t) => t.kind === 'text' && t.onDisk === false).map((t) => t.path),
+        );
+        tabs = raw.map((t) => ({
+          ...t,
+          vaultId: t.kind === 'text' && t.onDisk === false ? null : activeVaultId,
+        })) as SessionTab[];
+        const rekey = (p: string): string =>
+          scratchPaths.has(p) ? p : docKey(activeVaultId, p);
+        layout = {
+          ...layout,
+          panes: Object.fromEntries(
+            Object.entries(layout.panes).map(([id, pane]) => [
+              id,
+              {
+                ...pane,
+                tabs: pane.tabs.map(rekey),
+                active: pane.active !== null ? rekey(pane.active) : null,
+              },
+            ]),
+          ),
+        };
+      } else {
+        return false;
+      }
+
+      this.restoring = true;
+      const restoredKeys = new Set<string>();
+      for (const tab of tabs) {
+        // A tab whose vault vanished (deregistered since) closes silently,
+        // exactly like an unregistered doc kind.
+        if (tab.vaultId !== null && !this.vault.vaults().some((v) => v.id === tab.vaultId)) {
+          continue;
+        }
+        if (await this.restoreTab(tab)) {
+          restoredKeys.add(docKey(tab.vaultId, tab.path));
+        }
+      }
+      restoredAny = this.panes.restore(layout, (p) => restoredKeys.has(p));
     } catch {
       // A corrupt session file must never block startup.
     } finally {
@@ -131,9 +178,10 @@ export class SessionService {
   }
 
   private async restoreTab(tab: SessionTab): Promise<boolean> {
+    const key = docKey(tab.vaultId, tab.path);
     if (tab.kind === 'image') {
-      await this.editor.openFile(tab.path);
-      return this.editor.openDocs().some((d) => d.path === tab.path);
+      await this.editor.openFile(tab.path, tab.vaultId ?? undefined);
+      return this.editor.openDocs().some((d) => d.key === key);
     }
     if (tab.kind !== 'text') {
       // A registered doc kind (ADR-0044): its owner recreates the tab from
@@ -161,13 +209,13 @@ export class SessionService {
       const backup = tab.backupId ? await this.api?.readSessionBackup(tab.backupId) : null;
 
       if (tab.onDisk) {
-        await this.editor.openFile(tab.path);
-        const open = this.editor.openDocs().some((d) => d.path === tab.path);
+        await this.editor.openFile(tab.path, tab.vaultId ?? undefined);
+        const open = this.editor.openDocs().some((d) => d.key === key);
         if (open && backup != null) {
           // Re-apply the unsaved edits over the freshly-read disk content.
-          this.editor.updateBuffer(tab.path, backup.replace(/\r\n/g, '\n'));
+          this.editor.updateBuffer(key, backup.replace(/\r\n/g, '\n'));
           if (tab.backupId) {
-            this.backupIds.set(tab.path, tab.backupId);
+            this.backupIds.set(key, tab.backupId);
             this.written.add(tab.backupId);
           }
         }
@@ -180,7 +228,7 @@ export class SessionService {
       }
       this.editor.openScratch(tab.path, backup.replace(/\r\n/g, '\n'));
       if (tab.backupId) {
-        this.backupIds.set(tab.path, tab.backupId);
+        this.backupIds.set(key, tab.backupId);
         this.written.add(tab.backupId);
       }
       return true;
@@ -192,20 +240,20 @@ export class SessionService {
 
   private buildSnapshot(): SessionSnapshot {
     const layout = this.panes.snapshot();
-    const paths = new Set<string>();
+    const keys = new Set<string>();
     for (const id of Object.keys(layout.panes)) {
       for (const p of layout.panes[id].tabs) {
-        paths.add(p);
+        keys.add(p);
       }
     }
     const tabs: SessionTab[] = [];
-    for (const path of paths) {
-      const doc = this.editor.docFor(path);
+    for (const key of keys) {
+      const doc = this.editor.docFor(key);
       if (!doc) {
         continue;
       }
       if (doc.kind === 'image') {
-        tabs.push({ path, kind: 'image' });
+        tabs.push({ vaultId: doc.vaultId, path: doc.path, kind: 'image' });
       } else if (doc.kind !== 'text') {
         // A registered doc kind: its owner answers the payload. A kind that
         // lost its contribution (plugin disabled mid-session) is skipped --
@@ -215,7 +263,7 @@ export class SessionService {
           continue;
         }
         try {
-          tabs.push({ path, kind: doc.kind, data: contrib.serialize(path) });
+          tabs.push({ vaultId: null, path: doc.path, kind: doc.kind, data: contrib.serialize(doc.path) });
         } catch (error) {
           this.log.record('error', `doc kind "${doc.kind}" serialize failed: ${String(error)}`);
         }
@@ -223,18 +271,23 @@ export class SessionService {
         const needsBackup = !doc.existsOnDisk || doc.bufferContent !== doc.savedContent;
         let backupId: string | undefined;
         if (needsBackup) {
-          backupId = this.backupIds.get(path) ?? crypto.randomUUID();
-          this.backupIds.set(path, backupId);
+          backupId = this.backupIds.get(key) ?? crypto.randomUUID();
+          this.backupIds.set(key, backupId);
         } else {
-          this.backupIds.delete(path);
+          this.backupIds.delete(key);
         }
-        tabs.push({ path, kind: 'text', onDisk: doc.existsOnDisk, backupId });
+        tabs.push({
+          vaultId: doc.vaultId,
+          path: doc.path,
+          kind: 'text',
+          onDisk: doc.existsOnDisk,
+          backupId,
+        });
       }
     }
     return {
-      version: 1,
+      version: 2,
       savedAt: Date.now(),
-      vault: this.vault.activeVaultPath(),
       layout,
       tabs,
     };

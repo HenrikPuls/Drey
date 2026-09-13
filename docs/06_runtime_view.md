@@ -1786,6 +1786,39 @@ quietly, nothing is inserted (ADR-0014: no timeout, the user decides).
 A real error (e.g. a non-vision model behind a vision-capable provider)
 renders in the same modal with a Close button.
 
+## 6.38 Add a vault / switch the active vault ([ADR-0051](09_architecture_decisions/0051-multi-vault-registry.md))
+
+```mermaid
+sequenceDiagram
+    participant User
+    participant FP as FilesPanel
+    participant VS as VaultService (renderer)
+    participant VH as vault-handlers (main)
+    participant VM as VaultManager
+    participant Ann as VaultChangeAnnouncer
+
+    User->>FP: vault row context menu → "Add vault …" / "Set active"
+    FP->>VS: addVault() / setActiveVault(id)
+    VS->>VH: vault:add / vault:set-active (id)
+    VH->>VM: addVault() [native picker, mint id, dup check] / setActiveVault(id)
+    VM->>VM: persist vault-config.json v2
+    VH->>VH: syncVaultWatcher()
+    VH->>Ann: announceFullRefresh() — the ALL-vaults round
+    Ann->>Ann: pluginHost.emitVaultChange({ kind:'refresh' }) — every plugin index rebuilds
+    Ann-->>VS: vault:changed push (no vaultId ⇒ registry-level)
+    VS->>VS: loadRegistry() + re-pull every vault's tree
+    VS-->>FP: vaults() / trees() signals update (active dot moves, new root row appears)
+```
+
+A watcher batch or an MCP write is the same round **scoped**: the push
+carries `vaultId` + `paths`, so only that vault's tree reloads, only its
+clean open tabs auto-reload, and the tags/tasks indexes touch only that
+vault (per-vault indexes land with the M-B scopes). Open tabs carry the
+composite key `vaultId::relativePath`, so the same-named note in two
+vaults coexists; a cross-vault drag & drop move renames across the two
+namespaces (copy + delete in `VaultManager`, the assistant sidecar
+travels along) and retargets the open tab's key.
+
 ## Planned flows (added as their milestone is built)
 
 - Dedicated keyword-search / FTS surface — the search panel's free-text

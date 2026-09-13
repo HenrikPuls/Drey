@@ -75,9 +75,10 @@ protocol.registerSchemesAsPrivileged([
     },
   },
   // Serves images referenced from notes (`![](relative/path.png)`) straight
-  // from inside the active vault. `standard` so `drey-asset://asset/<path>`
-  // parses with a normal pathname; `secure` so an `<img>` on the privileged
-  // `app://` page is allowed to load it.
+  // from inside a registered vault. `standard` so
+  // `drey-asset://<vaultId>/asset/<path>` parses with host = vault id and a
+  // normal pathname; `secure` so an `<img>` on the privileged `app://` page
+  // is allowed to load it.
   {
     scheme: 'drey-asset',
     privileges: { standard: true, secure: true, supportFetchAPI: true, stream: true },
@@ -118,16 +119,23 @@ function registerAppProtocol(): void {
 }
 
 /**
- * `drey-asset://asset/<url-encoded vault-relative path>` -> the file inside
- * the active vault. `VaultManager.resolveAssetPath` applies the same escape
- * guard as the IPC read path; anything it rejects (no vault, `..`, absolute)
- * is a plain 404. The renderer only ever builds these URLs from
+ * `drey-asset://<vaultId>/asset/<url-encoded vault-relative path>` -> the
+ * file inside that vault (ADR-0051; the vaultId is the URL host, so the
+ * same relative path can resolve differently per vault).
+ * `VaultManager.resolveAssetPath` applies the same escape guard as the IPC
+ * read path; anything it rejects (unknown vault, `..`, absolute) is a
+ * plain 404. The renderer only ever builds these URLs from
  * `resolveVaultImageUrl`, which already normalises the path.
  */
 function registerAssetProtocol(vaultManager: VaultManager): void {
   protocol.handle('drey-asset', (request) => {
-    const relativePath = decodeURIComponent(new URL(request.url).pathname).replace(/^\/+/, '');
-    const filePath = vaultManager.resolveAssetPath(relativePath);
+    const url = new URL(request.url);
+    // host = the vault id; `/asset/<path>` = the vault-relative path.
+    const vaultId = decodeURIComponent(url.hostname);
+    const relativePath = decodeURIComponent(url.pathname)
+      .replace(/^\/asset\/?/, '')
+      .replace(/^\/+/, '');
+    const filePath = vaultManager.resolveAssetPath(relativePath, vaultId || undefined);
     if (!filePath) {
       return new Response('Not found', { status: 404 });
     }
@@ -487,6 +495,7 @@ if (!app.requestSingleInstanceLock()) {
     );
     const vaultWatcher = new VaultWatcher({
       getRoot: () => vaultManager.getActiveVaultPath(),
+      getVaultId: () => vaultManager.getActiveVaultId(),
       isEnabled: () => appConfig.get().vault.watch,
       ledger: ownWrites,
       announcer: vaultAnnouncer,
@@ -532,9 +541,13 @@ if (!app.requestSingleInstanceLock()) {
       (request) => mcpWriteBridge.requestConfirmation(request),
       // An MCP write bypasses note:save -- run the same external-change
       // round the watcher uses (index events + renderer push, scoped to
-      // the written file).
-      (writtenPath) =>
-        vaultAnnouncer.announceExternal({ changedPaths: [writtenPath], deletedPaths: [] }),
+      // the written file and its vault).
+      (writtenPath, writtenVaultId) =>
+        vaultAnnouncer.announceExternal({
+          vaultId: writtenVaultId ?? vaultManager.resolveVaultId(),
+          changedPaths: [writtenPath],
+          deletedPaths: [],
+        }),
     );
     const tagSuggester = new TagSuggester(appConfig, llm, llmTasks);
     // The plugin host activates main entries before the window exists and

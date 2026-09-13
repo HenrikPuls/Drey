@@ -22,11 +22,13 @@ import type {
 } from '../llm';
 import type { AppConfig } from '../app-config';
 import type { TagEntry, TagSearchHit, TagSearchQuery } from './search-types';
-import type { VaultFileEntry } from '../ipc-api';
+import type { VaultFileEntry, VaultStatus } from '../ipc-api';
 import type { PluginManifest } from './manifest';
 
 /** Fired after a note save has been written to disk (ADR-0044 rule 4). */
 export interface NoteSavedEvent {
+  /** The saved note's vault id (ADR-0051). */
+  readonly vaultId: string;
   /** Vault-relative path. */
   readonly path: string;
   /** The content as written (frontmatter already bumped), LF. */
@@ -59,11 +61,21 @@ export type SaveHook = (
   event: NoteSavedEvent,
 ) => Promise<SaveHookResult | void> | SaveHookResult | void;
 
+/**
+ * Scope for a section search (ADR-0051). Omitted = the active vault (the
+ * pre-multi-vault behavior); `{ kind: 'vault' }` = exactly one registered
+ * vault; `{ kind: 'all' }` = every registered vault, hits stamped with
+ * their `vaultId`.
+ */
+export type SectionSearchScope =
+  | { readonly kind: 'vault'; readonly vaultId: string }
+  | { readonly kind: 'all' };
+
 /** What a plugin registers so base surfaces (MCP `vault_search`) can query sections. */
 export interface SectionSearchProvider {
-  /** Tags AND + free-text AND over heading-tagged sections. */
-  search(query: TagSearchQuery): Promise<readonly TagSearchHit[]>;
-  /** The vault-wide tag vocabulary with occurrence counts. */
+  /** Tags AND + free-text AND over heading-tagged sections, optionally scoped. */
+  search(query: TagSearchQuery, scope?: SectionSearchScope): Promise<readonly TagSearchHit[]>;
+  /** The tag vocabulary with occurrence counts, aggregated across all vaults. */
   vocabulary(): readonly TagEntry[];
 }
 
@@ -73,6 +85,17 @@ export interface VaultChangeEvent {
   readonly kind: VaultChangeEventKind;
   /** Vault-relative path, when the kind is specific to one (`write`/`delete`/`rename`). */
   readonly path?: string;
+  /**
+   * The vault the event concerns (ADR-0051). Absent on `refresh` means ALL
+   * registered vaults must rebuild (a registry mutation or a full refresh
+   * round); a present vaultId scopes the event to that one vault.
+   */
+  readonly vaultId?: string;
+}
+
+/** Optional vault targeting for a `ctx.vault` operation; omitted = the active vault. */
+export interface VaultOpOptions {
+  readonly vaultId?: string;
 }
 
 /** Unsubscribe function handed out by every `on*` registration. */
@@ -156,8 +179,10 @@ export interface MainPluginContext {
   };
 
   readonly vault: {
-    read(path: string): Promise<string>;
-    write(path: string, content: string): Promise<number>;
+    /** Every registered vault with its live status (ADR-0051). */
+    listVaults(): Promise<readonly VaultStatus[]>;
+    read(path: string, opts?: VaultOpOptions): Promise<string>;
+    write(path: string, content: string, opts?: VaultOpOptions): Promise<number>;
     /**
      * A write the app must SEE immediately: after writing, the same
      * external-change round an MCP write runs fires (per-file plugin index
@@ -167,19 +192,19 @@ export interface MainPluginContext {
      * plain `write` for hidden bookkeeping (sidecars) where the churn is
      * unwanted.
      */
-    writeAnnounced(path: string, content: string): Promise<number>;
+    writeAnnounced(path: string, content: string, opts?: VaultOpOptions): Promise<number>;
     /**
      * Stage binary bytes as a vault asset (the editor's ADR-0024 path):
      * hash-named under `attachments/` beside `noteRelPath`, collisions
      * suffixed. Returns the vault-relative path to reference.
      */
-    saveAsset(bytes: Uint8Array, ext: string, noteRelPath: string): Promise<string>;
-    list(): Promise<readonly VaultFileEntry[]>;
+    saveAsset(bytes: Uint8Array, ext: string, noteRelPath: string, opts?: VaultOpOptions): Promise<string>;
+    list(opts?: VaultOpOptions): Promise<readonly VaultFileEntry[]>;
     /** Absolute path of a vault-relative asset, or null when it escapes the vault. */
-    resolveAssetPath(relativePath: string): string | null;
+    resolveAssetPath(relativePath: string, opts?: VaultOpOptions): string | null;
     onChanged(cb: (event: VaultChangeEvent) => void): Unsubscribe;
     /** Native save dialog rooted at the vault (Save-as), vault-relative result or null. */
-    pickSavePath(suggestedName: string): Promise<string | null>;
+    pickSavePath(suggestedName: string, opts?: VaultOpOptions): Promise<string | null>;
   };
 
   /** The base app config (ADR-0010). Read-only from a plugin — no patching from main. */

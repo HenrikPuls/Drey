@@ -223,10 +223,10 @@ export class MenuService {
         SEP,
         {
           kind: 'item',
-          label: 'Switch vault …',
+          label: 'Add vault …',
           run: () => {
             this.close();
-            void this.vault.selectVault();
+            void this.vault.addVault();
             this.dock.openAndExpand('files');
           },
         },

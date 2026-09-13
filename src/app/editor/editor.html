@@ -1,5 +1,5 @@
 <div class="chrome">
-  <span class="path" [title]="shownPath()">{{ shownPath() }}</span>
+  <span class="path" [title]="shownDoc()?.path ?? shownPath()">{{ shownDoc()?.path ?? shownPath() }}</span>
   @if (shownDoc()?.existsOnDisk === false) {
     <span class="draft">unsaved draft</span>
   }
@@ -121,7 +121,8 @@
     [mode]="shownDoc()?.viewMode ?? 'live'"
     [lineNumbers]="editor.lineNumbers()"
     [foldFrontmatter]="true"
-    [languageFilename]="shownPath()"
+    [languageFilename]="shownDoc()?.path ?? shownPath()"
+    [docVaultId]="shownDoc()?.vaultId ?? null"
     [spellcheck]="spellcheckSource"
     [imageCapture]="true"
     [onLinkActivate]="activateLink"

@@ -14,6 +14,47 @@ and the current architecture in
 
 ## Recent milestones
 
+### Milestone 28 — multi-vault registry (ADR-0051)
+
+The app knows **several vaults at once**: the Files panel shows one
+section per registered vault (the old vault header row, stacked — name,
+active marker, fold chevron) with the documents under each, plus
+**"Add vault …"** in the panel header, the empty state and the vault
+row's context menu (**Set active / Rename… / Add vault… / Open in File
+Explorer / Remove…** — registry-only removal, the folder stays on disk,
+open tabs close first with the usual dirty prompts). `<userData>/vault-config.json`
+became **version 2**: `{ vaults: [{id, name, path}], activeVaultId }` with a
+one-time v1 migration; ids are minted (`v` + hex) and stable across folder
+moves, display names are editable. **One vault stays active** — daily
+notes, quick capture, the Add entry drawer, chats, calendar and
+scratch-tab Save-as keep targeting it.
+
+Files from **any** vault open and edit side by side: a document's tab
+identity is now `vaultId::relativePath` (`OpenDoc.vaultId` + `key`), so
+the same-named note in two vaults is two independent tabs; pane tabs,
+tab drag, the session snapshot (v2, per-tab `vaultId`; a tab whose vault
+was removed since is dropped; v1 snapshots still restore) and the
+Files panel's selection/drag state all key on it. **Drag & drop now also
+moves entries across vaults** (copy + delete in main, EXDEV-safe, the
+assistant sidecar travels along; tabs re-target; both indexes rebuild).
+`drey-asset://` URLs carry the vault (`drey-asset://<vaultId>/asset/<path>`),
+wikilinks resolve and create within the linking note's vault, and Save-as
+roots at the tab's own vault.
+
+Every `vault:*` IPC method gained an optional trailing `vaultId`
+(default: active); new registry channels `vault:list/add/remove/
+rename-vault/set-active/reveal-folder` replace `vault:select`. Registry
+mutations run the full all-vaults refresh round — which also fixes the
+old gap where a vault switch never pushed `vault:changed` to the
+renderer. The watcher (opt-in) now watches **every registered vault**
+(one chokidar per vault, reconciled on registry changes; per-vault
+announce batches), the own-write ledger keys are vault-scoped, and the
+`ctx.vault` plugin facade gained `{vaultId}` options + `listVaults()`
+(`PLUGIN_API_VERSION` minor → 6). Tags/tasks indexes stay single-vault
+(the active one, guarded against foreign saves) — search scopes
+(document / this vault / all vaults), MCP `vault` arguments and per-vault
+indexes are the announced follow-up.
+
 ### Milestone 27 — OCR via the vision LLM (req-9 desktop half, ADR-0050)
 
 Right-click an image → **"Recognize text"**: the new `ocr` runtime plugin
@@ -48,6 +89,20 @@ skipped instead of blanking the menu). The SDK gained
 `MainChatOptions.maxOutputTokens` and `api.llm.onCapabilitiesChanged`;
 `PLUGIN_API_VERSION` minor → 5. The verbatim-transcription prompt lives
 in the plugin (`specs/classifier-spec.md` → "Prompt 3").
+
+Found during manual verification, fixed with it: **embedded images that
+reference a vault-relative path never rendered** — assistant chat notes
+embed their attachment lines with the `vault:saveAsset` result verbatim
+(vault-relative), but image references resolve note-relative, so every
+chat-note image showed the `image not found` placeholder (which, for an
+empty alt, read as the misleading "no alt text"). Image embeds now walk
+**two candidates** on load errors — note-relative first (unchanged
+semantics), then the same target read from the vault root — which heals
+chat notes and any note moved between folders without touching note
+data; the reveal mirror walks them too, and the placeholder now names
+the **reference as written** instead of the alt text. The OCR plugin's
+line-regex target resolution mirrors the same candidates (picked against
+the live vault file list).
 
 ### Milestone 26 — live edit mode (Req-32, ADR-0049)
 

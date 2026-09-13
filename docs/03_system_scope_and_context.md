@@ -27,6 +27,8 @@ graph LR
 | Main ↔ Vault filesystem | bidirectional | Node `fs`, `chokidar` for watching |
 | Main ↔ LM Studio | outbound | HTTP, OpenAI-compatible chat/completions API |
 
-No other external systems in Phase 1. Phase 3 adds multi-vault (still
-local filesystem only); Future Scope adds Tailscale-based remote access —
-out of scope for now.
+No other external systems in Phase 1. Multi-vault — still local
+filesystem only — shipped with the vault registry
+([ADR-0051](09_architecture_decisions/0051-multi-vault-registry.md)):
+several registered folders, one active. Future Scope adds Tailscale-based
+remote access — out of scope for now.

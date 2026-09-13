@@ -48,7 +48,9 @@ export type {
   SaveHook,
   SaveHookResult,
   SectionSearchProvider,
+  SectionSearchScope,
   Unsubscribe,
   VaultChangeEvent,
   VaultChangeEventKind,
+  VaultOpOptions,
 } from './main-plugin-api';

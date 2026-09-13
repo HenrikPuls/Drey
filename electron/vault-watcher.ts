@@ -18,6 +18,8 @@ export type VaultWatchEventKind = 'add' | 'change' | 'unlink' | 'addDir' | 'unli
 export interface VaultWatcherDeps {
   /** The active vault's absolute path, or `null` when none is active. */
   getRoot: () => string | null;
+  /** The watched vault's id (ADR-0051) -- stamps every announced batch. */
+  getVaultId: () => string | null;
   /** Whether the user turned watching on (Settings → Vault). */
   isEnabled: () => boolean;
   ledger: OwnWriteLedger;
@@ -56,6 +58,8 @@ export class VaultWatcher {
   private timer: ReturnType<typeof setTimeout> | null = null;
   private readonly pendingChanged = new Set<string>();
   private readonly pendingDeleted = new Set<string>();
+  /** The vault the pending batch belongs to (captured per event, ADR-0051). */
+  private pendingVaultId: string | null = null;
   /** Non-Markdown files / folder events: tree reload only, no index events. */
   private structuralDirty = false;
 
@@ -110,6 +114,7 @@ export class VaultWatcher {
     }
     this.pendingChanged.clear();
     this.pendingDeleted.clear();
+    this.pendingVaultId = null;
     this.structuralDirty = false;
     this.ready = false;
     const watcher = this.watcher;
@@ -160,9 +165,14 @@ export class VaultWatcher {
       typeof (statsArg as { mtimeMs?: unknown }).mtimeMs === 'number'
         ? (statsArg as { mtimeMs: number }).mtimeMs
         : undefined;
-    if (this.deps.ledger.isOwnEvent(relative, kind, mtimeMs)) {
+    // One watcher instance only ever sees one vault's tree, so resolving
+    // the vault id per event is exact; a root switch drops the pending
+    // batch (`stop`), so it can't leak across a change of vault.
+    const vaultId = this.deps.getVaultId();
+    if (vaultId === null || this.deps.ledger.isOwnEvent(vaultId, relative, kind, mtimeMs)) {
       return;
     }
+    this.pendingVaultId = vaultId;
 
     if (kind === 'add' || kind === 'change') {
       this.pendingDeleted.delete(relative);
@@ -204,16 +214,21 @@ export class VaultWatcher {
     }
 
     this.deps.ledger.prune();
+    const vaultId = this.pendingVaultId;
     const changedPaths = [...this.pendingChanged].sort();
     const deletedPaths = [...this.pendingDeleted].sort();
     this.pendingChanged.clear();
     this.pendingDeleted.clear();
+    this.pendingVaultId = null;
     this.structuralDirty = false;
+    if (vaultId === null) {
+      return; // defensive: every event captures its vault before queueing
+    }
 
     this.deps.log(
       `Vault changed externally: ${changedPaths.length} changed, ${deletedPaths.length} deleted`,
     );
-    const changes: ExternalVaultChanges = { changedPaths, deletedPaths };
+    const changes: ExternalVaultChanges = { vaultId, changedPaths, deletedPaths };
     this.deps.announcer.announceExternal(changes);
   }
 }

@@ -1,5 +1,14 @@
 <ng-template appPanelHeaderActions="files">
-  @if (vault.activeVaultPath()) {
+  <button
+    type="button"
+    class="hdr-btn"
+    (click)="onAddVault()"
+    title="Add vault folder"
+    aria-label="Add vault"
+  >
+    <app-icon name="plus" [size]="12" />
+  </button>
+  @if (vault.vaults().length > 0) {
     <button
       type="button"
       class="hdr-btn"
@@ -14,7 +23,7 @@
       class="hdr-btn"
       (click)="onRefresh()"
       [disabled]="vault.isLoading()"
-      title="Re-read the vault from disk"
+      title="Re-read the vaults from disk"
       aria-label="Refresh files"
     >
       <app-icon name="refresh-cw" [size]="12" />
@@ -22,43 +31,7 @@
   }
 </ng-template>
 
-<div class="files" (contextmenu)="openMenu($event)">
-  <div class="vault-bar">
-    <button
-      type="button"
-      class="vault-row"
-      [class.open]="vaultMenuOpen()"
-      (click)="toggleVaultMenu()"
-      title="Switch vault"
-    >
-      <app-icon name="folder" [size]="11" [strokeWidth]="1.2" />
-      <span class="vault-name">{{ vaultName() }}</span>
-      <app-icon
-        class="twist"
-        name="chevron-down"
-        [size]="9"
-        [strokeWidth]="1.2"
-        [style.transform]="vaultMenuOpen() ? 'rotate(180deg)' : 'none'"
-      />
-    </button>
-  </div>
-
-  @if (vaultMenuOpen()) {
-    <div class="vault-menu">
-      @if (vault.activeVaultPath()) {
-        <div class="vault-menu-item active">
-          <span class="mark">✓</span>
-          <span class="vault-menu-name">{{ vaultName() }}</span>
-        </div>
-        <div class="vault-menu-sep"></div>
-      }
-      <button type="button" class="vault-menu-item" (click)="onOpenOtherVault()">
-        <span class="mark">+</span>
-        <span class="vault-menu-name">Open other vault …</span>
-      </button>
-    </div>
-  }
-
+<div class="files">
   @if (creating(); as pending) {
     <div class="create-row">
       <app-icon [name]="pending.kind === 'directory' ? 'chevron-right' : 'plus'" [size]="10" />
@@ -93,28 +66,30 @@
     </div>
   }
 
-  @if (!vault.activeVaultPath()) {
-    <div class="vault-empty">
-      <p>No vault selected.</p>
-      <button type="button" class="primary" (click)="onOpenOtherVault()">
-        Select vault folder…
-      </button>
+  @if (renamingVault(); as pending) {
+    <div class="create-row">
+      <app-icon name="folder" [size]="10" />
+      <input
+        #vaultRenameInput
+        class="create-input"
+        type="text"
+        [value]="renamingVaultName()"
+        aria-label="Rename vault"
+        (keydown.enter)="commitVaultRename(vaultRenameInput.value)"
+        (keydown.escape)="cancelVaultRename()"
+        (blur)="commitVaultRename(vaultRenameInput.value)"
+      />
     </div>
-  } @else if (vault.isLoading()) {
-    <p class="hint">Loading…</p>
-  } @else if (vault.error(); as error) {
-    <p class="hint error">{{ error }}</p>
-  } @else if (vault.fileTree().length === 0) {
-    <p class="hint">Vault is empty.</p>
+  }
+
+  @if (vault.vaults().length === 0) {
+    <div class="vault-empty">
+      <p>No vault registered yet.</p>
+      <button type="button" class="primary" (click)="onAddVault()">Add vault…</button>
+    </div>
   } @else {
-    <div
-      class="tree-scroll"
-      tabindex="0"
-      (keydown)="onTreeKeydown($event)"
-      (dragover)="onRootDragOver($event)"
-      (drop)="onRootDrop($event)"
-    >
-      <ng-container *ngTemplateOutlet="tree; context: { $implicit: vault.fileTree(), depth: 0 }" />
+    <div class="tree-scroll" tabindex="0" (keydown)="onTreeKeydown($event)">
+      <ng-container *ngTemplateOutlet="tree" />
     </div>
   }
 </div>
@@ -122,8 +97,8 @@
 @if (menu(); as m) {
   <div
     class="ctx-backdrop"
-    (click)="closeMenu()"
-    (contextmenu)="$event.preventDefault(); closeMenu()"
+    (click)="closeMenus()"
+    (contextmenu)="$event.preventDefault(); closeMenus()"
   ></div>
   <div class="ctx-menu" [style.left.px]="m.x" [style.top.px]="m.y">
     <button type="button" (click)="startCreate('file')">New file</button>
@@ -146,61 +121,110 @@
   </div>
 }
 
-<ng-template #tree let-entries let-depth="depth">
-  @for (entry of entries; track entry.relativePath) {
-    @if (entry.type === 'directory') {
+@if (vaultMenu(); as vm) {
+  <div
+    class="ctx-backdrop"
+    (click)="closeMenus()"
+    (contextmenu)="$event.preventDefault(); closeMenus()"
+  ></div>
+  <div class="ctx-menu" [style.left.px]="vm.x" [style.top.px]="vm.y">
+    @if (!vm.vault.active) {
+      <button type="button" (click)="onSetActiveVault(vm.vault.id)">Set active</button>
+    } @else {
+      <div class="vault-menu-item active">
+        <span class="mark">✓</span>
+        <span>Active vault</span>
+      </div>
+    }
+    <button type="button" (click)="startVaultRename()">Rename…</button>
+    <button type="button" (click)="onAddVault()">Add vault…</button>
+    <button type="button" (click)="onRevealVault(vm.vault.id)">Open in File Explorer</button>
+    <div class="ctx-sep"></div>
+    <button type="button" class="danger" (click)="onRemoveVault(vm.vault)">Remove…</button>
+  </div>
+}
+
+<ng-template #tree>
+  @for (node of visibleNodes(); track keyOf(node)) {
+    @if (node.kind === 'vault') {
       <button
         type="button"
-        class="node folder"
-        draggable="true"
-        [class.selected]="selection().has(entry.relativePath)"
-        [class.drop-target]="dropHover() === entry.relativePath"
-        [attr.tabindex]="selected() === entry.relativePath ? 0 : -1"
-        [style.padding-left.px]="8 + depth * 13"
-        (click)="onFolderClick(entry, $event)"
-        (contextmenu)="openMenu($event, entry)"
-        (dragstart)="onFolderDragStart($event, entry)"
-        (dragover)="onRowDragOver($event, entry)"
-        (dragleave)="onRowDragLeave($event, entry)"
-        (drop)="onRowDrop($event, entry)"
-        (dragend)="onDragEnd()"
+        class="node vault-row"
+        [class.active-vault]="node.vault.active"
+        [class.missing]="!node.vault.exists"
+        [class.selected]="selected() === node.vault.id"
+        [class.drop-target]="dropHover() === node.vault.id"
+        [attr.tabindex]="selected() === node.vault.id ? 0 : -1"
+        (click)="toggleVaultSection(node.vault.id)"
+        (contextmenu)="openVaultMenu($event, node.vault)"
+        (dragover)="onVaultRowDragOver($event, node.vault)"
+        (dragleave)="onVaultRowDragLeave($event, node.vault)"
+        (drop)="onVaultRowDrop($event, node.vault)"
+        [title]="node.vault.path"
       >
         <app-icon
           class="twist"
           name="chevron-right"
           [size]="9"
           [strokeWidth]="1.2"
-          [style.transform]="isCollapsed(entry.relativePath) ? 'none' : 'rotate(90deg)'"
+          [style.transform]="collapsedVaults().has(node.vault.id) ? 'none' : 'rotate(90deg)'"
         />
-        <span class="node-name">{{ entry.name }}</span>
-        <span class="count">{{ entry.children?.length ?? 0 }}</span>
+        <app-icon name="folder" [size]="11" [strokeWidth]="1.2" />
+        <span class="node-name">{{ node.vault.name }}</span>
+        @if (node.vault.active) {
+          <span class="active-dot" aria-label="Active vault"></span>
+        }
       </button>
-      @if (!isCollapsed(entry.relativePath) && entry.children?.length) {
-        <ng-container
-          *ngTemplateOutlet="tree; context: { $implicit: entry.children, depth: depth + 1 }"
-        />
+    } @if (node.kind === 'entry') {
+      @if (node.entry.type === 'directory') {
+        <button
+          type="button"
+          class="node folder"
+          draggable="true"
+          [class.selected]="selection().has(keyOf(node))"
+          [class.drop-target]="dropHover() === keyOf(node)"
+          [attr.tabindex]="selected() === keyOf(node) ? 0 : -1"
+          [style.padding-left.px]="8 + node.depth * 13"
+          (click)="onFolderClick(node.vaultId, node.entry, $event)"
+          (contextmenu)="openTreeMenu($event, node.vaultId, node.entry)"
+          (dragstart)="onFolderDragStart($event, node.vaultId, node.entry)"
+          (dragover)="onRowDragOver($event, node.vaultId, node.entry)"
+          (dragleave)="onRowDragLeave($event, node.vaultId, node.entry)"
+          (drop)="onRowDrop($event, node.vaultId, node.entry)"
+          (dragend)="onDragEnd()"
+        >
+          <app-icon
+            class="twist"
+            name="chevron-right"
+            [size]="9"
+            [strokeWidth]="1.2"
+            [style.transform]="isCollapsed(keyOf(node)) ? 'none' : 'rotate(90deg)'"
+          />
+          <span class="node-name">{{ node.entry.name }}</span>
+          <span class="count">{{ node.entry.children?.length ?? 0 }}</span>
+        </button>
+      } @else {
+        <button
+          type="button"
+          class="node file"
+          draggable="true"
+          [class.active]="editor.activePath() === keyOf(node)"
+          [class.selected]="selection().has(keyOf(node))"
+          [class.drop-target]="dropHover() === keyOf(node)"
+          [attr.tabindex]="selected() === keyOf(node) ? 0 : -1"
+          [style.padding-left.px]="8 + node.depth * 13"
+          (click)="onFileClick(node.vaultId, node.entry, $event)"
+          (contextmenu)="openTreeMenu($event, node.vaultId, node.entry)"
+          (dragstart)="onFileDragStart($event, node.vaultId, node.entry)"
+          (dragover)="onRowDragOver($event, node.vaultId, node.entry)"
+          (dragleave)="onRowDragLeave($event, node.vaultId, node.entry)"
+          (drop)="onRowDrop($event, node.vaultId, node.entry)"
+          (dragend)="onDragEnd()"
+        >
+          <span class="bullet" aria-hidden="true"></span>
+          <span class="node-name">{{ node.entry.name }}</span>
+        </button>
       }
-    } @else {
-      <button
-        type="button"
-        class="node file"
-        draggable="true"
-        [class.active]="editor.openPath() === entry.relativePath"
-        [class.selected]="selection().has(entry.relativePath)"
-        [class.drop-target]="dropHover() === entry.relativePath"
-        [attr.tabindex]="selected() === entry.relativePath ? 0 : -1"
-        [style.padding-left.px]="8 + depth * 13"
-        (click)="onFileClick(entry, $event)"
-        (contextmenu)="openMenu($event, entry)"
-        (dragstart)="onFileDragStart($event, entry)"
-        (dragover)="onRowDragOver($event, entry)"
-        (dragleave)="onRowDragLeave($event, entry)"
-        (drop)="onRowDrop($event, entry)"
-        (dragend)="onDragEnd()"
-      >
-        <span class="bullet" aria-hidden="true"></span>
-        <span class="node-name">{{ entry.name }}</span>
-      </button>
     }
   }
 </ng-template>

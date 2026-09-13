@@ -6,6 +6,8 @@ import { PluginHost } from './plugin-host';
 const PUSH_PATHS_CAP = 200;
 
 export interface ExternalVaultChanges {
+  /** The vault the changes landed in (ADR-0051). */
+  readonly vaultId: string;
   /** Vault-relative `.md` paths whose content appeared or changed. */
   readonly changedPaths: readonly string[];
   /** Vault-relative `.md` paths that no longer exist. */
@@ -25,6 +27,10 @@ export interface ExternalVaultChanges {
  *    re-pulls the plugin panels, and lets `EditorService` auto-reload
  *    clean open tabs.
  *
+ * Everything is vault-scoped since ADR-0051: an external batch names its
+ * vault, so only that vault's tree/tabs/indexes react. `announceFullRefresh`
+ * without a vaultId is the registry-level / all-vaults round.
+ *
  * The deps are lazy closures because the announcer is constructed before
  * the plugin host and the window exist (the `vaultTools` pattern in
  * `main.ts`).
@@ -35,31 +41,37 @@ export class VaultChangeAnnouncer {
     private readonly getMainWindow: () => BrowserWindow | null,
   ) {}
 
-  /** Whole-vault re-index + a payload-less push (consumers reload everything). */
-  announceFullRefresh(): void {
-    this.pluginHost()?.emitVaultChange({ kind: 'refresh' });
-    this.push({});
+  /**
+   * A full re-index + push. Without `vaultId` this is the all-vaults round
+   * (a registry mutation or the manual refresh): every plugin rebuilds
+   * every vault and the renderer reloads all trees. With `vaultId` only
+   * that vault rebuilds.
+   */
+  announceFullRefresh(vaultId?: string): void {
+    this.pluginHost()?.emitVaultChange(vaultId ? { kind: 'refresh', vaultId } : { kind: 'refresh' });
+    this.push(vaultId ? { vaultId } : {});
   }
 
   /**
-   * A batch of external changes: per-file index events for the `.md`
-   * paths, then one push whose `paths` let the renderer scope its work.
-   * An empty batch (e.g. only non-Markdown files changed) still pushes --
-   * the tree must show the new attachment -- but emits no index events.
-   * Over {@link PUSH_PATHS_CAP} paths the payload omits `paths`; the
-   * consumers then treat it as a full refresh.
+   * A batch of external changes in ONE vault: per-file index events for
+   * the `.md` paths, then one push whose `paths` let the renderer scope
+   * its work. An empty batch (e.g. only non-Markdown files changed) still
+   * pushes -- the tree must show the new attachment -- but emits no index
+   * events. Over {@link PUSH_PATHS_CAP} paths the payload omits `paths`;
+   * the consumers then treat it as a full refresh of that vault.
    */
   announceExternal(changes: ExternalVaultChanges): void {
     const host = this.pluginHost();
     for (const path of changes.changedPaths) {
-      host?.emitVaultChange({ kind: 'write', path });
+      host?.emitVaultChange({ kind: 'write', path, vaultId: changes.vaultId });
     }
     for (const path of changes.deletedPaths) {
-      host?.emitVaultChange({ kind: 'delete', path });
+      host?.emitVaultChange({ kind: 'delete', path, vaultId: changes.vaultId });
     }
 
     const paths = [...changes.changedPaths, ...changes.deletedPaths];
-    this.push(paths.length > 0 && paths.length <= PUSH_PATHS_CAP ? { paths } : {});
+    const scoped: VaultChangedPush = { vaultId: changes.vaultId };
+    this.push(paths.length > 0 && paths.length <= PUSH_PATHS_CAP ? { ...scoped, paths } : scoped);
   }
 
   private push(payload: VaultChangedPush): void {

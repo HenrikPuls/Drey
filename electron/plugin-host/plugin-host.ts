@@ -23,6 +23,7 @@ import {
   type SaveHook,
   type SaveHookResult,
   type SectionSearchProvider,
+  type SectionSearchScope,
   type Unsubscribe,
   type VaultChangeEvent,
   type LlmModelListing,
@@ -284,7 +285,8 @@ export class PluginHost {
         }
         const ext = typeof shape['ext'] === 'string' ? shape['ext'] : '';
         const noteRelPath = typeof shape['noteRelPath'] === 'string' ? shape['noteRelPath'] : '';
-        return this.deps.vaultManager.saveAsset(bytes, ext, noteRelPath);
+        const vaultId = typeof shape['vaultId'] === 'string' ? shape['vaultId'] : undefined;
+        return this.deps.vaultManager.saveAsset(bytes, ext, noteRelPath, vaultId);
       }
       case 'drey.search.sections': {
         const provider = this.searchProvider;
@@ -292,10 +294,14 @@ export class PluginHost {
           throw new Error('no section-search provider is registered');
         }
         const query = (shape['query'] ?? {}) as { tags?: string[]; text?: string };
-        return provider.search({
-          tags: Array.isArray(query.tags) ? query.tags : [],
-          text: typeof query.text === 'string' ? query.text : '',
-        });
+        const scope = this.parseSearchScope(shape['scope']);
+        return provider.search(
+          {
+            tags: Array.isArray(query.tags) ? query.tags : [],
+            text: typeof query.text === 'string' ? query.text : '',
+          },
+          scope,
+        );
       }
       case 'drey.search.vocabulary': {
         const provider = this.searchProvider;
@@ -307,6 +313,21 @@ export class PluginHost {
       default:
         throw new Error(`unknown host method "${method}"`);
     }
+  }
+
+  /** Validates the serialized `SectionSearchScope` of `drey.search.sections`. */
+  private parseSearchScope(raw: unknown): SectionSearchScope | undefined {
+    if (raw === undefined || raw === null) {
+      return undefined;
+    }
+    const shape = raw as Record<string, unknown>;
+    if (shape['kind'] === 'all') {
+      return { kind: 'all' };
+    }
+    if (shape['kind'] === 'vault' && typeof shape['vaultId'] === 'string') {
+      return { kind: 'vault', vaultId: shape['vaultId'] };
+    }
+    throw new Error('invalid search scope');
   }
 
   /** Pushes one plugin event to the renderer's single fan-out channel. */
@@ -448,27 +469,29 @@ export class PluginHost {
         appVersion: app.getVersion(),
       },
       vault: {
-        read: (p) => vaultManager.readFile(p).then((f) => f.content),
-        write: (p, content) => vaultManager.writeFile(p, content),
+        listVaults: () => Promise.resolve(vaultManager.listVaults()),
+        read: (p, opts) => vaultManager.readFile(p, opts?.vaultId).then((f) => f.content),
+        write: (p, content, opts) => vaultManager.writeFile(p, content, opts?.vaultId),
         // A write the tree/index/open tabs must see NOW (chat notes, a
         // plugin-generated note): same round an MCP write runs — per-file
         // index events + one scoped `vault:changed` push. A plain `write`
         // announces nothing (sidecars etc. don't want the churn), and with
         // the watcher off nothing else would fire for it.
-        writeAnnounced: async (p, content) => {
-          const modifiedMs = await vaultManager.writeFile(p, content);
-          this.deps.vaultAnnouncer()?.announceExternal({ changedPaths: [p], deletedPaths: [] });
+        writeAnnounced: async (p, content, opts) => {
+          const vaultId = vaultManager.resolveVaultId(opts?.vaultId);
+          const modifiedMs = await vaultManager.writeFile(p, content, vaultId);
+          this.deps.vaultAnnouncer()?.announceExternal({ vaultId, changedPaths: [p], deletedPaths: [] });
           return modifiedMs;
         },
-        saveAsset: (bytes, ext, noteRelPath) =>
-          vaultManager.saveAsset(bytes, ext, noteRelPath),
-        list: () => vaultManager.listFiles(),
-        resolveAssetPath: (p) => vaultManager.resolveAssetPath(p),
+        saveAsset: (bytes, ext, noteRelPath, opts) =>
+          vaultManager.saveAsset(bytes, ext, noteRelPath, opts?.vaultId),
+        list: (opts) => vaultManager.listFiles(opts?.vaultId),
+        resolveAssetPath: (p, opts) => vaultManager.resolveAssetPath(p, opts?.vaultId),
         onChanged: (cb) => {
           this.vaultChangeCallbacks.push(cb);
           return track(() => removeItem(this.vaultChangeCallbacks, cb));
         },
-        pickSavePath: (suggestedName) => vaultManager.pickSavePath(suggestedName),
+        pickSavePath: (suggestedName, opts) => vaultManager.pickSavePath(suggestedName, opts?.vaultId),
       },
       appConfig: { get: () => appConfig.get() },
       config: {

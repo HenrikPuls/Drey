@@ -29,7 +29,7 @@ function widgets(set: DecorationSet): { from: number; to: number; deco: Decorati
   return out;
 }
 
-const passThrough: LivePreviewConfig = { resolveImage: (url) => url };
+const passThrough: LivePreviewConfig = { resolveImage: (url) => [url] };
 
 describe('blockDecorations', () => {
   it('replaces a table the cursor is outside of with a rendered block widget', () => {
@@ -54,14 +54,14 @@ describe('blockDecorations', () => {
     expect(all).toHaveLength(1);
     const widget = all[0].deco.spec['widget'] as ImageWidget;
     expect(widget).toBeInstanceOf(ImageWidget);
-    expect(widget.src).toBe('img/boat.png');
+    expect(widget.srcs).toEqual(['img/boat.png']);
     expect(widget.alt).toBe('a boat');
   });
 
   it('passes a null resolution through so the widget renders its placeholder', () => {
-    const config: LivePreviewConfig = { resolveImage: () => null };
+    const config: LivePreviewConfig = { resolveImage: () => [] };
     const all = widgets(blockDecorations(state('![gone](../../etc/x.png)\n\nend', 29), config));
-    expect((all[0].deco.spec['widget'] as ImageWidget).src).toBeNull();
+    expect((all[0].deco.spec['widget'] as ImageWidget).srcs).toEqual([]);
   });
 
   it('reveals the raw image markup while the cursor is inside it', () => {
@@ -90,7 +90,7 @@ describe('blockDecorations', () => {
   it('threads config.onOpenImage into the image widget', () => {
     const seen: string[] = [];
     const config: LivePreviewConfig = {
-      resolveImage: (url) => `resolved:${url}`,
+      resolveImage: (url) => [`resolved:${url}`],
       onOpenImage: (s) => seen.push(s),
     };
     const w = widgets(blockDecorations(state('![a](b.png)\n\nend'), config));
@@ -221,13 +221,13 @@ describe('revealDecorations', () => {
     expect(preview).toBeDefined();
     expect(preview!.deco.spec['block']).toBe(true);
     const w = preview!.deco.spec['widget'] as ImagePreviewWidget;
-    expect(w.src).toBe('img/boat.png');
+    expect(w.srcs).toEqual(['img/boat.png']);
     expect(w.alt).toBe('a boat');
     expect(w.width).toBe(300);
   });
 
   it('adds the container but no mirror when the image src does not resolve', () => {
-    const config: LivePreviewConfig = { resolveImage: () => null };
+    const config: LivePreviewConfig = { resolveImage: () => [] };
     const set = revealDecorations(state('![gone](../../etc/x.png)\n\nend', 3), config);
     expect(classesOf(set).length).toBeGreaterThan(0);
     expect(previewOf(set)).toBeUndefined();

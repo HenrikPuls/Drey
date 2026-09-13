@@ -8,8 +8,8 @@ import {
 } from './widgets';
 
 describe('ImageWidget', () => {
-  it('renders an <img> with the resolved src and alt', () => {
-    const dom = new ImageWidget('drey-asset://asset/pic.png', 'a boat').toDOM();
+  it('renders an <img> with the first candidate and the alt', () => {
+    const dom = new ImageWidget(['drey-asset://asset/pic.png'], 'a boat').toDOM();
     expect(dom.className).toBe('lp-image');
     const img = dom.querySelector('img')!;
     expect(img.getAttribute('src')).toBe('drey-asset://asset/pic.png');
@@ -19,34 +19,62 @@ describe('ImageWidget', () => {
   });
 
   it('applies an explicit width / height in px', () => {
-    const w = new ImageWidget('drey-asset://asset/pic.png', 'x', 300).toDOM().querySelector('img')!;
+    const w = new ImageWidget(['drey-asset://asset/pic.png'], 'x', 300).toDOM().querySelector('img')!;
     expect(w.style.width).toBe('300px');
     expect(w.style.height).toBe('');
 
-    const wh = new ImageWidget('drey-asset://asset/pic.png', 'x', 300, 200)
+    const wh = new ImageWidget(['drey-asset://asset/pic.png'], 'x', 300, 200)
       .toDOM()
       .querySelector('img')!;
     expect(wh.style.width).toBe('300px');
     expect(wh.style.height).toBe('200px');
   });
 
-  it('renders only the placeholder when the src could not be resolved', () => {
-    const dom = new ImageWidget(null, 'gone', 300).toDOM();
+  it('renders only the placeholder when no candidate could be resolved', () => {
+    const dom = new ImageWidget([], 'gone', 300).toDOM();
     expect(dom.querySelector('img')).toBeNull();
     expect(dom.querySelector('.lp-image-missing')?.textContent).toContain('gone');
   });
 
-  it('eq compares src, alt, width and height', () => {
-    const base = new ImageWidget('s', 'a', 100, 50);
-    expect(base.eq(new ImageWidget('s', 'a', 100, 50))).toBe(true);
-    expect(base.eq(new ImageWidget('s', 'a', 120, 50))).toBe(false);
-    expect(base.eq(new ImageWidget('s', 'a', 100, null))).toBe(false);
-    expect(base.eq(new ImageWidget('s2', 'a', 100, 50))).toBe(false);
-    expect(base.eq(new ImageWidget('s', 'b', 100, 50))).toBe(false);
+  it('the placeholder names the reference as written, not the alt text', () => {
+    const dom = new ImageWidget([], 'gone', 300, null, undefined, 'attachments/pic.png').toDOM();
+    expect(dom.querySelector('.lp-image-missing')?.textContent).toBe(
+      'image not found: attachments/pic.png',
+    );
   });
 
-  it('falls back to the placeholder on a runtime load error', () => {
-    const dom = new ImageWidget('drey-asset://asset/pic.png', 'boat').toDOM();
+  it('walks the candidate list on load errors before giving up', () => {
+    const dom = new ImageWidget(['a.png', 'b.png'], 'x').toDOM();
+    const img = dom.querySelector('img')!;
+    img.onerror!(new Event('error'));
+    expect(dom.querySelector('img')).not.toBeNull(); // retrying on the root-relative candidate
+    expect(img.getAttribute('src')).toBe('b.png');
+    img.onerror!(new Event('error'));
+    expect(dom.querySelector('img')).toBeNull(); // all candidates failed
+    expect(dom.querySelector('.lp-image-missing')).not.toBeNull();
+  });
+
+  it('the lens opens the candidate that actually loaded', () => {
+    const opened: string[] = [];
+    const dom = new ImageWidget(['a.png', 'b.png'], 'x', null, null, (s) => opened.push(s)).toDOM();
+    dom.querySelector('img')!.onerror!(new Event('error'));
+    const lens = dom.querySelector('.lp-lens') as HTMLButtonElement;
+    lens.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+    expect(opened).toEqual(['b.png']);
+  });
+
+  it('eq compares the candidate list, alt, width and height', () => {
+    const base = new ImageWidget(['s'], 'a', 100, 50);
+    expect(base.eq(new ImageWidget(['s'], 'a', 100, 50))).toBe(true);
+    expect(base.eq(new ImageWidget(['s'], 'a', 120, 50))).toBe(false);
+    expect(base.eq(new ImageWidget(['s'], 'a', 100, null))).toBe(false);
+    expect(base.eq(new ImageWidget(['s2'], 'a', 100, 50))).toBe(false);
+    expect(base.eq(new ImageWidget(['s'], 'b', 100, 50))).toBe(false);
+    expect(base.eq(new ImageWidget(['s', 't'], 'a', 100, 50))).toBe(false);
+  });
+
+  it('falls back to the placeholder on a runtime load error (single candidate)', () => {
+    const dom = new ImageWidget(['drey-asset://asset/pic.png'], 'boat').toDOM();
     const img = dom.querySelector('img')!;
     img.onerror!(new Event('error'));
     expect(dom.querySelector('img')).toBeNull();
@@ -55,7 +83,7 @@ describe('ImageWidget', () => {
 
   describe('tool cluster', () => {
     it('wraps the corner buttons in a .lp-tools flex row, not the .lp-resize grip', () => {
-      const dom = new ImageWidget('drey-asset://asset/pic.png', 'x', null, null, () =>
+      const dom = new ImageWidget(['drey-asset://asset/pic.png'], 'x', null, null, () =>
         undefined,
       ).toDOM();
       const tools = dom.querySelector(':scope > .lp-tools');
@@ -68,7 +96,7 @@ describe('ImageWidget', () => {
     });
 
     it('has a .lp-edit "View source" button carrying the </> glyph', () => {
-      const btn = new ImageWidget('drey-asset://asset/pic.png', 'x')
+      const btn = new ImageWidget(['drey-asset://asset/pic.png'], 'x')
         .toDOM()
         .querySelector('.lp-edit') as HTMLButtonElement;
       expect(btn).not.toBeNull();
@@ -79,7 +107,7 @@ describe('ImageWidget', () => {
     });
 
     it('an image with no onOpenImage still gets the </> button (no lens)', () => {
-      const dom = new ImageWidget('drey-asset://asset/pic.png', 'x').toDOM();
+      const dom = new ImageWidget(['drey-asset://asset/pic.png'], 'x').toDOM();
       expect(dom.querySelector('.lp-tools .lp-edit')).not.toBeNull();
       expect(dom.querySelector('.lp-lens')).toBeNull();
     });
@@ -100,18 +128,18 @@ describe('ImageWidget', () => {
   describe('lens button', () => {
     it('is absent without an onOpenImage callback', () => {
       expect(
-        new ImageWidget('drey-asset://asset/pic.png', 'x').toDOM().querySelector('.lp-lens'),
+        new ImageWidget(['drey-asset://asset/pic.png'], 'x').toDOM().querySelector('.lp-lens'),
       ).toBeNull();
     });
 
     it('is absent when the src could not be resolved', () => {
-      const dom = new ImageWidget(null, 'x', null, null, () => undefined).toDOM();
+      const dom = new ImageWidget([], 'x', null, null, () => undefined).toDOM();
       expect(dom.querySelector('.lp-lens')).toBeNull();
     });
 
     it('calls onOpenImage with the resolved src, and stops the event', () => {
       const opened: string[] = [];
-      const dom = new ImageWidget('drey-asset://asset/pic.png', 'x', null, null, (s) =>
+      const dom = new ImageWidget(['drey-asset://asset/pic.png'], 'x', null, null, (s) =>
         opened.push(s),
       ).toDOM();
       const lens = dom.querySelector('.lp-lens') as HTMLButtonElement;
@@ -122,7 +150,7 @@ describe('ImageWidget', () => {
     });
 
     it('is removed alongside the img (with the whole cluster) on a load error', () => {
-      const dom = new ImageWidget('drey-asset://asset/pic.png', 'x', null, null, () =>
+      const dom = new ImageWidget(['drey-asset://asset/pic.png'], 'x', null, null, () =>
         undefined,
       ).toDOM();
       dom.querySelector('img')!.onerror!(new Event('error'));
@@ -159,17 +187,17 @@ describe('ImageWidget', () => {
   describe('resize grip', () => {
     it('is present for a resolved image and gone for the placeholder / on error', () => {
       expect(
-        new ImageWidget('drey-asset://asset/p.png', 'x').toDOM().querySelector('.lp-resize'),
+        new ImageWidget(['drey-asset://asset/p.png'], 'x').toDOM().querySelector('.lp-resize'),
       ).not.toBeNull();
-      expect(new ImageWidget(null, 'x').toDOM().querySelector('.lp-resize')).toBeNull();
+      expect(new ImageWidget([], 'x').toDOM().querySelector('.lp-resize')).toBeNull();
 
-      const dom = new ImageWidget('drey-asset://asset/p.png', 'x').toDOM();
+      const dom = new ImageWidget(['drey-asset://asset/p.png'], 'x').toDOM();
       dom.querySelector('img')!.onerror!(new Event('error'));
       expect(dom.querySelector('.lp-resize')).toBeNull();
     });
 
     it('ignoreEvent lets CodeMirror see only .lp-resize and .lp-edit events', () => {
-      const w = new ImageWidget('drey-asset://asset/p.png', 'x');
+      const w = new ImageWidget(['drey-asset://asset/p.png'], 'x');
       const dom = w.toDOM();
       const grip = dom.querySelector('.lp-resize')!;
       const edit = dom.querySelector('.lp-edit')!;
@@ -190,8 +218,8 @@ describe('ImageWidget', () => {
   });
 
   describe('ImagePreviewWidget', () => {
-    it('renders a bare <img> with the resolved src / alt and both lp-image classes', () => {
-      const dom = new ImagePreviewWidget('drey-asset://asset/pic.png', 'a boat').toDOM();
+    it('renders a bare <img> with the first candidate / alt and both lp-image classes', () => {
+      const dom = new ImagePreviewWidget(['drey-asset://asset/pic.png'], 'a boat').toDOM();
       expect(dom.classList.contains('lp-image')).toBe(true);
       expect(dom.classList.contains('lp-image-preview')).toBe(true);
       const img = dom.querySelector('img')!;
@@ -200,33 +228,36 @@ describe('ImageWidget', () => {
     });
 
     it('applies an explicit width / height in px', () => {
-      const img = new ImagePreviewWidget('s', 'x', 300, 200).toDOM().querySelector('img')!;
+      const img = new ImagePreviewWidget(['s'], 'x', 300, 200).toDOM().querySelector('img')!;
       expect(img.style.width).toBe('300px');
       expect(img.style.height).toBe('200px');
     });
 
     it('carries no lens, resize grip, </> button or tool cluster', () => {
-      const dom = new ImagePreviewWidget('s', 'x').toDOM();
+      const dom = new ImagePreviewWidget(['s'], 'x').toDOM();
       expect(dom.querySelector('.lp-lens')).toBeNull();
       expect(dom.querySelector('.lp-resize')).toBeNull();
       expect(dom.querySelector('.lp-edit')).toBeNull();
       expect(dom.querySelector('.lp-tools')).toBeNull();
     });
 
-    it('drops the img on a runtime load error (raw markup is already shown above)', () => {
-      const dom = new ImagePreviewWidget('s', 'x').toDOM();
-      dom.querySelector('img')!.onerror!(new Event('error'));
+    it('walks the candidates too, then drops the img (raw markup is shown above)', () => {
+      const dom = new ImagePreviewWidget(['a.png', 'b.png'], 'x').toDOM();
+      const img = dom.querySelector('img')!;
+      img.onerror!(new Event('error'));
+      expect(img.getAttribute('src')).toBe('b.png');
+      img.onerror!(new Event('error'));
       expect(dom.querySelector('img')).toBeNull();
       expect(dom.querySelector('.lp-image-missing')).toBeNull();
     });
 
-    it('eq compares src, alt, width and height', () => {
-      const base = new ImagePreviewWidget('s', 'a', 100, 50);
-      expect(base.eq(new ImagePreviewWidget('s', 'a', 100, 50))).toBe(true);
-      expect(base.eq(new ImagePreviewWidget('s', 'a', 120, 50))).toBe(false);
-      expect(base.eq(new ImagePreviewWidget('s', 'a', 100, null))).toBe(false);
-      expect(base.eq(new ImagePreviewWidget('s2', 'a', 100, 50))).toBe(false);
-      expect(base.eq(new ImagePreviewWidget('s', 'b', 100, 50))).toBe(false);
+    it('eq compares the candidate list, alt, width and height', () => {
+      const base = new ImagePreviewWidget(['s'], 'a', 100, 50);
+      expect(base.eq(new ImagePreviewWidget(['s'], 'a', 100, 50))).toBe(true);
+      expect(base.eq(new ImagePreviewWidget(['s'], 'a', 120, 50))).toBe(false);
+      expect(base.eq(new ImagePreviewWidget(['s'], 'a', 100, null))).toBe(false);
+      expect(base.eq(new ImagePreviewWidget(['s2'], 'a', 100, 50))).toBe(false);
+      expect(base.eq(new ImagePreviewWidget(['s'], 'b', 100, 50))).toBe(false);
     });
   });
 });

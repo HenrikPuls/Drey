@@ -1,6 +1,25 @@
 import { TestBed } from '@angular/core/testing';
 import { VaultService } from './vault.service';
-import { DreyApi, VaultFileEntry } from '../../../shared/ipc-api';
+import { DreyApi, VaultFileEntry, VaultStatus } from '../../../shared/ipc-api';
+
+const VAULT: VaultStatus = {
+  id: 'v1',
+  name: 'vault',
+  path: 'E:/vault',
+  exists: true,
+  active: true,
+};
+
+/** A minimal registry-shaped bridge stub. */
+function registryApi(overrides: Partial<DreyApi> = {}): Partial<DreyApi> {
+  return {
+    getActiveVault: () => Promise.resolve(VAULT.path),
+    getActiveVaultId: () => Promise.resolve(VAULT.id),
+    listVaults: () => Promise.resolve([VAULT]),
+    listVaultFiles: () => Promise.resolve([] as VaultFileEntry[]),
+    ...overrides,
+  };
+}
 
 describe('VaultService', () => {
   afterEach(() => {
@@ -12,68 +31,69 @@ describe('VaultService', () => {
     await Promise.resolve(); // let the constructor's refresh() microtask settle
 
     expect(service.activeVaultPath()).toBeNull();
+    expect(service.activeVaultId()).toBeNull();
+    expect(service.vaults()).toEqual([]);
     expect(service.fileTree()).toEqual([]);
   });
 
-  it('loads the active vault and its file tree when available', async () => {
+  it('loads the registry and the active vault tree when available', async () => {
     const fakeTree: VaultFileEntry[] = [
       { name: 'sailing', relativePath: 'sailing', type: 'directory', children: [] },
     ];
-    const fakeApi: Partial<DreyApi> = {
-      getActiveVault: () => Promise.resolve('E:/vault'),
-      listVaultFiles: () => Promise.resolve(fakeTree),
-    };
-    window.dreyApi = fakeApi as DreyApi;
+    window.dreyApi = registryApi({
+      listVaultFiles: (vaultId) =>
+        Promise.resolve(vaultId === VAULT.id ? fakeTree : []),
+    }) as DreyApi;
 
     const service = TestBed.inject(VaultService);
-    await Promise.resolve();
-    await Promise.resolve();
+    await new Promise((resolve) => setTimeout(resolve, 10));
 
     expect(service.activeVaultPath()).toBe('E:/vault');
+    expect(service.activeVaultId()).toBe('v1');
+    expect(service.vaults()).toEqual([VAULT]);
     expect(service.fileTree()).toEqual(fakeTree);
+    expect(service.trees()['v1']).toEqual(fakeTree);
   });
 
-  it('surfaces an error and clears the tree when listing fails', async () => {
-    const fakeApi: Partial<DreyApi> = {
-      getActiveVault: () => Promise.resolve('E:/gone'),
-      listVaultFiles: () => Promise.reject(new Error('Vault folder no longer exists: E:/gone')),
-    };
-    window.dreyApi = fakeApi as DreyApi;
+  it('keeps the registration with an empty tree when listing fails', async () => {
+    // A missing/unreadable vault folder greys out -- it never blanks the
+    // whole panel or unregisters the vault (ADR-0051).
+    window.dreyApi = registryApi({
+      listVaultFiles: () => Promise.reject(new Error('Vault folder no longer exists: E:/vault')),
+    }) as DreyApi;
 
     const service = TestBed.inject(VaultService);
-    await Promise.resolve();
-    await Promise.resolve();
-    await Promise.resolve();
+    await new Promise((resolve) => setTimeout(resolve, 10));
 
     expect(service.fileTree()).toEqual([]);
-    expect(service.error()).toContain('no longer exists');
+    expect(service.vaults()).toEqual([VAULT]);
+    expect(service.activeVaultPath()).toBe('E:/vault');
   });
 
   describe('saveAssetFromUrl (ADR-0028)', () => {
     it('returns the path from the bridge and reloads the file tree', async () => {
       let listCalls = 0;
-      window.dreyApi = {
-        getActiveVault: () => Promise.resolve('E:/vault'),
+      window.dreyApi = registryApi({
         listVaultFiles: () => {
           listCalls++;
           return Promise.resolve([]);
         },
         saveVaultAssetFromUrl: (_url: string, note: string) =>
           Promise.resolve(`attachments/for-${note}.png`),
-      } as unknown as DreyApi;
+      }) as unknown as DreyApi;
 
       const service = TestBed.inject(VaultService);
       await Promise.resolve();
       const before = listCalls;
 
-      const rel = await service.saveAssetFromUrl('https://x/pic.png', 'notes/n.md');
+      const rel = await service.saveAssetFromUrl('https://x/pic.png', 'notes/n.md', 'v1');
       expect(rel).toBe('attachments/for-notes/n.md.png');
       expect(listCalls).toBeGreaterThan(before);
     });
 
     it('throws when the bridge is missing', async () => {
       const service = TestBed.inject(VaultService);
-      await expect(service.saveAssetFromUrl('https://x/pic.png', '')).rejects.toThrow(
+      await expect(service.saveAssetFromUrl('https://x/pic.png', '', 'v1')).rejects.toThrow(
         /desktop app/,
       );
     });
@@ -82,8 +102,7 @@ describe('VaultService', () => {
   describe('rename / copy / duplicate', () => {
     function apiWithCounts() {
       let listCalls = 0;
-      const api = {
-        getActiveVault: () => Promise.resolve('E:/vault'),
+      const api = registryApi({
         listVaultFiles: () => {
           listCalls++;
           return Promise.resolve([] as VaultFileEntry[]);
@@ -92,7 +111,7 @@ describe('VaultService', () => {
         copyVaultEntry: (_src: string, destDir: string) =>
           Promise.resolve(destDir ? `${destDir}/thing copy.md` : 'thing copy.md'),
         duplicateVaultEntry: (src: string) => Promise.resolve(src.replace(/\.md$/, ' copy.md')),
-      } as unknown as DreyApi;
+      }) as unknown as DreyApi;
       return { api, listCalls: () => listCalls };
     }
 
@@ -103,7 +122,7 @@ describe('VaultService', () => {
       await Promise.resolve();
       const before = listCalls();
 
-      const next = await service.renameEntry('notes/a.md', 'notes/b.md');
+      const next = await service.renameEntry('notes/a.md', 'notes/b.md', 'v1');
       expect(next).toBe('notes/b.md');
       expect(listCalls()).toBeGreaterThan(before);
     });
@@ -115,7 +134,9 @@ describe('VaultService', () => {
       await Promise.resolve();
       const before = listCalls();
 
-      expect(await service.copyEntry('notes/thing.md', 'archive')).toBe('archive/thing copy.md');
+      expect(await service.copyEntry('notes/thing.md', 'archive', 'v1')).toBe(
+        'archive/thing copy.md',
+      );
       expect(listCalls()).toBeGreaterThan(before);
     });
 
@@ -125,14 +146,14 @@ describe('VaultService', () => {
       const service = TestBed.inject(VaultService);
       await Promise.resolve();
 
-      expect(await service.duplicateEntry('notes/thing.md')).toBe('notes/thing copy.md');
+      expect(await service.duplicateEntry('notes/thing.md', 'v1')).toBe('notes/thing copy.md');
     });
 
     it('each throws a "needs the desktop app" error without the bridge', async () => {
       const service = TestBed.inject(VaultService);
-      await expect(service.renameEntry('a', 'b')).rejects.toThrow(/desktop app/);
-      await expect(service.copyEntry('a', '')).rejects.toThrow(/desktop app/);
-      await expect(service.duplicateEntry('a')).rejects.toThrow(/desktop app/);
+      await expect(service.renameEntry('a', 'b', 'v1')).rejects.toThrow(/desktop app/);
+      await expect(service.copyEntry('a', '', 'v1')).rejects.toThrow(/desktop app/);
+      await expect(service.duplicateEntry('a', 'v1')).rejects.toThrow(/desktop app/);
     });
   });
 
@@ -141,16 +162,15 @@ describe('VaultService', () => {
       service: VaultService;
       listCalls: () => number;
       refreshCalls: () => number;
-      notify: () => void;
+      notify: (vaultId?: string) => void;
     }
 
     function harnessWith(): Harness {
       TestBed.resetTestingModule();
       let lists = 0;
       let refreshes = 0;
-      let pushListener: (() => void) | null = null;
-      const api = {
-        getActiveVault: () => Promise.resolve('E:/vault'),
+      let pushListener: ((push: { vaultId?: string }) => void) | null = null;
+      const api = registryApi({
         listVaultFiles: () => {
           lists++;
           return Promise.resolve([] as VaultFileEntry[]);
@@ -158,40 +178,42 @@ describe('VaultService', () => {
         refreshVault: () => {
           refreshes++;
           // Mirror main: the round pushes before the invoke resolves.
-          pushListener?.();
+          pushListener?.({});
           return Promise.resolve();
         },
-        onVaultChanged: (listener: () => void) => {
+        onVaultChanged: (listener: (push: { vaultId?: string }) => void) => {
           pushListener = listener;
           return () => {
             pushListener = null;
           };
         },
-      } as unknown as DreyApi;
+      }) as unknown as DreyApi;
       window.dreyApi = api;
       const service = TestBed.inject(VaultService);
       return {
         service,
         listCalls: () => lists,
         refreshCalls: () => refreshes,
-        notify: () => pushListener?.(),
+        notify: (vaultId?: string) => pushListener?.(vaultId ? { vaultId } : {}),
       };
     }
 
     it('refresh() routes through the main-process round and reloads via the push', async () => {
       const h = harnessWith();
-      await Promise.resolve(); // the constructor's own refresh settles
+      // Let the constructor's own refresh round settle completely.
+      await new Promise((resolve) => setTimeout(resolve, 10));
       const refreshesBefore = h.refreshCalls();
       const listsBefore = h.listCalls();
 
       await h.service.refresh();
+      await new Promise((resolve) => setTimeout(resolve, 10));
 
       expect(h.refreshCalls()).toBe(refreshesBefore + 1);
       // The round's push (not the invoke) does the tree reload.
       expect(h.listCalls()).toBe(listsBefore + 1);
     });
 
-    it('reloads the tree when a push arrives', async () => {
+    it('reloads every tree when a registry-level push arrives', async () => {
       const h = harnessWith();
       await Promise.resolve();
       const before = h.listCalls();
@@ -199,20 +221,36 @@ describe('VaultService', () => {
       h.notify();
       await Promise.resolve();
       await Promise.resolve();
+      await Promise.resolve();
 
       expect(h.listCalls()).toBeGreaterThan(before);
+    });
+
+    it('reloads only the named vault when the push is scoped', async () => {
+      const h = harnessWith();
+      await Promise.resolve();
+      await Promise.resolve();
+      const before = h.listCalls();
+
+      h.notify('v1');
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+
+      // One tree pull for the scoped push (a registry-level push also
+      // re-pulls listVaults, but never lists trees twice here).
+      expect(h.listCalls()).toBe(before + 1);
     });
 
     it('falls back to the plain pull when main predates refreshVault', async () => {
       TestBed.resetTestingModule();
       let lists = 0;
-      window.dreyApi = {
-        getActiveVault: () => Promise.resolve('E:/vault'),
+      window.dreyApi = registryApi({
         listVaultFiles: () => {
           lists++;
           return Promise.resolve([] as VaultFileEntry[]);
         },
-      } as unknown as DreyApi;
+      }) as unknown as DreyApi;
       const service = TestBed.inject(VaultService);
       await Promise.resolve();
 

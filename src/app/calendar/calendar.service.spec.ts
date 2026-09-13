@@ -42,6 +42,11 @@ describe('CalendarService', () => {
   beforeEach(() => {
     const fakeApi: Partial<DreyApi> = {
       getActiveVault: () => Promise.resolve('E:/vault'),
+      getActiveVaultId: () => Promise.resolve('v1'),
+      listVaults: () =>
+        Promise.resolve([
+          { id: 'v1', name: 'vault', path: 'E:/vault', exists: true, active: true },
+        ]),
       listVaultFiles: () => Promise.resolve(tree),
     };
     window.dreyApi = fakeApi as DreyApi;

@@ -10,9 +10,9 @@ import {
   viewChild,
 } from '@angular/core';
 import { NgTemplateOutlet } from '@angular/common';
-import { EditorService } from '../../services/editor.service';
+import { EditorService, docKey } from '../../services/editor.service';
 import { VaultService } from '../../vault';
-import { VaultFileEntry } from '../../../../shared/ipc-api';
+import { VaultFileEntry, VaultStatus } from '../../../../shared/ipc-api';
 import { Icon } from '../../icons/icon';
 import { PanelHeaderActions } from '../panel-header-actions';
 
@@ -20,29 +20,59 @@ import { PanelHeaderActions } from '../panel-header-actions';
 interface TreeMenu {
   x: number;
   y: number;
+  /** The vault the menu acts in. */
+  vaultId: string;
   /** Vault-relative folder a new entry lands in; '' means the vault root. */
   dir: string;
   /** The entry the menu was opened on, if any -- the "Delete" target. */
   entry: VaultFileEntry | null;
 }
 
+/** Anchor + target for a vault row's right-click menu. */
+interface VaultMenu {
+  x: number;
+  y: number;
+  vault: VaultStatus;
+}
+
 /** An in-progress "new file" / "new folder" with its inline name input showing. */
 interface PendingCreate {
   kind: 'file' | 'directory';
+  vaultId: string;
   dir: string;
 }
 
 /** An in-progress rename: the entry and the name currently in the inline input. */
 interface PendingRename {
+  vaultId: string;
   entry: VaultFileEntry;
 }
 
+/** An in-progress vault display-name rename. */
+interface PendingVaultRename {
+  vaultId: string;
+}
+
+/** One row in the flat, keyboard-walkable model: a vault header or a file entry. */
+type VisibleNode =
+  | { kind: 'vault'; vault: VaultStatus }
+  | { kind: 'entry'; vaultId: string; entry: VaultFileEntry; depth: number };
+
 /**
- * "Files" dock panel: the vault switcher row plus the vault file tree.
- * Lifted out of the old `Sidebar` component unchanged in behaviour --
- * folder collapse state and the right-click new/delete flow are local view
- * state; the create call and the tree reload live in `VaultService`. Step 4
- * restyles the switcher and tree to the v3 spec.
+ * "Files" dock panel: every registered vault's section stacked in one tree
+ * (ADR-0051) -- a vault header row (name, active marker, section chevron)
+ * per registration, each expandable into its documents, plus an
+ * "Add vault …" affordance. Vault management lives in the vault row's
+ * context menu: Set active / Rename / Add vault / Open in File Explorer /
+ * Remove. Folder collapse and the right-click new/delete flow stay local
+ * view state; the operations and tree reloads live in `VaultService`.
+ *
+ * Every row identity is the composite `vaultId::relativePath` (the same
+ * format as an open tab's key), so the same relative path in two vaults is
+ * two independent rows. Drag & drop moves entries within a vault exactly
+ * as before (req-23) and -- since ADR-0051 -- across vaults too: a drop on
+ * another vault's rows or header moves the entry there (copy + delete in
+ * main, open tabs re-targeted).
  */
 @Component({
   selector: 'app-files-panel',
@@ -56,24 +86,27 @@ export class FilesPanel {
   protected readonly editor = inject(EditorService);
   private readonly host = inject<ElementRef<HTMLElement>>(ElementRef).nativeElement;
 
-  /** Folder paths the user has collapsed. Folders start expanded. */
+  /** Folder paths the user has collapsed, per vault (composite keys). Folders start expanded. */
   private readonly collapsed = signal<ReadonlySet<string>>(new Set());
+  /** Vault ids whose whole section the user collapsed. */
+  protected readonly collapsedVaults = signal<ReadonlySet<string>>(new Set());
 
   /**
-   * The tree entry the keyboard cursor sits on (a `relativePath`). Distinct
-   * from `editor.openPath()` (the open file) -- this is a roving selection
-   * for Up/Down/Left/Right navigation, like a file explorer. The selected
-   * row also holds DOM focus (roving `tabindex`, see `select()`), which is
-   * what makes Enter/Space activate the highlighted row.
+   * The tree row the keyboard cursor sits on (a composite key). Distinct
+   * from the open file -- this is a roving selection for Up/Down/Left/Right
+   * navigation, like a file explorer. The selected row also holds DOM focus
+   * (roving `tabindex`, see `select()`), which is what makes Enter/Space
+   * activate the highlighted row.
    */
   protected readonly selected = signal<string | null>(null);
 
   /**
-   * The multi-selection (bug-8): every highlighted `relativePath`, cursor
+   * The multi-selection (bug-8): every highlighted composite key, cursor
    * row included. A plain click / plain arrow key collapses it back to
    * `{selected}`; Ctrl+click toggles rows and Shift+click / Shift+arrow
    * extend a range over the visible rows (the anchor is where the range
-   * grows from).
+   * grows from). A selection never spans vaults silently -- ranges walk the
+   * visible rows whatever vault they belong to, and a delete acts per vault.
    */
   protected readonly selection = signal<ReadonlySet<string>>(new Set());
 
@@ -81,47 +114,62 @@ export class FilesPanel {
   private readonly anchor = signal<string | null>(null);
 
   /**
-   * `vault.fileTree()` flattened to the rows that are actually visible
-   * (a folder's children are dropped while it is collapsed), in display
-   * order -- the model the arrow keys step through.
+   * All vault sections flattened to the rows that are actually visible (a
+   * collapsed vault hides its whole tree; a collapsed folder drops its
+   * children), in display order -- the model the arrow keys step through.
    */
-  protected readonly visibleNodes = computed<{ entry: VaultFileEntry; depth: number }[]>(() => {
-    const out: { entry: VaultFileEntry; depth: number }[] = [];
-    const walk = (entries: readonly VaultFileEntry[], depth: number): void => {
-      for (const entry of entries) {
-        out.push({ entry, depth });
-        if (
-          entry.type === 'directory' &&
-          entry.children?.length &&
-          !this.collapsed().has(entry.relativePath)
-        ) {
-          walk(entry.children, depth + 1);
-        }
+  protected readonly visibleNodes = computed<VisibleNode[]>(() => {
+    const out: VisibleNode[] = [];
+    const folded = this.collapsedVaults();
+    for (const vault of this.vault.vaults()) {
+      out.push({ kind: 'vault', vault });
+      if (folded.has(vault.id)) {
+        continue;
       }
-    };
-    walk(this.vault.fileTree(), 0);
+      const walk = (entries: readonly VaultFileEntry[], depth: number): void => {
+        for (const entry of entries) {
+          out.push({ kind: 'entry', vaultId: vault.id, entry, depth });
+          if (
+            entry.type === 'directory' &&
+            entry.children?.length &&
+            !this.collapsed().has(docKey(vault.id, entry.relativePath))
+          ) {
+            walk(entry.children, depth + 1);
+          }
+        }
+      };
+      walk(this.vault.trees()[vault.id] ?? [], 0);
+    }
     return out;
   });
 
-  protected readonly vaultMenuOpen = signal(false);
+  protected readonly vaultMenu = signal<VaultMenu | null>(null);
   protected readonly menu = signal<TreeMenu | null>(null);
   protected readonly creating = signal<PendingCreate | null>(null);
   protected readonly renaming = signal<PendingRename | null>(null);
+  protected readonly renamingVault = signal<PendingVaultRename | null>(null);
+
+  /** The display name shown in the inline vault-rename input. */
+  protected renamingVaultName(): string {
+    const pending = this.renamingVault();
+    return pending ? (this.vault.vaults().find((v) => v.id === pending.vaultId)?.name ?? '') : '';
+  }
 
   /**
-   * The tree entry being dragged inside the panel (req-23): folders cannot
-   * carry the editor-drop's `application/x-drey-vault-path` (a pane would
-   * try to open a folder as a tab), so the drop target reads the dragged
-   * entry from here instead of `dataTransfer`. Files set it too -- the same
+   * The tree entry being dragged (req-23 + ADR-0051): folders cannot carry
+   * the editor-drop's `application/x-drey-vault-path` (a pane would try to
+   * open a folder as a tab), so the drop target reads the dragged entry
+   * from here instead of `dataTransfer`. Files set it too -- the same
    * gesture still drags into the editor via the dataTransfer types.
    */
-  protected readonly dragEntry = signal<VaultFileEntry | null>(null);
+  protected readonly dragEntry = signal<{ vaultId: string; entry: VaultFileEntry } | null>(null);
 
-  /** The row currently showing the drop highlight (its `relativePath`). */
+  /** The row currently showing the drop highlight (its composite key). */
   protected readonly dropHover = signal<string | null>(null);
 
   private readonly createInput = viewChild<ElementRef<HTMLInputElement>>('createInput');
   private readonly renameInput = viewChild<ElementRef<HTMLInputElement>>('renameInput');
+  private readonly vaultRenameInput = viewChild<ElementRef<HTMLInputElement>>('vaultRenameInput');
 
   constructor() {
     effect(() => {
@@ -141,76 +189,90 @@ export class FilesPanel {
         }, 0);
       }
     });
+    effect(() => {
+      if (this.renamingVault()) {
+        setTimeout(() => this.vaultRenameInput()?.nativeElement.select(), 0);
+      }
+    });
   }
 
-  protected vaultName(): string {
-    const path = this.vault.activeVaultPath();
-    if (!path) {
-      return 'No vault';
-    }
-    const parts = path.split(/[\\/]/).filter(Boolean);
-    return parts[parts.length - 1] ?? path;
+  protected vaultKey(vaultId: string, relativePath: string): string {
+    return docKey(vaultId, relativePath);
   }
 
-  protected isCollapsed(path: string): boolean {
-    return this.collapsed().has(path);
+  protected isCollapsed(key: string): boolean {
+    return this.collapsed().has(key);
   }
 
-  protected toggleFolder(path: string): void {
+  protected toggleFolder(key: string): void {
     this.collapsed.update((set) => {
       const next = new Set(set);
-      if (next.has(path)) {
-        next.delete(path);
+      if (next.has(key)) {
+        next.delete(key);
       } else {
-        next.add(path);
+        next.add(key);
       }
       return next;
     });
   }
 
-  /** Header "collapse all folders" button: fold every directory in the tree. */
+  protected toggleVaultSection(vaultId: string): void {
+    this.collapsedVaults.update((set) => {
+      const next = new Set(set);
+      if (next.has(vaultId)) {
+        next.delete(vaultId);
+      } else {
+        next.add(vaultId);
+      }
+      return next;
+    });
+  }
+
+  /** Header "collapse all folders" button: fold every directory in every vault. */
   protected collapseAll(): void {
     const paths = new Set<string>();
-    const walk = (entries: readonly VaultFileEntry[]): void => {
-      for (const entry of entries) {
-        if (entry.type === 'directory') {
-          paths.add(entry.relativePath);
-          if (entry.children?.length) {
-            walk(entry.children);
+    for (const [vaultId, tree] of Object.entries(this.vault.trees())) {
+      const walk = (entries: readonly VaultFileEntry[]): void => {
+        for (const entry of entries) {
+          if (entry.type === 'directory') {
+            paths.add(docKey(vaultId, entry.relativePath));
+            if (entry.children?.length) {
+              walk(entry.children);
+            }
           }
         }
-      }
-    };
-    walk(this.vault.fileTree());
+      };
+      walk(tree);
+    }
     this.collapsed.set(paths);
   }
 
-  protected onFolderClick(entry: VaultFileEntry, event?: MouseEvent): void {
+  protected onFolderClick(vaultId: string, entry: VaultFileEntry, event?: MouseEvent): void {
     const mod = pointerModifiers(event);
-    this.applyPointerSelection(entry, mod);
+    this.applyPointerSelection(vaultId, entry, mod);
     // Ctrl/Shift clicks adjust the selection only -- they must not fold the
     // folder out from under the user.
     if (!mod?.shiftKey && !mod?.ctrlKey) {
-      this.toggleFolder(entry.relativePath);
+      this.toggleFolder(docKey(vaultId, entry.relativePath));
     }
   }
 
   /**
    * File-explorer keyboard navigation on the tree container: Up/Down move
    * the cursor one visible row (Shift extends the selection's range, Ctrl
-   * moves the cursor alone), Right/Left expand/collapse a folder (or step
-   * in/out), Enter opens the cursor file -- every selected file, when the
-   * selection is multi-row -- and Space toggles a folder, Delete deletes the
-   * selection. Every handled key calls `preventDefault()` so the container
-   * does not also scroll.
+   * moves the cursor alone), Right/Left expand/collapse a folder or vault
+   * section (or step in/out), Enter opens the cursor file -- every selected
+   * file, when the selection is multi-row -- and Space toggles a folder or
+   * vault section, Delete deletes the selection. Every handled key calls
+   * `preventDefault()` so the container does not also scroll.
    */
   protected onTreeKeydown(event: KeyboardEvent): void {
     const nodes = this.visibleNodes();
     if (nodes.length === 0) {
       return;
     }
-    const idx = nodes.findIndex((n) => n.entry.relativePath === this.selected());
-    const current = idx >= 0 ? nodes[idx].entry : null;
+    const idx = nodes.findIndex((n) => this.keyOf(n) === this.selected());
+    const current = idx >= 0 ? nodes[idx] : null;
     const mod = { shiftKey: event.shiftKey, ctrlKey: event.ctrlKey || event.metaKey };
 
     switch (event.key) {
@@ -228,12 +290,26 @@ export class FilesPanel {
           this.selectAt(nodes, 0);
           break;
         }
-        if (current.type === 'directory') {
-          if (this.collapsed().has(current.relativePath)) {
-            this.toggleFolder(current.relativePath);
+        if (current.kind === 'vault') {
+          if (this.collapsedVaults().has(current.vault.id)) {
+            this.toggleVaultSection(current.vault.id);
           } else {
             const child = nodes[idx + 1];
-            if (child && child.entry.relativePath.startsWith(`${current.relativePath}/`)) {
+            if (child?.kind === 'entry') {
+              this.selectAt(nodes, idx + 1, mod);
+            }
+          }
+        } else if (current.entry.type === 'directory') {
+          const key = docKey(current.vaultId, current.entry.relativePath);
+          if (this.collapsed().has(key)) {
+            this.toggleFolder(key);
+          } else {
+            const child = nodes[idx + 1];
+            if (
+              child?.kind === 'entry' &&
+              child.vaultId === current.vaultId &&
+              child.entry.relativePath.startsWith(`${current.entry.relativePath}/`)
+            ) {
               this.selectAt(nodes, idx + 1, mod);
             }
           }
@@ -246,12 +322,23 @@ export class FilesPanel {
           this.selectAt(nodes, 0);
           break;
         }
-        if (current.type === 'directory' && !this.collapsed().has(current.relativePath)) {
-          this.toggleFolder(current.relativePath);
+        if (current.kind === 'vault') {
+          if (!this.collapsedVaults().has(current.vault.id)) {
+            this.toggleVaultSection(current.vault.id);
+          }
+          break;
+        }
+        if (
+          current.entry.type === 'directory' &&
+          !this.collapsed().has(docKey(current.vaultId, current.entry.relativePath))
+        ) {
+          this.toggleFolder(docKey(current.vaultId, current.entry.relativePath));
         } else {
-          const parent = parentDir(current.relativePath);
+          const parent = parentDir(current.entry.relativePath);
           if (parent) {
-            this.select(parent);
+            this.select(docKey(current.vaultId, parent));
+          } else {
+            this.select(current.vaultId); // back up to the vault row
           }
         }
         break;
@@ -270,50 +357,56 @@ export class FilesPanel {
           this.openSelection(nodes);
           break;
         }
-        if (current.type === 'directory') {
-          this.toggleFolder(current.relativePath);
+        if (current.kind === 'vault') {
+          this.toggleVaultSection(current.vault.id);
+        } else if (current.entry.type === 'directory') {
+          this.toggleFolder(docKey(current.vaultId, current.entry.relativePath));
         } else {
-          this.onFileClick(current);
+          this.onFileClick(current.vaultId, current.entry);
         }
         break;
       }
       case 'Delete': {
         event.preventDefault();
-        const targets = this.selectedEntries(nodes);
-        if (targets.length > 0) {
-          void this.deleteEntries(targets);
+        if (current?.kind === 'entry') {
+          const targets = this.selectedEntries(nodes);
+          if (targets.length > 0) {
+            void this.deleteEntries(targets);
+          }
         }
         break;
       }
     }
   }
 
-  private selectAt(
-    nodes: { entry: VaultFileEntry }[],
-    i: number,
-    mod?: { shiftKey: boolean; ctrlKey: boolean },
-  ): void {
-    const entry = nodes[i]?.entry;
-    if (!entry) {
+  /** The identity string a visible row is keyed by. */
+  protected keyOf(node: VisibleNode): string {
+    return node.kind === 'vault' ? node.vault.id : docKey(node.vaultId, node.entry.relativePath);
+  }
+
+  private selectAt(nodes: VisibleNode[], i: number, mod?: { shiftKey: boolean; ctrlKey: boolean }): void {
+    const node = nodes[i];
+    if (!node) {
       return;
     }
+    const key = this.keyOf(node);
     if (mod?.ctrlKey) {
       // Ctrl+Arrow: move the keyboard cursor; the selection set stays put.
-      this.selected.set(entry.relativePath);
+      this.selected.set(key);
       this.followFocus();
     } else if (mod?.shiftKey && this.anchor()) {
-      this.selected.set(entry.relativePath);
-      this.selection.set(this.rangeOver(nodes, this.anchor()!, entry.relativePath));
+      this.selected.set(key);
+      this.selection.set(this.rangeOver(nodes, this.anchor()!, key));
       this.followFocus();
     } else {
-      this.select(entry.relativePath);
+      this.select(key);
     }
   }
 
-  private select(path: string): void {
-    this.selected.set(path);
-    this.selection.set(new Set([path]));
-    this.anchor.set(path);
+  private select(key: string): void {
+    this.selected.set(key);
+    this.selection.set(new Set([key]));
+    this.anchor.set(key);
     this.followFocus();
   }
 
@@ -322,59 +415,64 @@ export class FilesPanel {
    * the anchor; anything plain collapses back to the single clicked row.
    */
   private applyPointerSelection(
+    vaultId: string,
     entry: VaultFileEntry,
     mod?: { shiftKey: boolean; ctrlKey: boolean },
   ): void {
+    const key = docKey(vaultId, entry.relativePath);
     if (mod?.ctrlKey) {
       const next = new Set(this.selection());
-      if (next.has(entry.relativePath)) {
-        next.delete(entry.relativePath);
+      if (next.has(key)) {
+        next.delete(key);
       } else {
-        next.add(entry.relativePath);
+        next.add(key);
       }
       this.selection.set(next);
-      this.selected.set(entry.relativePath);
-      this.anchor.set(entry.relativePath);
+      this.selected.set(key);
+      this.anchor.set(key);
       return;
     }
     if (mod?.shiftKey) {
-      const anchor = this.anchor() ?? entry.relativePath;
-      this.selected.set(entry.relativePath);
-      this.selection.set(this.rangeOver(this.visibleNodes(), anchor, entry.relativePath));
+      const anchor = this.anchor() ?? key;
+      this.selected.set(key);
+      this.selection.set(this.rangeOver(this.visibleNodes(), anchor, key));
       return;
     }
-    this.select(entry.relativePath);
+    this.select(key);
   }
 
-  /** The paths from `from` to `to`, both included, over the visible rows. */
-  private rangeOver(
-    nodes: { entry: VaultFileEntry }[],
-    from: string,
-    to: string,
-  ): ReadonlySet<string> {
-    const i = nodes.findIndex((n) => n.entry.relativePath === from);
-    const j = nodes.findIndex((n) => n.entry.relativePath === to);
+  /** The keys from `from` to `to`, both included, over the visible rows. */
+  private rangeOver(nodes: VisibleNode[], from: string, to: string): ReadonlySet<string> {
+    const i = nodes.findIndex((n) => this.keyOf(n) === from);
+    const j = nodes.findIndex((n) => this.keyOf(n) === to);
     if (i < 0 || j < 0) {
       return new Set([to]);
     }
     const [lo, hi] = i <= j ? [i, j] : [j, i];
-    return new Set(nodes.slice(lo, hi + 1).map((n) => n.entry.relativePath));
+    return new Set(nodes.slice(lo, hi + 1).map((n) => this.keyOf(n)));
   }
 
   /** The visible entries currently in the multi-selection (cursor row only when single). */
-  private selectedEntries(nodes: { entry: VaultFileEntry }[]): VaultFileEntry[] {
+  private selectedEntries(nodes: VisibleNode[]): Array<{ vaultId: string; entry: VaultFileEntry }> {
     const selection = this.selection();
+    const pick = (n: VisibleNode): { vaultId: string; entry: VaultFileEntry } | null =>
+      n.kind === 'entry' ? { vaultId: n.vaultId, entry: n.entry } : null;
     if (selection.size <= 1) {
-      return nodes.filter((n) => n.entry.relativePath === this.selected()).map((n) => n.entry);
+      const node = nodes.find((n) => this.keyOf(n) === this.selected());
+      const picked = node ? pick(node) : null;
+      return picked ? [picked] : [];
     }
-    return nodes.filter((n) => selection.has(n.entry.relativePath)).map((n) => n.entry);
+    return nodes
+      .filter((n) => selection.has(this.keyOf(n)))
+      .map(pick)
+      .filter((v): v is { vaultId: string; entry: VaultFileEntry } => v !== null);
   }
 
   /** Opens every selected *file*; folders in the selection are skipped. */
-  private openSelection(nodes: { entry: VaultFileEntry }[]): void {
-    for (const entry of this.selectedEntries(nodes)) {
-      if (entry.type === 'file') {
-        void this.editor.openFile(entry.relativePath);
+  private openSelection(nodes: VisibleNode[]): void {
+    for (const target of this.selectedEntries(nodes)) {
+      if (target.entry.type === 'file') {
+        void this.editor.openFile(target.entry.relativePath, target.vaultId);
       }
     }
   }
@@ -394,46 +492,128 @@ export class FilesPanel {
     }, 0);
   }
 
-  protected toggleVaultMenu(): void {
-    this.vaultMenuOpen.update((v) => !v);
-  }
-
-  protected onOpenOtherVault(): void {
-    this.vaultMenuOpen.set(false);
-    void this.vault.selectVault();
-  }
-
-  /** Manual "re-read the vault from disk" (a full round in main, ADR-0045). */
+  /** Manual "re-read every vault from disk" (a full round in main, ADR-0045). */
   protected onRefresh(): void {
     void this.vault.refresh();
   }
 
-  protected onFileClick(entry: VaultFileEntry, event?: MouseEvent): void {
-    if (entry.type !== 'file') {
+  /** Registers another vault via the native folder picker. */
+  protected async onAddVault(): Promise<void> {
+    this.vaultMenu.set(null);
+    try {
+      await this.vault.addVault();
+    } catch (err) {
+      alert(err instanceof Error ? err.message : String(err));
+    }
+  }
+
+  /** Makes this vault the target for daily notes, capture, chats, new notes. */
+  protected async onSetActiveVault(vaultId: string): Promise<void> {
+    this.vaultMenu.set(null);
+    try {
+      await this.vault.setActiveVault(vaultId);
+    } catch (err) {
+      alert(err instanceof Error ? err.message : String(err));
+    }
+  }
+
+  protected startVaultRename(): void {
+    const menu = this.vaultMenu();
+    this.vaultMenu.set(null);
+    if (menu) {
+      this.renamingVault.set({ vaultId: menu.vault.id });
+    }
+  }
+
+  protected cancelVaultRename(): void {
+    this.renamingVault.set(null);
+  }
+
+  protected async commitVaultRename(rawName: string): Promise<void> {
+    const pending = this.renamingVault();
+    this.renamingVault.set(null);
+    if (!pending) {
       return;
     }
-    const mod = pointerModifiers(event);
-    this.applyPointerSelection(entry, mod);
-    if (!mod?.shiftKey && !mod?.ctrlKey) {
-      void this.editor.openFile(entry.relativePath);
+    const name = rawName.trim();
+    if (!name) {
+      return;
+    }
+    try {
+      await this.vault.renameVault(pending.vaultId, name);
+    } catch (err) {
+      alert(err instanceof Error ? err.message : String(err));
+    }
+  }
+
+  protected async onRevealVault(vaultId: string): Promise<void> {
+    this.vaultMenu.set(null);
+    try {
+      await this.vault.revealVaultFolder(vaultId);
+    } catch (err) {
+      alert(err instanceof Error ? err.message : String(err));
     }
   }
 
   /**
-   * Drag a file onto the editor to insert it (ADR-0028): carry the vault
-   * path on a private type the editor's drop handler reads (an image gets
-   * linked in place, a text file's contents inlined). Set for any file;
-   * the editor decides what to do from the extension. The same gesture is
-   * also an intra-panel move candidate -- `dragEntry` arms that half.
+   * Registry-only removal: the folder and its files stay on disk. Open tabs
+   * of this vault close first -- clean ones silently, each dirty one
+   * through its own prompt; a cancelled prompt aborts the removal.
    */
-  protected onFileDragStart(event: DragEvent, entry: VaultFileEntry): void {
+  protected async onRemoveVault(vault: VaultStatus): Promise<void> {
+    this.vaultMenu.set(null);
+    const tabs = this.editor.openDocs().filter((d) => d.vaultId === vault.id);
+    if (
+      !confirm(
+        `Remove vault "${vault.name}" from the list? The folder and its files stay on disk.` +
+          (tabs.length > 0 ? ` ${tabs.length} open tab(s) will be closed.` : ''),
+      )
+    ) {
+      return;
+    }
+    for (const doc of tabs) {
+      if (!this.editor.closeTab(doc.key)) {
+        return; // a dirty-tab prompt was cancelled -- keep the vault
+      }
+    }
+    try {
+      await this.vault.removeVault(vault.id);
+    } catch (err) {
+      alert(err instanceof Error ? err.message : String(err));
+    }
+  }
+
+  protected onFileClick(vaultId: string, entry: VaultFileEntry, event?: MouseEvent): void {
+    if (entry.type !== 'file') {
+      return;
+    }
+    const mod = pointerModifiers(event);
+    this.applyPointerSelection(vaultId, entry, mod);
+    if (!mod?.shiftKey && !mod?.ctrlKey) {
+      void this.editor.openFile(entry.relativePath, vaultId);
+    }
+  }
+
+  /**
+   * Drag a file onto the editor to insert it (ADR-0028): carry the doc key
+   * (`vaultId::path`, ADR-0051) on a private type the editor's drop handler
+   * reads (an image gets linked in place, a text file's contents inlined).
+   * Set for any file; the editor decides what to do from the extension. The
+   * same gesture is also an intra/inter-panel move candidate -- `dragEntry`
+   * arms that half. `text/plain` keeps the bare path for external drops.
+   */
+  protected onFileDragStart(
+    event: DragEvent,
+    vaultId: string,
+    entry: VaultFileEntry,
+  ): void {
     if (entry.type !== 'file' || !event.dataTransfer) {
       return;
     }
-    event.dataTransfer.setData('application/x-drey-vault-path', entry.relativePath);
+    event.dataTransfer.setData('application/x-drey-vault-path', docKey(vaultId, entry.relativePath));
     event.dataTransfer.setData('text/plain', entry.relativePath);
     event.dataTransfer.effectAllowed = 'copyLink';
-    this.dragEntry.set(entry);
+    this.dragEntry.set({ vaultId, entry });
   }
 
   /**
@@ -441,12 +621,16 @@ export class FilesPanel {
    * none, nothing outside this panel reacts; `effectAllowed: 'move'` shows
    * the move cursor), the dragged entry lives in `dragEntry`.
    */
-  protected onFolderDragStart(event: DragEvent, entry: VaultFileEntry): void {
+  protected onFolderDragStart(
+    event: DragEvent,
+    vaultId: string,
+    entry: VaultFileEntry,
+  ): void {
     if (!event.dataTransfer) {
       return;
     }
     event.dataTransfer.effectAllowed = 'move';
-    this.dragEntry.set(entry);
+    this.dragEntry.set({ vaultId, entry });
   }
 
   /** Fires after a completed *or* cancelled drag -- always clears the state. */
@@ -460,101 +644,139 @@ export class FilesPanel {
     return entry.type === 'directory' ? entry.relativePath : parentDir(entry.relativePath);
   }
 
-  /** False for a no-op (same folder) and for a folder dropped into itself / its own subtree. */
-  private canDropOnto(entry: VaultFileEntry): boolean {
+  /**
+   * False for a no-op (same folder, same vault) and for a folder dropped
+   * into itself / its own subtree (same vault only -- a cross-vault drop
+   * can never nest inside itself). A drop ON a vault header row targets
+   * that vault's root and is handled by `canDropOntoVault`.
+   */
+  private canDropOnto(vaultId: string, entry: VaultFileEntry): boolean {
     const dragged = this.dragEntry();
     if (!dragged) {
       return false;
     }
-    const dest = this.destinationDir(entry);
-    if (dest === parentDir(dragged.relativePath)) {
-      return false;
+    if (dragged.vaultId === vaultId) {
+      const dest = this.destinationDir(entry);
+      if (dest === parentDir(dragged.entry.relativePath)) {
+        return false;
+      }
+      return (
+        dest !== dragged.entry.relativePath &&
+        !dest.startsWith(`${dragged.entry.relativePath}/`)
+      );
     }
-    return dest !== dragged.relativePath && !dest.startsWith(`${dragged.relativePath}/`);
+    return true; // cross-vault moves are always valid (copy + delete in main)
   }
 
-  protected onRowDragOver(event: DragEvent, entry: VaultFileEntry): void {
-    if (!this.canDropOnto(entry)) {
+  /** Whether a drop on the vault header row (that vault's root) is valid. */
+  private canDropOntoVault(vault: VaultStatus): boolean {
+    const dragged = this.dragEntry();
+    if (!dragged || !vault.exists) {
+      return false;
+    }
+    if (dragged.vaultId === vault.id) {
+      // Moving to the vault's own root: a no-op only when already there.
+      return parentDir(dragged.entry.relativePath) !== '';
+    }
+    return true; // a cross-vault move to another vault's root
+  }
+
+  protected onRowDragOver(event: DragEvent, vaultId: string, entry: VaultFileEntry): void {
+    if (!this.canDropOnto(vaultId, entry)) {
       return; // no preventDefault -> the browser shows no-drop, drop won't fire
     }
     event.preventDefault();
     if (event.dataTransfer) {
       event.dataTransfer.dropEffect = 'move';
     }
-    this.dropHover.set(entry.relativePath);
+    this.dropHover.set(docKey(vaultId, entry.relativePath));
   }
 
-  protected onRowDragLeave(event: DragEvent, entry: VaultFileEntry): void {
-    if (this.dropHover() === entry.relativePath) {
+  protected onRowDragLeave(event: DragEvent, vaultId: string, entry: VaultFileEntry): void {
+    if (this.dropHover() === docKey(vaultId, entry.relativePath)) {
       this.dropHover.set(null);
     }
   }
 
-  protected onRowDrop(event: DragEvent, entry: VaultFileEntry): void {
-    event.stopPropagation(); // the tree container's root drop must not double-handle
+  protected onRowDrop(event: DragEvent, vaultId: string, entry: VaultFileEntry): void {
+    event.stopPropagation();
     this.dropHover.set(null);
     // Validate BEFORE clearing the armed drag -- `canDropOnto` reads it.
     const dragged = this.dragEntry();
-    const valid = dragged !== null && this.canDropOnto(entry);
+    const valid = dragged !== null && this.canDropOnto(vaultId, entry);
     this.dragEntry.set(null);
     if (!valid) {
       return;
     }
     event.preventDefault();
-    void this.commitMove(dragged!.relativePath, this.destinationDir(entry));
+    void this.commitMove(dragged!.vaultId, dragged!.entry.relativePath, vaultId, this.destinationDir(entry));
   }
 
-  /** The `.tree-scroll` background: a drop target for the vault root. */
-  protected onRootDragOver(event: DragEvent): void {
-    if ((event.target as HTMLElement | null)?.closest('.node')) {
-      return; // a row handles (and stops) its own dragover
-    }
-    const dragged = this.dragEntry();
-    if (!dragged || parentDir(dragged.relativePath) === '') {
-      return; // already at the root -- no preventDefault, no-drop cursor
+  protected onVaultRowDragOver(event: DragEvent, vault: VaultStatus): void {
+    if (!this.canDropOntoVault(vault)) {
+      return;
     }
     event.preventDefault();
+    event.stopPropagation();
     if (event.dataTransfer) {
       event.dataTransfer.dropEffect = 'move';
     }
+    this.dropHover.set(vault.id);
   }
 
-  protected onRootDrop(event: DragEvent): void {
-    if ((event.target as HTMLElement | null)?.closest('.node')) {
-      return;
+  protected onVaultRowDragLeave(event: DragEvent, vault: VaultStatus): void {
+    if (this.dropHover() === vault.id) {
+      this.dropHover.set(null);
     }
-    const dragged = this.dragEntry();
-    this.dragEntry.set(null);
+  }
+
+  protected onVaultRowDrop(event: DragEvent, vault: VaultStatus): void {
+    event.stopPropagation();
     this.dropHover.set(null);
-    if (!dragged || parentDir(dragged.relativePath) === '') {
+    const dragged = this.dragEntry();
+    const valid = dragged !== null && this.canDropOntoVault(vault);
+    this.dragEntry.set(null);
+    if (!valid) {
       return;
     }
     event.preventDefault();
-    void this.commitMove(dragged.relativePath, '');
+    void this.commitMove(dragged!.vaultId, dragged!.entry.relativePath, vault.id, '');
   }
 
   /**
-   * The move half of `commitRename` (req-23): rename to the new folder,
-   * re-point open tabs (keeping unsaved buffers), follow the clipboard,
-   * reveal the destination. `VaultService.renameEntry` reloads the tree;
-   * the main process moves the assistant sidecar along.
+   * The move half of `commitRename` (req-23), generalized to ADR-0051:
+   * rename/move to the destination folder (possibly in ANOTHER vault --
+   * copy + delete in main, the assistant sidecar travels along), re-point
+   * open tabs (keeping unsaved buffers), follow the clipboard, reveal the
+   * destination.
    */
-  private async commitMove(fromRel: string, destDir: string): Promise<void> {
+  private async commitMove(
+    fromVaultId: string,
+    fromRel: string,
+    toVaultId: string,
+    destDir: string,
+  ): Promise<void> {
     const name = fromRel.slice(fromRel.lastIndexOf('/') + 1);
     const toRel = destDir ? `${destDir}/${name}` : name;
     try {
-      await this.vault.renameEntry(fromRel, toRel);
-      this.editor.retargetTabs(fromRel, toRel);
-      if (this.vault.clipboard()?.path === fromRel) {
-        this.vault.clipboard.set({ path: toRel, name });
+      await this.vault.renameEntry(fromRel, toRel, fromVaultId, toVaultId);
+      this.editor.retargetTabs(docKey(fromVaultId, fromRel), docKey(toVaultId, toRel));
+      const clip = this.vault.clipboard();
+      if (clip && clip.vaultId === fromVaultId && clip.path === fromRel) {
+        this.vault.clipboard.set({ vaultId: toVaultId, path: toRel, name });
       }
-      this.expand(destDir);
+      this.expand(toVaultId, destDir);
+      this.collapsedVaults.update((set) => {
+        const next = new Set(set);
+        next.delete(toVaultId);
+        return next;
+      });
     } catch (err) {
       alert(err instanceof Error ? err.message : String(err));
     }
   }
 
-  protected openMenu(event: MouseEvent, entry?: VaultFileEntry): void {
+  protected openTreeMenu(event: MouseEvent, vaultId: string, entry?: VaultFileEntry): void {
     if (event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement) {
       return;
     }
@@ -563,8 +785,8 @@ export class FilesPanel {
     // Right-clicking outside a multi-selection collapses it onto that row,
     // so "Delete" can't surprise-delete rows the user doesn't see. Inside a
     // multi-selection the menu acts on all of it (see `onDelete`).
-    if (entry && this.selection().size > 1 && !this.selection().has(entry.relativePath)) {
-      this.select(entry.relativePath);
+    if (entry && this.selection().size > 1 && !this.selection().has(docKey(vaultId, entry.relativePath))) {
+      this.select(docKey(vaultId, entry.relativePath));
     }
     const dir = !entry
       ? ''
@@ -574,13 +796,28 @@ export class FilesPanel {
     this.menu.set({
       x: Math.min(event.clientX, window.innerWidth - 180),
       y: Math.min(event.clientY, window.innerHeight - 260),
+      vaultId,
       dir,
       entry: entry ?? null,
     });
   }
 
-  protected closeMenu(): void {
+  protected openVaultMenu(event: MouseEvent, vault: VaultStatus): void {
+    if (event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement) {
+      return;
+    }
+    event.preventDefault();
+    event.stopPropagation();
+    this.vaultMenu.set({
+      x: Math.min(event.clientX, window.innerWidth - 220),
+      y: Math.min(event.clientY, window.innerHeight - 260),
+      vault,
+    });
+  }
+
+  protected closeMenus(): void {
     this.menu.set(null);
+    this.vaultMenu.set(null);
   }
 
   protected startCreate(kind: 'file' | 'directory'): void {
@@ -588,12 +825,12 @@ export class FilesPanel {
     if (!menu) {
       return;
     }
-    this.creating.set({ kind, dir: menu.dir });
-    this.menu.set(null);
+    this.creating.set({ kind, vaultId: menu.vaultId, dir: menu.dir });
+    this.closeMenus();
     if (menu.dir) {
       this.collapsed.update((set) => {
         const next = new Set(set);
-        next.delete(menu.dir);
+        next.delete(docKey(menu.vaultId, menu.dir));
         return next;
       });
     }
@@ -605,10 +842,11 @@ export class FilesPanel {
 
   /** Mark the right-clicked entry for a later "Paste". */
   protected onCopy(): void {
-    const entry = this.menu()?.entry;
-    this.menu.set(null);
-    if (entry) {
-      this.vault.clipboard.set({ path: entry.relativePath, name: entry.name });
+    const menu = this.menu();
+    const entry = menu?.entry;
+    this.closeMenus();
+    if (menu && entry) {
+      this.vault.clipboard.set({ vaultId: menu.vaultId, path: entry.relativePath, name: entry.name });
     }
   }
 
@@ -616,37 +854,39 @@ export class FilesPanel {
   protected async onPaste(): Promise<void> {
     const menu = this.menu();
     const clip = this.vault.clipboard();
-    this.menu.set(null);
+    this.closeMenus();
     if (!menu || !clip) {
       return;
     }
     try {
-      await this.vault.copyEntry(clip.path, menu.dir);
-      this.expand(menu.dir);
+      await this.vault.copyEntry(clip.path, menu.dir, clip.vaultId, menu.vaultId);
+      this.expand(menu.vaultId, menu.dir);
     } catch (err) {
       alert(err instanceof Error ? err.message : String(err));
     }
   }
 
   protected async onDuplicate(): Promise<void> {
-    const entry = this.menu()?.entry;
-    this.menu.set(null);
-    if (!entry) {
+    const menu = this.menu();
+    const entry = menu?.entry;
+    this.closeMenus();
+    if (!menu || !entry) {
       return;
     }
     try {
-      await this.vault.duplicateEntry(entry.relativePath);
+      await this.vault.duplicateEntry(entry.relativePath, menu.vaultId);
     } catch (err) {
       alert(err instanceof Error ? err.message : String(err));
     }
   }
 
   protected startRename(): void {
-    const entry = this.menu()?.entry;
-    this.menu.set(null);
-    if (entry) {
-      this.renaming.set({ entry });
+    const menu = this.menu();
+    const entry = menu?.entry;
+    if (menu && entry) {
+      this.renaming.set({ vaultId: menu.vaultId, entry });
     }
+    this.closeMenus();
   }
 
   protected cancelRename(): void {
@@ -676,67 +916,89 @@ export class FilesPanel {
     const parent = parentDir(entry.relativePath);
     const toPath = parent ? `${parent}/${nextName}` : nextName;
     try {
-      await this.vault.renameEntry(entry.relativePath, toPath);
-      this.editor.retargetTabs(entry.relativePath, toPath);
-      if (this.vault.clipboard()?.path === entry.relativePath) {
-        this.vault.clipboard.set({ path: toPath, name: nextName });
+      await this.vault.renameEntry(entry.relativePath, toPath, pending.vaultId);
+      this.editor.retargetTabs(
+        docKey(pending.vaultId, entry.relativePath),
+        docKey(pending.vaultId, toPath),
+      );
+      const clip = this.vault.clipboard();
+      if (clip && clip.vaultId === pending.vaultId && clip.path === entry.relativePath) {
+        this.vault.clipboard.set({ vaultId: clip.vaultId, path: toPath, name: nextName });
       }
     } catch (err) {
       alert(err instanceof Error ? err.message : String(err));
     }
   }
 
-  private expand(dir: string): void {
+  private expand(vaultId: string, dir: string): void {
     if (!dir) {
       return;
     }
     this.collapsed.update((set) => {
       const next = new Set(set);
-      next.delete(dir);
+      next.delete(docKey(vaultId, dir));
       return next;
     });
   }
 
   protected async onDelete(): Promise<void> {
-    const entry = this.menu()?.entry;
-    this.menu.set(null);
-    if (!entry) {
+    const menu = this.menu();
+    const entry = menu?.entry;
+    if (!menu || !entry) {
+      this.closeMenus();
       return;
     }
     // Right-clicking inside a multi-selection deletes the whole selection;
     // anywhere else it stays a single-entry delete.
     const selection = this.selection();
     const targets =
-      selection.size > 1 && selection.has(entry.relativePath)
+      selection.size > 1 && selection.has(docKey(menu.vaultId, entry.relativePath))
         ? this.selectedEntries(this.visibleNodes())
-        : [entry];
+        : [{ vaultId: menu.vaultId, entry }];
+    this.closeMenus();
     await this.deleteEntries(targets);
   }
 
-  /** One `confirm`, per-path tab/clipboard cleanup, one batched IPC delete. */
-  private async deleteEntries(entries: VaultFileEntry[]): Promise<void> {
-    if (entries.length === 0) {
+  /**
+   * One `confirm`, per-path tab/clipboard cleanup, one batched IPC delete
+   * PER VAULT (a selection can span vaults since ADR-0051).
+   */
+  private async deleteEntries(targets: Array<{ vaultId: string; entry: VaultFileEntry }>): Promise<void> {
+    if (targets.length === 0) {
       return;
     }
     const what =
-      entries.length === 1
-        ? entries[0].type === 'directory'
+      targets.length === 1
+        ? targets[0].entry.type === 'directory'
           ? 'folder'
           : 'file'
-        : `${entries.length} items`;
-    const names = entries.map((entry) => `"${entry.relativePath}"`).join(', ');
+        : `${targets.length} items`;
+    const names = targets.map((t) => `"${t.entry.relativePath}"`).join(', ');
     if (!confirm(`Delete ${what} ${names}? This cannot be undone.`)) {
       return;
     }
-    for (const entry of entries) {
-      this.editor.closeTabsUnder(entry.relativePath);
-      const clip = this.vault.clipboard()?.path;
-      if (clip && (clip === entry.relativePath || clip.startsWith(`${entry.relativePath}/`))) {
+    for (const target of targets) {
+      this.editor.closeTabsUnder(target.vaultId, target.entry.relativePath);
+      const clip = this.vault.clipboard();
+      if (
+        clip &&
+        clip.vaultId === target.vaultId &&
+        (clip.path === target.entry.relativePath ||
+          clip.path.startsWith(`${target.entry.relativePath}/`))
+      ) {
         this.vault.clipboard.set(null);
       }
     }
     try {
-      await this.vault.deleteEntries(entries.map((entry) => entry.relativePath));
+      const byVault = new Map<string, string[]>();
+      for (const target of targets) {
+        const list = byVault.get(target.vaultId) ?? [];
+        list.push(target.entry.relativePath);
+        byVault.set(target.vaultId, list);
+      }
+      for (const [vaultId, paths] of byVault) {
+        await this.vault.deleteEntries(paths, vaultId);
+      }
     } catch (err) {
       alert(err instanceof Error ? err.message : String(err));
     }
@@ -745,7 +1007,10 @@ export class FilesPanel {
     const selected = this.selected();
     if (
       selected &&
-      entries.some((entry) => selected === entry.relativePath || selected.startsWith(`${entry.relativePath}/`))
+      targets.some((t) => {
+        const key = docKey(t.vaultId, t.entry.relativePath);
+        return selected === key || selected.startsWith(`${key}/`);
+      })
     ) {
       this.selected.set(null);
       this.anchor.set(null);
@@ -773,9 +1038,9 @@ export class FilesPanel {
     const relativePath = pending.dir ? `${pending.dir}/${finalName}` : finalName;
 
     try {
-      await this.vault.createEntry(pending.kind, relativePath);
+      await this.vault.createEntry(pending.kind, relativePath, pending.vaultId);
       if (pending.kind === 'file') {
-        await this.editor.openFile(relativePath);
+        await this.editor.openFile(relativePath, pending.vaultId);
       }
     } catch (err) {
       alert(err instanceof Error ? err.message : String(err));
@@ -784,9 +1049,9 @@ export class FilesPanel {
 
   @HostListener('document:keydown.escape')
   protected onEscape(): void {
-    this.menu.set(null);
-    this.vaultMenuOpen.set(false);
+    this.closeMenus();
     this.renaming.set(null);
+    this.renamingVault.set(null);
     // A second Escape (or one with no menu open) collapses a multi-selection
     // back to the cursor row.
     const selected = this.selected();

@@ -1,16 +1,18 @@
 @if (pane(); as p) {
   @if (p.tabs.length > 0) {
     <app-tab-bar [paneId]="paneId()" />
-    @if (activeDoc()?.kind === 'image') {
-      <app-image-tab [path]="p.active!" [focused]="focused()" />
-    } @else if (pluginDocKind(); as dk) {
-      <app-plugin-doc-host [contrib]="dk" [path]="p.active!" [focused]="focused()" />
-    } @else if (pluginDocKind() === null) {
-      <div class="empty">
-        <p>This tab's kind is not available - its plugin is disabled or failed to load.</p>
-      </div>
-    } @else {
-      <app-editor [paneId]="paneId()" />
+    @if (activeDoc(); as doc) {
+      @if (doc.kind === 'image') {
+        <app-image-tab [path]="doc.path" [vaultId]="doc.vaultId" [focused]="focused()" />
+      } @else if (pluginDocKind(); as dk) {
+        <app-plugin-doc-host [contrib]="dk" [path]="doc.path" [focused]="focused()" />
+      } @else if (pluginDocKind() === null) {
+        <div class="empty">
+          <p>This tab's kind is not available - its plugin is disabled or failed to load.</p>
+        </div>
+      } @else {
+        <app-editor [paneId]="paneId()" />
+      }
     }
   } @else {
     <div class="empty">

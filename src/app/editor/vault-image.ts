@@ -2,7 +2,10 @@
  * Turns an image reference in a note (`![](url)`) into a `src` the renderer
  * can load. The renderer has no filesystem access, so vault-relative paths
  * are rewritten to the `drey-asset://` scheme that the main process serves
- * from inside the active vault (see `electron/main.ts`).
+ * from inside the named vault (see `electron/main.ts`). Since ADR-0051 the
+ * vault id is the URL host (`drey-asset://<vaultId>/asset/<path>`) so the
+ * same relative path resolves per vault; a null vaultId keeps the
+ * host-less legacy form (served from the active vault).
  */
 
 /** Collapse `.`/`..` segments; return `null` if the path climbs above the root. */
@@ -28,11 +31,15 @@ export function normalizeRelative(pathStr: string): string | null {
  *  - `http(s):` / `data:` pass through unchanged;
  *  - any other explicit scheme -> `null` (not rendered);
  *  - otherwise resolve relative to the note's own folder and return a
- *    `drey-asset://asset/<path>` URL.
+ *    `drey-asset://[<vaultId>/]asset/<path>` URL.
  * `null` whenever the path can't be trusted (escapes the vault) or there is
  * no open document to resolve against.
  */
-export function resolveVaultImageUrl(docPath: string | null, rawUrl: string): string | null {
+export function resolveVaultImageUrl(
+  docPath: string | null,
+  rawUrl: string,
+  vaultId: string | null = null,
+): string | null {
   const url = rawUrl.trim();
   if (!url) {
     return null;
@@ -49,5 +56,33 @@ export function resolveVaultImageUrl(docPath: string | null, rawUrl: string): st
   if (joined === null || joined === '') {
     return null;
   }
-  return `drey-asset://asset/${joined.split('/').map(encodeURIComponent).join('/')}`;
+  const encoded = joined.split('/').map(encodeURIComponent).join('/');
+  return vaultId !== null && vaultId !== ''
+    ? `drey-asset://${vaultId}/asset/${encoded}`
+    : `drey-asset://asset/${encoded}`;
+}
+
+/**
+ * Ordered servable candidates for one image reference: note-relative
+ * first (the documented semantics), then the same target read from the
+ * VAULT ROOT. The fallback heals notes that embed a vault-relative path —
+ * assistant chat notes do (their attachment lines carry the
+ * `vault:saveAsset` result verbatim), and a note moved between folders
+ * keeps rendering such references. `http(s)`/`data:` pass through as the
+ * single candidate; an unresolvable reference resolves to no candidate.
+ */
+export function resolveVaultImageCandidates(
+  docPath: string | null,
+  rawUrl: string,
+  vaultId: string | null = null,
+): string[] {
+  const primary = resolveVaultImageUrl(docPath, rawUrl, vaultId);
+  if (primary === null) {
+    return [];
+  }
+  if (/^(https?:|data:)/i.test(rawUrl.trim())) {
+    return [primary];
+  }
+  const fromRoot = resolveVaultImageUrl(null, rawUrl, vaultId);
+  return fromRoot !== null && fromRoot !== primary ? [primary, fromRoot] : [primary];
 }

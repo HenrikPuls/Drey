@@ -115,20 +115,27 @@ export class Editor implements AfterViewInit {
     if (/^[a-z][a-z0-9+.-]*:/i.test(raw) || raw.startsWith('//')) {
       return; // some other scheme -- leave it alone
     }
-    const target = resolveVaultLinkPath(this.shownPath(), raw);
+    const doc = this.shownDoc();
+    const target = resolveVaultLinkPath(doc?.path ?? null, raw);
     if (target) {
-      void this.editor.openFile(target);
+      void this.editor.openFile(target, doc?.vaultId ?? undefined);
     }
   };
 
   /**
    * A `Ctrl`/`Cmd`-click on a `[[wikilink]]` (req-20): resolve against this
-   * pane's note (sibling-first for ambiguous basenames), open at the
-   * `#heading` anchor when given, create the note when nothing resolves.
-   * An arrow function so it keeps `this` when the extension calls it.
+   * pane's note -- in ITS vault (ADR-0051) -- sibling-first for ambiguous
+   * basenames, open at the `#heading` anchor when given, create the note
+   * when nothing resolves (in the linking note's vault). An arrow function
+   * so it keeps `this` when the extension calls it.
    */
   protected readonly activateWikilink = (target: string, anchor: string | null): void => {
-    void this.wikiLinks.open(target, anchor, this.shownPath());
+    void this.wikiLinks.open(
+      target,
+      anchor,
+      this.shownDoc()?.vaultId ?? null,
+      this.shownDoc()?.path ?? null,
+    );
   };
 
   /**
@@ -219,7 +226,7 @@ export class Editor implements AfterViewInit {
     effect(() => {
       const request = this.editor.revealRequest();
       this.shownDoc()?.bufferContent; // re-run after the load settles
-      if (this.view && this.loadedPath === request.path) {
+      if (this.view && this.loadedPath === request.key) {
         this.applyRevealRequest(request);
       }
     });
@@ -402,7 +409,7 @@ export class Editor implements AfterViewInit {
   }
 
   /** Puts the caret at the start of 1-based `line` and scrolls it into view. */
-  private applyRevealRequest(request: { id: number; path: string; line: number }): void {
+  private applyRevealRequest(request: { id: number; key: string; line: number }): void {
     const view = this.view;
     if (!view || request.id === 0 || request.id === this.handledRevealRequest) {
       return;

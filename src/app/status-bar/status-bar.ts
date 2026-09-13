@@ -39,8 +39,8 @@ export class StatusBar {
    * through to the word/char count.
    */
   protected readonly docKindStatus = computed<string | null>(() => {
-    const doc = this.editor.openDocs().find((d) => d.path === this.editor.activePath());
-    if (doc === undefined || doc.kind === 'text' || doc.kind === 'image') {
+    const doc = this.editor.docFor(this.editor.activePath());
+    if (doc === null || doc.kind === 'text' || doc.kind === 'image') {
       return null;
     }
     return this.docKinds.statusTextFor(doc.kind, doc.path);

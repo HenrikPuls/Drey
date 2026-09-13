@@ -1,5 +1,6 @@
 import { TestBed } from '@angular/core/testing';
 import { vi } from 'vitest';
+import type { DreyApi } from '../../../shared/ipc-api';
 import { EditorService } from '../services/editor.service';
 import { VaultService } from '../vault';
 import { PaneDropService } from './pane-drop.service';
@@ -25,12 +26,32 @@ describe('PaneDropService', () => {
   let vault: VaultService;
   let panes: PaneService;
 
-  beforeEach(() => {
+  beforeEach(async () => {
     TestBed.configureTestingModule({});
+    // Two registered vaults; `v1` active. The service derives its state
+    // from this registry bridge.
+    window.dreyApi = {
+      getActiveVault: () => Promise.resolve('C:/Vault'),
+      getActiveVaultId: () => Promise.resolve('v1'),
+      listVaults: () =>
+        Promise.resolve([
+          { id: 'v1', name: 'Vault', path: 'C:/Vault', exists: true, active: true },
+          { id: 'v2', name: 'Second', path: 'D:/Second', exists: true, active: false },
+        ]),
+      listVaultFiles: () => Promise.resolve([]),
+    } as unknown as DreyApi;
     svc = TestBed.inject(PaneDropService);
     editor = TestBed.inject(EditorService);
     vault = TestBed.inject(VaultService);
     panes = TestBed.inject(PaneService);
+    // Let the registry load settle.
+    await Promise.resolve();
+    await Promise.resolve();
+    await Promise.resolve();
+  });
+
+  afterEach(() => {
+    delete (window as { dreyApi?: unknown }).dreyApi;
   });
 
   describe('canOpen', () => {
@@ -63,12 +84,23 @@ describe('PaneDropService', () => {
       expect(handled).toBe(true);
       expect(focus).toHaveBeenCalledWith('p1');
       expect(open).toHaveBeenCalledTimes(1);
-      expect(open).toHaveBeenCalledWith('notes/a.md');
+      expect(open).toHaveBeenCalledWith('notes/a.md', 'v1');
     });
 
-    it('resolves an OS file inside the vault root to a relative path', async () => {
+    it('resolves a keyed payload (vaultId::path) to that vault', async () => {
       const open = vi.spyOn(editor, 'openFile').mockResolvedValue(undefined);
-      vault.activeVaultPath.set('C:\\Vault');
+
+      const handled = await svc.openFromDrop(
+        'p1',
+        transfer({ data: { 'application/x-drey-vault-path': 'v2::notes/b.md' } }),
+      );
+
+      expect(handled).toBe(true);
+      expect(open).toHaveBeenCalledWith('notes/b.md', 'v2');
+    });
+
+    it('resolves an OS file inside the active vault root to a relative path', async () => {
+      const open = vi.spyOn(editor, 'openFile').mockResolvedValue(undefined);
 
       const handled = await svc.openFromDrop(
         'p1',
@@ -76,12 +108,11 @@ describe('PaneDropService', () => {
       );
 
       expect(handled).toBe(true);
-      expect(open).toHaveBeenCalledWith('sub/x.md');
+      expect(open).toHaveBeenCalledWith('sub/x.md', 'v1');
     });
 
     it('ignores an OS file outside the vault root', async () => {
       const open = vi.spyOn(editor, 'openFile').mockResolvedValue(undefined);
-      vault.activeVaultPath.set('C:\\Vault');
 
       const handled = await svc.openFromDrop(
         'p1',

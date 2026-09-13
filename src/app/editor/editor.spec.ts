@@ -49,7 +49,8 @@ describe('Editor', () => {
           path: request.path,
           content: request.body,
           modifiedMs: 2,
-        }),    };
+        }),
+    };
     window.dreyApi = fakeApi as DreyApi;
 
     await TestBed.configureTestingModule({ imports: [Editor] }).compileComponents();
@@ -185,7 +186,7 @@ describe('Editor', () => {
       el.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, ctrlKey: true }));
       fixture.detectChanges();
 
-      expect(spy).toHaveBeenCalledWith('Plan', null, 'wiki.md');
+      expect(spy).toHaveBeenCalledWith('Plan', null, null, 'wiki.md');
     });
 
     it('a plain click does not activate', async () => {

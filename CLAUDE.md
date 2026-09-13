@@ -151,18 +151,26 @@ plugin-owned behavioural contracts.
 
 Main process:
 
-- `VaultManager` — vault registration, active vault, path resolution,
-  `deleteEntry()` and `pickSavePath()` (native save dialog rooted at the
-  vault); every mutating method records itself in the own-write ledger so
-  the watcher can drop its own echoes
+- `VaultManager` — the multi-vault registry
+  ([ADR-0051](docs/09_architecture_decisions/0051-multi-vault-registry.md)):
+  every registered vault (`{id, name, path}`, stable minted ids) in
+  `<userData>/vault-config.json` v2 plus which one is **active** (the
+  default target for daily notes, capture, chats, drafts). Per-vault path
+  resolution — every op takes an optional trailing `vaultId` defaulting
+  to active — `deleteEntry()`, `pickSavePath()` (rooted at the given
+  vault) and cross-vault moves (copy + delete, sidecar travels along);
+  every mutating method records itself in the own-write ledger so the
+  watcher can drop its own echoes
 - `VaultWatcher` + `OwnWriteLedger` +
   `VaultChangeAnnouncer` (`electron/vault-watcher.ts`,
   `own-write-ledger.ts`, `vault-change-announcer.ts`) — the opt-in vault
-  watcher ([ADR-0045](docs/09_architecture_decisions/0045-optional-vault-file-watcher.md)):
-  chokidar (injected via a `watchFactory`) → ledger suppression → one
-  debounced round (per-`.md` plugin vault-change events + the
-  `vault:changed` renderer push with changed paths). The same round backs
-  the manual refresh (`vault:refresh`) and MCP writes.
+  watcher ([ADR-0045](docs/09_architecture_decisions/0045-optional-vault-file-watcher.md)),
+  one chokidar instance **per registered vault** (reconciled on registry
+  changes) → ledger suppression (vault-scoped keys) → one debounced round
+  per vault (per-`.md` plugin vault-change events + the `vault:changed`
+  renderer push with `vaultId` + changed paths; a payload-less push is
+  the registry-level round). The same round backs the manual refresh
+  (`vault:refresh`), registry mutations and MCP writes.
   `EditorService.reloadFromVaultChange` auto-reloads **clean** tabs among
   the changed paths; dirty tabs stay last-writer-wins
 - `electron/plugin-host/` — discovery (built-ins +
@@ -210,9 +218,12 @@ Renderer (Angular):
   dock-edge-resize gestures. Three docks — `left | right | bottom` (the
   bottom one a resizable band under the editor). Panels come from the
   runtime **`WidgetRegistryService`**: core panels via
-  `registerCoreWidgets()` — `CalendarPanel`, `FilesPanel` (vault
-  switcher + file tree + right-click new/delete + inline create + drag
-  & drop of files/folders within the tree, req-23),
+  `registerCoreWidgets()` — `CalendarPanel`, `FilesPanel` (one section
+  per registered vault — the vault header row stacked per ADR-0051 —
+  plus the file trees, right-click new/delete, inline create, add /
+  rename / remove / set-active vault management in the vault row's
+  context menu, and drag & drop of files/folders within or across
+  vaults, req-23),
   `WindowsPanel`, `SearchPanelHost`, `EntryPanel` (the "Add entry"
   drawer — default home: the bottom dock) — while the templates / search
   / tasks / assistant panels are plugin widgets mounting plain DOM into
@@ -407,11 +418,15 @@ be called out explicitly (see Working Style below), not introduced silently.
     with the session.
     `View → Reset layout` restores it (and undocks the editor bands).
     Layout state persists (`localStorage['drey.dock']`).
-  - **Files panel**: a vault-switcher row (name + "Open other vault …",
-    with the refresh button on the same row) above the vault file tree
-    (clicking a file opens it; right-click → new file/folder/delete;
-    dragging a row onto a folder / file row / the tree background moves
-    it — req-23, no-drop on a same-dir no-op or a folder into itself).
+  - **Files panel**: one section per registered vault — a vault header
+    row (name, active-vault dot, fold chevron, path tooltip) above that
+    vault's file tree, with the refresh + "Add vault …" buttons in the
+    panel header. Clicking a file opens it (in its vault); right-click on
+    a file/folder → new file/folder/delete; right-click on a vault row →
+    Set active / Rename / Add vault / Open in File Explorer / Remove
+    (ADR-0051). Dragging a row onto a folder / file row / another vault's
+    header row moves it (within or across vaults, req-23; no-drop on a
+    same-dir no-op or a folder into itself).
   - **Centre column**: a 34px tab bar for open documents, a 34px meta bar
     (path · Lines toggle · Save/Saved · `⋯` — no assistant sparkle
     button any more), the editor (Live Preview ⇄ source via the `⋯` menu
@@ -524,26 +539,34 @@ can dock into the three docks (milestone 20,
 The milestone log lives in
 [docs/milestones-done.md](docs/milestones-done.md).
 
-**No next milestone is chosen yet.** Phase 2+ features from
-`specs/roadmap.md` (vector search, embeddings, a dedicated FTS surface,
-RAG scope resolution) stay out of scope — ask before pulling any of them
-in.
+**In progress: milestone 28 — multi-vault registry** (Req for the
+owner's multi-vault request, [ADR-0051](docs/09_architecture_decisions/0051-multi-vault-registry.md)):
+a vault registry (`vault-config.json` v2, stable ids, add/remove/rename/
+set-active from the Files panel), multi-root Files panel, open/edit/save
+in any vault (doc keys `vaultId::path`), cross-vault drag & drop moves,
+session snapshot v2, per-vault asset URLs + wikilinks, watcher × N,
+vault-scoped IPC/pushes/ledger and `ctx.vault` vault options (SDK minor
+6). Code-complete, 1032/1033 unit tests green (the 1 failure is the
+concurrently in-flight OCR plugin work, unrelated); **not yet manually
+verified by the owner**. Announced follow-up (M-B): search scopes
+(document / this vault / all vaults), per-vault tags/tasks indexes, MCP
+`vault` arguments, tasks "all vaults" scope.
 
 ## Milestones
 
-The completed milestone log (1–26) is archived in
+The completed milestone log (1–27) is archived in
 [docs/milestones-done.md](docs/milestones-done.md).
 
-- **Last completed:** milestone 26 — live edit mode (Req-32,
-  ADR-0049 — a composer toggle lets the model edit the open note
-  directly via `doc_*` diff-hunk tools, immediate apply with an
-  advisory input lock, one undo step per push). Code-complete, all 990
-  unit tests green; **not yet manually verified by the owner**.
-  Milestone 25 (chats as vault notes, Req-30, ADR-0048) is likewise
-  code-complete and still awaiting manual verification.
-- **Next:** not chosen — see "Current State & Next Steps" above.
-  Candidates from the approved provider program: Req-31 MCP client
-  (M-next), then copilot-web re-apply + copilot-cli spike.
+- **Last completed:** milestone 27 — OCR via the vision LLM (req-9
+  desktop half, ADR-0050 — a `plugins/ocr/` context-menu row transcribes
+  embedded images and image tabs through the connected vision-capable
+  LLM). **Not yet manually verified by the owner.** Milestones 25 (chats
+  as vault notes) and 26 (live edit mode) are likewise code-complete and
+  still awaiting manual verification.
+- **Next:** milestone 28's M-B follow-up (search scopes, per-vault
+  indexes, MCP vault arguments — see "Current State" above), or the
+  provider program: Req-31 MCP client, then copilot-web re-apply +
+  copilot-cli spike.
 
 Pause after each milestone, show what works, don't push through several
 milestones in one uninterrupted stretch. (Milestones 10, 11, 15 and 19

@@ -106,12 +106,14 @@ export class PluginApiFactory {
     };
 
     const toOpenDoc = (doc: {
+      vaultId: string | null;
       path: string;
       name: string;
       kind: string;
       savedContent: string;
       bufferContent: string;
     }) => ({
+      vaultId: doc.vaultId,
       path: doc.path,
       name: doc.name,
       kind: doc.kind,
@@ -133,15 +135,15 @@ export class PluginApiFactory {
           return { ...toOpenDoc(doc), selection: this.selection() };
         },
         get: (path) => {
-          const doc = this.editor.docFor(path);
+          const doc = this.editor.resolveDoc(path);
           return doc === null ? null : toOpenDoc(doc);
         },
         list: () => this.editor.openDocs().map(toOpenDoc),
-        open: (path, line) => {
+        open: (path, line, opts) => {
           if (line === undefined) {
-            return this.editor.openFile(path);
+            return this.editor.openFile(path, opts?.vaultId);
           }
-          return this.editor.openFileAt(path, line);
+          return this.editor.openFileAt(path, line, opts?.vaultId);
         },
         openScratch: (path, content) => this.editor.openScratch(path, content),
         addDoc: (kind, key, name) => {
@@ -161,18 +163,20 @@ export class PluginApiFactory {
           return true;
         },
         setBuffer: (path, content) => {
-          const exists = this.editor.openDocs().some((d) => d.path === path && d.kind === 'text');
-          if (exists) {
-            this.editor.updateBuffer(path, content);
+          const doc = this.editor.resolveDoc(path);
+          if (doc !== null && doc.kind === 'text') {
+            this.editor.updateBuffer(doc.key, content);
+            return true;
           }
-          return exists;
+          return false;
         },
         setEditLock: (path, locked) => {
-          const exists = this.editor.openDocs().some((d) => d.path === path && d.kind === 'text');
-          if (exists) {
-            this.editor.setEditLock(path, locked);
+          const doc = this.editor.resolveDoc(path);
+          if (doc !== null && doc.kind === 'text') {
+            this.editor.setEditLock(doc.key, locked);
+            return true;
           }
-          return exists;
+          return false;
         },
         save: (path, options) =>
           this.editor.save({
@@ -202,11 +206,18 @@ export class PluginApiFactory {
         onChange: (listener) => track(context.addDocumentListener(listener)),
       },
       vault: {
-        readFile: (path) => window.dreyApi.readVaultFile(path),
-        writeFile: (path, content) => window.dreyApi.writeVaultFile(path, content),
-        saveAsset: (bytes, ext, noteRelPath) =>
-          invokeBackend('drey.vault.saveAsset', { bytes, ext, noteRelPath }) as Promise<string>,
-        listFiles: () => window.dreyApi.listVaultFiles(),
+        listVaults: () => window.dreyApi.listVaults(),
+        readFile: (path, opts) => window.dreyApi.readVaultFile(path, opts?.vaultId),
+        writeFile: (path, content, opts) =>
+          window.dreyApi.writeVaultFile(path, content, opts?.vaultId),
+        saveAsset: (bytes, ext, noteRelPath, opts) =>
+          invokeBackend('drey.vault.saveAsset', {
+            bytes,
+            ext,
+            noteRelPath,
+            ...(opts?.vaultId !== undefined ? { vaultId: opts.vaultId } : {}),
+          }) as Promise<string>,
+        listFiles: (opts) => window.dreyApi.listVaultFiles(opts?.vaultId),
         onChanged: (listener) =>
           track(
             window.dreyApi.onVaultChanged(() => {
@@ -287,10 +298,14 @@ export class PluginApiFactory {
       },
       search: {
         // Routed through the host's reserved methods so the surface reads
-        // whichever plugin registered the section-search provider.
+        // whichever plugin registered the section-search provider. `scope`
+        // (ADR-0051) defaults to the active vault main-side.
         vocabulary: () => invokeBackend('drey.search.vocabulary') as Promise<readonly TagEntry[]>,
-        searchSections: (query) =>
-          invokeBackend('drey.search.sections', { query }) as Promise<readonly TagSearchHit[]>,
+        searchSections: (query, scope) =>
+          invokeBackend('drey.search.sections', {
+            query,
+            ...(scope !== undefined ? { scope } : {}),
+          }) as Promise<readonly TagSearchHit[]>,
       },
       settings: {
         get: async <T>(key: string) => (await invokeBackend('drey.config.get', { key })) as

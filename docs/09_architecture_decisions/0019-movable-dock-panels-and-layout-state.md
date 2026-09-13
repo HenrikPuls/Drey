@@ -67,8 +67,10 @@ menu the design does not use.
   stays CodeMirror 6 + Live Preview ([ADR-0009](0009-live-preview-decorations.md)) —
   the prototype's `contenteditable` block model and its per-block-type
   gutter offsets are not reproduced; line numbers use CM's standard
-  line-based gutter, re-themed. The multi-vault switcher is reduced to
-  "Open other vault …" (no vault registry in the backend).
+  line-based gutter, re-themed. ~~The multi-vault switcher is reduced to
+  "Open other vault …" (no vault registry in the backend).~~ Superseded:
+  the full vault registry landed in
+  [ADR-0051](0051-multi-vault-registry.md).
 - The dock gestures are hand-rolled on native events, keeping the "no
   CDK / split-pane dependency" line the shell already held.
 

@@ -41,7 +41,7 @@ import {
   wikilinks,
 } from '../wikilinks';
 import { pasteUrlAsMarkdownLink } from '../paste-link';
-import { resolveVaultImageUrl } from '../vault-image';
+import { resolveVaultImageCandidates } from '../vault-image';
 import { EditorExtensionRegistry, DropDecoderRegistry } from '../../plugin-host';
 
 /**
@@ -107,6 +107,11 @@ export class MarkdownSurface implements AfterViewInit, OnDestroy {
    * editor sets it; the compact composers leave it `null` (always Markdown).
    */
   readonly languageFilename = input<string | null>(null);
+  /**
+   * The shown document's vault id (ADR-0051), for vault-scoped features
+   * (wikilink resolve/completion). `null` = the active vault.
+   */
+  readonly docVaultId = input<string | null>(null);
   readonly placeholder = input('');
   /**
    * Turns on image paste / drop: a pasted or dropped image is saved into
@@ -312,13 +317,15 @@ export class MarkdownSurface implements AfterViewInit, OnDestroy {
       // the language compartment; only the bracket concealing is
       // Live-Preview-only, via the conceal layer). `languageFilename()`
       // carries the tab's path for sibling-first resolution and is `null`
-      // in the composers.
+      // in the composers; `docVaultId()` scopes resolution to the shown
+      // doc's vault (ADR-0051).
       wikilinks({
-        resolve: (target) => this.wikiLinks.resolve(target, this.languageFilename()) !== null,
+        resolve: (target) =>
+          this.wikiLinks.resolve(target, this.docVaultId(), this.languageFilename()) !== null,
         onActivate: this.onWikilinkActivate(),
       }),
       markdownLanguage.data.of({
-        autocomplete: makeWikilinkCompletionSource(() => this.wikiLinks.noteNames()),
+        autocomplete: makeWikilinkCompletionSource(() => this.wikiLinks.noteNames(this.docVaultId())),
       }),
       // Paste a bare URL onto an empty caret -> `[url](url)` (lang-markdown's
       // own pasteURLAsLink only handles the wrap-a-selection case).
@@ -453,11 +460,21 @@ export class MarkdownSurface implements AfterViewInit, OnDestroy {
           this.imageCapture()
             ? imagePaste({
                 save: (bytes, ext) =>
-                  this.vault.saveAsset(bytes, ext, this.editor.openPath() ?? ''),
+                  this.vault.saveAsset(
+                    bytes,
+                    ext,
+                    this.editor.openPath() ?? '',
+                    this.editor.openVaultId() ?? this.vault.activeVaultId(),
+                  ),
                 notePath: () => this.editor.openPath(),
-                readTextFile: (path) => this.vault.readTextFile(path),
+                readTextFile: (path, vaultId) =>
+                  this.vault.readTextFile(path, vaultId ?? this.editor.openVaultId() ?? undefined),
                 saveFromUrl: (url) =>
-                  this.vault.saveAssetFromUrl(url, this.editor.openPath() ?? ''),
+                  this.vault.saveAssetFromUrl(
+                    url,
+                    this.editor.openPath() ?? '',
+                    this.editor.openVaultId() ?? this.vault.activeVaultId(),
+                  ),
                 // Plugin drop decoders claim a drop before the base cascade
                 // (the .ics/.msg meeting decoder is the Meeting plugin's).
                 dropClaimed: (data) => this.dropDecoders.claims(data),
@@ -563,7 +580,8 @@ export class MarkdownSurface implements AfterViewInit, OnDestroy {
   private modeExtensions(mode: EditorViewMode): Extension {
     return mode === 'live'
       ? livePreview({
-          resolveImage: (url) => resolveVaultImageUrl(this.editor.openPath(), url),
+          resolveImage: (url) =>
+            resolveVaultImageCandidates(this.editor.openPath(), url, this.editor.openVaultId()),
           onOpenImage: (src) => this.lightbox.open(src),
           onZoomDiagram: (dataUrl) => this.lightbox.open(dataUrl),
         })

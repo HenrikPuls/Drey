@@ -36,14 +36,31 @@ const plugin: MainPluginModule = {
     );
     index.setReadContent((path) => ctx.vault.read(path));
 
+    // Which vault this (single) index mirrors: the ACTIVE one. A scoped
+    // event for any OTHER vault is ignored -- per-vault indexes and the
+    // "all vaults" scope land with the M-B work.
+    let indexVaultId: string | null = null;
+    void ctx.vault.listVaults().then((vaults) => {
+      indexVaultId = vaults.find((v) => v.active)?.id ?? null;
+    });
+
     // note:save -> incremental re-index (the `templates/` exclusion lives
-    // in the index). The tags plugin's provider runs on the same hook.
+    // in the index). The tags plugin's provider runs on the same hook. A
+    // save in another vault is skipped.
     ctx.save.onNoteSaved((event) => {
+      if (indexVaultId !== null && event.vaultId !== indexVaultId) {
+        return;
+      }
       index.reindexFile(event.path, event.content);
     });
 
     // Vault lifecycle: removal on delete, full rebuild on rename / refresh.
+    // A vault-less `refresh` is the registry-level round (rebuild); a
+    // scoped event for another vault is ignored.
     ctx.vault.onChanged((event) => {
+      if (event.vaultId !== undefined && indexVaultId !== null && event.vaultId !== indexVaultId) {
+        return;
+      }
       if (event.kind === 'delete' && event.path !== undefined) {
         index.removeFile(event.path);
         return;
@@ -64,6 +81,10 @@ const plugin: MainPluginModule = {
         return;
       }
       void index.rebuild();
+      // A registry-level round may have changed which vault is active.
+      void ctx.vault.listVaults().then((vaults) => {
+        indexVaultId = vaults.find((v) => v.active)?.id ?? null;
+      });
     });
 
     // The renderer panel's whole-vault list.
