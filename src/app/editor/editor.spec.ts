@@ -159,6 +159,28 @@ describe('Editor', () => {
     expect(compiled().querySelector('.dirty')).toBeTruthy();
   });
 
+  describe('meta-bar icon buttons (req: Lines/Save as icons)', () => {
+    it('renders the Lines button icon-only with its toggle label', () => {
+      const lines = compiled().querySelector('.lines') as HTMLButtonElement;
+      expect(lines.querySelector('svg')).toBeTruthy();
+      expect(lines.textContent?.trim()).toBe('');
+      expect(lines.getAttribute('aria-label')).toBe('Toggle line numbers');
+    });
+
+    it('renders the Save button icon-only, state carried by aria-label/title', () => {
+      const save = compiled().querySelector('.save') as HTMLButtonElement;
+      expect(save.querySelector('svg')).toBeTruthy();
+      expect(save.textContent?.trim()).toBe('');
+      expect(save.getAttribute('aria-label')).toBe('Saved');
+      expect(save.getAttribute('title')).toBe('Saved');
+
+      editor.updateBuffer('note.md', '# Title\n\nedited');
+      fixture.detectChanges();
+      expect(save.getAttribute('aria-label')).toBe('Save');
+      expect(save.getAttribute('title')).toBe('Save');
+    });
+  });
+
   describe('wikilinks (req-20)', () => {
     async function openWiki(): Promise<void> {
       await editor.openFile('wiki.md');

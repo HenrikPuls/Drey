@@ -14,9 +14,9 @@
       [class.on]="editor.lineNumbers()"
       (click)="editor.toggleLineNumbers()"
       title="Toggle line numbers (Ctrl G)"
+      aria-label="Toggle line numbers"
     >
       <app-icon name="list-ordered" [size]="12" [strokeWidth]="1.1" />
-      <span>{{ editor.lineNumbers() ? 'Lines on' : 'Lines' }}</span>
     </button>
 
     @let dirty = shownDoc() && shownDoc()!.bufferContent !== shownDoc()!.savedContent;
@@ -26,8 +26,10 @@
       [class.dirty]="dirty"
       [disabled]="!dirty || editor.isSaving()"
       (click)="editor.save({ path: shownPath() ?? undefined })"
+      [title]="editor.isSaving() ? 'Saving…' : dirty ? 'Save' : 'Saved'"
+      [attr.aria-label]="editor.isSaving() ? 'Saving…' : dirty ? 'Save' : 'Saved'"
     >
-      {{ editor.isSaving() ? 'Saving…' : dirty ? 'Save' : 'Saved' }}
+      <app-icon name="save" [size]="12" [strokeWidth]="1.1" />
     </button>
 
     <button
