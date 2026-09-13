@@ -55,11 +55,13 @@ type IconName =
   | 'corner-down-left'
   | 'rotate-ccw'
   | 'wrench'
-  | 'pencil';
+  | 'pencil'
+  | 'plus';
 
 /** The Lucide glyphs the panel uses (same paths as `src/app/icons/icon.ts`). */
 const ICON_PATHS: Record<IconName, readonly string[]> = {
   check: ['M20 6 9 17l-5-5'],
+  plus: ['M5 12h14', 'M12 5v14'],
   'arrow-up': ['m5 12 7-7 7 7', 'M12 19V5'],
   copy: [
     'M10 8h10a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H10a2 2 0 0 1-2-2V10a2 2 0 0 1 2-2z',
@@ -138,10 +140,11 @@ export function mountPanel(
   chatTitleButton.type = 'button';
   chatTitleButton.title = 'Switch chat';
   chatTitleButton.addEventListener('click', openChatPicker);
-  const chatNewButton = el('button', 'chat-new', '+') as HTMLButtonElement;
+  const chatNewButton = el('button', 'chat-new') as HTMLButtonElement;
   chatNewButton.type = 'button';
   chatNewButton.title = 'Start a new chat';
   chatNewButton.setAttribute('aria-label', 'Start a new chat');
+  chatNewButton.appendChild(icon('plus', 13));
   chatNewButton.addEventListener('click', () => state.newChat());
 
   const switchButton = el('button', 'switch') as HTMLButtonElement;
@@ -336,6 +339,13 @@ export function mountPanel(
   };
 
   const renderThread = (): void => {
+    // Stick-to-bottom (req: the transcript follows the streamed text):
+    // remember whether the user is pinned to the bottom BEFORE the rebuild
+    // wipes the children -- scrolling up unpins until they return to the
+    // bottom. Pinned is the default (also for the empty first render).
+    const pinned =
+      thread.clientHeight === 0 ||
+      thread.scrollHeight - thread.scrollTop - thread.clientHeight < 24;
     thread.textContent = '';
 
     const summary = state.summaryCard();
@@ -416,6 +426,10 @@ export function mountPanel(
       line.title = 'Dismiss';
       line.addEventListener('click', () => state.dismissActionMessage());
       thread.appendChild(line);
+    }
+
+    if (pinned) {
+      thread.scrollTop = thread.scrollHeight;
     }
   };
 

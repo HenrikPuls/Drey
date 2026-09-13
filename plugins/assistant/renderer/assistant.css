@@ -58,14 +58,15 @@
 
 .assistant-head .chat-new {
   flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   width: 20px;
   height: 20px;
   border: none;
   border-radius: var(--radius);
   background: transparent;
   color: var(--text-5);
-  font-size: 13px;
-  line-height: 1;
   cursor: pointer;
 }
 
