@@ -570,3 +570,37 @@ describe('assistant plugin state — misc surface', () => {
     expect(h.state.extraFiles()).toEqual(['b.md']);
   });
 });
+
+describe('assistant plugin state — document-follow catch-up', () => {
+  it('re-follows a doc switch that happened while a generation was running', async () => {
+    const h = setup();
+    let release: () => void = () => undefined;
+    h.setActive('a.md');
+    await h.state.openNote('a.md');
+    await h.state.ask('erste');
+    const aChat = h.state.activeChatPath();
+    expect(aChat).not.toBeNull();
+
+    // A second generation starts; mid-flight the user switches to b.md,
+    // which already has its own bound chat.
+    h.askGate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const pending = h.state.ask('zweite');
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    h.chatNotes.set(
+      'chats/2026/09/b-chat.md',
+      "---\nkind: chat\nnote: 'v1::b.md'\ntitle: b chat\n---\n",
+    );
+    h.setActive('b.md');
+    await h.state.followActiveDoc('v1::b.md'); // deferred while asking
+    expect(h.state.activeChatPath()).toBe(aChat); // the run keeps its chat
+
+    release();
+    expect(await pending).toBe(true);
+    // The ask's finally releases `asking` and runs the deferred follow.
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(h.state.activeChatPath()).toBe('chats/2026/09/b-chat.md');
+  });
+});

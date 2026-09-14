@@ -184,6 +184,12 @@ export function createAssistantState(ports: AssistantPorts, tasks: RunningTasks)
   let asking = false;
   /** Counts followActiveDoc calls so a slow listChats can't clobber a newer switch. */
   let followSeq = 0;
+  /**
+   * The doc key a switch wanted followed while a generation was running —
+   * re-run when the ask finishes, or the switch is lost and the panel
+   * stays on the old document's chat until the NEXT tab switch.
+   */
+  let deferredFollowKey: string | null | undefined;
   /** Live edit (ADR-0049) — session flag, one toggle in the chips row. */
   let liveEdit = false;
   let streaming: { taskId: string; text: string } | null = null;
@@ -374,7 +380,10 @@ export function createAssistantState(ports: AssistantPorts, tasks: RunningTasks)
 
     async followActiveDoc(noteKey) {
       if (asking) {
-        return; // a running generation keeps its chat; the next switch re-follows
+        // A running generation keeps its chat; remember the switch and
+        // re-follow when the ask's finally releases `asking`.
+        deferredFollowKey = noteKey;
+        return;
       }
       const seq = ++followSeq;
       let candidates: ChatSummary[];
@@ -587,6 +596,12 @@ export function createAssistantState(ports: AssistantPorts, tasks: RunningTasks)
         return false;
       } finally {
         asking = false;
+        const followKey = deferredFollowKey;
+        deferredFollowKey = undefined;
+        if (followKey !== undefined) {
+          // Catch up on a doc switch that arrived mid-generation.
+          void this.followActiveDoc(followKey);
+        }
         notify();
       }
     },
