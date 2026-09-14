@@ -14,6 +14,74 @@ and the current architecture in
 
 ## Recent milestones
 
+### Milestone 31 — beta-feedback batch I: fixes + small features
+
+The first milestone cut from the beta-testing feedback list (triaged
+against the codebase; several items turned out already fixed or
+by-design — chat/document binding (M29), `.md`-only tag scanning,
+PDF-export image resolution — and the rest split into this batch and an
+M32 feature batch).
+
+- **Startup performance** — the tags and tasks indexes no longer block
+  activation on a full-vault scan: the window appears first, the boot
+  build runs once in the background (the old code scanned the vault
+  twice — once awaited, once via the refresh round), and each finished
+  sweep pushes `index-updated` over the plugin bridge so the Search panel
+  and `#tag` autocomplete populate as soon as the index is ready. This
+  also fixes the "tag autocomplete fails on some machines" report: the
+  renderer's one-shot vocabulary pull used to swallow errors with no
+  retry. Rebuilds coalesce (`requestRebuild`) so watcher bursts and the
+  refresh round can never interleave sweeps. Both plugins now walk via
+  the new `ctx.vault.listMarkdownFiles` (SDK minor 7) instead of
+  filtering the full tree.
+- **Ask protocol rework (ADR-0053)** — answers stream as **plain prose**
+  (the old "reply ONLY with JSON" envelope accumulated as raw JSON on
+  screen), and an edit arrives as the complete document inside a
+  four-backtick `document` fence (inner ``` fences survive; longest body
+  wins, ties last; a lone ```markdown block heals). No fence → the reply
+  IS the answer — a truncated or disobeyed reply can no longer degrade
+  into a raw-JSON answer card. Live edit (ADR-0049) and chat replay are
+  untouched.
+- **LLM "no response"** — providers now throw a clean `bad-reply` (with
+  detail) instead of returning empty text when the model never spoke and
+  no tool ran, and a non-JSON 200 body surfaces as an error excerpt
+  instead of a leaked `SyntaxError`; the chat engine fails a
+  tools-ran-but-empty turn with the question kept for a re-send.
+- **`![[image]]` / `![[pdf]]` embeds** — Obsidian-style media embeds
+  render in both editor modes with the same widgets and reveal mirror as
+  `![](path)` (ADR-0046 addendum); note targets still link, never
+  transclude. The image candidate chain is single-sourced in
+  `shared/asset-refs.ts` — note-relative, vault root, then the
+  `attachments/` folders for a bare name — shared by the editor, the PDF
+  export, and the export's `rewriteEmbedWikilinks`; the chain also
+  decodes percent-encoded destinations, fixing PDF export of file names
+  with spaces.
+- **Heading hierarchy** — per-level heading typography (all six levels
+  distinguishable) lives outside the theme compartment, so every
+  published theme keeps it (they style headings identically or not at
+  all — the "indistinguishable headings" report); theme colours still
+  apply. Even on Drey, h4–h6 are now distinct.
+- **Files panel** — folders start **collapsed** each session (a big
+  vault no longer opens as a wall of expanded trees); the header button
+  toggles Expand all / Collapse all; opening a tab auto-expands the
+  active file's ancestors so the row is visible. Row context menus gain
+  **Reveal in File Explorer** and **Open in Terminal** (typed IPC
+  `vault:reveal-path` / `vault:open-in-terminal`; Windows opens `cmd /K`
+  in the folder, macOS Terminal, Linux best effort).
+- **Generic file drop** — an OS file that no cascade branch claims is
+  staged name-preserving into `attachments/` and inserted as a Markdown
+  link (100 MB cap, extension-less files refused) — the drop used to be
+  swallowed silently.
+- **`created` datetime** — new notes, daily notes and chat notes store
+  `created` as date+time (`YYYY-MM-DDTHH:mm:ss`); legacy date-only values
+  in existing files remain valid and are never rewritten.
+  `specs/frontmatter-schema.md` updated.
+- **Assistant catch-up** — switching documents while a generation runs
+  now re-follows the new document's chat when the generation finishes
+  (the switch used to be lost until the next tab switch).
+- Stale "(milestone 26)" notes on the not-yet-wired Copilot presets now
+  point at `specs/roadmap.md`.
+
 ### Milestone 30 — PDF embeds + a PDF viewer tab (Req-2 PDF slice, ADR-0052)
 
 Dragging a PDF into a note now **reads it where you are** instead of

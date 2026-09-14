@@ -453,13 +453,14 @@ sequenceDiagram
         Engine->>Store: truncateFrom(user turn) — no dangling question
         Engine-->>State: rejection (renderer keeps the text)
     end
-    Engine->>Pure: parseJsonObject(reply)
-    alt note chip on AND { kind: 'edit', document }
+    Engine->>Pure: extractDocumentFence(reply) (ADR-0053)
+    alt note chip on AND a document fence
         Engine->>Pure: pickPreviewStyle(before, after)
         Engine-->>State: { chatPath, outcome: edit }
-    else { kind: 'answer', text }
-        Engine-->>State: { chatPath, outcome: answer }
+    else no fence (plain answer / a declined change)
+        Engine-->>State: { chatPath, outcome: answer (reply verbatim) }
     end
+    note over Engine: empty reply with no tool activity fails (truncates back + error)
     Engine->>Store: appendTurn(assistant: text + toolTrace as drey-tool, meta, session)
     State->>Store: chat:read — the view re-renders (turn cards, tool chips)
     opt edit outcome
@@ -916,8 +917,8 @@ The built-in assistant takes the in-process path instead:
 `ActionRunner.ask` passes `VaultTools.openAiToolSpec()` +
 `runVaultTool` into `LmStudioClient.chat`, whose tool-calling loop invokes
 `VaultTools.call` directly (same `ConfirmWrite` gate) between model
-rounds, then parses the final message as the `{"kind":"answer"|"edit"}`
-verdict.
+rounds; since ADR-0053 the final message is plain prose, or a
+`document` fence when the note was changed.
 
 ## 6.17 Paste / drop an image → save into `attachments/` → render ([ADR-0024](09_architecture_decisions/0024-binary-vault-asset-write.md))
 
@@ -1256,7 +1257,13 @@ drag that delivers no real `File`.
 Before the window and long before Angular bootstraps, the main process
 scans the plugin roots; the renderer activates inside
 `provideAppInitializer`, so every registry is complete before the shell,
-menus or session restore read them.
+menus or session restore read them. Since milestone 31, plugin
+**activation itself is fast**: the tags/tasks indexes no longer await a
+full-vault scan inside `activate` — the registry-level refresh round
+that follows activation triggers one background build per index, and
+each finished sweep pushes `index-updated` over the plugin bridge so the
+panels re-pull (SDK minor 7 added `ctx.vault.listMarkdownFiles` for the
+walk).
 
 ```mermaid
 sequenceDiagram
