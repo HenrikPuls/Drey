@@ -161,11 +161,13 @@ export class SettingsLlm implements OnInit, OnDestroy {
     return hints;
   }
 
-  /** The not-yet-wired presets (their providers land in later milestones). */
+  /** The not-yet-wired presets (they ship with the provider program — see specs/roadmap.md). */
   protected readonly pendingProviderNote = computed<string | null>(() => {
     const notes: Partial<Record<LlmProviderId, string>> = {
-      'copilot-cli': 'The GitHub Copilot CLI provider is not wired into this build yet (milestone 26).',
-      'copilot-web': 'The Copilot Web provider (browser automation) is not merged into this build yet (milestone 26).',
+      'copilot-cli':
+        'The GitHub Copilot CLI provider is not wired into this build yet — planned on the provider roadmap (specs/roadmap.md).',
+      'copilot-web':
+        'The Copilot Web provider (browser automation) is not merged into this build yet — planned on the provider roadmap (specs/roadmap.md).',
     };
     return notes[this.llm()?.provider ?? 'lmstudio'] ?? null;
   });
