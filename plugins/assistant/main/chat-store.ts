@@ -78,7 +78,7 @@ export class ChatStore {
       // Quoted: the `::` separator must not parse as a YAML mapping.
       doc.set('note', quotedScalar(noteKey));
     }
-    doc.set('created', quotedScalar(toDateStr(now)));
+    doc.set('created', quotedScalar(toTimestamp(now)));
     doc.set('updated', quotedScalar(toTimestamp(now)));
     let yaml = doc.toString({ flowCollectionPadding: false, lineWidth: 0 });
     if (!yaml.endsWith('\n')) {

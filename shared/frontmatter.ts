@@ -120,9 +120,10 @@ export function writeFrontmatter(text: string, patch: Partial<Frontmatter>): str
 
 /**
  * The `updated:` value for a save (always now) and the `created:` value to
- * use (the existing one, or today's date if the file has none). `now` is
- * injectable for tests, same pattern as `newDailyEntryEdit` /
- * `applyPlaceholders`.
+ * use (the existing one, or now as a full datetime if the file has none —
+ * schema change: new files timestamp `created`, legacy date-only values in
+ * existing files are kept verbatim). `now` is injectable for tests, same
+ * pattern as `newDailyEntryEdit` / `applyPlaceholders`.
  */
 export function bumpUpdated(
   frontmatter: Frontmatter | null,
@@ -131,7 +132,8 @@ export function bumpUpdated(
   const existingCreated = frontmatter?.created;
   return {
     updated: formatDateTime(now),
-    created: existingCreated && existingCreated.trim() !== '' ? existingCreated : formatDate(now),
+    created:
+      existingCreated && existingCreated.trim() !== '' ? existingCreated : formatDateTime(now),
   };
 }
 

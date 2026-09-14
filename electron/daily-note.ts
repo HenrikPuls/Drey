@@ -20,7 +20,7 @@ const DAILY_TEMPLATE_FILE = 'daily.md';
  */
 const STARTER_DAILY_TEMPLATE = `---
 title: "{{title}}"
-created: "{{date}}"
+created: "{{datetime}}"
 updated: "{{datetime}}"
 ---
 

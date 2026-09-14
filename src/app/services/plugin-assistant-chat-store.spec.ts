@@ -48,12 +48,12 @@ describe('ChatStore — create', () => {
     expect(view.frontmatter.provider).toBe('zai-glm');
     expect(view.frontmatter.model).toBe('glm-4.7');
     expect(view.frontmatter.title).toBe('Was ist die Rigg-Aufteilung?');
-    expect(view.frontmatter.created).toBe('2026-09-13');
+    expect(view.frontmatter.created).toBe('2026-09-13T14:32:00');
     expect(view.frontmatter.updated).toBe('2026-09-13T14:32:00');
     expect(view.turns).toHaveLength(0);
     // Dates are quoted strings (schema rule); kind stays plain.
     expect(vault.files.get(path)).toContain("kind: chat\n");
-    expect(vault.files.get(path)).toContain("created: \"2026-09-13\"");
+    expect(vault.files.get(path)).toContain("created: \"2026-09-13T14:32:00\"");
   });
 
   it('uniques against existing siblings with -2/-3 suffixes', async () => {

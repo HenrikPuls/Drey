@@ -121,10 +121,15 @@ describe('bumpUpdated', () => {
     expect(bumpUpdated(fm, now)).toEqual({ updated: '2026-09-06T10:00:00', created: '2026-08-01' });
   });
 
-  it('fills created with today when the file has none', () => {
+  it('fills created with the full datetime when the file has none', () => {
     expect(bumpUpdated(null, now)).toEqual({
       updated: '2026-09-06T10:00:00',
-      created: '2026-09-06',
+      created: '2026-09-06T10:00:00',
     });
+  });
+
+  it('keeps a legacy date-only created verbatim (no rewrite to datetime)', () => {
+    const fm = { created: '2026-08-01' } as Frontmatter;
+    expect(bumpUpdated(fm, now)).toEqual({ updated: '2026-09-06T10:00:00', created: '2026-08-01' });
   });
 });
