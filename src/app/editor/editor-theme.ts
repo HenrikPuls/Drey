@@ -16,41 +16,19 @@ import { tags as t } from '@lezer/highlight';
  * layer, which only fills tags this style does not define.
  */
 export const dreyHighlightStyle = HighlightStyle.define([
-  // Heading sizes are `em`, relative to the `.cm-scroller` base below, so
-  // the editor content zoom (Ctrl +/-/0) scales them along with body text.
-  // The `em` values are the old fixed px over the 14.5px base.
-  {
-    tag: t.heading1,
-    fontFamily: 'var(--drey-heading-font)',
-    fontWeight: '500',
-    color: 'var(--text-heading)',
-    fontSize: '2.14em',
-    lineHeight: '1.25',
-    letterSpacing: '-0.01em',
-  },
-  {
-    tag: t.heading2,
-    fontFamily: 'var(--drey-heading-font)',
-    fontWeight: '500',
-    color: 'var(--text-primary)',
-    fontSize: '1.31em',
-    lineHeight: '1.3',
-  },
-  {
-    tag: t.heading3,
-    fontFamily: 'var(--drey-heading-font)',
-    fontWeight: '500',
-    color: 'var(--text-heading)',
-    fontSize: '1.14em',
-    lineHeight: '1.35',
-  },
-  {
-    tag: [t.heading4, t.heading5, t.heading6],
-    fontFamily: 'var(--drey-heading-font)',
-    fontWeight: '500',
-    color: 'var(--text-3)',
-    fontSize: '1em',
-  },
+  // Heading COLORS only: the typography (per-level size/weight, one source
+  // of truth) lives in `headingTypographyStyle` below, which survives
+  // theme swaps — a published @uiw theme styles all heading levels
+  // identically or not at all, which made h1-h6 indistinguishable (the
+  // beta feedback). Sizes are `em`, relative to the `.cm-scroller` base in
+  // `editorStructure`, so the editor content zoom (Ctrl +/-/0) scales
+  // them along with body text.
+  { tag: t.heading1, color: 'var(--text-heading)' },
+  { tag: t.heading2, color: 'var(--text-primary)' },
+  { tag: t.heading3, color: 'var(--text-heading)' },
+  { tag: t.heading4, color: 'var(--text-heading)' },
+  { tag: t.heading5, color: 'var(--text-3)' },
+  { tag: t.heading6, color: 'var(--text-3)' },
   { tag: t.strong, fontWeight: '600' },
   { tag: t.emphasis, fontStyle: 'italic' },
   { tag: t.strikethrough, textDecoration: 'line-through' },
@@ -99,6 +77,64 @@ export const dreyHighlightStyle = HighlightStyle.define([
   },
   { tag: [t.angleBracket, t.separator, t.derefOperator, t.bracket], color: 'var(--text-5)' },
   { tag: [t.deleted, t.invalid], color: '#e0776d' },
+]);
+
+/**
+ * Per-level heading typography for BOTH source mode and Live Preview —
+ * deliberately its own HighlightStyle, mounted OUTSIDE the theme
+ * compartment with `Prec.high` (`markdown-surface.ts`): a published
+ * `@uiw` theme styles all heading levels identically (bold + one colour)
+ * or not at all, which flattened h1-h6 to body text. Declaring
+ * typography ONLY -- no `color` -- keeps the cascade per-property, so the
+ * active theme's heading colours still apply on top. Sizes are `em` off
+ * the `.cm-scroller` base (`editorStructure`), and every level keys off
+ * the same `--drey-heading-font` as the Drey theme always did.
+ *
+ * The steps make all six levels distinguishable: size drops per level,
+ * weight steps down after h3, and h6 adds tracking to read as a label.
+ */
+export const headingTypographyStyle = HighlightStyle.define([
+  {
+    tag: t.heading1,
+    fontFamily: 'var(--drey-heading-font)',
+    fontWeight: '500',
+    fontSize: '2.14em',
+    lineHeight: '1.25',
+    letterSpacing: '-0.01em',
+  },
+  {
+    tag: t.heading2,
+    fontFamily: 'var(--drey-heading-font)',
+    fontWeight: '500',
+    fontSize: '1.31em',
+    lineHeight: '1.3',
+  },
+  {
+    tag: t.heading3,
+    fontFamily: 'var(--drey-heading-font)',
+    fontWeight: '500',
+    fontSize: '1.14em',
+    lineHeight: '1.35',
+  },
+  {
+    tag: t.heading4,
+    fontFamily: 'var(--drey-heading-font)',
+    fontWeight: '600',
+    fontSize: '1em',
+  },
+  {
+    tag: t.heading5,
+    fontFamily: 'var(--drey-heading-font)',
+    fontWeight: '600',
+    fontSize: '0.95em',
+  },
+  {
+    tag: t.heading6,
+    fontFamily: 'var(--drey-heading-font)',
+    fontWeight: '600',
+    fontSize: '0.86em',
+    letterSpacing: '0.04em',
+  },
 ]);
 
 /**

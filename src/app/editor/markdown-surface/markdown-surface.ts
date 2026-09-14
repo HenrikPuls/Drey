@@ -13,7 +13,7 @@ import {
 import { completionStatus } from '@codemirror/autocomplete';
 import { insertNewlineAndIndent } from '@codemirror/commands';
 import { markdown, markdownLanguage } from '@codemirror/lang-markdown';
-import { LanguageDescription } from '@codemirror/language';
+import { LanguageDescription, syntaxHighlighting } from '@codemirror/language';
 import { languages } from '@codemirror/language-data';
 import { Compartment, EditorState, Extension, Prec } from '@codemirror/state';
 import { EditorView, keymap, placeholder as cmPlaceholder } from '@codemirror/view';
@@ -24,7 +24,7 @@ import { EditorZoomService } from '../../services/editor-zoom.service';
 import { ImageLightboxService } from '../../image-viewer';
 import { VaultService } from '../../vault';
 import { ThemeService } from '../../services/theme.service';import { ThemeCatalogEntry } from '../themes/theme-catalog';
-import { dreyEditorLook, editorStructure } from '../editor-theme';
+import { dreyEditorLook, editorStructure, headingTypographyStyle } from '../editor-theme';
 import { editorIndentation } from '../editor-indent';
 import { imagePaste } from '../image-paste';
 import {
@@ -443,6 +443,14 @@ export class MarkdownSurface implements AfterViewInit, OnDestroy {
           // specificity; `gutterTheme` / `compactTheme` (Prec.high) still
           // override where they need to.
           editorStructure,
+          // Per-level heading typography, also outside the theme
+          // compartment (a published theme flattens h1-h6 to one style or
+          // drops them entirely -- the beta feedback). `Prec.high` is
+          // load-bearing, same quirk as `compactTheme` below: it must beat
+          // the theme compartment's own heading rules at equal
+          // specificity. Typography only -- the theme keeps supplying the
+          // heading colours.
+          Prec.high(syntaxHighlighting(headingTypographyStyle)),
           // Long lines wrap at the editor's width instead of scrolling the
           // content sideways -- the full-page editor now fills the whole
           // area (no centred column), so a horizontal scrollbar there would
