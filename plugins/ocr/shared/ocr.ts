@@ -120,6 +120,15 @@ export function imageTargetFromLine(line: string, docPath: string): string | nul
  * an image or with an http(s)/data/explicit-scheme target — the caller
  * decides how to interpret it.
  */
+/**
+ * True for http(s):/data:/any other explicit scheme — such a target is a
+ * URL, never a vault-relative path (ADR-0050: remote images get no row).
+ * Shared by both public target resolvers so the guard cannot drift.
+ */
+function hasExplicitScheme(url: string): boolean {
+  return /^(https?:|data:)/i.test(url) || /^[a-z][a-z0-9+.-]*:/i.test(url);
+}
+
 export function rawImageTargetFromLine(line: string): string | null {
   const match = /!\[[^\]]*\]\((?:<([^>]+)>|([^)\s]+))\)/.exec(line);
   const raw = match?.[1] ?? match?.[2];
@@ -127,13 +136,7 @@ export function rawImageTargetFromLine(line: string): string | null {
     return null;
   }
   const url = raw.trim();
-  if (/^(https?:|data:)/i.test(url)) {
-    return null;
-  }
-  if (/^[a-z][a-z0-9+.-]*:/i.test(url)) {
-    return null;
-  }
-  return url;
+  return hasExplicitScheme(url) ? null : url;
 }
 
 /**
@@ -142,9 +145,16 @@ export function rawImageTargetFromLine(line: string): string | null {
  * (the documented semantics), then the same path read from the vault root
  * (assistant chat notes embed vault-relative attachment paths). The
  * renderer picks via the vault file list — a target present under the
- * note-relative reading wins.
+ * note-relative reading wins. Scheme targets (http(s)/data/any explicit
+ * scheme) yield `[]` on both readings — the same guard as
+ * `rawImageTargetFromLine`, applied HERE too so correctness never depends
+ * on the caller pre-filtering (a scheme URL must not silently collapse
+ * into a pseudo vault path; ADR-0050: remote images get no row).
  */
 export function imageTargetCandidates(rawUrl: string, docPath: string): string[] {
+  if (hasExplicitScheme(rawUrl)) {
+    return [];
+  }
   const baseDir = docPath.includes('/') ? docPath.slice(0, docPath.lastIndexOf('/')) : '';
   const noteRelative = normalizeRelative(baseDir !== '' ? `${baseDir}/${rawUrl}` : rawUrl);
   const fromRoot = normalizeRelative(rawUrl);
