@@ -4,7 +4,7 @@ import { Editor } from './editor';
 import { EditorService } from '../services/editor.service';
 import { KeybindingService } from '../keybindings';
 import { WikilinkService } from './wikilinks';
-import { DreyApi } from '../../../shared/ipc-api';
+import { DreyApi, NoteSaveRequest } from '../../../shared/ipc-api';
 
 const RICH = [
   '# Doc',
@@ -119,7 +119,15 @@ describe('Editor', () => {
     expect(cmText()).not.toContain('```');
   });
 
-  it('clicking a checkbox toggles the underlying task marker text', async () => {
+  it('clicking a checkbox toggles the marker AND saves the note', async () => {
+    const saves: string[] = [];
+    window.dreyApi = {
+      ...window.dreyApi,
+      saveNote: (request: NoteSaveRequest) => {
+        saves.push(request.body);
+        return Promise.resolve({ path: request.path, content: request.body, modifiedMs: 2 });
+      },
+    } as DreyApi;
     await openRich();
 
     const box = cm().querySelector('.lp-task input') as HTMLInputElement;
@@ -128,6 +136,12 @@ describe('Editor', () => {
     fixture.detectChanges();
 
     expect(editor.bufferContent()).toContain('- [x] todo');
+    // The click is the same explicit done-gesture as the Tasks panel's row
+    // toggle: the surface saves it (deferred out of the CM update stack),
+    // so the vault-scope consumers see it.
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    await fixture.whenStable();
+    expect(saves.some((body) => body.includes('- [x] todo'))).toBe(true);
   });
 
   it('folds frontmatter behind a pill, expandable on click', async () => {
@@ -276,17 +290,21 @@ describe('Editor', () => {
     // Ctrl+S is registered by `App` on the keybinding registry now, not by
     // the editor host -- wire the same command here and fire the chord.
     const keys = TestBed.inject(KeybindingService);
+    let savePromise: Promise<void> = Promise.resolve();
     keys.register({
       id: 'note.save',
       label: 'Save',
       keybinding: 'Mod+S',
-      run: () => void editor.save(),
+      run: () => {
+        savePromise = editor.save();
+      },
     });
 
     editor.updateBuffer('note.md', '# Title\n\nsome **bold** text edited');
     fixture.detectChanges();
 
     window.dispatchEvent(new KeyboardEvent('keydown', { key: 's', ctrlKey: true, bubbles: true }));
+    await savePromise; // the save is serialized now -- await it explicitly
     await fixture.whenStable();
     fixture.detectChanges();
 

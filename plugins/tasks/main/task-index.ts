@@ -16,8 +16,19 @@ import { scanTasks, TaskRecord } from '../shared/tasks';
 const ALWAYS_EXCLUDED_PREFIX = 'templates/';
 
 export class TaskIndex {
-  /** Records grouped by file, so one save re-indexes just that file. */
+  /**
+   * Records grouped by file, so one save re-indexes just that file. The
+   * map a reader sees is ALWAYS complete: a rebuild sweep builds a fresh
+   * map and swaps it in at the end — the old `byPath.clear()` + gradual
+   * re-population handed every `list` pull made mid-sweep a torn
+   * (partial/empty) snapshot, which the panel then rendered as a "reset"
+   * until the next push.
+   */
   private byPath = new Map<string, TaskRecord[]>();
+  /** The sweep's build target while a rebuild is running (mutations go to both). */
+  private sweep: Map<string, TaskRecord[]> | null = null;
+  /** Files reindexed during the running sweep — their records beat the sweep's (older) read. */
+  private sweepReindexed: Set<string> | null = null;
 
   /** Serialization for `requestRebuild` — always resolved, unlike the per-call promises. */
   private rebuildChain: Promise<void> = Promise.resolve();
@@ -69,24 +80,37 @@ export class TaskIndex {
 
   /** Rescans the whole vault. Safe with no active vault (clears the index). */
   async rebuild(): Promise<void> {
-    this.byPath.clear();
     let paths: readonly string[];
     try {
       paths = await this.listMarkdownFiles();
     } catch {
       return;
     }
-    for (const path of paths) {
-      if (this.isExcluded(path)) {
-        continue;
+    const next = new Map<string, TaskRecord[]>();
+    const reindexed = new Set<string>();
+    this.sweep = next;
+    this.sweepReindexed = reindexed;
+    try {
+      for (const path of paths) {
+        if (this.isExcluded(path)) {
+          continue;
+        }
+        try {
+          const content = await this.readContent(path);
+          // A reindexFile that landed while this read was in flight
+          // carries the NEWER content — its record stays.
+          if (!reindexed.has(path)) {
+            next.set(path, scanTasks(path, content));
+          }
+        } catch {
+          // Unreadable -- skip; the next rebuild picks it up.
+        }
       }
-      try {
-        const content = await this.readContent(path);
-        this.byPath.set(path, scanTasks(path, content));
-      } catch {
-        // Unreadable -- skip; the next rebuild picks it up.
-      }
+    } finally {
+      this.sweep = null;
+      this.sweepReindexed = null;
     }
+    this.byPath = next;
   }
 
   private readContent: (path: string) => Promise<string> = async () => '';
@@ -99,14 +123,24 @@ export class TaskIndex {
   /** Re-indexes one file after a save (or drops it if it now sits under an excluded folder). */
   reindexFile(path: string, content: string): void {
     if (this.isExcluded(path)) {
-      this.byPath.delete(path);
+      this.removeFile(path);
       return;
     }
-    this.byPath.set(path, scanTasks(path, content));
+    const record = scanTasks(path, content);
+    // A landing save during a sweep must survive the swap — and must not
+    // be overwritten by the sweep's older in-flight read of the file.
+    if (this.sweep !== null) {
+      this.sweep.set(path, record);
+      this.sweepReindexed?.add(path);
+    }
+    this.byPath.set(path, record);
   }
 
   /** Drops a file's records after it is deleted. */
   removeFile(path: string): void {
+    if (this.sweep !== null) {
+      this.sweep.delete(path);
+    }
     this.byPath.delete(path);
   }
 

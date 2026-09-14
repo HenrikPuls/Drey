@@ -46,8 +46,19 @@ export interface SectionRecord {
 const ALWAYS_EXCLUDED_PREFIX = 'templates/';
 
 export class TagIndex {
-  /** Records grouped by file, so one save re-indexes just that file. */
+  /**
+   * Records grouped by file, so one save re-indexes just that file. The
+   * map a reader sees is ALWAYS complete: a rebuild sweep builds a fresh
+   * map and swaps it in at the end — the old `byPath.clear()` + gradual
+   * re-population handed every `vocabulary`/`search` pull made mid-sweep
+   * a torn (partial/empty) snapshot, which the panels then rendered as a
+   * "reset" until the next push.
+   */
   private byPath = new Map<string, SectionRecord[]>();
+  /** The sweep's build target while a rebuild is running (mutations go to both). */
+  private sweep: Map<string, SectionRecord[]> | null = null;
+  /** Files reindexed during the running sweep — their records beat the sweep's (older) read. */
+  private sweepReindexed: Set<string> | null = null;
 
   /** Serialization for `requestRebuild` — always resolved, unlike the per-call promises. */
   private rebuildChain: Promise<void> = Promise.resolve();
@@ -100,24 +111,37 @@ export class TagIndex {
 
   /** Rescans the whole vault. Safe with no active vault (clears the index). */
   async rebuild(): Promise<void> {
-    this.byPath.clear();
     let paths: readonly string[];
     try {
       paths = await this.listMarkdownFiles();
     } catch {
       return;
     }
-    for (const path of paths) {
-      if (this.isExcluded(path)) {
-        continue;
+    const next = new Map<string, SectionRecord[]>();
+    const reindexed = new Set<string>();
+    this.sweep = next;
+    this.sweepReindexed = reindexed;
+    try {
+      for (const path of paths) {
+        if (this.isExcluded(path)) {
+          continue;
+        }
+        try {
+          const content = await this.readContent(path);
+          // A reindexFile that landed while this read was in flight
+          // carries the NEWER content — its record stays.
+          if (!reindexed.has(path)) {
+            next.set(path, recordsFor(path, content));
+          }
+        } catch {
+          // Unreadable -- skip; the next rebuild picks it up.
+        }
       }
-      try {
-        const content = await this.readContent(path);
-        this.byPath.set(path, recordsFor(path, content));
-      } catch {
-        // Unreadable -- skip; the next rebuild picks it up.
-      }
+    } finally {
+      this.sweep = null;
+      this.sweepReindexed = null;
     }
+    this.byPath = next;
   }
 
   private readContent: (path: string) => Promise<string> = async () => '';
@@ -130,14 +154,24 @@ export class TagIndex {
   /** Re-indexes one file after a save (or drops it if it now sits under an excluded folder). */
   reindexFile(path: string, content: string): void {
     if (this.isExcluded(path)) {
-      this.byPath.delete(path);
+      this.removeFile(path);
       return;
     }
-    this.byPath.set(path, recordsFor(path, content));
+    const record = recordsFor(path, content);
+    // A landing save during a sweep must survive the swap — and must not
+    // be overwritten by the sweep's older in-flight read of the file.
+    if (this.sweep !== null) {
+      this.sweep.set(path, record);
+      this.sweepReindexed?.add(path);
+    }
+    this.byPath.set(path, record);
   }
 
   /** Drops a file's records after it is deleted. */
   removeFile(path: string): void {
+    if (this.sweep !== null) {
+      this.sweep.delete(path);
+    }
     this.byPath.delete(path);
   }
 

@@ -1,6 +1,10 @@
-import type { DreyPluginApi, PluginRendererModule } from '../../../shared/plugin-api/renderer';
+import type {
+  DreyPluginApi,
+  OpenDocumentInfo,
+  PluginRendererModule,
+} from '../../../shared/plugin-api/renderer';
 import type { TaskRecord } from '../shared/tasks.js';
-import { scanTasks, setDoneOnLine } from '../shared/tasks.js';
+import { resolveTaskLine, scanTasks, setDoneOnLine } from '../shared/tasks.js';
 import {
   ALL_KINDS,
   filterVisibleTasks,
@@ -38,6 +42,35 @@ function toggleButton(
   node.setAttribute('aria-label', title);
   node.addEventListener('click', onPress);
   return node;
+}
+
+/** Files under here are kept out of the vault list (mirrors the main-side index). */
+const TEMPLATES_PREFIX = 'templates/';
+
+/**
+ * Open tabs with UNSAVED edits replace their own on-disk hits with what
+ * their current buffer matches — the whole-vault list reflects an editor
+ * checkbox click (or any edit) immediately, saved or not; previously an
+ * editor-side toggle only dirtied the buffer and the disk index (and so
+ * the list) never adopted it until an unrelated save. Same fold the Tags
+ * plugin's search runs over dirty tabs.
+ */
+function withOpenBufferHits(disk: TaskRecord[], docs: readonly OpenDocumentInfo[]): TaskRecord[] {
+  const dirty = docs.filter(
+    (doc) => doc.kind === 'text' && doc.dirty && !doc.path.startsWith(TEMPLATES_PREFIX),
+  );
+  if (dirty.length === 0) {
+    return disk;
+  }
+  const dirtyPaths = new Set(dirty.map((doc) => doc.path));
+  const merged = disk.filter((task) => !dirtyPaths.has(task.path));
+  for (const doc of dirty) {
+    merged.push(...scanTasks(doc.path, doc.buffer));
+  }
+  // File order then document order — keeps the vault view's per-file
+  // groups adjacent.
+  merged.sort((a, b) => a.path.localeCompare(b.path) || a.line - b.line);
+  return merged;
 }
 
 /**
@@ -126,7 +159,7 @@ const plugin: PluginRendererModule = {
           ? state.activePath === null
             ? []
             : scanTasks(state.activePath, state.activeBuffer)
-          : state.vaultTasks;
+          : withOpenBufferHits(state.vaultTasks, api.documents.list());
       return filterVisibleTasks(base, state);
     };
 
@@ -179,8 +212,15 @@ const plugin: PluginRendererModule = {
       if (open !== null && open.kind === 'text') {
         // Through the live buffer, saved like any edit (an unsaved change
         // in that tab is never lost) -- exactly what the base
-        // `EditorService.setTaskDone` did.
-        const next = setDoneOnLine(open.buffer, task.line, !task.done);
+        // `EditorService.setTaskDone` did. The line resolves against the
+        // CURRENT buffer (`resolveTaskLine`): the save pipeline's
+        // frontmatter bump shifts lines, and a row rendered before that
+        // shift would otherwise toggle nothing.
+        const line = resolveTaskLine(open.buffer, task);
+        if (line === null) {
+          return;
+        }
+        const next = setDoneOnLine(open.buffer, line, !task.done);
         if (next !== open.buffer) {
           api.documents.setBuffer(task.path, next);
           await api.documents.save(task.path);
@@ -192,7 +232,11 @@ const plugin: PluginRendererModule = {
         const { content } = await api.vault.readFile(task.path);
         const crlf = content.includes('\r\n');
         const normalized = content.replace(/\r\n/g, '\n');
-        const next = setDoneOnLine(normalized, task.line, !task.done);
+        const line = resolveTaskLine(normalized, task);
+        if (line === null) {
+          return;
+        }
+        const next = setDoneOnLine(normalized, line, !task.done);
         if (next !== normalized) {
           await api.vault.writeFile(task.path, crlf ? next.replace(/\n/g, '\r\n') : next);
           changed = true;

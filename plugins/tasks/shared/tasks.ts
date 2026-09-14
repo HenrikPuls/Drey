@@ -174,3 +174,30 @@ export function setDoneOnLine(content: string, line: number, done: boolean): str
 
   return content;
 }
+
+/**
+ * The line a row toggle should act on in `content`. A panel row's recorded
+ * line goes STALE the moment the note is saved with frontmatter growth —
+ * the pipeline's `created:`/`updated:` bump inserts lines above the body,
+ * shifting every task down — and a toggle against the old number then
+ * lands on a shifted line, where it silently no-ops (or worse, flips a
+ * neighbouring task). So: the exact line when a task still sits there,
+ * otherwise the nearest line carrying the SAME text and kind (duplicate
+ * texts resolve to the occurrence closest to the recorded line).
+ * `null` when the task is gone from the content entirely.
+ */
+export function resolveTaskLine(content: string, task: TaskRecord): number | null {
+  let best: TaskRecord | null = null;
+  for (const candidate of scanTasks(task.path, content)) {
+    if (candidate.text !== task.text || candidate.kind !== task.kind) {
+      continue;
+    }
+    if (
+      best === null ||
+      Math.abs(candidate.line - task.line) < Math.abs(best.line - task.line)
+    ) {
+      best = candidate;
+    }
+  }
+  return best?.line ?? null;
+}

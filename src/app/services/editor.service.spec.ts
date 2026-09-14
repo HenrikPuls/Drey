@@ -87,6 +87,71 @@ describe('EditorService', () => {
     expect(saves).toEqual([]);
   });
 
+  it('a save landing while another is in flight is queued, not dropped', async () => {
+    TestBed.resetTestingModule();
+    let release: (() => void) | undefined;
+    const gateApi: Partial<DreyApi> = {
+      readVaultFile: () => Promise.resolve({ content: 'v0\n', modifiedMs: 1 }),
+      saveNote: (request: NoteSaveRequest) => {
+        saves.push(request);
+        if (saves.length === 1) {
+          return new Promise<NoteSaveResult>((resolve) => {
+            release = () => resolve({ path: request.path, content: request.body, modifiedMs: 2 });
+          });
+        }
+        return echoSave(request);
+      },
+    };
+    window.dreyApi = gateApi as DreyApi;
+    const gated = TestBed.inject(EditorService);
+
+    await gated.openFile('note.md');
+    gated.updateBuffer('note.md', 'v1\n');
+    const first = gated.save();
+    // Let the first save actually reach the stalled gate before editing.
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    gated.updateBuffer('note.md', 'v2\n');
+    const second = gated.save(); // lands while the first is in flight
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    release?.();
+    await Promise.all([first, second]);
+
+    // Both reached the pipeline -- the old isSaving() early return
+    // silently dropped the second.
+    expect(saves.map((req) => req.body)).toEqual(['v1\n', 'v2\n']);
+    expect(gated.isDirty()).toBe(false);
+    expect(gated.savedContent()).toBe('v2\n');
+  });
+
+  it('edits made during an in-flight save are not clobbered by its result', async () => {
+    TestBed.resetTestingModule();
+    let release: (() => void) | undefined;
+    const gateApi: Partial<DreyApi> = {
+      readVaultFile: () => Promise.resolve({ content: 'v0\n', modifiedMs: 1 }),
+      saveNote: (request: NoteSaveRequest) => {
+        saves.push(request);
+        if (saves.length === 1) {
+          return new Promise<NoteSaveResult>((resolve) => {
+            release = () => resolve({ path: request.path, content: request.body, modifiedMs: 2 });
+          });
+        }
+        return echoSave(request);
+      },
+    };
+    window.dreyApi = gateApi as DreyApi;
+    const gated = TestBed.inject(EditorService);
+
+    await gated.openFile('note.md');
+    gated.updateBuffer('note.md', 'v1\n');
+    void gated.save(); // in flight
+    gated.updateBuffer('note.md', 'v1\nchecked a task\n');
+    release?.();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(gated.bufferContent()).toContain('checked a task'); // not reverted
+    expect(gated.isDirty()).toBe(true); // still to be saved
+  });
+
   it('sends the LF buffer plus the file EOL to the save pipeline', async () => {
     TestBed.resetTestingModule();
     const crlfSaves: NoteSaveRequest[] = [];

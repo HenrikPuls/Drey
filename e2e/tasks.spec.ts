@@ -70,6 +70,75 @@ test.describe('Tasks plugin panel', () => {
     await expect(rows.filter({ hasText: 'draft the brief' })).toHaveClass(/done/);
   });
 
+  test('vault scope: ticking rows back-to-back keeps every row done (regression)', async ({
+    page,
+  }) => {
+    await openTasksPanel(page);
+
+    const panel = page.locator('app-panel-frame', { has: page.locator('.tasks-panel') });
+    await panel.locator('.tasks-hdr .seg button', { hasText: 'Vault' }).click();
+    const rows = panel.locator('.task');
+    await expect(rows).toHaveCount(4); // 3 in tasks-demo.md (1 done) + 1 in other.md
+
+    // Tick the three open ones back-to-back, without waiting for the list
+    // between clicks -- the old silent save drop lost every tick that
+    // landed while the previous save was still running, and the next list
+    // pull "reset" the rows to open.
+    await rows.filter({ hasText: 'draft the brief' }).locator('.box').click();
+    await rows.filter({ hasText: 'Fix the roof' }).locator('.box').click();
+    await rows.filter({ hasText: 'water the plants' }).locator('.box').click();
+
+    await expect(rows.filter({ hasText: 'draft the brief' })).toHaveClass(/done/);
+    await expect(rows.filter({ hasText: 'Fix the roof' })).toHaveClass(/done/);
+    await expect(rows.filter({ hasText: 'water the plants' })).toHaveClass(/done/);
+
+    // And they reached DISK, not just the open buffers: after a reload the
+    // rebuilt index still reports every row done.
+    await page.reload();
+    const reloaded = page.locator('app-panel-frame', { has: page.locator('.tasks-panel') });
+    const reloadedRows = reloaded.locator('.task');
+    await expect(reloadedRows.filter({ hasText: 'draft the brief' })).toHaveClass(/done/);
+    await expect(reloadedRows.filter({ hasText: 'Fix the roof' })).toHaveClass(/done/);
+    await expect(reloadedRows.filter({ hasText: 'water the plants' })).toHaveClass(/done/);
+    await expect(reloadedRows).toHaveCount(4); // the pre-done one still lists too
+  });
+
+  test('clicking the checkbox in the editor reaches the vault list and disk', async ({ page }) => {
+    await openTasksPanel(page);
+
+    const panel = page.locator('app-panel-frame', { has: page.locator('.tasks-panel') });
+    await panel.locator('.tasks-hdr .seg button', { hasText: 'Vault' }).click();
+    const rows = panel.locator('.task');
+    await expect(rows.filter({ hasText: 'draft the brief' })).toHaveCount(1);
+
+    // Click the rendered checkbox in Live Preview -- no Ctrl+S anywhere.
+    // (This used to only dirty the buffer: the vault list, a disk index,
+    // never adopted it until an unrelated save.) The checkbox widget sits
+    // in the task's line; the line's text lives next to it.
+    // The click gesture can be swallowed by an in-flight decoration
+    // rebuild right after the tab opens (a CM widget swap between the hit
+    // test and the mousedown) -- retry click and effect as ONE unit; the
+    // first effective click wins.
+    await expect(async () => {
+      await page
+        .locator('app-editor .cm-content .cm-line', { hasText: 'draft the brief' })
+        .locator('.lp-task input')
+        .click();
+      await expect(
+        page.locator('app-editor .cm-content .lp-task-done', { hasText: 'draft the brief' }),
+      ).toHaveCount(1);
+    }).toPass({ timeout: 20_000 });
+
+    await expect(rows.filter({ hasText: 'draft the brief' })).toHaveClass(/done/);
+
+    // The click saved the note: after a reload the index still says done.
+    await page.reload();
+    const reloaded = page.locator('app-panel-frame', { has: page.locator('.tasks-panel') });
+    await expect(
+      reloaded.locator('.task', { hasText: 'draft the brief' }),
+    ).toHaveClass(/done/);
+  });
+
   test('the kind filter and the free-text filter narrow the document list', async ({ page }) => {
     await openTasksPanel(page);
 

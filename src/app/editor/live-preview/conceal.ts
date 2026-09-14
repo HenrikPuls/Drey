@@ -315,6 +315,12 @@ function toggleTask(view: EditorView, pos: number): boolean {
   }
   view.dispatch({
     changes: { from: pos + 1, to: pos + 2, insert: match[1] === ' ' ? 'x' : ' ' },
+    // Distinct from the Mod+Enter command's `input.toggleTask`: a CLICK on
+    // the rendered checkbox is the same explicit "done" gesture as the
+    // Tasks panel's row toggle, and the surface saves on it (the panel
+    // always saved; a click that only dirtied the buffer never reached the
+    // vault-scope task list).
+    userEvent: 'input.toggleTask.click',
   });
   return true;
 }

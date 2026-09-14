@@ -58,6 +58,7 @@ interface PluginMainModule {
   deactivate?: () => void | Promise<void>;
 }
 
+
 export interface PluginHostDeps {
   readonly builtinRoot: string;
   readonly userRoot: string;

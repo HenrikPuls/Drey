@@ -65,6 +65,12 @@ const plugin: MainPluginModule = {
         void ctx.vault
           .read(event.path)
           .then((content) => index.reindexFile(event.path as string, content))
+          .then(() => {
+            // The renderer's vault:changed pull can outrun this async
+            // re-read and render a stale row — the push after the
+            // mutation lets it re-pull the settled state.
+            ctx.ipc.emit('index-updated', { tags: index.getVocabulary().length });
+          })
           .catch(() => index.removeFile(event.path as string));
         return;
       }

@@ -262,6 +262,8 @@ export class EditorService {
 
   readonly isLoading = signal(false);
   readonly isSaving = signal(false);
+  /** Serialization tail for `save()` — always resolved, unlike the per-call promises. */
+  private saveQueue: Promise<void> = Promise.resolve();
   readonly error = signal<string | null>(null);
 
   /**
@@ -777,14 +779,31 @@ export class EditorService {
    * A caller may instead pass a bare vault-relative `path` (plugin-facing
    * surfaces) -- resolved via {@link resolveDoc}.
    */
+  /**
+   * Saves are SERIALIZED: a call landing while another save is in flight
+   * waits for it instead of being dropped (the old `isSaving()` early
+   * return silently lost rapid toggle edits -- a panel checkbox ticked
+   * while the previous save was still running never reached disk, and the
+   * next index pull "reset" the row). The doc is resolved inside the
+   * chained run, so the trailing save sees the state as of its turn.
+   */
   async save(options: { runOnSaveActions?: boolean; key?: string; path?: string } = {}): Promise<void> {
+    const run = this.saveQueue.then(() => this.saveNow(options));
+    this.saveQueue = run.then(
+      () => undefined,
+      () => undefined,
+    );
+    return run;
+  }
+
+  private async saveNow(options: { runOnSaveActions?: boolean; key?: string; path?: string } = {}): Promise<void> {
     const doc =
       options.key !== undefined
         ? this.docFor(options.key)
         : options.path !== undefined
           ? this.resolveDoc(options.path)
           : this.activeDoc();
-    if (!this.api || doc === null || doc.kind !== 'text' || this.isSaving()) {
+    if (!this.api || doc === null || doc.kind !== 'text') {
       return;
     }
     // A generated scratch doc has no destination yet -- ask for one, even
@@ -798,6 +817,10 @@ export class EditorService {
     }
 
     const wasDraft = doc.existsOnDisk === false;
+    // What this save is committing — a buffer edited while the save runs
+    // (a checkbox ticked mid-save, typing) must not be clobbered by the
+    // response.
+    const sentBody = doc.bufferContent;
 
     this.isSaving.set(true);
     this.error.set(null);
@@ -805,13 +828,17 @@ export class EditorService {
       const result = await this.api.saveNote({
         path: doc.path,
         vaultId: doc.vaultId ?? undefined,
-        body: doc.bufferContent,
+        body: sentBody,
         eol: doc.eol,
         runOnSaveActions: options.runOnSaveActions,
       });
+      // Adopt the pipeline's rewrite (frontmatter bump) only when the
+      // buffer still holds what was sent; otherwise keep the live buffer.
+      const fresh = this.docFor(doc.key);
+      const currentBuffer = fresh?.bufferContent ?? result.content;
       this.patchDoc(doc.key, {
         savedContent: result.content,
-        bufferContent: result.content,
+        bufferContent: currentBuffer === sentBody ? result.content : currentBuffer,
         modifiedMs: result.modifiedMs,
         existsOnDisk: true,
       });

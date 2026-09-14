@@ -209,11 +209,22 @@ export class PluginHostService {
     let lastPathsKey = this.pathKey();
     const bufferTimers = new Map<string, number>();
 
+    // Event `path` is the BARE vault-relative path — the same identity
+    // `documents.active().path`, `get()` and `list()` hand out. (It used to
+    // be the internal `vaultId::path` doc key, so every plugin comparing it
+    // against `active().path` silently never matched — a multi-vault
+    // regression that left the Tasks panel blind to buffer edits.)
+    const barePath = (key: string): { path: string; vaultId: string | null } =>
+      this.editor.docFor(key) !== null
+        ? { path: this.editor.docFor(key)!.path, vaultId: this.editor.docFor(key)!.vaultId }
+        : { path: key, vaultId: null };
+
     effect(() => {
-      const path = this.editor.activePath();
-      if (path !== lastPath) {
-        lastPath = path;
-        this.emitDocumentEvent({ type: 'active-changed', path });
+      const key = this.editor.activePath();
+      if (key !== lastPath) {
+        lastPath = key;
+        const id = key === null ? null : barePath(key);
+        this.emitDocumentEvent({ type: 'active-changed', path: id?.path ?? null, vaultId: id?.vaultId ?? null });
       }
       const pathsKey = this.pathKey();
       if (pathsKey !== lastPathsKey) {
@@ -223,27 +234,29 @@ export class PluginHostService {
     });
 
     effect(() => {
-      const path = this.editor.activePath();
+      const key = this.editor.activePath();
       const content = this.editor.bufferContent();
-      if (path === null) {
+      if (key === null) {
         return;
       }
-      window.clearTimeout(bufferTimers.get(path));
+      window.clearTimeout(bufferTimers.get(key));
       bufferTimers.set(
-        path,
+        key,
         window.setTimeout(() => {
-          bufferTimers.delete(path);
-          this.emitDocumentEvent({ type: 'buffer-changed', path, content });
+          bufferTimers.delete(key);
+          const id = barePath(key);
+          this.emitDocumentEvent({ type: 'buffer-changed', path: id.path, vaultId: id.vaultId, content });
         }, BUFFER_DEBOUNCE_MS),
       );
     });
 
     effect(() => {
-      const path = this.editor.activePath();
+      const key = this.editor.activePath();
       const dirty = this.editor.isDirty();
-      if (path !== null && dirty !== lastDirty) {
+      if (key !== null && dirty !== lastDirty) {
         lastDirty = dirty;
-        this.emitDocumentEvent({ type: 'dirty-changed', path, dirty });
+        const id = barePath(key);
+        this.emitDocumentEvent({ type: 'dirty-changed', path: id.path, vaultId: id.vaultId, dirty });
       }
     });
 

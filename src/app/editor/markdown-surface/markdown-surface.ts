@@ -15,7 +15,7 @@ import { insertNewlineAndIndent } from '@codemirror/commands';
 import { markdown, markdownLanguage } from '@codemirror/lang-markdown';
 import { LanguageDescription, syntaxHighlighting } from '@codemirror/language';
 import { languages } from '@codemirror/language-data';
-import { Compartment, EditorState, Extension, Prec } from '@codemirror/state';
+import { Compartment, EditorState, Extension, Prec, Transaction } from '@codemirror/state';
 import { EditorView, keymap, placeholder as cmPlaceholder } from '@codemirror/view';
 import { basicSetup } from 'codemirror';
 import { EditorService, EditorViewMode } from '../../services/editor.service';
@@ -426,6 +426,25 @@ export class MarkdownSurface implements AfterViewInit, OnDestroy {
           EditorView.updateListener.of((update) => {
             if (update.docChanged) {
               this.docChanged.emit(update.state.doc.toString());
+              // A checkbox CLICK is an explicit "done" gesture — same
+              // semantics as the Tasks panel's row toggle (which always
+              // saved): persist immediately, or the vault-scope task list
+              // (a disk index) never adopts the change until an unrelated
+              // save. `input.toggleTask` without the suffix is the
+              // Mod+Enter editing command and stays buffer-only.
+              if (
+                update.transactions.some(
+                  (tr) => tr.annotation(Transaction.userEvent) === 'input.toggleTask.click',
+                )
+              ) {
+                const path = this.languageFilename();
+                if (path !== null && path !== '') {
+                  // Deferred: an ipcRenderer.invoke kicked off from inside
+                  // the CM update stack never sees its promise settle --
+                  // the save continues outside the transaction.
+                  setTimeout(() => void this.editor.save({ path }), 0);
+                }
+              }
             }
             const expanded = frontmatterExpandedOf(update.state);
             if (expanded !== this._frontmatterExpanded()) {

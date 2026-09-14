@@ -30,6 +30,7 @@ import {
  * pipeline adopts it, exactly as the renderer adopts `NoteSaveResult`)
  * and/or queue confirmations for the renderer's dialog.
  */
+
 export interface NoteSaveHooks {
   onNoteSaved(hook: (event: NoteSavedEvent) => Promise<SaveHookResult | void>): Unsubscribe;
   emitNoteSaved(event: NoteSavedEvent): Promise<SaveHookResult[]>;
@@ -96,7 +97,6 @@ export class NoteManager {
         }
       }
     }
-
     return {
       path: relPath,
       content,

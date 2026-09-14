@@ -62,9 +62,12 @@ export interface ActiveDocument extends OpenDocumentInfo {
  * confirmation dialog).
  */
 export type DocumentChangeEvent =
-  | { type: 'active-changed'; path: string | null }
-  | { type: 'buffer-changed'; path: string; content: string }
-  | { type: 'dirty-changed'; path: string; dirty: boolean }
+  /** `path` is the BARE vault-relative path (the `OpenDocumentInfo.path`
+   * identity), with the owning vault in `vaultId` — not the internal
+   * `vaultId::path` doc key. */
+  | { type: 'active-changed'; path: string | null; vaultId: string | null }
+  | { type: 'buffer-changed'; path: string; vaultId: string | null; content: string }
+  | { type: 'dirty-changed'; path: string; vaultId: string | null; dirty: boolean }
   | { type: 'docs-changed' }
   /** Confirmed-rewrite outcomes the save pipeline queued (on-save actions). */
   | { type: 'pending-actions'; actions: readonly ActionOutcome[] };

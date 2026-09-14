@@ -88,6 +88,37 @@ describe('TagIndex requestRebuild coalescing', () => {
     expect(sweeps).toBe(3);
   });
 
+  it('a save landing during a sweep survives the snapshot swap', async () => {
+    let content = '## A #one\n';
+    let readGated = false;
+    let releaseRead: (() => void) | undefined;
+    const index = new TagIndex(() => Promise.resolve(['notes/a.md']));
+    index.setReadContent(() => {
+      if (!readGated) {
+        return Promise.resolve(content);
+      }
+      return new Promise<string>((resolve) => {
+        releaseRead = () => resolve(content); // a stale read: disk as of BEFORE the save
+      });
+    });
+
+    await index.requestRebuild(); // first sweep: the index knows #one
+    expect(index.getVocabulary().map((e) => e.tag)).toEqual(['one']);
+
+    // Second sweep: hold its file read open, land a save mid-sweep.
+    readGated = true;
+    const sweeping = index.requestRebuild();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(releaseRead).toBeDefined();
+    index.reindexFile('notes/a.md', '## A #two\n');
+    releaseRead?.();
+    await sweeping;
+
+    // The save must survive the swap -- the sweep's stale read must not
+    // clobber it (the torn `byPath.clear()` build used to lose it).
+    expect(index.getVocabulary().map((e) => e.tag)).toEqual(['two']);
+  });
+
   it('reflects changed content in a later coalesced sweep', async () => {
     let files: Record<string, string> = { 'notes/a.md': '## A #one\n' };
     const index = new TagIndex(() => Promise.resolve(Object.keys(files)));

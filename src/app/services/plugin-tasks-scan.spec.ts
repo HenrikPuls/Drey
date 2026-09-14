@@ -1,4 +1,7 @@
-import { scanTasks, setDoneOnLine } from '../../../plugins/tasks/shared/tasks';
+import { resolveTaskLine, scanTasks, setDoneOnLine } from '../../../plugins/tasks/shared/tasks';
+
+/** A single quote, for building quoted YAML scalars in expectations. */
+const QUOTE = String.fromCharCode(39);
 
 /**
  * The Tasks plugin's pure scanner (`plugins/tasks/shared/tasks`), relocated
@@ -116,5 +119,28 @@ describe('setDoneOnLine', () => {
   it('leaves a non-task line and an out-of-range line untouched', () => {
     expect(setDoneOnLine('just prose\n', 1, true)).toBe('just prose\n');
     expect(setDoneOnLine('- [ ] a\n', 9, true)).toBe('- [ ] a\n');
+  });
+});
+
+describe('resolveTaskLine', () => {
+  const doc = ['---', 'title: t', '---', '', '- [ ] draft', 'Fix the roof #task', ''].join('\n');
+
+  it('keeps the exact line while a task still sits there', () => {
+    const [row] = scanTasks('a.md', doc).filter((t) => t.text === 'draft');
+    expect(resolveTaskLine(doc, row)).toBe(row.line);
+  });
+
+  it('follows the task after the frontmatter bump shifted every line', () => {
+    // What the save pipeline produces on a first save: two inserted
+    // frontmatter lines, so the panel's recorded line is 2 too small.
+    const stamp = '2026-09-15T10:00:00';
+    const grown = ['---', 'title: t', 'created: ' + QUOTE + stamp + QUOTE, 'updated: ' + QUOTE + stamp + QUOTE, '---', '', '- [ ] draft', 'Fix the roof #task', ''].join('\n');
+    const staleRow = { path: 'a.md', line: 5, text: 'Fix the roof', done: false, kind: 'tag' as const, heading: 'Wohnen', tags: [] };
+    expect(resolveTaskLine(grown, staleRow)).toBe(8);
+  });
+
+  it('returns null once the task is gone', () => {
+    const staleRow = { path: 'a.md', line: 5, text: 'vanished', done: false, kind: 'tag' as const, heading: null, tags: [] };
+    expect(resolveTaskLine(doc, staleRow)).toBeNull();
   });
 });
