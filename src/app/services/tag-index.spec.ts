@@ -51,3 +51,52 @@ describe('TagIndex templates exclusion', () => {
     expect(index.getVocabulary().map((e) => e.tag)).not.toContain('gone');
   });
 });
+
+describe('TagIndex requestRebuild coalescing', () => {
+  it('collapses concurrent requests into at most one extra sweep', async () => {
+    let sweeps = 0;
+    // Assigned by the first sweep's promise executor, before `release()` runs.
+    let release!: () => void;
+    const index = new TagIndex(() => {
+      sweeps += 1;
+      if (sweeps === 1) {
+        // Hold the first sweep open so the later requests land while one
+        // is genuinely in flight.
+        return new Promise<string[]>((resolve) => {
+          release = () => resolve(Object.keys(FILES));
+        });
+      }
+      return Promise.resolve(Object.keys(FILES));
+    });
+    index.setReadContent((p) => Promise.resolve(FILES[p] ?? ''));
+
+    const first = index.requestRebuild();
+
+    await Promise.resolve(); // let the first sweep start (its list call pends)
+    expect(sweeps).toBe(1);
+
+    // These land WHILE the first sweep is in flight: they must share one
+    // extra sweep, not start one each.
+    const second = index.requestRebuild();
+    const third = index.requestRebuild();
+    release();
+    await Promise.all([first, second, third]);
+    expect(sweeps).toBe(2); // one extra sweep, not one per request
+
+    // A request after the queue drains starts a fresh sweep.
+    await index.requestRebuild();
+    expect(sweeps).toBe(3);
+  });
+
+  it('reflects changed content in a later coalesced sweep', async () => {
+    let files: Record<string, string> = { 'notes/a.md': '## A #one\n' };
+    const index = new TagIndex(() => Promise.resolve(Object.keys(files)));
+    index.setReadContent((p) => Promise.resolve(files[p] ?? ''));
+    await index.requestRebuild();
+    expect(index.getVocabulary().map((e) => e.tag)).toEqual(['one']);
+
+    files = { 'notes/a.md': '## A #two\n', 'notes/b.md': '## B #three\n' };
+    await index.requestRebuild();
+    expect(index.getVocabulary().map((e) => e.tag).sort()).toEqual(['three', 'two']);
+  });
+});

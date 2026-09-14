@@ -70,6 +70,11 @@ const plugin: PluginRendererModule = {
     };
     refreshVocabulary();
     api.vault.onChanged(refreshVocabulary);
+    // The main-side index builds in the background now (activation no
+    // longer waits for it) — this push is what populates the vocabulary
+    // (and so #tag autocomplete) once the boot sweep finishes, even when
+    // no vault-change event fired for it.
+    api.backend.on('index-updated', refreshVocabulary);
 
     const addTag = (raw: string): void => {
       const tag = raw.trim().replace(/^#/, '').toLowerCase();

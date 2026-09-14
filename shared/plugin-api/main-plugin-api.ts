@@ -200,6 +200,12 @@ export interface MainPluginContext {
      */
     saveAsset(bytes: Uint8Array, ext: string, noteRelPath: string, opts?: VaultOpOptions): Promise<string>;
     list(opts?: VaultOpOptions): Promise<readonly VaultFileEntry[]>;
+    /**
+     * Flat walk of the vault's `.md` files, vault-relative and
+     * forward-slash, dotfolders skipped. Feeds index scans (tags, tasks) —
+     * much cheaper than `list`, which builds the full tree.
+     */
+    listMarkdownFiles(opts?: VaultOpOptions): Promise<readonly string[]>;
     /** Absolute path of a vault-relative asset, or null when it escapes the vault. */
     resolveAssetPath(relativePath: string, opts?: VaultOpOptions): string | null;
     onChanged(cb: (event: VaultChangeEvent) => void): Unsubscribe;

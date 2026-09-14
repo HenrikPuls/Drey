@@ -115,6 +115,10 @@ const plugin: PluginRendererModule = {
     void refreshVault();
     // MCP writes / raw writes / manual refresh (no file watcher, ADR-0018).
     api.vault.onChanged(() => void refreshVault());
+    // The main-side index builds in the background now (activation no
+    // longer waits for it) — this push re-pulls the vault list once the
+    // boot sweep finishes, even when no vault-change event fired for it.
+    api.backend.on('index-updated', () => void refreshVault());
 
     const visibleTasks = (): TaskRecord[] => {
       const base =

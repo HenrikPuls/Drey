@@ -19,6 +19,32 @@ export class TaskIndex {
   /** Records grouped by file, so one save re-indexes just that file. */
   private byPath = new Map<string, TaskRecord[]>();
 
+  /** Serialization for `requestRebuild` — always resolved, unlike the per-call promises. */
+  private rebuildChain: Promise<void> = Promise.resolve();
+  /** Set by every `requestRebuild`, consumed by the next sweep pass. */
+  private rebuildRequested = false;
+
+  /**
+   * Requests a full rebuild, coalesced: bursts collapse into at most one
+   * extra sweep per pass, never one sweep per request, and two sweeps
+   * never interleave their `byPath.clear()` + per-file reads (watcher
+   * bursts vs the boot refresh round). Resolves when a sweep has run that
+   * covers this request.
+   */
+  requestRebuild(): Promise<void> {
+    this.rebuildRequested = true;
+    const run = this.rebuildChain.then(async () => {
+      // Each pass honors everything requested so far; a request landing
+      // mid-sweep re-arms the flag and gets its own pass.
+      while (this.rebuildRequested) {
+        this.rebuildRequested = false;
+        await this.rebuild();
+      }
+    });
+    this.rebuildChain = run.catch(() => undefined);
+    return run;
+  }
+
   /**
    * @param listMarkdownFiles flattens the vault tree to `.md` paths
    *   (vault-relative, forward-slash).
@@ -27,7 +53,7 @@ export class TaskIndex {
    *   `templates/` is always excluded regardless.
    */
   constructor(
-    private readonly listMarkdownFiles: () => Promise<string[]>,
+    private readonly listMarkdownFiles: () => Promise<readonly string[]>,
     private readonly getTemplatesDir?: () => string,
   ) {}
 
@@ -44,7 +70,7 @@ export class TaskIndex {
   /** Rescans the whole vault. Safe with no active vault (clears the index). */
   async rebuild(): Promise<void> {
     this.byPath.clear();
-    let paths: string[];
+    let paths: readonly string[];
     try {
       paths = await this.listMarkdownFiles();
     } catch {

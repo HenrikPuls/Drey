@@ -486,6 +486,7 @@ export class PluginHost {
         saveAsset: (bytes, ext, noteRelPath, opts) =>
           vaultManager.saveAsset(bytes, ext, noteRelPath, opts?.vaultId),
         list: (opts) => vaultManager.listFiles(opts?.vaultId),
+        listMarkdownFiles: (opts) => vaultManager.listMarkdownFiles(opts?.vaultId),
         resolveAssetPath: (p, opts) => vaultManager.resolveAssetPath(p, opts?.vaultId),
         onChanged: (cb) => {
           this.vaultChangeCallbacks.push(cb);

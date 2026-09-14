@@ -1,29 +1,6 @@
 import type { MainPluginContext, MainPluginModule } from '../../../shared/plugin-api';
 import { TaskIndex } from './task-index';
 
-interface VaultNode {
-  type: string;
-  relativePath: string;
-  children?: VaultNode[];
-}
-
-/** Flattens the vault tree to vault-relative `.md` paths (forward-slash). */
-function markdownPaths(entries: readonly VaultNode[]): string[] {
-  const out: string[] = [];
-  const walk = (nodes: readonly VaultNode[]): void => {
-    for (const node of nodes) {
-      if (node.type === 'file' && /\.md$/i.test(node.relativePath)) {
-        out.push(node.relativePath);
-      }
-      if (node.children !== undefined) {
-        walk(node.children);
-      }
-    }
-  };
-  walk(entries);
-  return out;
-}
-
 /**
  * The Tasks plugin's main entry (ADR-0033, converted in ADR-0044 stage 6):
  * owns the whole-vault task index and keeps it current through the
@@ -31,7 +8,7 @@ function markdownPaths(entries: readonly VaultNode[]): string[] {
  */
 const plugin: MainPluginModule = {
   async activate(ctx: MainPluginContext) {
-    const index = new TaskIndex(async () => markdownPaths(await ctx.vault.list()), () =>
+    const index = new TaskIndex(() => ctx.vault.listMarkdownFiles(), () =>
       ctx.appConfig.get().templates.dir,
     );
     index.setReadContent((path) => ctx.vault.read(path));
@@ -57,6 +34,17 @@ const plugin: MainPluginModule = {
     // Vault lifecycle: removal on delete, full rebuild on rename / refresh.
     // A vault-less `refresh` is the registry-level round (rebuild); a
     // scoped event for another vault is ignored.
+    //
+    // Full rebuilds run in the background and coalesce
+    // (`index.requestRebuild`): activation must not block on a full-vault
+    // scan — the window comes up first, and each finished sweep pushes
+    // `index-updated` so the renderer re-pulls the list even when no
+    // vault-change event announced the rebuild.
+    const rebuildAndAnnounce = (): void => {
+      void index.requestRebuild().then(() => {
+        ctx.ipc.emit('index-updated', { tasks: index.all().length });
+      });
+    };
     ctx.vault.onChanged((event) => {
       if (event.vaultId !== undefined && indexVaultId !== null && event.vaultId !== indexVaultId) {
         return;
@@ -67,7 +55,7 @@ const plugin: MainPluginModule = {
       }
       if (event.kind === 'rename' && event.path !== undefined) {
         // The rename moved content in or out of index scope.
-        void index.rebuild();
+        rebuildAndAnnounce();
         return;
       }
       if (event.kind === 'write' && event.path !== undefined) {
@@ -80,7 +68,7 @@ const plugin: MainPluginModule = {
           .catch(() => index.removeFile(path));
         return;
       }
-      void index.rebuild();
+      rebuildAndAnnounce();
       // A registry-level round may have changed which vault is active.
       void ctx.vault.listVaults().then((vaults) => {
         indexVaultId = vaults.find((v) => v.active)?.id ?? null;
@@ -92,11 +80,10 @@ const plugin: MainPluginModule = {
 
     ctx.log('activated');
 
-    // Initial build before activation completes: the window (and so the
-    // panel's first `list` pull) comes up after the host awaited activate,
-    // so the whole-vault list is populated on first read. Vault-change
-    // events keep it current from here.
-    await index.rebuild();
+    // No initial build here: activation must not block on a full-vault
+    // scan. The registry-level refresh round that follows activation (the
+    // vault-less `refresh` above) kicks off the one boot build in the
+    // background; `index-updated` tells the renderer when it is ready.
   },
 };
 
