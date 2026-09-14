@@ -103,6 +103,9 @@ export const TEMPLATE_DT_TYPE = 'application/x-drey-template';
 /** Largest text file whose contents we inline on drop (case D). */
 export const TEXT_DROP_MAX = 2 * 1024 * 1024;
 
+/** A leftover OS file bigger than this is refused, not staged (attachments bloat). */
+export const ATTACH_DROP_MAX = 100 * 1024 * 1024;
+
 /**
  * True for a dropped/pasted file that is an image -- by MIME (the fast
  * path) or, when the OS left `type` blank (common for a Windows Explorer
@@ -291,6 +294,33 @@ async function insertPdf(view: EditorView, file: File, config: ImagePasteConfig)
     async () => `![${file.name}](${await saveNamed(bytes, file.name)})`,
     config,
   );
+}
+
+/**
+ * A leftover OS file (nothing earlier in the cascade claimed it — not an
+ * image, PDF, text file, meeting invite or vault-panel drag): staged
+ * name-preserving into the note's `attachments/` and inserted as a plain
+ * Markdown LINK at the drop point. Milestone 31 — this drop used to be
+ * swallowed silently.
+ */
+async function insertAttachedFile(
+  view: EditorView,
+  file: File,
+  config: ImagePasteConfig,
+): Promise<void> {
+  const saveNamed = config.saveNamed;
+  const dot = file.name.lastIndexOf('.');
+  const ext = dot > 0 ? file.name.slice(dot + 1).toLowerCase() : '';
+  if (!saveNamed || ext === '') {
+    config.onError?.(`Skipped "${file.name}" — a file without an extension can't be attached.`);
+    return;
+  }
+  await resolveInserted(view, async () => {
+    const bytes = new Uint8Array(await file.arrayBuffer());
+    const path = await saveNamed(bytes, file.name);
+    const rel = noteRelativeLink(config.notePath?.() ?? '', path);
+    return /[ ()]/.test(rel) ? `[${file.name}](<${rel}>)` : `[${file.name}](${rel})`;
+  }, config);
 }
 
 /**
@@ -519,9 +549,17 @@ export function imagePaste(config: ImagePasteConfig): Extension {
         }
       } else if (url) {
         void insertFromUrl(view, url, config);
+      } else {
+        // The leftovers (hasAnyFile is guaranteed here): stage each into
+        // attachments/ and link it, instead of swallowing the drop.
+        for (const file of Array.from(data?.files ?? [])) {
+          if (file.size > ATTACH_DROP_MAX) {
+            config.onError?.(`"${file.name}" is too large to attach (over 100 MB).`);
+            continue;
+          }
+          void insertAttachedFile(view, file, config);
+        }
       }
-      // A non-image, non-PDF, non-text file drop falls through here:
-      // swallowed (preventDefault'd), nothing inserted.
       return true;
     },
     paste(event, view) {

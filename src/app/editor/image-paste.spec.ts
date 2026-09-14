@@ -513,6 +513,59 @@ describe('imagePaste', () => {
       expect(view.state.doc.toString()).toBe('# note\n');
     });
 
+  describe('generic OS file staging (milestone 31)', () => {
+    it('stages a leftover file name-preserving and inserts a Markdown link', async () => {
+      let savedName = '';
+      view = mount('# note\n', {
+        save: async () => 'attachments/x.png',
+        saveNamed: async (_bytes, fileName) => {
+          savedName = fileName;
+          return 'attachments/report.docx';
+        },
+        notePath: () => 'foo.md',
+      });
+      view.dispatch({ selection: { anchor: view.state.doc.length } });
+      fireDrop(view, transfer([fakeFile('', 'report.docx')]));
+      await settle();
+      expect(savedName).toBe('report.docx');
+      const text = view.state.doc.toString();
+      expect(text).toContain('[report.docx](attachments/report.docx)');
+      expect(text).not.toContain('uploading:');
+    });
+
+    it('refuses a leftover file over the size cap with a notice', async () => {
+      const errors: string[] = [];
+      view = mount('# note\n', {
+        save: async () => 'attachments/x.png',
+        saveNamed: async () => 'attachments/big.bin',
+        onError: (message) => errors.push(message),
+      });
+      const big = { ...fakeFile('', 'big.bin'), size: 101 * 1024 * 1024 } as unknown as File;
+      fireDrop(view, transfer([big]));
+      await settle();
+      expect(errors[0]).toContain('too large to attach');
+      expect(view.state.doc.toString()).toBe('# note\n');
+    });
+
+    it('skips an extension-less leftover with a notice, saving nothing', async () => {
+      const errors: string[] = [];
+      let saved = false;
+      view = mount('# note\n', {
+        save: async () => 'attachments/x.png',
+        saveNamed: async () => {
+          saved = true;
+          return 'attachments/x';
+        },
+        onError: (message) => errors.push(message),
+      });
+      fireDrop(view, transfer([fakeFile('', 'artifact')]));
+      await settle();
+      expect(saved).toBe(false);
+      expect(errors[0]).toContain('artifact');
+      expect(view.state.doc.toString()).toBe('# note\n');
+    });
+  });
+
     it('inserts nothing when decodeMeeting is not configured', async () => {
       view = mount('# note\n', { save: async () => 'x' });
 
