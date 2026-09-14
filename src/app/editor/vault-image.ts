@@ -6,25 +6,19 @@
  * vault id is the URL host (`drey-asset://<vaultId>/asset/<path>`) so the
  * same relative path resolves per vault; a null vaultId keeps the
  * host-less legacy form (served from the active vault).
+ *
+ * The candidate chain itself lives in `shared/asset-refs.ts` so the PDF
+ * export resolves through the exact same list.
  */
+import { resolveAssetRef, normalizeRelative } from '../../../shared/asset-refs';
 
-/** Collapse `.`/`..` segments; return `null` if the path climbs above the root. */
-export function normalizeRelative(pathStr: string): string | null {
-  const out: string[] = [];
-  for (const seg of pathStr.split('/')) {
-    if (seg === '' || seg === '.') {
-      continue;
-    }
-    if (seg === '..') {
-      if (out.length === 0) {
-        return null;
-      }
-      out.pop();
-    } else {
-      out.push(seg);
-    }
-  }
-  return out.join('/');
+export { normalizeRelative };
+
+function toAssetUrl(relative: string, vaultId: string | null): string {
+  const encoded = relative.split('/').map(encodeURIComponent).join('/');
+  return vaultId !== null && vaultId !== ''
+    ? `drey-asset://${vaultId}/asset/${encoded}`
+    : `drey-asset://asset/${encoded}`;
 }
 
 /**
@@ -40,51 +34,32 @@ export function resolveVaultImageUrl(
   rawUrl: string,
   vaultId: string | null = null,
 ): string | null {
-  const url = rawUrl.trim();
-  if (!url) {
-    return null;
+  const ref = resolveAssetRef(docPath, rawUrl);
+  if (ref.kind === 'passthrough') {
+    return ref.url;
   }
-  if (/^(https?:|data:)/i.test(url)) {
-    return url;
-  }
-  if (/^[a-z][a-z0-9+.-]*:/i.test(url)) {
-    return null;
-  }
-  const baseDir =
-    docPath && docPath.includes('/') ? docPath.slice(0, docPath.lastIndexOf('/')) : '';
-  const joined = normalizeRelative(baseDir ? `${baseDir}/${url}` : url);
-  if (joined === null || joined === '') {
-    return null;
-  }
-  const encoded = joined.split('/').map(encodeURIComponent).join('/');
-  return vaultId !== null && vaultId !== ''
-    ? `drey-asset://${vaultId}/asset/${encoded}`
-    : `drey-asset://asset/${encoded}`;
+  const first = ref.candidates[0];
+  return first === undefined ? null : toAssetUrl(first, vaultId);
 }
 
 /**
- * Ordered servable candidates for one image reference: note-relative
- * first (the documented semantics), then the same target read from the
- * VAULT ROOT. The fallback heals notes that embed a vault-relative path —
- * assistant chat notes do (their attachment lines carry the
- * `vault:saveAsset` result verbatim), and a note moved between folders
- * keeps rendering such references. `http(s)`/`data:` pass through as the
- * single candidate; an unresolvable reference resolves to no candidate.
+ * Ordered servable candidates for one image reference, straight from the
+ * shared chain (`shared/asset-refs.ts`): note-relative first, then the
+ * vault-root reading, then — for a bare file name — the `attachments/`
+ * folders beside the note and at the vault root. `http(s)`/`data:` pass
+ * through as the single candidate; an unresolvable reference resolves to
+ * no candidate.
  */
 export function resolveVaultImageCandidates(
   docPath: string | null,
   rawUrl: string,
   vaultId: string | null = null,
 ): string[] {
-  const primary = resolveVaultImageUrl(docPath, rawUrl, vaultId);
-  if (primary === null) {
-    return [];
+  const ref = resolveAssetRef(docPath, rawUrl);
+  if (ref.kind === 'passthrough') {
+    return [ref.url];
   }
-  if (/^(https?:|data:)/i.test(rawUrl.trim())) {
-    return [primary];
-  }
-  const fromRoot = resolveVaultImageUrl(null, rawUrl, vaultId);
-  return fromRoot !== null && fromRoot !== primary ? [primary, fromRoot] : [primary];
+  return ref.candidates.map((candidate) => toAssetUrl(candidate, vaultId));
 }
 
 /**

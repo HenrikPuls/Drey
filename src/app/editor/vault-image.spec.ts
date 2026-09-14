@@ -37,9 +37,24 @@ describe('resolveVaultImageCandidates', () => {
     ]);
   });
 
+  it('a bare name also tries the attachments folders (milestone 31)', () => {
+    expect(resolveVaultImageCandidates('sailing/trip.md', 'Pasted image 1.png')).toEqual([
+      'drey-asset://asset/sailing/Pasted%20image%201.png',
+      'drey-asset://asset/Pasted%20image%201.png',
+      'drey-asset://asset/sailing/attachments/Pasted%20image%201.png',
+      'drey-asset://asset/attachments/Pasted%20image%201.png',
+    ]);
+    // A reference with a directory component keeps the two classic candidates.
+    expect(resolveVaultImageCandidates('a/n.md', 'sub/pic.png')).toEqual([
+      'drey-asset://asset/a/sub/pic.png',
+      'drey-asset://asset/sub/pic.png',
+    ]);
+  });
+
   it('deduplicates when the note lives at the vault root', () => {
     expect(resolveVaultImageCandidates('note.md', 'pic.png')).toEqual([
       'drey-asset://asset/pic.png',
+      'drey-asset://asset/attachments/pic.png',
     ]);
   });
 

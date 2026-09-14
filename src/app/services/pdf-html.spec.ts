@@ -1,4 +1,9 @@
-import { buildNotePdfHtml, replaceTaskMarkers, stripActiveHtml } from '../../../shared/pdf-html';
+import {
+  buildNotePdfHtml,
+  replaceTaskMarkers,
+  rewriteEmbedWikilinks,
+  stripActiveHtml,
+} from '../../../shared/pdf-html';
 
 /** The one document the assertions below dig into. */
 function render(markdown: string, title?: string, resolve?: (url: string) => string | null): string {
@@ -104,5 +109,33 @@ describe('buildNotePdfHtml', () => {
     const html = render('# t');
     expect(html).toContain('print-color-adjust: exact');
     expect(html).toContain("font-family: 'Newsreader', Georgia");
+  });
+});
+
+describe('rewriteEmbedWikilinks (milestone 31)', () => {
+  it('rewrites media embeds to angle-bracket Markdown images', () => {
+    expect(rewriteEmbedWikilinks('![[Pasted image 20260427105518.png]]')).toBe(
+      '![](<Pasted image 20260427105518.png>)',
+    );
+    expect(rewriteEmbedWikilinks('![[doc.pdf|300]]')).toBe('![](<doc.pdf>)');
+  });
+
+  it('leaves note links, anchors, non-media targets and code fences alone', () => {
+    expect(rewriteEmbedWikilinks('[[Some note]]')).toBe('[[Some note]]');
+    expect(rewriteEmbedWikilinks('![[Note#Heading]]')).toBe('![[Note#Heading]]');
+    expect(rewriteEmbedWikilinks('![[archive.zip]]')).toBe('![[archive.zip]]');
+    expect(rewriteEmbedWikilinks('```\n![[x.png]]\n```')).toBe('```\n![[x.png]]\n```');
+  });
+
+  it('a rewritten embed renders into the html and the resolver sees the bare name', () => {
+    const html = buildNotePdfHtml({
+      markdown: '---\ntitle: t\n---\n\n![[pic with spaces.png]]\n',
+      title: 't',
+      // markdown-it hands the destination percent-encoded; the real
+      // resolver (shared/asset-refs.ts) offers the decoded reading.
+      resolveImageSrc: (url) =>
+        decodeURIComponent(url) === 'pic with spaces.png' ? 'file:///resolved.png' : null,
+    });
+    expect(html).toContain('src="file:///resolved.png"');
   });
 });

@@ -15,6 +15,7 @@ import * as fs from 'node:fs';
 import * as fsp from 'node:fs/promises';
 import * as path from 'node:path';
 import { pathToFileURL } from 'node:url';
+import { resolveAssetRef } from '../shared/asset-refs';
 import { buildNotePdfHtml } from '../shared/pdf-html';
 import { PdfExportRequest } from '../shared/ipc-api';
 import { VaultManager } from './vault-manager';
@@ -25,25 +26,6 @@ export interface PdfExportDeps {
   getParentWindow: () => BrowserWindow | null;
 }
 
-/** Collapse `.`/`..` segments; null when the path would climb above the root. */
-function normalizeRelative(p: string): string | null {
-  const out: string[] = [];
-  for (const seg of p.split('/')) {
-    if (seg === '' || seg === '.') {
-      continue;
-    }
-    if (seg === '..') {
-      if (out.length === 0) {
-        return null;
-      }
-      out.pop();
-    } else {
-      out.push(seg);
-    }
-  }
-  return out.join('/');
-}
-
 export async function exportNoteToPdf(
   { vaultManager, getParentWindow }: PdfExportDeps,
   request: PdfExportRequest,
@@ -51,29 +33,18 @@ export async function exportNoteToPdf(
   const content =
     request.content ?? (await vaultManager.readFile(request.path, request.vaultId)).content;
 
-  // Image references resolve in the note's own vault, note-folder first,
-  // then the vault root (same candidates the Live Preview uses). Main
-  // resolves to absolute file:// URLs -- the temp page is itself file://,
-  // so same-scheme subresources load unconditionally.
-  const noteDir = request.path.includes('/') ? request.path.slice(0, request.path.lastIndexOf('/')) : '';
+  // Image references resolve through the ONE shared candidate chain
+  // (`shared/asset-refs.ts` — the same list the Live Preview widgets walk:
+  // note-relative, vault root, then the attachments/ folders for a bare
+  // name). Main resolves to absolute file:// URLs -- the temp page is
+  // itself file://, so same-scheme subresources load unconditionally.
   const resolveImageSrc = (rawUrl: string): string | null => {
-    const url = rawUrl.trim();
-    if (!url) {
-      return null;
+    const ref = resolveAssetRef(request.path, rawUrl);
+    if (ref.kind === 'passthrough') {
+      return ref.url;
     }
-    if (/^(https?:|data:)/i.test(url)) {
-      return url;
-    }
-    if (/^[a-z][a-z0-9+.-]*:/i.test(url)) {
-      return null;
-    }
-    const candidates = [noteDir !== '' ? `${noteDir}/${url}` : url, url];
-    for (const candidate of candidates) {
-      const relative = normalizeRelative(candidate);
-      if (relative === null) {
-        continue;
-      }
-      const absolute = vaultManager.resolveAssetPath(relative, request.vaultId);
+    for (const candidate of ref.candidates) {
+      const absolute = vaultManager.resolveAssetPath(candidate, request.vaultId);
       if (absolute !== null && fs.existsSync(absolute)) {
         return pathToFileURL(absolute).href;
       }

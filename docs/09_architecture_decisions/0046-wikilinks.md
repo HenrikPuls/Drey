@@ -84,3 +84,17 @@ plugin because its vocabulary and section index are plugin-owned data).
   are unit-tested like `link-open.ts`.
 - `link-open.ts` and the conceal layer each gained a small
   "inside a wikilink span" guard (see ADR-0031's later change).
+
+## Addendum (milestone 31) — media embeds `![[file]]`
+
+Obsidian-migrated notes use `![[Pasted image ….png]]` for embedded images. The
+wikilink grammar (note links by name) now additionally recognizes the
+`!`-prefixed form when the target carries an image or PDF extension and
+renders it through the same embed pipeline as `![](path)` — the shared
+candidate chain (`shared/asset-refs.ts`) includes the `attachments/` folders,
+so a bare name resolves even when the file sits beside the note or at the
+vault root. Note targets (`[[note]]`, `![[Note#Heading]]`) still link, never
+transclude; a `|alias` suffix on a media embed is alt text, or the display
+size when it is a bare `W`/`WxH`. The PDF export rewrites media embeds to
+standard image references before its markdown pass
+(`shared/pdf-html.ts rewriteEmbedWikilinks`).

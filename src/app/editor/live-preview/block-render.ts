@@ -3,9 +3,10 @@ import { EditorState, Extension, Range, StateField } from '@codemirror/state';
 import { Decoration, DecorationSet, EditorView } from '@codemirror/view';
 import type { SyntaxNode } from '@lezer/common';
 import MarkdownIt from 'markdown-it';
-import { pdfExtension } from '../../../../shared/asset-name';
+import { imageExtension, pdfExtension } from '../../../../shared/asset-name';
 import { clampEmbedWidth, parseImageEmbed, setEmbedWidth } from '../../../../shared/image-embed';
 import { frontmatterEnd } from '../markdown-frontmatter';
+import { extractWikilinks } from '../wikilinks/wikilink';
 import { fenceLang } from './fenced-code';
 import { htmlTagBalance, sanitizeHtml } from './sanitize-html';
 import {
@@ -112,6 +113,15 @@ function scanEmbeds(state: EditorState, config: LivePreviewConfig): Embed[] {
   const htmlBlocks: { from: number; to: number }[] = [];
 
   const tree = ensureSyntaxTree(state, doc.length, PARSE_BUDGET_MS) ?? syntaxTree(state);
+
+  // Obsidian-style media embeds `![[name.png]]` / `![[name.pdf]]`
+  // (milestone 31, ADR-0046 addendum) are collected FIRST: the markdown
+  // parser ALSO reads their `![` prefix as a (URL-less) Image node — for
+  // media embeds a duplicate widget, for `![[Note]]` a stray image
+  // placeholder — so every Image node opening on `![[` is left to the
+  // wikilink pass below.
+  const wikiEmbeds = collectWikilinkEmbeds(state, config, tree, fmEnd);
+
   tree.iterate({
     enter: (node) => {
       if (node.name === 'Table') {
@@ -161,6 +171,11 @@ function scanEmbeds(state: EditorState, config: LivePreviewConfig): Embed[] {
         return false; // never descend into a fence
       }
       if (node.name === 'Image') {
+        // `![[...]]` belongs to the wikilink pass (below), whatever the
+        // target turns out to be.
+        if (state.sliceDoc(node.from, node.from + 3) === '![[') {
+          return false;
+        }
         if (node.from >= fmEnd) {
           // `node` is the iterate cursor -- its `from`/`to` are only valid
           // in this callback. Capture them before they move on.
@@ -267,7 +282,123 @@ function scanEmbeds(state: EditorState, config: LivePreviewConfig): Embed[] {
     });
   }
 
+  // Obsidian-style media embeds render exactly like a Markdown image —
+  // widget swap, reveal mirror, the shared candidate chain (so bare names
+  // search the `attachments/` folders too). `[[note]]` stays a link (no
+  // note transclusion).
+  for (const embed of wikiEmbeds) {
+    embeds.push(embed);
+  }
+
   return embeds;
+}
+
+interface WikilinkEmbed {
+  kind: EmbedKind;
+  from: number;
+  to: number;
+  target: string;
+  srcs: readonly string[];
+  alt: string;
+  width: number | null;
+  height: number | null;
+  previewPos: number;
+}
+
+/**
+ * The `![[...]]` media pass: `extractWikilinks` over the whole document,
+ * keeping only `!`-prefixed, post-frontmatter, image/PDF targets outside
+ * code. Heading anchors are note links, never media.
+ */
+function collectWikilinkEmbeds(
+  state: EditorState,
+  config: LivePreviewConfig,
+  tree: ReturnType<typeof syntaxTree>,
+  fmEnd: number,
+): Embed[] {
+  const doc = state.doc;
+  const full = state.sliceDoc();
+  const found: WikilinkEmbed[] = [];
+  for (const wl of extractWikilinks(full)) {
+    const from = wl.index - 1;
+    if (from < 0 || full[from] !== '!' || from < fmEnd) {
+      continue;
+    }
+    if (wl.target.includes('#') || wl.anchor !== null) {
+      continue;
+    }
+    const isPdf = pdfExtension(wl.target) !== null;
+    const isImage = imageExtension(wl.target) !== null;
+    if (!isPdf && !isImage) {
+      continue;
+    }
+    if (isInsideCode(tree, from)) {
+      continue;
+    }
+    const to = wl.index + wl.length;
+    // `![[img.png|300]]` — a size-only alias is the width, not alt text.
+    const alias = wl.alias ?? '';
+    const sizeOnly = /^\d+(x\d+)?$/.test(alias.trim());
+    const { alt, width, height } = sizeOnly
+      ? parseImageEmbed(`|${alias.trim()}`)
+      : parseImageEmbed(alias);
+    found.push({
+      kind: isPdf ? 'pdf' : 'image',
+      from,
+      to,
+      target: wl.target,
+      srcs: config.resolveImage(wl.target),
+      alt,
+      width,
+      height,
+      previewPos: doc.lineAt(to).to,
+    });
+  }
+  return found.map((embed) => ({
+    kind: embed.kind,
+    from: embed.from,
+    to: embed.to,
+    lineFrom: doc.lineAt(embed.from).from,
+    lineTo: embed.previewPos,
+    atom: () =>
+      Decoration.replace({
+        widget: embed.kind === 'pdf'
+          ? new PdfWidget([...embed.srcs], embed.alt, embed.target, config.onOpenPdf)
+          : new ImageWidget(
+              [...embed.srcs],
+              embed.alt,
+              embed.width,
+              embed.height,
+              config.onOpenImage,
+              embed.target,
+            ),
+      }).range(embed.from, embed.to),
+    // While the `![[...]]` line is revealed, mirror the embed below it,
+    // exactly like a Markdown image's preview.
+    preview:
+      embed.srcs.length === 0
+        ? null
+        : () =>
+            Decoration.widget({
+              widget: embed.kind === 'pdf'
+                ? new PdfPreviewWidget([...embed.srcs], embed.alt)
+                : new ImagePreviewWidget([...embed.srcs], embed.alt, embed.width, embed.height),
+              block: true,
+              side: 1,
+            }).range(embed.previewPos),
+  }));
+}
+
+/** True when `pos` sits inside a code span / fenced or inline code node. */
+function isInsideCode(tree: ReturnType<typeof syntaxTree>, pos: number): boolean {
+  let node: SyntaxNode | null = tree.resolveInner(pos, -1);
+  while (node !== null) {
+    if (node.name === 'CodeSpan' || node.name === 'InlineCode' || node.name === 'FencedCode') {
+      return true;
+    }
+    node = node.parent;
+  }
+  return false;
 }
 
 // The rounded container drawn around a revealed embed's raw source lines,

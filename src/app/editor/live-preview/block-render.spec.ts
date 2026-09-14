@@ -298,3 +298,45 @@ describe('revealDecorations', () => {
     expect(widgets(revealDecorations(state(doc), passThrough))).toHaveLength(0);
   });
 });
+
+describe('wikilink media embeds ![[...]] (milestone 31)', () => {
+  const DOC = 'pre\n\n![[Pasted image 1.png]]\n\nend';
+
+  it('replaces an image-target embed with an ImageWidget over the whole span', () => {
+    const all = widgets(blockDecorations(state(DOC, 0), passThrough));
+    expect(all).toHaveLength(1);
+    const widget = all[0].deco.spec['widget'] as ImageWidget;
+    expect(widget).toBeInstanceOf(ImageWidget);
+    expect(widget.srcs).toEqual(['Pasted image 1.png']);
+    expect(widget.alt).toBe('');
+    expect(DOC.slice(all[0].from, all[0].to)).toBe('![[Pasted image 1.png]]');
+  });
+
+  it('keeps the raw markup while the selection touches the embed', () => {
+    const at = DOC.indexOf('![[Pasted') + 2;
+    expect(widgets(blockDecorations(state(DOC, at), passThrough))).toHaveLength(0);
+  });
+
+  it('a size-only alias is the width, not alt text', () => {
+    const w = widgets(blockDecorations(state('![[pic.png|300]]\n\nend'), passThrough));
+    const widget = w[0].deco.spec['widget'] as ImageWidget;
+    expect(widget.alt).toBe('');
+    expect(widget.width).toBe(300);
+  });
+
+  it('an alias with text becomes the alt text', () => {
+    const w = widgets(blockDecorations(state('![[pic.png|a boat]]\n\nend'), passThrough));
+    expect((w[0].deco.spec['widget'] as ImageWidget).alt).toBe('a boat');
+  });
+
+  it('replaces a pdf-target embed with a PdfWidget', () => {
+    const all = widgets(blockDecorations(state('![[attachments/spec.pdf]]\n\nend'), passThrough));
+    expect(all).toHaveLength(1);
+    expect(all[0].deco.spec['widget']).toBeInstanceOf(PdfWidget);
+  });
+
+  it('leaves note links, anchors and code spans alone', () => {
+    const notes = '[[Some note]]\n\n![[Note#Heading]]\n\n`![[pic.png]]`\n\nend';
+    expect(widgets(blockDecorations(state(notes, 0), passThrough))).toHaveLength(0);
+  });
+});

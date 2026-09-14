@@ -15,6 +15,7 @@
  * text (they name in-vault targets a PDF reader can't follow).
  */
 import MarkdownIt from 'markdown-it';
+import { imageExtension, pdfExtension } from './asset-name';
 import { splitFrontmatter } from './frontmatter';
 
 export interface PdfHtmlOptions {
@@ -81,13 +82,55 @@ export function stripActiveHtml(html: string): string {
 }
 
 /**
+ * Rewrites Obsidian-style media embeds (milestone 31; ADR-0046 addendum):
+ * `![[name.png]]` / `![[name.pdf]]` — image or PDF extension, an optional
+ * `|alias` suffix dropped — become standard Markdown images, so the
+ * markdown-it pass renders them and the shared image-resolution chain
+ * (with its `attachments/` fallback) applies. `[[note]]` links and media
+ * embeds with a `#anchor` stay literal text (they name in-vault targets a
+ * PDF reader can't follow). Fenced code is left alone, same fence
+ * tracking as `replaceTaskMarkers`.
+ */
+export function rewriteEmbedWikilinks(markdown: string): string {
+  const lines = markdown.split('\n');
+  let inFence = false;
+  let fenceMarker = '';
+  for (let i = 0; i < lines.length; i++) {
+    const fence = lines[i].trim().match(/^(`{3,}|~{3,})/);
+    if (fence) {
+      if (!inFence) {
+        inFence = true;
+        fenceMarker = fence[1][0];
+      } else if (fence[1][0] === fenceMarker) {
+        inFence = false;
+      }
+      continue;
+    }
+    if (inFence) {
+      continue;
+    }
+    lines[i] = lines[i].replace(/!\[\[([^\[\]\n]+?)\]\]/g, (whole: string, target: string) => {
+      const name = target.split('|')[0].split('#')[0].trim();
+      if (imageExtension(name) === null && pdfExtension(name) === null) {
+        return whole;
+      }
+      // Angle brackets: asset names like `Pasted image 20260427105518.png`
+      // contain spaces, which end an ordinary CommonMark destination.
+      return `![](<${name}>)`;
+    });
+  }
+  return lines.join('\n');
+}
+
+/**
  * Renders the note to a complete HTML document. `[[wikilinks]]` pass
- * through as literal text (markdown-it leaves unknown syntax alone);
- * mermaid fences stay code blocks.
+ * through as literal text (markdown-it leaves unknown syntax alone;
+ * media embeds are rewritten to images first, see
+ * {@link rewriteEmbedWikilinks}); mermaid fences stay code blocks.
  */
 export function buildNotePdfHtml(options: PdfHtmlOptions): string {
   const { markdown, title, resolveImageSrc } = options;
-  const body = splitFrontmatter(markdown).body;
+  const body = rewriteEmbedWikilinks(splitFrontmatter(markdown).body);
   const md = new MarkdownIt({ html: true, typographer: true });
 
   if (resolveImageSrc) {
