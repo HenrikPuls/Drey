@@ -86,8 +86,14 @@ export class FilesPanel {
   protected readonly editor = inject(EditorService);
   private readonly host = inject<ElementRef<HTMLElement>>(ElementRef).nativeElement;
 
-  /** Folder paths the user has collapsed, per vault (composite keys). Folders start expanded. */
-  private readonly collapsed = signal<ReadonlySet<string>>(new Set());
+  /**
+   * Folder paths the user has EXPANDED, per vault (composite keys). Folders
+   * start COLLAPSED each session (the beta feedback: a big vault opened as
+   * one wall of expanded trees) -- an empty set is the resting state, and
+   * nothing is persisted, so a restart collapses again. Tab activation
+   * auto-expands the active file's ancestors (see the effect below).
+   */
+  private readonly expanded = signal<ReadonlySet<string>>(new Set());
   /** Vault ids whose whole section the user collapsed. */
   protected readonly collapsedVaults = signal<ReadonlySet<string>>(new Set());
 
@@ -115,7 +121,7 @@ export class FilesPanel {
 
   /**
    * All vault sections flattened to the rows that are actually visible (a
-   * collapsed vault hides its whole tree; a collapsed folder drops its
+   * collapsed vault hides its whole tree; an unexpanded folder drops its
    * children), in display order -- the model the arrow keys step through.
    */
   protected readonly visibleNodes = computed<VisibleNode[]>(() => {
@@ -132,7 +138,7 @@ export class FilesPanel {
           if (
             entry.type === 'directory' &&
             entry.children?.length &&
-            !this.collapsed().has(docKey(vault.id, entry.relativePath))
+            this.expanded().has(docKey(vault.id, entry.relativePath))
           ) {
             walk(entry.children, depth + 1);
           }
@@ -172,6 +178,42 @@ export class FilesPanel {
   private readonly vaultRenameInput = viewChild<ElementRef<HTMLInputElement>>('vaultRenameInput');
 
   constructor() {
+    // Reveal the active file: folders start collapsed, so a tab opened from
+    // search, a chat link or the calendar must expand its ancestor chain
+    // (and unfold the vault section) -- otherwise the row is invisible and
+    // the tree looks like it "did nothing".
+    effect(() => {
+      const key = this.editor.activePath();
+      if (!key) {
+        return;
+      }
+      const sep = key.indexOf('::');
+      const vaultId = sep > 0 ? key.slice(0, sep) : null;
+      const path = sep > 0 ? key.slice(sep + 2) : key;
+      const parts = path.split('/');
+      if (parts.length < 2) {
+        return;
+      }
+      let revealed = false;
+      this.expanded.update((set) => {
+        const next = new Set(set);
+        for (let i = 1; i < parts.length; i++) {
+          next.add(docKey(vaultId, parts.slice(0, i).join('/')));
+          revealed = true;
+        }
+        return next;
+      });
+      if (revealed && vaultId !== null) {
+        this.collapsedVaults.update((set) => {
+          if (!set.has(vaultId)) {
+            return set;
+          }
+          const next = new Set(set);
+          next.delete(vaultId);
+          return next;
+        });
+      }
+    });
     effect(() => {
       if (this.creating()) {
         setTimeout(() => this.createInput()?.nativeElement.focus(), 0);
@@ -201,11 +243,11 @@ export class FilesPanel {
   }
 
   protected isCollapsed(key: string): boolean {
-    return this.collapsed().has(key);
+    return !this.expanded().has(key);
   }
 
   protected toggleFolder(key: string): void {
-    this.collapsed.update((set) => {
+    this.expanded.update((set) => {
       const next = new Set(set);
       if (next.has(key)) {
         next.delete(key);
@@ -228,14 +270,23 @@ export class FilesPanel {
     });
   }
 
-  /** Header "collapse all folders" button: fold every directory in every vault. */
-  protected collapseAll(): void {
-    const paths = new Set<string>();
+  /**
+   * Header toggle: "Expand all" when any folder is still collapsed, else
+   * "Collapse all" (which is the default state, so the button usually
+   * expands). Expanding collects every directory key; collapsing empties
+   * the set.
+   */
+  protected readonly allFoldersExpanded = computed<boolean>(() => {
+    const expanded = this.expanded();
+    let every = true;
     for (const [vaultId, tree] of Object.entries(this.vault.trees())) {
       const walk = (entries: readonly VaultFileEntry[]): void => {
         for (const entry of entries) {
           if (entry.type === 'directory') {
-            paths.add(docKey(vaultId, entry.relativePath));
+            if (!expanded.has(docKey(vaultId, entry.relativePath))) {
+              every = false;
+              return;
+            }
             if (entry.children?.length) {
               walk(entry.children);
             }
@@ -243,8 +294,33 @@ export class FilesPanel {
         }
       };
       walk(tree);
+      if (!every) {
+        break;
+      }
     }
-    this.collapsed.set(paths);
+    return every;
+  });
+
+  protected toggleAllFolders(): void {
+    if (!this.allFoldersExpanded()) {
+      const paths = new Set<string>();
+      for (const [vaultId, tree] of Object.entries(this.vault.trees())) {
+        const walk = (entries: readonly VaultFileEntry[]): void => {
+          for (const entry of entries) {
+            if (entry.type === 'directory') {
+              paths.add(docKey(vaultId, entry.relativePath));
+              if (entry.children?.length) {
+                walk(entry.children);
+              }
+            }
+          }
+        };
+        walk(tree);
+      }
+      this.expanded.set(paths);
+    } else {
+      this.expanded.set(new Set());
+    }
   }
 
   protected onFolderClick(vaultId: string, entry: VaultFileEntry, event?: MouseEvent): void {
@@ -301,7 +377,7 @@ export class FilesPanel {
           }
         } else if (current.entry.type === 'directory') {
           const key = docKey(current.vaultId, current.entry.relativePath);
-          if (this.collapsed().has(key)) {
+          if (!this.expanded().has(key)) {
             this.toggleFolder(key);
           } else {
             const child = nodes[idx + 1];
@@ -330,7 +406,7 @@ export class FilesPanel {
         }
         if (
           current.entry.type === 'directory' &&
-          !this.collapsed().has(docKey(current.vaultId, current.entry.relativePath))
+          this.expanded().has(docKey(current.vaultId, current.entry.relativePath))
         ) {
           this.toggleFolder(docKey(current.vaultId, current.entry.relativePath));
         } else {
@@ -569,6 +645,37 @@ export class FilesPanel {
     this.vaultMenu.set(null);
     try {
       await this.vault.revealVaultFolder(vaultId);
+    } catch (err) {
+      alert(err instanceof Error ? err.message : String(err));
+    }
+  }
+
+  /** Row menu: reveals the file/folder in the OS file manager (selected in its parent). */
+  protected async onRevealEntry(): Promise<void> {
+    const menu = this.menu();
+    const entry = menu?.entry;
+    this.closeMenus();
+    if (!menu || !entry) {
+      return;
+    }
+    try {
+      await this.vault.revealPath(entry.relativePath, menu.vaultId);
+    } catch (err) {
+      alert(err instanceof Error ? err.message : String(err));
+    }
+  }
+
+  /** Row menu: opens the OS terminal in the entry's folder (a file's parent). */
+  protected async onOpenInTerminal(): Promise<void> {
+    const menu = this.menu();
+    this.closeMenus();
+    if (!menu) {
+      return;
+    }
+    const entry = menu.entry;
+    const dir = !entry || entry.type !== 'file' ? menu.dir : parentDir(entry.relativePath);
+    try {
+      await this.vault.openInTerminal(dir, menu.vaultId);
     } catch (err) {
       alert(err instanceof Error ? err.message : String(err));
     }
@@ -847,11 +954,7 @@ export class FilesPanel {
     this.creating.set({ kind, vaultId: menu.vaultId, dir: menu.dir });
     this.closeMenus();
     if (menu.dir) {
-      this.collapsed.update((set) => {
-        const next = new Set(set);
-        next.delete(docKey(menu.vaultId, menu.dir));
-        return next;
-      });
+      this.expandAncestors(menu.vaultId, menu.dir);
     }
   }
 
@@ -964,15 +1067,28 @@ export class FilesPanel {
     }
   }
 
-  private expand(vaultId: string, dir: string): void {
+  /**
+   * Expands `dir` AND every ancestor above it, so a reveal inside a
+   * collapsed tree actually shows the row (folders start collapsed now --
+   * a single-folder flip would open a folder whose parents are still
+   * shut).
+   */
+  private expandAncestors(vaultId: string, dir: string): void {
     if (!dir) {
       return;
     }
-    this.collapsed.update((set) => {
+    this.expanded.update((set) => {
       const next = new Set(set);
-      next.delete(docKey(vaultId, dir));
+      const parts = dir.split('/');
+      for (let i = 1; i <= parts.length; i++) {
+        next.add(docKey(vaultId, parts.slice(0, i).join('/')));
+      }
       return next;
     });
+  }
+
+  private expand(vaultId: string, dir: string): void {
+    this.expandAncestors(vaultId, dir);
   }
 
   protected async onDelete(): Promise<void> {

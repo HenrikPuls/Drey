@@ -1,4 +1,5 @@
 import { app, dialog, shell } from 'electron';
+import { spawn } from 'node:child_process';
 import * as crypto from 'node:crypto';
 import * as fs from 'node:fs';
 import * as fsp from 'node:fs/promises';
@@ -238,6 +239,60 @@ export class VaultManager {
   /** Shows the vault's folder in the OS file manager. */
   revealVaultFolder(vaultId: string): void {
     shell.showItemInFolder(this.pathOf(vaultId));
+  }
+
+  /**
+   * Reveals a vault-relative file/folder in the OS file manager
+   * (`shell.showItemInFolder` opens the containing folder with the item
+   * selected -- for a folder row, the folder selected in its parent). Only
+   * paths resolving inside a registered vault are reachable -- the
+   * absolute path never crosses the IPC bridge.
+   */
+  revealPath(relativePath: string, vaultId?: string): void {
+    shell.showItemInFolder(this.resolveInVault(relativePath, vaultId));
+  }
+
+  /**
+   * Opens the OS terminal with its working directory at the vault-relative
+   * folder (a file row uses its containing folder). Detached + unref'd, so
+   * the terminal outlives the app; spawned by ARG ARRAY with `cwd` -- the
+   * path is never interpolated into a shell string.
+   */
+  async openTerminalIn(dirRelativePath: string, vaultId?: string): Promise<void> {
+    const dir = this.resolveInVault(dirRelativePath, vaultId);
+    const detached = { detached: true, stdio: 'ignore' } as const;
+    if (process.platform === 'darwin') {
+      spawn('open', ['-a', 'Terminal', dir], detached).unref();
+      return;
+    }
+    if (process.platform === 'win32') {
+      // `/K` keeps the window open, sitting in `cwd`.
+      spawn(process.env['ComSpec'] ?? 'cmd.exe', ['/K'], { ...detached, cwd: dir }).unref();
+      return;
+    }
+    // Linux: best effort, first launcher that actually spawns wins.
+    const candidates: Array<{ cmd: string; args: string[]; cwd?: string }> = [
+      { cmd: 'gnome-terminal', args: ['--working-directory=' + dir] },
+      { cmd: 'konsole', args: ['--workdir', dir] },
+      { cmd: 'kitty', args: ['--directory', dir] },
+      { cmd: 'xdg-terminal-exec', args: [], cwd: dir },
+    ];
+    for (const candidate of candidates) {
+      const launched = await new Promise<boolean>((resolve) => {
+        try {
+          const child = spawn(candidate.cmd, candidate.args, { ...detached, cwd: candidate.cwd });
+          child.once('error', () => resolve(false));
+          child.once('spawn', () => resolve(true));
+          child.unref();
+        } catch {
+          resolve(false);
+        }
+      });
+      if (launched) {
+        return;
+      }
+    }
+    throw new Error('No terminal found (tried gnome-terminal, konsole, kitty, xdg-terminal-exec).');
   }
 
   async pickSavePath(suggestedName: string, vaultId?: string): Promise<string | null> {

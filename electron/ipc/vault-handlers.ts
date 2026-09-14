@@ -88,6 +88,15 @@ export function registerVaultHandlers({
   ipcMain.handle(IPC_CHANNELS.vaultRevealFolder, (_event, vaultId: string): void => {
     vaultManager.revealVaultFolder(vaultId);
   });
+  ipcMain.handle(IPC_CHANNELS.vaultRevealPath, (_event, relativePath: string, vaultId: string): void => {
+    vaultManager.revealPath(relativePath, vaultId);
+  });
+  ipcMain.handle(
+    IPC_CHANNELS.vaultOpenInTerminal,
+    async (_event, dirRelativePath: string, vaultId: string): Promise<void> => {
+      await vaultManager.openTerminalIn(dirRelativePath, vaultId);
+    },
+  );
 
   // --- Filesystem ops -----------------------------------------------------
   // The manual refresh (Files panel button / ADR-0045): one full round in

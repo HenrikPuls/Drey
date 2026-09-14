@@ -51,6 +51,8 @@ export const IPC_CHANNELS = {
   vaultRenameVault: 'vault:rename-vault',
   vaultSetActive: 'vault:set-active',
   vaultRevealFolder: 'vault:reveal-folder',
+  vaultRevealPath: 'vault:reveal-path',
+  vaultOpenInTerminal: 'vault:open-in-terminal',
   vaultGetActiveId: 'vault:get-active-id',
   vaultListFiles: 'vault:list-files',
   vaultReadFile: 'vault:read-file',
@@ -636,6 +638,19 @@ export interface DreyApi {
 
   /** Shows the vault's folder in the OS file manager. */
   revealVaultFolder(vaultId: string): Promise<void>;
+
+  /**
+   * Reveals a vault-relative file/folder in the OS file manager (selected
+   * in its parent folder). Throws when the path resolves outside the
+   * vault -- the absolute path never crosses the bridge.
+   */
+  revealVaultPath(relativePath: string, vaultId: string): Promise<void>;
+
+  /**
+   * Opens the OS terminal with its working directory at the vault-relative
+   * folder. Throws when no terminal can be launched (Linux best effort).
+   */
+  openVaultFolderInTerminal(dirRelativePath: string, vaultId: string): Promise<void>;
 
   /**
    * Recursively lists a vault's contents. `vaultId` defaults to the active

@@ -12,9 +12,9 @@
     <button
       type="button"
       class="hdr-btn"
-      (click)="collapseAll()"
-      title="Collapse all folders"
-      aria-label="Collapse all folders"
+      (click)="toggleAllFolders()"
+      [title]="allFoldersExpanded() ? 'Collapse all folders' : 'Expand all folders'"
+      [attr.aria-label]="allFoldersExpanded() ? 'Collapse all folders' : 'Expand all folders'"
     >
       <app-icon name="chevrons-down-up" [size]="12" />
     </button>
@@ -117,6 +117,8 @@
       <button type="button" (click)="onPaste()">Paste “{{ clip.name }}”</button>
     }
     @if (m.entry) {
+      <button type="button" (click)="onRevealEntry()">Reveal in File Explorer</button>
+      <button type="button" (click)="onOpenInTerminal()">Open in Terminal</button>
       <button type="button" (click)="startRename()">Rename…</button>
       <div class="ctx-sep"></div>
       <button type="button" class="danger" (click)="onDelete()">Delete</button>

@@ -183,6 +183,16 @@ export class VaultService {
     await window.dreyApi.revealVaultFolder(vaultId);
   }
 
+  /** Reveals a vault-relative file/folder in the OS file manager. */
+  async revealPath(relativePath: string, vaultId: string): Promise<void> {
+    await window.dreyApi.revealVaultPath(relativePath, vaultId);
+  }
+
+  /** Opens the OS terminal in a vault-relative folder. */
+  async openInTerminal(dirRelativePath: string, vaultId: string): Promise<void> {
+    await window.dreyApi.openVaultFolderInTerminal(dirRelativePath, vaultId);
+  }
+
   // --- Filesystem ops (all take the vault they act in) --------------------
 
   /**

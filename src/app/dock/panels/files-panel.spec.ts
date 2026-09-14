@@ -101,6 +101,24 @@ function tree(): VaultFileEntry[] {
   ];
 }
 
+/****
+ * Folders start COLLAPSED now; the specs below assume the fully expanded
+ * tree, so keep re-toggling until every folder has opened (the trees
+ * arrive asynchronously).
+ */
+async function expandAll(fixture: ComponentFixture<FilesPanel>): Promise<void> {
+  const host = fixture.componentInstance as unknown as {
+    toggleAllFolders(): void;
+    allFoldersExpanded(): boolean;
+  };
+  await vi.waitFor(() => {
+    if (!host.allFoldersExpanded()) {
+      host.toggleAllFolders();
+    }
+    fixture.detectChanges();
+  });
+}
+
 describe('FilesPanel row tooltips (req: full path on hover)', () => {
   let fixture: ComponentFixture<FilesPanel>;
 
@@ -118,8 +136,9 @@ describe('FilesPanel row tooltips (req: full path on hover)', () => {
     fixture.detectChanges();
     await vi.waitFor(() => {
       fixture.detectChanges();
-      expect(fixture.nativeElement.querySelectorAll('.node').length).toBe(4);
+      expect(fixture.nativeElement.querySelectorAll('.node').length).toBe(3); // folders start collapsed
     });
+    await expandAll(fixture);
     return fixture.nativeElement.querySelectorAll('.node');
   }
 
@@ -183,8 +202,9 @@ describe('FilesPanel keyboard navigation (bug-7)', () => {
   async function renderTree(): Promise<void> {
     await vi.waitFor(() => {
       fixture.detectChanges();
-      expect(rows().length).toBe(4); // vault row + a.md + notes + notes/b.md
+      expect(rows().length).toBe(3); // folders start collapsed
     });
+    await expandAll(fixture);
   }
 
   /** Arrow keys settle the selection synchronously; the focus-follow is a `setTimeout`. */
@@ -310,8 +330,9 @@ describe('FilesPanel multi-select (bug-8)', () => {
   async function renderTree(): Promise<void> {
     await vi.waitFor(() => {
       fixture.detectChanges();
-      expect(rows().length).toBe(4);
+      expect(rows().length).toBe(3); // folders start collapsed
     });
+    await expandAll(fixture);
   }
 
   async function settle(): Promise<void> {
@@ -517,9 +538,16 @@ describe('FilesPanel drag & drop (req-23 + cross-vault, ADR-0051)', () => {
   }
 
   async function renderTree(): Promise<void> {
+    // Folders start collapsed; this describe's tree has two of them
+    // (notes/, archive/), so 5 rows before the expand, 7 after.
     await vi.waitFor(() => {
       fixture.detectChanges();
-      expect(rows().length).toBe(6); // two vault rows + four entries
+      expect(rows().length).toBe(5);
+    });
+    await expandAll(fixture);
+    await vi.waitFor(() => {
+      fixture.detectChanges();
+      expect(rows().length).toBe(6); // archive/ has no children, so only b.md appears
     });
   }
 
@@ -649,5 +677,58 @@ describe('FilesPanel drag & drop (req-23 + cross-vault, ADR-0051)', () => {
     await vi.waitFor(() =>
       expect(renamed).toEqual([{ from: 'notes/b.md', to: 'b.md', fromVaultId: V, toVaultId: V }]),
     );
+  });
+});
+
+describe('FilesPanel collapsed-by-default (milestone 31)', () => {
+  let fixture: ComponentFixture<FilesPanel>;
+
+  function rows(): NodeListOf<HTMLElement> {
+    return fixture.nativeElement.querySelectorAll('.node');
+  }
+
+  beforeEach(async () => {
+    window.dreyApi = registryApi({
+      listVaultFiles: () => Promise.resolve(tree()),
+    }) as DreyApi;
+    await TestBed.configureTestingModule({ imports: [FilesPanel] }).compileComponents();
+    fixture = TestBed.createComponent(FilesPanel);
+    fixture.detectChanges();
+  });
+
+  afterEach(() => {
+    fixture.nativeElement.remove();
+    delete (window as { dreyApi?: unknown }).dreyApi;
+  });
+
+  it('folders start collapsed: notes/ is visible, its children are not', async () => {
+    await vi.waitFor(() => {
+      fixture.detectChanges();
+      expect(rows().length).toBe(3); // vault + a.md + notes (b.md hidden)
+    });
+    const comp = fixture.componentInstance as unknown as { toggleFolder(key: string): void };
+    comp.toggleFolder(`${V}::notes`);
+    fixture.detectChanges();
+    expect(rows().length).toBe(4); // b.md revealed
+  });
+
+  it('the header button toggles between expand-all and collapse-all', async () => {
+    const comp = fixture.componentInstance as unknown as {
+      toggleAllFolders(): void;
+      allFoldersExpanded(): boolean;
+    };
+    await vi.waitFor(() => {
+      fixture.detectChanges();
+      expect(rows().length).toBe(3);
+    });
+    expect(comp.allFoldersExpanded()).toBe(false);
+    comp.toggleAllFolders();
+    fixture.detectChanges();
+    expect(comp.allFoldersExpanded()).toBe(true);
+    expect(rows().length).toBe(4);
+    comp.toggleAllFolders();
+    fixture.detectChanges();
+    expect(comp.allFoldersExpanded()).toBe(false);
+    expect(rows().length).toBe(3); // back to the resting default
   });
 });

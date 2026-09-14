@@ -80,6 +80,10 @@ const dreyApi: DreyApi = {
     ipcRenderer.invoke(IPC_CHANNELS.vaultSetActive, vaultId),
   revealVaultFolder: (vaultId: string): Promise<void> =>
     ipcRenderer.invoke(IPC_CHANNELS.vaultRevealFolder, vaultId),
+  revealVaultPath: (relativePath: string, vaultId: string): Promise<void> =>
+    ipcRenderer.invoke(IPC_CHANNELS.vaultRevealPath, relativePath, vaultId),
+  openVaultFolderInTerminal: (dirRelativePath: string, vaultId: string): Promise<void> =>
+    ipcRenderer.invoke(IPC_CHANNELS.vaultOpenInTerminal, dirRelativePath, vaultId),
   listVaultFiles: (vaultId?: string): Promise<VaultFileEntry[]> =>
     ipcRenderer.invoke(IPC_CHANNELS.vaultListFiles, vaultId),
   readVaultFile: (relativePath: string, vaultId?: string): Promise<VaultFileContent> =>
