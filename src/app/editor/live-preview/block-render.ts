@@ -3,6 +3,7 @@ import { EditorState, Extension, Range, StateField } from '@codemirror/state';
 import { Decoration, DecorationSet, EditorView } from '@codemirror/view';
 import type { SyntaxNode } from '@lezer/common';
 import MarkdownIt from 'markdown-it';
+import { pdfExtension } from '../../../../shared/asset-name';
 import { clampEmbedWidth, parseImageEmbed, setEmbedWidth } from '../../../../shared/image-embed';
 import { frontmatterEnd } from '../markdown-frontmatter';
 import { fenceLang } from './fenced-code';
@@ -12,6 +13,8 @@ import {
   ImagePreviewWidget,
   ImageWidget,
   MermaidWidget,
+  PdfPreviewWidget,
+  PdfWidget,
   TableWidget,
 } from './widgets';
 
@@ -51,6 +54,12 @@ export interface LivePreviewConfig {
    * `onOpenImage`.
    */
   onZoomDiagram?: (dataUrl: string) => void;
+  /**
+   * Opens a resolved PDF embed URL as a full PDF tab (ADR-0052) -- the
+   * hover lens on a rendered PDF, handed the candidate that mounted.
+   * Optional, like `onOpenImage`.
+   */
+  onOpenPdf?: (src: string) => void;
 }
 
 const PARSE_BUDGET_MS = 50;
@@ -70,7 +79,7 @@ const tableMd = new MarkdownIt({ html: false });
  */
 const htmlMd = new MarkdownIt({ html: true });
 
-type EmbedKind = 'table' | 'mermaid' | 'image' | 'html';
+type EmbedKind = 'table' | 'mermaid' | 'image' | 'pdf' | 'html';
 
 /**
  * One rendered embed found in the tree. `from`/`to` are the node range for
@@ -160,32 +169,40 @@ function scanEmbeds(state: EditorState, config: LivePreviewConfig): Embed[] {
           const { alt, url, width, height } = parseImage(state, node.node);
           const srcs = url === null ? [] : config.resolveImage(url);
           const previewPos = doc.lineAt(nodeTo).to;
+          // A `.pdf` reference embeds the built-in (PDFium) viewer instead
+          // of an `<img>` (ADR-0052). The size suffix is parsed but
+          // deliberately ignored -- a page viewer's width is the column.
+          const isPdf = url !== null && pdfExtension(url) !== null;
           embeds.push({
-            kind: 'image',
+            kind: isPdf ? 'pdf' : 'image',
             from: nodeFrom,
             to: nodeTo,
             lineFrom: doc.lineAt(nodeFrom).from,
             lineTo: previewPos,
             atom: () =>
               Decoration.replace({
-                widget: new ImageWidget(
-                  srcs,
-                  alt,
-                  width,
-                  height,
-                  config.onOpenImage,
-                  url ?? '',
-                ),
+                widget: isPdf
+                  ? new PdfWidget(srcs, alt, url ?? '', config.onOpenPdf)
+                  : new ImageWidget(
+                      srcs,
+                      alt,
+                      width,
+                      height,
+                      config.onOpenImage,
+                      url ?? '',
+                    ),
               }).range(nodeFrom, nodeTo),
             // While the `![alt](path)` line is revealed, keep a read-only
-            // render of the image directly below it (owner's call). A
+            // render of the embed directly below it (owner's call). A
             // reference that doesn't resolve has nothing to mirror.
             preview:
               srcs.length === 0
                 ? null
                 : () =>
                     Decoration.widget({
-                      widget: new ImagePreviewWidget(srcs, alt, width, height),
+                      widget: isPdf
+                        ? new PdfPreviewWidget(srcs, alt)
+                        : new ImagePreviewWidget(srcs, alt, width, height),
                       block: true,
                       side: 1,
                     }).range(previewPos),
@@ -385,10 +402,14 @@ export function livePreviewBlocks(config: LivePreviewConfig): Extension {
   const clickToReveal = EditorView.domEventHandlers({
     mousedown(event, view) {
       const target = event.target as HTMLElement | null;
-      if (!target?.closest('.lp-edit') && !target?.closest('.lp-mermaid-error')) {
+      if (
+        !target?.closest('.lp-edit') &&
+        !target?.closest('.lp-mermaid-error') &&
+        !target?.closest('.lp-pdf-error')
+      ) {
         return false;
       }
-      const widget = target.closest('.lp-table, .lp-html, .lp-mermaid, .lp-image');
+      const widget = target.closest('.lp-table, .lp-html, .lp-mermaid, .lp-image, .lp-pdf');
       if (!widget) {
         return false;
       }

@@ -1,6 +1,6 @@
 import { Extension } from '@codemirror/state';
 import { EditorView } from '@codemirror/view';
-import { imageExtension } from '../../../shared/asset-name';
+import { imageExtension, pdfExtension } from '../../../shared/asset-name';
 import { noteRelativeLink } from '../../../shared/note-link';
 import { textExtension } from '../../../shared/text-extension';
 
@@ -12,10 +12,13 @@ import { textExtension } from '../../../shared/text-extension';
  *
  * - an **image file** (paste, OS drag) -> bytes saved into the vault's
  *   per-note `attachments/`, `![](attachments/…)` inserted;
+ * - a **PDF file** (paste, OS drag, ADR-0052) -> staged name-preserving
+ *   into `attachments/`, `![name](attachments/…)` inserted -- the embed
+ *   renders as an inline PDF viewer (Live Preview) and Ctrl-click / the
+ *   Files panel open it as a PDF tab;
  * - a **vault file** dragged from the Files panel
- *   (`application/x-drey-vault-path`) -> an image is linked in place
- *   (`![](../relative/path)`, no copy), a text file's contents are
- *   inserted raw;
+ *   (`application/x-drey-vault-path`) -> an image or PDF is linked in
+ *   place (no copy), a text file's contents are inserted raw;
  * - a **web image** dragged from a browser -> downloaded via `saveFromUrl`
  *   and inserted with a visible `[Source](<url>)` line beneath it.
  *
@@ -26,6 +29,12 @@ import { textExtension } from '../../../shared/text-extension';
 export interface ImagePasteConfig {
   /** Persists raw bytes; resolves to the path for `![](...)`. Rejects with a user message. */
   save: (bytes: Uint8Array, ext: string) => Promise<string>;
+  /**
+   * Name-preserving variant (ADR-0052) for PDFs: stores the bytes under a
+   * sanitized form of `fileName` in the note's `attachments/`; resolves to
+   * the note-relative path for the embed. Rejects with a user message.
+   */
+  saveNamed?: (bytes: Uint8Array, fileName: string) => Promise<string>;
   /** The open document's vault-relative path, for `noteRelativeLink`. */
   notePath?: () => string | null;
   /** Reads a vault file's text (Files-panel drag of a text file). */
@@ -133,6 +142,41 @@ function imageFiles(data: DataTransfer | null): File[] {
 let placeholderSeq = 0;
 
 /**
+ * True for a dropped/pasted file that is a PDF -- by MIME (the fast path)
+ * or, when the OS left `type` blank (common for a Windows Explorer drag),
+ * by a `.pdf` extension on the name (ADR-0052).
+ */
+function isPdfFile(type: string, name: string | undefined): boolean {
+  return !!pdfExtension(type || (name ?? ''));
+}
+
+/** PDF files carried by a clipboard or drag `DataTransfer`. */
+function pdfFiles(data: DataTransfer | null): File[] {
+  if (!data) {
+    return [];
+  }
+  const out: File[] = [];
+  for (const item of Array.from(data.items ?? [])) {
+    if (item.kind !== 'file') {
+      continue;
+    }
+    const file = item.getAsFile();
+    if (file && isPdfFile(item.type, file.name)) {
+      out.push(file);
+    }
+  }
+  // Some drops expose `files` but not `items`.
+  if (out.length === 0) {
+    for (const file of Array.from(data.files ?? [])) {
+      if (isPdfFile(file.type, file.name)) {
+        out.push(file);
+      }
+    }
+  }
+  return out;
+}
+
+/**
  * The change + resulting caret for inserting `text` on its own line at
  * `at` -- a leading newline unless already at line start, a trailing one
  * always, caret parked on the line after. Keeps a rendered image from
@@ -230,10 +274,38 @@ async function insertImage(view: EditorView, file: File, config: ImagePasteConfi
   );
 }
 
-/** A vault image dragged from the Files panel: link it in place, no copy. Synchronous. */
-function insertRelativeLink(view: EditorView, vaultPath: string, config: ImagePasteConfig): void {
+/**
+ * A PDF file (paste / OS drag, ADR-0052): staged name-preserving into the
+ * note's `attachments/`, inserted as `![name](attachments/…)`. The
+ * original name is the alt text -- it becomes the embed's caption and
+ * stays the readable label in raw mode.
+ */
+async function insertPdf(view: EditorView, file: File, config: ImagePasteConfig): Promise<void> {
+  const saveNamed = config.saveNamed;
+  if (!saveNamed) {
+    return;
+  }
+  const bytes = new Uint8Array(await file.arrayBuffer());
+  await resolveInserted(
+    view,
+    async () => `![${file.name}](${await saveNamed(bytes, file.name)})`,
+    config,
+  );
+}
+
+/**
+ * A vault image or PDF dragged from the Files panel: link it in place, no
+ * copy. Synchronous. `alt` stays empty for images and carries the file
+ * name for PDFs (the embed caption, ADR-0052).
+ */
+function insertRelativeLink(
+  view: EditorView,
+  vaultPath: string,
+  config: ImagePasteConfig,
+  alt = '',
+): void {
   const rel = noteRelativeLink(config.notePath?.() ?? '', vaultPath);
-  const link = /[ ()]/.test(rel) ? `![](<${rel}>)` : `![](${rel})`;
+  const link = /[ ()]/.test(rel) ? `![${alt}](<${rel}>)` : `![${alt}](${rel})`;
   const at = view.state.selection.main.from;
   const { from, insert, anchor } = ownLineInsert(view, at, link);
   view.dispatch({ changes: { from, insert }, selection: { anchor } });
@@ -379,11 +451,16 @@ export function imagePaste(config: ImagePasteConfig): Extension {
       }
 
       const files = imageFiles(data);
+      // PDFs only when no image won the drop (ADR-0052; same precedence
+      // the text branch below follows).
+      const pdfs = files.length ? [] : pdfFiles(data);
       const hasAnyFile = (data?.files.length ?? 0) > 0;
-      const textFile = files.length
-        ? undefined
-        : Array.from(data?.files ?? []).find((f) => textExtension(f.name));
-      const tagged = files.length || textFile ? '' : (data?.getData(VAULT_PATH_DT_TYPE) ?? '');
+      const textFile =
+        files.length || pdfs.length
+          ? undefined
+          : Array.from(data?.files ?? []).find((f) => textExtension(f.name));
+      const tagged =
+        files.length || pdfs.length || textFile ? '' : (data?.getData(VAULT_PATH_DT_TYPE) ?? '');
       // The payload is a tab key (`vaultId::relativePath`, ADR-0051) or a
       // bare vault-relative path from an older source; `::` cannot occur in
       // a real path, so the split is unambiguous.
@@ -394,10 +471,10 @@ export function imagePaste(config: ImagePasteConfig): Extension {
           : { vaultId: undefined, path: tagged }
         : null;
       const url =
-        files.length || textFile || vaultDrop || !config.saveFromUrl
+        files.length || pdfs.length || textFile || vaultDrop || !config.saveFromUrl
           ? ''
           : imageUrlFromTransfer(data);
-      if (files.length === 0 && !hasAnyFile && !vaultDrop && !url) {
+      if (files.length === 0 && pdfs.length === 0 && !hasAnyFile && !vaultDrop && !url) {
         return false; // a plain text / URL drag we won't act on -- let CodeMirror handle it
       }
       event.preventDefault();
@@ -409,6 +486,10 @@ export function imagePaste(config: ImagePasteConfig): Extension {
       if (files.length) {
         for (const file of files) {
           void insertImage(view, file, config);
+        }
+      } else if (pdfs.length) {
+        for (const file of pdfs) {
+          void insertPdf(view, file, config);
         }
       } else if (textFile) {
         if (textFile.size > TEXT_DROP_MAX) {
@@ -424,6 +505,10 @@ export function imagePaste(config: ImagePasteConfig): Extension {
       } else if (vaultDrop) {
         if (imageExtension(vaultDrop.path)) {
           insertRelativeLink(view, vaultDrop.path, config);
+        } else if (pdfExtension(vaultDrop.path)) {
+          // Linked in place, no copy; the file name becomes the embed
+          // caption (ADR-0052).
+          insertRelativeLink(view, vaultDrop.path, config, vaultDrop.path.split('/').pop() ?? '');
         } else if (textExtension(vaultDrop.path) && config.readTextFile) {
           const read = config.readTextFile;
           void read(vaultDrop.path, vaultDrop.vaultId)
@@ -435,8 +520,8 @@ export function imagePaste(config: ImagePasteConfig): Extension {
       } else if (url) {
         void insertFromUrl(view, url, config);
       }
-      // A non-image, non-text file drop falls through here: swallowed
-      // (preventDefault'd), nothing inserted.
+      // A non-image, non-PDF, non-text file drop falls through here:
+      // swallowed (preventDefault'd), nothing inserted.
       return true;
     },
     paste(event, view) {
@@ -444,12 +529,16 @@ export function imagePaste(config: ImagePasteConfig): Extension {
         return false;
       }
       const files = imageFiles(event.clipboardData);
-      if (files.length === 0) {
+      const pdfs = files.length ? [] : pdfFiles(event.clipboardData);
+      if (files.length === 0 && pdfs.length === 0) {
         return false; // let the default text paste happen
       }
       event.preventDefault();
       for (const file of files) {
         void insertImage(view, file, config);
+      }
+      for (const file of pdfs) {
+        void insertPdf(view, file, config);
       }
       return true;
     },

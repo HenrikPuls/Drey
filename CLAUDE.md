@@ -309,7 +309,7 @@ Renderer (Angular):
   layout: an arbitrary tree of row/column splits down to leaf panes, each
   a `{ tabs, active }` record. `PaneLayout` renders the tree recursively
   (draggable splitters between siblings); `PaneLeaf` renders one pane's
-  own `TabBar` + `EditorComponent`/`ImageTab`. `EditorService` is a
+  own `TabBar` + `EditorComponent`/`ImageTab`/`PdfTab`. `EditorService` is a
   facade over the *focused* pane's document (`activePath`, `isDirty`,
   `save()`, word count, …). One pane per open path (not the same note
   live in two panes at once); a tab's own "Split right"/"Split down" (its
@@ -562,21 +562,34 @@ verified by the owner**. Announced follow-up (M-B): search scopes
 (document / this vault / all vaults), per-vault tags/tasks indexes, MCP
 `vault` arguments, tasks "all vaults" scope.
 
+**Just implemented: milestone 30 — PDF embeds + a PDF viewer tab**
+(Req-2 PDF slice, [ADR-0052](docs/09_architecture_decisions/0052-pdf-embeds-and-viewer.md)):
+dropping a PDF stages it name-preserving into `attachments/` and
+renders it in place via Chromium's built-in (PDFium) viewer
+(`plugins: true`, no bundled PDF library); `.pdf` files open as a third
+base doc kind (`kind: 'pdf'`, `PdfTab`). Code-complete, unit tests
+green (one pre-existing OCR-spec failure is unrelated in-flight work);
+**not yet manually verified by the owner**.
+
 ## Milestones
 
 The completed milestone log (1–27) is archived in
-[docs/milestones-done.md](docs/milestones-done.md).
+[docs/milestones-done.md](docs/milestones-done.md); milestones 24–29 are
+summarized in [specs/changelog.md](specs/changelog.md) ("Recent
+milestones") until owner-verified.
 
-- **Last completed:** milestone 27 — OCR via the vision LLM (req-9
-  desktop half, ADR-0050 — a `plugins/ocr/` context-menu row transcribes
-  embedded images and image tabs through the connected vision-capable
-  LLM). **Not yet manually verified by the owner.** Milestones 25 (chats
-  as vault notes) and 26 (live edit mode) are likewise code-complete and
-  still awaiting manual verification.
+- **Last completed:** milestone 29 — UX batch (icon meta-bar buttons,
+  tooltips, assistant overhaul, capture fix), per changelog. Milestones
+  25 (chats as vault notes), 26 (live edit mode), 27 (OCR) and 28
+  (multi-vault) are likewise code-complete and **still awaiting manual
+  verification by the owner**.
+- **Just code-complete:** milestone 30 — PDF embeds + viewer tab (see
+  "Current State" above).
 - **Next:** milestone 28's M-B follow-up (search scopes, per-vault
-  indexes, MCP vault arguments — see "Current State" above), or the
+  indexes, MCP vault arguments — see "Current State" above), the
   provider program: Req-31 MCP client, then copilot-web re-apply +
-  copilot-cli spike.
+  copilot-cli spike, or the Office remainder of Req-2 (needs a
+  rendering strategy discussion first).
 
 Pause after each milestone, show what works, don't push through several
 milestones in one uninterrupted stretch. (Milestones 10, 11, 15 and 19

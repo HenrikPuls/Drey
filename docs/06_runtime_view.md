@@ -1825,6 +1825,72 @@ vaults coexists; a cross-vault drag & drop move renames across the two
 namespaces (copy + delete in `VaultManager`, the assistant sidecar
 travels along) and retargets the open tab's key.
 
+## 6.39 Export a note as PDF (editor `⋯` / right-click menu, tab context menu, Files panel row)
+
+```mermaid
+sequenceDiagram
+    participant User
+    participant UI as Editor ⋯ / TabBar / FilesPanel
+    participant ES as EditorService / VaultService (renderer)
+    participant EH as export-handlers (main)
+    participant PX as pdf-export.ts
+    participant HW as hidden BrowserWindow
+    participant VM as VaultManager
+
+    User->>UI: "Export as PDF…" on a Markdown note
+    UI->>ES: exportPdf(key) / exportPdf(path, vaultId)
+    ES->>EH: export:note-pdf { path, vaultId?, content? }
+    Note over ES,EH: open docs always send the live buffer (dirty + scratch tabs export WYSIWYG); the Files panel sends none — main reads from disk
+    EH->>PX: exportNoteToPdf(deps, request)
+    PX->>VM: readFile (when no content) / resolveAssetPath (images, default folder)
+    PX->>PX: shared/pdf-html.ts — frontmatter off, task glyphs, images → file:// URLs, paper CSS
+    PX->>User: native save dialog (any folder — NOT vault-restricted)
+    User-->>PX: target path (or cancel → null, silent no-op)
+    PX->>HW: write temp HTML, loadFile, wait for images (10 s cap)
+    HW->>PX: printToPDF({ A4, printBackground, footer "n / m" })
+    PX-->>ES: saved absolute path
+```
+
+`shared/pdf-html.ts` is pure (string in/out, the `shared/frontmatter.ts`
+precedent) and unit-tested from `src/app/services/pdf-html.spec.ts`; the
+mermaid + `[[wikilink]]` fallbacks (code block / literal text) are
+decisions, not gaps. The temp page and hidden window are destroyed in a
+`finally`, so a failed print leaves nothing behind.
+
+## 6.40 Drop a PDF into a note → staged, embedded, readable in place (ADR-0052)
+
+```mermaid
+sequenceDiagram
+    participant User
+    participant CM as image-paste drop cascade
+    participant VS as VaultService (renderer)
+    participant VM as VaultManager (main)
+    participant AP as drey-asset protocol
+    participant LP as Live Preview / PdfWidget
+
+    User->>CM: drop a .pdf on the editor
+    CM->>VS: saveNamedAsset(bytes, fileName, notePath, vaultId)
+    VS->>VM: vault:save-asset (+ preferredName)
+    VM-->>VS: attachments/<original name> (note-relative; -2 on collision)
+    VS-->>CM: path
+    CM->>CM: insert ![file.name](attachments/…) (uploading placeholder swapped)
+    Note over LP: selection outside the node → the embed renders
+    LP->>AP: HEAD drey-asset://<vaultId>/asset/<path> (candidates in order)
+    AP-->>LP: 200, Content-Type: application/pdf (pinned main-side)
+    LP->>LP: <iframe> mounts — built-in PDFium viewer (plugins: true)
+    User->>LP: </> reveal → raw line + read-only mirror below
+    User->>LP: lens → openFile(path, vaultId) → kind:'pdf' tab (PdfTab)
+    User->>CM: (or) Files panel / Ctrl+click a plain link → the same tab
+```
+
+The embed keeps the Req-1 image affordances: the revealed raw line sits
+in the rounded container with a read-only `PdfPreviewWidget` kept below
+it; all candidates dead at probe time → a compact `PDF not found:` box
+whose click drops the caret into the source line. Opening a `.pdf` from
+anywhere (Files panel, link, lens, session restore) routes through
+`EditorService.openFile` → a `kind: 'pdf'` viewer doc — the file is
+never read as text (the mojibake-buffer path this milestone removes).
+
 ## Planned flows (added as their milestone is built)
 
 - Dedicated keyword-search / FTS surface — the search panel's free-text

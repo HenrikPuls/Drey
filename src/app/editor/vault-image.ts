@@ -86,3 +86,38 @@ export function resolveVaultImageCandidates(
   const fromRoot = resolveVaultImageUrl(null, rawUrl, vaultId);
   return fromRoot !== null && fromRoot !== primary ? [primary, fromRoot] : [primary];
 }
+
+/**
+ * The inverse of {@link resolveVaultImageUrl} for `drey-asset://` URLs
+ * (ADR-0052): takes a widget's resolved asset URL back to
+ * `{ vaultId, path }` so the lens can open the file by vault-relative
+ * path (`EditorService.openFile`). `null` for anything that is not an
+ * asset URL (http/data/foreign scheme); the host-less legacy form maps to
+ * `vaultId: null` (served from / opened in the active vault).
+ */
+export function assetUrlToVaultPath(url: string): { vaultId: string | null; path: string } | null {
+  if (!url.startsWith('drey-asset://')) {
+    return null;
+  }
+  let parsed: URL;
+  try {
+    parsed = new URL(url);
+  } catch {
+    return null;
+  }
+  const host = decodeURIComponent(parsed.hostname);
+  // Mirrors the serving handler's stripping exactly (`registerAssetProtocol`):
+  // the `/asset/` prefix off, then any leading slashes. (On the host-less
+  // legacy form `asset` is the HOST, so the prefix strip is a no-op there
+  // and only the slash trim applies.)
+  const path = parsed.pathname
+    .replace(/^\/asset\/?/, '')
+    .replace(/^\/+/, '')
+    .split('/')
+    .map(decodeURIComponent)
+    .join('/');
+  if (!path) {
+    return null;
+  }
+  return { vaultId: host === '' || host === 'asset' ? null : host, path };
+}

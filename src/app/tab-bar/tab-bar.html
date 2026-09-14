@@ -73,6 +73,10 @@
       <div class="ctx-sep" role="separator"></div>
       <button type="button" (click)="split(m.path, 'row')">Split right</button>
       <button type="button" (click)="split(m.path, 'column')">Split down</button>
+      @if (editor.isMarkdown(editor.docFor(m.path)?.path ?? '')) {
+        <div class="ctx-sep" role="separator"></div>
+        <button type="button" (click)="exportPdf(m.path)">Export as PDF…</button>
+      }
       <div class="ctx-sep" role="separator"></div>
       <button type="button" (click)="closeOthers(m.path)">Close others</button>
       <button type="button" (click)="closeAll()">Close all</button>

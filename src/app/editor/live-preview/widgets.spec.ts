@@ -1,263 +1,107 @@
-import {
-  HtmlBlockWidget,
-  ImagePreviewWidget,
-  ImageWidget,
-  MermaidWidget,
-  svgToDataUrl,
-  TableWidget,
-} from './widgets';
+import { vi } from 'vitest';
+import { PdfPreviewWidget, PdfWidget } from './widgets';
 
-describe('ImageWidget', () => {
-  it('renders an <img> with the first candidate and the alt', () => {
-    const dom = new ImageWidget(['drey-asset://asset/pic.png'], 'a boat').toDOM();
-    expect(dom.className).toBe('lp-image');
-    const img = dom.querySelector('img')!;
-    expect(img.getAttribute('src')).toBe('drey-asset://asset/pic.png');
-    expect(img.getAttribute('alt')).toBe('a boat');
-    expect(img.style.width).toBe('');
-    expect(img.style.height).toBe('');
+/** A HEAD probe that never answers — `mount` takes the error path. */
+function stubFetchNeverOk(): void {
+  vi.stubGlobal(
+    'fetch',
+    vi.fn(() => Promise.reject(new Error('unreachable'))),
+  );
+}
+
+function stubFetchOk(): void {
+  vi.stubGlobal('fetch', vi.fn(() => Promise.resolve({ ok: true })));
+}
+
+const settle = (): Promise<void> => new Promise((resolve) => setTimeout(resolve, 0));
+
+describe('PdfWidget (ADR-0052)', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
   });
 
-  it('applies an explicit width / height in px', () => {
-    const w = new ImageWidget(['drey-asset://asset/pic.png'], 'x', 300).toDOM().querySelector('img')!;
-    expect(w.style.width).toBe('300px');
-    expect(w.style.height).toBe('');
-
-    const wh = new ImageWidget(['drey-asset://asset/pic.png'], 'x', 300, 200)
-      .toDOM()
-      .querySelector('img')!;
-    expect(wh.style.width).toBe('300px');
-    expect(wh.style.height).toBe('200px');
+  it('compares on srcs, alt and rawUrl', () => {
+    const widget = new PdfWidget(['a.pdf'], 'A', 'a.pdf');
+    expect(widget.eq(new PdfWidget(['a.pdf'], 'A', 'a.pdf'))).toBe(true);
+    expect(widget.eq(new PdfWidget(['b.pdf'], 'A', 'b.pdf'))).toBe(false);
+    expect(widget.eq(new PdfWidget(['a.pdf'], 'B', 'a.pdf'))).toBe(false);
+    expect(widget.eq(new PdfWidget(['a.pdf'], 'A', 'other'))).toBe(false);
   });
 
-  it('renders only the placeholder when no candidate could be resolved', () => {
-    const dom = new ImageWidget([], 'gone', 300).toDOM();
-    expect(dom.querySelector('img')).toBeNull();
-    expect(dom.querySelector('.lp-image-missing')?.textContent).toContain('gone');
-  });
-
-  it('the placeholder names the reference as written, not the alt text', () => {
-    const dom = new ImageWidget([], 'gone', 300, null, undefined, 'attachments/pic.png').toDOM();
-    expect(dom.querySelector('.lp-image-missing')?.textContent).toBe(
-      'image not found: attachments/pic.png',
-    );
-  });
-
-  it('walks the candidate list on load errors before giving up', () => {
-    const dom = new ImageWidget(['a.png', 'b.png'], 'x').toDOM();
-    const img = dom.querySelector('img')!;
-    img.onerror!(new Event('error'));
-    expect(dom.querySelector('img')).not.toBeNull(); // retrying on the root-relative candidate
-    expect(img.getAttribute('src')).toBe('b.png');
-    img.onerror!(new Event('error'));
-    expect(dom.querySelector('img')).toBeNull(); // all candidates failed
-    expect(dom.querySelector('.lp-image-missing')).not.toBeNull();
-  });
-
-  it('the lens opens the candidate that actually loaded', () => {
+  it('shows the pending note first, then mounts the frame on a good probe', async () => {
+    stubFetchOk();
     const opened: string[] = [];
-    const dom = new ImageWidget(['a.png', 'b.png'], 'x', null, null, (s) => opened.push(s)).toDOM();
-    dom.querySelector('img')!.onerror!(new Event('error'));
-    const lens = dom.querySelector('.lp-lens') as HTMLButtonElement;
-    lens.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
-    expect(opened).toEqual(['b.png']);
+    const span = new PdfWidget(['drey-asset://v1/asset/a.pdf'], 'Doc', 'a.pdf', (s) =>
+      opened.push(s),
+    ).toDOM();
+    // `mount` bails on a detached node (the editor never shows one) —
+    // attach like CodeMirror would.
+    document.body.appendChild(span);
+    try {
+      expect(span.querySelector('.lp-pdf-pending')).not.toBeNull();
+      await settle();
+      expect(span.querySelector('.lp-pdf-pending')).toBeNull();
+      const frame = span.querySelector('iframe');
+      expect(frame?.getAttribute('src')).toBe('drey-asset://v1/asset/a.pdf');
+      expect(span.querySelector('.lp-lens')).not.toBeNull();
+    } finally {
+      span.remove();
+    }
   });
 
-  it('eq compares the candidate list, alt, width and height', () => {
-    const base = new ImageWidget(['s'], 'a', 100, 50);
-    expect(base.eq(new ImageWidget(['s'], 'a', 100, 50))).toBe(true);
-    expect(base.eq(new ImageWidget(['s'], 'a', 120, 50))).toBe(false);
-    expect(base.eq(new ImageWidget(['s'], 'a', 100, null))).toBe(false);
-    expect(base.eq(new ImageWidget(['s2'], 'a', 100, 50))).toBe(false);
-    expect(base.eq(new ImageWidget(['s'], 'b', 100, 50))).toBe(false);
-    expect(base.eq(new ImageWidget(['s', 't'], 'a', 100, 50))).toBe(false);
+  it('mounts the error box naming the raw reference when every probe fails', async () => {
+    stubFetchNeverOk();
+    const span = new PdfWidget(['gone.pdf', 'gone2.pdf'], 'Doc', 'gone.pdf').toDOM();
+    document.body.appendChild(span);
+    try {
+      await settle();
+      expect(span.querySelector('iframe')).toBeNull();
+      const error = span.querySelector('.lp-pdf-error');
+      expect(error?.textContent).toBe('PDF not found: gone.pdf');
+      expect(span.querySelector('.lp-tools')).not.toBeNull();
+    } finally {
+      span.remove();
+    }
   });
 
-  it('falls back to the placeholder on a runtime load error (single candidate)', () => {
-    const dom = new ImageWidget(['drey-asset://asset/pic.png'], 'boat').toDOM();
-    const img = dom.querySelector('img')!;
-    img.onerror!(new Event('error'));
-    expect(dom.querySelector('img')).toBeNull();
-    expect(dom.querySelector('.lp-image-missing')).not.toBeNull();
+  it('the lens hands over the probed candidate, and ignoreEvent follows the shared rule', async () => {
+    stubFetchOk();
+    const opened: string[] = [];
+    const widget = new PdfWidget(['a.pdf'], 'A', 'a.pdf', (s) => opened.push(s));
+    const span = widget.toDOM();
+    document.body.appendChild(span);
+    try {
+      await settle();
+      (span.querySelector('.lp-lens') as HTMLButtonElement).click();
+      expect(opened).toEqual(['a.pdf']);
+    } finally {
+      span.remove();
+    }
+
+    const target = document.createElement('span');
+    expect(widget.ignoreEvent({ target } as unknown as Event)).toBe(true);
+    const edit = document.createElement('button');
+    edit.className = 'lp-edit';
+    expect(widget.ignoreEvent({ target: edit } as unknown as Event)).toBe(false);
+    const miss = document.createElement('pre');
+    miss.className = 'lp-pdf-error';
+    expect(widget.ignoreEvent({ target: miss } as unknown as Event)).toBe(false);
+  });
+});
+
+describe('PdfPreviewWidget (ADR-0052)', () => {
+  it('mounts a bare frame of the first candidate, no probe and no chrome', () => {
+    const widget = new PdfPreviewWidget(['a.pdf', 'b.pdf'], 'Doc');
+    const span = widget.toDOM();
+    expect(span.className).toBe('lp-pdf lp-pdf-preview');
+    expect(span.querySelector('iframe')?.getAttribute('src')).toBe('a.pdf');
+    expect(span.querySelector('.lp-tools')).toBeNull();
+    expect(widget.eq(new PdfPreviewWidget(['a.pdf', 'b.pdf'], 'Doc'))).toBe(true);
+    expect(widget.eq(new PdfPreviewWidget(['a.pdf'], 'Doc'))).toBe(false);
   });
 
-  describe('tool cluster', () => {
-    it('wraps the corner buttons in a .lp-tools flex row, not the .lp-resize grip', () => {
-      const dom = new ImageWidget(['drey-asset://asset/pic.png'], 'x', null, null, () =>
-        undefined,
-      ).toDOM();
-      const tools = dom.querySelector(':scope > .lp-tools');
-      expect(tools).not.toBeNull();
-      expect(tools!.querySelector('.lp-edit')).not.toBeNull();
-      expect(tools!.querySelector('.lp-lens')).not.toBeNull();
-      // the resize grip is its own bottom-corner element, outside the cluster
-      expect(tools!.querySelector('.lp-resize')).toBeNull();
-      expect(dom.querySelector(':scope > .lp-resize')).not.toBeNull();
-    });
-
-    it('has a .lp-edit "View source" button carrying the </> glyph', () => {
-      const btn = new ImageWidget(['drey-asset://asset/pic.png'], 'x')
-        .toDOM()
-        .querySelector('.lp-edit') as HTMLButtonElement;
-      expect(btn).not.toBeNull();
-      expect(btn.title).toBe('View source');
-      expect(btn.innerHTML).toContain('m16 18 6-6-6-6');
-      expect(btn.innerHTML).toContain('m8 6-6 6 6 6');
-      expect(btn.innerHTML).not.toContain('M17 3a2.85');
-    });
-
-    it('an image with no onOpenImage still gets the </> button (no lens)', () => {
-      const dom = new ImageWidget(['drey-asset://asset/pic.png'], 'x').toDOM();
-      expect(dom.querySelector('.lp-tools .lp-edit')).not.toBeNull();
-      expect(dom.querySelector('.lp-lens')).toBeNull();
-    });
-
-    it('TableWidget / HtmlBlockWidget / MermaidWidget render the same cluster', () => {
-      for (const dom of [
-        new TableWidget('<table></table>', '| a |').toDOM(),
-        new HtmlBlockWidget('<div>hi</div>', '<div>hi</div>').toDOM(),
-        new MermaidWidget('graph TD; A-->B').toDOM(),
-      ]) {
-        const tools = dom.querySelector(':scope > .lp-tools');
-        expect(tools).not.toBeNull();
-        expect(tools!.querySelector('.lp-edit')).not.toBeNull();
-      }
-    });
-  });
-
-  describe('lens button', () => {
-    it('is absent without an onOpenImage callback', () => {
-      expect(
-        new ImageWidget(['drey-asset://asset/pic.png'], 'x').toDOM().querySelector('.lp-lens'),
-      ).toBeNull();
-    });
-
-    it('is absent when the src could not be resolved', () => {
-      const dom = new ImageWidget([], 'x', null, null, () => undefined).toDOM();
-      expect(dom.querySelector('.lp-lens')).toBeNull();
-    });
-
-    it('calls onOpenImage with the resolved src, and stops the event', () => {
-      const opened: string[] = [];
-      const dom = new ImageWidget(['drey-asset://asset/pic.png'], 'x', null, null, (s) =>
-        opened.push(s),
-      ).toDOM();
-      const lens = dom.querySelector('.lp-lens') as HTMLButtonElement;
-      const event = new MouseEvent('click', { bubbles: true, cancelable: true });
-      lens.dispatchEvent(event);
-      expect(opened).toEqual(['drey-asset://asset/pic.png']);
-      expect(event.defaultPrevented).toBe(true);
-    });
-
-    it('is removed alongside the img (with the whole cluster) on a load error', () => {
-      const dom = new ImageWidget(['drey-asset://asset/pic.png'], 'x', null, null, () =>
-        undefined,
-      ).toDOM();
-      dom.querySelector('img')!.onerror!(new Event('error'));
-      expect(dom.querySelector('.lp-lens')).toBeNull();
-      expect(dom.querySelector('.lp-tools')).toBeNull();
-      expect(dom.querySelector('.lp-image-missing')).not.toBeNull();
-    });
-  });
-
-  describe('svgToDataUrl (mermaid zoom)', () => {
-    it('promotes a viewBox to explicit width/height and drops max-width', () => {
-      const svg =
-        '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 480" ' +
-        'style="max-width: 640px; background: white;"><rect width="10" height="10"/></svg>';
-      const url = svgToDataUrl(svg);
-      expect(url.startsWith('data:image/svg+xml;charset=utf-8,')).toBe(true);
-      const decoded = decodeURIComponent(url.slice('data:image/svg+xml;charset=utf-8,'.length));
-      expect(decoded).toContain('width="640"');
-      expect(decoded).toContain('height="480"');
-      expect(decoded).not.toContain('max-width');
-    });
-
-    it('still returns a usable data URL when there is no viewBox', () => {
-      const url = svgToDataUrl('<svg xmlns="http://www.w3.org/2000/svg"><g/></svg>');
-      expect(url.startsWith('data:image/svg+xml;charset=utf-8,')).toBe(true);
-    });
-
-    it('falls back to the raw markup for non-SVG input', () => {
-      const url = svgToDataUrl('not svg at all');
-      expect(url).toBe('data:image/svg+xml;charset=utf-8,not%20svg%20at%20all');
-    });
-  });
-
-  describe('resize grip', () => {
-    it('is present for a resolved image and gone for the placeholder / on error', () => {
-      expect(
-        new ImageWidget(['drey-asset://asset/p.png'], 'x').toDOM().querySelector('.lp-resize'),
-      ).not.toBeNull();
-      expect(new ImageWidget([], 'x').toDOM().querySelector('.lp-resize')).toBeNull();
-
-      const dom = new ImageWidget(['drey-asset://asset/p.png'], 'x').toDOM();
-      dom.querySelector('img')!.onerror!(new Event('error'));
-      expect(dom.querySelector('.lp-resize')).toBeNull();
-    });
-
-    it('ignoreEvent lets CodeMirror see only .lp-resize and .lp-edit events', () => {
-      const w = new ImageWidget(['drey-asset://asset/p.png'], 'x');
-      const dom = w.toDOM();
-      const grip = dom.querySelector('.lp-resize')!;
-      const edit = dom.querySelector('.lp-edit')!;
-      const img = dom.querySelector('img')!;
-
-      const onGrip = new MouseEvent('pointerdown');
-      Object.defineProperty(onGrip, 'target', { value: grip });
-      expect(w.ignoreEvent(onGrip)).toBe(false);
-
-      const onEdit = new MouseEvent('mousedown');
-      Object.defineProperty(onEdit, 'target', { value: edit });
-      expect(w.ignoreEvent(onEdit)).toBe(false);
-
-      const onImg = new MouseEvent('pointerdown');
-      Object.defineProperty(onImg, 'target', { value: img });
-      expect(w.ignoreEvent(onImg)).toBe(true);
-    });
-  });
-
-  describe('ImagePreviewWidget', () => {
-    it('renders a bare <img> with the first candidate / alt and both lp-image classes', () => {
-      const dom = new ImagePreviewWidget(['drey-asset://asset/pic.png'], 'a boat').toDOM();
-      expect(dom.classList.contains('lp-image')).toBe(true);
-      expect(dom.classList.contains('lp-image-preview')).toBe(true);
-      const img = dom.querySelector('img')!;
-      expect(img.getAttribute('src')).toBe('drey-asset://asset/pic.png');
-      expect(img.getAttribute('alt')).toBe('a boat');
-    });
-
-    it('applies an explicit width / height in px', () => {
-      const img = new ImagePreviewWidget(['s'], 'x', 300, 200).toDOM().querySelector('img')!;
-      expect(img.style.width).toBe('300px');
-      expect(img.style.height).toBe('200px');
-    });
-
-    it('carries no lens, resize grip, </> button or tool cluster', () => {
-      const dom = new ImagePreviewWidget(['s'], 'x').toDOM();
-      expect(dom.querySelector('.lp-lens')).toBeNull();
-      expect(dom.querySelector('.lp-resize')).toBeNull();
-      expect(dom.querySelector('.lp-edit')).toBeNull();
-      expect(dom.querySelector('.lp-tools')).toBeNull();
-    });
-
-    it('walks the candidates too, then drops the img (raw markup is shown above)', () => {
-      const dom = new ImagePreviewWidget(['a.png', 'b.png'], 'x').toDOM();
-      const img = dom.querySelector('img')!;
-      img.onerror!(new Event('error'));
-      expect(img.getAttribute('src')).toBe('b.png');
-      img.onerror!(new Event('error'));
-      expect(dom.querySelector('img')).toBeNull();
-      expect(dom.querySelector('.lp-image-missing')).toBeNull();
-    });
-
-    it('eq compares the candidate list, alt, width and height', () => {
-      const base = new ImagePreviewWidget(['s'], 'a', 100, 50);
-      expect(base.eq(new ImagePreviewWidget(['s'], 'a', 100, 50))).toBe(true);
-      expect(base.eq(new ImagePreviewWidget(['s'], 'a', 120, 50))).toBe(false);
-      expect(base.eq(new ImagePreviewWidget(['s'], 'a', 100, null))).toBe(false);
-      expect(base.eq(new ImagePreviewWidget(['s2'], 'a', 100, 50))).toBe(false);
-      expect(base.eq(new ImagePreviewWidget(['s'], 'b', 100, 50))).toBe(false);
-    });
+  it('renders nothing (but stays a widget) when there is no candidate', () => {
+    const span = new PdfPreviewWidget([], 'Doc').toDOM();
+    expect(span.querySelector('iframe')).toBeNull();
   });
 });

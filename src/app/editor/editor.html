@@ -102,6 +102,16 @@
       <span class="tick"></span>
       Save as…
     </button>
+    @if (editor.isMarkdown(shownPath())) {
+      <button
+        type="button"
+        role="menuitem"
+        (click)="closeMenu(); editor.exportPdf(shownPath() ?? undefined)"
+      >
+        <span class="tick"></span>
+        Export as PDF…
+      </button>
+    }
 
     <!-- Plugin-contributed rows (ADR-0044): the manual Actions live in the
          assistant plugin since stage 7 and register through

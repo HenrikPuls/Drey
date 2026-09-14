@@ -18,6 +18,7 @@ import { registerAppHandlers } from './app-handlers';
 import { registerConfigHandlers } from './config-handlers';
 import { ExitBridge } from './exit-bridge';
 import { registerExitHandlers } from './exit-handlers';
+import { registerExportHandlers } from './export-handlers';
 import { registerLlmHandlers } from './llm-handlers';
 import { registerMcpHandlers } from './mcp-handlers';
 import { McpWriteBridge } from './mcp-write-bridge';
@@ -54,6 +55,7 @@ export interface IpcHandlerDeps {
 
 export function registerIpcHandlers(deps: IpcHandlerDeps): void {
   registerAppHandlers(deps.getMainWindow);
+  registerExportHandlers(deps.getMainWindow, deps.vaultManager);
   registerSessionHandlers(deps);
   registerVaultHandlers(deps);
   registerExitHandlers(deps);

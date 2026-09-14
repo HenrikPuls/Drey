@@ -272,6 +272,20 @@ export class VaultService {
   }
 
   /**
+   * "Export as PDF…" on a tree row (Files panel context menu): main reads
+   * the note from disk and owns the whole flow (render, print dialog,
+   * write). The save target is deliberately allowed OUTSIDE the vault, so
+   * unlike the other ops this resolves to the saved absolute path (`null`
+   * on cancel) and touches no tree state -- nothing to reload afterwards.
+   */
+  async exportPdf(relativePath: string, vaultId: string): Promise<string | null> {
+    if (typeof window === 'undefined' || !window.dreyApi?.exportNotePdf) {
+      throw new Error('Exporting needs the desktop app.');
+    }
+    return window.dreyApi.exportNotePdf({ path: relativePath, vaultId });
+  }
+
+  /**
    * Deletes a file or folder and reloads the tree. Like `createEntry`,
    * errors propagate to the caller (the sidebar shows a one-off `alert`)
    * rather than blanking the whole list.
@@ -313,6 +327,38 @@ export class VaultService {
       throw new Error('Saving images needs the desktop app.');
     }
     const rel = await window.dreyApi.saveVaultAsset(bytes, ext, noteRelPath, vaultId ?? undefined);
+    if (vaultId !== null) {
+      await this.loadTree(vaultId);
+    }
+    return rel;
+  }
+
+  /**
+   * Same as {@link saveAsset}, but the stored file keeps (a sanitized form
+   * of) `fileName` instead of a timestamp+hash name (ADR-0052) -- PDFs
+   * stay recognisable documents in `attachments/`. Collisions get a
+   * `-2`-style suffix main-side, so the returned path is always the one to
+   * reference.
+   */
+  async saveNamedAsset(
+    bytes: Uint8Array,
+    fileName: string,
+    noteRelPath: string,
+    vaultId: string | null,
+  ): Promise<string> {
+    if (typeof window === 'undefined' || typeof window.dreyApi?.saveVaultAsset !== 'function') {
+      throw new Error('Saving attachments needs the desktop app.');
+    }
+    const ext = fileName.toLowerCase().endsWith('.pdf')
+      ? 'pdf'
+      : (fileName.split('.').pop() ?? 'pdf').toLowerCase();
+    const rel = await window.dreyApi.saveVaultAsset(
+      bytes,
+      ext,
+      noteRelPath,
+      vaultId ?? undefined,
+      fileName,
+    );
     if (vaultId !== null) {
       await this.loadTree(vaultId);
     }

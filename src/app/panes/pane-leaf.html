@@ -4,6 +4,8 @@
     @if (activeDoc(); as doc) {
       @if (doc.kind === 'image') {
         <app-image-tab [path]="doc.path" [vaultId]="doc.vaultId" [focused]="focused()" />
+      } @else if (doc.kind === 'pdf') {
+        <app-pdf-tab [path]="doc.path" [vaultId]="doc.vaultId" [focused]="focused()" />
       } @else if (pluginDocKind(); as dk) {
         <app-plugin-doc-host [contrib]="dk" [path]="doc.path" [focused]="focused()" />
       } @else if (pluginDocKind() === null) {

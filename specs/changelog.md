@@ -14,6 +14,37 @@ and the current architecture in
 
 ## Recent milestones
 
+### Milestone 30 — PDF embeds + a PDF viewer tab (Req-2 PDF slice, ADR-0052)
+
+Dragging a PDF into a note now **reads it where you are** instead of
+silently swallowing the drop, and a `.pdf` in the vault opens as a
+viewer tab instead of a mojibake text buffer (that buffer's Ctrl+S
+writing binary garbage was a real hazard — gone).
+
+- **Drop / paste** — a PDF staged into the note's `attachments/` keeps
+  its **original file name** (`Quarterly Report.pdf`, `-2` on a
+  collision — a documented deviation from ADR-0024's hash naming: PDFs
+  are browsable documents, not paste artifacts) and inserts
+  `![Quarterly Report.pdf](attachments/…)`. Blank-MIME Explorer drops
+  work by extension, like images; images still win mixed drops;
+  clipboard paste works too; a Files-panel drag links in place without
+  copying.
+- **Inline embed** — the `![](…)` line renders as a Live Preview block
+  widget over Chromium's **built-in (PDFium) viewer** (`plugins: true`
+  on the main window; no bundled PDF library). The familiar Req-1
+  affordances: `</>` reveals the raw line in the rounded container with
+  a read-only viewer mirror kept below, the lens opens the **full PDF
+  tab**, a dead reference shows a compact `PDF not found: …` box whose
+  click drops the caret into the source. The `drey-asset` protocol pins
+  `application/pdf` for `.pdf` paths so the viewer accepts the frame.
+- **`kind: 'pdf'` tab** — the third base doc kind beside `'text'` and
+  `'image'`: no buffer, never dirty, session-restored, opened from the
+  Files panel, plain links (Ctrl+click), the embed lens and the pane
+  drop. Tab strip and status bar treat it as a base kind.
+- Precedence of the drop cascade is now image > PDF > text; `|WxH`
+  size suffixes on PDF embeds are parsed but ignored (a page viewer's
+  width is the column).
+
 ### Milestone 29 — UX batch: icon buttons, tooltips, assistant overhaul, capture fix
 
 Seven owner requests in one pass:

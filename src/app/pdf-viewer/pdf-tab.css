@@ -1,0 +1,46 @@
+:host {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  height: 100%;
+}
+
+.meta {
+  height: var(--bar-h);
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 0 12px;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-bar);
+  font-family: var(--font-mono);
+  font-size: var(--fs-mono-path);
+  color: var(--text-6);
+}
+
+.path {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.body {
+  flex: 1;
+  min-height: 0;
+}
+
+.frame {
+  width: 100%;
+  height: 100%;
+  border: 0;
+  background: var(--bg-bar);
+}
+
+.empty {
+  height: 100%;
+  display: grid;
+  place-items: center;
+  color: var(--text-faint);
+}

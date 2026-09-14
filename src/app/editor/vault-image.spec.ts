@@ -1,4 +1,4 @@
-import { resolveVaultImageCandidates, resolveVaultImageUrl } from './vault-image';
+import { assetUrlToVaultPath, resolveVaultImageCandidates, resolveVaultImageUrl } from './vault-image';
 
 describe('resolveVaultImageUrl', () => {
   it('passes http(s) and data URLs through unchanged', () => {
@@ -47,5 +47,34 @@ describe('resolveVaultImageCandidates', () => {
     expect(resolveVaultImageCandidates('a/n.md', 'https://x/y.png')).toEqual(['https://x/y.png']);
     expect(resolveVaultImageCandidates('a/n.md', 'file:///etc/passwd')).toEqual([]);
     expect(resolveVaultImageCandidates('a/n.md', '../../etc/passwd')).toEqual([]);
+  });
+});
+
+describe('assetUrlToVaultPath (ADR-0052)', () => {
+  it('maps a vault-scoped asset URL back to vaultId + path', () => {
+    expect(assetUrlToVaultPath('drey-asset://v1/asset/attachments/doc.pdf')).toEqual({
+      vaultId: 'v1',
+      path: 'attachments/doc.pdf',
+    });
+  });
+
+  it('decodes percent-escaped path segments', () => {
+    expect(assetUrlToVaultPath('drey-asset://v1/asset/attachments/my%20doc.pdf')).toEqual({
+      vaultId: 'v1',
+      path: 'attachments/my doc.pdf',
+    });
+  });
+
+  it('maps the host-less legacy form to the active vault (vaultId null)', () => {
+    expect(assetUrlToVaultPath('drey-asset://asset/attachments/doc.pdf')).toEqual({
+      vaultId: null,
+      path: 'attachments/doc.pdf',
+    });
+  });
+
+  it('rejects non-asset URLs', () => {
+    expect(assetUrlToVaultPath('https://x/y.png')).toBeNull();
+    expect(assetUrlToVaultPath('data:image/png;base64,AAA')).toBeNull();
+    expect(assetUrlToVaultPath('attachments/doc.pdf')).toBeNull();
   });
 });

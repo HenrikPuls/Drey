@@ -1,5 +1,5 @@
 import { Injectable, computed, inject, signal } from '@angular/core';
-import { imageExtension } from '../../../shared/asset-name';
+import { imageExtension, pdfExtension } from '../../../shared/asset-name';
 import { dailyPathFor } from '../../../shared/daily';
 import { EntryDraft } from '../../../shared/entry-compose';
 import { ActionOutcome } from '../../../shared/ipc-api';
@@ -62,14 +62,16 @@ export interface OpenDoc {
   /** For a browser tab this follows the page title as it loads (via `patchDoc`). */
   readonly name: string;
   /**
-   * `'text'` (a Markdown/code buffer, the default) and `'image'` (a viewer
-   * tab for a `.png`/`.jpg`/… file, ADR-0026) are the base kinds. Anything
-   * else is a registered doc kind (ADR-0044 stage 8A) -- the browser tab
-   * (`browser://<n>`, ADR-0042) today, plugin tabs from stage 8B --
-   * resolved through the `DocKindRegistry` by the pane body, the tab strip
-   * and the session. Neither non-text kind carries a buffer
-   * (`savedContent === bufferContent === ''`, never dirty); both skip every
-   * text-only path (`save`, `saveAs`, `setViewMode`, `updateBuffer`).
+   * `'text'` (a Markdown/code buffer, the default), `'image'` (a viewer
+   * tab for a `.png`/`.jpg`/… file, ADR-0026) and `'pdf'` (a viewer tab
+   * for a `.pdf` file over the built-in PDFium viewer, ADR-0052) are the
+   * base kinds. Anything else is a registered doc kind (ADR-0044 stage
+   * 8A) -- the browser tab (`browser://<n>`, ADR-0042) today, plugin tabs
+   * from stage 8B -- resolved through the `DocKindRegistry` by the pane
+   * body, the tab strip and the session. The non-text kinds carry no
+   * buffer (`savedContent === bufferContent === ''`, never dirty); they
+   * skip every text-only path (`save`, `saveAs`, `setViewMode`,
+   * `updateBuffer`).
    */
   readonly kind: string;
   savedContent: string;
@@ -463,6 +465,13 @@ export class EditorService {
     // to open a mojibake buffer that Ctrl+S would write back).
     if (imageExtension(relativePath)) {
       this.addDoc(this.makeImageDoc(relativePath, resolvedVault));
+      return;
+    }
+
+    // Same for a PDF (ADR-0052): the built-in (PDFium) viewer tab, never a
+    // text buffer.
+    if (pdfExtension(relativePath)) {
+      this.addDoc(this.makePdfDoc(relativePath, resolvedVault));
       return;
     }
 
@@ -966,6 +975,31 @@ export class EditorService {
   }
 
   /**
+   * "Export as PDF…" (editor `⋯` menu, tab context menu): main renders and
+   * prints the note; the save dialog lives main-side. The live buffer is
+   * always sent, so dirty tabs and scratch (untitled) notes export exactly
+   * what the user sees -- and a scratch export never needs the disk read a
+   * missing `content` would trigger. `key` defaults to the focused pane's
+   * document, like `saveAs()`; cancelled dialogs resolve silently.
+   */
+  async exportPdf(key?: string): Promise<void> {
+    const doc = key !== undefined ? this.docFor(key) : this.activeDoc();
+    if (!this.api?.exportNotePdf || doc === null || doc.kind !== 'text') {
+      return;
+    }
+    this.error.set(null);
+    try {
+      await this.api.exportNotePdf({
+        path: doc.path,
+        vaultId: doc.vaultId ?? undefined,
+        content: doc.bufferContent,
+      });
+    } catch (err) {
+      this.error.set(err instanceof Error ? err.message : String(err));
+    }
+  }
+
+  /**
    * Adopts an Action / Ask-mode rewrite of an open document: pushes
    * `content` into the tab's buffer and saves it with the on-save Action
    * hook suppressed (so applying one action can't recurse into another).
@@ -1027,6 +1061,28 @@ export class EditorService {
       key: docKey(vaultId, relativePath),
       name: baseName(relativePath),
       kind: 'image',
+      savedContent: '',
+      bufferContent: '',
+      viewMode: 'live',
+      eol: '\n',
+      modifiedMs: 0,
+      existsOnDisk: true,
+    };
+  }
+
+  /**
+   * A PDF viewer tab (ADR-0052): no `readVaultFile`, no buffer, never
+   * dirty. The renderer loads the file through `drey-asset://` -- the
+   * `PdfTab` component resolves the URL (vault-relative path + vault id)
+   * itself and the built-in (PDFium) viewer renders it.
+   */
+  private makePdfDoc(relativePath: string, vaultId: string | null): OpenDoc {
+    return {
+      vaultId,
+      path: relativePath,
+      key: docKey(vaultId, relativePath),
+      name: baseName(relativePath),
+      kind: 'pdf',
       savedContent: '',
       bufferContent: '',
       viewMode: 'live',

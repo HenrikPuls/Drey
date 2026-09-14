@@ -117,8 +117,14 @@ export function registerVaultHandlers({
   );
   ipcMain.handle(
     IPC_CHANNELS.vaultSaveAsset,
-    (_event, bytes: Uint8Array, ext: string, noteRelPath: string, vaultId?: string): Promise<string> =>
-      vaultManager.saveAsset(bytes, ext, noteRelPath, vaultId),
+    (
+      _event,
+      bytes: Uint8Array,
+      ext: string,
+      noteRelPath: string,
+      vaultId?: string,
+      preferredName?: string,
+    ): Promise<string> => vaultManager.saveAsset(bytes, ext, noteRelPath, vaultId, preferredName),
   );
   ipcMain.handle(
     IPC_CHANNELS.vaultSaveAssetFromUrl,

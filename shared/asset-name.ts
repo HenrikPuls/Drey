@@ -96,3 +96,57 @@ export function assetFileName(input: { date: Date; hashHex: string; ext: string 
   }
   return `${assetTimestamp(input.date)}-${short}.${ext}`;
 }
+
+/** Windows-reserved device names -- illegal as a file base name even with an extension. */
+const RESERVED_NAMES: ReadonlySet<string> = new Set([
+  'con', 'prn', 'aux', 'nul',
+  'com1', 'com2', 'com3', 'com4', 'com5', 'com6', 'com7', 'com8', 'com9',
+  'lpt1', 'lpt2', 'lpt3', 'lpt4', 'lpt5', 'lpt6', 'lpt7', 'lpt8', 'lpt9',
+]);
+
+/**
+ * Whether `mimeOrFilename` names a PDF: the MIME type (`application/pdf`)
+ * or a filename/path whose extension (case-insensitive) is `pdf`. Returns
+ * the extension (`'pdf'`) or `null` -- the same contract as
+ * {@link imageExtension}. Deliberately separate from the image sets so the
+ * image branch of the drop cascade, `saveAssetFromUrl` and the OCR image
+ * scanning keep working unchanged (ADR-0052).
+ */
+export function pdfExtension(mimeOrFilename: string): string | null {
+  const value = mimeOrFilename.trim().toLowerCase();
+  if (!value) {
+    return null;
+  }
+  if (value === 'application/pdf') {
+    return 'pdf';
+  }
+  const dot = value.lastIndexOf('.');
+  const slash = Math.max(value.lastIndexOf('/'), value.lastIndexOf('\\'));
+  if (dot > slash && dot < value.length - 1) {
+    return value.slice(dot + 1) === 'pdf' ? 'pdf' : null;
+  }
+  return null;
+}
+
+/**
+ * The file name a *name-preserving* asset keeps (ADR-0052): the source
+ * name's base name with the characters Windows forbids in a file name
+ * replaced by `-`, trailing dots/spaces removed from the stem, and the
+ * given extension enforced (any existing extension is replaced, so a
+ * mislabelled file still lands under the right one). A stem that
+ * sanitises away to nothing (or a reserved device name like `con`, which
+ * Windows forbids even before an extension) falls back to
+ * `asset.<ext>`. The caller appends `-2`, `-3`, ... on a collision --
+ * same contract as the hash-named assets.
+ */
+export function sanitizedAssetFileName(fileName: string, ext: string): string {
+  const cleanExt = ext.replace(/^\.+/, '').toLowerCase();
+  const base = fileName.slice(Math.max(fileName.lastIndexOf('/'), fileName.lastIndexOf('\\')) + 1);
+  const sanitized = base.replace(/[<>:"/\\|?*]/g, '-');
+  const dot = sanitized.lastIndexOf('.');
+  const stem = (dot > 0 ? sanitized.slice(0, dot) : sanitized).replace(/[. ]+$/, '');
+  if (!stem || RESERVED_NAMES.has(stem.toLowerCase())) {
+    return `asset.${cleanExt}`;
+  }
+  return `${stem}.${cleanExt}`;
+}

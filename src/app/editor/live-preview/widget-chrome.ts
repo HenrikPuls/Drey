@@ -75,16 +75,18 @@ export function makeLensButton(onActivate: () => void, extraClass?: string): HTM
 
 /**
  * `true` (= CodeMirror ignores it) for everything except the `</>` button
- * and a mermaid error box -- clicking the error message anywhere should
- * drop the cursor into the fence to fix it, not stay swallowed by the
- * widget.
+ * and an error box (mermaid parse error, unresolvable PDF reference) --
+ * clicking the error message anywhere should drop the cursor into the
+ * source to fix it, not stay swallowed by the widget.
  */
 export function ignoreWidgetEvent(event: Event): boolean {
   if (!(event.target instanceof Element)) {
     return true;
   }
   return (
-    event.target.closest('.lp-edit') === null && event.target.closest('.lp-mermaid-error') === null
+    event.target.closest('.lp-edit') === null &&
+    event.target.closest('.lp-mermaid-error') === null &&
+    event.target.closest('.lp-pdf-error') === null
   );
 }
 

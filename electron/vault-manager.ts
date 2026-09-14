@@ -3,7 +3,12 @@ import * as crypto from 'node:crypto';
 import * as fs from 'node:fs';
 import * as fsp from 'node:fs/promises';
 import * as path from 'node:path';
-import { assetFileName, ATTACHMENTS_DIR, imageExtension } from '../shared/asset-name';
+import {
+  assetFileName,
+  ATTACHMENTS_DIR,
+  imageExtension,
+  sanitizedAssetFileName,
+} from '../shared/asset-name';
 import { sidecarPathFor } from '../shared/sidecar';
 import { VaultFileContent, VaultFileEntry, VaultRegistration, VaultStatus } from '../shared/ipc-api';
 import { uniqueCopyName } from '../shared/unique-name';
@@ -328,11 +333,23 @@ export class VaultManager {
    * root's `attachments/` is used. The file name is
    * `<timestamp>-<6 hex of sha256>.<ext>` (`shared/asset-name.ts`); a name
    * collision gets a `-2`, `-3`, ... suffix rather than overwriting.
+   *
+   * `preferredName` (ADR-0052) switches to name-preserving storage: the
+   * base name is the sanitized source name instead of the timestamp+hash
+   * form -- PDFs stay recognisable documents in the vault folder. The
+   * collision suffixing works the same.
    */
-  async saveAsset(bytes: Uint8Array, ext: string, noteRelPath: string, vaultId?: string): Promise<string> {
+  async saveAsset(
+    bytes: Uint8Array,
+    ext: string,
+    noteRelPath: string,
+    vaultId?: string,
+    preferredName?: string,
+  ): Promise<string> {
     const resolvedVault = this.registrationFor(vaultId);
-    const hashHex = crypto.createHash('sha256').update(bytes).digest('hex');
-    const baseName = assetFileName({ date: new Date(), hashHex, ext });
+    const baseName = preferredName
+      ? sanitizedAssetFileName(preferredName, ext)
+      : assetFileName({ date: new Date(), hashHex: crypto.createHash('sha256').update(bytes).digest('hex'), ext });
 
     const noteDir =
       noteRelPath.includes('/') ? noteRelPath.slice(0, noteRelPath.lastIndexOf('/')) : '';

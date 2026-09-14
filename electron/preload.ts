@@ -18,6 +18,7 @@ import {
   McpWriteRequest,
   NoteSaveRequest,
   NoteSaveResult,
+  PdfExportRequest,
   PluginDescriptorForRenderer,
   PluginIpcEventPayload,
   SpellCheckResult,
@@ -85,8 +86,14 @@ const dreyApi: DreyApi = {
     ipcRenderer.invoke(IPC_CHANNELS.vaultReadFile, relativePath, vaultId),
   writeVaultFile: (relativePath: string, content: string, vaultId?: string): Promise<number> =>
     ipcRenderer.invoke(IPC_CHANNELS.vaultWriteFile, relativePath, content, vaultId),
-  saveVaultAsset: (bytes: Uint8Array, ext: string, noteRelPath: string, vaultId?: string): Promise<string> =>
-    ipcRenderer.invoke(IPC_CHANNELS.vaultSaveAsset, bytes, ext, noteRelPath, vaultId),
+  saveVaultAsset: (
+    bytes: Uint8Array,
+    ext: string,
+    noteRelPath: string,
+    vaultId?: string,
+    preferredName?: string,
+  ): Promise<string> =>
+    ipcRenderer.invoke(IPC_CHANNELS.vaultSaveAsset, bytes, ext, noteRelPath, vaultId, preferredName),
   saveVaultAssetFromUrl: (url: string, noteRelPath: string, vaultId?: string): Promise<string> =>
     ipcRenderer.invoke(IPC_CHANNELS.vaultSaveAssetFromUrl, url, noteRelPath, vaultId),
   createVaultFile: (relativePath: string, vaultId?: string): Promise<string> =>
@@ -115,6 +122,8 @@ const dreyApi: DreyApi = {
     ipcRenderer.invoke(IPC_CHANNELS.vaultDeleteMany, relativePaths, vaultId),
   pickSavePath: (suggestedName: string, vaultId?: string): Promise<string | null> =>
     ipcRenderer.invoke(IPC_CHANNELS.vaultPickSavePath, suggestedName, vaultId),
+  exportNotePdf: (request: PdfExportRequest): Promise<string | null> =>
+    ipcRenderer.invoke(IPC_CHANNELS.exportNotePdf, request),
   buildDailyNoteContent: (date: string): Promise<string> =>
     ipcRenderer.invoke(IPC_CHANNELS.dailyBuildContent, date),
   saveNote: (request: NoteSaveRequest): Promise<NoteSaveResult> =>

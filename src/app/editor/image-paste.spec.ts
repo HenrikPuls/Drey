@@ -213,6 +213,119 @@ describe('imagePaste', () => {
     });
   });
 
+  describe('pdf drop / paste (ADR-0052)', () => {
+    /** A stand-in PDF; the OS often leaves the MIME blank on Explorer drags. */
+    function pdfFile(type = 'application/pdf', name = 'Report.pdf'): File {
+      return fakeFile(type, name);
+    }
+
+    it('stages a dropped pdf name-preserving and inserts ![name](path)', async () => {
+      const calls: Array<{ fileName: string; bytes: number }> = [];
+      view = mount('# note\n', {
+        save: async () => 'x',
+        saveNamed: async (bytes, fileName) => {
+          calls.push({ fileName, bytes: bytes.length });
+          return 'attachments/Report.pdf';
+        },
+      });
+      view.dispatch({ selection: { anchor: view.state.doc.length } });
+
+      fireDrop(view, transfer([pdfFile()]));
+      await settle();
+
+      expect(calls).toEqual([{ fileName: 'Report.pdf', bytes: 4 }]);
+      const text = view.state.doc.toString();
+      expect(text).toContain('![Report.pdf](attachments/Report.pdf)');
+      expect(text).not.toContain('uploading:');
+    });
+
+    it('accepts a blank-MIME .pdf by extension, like images', async () => {
+      let saved = '';
+      view = mount('# note\n', {
+        save: async () => 'x',
+        saveNamed: async (_bytes, fileName) => {
+          saved = fileName;
+          return `attachments/${fileName}`;
+        },
+      });
+      fireDrop(view, transfer([pdfFile('', 'quarterly.PDF')]));
+      await settle();
+      expect(saved).toBe('quarterly.PDF');
+      expect(view.state.doc.toString()).toContain('![quarterly.PDF](attachments/quarterly.PDF)');
+    });
+
+    it('an image wins a mixed drop; the pdf is not staged', async () => {
+      let savedNamed = false;
+      view = mount('# note\n', {
+        save: async () => 'attachments/x.png',
+        saveNamed: async () => {
+          savedNamed = true;
+          return 'attachments/x.pdf';
+        },
+      });
+      fireDrop(view, transfer([fakeImage(), pdfFile()]));
+      await settle();
+      expect(savedNamed).toBe(false);
+      expect(view.state.doc.toString()).toContain('![](attachments/x.png)');
+    });
+
+    it('links a dragged vault pdf in place (alt = file name, no copy)', async () => {
+      let savedNamed = false;
+      view = mount('# note\n', {
+        save: async () => 'x',
+        saveNamed: async () => {
+          savedNamed = true;
+          return 'x';
+        },
+        notePath: () => 'projects/foo.md',
+      });
+      view.dispatch({ selection: { anchor: view.state.doc.length } });
+
+      fireDrop(view, transfer([], { 'application/x-drey-vault-path': 'docs/spec v2.pdf' }));
+      await settle();
+
+      expect(savedNamed).toBe(false);
+      expect(view.state.doc.toString()).toContain('![spec v2.pdf](<../docs/spec v2.pdf>)');
+      expect(view.state.doc.toString()).not.toContain('uploading:');
+    });
+
+    it('pastes a pdf from the clipboard', async () => {
+      let saved = '';
+      view = mount('# note\n', {
+        save: async () => 'x',
+        saveNamed: async (_bytes, fileName) => {
+          saved = fileName;
+          return `attachments/${fileName}`;
+        },
+      });
+      firePaste(view, transfer([pdfFile()]));
+      await settle();
+      expect(saved).toBe('Report.pdf');
+      expect(view.state.doc.toString()).toContain('![Report.pdf](attachments/Report.pdf)');
+    });
+
+    it('inserts nothing when saveNamed is not configured', async () => {
+      view = mount('# note\n', { save: async () => 'x' });
+      const event = fireDrop(view, transfer([pdfFile()]));
+      await settle();
+      expect(event.defaultPrevented).toBe(true);
+      expect(view.state.doc.toString()).toBe('# note\n');
+    });
+
+    it('reports a staging failure and rolls the placeholder back', async () => {
+      const errors: string[] = [];
+      view = mount('# note\n', {
+        save: async () => 'x',
+        saveNamed: () => Promise.reject(new Error('No vault is active.')),
+        onError: (m) => errors.push(m),
+      });
+      fireDrop(view, transfer([pdfFile()]));
+      await settle();
+      expect(errors).toEqual(['No vault is active.']);
+      expect(view.state.doc.toString()).toBe('# note\n');
+    });
+  });
+
   describe('web image drag (URL)', () => {
     it('downloads the image and adds a [Source] line under it', async () => {
       const calls: string[] = [];

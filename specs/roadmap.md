@@ -47,10 +47,13 @@ Once you start working on one of the feature requests and it didn't had a Id the
 
 ### Feature requests
 
-- **Req-2** — render Office documents inline: Word, Excel, PowerPoint,
-  PDF and Loop components. Insert a link that opens the document inline;
-  dragging a document directly places it in the `attachments/` folder.
-  (Effort to be discussed before implementation.)
+- **Req-2 (remainder)** — render Office documents inline: Word, Excel,
+  PowerPoint and Loop components. **The PDF slice shipped** (milestone
+  30, [ADR-0052](docs/09_architecture_decisions/0052-pdf-embeds-and-viewer.md):
+  drag a PDF in → staged name-preserving into `attachments/` → rendered
+  in place by the built-in viewer; opening a `.pdf` gives a viewer tab).
+  The Office formats remain open — the platform renders none of them
+  natively. (Effort to be discussed before implementation.)
 - **Req-3 / req-15** — `copilot-web` provider: drive Microsoft 365
   Copilot's website via Playwright + system Edge as an LLM provider.
   Prototyped on branch `feat/copilot-web-provider` (ADR-0040) — fragile
@@ -88,6 +91,9 @@ Once you start working on one of the feature requests and it didn't had a Id the
   tools in one provider-neutral tool pool (namespaced
   `mcp__<server>__<tool>`), confirmation-gated per server. Builds on the
   Req-29 interface — every tool-capable provider can drive them.
+
+bug:
+bug - beim öffnen eines vaults werden immer alle folder aufgeklappt und es dauert ewig bis er geladen hat, bei großen vaults, es soll aber immer nur die jeweilige ebene angezeigt werden. 
 
   UX:
   Req - Editor - Lines shall only display the picture but no text, same for save please use a save symbol instead.

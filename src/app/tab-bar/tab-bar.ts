@@ -65,7 +65,7 @@ export class TabBar {
    * was the hardcoded `kind === 'browser'` branch).
    */
   protected tabIcon(doc: OpenDoc): { url: string | null; glyph: IconName } | null {
-    if (doc.kind === 'text' || doc.kind === 'image') {
+    if (doc.kind === 'text' || doc.kind === 'image' || doc.kind === 'pdf') {
       return null;
     }
     return {
@@ -142,6 +142,12 @@ export class TabBar {
   protected split(path: string, direction: 'row' | 'column'): void {
     this.closeMenu();
     this.panes.splitPane(this.paneId(), direction, path);
+  }
+
+  /** "Export as PDF…" on the right-clicked tab (centre-pane menu only). */
+  protected exportPdf(path: string): void {
+    this.closeMenu();
+    void this.editor.exportPdf(path);
   }
 
   /** Moves this whole pane into a dock's editor band (ADR-0038). */

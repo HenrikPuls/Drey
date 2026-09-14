@@ -7,6 +7,8 @@ import {
   ImagePreviewWidget,
   ImageWidget,
   MermaidWidget,
+  PdfPreviewWidget,
+  PdfWidget,
   TableWidget,
 } from './widgets';
 
@@ -96,6 +98,38 @@ describe('blockDecorations', () => {
     const w = widgets(blockDecorations(state('![a](b.png)\n\nend'), config));
     (w[0].deco.spec['widget'] as ImageWidget).onOpenImage!('resolved:b.png');
     expect(seen).toEqual(['resolved:b.png']);
+  });
+
+  it('replaces a pdf reference with a PdfWidget carrying the resolved srcs', () => {
+    const config: LivePreviewConfig = {
+      resolveImage: (url) => [`drey-asset://v1/asset/${url}`],
+    };
+    const all = widgets(blockDecorations(state('![Spec](attachments/spec.pdf)\n\nend'), config));
+    expect(all).toHaveLength(1);
+    const widget = all[0].deco.spec['widget'] as PdfWidget;
+    expect(widget).toBeInstanceOf(PdfWidget);
+    expect(widget.srcs).toEqual(['drey-asset://v1/asset/attachments/spec.pdf']);
+    expect(widget.alt).toBe('Spec');
+    expect(widget.rawUrl).toBe('attachments/spec.pdf');
+  });
+
+  it('keeps a size suffix out of a pdf widget (parsed, deliberately ignored)', () => {
+    const all = widgets(blockDecorations(state('![plan|300](doc.pdf)\n\nend'), passThrough));
+    const widget = all[0].deco.spec['widget'] as PdfWidget;
+    expect(widget).toBeInstanceOf(PdfWidget);
+    expect(widget.alt).toBe('plan');
+    expect(widget.srcs).toEqual(['doc.pdf']);
+  });
+
+  it('threads config.onOpenPdf into the pdf widget', () => {
+    const seen: string[] = [];
+    const config: LivePreviewConfig = {
+      resolveImage: (url) => [`resolved:${url}`],
+      onOpenPdf: (s) => seen.push(s),
+    };
+    const w = widgets(blockDecorations(state('![a](doc.pdf)\n\nend'), config));
+    (w[0].deco.spec['widget'] as PdfWidget).onOpenPdf!('resolved:doc.pdf');
+    expect(seen).toEqual(['resolved:doc.pdf']);
   });
 
   it('renders an HTML block as a sanitized widget, raw while the cursor is inside', () => {
@@ -231,6 +265,25 @@ describe('revealDecorations', () => {
     const set = revealDecorations(state('![gone](../../etc/x.png)\n\nend', 3), config);
     expect(classesOf(set).length).toBeGreaterThan(0);
     expect(previewOf(set)).toBeUndefined();
+  });
+
+  it('keeps a read-only PdfPreviewWidget below a touched pdf embed', () => {
+    const doc = '![Spec](attachments/spec.pdf)\n\nend';
+    const set = revealDecorations(state(doc, 3), passThrough);
+    expect(classesOf(set)).toEqual(['lp-reveal lp-reveal-first lp-reveal-last']);
+    const preview = widgets(set).find((d) => d.deco.spec['widget'] instanceof PdfPreviewWidget);
+    expect(preview).toBeDefined();
+    expect(preview!.deco.spec['block']).toBe(true);
+    const w = preview!.deco.spec['widget'] as PdfPreviewWidget;
+    expect(w.srcs).toEqual(['attachments/spec.pdf']);
+    expect(w.alt).toBe('Spec');
+  });
+
+  it('keeps a broken pdf reference unmirrored (container only)', () => {
+    const config: LivePreviewConfig = { resolveImage: () => [] };
+    const set = revealDecorations(state('![gone](missing.pdf)\n\nend', 3), config);
+    expect(classesOf(set).length).toBeGreaterThan(0);
+    expect(widgets(set).find((d) => d.deco.spec['widget'] instanceof PdfPreviewWidget)).toBeUndefined();
   });
 
   it('reveals an inline image at paragraph granularity (container + mirror)', () => {

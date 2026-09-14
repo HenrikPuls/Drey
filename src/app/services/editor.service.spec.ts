@@ -449,6 +449,49 @@ describe('EditorService', () => {
     });
   });
 
+  describe('pdf tabs (kind: pdf, ADR-0052)', () => {
+    it('opens a pdf without reading it as text and never dirty', async () => {
+      let reads = 0;
+      (window.dreyApi as unknown as { readVaultFile: unknown }).readVaultFile = (p: string) => {
+        reads++;
+        return Promise.resolve({ content: `%PDF-1.7 ${p}`, modifiedMs: 1 });
+      };
+
+      await service.openFile('docs/spec.pdf');
+
+      expect(reads).toBe(0);
+      expect(service.activeKind()).toBe('pdf');
+      expect(service.openPath()).toBe('docs/spec.pdf');
+      expect(service.bufferContent()).toBe('');
+      expect(service.isDirty()).toBe(false);
+    });
+
+    it('save / saveAs / updateBuffer / setViewMode are no-ops on a pdf tab', async () => {
+      await service.openFile('docs/spec.pdf');
+      service.updateBuffer('docs/spec.pdf', 'junk');
+      service.setViewMode('source');
+      await service.save();
+      await service.saveAs();
+
+      expect(saves).toHaveLength(0);
+      expect(service.bufferContent()).toBe('');
+      expect(service.viewMode()).toBe('live');
+    });
+
+    it('dedupes on reopen', async () => {
+      await service.openFile('docs/spec.pdf');
+      await service.openFile('note.md');
+      await service.openFile('docs/spec.pdf');
+      expect(service.openDocs().filter((d) => d.path === 'docs/spec.pdf')).toHaveLength(1);
+    });
+
+    it('closes cleanly (never dirty, no prompt)', async () => {
+      await service.openFile('docs/spec.pdf');
+      service.closeTab('docs/spec.pdf');
+      expect(service.openDocs().some((d) => d.path === 'docs/spec.pdf')).toBe(false);
+    });
+  });
+
   describe('plugin doc tabs (kind: browser)', () => {
     it('addPluginDoc yields a non-dirty, non-text doc', () => {
       service.addPluginDoc('browser', 'browser://1', 'New tab');

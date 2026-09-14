@@ -1,4 +1,11 @@
-import { assetFileName, assetTimestamp, ATTACHMENTS_DIR, imageExtension } from '../../../shared/asset-name';
+import {
+  assetFileName,
+  assetTimestamp,
+  ATTACHMENTS_DIR,
+  imageExtension,
+  pdfExtension,
+  sanitizedAssetFileName,
+} from '../../../shared/asset-name';
 
 describe('imageExtension', () => {
   it('maps the common image MIME types', () => {
@@ -65,5 +72,55 @@ describe('assetFileName', () => {
 describe('ATTACHMENTS_DIR', () => {
   it('is the conventional folder name', () => {
     expect(ATTACHMENTS_DIR).toBe('attachments');
+  });
+});
+
+describe('pdfExtension (ADR-0052)', () => {
+  it('accepts the PDF MIME type', () => {
+    expect(pdfExtension('application/pdf')).toBe('pdf');
+    expect(pdfExtension('  APPLICATION/PDF ')).toBe('pdf');
+  });
+
+  it('falls back to a file name extension, case-insensitive', () => {
+    expect(pdfExtension('Report.pdf')).toBe('pdf');
+    expect(pdfExtension('C:\\Users\\x\\REPORT.PDF')).toBe('pdf');
+    expect(pdfExtension('/vault/notes/paper.Pdf')).toBe('pdf');
+  });
+
+  it('rejects non-PDF types, image types and bare names', () => {
+    expect(pdfExtension('image/png')).toBeNull();
+    expect(pdfExtension('notes.txt')).toBeNull();
+    expect(pdfExtension('report.pdfx')).toBeNull();
+    expect(pdfExtension('')).toBeNull();
+    expect(pdfExtension('pdf')).toBeNull();
+  });
+});
+
+describe('sanitizedAssetFileName (ADR-0052)', () => {
+  it('keeps a normal file name and enforces the extension', () => {
+    expect(sanitizedAssetFileName('Report.pdf', 'pdf')).toBe('Report.pdf');
+    expect(sanitizedAssetFileName('Quarterly Report 2026.pdf', 'pdf')).toBe(
+      'Quarterly Report 2026.pdf',
+    );
+  });
+
+  it('strips any directory part', () => {
+    expect(sanitizedAssetFileName('C:\\Users\\x\\paper.pdf', 'pdf')).toBe('paper.pdf');
+    expect(sanitizedAssetFileName('/tmp/imports/paper.pdf', 'pdf')).toBe('paper.pdf');
+  });
+
+  it('replaces Windows-forbidden characters with a dash', () => {
+    expect(sanitizedAssetFileName('a<b>:c"d?e*f.pdf', 'pdf')).toBe('a-b--c-d-e-f.pdf');
+  });
+
+  it('removes trailing dots and spaces, keeps interior ones', () => {
+    expect(sanitizedAssetFileName('report... .pdf', 'pdf')).toBe('report.pdf');
+    expect(sanitizedAssetFileName('draft v2 .pdf', 'pdf')).toBe('draft v2.pdf');
+  });
+
+  it('falls back to asset.<ext> for unusable names', () => {
+    expect(sanitizedAssetFileName('...', 'pdf')).toBe('asset.pdf');
+    expect(sanitizedAssetFileName('con.pdf', 'pdf')).toBe('asset.pdf');
+    expect(sanitizedAssetFileName('', 'pdf')).toBe('asset.pdf');
   });
 });

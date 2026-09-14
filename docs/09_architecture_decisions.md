@@ -59,6 +59,7 @@ package, a minor naming convention).
 | [0049](09_architecture_decisions/0049-live-edit-mode.md)                           | Live edit mode: a composer toggle lets the model edit the open note directly via `doc_*` tools (diff hunks), immediate apply, advisory input lock — a per-turn opt-in exception to 0011 | Accepted |
 | [0050](09_architecture_decisions/0050-ocr-via-vision-llm.md)                       | OCR via the connected vision LLM: a `plugins/ocr/` context-menu row on embedded images + image tabs, capability-gated (deviates from req-9's Tesseract idea) | Accepted |
 | [0051](09_architecture_decisions/0051-multi-vault-registry.md)                     | Multi-vault registry: stable vault ids, `vaultId`-scoped IPC/docs/indexes/watcher, active-vault retention, `vaultId::path` doc keys (supersedes 0019's "no vault registry") | Accepted |
+| [0052](09_architecture_decisions/0052-pdf-embeds-and-viewer.md)                    | PDF embeds + viewer tab: the built-in PDFium viewer (`plugins: true`) over `drey-asset://` iframes, name-preserving `attachments/` staging, `kind: 'pdf'` base doc kind | Accepted |
 
 Decisions not yet written up (relevant spec already fixes them, but the
 ADR is deferred to the milestone that actually implements them, per

@@ -24,6 +24,7 @@ import { StatusBar } from './status-bar/status-bar';
 import { Settings } from './settings/settings';
 import { EditorContextMenu } from './editor-context-menu/editor-context-menu';
 import { EditorContextMenuService } from './editor-context-menu/editor-context-menu.service';
+import { EditorContextMenuRegistry } from './plugin-host';
 
 /**
  * Root shell (ADR-0019): a custom titlebar with the HTML menu bar, then a
@@ -104,6 +105,18 @@ export class App {
     // Install the capture-phase contextmenu listener that gives the editor
     // its own right-click menu in place of the OS one (ADR-0030).
     inject(EditorContextMenuService).start();
+    // "Export as PDF…" in that right-click menu. The base registers through
+    // the same registry plugins use (ADR-0044 rule 2); scoped to pane text
+    // documents that are Markdown, exactly like the `⋯`-menu row. The
+    // target's `docPath` is the editor host's doc KEY (`shownPath()`), so
+    // `exportPdf` resolves it directly.
+    inject(EditorContextMenuRegistry).register((target) => {
+      if (target.surface !== 'editor' || target.docPath === null || !this.editor.isMarkdown(target.docPath)) {
+        return [];
+      }
+      const docKey = target.docPath;
+      return [{ label: 'Export as PDF…', run: () => void this.editor.exportPdf(docKey) }];
+    });
 
     // Startup, once, after both the vault path and the persisted config are
     // known: restore the previous session's layout + tabs (ADR-0043), then

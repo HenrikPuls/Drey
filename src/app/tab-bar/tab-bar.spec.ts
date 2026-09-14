@@ -115,7 +115,7 @@ describe('TabBar', () => {
     }
   });
 
-  it('offers "Split right" / "Split down" / "Close others" / "Close all" from the tab context menu', async () => {
+  it('offers "Split right" / "Split down" / "Export as PDF…" / "Close others" / "Close all" from the tab context menu', async () => {
     await editor.openFile('c.md');
     fixture.detectChanges();
     const compiled = fixture.nativeElement as HTMLElement;
@@ -132,11 +132,12 @@ describe('TabBar', () => {
       'Move to bottom dock',
       'Split right',
       'Split down',
+      'Export as PDF…',
       'Close others',
       'Close all',
     ]);
 
-    (items[5] as HTMLButtonElement).click(); // "Close others" (keeps b.md, the row that was right-clicked)
+    (items[6] as HTMLButtonElement).click(); // "Close others" (keeps b.md, the row that was right-clicked)
     fixture.detectChanges();
     expect(editor.openDocs().map((d) => d.path)).toEqual(['b.md']);
     expect(compiled.querySelector('.ctx-menu')).toBeNull();

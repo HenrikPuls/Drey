@@ -1,0 +1,13 @@
+<div class="meta">
+  <span class="path" [title]="path()">{{ path() }}</span>
+</div>
+
+<div class="body">
+  @if (url()) {
+    <iframe class="frame" [src]="url()" [title]="path()"></iframe>
+  } @else {
+    <div class="empty">
+      <p>This PDF's path could not be resolved.</p>
+    </div>
+  }
+</div>

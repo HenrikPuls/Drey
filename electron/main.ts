@@ -139,7 +139,19 @@ function registerAssetProtocol(vaultManager: VaultManager): void {
     if (!filePath) {
       return new Response('Not found', { status: 404 });
     }
-    return net.fetch(pathToFileURL(filePath).toString());
+    return net.fetch(pathToFileURL(filePath).toString()).then((response) => {
+      // A PDF must arrive with an exact `application/pdf` Content-Type or
+      // the built-in viewer refuses the frame (ADR-0052); the file://
+      // loader's MIME guessing is registry-dependent on Windows, so it is
+      // pinned here. Everything else keeps the sniffed headers (images
+      // have worked through this channel since ADR-0024).
+      if (!filePath.toLowerCase().endsWith('.pdf')) {
+        return response;
+      }
+      const headers = new Headers(response.headers);
+      headers.set('Content-Type', 'application/pdf');
+      return new Response(response.body, { status: response.status, headers });
+    });
   });
 }
 
@@ -357,6 +369,11 @@ function createMainWindow(getUiScaleFactor?: () => number): BrowserWindow {
       // deferred. Revisit once preload has a bundling step that can
       // inline shared/ into a single file with no runtime require().
       sandbox: false,
+      // Chromium's built-in (PDFium) PDF viewer -- the only thing this
+      // flag enables on modern Electron -- so PDF embeds
+      // (`![](attachments/x.pdf)`, ADR-0052) and PDF tabs render inside
+      // iframes instead of downloading or showing a blank frame.
+      plugins: true,
     },
   });
 

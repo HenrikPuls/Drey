@@ -46,7 +46,10 @@ restore, keybindings, spellcheck, the MCP vault server, the LLM
   interface, per-call `LlmRouter`, one client per backend under
   `providers/` (ADR-0047), debug log, task registry, tag-suggest),
   `mcp/` (vault server; `vault_search` reads the
-  section-search provider the tags plugin registers).
+  section-search provider the tags plugin registers),
+  `pdf-export.ts` (the "Export as PDF…" flow: paper-styled HTML from
+  `shared/pdf-html.ts` printed in a hidden sandboxed window; its own save
+  dialog, deliberately NOT vault-root-restricted).
 - `ipc/` — the base channel handlers (thin, feature-free).
 
 **Base, renderer** (`src/app/`):
@@ -2249,3 +2252,46 @@ one push per press, Ctrl+S saves (req-25 unchanged).
   compartment (NOT `EditorState.readOnly`, which would filter the
   model's own buffer pushes) plus the meta bar's "Assistant is
   editing…" hint. `PLUGIN_API_VERSION` minor → 4.
+
+## 5.27 PDF embeds + viewer tab (ADR-0052)
+
+Dropped PDFs render in place; `.pdf` files open as viewer tabs. No PDF
+library — Chromium's built-in (PDFium) viewer, enabled by
+`plugins: true` on the main window, drawing inside an `<iframe>` whose
+`src` is the existing `drey-asset://` URL.
+
+- **`shared/asset-name.ts`** — `pdfExtension()` (MIME `application/pdf`
+  or a `.pdf` name; deliberately separate from the image sets) and
+  `sanitizedAssetFileName()` — the name-preserving staging helper
+  (Windows-forbidden characters → `-`, trailing dots/spaces stripped,
+  extension enforced, reserved device names and unusable stems fall back
+  to `asset.<ext>`).
+- **`VaultManager.saveAsset`** — optional trailing `preferredName`
+  switches from timestamp+hash to name-preserving storage (collision
+  suffixing unchanged); threaded through `vault:save-asset` /
+  `saveVaultAsset` / `VaultService.saveNamedAsset`. ADR-0024's hash
+  naming stays the default for images.
+- **`src/app/editor/image-paste.ts`** — a `pdfFiles()` collector
+  (blank-MIME Explorer drops accepted by name, like images), `insertPdf`
+  (→ `![file.name](attachments/…)`, placeholder flow reused), a drop
+  branch after images and before text (precedence: image > PDF > text),
+  a Files-panel drag branch linking in place with the file name as alt,
+  and clipboard paste.
+- **`src/app/editor/live-preview/`** — `PdfWidget` (inline replace, like
+  `ImageWidget`: caption + HEAD-probed candidate mount + `</>`/lens
+  chrome; `.lp-pdf-error` box clickable into the source, mirrored in
+  `ignoreWidgetEvent`), `PdfPreviewWidget` (the reveal-layer mirror, no
+  probe, no chrome), `scanEmbeds` branches the `Image` node on
+  `pdfExtension` (`.pdf` refs no longer render a broken `<img>`;
+  `|WxH` ignored), `clickToReveal` knows `.lp-pdf`, the theme adds the
+  `.lp-pdf*` rules (`--lp-pdf-height`, 480px default).
+- **`src/app/pdf-viewer/`** — `PdfTab`, the `kind: 'pdf'` pane view: a
+  34px meta bar (path) over the full-height PDFium frame. Core doc kind
+  alongside `'text'`/`'image'`: `EditorService.openFile` routes `.pdf`
+  (no buffer, never dirty), `PaneLeaf` picks it, the session snapshot
+  carries `{vaultId, path, kind: 'pdf'}`, tab strip and status bar treat
+  it as a base kind.
+- **`src/app/editor/vault-image.ts`** — `assetUrlToVaultPath`, the pure
+  inverse of `resolveVaultImageUrl` (mirrors the serving handler's
+  `/asset/` + slash stripping exactly), used by the embed lens to open
+  the probed URL as a tab.

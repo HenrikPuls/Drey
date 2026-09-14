@@ -1,0 +1,211 @@
+/**
+ * Markdown -> self-contained HTML for the "Export as PDF…" feature. Pure
+ * string in, pure string out -- no filesystem, no Electron, no DOM -- so
+ * main (`electron/pdf-export.ts`) renders with it and the renderer test
+ * suite can pin its behavior, the same split as `shared/frontmatter.ts`.
+ *
+ * The output is a full document with an embedded light "paper" stylesheet:
+ * white pages, print-friendly, typography borrowed from the app's token
+ * stacks (`src/styles.css`) -- sans body, serif headings, mono code. The
+ * PDF is meant to leave the vault, so it deliberately does NOT follow the
+ * dark app theme.
+ *
+ * Out of scope by decision: mermaid fences stay code blocks (mermaid is a
+ * renderer-side Live Preview widget), and `[[wikilinks]]` stay literal
+ * text (they name in-vault targets a PDF reader can't follow).
+ */
+import MarkdownIt from 'markdown-it';
+import { splitFrontmatter } from './frontmatter';
+
+export interface PdfHtmlOptions {
+  /** The full note text; a frontmatter fence is stripped here. */
+  markdown: string;
+  /** `<title>` / `<h1>` fallback when the body starts with no heading. */
+  title?: string;
+  /**
+   * Rewrites an image reference to a loadable URL. `null` drops the image
+   * (its alt text stays). Called for Markdown images AND raw-HTML `<img>`
+   * tags from `html: true` blocks; absent, `http(s)`/`data` URLs pass
+   * through and relative ones are dropped.
+   */
+  resolveImageSrc?: (rawUrl: string) => string | null;
+}
+
+/** Task-list glyphs (GFM checkboxes don't exist in print CSS). */
+const TASK_OPEN = '☐';
+const TASK_DONE = '☑';
+
+/** `- [ ] ` / `1. [x] ` style task items -> the glyph, outside code fences. */
+const TASK_ITEM = /^(\s*(?:[-*+]|\d+[.)])\s+)\[([ xX])\]\s+/;
+
+/**
+ * Rewrites task-list markers to glyphs, line by line, tracking fenced code
+ * blocks (``` / ~~~) so their contents stay verbatim.
+ */
+export function replaceTaskMarkers(markdown: string): string {
+  const lines = markdown.split('\n');
+  let inFence = false;
+  let fenceMarker = '';
+  for (let i = 0; i < lines.length; i++) {
+    const fence = lines[i].trim().match(/^(`{3,}|~{3,})/);
+    if (fence) {
+      if (!inFence) {
+        inFence = true;
+        fenceMarker = fence[1][0];
+      } else if (fence[1][0] === fenceMarker) {
+        inFence = false;
+      }
+      continue;
+    }
+    if (inFence) {
+      continue;
+    }
+    const task = lines[i].match(TASK_ITEM);
+    if (task) {
+      lines[i] = task[1] + (task[2] === ' ' ? TASK_OPEN : TASK_DONE) + ' ' + lines[i].slice(task[0].length);
+    }
+  }
+  return lines.join('\n');
+}
+
+/**
+ * Strips `<script>` blocks and inline `on*="…"` handler attributes from
+ * raw HTML -- defense in depth for `html: true` note HTML alongside the
+ * sandboxed print window, not a sanitizer claim. The `on*` pass anchors
+ * inside a tag (`<tag … on…=`), so plain text like "one = 2" survives.
+ */
+export function stripActiveHtml(html: string): string {
+  return html
+    .replace(/<script\b[^>]*>[\s\S]*?<\/script\s*>/gi, '')
+    .replace(/(<[a-z][^>]*?)\son\w+\s*=\s*("[^"]*"|'[^']*'|[^\s>]+)/gi, '$1');
+}
+
+/**
+ * Renders the note to a complete HTML document. `[[wikilinks]]` pass
+ * through as literal text (markdown-it leaves unknown syntax alone);
+ * mermaid fences stay code blocks.
+ */
+export function buildNotePdfHtml(options: PdfHtmlOptions): string {
+  const { markdown, title, resolveImageSrc } = options;
+  const body = splitFrontmatter(markdown).body;
+  const md = new MarkdownIt({ html: true, typographer: true });
+
+  if (resolveImageSrc) {
+    // Markdown-source images: run the raw url through the callback; a null
+    // drops the <img> but keeps the alt text. Mirrors markdown-it's own
+    // default rule (alt from the rendered children, then renderToken).
+    md.renderer.rules['image'] = (tokens, idx, options, env, self) => {
+      const token = tokens[idx];
+      const src = resolveImageSrc(String(token.attrGet('src') ?? ''));
+      if (src === null) {
+        return md.utils.escapeHtml(token.content);
+      }
+      token.attrSet('src', src);
+      token.attrSet('alt', self.renderInlineAsText(token.children ?? [], options, env));
+      return self.renderToken(tokens, idx, options);
+    };
+  }
+
+  let html = stripActiveHtml(md.render(replaceTaskMarkers(body)));
+
+  if (resolveImageSrc) {
+    // Raw-HTML `<img>` tags (html: true lets them through verbatim). Srcs
+    // that are already final (https/data from the note, file:// from the
+    // markdown rule above) are left alone -- only relative references go
+    // through the callback here.
+    html = html.replace(/<img\b[^>]*>/gi, (tag: string) => {
+      const src = tag.match(/\ssrc\s*=\s*("([^"]*)"|'([^']*)')/i);
+      if (src === null) {
+        return '';
+      }
+      const raw = src[2] ?? src[3] ?? '';
+      if (/^(https?:|data:|file:)/i.test(raw.trim())) {
+        return tag;
+      }
+      const resolved = resolveImageSrc(raw);
+      return resolved === null ? '' : tag.replace(src[0], ` src="${resolved}"`);
+    });
+  }
+
+  const safeTitle = (title ?? '').trim();
+  const headingHtml =
+    safeTitle && !/^<h[1-6]\b/m.test(html.trim()) ? `<h1>${md.utils.escapeHtml(safeTitle)}</h1>\n` : '';
+  return `<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>${md.utils.escapeHtml(safeTitle || 'Export')}</title>
+<style>
+${PAPER_CSS}
+</style>
+</head>
+<body>
+${headingHtml}${html}
+</body>
+</html>
+`;
+}
+
+/**
+ * Light paper stylesheet. Font stacks mirror `src/styles.css` tokens
+ * (`--font-sans` / `--font-serif` / `--font-mono`) so the PDF reads as the
+ * app's typography; Newsreader/IBM Plex Mono simply fall back like they do
+ * in the app when the platform lacks them. Code/table fills rely on
+ * `printToPDF({ printBackground: true })`.
+ */
+const PAPER_CSS = `
+  /* No @page rule on purpose: CSS @page margins would override the
+     printToPDF margins, and margin: 0 here is exactly the "bleeds to the
+     page edge" bug. Page geometry comes from printToPDF alone. */
+  html {
+    background: #ffffff;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+  body {
+    margin: 0;
+    color: #1f2328;
+    font-family: ui-sans-serif, system-ui, -apple-system, 'Segoe UI', 'Helvetica Neue', sans-serif;
+    font-size: 11pt;
+    line-height: 1.6;
+  }
+  h1, h2, h3, h4, h5, h6 {
+    font-family: 'Newsreader', Georgia, 'Times New Roman', serif;
+    line-height: 1.3;
+    color: #111418;
+    break-after: avoid;
+  }
+  h1 { font-size: 22pt; margin: 0 0 0.6em; }
+  h2 { font-size: 16pt; margin: 1.4em 0 0.5em; border-bottom: 1px solid #e4e6e8; padding-bottom: 0.2em; }
+  h3 { font-size: 13pt; margin: 1.2em 0 0.4em; }
+  h4, h5, h6 { font-size: 11.5pt; margin: 1em 0 0.3em; }
+  p { margin: 0.5em 0; }
+  a { color: #c96442; text-decoration: none; }
+  code, pre, kbd {
+    font-family: 'IBM Plex Mono', ui-monospace, 'Cascadia Code', 'Consolas', monospace;
+    font-size: 9.5pt;
+  }
+  code { background: #f2f4f6; border-radius: 3px; padding: 0.1em 0.35em; }
+  pre {
+    background: #f6f8fa;
+    border: 1px solid #e4e6e8;
+    border-radius: 6px;
+    padding: 0.7em 0.9em;
+    overflow-x: hidden;
+    white-space: pre-wrap;
+    word-wrap: break-word;
+    break-inside: avoid;
+  }
+  pre code { background: none; padding: 0; }
+  table { border-collapse: collapse; margin: 0.8em 0; break-inside: avoid; }
+  th, td { border: 1px solid #d7dadd; padding: 0.35em 0.7em; text-align: left; }
+  th { background: #f2f4f6; }
+  blockquote {
+    margin: 0.8em 0;
+    padding: 0.1em 1em;
+    border-left: 3px solid #d7dadd;
+    color: #57606a;
+  }
+  img { max-width: 100%; }
+  hr { border: none; border-top: 1px solid #e4e6e8; margin: 1.5em 0; }
+`;

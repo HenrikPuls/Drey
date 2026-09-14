@@ -20,6 +20,7 @@ import { VaultService } from '../vault';
 export type SessionTab =
   | { vaultId: string | null; path: string; kind: 'text'; onDisk: boolean; backupId?: string }
   | { vaultId: string | null; path: string; kind: 'image' }
+  | { vaultId: string | null; path: string; kind: 'pdf' }
   | { vaultId: null; path: string; kind: string; data: unknown };
 
 export interface SessionSnapshot {
@@ -179,7 +180,7 @@ export class SessionService {
 
   private async restoreTab(tab: SessionTab): Promise<boolean> {
     const key = docKey(tab.vaultId, tab.path);
-    if (tab.kind === 'image') {
+    if (tab.kind === 'image' || tab.kind === 'pdf') {
       await this.editor.openFile(tab.path, tab.vaultId ?? undefined);
       return this.editor.openDocs().some((d) => d.key === key);
     }
@@ -254,6 +255,8 @@ export class SessionService {
       }
       if (doc.kind === 'image') {
         tabs.push({ vaultId: doc.vaultId, path: doc.path, kind: 'image' });
+      } else if (doc.kind === 'pdf') {
+        tabs.push({ vaultId: doc.vaultId, path: doc.path, kind: 'pdf' });
       } else if (doc.kind !== 'text') {
         // A registered doc kind: its owner answers the payload. A kind that
         // lost its contribution (plugin disabled mid-session) is skipped --

@@ -158,6 +158,47 @@ export const livePreviewTheme = EditorView.theme(
       cursor: 'pointer',
     },
 
+    // An embedded PDF rendered by the built-in (PDFium) viewer (ADR-0052).
+    // Inline replace decoration like `.lp-image`, full column wide; the
+    // height is a variable so it stays themable without code.
+    '.lp-pdf': {
+      position: 'relative',
+      display: 'inline-block',
+      width: '100%',
+    },
+    '.lp-pdf-name': {
+      display: 'block',
+      lineHeight: '1.4',
+      fontFamily: 'var(--font-mono)',
+      fontSize: '0.78rem',
+      color: 'var(--text-faint)',
+      padding: '0 0 2px',
+      overflowWrap: 'anywhere',
+    },
+    '.lp-pdf-frame': {
+      display: 'block',
+      width: '100%',
+      height: 'var(--lp-pdf-height, 480px)',
+      border: '1px solid var(--border-strong)',
+      borderRadius: 'var(--radius-xs)',
+      background: 'var(--bg-bar)',
+    },
+    '.lp-pdf-pending': {
+      color: 'var(--text-faint)',
+      fontStyle: 'italic',
+      fontSize: '0.9em',
+    },
+    '.lp-pdf-error': {
+      margin: '0',
+      textAlign: 'left',
+      whiteSpace: 'pre-wrap',
+      fontFamily: 'var(--font-mono)',
+      fontSize: '0.85em',
+      color: 'var(--danger, #e06c75)',
+      // The whole box is a hit target back into the embed's source line.
+      cursor: 'pointer',
+    },
+
     '.lp-table': {
       padding: '4px 0',
       cursor: 'default',
@@ -214,7 +255,7 @@ export const livePreviewTheme = EditorView.theme(
       opacity: '0',
       transition: 'opacity 0.12s ease',
     },
-    '.lp-table:hover .lp-tools, .lp-html:hover .lp-tools, .lp-mermaid:hover .lp-tools, .lp-image:hover .lp-tools':
+    '.lp-table:hover .lp-tools, .lp-html:hover .lp-tools, .lp-mermaid:hover .lp-tools, .lp-image:hover .lp-tools, .lp-pdf:hover .lp-tools':
       {
         opacity: '1',
       },
@@ -256,6 +297,11 @@ export const livePreviewTheme = EditorView.theme(
     },
     // The read-only render kept below an image's markup while it is revealed.
     '.lp-image-preview': {
+      display: 'block',
+      margin: '4px 0 2px',
+    },
+    // The PDF counterpart -- no tools, just the frame.
+    '.lp-pdf-preview': {
       display: 'block',
       margin: '4px 0 2px',
     },

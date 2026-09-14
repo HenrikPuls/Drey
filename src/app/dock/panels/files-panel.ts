@@ -899,6 +899,21 @@ export class FilesPanel {
     }
   }
 
+  /** "Export as PDF…" on a .md row -- main reads the file straight from disk. */
+  protected async onExportPdf(): Promise<void> {
+    const menu = this.menu();
+    const entry = menu?.entry;
+    this.closeMenus();
+    if (!menu || !entry) {
+      return;
+    }
+    try {
+      await this.vault.exportPdf(entry.relativePath, menu.vaultId);
+    } catch (err) {
+      alert(err instanceof Error ? err.message : String(err));
+    }
+  }
+
   protected startRename(): void {
     const menu = this.menu();
     const entry = menu?.entry;

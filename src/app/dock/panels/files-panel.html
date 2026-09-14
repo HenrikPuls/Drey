@@ -109,6 +109,9 @@
     @if (m.entry) {
       <button type="button" (click)="onCopy()">Copy</button>
       <button type="button" (click)="onDuplicate()">Duplicate</button>
+      @if (m.entry.type === 'file' && editor.isMarkdown(m.entry.relativePath)) {
+        <button type="button" (click)="onExportPdf()">Export as PDF…</button>
+      }
     }
     @if (vault.clipboard(); as clip) {
       <button type="button" (click)="onPaste()">Paste “{{ clip.name }}”</button>

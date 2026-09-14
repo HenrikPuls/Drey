@@ -70,6 +70,7 @@ export const IPC_CHANNELS = {
   dailyOpen: 'daily:open',
   dailyBuildContent: 'daily:build-content',
   noteSave: 'note:save',
+  exportNotePdf: 'export:note-pdf',
   tagList: 'tags:list',
   tagSearch: 'tags:search',
   tagSuggest: 'tags:suggest',
@@ -288,6 +289,23 @@ export interface VaultFileEntry {
 export interface VaultFileContent {
   content: string;
   modifiedMs: number;
+}
+
+/**
+ * One "Export as PDF…" request (editor `⋯` menu, tab context menu, Files
+ * panel row). `path` is the note's vault-relative path; it names the
+ * exported file, anchors note-relative image resolution and seeds the save
+ * dialog's default location. `content` is the live editor buffer -- sent
+ * whenever the doc is open, so dirty and scratch (untitled, `vaultId`
+ * absent) tabs export what the user sees; without it main reads the file
+ * from disk (Files-panel export of a possibly never-opened note).
+ */
+export interface PdfExportRequest {
+  path: string;
+  /** Defaults to the active vault (ADR-0051). Scratch tabs send none. */
+  vaultId?: string;
+  /** Live buffer override; absent = read from disk. */
+  content?: string;
 }
 
 /** `type:` of a note file (see `specs/frontmatter-schema.md`). */
@@ -665,7 +683,13 @@ export interface DreyApi {
    * into a `drey-asset://` URL. Rejects if the resolved folder escapes the
    * vault.
    */
-  saveVaultAsset(bytes: Uint8Array, ext: string, noteRelPath: string, vaultId?: string): Promise<string>;
+  saveVaultAsset(
+    bytes: Uint8Array,
+    ext: string,
+    noteRelPath: string,
+    vaultId?: string,
+    preferredName?: string,
+  ): Promise<string>;
 
   /**
    * Downloads a web image and saves it like `saveVaultAsset` (ADR-0028) --
@@ -760,6 +784,16 @@ export interface DreyApi {
    * user cancelled. Rejects if the chosen location is outside that vault.
    */
   pickSavePath(suggestedName: string, vaultId?: string): Promise<string | null>;
+
+  /**
+   * Exports a note as PDF (paper-styled, A4, page-numbered footer): main
+   * renders the note's Markdown body to HTML, prints it in a hidden window
+   * and writes the result to a location chosen in the native save dialog.
+   * Resolves to the saved ABSOLUTE path, or `null` if the user cancelled.
+   * Unlike `pickSavePath` the target is deliberately NOT restricted to the
+   * vault -- an export is meant to leave the vault.
+   */
+  exportNotePdf(request: PdfExportRequest): Promise<string | null>;
 
   /**
    * Builds the Markdown a fresh daily note for `date` (`YYYY-MM-DD`) would

@@ -9,6 +9,7 @@ import {
 } from '@angular/core';
 import { Editor } from '../editor/editor';
 import { ImageTab } from '../image-viewer';
+import { PdfTab } from '../pdf-viewer';
 import { DocKindRegistry, PluginDocHost } from '../plugin-host';
 import { EditorService } from '../services/editor.service';
 import { TabBar } from '../tab-bar/tab-bar';
@@ -44,7 +45,7 @@ const OWNS_DROP = '.cm-content, input, textarea, [contenteditable="true"]';
 @Component({
   selector: 'app-pane-leaf',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [TabBar, Editor, ImageTab, PluginDocHost],
+  imports: [TabBar, Editor, ImageTab, PdfTab, PluginDocHost],
   templateUrl: './pane-leaf.html',
   styleUrl: './pane-leaf.css',
   host: {
@@ -78,10 +79,9 @@ export class PaneLeaf {
    */
   protected readonly pluginDocKind = computed(() => {
     const kind = this.activeDoc()?.kind;
-    if (kind === undefined || kind === 'text' || kind === 'image') {
-      return undefined;
-    }
-    return this.docKinds.get(kind) ?? null;
+    return kind === undefined || kind === 'text' || kind === 'image' || kind === 'pdf'
+      ? undefined
+      : this.docKinds.get(kind) ?? null;
   });
 
   protected readonly focused = computed(() => this.panes.focusedId() === this.paneId());

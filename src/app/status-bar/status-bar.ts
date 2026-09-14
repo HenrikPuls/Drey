@@ -40,7 +40,7 @@ export class StatusBar {
    */
   protected readonly docKindStatus = computed<string | null>(() => {
     const doc = this.editor.docFor(this.editor.activePath());
-    if (doc === null || doc.kind === 'text' || doc.kind === 'image') {
+    if (doc === null || doc.kind === 'text' || doc.kind === 'image' || doc.kind === 'pdf') {
       return null;
     }
     return this.docKinds.statusTextFor(doc.kind, doc.path);

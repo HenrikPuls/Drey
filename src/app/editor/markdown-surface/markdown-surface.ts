@@ -41,7 +41,7 @@ import {
   wikilinks,
 } from '../wikilinks';
 import { pasteUrlAsMarkdownLink } from '../paste-link';
-import { resolveVaultImageCandidates } from '../vault-image';
+import { assetUrlToVaultPath, resolveVaultImageCandidates } from '../vault-image';
 import { EditorExtensionRegistry, DropDecoderRegistry } from '../../plugin-host';
 
 /**
@@ -466,6 +466,14 @@ export class MarkdownSurface implements AfterViewInit, OnDestroy {
                     this.editor.openPath() ?? '',
                     this.editor.openVaultId() ?? this.vault.activeVaultId(),
                   ),
+                // PDFs keep their file name in attachments/ (ADR-0052).
+                saveNamed: (bytes, fileName) =>
+                  this.vault.saveNamedAsset(
+                    bytes,
+                    fileName,
+                    this.editor.openPath() ?? '',
+                    this.editor.openVaultId() ?? this.vault.activeVaultId(),
+                  ),
                 notePath: () => this.editor.openPath(),
                 readTextFile: (path, vaultId) =>
                   this.vault.readTextFile(path, vaultId ?? this.editor.openVaultId() ?? undefined),
@@ -584,6 +592,13 @@ export class MarkdownSurface implements AfterViewInit, OnDestroy {
             resolveVaultImageCandidates(this.editor.openPath(), url, this.editor.openVaultId()),
           onOpenImage: (src) => this.lightbox.open(src),
           onZoomDiagram: (dataUrl) => this.lightbox.open(dataUrl),
+          // The PDF embed's lens opens the file as a full PDF tab.
+          onOpenPdf: (src) => {
+            const target = assetUrlToVaultPath(src);
+            if (target) {
+              void this.editor.openFile(target.path, target.vaultId ?? undefined);
+            }
+          },
         })
       : [];
   }
