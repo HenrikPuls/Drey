@@ -14,12 +14,12 @@
  * retry before the failure surfaces.
  */
 import type { ChatAttachment, ChatMessage, LlmChatResult, ToolSpec } from '../../../shared/llm';
-import { parseJsonObject } from '../../../shared/llm';
 import { pickPreviewStyle } from '../../../shared/text-diff';
 import { formatDateTime } from '../../../shared/timestamp';
 import type { AppConfig } from '../../../shared/app-config';
 import type { LlmCapabilities } from '../../../shared/llm';
 import type { AskRequest, AssistantOutcome } from '../shared/ask';
+import { extractDocumentFence } from '../shared/document-fence';
 import {
   ChatNoteAttachment,
   ChatNoteTurn,
@@ -245,6 +245,17 @@ export class ChatEngine {
     }
     const durationMs = Date.now() - startedAt;
 
+    // A tool loop can end without the model ever speaking (round cap, a
+    // model that only calls tools). For a live-edit turn that is fine —
+    // the outcome names what was applied. For everything else an empty
+    // answer card is exactly the "no response" the beta testers saw, so
+    // fail like any other generation (the user turn truncates back, the
+    // renderer reports the error and keeps the question for a re-send).
+    if (liveSession === null && result.text.trim() === '') {
+      await this.store.truncateFrom(chatPath, userTurnIndex);
+      throw new Error('The model returned no message content.');
+    }
+
     // 5 · The reply: a live turn's changes are already applied — the
     // model's text is the summary (the providers deliver an empty text
     // when the round cap hit mid-loop, so a fallback names what happened).
@@ -264,10 +275,13 @@ export class ChatEngine {
         text: result.text.trim() || fallback,
       };
     } else {
-      const obj = parseJsonObject(result.text);
-      if (request.note !== null && obj?.['kind'] === 'edit' && typeof obj['document'] === 'string') {
+      // ADR-0053: a change arrives as a `document` fence; a question (and
+      // any reply without a usable fence — a prose decline, a truncated
+      // document) degrades to a plain answer instead of a raw-JSON card.
+      const fence = extractDocumentFence(result.text);
+      if (request.note !== null && fence !== null) {
         const body = request.note.body;
-        const after = normalizeDoc(obj['document']);
+        const after = normalizeDoc(fence.document);
         outcome = {
           kind: 'edit',
           before: body,
@@ -276,8 +290,7 @@ export class ChatEngine {
           summary: request.question.trim(),
         };
       } else {
-        const text = typeof obj?.['text'] === 'string' ? obj['text'] : result.text.trim();
-        outcome = { kind: 'answer', text };
+        outcome = { kind: 'answer', text: result.text.trim() };
       }
     }
 

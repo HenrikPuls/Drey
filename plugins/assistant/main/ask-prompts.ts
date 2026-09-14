@@ -9,27 +9,31 @@ import { MAX_EXTRA_FILES } from '../shared/ask.js';
 
 export const ASK_SYSTEM = `You are working on a Markdown document. The user either asks a question about it or gives an instruction to change it. Further files may be attached below the document; treat them as read-only reference for this reply.
 
-Respond ONLY with JSON, no prose around it:
-- Question (answer only, change nothing): {"kind":"answer","text":"<answer>"}
-- Change: {"kind":"edit","document":"<the full changed document>"}
+Two reply forms, nothing else:
+- Question (answer only, change nothing): answer in plain prose. No JSON, no code fences around the answer.
+- Change: at most one short lead-in sentence, then the FULL changed document in a fenced block whose info string is "document", opened with FOUR backticks so ordinary fences inside the document survive:
+
+\`\`\`\`document
+...the complete document...
+\`\`\`\`
 
 For a change you ALWAYS return the whole document, not just the changed part.
-Earlier turns of this conversation are shown as plain text; your reply must still be one of the JSON forms above.`;
+Earlier turns of this conversation are shown as plain text; these two reply forms still apply.`;
 
 /**
  * Answer-only variant, used when the note chip is deselected (`note:
- * null`): there is no document to edit, so the edit JSON form is dropped
- * entirely — the model has nothing to return a whole document against.
+ * null`): there is no document to edit, so the document-fence form is
+ * dropped entirely — the model has nothing to return a whole document
+ * against.
  */
 export const ASK_ANSWER_SYSTEM = `You are answering the user's questions about their note vault. The attached files are read-only context for this reply -- there is no document to edit.
 
-Respond ONLY with JSON, no prose around it:
-- {"kind":"answer","text":"<answer>"}
+Answer in plain prose. No JSON, no code fences around the answer.
 
-Earlier turns of this conversation are shown as plain text; your reply must still be the JSON form above.`;
+Earlier turns of this conversation are shown as plain text; this reply form still applies.`;
 
 /** Appended to `ASK_SYSTEM` when the vault tool set is available (ADR-0021). */
-export const ASK_TOOLS_NOTE = `You may call the vault tools (vault_search, vault_read, vault_write) to look things up in the wider vault or to make changes elsewhere before you give your final JSON answer. A vault_write is confirmed by the user unless the app is in YOLO mode.`;
+export const ASK_TOOLS_NOTE = `You may call the vault tools (vault_search, vault_read, vault_write) to look things up in the wider vault or to make changes elsewhere before you give your final answer. A vault_write is confirmed by the user unless the app is in YOLO mode.`;
 
 /** One-line catch-up for a resumed session that never saw the confirm result. */
 export function editCatchUpLine(path: string, applied: boolean): string {

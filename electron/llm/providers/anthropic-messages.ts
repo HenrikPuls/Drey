@@ -383,11 +383,22 @@ export class AnthropicMessagesProvider implements LlmClient {
         throw this.httpError(status, text);
       }
 
-      const json = JSON.parse(text) as {
+      let json: {
         content?: AnthropicBlock[];
         usage?: { input_tokens?: unknown; output_tokens?: unknown };
         error?: { type?: unknown; message?: unknown };
       };
+      try {
+        json = JSON.parse(text) as typeof json;
+      } catch {
+        // A 200 whose body is not JSON — a clean bad-reply instead of a
+        // leaked SyntaxError (same stance as the OpenAI-compatible path).
+        throw new LlmError(
+          'bad-reply',
+          'The endpoint returned a body that is not JSON.',
+          text.slice(0, 200),
+        );
+      }
       if (json.error && typeof json.error.message === 'string') {
         throw new LlmError('http', `HTTP 200 — ${json.error.message}`);
       }
@@ -435,12 +446,7 @@ export class AnthropicMessagesProvider implements LlmClient {
         .filter((block): block is Extract<AnthropicBlock, { type: 'text' }> => block.type === 'text')
         .map((block) => block.text)
         .join('');
-      if (textOut !== '' || blocks.length === 0) {
-        if (textOut === '' && blocks.length === 0) {
-          // Empty body -- give back what we can rather than throw, like the
-          // OpenAI path does past the round cap.
-          return { text: '', ...(toolTrace.length > 0 ? { toolTrace } : {}) };
-        }
+      if (textOut !== '') {
         options.onDelta?.(textOut);
         return {
           text: textOut,
@@ -448,8 +454,19 @@ export class AnthropicMessagesProvider implements LlmClient {
           ...(toolTrace.length > 0 ? { toolTrace } : {}),
         };
       }
-      // Only non-text blocks (e.g. tool_use past the round cap) came back.
-      return { text: '', ...(toolTrace.length > 0 ? { toolTrace } : {}) };
+      if (toolTrace.length > 0) {
+        // The loop ran tools but the model never spoke: give back what we
+        // can — the live-edit turn names what happened over this empty
+        // text instead of showing an error after applying the changes
+        // (same stance as the OpenAI-compatible path).
+        return { text: '', toolTrace };
+      }
+      // Silent-empty is how "no response" looked to the user — surface it.
+      throw new LlmError(
+        'bad-reply',
+        'The endpoint returned no message content.',
+        `round ${round} of ${maxRounds}`,
+      );
     }
   }
 

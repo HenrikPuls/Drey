@@ -139,7 +139,7 @@ interface ChatHarness {
 
 function chatHarness(
   reply: (call: ChatCall, index: number) => LlmChatResult | Error = () => ({
-    text: '{"kind":"answer","text":"Antwort."}',
+    text: 'Antwort.',
   }),
   options: { llm?: boolean; mcp?: boolean } = {},
 ): ChatHarness {
@@ -294,7 +294,7 @@ describe('assistant plugin chat engine — persistence (bug-10b)', () => {
     const h = chatHarness((call, index) =>
       index === 0
         ? {
-            text: '{"kind":"answer","text":"Mit Werkzeug gefunden."}',
+            text: 'Mit Werkzeug gefunden.',
             toolTrace: [
               {
                 role: 'assistant',
@@ -310,7 +310,7 @@ describe('assistant plugin chat engine — persistence (bug-10b)', () => {
               { role: 'tool', tool_call_id: 't1', content: '3 hits' },
             ],
           }
-        : { text: '{"kind":"answer","text":"ok"}' },
+        : { text: 'ok' },
     );
     const first = await h.engine.ask(ASK);
     // MCP off: no vault tools ride the call.
@@ -361,7 +361,7 @@ describe('assistant plugin chat engine — persistence (bug-10b)', () => {
 describe('assistant plugin chat engine — sessions vs replay', () => {
   function sessionHarness(): ChatHarness {
     const h = chatHarness((call, index) =>
-      index === 0 ? { text: '{"kind":"answer","text":"eins"}', sessionRef: 'sess-1' } : { text: '{"kind":"answer","text":"zwei"}' },
+      index === 0 ? { text: 'eins', sessionRef: 'sess-1' } : { text: 'zwei' },
     );
     h.setCapabilities({ sessions: true });
     h.setConfig({ provider: 'claude-code' });
@@ -390,7 +390,7 @@ describe('assistant plugin chat engine — sessions vs replay', () => {
 
   it('resumed session catch-up: the confirm result the session never saw', async () => {
     const edited = chatHarness(() => ({
-      text: '{"kind":"edit","document":"# Geändert\\n"}',
+      text: '````document\n# Geändert\n````',
       sessionRef: 'sess-9',
     }));
     edited.setCapabilities({ sessions: true });
@@ -435,13 +435,13 @@ describe('assistant plugin chat engine — failure semantics', () => {
     let attempt = 0;
     const h = chatHarness((_call, index) => {
       if (index === 0) {
-        return { text: '{"kind":"answer","text":"eins"}', sessionRef: 'sess-1' };
+        return { text: 'eins', sessionRef: 'sess-1' };
       }
       attempt++;
       if (attempt === 1) {
         return new Error('No conversation found with session sess-1');
       }
-      return { text: '{"kind":"answer","text":"retry hat geklappt"}' };
+      return { text: 'retry hat geklappt' };
     });
     h.setCapabilities({ sessions: true });
     h.setConfig({ provider: 'claude-code' });
@@ -459,7 +459,7 @@ describe('assistant plugin chat engine — failure semantics', () => {
 
 describe('assistant plugin chat engine — edit proposals', () => {
   it('an edit reply persists the proposal marker and returns the confirm outcome', async () => {
-    const h = chatHarness(() => ({ text: '{"kind":"edit","document":"# Geändert\\n"}' }));
+    const h = chatHarness(() => ({ text: '````document\n# Geändert\n````' }));
     const { outcome, chatPath } = await h.engine.ask({ ...ASK, question: 'Mach das anders.' });
 
     expect(outcome.kind).toBe('edit');
@@ -493,14 +493,59 @@ describe('assistant plugin chat engine — edit proposals', () => {
     expect(String(user.content).match(/FILE \(/g)).toHaveLength(MAX_EXTRA_FILES);
   });
 
-  it('note chip off uses the answer-only prompt and degrades an edit reply', async () => {
-    const h = chatHarness(() => ({ text: '{"kind":"edit","document":"# Anders\\n"}' }));
+  it('note chip off uses the answer-only prompt and ignores a document fence', async () => {
+    const h = chatHarness(() => ({ text: '````document\n# Anders\n````' }));
     const { outcome } = await h.engine.ask({ ...ASK, note: null, question: 'Was steht in b.md?' });
     const system = h.calls[0].messages[0];
     expect(system.content).toContain('no document to edit');
-    expect(outcome.kind).toBe('answer');
-    if (outcome.kind === 'answer') {
-      expect(outcome.text).toContain('"kind":"edit"');
+    // No edit target exists: the reply stays a plain answer, verbatim.
+    expect(outcome).toEqual({ kind: 'answer', text: '````document\n# Anders\n````' });
+  });
+});
+
+describe('assistant plugin chat engine — document-fence protocol (ADR-0053)', () => {
+  it('an edit request with no usable fence degrades to a plain answer', async () => {
+    const h = chatHarness(() => ({ text: 'I would rather not change the document.' }));
+    const { outcome } = await h.engine.ask({ ...ASK, question: 'Mach das anders.' });
+    // A prose decline streams as an answer; it is NOT a parse failure.
+    expect(outcome).toEqual({ kind: 'answer', text: 'I would rather not change the document.' });
+  });
+
+  it('a document fence with inner ``` fences survives intact', async () => {
+    const reply = [
+      'Here is the change:',
+      '````document',
+      '# T',
+      '```js',
+      'code();',
+      '```',
+      '# More',
+      '````',
+    ].join('\n');
+    const h = chatHarness(() => ({ text: reply }));
+    const { outcome } = await h.engine.ask({ ...ASK, question: 'Mach das anders.' });
+    expect(outcome.kind).toBe('edit');
+    if (outcome.kind === 'edit') {
+      expect(outcome.after).toBe('# T\n```js\ncode();\n```\n# More\n');
     }
+  });
+
+  it('a tools-ran-but-empty reply fails instead of showing an empty card', async () => {
+    const h = chatHarness(() => ({
+      text: '',
+      toolTrace: [
+        {
+          role: 'assistant',
+          content: null,
+          tool_calls: [
+            { id: 't1', type: 'function', function: { name: 'vault_search', arguments: '{}' } },
+          ],
+        },
+        { role: 'tool', tool_call_id: 't1', content: '3 hits' },
+      ],
+    }));
+    await expect(h.engine.ask(ASK)).rejects.toThrow(/no message content/);
+    const path = [...h.files.keys()][0];
+    expect(parseChatNote(h.files.get(path)!).turns).toHaveLength(0);
   });
 });

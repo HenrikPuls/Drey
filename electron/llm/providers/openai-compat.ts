@@ -463,13 +463,25 @@ export class OpenAiCompatProvider implements LlmClient {
         throw this.httpError(status, text, endpoint);
       }
 
-      const json = JSON.parse(text) as {
+      let json: {
         choices?: Array<{
           message?: { content?: unknown; tool_calls?: ChatMessage['tool_calls'] };
         }>;
         usage?: { prompt_tokens?: unknown; completion_tokens?: unknown };
         error?: { message?: unknown };
       };
+      try {
+        json = JSON.parse(text) as typeof json;
+      } catch {
+        // A 200 whose body is not JSON (a proxy's HTML error page, a
+        // truncated stream collected as text) — as a clean bad-reply
+        // instead of a leaked SyntaxError.
+        throw new LlmError(
+          'bad-reply',
+          'The endpoint returned a body that is not JSON.',
+          text.slice(0, 200),
+        );
+      }
       // OpenRouter reports some failures as HTTP 200 with an error body.
       if (json.error && typeof json.error.message === 'string') {
         throw new LlmError('http', `HTTP 200 — ${json.error.message}`);
@@ -505,7 +517,7 @@ export class OpenAiCompatProvider implements LlmClient {
         continue;
       }
 
-      if (typeof message?.content === 'string') {
+      if (typeof message?.content === 'string' && message.content !== '') {
         // Non-streamed: an onDelta caller still gets exactly one call.
         options.onDelta?.(message.content);
         return {
@@ -514,12 +526,18 @@ export class OpenAiCompatProvider implements LlmClient {
           ...(toolTrace.length > 0 ? { toolTrace } : {}),
         };
       }
-      // A model that keeps calling tools past the round cap, or returns an
-      // empty message -- give back what we can rather than throw.
-      if (round >= maxRounds) {
-        return { text: '', ...(toolTrace.length > 0 ? { toolTrace } : {}) };
+      if (toolTrace.length > 0) {
+        // The loop ran tools but the model never spoke: give back what we
+        // can — the live-edit turn names what happened over this empty
+        // text instead of showing an error after applying the changes.
+        return { text: '', toolTrace };
       }
-      throw new LlmError('bad-reply', 'The endpoint returned no message content.');
+      // Silent-empty is how "no response" looked to the user — surface it.
+      throw new LlmError(
+        'bad-reply',
+        'The endpoint returned no message content.',
+        `round ${round} of ${maxRounds}`,
+      );
     }
   }
 
