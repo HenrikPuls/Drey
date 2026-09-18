@@ -132,3 +132,12 @@ the same corner (they did on a mermaid diagram — the only widget with
 both). A revealed fence's raw lines also gain the `.lp-reveal` rounded
 container. Details in [ADR-0009](0009-live-preview-decorations.md)'s
 "Later change" section.
+
+## Later change — diagrams also render in the PDF export (milestone 32)
+
+The export window gets its own mermaid: main inlines the UMD bundle
+(`mermaid/dist/mermaid.min.js`, light paper theme, not this ADR's dark
+editor config) into the generated page and a bootstrap renders each
+` ```mermaid ` fence to an SVG figure before `printToPDF`, with the code
+block as the bounded fallback. Details in
+[ADR-0052](0052-pdf-embeds-and-viewer.md)'s "Later change" section.

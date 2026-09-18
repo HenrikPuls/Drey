@@ -49,7 +49,9 @@ restore, keybindings, spellcheck, the MCP vault server, the LLM
   section-search provider the tags plugin registers),
   `pdf-export.ts` (the "Export as PDF…" flow: paper-styled HTML from
   `shared/pdf-html.ts` printed in a hidden sandboxed window; its own save
-  dialog, deliberately NOT vault-root-restricted).
+  dialog, deliberately NOT vault-root-restricted; notes with a
+  ` ```mermaid ` fence get the mermaid UMD bundle inlined so the fences
+  render as figures — ADR-0052 later change).
 - `ipc/` — the base channel handlers (thin, feature-free).
 
 **Base, renderer** (`src/app/`):

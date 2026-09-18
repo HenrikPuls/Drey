@@ -1875,18 +1875,27 @@ sequenceDiagram
     EH->>PX: exportNoteToPdf(deps, request)
     PX->>VM: readFile (when no content) / resolveAssetPath (images, default folder)
     PX->>PX: shared/pdf-html.ts — frontmatter off, task glyphs, images → file:// URLs, paper CSS
+    PX->>PX: ```mermaid fence? inline the mermaid UMD bundle (once per session) + bootstrap
     PX->>User: native save dialog (any folder — NOT vault-restricted)
     User-->>PX: target path (or cancel → null, silent no-op)
     PX->>HW: write temp HTML, loadFile, wait for images (10 s cap)
+    HW->>HW: bootstrap swaps each rendered SVG in for its ```mermaid code block (20 s cap/diagram; parse error → the code block stays)
     HW->>PX: printToPDF({ A4, printBackground, footer "n / m" })
     PX-->>ES: saved absolute path
 ```
 
 `shared/pdf-html.ts` is pure (string in/out, the `shared/frontmatter.ts`
-precedent) and unit-tested from `src/app/services/pdf-html.spec.ts`; the
-mermaid + `[[wikilink]]` fallbacks (code block / literal text) are
-decisions, not gaps. The temp page and hidden window are destroyed in a
-`finally`, so a failed print leaves nothing behind.
+precedent) and unit-tested from `src/app/services/pdf-html.spec.ts` — the
+bootstrap itself is executed there against a stub mermaid in a real
+iframe. Since milestone 32 a ` ```mermaid ` fence no longer stays a code
+block: main inlines the bundled `mermaid/dist/mermaid.min.js` (read from
+the packaged `dependencies` tree, ~3.5 MB, only when the note has such a
+fence) and the bootstrap renders each fence to a light-themed SVG figure
+before the print; a parse error, the 20 s per-diagram cap or a missing
+bundle leaves the plain code block. `[[wikilink]]` stays literal text by
+decision (it names an in-vault target a PDF reader can't follow). The
+temp page and hidden window are destroyed in a `finally`, so a failed
+print leaves nothing behind.
 
 ## 6.40 Drop a PDF into a note → staged, embedded, readable in place (ADR-0052)
 

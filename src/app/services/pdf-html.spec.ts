@@ -1,5 +1,7 @@
 import {
   buildNotePdfHtml,
+  hasMermaidFence,
+  MERMAID_BOOTSTRAP,
   replaceTaskMarkers,
   rewriteEmbedWikilinks,
   stripActiveHtml,
@@ -137,5 +139,172 @@ describe('rewriteEmbedWikilinks (milestone 31)', () => {
         decodeURIComponent(url) === 'pic with spaces.png' ? 'file:///resolved.png' : null,
     });
     expect(html).toContain('src="file:///resolved.png"');
+  });
+});
+
+describe('hasMermaidFence (milestone 32)', () => {
+  it('detects backtick and tilde mermaid fences, extra info words included', () => {
+    expect(hasMermaidFence('```mermaid\ngraph TD\nA-->B\n```')).toBe(true);
+    expect(hasMermaidFence('~~~mermaid\ngraph TD\nA-->B\n~~~')).toBe(true);
+    expect(hasMermaidFence('```mermaid extra words\nA-->B\n```')).toBe(true);
+    // Unclosed fence: markdown-it renders it to EOF with that language.
+    expect(hasMermaidFence('```mermaid\ngraph TD')).toBe(true);
+  });
+
+  it('ignores the word inside other fences and other languages', () => {
+    expect(hasMermaidFence('```js\nmermaid would be nice\n```')).toBe(false);
+    expect(hasMermaidFence('```mermaidx\nA-->B\n```')).toBe(false);
+    // The tracker closes at the inner markers, so the info string is never
+    // seen -- and markdown-it (closing fences take no info string) also
+    // renders no mermaid block here. Same verdict by different paths.
+    expect(hasMermaidFence('```\n```mermaid\nA-->B\n```\n```')).toBe(false);
+  });
+});
+
+describe('buildNotePdfHtml mermaid runtime (milestone 32)', () => {
+  const FENCE = '```mermaid\ngraph TD\nA-->B\n```';
+
+  it('embeds nothing without a fence, even when a runtime is given', () => {
+    const html = buildNotePdfHtml({ markdown: '# t', mermaidRuntime: { script: 'window.X=1;' } });
+    expect(html).not.toContain('<script');
+  });
+
+  it('keeps the code block when no runtime is available', () => {
+    const html = render(FENCE);
+    expect(html).toContain('<code class="language-mermaid">');
+    expect(html).not.toContain('<script');
+  });
+
+  it('inlines bundle and bootstrap when the note has a mermaid fence', () => {
+    const html = buildNotePdfHtml({ markdown: FENCE, mermaidRuntime: { script: 'window.X=1;' } });
+    expect(html).toContain('window.X=1;');
+    expect(html).toContain('__dreyMermaidSettled');
+    // The code block stays in the markup -- it is the fallback the
+    // bootstrap replaces (or leaves on a parse error).
+    expect(html).toContain('<code class="language-mermaid">');
+  });
+
+  it('a </script> sequence inside the runtime cannot close the element early', () => {
+    const html = buildNotePdfHtml({
+      markdown: FENCE,
+      mermaidRuntime: { script: 'var s = "</scr" + "</script><script>alert(1)</script>";' },
+    });
+    expect(html).not.toContain('</script><script>alert');
+    expect(html).toContain('<\\/script>');
+  });
+
+  it('note-authored scripts stay stripped even when the runtime is embedded', () => {
+    const html = buildNotePdfHtml({
+      markdown: `<script>alert(1)</script>\n\n${FENCE}`,
+      mermaidRuntime: { script: 'window.X=1;' },
+    });
+    expect(html).not.toContain('<script>alert');
+    expect(html).toContain('window.X=1;');
+  });
+
+  it('the paper stylesheet carries the figure rules', () => {
+    expect(render('# t')).toContain('.mermaid-figure');
+    expect(render('# t')).toContain('break-inside: avoid');
+  });
+});
+
+describe('MERMAID_BOOTSTRAP (executed in a real iframe)', () => {
+  interface StubMermaid {
+    initialize: (config: Record<string, unknown>) => void;
+    render: (id: string, source: string) => Promise<{ svg: string }>;
+  }
+  interface FrameWindow {
+    mermaid?: StubMermaid;
+    __dreyMermaidSettled?: Promise<unknown>;
+  }
+
+  const frames: HTMLIFrameElement[] = [];
+
+  afterEach(() => {
+    while (frames.length > 0) {
+      frames.pop()?.remove();
+    }
+  });
+
+  /** An about:blank iframe with the given body; the bootstrap runs against it. */
+  function mount(bodyHtml: string): { doc: Document; win: FrameWindow } {
+    const frame = document.createElement('iframe');
+    frames.push(frame);
+    document.body.appendChild(frame);
+    const doc = frame.contentDocument!;
+    doc.open();
+    doc.write(`<!doctype html><html><body>${bodyHtml}</body></html>`);
+    doc.close();
+    const win = frame.contentWindow as unknown as FrameWindow;
+    return { doc, win };
+  }
+
+  function run(doc: Document): void {
+    const script = doc.createElement('script');
+    script.textContent = MERMAID_BOOTSTRAP;
+    doc.body.appendChild(script); // executes synchronously
+  }
+
+  /** A stub that renders every source, "leaking" mermaid's `d<id>` node. */
+  function stubMermaid(doc: Document, rendered: string[], broken?: string): StubMermaid {
+    return {
+      initialize: () => undefined,
+      render: (id: string, source: string) => {
+        rendered.push(source);
+        const leftover = doc.createElement('div');
+        leftover.id = `d${id}`;
+        doc.body.appendChild(leftover);
+        if (broken !== undefined && source.includes(broken)) {
+          return Promise.reject(new Error('Parse error'));
+        }
+        return Promise.resolve({ svg: `<svg><text>${source}</text></svg>` });
+      },
+    };
+  }
+
+  it('replaces a renderable fence with the figure and cleans the measuring node', async () => {
+    const { doc, win } = mount('<pre><code class="language-mermaid">graph TD\nA-->B</code></pre>');
+    const rendered: string[] = [];
+    win.mermaid = stubMermaid(doc, rendered);
+    run(doc);
+
+    await win.__dreyMermaidSettled;
+    expect(rendered).toEqual(['graph TD\nA-->B']);
+    const figures = doc.querySelectorAll('figure.mermaid-figure');
+    expect(figures.length).toBe(1);
+    expect(figures[0].querySelector('svg text')?.textContent).toBe('graph TD\nA-->B');
+    expect(doc.querySelector('pre')).toBeNull();
+    // mermaid's offscreen node is gone again.
+    expect(doc.querySelectorAll('div[id^="d"]').length).toBe(0);
+  });
+
+  it('a parse error leaves the code block in place', async () => {
+    const { doc, win } = mount('<pre><code class="language-mermaid">BROKEN</code></pre>');
+    win.mermaid = stubMermaid(doc, [], 'BROKEN');
+    run(doc);
+
+    await win.__dreyMermaidSettled;
+    expect(doc.querySelector('figure')).toBeNull();
+    const code = doc.querySelector('pre > code');
+    expect(code?.textContent).toBe('BROKEN');
+  });
+
+  it('without a mermaid global nothing happens at all', () => {
+    const { doc, win } = mount('<pre><code class="language-mermaid">graph TD</code></pre>');
+    run(doc);
+
+    expect(win.__dreyMermaidSettled).toBeUndefined();
+    expect(doc.querySelector('pre > code')?.textContent).toBe('graph TD');
+  });
+
+  it('non-mermaid code blocks are untouched', async () => {
+    const { doc, win } = mount('<pre><code class="language-js">let x = 1;</code></pre>');
+    const rendered: string[] = [];
+    win.mermaid = stubMermaid(doc, rendered);
+    run(doc);
+
+    await win.__dreyMermaidSettled;
+    expect(rendered).toEqual([]);
+    expect(doc.querySelector('pre > code')?.textContent).toBe('let x = 1;');
   });
 });

@@ -101,3 +101,41 @@ The `DropDecoderContrib` seam stays plugin-shaped and untouched.
   Ctrl+click on the embed (the lens and the Files panel cover it).
 - The Office half of Req-2 (Word/Excel/PowerPoint) stays open — PDF is
   the only format the platform renders natively.
+
+## Later change — mermaid diagrams render in the PDF export (milestone 32)
+
+The milestone-30 export deliberately shipped with mermaid fences staying
+code blocks (mermaid was a renderer-side Live Preview widget, and the
+export window has no editor bundle). That scope-cut is reopened: a note
+with a ` ```mermaid ` fence now exports the diagram, not the source.
+
+**The hidden export window renders the fences itself.** Main resolves
+`mermaid/dist/mermaid.min.js` (the UMD bundle already shipped in
+`dependencies` — read from `app.asar/node_modules` in a packed build) and
+`shared/pdf-html.ts` inlines it, plus a small bootstrap script, into the
+generated page **only when the note actually has such a fence**
+(`hasMermaidFence`, the same fence-tracking shape as the task-glyph and
+embed rewrites). After `loadFile`, main awaits the bootstrap's
+`__dreyMermaidSettled` promise before `printToPDF`. The bootstrap
+initialises mermaid for the *light paper page* (`theme: 'default'` — the
+editor's dark config is deliberately not reused; the PDF leaves the
+vault), renders every `<code class="language-mermaid">` block and
+replaces it with a `<figure class="mermaid-figure">`.
+
+**Fallbacks, in order of preference:** a parse/render error leaves that
+fence's code block; a diagram exceeding the 20 s per-diagram cap prints
+its code block (the bootstrap races each render); a failed/missing
+bundle read (`loadMermaidScript` returns null) means no scripts are
+inlined at all and every fence prints as code. Note-authored markup
+cannot reach the script layer — `stripActiveHtml` still strips it, and
+the inlined scripts are appended after that pass; the only
+`</script>`-safety concern is the bundle itself, escaped (`</script` →
+`<\/script`) before inlining.
+
+Render-in-the-window was chosen over pre-rendering main-side (mermaid
+needs a DOM; the window already is one) and over a renderer-side
+pre-render over IPC (it would complicate the request contract for the
+Files-panel entry point, which exports never-opened files, and move the
+3.5 MB bundle into the renderer's payload path). The unit suite executes
+the extracted bootstrap against a stub mermaid in a real iframe — no
+unit-test DOM gap between the script's text and its behavior.

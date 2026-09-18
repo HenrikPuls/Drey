@@ -3,7 +3,9 @@
  * panel row). One flow: read the note (or take the renderer's live buffer),
  * render it to a self-contained paper-styled HTML page
  * (`shared/pdf-html.ts`), print that page in a hidden sandboxed window and
- * write `printToPDF`'s buffer to a user-chosen location.
+ * write `printToPDF`'s buffer to a user-chosen location. Notes with
+ * ` ```mermaid ` fences get the mermaid UMD bundle inlined (see
+ * {@link loadMermaidScript}) so the fences render as diagrams in the page.
  *
  * Deliberately NOT routed through `VaultManager.pickSavePath`: that dialog
  * is `.md`-locked and throws outside the vault, while an export is meant to
@@ -14,9 +16,10 @@ import { app, BrowserWindow, dialog } from 'electron';
 import * as fs from 'node:fs';
 import * as fsp from 'node:fs/promises';
 import * as path from 'node:path';
+import { createRequire } from 'node:module';
 import { pathToFileURL } from 'node:url';
 import { resolveAssetRef } from '../shared/asset-refs';
-import { buildNotePdfHtml } from '../shared/pdf-html';
+import { buildNotePdfHtml, hasMermaidFence } from '../shared/pdf-html';
 import { PdfExportRequest } from '../shared/ipc-api';
 import { VaultManager } from './vault-manager';
 
@@ -24,6 +27,31 @@ export interface PdfExportDeps {
   vaultManager: VaultManager;
   /** The window the native dialog parents to; null when it is gone. */
   getParentWindow: () => BrowserWindow | null;
+}
+
+let mermaidScriptPromise: Promise<string | null> | null = null;
+
+/**
+ * The mermaid UMD bundle, read once per session and only for notes that
+ * actually contain a ` ```mermaid ` fence (it is ~3.5 MB). Resolved through
+ * the packaged `dependencies` tree -- `app.asar/node_modules` in a packed
+ * build (Electron's fs reads asar entries directly), the repo checkout in
+ * dev. A failed read returns null and the export falls back to plain code
+ * blocks.
+ */
+function loadMermaidScript(): Promise<string | null> {
+  if (mermaidScriptPromise === null) {
+    mermaidScriptPromise = (async () => {
+      try {
+        const nodeRequire = createRequire(__filename);
+        const bundle = nodeRequire.resolve('mermaid/dist/mermaid.min.js');
+        return await fsp.readFile(bundle, 'utf-8');
+      } catch {
+        return null;
+      }
+    })();
+  }
+  return mermaidScriptPromise;
 }
 
 export async function exportNoteToPdf(
@@ -52,10 +80,18 @@ export async function exportNoteToPdf(
     return null;
   };
 
+  // Mermaid fences render as diagrams: the UMD runtime is inlined into the
+  // page and a bootstrap script swaps each rendered SVG in for its code
+  // block (per-diagram 20 s cap; a parse error leaves the code block).
+  // Only notes with such a fence pay the bundle read; a failed read
+  // degrades to plain code blocks.
+  const mermaidScript = hasMermaidFence(content) ? await loadMermaidScript() : null;
+
   const html = buildNotePdfHtml({
     markdown: content,
     title: path.basename(request.path).replace(/\.md$/i, ''),
     resolveImageSrc,
+    mermaidRuntime: mermaidScript === null ? undefined : { script: mermaidScript },
   });
 
   const target = await pickExportTarget(getParentWindow(), vaultManager, request);
@@ -85,6 +121,19 @@ export async function exportNoteToPdf(
        ])`,
       true,
     );
+    // Wait for the inlined mermaid runtime to settle every diagram
+    // (rendered SVG or code-block fallback). The bootstrap caps each
+    // diagram at 20 s; the outer race is the belt for a page that never
+    // set the promise -- skipping the wait just prints the code blocks.
+    if (mermaidScript !== null) {
+      await win.webContents.executeJavaScript(
+        `Promise.race([
+           window.__dreyMermaidSettled ?? Promise.resolve(),
+           new Promise((resolve) => setTimeout(resolve, 30000)),
+         ])`,
+        true,
+      );
+    }
     const pdf = await win.webContents.printToPDF({
       printBackground: true,
       pageSize: 'A4',

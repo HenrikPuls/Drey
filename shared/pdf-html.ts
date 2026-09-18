@@ -10,9 +10,13 @@
  * PDF is meant to leave the vault, so it deliberately does NOT follow the
  * dark app theme.
  *
- * Out of scope by decision: mermaid fences stay code blocks (mermaid is a
- * renderer-side Live Preview widget), and `[[wikilinks]]` stay literal
- * text (they name in-vault targets a PDF reader can't follow).
+ * Mermaid fences render as diagrams when the caller passes the mermaid
+ * runtime script (`mermaidRuntime`, read main-side from the packaged
+ * dependency): it is inlined into the page together with a bootstrap that
+ * swaps each rendered SVG in for its code block. Without the runtime -- or
+ * on a parse error / per-diagram timeout -- the fence stays a code block.
+ * `[[wikilinks]]` stay literal text by decision (they name in-vault
+ * targets a PDF reader can't follow).
  */
 import MarkdownIt from 'markdown-it';
 import { imageExtension, pdfExtension } from './asset-name';
@@ -30,6 +34,13 @@ export interface PdfHtmlOptions {
    * through and relative ones are dropped.
    */
   resolveImageSrc?: (rawUrl: string) => string | null;
+  /**
+   * The mermaid UMD bundle (`mermaid/dist/mermaid.min.js`, exposes
+   * `globalThis.mermaid`), inlined verbatim so the print window can render
+   * ` ```mermaid ` fences. Embedded only when the note actually has a
+   * mermaid fence; absent → the fences stay code blocks.
+   */
+  mermaidRuntime?: { script: string };
 }
 
 /** Task-list glyphs (GFM checkboxes don't exist in print CSS). */
@@ -123,13 +134,116 @@ export function rewriteEmbedWikilinks(markdown: string): string {
 }
 
 /**
+ * Whether the note contains a ` ```mermaid ` fenced block (fence tracking
+ * like {@link replaceTaskMarkers}; the info string's first token decides,
+ * the same predicate the Live Preview widget uses via `fenceLang`). Main
+ * uses this to skip reading the ~3.5 MB mermaid runtime for notes that
+ * have no diagram.
+ */
+export function hasMermaidFence(markdown: string): boolean {
+  const lines = markdown.split('\n');
+  let inFence = false;
+  let fenceMarker = '';
+  for (const line of lines) {
+    const fence = line.trim().match(/^(`{3,}|~{3,})\s*(.*)$/);
+    if (fence) {
+      if (!inFence) {
+        inFence = true;
+        fenceMarker = fence[1][0];
+        const info = fence[2].trim().split(/\s+/)[0]?.toLowerCase() ?? '';
+        if (info === 'mermaid') {
+          return true;
+        }
+      } else if (fence[1][0] === fenceMarker) {
+        inFence = false;
+      }
+      continue;
+    }
+  }
+  return false;
+}
+
+/**
+ * Makes a script safe to inline into a `<script>` element: a literal
+ * `</script` anywhere in the text (string literal, regex, …) would close
+ * the element early. `<\/script` is the same character sequence once the
+ * JS engine reads it (`\/` === `/` in strings and templates, an escaped
+ * slash in regexes), and outside those it cannot occur in valid JS.
+ */
+function escapeInlineScript(script: string): string {
+  return script.replace(/<\/script/gi, '<\\/script');
+}
+
+/**
+ * Runs after the mermaid bundle has loaded: initialises mermaid for the
+ * light paper page (the editor's dark config is deliberately not reused --
+ * the PDF leaves the vault), renders every ` ```mermaid ` code block and
+ * replaces it with a `<figure class="mermaid-figure">`. A parse/render
+ * error or the 20 s per-diagram cap leaves that block untouched, and the
+ * `__dreyMermaidSettled` promise tells main when every diagram has
+ * settled. Plain ES5 style -- it is inlined into the generated page.
+ *
+ * Exposed for the renderer unit suite, which executes it against a stub
+ * `mermaid` in a real iframe (the same suite runs in Chrome).
+ */
+export const MERMAID_BOOTSTRAP = `
+(function () {
+  'use strict';
+  var blocks = Array.prototype.slice.call(
+    document.querySelectorAll('pre > code.language-mermaid'));
+  if (blocks.length === 0 || typeof window.mermaid === 'undefined') {
+    return;
+  }
+  window.mermaid.initialize({
+    startOnLoad: false,
+    securityLevel: 'strict',
+    theme: 'default',
+    darkMode: false,
+    suppressErrorRendering: true,
+    fontFamily: "ui-sans-serif, system-ui, 'Segoe UI', 'Helvetica Neue', sans-serif"
+  });
+  var seq = 0;
+  function withCap(promise, cap) {
+    return Promise.race([promise, new Promise(function (resolve) {
+      setTimeout(resolve, cap);
+    })]);
+  }
+  window.__dreyMermaidSettled = Promise.all(blocks.map(function (code) {
+    var id = 'drey-pdf-' + (seq += 1);
+    var pre = code.parentElement;
+    var done = window.mermaid.render(id, code.textContent)
+      .then(function (result) {
+        var fig = document.createElement('figure');
+        fig.className = 'mermaid-figure';
+        fig.innerHTML = result.svg;
+        if (pre !== null && pre.parentElement !== null) {
+          pre.parentElement.replaceChild(fig, pre);
+        }
+      })
+      .catch(function () {
+        /* Parse or layout failure: the code block stays. */
+      })
+      .then(function () {
+        var leftover = document.getElementById('d' + id);
+        if (leftover !== null) {
+          leftover.remove();
+        }
+      });
+    return withCap(done, 20000);
+  }));
+})();
+`.trim();
+
+/**
  * Renders the note to a complete HTML document. `[[wikilinks]]` pass
  * through as literal text (markdown-it leaves unknown syntax alone;
  * media embeds are rewritten to images first, see
- * {@link rewriteEmbedWikilinks}); mermaid fences stay code blocks.
+ * {@link rewriteEmbedWikilinks}). Mermaid fences stay code blocks in the
+ * markup -- when {@link PdfHtmlOptions.mermaidRuntime} is given they are
+ * rendered in the page by the inlined runtime before the print.
  */
 export function buildNotePdfHtml(options: PdfHtmlOptions): string {
-  const { markdown, title, resolveImageSrc } = options;
+  const { markdown, title, resolveImageSrc, mermaidRuntime } = options;
   const body = rewriteEmbedWikilinks(splitFrontmatter(markdown).body);
   const md = new MarkdownIt({ html: true, typographer: true });
 
@@ -173,6 +287,12 @@ export function buildNotePdfHtml(options: PdfHtmlOptions): string {
   const safeTitle = (title ?? '').trim();
   const headingHtml =
     safeTitle && !/^<h[1-6]\b/m.test(html.trim()) ? `<h1>${md.utils.escapeHtml(safeTitle)}</h1>\n` : '';
+  // Appended AFTER stripActiveHtml: the note's own markup never yields a
+  // script tag; these two are ours (bundle + bootstrap).
+  const mermaidScripts =
+    mermaidRuntime !== undefined && hasMermaidFence(body)
+      ? `\n<script>${escapeInlineScript(mermaidRuntime.script)}</script>\n<script>${MERMAID_BOOTSTRAP}</script>\n`
+      : '';
   return `<!doctype html>
 <html>
 <head>
@@ -183,7 +303,7 @@ ${PAPER_CSS}
 </style>
 </head>
 <body>
-${headingHtml}${html}
+${headingHtml}${html}${mermaidScripts}
 </body>
 </html>
 `;
@@ -251,4 +371,12 @@ const PAPER_CSS = `
   }
   img { max-width: 100%; }
   hr { border: none; border-top: 1px solid #e4e6e8; margin: 1.5em 0; }
+  .mermaid-figure {
+    margin: 1em 0;
+    break-inside: avoid;
+  }
+  .mermaid-figure svg {
+    max-width: 100%;
+    height: auto;
+  }
 `;
