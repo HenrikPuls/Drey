@@ -91,7 +91,7 @@ const plugin: PluginRendererModule = {
       const items: ContextMenuItem[] = library.recent.map((t) => ({
         label: t.name,
         run: () => {
-          void library.insert(t.relativePath).then(showResult);
+          void library.insert(t.relativePath).then((result) => showResult(api, result));
         },
       }));
       return items;
@@ -109,10 +109,10 @@ const plugin: PluginRendererModule = {
 
 type InsertResult = { ok: boolean; message?: string };
 
-/** Surfaces an insert failure: the alert is rare and matches how base errors surfaced. */
-function showResult(result: InsertResult): void {
+/** Surfaces an insert failure through the app's dialog (never `window.alert` — electron#41602). */
+function showResult(api: DreyPluginApi, result: InsertResult): void {
   if (!result.ok && result.message !== undefined) {
-    window.alert(result.message);
+    void api.ui.showMessage(result.message, 'Insert template failed');
   }
 }
 
@@ -218,7 +218,7 @@ function openRowMenu(
   menu.appendChild(
     button('tpl-row-menu-item', 'Insert at the cursor', () => {
       closeRowMenu();
-      void library.insert(entry.relativePath).then(showResult);
+      void library.insert(entry.relativePath).then((result) => showResult(api, result));
     }),
   );
   menu.appendChild(

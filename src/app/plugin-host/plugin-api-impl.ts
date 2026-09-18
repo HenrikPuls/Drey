@@ -22,6 +22,7 @@ import { ConfirmationService } from '../llm/confirmation.service';
 import { KeybindingService } from '../keybindings';
 import { EditTargetService } from '../services/edit-target.service';
 import { EditorService } from '../services/editor.service';
+import { ConfirmDialogService } from '../services/confirm-dialog.service';
 import { LogService } from '../services/log.service';
 import { OverlayGuardService } from '../services/overlay-guard.service';
 import { SettingsService } from '../services/settings.service';
@@ -61,6 +62,7 @@ export class PluginApiFactory {
   private readonly widgets = inject(WidgetRegistryService);
   private readonly settingsPages = inject(SettingsCategoryRegistry);
   private readonly confirm = inject(ConfirmationService);
+  private readonly dialogs = inject(ConfirmDialogService);
   private readonly settings = inject(SettingsService);
   private readonly overlayGuard = inject(OverlayGuardService);
   private readonly extensions = inject(EditorExtensionRegistry);
@@ -288,6 +290,7 @@ export class PluginApiFactory {
           track(teardown);
           return teardown;
         },
+        showMessage: (message, title) => this.dialogs.message({ message, title }),
       },
       editor: {
         cm: HOST_CODEMIRROR,

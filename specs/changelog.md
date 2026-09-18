@@ -652,9 +652,12 @@ covers the delete / remove-vault / dirty-tab-close prompts and every
 Files-panel error alert. Main-side native dialogs
 (`showOpenDialog`/`showSaveDialog`/`showMessageBox`) call
 `refocusRenderer()` (`electron/focus.ts`) as they resolve, and the
-recover-input handler now refocuses the webContents too. Known remainder:
-four `window.alert` calls in the meeting/templates plugins (the plugin SDK
-has no dialog API yet).
+recover-input handler now refocuses the webContents too. A same-day
+follow-up closed the last remainder: the plugin SDK gained
+`api.ui.showMessage(message, title?)` (minor 8 — the app's own OK-only
+dialog, queuing like the native calls did), and the four `window.alert`
+calls in the meeting/templates plugins go through it — no native
+`alert()`/`confirm()` call is left in the renderer.
 
 bug-8 — the Files panel gained a **multi-selection** (project request):
 Ctrl+click toggles rows into the set, Shift+click / Shift+arrow extend a

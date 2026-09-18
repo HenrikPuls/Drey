@@ -46,7 +46,7 @@ running the previous build (a changed renderer module 404s). Verify with
 
 - `apiVersion` is a **major gate**: a manifest whose major differs from
   `PLUGIN_API_VERSION.major` (`shared/plugin-api/versions.ts`, currently
-  `{ major: 1, minor: 7 }`) is never imported — the plugin shows up in
+  `{ major: 1, minor: 8 }`) is never imported — the plugin shows up in
   Settings → Panels & plugins as incompatible. Minor bumps are additive.
 - `main` is optional (a renderer-only plugin needs none); `css` is a list
   of stylesheets injected next to the renderer module.
@@ -75,6 +75,11 @@ Styling rules, in order of enforcement:
 3. **No `px` font sizes.** Type is rem-based (`0.74rem` hints,
    `0.8–0.88rem` body — see `src/app/settings/settings-forms.css` for the
    scale) so the app-wide type-size setting applies to your UI too.
+4. **No native dialogs.** `window.alert()` / `confirm()` break Windows
+   keyboard focus after dismissal (electron#41602). Use
+   `api.ui.showMessage(message, title?)` for acknowledgements — the app's
+   own OK-only dialog, queuing like the native calls did — and
+   `api.ui.showModal` for anything interactive.
 
 ## Settings pages
 

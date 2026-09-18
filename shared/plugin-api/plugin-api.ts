@@ -370,6 +370,13 @@ export interface DreyPluginApi {
      * programmatically (picker Enter/Esc). Idempotent.
      */
     showModal(mount: (el: HTMLElement) => void): () => void;
+    /**
+     * An OK-only acknowledgement dialog in the app's own UI — the safe
+     * replacement for `window.alert()`, whose native dialog breaks Windows
+     * keyboard focus after dismissal (electron#41602). Resolves once
+     * acknowledged; sequential calls queue like the native dialogs did.
+     */
+    showMessage(message: string, title?: string): Promise<void>;
   };
 
   readonly editor: {

@@ -30,7 +30,7 @@ const plugin: PluginRendererModule = {
 
     const insert = (markdown: string): void => {
       if (!api.documents.insertAtCursor(markdown)) {
-        window.alert('Open a note before importing a meeting.');
+        void api.ui.showMessage('Open a note before importing a meeting.');
       }
     };
 
@@ -51,7 +51,7 @@ const plugin: PluginRendererModule = {
         label: 'Import meeting …',
         run: () => {
           if (api.documents.active() === null) {
-            window.alert('Open a note before importing a meeting.');
+            void api.ui.showMessage('Open a note before importing a meeting.');
             return;
           }
           void api.backend
@@ -61,7 +61,7 @@ const plugin: PluginRendererModule = {
                 insert(block);
               }
             })
-            .catch((error: unknown) => window.alert(String(error)));
+            .catch((error: unknown) => api.ui.showMessage(String(error), 'Import meeting failed'));
         },
       },
     ]);
