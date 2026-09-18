@@ -5,6 +5,14 @@
 Accepted — implemented in the "visual shell" milestone (rebuild of the
 design prototype).
 
+**Amended (milestone 32):** opening a file now closes the focused pane's
+*clean* active tab, so following documents replaces the view instead of
+accumulating tabs. A dirty focused tab stays and the new file opens
+alongside; registered plugin doc kinds and the already-open reveal path
+are excluded (their state is not behind the file), and internal flows
+(session restore, `saveAs`, the Files panel's multi-select open) pass
+`keepFocused` to opt out. See `EditorService.openFile` / `openDailyNote`.
+
 ## Context
 
 Milestone 3 built the editor as strictly one document at a time:

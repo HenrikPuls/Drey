@@ -389,9 +389,12 @@ src/                Angular renderer (standalone components, esbuild via Angular
       vault.service.ts     -> src/app/vault/ (see above)
       editor.service.ts    Multi-document state: openDocs[] + activePath, with computed
                             openPath/savedContent/bufferContent/viewMode/isDirty over the
-                            active doc; openFile/openDailyNote/closeTab; unsaved drafts;
-                            newEntryRequest + pure newDailyEntryEdit(); setViewMode
-                            persists the last mode as the new-note default (drey.editor)
+                            active doc; openFile/openDailyNote replace the focused CLEAN
+                            tab when the new file opens (dirty stays, plugin kinds and
+                            the reveal path excluded; internal flows pass keepFocused);
+                            closeTab; unsaved drafts; newEntryRequest + pure
+                            newDailyEntryEdit(); setViewMode persists the last mode as
+                            the new-note default (drey.editor)
       calendar.service.ts  Mini-calendar view state (month, selected day) + weeks grid +
                             "has a daily note" lookup off VaultService.fileTree
                             (the configured daily folder, SettingsService.dailyDir)

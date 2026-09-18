@@ -191,15 +191,93 @@ describe('EditorService', () => {
   });
 
   describe('tabs', () => {
-    it('keeps every opened file as its own tab and re-activates an already-open one', async () => {
+    it('replaces the clean focused tab when another file opens', async () => {
       await service.openFile('a.md');
+      await service.openFile('b.md');
+      expect(service.openDocs().map((d) => d.path)).toEqual(['b.md']);
+      expect(service.openPath()).toBe('b.md');
+    });
+
+    it('re-activates an already-open file without closing anything (reveal)', async () => {
+      await service.openFile('a.md');
+      await service.openFile('b.md', undefined, { keepFocused: true });
+      await service.openFile('a.md');
+      expect(service.openDocs().map((d) => d.path)).toEqual(['a.md', 'b.md']);
+      expect(service.openPath()).toBe('a.md');
+    });
+
+    it('opens alongside a dirty focused tab', async () => {
+      await service.openFile('a.md');
+      service.updateBuffer('a.md', 'content of a.md + edit');
       await service.openFile('b.md');
       expect(service.openDocs().map((d) => d.path)).toEqual(['a.md', 'b.md']);
       expect(service.openPath()).toBe('b.md');
+      expect(service.docFor('a.md')?.bufferContent).toBe('content of a.md + edit');
+    });
 
+    it('keeps the focused tab when it turned dirty while the new file was read', async () => {
       await service.openFile('a.md');
-      expect(service.openDocs().length).toBe(2);
+      // Gate b.md's read so the buffer edit lands while the open is in flight.
+      let release: (() => void) | null = null;
+      const base = window.dreyApi as DreyApi;
+      window.dreyApi = {
+        ...base,
+        readVaultFile: (relativePath: string) =>
+          relativePath === 'b.md'
+            ? new Promise<{ content: string; modifiedMs: number }>((resolve) => {
+                release = () => resolve({ content: 'content of b.md', modifiedMs: 100 });
+              })
+            : base.readVaultFile(relativePath),
+      } as DreyApi;
+      const opening = service.openFile('b.md');
+      service.updateBuffer('a.md', 'typed during the read');
+      release!();
+      await opening;
+
+      expect(service.openDocs().map((d) => d.path)).toEqual(['a.md', 'b.md']);
+      expect(service.openPath()).toBe('b.md');
+    });
+
+    it('keeps the focused tab when the read of the new file fails', async () => {
+      await service.openFile('a.md');
+      (window.dreyApi as unknown as { readVaultFile: unknown }).readVaultFile = (p: string) =>
+        p === 'gone.md'
+          ? Promise.reject(new Error('ENOENT'))
+          : Promise.resolve({ content: `content of ${p}`, modifiedMs: 1 });
+      await service.openFile('gone.md');
+
+      expect(service.openDocs().map((d) => d.path)).toEqual(['a.md']);
       expect(service.openPath()).toBe('a.md');
+    });
+
+    it('replaces a clean image or pdf viewer tab like any clean tab', async () => {
+      await service.openFile('x.png');
+      await service.openFile('note.md');
+      expect(service.openDocs().map((d) => d.path)).toEqual(['note.md']);
+
+      await service.openFile('docs/spec.pdf');
+      expect(service.openDocs().map((d) => d.path)).toEqual(['docs/spec.pdf']);
+    });
+
+    it('never closes a plugin doc kind tab (its state is not behind the file)', async () => {
+      service.addPluginDoc('browser', 'browser://1', 'New tab');
+      await service.openFile('note.md');
+      expect(service.openDocs().map((d) => d.key)).toEqual(['browser://1', 'note.md']);
+      expect(service.openPath()).toBe('note.md');
+    });
+
+    it('replaces an empty untitled scratch tab, keeps a dirty one', async () => {
+      service.newUntitled(); // empty buffer == empty saved content: clean
+      await service.openFile('note.md');
+      expect(service.openDocs().map((d) => d.path)).toEqual(['note.md']);
+
+      service.openScratch('search-results.md', 'hits'); // dirty from the start
+      await service.openFile('other.md');
+      expect(service.openDocs().map((d) => d.path)).toEqual([
+        'note.md',
+        'search-results.md',
+        'other.md',
+      ]);
     });
 
     it("preserves each tab's unsaved buffer across a switch (no prompt)", async () => {
@@ -215,8 +293,8 @@ describe('EditorService', () => {
 
     it('closes a clean tab and activates its neighbour', async () => {
       await service.openFile('a.md');
-      await service.openFile('b.md');
-      await service.openFile('c.md');
+      await service.openFile('b.md', undefined, { keepFocused: true });
+      await service.openFile('c.md', undefined, { keepFocused: true });
 
       service.activate('b.md');
       service.closeTab('b.md');
@@ -244,8 +322,8 @@ describe('EditorService', () => {
 
       it('moves every tab under a renamed folder', async () => {
         await service.openFile('proj/one.md');
-        await service.openFile('proj/sub/two.md');
-        await service.openFile('other.md');
+        await service.openFile('proj/sub/two.md', undefined, { keepFocused: true });
+        await service.openFile('other.md', undefined, { keepFocused: true });
 
         service.retargetTabs('proj', 'work');
 
@@ -271,6 +349,23 @@ describe('EditorService', () => {
       expect(service.openPath()).toBe('daily/2026/09/2026-09-05.md');
       expect(service.bufferContent()).toBe('content of daily/2026/09/2026-09-05.md');
       expect(service.activeIsDraft()).toBe(false);
+    });
+
+    it('replaces the clean focused tab; a dirty one stays', async () => {
+      await service.openFile('a.md');
+      await service.openDailyNote('2026-09-05');
+      expect(service.openDocs().map((d) => d.path)).toEqual(['daily/2026/09/2026-09-05.md']);
+
+      await service.openFile('b.md', undefined, { keepFocused: true });
+      service.updateBuffer('b.md', 'edit');
+      await service.openDailyNote('2026-09-06');
+      // The first daily tab (clean) is still there from the phase above --
+      // only b.md, dirty, blocked the replacement here.
+      expect(service.openDocs().map((d) => d.path)).toEqual([
+        'daily/2026/09/2026-09-05.md',
+        'b.md',
+        'daily/2026/09/2026-09-06.md',
+      ]);
     });
 
     it('falls back to a pre-existing flat daily note', async () => {

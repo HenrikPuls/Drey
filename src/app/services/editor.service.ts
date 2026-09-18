@@ -451,11 +451,22 @@ export class EditorService {
    * Opens a file in a tab. `vaultId` defaults to the active vault. If it's
    * already open, just activates that tab. Never prompts -- a dirty buffer
    * for another file stays in memory.
+   *
+   * Tab replacement (milestone 32): when the new file opens, the focused
+   * pane's *clean* active tab is closed with it -- following documents
+   * replaces the view instead of accumulating tabs. A dirty focused tab
+   * stays and the new file opens alongside. Only file-view kinds qualify
+   * (see {@link replacedTabCandidate}); the already-open reveal path never
+   * closes anything, and a failed read keeps the tab. Internal composition
+   * flows pass `keepFocused: true`: the session restore reopens the whole
+   * saved tab set, `saveAs` swaps the tab itself, and the Files panel's
+   * multi-select open replaces only on its first call.
    */
-  async openFile(relativePath: string, vaultId?: string): Promise<void> {
+  async openFile(relativePath: string, vaultId?: string, opts: { keepFocused?: boolean } = {}): Promise<void> {
     if (!this.api) {
       return;
     }
+    const victim = opts.keepFocused === true ? null : this.replacedTabCandidate();
     const resolvedVault = vaultId ?? this.vault.activeVaultId();
     const key = docKey(resolvedVault, relativePath);
     if (this.docs().some((d) => d.key === key)) {
@@ -469,6 +480,7 @@ export class EditorService {
     // to open a mojibake buffer that Ctrl+S would write back).
     if (imageExtension(relativePath)) {
       this.addDoc(this.makeImageDoc(relativePath, resolvedVault));
+      this.closeReplacedTab(victim);
       return;
     }
 
@@ -476,6 +488,7 @@ export class EditorService {
     // text buffer.
     if (pdfExtension(relativePath)) {
       this.addDoc(this.makePdfDoc(relativePath, resolvedVault));
+      this.closeReplacedTab(victim);
       return;
     }
 
@@ -484,11 +497,46 @@ export class EditorService {
     try {
       const { content, modifiedMs } = await this.api.readVaultFile(relativePath, resolvedVault ?? undefined);
       this.addDoc(this.makeDoc(relativePath, resolvedVault, content, modifiedMs, true));
+      this.closeReplacedTab(victim);
     } catch (err) {
       this.error.set(err instanceof Error ? err.message : String(err));
     } finally {
       this.isLoading.set(false);
     }
+  }
+
+  /**
+   * The focused pane's active tab IF opening another file may replace it:
+   * a **clean** file-view doc -- text, image or pdf -- whose content is on
+   * disk, so closing it loses nothing. A dirty tab stays; a registered
+   * plugin doc kind (`browser://…`) stays (its live state is not behind
+   * the file, so no re-open would bring it back); `null` when nothing is
+   * focused.
+   */
+  private replacedTabCandidate(): string | null {
+    const doc = this.docFor(this.panes.focusedPane()?.active ?? null);
+    if (doc === null || (doc.kind !== 'text' && doc.kind !== 'image' && doc.kind !== 'pdf')) {
+      return null;
+    }
+    return doc.bufferContent === doc.savedContent ? doc.key : null;
+  }
+
+  /**
+   * Closes the tab captured by {@link replacedTabCandidate} -- after the
+   * new file is safely open. Re-checks cleanliness: if the buffer turned
+   * dirty while the read was in flight (the user typed into it), the tab
+   * stays, per the same rule that never closes a dirty tab.
+   */
+  private closeReplacedTab(victim: string | null): void {
+    if (victim === null) {
+      return;
+    }
+    const doc = this.docFor(victim);
+    if (doc === null || doc.bufferContent !== doc.savedContent) {
+      return;
+    }
+    // The doc is clean at this instant, so no dialog can fire.
+    void this.closeTab(victim, { silent: true });
   }
 
   /**
@@ -542,11 +590,15 @@ export class EditorService {
    * inside that folder -- it's opened normally; otherwise a **draft** tab
    * is opened from the template -- nothing hits disk until the user types
    * and saves. Whatever an older folder setting wrote is never read here.
+   *
+   * Same tab replacement as {@link openFile}: clicking through the calendar
+   * follows days instead of accumulating one clean tab per day.
    */
   async openDailyNote(dateStr: string): Promise<void> {
     if (!this.api) {
       return;
     }
+    const victim = this.replacedTabCandidate();
     const vaultId = this.vault.activeVaultId();
     const dir = this.settings.dailyDir();
     const nestedPath = dailyPathFor(dateStr, dir);
@@ -570,9 +622,11 @@ export class EditorService {
         (await this.tryReadDaily(legacyPath, vaultId));
       if (existing) {
         this.addDoc(this.makeDoc(existing.path, vaultId, existing.content, existing.modifiedMs, true));
+        this.closeReplacedTab(victim);
       } else {
         const template = await this.api.buildDailyNoteContent(dateStr);
         this.addDoc(this.makeDoc(nestedPath, vaultId, template, 0, false));
+        this.closeReplacedTab(victim);
       }
     } catch (err) {
       this.error.set(err instanceof Error ? err.message : String(err));
@@ -990,10 +1044,12 @@ export class EditorService {
     this.isSaving.set(false);
 
     // Swap the scratch/old tab for the real file, then load it fresh so the
-    // buffer, mtime and `existsOnDisk` come from disk.
+    // buffer, mtime and `existsOnDisk` come from disk. `keepFocused`: the
+    // close above already picked this open's tab -- without it the pane's
+    // newly-activated neighbour would be read as the replace victim.
     const previousKey = doc.key;
     this.closeTab(doc.key, { silent: true });
-    await this.openFile(target, targetVault ?? undefined);
+    await this.openFile(target, targetVault ?? undefined, { keepFocused: true });
     // Moving a file out of `.drafts/` (bug-5's exit auto-saves) deletes the
     // draft original -- move semantics, so drafts don't linger in two places.
     if (doc.vaultId !== null && doc.path.startsWith('.drafts/') && doc.path !== target) {

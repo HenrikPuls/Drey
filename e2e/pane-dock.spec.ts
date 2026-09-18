@@ -22,6 +22,24 @@ async function open(page: Page, vaultDir: string, name: string): Promise<void> {
   await page.locator('app-dock[side="left"] .node.file', { hasText: name }).click();
 }
 
+/**
+ * Opens two files side by side. Sequential clicks keep only the last file
+ * any more -- `openFile` replaces the focused clean tab (milestone 32) --
+ * so both rows are selected (Ctrl+click) and opened in one Enter:
+ * `openSelection` replaces only on its first call, so both tabs survive.
+ */
+async function openTwo(page: Page, vaultDir: string, first: string, second: string): Promise<void> {
+  await open(page, vaultDir, first); // replaces the startup daily tab
+  fs.writeFileSync(path.join(vaultDir, second), `# ${second}\n\nbody of ${second}\n`);
+  await page.locator('app-dock[side="left"] .hdr-btn[aria-label="Refresh files"]').click();
+  await page
+    .locator('app-dock[side="left"] .node.file', { hasText: second })
+    .click({ modifiers: ['ControlOrMeta'] });
+  await page.keyboard.press('Enter');
+  await expect(tab(page, first)).toHaveCount(1);
+  await expect(tab(page, second)).toHaveCount(1);
+}
+
 async function centre(locator: Locator): Promise<{ x: number; y: number }> {
   const box = await locator.boundingBox();
   if (!box) {
@@ -121,8 +139,7 @@ test.describe('editor panes in the docks', () => {
     page,
     vaultDir,
   }) => {
-    await open(page, vaultDir, 'a.md');
-    await open(page, vaultDir, 'b.md');
+    await openTwo(page, vaultDir, 'a.md', 'b.md');
     await page.locator('.main-pane app-editor .cm-content').first().click();
     await page.keyboard.press('Control+Alt+Enter'); // split right: b.md into pane 2
     await expect(page.locator('.main-pane app-editor')).toHaveCount(2);

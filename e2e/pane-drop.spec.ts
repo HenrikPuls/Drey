@@ -14,6 +14,19 @@ async function refresh(page: Page): Promise<void> {
   await page.locator('app-dock[side="left"] .hdr-btn[aria-label="Refresh files"]').click();
 }
 
+/** Clicks `first`, then Ctrl+clicks `second` and presses Enter -- sequential
+ * clicks would keep only `second` (`openFile` replaces the focused clean
+ * tab, milestone 32); the multi-selection open keeps both tabs. */
+async function openTwo(page: Page, first: string, second: string): Promise<void> {
+  await page.locator('app-dock[side="left"] .node.file', { hasText: first }).click();
+  await page
+    .locator('app-dock[side="left"] .node.file', { hasText: second })
+    .click({ modifiers: ['ControlOrMeta'] });
+  await page.keyboard.press('Enter');
+  await expect(page.locator('app-tab-bar .tab', { hasText: first })).toHaveCount(1);
+  await expect(page.locator('app-tab-bar .tab', { hasText: second })).toHaveCount(1);
+}
+
 /** Fire a real `DataTransfer`-carrying dragover + drop on `selector`. */
 async function dropVaultPath(page: Page, selector: string, relPath: string): Promise<void> {
   await page.evaluate(
@@ -57,8 +70,7 @@ test.describe('drop a file onto a pane to open it', () => {
     fs.writeFileSync(path.join(vaultDir, 'b.md'), '# b\n\nbody b\n');
     fs.writeFileSync(path.join(vaultDir, 'side.md'), '# side\n\nside note\n');
     await refresh(page);
-    await page.locator('app-dock[side="left"] .node.file', { hasText: 'a.md' }).click();
-    await page.locator('app-dock[side="left"] .node.file', { hasText: 'b.md' }).click();
+    await openTwo(page, 'a.md', 'b.md'); // b.md active
 
     await page.locator('app-editor .cm-content').first().click();
     await page.keyboard.press('Control+Alt+Enter'); // split right: b.md -> pane 2

@@ -29,7 +29,7 @@ describe('OpenWindows', () => {
 
   it('lists open docs and activates one on click', async () => {
     await editor.openFile('a.md');
-    await editor.openFile('b.md');
+    await editor.openFile('b.md', undefined, { keepFocused: true });
     fixture.detectChanges();
 
     const rows = (fixture.nativeElement as HTMLElement).querySelectorAll('.row');
@@ -40,7 +40,7 @@ describe('OpenWindows', () => {
 
   it('closes a tab from the row X', async () => {
     await editor.openFile('a.md');
-    await editor.openFile('b.md');
+    await editor.openFile('b.md', undefined, { keepFocused: true });
     fixture.detectChanges();
 
     const firstClose = (fixture.nativeElement as HTMLElement).querySelector(

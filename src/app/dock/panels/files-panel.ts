@@ -565,9 +565,15 @@ export class FilesPanel {
 
   /** Opens every selected *file*; folders in the selection are skipped. */
   private openSelection(nodes: VisibleNode[]): void {
+    let first = true;
     for (const target of this.selectedEntries(nodes)) {
       if (target.entry.type === 'file') {
-        void this.editor.openFile(target.entry.relativePath, target.vaultId);
+        // Only the first open replaces the focused clean tab (`openFile`'s
+        // default); the rest must open alongside it, not close each other.
+        void this.editor.openFile(target.entry.relativePath, target.vaultId, {
+          keepFocused: !first,
+        });
+        first = false;
       }
     }
   }

@@ -314,7 +314,12 @@ Renderer (Angular):
   facade over the *focused* pane's document (`activePath`, `isDirty`,
   `save()`, word count, …). One pane per open path (not the same note
   live in two panes at once); a tab's own "Split right"/"Split down" (its
-  context menu) creates a sibling pane. Dragging a tab is real DnD via
+  context menu) creates a sibling pane. Opening a file (or a calendar day)
+  **replaces** the focused pane's *clean* tab — a dirty tab stays and the
+  new file opens alongside; plugin doc kinds and the already-open reveal
+  path are excluded, and internal flows (session restore, `saveAs`,
+  multi-select open) pass `keepFocused` (ADR-0003 amendment, milestone 32).
+  Dragging a tab is real DnD via
   `TabDragService` + the shared `src/app/dnd/` overlay (ADR-0039): source
   stays put, ghost chip + drop-line, `no-drop` over an invalid target,
   commit once on release onto a tab strip (precise slot) or a pane body

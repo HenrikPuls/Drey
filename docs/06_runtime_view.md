@@ -76,6 +76,13 @@ buffer dirty; Ctrl+S (or the Save button) writes it back. All document
 state lives in `EditorService` signals — `Editor` owns only the
 CodeMirror instance (source) and the markdown-it render (preview).
 
+Since milestone 32, opening **replaces the view**: if the focused pane's
+active tab is *clean*, it closes once the new file is open, so clicking
+through the tree follows documents instead of accumulating tabs. A dirty
+tab stays and the new file opens alongside; a registered plugin doc kind
+(browser tab) is never the victim — its state is not behind the file.
+Switching itself never prompts (the milestone-3 `confirm()` is long gone).
+
 ```mermaid
 sequenceDiagram
     actor User
@@ -89,21 +96,23 @@ sequenceDiagram
 
     User->>Sidebar: click a file entry
     Sidebar->>EditorService: openFile(relativePath)
-    alt current buffer is dirty
-        EditorService->>User: confirm("discard unsaved changes?")
-        User-->>EditorService: cancel -> abort / OK -> continue
+    EditorService->>EditorService: victim = focused pane's active tab,\nif clean (dirty / plugin kind -> none)
+    alt file already open
+        EditorService->>EditorService: reveal: focus + activate that pane (nothing closes)
+    else new file
+        EditorService->>Preload: readVaultFile(relativePath)
+        Preload->>Main: invoke('vault:read-file', relativePath)
+        Main->>VaultManager: readFile(relativePath)
+        VaultManager->>VaultManager: resolveInVault() -- reject if path escapes vault
+        VaultManager->>FS: readFile + stat
+        FS-->>VaultManager: content, mtimeMs
+        VaultManager-->>Main: { content, modifiedMs }
+        Main-->>Preload: { content, modifiedMs }
+        Preload-->>EditorService: { content, modifiedMs }
+        EditorService->>EditorService: open tab; clean victim closes\n(victim turned dirty mid-read -> stays)
+        EditorService->>EditorService: savedContent = bufferContent = content,\nopenPath = relativePath, viewMode = readDefaultMode() (preview by default)
     end
-    EditorService->>Preload: readVaultFile(relativePath)
-    Preload->>Main: invoke('vault:read-file', relativePath)
-    Main->>VaultManager: readFile(relativePath)
-    VaultManager->>VaultManager: resolveInVault() -- reject if path escapes vault
-    VaultManager->>FS: readFile + stat
-    FS-->>VaultManager: content, mtimeMs
-    VaultManager-->>Main: { content, modifiedMs }
-    Main-->>Preload: { content, modifiedMs }
-    Preload-->>EditorService: { content, modifiedMs }
-    EditorService->>EditorService: savedContent = bufferContent = content,\nopenPath = relativePath, viewMode = readDefaultMode() (preview by default)
-    Note over Editor: effect() sees openPath/savedContent change
+    Note over Editor: effect() sees the pane's shown document change
     Editor->>Editor: dispatch full-doc replace into EditorView
 
     User->>Editor: type

@@ -20,7 +20,9 @@ describe('TabBar', () => {
     editor = TestBed.inject(EditorService);
     panes = TestBed.inject(PaneService);
     await editor.openFile('a.md');
-    await editor.openFile('b.md');
+    // keepFocused: the strip needs both tabs; openFile's default would
+    // replace the clean focused one (the behaviour its own specs cover).
+    await editor.openFile('b.md', undefined, { keepFocused: true });
 
     fixture = TestBed.createComponent(TabBar);
     fixture.componentRef.setInput('paneId', 'p1'); // the single pane both docs land in
@@ -63,7 +65,7 @@ describe('TabBar', () => {
   });
 
   it('defers a tab reorder to the drop: nothing moves until mouseup (ADR-0039)', async () => {
-    await editor.openFile('c.md');
+    await editor.openFile('c.md', undefined, { keepFocused: true });
     fixture.detectChanges();
     const compiled = fixture.nativeElement as HTMLElement;
     const tabs = Array.from(compiled.querySelectorAll<HTMLElement>('.tab'));
@@ -116,7 +118,7 @@ describe('TabBar', () => {
   });
 
   it('offers "Split right" / "Split down" / "Export as PDF…" / "Close others" / "Close all" from the tab context menu', async () => {
-    await editor.openFile('c.md');
+    await editor.openFile('c.md', undefined, { keepFocused: true });
     fixture.detectChanges();
     const compiled = fixture.nativeElement as HTMLElement;
 

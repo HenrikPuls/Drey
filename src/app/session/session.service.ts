@@ -181,7 +181,10 @@ export class SessionService {
   private async restoreTab(tab: SessionTab): Promise<boolean> {
     const key = docKey(tab.vaultId, tab.path);
     if (tab.kind === 'image' || tab.kind === 'pdf') {
-      await this.editor.openFile(tab.path, tab.vaultId ?? undefined);
+      // `keepFocused`: restore reopens the WHOLE saved tab set -- the clean-
+      // focused-tab replacement (`openFile`'s default) would close every tab
+      // but the last.
+      await this.editor.openFile(tab.path, tab.vaultId ?? undefined, { keepFocused: true });
       return this.editor.openDocs().some((d) => d.key === key);
     }
     if (tab.kind !== 'text') {
@@ -210,7 +213,7 @@ export class SessionService {
       const backup = tab.backupId ? await this.api?.readSessionBackup(tab.backupId) : null;
 
       if (tab.onDisk) {
-        await this.editor.openFile(tab.path, tab.vaultId ?? undefined);
+        await this.editor.openFile(tab.path, tab.vaultId ?? undefined, { keepFocused: true });
         const open = this.editor.openDocs().some((d) => d.key === key);
         if (open && backup != null) {
           // Re-apply the unsaved edits over the freshly-read disk content.

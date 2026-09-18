@@ -176,6 +176,35 @@ describe('SessionService', () => {
     expect(panes.focusedId()).toBe('p2');
   });
 
+  it('restores every disk tab side by side (no clean-focused-tab replacement)', async () => {
+    // Regression guard: restore passes `keepFocused` into `openFile`, whose
+    // default would otherwise close each clean tab when the next one opens.
+    writeSession(
+      [
+        { vaultId: VAULT_ID, path: 'notes/a.md', kind: 'text', onDisk: true },
+        { vaultId: VAULT_ID, path: 'notes/b.md', kind: 'text', onDisk: true },
+      ],
+      {
+        root: { kind: 'leaf', paneId: 'p1' },
+        panes: {
+          p1: {
+            id: 'p1',
+            tabs: [`${VAULT_ID}::notes/a.md`, `${VAULT_ID}::notes/b.md`],
+            active: `${VAULT_ID}::notes/b.md`,
+          },
+        },
+        focusedId: 'p1',
+      },
+    );
+
+    expect(await session.restore()).toBe(true);
+    expect(panes.pane('p1')?.tabs).toEqual([
+      `${VAULT_ID}::notes/a.md`,
+      `${VAULT_ID}::notes/b.md`,
+    ]);
+    expect(editor.openDocs().map((d) => d.path).sort()).toEqual(['notes/a.md', 'notes/b.md']);
+  });
+
   it('restores a v1 snapshot by mapping every tab to the active vault', async () => {
     writeSession(
       [
