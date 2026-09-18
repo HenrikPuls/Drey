@@ -1,6 +1,7 @@
 import { TestBed, ComponentFixture } from '@angular/core/testing';
 import { DreyApi, VaultFileEntry, VaultStatus } from '../../../../shared/ipc-api';
 import { EditorService } from '../../services/editor.service';
+import { ConfirmDialogService } from '../../services/confirm-dialog.service';
 import { VaultService } from '../../vault';
 import { FilesPanel } from './files-panel';
 
@@ -419,7 +420,9 @@ describe('FilesPanel multi-select (bug-8)', () => {
 
   it('Delete removes the whole selection in ONE batched IPC call', async () => {
     await renderTree();
-    const confirmDialog = vi.spyOn(window, 'confirm').mockReturnValue(true);
+    const confirmDialog = vi
+      .spyOn(TestBed.inject(ConfirmDialogService), 'confirm')
+      .mockResolvedValue(true);
     const closeTabsUnder = vi.spyOn(TestBed.inject(EditorService), 'closeTabsUnder');
 
     clickRow(1); // a.md
@@ -435,7 +438,7 @@ describe('FilesPanel multi-select (bug-8)', () => {
 
   it('Delete clears a clipboard entry that lived under a deleted folder', async () => {
     await renderTree();
-    vi.spyOn(window, 'confirm').mockReturnValue(true);
+    vi.spyOn(TestBed.inject(ConfirmDialogService), 'confirm').mockResolvedValue(true);
     const vault = TestBed.inject(VaultService);
     vault.clipboard.set({ vaultId: V, path: 'notes/b.md', name: 'b.md' });
 
@@ -637,14 +640,14 @@ describe('FilesPanel drag & drop (req-23 + cross-vault, ADR-0051)', () => {
       ...window.dreyApi,
       renameVaultEntry: () => Promise.reject(new Error('Already exists: notes/a.md')),
     } as unknown as DreyApi;
-    const alertBox = vi.spyOn(window, 'alert').mockReturnValue(undefined);
+    const alertBox = vi.spyOn(TestBed.inject(ConfirmDialogService), 'message').mockResolvedValue();
     const retarget = vi.spyOn(TestBed.inject(EditorService), 'retargetTabs');
 
     host().onFileDragStart({ dataTransfer: fakeDataTransfer() } as DragEvent, V, aMd);
     host().onRowDrop(dragEvent().event, V, notes);
 
     await vi.waitFor(() => expect(alertBox).toHaveBeenCalled());
-    expect(alertBox.mock.calls[0][0]).toContain('Already exists');
+    expect(alertBox.mock.calls[0][0].message).toContain('Already exists');
     expect(retarget).not.toHaveBeenCalled();
   });
 

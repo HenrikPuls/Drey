@@ -14,6 +14,7 @@ import { sidecarPathFor } from '../shared/sidecar';
 import { VaultFileContent, VaultFileEntry, VaultRegistration, VaultStatus } from '../shared/ipc-api';
 import { uniqueCopyName } from '../shared/unique-name';
 import { OwnWriteLedger } from './own-write-ledger';
+import { refocusRenderer } from './focus';
 
 /**
  * `vault-config.json` v2 (ADR-0051): every registered vault plus which one
@@ -185,6 +186,7 @@ export class VaultManager {
       title: 'Add vault folder',
       properties: ['openDirectory', 'createDirectory'],
     });
+    refocusRenderer();
     if (result.canceled || result.filePaths.length === 0) {
       return null;
     }
@@ -304,6 +306,7 @@ export class VaultManager {
       filters: [{ name: 'Markdown', extensions: ['md'] }],
       properties: ['createDirectory', 'showOverwriteConfirmation'],
     });
+    refocusRenderer();
     if (result.canceled || !result.filePath) {
       return null;
     }

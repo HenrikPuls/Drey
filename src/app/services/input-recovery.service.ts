@@ -8,12 +8,17 @@ import { LogService } from './log.service';
  *
  * The project owner hits an intermittent state in the packaged build where
  * **no** input field accepts typed text (mouse selection / copy still
- * work) and only an app restart clears it. Root cause is unknown and not
- * reproducible on the dev machine -- so instead of a speculative fix this
- * service gives (a) a manual escape hatch wired to a menu item + chord,
- * and (b) a periodic check that clears the obvious "leftover overlay /
+ * work) and only an app restart clears it. One trigger is now known: a
+ * dismissed native `confirm()`/`alert()` leaves the Windows window
+ * without keyboard focus (electron#41602 -- Alt+Tab there and back
+ * clears it); those dialogs are gone from the renderer (replaced by
+ * `ConfirmDialogService`), and main's recover handler calls
+ * `refocusRenderer()` as well. Main-side native dialogs refocus through
+ * `electron/focus.ts`. The less reproducible field reports stay covered
+ * the original way: a manual escape hatch wired to a menu item + chord,
+ * and a periodic check that clears the obvious "leftover overlay /
  * gesture" states on its own. Every action is logged (ADR-0032) so a
- * field occurrence finally leaves a trace.
+ * field occurrence leaves a trace.
  */
 @Injectable({ providedIn: 'root' })
 export class InputRecoveryService {

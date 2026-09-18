@@ -581,6 +581,22 @@ main (`window:recover-input`) to force-close such a popup, and every step
 logs to `drey.log` so a field occurrence finally leaves a trace;
 (4) a dead `.menu-backdrop` selector in `InputRecoveryService` was removed.
 
+bug-6 follow-up (2026-09-18) — a reproducible trigger surfaced: deleting a
+file via the Files panel's right-click menu left every input field dead (no
+caret, typing ignored, mouse selection and Delete/Entf still worked; an
+Alt+Tab round trip cleared it). The flow's synchronous `confirm()` is one of
+the native blocking dialogs that break Windows keyboard focus
+(electron#41602, electron#19977). All renderer `confirm()`/`alert()` calls
+are retired: a new in-renderer confirm/message dialog
+(`ConfirmDialogService` + `app-confirm-dialog`, the Exit-prompt pattern)
+covers the delete / remove-vault / dirty-tab-close prompts and every
+Files-panel error alert. Main-side native dialogs
+(`showOpenDialog`/`showSaveDialog`/`showMessageBox`) call
+`refocusRenderer()` (`electron/focus.ts`) as they resolve, and the
+recover-input handler now refocuses the webContents too. Known remainder:
+four `window.alert` calls in the meeting/templates plugins (the plugin SDK
+has no dialog API yet).
+
 bug-8 — the Files panel gained a **multi-selection** (project request):
 Ctrl+click toggles rows into the set, Shift+click / Shift+arrow extend a
 range over the visible rows, Ctrl+arrow moves the cursor without changing

@@ -297,12 +297,12 @@ describe('EditorService', () => {
       await service.openFile('c.md', undefined, { keepFocused: true });
 
       service.activate('b.md');
-      service.closeTab('b.md');
+      await service.closeTab('b.md');
       expect(service.openDocs().map((d) => d.path)).toEqual(['a.md', 'c.md']);
       expect(service.openPath()).toBe('c.md');
 
-      service.closeTab('c.md');
-      service.closeTab('a.md');
+      await service.closeTab('c.md');
+      await service.closeTab('a.md');
       expect(service.openDocs()).toEqual([]);
       expect(service.openPath()).toBeNull();
     });
@@ -708,7 +708,7 @@ describe('EditorService', () => {
 
     it('closes cleanly (never dirty, no prompt)', async () => {
       await service.openFile('docs/spec.pdf');
-      service.closeTab('docs/spec.pdf');
+      await service.closeTab('docs/spec.pdf');
       expect(service.openDocs().some((d) => d.path === 'docs/spec.pdf')).toBe(false);
     });
   });
@@ -729,11 +729,11 @@ describe('EditorService', () => {
       expect(saves).toEqual([]);
     });
 
-    it('closeTab on a browser tab closes cleanly (never dirty, no prompt)', () => {
+    it('closeTab on a browser tab closes cleanly (never dirty, no prompt)', async () => {
       service.addPluginDoc('browser', 'browser://1', 'New tab');
       // A browser doc has savedContent === bufferContent === '' so the
-      // dirty check that would `confirm()` is never reached.
-      service.closeTab('browser://1');
+      // dirty check that would prompt is never reached.
+      await service.closeTab('browser://1');
       expect(service.openDocs().some((d) => d.path === 'browser://1')).toBe(false);
     });
 

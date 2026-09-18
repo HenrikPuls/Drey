@@ -4,6 +4,7 @@ import * as path from 'node:path';
 import { AppConfig, CustomDictionary, IPC_CHANNELS, SpellCheckResult, SpellLanguage } from '../../shared/ipc-api';
 import { AppConfigStore } from '../app-config';
 import { SpellcheckService } from '../spellcheck';
+import { refocusRenderer } from '../focus';
 
 export interface SpellHandlerDeps {
   appConfig: AppConfigStore;
@@ -69,6 +70,7 @@ async function pickDictionary(): Promise<CustomDictionary | null> {
     properties: ['openFile'],
     filters: [{ name: 'Hunspell dictionary', extensions: ['dic'] }],
   });
+  refocusRenderer();
   if (result.canceled || result.filePaths.length === 0) {
     return null;
   }
@@ -82,6 +84,7 @@ async function pickDictionary(): Promise<CustomDictionary | null> {
       message: 'No matching .aff file found',
       detail: `Expected ${path.basename(affPath)} in the same folder as the .dic file.`,
     });
+    refocusRenderer();
     return null;
   }
   const id = path.basename(dicPath, '.dic');

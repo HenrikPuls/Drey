@@ -140,8 +140,9 @@ describe('TabBar', () => {
     ]);
 
     (items[6] as HTMLButtonElement).click(); // "Close others" (keeps b.md, the row that was right-clicked)
+    // closeOthers closes tab by tab through async closeTab calls.
+    await vi.waitFor(() => expect(editor.openDocs().map((d) => d.path)).toEqual(['b.md']));
     fixture.detectChanges();
-    expect(editor.openDocs().map((d) => d.path)).toEqual(['b.md']);
     expect(compiled.querySelector('.ctx-menu')).toBeNull();
   });
 

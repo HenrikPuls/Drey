@@ -22,6 +22,7 @@ import { resolveAssetRef } from '../shared/asset-refs';
 import { buildNotePdfHtml, hasMermaidFence } from '../shared/pdf-html';
 import { PdfExportRequest } from '../shared/ipc-api';
 import { VaultManager } from './vault-manager';
+import { refocusRenderer } from './focus';
 
 export interface PdfExportDeps {
   vaultManager: VaultManager;
@@ -190,6 +191,7 @@ async function pickExportTarget(
     parent !== null && !parent.isDestroyed()
       ? await dialog.showSaveDialog(parent, options)
       : await dialog.showSaveDialog(options);
+  refocusRenderer(parent);
   if (result.canceled || !result.filePath) {
     return null;
   }

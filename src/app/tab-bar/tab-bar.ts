@@ -83,7 +83,7 @@ export class TabBar {
 
   protected onClose(event: MouseEvent, path: string): void {
     event.stopPropagation();
-    this.editor.closeTab(path);
+    void this.editor.closeTab(path);
   }
 
   /** A browser tab's favicon failed to load -- fall back to the globe glyph. */
@@ -164,11 +164,11 @@ export class TabBar {
 
   protected closeOthers(path: string): void {
     this.closeMenu();
-    this.editor.closeOthers(this.paneId(), path);
+    void this.editor.closeOthers(this.paneId(), path);
   }
 
   protected closeAll(): void {
     this.closeMenu();
-    this.editor.closeAll(this.paneId());
+    void this.editor.closeAll(this.paneId());
   }
 }

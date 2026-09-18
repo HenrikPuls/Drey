@@ -8,6 +8,7 @@ import { EditorCommandsService } from '../editor/editor-commands.service';
 import { EditorPrefsService, EditorViewMode } from '../editor/editor-prefs.service';
 import { PaneService } from '../panes/pane.service';
 import { VaultService } from '../vault';
+import { ConfirmDialogService } from './confirm-dialog.service';
 import { SettingsService } from './settings.service';
 
 /** Re-exported for existing importers (`Editor`, specs); defined in `markdown-frontmatter.ts`. */
@@ -142,6 +143,7 @@ export class EditorService {
   private readonly panes = inject(PaneService);
   private readonly prefs = inject(EditorPrefsService);
   private readonly commands = inject(EditorCommandsService);
+  private readonly dialogs = inject(ConfirmDialogService);
   private readonly settings = inject(SettingsService);
 
   private readonly docs = signal<OpenDoc[]>([]);
@@ -662,13 +664,15 @@ export class EditorService {
 
   /**
    * Closes a tab. A dirty tab asks first (the roadmap's minimum bar until
-   * the file watcher forces a real keep-mine / take-external decision).
-   * Closing the active tab activates its neighbour. `silent` skips the
-   * dirty prompt -- used when the underlying file was just deleted, where
-   * "keep editing" is not an option. Resolves to whether the tab actually
-   * closed (a cancelled dirty prompt leaves it open).
+   * the file watcher forces a real keep-mine / take-external decision) --
+   * through the in-renderer confirm dialog, since the native `confirm()`
+   * breaks Windows keyboard focus (electron#41602). Closing the active tab
+   * activates its neighbour. `silent` skips the dirty prompt -- used when
+   * the underlying file was just deleted, where "keep editing" is not an
+   * option. Resolves to whether the tab actually closed (a cancelled dirty
+   * prompt leaves it open).
    */
-  closeTab(key: string, options: { silent?: boolean } = {}): boolean {
+  async closeTab(key: string, options: { silent?: boolean } = {}): Promise<boolean> {
     const doc = this.docs().find((d) => d.key === key);
     if (!doc) {
       return false;
@@ -676,7 +680,12 @@ export class EditorService {
     if (
       !options.silent &&
       doc.bufferContent !== doc.savedContent &&
-      !confirm(`Discard unsaved changes to ${doc.name}?`)
+      !(await this.dialogs.confirm({
+        title: 'Unsaved changes',
+        message: `Discard unsaved changes to ${doc.name}?`,
+        confirmLabel: 'Discard',
+        danger: true,
+      }))
     ) {
       return false;
     }
@@ -695,16 +704,16 @@ export class EditorService {
    * a cancel there leaves that tab (and the rest) open. The key list is
    * snapshotted first (from `PaneService`) because `closeTab` mutates it.
    */
-  closeAll(paneId: string): void {
+  async closeAll(paneId: string): Promise<void> {
     for (const key of this.panes.pane(paneId)?.tabs ?? []) {
-      this.closeTab(key);
+      await this.closeTab(key);
     }
   }
 
-  closeOthers(paneId: string, keepKey: string): void {
+  async closeOthers(paneId: string, keepKey: string): Promise<void> {
     for (const key of this.panes.pane(paneId)?.tabs ?? []) {
       if (key !== keepKey) {
-        this.closeTab(key);
+        await this.closeTab(key);
       }
     }
   }
@@ -720,7 +729,9 @@ export class EditorService {
     const deletedKey = docKey(vaultId, deletedPath);
     for (const doc of this.docs()) {
       if (doc.key === deletedKey || doc.key.startsWith(prefix)) {
-        this.closeTab(doc.key, { silent: true });
+        // Silent closes never await the dialog, so this runs fully
+        // synchronously -- the delete flow depends on that.
+        void this.closeTab(doc.key, { silent: true });
       }
     }
   }
@@ -1048,7 +1059,7 @@ export class EditorService {
     // close above already picked this open's tab -- without it the pane's
     // newly-activated neighbour would be read as the replace victim.
     const previousKey = doc.key;
-    this.closeTab(doc.key, { silent: true });
+    void this.closeTab(doc.key, { silent: true });
     await this.openFile(target, targetVault ?? undefined, { keepFocused: true });
     // Moving a file out of `.drafts/` (bug-5's exit auto-saves) deletes the
     // draft original -- move semantics, so drafts don't linger in two places.

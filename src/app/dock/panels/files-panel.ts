@@ -11,6 +11,7 @@ import {
 } from '@angular/core';
 import { NgTemplateOutlet } from '@angular/common';
 import { EditorService, docKey } from '../../services/editor.service';
+import { ConfirmDialogService } from '../../services/confirm-dialog.service';
 import { VaultService } from '../../vault';
 import { VaultFileEntry, VaultStatus } from '../../../../shared/ipc-api';
 import { Icon } from '../../icons/icon';
@@ -84,6 +85,7 @@ type VisibleNode =
 export class FilesPanel {
   protected readonly vault = inject(VaultService);
   protected readonly editor = inject(EditorService);
+  private readonly dialogs = inject(ConfirmDialogService);
   private readonly host = inject<ElementRef<HTMLElement>>(ElementRef).nativeElement;
 
   /**
@@ -593,6 +595,15 @@ export class FilesPanel {
     }, 0);
   }
 
+  /**
+   * Every legacy `alert()` error path funnels through the in-renderer
+   * message dialog now -- the native one breaks keyboard focus on
+   * Windows (electron#41602).
+   */
+  private showError(err: unknown): void {
+    void this.dialogs.message({ message: err instanceof Error ? err.message : String(err) });
+  }
+
   /** Manual "re-read every vault from disk" (a full round in main, ADR-0045). */
   protected onRefresh(): void {
     void this.vault.refresh();
@@ -604,7 +615,7 @@ export class FilesPanel {
     try {
       await this.vault.addVault();
     } catch (err) {
-      alert(err instanceof Error ? err.message : String(err));
+      this.showError(err);
     }
   }
 
@@ -614,7 +625,7 @@ export class FilesPanel {
     try {
       await this.vault.setActiveVault(vaultId);
     } catch (err) {
-      alert(err instanceof Error ? err.message : String(err));
+      this.showError(err);
     }
   }
 
@@ -643,7 +654,7 @@ export class FilesPanel {
     try {
       await this.vault.renameVault(pending.vaultId, name);
     } catch (err) {
-      alert(err instanceof Error ? err.message : String(err));
+      this.showError(err);
     }
   }
 
@@ -652,7 +663,7 @@ export class FilesPanel {
     try {
       await this.vault.revealVaultFolder(vaultId);
     } catch (err) {
-      alert(err instanceof Error ? err.message : String(err));
+      this.showError(err);
     }
   }
 
@@ -667,7 +678,7 @@ export class FilesPanel {
     try {
       await this.vault.revealPath(entry.relativePath, menu.vaultId);
     } catch (err) {
-      alert(err instanceof Error ? err.message : String(err));
+      this.showError(err);
     }
   }
 
@@ -683,7 +694,7 @@ export class FilesPanel {
     try {
       await this.vault.openInTerminal(dir, menu.vaultId);
     } catch (err) {
-      alert(err instanceof Error ? err.message : String(err));
+      this.showError(err);
     }
   }
 
@@ -695,23 +706,26 @@ export class FilesPanel {
   protected async onRemoveVault(vault: VaultStatus): Promise<void> {
     this.vaultMenu.set(null);
     const tabs = this.editor.openDocs().filter((d) => d.vaultId === vault.id);
-    if (
-      !confirm(
+    const removeConfirmed = await this.dialogs.confirm({
+      title: 'Remove vault',
+      message:
         `Remove vault "${vault.name}" from the list? The folder and its files stay on disk.` +
-          (tabs.length > 0 ? ` ${tabs.length} open tab(s) will be closed.` : ''),
-      )
-    ) {
+        (tabs.length > 0 ? ` ${tabs.length} open tab(s) will be closed.` : ''),
+      confirmLabel: 'Remove',
+      danger: true,
+    });
+    if (!removeConfirmed) {
       return;
     }
     for (const doc of tabs) {
-      if (!this.editor.closeTab(doc.key)) {
+      if (!(await this.editor.closeTab(doc.key))) {
         return; // a dirty-tab prompt was cancelled -- keep the vault
       }
     }
     try {
       await this.vault.removeVault(vault.id);
     } catch (err) {
-      alert(err instanceof Error ? err.message : String(err));
+      this.showError(err);
     }
   }
 
@@ -904,7 +918,7 @@ export class FilesPanel {
         return next;
       });
     } catch (err) {
-      alert(err instanceof Error ? err.message : String(err));
+      this.showError(err);
     }
   }
 
@@ -990,7 +1004,7 @@ export class FilesPanel {
       await this.vault.copyEntry(clip.path, menu.dir, clip.vaultId, menu.vaultId);
       this.expand(menu.vaultId, menu.dir);
     } catch (err) {
-      alert(err instanceof Error ? err.message : String(err));
+      this.showError(err);
     }
   }
 
@@ -1004,7 +1018,7 @@ export class FilesPanel {
     try {
       await this.vault.duplicateEntry(entry.relativePath, menu.vaultId);
     } catch (err) {
-      alert(err instanceof Error ? err.message : String(err));
+      this.showError(err);
     }
   }
 
@@ -1019,7 +1033,7 @@ export class FilesPanel {
     try {
       await this.vault.exportPdf(entry.relativePath, menu.vaultId);
     } catch (err) {
-      alert(err instanceof Error ? err.message : String(err));
+      this.showError(err);
     }
   }
 
@@ -1053,7 +1067,7 @@ export class FilesPanel {
       nextName === '.' ||
       nextName === '..'
     ) {
-      alert(`Invalid name: ${nextName}`);
+      void this.dialogs.message({ message: `Invalid name: ${nextName}` });
       return;
     }
     const parent = parentDir(entry.relativePath);
@@ -1069,7 +1083,7 @@ export class FilesPanel {
         this.vault.clipboard.set({ vaultId: clip.vaultId, path: toPath, name: nextName });
       }
     } catch (err) {
-      alert(err instanceof Error ? err.message : String(err));
+      this.showError(err);
     }
   }
 
@@ -1130,7 +1144,13 @@ export class FilesPanel {
           : 'file'
         : `${targets.length} items`;
     const names = targets.map((t) => `"${t.entry.relativePath}"`).join(', ');
-    if (!confirm(`Delete ${what} ${names}? This cannot be undone.`)) {
+    const deleteConfirmed = await this.dialogs.confirm({
+      title: `Delete ${what}`,
+      message: `${names} will be deleted. This cannot be undone.`,
+      confirmLabel: 'Delete',
+      danger: true,
+    });
+    if (!deleteConfirmed) {
       return;
     }
     for (const target of targets) {
@@ -1156,7 +1176,7 @@ export class FilesPanel {
         await this.vault.deleteEntries(paths, vaultId);
       }
     } catch (err) {
-      alert(err instanceof Error ? err.message : String(err));
+      this.showError(err);
     }
     // Deselect whatever lived under a deleted path (the tree reloads without
     // it; a stale cursor would point at a ghost row).
@@ -1186,7 +1206,7 @@ export class FilesPanel {
       return;
     }
     if (name.includes('/') || name.includes('\\') || name === '.' || name === '..') {
-      alert(`Invalid name: ${name}`);
+      void this.dialogs.message({ message: `Invalid name: ${name}` });
       return;
     }
 
@@ -1199,7 +1219,7 @@ export class FilesPanel {
         await this.editor.openFile(relativePath, pending.vaultId);
       }
     } catch (err) {
-      alert(err instanceof Error ? err.message : String(err));
+      this.showError(err);
     }
   }
 

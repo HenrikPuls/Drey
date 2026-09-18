@@ -20,6 +20,6 @@ export class OpenWindows {
 
   protected onClose(event: MouseEvent, path: string): void {
     event.stopPropagation();
-    this.editor.closeTab(path);
+    void this.editor.closeTab(path);
   }
 }

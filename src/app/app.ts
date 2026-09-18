@@ -2,6 +2,7 @@ import { Component, computed, effect, inject } from '@angular/core';
 import { formatDate } from '../../shared/timestamp';
 import { ImageLightbox } from './image-viewer';
 import { ConfirmationDialog } from './confirmation-dialog/confirmation-dialog';
+import { ConfirmDialog } from './confirm-dialog/confirm-dialog';
 import { ExitConfirmDialog } from './exit-confirm-dialog/exit-confirm-dialog';
 import { SessionService } from './session';
 import { AppearanceService } from './services/appearance.service';
@@ -47,6 +48,7 @@ import { EditorContextMenuRegistry } from './plugin-host';
     PaneLayout,
     Settings,
     ConfirmationDialog,
+    ConfirmDialog,
     ExitConfirmDialog,
     ImageLightbox,
     EditorContextMenu,

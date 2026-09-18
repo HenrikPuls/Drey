@@ -105,6 +105,8 @@ bug - beim öffnen eines vaults werden immer alle folder aufgeklappt und es daue
   automatically get a new chat. If you switch back to another docuemtn, you will get the chat of that document.
   Of course I can add other files from the vault to the context.
   Req - Look at the internal prompts and review them
+  Req - Settings -  Cleanup order of entries in settings dialog, maybe we can order them alphabetically.
+  Req - Review all context menus, bring them in the typical order, add lines where appropiate, add keyboard shortcuts. This is especailly relevant for the editor context menu as there the create pdf is after the templates, however the templates shall always be the last
 
 ### Known-defect remainder
 

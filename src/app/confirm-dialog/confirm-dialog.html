@@ -1,0 +1,34 @@
+@if (service.current(); as req) {
+  <div class="backdrop" appOverlayGuard (click)="service.cancel()"></div>
+  <div
+    class="dialog"
+    role="dialog"
+    aria-modal="true"
+    [attr.aria-labelledby]="req.title ? 'confirm-dialog-title' : null"
+  >
+    @if (req.title) {
+      <header>
+        <h2 id="confirm-dialog-title">{{ req.title }}</h2>
+      </header>
+    }
+    <p class="message" [class.no-title]="!req.title">{{ req.message }}</p>
+    <footer>
+      @if (req.cancelLabel !== null) {
+        <button type="button" class="ghost" (click)="service.cancel()">{{ req.cancelLabel }}</button>
+        <span class="spacer"></span
+        ><button
+          type="button"
+          #confirmButton
+          class="primary"
+          [class.danger]="req.danger"
+          (click)="service.accept()"
+        >
+          {{ req.confirmLabel }}
+        </button>
+      } @else {
+        <span class="spacer"></span
+        ><button type="button" #confirmButton class="primary" (click)="service.accept()">OK</button>
+      }
+    </footer>
+  </div>
+}
