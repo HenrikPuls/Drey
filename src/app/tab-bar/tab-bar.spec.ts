@@ -132,8 +132,8 @@ describe('TabBar', () => {
       'Move to left dock',
       'Move to right dock',
       'Move to bottom dock',
-      'Split right',
-      'Split down',
+      'Split right Ctrl Alt Enter',
+      'Split down Ctrl Alt Shift Enter',
       'Export as PDF…',
       'Close others',
       'Close all',
@@ -154,7 +154,7 @@ describe('TabBar', () => {
     fixture.detectChanges();
 
     const splitRight = [...compiled.querySelectorAll('.ctx-menu button')].find(
-      (b) => b.textContent?.trim() === 'Split right',
+      (b) => b.textContent?.trim().startsWith('Split right'),
     ) as HTMLButtonElement;
     splitRight.click();
     fixture.detectChanges();

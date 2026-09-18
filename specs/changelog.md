@@ -395,6 +395,29 @@ unrouted until their milestones land (see roadmap).
 
 Moved here from the roadmap's former "Completed" chapter.
 
+req-33 — Settings categories in a predictable order. The core
+categories read alphabetically ("Add entry", "Appearance", "Daily
+notes", "LLM", "MCP", "Panels & plugins", "Spelling", "Vault"), plugin
+pages follow sorted by their label, and "About" stays last. This also
+fixes real drift: a plugin page actually rendered *after* "About"
+(registration order put it behind the last core category) while the
+docs claimed "before". The order is pinned by
+`settings-registry.service.spec.ts`.
+
+req-34 — context menus reviewed: typical order, separators, keyboard
+hints. The editor's right-click menu now reads as three groups —
+clipboard (Cut / Copy / Paste / Select all, with their `Ctrl` hints),
+base rows, plugin rows — and the base's "Export as PDF…" row can no
+longer land below the templates rows (registration order used to
+decide, and plugins activate before App's bootstrap, so it did).
+`EditorContextMenuRegistry` gained a `{ head: true }` ordering hint
+instead of a privileged path (ADR-0030 "Later change"): same registry,
+same item shape — base group first, the templates rows last, as
+required. The `⋯` menu shows the Save-as chord, the tab menu shows the
+split chords, and the Files panel's file menu groups copy/paste before
+duplicate/export and reveal/terminal/rename, with delete last as
+before.
+
 Plugin-modal click fix — `ui.showModal`'s backdrop dismissed on **every**
 mousedown, and the modal box is the backdrop's child, so pressing any
 dead spot inside a picker (the "Attach" label, tab-row padding, the gap

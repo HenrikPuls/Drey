@@ -51,12 +51,23 @@ export class MenuContributionsService {
  * open via the callback form, so items can enable/disable dynamically;
  * the callback receives the click target (ADR-0050) so rows can be
  * surface-scoped (embedded image vs image tab vs plain editor position).
+ *
+ * Ordering (req-34): the menu reads as three groups — the built-in
+ * clipboard group (owned by the component), then base rows, then plugin
+ * rows — so a base row registered through this same registry (the
+ * "Export as PDF…" row) never lands below or between plugin rows no
+ * matter when registration happens. The base registers with
+ * `{ head: true }`; plugin registrations (through the plugin API) are
+ * tail by default. Within a group, registration order decides.
  */
+interface ContextMenuProvider {
+  provide: (target: EditorContextMenuTarget) => readonly ContextMenuItem[];
+  head: boolean;
+}
+
 @Injectable({ providedIn: 'root' })
 export class EditorContextMenuRegistry {
-  private readonly providers = signal<
-    readonly ((target: EditorContextMenuTarget) => readonly ContextMenuItem[])[]
-  >([]);
+  private readonly providers = signal<readonly ContextMenuProvider[]>([]);
 
   /**
    * Deliberately a METHOD, not a computed: the callback form is meant to be
@@ -69,23 +80,43 @@ export class EditorContextMenuRegistry {
    * whole menu.
    */
   items(target: EditorContextMenuTarget): readonly ContextMenuItem[] {
-    const out: ContextMenuItem[] = [];
-    for (const provide of this.providers()) {
-      try {
-        out.push(...provide(target));
-      } catch {
-        // a broken plugin contributes nothing this open
+    const { head, tail } = this.groupedItems(target);
+    return [...head, ...tail];
+  }
+
+  /**
+   * The two groups separately, so the menu can place a separator between
+   * base and plugin rows (and omit it when a group is empty).
+   */
+  groupedItems(target: EditorContextMenuTarget): {
+    head: readonly ContextMenuItem[];
+    tail: readonly ContextMenuItem[];
+  } {
+    const collect = (head: boolean): readonly ContextMenuItem[] => {
+      const out: ContextMenuItem[] = [];
+      for (const provider of this.providers()) {
+        if (provider.head !== head) {
+          continue;
+        }
+        try {
+          out.push(...provider.provide(target));
+        } catch {
+          // a broken plugin contributes nothing this open
+        }
       }
-    }
-    return out;
+      return out;
+    };
+    return { head: collect(true), tail: collect(false) };
   }
 
   register(
     items: (target: EditorContextMenuTarget) => readonly ContextMenuItem[],
+    opts: { head?: boolean } = {},
   ): Unsubscribe {
-    this.providers.update((list) => [...list, items]);
+    const provider: ContextMenuProvider = { provide: items, head: opts.head === true };
+    this.providers.update((list) => [...list, provider]);
     return () => {
-      this.providers.update((list) => list.filter((p) => p !== items));
+      this.providers.update((list) => list.filter((p) => p !== provider));
     };
   }
 }

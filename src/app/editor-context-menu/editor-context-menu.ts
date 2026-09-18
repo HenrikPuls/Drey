@@ -25,13 +25,19 @@ export class EditorContextMenu {
   protected readonly editor = inject(EditorService);
   private readonly contributions = inject(EditorContextMenuRegistry);
 
-  /** Plugin-contributed rows, evaluated fresh on every menu open. */
-  protected readonly pluginItems = computed(() => {
+  /** Base rows (head group) and plugin rows (tail group), per menu open. */
+  protected readonly baseItems = computed(() => this.group('head').filter((item) => item.run !== undefined));
+
+  protected readonly pluginItems = computed(() => this.group('tail').filter((item) => item.run !== undefined));
+
+  private group(kind: 'head' | 'tail'): readonly { label: string; disabled?: boolean; run(): void }[] {
     const target = this.svc.menuTarget();
-    return this.svc.anchor() === null || target === null
-      ? []
-      : this.contributions.items(target).filter((item) => item.run !== undefined);
-  });
+    if (this.svc.anchor() === null || target === null) {
+      return [];
+    }
+    const grouped = this.contributions.groupedItems(target);
+    return kind === 'head' ? grouped.head : grouped.tail;
+  }
 
   // Close the menu (and its full-screen backdrop) FIRST, then run the
   // action -- if the action throws, the backdrop must not be left covering
@@ -54,6 +60,14 @@ export class EditorContextMenu {
   protected selectAll(): void {
     this.svc.close();
     this.menu.execEdit('selectAll');
+  }
+
+  protected runBaseItem(index: number): void {
+    const item = this.baseItems()[index];
+    this.svc.close();
+    if (item?.run !== undefined && item.disabled !== true) {
+      item.run();
+    }
   }
 
   protected runPluginItem(index: number): void {

@@ -160,6 +160,28 @@ describe('MenuContributionsService + EditorContextMenuRegistry', () => {
 
     expect(registry.items(target).map((i) => i.label)).toEqual(['ok']);
   });
+
+  it('orders base (head) rows before plugin (tail) rows regardless of registration order (req-34)', () => {
+    TestBed.configureTestingModule({});
+    const registry = TestBed.inject(EditorContextMenuRegistry);
+    const target: import('../../../shared/plugin-api/renderer').EditorContextMenuTarget = {
+      surface: 'editor',
+      docPath: 'n.md',
+      target: document.createElement('div'),
+      lineNumber: null,
+      lineText: null,
+    };
+    // The plugin registers FIRST (activation runs before App's bootstrap),
+    // the base row SECOND — the head flag must still keep the base row on
+    // top, and the groups come back separately for the separator.
+    registry.register(() => [{ label: 'Recent template', run: () => undefined }]);
+    registry.register(() => [{ label: 'Export as PDF…', run: () => undefined }], { head: true });
+
+    expect(registry.items(target).map((i) => i.label)).toEqual(['Export as PDF…', 'Recent template']);
+    const grouped = registry.groupedItems(target);
+    expect(grouped.head.map((i) => i.label)).toEqual(['Export as PDF…']);
+    expect(grouped.tail.map((i) => i.label)).toEqual(['Recent template']);
+  });
 });
 
 describe('DocKindRegistry', () => {

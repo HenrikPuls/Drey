@@ -156,6 +156,14 @@
   cursor: pointer;
 }
 
+.ctx-key {
+  flex: none;
+  margin-left: auto;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--text-7);
+}
+
 .ctx-menu button:hover {
   background: var(--hover-bg);
   color: var(--text-primary);

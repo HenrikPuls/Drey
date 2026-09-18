@@ -76,3 +76,20 @@ main process suppresses its native menu there, keyed on `formControlType`.**
   ADR-0029 verification list; the bounding-rect fallback is the fix.
 - One more capture-phase `window` listener (`contextmenu`), alongside the
   `wheel` (ADR-0015) and `dragover`/`drop` (ADR-0027) guards.
+
+## Later change — grouped ordering: base rows before plugin rows (req-34, 2026-09-18)
+
+The menu's original shape flattened the registry in registration order
+after the clipboard group. Because plugin activation runs before `App`'s
+bootstrap, the base's own "Export as PDF…" row — registered through the
+same registry (ADR-0044 rule 2, no privileged path) — landed **after**
+the templates plugin's recent rows. The registry now carries an ordering
+hint instead: `register(provider, { head?: true })`, where the base
+registers head and plugin registrations (through the plugin API) are tail
+by default. `items()` still returns one flat list (head rows first);
+`groupedItems()` additionally exposes the groups separately so the menu
+can draw a separator between them and omit it when a group is empty.
+Same registry, same item shape, no privileged path — only ordering
+metadata. The clipboard rows gained their keyboard hints (display-only,
+the same "Ctrl X" style as the titlebar menus), and the templates rows
+now sit last, per the owner's requirement.

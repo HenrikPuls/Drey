@@ -111,14 +111,18 @@ export class App {
     // the same registry plugins use (ADR-0044 rule 2); scoped to pane text
     // documents that are Markdown, exactly like the `⋯`-menu row. The
     // target's `docPath` is the editor host's doc KEY (`shownPath()`), so
-    // `exportPdf` resolves it directly.
-    inject(EditorContextMenuRegistry).register((target) => {
-      if (target.surface !== 'editor' || target.docPath === null || !this.editor.isMarkdown(target.docPath)) {
-        return [];
-      }
-      const docKey = target.docPath;
-      return [{ label: 'Export as PDF…', run: () => void this.editor.exportPdf(docKey) }];
-    });
+    // `exportPdf` resolves it directly. `head: true` keeps it in the base
+    // group above the plugin rows (req-34: templates are last).
+    inject(EditorContextMenuRegistry).register(
+      (target) => {
+        if (target.surface !== 'editor' || target.docPath === null || !this.editor.isMarkdown(target.docPath)) {
+          return [];
+        }
+        const docKey = target.docPath;
+        return [{ label: 'Export as PDF…', run: () => void this.editor.exportPdf(docKey) }];
+      },
+      { head: true },
+    );
 
     // Startup, once, after both the vault path and the persisted config are
     // known: restore the previous session's layout + tabs (ADR-0043), then

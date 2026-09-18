@@ -8,10 +8,23 @@
   <div class="ctx-menu" [style.left.px]="a.x" [style.top.px]="a.y">
     <!-- Clipboard rows are editor-surface only: an image tab has nothing to cut. -->
     @if (svc.menuTarget()?.surface !== 'image') {
-      <button type="button" (click)="cut()">Cut</button>
-      <button type="button" (click)="copy()">Copy</button>
-      <button type="button" (click)="paste()">Paste</button>
-      <button type="button" (click)="selectAll()">Select all</button>
+      <button type="button" (click)="cut()">Cut <span class="ctx-key">Ctrl X</span></button>
+      <button type="button" (click)="copy()">Copy <span class="ctx-key">Ctrl C</span></button>
+      <button type="button" (click)="paste()">Paste <span class="ctx-key">Ctrl V</span></button>
+      <button type="button" (click)="selectAll()">Select all <span class="ctx-key">Ctrl A</span></button>
+    }
+
+    @if (baseItems().length > 0) {
+      <div class="ctx-sep"></div>
+      @for (item of baseItems(); track item.label; let i = $index) {
+        <button
+          type="button"
+          [disabled]="item.disabled === true"
+          (click)="runBaseItem(i)"
+        >
+          {{ item.label }}
+        </button>
+      }
     }
 
     @if (pluginItems().length > 0) {

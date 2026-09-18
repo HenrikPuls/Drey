@@ -17,6 +17,10 @@ import { SettingsCategory } from './settings-category';
  * ADR-0016/ADR-0010, now runtime-extensible (ADR-0044): core categories
  * here, plugin pages appended through `api.ui.registerSettingsPage`.
  *
+ * Order (req-33): the core categories read alphabetically, plugin pages
+ * follow sorted by their label, "About" stays last — so the list stays
+ * predictable no matter what registers when.
+ *
  * A plugin page renders through `PluginSettingsHost` and saves immediately
  * (its own `api.settings`) — the core categories keep the draft / Save /
  * Discard flow.
@@ -28,7 +32,8 @@ export class SettingsCategoryRegistry {
 
   readonly categories: Signal<readonly SettingsCategory[]> = computed(() => [
     ...CORE_CATEGORIES,
-    ...this.pluginPages(),
+    ...[...this.pluginPages()].sort((a, b) => a.label.localeCompare(b.label)),
+    ABOUT_CATEGORY,
   ]);
 
   categoryFor(id: string): SettingsCategory | undefined {
@@ -58,8 +63,9 @@ export class SettingsCategoryRegistry {
     this.pageContribs.set(page.id, page);
     this.pluginPages.update((list) => [
       ...list,
-      // Inserted before "About" (the last core category) so plugin pages
-      // read as feature categories, not as app metadata.
+      // Rendered after the core categories (sorted by label there) and
+      // before "About", so plugin pages read as feature categories, not as
+      // app metadata.
       {
         id: page.id,
         label: page.label,
@@ -74,29 +80,37 @@ export class SettingsCategoryRegistry {
   }
 }
 
+/** Core categories, kept in alphabetical label order (req-33). */
 const CORE_CATEGORIES: readonly SettingsCategory[] = [
-  { id: 'llm', label: 'LLM', hint: 'Local model connection', component: SettingsLlm },
   { id: 'entry', label: 'Add entry', hint: 'Append template', component: SettingsEntry },
-  { id: 'daily', label: 'Daily notes', hint: 'Startup & storage folder', component: SettingsDaily },
-  {
-    id: 'spellcheck',
-    label: 'Spelling',
-    hint: 'Dictionaries & language',
-    component: SettingsSpellcheck,
-  },
   {
     id: 'appearance',
     label: 'Appearance',
     hint: 'Type size, colour & font',
     component: SettingsAppearance,
   },
+  { id: 'daily', label: 'Daily notes', hint: 'Startup & storage folder', component: SettingsDaily },
+  { id: 'llm', label: 'LLM', hint: 'Local model connection', component: SettingsLlm },
+  { id: 'mcp', label: 'MCP', hint: 'Vault server & tools', component: SettingsMcp },
   {
     id: 'widgets',
     label: 'Panels & plugins',
     hint: 'Toggle panels & plugins',
     component: SettingsDockWidgets,
   },
+  {
+    id: 'spellcheck',
+    label: 'Spelling',
+    hint: 'Dictionaries & language',
+    component: SettingsSpellcheck,
+  },
   { id: 'vault', label: 'Vault', hint: 'External change detection', component: SettingsVault },
-  { id: 'mcp', label: 'MCP', hint: 'Vault server & tools', component: SettingsMcp },
-  { id: 'about', label: 'About', hint: 'Version & licenses', component: SettingsAbout },
 ];
+
+/** Always last — app metadata, not a feature category. */
+const ABOUT_CATEGORY: SettingsCategory = {
+  id: 'about',
+  label: 'About',
+  hint: 'Version & licenses',
+  component: SettingsAbout,
+};

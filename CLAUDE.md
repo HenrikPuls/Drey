@@ -381,13 +381,14 @@ Renderer (Angular):
   menu contributions, settings pages) and the three DOM mount hosts for
   widgets / settings pages / doc kinds
 - `SettingsComponent` — master-detail settings screen (category list +
-  detail pane), core categories "LLM", "Add entry", "Daily notes",
-  "Spelling", "Appearance",
+  detail pane), core categories in alphabetical order — "Add entry",
+  "Appearance",
   [ADR-0020](docs/09_architecture_decisions/0020-app-wide-appearance-accent-and-ui-scale.md),
-  "Panels & plugins" (`widgets.disabled` + `plugins.disabled` + each
-  discovered plugin's live status), "Vault" (`vault.watch`, the opt-in
-  external-change watcher, ADR-0045), and "MCP"; **plugin-contributed
-  categories** append before "About" and render through
+  "Daily notes", "LLM", "MCP", "Panels & plugins" (`widgets.disabled` +
+  `plugins.disabled` + each discovered plugin's live status),
+  "Spelling", "Vault" (`vault.watch`, the opt-in external-change
+  watcher, ADR-0045) — then **plugin-contributed categories** (sorted by
+  label) before "About" and rendered through
   `PluginSettingsHost` (shared form vocabulary `plugin-settings.css`,
   author guide `plugins/AUTHORING.md`), saving immediately rather than
   via the footer bar (ADR-0044 rule 3). Opened from the status-bar entry.
@@ -456,12 +457,12 @@ be called out explicitly (see Working Style below), not introduced silently.
     bottom chat bar; capture lives in the Add entry panel.
   - **Settings**: a full-surface overlay opened from the status-bar entry
     — master-detail (category list on the left, detail pane on the
-    right), core categories "LLM", "Add entry", "Daily notes",
-    "Spelling", "Appearance" (app-wide base font size + highlight colour
-    + editor typeface, ADR-0020), "Panels & plugins", "Vault"
-    (ADR-0045) and "MCP"
-    (ADR-0010; descriptor-driven list, ADR-0016); plugin-contributed
-    categories (templates, actions) append before "About".
+    right), core categories in alphabetical order ("Add entry",
+    "Appearance" (app-wide base font size + highlight colour + editor
+    typeface, ADR-0020), "Daily notes", "LLM", "MCP", "Panels &
+    plugins", "Spelling", "Vault" (ADR-0045)
+    (ADR-0010; descriptor-driven list, ADR-0016)); plugin-contributed
+    categories (sorted by label) append before "About".
     The X sits top-right; Discard is always active and closes (with a
     dirty-state warning). The
     confirmation dialog (Actions / Ask edits / MCP writes) is a centred

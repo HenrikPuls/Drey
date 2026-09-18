@@ -97,14 +97,15 @@ Once you start working on one of the feature requests and it didn't had a Id the
   `mcp__<server>__<tool>`), confirmation-gated per server. Builds on the
   Req-29 interface — every tool-capable provider can drive them.
 
-  UX (shipped entries removed — the Files-panel bug and the editor
-  icons/path tooltip/assistant scroll+icon/auto-summary/document-binding
-  lines shipped in milestones 29 and 31, see the changelog):
+  UX (dispatched: the Files-panel bug and the editor icons / path
+  tooltip / assistant scroll+icon / auto-summary-removal /
+  document-binding lines shipped in milestones 29 and 31; the settings
+  order shipped as Req-33 and the context-menu review as Req-34
+  (2026-09-18) — see the changelog. Remaining, unnumbered until work
+  starts:)
 
   Req - Look at the internal prompts and review them (partially: the ask
   protocol was reworked in milestone 31, ADR-0053)
-  Req - Settings -  Cleanup order of entries in settings dialog, maybe we can order them alphabetically.
-  Req - Review all context menus, bring them in the typical order, add lines where appropiate, add keyboard shortcuts. This is especailly relevant for the editor context menu as there the create pdf is after the templates, however the templates shall always be the last
 
 ### Announced follow-ups
 
