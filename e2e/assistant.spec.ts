@@ -50,9 +50,10 @@ test.describe('Assistant plugin', () => {
 
     const panel = page.locator('app-panel-frame', { has: page.locator('.assistant-panel') });
     await expect(panel.locator('.head .title')).toHaveText('Assistant');
-    // The header status follows the active note (was the core widget's
-    // AssistantService-backed status).
-    await expect(panel.locator('.head .status')).toHaveText('notiz.md');
+    // The header status names the conversation (chat-first since ADR-0048;
+    // the pre-plugin "active note name" status is gone) -- for a fresh vault
+    // with no chats yet, the composer's new-chat placeholder.
+    await expect(panel.locator('.head .status')).toHaveText('New chat');
     // LLM features are off in the e2e profile: the panel says so quietly.
     await expect(panel.locator('.assistant-thread .empty')).toHaveText(
       'LLM features are off — nothing is answered.',

@@ -35,6 +35,13 @@ export function registerExitHandlers({
     exitBridge.resolveDecision(id, decision);
   });
 
+  // Readiness handshake for the exit bridge: the preload fires this exactly
+  // when the renderer's exit listener exists, so a close that raced app
+  // startup replays its held request instead of losing it.
+  ipcMain.handle(IPC_CHANNELS.exitListenerReady, () => {
+    exitBridge.onRendererReady();
+  });
+
   ipcMain.handle(
     IPC_CHANNELS.draftSave,
     async (_event, request: DraftSaveRequest): Promise<NoteSaveResult> => {

@@ -46,6 +46,9 @@ const dreyApi: DreyApi = {
     const wrapped = (_event: IpcRendererEvent, request: ExitConfirmRequest): void =>
       listener(request);
     ipcRenderer.on(IPC_CHANNELS.exitConfirmRequest, wrapped);
+    // The registration is the exit bridge's readiness signal: a close that
+    // raced app startup replays its held request now instead of being lost.
+    void ipcRenderer.invoke(IPC_CHANNELS.exitListenerReady);
     return () => ipcRenderer.removeListener(IPC_CHANNELS.exitConfirmRequest, wrapped);
   },
   resolveExitConfirm: (id: number, decision: ExitDecision): Promise<void> =>

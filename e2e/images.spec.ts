@@ -1,6 +1,7 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { test, expect, type Page } from './fixtures/drey';
+import { activeVaultAssetUrl } from './fixtures/asset-url';
 
 /** A 1x1 transparent PNG. */
 const PNG_BASE64 =
@@ -121,12 +122,12 @@ test.describe('image capture — paste & drop in the editors', () => {
     await pasteImage(page, 'app-editor .cm-content');
 
     await expectOneSavedImage(vaultDir);
-    expect(fs.readdirSync(attachmentsDir(vaultDir))[0]).toMatch(
-      /^\d{4}-\d{2}-\d{2}-\d{6}-[0-9a-f]{6}\.png$/,
-    );
+    const savedName = fs.readdirSync(attachmentsDir(vaultDir))[0];
+    expect(savedName).toMatch(/^\d{4}-\d{2}-\d{2}-\d{6}-[0-9a-f]{6}\.png$/);
+    // Since ADR-0051 the asset URL carries the minted vault id as its host.
     await expect(page.locator('app-editor .cm-content .lp-image img')).toHaveAttribute(
       'src',
-      /^drey-asset:\/\/asset\/attachments\/.+\.png$/,
+      await activeVaultAssetUrl(page, `attachments/${savedName}`),
     );
   });
 
@@ -137,9 +138,10 @@ test.describe('image capture — paste & drop in the editors', () => {
     await pasteImage(page, 'app-editor .cm-content', 'drop');
 
     await expectOneSavedImage(vaultDir);
+    const savedName = fs.readdirSync(attachmentsDir(vaultDir))[0];
     await expect(page.locator('app-editor .cm-content .lp-image img')).toHaveAttribute(
       'src',
-      /^drey-asset:\/\/asset\/attachments\//,
+      await activeVaultAssetUrl(page, `attachments/${savedName}`),
     );
   });
 
@@ -154,9 +156,10 @@ test.describe('image capture — paste & drop in the editors', () => {
     await pasteImage(page, 'app-entry-drawer .md-editor .cm-content');
 
     await expectOneSavedImage(vaultDir);
+    const savedName = fs.readdirSync(attachmentsDir(vaultDir))[0];
     await expect(surface.locator('.lp-image img')).toHaveAttribute(
       'src',
-      /^drey-asset:\/\/asset\/attachments\//,
+      await activeVaultAssetUrl(page, `attachments/${savedName}`),
     );
   });
 
@@ -188,7 +191,7 @@ test.describe('inline image sizing — ![alt|W]', () => {
     await page.locator('app-dock[side="left"] .node.file', { hasText: 'sized.md' }).click();
 
     const img = page.locator('app-editor .cm-content .lp-image img');
-    await expect(img).toHaveAttribute('src', /^drey-asset:\/\/asset\/assets\/p\.png$/);
+    await expect(img).toHaveAttribute('src', await activeVaultAssetUrl(page, 'assets/p.png'));
     await expect(img).toHaveAttribute('style', /width:\s*140px/);
   });
 });

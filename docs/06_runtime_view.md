@@ -1468,6 +1468,15 @@ re-intercepting. An untitled scratch tab saves into the hidden
 `.drafts/` (§5.3 `draft:save`) instead of a Save-As dialog, and on-save
 Actions are suppressed on this path — no LLM round trips during shutdown.
 
+The request is **readiness-gated** (`exit:listener-ready`): `wc.send` is
+fire-and-forget, so a close racing the renderer's bootstrap — the window is
+closable within the first second, before the app UI registered its exit
+listener — would lose the request and leave the window permanently
+unclosable. The preload reports readiness exactly when the listener exists
+(`ExitConfirmService.start()` → `onExitConfirmRequest` registration), and
+requests raised before that are held by the bridge and delivered on
+readiness.
+
 ```mermaid
 sequenceDiagram
     participant User
@@ -1477,9 +1486,13 @@ sequenceDiagram
     participant Ed as EditorService
     participant SS as SessionService
 
+    Note over XC: at app bootstrap:<br/>onExitConfirmRequest registration fires<br/>exit:listener-ready -> EB.rendererReady = true
     User->>Main: close intent (X / Alt+F4 / taskbar Quit)
     Main->>Main: exitApproved? no -> event.preventDefault()
     Main->>EB: requestDecision()
+    alt renderer not ready yet (close raced bootstrap)
+        Note over EB: request held; delivered on exit:listener-ready
+    end
     EB->>XC: exit:confirm-request { id }
     alt no dirty text documents
         XC->>EB: exit:decision 'discard' (no dialog)

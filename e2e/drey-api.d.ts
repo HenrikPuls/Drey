@@ -13,6 +13,16 @@ interface DreyApiForE2E {
     platform: string;
   }>;
   getActiveVault(): Promise<string | null>;
+  listVaults(): Promise<
+    Array<{ id: string; name: string; path: string; exists: boolean; active: boolean }>
+  >;
+  saveVaultAsset(
+    bytes: Uint8Array,
+    ext: string,
+    noteRelPath: string,
+    vaultId?: string,
+    preferredName?: string,
+  ): Promise<string>;
   listVaultFiles(): Promise<
     Array<{ name: string; relativePath: string; type: 'file' | 'directory' }>
   >;

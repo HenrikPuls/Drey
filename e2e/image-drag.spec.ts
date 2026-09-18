@@ -2,6 +2,7 @@ import * as http from 'node:http';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { test, expect, type Page } from './fixtures/drey';
+import { activeVaultAssetUrl } from './fixtures/asset-url';
 
 /** A 1x1 PNG. */
 const PNG_BASE64 =
@@ -11,6 +12,15 @@ async function openNote(page: Page, vaultDir: string, name: string, body: string
   fs.mkdirSync(path.dirname(path.join(vaultDir, name)), { recursive: true });
   fs.writeFileSync(path.join(vaultDir, name), body);
   await page.locator('app-dock[side="left"] .hdr-btn[aria-label="Refresh files"]').click();
+  // Folders start collapsed each session (milestone 31), so a nested note's
+  // row is not in the tree until its ancestors are expanded. (The spec's
+  // paths use `/`, which Windows path.dirname converts to `\`.)
+  const parent = path.dirname(name);
+  if (parent !== '.') {
+    for (const folder of parent.split(/[\\/]/)) {
+      await page.locator('app-dock[side="left"] .node.folder', { hasText: folder }).click();
+    }
+  }
   await page.locator('app-dock[side="left"] .node.file', { hasText: path.basename(name) }).click();
   await expect(page.locator('app-editor .cm-content')).toBeVisible();
 }
@@ -45,7 +55,7 @@ test.describe('drag a vault file into the editor', () => {
 
     // Rendered inline from the relative path, no attachments/ copy.
     const img = page.locator('app-editor .cm-content .lp-image img');
-    await expect(img).toHaveAttribute('src', /^drey-asset:\/\/asset\/assets\/logo\.png$/);
+    await expect(img).toHaveAttribute('src', await activeVaultAssetUrl(page, 'assets/logo.png'));
     expect(fs.existsSync(path.join(vaultDir, 'attachments'))).toBe(false);
 
     // Persisted markdown carries the ../../ relative path.

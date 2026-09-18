@@ -34,6 +34,7 @@ export const IPC_CHANNELS = {
   windowRecoverInput: 'window:recover-input',
   exitConfirmRequest: 'exit:confirm-request',
   exitDecision: 'exit:decision',
+  exitListenerReady: 'exit:listener-ready',
   windowIsMaximized: 'window:is-maximized',
   windowMaximizeChanged: 'window:maximize-changed',
   editExec: 'edit:exec',

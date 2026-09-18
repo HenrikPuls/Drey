@@ -1,6 +1,7 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { test, expect, type Page } from './fixtures/drey';
+import { activeVaultAssetUrl } from './fixtures/asset-url';
 
 /** A 1x1 PNG. */
 const PNG_BASE64 =
@@ -31,7 +32,7 @@ test.describe('image lens → fullscreen viewer', () => {
     await expect(backdrop).toBeVisible();
     await expect(page.locator('app-image-lightbox app-image-viewer img')).toHaveAttribute(
       'src',
-      /^drey-asset:\/\/asset\/assets\/p\.png$/,
+      await activeVaultAssetUrl(page, 'assets/p.png'),
     );
     // Sits above every other overlay.
     expect(await backdrop.evaluate((el) => getComputedStyle(el).zIndex)).toBe('60');
@@ -102,7 +103,7 @@ test.describe('image files open as a viewer tab', () => {
     await expect(page.locator('app-image-tab .cm-content')).toHaveCount(0);
     await expect(page.locator('app-image-tab app-image-viewer img')).toHaveAttribute(
       'src',
-      /^drey-asset:\/\/asset\/photo\.png$/,
+      await activeVaultAssetUrl(page, 'photo.png'),
     );
 
     // A real tab: shows in the bar with a close button, dedupes on reopen.
