@@ -556,41 +556,35 @@ can dock into the three docks (milestone 20,
 The milestone log lives in
 [docs/milestones-done.md](docs/milestones-done.md).
 
-**In progress: milestone 28 — multi-vault registry** (Req for the
-owner's multi-vault request, [ADR-0051](docs/09_architecture_decisions/0051-multi-vault-registry.md)):
-a vault registry (`vault-config.json` v2, stable ids, add/remove/rename/
-set-active from the Files panel), multi-root Files panel, open/edit/save
-in any vault (doc keys `vaultId::path`), cross-vault drag & drop moves,
-session snapshot v2, per-vault asset URLs + wikilinks, watcher × N,
-vault-scoped IPC/pushes/ledger and `ctx.vault` vault options (SDK minor
-6). Code-complete, 1032/1033 unit tests green (the 1 failure is the
-concurrently in-flight OCR plugin work, unrelated); **not yet manually
-verified by the owner**. Announced follow-up (M-B): search scopes
-(document / this vault / all vaults), per-vault tags/tasks indexes, MCP
-`vault` arguments, tasks "all vaults" scope.
-
-**Just implemented: milestone 30 — PDF embeds + a PDF viewer tab**
-(Req-2 PDF slice, [ADR-0052](docs/09_architecture_decisions/0052-pdf-embeds-and-viewer.md)):
-dropping a PDF stages it name-preserving into `attachments/` and
-renders it in place via Chromium's built-in (PDFium) viewer
-(`plugins: true`, no bundled PDF library); `.pdf` files open as a third
-base doc kind (`kind: 'pdf'`, `PdfTab`). Code-complete, unit tests
-green (one pre-existing OCR-spec failure is unrelated in-flight work);
-**not yet manually verified by the owner**.
+**Just code-complete: milestone 32 — beta-feedback batch II** (five
+feedback items: configurable daily-note folder `daily.dir`; opening a
+file replaces the focused clean tab (ADR-0003 amendment); mermaid
+diagrams render in the PDF export (ADR-0052 reopened); the editor/PDF
+parity rule (changelog preamble + docs/06 §6.39 checklist); shared
+plugin settings styling + the author guide `plugins/AUTHORING.md`).
+**Not yet manually verified by the owner.** Milestones 28 (multi-vault,
+[ADR-0051](docs/09_architecture_decisions/0051-multi-vault-registry.md)),
+30 (PDF embeds + a PDF viewer tab,
+[ADR-0052](docs/09_architecture_decisions/0052-pdf-embeds-and-viewer.md))
+and 31 (feedback batch I: background indexing, ADR-0053 ask fences,
+`![[…]]` embeds, collapsed files tree) are code-complete and likewise
+awaiting manual verification. Announced follow-up (M-B, from milestone
+28): search scopes (document / this vault / all vaults), per-vault
+tags/tasks indexes, MCP `vault` arguments, tasks "all vaults" scope.
 
 ## Milestones
 
 The completed milestone log (1–27) is archived in
-[docs/milestones-done.md](docs/milestones-done.md); milestones 24–29 are
+[docs/milestones-done.md](docs/milestones-done.md); milestones 22–32 are
 summarized in [specs/changelog.md](specs/changelog.md) ("Recent
 milestones") until owner-verified.
 
-- **Last completed:** milestone 29 — UX batch (icon meta-bar buttons,
-  tooltips, assistant overhaul, capture fix), per changelog. Milestones
-  25 (chats as vault notes), 26 (live edit mode), 27 (OCR) and 28
-  (multi-vault) are likewise code-complete and **still awaiting manual
-  verification by the owner**.
-- **Just code-complete:** milestone 30 — PDF embeds + viewer tab (see
+- **Last completed:** milestone 31 — beta-feedback batch I, per
+  changelog. Milestones 25 (chats as vault notes), 26 (live edit mode),
+  27 (OCR), 28 (multi-vault) and 30 (PDF embeds + viewer tab) are
+  likewise code-complete and **still awaiting manual verification by
+  the owner**.
+- **Just code-complete:** milestone 32 — beta-feedback batch II (see
   "Current State" above).
 - **Next:** milestone 28's M-B follow-up (search scopes, per-vault
   indexes, MCP vault arguments — see "Current State" above), the

@@ -20,6 +20,58 @@ recorded as an explicit decision. The parity checklist lives in
 
 ## Recent milestones
 
+### Milestone 32 — beta-feedback batch II: daily folder, tab replacement, mermaid export, plugin settings
+
+The second cut from the beta-testing feedback list (five items; the
+native-dialog focus fix landed the same week and is recorded as the
+bug-6 follow-up below).
+
+- **Configurable daily-note folder** — Settings → Daily notes gains
+  "Storage folder" (`daily.dir`, default `daily/`), mirroring
+  `templates.dir` exactly: app-level config (ADR-0010), applied to all
+  vaults equally; per-vault overlays stay with ADR-0051's announced
+  follow-up. Only the root is configurable — year/month nesting and the
+  `YYYY-MM-DD.md` name stay fixed (they are the calendar's matching
+  grammar). Reads and writes use **only** the configured folder (exact
+  `templates.dir` semantics): legacy flat `<dir>/<date>.md` files stay
+  readable inside it, an old `daily/` root is never read again once the
+  setting changes, and no files are moved. `dailyPathFor`/
+  `dailyDateFromPath` take the dir (regex metacharacters escaped, so a
+  root like `My.Notes` can't act as a wildcard), and the calendar finds
+  note days by walking the whole file tree instead of assuming a
+  top-level `daily` folder.
+- **Opening a file replaces the focused clean tab** (ADR-0003
+  amendment) — clicking a file row or a calendar day reuses the focused
+  pane's *clean* tab instead of stacking a new one; a dirty tab stays
+  and the new file opens alongside. Plugin doc kinds and the
+  already-open reveal path are excluded, and internal flows (session
+  restore, `saveAs`, multi-select open) pass `keepFocused`.
+- **Mermaid diagrams render in the PDF export** — ADR-0052's scope cut
+  is reopened and closed: the hidden export window (already a Chromium
+  renderer) inlines the bundled mermaid build and renders ```mermaid
+  fences to SVG before `printToPDF` — light theme on purpose (the PDF
+  leaves the vault's dark editor), a parse error or the 20 s
+  per-diagram cap falls back to the plain code block, a failed bundle
+  read exports without diagrams. The runtime is embedded only when the
+  note actually contains a mermaid fence, and note markup cannot reach
+  the script layer (the HTML strips run first).
+- **Editor/PDF parity is a standing rule** — recorded in this file's
+  preamble, checklist in docs/06 §6.39: when the editor gains a new
+  rendered element it must carry into the export in the same change, or
+  its absence there is an explicit decision (current: `[[wikilinks]]`
+  stay literal; known limitation: `![[x.pdf]]` embeds print empty —
+  `<img>` cannot rasterize a PDF — open follow-up).
+- **Plugin Settings pages share the core form vocabulary** — a shared
+  stylesheet scoped under `.plugin-settings-body`
+  (`src/app/plugin-host/plugin-settings.css`, mirroring the Settings
+  panes' `settings-forms.css`) replaces the three built-in plugins'
+  bespoke settings styling (the assistant's Actions page, templates,
+  sample), so a plugin page reads like a built-in category and follows
+  the app-wide type size; `plugins/AUTHORING.md` is the practical
+  author guide (layout & build, the manifest's `apiVersion` gate, the
+  CSS prefix/tokens/rem rules, the vocabulary table, the testing
+  convention).
+
 ### Milestone 31 — beta-feedback batch I: fixes + small features
 
 The first milestone cut from the beta-testing feedback list (triaged
