@@ -17,9 +17,12 @@ test.describe('split-view entry points', () => {
     await page.locator('app-editor .cm-content').click();
     await page.keyboard.press('Control+Alt+Enter');
 
-    await expect(page.locator('app-editor')).toHaveCount(2);
-    // The split moved the active tab into the new pane; both panes show a tab.
+    // Tab replacement (milestone 32): opening one.md already replaced the
+    // clean startup daily tab, so the pane held a single tab -- the split
+    // moves it into the new pane and empties the source pane.
+    await expect(page.locator('app-pane-leaf')).toHaveCount(2);
     await expect(page.locator('app-tab-bar .tab', { hasText: 'one.md' })).toHaveCount(1);
+    await expect(page.locator('app-pane-leaf .empty')).toHaveCount(1);
   });
 
   test('the View menu exposes the split rows', async ({ page, vaultDir }) => {
@@ -34,6 +37,9 @@ test.describe('split-view entry points', () => {
     await expect(menu.locator('.row', { hasText: 'Split editor down' })).toBeVisible();
 
     await menu.locator('.row', { hasText: 'Split editor right' }).click();
-    await expect(page.locator('app-editor')).toHaveCount(2);
+    // Same post-condition as the chord: two panes, the single tab moved.
+    await expect(page.locator('app-pane-leaf')).toHaveCount(2);
+    await expect(page.locator('app-tab-bar .tab', { hasText: 'two.md' })).toHaveCount(1);
+    await expect(page.locator('app-pane-leaf .empty')).toHaveCount(1);
   });
 });
