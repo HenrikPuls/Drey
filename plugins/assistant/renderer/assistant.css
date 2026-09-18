@@ -766,109 +766,12 @@
   background: var(--hover-bg);
 }
 
-/* -- Settings pages ---------------------------------------------------------- */
+/* -- Settings (Actions page) -------------------------------------------------
 
-.assistant-actions-settings h3 {
-  margin: 0 0 10px;
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--text-primary);
-}
-
-.assistant-actions-settings .add-trigger {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
-
-.assistant-actions-settings .section-hint {
-  font-size: 11.5px;
-  color: var(--text-6);
-}
-
-.assistant-actions-settings .mono {
-  font-family: var(--font-mono);
-}
-
-.assistant-actions-settings .rows {
-  list-style: none;
-  margin: 10px 0;
-  padding: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-
-.assistant-actions-settings .row {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  font-size: 12.5px;
-  padding: 4px 0;
-}
-
-.assistant-actions-settings .row .name {
-  flex: 1;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.assistant-actions-settings .row .check {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  font-size: 11.5px;
-  color: var(--text-4);
-  white-space: nowrap;
-}
-
-.assistant-actions-settings .add-trigger select,
-.assistant-actions-settings .row select {
-  background: var(--bg-input);
-  color: var(--text-primary);
-  border: 1px solid var(--border-strong);
-  border-radius: var(--radius-xs);
-  font-size: 11.5px;
-  padding: 2px 6px;
-}
-
-.assistant-actions-settings .empty {
-  font-size: 11.5px;
-  color: var(--text-6);
-}
-
-.assistant-actions-settings button.ghost,
-.assistant-actions-settings button.link,
-.assistant-actions-settings button.link-danger {
-  background: transparent;
-  border: 1px solid var(--border-strong);
-  border-radius: var(--radius-xs);
-  color: var(--text-4);
-  font-size: 11.5px;
-  padding: 3px 10px;
-  cursor: pointer;
-}
-
-.assistant-actions-settings button.link,
-.assistant-actions-settings button.link-danger {
-  border-color: transparent;
-  padding: 3px 4px;
-}
-
-.assistant-actions-settings button.link:hover {
-  color: var(--text-primary);
-}
-
-.assistant-actions-settings button.link-danger:hover {
-  color: var(--accent-hover);
-}
-
-.assistant-actions-settings button.ghost:hover:not(:disabled) {
-  color: var(--text-primary);
-  background: var(--hover-bg);
-}
+   Only page-specific layout lives here: the shared form vocabulary
+   (fields/hints, inputs, rows, ghost/link buttons, badge, …) comes from
+   the base PluginSettingsHost stylesheet scoped under
+   `.plugin-settings-body` — see plugins/AUTHORING.md. */
 
 .assistant-actions-settings .templates {
   list-style: none;
@@ -891,39 +794,21 @@
   gap: 8px;
 }
 
-.assistant-actions-settings .template-name {
+.assistant-actions-settings .template-head input[type='text'] {
   flex: 0 1 auto;
   min-width: 120px;
-  background: var(--bg-input);
-  color: var(--text-primary);
-  border: 1px solid var(--border-strong);
-  border-radius: var(--radius-xs);
-  font-size: 12.5px;
+}
+
+.assistant-actions-settings .template-head select {
   padding: 3px 8px;
+  font-size: 0.78rem;
 }
 
-.assistant-actions-settings .badge {
-  font-family: var(--font-mono);
-  font-size: 9px;
-  text-transform: uppercase;
-  letter-spacing: var(--ls-mono-title);
-  color: var(--text-5);
-  border: 1px solid var(--border-strong);
-  border-radius: 999px;
-  padding: 1px 7px;
+.assistant-actions-settings .add-trigger {
+  margin-top: 10px;
 }
 
-.assistant-actions-settings .template-prompt {
-  margin-top: 8px;
-  width: 100%;
-  box-sizing: border-box;
-  background: var(--bg-input);
-  color: var(--text-primary);
-  border: 1px solid var(--border-strong);
-  border-radius: var(--radius-xs);
+/* The prompt body is code, not prose. */
+.assistant-actions-settings textarea {
   font-family: var(--font-mono);
-  font-size: 11.5px;
-  line-height: 1.5;
-  padding: 6px 8px;
-  resize: vertical;
 }

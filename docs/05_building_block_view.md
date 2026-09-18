@@ -73,6 +73,10 @@ restore, keybindings, spellcheck, the MCP vault server, the LLM
   `menu-contributions`, `drop-decoder-registry`,
   `settings-registry.service`), and the three DOM mount hosts
   (`plugin-widget-host`, `plugin-settings-host`, `plugin-doc-host`).
+  `plugin-settings.css` is the shared form vocabulary for plugin
+  Settings pages (fields/hints, inputs, rows, buttons — mirroring the
+  core panes' `settings-forms.css`, scoped under `.plugin-settings-host`'s
+  `.plugin-settings-body`; author guide `plugins/AUTHORING.md`).
 
 **SDK** (`shared/plugin-api/`) — the frozen contract both sides compile
 against: `manifest.ts` (`PluginManifest` + `validateManifest`),

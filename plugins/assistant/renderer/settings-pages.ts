@@ -81,7 +81,7 @@ export function actionsSettingsPage(
       );
       const triggerList = el('ul', 'rows');
       triggersSection.appendChild(triggerList);
-      const addTriggerRow = el('div', 'add-trigger');
+      const addTriggerRow = el('div', 'row add-trigger');
       triggersSection.appendChild(addTriggerRow);
       root.appendChild(triggersSection);
 
@@ -174,7 +174,7 @@ export function actionsSettingsPage(
         const item = el('li', 'template');
         const headRow = el('div', 'template-head');
 
-        const nameInput = el('input', 'template-name') as HTMLInputElement;
+        const nameInput = el('input') as HTMLInputElement;
         nameInput.type = 'text';
         nameInput.value = template.name;
         nameInput.addEventListener('input', () => {
@@ -233,7 +233,7 @@ export function actionsSettingsPage(
         item.appendChild(headRow);
 
         if (openTemplateId === template.id) {
-          const prompt = el('textarea', 'template-prompt') as HTMLTextAreaElement;
+          const prompt = el('textarea') as HTMLTextAreaElement;
           prompt.rows = 6;
           prompt.spellcheck = false;
           prompt.value = template.prompt;

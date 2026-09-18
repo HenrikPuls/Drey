@@ -340,15 +340,19 @@ function openPicker(api: DreyPluginApi, library: TemplateLibrary): void {
 // -- settings page -----------------------------------------------------------
 
 function mountSettings(api: DreyPluginApi, library: TemplateLibrary, body: HTMLElement): () => void {
-  body.classList.add('tpl-settings');
-  const label = el('label', 'tpl-settings-label', 'Templates folder (vault-relative)');
-  const input = el('input', 'tpl-settings-input') as HTMLInputElement;
+  // Built from the shared settings vocabulary (`plugin-settings-body`
+  // classes — see plugins/AUTHORING.md): a field, its input, its hint.
+  const field = el('div', 'field');
+  const label = el('label', undefined, 'Templates folder (vault-relative)');
+  const input = el('input') as HTMLInputElement;
   input.type = 'text';
+  input.id = 'tpl-dir';
+  label.setAttribute('for', 'tpl-dir');
   input.placeholder = 'templates';
-  label.appendChild(input);
-  body.appendChild(label);
+  field.append(label, input);
+  body.appendChild(field);
 
-  const note = el('div', 'tpl-settings-note');
+  const note = el('p', 'field-hint');
   body.appendChild(note);
 
   const show = (value: string, message?: string): void => {

@@ -1,0 +1,221 @@
+/*
+ * Shared form vocabulary for plugin-contributed Settings pages
+ * (ADR-0044 rule 2: plugin UI is plain DOM). PluginSettingsHost loads
+ * this file with ViewEncapsulation.None — plugin pages are imperative
+ * DOM children and would never match emulated-encapsulation attributes —
+ * so every rule is scoped under `.plugin-settings-body`, the one div
+ * only this host creates. Class names and values mirror
+ * `src/app/settings/settings-forms.css`, so a plugin page built from
+ * this vocabulary reads like a core category pane: same field/hint/
+ * button primitives, rem-based type scale, design tokens only.
+ *
+ * Everything page-specific stays in the plugin's own stylesheet, under
+ * its `plugins/<id>` class prefix. Author guide: plugins/AUTHORING.md.
+ */
+
+.plugin-settings-body {
+  font-size: 0.88rem;
+  line-height: 1.55;
+  color: var(--text-primary);
+}
+
+/* Group sections: the h3 a plugin page uses for its own sub-groups
+   (the page title/hint in the category list come from the contribution). */
+.plugin-settings-body section {
+  display: block;
+  margin: 0 0 20px;
+}
+
+.plugin-settings-body h3 {
+  margin: 0 0 8px;
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: var(--text-4);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+/* Fields — same shape as the core panes: label, control, hint. */
+.plugin-settings-body .field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.plugin-settings-body .field > label {
+  font-size: 0.78rem;
+  color: var(--text-4);
+}
+
+.plugin-settings-body .field-hint,
+.plugin-settings-body .section-hint {
+  margin: 0;
+  font-size: 0.74rem;
+  line-height: 1.6;
+  color: var(--text-6);
+}
+
+/* Inputs — text/password/select match settings-forms.css; textarea is a
+   plugin-pages addition (prompt bodies) styled the same way. `flex: 1`
+   stretches only inside a `.field` — controls in dense row lists keep
+   their natural width (with a compact override below). */
+.plugin-settings-body input[type='text'],
+.plugin-settings-body input[type='password'],
+.plugin-settings-body select,
+.plugin-settings-body textarea {
+  background: var(--bg-input);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+  color: var(--text-primary);
+  font: inherit;
+  font-size: 0.82rem;
+  padding: 7px 9px;
+  outline: none;
+}
+
+.plugin-settings-body .field input[type='text'],
+.plugin-settings-body .field input[type='password'],
+.plugin-settings-body .field select,
+.plugin-settings-body .field textarea {
+  flex: 1;
+  min-width: 0;
+}
+
+.plugin-settings-body .rows select,
+.plugin-settings-body .row select {
+  padding: 3px 8px;
+  font-size: 0.78rem;
+}
+
+.plugin-settings-body input[type='text']:focus,
+.plugin-settings-body input[type='password']:focus,
+.plugin-settings-body select:focus,
+.plugin-settings-body textarea:focus {
+  border-color: var(--accent-ring);
+}
+
+.plugin-settings-body textarea {
+  resize: vertical;
+  line-height: 1.5;
+}
+
+/* Switch rows — the core checkbox pattern. */
+.plugin-settings-body .switch-row {
+  display: flex;
+  gap: 10px;
+  cursor: pointer;
+}
+
+.plugin-settings-body .switch-row input {
+  margin-top: 2px;
+}
+
+.plugin-settings-body .switch-label {
+  display: block;
+  font-size: 0.88rem;
+  color: var(--text-2);
+}
+
+.plugin-settings-body .switch-hint {
+  display: block;
+  font-size: 0.76rem;
+  line-height: 1.5;
+  color: var(--text-6);
+  margin-top: 2px;
+}
+
+/* Row lists — the Actions page's triggers and any similar editor. */
+.plugin-settings-body .rows {
+  list-style: none;
+  margin: 10px 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.plugin-settings-body .row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.plugin-settings-body .row > .name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.plugin-settings-body .check {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 0.78rem;
+  color: var(--text-4);
+  white-space: nowrap;
+}
+
+/* Buttons — quiet ghost, and border-less link buttons. */
+.plugin-settings-body button.ghost {
+  background: transparent;
+  border: 1px solid var(--border-strong);
+  color: var(--text-3);
+  border-radius: var(--radius);
+  font-size: 0.8rem;
+  padding: 7px 12px;
+  cursor: pointer;
+  align-self: flex-start;
+}
+
+.plugin-settings-body button.ghost:hover:not(:disabled) {
+  background: var(--hover-bg);
+}
+
+.plugin-settings-body button.ghost:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.plugin-settings-body button.link,
+.plugin-settings-body button.link-danger {
+  background: transparent;
+  border: none;
+  border-radius: var(--radius-xs);
+  color: var(--text-4);
+  font-size: 0.8rem;
+  padding: 3px 4px;
+  cursor: pointer;
+}
+
+.plugin-settings-body button.link:hover {
+  color: var(--text-primary);
+}
+
+.plugin-settings-body button.link-danger:hover {
+  color: var(--accent-hover);
+}
+
+/* Misc primitives. */
+.plugin-settings-body .badge {
+  font-family: var(--font-mono);
+  font-size: 0.62rem;
+  text-transform: uppercase;
+  letter-spacing: var(--ls-mono-title);
+  color: var(--text-5);
+  border: 1px solid var(--border-strong);
+  border-radius: 999px;
+  padding: 1px 7px;
+}
+
+.plugin-settings-body .empty {
+  font-size: 0.8rem;
+  color: var(--text-6);
+}
+
+.plugin-settings-body .mono {
+  font-family: var(--font-mono);
+  font-size: 0.95em;
+  color: var(--text-5);
+}

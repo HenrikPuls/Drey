@@ -11,11 +11,15 @@ let bufferEvents = 0;
 function el<K extends keyof HTMLElementTagNameMap>(
   tag: K,
   text: string | null,
-  styles: Partial<CSSStyleDeclaration>,
+  styles: Partial<CSSStyleDeclaration> = {},
+  className?: string,
 ): HTMLElementTagNameMap[K] {
   const node = document.createElement(tag);
   if (text !== null) {
     node.textContent = text;
+  }
+  if (className !== undefined) {
+    node.className = className;
   }
   Object.assign(node.style, styles);
   return node;
@@ -100,41 +104,31 @@ function buildWidget(api: DreyPluginApi): HTMLElement {
   return root;
 }
 
-function buildSettingsPage(api: DreyPluginApi): HTMLElement {  const root = el('div', null, {
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '10px',
-    maxWidth: '420px',
-    font: '13px/1.5 sans-serif',
-  });
-  const label = el('label', 'Greeting (saved immediately, per-plugin config)', {
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '4px',
-  });
-  const input = el('input', null, {
-    padding: '6px 8px',
-    borderRadius: '6px',
-    border: '1px solid rgba(128,128,128,.4)',
-    background: 'transparent',
-    color: 'inherit',
-    font: 'inherit',
-  });
-  label.appendChild(input);
-  root.appendChild(label);
+/**
+ * Built from the shared `.plugin-settings-body` vocabulary (the base
+ * PluginSettingsHost stylesheet — plugins/AUTHORING.md): a field, its
+ * hint, a ghost button. No inline styles, no bespoke classes.
+ */
+function buildSettingsPage(api: DreyPluginApi): HTMLElement {
+  const root = el('div', null, {}, 'sample-settings');
 
-  const roundtrip = el('div', 'Backend roundtrip: —', { opacity: '0.75' });
-  const pingButton = el('button', 'Ping main process', {
-    cursor: 'pointer',
-    padding: '5px 12px',
-    borderRadius: '6px',
-    border: '1px solid rgba(128,128,128,.4)',
-    background: 'transparent',
-    color: 'inherit',
-    font: 'inherit',
-    alignSelf: 'flex-start',
-  });
+  const field = el('div', null, {}, 'field');
+  const label = el('label', 'Greeting', {});
+  label.setAttribute('for', 'sample-greeting');
+  const input = el('input', null, {});
+  input.type = 'text';
+  input.id = 'sample-greeting';
+  field.append(label, input);
+  root.appendChild(field);
+  root.appendChild(
+    el('p', 'Saved immediately to this plugin’s own config (ADR-0044 rule 3).', {}, 'field-hint'),
+  );
+
+  const pingButton = el('button', 'Ping main process', {}, 'ghost');
+  pingButton.type = 'button';
   root.appendChild(pingButton);
+
+  const roundtrip = el('div', 'Backend roundtrip: —', {}, 'empty');
   root.appendChild(roundtrip);
 
   let greeting = '';

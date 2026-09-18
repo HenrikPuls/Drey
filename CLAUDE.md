@@ -388,8 +388,9 @@ Renderer (Angular):
   discovered plugin's live status), "Vault" (`vault.watch`, the opt-in
   external-change watcher, ADR-0045), and "MCP"; **plugin-contributed
   categories** append before "About" and render through
-  `PluginSettingsHost`, saving immediately rather than via the footer bar
-  (ADR-0044 rule 3). Opened from the status-bar entry.
+  `PluginSettingsHost` (shared form vocabulary `plugin-settings.css`,
+  author guide `plugins/AUTHORING.md`), saving immediately rather than
+  via the footer bar (ADR-0044 rule 3). Opened from the status-bar entry.
   Category list is descriptor-driven (`*ngComponentOutlet`). The
   close (X) is top-right; the footer Discard is always enabled and closes,
   warning first when the draft is dirty
