@@ -135,7 +135,9 @@ milestone 5 — needs YAML frontmatter handling; see
 
 The global hotkey raises the main window and opens today's daily note in
 the editor, creating it from `templates/daily.md` if needed, then starting
-a fresh `## HH:mm` entry. No popup — see
+a fresh `## HH:mm` entry. The note lives under the configured daily folder
+(`AppConfig.daily.dir`, default `daily/`; `dailyPathFor` in
+`shared/daily.ts`) — below, `<daily.dir>` stands for it. No popup — see
 [05_building_block_view.md](05_building_block_view.md) §5.6 and
 [ADR-0002](09_architecture_decisions/0002-quick-capture-opens-daily-note.md).
 
@@ -154,15 +156,15 @@ sequenceDiagram
     OS->>Main: global shortcut fires
     Main->>Main: mainWindow.show() + focus() (restore if minimized)
     Main->>Daily: ensureTodayNote()
-    alt daily/<date>.md missing
+    alt <daily.dir>/<date>.md missing
         Daily->>FS: read templates/daily.md
         alt template missing
             Daily->>FS: write starter templates/daily.md (verbatim placeholders)
         end
         Daily->>Daily: substitute {{date}} {{time}} {{datetime}} {{title}}
-        Daily->>FS: mkdir daily/ + write daily/<date>.md
+        Daily->>FS: mkdir <daily.dir>/ + write <daily.dir>/<date>.md
     end
-    Daily-->>Main: "daily/2026-09-05.md"
+    Daily-->>Main: "<daily.dir>/2026/09/2026-09-05.md"
     Main->>DailyService: send('daily:open', relativePath)
     DailyService->>EditorService: openFile(relativePath)
     EditorService->>EditorService: savedContent = bufferContent = file, openPath set
@@ -974,7 +976,7 @@ sequenceDiagram
     App->>App: dailyNoteStartupDone = true
     alt config.daily.openOnStartup
         App->>EditorService: openDailyNote(formatDate(today))
-        alt daily/<y>/<m>/<date>.md exists
+        alt <daily.dir>/<y>/<m>/<date>.md exists
             EditorService->>Main: readVaultFile(path) → normal tab
         else missing
             EditorService->>Main: buildDailyNoteContent(date)

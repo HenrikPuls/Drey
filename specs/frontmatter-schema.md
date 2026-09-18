@@ -41,11 +41,19 @@ updated: '2026-09-05T14:32:00'
   written back unambiguously); optional `due:` / `prio:`; `done:` only once
   checked off. `#task` is a reserved structural marker, never a tag.
 
-## Daily notes — `daily/<year>/<month>/YYYY-MM-DD.md`
+## Daily notes — `<dir>/<year>/<month>/YYYY-MM-DD.md`
 
 One file per calendar day, nested by year/month. Created by quick-capture
 from `templates/daily.md`, entries appended as `## HH:mm` headings.
 Indexed for tag search. Path handling: `shared/daily.ts`.
+
+The root folder `<dir>` is configurable in Settings → Daily notes
+(`AppConfig.daily.dir`, default `daily/`; app config per ADR-0010, so one
+folder shape across all vaults — never stored in the vault). Year/month
+nesting and the `YYYY-MM-DD.md` file name are fixed (they are the grammar
+the calendar matches against). Legacy flat files (`<dir>/YYYY-MM-DD.md`)
+stay readable, but only inside the configured folder: notes left under a
+previous folder are not migrated and no longer read.
 
 ## Chat notes — `chats/<year>/<month>/<date>-<slug>.md`
 
@@ -61,6 +69,9 @@ save-before-exit prompt.
 
 ## Structural folders
 
+- `daily/` — default root of the daily notes (`daily/<year>/<month>/…`;
+  the root is configurable via `daily.dir`, the grammar lives in
+  `shared/daily.ts`). Visible and tag-indexed like any user folder.
 - `templates/` — Markdown templates for new notes; `{{date}}` `{{time}}`
   `{{datetime}}` `{{title}}` placeholders substituted at creation (unknown
   tokens untouched). `templates/daily.md` seeds new daily notes. Excluded

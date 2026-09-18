@@ -3,6 +3,7 @@
  * key in a stored config falls back to. Split out of `schema.ts` (shapes)
  * and `normalize.ts` (validation); re-exported from `shared/app-config.ts`.
  */
+import { DEFAULT_DAILY_DIR } from '../daily';
 import {
   ActionTemplate,
   AppConfig,
@@ -25,7 +26,10 @@ import {
   WidgetsConfig,
 } from './schema';
 
-export const DEFAULT_DAILY_CONFIG: DailyConfig = { openOnStartup: true };
+export const DEFAULT_DAILY_CONFIG: DailyConfig = {
+  openOnStartup: true,
+  dir: DEFAULT_DAILY_DIR,
+};
 
 export const DEFAULT_WIDGETS_CONFIG: WidgetsConfig = { disabled: [] };
 

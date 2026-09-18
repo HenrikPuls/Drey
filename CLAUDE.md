@@ -76,7 +76,8 @@ toolchain is removable by deleting `.tools/`). Never assume a bare `node`,
 - Storage format: plain Markdown + YAML frontmatter. No proprietary format,
   no database as source of truth (see `specs/frontmatter-schema.md`).
 - Folder structure is the user's own — the app imposes only `templates/`,
-  `daily/`, `chats/` (assistant conversation notes, ADR-0048, indexed
+  `daily/` (the daily-notes root is configurable, `daily.dir`, default
+  `daily/`), `chats/` (assistant conversation notes, ADR-0048, indexed
   like `daily/`), and the hidden `.drafts/` (bug-5's exit-time auto-saves of
   untitled tabs, Notepad++-style; invisible to the file tree and indexes,
   see `specs/frontmatter-schema.md`). Topics are free inline `#tag` labels, never directories

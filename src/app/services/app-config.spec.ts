@@ -174,9 +174,24 @@ describe('normalizeAppConfig', () => {
   });
 
   it('defaults the daily block to open-on-startup and coerces a junk value', () => {
-    expect(normalizeAppConfig({}).daily).toEqual({ openOnStartup: true });
+    expect(normalizeAppConfig({}).daily).toEqual({ openOnStartup: true, dir: 'daily' });
     expect(normalizeAppConfig({ daily: { openOnStartup: 'yes' } }).daily.openOnStartup).toBe(true);
     expect(normalizeAppConfig({ daily: { openOnStartup: false } }).daily.openOnStartup).toBe(false);
+  });
+
+  it('normalises the daily folder: default, slash-trim, back-slash fold, .. rejection', () => {
+    expect(normalizeAppConfig({}).daily.dir).toBe('daily');
+    expect(normalizeAppConfig({ daily: { dir: '  /Journal/  ' } }).daily.dir).toBe('Journal');
+    expect(normalizeAppConfig({ daily: { dir: 'meta\\journal' } }).daily.dir).toBe('meta/journal');
+    expect(normalizeAppConfig({ daily: { dir: '../escape' } }).daily.dir).toBe('daily');
+    expect(normalizeAppConfig({ daily: { dir: 'a/./b' } }).daily.dir).toBe('daily');
+    expect(normalizeAppConfig({ daily: { dir: '' } }).daily.dir).toBe('daily');
+    expect(normalizeAppConfig({ daily: { dir: 42 } }).daily.dir).toBe('daily');
+    // The two daily fields normalise independently.
+    expect(normalizeAppConfig({ daily: { dir: 'Journal' } }).daily).toEqual({
+      openOnStartup: true,
+      dir: 'Journal',
+    });
   });
 
   it('defaults the vault block to not watching and coerces a junk value', () => {

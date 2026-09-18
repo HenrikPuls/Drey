@@ -2,6 +2,7 @@ import { Injectable, computed, inject, signal } from '@angular/core';
 import { dailyDateFromPath } from '../../../shared/daily';
 import { formatDate } from '../../../shared/timestamp';
 import { VaultFileEntry } from '../../../shared/ipc-api';
+import { SettingsService } from '../services/settings.service';
 import { VaultService } from '../vault';
 
 /** One cell in the mini-calendar grid. */
@@ -42,12 +43,14 @@ export const WEEKDAY_INITIALS = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
  * day is selected. Opening a day's note is not done here -- the `Calendar`
  * component calls `EditorService.openDailyNote()` -- this service only owns
  * the calendar's own state plus the "does this day have a note?" lookup,
- * derived from the vault file tree (`daily/<year>/<month>/YYYY-MM-DD.md`,
- * or a legacy flat `daily/YYYY-MM-DD.md`).
+ * derived from the vault file tree under the configured daily folder
+ * (`<daily.dir>/<year>/<month>/YYYY-MM-DD.md`, or a legacy flat
+ * `<daily.dir>/YYYY-MM-DD.md`).
  */
 @Injectable({ providedIn: 'root' })
 export class CalendarService {
   private readonly vault = inject(VaultService);
+  private readonly settings = inject(SettingsService);
 
   private readonly today = new Date();
 
@@ -62,27 +65,30 @@ export class CalendarService {
   readonly monthLabel = computed(() => `${MONTH_NAMES[this.viewMonth()]} ${this.viewYear()}`);
 
   /**
-   * Set of `YYYY-MM-DD` for which a `daily/` note exists in the vault.
-   * Walks the whole `daily/` subtree so both the nested
-   * `daily/<year>/<month>/` layout and any legacy flat files are counted;
-   * `dailyDateFromPath` recognises either.
+   * Set of `YYYY-MM-DD` for which a daily note exists in the vault, under
+   * the configured daily folder. Walks the whole tree and lets
+   * `dailyDateFromPath` (anchored on the configured root) pick the matches,
+   * so both the nested `<dir>/<year>/<month>/` layout and any legacy flat
+   * files inside the folder are counted -- and a nested folder root
+   * (`meta/journal`) works too. Reads `dailyDir()` inside the computed so
+   * the dots follow a Settings save even without a tree change.
    */
   private readonly noteDates = computed<ReadonlySet<string>>(() => {
-    const daily = this.vault.fileTree().find((e) => e.type === 'directory' && e.name === 'daily');
+    const dir = this.settings.dailyDir();
     const dates = new Set<string>();
     const walk = (entries: readonly VaultFileEntry[]): void => {
       for (const entry of entries) {
         if (entry.type === 'directory') {
           walk(entry.children ?? []);
         } else {
-          const date = dailyDateFromPath(entry.relativePath);
+          const date = dailyDateFromPath(entry.relativePath, dir);
           if (date) {
             dates.add(date);
           }
         }
       }
     };
-    walk(daily?.children ?? []);
+    walk(this.vault.fileTree());
     return dates;
   });
 

@@ -1,7 +1,8 @@
 import { TestBed } from '@angular/core/testing';
 import { CalendarService } from './calendar.service';
+import { SettingsService } from '../services/settings.service';
 import { VaultService } from '../vault';
-import { DreyApi, VaultFileEntry } from '../../../shared/ipc-api';
+import { AppConfig, DreyApi, VaultFileEntry } from '../../../shared/ipc-api';
 
 describe('CalendarService', () => {
   let service: CalendarService;
@@ -86,6 +87,64 @@ describe('CalendarService', () => {
     expect(days.find((d) => d.iso === '2026-09-03')?.hasNote).toBe(true); // legacy flat
     expect(days.find((d) => d.iso === '2026-09-11')?.hasNote).toBe(true); // nested
     expect(days.find((d) => d.iso === '2026-09-04')?.hasNote).toBe(false);
+  });
+
+  it('marks days from the configured folder only', async () => {
+    TestBed.resetTestingModule();
+    const journalTree: VaultFileEntry[] = [
+      // The old root is still in the tree; it must not count any more.
+      ...tree,
+      {
+        name: 'Journal',
+        relativePath: 'Journal',
+        type: 'directory',
+        children: [
+          { name: '2026-09-04.md', relativePath: 'Journal/2026-09-04.md', type: 'file' }, // flat
+          {
+            name: '2026',
+            relativePath: 'Journal/2026',
+            type: 'directory',
+            children: [
+              {
+                name: '09',
+                relativePath: 'Journal/2026/09',
+                type: 'directory',
+                children: [
+                  {
+                    name: '2026-09-12.md',
+                    relativePath: 'Journal/2026/09/2026-09-12.md',
+                    type: 'file',
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+      },
+    ];
+    const journalApi: Partial<DreyApi> = {
+      getConfig: () => Promise.resolve({ daily: { dir: 'Journal' } } as AppConfig),
+      getActiveVault: () => Promise.resolve('E:/vault'),
+      getActiveVaultId: () => Promise.resolve('v1'),
+      listVaults: () =>
+        Promise.resolve([
+          { id: 'v1', name: 'vault', path: 'E:/vault', exists: true, active: true },
+        ]),
+      listVaultFiles: () => Promise.resolve(journalTree),
+    };
+    window.dreyApi = journalApi as DreyApi;
+    await TestBed.inject(SettingsService).load();
+    const journalService = TestBed.inject(CalendarService);
+    const journalVault = TestBed.inject(VaultService);
+
+    await journalVault.refresh();
+    journalService.viewYear.set(2026);
+    journalService.viewMonth.set(8);
+    const days = journalService.weeks().flat();
+    expect(days.find((d) => d.iso === '2026-09-04')?.hasNote).toBe(true); // Journal, flat
+    expect(days.find((d) => d.iso === '2026-09-12')?.hasNote).toBe(true); // Journal, nested
+    expect(days.find((d) => d.iso === '2026-09-03')?.hasNote).toBe(false); // old daily/ root
+    expect(days.find((d) => d.iso === '2026-09-11')?.hasNote).toBe(false); // old daily/ root
   });
 
   it('select() moves the shown month to the picked day', () => {

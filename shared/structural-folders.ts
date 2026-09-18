@@ -5,7 +5,8 @@
  * main and renderer.
  *
  * - `templates/` — note templates; excluded from the tag index.
- * - `daily/` — one note per day (`shared/daily.ts` owns its grammar).
+ * - `daily/` — one note per day (`shared/daily.ts` owns its grammar); the
+ *   root folder is configurable (`AppConfig.daily.dir`, default `daily/`).
  * - `chats/` — assistant conversation notes (ADR-0048); indexed like
  *   `daily/`, and auto-saved: the chat engine appends every turn to the
  *   file itself, so an open tab follows the disk instead of holding an

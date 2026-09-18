@@ -77,7 +77,7 @@ export class SettingsCategoryRegistry {
 const CORE_CATEGORIES: readonly SettingsCategory[] = [
   { id: 'llm', label: 'LLM', hint: 'Local model connection', component: SettingsLlm },
   { id: 'entry', label: 'Add entry', hint: 'Append template', component: SettingsEntry },
-  { id: 'daily', label: 'Daily notes', hint: 'Open on startup', component: SettingsDaily },
+  { id: 'daily', label: 'Daily notes', hint: 'Startup & storage folder', component: SettingsDaily },
   {
     id: 'spellcheck',
     label: 'Spelling',

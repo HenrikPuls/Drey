@@ -258,6 +258,7 @@ function normalizeDaily(raw: unknown): DailyConfig {
   const source = (raw ?? {}) as Record<string, unknown>;
   return {
     openOnStartup: bool(source['openOnStartup'], DEFAULT_DAILY_CONFIG.openOnStartup),
+    dir: normalizeVaultDir(source['dir'], DEFAULT_DAILY_CONFIG.dir),
   };
 }
 
@@ -284,22 +285,23 @@ function normalizePlugins(raw: unknown): PluginsConfig {
 /**
  * A vault-relative folder: trimmed, back-slashes folded, no leading/trailing
  * slash, and no `.`/`..` segment (so it can never point outside the vault).
- * Anything malformed falls back to the default `templates`.
+ * Anything malformed falls back to the given default. Shared by every
+ * config field that names a vault folder (`templates.dir`, `daily.dir`).
  */
-export function normalizeTemplatesDir(raw: unknown): string {
+export function normalizeVaultDir(raw: unknown, fallback: string): string {
   const cleaned = (typeof raw === 'string' ? raw : '')
     .trim()
     .replace(/\\/g, '/')
     .replace(/^\/+|\/+$/g, '');
   if (cleaned === '' || cleaned.split('/').some((seg) => seg === '' || seg === '.' || seg === '..')) {
-    return DEFAULT_TEMPLATES_CONFIG.dir;
+    return fallback;
   }
   return cleaned;
 }
 
 function normalizeTemplatesConfig(raw: unknown): TemplatesConfig {
   const source = (raw ?? {}) as Record<string, unknown>;
-  return { dir: normalizeTemplatesDir(source['dir']) };
+  return { dir: normalizeVaultDir(source['dir'], DEFAULT_TEMPLATES_CONFIG.dir) };
 }
 
 function normalizeVault(raw: unknown): VaultConfig {

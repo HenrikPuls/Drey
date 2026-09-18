@@ -1,6 +1,6 @@
 <app-settings-pane
   title="Daily notes"
-  description="How the app handles the per-day note in the daily/ folder."
+  description="How the app handles the per-day note: startup and the storage folder."
 >
   @if (daily(); as daily) {
     <label class="switch-row">
@@ -17,5 +17,22 @@
         </span>
       </span>
     </label>
+    <div class="field">
+      <label for="daily-dir">Storage folder</label>
+      <input
+        id="daily-dir"
+        type="text"
+        spellcheck="false"
+        autocomplete="off"
+        placeholder="daily"
+        [value]="daily.dir"
+        (input)="onDirChange($any($event.target).value)"
+      />
+      <p class="field-hint">
+        Vault-relative folder the daily notes live in. One sub-folder per year and month and the
+        YYYY-MM-DD.md file name stay fixed. An invalid path falls back to "daily". Existing notes
+        are not moved and an old folder is no longer read once this changes.
+      </p>
+    </div>
   }
 </app-settings-pane>

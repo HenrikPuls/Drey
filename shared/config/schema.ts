@@ -300,6 +300,15 @@ export interface DailyConfig {
    * exactly like clicking today in the calendar.
    */
   openOnStartup: boolean;
+  /**
+   * Vault-relative root folder the daily notes live in (app config per
+   * ADR-0010, so one folder shape across all vaults). Year and month
+   * sub-folders and the `YYYY-MM-DD.md` file name stay fixed -- they are
+   * the grammar the calendar matches against; legacy flat files inside the
+   * folder stay readable. Notes left under a previous folder are not
+   * migrated and no longer read.
+   */
+  dir: string;
 }
 
 /**

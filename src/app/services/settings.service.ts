@@ -6,6 +6,7 @@ import {
   CustomDictionary,
   DailyConfig,
   DEFAULT_APPEARANCE,
+  DEFAULT_DAILY_CONFIG,
   DEFAULT_EDITOR_FONT_FAMILY,
   DEFAULT_THEME,
   DEFAULT_TEMPLATES_CONFIG,
@@ -92,6 +93,9 @@ export class SettingsService {
   readonly templatesDir = computed<string>(
     () => this._config()?.templates.dir ?? DEFAULT_TEMPLATES_CONFIG.dir,
   );
+
+  /** The vault-relative root folder for daily notes. Persisted config, never the draft. */
+  readonly dailyDir = computed<string>(() => this._config()?.daily.dir ?? DEFAULT_DAILY_CONFIG.dir);
 
   /**
    * Ids of the dock widgets switched off in Settings -> Widgets. **Persisted

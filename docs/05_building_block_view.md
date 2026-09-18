@@ -181,8 +181,9 @@ open-windows list is capped at a third of the sidebar height and each row
 has an `x` to close that document; the file tree has a **right-click menu
 to create a new file or folder**. Quick-capture is a
 global hotkey (`Ctrl/Cmd+Alt+N`) that brings the main window forward and
-opens **today's daily note** — creating `daily/YYYY-MM-DD.md` from
-`templates/daily.md` (scaffolded on first use) if needed — then starts a
+opens **today's daily note** — creating it in the configured daily folder
+(`daily.dir`, default `daily/`) from `templates/daily.md` (scaffolded on
+first use) if needed — then starts a
 fresh `## HH:mm` entry. No popup window (see
 [ADR-0002](09_architecture_decisions/0002-quick-capture-opens-daily-note.md)).
 
@@ -267,7 +268,7 @@ graph TB
         Protocol["app:// protocol handler\n(serves the built renderer)"]
         Hotkey["globalShortcut (Ctrl+Alt+N)\n+ single-instance lock\n-> openTodayDailyNote()"]
         VaultManager["VaultManager (electron/vault-manager.ts)\nmulti-vault registry (ADR-0051) + active vault +\nper-vault directory listing + file read/write/create +\ndir create + rename/copy/duplicate (sidecar-aware,\ncross-vault = copy+delete) + binary asset write\n(attachments/) + listAllMarkdownFiles\n(path-guarded per vault)"]
-        DailyNoteManager["DailyNoteManager (electron/daily-note.ts)\nensureTodayNote(): create daily/ note from\ntemplates/daily.md, scaffold template;\nnoteContentFor(date): substituted template, no write"]
+        DailyNoteManager["DailyNoteManager (electron/daily-note.ts)\nensureTodayNote(): create <daily.dir>/ note from\ntemplates/daily.md, scaffold template;\nnoteContentFor(date): substituted template, no write"]
         TagIndex["TagIndex (electron/tag-index.ts)\nin-memory tag vocabulary + master metadata;\nrebuild() scans all .md frontmatter\n(skips daily/ + templates/); tag:list / tag:registry"]
         NoteManager["NoteManager (electron/note-manager.ts)\nnote:save pipeline: merge inline #tags -> frontmatter,\nbump updated:, (6b) route entries to master docs"]
         IpcHandlers --> VaultManager
@@ -282,7 +283,7 @@ graph TB
     end
 
     ConfigFile[("vault-config.json\n(app.getPath('userData'))")]
-    DailyFiles[("<vault>/daily/YYYY-MM-DD.md\n<vault>/templates/daily.md")]
+    DailyFiles[("<vault>/<daily.dir>/<y>/<m>/YYYY-MM-DD.md\n<vault>/templates/daily.md")]
     VaultManager --> ConfigFile
     DailyNoteManager --> DailyFiles
 
@@ -327,8 +328,9 @@ electron/           Main process + preload (compiled to dist-electron/, CommonJS
                      per-file plugin vault-change events for .md + the
                      vault:changed renderer push (ADR-0045); shared by watcher,
                      manual refresh (vault:refresh) and MCP writes
-  daily-note.ts     DailyNoteManager: ensureTodayNote() -- creates daily/<date>.md
-                     from templates/daily.md (scaffolds a starter template on
+  daily-note.ts     DailyNoteManager: ensureTodayNote() -- creates <daily.dir>/<y>/<m>/<date>.md
+                     (the configured daily folder, AppConfig.daily.dir) from
+                     templates/daily.md (scaffolds a starter template on
                      first use); noteContentFor(date) -- substituted template
                      with no write (calendar draft); placeholder substitution
   note-manager.ts   NoteManager: the note:save pipeline -- on a file with a
@@ -392,6 +394,7 @@ src/                Angular renderer (standalone components, esbuild via Angular
                             persists the last mode as the new-note default (drey.editor)
       calendar.service.ts  Mini-calendar view state (month, selected day) + weeks grid +
                             "has a daily note" lookup off VaultService.fileTree
+                            (the configured daily folder, SettingsService.dailyDir)
       entry-draft.service.ts  The drawer's draft ({ topic, text, tags }); hands the
                             finished draft to EditorService.requestEntryFromDraft().
                             (People/Meetings chip rows and the empty-TOPIC
@@ -694,8 +697,9 @@ shared/             Code compiled into BOTH electron/ and src/ (two separate
                       model), DEFAULT_APP_CONFIG (incl. the three built-in action
                       templates -- Summarise note / Summarise search results / Autotag
                       -- and their English prompts), normalizeAppConfig (total parse)
-  daily.ts           Pure: dailyPathFor(date) -> daily/<year>/<month>/YYYY-MM-DD.md
-                      and dailyDateFromPath() (nested + legacy flat)
+  daily.ts           Pure: dailyPathFor(date, dir) -> <dir>/<year>/<month>/YYYY-MM-DD.md
+                      and dailyDateFromPath(path, dir) (nested + legacy flat,
+                      both inside the configured folder); DEFAULT_DAILY_DIR = 'daily'
   timestamp.ts       Pure local-time formatters (date / time / datetime / timestamp)
   frontmatter.ts     Pure YAML frontmatter engine (split / read / write / bumpUpdated),
                       built on the `yaml` package's parseDocument for a lossless
@@ -1006,8 +1010,8 @@ placeholders. See also
   `EditorService.openDailyNote(iso)`: existing file opens normally; a day
   with no note opens an unsaved draft from `daily:build-content`. Nothing
   is written until the user types and saves (ADR-0003). "Has a note"
-  markers come from scanning `daily/*.md` in `VaultService.fileTree()` —
-  no new IPC for that.
+  markers come from scanning the configured daily folder in
+  `VaultService.fileTree()` — no new IPC for that.
 - **`CalendarService` / `EntryDraftService` / `AssistantService` hold the
   view state**, not the components (CLAUDE.md, "no business logic inside
   components"). Calendar navigation + selection + note-date lookup; the
@@ -1877,8 +1881,9 @@ src/app/templates/
 
 ### Startup daily note (ADR-0002 flow, opened automatically)
 
-- `daily: { openOnStartup }` on `AppConfig` (default `true`), a one-toggle
-  **Daily notes** settings category.
+- `daily: { openOnStartup, dir }` on `AppConfig` (defaults `true` /
+  `'daily'`), the **Daily notes** settings category (startup toggle +
+  storage folder).
 - `App` runs a one-shot `effect()`: when `VaultService.activeVaultPath()`
   and `SettingsService.loaded()` are both truthy (guarded by a
   `dailyNoteStartupDone` boolean so post-save `vault.refresh()` calls do

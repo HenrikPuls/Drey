@@ -539,7 +539,7 @@ if (!app.requestSingleInstanceLock()) {
       },
     });
     vaultWatcherForShutdown = vaultWatcher;
-    const dailyNotes = new DailyNoteManager(vaultManager);
+    const dailyNotes = new DailyNoteManager(vaultManager, appConfig);
     const llmDebug = new LlmDebugLog();
     // The provider router (ADR-0047): one client per implemented backend,
     // picked per call from `llm.provider` -- switching in Settings applies

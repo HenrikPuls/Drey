@@ -1,6 +1,7 @@
 import { TestBed } from '@angular/core/testing';
 import { EditorService, stripFrontmatter } from './editor.service';
-import { DreyApi, NoteSaveRequest, NoteSaveResult } from '../../../shared/ipc-api';
+import { SettingsService } from './settings.service';
+import { AppConfig, DreyApi, NoteSaveRequest, NoteSaveResult } from '../../../shared/ipc-api';
 
 /** Default fake `saveNote`: echoes the buffer back as the saved content (no rewrite). */
 function echoSave(request: NoteSaveRequest): Promise<NoteSaveResult> {
@@ -286,6 +287,66 @@ describe('EditorService', () => {
       await legacyService.openDailyNote('2026-09-05');
       expect(legacyService.openPath()).toBe('daily/2026-09-05.md');
       expect(legacyService.bufferContent()).toBe('legacy body');
+    });
+
+    it('opens an existing daily note in the configured folder', async () => {
+      TestBed.resetTestingModule();
+      const journalApi: Partial<DreyApi> = {
+        getConfig: () => Promise.resolve({ daily: { dir: 'Journal' } } as AppConfig),
+        readVaultFile: (relativePath: string) =>
+          relativePath === 'Journal/2026/09/2026-09-05.md'
+            ? Promise.resolve({ content: 'journal body', modifiedMs: 1 })
+            : Promise.reject(new Error('ENOENT')),
+      };
+      window.dreyApi = journalApi as DreyApi;
+      await TestBed.inject(SettingsService).load();
+      const journalService = TestBed.inject(EditorService);
+
+      await journalService.openDailyNote('2026-09-05');
+      expect(journalService.openPath()).toBe('Journal/2026/09/2026-09-05.md');
+      expect(journalService.bufferContent()).toBe('journal body');
+      expect(journalService.activeIsDraft()).toBe(false);
+    });
+
+    it('falls back to a flat file inside the configured folder', async () => {
+      TestBed.resetTestingModule();
+      const flatApi: Partial<DreyApi> = {
+        getConfig: () => Promise.resolve({ daily: { dir: 'Journal' } } as AppConfig),
+        readVaultFile: (relativePath: string) =>
+          relativePath === 'Journal/2026-09-05.md'
+            ? Promise.resolve({ content: 'flat body', modifiedMs: 1 })
+            : Promise.reject(new Error('ENOENT')),
+      };
+      window.dreyApi = flatApi as DreyApi;
+      await TestBed.inject(SettingsService).load();
+      const flatService = TestBed.inject(EditorService);
+
+      await flatService.openDailyNote('2026-09-05');
+      expect(flatService.openPath()).toBe('Journal/2026-09-05.md');
+      expect(flatService.bufferContent()).toBe('flat body');
+    });
+
+    it('never reads the old daily/ root once the folder is configured', async () => {
+      TestBed.resetTestingModule();
+      const reads: string[] = [];
+      const strictApi: Partial<DreyApi> = {
+        getConfig: () => Promise.resolve({ daily: { dir: 'Journal' } } as AppConfig),
+        readVaultFile: (relativePath: string) => {
+          reads.push(relativePath);
+          return Promise.reject(new Error('ENOENT'));
+        },
+        buildDailyNoteContent: () => Promise.resolve('# 2026-09-06\n'),
+      };
+      window.dreyApi = strictApi as DreyApi;
+      await TestBed.inject(SettingsService).load();
+      const strictService = TestBed.inject(EditorService);
+
+      await strictService.openDailyNote('2026-09-06');
+      // A draft at the configured path; nothing under the old daily/ root
+      // was probed (configured-folder-only reads).
+      expect(strictService.openPath()).toBe('Journal/2026/09/2026-09-06.md');
+      expect(strictService.activeIsDraft()).toBe(true);
+      expect(reads).toEqual(['Journal/2026/09/2026-09-06.md', 'Journal/2026-09-06.md']);
     });
 
     it('opens an unsaved draft from the template when the file is missing, and only writes on first real edit', async () => {

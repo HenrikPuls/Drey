@@ -120,17 +120,21 @@ describe('SettingsService (draft model)', () => {
   it('patchDaily / patchTemplates write the draft only, and getters read the persisted config', async () => {
     expect(service.loaded()).toBe(true);
     expect(service.dailyOpenOnStartup()).toBe(true);
+    expect(service.dailyDir()).toBe('daily');
     expect(service.templatesDir()).toBe('templates');
 
     service.patchDaily({ openOnStartup: false });
+    service.patchDaily({ dir: 'Journal' });
     service.patchTemplates({ dir: 'snippets' });
     // Draft moved; persisted getters unchanged until save.
     expect(service.draft()?.daily.openOnStartup).toBe(false);
     expect(service.dailyOpenOnStartup()).toBe(true);
+    expect(service.dailyDir()).toBe('daily');
     expect(service.templatesDir()).toBe('templates');
 
     await service.save();
     expect(service.dailyOpenOnStartup()).toBe(false);
+    expect(service.dailyDir()).toBe('Journal');
     expect(service.templatesDir()).toBe('snippets');
   });
 

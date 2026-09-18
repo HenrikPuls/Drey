@@ -8,6 +8,7 @@ import { EditorCommandsService } from '../editor/editor-commands.service';
 import { EditorPrefsService, EditorViewMode } from '../editor/editor-prefs.service';
 import { PaneService } from '../panes/pane.service';
 import { VaultService } from '../vault';
+import { SettingsService } from './settings.service';
 
 /** Re-exported for existing importers (`Editor`, specs); defined in `markdown-frontmatter.ts`. */
 export { stripFrontmatter } from '../editor/markdown-frontmatter';
@@ -141,6 +142,7 @@ export class EditorService {
   private readonly panes = inject(PaneService);
   private readonly prefs = inject(EditorPrefsService);
   private readonly commands = inject(EditorCommandsService);
+  private readonly settings = inject(SettingsService);
 
   private readonly docs = signal<OpenDoc[]>([]);
 
@@ -534,18 +536,21 @@ export class EditorService {
   }
 
   /**
-   * Opens the daily note for `dateStr` (`YYYY-MM-DD`) in the ACTIVE vault.
-   * If the file exists it's opened normally; otherwise a **draft** tab is
-   * opened from the template -- nothing hits disk until the user types and
-   * saves.
+   * Opens the daily note for `dateStr` (`YYYY-MM-DD`) in the ACTIVE vault,
+   * under the configured daily folder (`AppConfig.daily.dir`, default
+   * `daily/`). If the file exists -- nested, or as a legacy flat file
+   * inside that folder -- it's opened normally; otherwise a **draft** tab
+   * is opened from the template -- nothing hits disk until the user types
+   * and saves. Whatever an older folder setting wrote is never read here.
    */
   async openDailyNote(dateStr: string): Promise<void> {
     if (!this.api) {
       return;
     }
     const vaultId = this.vault.activeVaultId();
-    const nestedPath = dailyPathFor(dateStr);
-    const legacyPath = `daily/${dateStr}.md`;
+    const dir = this.settings.dailyDir();
+    const nestedPath = dailyPathFor(dateStr, dir);
+    const legacyPath = `${dir}/${dateStr}.md`;
     // A note this session may already be open under either layout.
     for (const candidate of [nestedPath, legacyPath]) {
       const key = docKey(vaultId, candidate);
