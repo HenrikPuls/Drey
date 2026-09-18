@@ -10,8 +10,10 @@ An AI-powered knowledge hub for note-taking and task automation.
   proprietary format.
 - No server — Electron app, direct file access to any folder (including
   OneDrive).
-- Folder structure is **the user's own**. The app imposes only the
-  structural `templates/` and `daily/` folders; topics are free inline
+- Folder structure is **the user's own**. The app imposes only
+  `templates/`, the daily-notes root (configurable, `daily.dir`, default
+  `daily/`), `chats/` (assistant conversations) and the hidden `.drafts/`
+  (exit-time auto-saves); topics are free inline
   `#tag` labels, never directories, and the app never creates or moves
   folders on a tag's behalf. Nested tags (`#project/frontend`) are a label
   hierarchy — a naming convention, still not folders (ADR-0017).
@@ -51,9 +53,12 @@ Once you start working on one of the feature requests and it didn't had a Id the
   PowerPoint and Loop components. **The PDF slice shipped** (milestone
   30, [ADR-0052](docs/09_architecture_decisions/0052-pdf-embeds-and-viewer.md):
   drag a PDF in → staged name-preserving into `attachments/` → rendered
-  in place by the built-in viewer; opening a `.pdf` gives a viewer tab).
-  The Office formats remain open — the platform renders none of them
-  natively. (Effort to be discussed before implementation.)
+  in place by the built-in viewer; opening a `.pdf` gives a viewer tab),
+  and the same milestone delivered the note **PDF export** (req-16 —
+  editor `⋯` / tab / Files-panel rows, docs/06 §6.39, mermaid-rendering
+  since milestone 32). The Office formats remain open — the platform
+  renders none of them natively. (Effort to be discussed before
+  implementation.)
 - **Req-3 / req-15** — `copilot-web` provider: drive Microsoft 365
   Copilot's website via Playwright + system Edge as an LLM provider.
   Prototyped on branch `feat/copilot-web-provider` (ADR-0040) — fragile
@@ -81,8 +86,8 @@ Once you start working on one of the feature requests and it didn't had a Id the
   integrated speech-to-text via Win+H as the likely first step).
 - **req-12** — automatic image captioning via a vision model.
 - **req-13** — editor: footnote rendering in Live Preview (needs a custom
-  Lezer markdown extension); `Ctrl`-click to open concealed link targets.
-- **req-16** — PDF export.
+  Lezer markdown extension). (The `Ctrl`-click half shipped: external
+  links open in the OS browser — Req-5 — and wikilinks via req-20.)
 - **req-19** — integrate draw.io view and edit.
 - **req-21** — dataview.js support.
 - **Req-31** — MCP client: connect the app TO external MCP servers
@@ -92,21 +97,20 @@ Once you start working on one of the feature requests and it didn't had a Id the
   `mcp__<server>__<tool>`), confirmation-gated per server. Builds on the
   Req-29 interface — every tool-capable provider can drive them.
 
-bug:
-bug - beim öffnen eines vaults werden immer alle folder aufgeklappt und es dauert ewig bis er geladen hat, bei großen vaults, es soll aber immer nur die jeweilige ebene angezeigt werden. 
+  UX (shipped entries removed — the Files-panel bug and the editor
+  icons/path tooltip/assistant scroll+icon/auto-summary/document-binding
+  lines shipped in milestones 29 and 31, see the changelog):
 
-  UX:
-  Req - Editor - Lines shall only display the picture but no text, same for save please use a save symbol instead.
-  Req - Files - If the mouse hovers over the file the tooltip shall display the whole path and name of the file
-  Req - Assitant - the text shall automatically scroll when new text is received from the assistant.
-  Req - Assistant - Use image for new text instead of text.
-  Req - Assistant - Remove auto summary
-  Req - Assistant - The assistant shall be bound to an open document, so when you change the document you will
-  automatically get a new chat. If you switch back to another docuemtn, you will get the chat of that document.
-  Of course I can add other files from the vault to the context.
-  Req - Look at the internal prompts and review them
+  Req - Look at the internal prompts and review them (partially: the ask
+  protocol was reworked in milestone 31, ADR-0053)
   Req - Settings -  Cleanup order of entries in settings dialog, maybe we can order them alphabetically.
   Req - Review all context menus, bring them in the typical order, add lines where appropiate, add keyboard shortcuts. This is especailly relevant for the editor context menu as there the create pdf is after the templates, however the templates shall always be the last
+
+### Announced follow-ups
+
+- **M-B (from milestone 28, ADR-0051)** — multi-vault round two: search
+  scopes (document / this vault / all vaults), per-vault tags/tasks
+  indexes, MCP `vault` arguments, tasks "all vaults" scope.
 
 ### Known-defect remainder
 
