@@ -1916,7 +1916,7 @@ milestone 32; the state of the list:
 | `![[media]]` embeds | rewritten to standard image syntax first (`rewriteEmbedWikilinks`) | M31 |
 | ` ```mermaid ` fences | light-theme SVG figures rendered by the inlined runtime; parse error / 20 s cap / missing bundle → the code block | M32 |
 | `[[wikilinks]]`, `![[note#anchor]]` | literal text — they name in-vault targets a PDF reader can't follow | M30 |
-| `![[x.pdf]]` embeds | **known limitation:** the embed resolves like an image, but an `<img>` cannot rasterize a PDF — the spot prints empty. A viewer frame is not print-reproducible; a visible fallback (e.g. the file name) is an open follow-up | M31 |
+| `![[x.pdf]]` embeds (and a hand-written `![](x.pdf)`) | a bordered note — "PDF embed — not printable: `<name>`. The file stays in the vault." — replaces the `<img>`, which cannot rasterize a PDF and printed empty (M31's known limitation, closed) | M32 |
 | `#tag` pills, hover chrome, gutters, editor widgets | absent by definition — the PDF is the document, not the editor | — |
 
 ## 6.40 Drop a PDF into a note → staged, embedded, readable in place (ADR-0052)

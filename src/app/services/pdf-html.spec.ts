@@ -114,6 +114,39 @@ describe('buildNotePdfHtml', () => {
   });
 });
 
+describe('PDF embed fallback (docs/06 §6.39)', () => {
+  const resolver = (u: string): string | null => (u === 'pics/x.png' ? 'file:///r/x.png' : null);
+
+  it('prints a visible note for a ![[x.pdf]] embed instead of an empty <img>', () => {
+    const html = render('![[Quarterly Report.pdf]]', undefined, resolver);
+    expect(html).toContain('PDF embed — not printable: <code>Quarterly Report.pdf</code>');
+    expect(html).not.toContain('<img');
+  });
+
+  it('covers a hand-written Markdown pdf image too', () => {
+    const html = render('![](attachments/x.pdf)', undefined, resolver);
+    expect(html).toContain('PDF embed — not printable');
+    expect(html).not.toContain('<img');
+  });
+
+  it('decodes a percent-encoded pdf name', () => {
+    const html = render('![](my%20report.pdf)', undefined, resolver);
+    expect(html).toContain('my report.pdf');
+  });
+
+  it('leaves image embeds and images alone', () => {
+    const html = render('![[pics/x.png]]\n\n![Alt](pics/x.png)', undefined, resolver);
+    expect(html).toContain('<img src="file:///r/x.png"');
+    expect(html).not.toContain('PDF embed — not printable');
+  });
+
+  it('replaces a raw-HTML pdf img tag with the note', () => {
+    const html = render('<img src="x.pdf" alt="x">', undefined, resolver);
+    expect(html).toContain('PDF embed — not printable');
+    expect(html).not.toContain('<img');
+  });
+});
+
 describe('rewriteEmbedWikilinks (milestone 31)', () => {
   it('rewrites media embeds to angle-bracket Markdown images', () => {
     expect(rewriteEmbedWikilinks('![[Pasted image 20260427105518.png]]')).toBe(

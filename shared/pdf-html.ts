@@ -16,7 +16,10 @@
  * swaps each rendered SVG in for its code block. Without the runtime -- or
  * on a parse error / per-diagram timeout -- the fence stays a code block.
  * `[[wikilinks]]` stay literal text by decision (they name in-vault
- * targets a PDF reader can't follow).
+ * targets a PDF reader can't follow). PDF embeds (`![[x.pdf]]`, a
+ * hand-written `![](x.pdf)`) print as a visible note instead of an
+ * `<img>` — an image tag cannot rasterize a PDF, so the spot would be
+ * blank.
  */
 import MarkdownIt from 'markdown-it';
 import { imageExtension, pdfExtension } from './asset-name';
@@ -242,6 +245,31 @@ export const MERMAID_BOOTSTRAP = `
  * markup -- when {@link PdfHtmlOptions.mermaidRuntime} is given they are
  * rendered in the page by the inlined runtime before the print.
  */
+/**
+ * The raw reference if it names a PDF, percent-encoding decoded (markdown-it
+ * normalizes destinations, so `my report.pdf` arrives as `my%20report.pdf`).
+ * Non-PDF (or undecodable) references return `null`.
+ */
+function pdfRefName(raw: string): string | null {
+  const candidate = raw.trim();
+  let decoded = candidate;
+  try {
+    decoded = decodeURIComponent(candidate);
+  } catch {
+    /* keep the raw text */
+  }
+  return pdfExtension(decoded) !== null ? decoded : null;
+}
+
+/**
+ * The visible stand-in for a PDF embed: an `<img>` cannot rasterize a PDF,
+ * so the spot would print empty — an honest, identifiable note prints
+ * instead (docs/06 §6.39 parity checklist).
+ */
+function pdfEmbedNote(name: string, escapeHtml: (text: string) => string): string {
+  return `<span class="pdf-embed-note">PDF embed — not printable: <code>${escapeHtml(name)}</code>. The file stays in the vault.</span>`;
+}
+
 export function buildNotePdfHtml(options: PdfHtmlOptions): string {
   const { markdown, title, resolveImageSrc, mermaidRuntime } = options;
   const body = rewriteEmbedWikilinks(splitFrontmatter(markdown).body);
@@ -251,9 +279,16 @@ export function buildNotePdfHtml(options: PdfHtmlOptions): string {
     // Markdown-source images: run the raw url through the callback; a null
     // drops the <img> but keeps the alt text. Mirrors markdown-it's own
     // default rule (alt from the rendered children, then renderToken).
+    // A PDF reference never becomes an <img> — it would print empty — and
+    // gets the visible note instead.
     md.renderer.rules['image'] = (tokens, idx, options, env, self) => {
       const token = tokens[idx];
-      const src = resolveImageSrc(String(token.attrGet('src') ?? ''));
+      const rawSrc = String(token.attrGet('src') ?? '');
+      const pdfName = pdfRefName(rawSrc);
+      if (pdfName !== null) {
+        return pdfEmbedNote(pdfName, (s) => md.utils.escapeHtml(s));
+      }
+      const src = resolveImageSrc(rawSrc);
       if (src === null) {
         return md.utils.escapeHtml(token.content);
       }
@@ -269,13 +304,18 @@ export function buildNotePdfHtml(options: PdfHtmlOptions): string {
     // Raw-HTML `<img>` tags (html: true lets them through verbatim). Srcs
     // that are already final (https/data from the note, file:// from the
     // markdown rule above) are left alone -- only relative references go
-    // through the callback here.
+    // through the callback here. A PDF src gets the same visible note as
+    // the Markdown route.
     html = html.replace(/<img\b[^>]*>/gi, (tag: string) => {
       const src = tag.match(/\ssrc\s*=\s*("([^"]*)"|'([^']*)')/i);
       if (src === null) {
         return '';
       }
       const raw = src[2] ?? src[3] ?? '';
+      const pdfName = pdfRefName(raw);
+      if (pdfName !== null) {
+        return pdfEmbedNote(pdfName, (s) => md.utils.escapeHtml(s));
+      }
       if (/^(https?:|data:|file:)/i.test(raw.trim())) {
         return tag;
       }
@@ -378,5 +418,14 @@ const PAPER_CSS = `
   .mermaid-figure svg {
     max-width: 100%;
     height: auto;
+  }
+  .pdf-embed-note {
+    display: block;
+    margin: 1em 0;
+    padding: 0.5em 0.9em;
+    border: 1px solid #d7dadd;
+    border-radius: 6px;
+    color: #57606a;
+    break-inside: avoid;
   }
 `;

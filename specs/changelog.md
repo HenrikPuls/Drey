@@ -59,8 +59,9 @@ bug-6 follow-up below).
   preamble, checklist in docs/06 §6.39: when the editor gains a new
   rendered element it must carry into the export in the same change, or
   its absence there is an explicit decision (current: `[[wikilinks]]`
-  stay literal; known limitation: `![[x.pdf]]` embeds print empty —
-  `<img>` cannot rasterize a PDF — open follow-up).
+  stay literal; `![[x.pdf]]` embeds print a visible "not printable" note
+  instead of an empty frame — an `<img>` cannot rasterize a PDF; the M31
+  gap closed with this milestone's wrap-up).
 - **Plugin Settings pages share the core form vocabulary** — a shared
   stylesheet scoped under `.plugin-settings-body`
   (`src/app/plugin-host/plugin-settings.css`, mirroring the Settings
