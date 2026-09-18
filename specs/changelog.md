@@ -10,6 +10,12 @@ live in the ADRs
 and the current architecture in
 [`docs/05_building_block_view.md`](../docs/05_building_block_view.md).
 
+**Standing rule (since milestone 32):** the PDF export is a second
+renderer of the note. When the editor gains a new rendered element, it
+must carry into the export in the same change — or its absence there is
+recorded as an explicit decision. The parity checklist lives in
+[`docs/06_runtime_view.md`](../docs/06_runtime_view.md) §6.39.
+
 ---
 
 ## Recent milestones

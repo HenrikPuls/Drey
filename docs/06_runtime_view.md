@@ -1897,6 +1897,28 @@ decision (it names an in-vault target a PDF reader can't follow). The
 temp page and hidden window are destroyed in a `finally`, so a failed
 print leaves nothing behind.
 
+### Parity checklist — every editor element carries into the export (or its absence is a decision)
+
+The PDF export is a **second renderer of the note**. When the editor
+gains a new rendered element, `shared/pdf-html.ts` (plus
+`electron/pdf-export.ts`, when the element needs a runtime) must be
+revisited **in the same change**: the element either carries into the
+PDF, or its absence is recorded in this list. Standing rule since
+milestone 32; the state of the list:
+
+| Editor element | Export treatment | Since |
+| --- | --- | --- |
+| Frontmatter fence | stripped (`splitFrontmatter`) | M30 |
+| GFM task checkboxes | ☐/☑ glyph replacement outside code fences (`replaceTaskMarkers`) | M30 |
+| `![](…)` images and raw `<img>` | resolved to `file://` URLs through the shared candidate chain (`shared/asset-refs.ts`); unresolvable → alt text stays | M30 |
+| Raw note HTML | `<script>` blocks and `on*=` handler attributes stripped (`stripActiveHtml`) | M30 |
+| Tables, code fences, blockquotes, headings | plain markdown-it output under the paper stylesheet | M30 |
+| `![[media]]` embeds | rewritten to standard image syntax first (`rewriteEmbedWikilinks`) | M31 |
+| ` ```mermaid ` fences | light-theme SVG figures rendered by the inlined runtime; parse error / 20 s cap / missing bundle → the code block | M32 |
+| `[[wikilinks]]`, `![[note#anchor]]` | literal text — they name in-vault targets a PDF reader can't follow | M30 |
+| `![[x.pdf]]` embeds | **known limitation:** the embed resolves like an image, but an `<img>` cannot rasterize a PDF — the spot prints empty. A viewer frame is not print-reproducible; a visible fallback (e.g. the file name) is an open follow-up | M31 |
+| `#tag` pills, hover chrome, gutters, editor widgets | absent by definition — the PDF is the document, not the editor | — |
+
 ## 6.40 Drop a PDF into a note → staged, embedded, readable in place (ADR-0052)
 
 ```mermaid
