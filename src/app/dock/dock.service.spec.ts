@@ -1,5 +1,6 @@
 import { TestBed } from '@angular/core/testing';
 import { PaneService } from '../panes/pane.service';
+import { SettingsService } from '../services/settings.service';
 import { DockService } from './dock.service';
 import { CORE_WIDGETS } from './widget-registry';
 
@@ -344,6 +345,25 @@ describe('DockService', () => {
       const before = JSON.stringify(localStorage.getItem('drey.dock'));
       dock.reconcileEnabled(new Set());
       expect(JSON.stringify(localStorage.getItem('drey.dock'))).toBe(before);
+    });
+  });
+
+  describe('a widget disabled in the persisted config', () => {
+    // Regression: the registry-absorb effect re-placed a disabled widget and
+    // the reconcile effect removed it again, forever -- the renderer froze
+    // and ate memory on every start once any widget was switched off.
+    it('settles instead of ping-ponging between the two effects', () => {
+      const setItem = vi.spyOn(Storage.prototype, 'setItem');
+      TestBed.configureTestingModule({
+        providers: [{ provide: SettingsService, useValue: { widgetsDisabled: () => new Set(['files']) } }],
+      });
+      const dock = make();
+      for (let i = 0; i < 5; i++) {
+        TestBed.tick();
+      }
+      expect(dock.sideOf('files')).toBeNull();
+      expect(dock.leftIds()).toEqual(['calendar', 'windows']);
+      expect(setItem.mock.calls.length).toBeLessThan(10);
     });
   });
 });

@@ -1,4 +1,4 @@
-import { Injectable, computed, effect, inject, signal } from '@angular/core';
+import { Injectable, computed, effect, inject, signal, untracked } from '@angular/core';
 import { endDragChrome, moveDragChrome, startDragChrome } from '../dnd';
 import { PaneService } from '../panes/pane.service';
 import { LayoutGestureService } from '../services/layout-gesture.service';
@@ -128,17 +128,34 @@ export class DockService {
 
     // Settings -> Widgets: fold the "disabled" set into the layout whenever
     // it changes (persisted config, so this fires on Save and on load).
-    effect(() => this.reconcileEnabled(this.settings.widgetsDisabled()));
+    //
+    // Both effects write `state` (via `patch`, whose `persist` also reads
+    // it), so each body runs untracked: only the inputs named here may
+    // re-trigger it. Tracking `state` made the two effects re-fire each
+    // other forever (see `absorbRegistry`).
+    effect(() => {
+      const disabled = this.settings.widgetsDisabled();
+      untracked(() => this.reconcileEnabled(disabled));
+    });
 
     // The registry is runtime (ADR-0044): a plugin widget could register
     // after this service was first injected. Whatever the construction
     // order, converge: every registered widget gets a dock slot (or keeps
     // its hidden one) and default flex/open values.
-    effect(() => this.absorbRegistry(this.registry.widgets()));
+    effect(() => {
+      const widgets = this.registry.widgets();
+      const disabled = this.settings.widgetsDisabled();
+      untracked(() => this.absorbRegistry(widgets, disabled));
+    });
   }
 
-  /** Adds dock-list slots + default flex/open for widgets the state doesn't know yet. */
-  private absorbRegistry(widgets: readonly WidgetDescriptor[]): void {
+  /**
+   * Adds dock-list slots + default flex/open for widgets the state doesn't
+   * know yet. A widget disabled in Settings gets its defaults but no slot --
+   * `reconcileEnabled` strips those, so placing one here would undo it and
+   * the two would fight indefinitely.
+   */
+  private absorbRegistry(widgets: readonly WidgetDescriptor[], disabled: ReadonlySet<string>): void {
     this.patch((s) => {
       const dock = {
         left: [...s.dock.left],
@@ -160,7 +177,7 @@ export class DockService {
           open[w.id] = w.defaultOpen;
           changed = true;
         }
-        if (!placed) {
+        if (!placed && !disabled.has(w.id)) {
           dock[w.defaultDock].splice(this.orderedInsertIndex(w.defaultDock, w.id, dock[w.defaultDock]), 0, w.id);
           changed = true;
         }
