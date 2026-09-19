@@ -96,62 +96,22 @@
 
 /* ---- body: free-text + tag filter ---- */
 
-.tasks-panel .chip-field {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 4px;
+/* The tag chips + their input come from the shared tag field
+   (`src/styles.css` `.tag-field*`, milestone 33) — the Search panel and the
+   entry drawer mount the exact same component. The field sits inside the
+   tasks `.filter` row, so only the frame styling lives here. */
+
+.tasks-panel .tag-field {
+  flex: 1;
+  min-width: 90px;
+}
+
+.tasks-panel .tag-field-chips {
   min-height: 28px;
   padding: 4px 7px;
   background: var(--bg-search);
   border: 1px solid var(--field-border);
   border-radius: var(--radius);
-}
-
-.tasks-panel .chip {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  height: 18px;
-  padding: 0 3px 0 6px;
-  border-radius: var(--radius-xs);
-  background: var(--accent-surface);
-  color: var(--accent-text);
-  font-family: var(--font-mono);
-  font-size: var(--fs-mono-tag);
-  white-space: nowrap;
-}
-
-.tasks-panel .chip .x {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 12px;
-  height: 12px;
-  border: 0;
-  border-radius: 3px;
-  background: transparent;
-  color: inherit;
-  font-size: 11px;
-  line-height: 1;
-  cursor: pointer;
-  opacity: 0.65;
-}
-
-.tasks-panel .chip .x:hover {
-  opacity: 1;
-  background: var(--hover-bg-loud);
-}
-
-.tasks-panel .chip-input {
-  flex: 1;
-  min-width: 60px;
-  border: 0;
-  background: transparent;
-  outline: none;
-  color: var(--text-primary);
-  font-size: 11.5px;
-  padding: 1px 0;
 }
 
 .tasks-panel .text-input {

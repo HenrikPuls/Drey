@@ -74,9 +74,14 @@ export const IPC_CHANNELS = {
   dailyBuildContent: 'daily:build-content',
   noteSave: 'note:save',
   exportNotePdf: 'export:note-pdf',
-  tagList: 'tags:list',
-  tagSearch: 'tags:search',
   tagSuggest: 'tags:suggest',
+  // Tag vocabulary + prefix styles over the section-search provider (the
+  // tags plugin registers it; ADR-0017/ADR-0044). `search:vocabulary` is a
+  // request the base renderer makes; it degrades to an empty payload when
+  // no provider is registered. `search:changed` is the main -> renderer
+  // push fired whenever the provider or its index changed.
+  searchVocabulary: 'search:vocabulary',
+  searchChanged: 'search:changed',
   configGet: 'config:get',
   configSet: 'config:set',
   llmListModels: 'llm:list-models',
@@ -347,6 +352,17 @@ export interface Frontmatter {
 export interface TagEntry {
   tag: string;
   count: number;
+}
+
+/**
+ * The vocabulary + prefix-style payload the section-search provider serves
+ * (see `search:vocabulary`). Empty when no provider is registered (e.g. the
+ * tags plugin is disabled) — consumers degrade to no completion / auto
+ * colors.
+ */
+export interface TagVocabularyPayload {
+  entries: TagEntry[];
+  prefixes: Array<{ prefix: string; color: string }>;
 }
 
 /** Renderer -> main: save the active editor buffer as a note. */
@@ -854,6 +870,20 @@ export interface DreyApi {
    * cancellable. Rejects when LLM features are off.
    */
   suggestTags(entryText: string, taskId?: string): Promise<string[]>;
+
+  /**
+   * The tag vocabulary + configured prefix styles from the section-search
+   * provider (the tags plugin registers it). Resolves to empty arrays when
+   * no provider is registered — features degrade, never throw.
+   */
+  searchVocabulary(): Promise<TagVocabularyPayload>;
+
+  /**
+   * Fires when the section-search provider or its index changed (index
+   * rebuild, settings change, plugin enable/disable). Returns an
+   * unsubscribe.
+   */
+  onSearchChanged(listener: () => void): () => void;
 
   /** Current MCP vault server state for the Settings pane (ADR-0021). */
   getMcpStatus(): Promise<McpStatus>;

@@ -42,6 +42,9 @@ import {
 } from '../wikilinks';
 import { pasteUrlAsMarkdownLink } from '../paste-link';
 import { assetUrlToVaultPath, resolveVaultImageCandidates } from '../vault-image';
+import { makeTagCompletionSource, tagPills, tagStyleRefresh } from '../tags';
+import { TagVocabularyService } from '../../tags/tag-vocabulary.service';
+import { KeybindingService } from '../../keybindings';
 import { EditorExtensionRegistry, DropDecoderRegistry } from '../../plugin-host';
 
 /**
@@ -77,6 +80,8 @@ export class MarkdownSurface implements AfterViewInit, OnDestroy {
   private readonly zoom = inject(EditorZoomService);
   private readonly lightbox = inject(ImageLightboxService);
   private readonly wikiLinks = inject(WikilinkService);
+  private readonly tagVocab = inject(TagVocabularyService);
+  private readonly keys = inject(KeybindingService);
   private readonly pluginExtensions = inject(EditorExtensionRegistry);
   private readonly dropDecoders = inject(DropDecoderRegistry);
   private readonly host = viewChild.required<ElementRef<HTMLDivElement>>('host');
@@ -255,6 +260,12 @@ export class MarkdownSurface implements AfterViewInit, OnDestroy {
         effects: this.pluginCompartment.reconfigure(this.collectPluginExtensions()),
       });
     });
+    // Tag prefix colors changed (Settings → Tags): nudge the pill plugin to
+    // re-resolve its colors now, not at the next scroll/edit.
+    effect(() => {
+      this.tagVocab.stylesRevision();
+      this._view?.dispatch({ effects: tagStyleRefresh.of(null) });
+    });
   }
 
   /**
@@ -310,8 +321,20 @@ export class MarkdownSurface implements AfterViewInit, OnDestroy {
         // stays plain.
         extensions: [{ remove: ['Emoji'] }],
       }),
-      // `#tag` completion + pills are plugin extensions now (the Tags
-      // plugin's `registerExtension('both')`, ADR-0044 stage 5).
+      // `#tag` completion + pills are BASE editor features (milestone 33 —
+      // moved out of the Tags plugin, which stays the data owner): colored
+      // pills, Ctrl/Cmd-click -> the Search panel's `search.open` with
+      // `{ tag }`, completion from the tag vocabulary service.
+      tagPills({
+        colorFor: (tag) => this.tagVocab.styleFor(tag).color,
+        onActivate: (tag) => this.keys.run('search.open', { tag }),
+      }),
+      markdownLanguage.data.of({
+        autocomplete: makeTagCompletionSource({
+          getTags: () => this.tagVocab.entries(),
+          colorFor: (tag) => this.tagVocab.styleFor(tag).color,
+        }),
+      }),
       this.onLinkActivate() ? linkActivation(this.onLinkActivate()!) : [],
       // `[[wikilinks]]` (req-20): styled + clickable in both modes (this is
       // the language compartment; only the bracket concealing is

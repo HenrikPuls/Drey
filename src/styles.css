@@ -290,3 +290,129 @@ textarea::placeholder {
 ::-webkit-scrollbar-corner {
   background: transparent;
 }
+
+/* ---------------------------------------------------------------------------
+ * Tag field (milestone 33) — the shared tag chip field mounted by the entry
+ * drawer and, through `api.ui.createTagField`, by plugin panels (Search,
+ * Tasks). Chip colors come in as inline `color`/`background` (resolved per
+ * tag from the configured prefix styles / auto palette); only the neutral
+ * chrome lives here. Global sheet: plugin documents get it for free.
+ * ------------------------------------------------------------------------- */
+
+.tag-field {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.tag-field-chips {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 5px;
+  min-width: 0;
+}
+
+.tag-field-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 22px;
+  padding: 0 4px 0 8px;
+  border-radius: var(--radius-sm);
+  font-family: var(--font-mono);
+  font-size: var(--fs-mono-tag);
+  white-space: nowrap;
+}
+
+.tag-field-x {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 13px;
+  height: 13px;
+  background: transparent;
+  border: none;
+  border-radius: 3px;
+  padding: 0;
+  color: inherit;
+  font-size: 11px;
+  line-height: 1;
+  cursor: pointer;
+  opacity: 0.65;
+}
+
+.tag-field-x:hover {
+  opacity: 1;
+  background: var(--hover-bg-loud);
+}
+
+.tag-field-input {
+  flex: 1;
+  min-width: 80px;
+  background: transparent;
+  border: none;
+  outline: none;
+  color: var(--text-primary);
+  font-family: var(--font-sans);
+  font-size: inherit;
+}
+
+.tag-field-input::placeholder {
+  color: var(--placeholder);
+}
+
+.tag-field-menu {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  z-index: 30;
+  margin: 2px 0 0;
+  padding: 4px;
+  min-width: 180px;
+  max-height: 210px;
+  overflow-y: auto;
+  background: var(--bg-input);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  box-shadow: var(--popover-shadow);
+  list-style: none;
+}
+
+.tag-field-option {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 3px 6px;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.tag-field-option:hover,
+.tag-field-option.active {
+  background: var(--hover-bg-strong);
+}
+
+.tag-field-option-tag {
+  font-family: var(--font-mono);
+  font-size: var(--fs-mono-tag);
+  padding: 0 5px;
+  border-radius: 4px;
+}
+
+.tag-field-option-count {
+  color: var(--text-3);
+  font-size: 11px;
+}
+
+/* Completion option for `#tag` suggestions (base editor tag completion,
+ * milestone 33): the colored chip inside the autocomplete tooltip. */
+.cm-tooltip-autocomplete .cm-tag-option {
+  border-radius: 4px;
+  padding: 0 5px;
+  font-family: var(--font-mono);
+  font-size: var(--fs-mono-tag);
+}

@@ -157,3 +157,40 @@ a parent tag (`#project`) also returns sections carrying a nested tag
 offers the full nested vocabulary entries, so the user types through the
 segments. `TagIndex` stores each nested tag as its own vocabulary entry
 (no synthesised parent rows).
+
+## Later change — milestone 33: all-sections index, per-vault scopes, tag chrome in base, prefix colors, cross-file replace
+
+One coherent evolution of the tag system, keeping every earlier decision:
+
+- **The index covers every heading-delimited section, tagged or not** (the
+  old "sections need at least one inline `#tag`" guard is gone). Free-text
+  search now reaches untagged notes — the "tags work, text doesn't"
+  defect. Tag-only queries are unchanged (an untagged section never
+  satisfies a tag requirement).
+- **One index per registered vault** (ADR-0051 round two). The section
+  search honours the SDK's `SectionSearchScope`: omitted = the active
+  vault resolved *at call time* (no cached active id, no boot race),
+  `{ kind: 'vault' }` = one vault, `{ kind: 'all' }` = every vault with
+  hits stamped `vaultId`. The Search panel exposes **File | Vault | All**;
+  MCP `vault_search` gains an optional `vault` argument.
+- **Tag chrome moved to base.** Editor tag pills and `#tag` completion are
+  base editor features (`src/app/editor/tags/`, beside the wikilinks);
+  the Tags plugin is the *data owner* (index + provider + settings) and
+  serves the vocabulary through the section-search provider. The shared
+  tag grammar lives in `shared/tag-grammar.ts` — plugin-local twins stay
+  because plugin renderers cannot load values over `plugin://` (parity
+  spec guards drift). A plain-DOM **tag field** (`TagField`, mounted by
+  the entry drawer, handed to plugins as `api.ui.createTagField`)
+  replaces the three hand-rolled chip rows and finally gives tags
+  completion outside the editor.
+- **Tag prefix colors.** A prefix is a `/`-namespace; the longest
+  configured prefix wins; unconfigured tags get a deterministic auto
+  color (djb2 over the first segment into a curated dark-theme palette).
+  Configured on Settings → Tags (a plugin page, per-plugin config store);
+  the provider serves prefix styles and the base resolves colors, so
+  pills, chips and completion options recolor live everywhere.
+- **Cross-file replace** with section semantics: only occurrences inside
+  the matching sections change (the search model, applied as a batch).
+  File scope patches the open buffer (undoable); vault/all scope goes
+  through one bundled confirmation (per-file diffs) and re-reads +
+  re-matches every file right before writing (TOCTOU), CRLF preserved.

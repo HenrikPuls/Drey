@@ -29,8 +29,10 @@ test('switching to the "Ruled" template changes what the drawer appends', async 
   const bottom = page.locator('app-dock[side="bottom"]');
   await bottom.locator('app-panel-frame .head').first().click();
   await bottom.locator('#entry-topic').fill('Urlaub-Ideen');
-  await bottom.locator('.chip-input').fill('urlaub');
-  await bottom.locator('.chip-input').press('Enter');
+  // The shared tag field (milestone 33) commits on Enter like the old
+  // drawer-local chip input did.
+  await bottom.locator('.tag-field-input').fill('urlaub');
+  await bottom.locator('.tag-field-input').press('Enter');
   await bottom.locator('app-entry-drawer .md-editor .cm-content').click();
   await page.keyboard.type('Mallorca oder Kroatien.');
   await bottom.locator('.btn.primary', { hasText: 'Add to document' }).click();

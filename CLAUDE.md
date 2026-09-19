@@ -83,13 +83,24 @@ toolchain is removable by deleting `.tools/`). Never assume a bare `node`,
   see `specs/frontmatter-schema.md`). Topics are free inline `#tag` labels, never directories
   ([ADR-0017](docs/09_architecture_decisions/0017-tags-as-labels-and-section-index.md)).
 - Tags are free inline `#tag`s in the note body — no frontmatter `tags[]`.
-  The **tags plugin** (`plugins/tags/`) holds the vocabulary and the
-  inverted index of tagged `##`/`###` sections, kept fresh through the
-  save/vault hook registries; its **search** panel (tags AND + free text)
-  returns section-level hits with clickable links and a Markdown Export.
-  The MCP server's `vault_search` reads the index through the registered
-  `SectionSearchProvider` and degrades with a clear error when the tags
-  plugin is disabled. `#task` is reserved; the LLM only _suggests_ tags
+  The **tags plugin** (`plugins/tags/`) is the tag **data owner**: a
+  per-vault index of *every* heading-delimited section (tagged or not —
+  milestone 33, so text search reaches untagged notes), kept fresh through
+  the save/vault hook registries, plus the tag **prefix colors**
+  (Settings → Tags; longest `/`-namespace prefix wins, deterministic auto
+  palette otherwise). The tag **chrome is base**: editor pills +
+  `#tag` completion (`src/app/editor/tags/`, fed by the base
+  `TagVocabularyService` over `search:vocabulary` + `search:changed`) and
+  a shared tag chip field (`TagField`, also handed to plugins as
+  `api.ui.createTagField`). Its **search** panel: scope switch
+  **File | Vault | All**, tag chips AND + free text with
+  case/whole-word/regex toggles, per-file grouped hits, and replace
+  (buffer patch in file scope; one bundled confirmation vault-wide, MCP
+  `vault_search` takes an optional `vault` argument.
+  The MCP server reads the index through the registered
+  `SectionSearchProvider` (which also serves vocabulary + prefix styles)
+  and degrades with a clear error when the tags plugin is disabled.
+  `#task` is reserved; the LLM only _suggests_ tags
   (the drawer's Autotag button). See `specs/classifier-spec.md`.
 - LLM transport behind a provider abstraction
   ([ADR-0047](docs/09_architecture_decisions/0047-llm-provider-abstraction.md)):
@@ -247,10 +258,14 @@ Renderer (Angular):
 - `StatusBarComponent` (`src/app/status-bar/`) — the 26px bottom bar:
   word/char count, a context hint (the drag instruction while a panel is
   moving), and the Settings entry.
-- Search panel — `plugins/tags/` (DOM dock widget): tag chips + free text
-  → section hits (click opens the file at the line through the document
-  API), and an **Export** button that dumps the hits into an unsaved
-  `search-results.md` scratch tab
+- Search panel — `plugins/tags/` (DOM dock widget): a **File | Vault |
+  All** scope switch, tag chips (the shared tag field) + free text with
+  `Aa`/`ab`/`.*` match toggles → section hits **grouped per file** (click
+  opens the file at the line through the document API, vault-aware), a
+  replace row (file scope patches the buffer; vault/all goes through one
+  bundled per-file-diff confirmation), and an **Export** button that dumps
+  the hits into an unsaved `search-results.md` scratch tab. Panel + toggle
+  prefs persist in `localStorage['drey.search']`
 - Tasks panel — `plugins/tasks/` (DOM dock widget, ADR-0033):
   checkbox / `#task` lines in the open document or the whole vault, a
   scope toggle · "hide done" · a kind filter (persisted to

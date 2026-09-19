@@ -1953,6 +1953,44 @@ anywhere (Files panel, link, lens, session restore) routes through
 `EditorService.openFile` → a `kind: 'pdf'` viewer doc — the file is
 never read as text (the mojibake-buffer path this milestone removes).
 
+## 6.41 Scoped search → grouped results → bundled replace (milestone 33)
+
+```mermaid
+sequenceDiagram
+    participant User
+    participant SP as Search panel (Tags plugin)
+    participant TI as TagIndex (per-vault, plugin main)
+    participant BV as TagVocabularyService (base)
+    participant PH as PluginHost (main)
+    participant VM as VaultManager
+
+    Note over TI: boot: one coalesced sweep per registered vault
+    TI-->>PH: sweep done → ctx.search.notifyChanged()
+    PH-->>BV: search:changed push → re-pull search:vocabulary (+prefix styles)
+    User->>SP: query (tags · text · Aa/ab/.* · scope)
+    SP->>SP: buildTextMatcher → broken regex shows inline, stops here
+    alt scope file
+        SP->>SP: runTagSearch over the active buffer (sectionRecordsFor)
+    else scope vault / all
+        SP->>PH: drey.search.sections {query, scope}
+        PH->>TI: index.search(query, scope, active@call time)
+        TI-->>SP: hits stamped vaultId (dirty open buffers folded on top)
+    end
+    SP-->>User: results grouped per file; click → documents.open(path, line, {vaultId})
+    User->>SP: Replace all (vault/all scope)
+    SP->>TI: replace-preview {query, replacement, scope}
+    TI-->>SP: per-file ops (fresh patches, line diffs)
+    SP->>SP: api.ui.showModal — one bundled confirmation
+    User->>SP: Replace all (apply)
+    SP->>TI: replace-apply → per file: re-read, re-match, writeAnnounced (CRLF kept)
+    TI-->>PH: writes announced → index re-read + search:changed + vault:changed
+    Note over BV: base pills/chips recolor live on styles changes (same push)
+```
+
+Replace touches only occurrences inside the matching sections (the
+search model, applied as a batch); the file-scope variant patches the
+open buffer directly (a normal undoable edit, no confirmation round).
+
 ## Planned flows (added as their milestone is built)
 
 - Dedicated keyword-search / FTS surface — the search panel's free-text

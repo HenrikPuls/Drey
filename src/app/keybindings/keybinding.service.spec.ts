@@ -83,4 +83,15 @@ describe('KeybindingService', () => {
     service.run('t.d');
     expect(ran).toBe(true);
   });
+
+  it('run(id, payload) passes the payload through to the command', () => {
+    let received: unknown = 'nothing';
+    service.register({ id: 't.e', label: 'E', run: (payload) => (received = payload) });
+    service.run('t.e', { tag: 'sailing' });
+    expect(received).toEqual({ tag: 'sailing' });
+  });
+
+  it('run() on an unknown id is a no-op', () => {
+    expect(() => service.run('no.such.id', { whatever: true })).not.toThrow();
+  });
 });

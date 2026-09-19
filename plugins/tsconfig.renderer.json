@@ -16,5 +16,5 @@
   },
   "//": "Plugin renderer entries compile to plain ES modules under dist-plugins/<id>/renderer/, served file-per-file over plugin:// (ADR-0044). They must contain NO bare-specifier runtime imports: type-only imports are erased, and anything the plugin needs from the host comes through api.* (CodeMirror instances via api.editor.cm from stage 2). shared/ is included so the renderers' '../shared/…' imports typecheck — and its ESM emission is load-bearing, not dead weight: the merge in scripts/build-plugins.mjs copies it to dist-electron/plugins/<id>/shared/, from where the renderer loads it at runtime over plugin:// and the plugin main sides require() the same files as ESM.",
   "include": ["./**/renderer/**/*.ts", "./**/shared/**/*.ts", "../shared/**/*.ts"],
-  "exclude": ["../shared/**/*.spec.ts", "./**/renderer/**/*.spec.ts"]
+  "exclude": ["../shared/**/*.spec.ts", "./**/renderer/**/*.spec.ts", "./**/shared/**/*.spec.ts"]
 }

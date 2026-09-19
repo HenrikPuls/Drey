@@ -8,7 +8,6 @@ import { resolveTaskLine, scanTasks, setDoneOnLine } from '../shared/tasks.js';
 import {
   ALL_KINDS,
   filterVisibleTasks,
-  normalizeTag,
   readPrefs,
   writePrefs,
   type TaskScope,
@@ -184,18 +183,6 @@ const plugin: PluginRendererModule = {
         notify();
       }
     };
-    const addTag = (raw: string): void => {
-      const tag = normalizeTag(raw);
-      if (tag === '' || state.queryTags.includes(tag)) {
-        return;
-      }
-      state.queryTags = [...state.queryTags, tag];
-      notify();
-    };
-    const removeTag = (tag: string): void => {
-      state.queryTags = state.queryTags.filter((t) => t !== tag);
-      notify();
-    };
     const setText = (value: string): void => {
       state.queryText = value;
       notify();
@@ -323,11 +310,18 @@ const plugin: PluginRendererModule = {
         body.classList.add('tasks-panel');
 
         // -- filter block (pinned; only the list scrolls -- widget is flush) --
-        const chipField = el('div', 'chip-field');
-        const chipInput = el('input', 'chip-input') as HTMLInputElement;
-        chipInput.type = 'text';
-        chipInput.autocomplete = 'off';
-        chipInput.placeholder = '+ tag';
+        // The shared tag chip field (milestone 33): colored chips + a
+        // completion dropdown from the Tags plugin's vocabulary, exactly
+        // what the Search panel and the entry drawer use.
+        const tagField = api.ui.createTagField({
+          values: state.queryTags,
+          onChange: (values) => {
+            state.queryTags = values;
+            notify();
+          },
+          placeholder: '+ tag',
+          ariaLabel: 'Tag filter',
+        });
         const textInput = el('input', 'text-input') as HTMLInputElement;
         textInput.type = 'text';
         textInput.autocomplete = 'off';
@@ -339,17 +333,7 @@ const plugin: PluginRendererModule = {
         const content = el('div', 'content');
 
         const renderChips = (): void => {
-          chipField.textContent = '';
-          for (const tag of state.queryTags) {
-            const chip = el('span', 'chip', `#${tag}`);
-            const x = el('button', 'x', '×') as HTMLButtonElement;
-            x.type = 'button';
-            x.setAttribute('aria-label', `Remove ${tag}`);
-            x.addEventListener('click', () => removeTag(tag));
-            chip.appendChild(x);
-            chipField.appendChild(chip);
-          }
-          chipField.appendChild(chipInput);
+          tagField.setValues(state.queryTags);
         };
 
         const taskRow = (task: TaskRecord, showLoc: boolean): HTMLElement => {
@@ -428,37 +412,17 @@ const plugin: PluginRendererModule = {
           renderContent();
         };
 
-        // Enter / comma commits the typed tag; Backspace on an empty field
-        // pops the last chip; blur commits a partial entry.
-        chipInput.addEventListener('keydown', (event) => {
-          if (event.key === 'Enter' || event.key === ',') {
-            event.preventDefault();
-            if (chipInput.value.trim() !== '') {
-              addTag(chipInput.value);
-              chipInput.value = '';
-            }
-            return;
-          }
-          if (event.key === 'Backspace' && chipInput.value === '' && state.queryTags.length > 0) {
-            removeTag(state.queryTags[state.queryTags.length - 1]);
-          }
-        });
-        chipInput.addEventListener('blur', () => {
-          if (chipInput.value.trim() !== '') {
-            addTag(chipInput.value);
-            chipInput.value = '';
-          }
-        });
         textInput.addEventListener('input', () => {
           setText(textInput.value);
         });
 
-        filter.append(chipField, textInput, clearButton);
+        filter.append(tagField.element, textInput, clearButton);
         body.append(filter, content);
         render();
         listeners.add(render);
         return () => {
           listeners.delete(render);
+          tagField.dispose();
         };
       },
     });

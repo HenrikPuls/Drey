@@ -1,6 +1,6 @@
 import { TestBed } from '@angular/core/testing';
 import type { EditorView } from '@codemirror/view';
-import { EditorContextMenuRegistry } from '../plugin-host/menu-contributions.service';
+import { EditorContextMenuRegistry } from '../plugin-host';
 import {
   EditorContextMenuService,
   buildMenuTarget,

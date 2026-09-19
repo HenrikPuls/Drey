@@ -23,6 +23,7 @@ import {
   PluginIpcEventPayload,
   SpellCheckResult,
   SpellLanguage,
+  TagVocabularyPayload,
   VaultChangedPush,
   VaultFileContent,
   VaultFileEntry,
@@ -137,6 +138,14 @@ const dreyApi: DreyApi = {
     ipcRenderer.invoke(IPC_CHANNELS.noteSave, request),
   suggestTags: (entryText: string, taskId?: string): Promise<string[]> =>
     ipcRenderer.invoke(IPC_CHANNELS.tagSuggest, entryText, taskId),
+  searchVocabulary: (): Promise<TagVocabularyPayload> =>
+    ipcRenderer.invoke(IPC_CHANNELS.searchVocabulary),
+  onSearchChanged: (listener: () => void): (() => void) => {
+    // Forward only the signal (no payload), never the IpcRendererEvent.
+    const wrapped = (): void => listener();
+    ipcRenderer.on(IPC_CHANNELS.searchChanged, wrapped);
+    return () => ipcRenderer.removeListener(IPC_CHANNELS.searchChanged, wrapped);
+  },
   getConfig: (): Promise<AppConfig> => ipcRenderer.invoke(IPC_CHANNELS.configGet),
   setConfig: (config: AppConfig): Promise<AppConfig> =>
     ipcRenderer.invoke(IPC_CHANNELS.configSet, config),

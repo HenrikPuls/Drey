@@ -21,7 +21,7 @@ import type {
   ToolSpec,
 } from '../llm';
 import type { AppConfig } from '../app-config';
-import type { TagEntry, TagSearchHit, TagSearchQuery } from './search-types';
+import type { TagEntry, TagPrefixStyle, TagSearchHit, TagSearchQuery } from './search-types';
 import type { VaultFileEntry, VaultStatus } from '../ipc-api';
 import type { PluginManifest } from './manifest';
 
@@ -77,6 +77,12 @@ export interface SectionSearchProvider {
   search(query: TagSearchQuery, scope?: SectionSearchScope): Promise<readonly TagSearchHit[]>;
   /** The tag vocabulary with occurrence counts, aggregated across all vaults. */
   vocabulary(): readonly TagEntry[];
+  /**
+   * Optional prefix styles (SDK 1.9): the configured tag-prefix colors the
+   * provider knows about. Base surfaces merge these with the auto palette;
+   * absent = no configured prefixes.
+   */
+  styles?(): { readonly prefixes: readonly TagPrefixStyle[] };
 }
 
 export type VaultChangeEventKind = 'refresh' | 'write' | 'delete' | 'rename';
@@ -226,7 +232,16 @@ export interface MainPluginContext {
   readonly save: { onNoteSaved(hook: SaveHook): Unsubscribe };
 
   /** The section-search seam MCP's `vault_search` reads; null provider = tool degrades. */
-  readonly search: { registerSectionSearch(provider: SectionSearchProvider): Unsubscribe };
+  readonly search: {
+    registerSectionSearch(provider: SectionSearchProvider): Unsubscribe;
+    /**
+     * Pushes `search:changed` to the renderer (SDK 1.9): call after the
+     * provider's index or styles changed so base surfaces (tag completion,
+     * prefix colors) re-pull. Also fired by the host when a provider
+     * registers or unregisters.
+     */
+    notifyChanged(): void;
+  };
 
   /**
    * The LLM transport facade (transport stays base; feature logic is

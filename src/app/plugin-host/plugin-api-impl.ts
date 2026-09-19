@@ -20,6 +20,8 @@ import { WidgetRegistryService } from '../dock/widget-registry.service';
 import { SettingsCategoryRegistry } from '../settings/settings-registry.service';
 import { ConfirmationService } from '../llm/confirmation.service';
 import { KeybindingService } from '../keybindings';
+import { TagField } from '../tags/tag-field';
+import { TagVocabularyService } from '../tags/tag-vocabulary.service';
 import { EditTargetService } from '../services/edit-target.service';
 import { EditorService } from '../services/editor.service';
 import { ConfirmDialogService } from '../services/confirm-dialog.service';
@@ -71,6 +73,12 @@ export class PluginApiFactory {
   private readonly menuContributions = inject(MenuContributionsService);
   private readonly contextMenuItems = inject(EditorContextMenuRegistry);
   private readonly log = inject(LogService);
+  /**
+   * Resolved LAZILY inside `createTagField`: `TagVocabularyService` needs
+   * `PluginHostService` (the `search:changed` tick), which needs this
+   * factory — a constructor-time injection here would be a DI cycle.
+   */
+  private readonly appInjector = inject(Injector);
 
   /**
    * DockService, resolved on FIRST USE, not at construction: the factory is
@@ -238,7 +246,7 @@ export class PluginApiFactory {
             this.keys.register({ id: command.id, label: command.label, run: () => {} });
           });
         },
-        run: (id) => this.keys.run(id),
+        run: (id, payload) => this.keys.run(id, payload),
       },
       ui: {
         registerWidget: (widget: PluginWidgetContrib) => track(this.widgets.registerPluginWidget(widget)),
@@ -291,6 +299,19 @@ export class PluginApiFactory {
           return teardown;
         },
         showMessage: (message, title) => this.dialogs.message({ message, title }),
+        createTagField: (opts) => {
+          // Same component the base entry drawer mounts (milestone 33):
+          // vocabulary + prefix colors come from the base tag vocabulary
+          // service, so plugin panels and base surfaces always agree.
+          const field = new TagField(this.appInjector.get(TagVocabularyService), {
+            values: opts.values ?? [],
+            onChange: opts.onChange,
+            ...(opts.placeholder !== undefined ? { placeholder: opts.placeholder } : {}),
+            ...(opts.ariaLabel !== undefined ? { ariaLabel: opts.ariaLabel } : {}),
+            ...(opts.completions !== undefined ? { completions: opts.completions } : {}),
+          });
+          return field;
+        },
       },
       editor: {
         cm: HOST_CODEMIRROR,

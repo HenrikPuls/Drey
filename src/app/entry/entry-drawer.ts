@@ -1,13 +1,18 @@
 import {
   ChangeDetectionStrategy,
   Component,
+  OnDestroy,
+  AfterViewInit,
   computed,
   effect,
   inject,
   viewChild,
+  ElementRef,
 } from '@angular/core';
 import { MarkdownSurface } from '../editor/markdown-surface/markdown-surface';
 import { WikilinkService } from '../editor/wikilinks';
+import { TagField } from '../tags/tag-field';
+import { TagVocabularyService } from '../tags/tag-vocabulary.service';
 import { EntryDraftService } from './entry-draft.service';
 import { EditorService } from '../services/editor.service';
 import { SpellcheckService } from '../services/spellcheck.service';
@@ -31,12 +36,17 @@ import { AutotagButton } from './autotag-button';
   templateUrl: './entry-drawer.html',
   styleUrl: './entry-drawer.css',
 })
-export class EntryDrawer {
+export class EntryDrawer implements AfterViewInit, OnDestroy {
   protected readonly drawer = inject(EntryDraftService);
   protected readonly editor = inject(EditorService);
   private readonly spellcheck = inject(SpellcheckService);
   private readonly wikiLinks = inject(WikilinkService);
+  private readonly tagVocab = inject(TagVocabularyService);
   private readonly surface = viewChild(MarkdownSurface);
+  private readonly tagFieldHost = viewChild.required<ElementRef<HTMLDivElement>>('tagFieldHost');
+
+  /** The shared tag chip field; the drawer owns one instance (milestone 33). */
+  private tagField: TagField | null = null;
 
   /**
    * The source handed to the surface. Ungated: checking starts with the
@@ -91,31 +101,46 @@ export class EntryDrawer {
       this.spellcheck.language();
       this.surface()?.recheckSpelling();
     });
+    // Draft → field: auto-extracted / discarded chips repaint the field.
+    // (`setValues` never fires `onChange`, so this cannot loop.)
+    effect(() => {
+      this.tagField?.setValues(this.drawer.tags());
+    });
   }
 
-  /** Enter (or comma) commits a tag chip; Backspace on an empty field removes the last. */
-  protected onChipKeydown(event: KeyboardEvent): void {
-    const input = event.target as HTMLInputElement;
-    if (event.key === 'Enter' || event.key === ',') {
-      event.preventDefault();
-      this.drawer.addChip(input.value);
-      input.value = '';
-      return;
-    }
-    if (event.key === 'Backspace' && input.value === '') {
-      const list = this.drawer.tags();
-      if (list.length > 0) {
-        this.drawer.removeChip(list[list.length - 1]);
+  ngAfterViewInit(): void {
+    const field = new TagField(this.tagVocab, {
+      values: this.drawer.tags(),
+      onChange: (values) => this.syncTagsFromField(values),
+      placeholder: '+ tag',
+      ariaLabel: 'Tags',
+    });
+    this.tagFieldHost().nativeElement.appendChild(field.element);
+    this.tagField = field;
+  }
+
+  ngOnDestroy(): void {
+    this.tagField?.dispose();
+    this.tagField = null;
+  }
+
+  /**
+   * Field → draft, as a delta through the draft service's add/remove so the
+   * `manualTags` bookkeeping (chips surviving a text edit) stays intact.
+   */
+  private syncTagsFromField(next: string[]): void {
+    const current = this.drawer.tags();
+    const currentLower = new Set(current.map((t) => t.toLowerCase()));
+    const nextLower = new Set(next);
+    for (const tag of next) {
+      if (!currentLower.has(tag)) {
+        this.drawer.addChip(tag);
       }
     }
-  }
-
-  /** A half-typed chip should not be lost when focus moves on. */
-  protected onChipBlur(event: FocusEvent): void {
-    const input = event.target as HTMLInputElement;
-    if (input.value.trim() !== '') {
-      this.drawer.addChip(input.value);
-      input.value = '';
+    for (const tag of current) {
+      if (!nextLower.has(tag.toLowerCase())) {
+        this.drawer.removeChip(tag);
+      }
     }
   }
 

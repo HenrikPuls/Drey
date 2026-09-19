@@ -6,15 +6,14 @@ import {
   hasEntryContent,
 } from '../../../shared/entry-compose';
 import { formatDate } from '../../../shared/timestamp';
-/** The tag-name grammar (local copy: the tags feature is a plugin now). */
-const TAG_NAME_SOURCE = String.raw`\p{L}[\p{L}\p{N}_-]*(?:/[\p{L}\p{N}_-]+)*`;
+import { TAG_NAME_SOURCE } from '../../../shared/tag-grammar';
 import { EditorService } from '../services/editor.service';
 import { SettingsService } from '../services/settings.service';
 
 /**
- * `#` + the canonical tag-name grammar (shared/tags), global. The drawer
- * lifts these into chips as the user types; unlike the main index it does
- * not skip code spans, which is fine for a short capture field.
+ * `#` + the canonical tag-name grammar (shared/tag-grammar), global. The
+ * drawer lifts these into chips as the user types; unlike the main index it
+ * does not skip code spans, which is fine for a short capture field.
  */
 const TAG_IN_TEXT = new RegExp(`#(${TAG_NAME_SOURCE})`, 'gu');
 

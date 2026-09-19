@@ -1,9 +1,10 @@
 import { TagIndex } from '../../../plugins/tags/main/tag-index';
 
 /**
- * `TagIndex` excludes the literal `templates/` folder always, and the
- * user-configured templates folder on top of that (so snippet headings do
- * not leak into tag search).
+ * `TagIndex`, per-vault since milestone 33: one map per registered vault,
+ * every heading-delimited section indexed (untagged ones too, so free-text
+ * search covers them), scoped search with `vaultId` stamps. The literal
+ * `templates/` folder is excluded always, the user-configured one on top.
  */
 
 const FILES: Record<string, string> = {
@@ -13,78 +14,175 @@ const FILES: Record<string, string> = {
   'notes/real.md': '## Real #keeper\nz\n',
 };
 
-function listMarkdownFiles(): Promise<string[]> {
-  return Promise.resolve(Object.keys(FILES));
+const V = 'vault-a';
+
+function makeIndex(files: Record<string, string> = FILES, templatesDir?: () => string): TagIndex {
+  const index = new TagIndex((vaultId) => {
+    void vaultId;
+    return Promise.resolve(Object.keys(files));
+  }, templatesDir);
+  index.setReadContent((_vaultId, p) => Promise.resolve(files[p] ?? ''));
+  return index;
 }
 
-/** The plugin's index reads file contents through the injected reader. */
-const readContent = (p: string): Promise<string> => Promise.resolve(FILES[p] ?? '');
+const tags = (index: TagIndex): string[] => index.getVocabulary().map((e) => e.tag);
 
 describe('TagIndex templates exclusion', () => {
   it('excludes both the literal templates/ folder and the configured one', async () => {
-    const index = new TagIndex(listMarkdownFiles, () => 'meta/templates');
-    index.setReadContent(readContent);
-    await index.rebuild();
-    const tags = index.getVocabulary().map((e) => e.tag);
-    expect(tags).toContain('work');
-    expect(tags).toContain('keeper');
-    expect(tags).not.toContain('meeting'); // literal templates/
-    expect(tags).not.toContain('snippet'); // configured meta/templates
+    const index = makeIndex(FILES, () => 'meta/templates');
+    await index.requestRebuild(V);
+    expect(tags(index)).toContain('work');
+    expect(tags(index)).toContain('keeper');
+    expect(tags(index)).not.toContain('meeting'); // literal templates/
+    expect(tags(index)).not.toContain('snippet'); // configured meta/templates
   });
 
   it('falls back to only the literal templates/ folder with no getter', async () => {
-    const index = new TagIndex(listMarkdownFiles);
-    index.setReadContent(readContent);
-    await index.rebuild();
-    const tags = index.getVocabulary().map((e) => e.tag);
-    expect(tags).not.toContain('meeting');
-    expect(tags).toContain('snippet'); // meta/templates is now indexed
+    const index = makeIndex(FILES);
+    await index.requestRebuild(V);
+    expect(tags(index)).not.toContain('meeting');
+    expect(tags(index)).toContain('snippet'); // meta/templates is now indexed
   });
 
   it('drops a file from the index when a save moves it under the configured folder', async () => {
-    const index = new TagIndex(listMarkdownFiles, () => 'meta/templates');
-    index.setReadContent(readContent);
-    await index.rebuild();
-    expect(index.getVocabulary().map((e) => e.tag)).toContain('keeper');
+    const index = makeIndex(FILES, () => 'meta/templates');
+    await index.requestRebuild(V);
+    expect(tags(index)).toContain('keeper');
 
-    index.reindexFile('meta/templates/moved.md', '## Moved #gone\n');
-    expect(index.getVocabulary().map((e) => e.tag)).not.toContain('gone');
+    index.reindexFile(V, 'meta/templates/moved.md', '## Moved #gone\n');
+    expect(tags(index)).not.toContain('gone');
   });
 });
 
-describe('TagIndex requestRebuild coalescing', () => {
+describe('TagIndex all-sections indexing (milestone 33)', () => {
+  it('indexes untagged sections, so text search finds untagged notes', async () => {
+    const index = makeIndex({
+      'notes/tagged.md': '## Tagged #alpha\nsharedword here\n',
+      'notes/plain.md': '## Plain\nsharedword there\n',
+      'notes/none.md': 'nothing findable\n',
+    });
+    await index.requestRebuild(V);
+
+    const textHits = index.search({ tags: [], text: 'sharedword' }, undefined, V);
+    expect(textHits.map((h) => h.path).sort()).toEqual(['notes/plain.md', 'notes/tagged.md']);
+
+    // A tag-only query still requires the tag: the untagged section never
+    // satisfies it.
+    const tagHits = index.search({ tags: ['alpha'], text: '' }, undefined, V);
+    expect(tagHits.map((h) => h.path)).toEqual(['notes/tagged.md']);
+
+    // A heading-less note is one implicit section (pre-heading part).
+    const implicit = index.search({ tags: [], text: 'findable' }, undefined, V);
+    expect(implicit.map((h) => h.path)).toEqual(['notes/none.md']);
+    expect(implicit[0].heading).toBe('none.md'); // base-name fallback
+    expect(implicit[0].vaultId).toBe(V);
+  });
+
+  it('leaves the vocabulary untouched: untagged sections contribute no tags', async () => {
+    const index = makeIndex({ 'notes/plain.md': '## Plain\njust text\n' });
+    await index.requestRebuild(V);
+    expect(tags(index)).toEqual([]);
+    expect(index.search({ tags: [], text: 'just' }, undefined, V)).toHaveLength(1);
+  });
+});
+
+describe('TagIndex per-vault scoping (milestone 33)', () => {
+  const TWO: Record<string, Record<string, string>> = {
+    'vault-a': { 'notes/a.md': '## A #one\ncontent-a\n' },
+    'vault-b': { 'notes/b.md': '## B #two\ncontent-b\n' },
+  };
+
+  function twoVaultIndex(): TagIndex {
+    const index = new TagIndex((vaultId) =>
+      Promise.resolve(Object.keys(TWO[vaultId] ?? {})),
+    );
+    index.setReadContent((vaultId, p) => Promise.resolve(TWO[vaultId]?.[p] ?? ''));
+    return index;
+  }
+
+  it('keeps vault indexes isolated and aggregates the vocabulary', async () => {
+    const index = twoVaultIndex();
+    await index.requestRebuild('vault-a');
+    await index.requestRebuild('vault-b');
+    expect(tags(index).sort()).toEqual(['one', 'two']);
+
+    // Scoped: exactly one vault.
+    expect(index.search({ tags: [], text: 'content' }, { kind: 'vault', vaultId: 'vault-a' }, null).map((h) => h.path)).toEqual(['notes/a.md']);
+    expect(index.search({ tags: [], text: 'content' }, { kind: 'vault', vaultId: 'vault-b' }, null).map((h) => h.path)).toEqual(['notes/b.md']);
+  });
+
+  it("scope { kind: 'all' } flattens every vault with vaultId stamps", async () => {
+    const index = twoVaultIndex();
+    await index.requestRebuild('vault-a');
+    await index.requestRebuild('vault-b');
+    const hits = index.search({ tags: [], text: 'content' }, { kind: 'all' }, null);
+    expect(hits).toHaveLength(2);
+    expect(hits.every((h) => h.vaultId !== undefined)).toBe(true);
+    expect(hits.map((h) => h.vaultId).sort()).toEqual(['vault-a', 'vault-b']);
+  });
+
+  it('omitted scope resolves the active vault at call time', async () => {
+    const index = twoVaultIndex();
+    await index.requestRebuild('vault-a');
+    await index.requestRebuild('vault-b');
+    expect(index.search({ tags: [], text: 'content' }, undefined, 'vault-b').map((h) => h.path)).toEqual(['notes/b.md']);
+    // Unknown/never-built active vault: no hits, no throw.
+    expect(index.search({ tags: [], text: 'content' }, undefined, 'vault-x')).toEqual([]);
+    expect(index.search({ tags: [], text: 'content' }, undefined, null)).toEqual([]);
+  });
+
+  it('reindexFile / removeFile target only their own vault', async () => {
+    const index = twoVaultIndex();
+    await index.requestRebuild('vault-a');
+    await index.requestRebuild('vault-b');
+
+    index.reindexFile('vault-a', 'notes/new.md', '## New #fresh\n');
+    expect(tags(index)).toContain('fresh');
+    expect(index.search({ tags: ['fresh'], text: '' }, { kind: 'vault', vaultId: 'vault-b' }, null)).toEqual([]);
+    expect(index.search({ tags: ['fresh'], text: '' }, { kind: 'vault', vaultId: 'vault-a' }, null)).toHaveLength(1);
+
+    index.removeFile('vault-a', 'notes/a.md');
+    expect(index.search({ tags: [], text: 'content-a' }, { kind: 'vault', vaultId: 'vault-a' }, null)).toEqual([]);
+    expect(index.search({ tags: [], text: 'content-b' }, { kind: 'vault', vaultId: 'vault-b' }, null)).toHaveLength(1);
+  });
+
+  it('dropVault forgets the vault entirely', async () => {
+    const index = twoVaultIndex();
+    await index.requestRebuild('vault-a');
+    await index.requestRebuild('vault-b');
+    index.dropVault('vault-a');
+    expect(index.search({ tags: [], text: 'content' }, { kind: 'all' }, null).map((h) => h.vaultId)).toEqual(['vault-b']);
+    expect(index.knownVaults()).toEqual(['vault-b']);
+  });
+});
+
+describe('TagIndex requestRebuild coalescing (per vault)', () => {
   it('collapses concurrent requests into at most one extra sweep', async () => {
     let sweeps = 0;
-    // Assigned by the first sweep's promise executor, before `release()` runs.
     let release!: () => void;
-    const index = new TagIndex(() => {
+    const index = new TagIndex((_vaultId) => {
       sweeps += 1;
       if (sweeps === 1) {
-        // Hold the first sweep open so the later requests land while one
-        // is genuinely in flight.
         return new Promise<string[]>((resolve) => {
           release = () => resolve(Object.keys(FILES));
         });
       }
       return Promise.resolve(Object.keys(FILES));
     });
-    index.setReadContent((p) => Promise.resolve(FILES[p] ?? ''));
+    index.setReadContent((_v, p) => Promise.resolve(FILES[p] ?? ''));
 
-    const first = index.requestRebuild();
+    const first = index.requestRebuild(V);
 
     await Promise.resolve(); // let the first sweep start (its list call pends)
     expect(sweeps).toBe(1);
 
-    // These land WHILE the first sweep is in flight: they must share one
-    // extra sweep, not start one each.
-    const second = index.requestRebuild();
-    const third = index.requestRebuild();
+    const second = index.requestRebuild(V);
+    const third = index.requestRebuild(V);
     release();
     await Promise.all([first, second, third]);
     expect(sweeps).toBe(2); // one extra sweep, not one per request
 
-    // A request after the queue drains starts a fresh sweep.
-    await index.requestRebuild();
+    await index.requestRebuild(V);
     expect(sweeps).toBe(3);
   });
 
@@ -93,7 +191,7 @@ describe('TagIndex requestRebuild coalescing', () => {
     let readGated = false;
     let releaseRead: (() => void) | undefined;
     const index = new TagIndex(() => Promise.resolve(['notes/a.md']));
-    index.setReadContent(() => {
+    index.setReadContent((_v) => {
       if (!readGated) {
         return Promise.resolve(content);
       }
@@ -102,32 +200,40 @@ describe('TagIndex requestRebuild coalescing', () => {
       });
     });
 
-    await index.requestRebuild(); // first sweep: the index knows #one
-    expect(index.getVocabulary().map((e) => e.tag)).toEqual(['one']);
+    await index.requestRebuild(V); // first sweep: the index knows #one
+    expect(tags(index)).toEqual(['one']);
 
-    // Second sweep: hold its file read open, land a save mid-sweep.
     readGated = true;
-    const sweeping = index.requestRebuild();
+    const sweeping = index.requestRebuild(V);
     await new Promise((resolve) => setTimeout(resolve, 0));
     expect(releaseRead).toBeDefined();
-    index.reindexFile('notes/a.md', '## A #two\n');
+    index.reindexFile(V, 'notes/a.md', '## A #two\n');
     releaseRead?.();
     await sweeping;
 
-    // The save must survive the swap -- the sweep's stale read must not
-    // clobber it (the torn `byPath.clear()` build used to lose it).
-    expect(index.getVocabulary().map((e) => e.tag)).toEqual(['two']);
+    expect(tags(index)).toEqual(['two']);
   });
 
-  it('reflects changed content in a later coalesced sweep', async () => {
-    let files: Record<string, string> = { 'notes/a.md': '## A #one\n' };
-    const index = new TagIndex(() => Promise.resolve(Object.keys(files)));
-    index.setReadContent((p) => Promise.resolve(files[p] ?? ''));
-    await index.requestRebuild();
-    expect(index.getVocabulary().map((e) => e.tag)).toEqual(['one']);
+  it('sweeps of DIFFERENT vaults run independently', async () => {
+    let sweeps = 0;
+    let release!: () => void;
+    const index = new TagIndex((vaultId) => {
+      void vaultId;
+      sweeps += 1;
+      if (sweeps === 1) {
+        return new Promise<string[]>((resolve) => {
+          release = () => resolve(['notes/a.md']);
+        });
+      }
+      return Promise.resolve(['notes/a.md']);
+    });
+    index.setReadContent((_v, p) => Promise.resolve(p === 'notes/a.md' ? '## A #one\n' : ''));
 
-    files = { 'notes/a.md': '## A #two\n', 'notes/b.md': '## B #three\n' };
-    await index.requestRebuild();
-    expect(index.getVocabulary().map((e) => e.tag).sort()).toEqual(['three', 'two']);
+    const held = index.requestRebuild('vault-a');
+    const other = index.requestRebuild('vault-b');
+    await Promise.resolve();
+    expect(sweeps).toBe(2); // vault-b's sweep did not queue behind vault-a's held one
+    release();
+    await Promise.all([held, other]);
   });
 });

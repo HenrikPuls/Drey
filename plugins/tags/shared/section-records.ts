@@ -1,7 +1,9 @@
 /**
- * Turns raw note text into the tagged-section records the tag search
- * consumes: split into heading-delimited sections, keep the ones carrying
- * at least one inline `#tag`, fall back to the file's base name for the
+ * Turns raw note text into the section records the tag search consumes:
+ * split into heading-delimited sections, EVERY section kept — since
+ * milestone 33 the untagged ones too, so free-text search covers notes
+ * without any inline `#tag` (tag-only queries still require the tags, so
+ * untagged sections never surface there) — and the file's base name as the
  * pre-heading part's heading.
  *
  * The single source of truth for "what the index records for this text".
@@ -20,15 +22,11 @@ export function sectionRecordsFor(path: string, content: string): SearchableSect
   const base = path.slice(path.lastIndexOf('/') + 1);
   const out: SearchableSection[] = [];
   for (const section of splitSections(content)) {
-    const tags = extractInlineTags(`${section.heading}\n${section.text}`);
-    if (tags.length === 0) {
-      continue;
-    }
     out.push({
       path,
       heading: section.heading || base,
       line: section.line,
-      tags,
+      tags: extractInlineTags(`${section.heading}\n${section.text}`),
       text: section.text,
     });
   }

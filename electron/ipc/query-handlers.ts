@@ -11,11 +11,12 @@ export interface QueryHandlerDeps {
 
 /**
  * Read-side index IPC: the LLM-backed `tags:suggest` (the drawer's
- * Autotag). The suggestion's vocabulary comes from the section-search
- * provider -- the Tags plugin -- and the Autotag stays a base surface
- * because it writes into the entry drawer's draft (ADR-0044 stage 7: the
- * engine moved to the assistant plugin, the Autotag did not — it is a
- * tags/drawer feature on base transport).
+ * Autotag) and the base `search:vocabulary` pull (tag completion, prefix
+ * colors). Both read through the section-search provider -- the Tags
+ * plugin -- which stays the single data owner (ADR-0044); the Autotag
+ * stays a base surface because it writes into the entry drawer's draft
+ * (ADR-0044 stage 7), and the vocabulary pull is base transport so base
+ * surfaces never hardcode a plugin id.
  */
 export function registerQueryHandlers({ tagSuggester, pluginHost }: QueryHandlerDeps): void {
   ipcMain.handle(
@@ -32,4 +33,17 @@ export function registerQueryHandlers({ tagSuggester, pluginHost }: QueryHandler
       );
     },
   );
+
+  // Degenerates to empty arrays with no provider registered (tags plugin
+  // disabled/failed): completion and prefix colors degrade, nothing throws.
+  ipcMain.handle(IPC_CHANNELS.searchVocabulary, () => {
+    const provider = pluginHost.getSectionSearchProvider();
+    if (provider === null) {
+      return { entries: [], prefixes: [] };
+    }
+    return {
+      entries: provider.vocabulary(),
+      prefixes: provider.styles?.().prefixes ?? [],
+    };
+  });
 }

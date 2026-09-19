@@ -14,29 +14,10 @@
   <div class="tag-row">
     <span class="tr-label">TAGS</span>
     <app-autotag-button />
-    <div class="chip-field">
-      @for (chip of drawer.tags(); track chip) {
-        <span class="chip tags">
-          #{{ chip }}
-          <button
-            type="button"
-            class="x"
-            [attr.aria-label]="'Remove ' + chip"
-            (click)="drawer.removeChip(chip)"
-          >
-            ×
-          </button>
-        </span>
-      }
-      <input
-        class="chip-input"
-        type="text"
-        autocomplete="off"
-        placeholder="+ tag"
-        (keydown)="onChipKeydown($event)"
-        (blur)="onChipBlur($event)"
-      />
-    </div>
+    <!-- The shared tag chip field (milestone 33): colored chips + a
+         completion dropdown from the tag vocabulary, the exact component
+         the Search/Tasks panels get through `api.ui.createTagField`. -->
+    <div #tagFieldHost class="chip-field"></div>
   </div>
 
   <!-- The shared Markdown surface in compact mode, with the inline

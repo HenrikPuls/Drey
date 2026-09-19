@@ -46,8 +46,12 @@ running the previous build (a changed renderer module 404s). Verify with
 
 - `apiVersion` is a **major gate**: a manifest whose major differs from
   `PLUGIN_API_VERSION.major` (`shared/plugin-api/versions.ts`, currently
-  `{ major: 1, minor: 8 }`) is never imported — the plugin shows up in
-  Settings → Panels & plugins as incompatible. Minor bumps are additive.
+  `{ major: 1, minor: 9 }`) is never imported — the plugin shows up in
+  Settings → Panels & plugins as incompatible. Minor bumps are additive;
+  1.9 added `commands.run(id, payload?)`, `ui.createTagField` (the shared
+  tag chip field — prefer it over a hand-rolled chip row), the main-side
+  `ctx.search.notifyChanged()` push and the section-search provider's
+  optional `styles()` (tag prefix colors).
 - `main` is optional (a renderer-only plugin needs none); `css` is a list
   of stylesheets injected next to the renderer module.
 - Discovery: built-in `plugins/` + `<userData>/plugins/<id>/` +
@@ -61,6 +65,15 @@ Plugin UI is **plain DOM over the host-provided element** — no Angular,
 no Node, no bundler (ADR-0044 rule 2). `mount(el)` fills the element and
 returns a dispose function; the base calls it on page switch, panel
 removal and quarantine.
+
+One hard boundary to know before you reach for a shared helper: your
+renderer loads over `plugin://`, which **cannot serve files outside your
+plugin root** — importing a *value* from top-level `shared/` typechecks
+(types are erased) and then 404s at runtime. Import types from anywhere,
+but runtime code your renderer needs must live under `plugins/<id>/` as
+a local twin of the shared file (see `plugins/tags/shared/tags.ts` vs
+`shared/tag-grammar.ts`, kept in sync by a parity spec), or come through
+the plugin backend (`ctx.ipc.handle`) as data.
 
 Styling rules, in order of enforcement:
 

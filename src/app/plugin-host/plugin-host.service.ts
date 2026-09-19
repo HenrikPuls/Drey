@@ -56,14 +56,22 @@ export class PluginHostService {
   readonly plugins = signal<readonly PluginDescriptorForRenderer[]>([]);
   /** True once `loadAll()` finished (successfully or not) — session restore waits for it. */
   readonly loaded = signal(false);
+  /**
+   * Ticks when the section-search provider or its index changed (SDK 1.9:
+   * `search:changed`) — the base tag vocabulary service re-pulls on it.
+   */
+  readonly searchChanged = signal(0);
 
   private readonly activated = new Map<string, ActivatedRendererPlugin>();
 
   constructor() {
-    // The single subscription to the fixed push channel, fanned out per plugin.
-    window.dreyApi.onPluginEvent((payload) =>
+    // The single subscription to the fixed push channel, fanned out per
+    // plugin. Optional-chained: a partial `dreyApi` stub (tests) without
+    // these channels must not take the host down.
+    window.dreyApi?.onPluginEvent?.((payload) =>
       this.handlePluginEvent(payload.pluginId, payload.event, payload.data),
     );
+    window.dreyApi?.onSearchChanged?.(() => this.searchChanged.update((n) => n + 1));
 
     this.synthesizeDocumentEvents();
     this.synthesizeVisibilityEvents();

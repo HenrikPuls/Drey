@@ -24,6 +24,7 @@ import {
   type SaveHookResult,
   type SectionSearchProvider,
   type SectionSearchScope,
+  type TextMatchOptions,
   type Unsubscribe,
   type VaultChangeEvent,
   type LlmModelListing,
@@ -107,7 +108,10 @@ export class PluginHost {
    */
   readonly save: { onNoteSaved(hook: SaveHook): Unsubscribe };
 
-  readonly search: { registerSectionSearch(provider: SectionSearchProvider): Unsubscribe };
+  readonly search: {
+    registerSectionSearch(provider: SectionSearchProvider): Unsubscribe;
+    notifyChanged(): void;
+  };
 
   constructor(private readonly deps: PluginHostDeps) {
     this.configStore = new PluginConfigStore(deps.userRoot);
@@ -120,13 +124,26 @@ export class PluginHost {
     this.search = {
       registerSectionSearch: (provider) => {
         this.searchProvider = provider;
+        // The provider set changed: base surfaces re-pull the vocabulary.
+        this.emitSearchChanged();
         return () => {
           if (this.searchProvider === provider) {
             this.searchProvider = null;
+            this.emitSearchChanged();
           }
         };
       },
+      notifyChanged: () => this.emitSearchChanged(),
     };
+  }
+
+  /**
+   * Pushes `search:changed` to the main window (base renderer surfaces
+   * re-pull vocabulary + prefix styles). A no-op before the window exists
+   * — the renderer pulls once on boot anyway.
+   */
+  private emitSearchChanged(): void {
+    this.deps.getMainWindow()?.webContents.send(IPC_CHANNELS.searchChanged);
   }
 
   /** Scans the roots, then imports + activates every main entry that may load. */
@@ -294,12 +311,28 @@ export class PluginHost {
         if (provider === null) {
           throw new Error('no section-search provider is registered');
         }
-        const query = (shape['query'] ?? {}) as { tags?: string[]; text?: string };
+        const query = (shape['query'] ?? {}) as {
+          tags?: string[];
+          text?: string;
+          match?: TextMatchOptions;
+        };
         const scope = this.parseSearchScope(shape['scope']);
+        // `match` (SDK 1.9) is shaped defensively like tags/text: unknown
+        // fields keep the historical substring behavior.
+        const match = query.match;
         return provider.search(
           {
             tags: Array.isArray(query.tags) ? query.tags : [],
             text: typeof query.text === 'string' ? query.text : '',
+            ...(match !== null && typeof match === 'object'
+              ? {
+                  match: {
+                    ...(match.caseSensitive === true ? { caseSensitive: true } : {}),
+                    ...(match.wholeWord === true ? { wholeWord: true } : {}),
+                    ...(match.regex === true ? { regex: true } : {}),
+                  },
+                }
+              : {}),
           },
           scope,
         );
@@ -505,6 +538,7 @@ export class PluginHost {
       },
       search: {
         registerSectionSearch: (provider) => track(this.search.registerSectionSearch(provider)),
+        notifyChanged: () => this.search.notifyChanged(),
       },
       llm: {
         enabled: () => appConfig.get().llm.enabled,

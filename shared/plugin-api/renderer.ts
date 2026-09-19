@@ -35,7 +35,13 @@ export type {
 } from '../llm';
 export type { TagEntry } from './search-types';
 export type { VaultFileEntry } from '../ipc-api';
-export type { TagSearchHit, TagSearchQuery } from './search-types';
+export type {
+  TagPrefixStyle,
+  TagSearchHit,
+  TagSearchQuery,
+  TextMatchOptions,
+} from './search-types';
+export type { SectionSearchScope } from './main-plugin-api';
 
 export type {
   ActiveDocument,

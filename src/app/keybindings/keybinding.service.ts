@@ -46,9 +46,13 @@ export class KeybindingService {
     return [...this.commands.values()];
   }
 
-  /** Invokes a command by id (the palette / tests use this). */
-  run(id: string): void {
-    this.commands.get(id)?.run();
+  /**
+   * Invokes a command by id (the palette / tests / cross-feature calls use
+   * this). Unknown ids are a no-op; `payload` is passed through to the
+   * command (see {@link Command.run}).
+   */
+  run(id: string, payload?: unknown): void {
+    this.commands.get(id)?.run(payload);
   }
 
   private readonly onKeydown = (event: KeyboardEvent): void => {

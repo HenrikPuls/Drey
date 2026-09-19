@@ -150,12 +150,13 @@ fills** — base knows the interfaces, not the features:
 | Non-file editor tabs (doc kinds) | `ui.registerDocKind` | — |
 | Settings pages | `ui.registerSettingsPage` | — |
 | Menu rows (`file`/`edit`/`selection`/`view`/`editor-more`) | `ui.registerMenuContributions` | — |
-| Commands + keybindings | `commands.register` / `run` | — |
+| Commands + keybindings | `commands.register` / `run(id, payload?)` (payload carries invoker context, SDK 1.9 — the base tag pills run `search.open` with `{ tag }`) | — |
+| Shared tag chip field (colored chips + completion, milestone 33) | `ui.createTagField` | — |
 | Editor extensions (host CM instances), drop decoders, context-menu items (with the click target, ADR-0050), composer slot | `editor.*` | — |
 | Document read/observe/insert/confirmed rewrite/open + the live-edit input lock | `documents.*` (incl. `setEditLock`, ADR-0049) | — |
 | Vault IO + change push | `vault.*` (incl. `saveAsset`) | `ctx.vault.*` (incl. `writeAnnounced`) |
 | Backend methods + pushes (the plugin's own IPC) | `backend.invoke` / `backend.on` | `ctx.ipc.handle` / `ctx.ipc.emit` |
-| Save pipeline (`{content?, pendingActions?}`), vault lifecycle, section search | — | `ctx.save`, `ctx.vault` hooks, `ctx.search` |
+| Save pipeline (`{content?, pendingActions?}`), vault lifecycle, section search | — | `ctx.save`, `ctx.vault` hooks, `ctx.search` (`notifyChanged` pushes `search:changed` to the base vocabulary service, SDK 1.9; the provider's optional `styles()` serves the tag prefix colors) |
 | LLM transport | `llm.chat/cancelTask/onDebugEntry/onDelta/listModels/capabilities/onCapabilitiesChanged` | `ctx.llm.chat/suggestTags/capabilities` (chat gains `tools`/`onToolCall`/`maxToolRounds`, ADR-0049; `maxOutputTokens` + the capability push, ADR-0050) |
 | Per-plugin config, app config read/patch | `settings.*`, `appConfig.*` | `ctx.config`, `ctx.appConfig` |
 | Native-surface hide (overlays/gestures) | `env.onNativeSurfaceVisibility` | — |

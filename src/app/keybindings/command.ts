@@ -11,7 +11,12 @@ export interface Command {
   id: string;
   label: string;
   keybinding?: string;
-  run: () => void;
+  /**
+   * `payload` carries optional context from the invoker (SDK 1.9: a tag
+   * pill click runs `search.open` with `{ tag }`); keyboard invocations
+   * pass none.
+   */
+  run: (payload?: unknown) => void;
 }
 
 /** A parsed chord: the modifier flags plus the lower-cased key. */

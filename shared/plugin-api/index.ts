@@ -26,7 +26,13 @@ export type {
 } from './plugin-ipc';
 export { PLUGIN_IPC_CHANNELS } from './plugin-ipc';
 
-export type { TagEntry, TagSearchHit, TagSearchQuery } from './search-types';
+export type {
+  TagEntry,
+  TagPrefixStyle,
+  TagSearchHit,
+  TagSearchQuery,
+  TextMatchOptions,
+} from './search-types';
 
 // The shared payload types the main-side surface references (`llm.chat`,
 // `save.onNoteSaved`'s `pendingActions`), re-exported so a plugin main

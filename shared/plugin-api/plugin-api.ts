@@ -254,7 +254,38 @@ export interface PluginCommand {
   readonly label: string;
   /** Chord string, e.g. `Mod+Shift+K` (`Mod` = Ctrl/Cmd). Conflicts: first registration wins. */
   readonly keybinding?: string;
-  run(): void;
+  /**
+   * `payload` carries optional context from the invoker (SDK 1.9 — e.g.
+   * base tag pills run the Search panel's `search.open` with `{ tag }`);
+   * keyboard invocations pass none.
+   */
+  run(payload?: unknown): void;
+}
+
+/** Options for `ui.createTagField` (SDK 1.9). */
+export interface TagFieldOptions {
+  /** Initial (already normalized) chip values. */
+  readonly values?: readonly string[];
+  /** Fires with the normalized (lower-cased, de-duplicated) values on every change. */
+  readonly onChange: (values: string[]) => void;
+  /** Input placeholder; default `+ tag`. */
+  readonly placeholder?: string;
+  /** Accessible label for the input; default `Tags`. */
+  readonly ariaLabel?: string;
+  /** Vocabulary completion dropdown; default true. `false` = plain chip field. */
+  readonly completions?: boolean;
+}
+
+/** Handle to a mounted tag field (see `ui.createTagField`). */
+export interface TagFieldHandle {
+  /** The field root — append it into your panel DOM. */
+  readonly element: HTMLElement;
+  /** Focuses the field's input (also opens the completion dropdown when applicable). */
+  focus(): void;
+  /** Replaces the chips without firing `onChange`. */
+  setValues(values: readonly string[]): void;
+  /** Detaches the field and releases listeners; call when the panel unmounts. */
+  dispose(): void;
 }
 
 /** Options for the LLM chat facade. `taskId` enables `llm.cancelTask(taskId)`. */
@@ -352,7 +383,8 @@ export interface DreyPluginApi {
 
   readonly commands: {
     register(command: PluginCommand): Unsubscribe;
-    run(id: string): void;
+    /** Invoke a command by id; unknown ids are a no-op. `payload` passes through. */
+    run(id: string, payload?: unknown): void;
   };
 
   readonly ui: {
@@ -377,6 +409,13 @@ export interface DreyPluginApi {
      * acknowledged; sequential calls queue like the native dialogs did.
      */
     showMessage(message: string, title?: string): Promise<void>;
+    /**
+     * The shared tag chip field (SDK 1.9): colored chips with a completion
+     * dropdown fed by the section-search provider's vocabulary — the same
+     * component the base entry drawer uses. Mount `handle.element`, sync
+     * via `setValues`, dispose with the panel.
+     */
+    createTagField(opts: TagFieldOptions): TagFieldHandle;
   };
 
   readonly editor: {

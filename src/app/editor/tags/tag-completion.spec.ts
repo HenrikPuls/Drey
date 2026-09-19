@@ -1,6 +1,6 @@
 import type { CompletionContext } from '@codemirror/autocomplete';
-import { makeTagCompletionSource } from '../../../plugins/tags/renderer/extensions';
-import type { TagEntry } from '../../../plugins/tags/shared/search.js';
+import { makeTagCompletionSource } from './tag-completion';
+import type { TagEntry } from '../../../../shared/plugin-api/search-types';
 
 const TAGS: TagEntry[] = [
   { tag: 'sailing', count: 9 },
@@ -11,7 +11,7 @@ const TAGS: TagEntry[] = [
 
 interface CompletionResultLike {
   from: number;
-  options: Array<{ label: string; apply?: string; detail?: string }>;
+  options: Array<{ label: string; apply?: string; detail?: string; render?: () => HTMLElement }>;
   validFor?: RegExp;
 }
 
@@ -22,8 +22,8 @@ function context(
   return { explicit, matchBefore: () => match } as unknown as CompletionContext;
 }
 
-describe('makeTagCompletionSource', () => {
-  const source = makeTagCompletionSource(() => TAGS) as (
+describe('makeTagCompletionSource (base editor, milestone 33)', () => {
+  const source = makeTagCompletionSource({ getTags: () => TAGS }) as (
     ctx: CompletionContext,
   ) => CompletionResultLike | null;
 
@@ -49,5 +49,16 @@ describe('makeTagCompletionSource', () => {
     const result = source(context({ from: 2, to: 12, text: '#projekt/fr' }));
     expect(result?.options.map((o) => o.label)).toEqual(['#projekt/frontend']);
     expect(result?.options[0].apply).toBe('#projekt/frontend ');
+  });
+
+  it('renders colored option labels when a color resolver is given', () => {
+    const colored = makeTagCompletionSource({
+      getTags: () => TAGS,
+      colorFor: () => '#4f9a90',
+    }) as (ctx: CompletionContext) => CompletionResultLike | null;
+    const result = colored(context({ from: 0, to: 3, text: '#sa' }));
+    const node = result?.options[0].render?.();
+    expect(node?.className).toBe('cm-tag-option');
+    expect(node?.textContent).toBe('#sailing');
   });
 });

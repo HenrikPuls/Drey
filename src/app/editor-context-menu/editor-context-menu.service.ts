@@ -1,6 +1,6 @@
 import { Injectable, signal } from '@angular/core';
 import { EditorView } from '@codemirror/view';
-import { EditorContextMenuRegistry } from '../plugin-host/menu-contributions.service';
+import { EditorContextMenuRegistry } from '../plugin-host';
 import type { EditorContextMenuTarget } from '../../../shared/plugin-api/renderer';
 
 /** Where the editor's right-click menu is anchored, or `null` when closed. */

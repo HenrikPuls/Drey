@@ -15,10 +15,18 @@
     "types": ["node"]
   },
   "//": "Plugin main entries compile to CommonJS under dist-electron/plugins/<id>/main/ (the host imports them with import(pathToFileURL(...))). Runtime imports from ../shared/ emit CJS require() calls against the ESM shared/ files (fine on the Node inside Electron >= 22; module-type markers in scripts/build-plugins.mjs keep Node from sniffing). The emitted dist-electron/shared copies of ../shared/plugin-api are the same dead weight electron/tsconfig.json already produces.",
-  "include": ["./**/main/**/*.ts", "./**/shared/**/*.ts", "../shared/plugin-api/**/*.ts"],
+  "include": [
+    "./**/main/**/*.ts",
+    "./**/shared/**/*.ts",
+    "../shared/plugin-api/**/*.ts",
+    "../shared/tag-grammar.ts",
+    "../shared/tag-style.ts",
+    "../shared/text-diff.ts"
+  ],
   "exclude": [
     "../shared/plugin-api/plugin-api.ts",
     "../shared/plugin-api/renderer.ts",
-    "./**/main/**/*.spec.ts"
+    "./**/main/**/*.spec.ts",
+    "./**/shared/**/*.spec.ts"
   ]
 }

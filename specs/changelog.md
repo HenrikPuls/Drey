@@ -20,6 +20,72 @@ recorded as an explicit decision. The parity checklist lives in
 
 ## Recent milestones
 
+### Milestone 33 — tag system round: prefix colors, central tag completion, search fix + redesign (M-B core)
+
+The tag/search batch: four owner-reported items — configurable tag
+prefixes with colors, tag completion as a central component, the broken
+text search, and a VS Code-style search redesign — landed as one
+coherent evolution of the tag system (ADR-0017 "Later change"; the
+multi-vault halves of the announced M-B follow-up ship here).
+
+- **Search fixed at the root** — the index skipped every section
+  without an inline `#tag`, so text search *never* found untagged
+  notes ("tags work, text doesn't"). The index now covers every
+  heading-delimited section; tag-only queries behave exactly as
+  before. Errors surface in the panel instead of silently emptying it
+  (a missing provider, a broken regex), and `Mod+Shift+F` focuses the
+  search field.
+- **Per-vault indexes + search scopes (M-B core)** — one tag index per
+  registered vault; the SDK's `scope` parameter is honoured at last
+  (`{ kind: 'vault' }` / `{ kind: 'all' }`, omitted = the active vault
+  resolved at call time — the old boot-race guard is gone). The Search
+  panel gets a **File | Vault | All** scope switch, hits carry
+  `vaultId` (clicks open the right file in cross-vault results, and
+  unsaved-buffer folds key on `(vaultId, path)`), and MCP
+  `vault_search` gains an optional `vault` argument (`"all"` or a
+  vault id; the regex-only scan follows it). Tasks stay single-vault —
+  the remaining M-B item.
+- **Search redesign** — the panel (flush layout: inputs pinned, one
+  scrolling results list, everything top-left) grows the mockup's
+  search row with **Aa** (match case) / **ab** (whole word) / **.\***
+  (regex) toggles and a collapsible **replace row**; the tag chips
+  remain AND-combinable; results group **per file** (collapsible,
+  match counts, vault badge in the all-vaults scope, per-hit replace).
+  Scope + toggles persist (`localStorage['drey.search']`). A broken
+  regex shows its compile error inline and disables nothing else.
+- **Replace with section semantics** — file scope patches the open
+  buffer (a normal undoable edit); vault/all scope collects per-file
+  patches and shows **one bundled confirmation** (per-file expandable
+  diffs) before applying via announced writes. Every file is re-read
+  and re-matched right before its write (TOCTOU), CRLF is preserved,
+  and only occurrences inside the matching sections change.
+- **Tag prefix colors** — Settings → **Tags** (a Tags-plugin page) maps
+  `/`-namespaces to colors (`proj` colors `#proj/alpha`; the longest
+  prefix wins). Unconfigured tags get a deterministic auto color keyed
+  on the first segment from a curated dark-theme palette. The provider
+  serves prefix styles; base resolves colors — editor pills, entry
+  drawer chips, panel chips and completion options recolor **live**
+  (no restart). Stored per-plugin (`plugins/tags/config.json`).
+- **Central tag completion (the plugin stays the data owner)** — tag
+  pills and `#tag` completion moved from the Tags plugin into base
+  (`src/app/editor/tags/`, fed by a base `TagVocabularyService` over a
+  new `search:vocabulary` route + `search:changed` push), and a shared
+  plain-DOM **tag field** (colored chips + completion dropdown) is
+  mounted by the entry drawer and handed to plugins as
+  `api.ui.createTagField` — the Tasks filter and the Search panel
+  dropped their hand-rolled, completion-less chip rows for it.
+  `commands.run(id, payload?)` carries the pill-click handoff
+  (`search.open` with `{ tag }`).
+- **SDK 1.9 (additive)** — `commands.run` payload,
+  `ui.createTagField`, `ctx.search.notifyChanged`,
+  `SectionSearchProvider.styles?`, `TagSearchQuery.match?`,
+  `TagPrefixStyle`, `TagEntry.color?`. The tag grammar moved to
+  `shared/tag-grammar.ts` (plugin-local twins + parity spec — plugin
+  renderers cannot load values over `plugin://`); the dead
+  `tags:list`/`tags:search` channels are gone. Two pre-existing lint
+  errors in `editor-context-menu` (barrel imports from the req-33/34
+  commit) fixed in passing.
+
 ### Milestone 32 — beta-feedback batch II: daily folder, tab replacement, mermaid export, plugin settings
 
 The second cut from the beta-testing feedback list (five items; the

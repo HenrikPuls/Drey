@@ -17,7 +17,11 @@
  */
 import type { AppConfig } from '../../shared/app-config';
 import type { ToolSpec } from '../../shared/llm';
-import type { SectionSearchProvider, TagSearchHit } from '../../shared/plugin-api';
+import type {
+  SectionSearchProvider,
+  SectionSearchScope,
+  TagSearchHit,
+} from '../../shared/plugin-api';
 import type { VaultManager } from '../vault-manager';
 
 /** JSON-Schema-ish tool descriptor, as MCP `tools/list` returns it. */
@@ -56,7 +60,8 @@ export const VAULT_TOOL_DEFS: readonly McpToolDef[] = [
     description:
       'Search the note vault. Combine any of: `tags` (all must be present in a section), ' +
       '`text` (all whitespace-separated terms must appear), and `regex` (JavaScript regular ' +
-      'expression). With only `regex`, every Markdown file is line-scanned; otherwise `regex` ' +
+      'expression). Sections are heading-delimited and cover every note, tagged or not. ' +
+      'With only `regex`, every Markdown file is line-scanned; otherwise `regex` ' +
       'filters the matched sections. Returns file path, line and a snippet per hit.',
     inputSchema: {
       type: 'object',
@@ -70,6 +75,11 @@ export const VAULT_TOOL_DEFS: readonly McpToolDef[] = [
         regex: { type: 'string', description: 'JavaScript regular expression source.' },
         regexFlags: { type: 'string', description: "Regex flags, e.g. 'i' or 'im'. Default 'i'." },
         maxResults: { type: 'number', description: 'Cap on returned hits (default 40, max 200).' },
+        vault: {
+          type: 'string',
+          description:
+            "Vault id, or \"all\" for every registered vault. Default: the active vault.",
+        },
       },
     },
   },
@@ -217,7 +227,7 @@ export class VaultTools {
       if (!regex) {
         return textResult('Provide at least one of: tags, text, regex.', true);
       }
-      return this.regexScan(regex, limit);
+      return this.regexScan(regex, limit, this.scopeFromVaultArg(args['vault']));
     }
 
     const provider = this.getSearchProvider();
@@ -227,7 +237,8 @@ export class VaultTools {
         true,
       );
     }
-    let hits = await provider.search({ tags, text });
+    const scope = this.scopeFromVaultArg(args['vault']);
+    let hits = await provider.search({ tags, text }, scope);
     if (regex) {
       const re = regex;
       hits = hits.filter((hit) => {
@@ -238,15 +249,43 @@ export class VaultTools {
     return textResult(formatHits(hits, limit));
   }
 
-  /** Line-by-line regex scan across every Markdown file (the "grep the vault" path). */
-  private async regexScan(regex: RegExp, limit: number): Promise<McpToolResult> {
-    const files = await this.vault.listMarkdownFiles();
+  /**
+   * The optional `vault` argument (milestone 33) as a section-search scope:
+   * a vault id names that vault, `"all"` spans every registered one, and an
+   * absent argument is the provider's default (the active vault).
+   */
+  private scopeFromVaultArg(raw: unknown): SectionSearchScope | undefined {
+    if (typeof raw !== 'string' || raw === '') {
+      return undefined;
+    }
+    return raw === 'all' ? { kind: 'all' } : { kind: 'vault', vaultId: raw };
+  }
+
+  /** Line-by-line regex scan across Markdown files (the "grep the vault" path). */
+  private async regexScan(
+    regex: RegExp,
+    limit: number,
+    scope?: SectionSearchScope,
+  ): Promise<McpToolResult> {
+    // The all-vaults variant stamps every file with its vault id, so an
+    // ambiguous relative path stays attributable in the output.
+    const files =
+      scope === undefined
+        ? (await this.vault.listMarkdownFiles()).map((path) => ({ vaultId: undefined, path }))
+        : scope.kind === 'all'
+          ? await this.vault.listAllMarkdownFiles()
+          : (await this.vault.listMarkdownFiles(scope.vaultId)).map((path) => ({
+              vaultId: scope.vaultId,
+              path,
+            }));
+    const label = (file: { vaultId?: string; path: string }): string =>
+      file.vaultId !== undefined ? `${file.vaultId}:${file.path}` : file.path;
     const lines: string[] = [];
     let scanned = 0;
-    for (const path of files.slice(0, SCAN_MAX_FILES)) {
+    for (const file of files.slice(0, SCAN_MAX_FILES)) {
       let content: string;
       try {
-        content = (await this.vault.readFile(path)).content;
+        content = (await this.vault.readFile(file.path, file.vaultId)).content;
       } catch {
         continue;
       }
@@ -258,7 +297,7 @@ export class VaultTools {
       for (let i = 0; i < fileLines.length; i++) {
         regex.lastIndex = 0;
         if (regex.test(fileLines[i])) {
-          lines.push(`${path}:${i + 1}: ${fileLines[i].trim().slice(0, 200)}`);
+          lines.push(`${label(file)}:${i + 1}: ${fileLines[i].trim().slice(0, 200)}`);
           if (lines.length >= limit) {
             return textResult(
               `${lines.length}+ matching lines (scan capped):\n\n${lines.join('\n')}`,
