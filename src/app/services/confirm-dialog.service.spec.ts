@@ -52,6 +52,31 @@ describe('ConfirmDialogService', () => {
     await shown;
   });
 
+  it('decide maps Save / Don\'t save / Cancel (and Escape) onto a SaveDecision', async () => {
+    const save = service.decide({ message: 'Save a.md?' });
+    expect(service.current()).toMatchObject({
+      confirmLabel: 'Save',
+      discardLabel: "Don't save",
+      cancelLabel: 'Cancel',
+    });
+    service.accept();
+    await expect(save).resolves.toBe('save');
+
+    const discard = service.decide({ message: 'Save b.md?' });
+    service.discard();
+    await expect(discard).resolves.toBe('discard');
+
+    const cancel = service.decide({ message: 'Save c.md?' });
+    service.cancel(); // also what Escape / the backdrop call
+    await expect(cancel).resolves.toBe('cancel');
+  });
+
+  it('a plain confirm never offers the middle button', () => {
+    void service.confirm({ message: 'Delete?' });
+    expect(service.current()?.discardLabel).toBeNull();
+    service.cancel();
+  });
+
   it('cancel with nothing pending is a no-op (the always-attached Escape host listener)', () => {
     expect(() => service.cancel()).not.toThrow();
     expect(service.current()).toBeNull();

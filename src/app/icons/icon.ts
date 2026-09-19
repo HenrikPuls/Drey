@@ -41,7 +41,8 @@ export type IconName =
   | 'pencil'
   | 'globe'
   | 'square'
-  | 'save';
+  | 'save'
+  | 'pin';
 
 const ICONS: Record<IconName, readonly IconShape[]> = {
   'chevron-right': [{ kind: 'path', d: 'm9 18 6-6-6-6' }],
@@ -167,6 +168,14 @@ const ICONS: Record<IconName, readonly IconShape[]> = {
     },
     { kind: 'path', d: 'M17 21v-7a1 1 0 0 0-1-1H8a1 1 0 0 0-1 1v7' },
     { kind: 'path', d: 'M7 3v4a1 1 0 0 0 1 1h7' },
+  ],
+  // Lucide "pin" -- a pinned tab (never replaced by the next file opened).
+  pin: [
+    { kind: 'path', d: 'M12 17v5' },
+    {
+      kind: 'path',
+      d: 'M9 10.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24V16a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V7a1 1 0 0 1 1-1 2 2 0 0 0 0-4H8a2 2 0 0 0 0 4 1 1 0 0 1 1 1z',
+    },
   ],
 };
 

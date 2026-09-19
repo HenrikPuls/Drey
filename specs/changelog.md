@@ -20,6 +20,29 @@ recorded as an explicit decision. The parity checklist lives in
 
 ## Recent milestones
 
+### Milestone 35 — pinned tabs + a Save / Don't save / Cancel prompt on tab close
+
+- **Pin a tab** — tab context menu → "Pin tab" / "Unpin tab" (text, image
+  and pdf tabs; a pin glyph shows on the tab). A pinned tab is never the
+  tab that milestone 32's clean-tab replacement closes: the next file
+  (Files panel, calendar day, wikilink, search hit) opens in a **new tab
+  beside it**. When the pinned tab is the *active* one, the replacement
+  goes to the pane's clean **unpinned** tab instead (rightmost one), so
+  browsing from a pinned reference note reuses one "preview" tab rather
+  than piling up new ones; with no such tab (only pinned or dirty ones
+  left) the file opens beside. The pin survives Save-as, renames/moves and a restart
+  (`pinned` on the session snapshot's tab). Closing a pinned tab, "Close
+  others" and "Close all" are unchanged — a pin only steers replacement.
+- **Closing a dirty tab asks Save / Don't save / Cancel** (was a two-button
+  "Discard unsaved changes?"). "Save" writes the buffer and closes only if
+  nothing is left unsaved — a failed write or a cancelled Save-As dialog
+  (a never-saved untitled tab) keeps the tab open; Escape / backdrop count
+  as Cancel. New `ConfirmDialogService.decide()` (a third button on the
+  shared dialog); `EditorService.saveAs()` now resolves to the key of the
+  saved tab so the swapped-in tab can be closed too. The **app-exit**
+  prompt (bug-5, Save all / Exit without saving / Cancel) was already
+  three-way and is unchanged.
+
 ### Milestone 34 — tasks across vaults (M-B complete) + the editor's undo fix
 
 The two leftovers from the tag-system round: the last M-B item (tasks

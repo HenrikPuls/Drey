@@ -21,6 +21,9 @@
           <app-icon class="favicon" [name]="icon.glyph" [size]="12" [strokeWidth]="1.6" />
         }
       }
+      @if (doc.pinned) {
+        <app-icon class="pin" name="pin" [size]="10" [strokeWidth]="1.8" aria-label="Pinned" />
+      }
       <span class="name">{{ doc.name }}</span>
       @if (doc.bufferContent !== doc.savedContent) {
         <span class="dirty" aria-label="Unsaved changes"></span>
@@ -52,6 +55,12 @@
     (contextmenu)="$event.preventDefault(); closeMenu()"
   ></div>
   <div class="ctx-menu" [style.left.px]="m.x" [style.top.px]="m.y">
+    @if (pinnable(m.path)) {
+      <button type="button" (click)="togglePin(m.path)">
+        {{ editor.docFor(m.path)?.pinned ? 'Unpin tab' : 'Pin tab' }}
+      </button>
+      <div class="ctx-sep" role="separator"></div>
+    }
     @if (docked()) {
       @if (region() !== 'dock-left') {
         <button type="button" (click)="moveToDock('left')">Move to left dock</button>

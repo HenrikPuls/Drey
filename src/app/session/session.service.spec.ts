@@ -205,6 +205,34 @@ describe('SessionService', () => {
     expect(editor.openDocs().map((d) => d.path).sort()).toEqual(['notes/a.md', 'notes/b.md']);
   });
 
+  it('restores a pinned tab as pinned and writes the pin back into the snapshot', async () => {
+    writeSession(
+      [
+        { vaultId: VAULT_ID, path: 'notes/a.md', kind: 'text', onDisk: true, pinned: true },
+        { vaultId: VAULT_ID, path: 'notes/b.md', kind: 'text', onDisk: true },
+      ],
+      {
+        root: { kind: 'leaf', paneId: 'p1' },
+        panes: {
+          p1: {
+            id: 'p1',
+            tabs: [`${VAULT_ID}::notes/a.md`, `${VAULT_ID}::notes/b.md`],
+            active: `${VAULT_ID}::notes/b.md`,
+          },
+        },
+        focusedId: 'p1',
+      },
+    );
+
+    expect(await session.restore()).toBe(true);
+    expect(editor.docFor(`${VAULT_ID}::notes/a.md`)?.pinned).toBe(true);
+    expect(editor.docFor(`${VAULT_ID}::notes/b.md`)?.pinned).toBeUndefined();
+
+    await session.flushNow();
+    const stored = JSON.parse(localStorage.getItem('drey.session') ?? '{}') as SessionSnapshot;
+    expect(stored.tabs.map((t) => ('pinned' in t ? t.pinned : undefined))).toEqual([true, undefined]);
+  });
+
   it('restores a v1 snapshot by mapping every tab to the active vault', async () => {
     writeSession(
       [

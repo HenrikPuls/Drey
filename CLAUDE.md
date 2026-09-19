@@ -334,8 +334,8 @@ Renderer (Angular):
   `save()`, word count, …). One pane per open path (not the same note
   live in two panes at once); a tab's own "Split right"/"Split down" (its
   context menu) creates a sibling pane. Opening a file (or a calendar day)
-  **replaces** the focused pane's *clean* tab — a dirty tab stays and the
-  new file opens alongside; plugin doc kinds and the already-open reveal
+  **replaces** the focused pane's *clean* tab — a dirty or **pinned** tab
+  (tab context menu, milestone 35) stays and the new file opens alongside; plugin doc kinds and the already-open reveal
   path are excluded, and internal flows (session restore, `saveAs`,
   multi-select open) pass `keepFocused` (ADR-0003 amendment, milestone 32).
   Dragging a tab is real DnD via

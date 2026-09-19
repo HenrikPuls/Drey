@@ -11,22 +11,18 @@ An AI-powered knowledge hub for note-taking and task automation.
 - No server — Electron app, direct file access to any folder (including
   OneDrive).
 - Folder structure is **the user's own**. The app imposes only
-  `templates/`, the daily-notes root (configurable, `daily.dir`, default
-  `daily/`), `chats/` (assistant conversations) and the hidden `.drafts/`
-  (exit-time auto-saves); topics are free inline
-  `#tag` labels, never directories, and the app never creates or moves
-  folders on a tag's behalf. Nested tags (`#project/frontend`) are a label
-  hierarchy — a naming convention, still not folders (ADR-0017).
-- Classification/synthesis via a **local** OpenAI-compatible API, no fixed
-  model. Unsloth Desktop is the default; any server speaking that dialect
-  works (Unsloth Desktop, llama.cpp, vLLM, Ollama, LM Studio), with an
-  optional bearer API key for the ones that require auth. Cloud calls are
-  **documented, opt-in exceptions only, each off by default** (ADR-0047):
-  the removable `copilot-web` provider (Req-3 / req-15, ADR-0040), which
-  drives Microsoft Copilot's website through browser automation, and the
-  hosted provider presets (`openrouter`, `anthropic`, `zai-glm`) plus the
-  Claude Code / GitHub Copilot CLIs behind the req-29 provider
-  abstraction. The local OpenAI-compatible endpoint stays the default.
+  `templates/`, the daily-notes root (`daily.dir`, default `daily/`),
+  `chats/` (assistant conversations) and the hidden `.drafts/` (exit-time
+  auto-saves); topics are free inline `#tag` labels, never directories,
+  and the app never creates or moves folders on a tag's behalf. Nested
+  tags (`#project/frontend`) are a label hierarchy — a naming convention,
+  still not folders (ADR-0017).
+- Classification/synthesis via a **local** OpenAI-compatible API, no
+  fixed model (Unsloth Desktop default; llama.cpp/vLLM/Ollama/LM Studio
+  also work). Cloud calls are **documented, opt-in exceptions, each off
+  by default** (ADR-0047): `copilot-web` (Req-3/req-15, ADR-0040), the
+  hosted presets (`openrouter`, `anthropic`, `zai-glm`), and Claude
+  Code/GitHub Copilot CLIs — all behind the req-29 provider abstraction.
 - Interactive requests (capture, chat) always take priority over
   background jobs.
 
@@ -35,166 +31,134 @@ An AI-powered knowledge hub for note-taking and task automation.
 Electron + Angular/TypeScript, CodeMirror 6 (editor), transformers.js
 (embeddings, Phase 2), sqlite-vec (vector search, Phase 2),
 OpenAI-API-compatible backend (LLM backend), Electron Builder (packaging).
-No file watcher by default — the vault is re-read on demand (see "Manual
-refresh" below), with an opt-in chokidar watcher for external changes
-(ADR-0045).
+No file watcher by default — vault is re-read on demand; opt-in chokidar
+watcher for external changes (ADR-0045).
 
 ---
 
 ## Not yet implemented
 
 Everything implemented lives in [`changelog.md`](changelog.md). When an
-item below ships, move it there and remove it from this list.
-Once you start working on one of the feature requests and it didn't had a Id then please assign the next one.
+item below ships, move it there and remove it from this list. When work
+starts on an item without an id, assign the next free one.
 
-### Feature requests
+### Next milestones (priority order)
 
-- **Req-2 (remainder)** — render Office documents inline: Word, Excel,
-  PowerPoint and Loop components. **The PDF slice shipped** (milestone
-  30, [ADR-0052](docs/09_architecture_decisions/0052-pdf-embeds-and-viewer.md):
-  drag a PDF in → staged name-preserving into `attachments/` → rendered
-  in place by the built-in viewer; opening a `.pdf` gives a viewer tab),
-  and the same milestone delivered the note **PDF export** (req-16 —
-  editor `⋯` / tab / Files-panel rows, docs/06 §6.39, mermaid-rendering
-  since milestone 32). The Office formats remain open — the platform
-  renders none of them natively. (Effort to be discussed before
-  implementation.)
-- **Req-3 / req-15** — `copilot-web` provider: drive Microsoft 365
-  Copilot's website via Playwright + system Edge as an LLM provider.
-  Prototyped on branch `feat/copilot-web-provider` (ADR-0040) — fragile
-  PoC, URL / selectors / timing editable in Settings. Unmerged; tracked
-  with the Req-29 remainder below.
-- **Req-17** — Jira integration: when a ticket link is inserted into a
-  document, fetch its current status on load and render it inline with the
-  text; plus the ability to create new tickets directly.
-- **Req-6** — download further CodeMirror 6 themes on demand (a bundled
-  set — the Drey look plus the published `@uiw` themes — ships since
-  milestone 16).
-- **Req-18** — flow descriptions / agentic workflow automation:
-  "Task Description => Sebastian => Peter" (prepare a task, send it to
-  Sebastian to discuss with Peter), "Description => Jira" (create a ticket
-  from the description, return the new ticket's link).
-- **req-9** — OCR remainder (iPad expansion stage): handwriting
-  recognition on the tablet itself (Apple Vision Framework or local
-  Tesseract). The **desktop half has shipped** — the `ocr` plugin
-  transcribes embedded images / image tabs via the connected
-  vision-capable LLM (ADR-0050, a deliberate deviation from the
-  Tesseract idea). An "OCR drop field" that batch-processes dropped
-  images stays parked.
-- **req-10** — iPad/iPhone access via Tailscale to the PC backend.
-- **req-11** — audio recording in interview mode (local Whisper; Windows
-  integrated speech-to-text via Win+H as the likely first step).
+⚠️ Neither item below has an id assigned yet — the highest visible id in
+this file is req-34/Req-34, but changelog.md may already use higher
+numbers I can't see. Check there before assigning req-35/req-36 (or
+whatever's next).
+
+1. **Semantic Search** — embeddings via transformers.js + sqlite-vec,
+   wired into the "all notes" chat scope (RAG). Reindexing runs as a
+   scoped async background step (progress, crash-persisted, pauses on
+   interactive use) — sized for this one consumer only. Do not build a
+   generic Job Queue subsystem yet (see Excluded ideas).
+2. **Task Center** — stable `#task id:` addressing; migrate the Tasks
+   panel's write-back from line-number to id-based. Closes the silent
+   mis-tick risk when a task's line number shifts between scan and
+   write-back.
+
+### Feature requests (backlog, unordered)
+
+- **Req-2 (remainder)** — render Office documents inline (Word, Excel,
+  PowerPoint, Loop). PDF slice shipped (milestone 30, ADR-0052: drag-in
+  → `attachments/` → built-in viewer); PDF export also shipped (req-16).
+  Office formats remain unrendered. (Effort TBD.)
+- **Req-6** — further CodeMirror 6 themes on demand (bundled set + `@uiw`
+  themes ship since milestone 16).
+- **Req-18** — flow descriptions / agentic workflow automation
+  ("Description => Sebastian => Peter", "Description => Jira").
 - **req-12** — automatic image captioning via a vision model.
-- **req-13** — editor: footnote rendering in Live Preview (needs a custom
-  Lezer markdown extension). (The `Ctrl`-click half shipped: external
-  links open in the OS browser — Req-5 — and wikilinks via req-20.)
-- **req-19** — integrate draw.io view and edit.
-- **req-21** — dataview.js support.
-- **Req-31** — MCP client: connect the app TO external MCP servers
-  (`@modelcontextprotocol/sdk`, stdio + Streamable-HTTP transports),
-  configured in an `mcpServers` config slice; their tools join the vault
-  tools in one provider-neutral tool pool (namespaced
-  `mcp__<server>__<tool>`), confirmation-gated per server. Builds on the
-  Req-29 interface — every tool-capable provider can drive them.
-
-  UX (dispatched: the Files-panel bug and the editor icons / path
-  tooltip / assistant scroll+icon / auto-summary-removal /
-  document-binding lines shipped in milestones 29 and 31; the settings
-  order shipped as Req-33 and the context-menu review as Req-34
-  (2026-09-18) — see the changelog. Remaining, unnumbered until work
-  starts:)
-
-  Req - Look at the internal prompts and review them (partially: the ask
-  protocol was reworked in milestone 31, ADR-0053)
+- **req-13** — footnote rendering in Live Preview (needs a custom Lezer
+  extension). (`Ctrl`-click for external links shipped as Req-5, wikilinks
+  as req-20.)
+- **req-19** — draw.io view/edit integration.
+- **req-27** — review internal prompts (partial: ask protocol reworked in
+  milestone 31, ADR-0053).
+- **req-28** — editor: table-of-contents plugin.
 
 ### Announced follow-ups
 
-- **M-B (from milestone 28, ADR-0051)** — multi-vault round two: search
-  scopes (document / this vault / all vaults), per-vault tags/tasks
-  indexes, MCP `vault` arguments, tasks "all vaults" scope.
+- **M-B remainder** (milestone 28, ADR-0051) — multi-vault round three,
+  tasks side: per-vault tasks index, tasks panel "all vaults" scope.
+  (Search halves shipped in milestone 33.)
 
 ### Known-defect remainder
 
-None open. bug-10(a) (payload validation) was fixed in milestone 23;
-bug-10(b) (tool calls/results and applied-edit content never persisted,
-the ~12-message history cap) resolved with Req-30's chat notes in
-milestone 25 — see the changelog.
+(none currently)
 
-### Partials — the shipped half is in the changelog
+### Partials — shipped half is in the changelog
 
-- **Req-29 remainder** — the **`copilot-cli`** provider (GitHub Copilot
-  CLI, `-p`) and the **`copilot-web`** routing (Req-3/req-15) are not on
-  main; both ids stay unrouted in `electron/llm/providers/presets.ts`.
-  Shipped: the abstraction itself, the local OpenAI-compatible provider,
-  the hosted presets (OpenRouter / Anthropic API / Z.ai GLM), the
-  Anthropic-Messages client and the Claude Code CLI provider.
-- **req-22 remainder** — the context-menu **"add meeting log"** entry and
-  the per-day **appointment picker** (the one covering the current time
-  preselected; picking one inserts the meeting documentation). Needs a
-  live calendar source, not just a dropped file. Shipped: `.ics`/`.msg`
-  drag-and-drop and File → Import meeting (ADR-0041).
+- **Req-29 remainder** — `copilot-cli` (GitHub Copilot CLI, `-p`) and
+  `copilot-web` routing (Req-3/req-15) not on main; ids unrouted in
+  `electron/llm/providers/presets.ts`. Shipped: the abstraction, local
+  OpenAI-compatible provider, hosted presets, Anthropic-Messages client,
+  Claude Code CLI provider.
+- **req-22 remainder** — context-menu "add meeting log" + per-day
+  appointment picker; needs a live calendar source. Shipped:
+  `.ics`/`.msg` drag-and-drop, File → Import meeting (ADR-0041).
 
-### Phase 2 leftovers
+## Excluded ideas
 
-- Dedicated keyword search / FTS index — a standalone SQLite FTS index
-  over whole files; the free-text mode of tag search covers the common
-  case over section text and headings.
-- Daily tasks day view — a generated (read-only) aggregate view built from
-  timestamp scanning, distinct from the editable daily note file. (The
-  task-collection + tick-back part shipped early as the Tasks panel.)
-- Semantic search — embeddings via transformers.js + sqlite-vec, RAG for
-  the "all notes" chat scope.
-- Daily wrap-up — yesterday done/worked-on, a prioritized list for today;
-  triggered by date rollover, not by app start.
-
-### Phase 4 leftovers
-
-- Interview mode — templates with starter questions, the model drafts
-  adaptive follow-up questions, text-only, result feeds into the normal
-  processing pipeline (primarily lands in the sensitive vault).
-- Task center — the active, writable cross-file task overview with stable
-  `#task id:` addressing instead of line numbers (the Tasks panel writes
-  back by line number today).
-- Job queue — configurable background processes (re-indexing after a model
-  change, export), status/progress, persisted against crashes, auto-pauses
-  on interactive use.
-
----
+- **Req-3/req-15** — `copilot-web` provider (Playwright + system Edge
+  driving M365 Copilot's website). Prototyped, unmerged
+  (`feat/copilot-web-provider`, ADR-0040) — fragile PoC. Tracked with the
+  Req-29 remainder above.
+- **Req-17** — Jira integration: inline live ticket status, create
+  tickets from the editor.
+- **req-9** — OCR remainder (iPad): on-device handwriting recognition.
+  Desktop half shipped (`ocr` plugin, vision-capable LLM, ADR-0050).
+- **req-21** — dataview.js support.
+- **req-10** — iPad/iPhone access via Tailscale.
+- **req-11** — audio recording in interview mode (local Whisper; Win+H
+  as likely first step).
+- **Req-31** — MCP client (connect Drey to external MCP servers).
+  Builds on the Req-29 interface once that exists.
+- **Job Queue (generic, multi-consumer)** — background processes with
+  status/progress, crash persistence, auto-pause on interactive use,
+  meant to cover both re-indexing and export. No second consumer exists
+  yet; a scoped version ships inside the Semantic Search milestone
+  instead. Revisit as a standalone subsystem once export (or similar)
+  needs it too.
+- **Dedicated keyword search / FTS index** — free-text tag search already
+  covers the common case; no evidence it's a bottleneck.
+- **Daily tasks day view** — read-only multi-day aggregate; Tasks panel
+  already covers collection + tick-back. Only useful if tasks end up
+  scattered across many notes instead of daily notes.
+- **Daily wrap-up** — automation convenience on existing data, no
+  structural gap.
+- **Interview mode** — templated adaptive interviews; real prompt-design
+  effort, no confirmed usage pattern yet.
 
 ## Open Risks / Undecided Details
 
-- Stale view with the watcher off: an external tool changing vault files
-  is not noticed until the next manual refresh. Acceptable for a
-  single-user, single-machine tool; the opt-in watcher (req-14,
-  ADR-0045) covers it when it bites. With the watcher on, a *dirty* open
-  tab still wins over an external change on save (last-writer-wins; no
-  conflict dialog).
-- Model contention: assistant usage vs. any benchmarking models running
-  in parallel — needs an availability check before every call.
-- Tag sprawl: nothing prevents near-duplicate tags (`sailing` vs.
-  `boat`). Autotagging biases toward reusing existing vocabulary, but the
-  user can always type a fresh tag, and there is no merge/alias tool yet.
-- Very large vocabularies: the autotag prompt embeds the full tag list.
-  Fine for tens to low hundreds of tags; a pre-filter step would be
-  needed well beyond that (see `classifier-spec.md`).
+- Stale view with the watcher off: external file changes go unnoticed
+  until manual refresh. Opt-in watcher (req-14, ADR-0045) covers it when
+  it bites. With the watcher on: dirty open tab still wins over an
+  external change on save (last-writer-wins, no conflict dialog).
+- Model contention: assistant usage vs. parallel benchmarking runs —
+  needs an availability check before every call.
+- Tag sprawl: no near-duplicate detection (`sailing` vs. `boat`).
+  Autotagging biases toward existing vocabulary; no merge/alias tool yet.
+- Very large vocabularies: autotag prompt embeds the full tag list — fine
+  to low hundreds, needs a pre-filter beyond that (see
+  `classifier-spec.md`).
 
 ---
 
 ## Won't do (decided against, kept for the record)
 
-req-24 Editor, the Lines On shall just contain the image but not text an ylonger
-  → Dropped after inspection (2026-09-12): the Live Preview image embed
-    already renders as the image only while the caret is elsewhere; the
-    caret-in / `</>` reveal of the raw `![alt](path)` line (with the
-    rendered picture kept below, Req-1) is the intended editing affordance.
+**req-24** — Editor: image lines should show only the image, no text.
+→ Dropped (2026-09-12): Live Preview already renders image-only outside
+  the caret; caret-in reveals the raw `![alt](path)` line by design
+  (Req-1).
 
-req-25 Editor written status informations like unsaved draft or Saved shall be removed. I opt to go the way of saving all changes to the document, so that it is guaranteed that they are stored.
-  → Decided against (2026-09-12): we stay with **manual save** (Ctrl+S /
-    Save button). An autosave design was drafted and shelved.
+**req-25** — Remove "unsaved"/"saved" status; always persist changes.
+→ Decided against (2026-09-12): staying with manual save (Ctrl+S/Save
+  button). Autosave design drafted and shelved.
 
-req-26 frontmatter needs to be updated on save
-  → Dropped after inspection (2026-09-12): already implemented exactly as
-    specified — `note:save` bumps `updated:` and fills `created:` whenever
-    the file has a frontmatter fence, and fence-less files are written
-    back byte-for-byte (the app never adds a header that wasn't there,
-    `specs/frontmatter-schema.md`).
+**req-26** — Frontmatter must update on save.
+→ Dropped (2026-09-12): already implemented — `note:save` bumps
+  `updated:` and fills `created:` when a frontmatter fence exists;
+  fence-less files stay byte-for-byte (`specs/frontmatter-schema.md`).

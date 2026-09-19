@@ -18,9 +18,9 @@ import { VaultService } from '../vault';
  * no longer registered.
  */
 export type SessionTab =
-  | { vaultId: string | null; path: string; kind: 'text'; onDisk: boolean; backupId?: string }
-  | { vaultId: string | null; path: string; kind: 'image' }
-  | { vaultId: string | null; path: string; kind: 'pdf' }
+  | { vaultId: string | null; path: string; kind: 'text'; onDisk: boolean; backupId?: string; pinned?: boolean }
+  | { vaultId: string | null; path: string; kind: 'image'; pinned?: boolean }
+  | { vaultId: string | null; path: string; kind: 'pdf'; pinned?: boolean }
   | { vaultId: null; path: string; kind: string; data: unknown };
 
 export interface SessionSnapshot {
@@ -164,7 +164,11 @@ export class SessionService {
           continue;
         }
         if (await this.restoreTab(tab)) {
-          restoredKeys.add(docKey(tab.vaultId, tab.path));
+          const key = docKey(tab.vaultId, tab.path);
+          restoredKeys.add(key);
+          if ('pinned' in tab && tab.pinned === true) {
+            this.editor.setPinned(key, true);
+          }
         }
       }
       restoredAny = this.panes.restore(layout, (p) => restoredKeys.has(p));
@@ -256,10 +260,11 @@ export class SessionService {
       if (!doc) {
         continue;
       }
+      const pin = doc.pinned === true ? { pinned: true } : {};
       if (doc.kind === 'image') {
-        tabs.push({ vaultId: doc.vaultId, path: doc.path, kind: 'image' });
+        tabs.push({ vaultId: doc.vaultId, path: doc.path, kind: 'image', ...pin });
       } else if (doc.kind === 'pdf') {
-        tabs.push({ vaultId: doc.vaultId, path: doc.path, kind: 'pdf' });
+        tabs.push({ vaultId: doc.vaultId, path: doc.path, kind: 'pdf', ...pin });
       } else if (doc.kind !== 'text') {
         // A registered doc kind: its owner answers the payload. A kind that
         // lost its contribution (plugin disabled mid-session) is skipped --
@@ -288,6 +293,7 @@ export class SessionService {
           kind: 'text',
           onDisk: doc.existsOnDisk,
           backupId,
+          ...pin,
         });
       }
     }

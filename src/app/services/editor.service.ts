@@ -91,6 +91,13 @@ export interface OpenDoc {
    * plugin doc kind tab does not carry this either -- it saves nothing.
    */
   askOnSave?: boolean;
+  /**
+   * A pinned tab is never the tab another file replaces (milestone 32's
+   * clean-tab replacement, see `EditorService.replacedTabCandidate`): the
+   * next file opens in a new tab beside it. Persisted with the session;
+   * closing a pinned tab stays an explicit act.
+   */
+  pinned?: boolean;
 }
 
 function baseName(relativePath: string): string {
@@ -508,19 +515,58 @@ export class EditorService {
   }
 
   /**
-   * The focused pane's active tab IF opening another file may replace it:
-   * a **clean** file-view doc -- text, image or pdf -- whose content is on
-   * disk, so closing it loses nothing. A dirty tab stays; a registered
-   * plugin doc kind (`browser://…`) stays (its live state is not behind
-   * the file, so no re-open would bring it back); `null` when nothing is
-   * focused.
+   * The tab opening another file may replace: the focused pane's active
+   * tab if it qualifies, else -- when the active tab is **pinned** -- the
+   * pane's rightmost tab that does. Qualifying means a **clean** file-view
+   * doc (text, image or pdf) whose content is on disk, so closing it loses
+   * nothing, and not pinned. A dirty tab stays; a registered plugin doc
+   * kind (`browser://…`) stays (its live state is not behind the file, so
+   * no re-open would bring it back); a pinned tab stays (the user asked
+   * for it to stay) and hands the replacement to an unpinned neighbour, so
+   * browsing from a pinned reference note reuses the "preview" slot rather
+   * than piling up tabs. A dirty or plugin *active* tab does not delegate:
+   * the new file opens alongside, as before. `null` when nothing is
+   * focused or nothing qualifies.
    */
   private replacedTabCandidate(): string | null {
-    const doc = this.docFor(this.panes.focusedPane()?.active ?? null);
-    if (doc === null || (doc.kind !== 'text' && doc.kind !== 'image' && doc.kind !== 'pdf')) {
+    const pane = this.panes.focusedPane();
+    const active = this.docFor(pane?.active ?? null);
+    if (pane === null || active === null) {
       return null;
     }
-    return doc.bufferContent === doc.savedContent ? doc.key : null;
+    if (active.pinned !== true) {
+      return this.isReplaceable(active) ? active.key : null;
+    }
+    for (const key of [...pane.tabs].reverse()) {
+      const doc = this.docFor(key);
+      if (doc !== null && this.isReplaceable(doc)) {
+        return key;
+      }
+    }
+    return null;
+  }
+
+  private isReplaceable(doc: OpenDoc): boolean {
+    return (
+      doc.pinned !== true &&
+      (doc.kind === 'text' || doc.kind === 'image' || doc.kind === 'pdf') &&
+      doc.bufferContent === doc.savedContent
+    );
+  }
+
+  /** Pins / unpins a tab; a no-op for a key that is not open. */
+  togglePin(key: string): void {
+    const doc = this.docFor(key);
+    if (doc !== null) {
+      this.patchDoc(key, { pinned: doc.pinned !== true });
+    }
+  }
+
+  /** Session restore: re-applies a persisted pin. */
+  setPinned(key: string, pinned: boolean): void {
+    if (this.docFor(key) !== null) {
+      this.patchDoc(key, { pinned });
+    }
   }
 
   /**
@@ -534,7 +580,7 @@ export class EditorService {
       return;
     }
     const doc = this.docFor(victim);
-    if (doc === null || doc.bufferContent !== doc.savedContent) {
+    if (doc === null || !this.isReplaceable(doc)) {
       return;
     }
     // The doc is clean at this instant, so no dialog can fire.
@@ -663,31 +709,31 @@ export class EditorService {
   }
 
   /**
-   * Closes a tab. A dirty tab asks first (the roadmap's minimum bar until
-   * the file watcher forces a real keep-mine / take-external decision) --
-   * through the in-renderer confirm dialog, since the native `confirm()`
-   * breaks Windows keyboard focus (electron#41602). Closing the active tab
-   * activates its neighbour. `silent` skips the dirty prompt -- used when
-   * the underlying file was just deleted, where "keep editing" is not an
-   * option. Resolves to whether the tab actually closed (a cancelled dirty
-   * prompt leaves it open).
+   * Closes a tab. A dirty tab asks first -- Save / Don't save / Cancel --
+   * through the in-renderer dialog, since the native `confirm()` breaks
+   * Windows keyboard focus (electron#41602). "Save" writes the buffer and
+   * closes only if that really left nothing unsaved (a failed write or a
+   * cancelled Save-As dialog keeps the tab open, like Cancel). Closing the
+   * active tab activates its neighbour. `silent` skips the dirty prompt --
+   * used when the underlying file was just deleted, where "keep editing"
+   * is not an option. Resolves to whether the tab actually closed.
    */
   async closeTab(key: string, options: { silent?: boolean } = {}): Promise<boolean> {
     const doc = this.docs().find((d) => d.key === key);
     if (!doc) {
       return false;
     }
-    if (
-      !options.silent &&
-      doc.bufferContent !== doc.savedContent &&
-      !(await this.dialogs.confirm({
+    if (!options.silent && doc.bufferContent !== doc.savedContent) {
+      const decision = await this.dialogs.decide({
         title: 'Unsaved changes',
-        message: `Discard unsaved changes to ${doc.name}?`,
-        confirmLabel: 'Discard',
-        danger: true,
-      }))
-    ) {
-      return false;
+        message: `Do you want to save the changes to ${doc.name}?`,
+      });
+      if (decision === 'cancel') {
+        return false;
+      }
+      if (decision === 'save') {
+        return this.saveAndClose(doc);
+      }
     }
     // Pane placement first (picks the neighbour to activate there), then
     // drop the buffer -- a document lives in one pane at a time, so this
@@ -695,6 +741,26 @@ export class EditorService {
     this.panes.closeEverywhere(key);
     this.docs.update((list) => list.filter((d) => d.key !== key));
     return true;
+  }
+
+  /**
+   * The "Save" branch of {@link closeTab}. A never-saved scratch tab
+   * (`askOnSave`) goes through Save-As and comes back re-keyed to the real
+   * file, so it is that tab that closes. Anything still dirty afterwards
+   * (write failed, dialog cancelled, typed into mid-save) keeps the tab.
+   */
+  private async saveAndClose(doc: OpenDoc): Promise<boolean> {
+    let savedKey: string | null = doc.key;
+    if (doc.askOnSave) {
+      savedKey = await this.saveAs(doc.key);
+    } else {
+      await this.save({ key: doc.key });
+    }
+    const saved = savedKey === null ? null : this.docFor(savedKey);
+    if (saved === null || saved.bufferContent !== saved.savedContent) {
+      return false;
+    }
+    return this.closeTab(saved.key, { silent: true });
   }
 
   /**
@@ -1015,12 +1081,15 @@ export class EditorService {
    * file. For a never-saved scratch doc this is where `save()` lands; on a
    * normal file it forks the buffer to a new path (the original on disk is
    * untouched). `key` defaults to the focused pane's document, like
-   * `save()`.
+   * `save()`. Resolves to the key of the tab now holding the saved file
+   * (the doc's own key when it saved in place), or `null` when nothing was
+   * saved (dialog cancelled, write failed) -- `closeTab`'s "Save" needs it
+   * to close the swapped-in tab too.
    */
-  async saveAs(key?: string): Promise<void> {
+  async saveAs(key?: string): Promise<string | null> {
     const doc = key !== undefined ? this.docFor(key) : this.activeDoc();
     if (!this.api?.pickSavePath || doc === null || doc.kind !== 'text' || this.isSaving()) {
-      return;
+      return null;
     }
     this.error.set(null);
     const targetVault = doc.vaultId ?? this.vault.activeVaultId();
@@ -1029,14 +1098,14 @@ export class EditorService {
       target = await this.api.pickSavePath(doc.name, targetVault ?? undefined);
     } catch (err) {
       this.error.set(err instanceof Error ? err.message : String(err));
-      return;
+      return null;
     }
     if (target === null) {
-      return; // cancelled
+      return null; // cancelled
     }
     if (target === doc.path && doc.vaultId === targetVault && !doc.askOnSave) {
       await this.save({ key: doc.key });
-      return;
+      return doc.key;
     }
 
     this.isSaving.set(true);
@@ -1050,7 +1119,7 @@ export class EditorService {
     } catch (err) {
       this.error.set(err instanceof Error ? err.message : String(err));
       this.isSaving.set(false);
-      return;
+      return null;
     }
     this.isSaving.set(false);
 
@@ -1058,9 +1127,12 @@ export class EditorService {
     // buffer, mtime and `existsOnDisk` come from disk. `keepFocused`: the
     // close above already picked this open's tab -- without it the pane's
     // newly-activated neighbour would be read as the replace victim.
-    const previousKey = doc.key;
+    const savedKey = docKey(targetVault, target);
     void this.closeTab(doc.key, { silent: true });
     await this.openFile(target, targetVault ?? undefined, { keepFocused: true });
+    if (doc.pinned === true) {
+      this.setPinned(savedKey, true);
+    }
     // Moving a file out of `.drafts/` (bug-5's exit auto-saves) deletes the
     // draft original -- move semantics, so drafts don't linger in two places.
     if (doc.vaultId !== null && doc.path.startsWith('.drafts/') && doc.path !== target) {
@@ -1071,6 +1143,7 @@ export class EditorService {
       }
     }
     void this.vault.refresh();
+    return this.docFor(savedKey) !== null ? savedKey : null;
   }
 
   /**

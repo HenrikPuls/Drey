@@ -60,6 +60,12 @@
   opacity: 0.85;
 }
 
+.pin {
+  flex: none;
+  margin-right: -2px;
+  color: var(--accent);
+}
+
 .name {
   flex: 1;
   min-width: 0;

@@ -13,7 +13,14 @@
     }
     <p class="message" [class.no-title]="!req.title">{{ req.message }}</p>
     <footer>
-      @if (req.cancelLabel !== null) {
+      @if (req.discardLabel !== null) {
+        <button type="button" class="ghost" (click)="service.cancel()">{{ req.cancelLabel }}</button>
+        <span class="spacer"></span
+        ><button type="button" class="ghost" (click)="service.discard()">{{ req.discardLabel }}</button
+        ><button type="button" #confirmButton class="primary" (click)="service.accept()">
+          {{ req.confirmLabel }}
+        </button>
+      } @else if (req.cancelLabel !== null) {
         <button type="button" class="ghost" (click)="service.cancel()">{{ req.cancelLabel }}</button>
         <span class="spacer"></span
         ><button

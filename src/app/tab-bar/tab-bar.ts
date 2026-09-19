@@ -123,14 +123,25 @@ export class TabBar {
     event.stopPropagation();
     this.menu.set({
       x: Math.min(event.clientX, window.innerWidth - 168),
-      // The menu grew to seven rows with the dock-move entries (ADR-0038).
-      y: Math.min(event.clientY, window.innerHeight - 240),
+      // The menu grew to eight rows with the dock-move and pin entries (ADR-0038).
+      y: Math.min(event.clientY, window.innerHeight - 270),
       path,
     });
   }
 
   protected closeMenu(): void {
     this.menu.set(null);
+  }
+
+  /** Only file-view tabs get replaced by the next open, so only they can be pinned. */
+  protected pinnable(path: string): boolean {
+    const kind = this.editor.docFor(path)?.kind;
+    return kind === 'text' || kind === 'image' || kind === 'pdf';
+  }
+
+  protected togglePin(path: string): void {
+    this.closeMenu();
+    this.editor.togglePin(path);
   }
 
   @HostListener('document:keydown.escape')

@@ -13,6 +13,16 @@ are excluded (their state is not behind the file), and internal flows
 (session restore, `saveAs`, the Files panel's multi-select open) pass
 `keepFocused` to opt out. See `EditorService.openFile` / `openDailyNote`.
 
+**Amended (milestone 35):** a tab can be **pinned** (`OpenDoc.pinned`,
+tab context menu). `replacedTabCandidate` skips a pinned tab, so opening
+another file adds a tab beside it instead of replacing it — and while a
+pinned tab is the *active* one, the pane's rightmost clean unpinned tab is
+replaced instead (falling back to "open beside" when none qualifies); the pin is
+carried through `saveAs`, `retargetTabs` and the session snapshot. Closing
+a **dirty** tab now asks Save / Don't save / Cancel
+(`ConfirmDialogService.decide`) instead of the two-button discard prompt —
+"Save" closes the tab only when nothing is left unsaved afterwards.
+
 ## Context
 
 Milestone 3 built the editor as strictly one document at a time:

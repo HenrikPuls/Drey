@@ -129,6 +129,7 @@ describe('TabBar', () => {
 
     const items = compiled.querySelectorAll('.ctx-menu button');
     expect(Array.from(items).map((b) => b.textContent?.trim())).toEqual([
+      'Pin tab',
       'Move to left dock',
       'Move to right dock',
       'Move to bottom dock',
@@ -139,11 +140,31 @@ describe('TabBar', () => {
       'Close all',
     ]);
 
-    (items[6] as HTMLButtonElement).click(); // "Close others" (keeps b.md, the row that was right-clicked)
+    (items[7] as HTMLButtonElement).click(); // "Close others" (keeps b.md, the row that was right-clicked)
     // closeOthers closes tab by tab through async closeTab calls.
     await vi.waitFor(() => expect(editor.openDocs().map((d) => d.path)).toEqual(['b.md']));
     fixture.detectChanges();
     expect(compiled.querySelector('.ctx-menu')).toBeNull();
+  });
+
+  it('"Pin tab" pins the right-clicked tab, shows the pin and flips to "Unpin tab"', () => {
+    const compiled = fixture.nativeElement as HTMLElement;
+    const openMenu = (): void => {
+      compiled
+        .querySelectorAll('.tab')[0]
+        .dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, clientX: 20, clientY: 20 }));
+      fixture.detectChanges();
+    };
+
+    openMenu();
+    (compiled.querySelector('.ctx-menu button') as HTMLButtonElement).click(); // "Pin tab"
+    fixture.detectChanges();
+    expect(editor.docFor('a.md')?.pinned).toBe(true);
+    expect(compiled.querySelectorAll('.tab')[0].querySelector('.pin')).not.toBeNull();
+    expect(compiled.querySelectorAll('.tab')[1].querySelector('.pin')).toBeNull();
+
+    openMenu();
+    expect(compiled.querySelector('.ctx-menu button')?.textContent?.trim()).toBe('Unpin tab');
   });
 
   it('"Split right" moves the tab into a brand-new sibling pane', async () => {

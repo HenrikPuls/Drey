@@ -1,4 +1,5 @@
 import { TestBed } from '@angular/core/testing';
+import { ConfirmDialogService } from './confirm-dialog.service';
 import { EditorService, stripFrontmatter } from './editor.service';
 import { SettingsService } from './settings.service';
 import { AppConfig, DreyApi, NoteSaveRequest, NoteSaveResult } from '../../../shared/ipc-api';
@@ -305,6 +306,136 @@ describe('EditorService', () => {
       await service.closeTab('a.md');
       expect(service.openDocs()).toEqual([]);
       expect(service.openPath()).toBeNull();
+    });
+
+    describe('pinned tabs', () => {
+      it('are not replaced: the next file opens in a new tab beside them', async () => {
+        await service.openFile('a.md');
+        service.togglePin('a.md');
+        await service.openFile('b.md');
+
+        expect(service.openDocs().map((d) => d.path)).toEqual(['a.md', 'b.md']);
+        expect(service.docFor('a.md')?.pinned).toBe(true);
+        expect(service.openPath()).toBe('b.md');
+      });
+
+      it('hand the replacement to the unpinned tab when the pinned one is active', async () => {
+        await service.openFile('a.md');
+        service.togglePin('a.md');
+        await service.openFile('b.md'); // beside the pin: [a, b]
+        service.activate('a.md'); // the user looks at the pinned note again
+        await service.openFile('c.md');
+
+        expect(service.openDocs().map((d) => d.path)).toEqual(['a.md', 'c.md']);
+        expect(service.openPath()).toBe('c.md');
+        expect(service.docFor('a.md')?.pinned).toBe(true);
+      });
+
+      it('open beside the pin when the only other tab is dirty', async () => {
+        await service.openFile('a.md');
+        service.togglePin('a.md');
+        await service.openFile('b.md');
+        service.updateBuffer('b.md', 'content of b.md + edit');
+        service.activate('a.md');
+        await service.openFile('c.md');
+
+        expect(service.openDocs().map((d) => d.path)).toEqual(['a.md', 'b.md', 'c.md']);
+        expect(service.docFor('b.md')?.bufferContent).toBe('content of b.md + edit');
+      });
+
+      it('never replace a second pinned tab', async () => {
+        await service.openFile('a.md');
+        service.togglePin('a.md');
+        await service.openFile('b.md');
+        service.togglePin('b.md');
+        service.activate('a.md');
+        await service.openFile('c.md');
+
+        expect(service.openDocs().map((d) => d.path)).toEqual(['a.md', 'b.md', 'c.md']);
+      });
+
+      it('replace again once unpinned', async () => {
+        await service.openFile('a.md');
+        service.togglePin('a.md');
+        service.togglePin('a.md');
+        await service.openFile('b.md');
+
+        expect(service.openDocs().map((d) => d.path)).toEqual(['b.md']);
+      });
+
+      it('also hold for image / pdf viewer tabs', async () => {
+        await service.openFile('x.png');
+        service.togglePin('x.png');
+        await service.openFile('note.md');
+
+        expect(service.openDocs().map((d) => d.path)).toEqual(['x.png', 'note.md']);
+      });
+
+      it('keep their pin across a rename on disk', async () => {
+        await service.openFile('a.md');
+        service.togglePin('a.md');
+        service.retargetTabs('a.md', 'renamed.md');
+
+        expect(service.docFor('renamed.md')?.pinned).toBe(true);
+      });
+    });
+
+    describe('closing a dirty tab (Save / Don\'t save / Cancel)', () => {
+      let decide: ReturnType<typeof vi.spyOn>;
+
+      async function openDirty(): Promise<void> {
+        await service.openFile('a.md');
+        service.updateBuffer('a.md', 'content of a.md + edit');
+      }
+
+      beforeEach(() => {
+        decide = vi.spyOn(TestBed.inject(ConfirmDialogService), 'decide');
+      });
+
+      it('Cancel keeps the tab open and its buffer intact', async () => {
+        decide.mockResolvedValue('cancel');
+        await openDirty();
+
+        expect(await service.closeTab('a.md')).toBe(false);
+        expect(service.docFor('a.md')?.bufferContent).toBe('content of a.md + edit');
+        expect(saves).toEqual([]);
+      });
+
+      it("Don't save closes without writing", async () => {
+        decide.mockResolvedValue('discard');
+        await openDirty();
+
+        expect(await service.closeTab('a.md')).toBe(true);
+        expect(service.openDocs()).toEqual([]);
+        expect(saves).toEqual([]);
+      });
+
+      it('Save writes the buffer, then closes', async () => {
+        decide.mockResolvedValue('save');
+        await openDirty();
+
+        expect(await service.closeTab('a.md')).toBe(true);
+        expect(saves).toEqual([{ path: 'a.md', body: 'content of a.md + edit', eol: '\n' }]);
+        expect(service.openDocs()).toEqual([]);
+      });
+
+      it('Save keeps the tab open when the write fails', async () => {
+        decide.mockResolvedValue('save');
+        await openDirty();
+        (window.dreyApi as unknown as { saveNote: unknown }).saveNote = () =>
+          Promise.reject(new Error('EACCES'));
+
+        expect(await service.closeTab('a.md')).toBe(false);
+        expect(service.docFor('a.md')?.bufferContent).toBe('content of a.md + edit');
+        expect(service.error()).toBe('EACCES');
+      });
+
+      it('never asks for a clean tab', async () => {
+        await service.openFile('a.md');
+
+        expect(await service.closeTab('a.md')).toBe(true);
+        expect(decide).not.toHaveBeenCalled();
+      });
     });
 
     describe('retargetTabs (rename on disk)', () => {
