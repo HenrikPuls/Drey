@@ -5,13 +5,7 @@ import type {
 } from '../../../shared/plugin-api/renderer';
 import type { TaskRecord } from '../shared/tasks.js';
 import { resolveTaskLine, scanTasks, setDoneOnLine } from '../shared/tasks.js';
-import {
-  ALL_KINDS,
-  filterVisibleTasks,
-  readPrefs,
-  writePrefs,
-  type TaskScope,
-} from './filter.js';
+import { ALL_KINDS, filterVisibleTasks, readPrefs, writePrefs, type TaskScope } from './filter.js';
 import { taskToggleExtension, toggleInFocusedSurface } from './task-toggle.js';
 
 function el<K extends keyof HTMLElementTagNameMap>(
@@ -52,31 +46,45 @@ const TEMPLATES_PREFIX = 'templates/';
  * checkbox click (or any edit) immediately, saved or not; previously an
  * editor-side toggle only dirtied the buffer and the disk index (and so
  * the list) never adopted it until an unrelated save. Same fold the Tags
- * plugin's search runs over dirty tabs.
+ * plugin's search runs over dirty tabs. The merge is keyed by
+ * `vaultId` + path (two vaults may hold the same relative path), and
+ * `scopeVaultId` narrows it to one vault (`null` = every vault, the All
+ * scope); never-located scratch tabs hold no vault content either way.
  */
-function withOpenBufferHits(disk: TaskRecord[], docs: readonly OpenDocumentInfo[]): TaskRecord[] {
+function withOpenBufferHits(
+  disk: TaskRecord[],
+  docs: readonly OpenDocumentInfo[],
+  scopeVaultId: string | null,
+): TaskRecord[] {
   const dirty = docs.filter(
-    (doc) => doc.kind === 'text' && doc.dirty && !doc.path.startsWith(TEMPLATES_PREFIX),
+    (doc) =>
+      doc.kind === 'text' &&
+      doc.dirty &&
+      doc.vaultId !== null &&
+      (scopeVaultId === null || doc.vaultId === scopeVaultId) &&
+      !doc.path.startsWith(TEMPLATES_PREFIX),
   );
   if (dirty.length === 0) {
     return disk;
   }
-  const dirtyPaths = new Set(dirty.map((doc) => doc.path));
-  const merged = disk.filter((task) => !dirtyPaths.has(task.path));
+  const dirtyKeys = new Set(dirty.map((doc) => `${doc.vaultId} ${doc.path}`));
+  const merged = disk.filter((task) => !dirtyKeys.has(`${task.vaultId} ${task.path}`));
   for (const doc of dirty) {
-    merged.push(...scanTasks(doc.path, doc.buffer));
+    merged.push(...scanTasks(doc.path, doc.buffer, doc.vaultId ?? ''));
   }
-  // File order then document order — keeps the vault view's per-file
-  // groups adjacent.
-  merged.sort((a, b) => a.path.localeCompare(b.path) || a.line - b.line);
+  // Vault order, then file order, then document order — keeps the grouped
+  // view's per-file sections adjacent in every scope.
+  merged.sort(
+    (a, b) => a.vaultId.localeCompare(b.vaultId) || a.path.localeCompare(b.path) || a.line - b.line,
+  );
   return merged;
 }
 
 /**
  * The Tasks plugin's renderer (ADR-0033, converted in ADR-0044 stage 6):
- * the Tasks dock panel (document / whole-vault scope, hide-done and kind
- * filters, tag+text filter) and the `Mod+Enter` checkbox toggle as editor
- * extensions — ported from `src/app/tasks/` to plain DOM.
+ * the Tasks dock panel (document / vault / all-vaults scope, hide-done and
+ * kind filters, tag+text filter) and the `Mod+Enter` checkbox toggle as
+ * editor extensions — ported from `src/app/tasks/` to plain DOM.
  */
 const plugin: PluginRendererModule = {
   activate(api: DreyPluginApi) {
@@ -88,12 +96,17 @@ const plugin: PluginRendererModule = {
       kinds: [...prefs.kinds],
       queryTags: [...prefs.queryTags],
       queryText: prefs.queryText,
-      /** The whole-vault list from the plugin main; only read in vault scope. */
+      /** The index list from the plugin main (every vault, vaultId-stamped). */
       vaultTasks: [] as TaskRecord[],
       activePath: null as string | null,
+      /** The active document's vault (document-scope records are stamped with it). */
+      activeVault: null as string | null,
       activeBuffer: '',
     };
     const listeners = new Set<() => void>();
+    /** The vault registry (ADR-0051) for the Vault scope + the group badges. */
+    let vaultNames = new Map<string, string>();
+    let activeVaultId: string | null = null;
     const persist = (): void => {
       writePrefs({
         scope: state.scope,
@@ -115,6 +128,7 @@ const plugin: PluginRendererModule = {
       const active = api.documents.active();
       const isText = active !== null && active.kind === 'text';
       state.activePath = isText ? active.path : null;
+      state.activeVault = isText ? active.vaultId : null;
       state.activeBuffer = isText ? active.buffer : '';
     };
     pullActive();
@@ -135,10 +149,16 @@ const plugin: PluginRendererModule = {
       }
     });
 
-    // -- vault scope: the main-side index, via the plugin bridge -------------
+    // -- vault / all scope: the main-side index, via the plugin bridge -------
     const refreshVault = async (): Promise<void> => {
       try {
-        state.vaultTasks = ((await api.backend.invoke('list')) as TaskRecord[]) ?? [];
+        const [tasks, vaults] = (await Promise.all([
+          api.backend.invoke('list'),
+          api.vault.listVaults(),
+        ])) as [TaskRecord[], readonly { id: string; name: string; active: boolean }[]];
+        state.vaultTasks = tasks ?? [];
+        vaultNames = new Map(vaults.map((v) => [v.id, v.name]));
+        activeVaultId = vaults.find((v) => v.active)?.id ?? null;
       } catch {
         state.vaultTasks = [];
       }
@@ -153,12 +173,26 @@ const plugin: PluginRendererModule = {
     api.backend.on('index-updated', () => void refreshVault());
 
     const visibleTasks = (): TaskRecord[] => {
-      const base =
-        state.scope === 'document'
-          ? state.activePath === null
+      let base: TaskRecord[];
+      if (state.scope === 'document') {
+        base =
+          state.activePath === null
             ? []
-            : scanTasks(state.activePath, state.activeBuffer)
-          : withOpenBufferHits(state.vaultTasks, api.documents.list());
+            : scanTasks(state.activePath, state.activeBuffer, state.activeVault ?? '');
+      } else {
+        // Vault scope: exactly the registry's active vault, at pull time.
+        // All scope: every known vault — the panel scopes the main-side
+        // list client-side so the active vault is never stale.
+        const disk =
+          state.scope === 'vault'
+            ? state.vaultTasks.filter((t) => t.vaultId === activeVaultId)
+            : state.vaultTasks;
+        base = withOpenBufferHits(
+          disk,
+          api.documents.list(),
+          state.scope === 'vault' ? activeVaultId : null,
+        );
+      }
       return filterVisibleTasks(base, state);
     };
 
@@ -195,6 +229,11 @@ const plugin: PluginRendererModule = {
 
     // -- ticking a task --------------------------------------------------------
     const toggleTask = async (task: TaskRecord): Promise<void> => {
+      // `documents.get` resolves the bare path (active vault first, then a
+      // unique open match). The one ambiguous case — the same relative path
+      // open from two vaults while the task's vault is not active — falls
+      // through to the disk write below, which targets the task's own
+      // vault explicitly.
       const open = api.documents.get(task.path);
       if (open !== null && open.kind === 'text') {
         // Through the live buffer, saved like any edit (an unsaved change
@@ -216,7 +255,7 @@ const plugin: PluginRendererModule = {
       }
       let changed = false;
       try {
-        const { content } = await api.vault.readFile(task.path);
+        const { content } = await api.vault.readFile(task.path, { vaultId: task.vaultId });
         const crlf = content.includes('\r\n');
         const normalized = content.replace(/\r\n/g, '\n');
         const line = resolveTaskLine(normalized, task);
@@ -225,7 +264,9 @@ const plugin: PluginRendererModule = {
         }
         const next = setDoneOnLine(normalized, line, !task.done);
         if (next !== normalized) {
-          await api.vault.writeFile(task.path, crlf ? next.replace(/\n/g, '\r\n') : next);
+          await api.vault.writeFile(task.path, crlf ? next.replace(/\n/g, '\r\n') : next, {
+            vaultId: task.vaultId,
+          });
           changed = true;
         }
       } catch {
@@ -274,15 +315,15 @@ const plugin: PluginRendererModule = {
           setScope('vault'),
         );
         vaultBtn.setAttribute('role', 'tab');
-        seg.append(docBtn, vaultBtn);
+        const allBtn = toggleButton('', 'All', 'Tasks across every vault', () => setScope('all'));
+        allBtn.setAttribute('role', 'tab');
+        seg.append(docBtn, vaultBtn, allBtn);
 
         const doneBtn = toggleButton('tgl', 'done', 'Hide completed tasks', toggleHideDone);
         const boxBtn = toggleButton('tgl', '[ ]', 'Show - [ ] checkbox tasks', () =>
           toggleKind('checkbox'),
         );
-        const tagBtn = toggleButton('tgl', '#', 'Show lines tagged #task', () =>
-          toggleKind('tag'),
-        );
+        const tagBtn = toggleButton('tgl', '#', 'Show lines tagged #task', () => toggleKind('tag'));
         row.append(seg, doneBtn, boxBtn, tagBtn);
 
         const render = (): void => {
@@ -290,6 +331,8 @@ const plugin: PluginRendererModule = {
           docBtn.setAttribute('aria-selected', String(state.scope === 'document'));
           vaultBtn.classList.toggle('on', state.scope === 'vault');
           vaultBtn.setAttribute('aria-selected', String(state.scope === 'vault'));
+          allBtn.classList.toggle('on', state.scope === 'all');
+          allBtn.setAttribute('aria-selected', String(state.scope === 'all'));
           for (const [btn, on] of [
             [doneBtn, state.hideDone],
             [boxBtn, state.kinds.includes('checkbox')],
@@ -361,7 +404,10 @@ const plugin: PluginRendererModule = {
             meta.appendChild(el('span', 'loc', `:${task.line}`));
           }
           bodyButton.appendChild(meta);
-          bodyButton.addEventListener('click', () => void api.documents.open(task.path, task.line));
+          bodyButton.addEventListener(
+            'click',
+            () => void api.documents.open(task.path, task.line, { vaultId: task.vaultId }),
+          );
 
           wrap.append(box, bodyButton);
           return wrap;
@@ -379,7 +425,9 @@ const plugin: PluginRendererModule = {
                   ? 'No tasks match the filter.'
                   : state.scope === 'document'
                     ? 'No tasks in this document.'
-                    : 'No tasks in the vault.',
+                    : state.scope === 'vault'
+                      ? 'No tasks in the vault.'
+                      : 'No tasks in any vault.',
               ),
             );
             return;
@@ -390,13 +438,21 @@ const plugin: PluginRendererModule = {
               list.appendChild(taskRow(task, false));
             }
           } else {
-            // Grouped by file; the full path disambiguates same-named notes.
-            let lastPath: string | null = null;
+            // Grouped by file; the full path disambiguates same-named
+            // notes, and in the All scope a badge names every group's
+            // vault (the active one stays unbadged, like the Search panel).
+            let lastKey: string | null = null;
             for (const task of visible) {
-              if (task.path !== lastPath) {
-                lastPath = task.path;
+              const key = `${task.vaultId} ${task.path}`;
+              if (key !== lastKey) {
+                lastKey = key;
                 const group = el('p', 'group', task.path);
                 group.title = task.path;
+                if (task.vaultId !== activeVaultId) {
+                  group.appendChild(
+                    el('span', 'vault', vaultNames.get(task.vaultId) ?? task.vaultId),
+                  );
+                }
                 list.appendChild(group);
               }
               list.appendChild(taskRow(task, true));

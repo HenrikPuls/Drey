@@ -14,12 +14,48 @@ import type { TaskRecord } from '../../../plugins/tasks/shared/tasks';
  * runner ignores `plugins/**`, so the spec lives here.
  */
 
-/** Vault-scope tasks, as the plugin main's `list` returns them. */
+/** Index-scope tasks, as the plugin main's `list` returns them (vaultId-stamped). */
 const VAULT_TASKS: TaskRecord[] = [
-  { path: 'a.md', line: 3, text: 'draft the brief', done: false, kind: 'checkbox', heading: 'Projekt Alpha', tags: ['project', 'project/frontend'] },
-  { path: 'a.md', line: 4, text: 'send the invoice', done: true, kind: 'checkbox', heading: 'Projekt Alpha', tags: ['project', 'buchhaltung'] },
-  { path: 'b.md', line: 9, text: 'call the landlord', done: false, kind: 'tag', heading: 'Wohnung', tags: ['wohnung'] },
-  { path: 'b.md', line: 12, text: 'water the plants', done: false, kind: 'checkbox', heading: null, tags: [] },
+  {
+    path: 'a.md',
+    vaultId: 'home',
+    line: 3,
+    text: 'draft the brief',
+    done: false,
+    kind: 'checkbox',
+    heading: 'Projekt Alpha',
+    tags: ['project', 'project/frontend'],
+  },
+  {
+    path: 'a.md',
+    vaultId: 'home',
+    line: 4,
+    text: 'send the invoice',
+    done: true,
+    kind: 'checkbox',
+    heading: 'Projekt Alpha',
+    tags: ['project', 'buchhaltung'],
+  },
+  {
+    path: 'b.md',
+    vaultId: 'home',
+    line: 9,
+    text: 'call the landlord',
+    done: false,
+    kind: 'tag',
+    heading: 'Wohnung',
+    tags: ['wohnung'],
+  },
+  {
+    path: 'b.md',
+    vaultId: 'home',
+    line: 12,
+    text: 'water the plants',
+    done: false,
+    kind: 'checkbox',
+    heading: null,
+    tags: [],
+  },
 ];
 
 const NO_FILTER: TaskFilter = {
@@ -67,15 +103,19 @@ describe('Tasks plugin filter (req-8)', () => {
     ).toEqual(['call the landlord']);
 
     expect(
-      filterVisibleTasks(VAULT_TASKS, { ...NO_FILTER, queryText: 'the wohnung' }).map((t) => t.text),
+      filterVisibleTasks(VAULT_TASKS, { ...NO_FILTER, queryText: 'the wohnung' }).map(
+        (t) => t.text,
+      ),
     ).toEqual(['call the landlord']);
   });
 
   it('combines tag and text terms with AND', () => {
     expect(
-      filterVisibleTasks(VAULT_TASKS, { ...NO_FILTER, queryTags: ['project'], queryText: 'brief' }).map(
-        (t) => t.text,
-      ),
+      filterVisibleTasks(VAULT_TASKS, {
+        ...NO_FILTER,
+        queryTags: ['project'],
+        queryText: 'brief',
+      }).map((t) => t.text),
     ).toEqual(['draft the brief']);
   });
 
@@ -128,6 +168,17 @@ describe('Tasks plugin persisted prefs', () => {
       queryTags: ['project'],
       queryText: 'brief',
     });
+  });
+
+  it('persists the all-vaults scope (milestone 34)', () => {
+    writePrefs({
+      scope: 'all',
+      hideDone: false,
+      kinds: ['checkbox', 'tag'],
+      queryTags: [],
+      queryText: '',
+    });
+    expect(readPrefs().scope).toBe('all');
   });
 
   it('ignores a corrupt blob and an unknown scope', () => {

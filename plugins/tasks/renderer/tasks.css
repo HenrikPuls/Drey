@@ -182,6 +182,17 @@
   margin-top: 0;
 }
 
+/* The All-vaults scope badges each group with its vault's name (the active
+   vault stays unbadged, same convention as the Search panel). */
+.tasks-panel .group .vault {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 0 5px;
+  border-radius: 999px;
+  background: var(--bg-search);
+  color: var(--text-3);
+}
+
 .tasks-panel .task {
   flex: 0 0 auto;
   display: flex;

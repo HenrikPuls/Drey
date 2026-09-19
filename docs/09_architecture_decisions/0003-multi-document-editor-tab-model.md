@@ -122,3 +122,18 @@ highlight and `closeTabsUnder` (folder delete) all treat it like any
 other. The centre column renders `<app-image-tab>` instead of
 `<app-editor>` when `editor.activeKind() === 'image'`. Still no
 cross-restart persistence.
+
+## Later change — the load is no longer an undo event (milestone 34)
+
+The original trade-off above had a defect the docs accidentally papered
+over: the document swap was a *dispatched* full-range change, so the
+load itself sat at the bottom of CodeMirror's undo history. A second
+`Ctrl+Z` in a freshly opened tab rolled the LOAD back and wiped the
+document, and undoing across a tab switch could resurrect the previous
+tab's content. The swap now builds a **fresh `EditorState`**
+(`MarkdownSurface.loadDocument`; compartment contents carry over via
+`Compartment.get`), which makes the code match what this ADR always
+claimed: the load is not an undo event, every tab starts with an empty
+undo stack, and undo never crosses a tab boundary. In-place reloads of
+the same tab (save pipeline, watcher, live-edit pushes per ADR-0049)
+stay dispatched and undoable on purpose.

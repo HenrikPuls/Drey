@@ -14,10 +14,29 @@ describe('scanTasks', () => {
   it('finds checkbox tasks with their done-state and text', () => {
     const doc = '- [ ] buy milk\n- [x] call Anna\n  - [X] nested and done\n';
     expect(scanTasks('n.md', doc)).toEqual([
-      { path: 'n.md', line: 1, text: 'buy milk', done: false, kind: 'checkbox', heading: null, tags: [] },
-      { path: 'n.md', line: 2, text: 'call Anna', done: true, kind: 'checkbox', heading: null, tags: [] },
       {
         path: 'n.md',
+        vaultId: '',
+        line: 1,
+        text: 'buy milk',
+        done: false,
+        kind: 'checkbox',
+        heading: null,
+        tags: [],
+      },
+      {
+        path: 'n.md',
+        vaultId: '',
+        line: 2,
+        text: 'call Anna',
+        done: true,
+        kind: 'checkbox',
+        heading: null,
+        tags: [],
+      },
+      {
+        path: 'n.md',
+        vaultId: '',
         line: 3,
         text: 'nested and done',
         done: true,
@@ -32,15 +51,42 @@ describe('scanTasks', () => {
     const doc = 'Fix the roof #task\nMow the lawn #task #task/done\n';
     const tasks = scanTasks('n.md', doc);
     expect(tasks).toEqual([
-      { path: 'n.md', line: 1, text: 'Fix the roof', done: false, kind: 'tag', heading: null, tags: [] },
-      { path: 'n.md', line: 2, text: 'Mow the lawn', done: true, kind: 'tag', heading: null, tags: [] },
+      {
+        path: 'n.md',
+        vaultId: '',
+        line: 1,
+        text: 'Fix the roof',
+        done: false,
+        kind: 'tag',
+        heading: null,
+        tags: [],
+      },
+      {
+        path: 'n.md',
+        vaultId: '',
+        line: 2,
+        text: 'Mow the lawn',
+        done: true,
+        kind: 'tag',
+        heading: null,
+        tags: [],
+      },
     ]);
   });
 
   it('reports a checkbox+#task line once, as a checkbox', () => {
     const tasks = scanTasks('n.md', '- [ ] ship it #task\n');
     expect(tasks).toEqual([
-      { path: 'n.md', line: 1, text: 'ship it', done: false, kind: 'checkbox', heading: null, tags: [] },
+      {
+        path: 'n.md',
+        vaultId: '',
+        line: 1,
+        text: 'ship it',
+        done: false,
+        kind: 'checkbox',
+        heading: null,
+        tags: [],
+      },
     ]);
   });
 
@@ -67,9 +113,14 @@ describe('scanTasks', () => {
     expect(scanTasks('n.md', '## 14:32\ntext without markers\n')).toEqual([]);
   });
 
+  it('stamps the records with the owning vault (milestone 34)', () => {
+    expect(scanTasks('n.md', '- [ ] a\n', 'vault-2').map((t) => t.vaultId)).toEqual(['vault-2']);
+  });
+
   describe('section tags', () => {
     it('attaches the containing section’s inline tags to a task', () => {
-      const doc = '## Projekt Alpha #project #kunde\n\n- [ ] draft the brief\n- [x] send invoice #buchhaltung\n';
+      const doc =
+        '## Projekt Alpha #project #kunde\n\n- [ ] draft the brief\n- [x] send invoice #buchhaltung\n';
       const tasks = scanTasks('n.md', doc);
       expect(tasks[0].tags).toEqual(['project', 'kunde', 'buchhaltung']);
       expect(tasks[1].tags).toEqual(['project', 'kunde', 'buchhaltung']);
@@ -108,12 +159,8 @@ describe('setDoneOnLine', () => {
   });
 
   it('adds and removes #task/done on a bare #task line', () => {
-    expect(setDoneOnLine('water plants #task\n', 1, true)).toBe(
-      'water plants #task #task/done\n',
-    );
-    expect(setDoneOnLine('water plants #task #task/done\n', 1, false)).toBe(
-      'water plants #task\n',
-    );
+    expect(setDoneOnLine('water plants #task\n', 1, true)).toBe('water plants #task #task/done\n');
+    expect(setDoneOnLine('water plants #task #task/done\n', 1, false)).toBe('water plants #task\n');
   });
 
   it('leaves a non-task line and an out-of-range line untouched', () => {
@@ -134,13 +181,41 @@ describe('resolveTaskLine', () => {
     // What the save pipeline produces on a first save: two inserted
     // frontmatter lines, so the panel's recorded line is 2 too small.
     const stamp = '2026-09-15T10:00:00';
-    const grown = ['---', 'title: t', 'created: ' + QUOTE + stamp + QUOTE, 'updated: ' + QUOTE + stamp + QUOTE, '---', '', '- [ ] draft', 'Fix the roof #task', ''].join('\n');
-    const staleRow = { path: 'a.md', line: 5, text: 'Fix the roof', done: false, kind: 'tag' as const, heading: 'Wohnen', tags: [] };
+    const grown = [
+      '---',
+      'title: t',
+      'created: ' + QUOTE + stamp + QUOTE,
+      'updated: ' + QUOTE + stamp + QUOTE,
+      '---',
+      '',
+      '- [ ] draft',
+      'Fix the roof #task',
+      '',
+    ].join('\n');
+    const staleRow = {
+      path: 'a.md',
+      vaultId: '',
+      line: 5,
+      text: 'Fix the roof',
+      done: false,
+      kind: 'tag' as const,
+      heading: 'Wohnen',
+      tags: [],
+    };
     expect(resolveTaskLine(grown, staleRow)).toBe(8);
   });
 
   it('returns null once the task is gone', () => {
-    const staleRow = { path: 'a.md', line: 5, text: 'vanished', done: false, kind: 'tag' as const, heading: null, tags: [] };
+    const staleRow = {
+      path: 'a.md',
+      vaultId: '',
+      line: 5,
+      text: 'vanished',
+      done: false,
+      kind: 'tag' as const,
+      heading: null,
+      tags: [],
+    };
     expect(resolveTaskLine(doc, staleRow)).toBeNull();
   });
 });

@@ -1903,7 +1903,7 @@ src/app/templates/
 
 ## 5.20 Tasks panel + task index (ADR-0033)
 
-> _(The tasks feature is now the `plugins/tasks/` runtime plugin — [ADR-0044](09_architecture_decisions/0044-runtime-plugin-system.md), §5.0.)_
+> _(The tasks feature is now the `plugins/tasks/` runtime plugin — [ADR-0044](09_architecture_decisions/0044-runtime-plugin-system.md), §5.0. Since milestones 33/34 it mounts the base `TagField` chip component, owns **one index per registered vault** with `vaultId`-stamped `TaskRecord`s, and the panel scope is **Doc | Vault | All** — see ADR-0033's "Later change". The pre-plugin structure below is historical.)_
 
 A third feature-module trio, shaped like the tag stack (§5.14):
 

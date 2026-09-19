@@ -26,6 +26,12 @@ export type TaskKind = 'checkbox' | 'tag';
 export interface TaskRecord {
   /** Vault-relative path of the note. */
   path: string;
+  /**
+   * Owning vault id (ADR-0051). `''` only for scans that are not
+   * vault-bound (the panel's document scope over a never-located scratch
+   * tab); every index/panel record carries the real id.
+   */
+  vaultId: string;
   /** 1-based line the task sits on. */
   line: number;
   /** The task text: list marker, checkbox and `#task*` markers stripped. */
@@ -69,7 +75,9 @@ function stripTaskMarkers(text: string): string {
  * task line can be mapped to the inline tags of the section it sits in.
  * Reuses `splitSections` -- the exact unit the tag search reports on.
  */
-function sectionTagRanges(content: string): { start: number; end: number; tags: readonly string[] }[] {
+function sectionTagRanges(
+  content: string,
+): { start: number; end: number; tags: readonly string[] }[] {
   const sections = splitSections(content);
   return sections.map((s, i) => ({
     start: s.line,
@@ -79,7 +87,7 @@ function sectionTagRanges(content: string): { start: number; end: number; tags: 
 }
 
 /** Every task line in `content`, in document order. */
-export function scanTasks(path: string, content: string): TaskRecord[] {
+export function scanTasks(path: string, content: string, vaultId = ''): TaskRecord[] {
   const lines = content.split('\n');
   const out: TaskRecord[] = [];
   const ranges = sectionTagRanges(content);
@@ -109,6 +117,7 @@ export function scanTasks(path: string, content: string): TaskRecord[] {
     if (box) {
       out.push({
         path,
+        vaultId,
         line: i + 1,
         text: stripTaskMarkers(box[3].slice(1).trim()),
         done: box[2].toLowerCase() === 'x',
@@ -122,6 +131,7 @@ export function scanTasks(path: string, content: string): TaskRecord[] {
     if (TASK_MARKER.test(raw)) {
       out.push({
         path,
+        vaultId,
         line: i + 1,
         text: stripTaskMarkers(stripBullet(raw)),
         done: TASK_DONE.test(raw),
@@ -192,10 +202,7 @@ export function resolveTaskLine(content: string, task: TaskRecord): number | nul
     if (candidate.text !== task.text || candidate.kind !== task.kind) {
       continue;
     }
-    if (
-      best === null ||
-      Math.abs(candidate.line - task.line) < Math.abs(best.line - task.line)
-    ) {
+    if (best === null || Math.abs(candidate.line - task.line) < Math.abs(best.line - task.line)) {
       best = candidate;
     }
   }

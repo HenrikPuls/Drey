@@ -23,7 +23,8 @@ import { EditTargetService } from '../../services/edit-target.service';
 import { EditorZoomService } from '../../services/editor-zoom.service';
 import { ImageLightboxService } from '../../image-viewer';
 import { VaultService } from '../../vault';
-import { ThemeService } from '../../services/theme.service';import { ThemeCatalogEntry } from '../themes/theme-catalog';
+import { ThemeService } from '../../services/theme.service';
+import { ThemeCatalogEntry } from '../themes/theme-catalog';
 import { dreyEditorLook, editorStructure, headingTypographyStyle } from '../editor-theme';
 import { editorIndentation } from '../editor-indent';
 import { imagePaste } from '../image-paste';
@@ -35,11 +36,7 @@ import {
 import { livePreview } from '../live-preview';
 import { inlineSpellcheck, requestSpellcheck, SpellcheckSource } from '../spellcheck/spellcheck';
 import { linkActivation } from '../link-open';
-import {
-  WikilinkService,
-  makeWikilinkCompletionSource,
-  wikilinks,
-} from '../wikilinks';
+import { WikilinkService, makeWikilinkCompletionSource, wikilinks } from '../wikilinks';
 import { pasteUrlAsMarkdownLink } from '../paste-link';
 import { assetUrlToVaultPath, resolveVaultImageCandidates } from '../vault-image';
 import { makeTagCompletionSource, tagPills, tagStyleRefresh } from '../tags';
@@ -348,7 +345,9 @@ export class MarkdownSurface implements AfterViewInit, OnDestroy {
         onActivate: this.onWikilinkActivate(),
       }),
       markdownLanguage.data.of({
-        autocomplete: makeWikilinkCompletionSource(() => this.wikiLinks.noteNames(this.docVaultId())),
+        autocomplete: makeWikilinkCompletionSource(() =>
+          this.wikiLinks.noteNames(this.docVaultId()),
+        ),
       }),
       // Paste a bare URL onto an empty caret -> `[url](url)` (lang-markdown's
       // own pasteURLAsLink only handles the wrap-a-selection case).
@@ -415,145 +414,166 @@ export class MarkdownSurface implements AfterViewInit, OnDestroy {
       parent: this.host().nativeElement,
       state: EditorState.create({
         doc: '',
-        extensions: [
-          // Above basicSetup so Enter wins over insertNewline -- but an
-          // active completion popup keeps its Enter (accept).
-          this.compact() && this.submitOnEnter()
-            ? Prec.highest(keymap.of(this.submitKeymap()))
-            : [],
-          // Tab = insert a tab / indent the selection (bug-9); above
-          // basicSetup, which ships no Tab binding at all -- unbound, the
-          // key fell through to the browser's focus navigation.
-          editorIndentation,
-          basicSetup,
-          // The language grammar + (for Markdown) the `#tag` autocomplete /
-          // pills / link activation / spellcheck / frontmatter fold. Seeded
-          // with the Markdown bundle; `applyLanguage()` swaps in a code
-          // grammar (and drops the Markdown chrome) for a non-`.md` tab.
-          this.languageCompartment.of(this.markdownBundle()),
-          // Plugin-contributed extensions (ADR-0044 stage 2), in their own
-          // compartment so a (de)registration reconfigures without touching
-          // the language state.
-          this.pluginCompartment.of(this.collectPluginExtensions()),
-          // Track this surface as the Edit/Selection menu's target while it
-          // holds focus (see `EditTargetService` -- "last focused", so a
-          // menu-bar click doesn't drop it).
-          EditorView.domEventHandlers({
-            focus: () => {
-              if (this._view) {
-                this.editTarget.register(this._view);
-              }
-              return false;
-            },
-          }),
-          EditorView.updateListener.of((update) => {
-            if (update.docChanged) {
-              this.docChanged.emit(update.state.doc.toString());
-              // A checkbox CLICK is an explicit "done" gesture — same
-              // semantics as the Tasks panel's row toggle (which always
-              // saved): persist immediately, or the vault-scope task list
-              // (a disk index) never adopts the change until an unrelated
-              // save. `input.toggleTask` without the suffix is the
-              // Mod+Enter editing command and stays buffer-only.
-              if (
-                update.transactions.some(
-                  (tr) => tr.annotation(Transaction.userEvent) === 'input.toggleTask.click',
-                )
-              ) {
-                const path = this.languageFilename();
-                if (path !== null && path !== '') {
-                  // Deferred: an ipcRenderer.invoke kicked off from inside
-                  // the CM update stack never sees its promise settle --
-                  // the save continues outside the transaction.
-                  setTimeout(() => void this.editor.save({ path }), 0);
-                }
-              }
-            }
-            const expanded = frontmatterExpandedOf(update.state);
-            if (expanded !== this._frontmatterExpanded()) {
-              this._frontmatterExpanded.set(expanded);
-            }
-          }),
-          // The active CM6 theme. Seeded with Drey (local, synchronous) and
-          // swapped by `applyTheme()` -- a published theme is a lazy import,
-          // so it arrives a microtask/frame later. In a compartment so
-          // Settings -> Appearance can swap it live without a view rebuild.
-          this.themeCompartment.of(dreyEditorLook),
-          // Layout skeleton (height, scroll, content padding, hidden
-          // gutter) -- kept out of the swappable theme so a published theme
-          // can't drop it. After the compartment so it wins on equal
-          // specificity; `gutterTheme` / `compactTheme` (Prec.high) still
-          // override where they need to.
-          editorStructure,
-          // Per-level heading typography, also outside the theme
-          // compartment (a published theme flattens h1-h6 to one style or
-          // drops them entirely -- the beta feedback). `Prec.high` is
-          // load-bearing, same quirk as `compactTheme` below: it must beat
-          // the theme compartment's own heading rules at equal
-          // specificity. Typography only -- the theme keeps supplying the
-          // heading colours.
-          Prec.high(syntaxHighlighting(headingTypographyStyle)),
-          // Long lines wrap at the editor's width instead of scrolling the
-          // content sideways -- the full-page editor now fills the whole
-          // area (no centred column), so a horizontal scrollbar there would
-          // just be noise.
-          EditorView.lineWrapping,
-          // Compact surfaces (entry drawer, note assistant composer) also
-          // get a slimmer theme.
-          //
-          // `Prec.high` is load-bearing: `compactTheme` restyles `.cm-content`
-          // (drops the full-page 40px top padding), but at equal precedence
-          // CodeMirror lets the style module declared *earlier* -- the theme
-          // compartment above -- win the cascade, so the compact field would
-          // otherwise open with its first line pushed 40px down.
-          this.compact() ? Prec.high(compactTheme) : [],
-          this.imageCapture()
-            ? imagePaste({
-                save: (bytes, ext) =>
-                  this.vault.saveAsset(
-                    bytes,
-                    ext,
-                    this.editor.openPath() ?? '',
-                    this.editor.openVaultId() ?? this.vault.activeVaultId(),
-                  ),
-                // PDFs keep their file name in attachments/ (ADR-0052).
-                saveNamed: (bytes, fileName) =>
-                  this.vault.saveNamedAsset(
-                    bytes,
-                    fileName,
-                    this.editor.openPath() ?? '',
-                    this.editor.openVaultId() ?? this.vault.activeVaultId(),
-                  ),
-                notePath: () => this.editor.openPath(),
-                readTextFile: (path, vaultId) =>
-                  this.vault.readTextFile(path, vaultId ?? this.editor.openVaultId() ?? undefined),
-                saveFromUrl: (url) =>
-                  this.vault.saveAssetFromUrl(
-                    url,
-                    this.editor.openPath() ?? '',
-                    this.editor.openVaultId() ?? this.vault.activeVaultId(),
-                  ),
-                // Plugin drop decoders claim a drop before the base cascade
-                // (the .ics/.msg meeting decoder is the Meeting plugin's).
-                dropClaimed: (data) => this.dropDecoders.claims(data),
-                decodeDropped: async (data) => (await this.dropDecoders.decode(data)) ?? '',
-                onError: (message) => this.editor.error.set(message),
-              })
-            : [],
-          this.placeholderCompartment.of(
-            this.placeholder() ? cmPlaceholder(this.placeholder()) : [],
-          ),
-          this.readOnlyCompartment.of(this.readOnly() ? readOnlyExtension : []),
-          this.editLockCompartment.of([]),
-          this.lineNumberCompartment.of(this.lineNumbers() ? gutterTheme : []),
-          this.modeCompartment.of(this.modeExtensions(this.mode())),
-        ],
+        extensions: this.buildExtensions(null),
       }),
     });
     // The compartment is seeded with the Markdown bundle; if this surface
     // opened straight onto a code file, swap the grammar now rather than
     // waiting for the first `languageFilename` change.
     void this.applyLanguage(this.languageFilename());
+  }
+
+  /**
+   * The surface's full extension list. `previous === null` seeds every
+   * compartment from the current inputs (initial construction); otherwise
+   * each compartment carries over exactly what the previous state held
+   * (`Compartment.get`), so a fresh state built by `loadDocument` re-styles
+   * the incoming document identically before any effect re-runs. The
+   * language compartment rides the seed too: `currentLangKey` describes
+   * what the compartment holds, and `applyLanguage()` reconfigures when the
+   * next document's grammar differs.
+   */
+  private buildExtensions(previous: EditorState | null): Extension[] {
+    const seed = (compartment: Compartment, initial: Extension): Extension =>
+      previous === null ? initial : (compartment.get(previous) ?? initial);
+    return [
+      // Above basicSetup so Enter wins over insertNewline -- but an
+      // active completion popup keeps its Enter (accept).
+      this.compact() && this.submitOnEnter() ? Prec.highest(keymap.of(this.submitKeymap())) : [],
+      // Tab = insert a tab / indent the selection (bug-9); above
+      // basicSetup, which ships no Tab binding at all -- unbound, the
+      // key fell through to the browser's focus navigation.
+      editorIndentation,
+      basicSetup,
+      // The language grammar + (for Markdown) the `#tag` autocomplete /
+      // pills / link activation / spellcheck / frontmatter fold. Seeded
+      // with the Markdown bundle; `applyLanguage()` swaps in a code
+      // grammar (and drops the Markdown chrome) for a non-`.md` tab.
+      this.languageCompartment.of(seed(this.languageCompartment, this.markdownBundle())),
+      // Plugin-contributed extensions (ADR-0044 stage 2), in their own
+      // compartment so a (de)registration reconfigures without touching
+      // the language state.
+      this.pluginCompartment.of(seed(this.pluginCompartment, this.collectPluginExtensions())),
+      // Track this surface as the Edit/Selection menu's target while it
+      // holds focus (see `EditTargetService` -- "last focused", so a
+      // menu-bar click doesn't drop it).
+      EditorView.domEventHandlers({
+        focus: () => {
+          if (this._view) {
+            this.editTarget.register(this._view);
+          }
+          return false;
+        },
+      }),
+      EditorView.updateListener.of((update) => {
+        if (update.docChanged) {
+          this.docChanged.emit(update.state.doc.toString());
+          // A checkbox CLICK is an explicit "done" gesture — same
+          // semantics as the Tasks panel's row toggle (which always
+          // saved): persist immediately, or the vault-scope task list
+          // (a disk index) never adopts the change until an unrelated
+          // save. `input.toggleTask` without the suffix is the
+          // Mod+Enter editing command and stays buffer-only.
+          if (
+            update.transactions.some(
+              (tr) => tr.annotation(Transaction.userEvent) === 'input.toggleTask.click',
+            )
+          ) {
+            const path = this.languageFilename();
+            if (path !== null && path !== '') {
+              // Deferred: an ipcRenderer.invoke kicked off from inside
+              // the CM update stack never sees its promise settle --
+              // the save continues outside the transaction.
+              setTimeout(() => void this.editor.save({ path }), 0);
+            }
+          }
+        }
+        const expanded = frontmatterExpandedOf(update.state);
+        if (expanded !== this._frontmatterExpanded()) {
+          this._frontmatterExpanded.set(expanded);
+        }
+      }),
+      // The active CM6 theme. Seeded with Drey (local, synchronous) and
+      // swapped by `applyTheme()` -- a published theme is a lazy import,
+      // so it arrives a microtask/frame later. In a compartment so
+      // Settings -> Appearance can swap it live without a view rebuild.
+      this.themeCompartment.of(seed(this.themeCompartment, dreyEditorLook)),
+      // Layout skeleton (height, scroll, content padding, hidden
+      // gutter) -- kept out of the swappable theme so a published theme
+      // can't drop it. After the compartment so it wins on equal
+      // specificity; `gutterTheme` / `compactTheme` (Prec.high) still
+      // override where they need to.
+      editorStructure,
+      // Per-level heading typography, also outside the theme
+      // compartment (a published theme flattens h1-h6 to one style or
+      // drops them entirely -- the beta feedback). `Prec.high` is
+      // load-bearing, same quirk as `compactTheme` below: it must beat
+      // the theme compartment's own heading rules at equal
+      // specificity. Typography only -- the theme keeps supplying the
+      // heading colours.
+      Prec.high(syntaxHighlighting(headingTypographyStyle)),
+      // Long lines wrap at the editor's width instead of scrolling the
+      // content sideways -- the full-page editor now fills the whole
+      // area (no centred column), so a horizontal scrollbar there would
+      // just be noise.
+      EditorView.lineWrapping,
+      // Compact surfaces (entry drawer, note assistant composer) also
+      // get a slimmer theme.
+      //
+      // `Prec.high` is load-bearing: `compactTheme` restyles `.cm-content`
+      // (drops the full-page 40px top padding), but at equal precedence
+      // CodeMirror lets the style module declared *earlier* -- the theme
+      // compartment above -- win the cascade, so the compact field would
+      // otherwise open with its first line pushed 40px down.
+      this.compact() ? Prec.high(compactTheme) : [],
+      this.imageCapture()
+        ? imagePaste({
+            save: (bytes, ext) =>
+              this.vault.saveAsset(
+                bytes,
+                ext,
+                this.editor.openPath() ?? '',
+                this.editor.openVaultId() ?? this.vault.activeVaultId(),
+              ),
+            // PDFs keep their file name in attachments/ (ADR-0052).
+            saveNamed: (bytes, fileName) =>
+              this.vault.saveNamedAsset(
+                bytes,
+                fileName,
+                this.editor.openPath() ?? '',
+                this.editor.openVaultId() ?? this.vault.activeVaultId(),
+              ),
+            notePath: () => this.editor.openPath(),
+            readTextFile: (path, vaultId) =>
+              this.vault.readTextFile(path, vaultId ?? this.editor.openVaultId() ?? undefined),
+            saveFromUrl: (url) =>
+              this.vault.saveAssetFromUrl(
+                url,
+                this.editor.openPath() ?? '',
+                this.editor.openVaultId() ?? this.vault.activeVaultId(),
+              ),
+            // Plugin drop decoders claim a drop before the base cascade
+            // (the .ics/.msg meeting decoder is the Meeting plugin's).
+            dropClaimed: (data) => this.dropDecoders.claims(data),
+            decodeDropped: async (data) => (await this.dropDecoders.decode(data)) ?? '',
+            onError: (message) => this.editor.error.set(message),
+          })
+        : [],
+      this.placeholderCompartment.of(
+        seed(
+          this.placeholderCompartment,
+          this.placeholder() ? cmPlaceholder(this.placeholder()) : [],
+        ),
+      ),
+      this.readOnlyCompartment.of(
+        seed(this.readOnlyCompartment, this.readOnly() ? readOnlyExtension : []),
+      ),
+      this.editLockCompartment.of(seed(this.editLockCompartment, [])),
+      this.lineNumberCompartment.of(
+        seed(this.lineNumberCompartment, this.lineNumbers() ? gutterTheme : []),
+      ),
+      this.modeCompartment.of(seed(this.modeCompartment, this.modeExtensions(this.mode()))),
+    ];
   }
 
   ngOnDestroy(): void {
@@ -563,7 +583,45 @@ export class MarkdownSurface implements AfterViewInit, OnDestroy {
     }
   }
 
-  /** Replaces the whole document (owner-driven loads, clearing the capture box). */
+  /**
+   * Replaces the whole document with a FRESH editor state: the text becomes
+   * the state's own doc instead of being dispatched in, so the load is not
+   * an undo event and the tab starts with an empty undo stack ("undo
+   * history does not survive a tab switch", ADR-0037). A dispatched load
+   * sits at the bottom of the history instead -- undoing past the first
+   * real edit rolled the LOAD back and wiped the document (and an undo
+   * across a tab switch could resurrect the *previous* tab's content).
+   *
+   * This is the path for a FIRST load and every TAB SWITCH. An in-place
+   * reload of the same document (save pipeline, watcher, live-edit pushes)
+   * must stay undoable -- use `setContent` there.
+   */
+  loadDocument(text: string, anchor = 0): void {
+    const view = this._view;
+    if (!view) {
+      return;
+    }
+    const resolvedAnchor = Math.min(anchor, text.length);
+    view.setState(
+      EditorState.create({
+        doc: text,
+        extensions: this.buildExtensions(view.state),
+        selection: { anchor: resolvedAnchor },
+      }),
+    );
+    // Same reasoning as in `setContent`: a fresh open must *show* the top.
+    if (resolvedAnchor === 0) {
+      view.scrollDOM.scrollTop = 0;
+    }
+  }
+
+  /**
+   * Replaces the whole document as a single UNDOABLE edit, keeping the
+   * caret at `anchor` (owner-driven in-place reloads: the save pipeline's
+   * frontmatter rewrite, a watcher reload, each live-edit buffer push --
+   * ADR-0049 keeps every push one undo step). A fresh open / tab switch
+   * must use `loadDocument` instead.
+   */
   setContent(text: string, anchor = 0): void {
     const view = this._view;
     if (!view) {

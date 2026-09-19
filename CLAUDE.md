@@ -267,13 +267,17 @@ Renderer (Angular):
   the hits into an unsaved `search-results.md` scratch tab. Panel + toggle
   prefs persist in `localStorage['drey.search']`
 - Tasks panel — `plugins/tasks/` (DOM dock widget, ADR-0033):
-  checkbox / `#task` lines in the open document or the whole vault, a
-  scope toggle · "hide done" · a kind filter (persisted to
-  `localStorage['drey.tasks']`). Document scope scans the live editor
-  buffer through the document API; vault scope calls the plugin's
-  `backend.invoke('list', …)`. A row's checkbox rewrites the buffer line
-  through `documents.setBuffer` + save; a row click opens the file at the
-  line
+  checkbox / `#task` lines in the open document, the whole vault, or all
+  vaults (Doc | Vault | All scope toggle, milestone 34) · "hide done" · a
+  kind filter (persisted to `localStorage['drey.tasks']`). Document scope
+  scans the live editor buffer through the document API; vault/all scope
+  calls the plugin's `backend.invoke('list', …)` over its **per-vault
+  index** (every record stamped `vaultId`; vault scope filters to the
+  registry's active vault at pull time, all scope groups per file with a
+  vault badge). A row's checkbox rewrites the buffer line through
+  `documents.setBuffer` + save (closed files through
+  `vault.writeFile { vaultId }`); a row click opens the file at the line,
+  in its vault
 - Assistant panel — `plugins/assistant/` (DOM dock widget; conversations
   since ADR-0048): **chat-first** — a chat
   picker + new chat in the head, turn cards rendered from the active
@@ -572,41 +576,39 @@ can dock into the three docks (milestone 20,
 The milestone log lives in
 [docs/milestones-done.md](docs/milestones-done.md).
 
-**Just code-complete: milestone 32 — beta-feedback batch II** (five
-feedback items: configurable daily-note folder `daily.dir`; opening a
-file replaces the focused clean tab (ADR-0003 amendment); mermaid
-diagrams render in the PDF export (ADR-0052 reopened); the editor/PDF
-parity rule (changelog preamble + docs/06 §6.39 checklist); shared
-plugin settings styling + the author guide `plugins/AUTHORING.md`).
-**Not yet manually verified by the owner.** Milestones 28 (multi-vault,
+**Just code-complete: milestone 34 — tasks across vaults + the editor's
+undo fix** (the tasks plugin mirrors the tags plugin's per-vault shape:
+Doc | Vault | All scope, `vaultId`-stamped records, vault badges; and a
+fresh CodeMirror state per first load / tab switch, so undo can no
+longer wipe a freshly opened tab). **Not yet manually verified by the
+owner.** Milestone 33 (tag system round: prefix colors, central tag
+completion, search fix + redesign), milestone 32 (beta-feedback batch
+II), milestone 28 (multi-vault,
 [ADR-0051](docs/09_architecture_decisions/0051-multi-vault-registry.md)),
 30 (PDF embeds + a PDF viewer tab,
 [ADR-0052](docs/09_architecture_decisions/0052-pdf-embeds-and-viewer.md))
-and 31 (feedback batch I: background indexing, ADR-0053 ask fences,
-`![[…]]` embeds, collapsed files tree) are code-complete and likewise
-awaiting manual verification. Announced follow-up (M-B, from milestone
-28): search scopes (document / this vault / all vaults), per-vault
-tags/tasks indexes, MCP `vault` arguments, tasks "all vaults" scope.
+and 31 (feedback batch I) are code-complete and likewise awaiting manual
+verification. Milestone 28's announced M-B follow-up (search scopes,
+per-vault tags/tasks indexes, MCP `vault` arguments, tasks "all vaults"
+scope) is **fully shipped** as of milestones 33 + 34.
 
 ## Milestones
 
 The completed milestone log (1–27) is archived in
-[docs/milestones-done.md](docs/milestones-done.md); milestones 22–32 are
+[docs/milestones-done.md](docs/milestones-done.md); milestones 22–34 are
 summarized in [specs/changelog.md](specs/changelog.md) ("Recent
 milestones") until owner-verified.
 
-- **Last completed:** milestone 31 — beta-feedback batch I, per
+- **Last completed:** milestone 32 — beta-feedback batch II, per
   changelog. Milestones 25 (chats as vault notes), 26 (live edit mode),
   27 (OCR), 28 (multi-vault) and 30 (PDF embeds + viewer tab) are
   likewise code-complete and **still awaiting manual verification by
   the owner**.
-- **Just code-complete:** milestone 32 — beta-feedback batch II (see
-  "Current State" above).
-- **Next:** milestone 28's M-B follow-up (search scopes, per-vault
-  indexes, MCP vault arguments — see "Current State" above), the
-  provider program: Req-31 MCP client, then copilot-web re-apply +
-  copilot-cli spike, or the Office remainder of Req-2 (needs a
-  rendering strategy discussion first).
+- **Just code-complete:** milestones 33 (tag system round) and 34
+  (tasks across vaults + undo fix) — see "Current State" above.
+- **Next:** the provider program: Req-31 MCP client, then copilot-web
+  re-apply + copilot-cli spike, or the Office remainder of Req-2 (needs
+  a rendering strategy discussion first).
 
 Pause after each milestone, show what works, don't push through several
 milestones in one uninterrupted stretch. (Milestones 10, 11, 15 and 19

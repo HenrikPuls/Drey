@@ -7,7 +7,7 @@ import type { TaskKind, TaskRecord } from '../shared/tasks.js';
 import { tagSetMatches } from '../shared/support.js';
 
 /** Which set of task lines the panel shows. */
-export type TaskScope = 'document' | 'vault';
+export type TaskScope = 'document' | 'vault' | 'all';
 
 export const ALL_KINDS: readonly TaskKind[] = ['checkbox', 'tag'];
 
@@ -45,7 +45,7 @@ export function readPrefs(): TaskPrefs {
       ? [...new Set(raw.queryTags.map(normalizeTag).filter((t) => t !== ''))]
       : base.queryTags;
     return {
-      scope: raw.scope === 'vault' ? 'vault' : 'document',
+      scope: raw.scope === 'vault' || raw.scope === 'all' ? raw.scope : 'document',
       hideDone: raw.hideDone === true,
       // An empty selection would hide everything with no way back -- keep the default.
       kinds: kinds.length > 0 ? kinds : base.kinds,
@@ -78,10 +78,7 @@ export interface TaskFilter {
  * Kind / done / tag+text filtering and the canonical sort (file order then
  * document order). Same semantics as before the conversion.
  */
-export function filterVisibleTasks(
-  tasks: readonly TaskRecord[],
-  filter: TaskFilter,
-): TaskRecord[] {
+export function filterVisibleTasks(tasks: readonly TaskRecord[], filter: TaskFilter): TaskRecord[] {
   let list = tasks.filter((t) => filter.kinds.includes(t.kind));
   if (filter.hideDone) {
     list = list.filter((t) => !t.done);

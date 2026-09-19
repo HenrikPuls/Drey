@@ -1,21 +1,24 @@
 /**
- * The vault's task index, plugin-side (ADR-0033, converted in ADR-0044
- * stage 6): a per-file cache of every checkbox / `#task` line, derived
- * purely by `shared/tasks`. Backs the renderer panel's "whole vault" scope
- * (document scope is scanned live from the open buffer).
+ * The task indexes, plugin-side (ADR-0033, converted in ADR-0044 stage 6,
+ * per-vault since milestone 34 — the last piece of the M-B follow-up): one
+ * {@link VaultTaskIndex} per registered vault, each a per-file cache of
+ * every checkbox / `#task` line, derived purely by `shared/tasks`. Backs
+ * the renderer panel's vault / all-vaults scopes (document scope is scanned
+ * live from the open buffer).
  *
  * Same lifecycle and exclusion rules as the Tags plugin's index: the
  * literal `templates/` folder is always skipped, and so is the
  * user-configured templates folder when that differs; everything else,
- * `daily/` included, is scanned. Full rebuild on vault open / refresh, one
- * file re-indexed on `note:save` (a save hook) and on a raw vault write,
- * dropped on delete -- there is no file watcher (ADR-0018).
+ * `daily/` included, is scanned. Full rebuild per vault on vault open /
+ * refresh, one file re-indexed on `note:save` (a save hook) and on a raw
+ * vault write, dropped on delete — there is no file watcher (ADR-0018).
  */
 import { scanTasks, TaskRecord } from '../shared/tasks';
 
 const ALWAYS_EXCLUDED_PREFIX = 'templates/';
 
-export class TaskIndex {
+/** One vault's index: files → their task records, with its own sweep state. */
+class VaultTaskIndex {
   /**
    * Records grouped by file, so one save re-indexes just that file. The
    * map a reader sees is ALWAYS complete: a rebuild sweep builds a fresh
@@ -34,6 +37,24 @@ export class TaskIndex {
   private rebuildChain: Promise<void> = Promise.resolve();
   /** Set by every `requestRebuild`, consumed by the next sweep pass. */
   private rebuildRequested = false;
+
+  constructor(
+    private readonly vaultId: string,
+    private readonly listFiles: (vaultId: string) => Promise<readonly string[]>,
+    private readonly readContent: (vaultId: string, path: string) => Promise<string>,
+    private readonly getTemplatesDir?: () => string,
+  ) {}
+
+  /** Path prefixes whose files are kept out of the index. */
+  private excludedPrefixes(): string[] {
+    const raw = (this.getTemplatesDir?.() ?? '').trim().replace(/^\/+|\/+$/g, '');
+    const configured = raw === '' ? ALWAYS_EXCLUDED_PREFIX : `${raw}/`;
+    return Array.from(new Set([ALWAYS_EXCLUDED_PREFIX, configured]));
+  }
+
+  private isExcluded(path: string): boolean {
+    return this.excludedPrefixes().some((prefix) => path.startsWith(prefix));
+  }
 
   /**
    * Requests a full rebuild, coalesced: bursts collapse into at most one
@@ -56,33 +77,11 @@ export class TaskIndex {
     return run;
   }
 
-  /**
-   * @param listMarkdownFiles flattens the vault tree to `.md` paths
-   *   (vault-relative, forward-slash).
-   * @param getTemplatesDir the configured templates folder (vault-relative,
-   *   no slashes) -- its files are excluded too. Optional; the literal
-   *   `templates/` is always excluded regardless.
-   */
-  constructor(
-    private readonly listMarkdownFiles: () => Promise<readonly string[]>,
-    private readonly getTemplatesDir?: () => string,
-  ) {}
-
-  private excludedPrefixes(): string[] {
-    const raw = (this.getTemplatesDir?.() ?? '').trim().replace(/^\/+|\/+$/g, '');
-    const configured = raw === '' ? ALWAYS_EXCLUDED_PREFIX : `${raw}/`;
-    return Array.from(new Set([ALWAYS_EXCLUDED_PREFIX, configured]));
-  }
-
-  private isExcluded(path: string): boolean {
-    return this.excludedPrefixes().some((prefix) => path.startsWith(prefix));
-  }
-
-  /** Rescans the whole vault. Safe with no active vault (clears the index). */
-  async rebuild(): Promise<void> {
+  /** Rescans the whole vault. Safe when the vault is unreadable (clears the index). */
+  private async rebuild(): Promise<void> {
     let paths: readonly string[];
     try {
-      paths = await this.listMarkdownFiles();
+      paths = await this.listFiles(this.vaultId);
     } catch {
       return;
     }
@@ -96,11 +95,11 @@ export class TaskIndex {
           continue;
         }
         try {
-          const content = await this.readContent(path);
+          const content = await this.readContent(this.vaultId, path);
           // A reindexFile that landed while this read was in flight
           // carries the NEWER content — its record stays.
           if (!reindexed.has(path)) {
-            next.set(path, scanTasks(path, content));
+            next.set(path, scanTasks(path, content, this.vaultId));
           }
         } catch {
           // Unreadable -- skip; the next rebuild picks it up.
@@ -113,20 +112,13 @@ export class TaskIndex {
     this.byPath = next;
   }
 
-  private readContent: (path: string) => Promise<string> = async () => '';
-
-  /** The plugin entry wires its vault `read` here before the first rebuild. */
-  setReadContent(read: (path: string) => Promise<string>): void {
-    this.readContent = read;
-  }
-
   /** Re-indexes one file after a save (or drops it if it now sits under an excluded folder). */
   reindexFile(path: string, content: string): void {
     if (this.isExcluded(path)) {
       this.removeFile(path);
       return;
     }
-    const record = scanTasks(path, content);
+    const record = scanTasks(path, content, this.vaultId);
     // A landing save during a sweep must survive the swap — and must not
     // be overwritten by the sweep's older in-flight read of the file.
     if (this.sweep !== null) {
@@ -147,5 +139,85 @@ export class TaskIndex {
   /** Every task line in the vault, file order then document order. */
   all(): TaskRecord[] {
     return [...this.byPath.values()].flat();
+  }
+}
+
+export class TaskIndex {
+  /** One index per registered vault, keyed by vault id (ADR-0051). */
+  private byVault = new Map<string, VaultTaskIndex>();
+
+  /**
+   * @param listMarkdownFiles flattens one vault's tree to `.md` paths
+   *   (vault-relative, forward-slash).
+   * @param getTemplatesDir the configured templates folder (vault-relative,
+   *   no slashes) -- its files are excluded too. Optional; the literal
+   *   `templates/` is always excluded regardless.
+   */
+  constructor(
+    private readonly listMarkdownFiles: (vaultId: string) => Promise<readonly string[]>,
+    private readonly getTemplatesDir?: () => string,
+  ) {}
+
+  private readContent: (vaultId: string, path: string) => Promise<string> = async () => '';
+
+  /** The plugin entry wires its vault `read` here before the first rebuild. */
+  setReadContent(read: (vaultId: string, path: string) => Promise<string>): void {
+    this.readContent = read;
+  }
+
+  /** The vault's index, created on first touch. */
+  private vaultIndex(vaultId: string): VaultTaskIndex {
+    let index = this.byVault.get(vaultId);
+    if (index === undefined) {
+      index = new VaultTaskIndex(
+        vaultId,
+        this.listMarkdownFiles,
+        // Reads through the parent field, so a `setReadContent` that lands
+        // after a vault index exists still takes effect.
+        (id, path) => this.readContent(id, path),
+        this.getTemplatesDir,
+      );
+      this.byVault.set(vaultId, index);
+    }
+    return index;
+  }
+
+  /** Full rebuild of one vault's index, coalesced per vault. */
+  requestRebuild(vaultId: string): Promise<void> {
+    return this.vaultIndex(vaultId).requestRebuild();
+  }
+
+  /** Full rebuild of every known vault's index (a registry-level round). */
+  async requestRebuildAll(vaultIds: readonly string[]): Promise<void> {
+    await Promise.all(vaultIds.map((id) => this.requestRebuild(id)));
+  }
+
+  /** Forgets a vault's index entirely (the vault was unregistered). */
+  dropVault(vaultId: string): void {
+    this.byVault.delete(vaultId);
+  }
+
+  /** Vault ids this index currently knows about (for dropping unregistered ones). */
+  knownVaults(): string[] {
+    return [...this.byVault.keys()];
+  }
+
+  /** Re-indexes one file after a save (or drops it if it now sits under an excluded folder). */
+  reindexFile(vaultId: string, path: string, content: string): void {
+    this.vaultIndex(vaultId).reindexFile(path, content);
+  }
+
+  /** Drops a file's records after it is deleted. */
+  removeFile(vaultId: string, path: string): void {
+    this.byVault.get(vaultId)?.removeFile(path);
+  }
+
+  /** Every task line in every known vault, each stamped with its `vaultId`. */
+  all(): TaskRecord[] {
+    const out: TaskRecord[] = [];
+    for (const index of this.byVault.values()) {
+      out.push(...index.all());
+    }
+    return out;
   }
 }

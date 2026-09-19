@@ -20,6 +20,43 @@ recorded as an explicit decision. The parity checklist lives in
 
 ## Recent milestones
 
+### Milestone 34 — tasks across vaults (M-B complete) + the editor's undo fix
+
+The two leftovers from the tag-system round: the last M-B item (tasks
+per-vault + "all vaults") and the editor defect discovered while testing
+milestone 33's replace flow.
+
+- **Tasks: per-vault index + all-vaults scope (M-B complete)** — the
+  tasks plugin mirrors the tags plugin's milestone-33 shape: one task
+  index per registered vault (the mirror-the-active-vault boot guard is
+  gone), every record stamped with its `vaultId`, and the panel's scope
+  switch grows a third segment — **Doc | Vault | All**. Vault scope
+  filters the main-side list to the registry's active vault at pull
+  time; the All scope groups per file with a vault-name badge (the
+  active vault stays unbadged, like the Search panel). Row toggles and
+  row clicks carry the vault: a closed file's toggle writes through
+  `readFile`/`writeFile { vaultId }`, an open tab is reached by the
+  bare path (active vault first, then a unique open match — the
+  `resolveDoc` semantics the Search panel rides). The unsaved-buffer
+  fold keys on `(vaultId, path)`, so two vaults holding the same
+  relative path no longer clobber each other's rows. With this,
+  milestone 28's announced M-B follow-up is fully shipped.
+- **Editor: undo can no longer wipe a freshly opened tab** — a first
+  load and every tab switch now build a fresh CodeMirror state
+  (`MarkdownSurface.loadDocument`, compartment contents carried over via
+  `Compartment.get`): the document sits in the state's own doc instead
+  of being dispatched in, so the load is not an undo event and every
+  tab starts with an empty undo stack. Previously the load was a
+  dispatched full-range change sitting at the bottom of the history — a
+  second `Ctrl+Z` in a freshly opened tab rolled the LOAD back and
+  wiped the document (found while testing milestone 33), and undoing
+  across a tab switch could resurrect the *previous* tab's content.
+  In-place reloads of the same tab (save pipeline, watcher, live-edit
+  buffer pushes per ADR-0049) deliberately stay undoable dispatches;
+  the entry drawer's capture box keeps its behavior. The code now
+  matches what the Editor's header already documented: "undo history
+  does not survive a tab switch" (ADR-0037).
+
 ### Milestone 33 — tag system round: prefix colors, central tag completion, search fix + redesign (M-B core)
 
 The tag/search batch: four owner-reported items — configurable tag

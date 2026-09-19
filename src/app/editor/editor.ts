@@ -440,8 +440,19 @@ export class Editor implements AfterViewInit {
     }
 
     if (next !== current) {
-      const prevHead = view.state.selection.main.head;
-      this.surface().setContent(next, samePath ? prevHead : 0);
+      if (samePath) {
+        // Same file, new text = an in-place reload (the save pipeline
+        // rewrote the frontmatter, a watcher reload, a live-edit push):
+        // a plain undoable edit that keeps the caret where it was.
+        const prevHead = view.state.selection.main.head;
+        this.surface().setContent(next, prevHead);
+      } else {
+        // First load / tab switch: a fresh state. The load must not be an
+        // undo event -- a second Ctrl+Z in a freshly opened tab used to
+        // roll the load back and wipe the document -- and undo history
+        // does not survive a tab switch anyway (see this file's header).
+        this.surface().loadDocument(next, 0);
+      }
     }
     this.loadedPath = path;
 

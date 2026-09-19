@@ -99,3 +99,21 @@ in `src/app/tasks`.**
 - The `#task/done` convention is new surface area in `specs/` --
   `classifier-spec.md` / `frontmatter-schema.md` mention `#task` only as a
   marker; this ADR is the reference for completion.
+
+## Later change — per-vault index + the all-vaults scope (milestones 33/34)
+
+Multi-vault (ADR-0051) turned the single index into a liability: it
+mirrored whichever vault was active at boot, and a save landing before
+that lookup resolved (or in any *other* vault) was silently dropped.
+The tasks plugin now mirrors the tags plugin's milestone-33 shape: one
+`TaskIndex` map per registered vault (per-vault rebuild coalescing, the
+boot-race vault guard deleted), every `TaskRecord` stamped with its
+`vaultId`, and the panel's scope switch grew from
+Doc | Vault to **Doc | Vault | All**. Vault scope filters the
+main-side list to the registry's active vault at pull time; the All
+scope groups per file with a vault-name badge. Toggles and row clicks
+carry the vault (`vault.writeFile { vaultId }` for closed files; open
+tabs resolve by bare path as the Search panel does), and the
+unsaved-buffer fold keys on `(vaultId, path)` so the same relative path
+in two vaults cannot clobber rows. This closed the last item of
+milestone 28's announced M-B follow-up.

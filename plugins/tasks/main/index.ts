@@ -2,94 +2,88 @@ import type { MainPluginContext, MainPluginModule } from '../../../shared/plugin
 import { TaskIndex } from './task-index';
 
 /**
- * The Tasks plugin's main entry (ADR-0033, converted in ADR-0044 stage 6):
- * owns the whole-vault task index and keeps it current through the
- * save-hook and vault-change registries.
+ * The Tasks plugin's main entry (ADR-0033, converted in ADR-0044 stage 6,
+ * per-vault since milestone 34): owns one task index per registered vault
+ * and keeps them current through the save-hook and vault-change registries.
  */
 const plugin: MainPluginModule = {
   async activate(ctx: MainPluginContext) {
-    const index = new TaskIndex(() => ctx.vault.listMarkdownFiles(), () =>
-      ctx.appConfig.get().templates.dir,
+    const index = new TaskIndex(
+      (vaultId) => ctx.vault.listMarkdownFiles({ vaultId }),
+      () => ctx.appConfig.get().templates.dir,
     );
-    index.setReadContent((path) => ctx.vault.read(path));
+    index.setReadContent((vaultId, path) => ctx.vault.read(path, { vaultId }));
 
-    // Which vault this (single) index mirrors: the ACTIVE one. A scoped
-    // event for any OTHER vault is ignored -- per-vault indexes and the
-    // "all vaults" scope land with the M-B work.
-    let indexVaultId: string | null = null;
-    void ctx.vault.listVaults().then((vaults) => {
-      indexVaultId = vaults.find((v) => v.active)?.id ?? null;
-    });
-
-    // note:save -> incremental re-index (the `templates/` exclusion lives
-    // in the index). The tags plugin's provider runs on the same hook. A
-    // save in another vault is skipped.
-    ctx.save.onNoteSaved((event) => {
-      if (indexVaultId !== null && event.vaultId !== indexVaultId) {
-        return;
-      }
-      index.reindexFile(event.path, event.content);
-    });
-
-    // Vault lifecycle: removal on delete, full rebuild on rename / refresh.
-    // A vault-less `refresh` is the registry-level round (rebuild); a
-    // scoped event for another vault is ignored.
-    //
-    // Full rebuilds run in the background and coalesce
-    // (`index.requestRebuild`): activation must not block on a full-vault
-    // scan — the window comes up first, and each finished sweep pushes
-    // `index-updated` so the renderer re-pulls the list even when no
-    // vault-change event announced the rebuild.
-    const rebuildAndAnnounce = (): void => {
-      void index.requestRebuild().then(() => {
-        ctx.ipc.emit('index-updated', { tasks: index.all().length });
-      });
+    /** Every push point: the panel re-pulls its vault / all-vaults list. */
+    const announce = (): void => {
+      ctx.ipc.emit('index-updated', { tasks: index.all().length });
     };
+
+    // note:save -> incremental re-index of that vault's map (the
+    // `templates/` exclusion lives in the index). Fires for EVERY vault —
+    // the per-vault maps made the old mirror-the-active-vault guard
+    // (`indexVaultId`) unnecessary.
+    ctx.save.onNoteSaved((event) => {
+      index.reindexFile(event.vaultId, event.path, event.content);
+      announce();
+    });
+
+    // Vault lifecycle. Scoped events (`vaultId` present) touch exactly that
+    // vault's map; the registry-level round (a vault-less `refresh`, a
+    // rename — content moved in or out of index scope) rebuilds every vault
+    // and drops the indexes of unregistered ones.
+    const rebuildAll = async (): Promise<void> => {
+      const vaults = await ctx.vault.listVaults();
+      await Promise.all(vaults.map((v) => index.requestRebuild(v.id)));
+      const registered = new Set(vaults.map((v) => v.id));
+      for (const id of index.knownVaults()) {
+        if (!registered.has(id)) {
+          index.dropVault(id);
+        }
+      }
+      announce();
+    };
+
     ctx.vault.onChanged((event) => {
-      if (event.vaultId !== undefined && indexVaultId !== null && event.vaultId !== indexVaultId) {
+      const { vaultId } = event;
+      if (event.kind === 'delete' && event.path !== undefined && vaultId !== undefined) {
+        index.removeFile(vaultId, event.path);
+        announce();
         return;
       }
-      if (event.kind === 'delete' && event.path !== undefined) {
-        index.removeFile(event.path);
-        return;
-      }
-      if (event.kind === 'rename' && event.path !== undefined) {
-        // The rename moved content in or out of index scope.
-        rebuildAndAnnounce();
-        return;
-      }
-      if (event.kind === 'write' && event.path !== undefined) {
+      if (event.kind === 'write' && event.path !== undefined && vaultId !== undefined) {
         // A raw vault write (the panel's closed-file toggle, an MCP write)
         // bypasses note:save -- re-read just that file.
-        const path = event.path;
         void ctx.vault
-          .read(path)
-          .then((content) => index.reindexFile(path, content))
-          .then(() => {
+          .read(event.path, { vaultId })
+          .then((content) => {
+            index.reindexFile(vaultId, event.path as string, content);
             // The renderer's vault:changed pull can outrun this async
             // re-read and render a stale row — the push after the
             // mutation lets it re-pull the settled state.
-            ctx.ipc.emit('index-updated', { tasks: index.all().length });
+            announce();
           })
-          .catch(() => index.removeFile(path));
+          .catch(() => {
+            index.removeFile(vaultId, event.path as string);
+            announce();
+          });
         return;
       }
-      rebuildAndAnnounce();
-      // A registry-level round may have changed which vault is active.
-      void ctx.vault.listVaults().then((vaults) => {
-        indexVaultId = vaults.find((v) => v.active)?.id ?? null;
-      });
+      void rebuildAll();
     });
 
-    // The renderer panel's whole-vault list.
+    // The renderer panel's vault / all-vaults list: every record carries
+    // its `vaultId`; the panel scopes client-side (the active vault is
+    // resolved there at pull time).
     ctx.ipc.handle('list', () => index.all());
 
     ctx.log('activated');
 
     // No initial build here: activation must not block on a full-vault
     // scan. The registry-level refresh round that follows activation (the
-    // vault-less `refresh` above) kicks off the one boot build in the
-    // background; `index-updated` tells the renderer when it is ready.
+    // vault-less `refresh` above) kicks off the boot builds in the
+    // background; each finished sweep pushes `index-updated` so the
+    // renderer re-pulls the list.
   },
 };
 
