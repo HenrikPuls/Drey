@@ -96,9 +96,10 @@ against: `manifest.ts` (`PluginManifest` + `validateManifest`),
 major mismatch ⇒ `incompatible`). Exempt from module-boundary lint, like
 `shared/ipc-api.ts`.
 
-**Plugins** (`plugins/<id>/`, eight shipped): `sample` (exercises every
+**Plugins** (`plugins/<id>/`, nine shipped): `sample` (exercises every
 surface), `templates`, `meeting`, `tags`, `tasks`, `assistant`
-(Assistant + Actions), `browser`, `ocr` (vision-LLM OCR, ADR-0050). Each
+(Assistant + Actions), `browser`, `ocr` (vision-LLM OCR, ADR-0050),
+`outline` (the open note's heading tree, renderer-only). Each
 is a full stack: `plugin.json` +
 `main/` (CommonJS, Node access — `electron/` and app-`shared/` CJS
 allowed) + `renderer/` (browser-context ES modules + CSS, served over
@@ -127,7 +128,7 @@ graph TB
         MCP["mcp/: VaultTools (vault_search via\nregistered SectionSearchProvider)"]
     end
     subgraph Plugins["plugins/<id>/  (dist-electron/plugins/<id>/)"]
-        P1["templates · meeting · tags ·\ntasks · assistant · browser · ocr · sample"]
+        P1["templates · meeting · tags ·\ntasks · assistant · browser · ocr ·\noutline · sample"]
         P2["each: plugin.json + main/ (CJS,\nNode ok) + renderer/ (ESM + CSS over\nplugin://, plain DOM) + shared/"]
     end
     SDK["shared/plugin-api/\nmanifest · DreyPluginApi ·\nMainPluginContext · PLUGIN_API_VERSION"]

@@ -76,7 +76,6 @@ whatever's next).
 - **req-19** — draw.io view/edit integration.
 - **req-27** — review internal prompts (partial: ask protocol reworked in
   milestone 31, ADR-0053).
-- **req-28** — editor: table-of-contents plugin.
 
 ### Announced follow-ups
 

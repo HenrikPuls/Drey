@@ -1,0 +1,151 @@
+/*
+ * Outline plugin styles (ADR-0044: plugin CSS is global — every rule is
+ * scoped under the plugin's own root classes `.outline-panel` /
+ * `.outline-hdr`).
+ */
+
+/* ---- body: fills the (flush) PanelFrame; only the tree scrolls ---- */
+
+.outline-panel {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  padding: 8px 8px 10px;
+}
+
+.outline-panel .tree {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+
+.outline-panel .empty {
+  flex: none;
+  margin: 6px 4px;
+  font-size: 11.5px;
+  color: var(--text-6);
+}
+
+/* ---- header-strip control (rendered in the PanelFrame header) ---- */
+
+.outline-hdr {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.outline-hdr .tgl {
+  height: 20px;
+  min-width: 20px;
+  padding: 0 5px;
+  border: 1px solid var(--field-border);
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-5);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.outline-hdr .tgl:hover:not(.on) {
+  color: var(--text-2);
+}
+
+.outline-hdr .tgl.on {
+  background: var(--accent-surface);
+  border-color: var(--accent-quote);
+  color: var(--accent-text);
+}
+
+/* ---- tree rows ---- */
+
+.outline-panel .row {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  min-height: 22px;
+  padding-right: 4px;
+  border-radius: var(--radius);
+}
+
+.outline-panel .row:hover {
+  background: var(--hover-bg);
+}
+
+/* The twist chevron — ▸, rotated open. Levels without children keep an
+   empty spacer so titles align across the tree. */
+
+.outline-panel .row .twist {
+  flex: none;
+  width: 16px;
+  height: 20px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--text-5);
+  font-size: 9px;
+  line-height: 1;
+  cursor: pointer;
+  transition: transform 0.08s ease;
+}
+
+.outline-panel .row .twist:hover {
+  color: var(--text-2);
+}
+
+.outline-panel .row .twist.open {
+  transform: rotate(90deg);
+}
+
+.outline-panel .row .twist-sp {
+  flex: none;
+  width: 16px;
+}
+
+.outline-panel .row .label {
+  flex: 1;
+  min-width: 0;
+  padding: 2px 4px;
+  border: 0;
+  background: transparent;
+  text-align: left;
+  font-family: var(--font-sans);
+  font-size: 12px;
+  line-height: 1.35;
+  color: var(--text-2);
+  cursor: pointer;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.outline-panel .row .label:hover {
+  color: var(--text-primary);
+}
+
+/* Heading weight: the top levels read stronger, like the Live Preview. */
+.outline-panel .row .label.h1 {
+  font-weight: 600;
+}
+
+.outline-panel .row .label.h2 {
+  font-weight: 500;
+}
+
+/* The heading at the caret (or its nearest visible ancestor when the
+   section is collapsed) — a quiet accent tint, like the tasks scope
+   toggles. */
+.outline-panel .row.current {
+  background: var(--accent-surface);
+}
+
+.outline-panel .row.current .label {
+  color: var(--accent-text);
+}

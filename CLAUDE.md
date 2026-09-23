@@ -138,7 +138,7 @@ toolchain is removable by deleting `.tools/`). Never assume a bare `node`,
   two plugin hosts) plus **runtime-loadable, in-process, trusted plugins**
   under `plugins/<id>/` — templates, meeting, tags, tasks, assistant
   (Assistant + Actions), browser, `ocr` (vision-LLM OCR, ADR-0050),
-  `sample`. Each is `plugin.json` +
+  `outline` (the open note's heading tree, renderer-only), `sample`. Each is `plugin.json` +
   `main/` (CommonJS, Node) + `renderer/` (browser-context ESM + CSS over
   `plugin://`, **plain DOM**) + `shared/` types, built by
   `scripts/build-plugins.mjs` into `dist-electron/plugins/<id>/`.
@@ -455,15 +455,17 @@ be called out explicitly (see Working Style below), not introduced silently.
   being the editor area above a **bottom dock** band — then a **26px
   status bar** (word/char count · context hint · Settings entry).
   - **Docks**: three (`left`, `right`, `bottom`), each an ordered list of
-    the eight panels — **Calendar, Files, Templates, Search, Tasks, Open
-    windows, Assistant, Add entry** (the core ones registered by the base;
-    Templates/Search/Tasks/Assistant are provided by plugins, ADR-0044). A
+    the nine panels — **Calendar, Files, Templates, Search, Tasks, Open
+    windows, Outline, Assistant, Add entry** (the core ones registered by
+    the base; Templates/Search/Tasks/Assistant/Outline are provided by
+    plugins, ADR-0044). A
     panel is dragged between docks by its header, resized against its
     neighbour by a splitter, and collapsed to its 32px header. Every
     panel header is built the same way (chevron +
     mono-uppercase title + optional status value + drag grip). Default:
-    Calendar/Files/Templates/Search/Tasks/Open windows left, Assistant
-    right, Add entry in the bottom band, Templates + Search + Tasks + Add
+    Calendar/Files/Templates/Search/Tasks/Open windows/Outline left,
+    Assistant right, Add entry in the bottom band, Templates + Search +
+    Tasks + Outline + Add
     entry collapsed. Calendar takes its content height, not a flex share.
     Each dock can additionally host one **editor band** above its panels
     (milestone 20, ADR-0038): a docked editor pane, its 32px header
@@ -595,6 +597,11 @@ can dock into the three docks (milestone 20,
 [ADR-0038](docs/09_architecture_decisions/0038-editor-panes-in-docks.md)).
 The milestone log lives in
 [docs/milestones-done.md](docs/milestones-done.md).
+
+**Just code-complete: milestone 39 — the Outline panel plugin (req-28)**
+(`plugins/outline/`, renderer-only: the open note's heading tree as a dock
+panel — collapsible levels, click to jump to the heading, caret-row
+highlight). **Not yet manually verified by the owner.**
 
 **Just code-complete: milestone 36 — Drey as an Explorer "Open with" /
 default program for Markdown and text** (installer `fileAssociations`;

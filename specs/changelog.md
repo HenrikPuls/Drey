@@ -20,6 +20,39 @@ recorded as an explicit decision. The parity checklist lives in
 
 ## Recent milestones
 
+### Milestone 39 — the Outline panel plugin (req-28)
+
+- The **Outline dock panel** (`plugins/outline/`, renderer-only like
+  `templates/`): the open note's heading tree — every level with children
+  gets a chevron to expand/collapse (per-document session state, keyed by
+  stable title-chain keys so the tree keeps its shape across re-scans; a
+  `fold` header toggle collapses/expands everything at once), clicking an
+  entry opens the section at its heading line, and the row at the caret
+  (or, inside a collapsed subtree, its nearest visible ancestor) carries
+  a quiet accent highlight. Lands collapsed at the bottom of the left
+  dock; movable like every panel.
+- Doc scope only, and always fresh: the panel scans the focused pane's
+  **live buffer** on every document event (the host's ~150 ms
+  `buffer-changed` debounce) — no disk index, no stale-line resolution;
+  the click target re-resolves through the row's stable key inside the
+  debounce window. Scanner conventions match the tags/tasks section
+  scanners (ATX-only, naive fence toggle, closing `#`s stripped) plus
+  YAML frontmatter skipping, so a `# comment` in the frontmatter never
+  becomes an entry (`plugins/outline/shared/outline.ts`).
+- **Reveal through the tracked editor view**: `documents.open` resolves
+  paths against the active vault, so for a pinned external tab
+  (`external://…`, ADR-0054) or a scratch tab it could only raise an
+  error banner. The plugin instead registers a document-slot
+  `updateListener` (host CM modules, ADR-0044 rule 1) that tracks the
+  last-focused surface's path + view; a click dispatches the caret move
+  + scroll straight into that view — works for every doc shape and can
+  never open a duplicate tab — and falls back to `documents.open` for
+  vault docs when nothing is tracked yet. The same listener feeds the
+  caret-line highlight (the document API has no selection event).
+- Tests: scanner + tree builder (`plugins/outline/shared/outline.spec.ts`,
+  16 cases — nesting, keys stable across line shifts, fences,
+  frontmatter). Panel behaviour is manual-verification territory.
+
 ### Fix — spellcheck: suggestions for typos inside compounds
 
 A flagged compound got an empty popup: nspell's suggest searches the

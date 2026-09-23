@@ -1,0 +1,11 @@
+{
+  "id": "outline",
+  "name": "Outline",
+  "version": "1.0.0",
+  "apiVersion": 1,
+  "description": "The open note's heading tree as a dock panel: collapsible levels, click an entry to jump to the heading, and the row at the caret stays highlighted.",
+  "author": "Drey",
+  "renderer": "renderer/index.js",
+  "css": ["renderer/outline.css"],
+  "permissions": ["documents", "editor"]
+}
