@@ -70,6 +70,10 @@ const plugin: MainPluginModule = {
             return null;
           }
         },
+        listVaults: async () => {
+          const vaults = await ctx.vault.listVaults();
+          return vaults.map((vault) => ({ id: vault.id, name: vault.name }));
+        },
         resolveAssetPath: (path) => ctx.vault.resolveAssetPath(path),
         readAssetBase64: async (abs) => {
           try {

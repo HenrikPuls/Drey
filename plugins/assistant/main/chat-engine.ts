@@ -33,6 +33,7 @@ import {
   ASK_SYSTEM,
   ASK_TOOLS_NOTE,
   buildAskUserMessage,
+  buildToolsNote,
   editCatchUpLine,
 } from './ask-prompts';
 import {
@@ -64,6 +65,8 @@ export type ChatFn = (
 export interface ChatEnginePorts {
   /** Vault text read for attachment re-hydration; `null` = missing/unreadable. */
   readVaultText(path: string): Promise<string | null>;
+  /** The registered vaults (id + name) for the tools note (ADR-0051). */
+  listVaults(): Promise<readonly { id: string; name: string }[]>;
   resolveAssetPath(path: string): string | null;
   readAssetBase64(absPath: string): Promise<string | null>;
   /** Delta forwarding to the panel (the plugin's own `chat:delta` event). */
@@ -171,7 +174,9 @@ export class ChatEngine {
       : answerOnly
         ? ASK_ANSWER_SYSTEM
         : ASK_SYSTEM;
-    const toolsNote = live ? LIVE_EDIT_TOOLS_NOTE : ASK_TOOLS_NOTE;
+    const toolsNote = toolsOn
+      ? buildToolsNote(live ? LIVE_EDIT_TOOLS_NOTE : ASK_TOOLS_NOTE, await this.ports.listVaults())
+      : null;
     const baseMessages: ChatMessage[] = [
       { role: 'system', content: toolsOn ? `${system}\n${toolsNote}` : system },
     ];

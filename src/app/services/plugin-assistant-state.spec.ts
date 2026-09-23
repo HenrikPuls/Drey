@@ -34,6 +34,12 @@ interface Harness {
   pushDelta(taskId: string, text: string): void;
   /** Vault files the readVaultFile port serves; anything else reads as null. */
   vaultFiles: Map<string, string>;
+  /** Open scratch tabs the scratchBody port serves (docPath -> buffer). */
+  scratchDocs: Map<string, string>;
+  /** Snapshots the writeScratchSnapshot port wrote (also seeded into vaultFiles). */
+  snapshots: Array<{ path: string; body: string }>;
+  /** When set, writeScratchSnapshot rejects (disk failure). */
+  failSnapshot: boolean;
   /** The "active document" the ports report; null = nothing text-shaped open. */
   setActive(path: string | null, body?: string, vaultId?: string | null): void;
   /** The vaultId the active document port reports (null = unbound scratch). */
@@ -64,6 +70,8 @@ function setup(options: { llm?: boolean } = {}): Harness {
   const rewrites: Array<{ path: string; title: string }> = [];
   const lockOps: Array<{ path: string; locked: boolean }> = [];
   const vaultFiles = new Map<string, string>();
+  const scratchDocs = new Map<string, string>();
+  const snapshots: Array<{ path: string; body: string }> = [];
   const deltaListeners = new Set<(event: { taskId: string; text: string }) => void>();
   const h: Harness = {
     asks,
@@ -73,6 +81,9 @@ function setup(options: { llm?: boolean } = {}): Harness {
     rewrites,
     lockOps,
     vaultFiles,
+    scratchDocs,
+    snapshots,
+    failSnapshot: false,
     pushDelta: (taskId, text) => {
       for (const listener of deltaListeners) {
         listener({ taskId, text });
@@ -142,6 +153,16 @@ function setup(options: { llm?: boolean } = {}): Harness {
       return () => deltaListeners.delete(listener);
     },
     readVaultFile: async (path) => vaultFiles.get(path) ?? null,
+    scratchBody: (docPath) => scratchDocs.get(docPath) ?? null,
+    writeScratchSnapshot: async (docPath, body) => {
+      if (h.failSnapshot) {
+        throw new Error('disk full');
+      }
+      const path = `.drafts/assistant/snap-${docPath}`;
+      snapshots.push({ path, body });
+      vaultFiles.set(path, body);
+      return path;
+    },
     cancel: async () => undefined,
     activeDoc: () =>
       activePath === null ? null : { path: activePath, body: activeBody, vaultId: activeVaultId },
@@ -302,6 +323,89 @@ describe('assistant plugin state — chat-first asks (ADR-0048)', () => {
 
     await h.state.ask('zweite');
     expect(h.asks[1]?.chatPath).toBeNull();
+  });
+});
+
+describe('assistant plugin state — scratch-tab chips (search summary as context)', () => {
+  it('attaches an unsaved tab as its live buffer and snapshots it at send', async () => {
+    const h = setup();
+    h.setActive(null);
+    h.scratchDocs.set('search-summary.md', '# Summary\n\nTreffer …');
+    expect(h.state.addScratch('search-summary.md').ok).toBe(true);
+
+    const sent = await h.state.ask('Fasse zusammen.');
+
+    expect(sent).toBe(true);
+    expect(h.snapshots).toEqual([
+      { path: '.drafts/assistant/snap-search-summary.md', body: '# Summary\n\nTreffer …' },
+    ]);
+    expect(h.asks[0]?.extraFiles).toEqual([
+      { path: '.drafts/assistant/snap-search-summary.md', body: '# Summary\n\nTreffer …' },
+    ]);
+  });
+
+  it('reuses the last snapshot when the tab is closed by the next send', async () => {
+    const h = setup();
+    h.setActive(null);
+    h.scratchDocs.set('search-summary.md', 'Erster Stand.');
+    expect(h.state.addScratch('search-summary.md').ok).toBe(true);
+    await h.state.ask('erste');
+    expect(h.snapshots).toHaveLength(1);
+
+    // Tab closed; only the snapshot remains (later turns re-read it fresh,
+    // same rule as the other vault attachments).
+    h.scratchDocs.delete('search-summary.md');
+    const sent = await h.state.ask('zweite');
+
+    expect(sent).toBe(true);
+    expect(h.snapshots).toHaveLength(1); // no new snapshot without the tab
+    expect(h.asks[1]?.extraFiles).toEqual([
+      { path: '.drafts/assistant/snap-search-summary.md', body: 'Erster Stand.' },
+    ]);
+  });
+
+  it('skips a scratch tab that is closed and was never sent, keeping other context', async () => {
+    const h = setup();
+    h.setActive(null);
+    h.scratchDocs.set('search-summary.md', 'Text');
+    expect(h.state.addScratch('search-summary.md').ok).toBe(true);
+    h.vaultFiles.set('b.md', 'B.');
+    expect(h.state.addFile('b.md').ok).toBe(true);
+    h.scratchDocs.delete('search-summary.md');
+
+    const sent = await h.state.ask('Frage?');
+
+    expect(sent).toBe(true);
+    expect(h.asks[0]?.extraFiles).toEqual([{ path: 'b.md', body: 'B.' }]);
+    expect(h.state.notice()).toContain('tab not open');
+
+    // With nothing else attached, the missing tab is a hard error instead
+    // of a silently context-less question.
+    const h2 = setup();
+    h2.setActive(null);
+    h2.scratchDocs.set('search-summary.md', 'Text');
+    h2.state.addScratch('search-summary.md');
+    h2.scratchDocs.delete('search-summary.md');
+    expect(await h2.state.ask('Frage?')).toBe(false);
+    expect(h2.state.error()).toContain('no longer in the vault');
+  });
+
+  it('dedupes scratch chips and folds a focused tab into the note chip', async () => {
+    const h = setup();
+    h.setActive(null);
+    h.scratchDocs.set('search-summary.md', 'Text');
+    expect(h.state.addScratch('search-summary.md').ok).toBe(true);
+    expect(h.state.addScratch('search-summary.md').reason).toBe('Already attached.');
+
+    // Focusing the tab makes it the note chip: attaching is refused while
+    // the chip is on, and re-includes the note when it was excluded.
+    await h.state.openNote('search-summary.md');
+    expect(h.state.addScratch('search-summary.md').reason).toBe(
+      'This document is already attached.',
+    );
+    h.state.setNoteIncluded(false);
+    expect(h.state.addScratch('search-summary.md').ok).toBe(true);
+    expect(h.state.noteIncluded()).toBe(true);
   });
 });
 

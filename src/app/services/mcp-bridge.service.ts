@@ -38,9 +38,15 @@ export class McpBridgeService {
   private async confirm(request: McpWriteRequest): Promise<void> {
     let approved = false;
     try {
+      // A cross-vault write names its vault in the summary; the default
+      // active-vault case keeps the bare path (old payloads too).
+      const target =
+        request.vaultId !== undefined
+          ? `${request.path} in vault ${request.vaultName ?? request.vaultId}`
+          : request.path;
       approved = await this.confirmation.request({
         title: 'Apply a change from an MCP client',
-        summary: `${request.mode === 'append' ? 'Append to' : 'Overwrite'} ${request.path}`,
+        summary: `${request.mode === 'append' ? 'Append to' : 'Overwrite'} ${target}`,
         previewStyle: pickPreviewStyle(request.before, request.after),
         before: request.before,
         after: request.after,

@@ -20,6 +20,42 @@ recorded as an explicit decision. The parity checklist lives in
 
 ## Recent milestones
 
+### Milestone 38 — summary streaming scroll, scratch-tab context, assistant tools across vaults
+
+- **Stick-to-bottom while the summary streams** — the old behaviour
+  snapped the `search-summary.md` tab back to the top on every 150 ms
+  flush (`setContent`'s `anchor === 0 → scrollTop = 0` branch; the
+  scratch tab's caret stays at 0 because nobody clicks into it).
+  `setContent` now measures the pin state (≤ 32 px from the bottom)
+  before the in-place swap and restores it after: the view follows the
+  growing text by default, stays put while the user has scrolled up, and
+  resumes following when they return to the bottom. The same rule now
+  covers live-edit pushes and re-run summaries; fresh opens still start
+  at the top (`loadDocument`).
+- **The search summary as assistant context** — the composer's **+**
+  picker lists **unsaved scratch tabs** (saved-empty + dirty text docs,
+  e.g. `search-summary.md`) above the vault files, labelled "unsaved
+  tab". A scratch chip rides as the tab's live buffer; each send
+  snapshots the current text to `.drafts/assistant/<vaultId>-<name>.md`
+  (hidden scratch area, invisible to tree/index) and that vault path is
+  what the turn cites — so follow-up replays re-read it like any
+  attachment and the context survives the tab being closed. Attaching
+  the focused tab folds into the note chip instead of doubling; files +
+  scratch tabs share the 10-chip cap.
+- **Assistant vault tools across vaults** (ADR-0051 follow-up) —
+  `vault_read`/`vault_write` grew the `vault` argument (id, default
+  active; `"all"` is rejected with a clear error), cross-vault writes
+  name the vault in the confirmation dialog (`vaultId`/`vaultName` ride
+  the existing bridge payload), cross-vault `vault_search` hits are
+  labelled `vaultId:path`, and the tools note in the system prompt lists
+  the registered vaults (id + name) — until now the model had no way to
+  learn vault ids, making even `vault_search`'s `vault`/`"all"` support
+  unreachable in practice.
+- Tests: scratch-chip send/snapshot/replay flows
+  (`plugin-assistant-state.spec.ts`), the vault-argument threading +
+  hit labels (`mcp-vault-tools.spec.ts`). Runtime view §6.43 updated;
+  ADR-0051's tools bullet resolved.
+
 ### Milestone 37 — search summarise: an LLM topic digest from the search results
 
 - **"Summarize" in the Search panel** — next to Export (same visibility:

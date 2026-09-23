@@ -98,11 +98,17 @@ inside its own tree and index).
   become ambiguous across vaults in principle; resolution is
   active-vault-first, then unique-match. Plugins that need precision pass
   `{vaultId}` (the SDK grew it, minor version 5 → 6).
-- The assistant's in-process tools (`vaultTools`, live-edit `doc_*`)
-  remain active-vault in this milestone; threading the vault argument
-  through them is follow-up work alongside the assistant's M-B scopes.
+- The assistant's vault tools are multi-vault (shipped as the promised
+  follow-up): `vault_read`/`vault_write` take a `vault` id (default: the
+  active vault; a cross-vault write stays confirmation-gated and the
+  dialog names the vault), `vault_search`'s existing `vault`/`"all"`
+  scopes label their hits with `vaultId:path`, and the system prompt's
+  tools note lists the registered vaults (id + name) so the model can
+  actually aim the argument. The live-edit `doc_*` tools stay bound to
+  the open note by design (that note IS the edit target); context chips
+  (+ picker / `@`) stay active-vault.
 - OCR on an image tab from a non-active vault reads through the active
-  vault's `ctx.vault` — same follow-up.
+  vault's `ctx.vault` — still open.
 - Cross-vault drag & drop moves files but not tags/task index state
   beyond the rebuild both vaults run; interrupted copies clean up after
   themselves but are not resumable.

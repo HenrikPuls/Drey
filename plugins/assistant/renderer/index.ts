@@ -72,6 +72,24 @@ const plugin: PluginRendererModule = {
           return null; // Gone from the vault (or unreadable).
         }
       },
+      scratchBody: (docPath) => {
+        const open = api.documents.get(docPath);
+        return open !== null && open.kind === 'text' ? open.buffer : null;
+      },
+      // The snapshot lives in the hidden `.drafts/` scratch area (invisible
+      // to the file tree and indexes), name derived from the tab so each
+      // scratch source owns one file that later sends overwrite.
+      writeScratchSnapshot: async (docPath, body) => {
+        const open = api.documents.get(docPath);
+        const base = docPath.split(/[\\/]/).pop() ?? 'untitled';
+        const safe = (base.replace(/[^A-Za-z0-9._-]/g, '_') || 'untitled').replace(
+          /\.md$/i,
+          '',
+        );
+        const path = `.drafts/assistant/${open?.vaultId ?? 'scratch'}-${safe}.md`;
+        await api.vault.writeFile(path, body);
+        return path;
+      },
       cancel: (taskId) => tasks.cancel(taskId),
       activeDoc: () => {
         const active = api.documents.active();

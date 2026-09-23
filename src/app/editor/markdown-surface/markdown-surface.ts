@@ -44,6 +44,11 @@ import { TagVocabularyService } from '../../tags/tag-vocabulary.service';
 import { KeybindingService } from '../../keybindings';
 import { EditorExtensionRegistry, DropDecoderRegistry } from '../../plugin-host';
 
+/** How close to the bottom (px) counts as "pinned" for `setContent`'s
+ * stick-to-bottom behaviour on external in-place reloads. Same idea as the
+ * assistant transcript's proximity check. */
+const STICK_TO_BOTTOM_PX = 32;
+
 /**
  * The one reusable CodeMirror Markdown surface: the full-page editor and the
  * entry drawer's body field are the *same* component, so Live Preview
@@ -628,19 +633,24 @@ export class MarkdownSurface implements AfterViewInit, OnDestroy {
       return;
     }
     const resolvedAnchor = Math.min(anchor, text.length);
+    // Stick-to-bottom for external in-place reloads (the streamed search
+    // summary, a live-edit push): follow the growing tail while the user is
+    // pinned at the bottom, leave their position alone otherwise. Measured
+    // BEFORE the swap -- CodeMirror keeps the previous scroll offset across
+    // a full document replace, so a pinned view would drift off the bottom
+    // as the content grows. This dispatch carries no `scrollIntoView`, so
+    // CodeMirror does not re-scroll to the selection afterwards.
+    const scrollDOM = view.scrollDOM;
+    const pinned =
+      scrollDOM.clientHeight > 0 &&
+      scrollDOM.scrollHeight - scrollDOM.scrollTop - scrollDOM.clientHeight <=
+        STICK_TO_BOTTOM_PX;
     view.dispatch({
       changes: { from: 0, to: view.state.doc.length, insert: text },
       selection: { anchor: resolvedAnchor },
     });
-    // A fresh open (anchor at the very top) must also *show* the top:
-    // CodeMirror keeps the previous scroll offset across a full document
-    // swap, so after creating an entry at the end and then loading another
-    // doc the view would stay scrolled down. Safe to set synchronously --
-    // this dispatch carries no `scrollIntoView`, so CodeMirror does not
-    // re-scroll to the selection afterwards. A non-zero anchor (the
-    // full-page editor's same-path reload) deliberately keeps position.
-    if (resolvedAnchor === 0) {
-      view.scrollDOM.scrollTop = 0;
+    if (pinned) {
+      scrollDOM.scrollTop = scrollDOM.scrollHeight;
     }
   }
 

@@ -35,6 +35,23 @@ Earlier turns of this conversation are shown as plain text; this reply form stil
 /** Appended to `ASK_SYSTEM` when the vault tool set is available (ADR-0021). */
 export const ASK_TOOLS_NOTE = `You may call the vault tools (vault_search, vault_read, vault_write) to look things up in the wider vault or to make changes elsewhere before you give your final answer. A vault_write is confirmed by the user unless the app is in YOLO mode.`;
 
+/**
+ * Appends the registered vaults (id + name) to a tools note: without this
+ * list the tools' `vault` argument is unreachable for the model (ADR-0051
+ * follow-up). Rebuilt per call, so a newly registered vault appears on the
+ * very next turn.
+ */
+export function buildToolsNote(
+  note: string,
+  vaults: readonly { id: string; name: string }[],
+): string {
+  if (vaults.length === 0) {
+    return note;
+  }
+  const list = vaults.map((vault) => `- ${vault.id} (${vault.name})`).join('\n');
+  return `${note}\n\nRegistered vaults (the tools' \`vault\` argument; omit it for the active vault):\n${list}`;
+}
+
 /** One-line catch-up for a resumed session that never saw the confirm result. */
 export function editCatchUpLine(path: string, applied: boolean): string {
   return applied

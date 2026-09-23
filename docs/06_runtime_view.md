@@ -2091,3 +2091,11 @@ position while they have scrolled up, and resumes following once they
 scroll back down. (The old `anchor === 0 → scrollTop = 0` snap in
 `setContent` is gone; fresh opens still start at the top via
 `loadDocument`.)
+
+The digest reaches the assistant as context via the composer's **+**
+picker: its Files tab lists unsaved scratch tabs (saved-empty + dirty
+text docs) above the vault files. A scratch chip rides as the tab's live
+buffer, and each send snapshots the current text to
+`.drafts/assistant/<vaultId>-<name>.md` — that vault path is what the
+turn cites and what follow-up replays re-read, so the context survives
+the tab being closed (ADR-0048's paths-not-bodies rule stays intact).

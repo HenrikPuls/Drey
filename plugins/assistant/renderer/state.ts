@@ -19,6 +19,19 @@ import { type RunningTasks } from './running-tasks.js';
 /** The text a cancelled generation reports. */
 const CANCELLED = 'Generation cancelled.';
 
+/**
+ * An attached unsaved scratch tab (e.g. the search summary). The live
+ * buffer rides at send time; each send also snapshots the current text
+ * under `.drafts/` so follow-up replays — which re-read attachments from
+ * the vault — keep the context after the tab is closed.
+ */
+export interface ScratchChip {
+  /** The open tab's document path (e.g. `search-summary.md`). */
+  docPath: string;
+  /** The `.drafts/` snapshot written on the last send; null until then. */
+  snapshotPath: string | null;
+}
+
 /** Whether a rejection is "the user pressed Cancel" (not a fault). */
 function isCancellation(error: unknown): boolean {
   return /abort/i.test(ipcErrorMessage(error)) || ipcErrorMessage(error) === CANCELLED;
@@ -43,6 +56,13 @@ export interface AssistantPorts {
     staged: { path: string; kind: 'file' | 'image' }[];
     skipped: string[];
   }>;
+  /** An open scratch tab's live buffer; null when the tab is not open. */
+  scratchBody(docPath: string): string | null;
+  /**
+   * Persists a scratch tab's current text under `.drafts/` (assistant
+   * context snapshot) and returns the vault-relative path.
+   */
+  writeScratchSnapshot(docPath: string, body: string): Promise<string>;
   /** Streamed answer text for a task this state started (`chat:delta`). */
   onDelta(listener: (event: { taskId: string; text: string }) => void): () => void;
 
@@ -127,6 +147,11 @@ export interface AssistantState {
   /** Adds a file chip; resolves to a reason string when refused. */
   addFile(path: string): { ok: boolean; reason?: string };
   removeFile(path: string): void;
+  /** Attached unsaved scratch tabs (e.g. the search summary). */
+  scratchFiles(): readonly ScratchChip[];
+  /** Adds a scratch-tab chip; resolves to a reason string when refused. */
+  addScratch(docPath: string): { ok: boolean; reason?: string };
+  removeScratch(docPath: string): void;
   images(): readonly string[];
   /** Adds an image chip (a vault-relative path); reason string when refused. */
   addImage(path: string): { ok: boolean; reason?: string };
@@ -179,6 +204,7 @@ export function createAssistantState(ports: AssistantPorts, tasks: RunningTasks)
   const chipKey = (): string => activePath ?? '';
   const noteExcluded = new Set<string>();
   const filesByNote = new Map<string, string[]>();
+  const scratchByNote = new Map<string, ScratchChip[]>();
   const imagesByKey = new Map<string, string[]>();
 
   let asking = false;
@@ -342,6 +368,45 @@ export function createAssistantState(ports: AssistantPorts, tasks: RunningTasks)
       }
     },
 
+    scratchFiles: () => scratchByNote.get(chipKey()) ?? [],
+
+    addScratch(docPath) {
+      if (docPath === activePath) {
+        // The focused document IS this tab — the note chip already carries
+        // its live buffer: re-include rather than attach twice.
+        if (activePath !== null && noteExcluded.has(activePath)) {
+          noteExcluded.delete(activePath);
+          notify();
+          return { ok: true };
+        }
+        return { ok: false, reason: 'This document is already attached.' };
+      }
+      const key = chipKey();
+      const chips = scratchByNote.get(key) ?? [];
+      if (chips.some((chip) => chip.docPath === docPath)) {
+        return { ok: false, reason: 'Already attached.' };
+      }
+      // Files and scratch tabs share the per-question cap.
+      const files = filesByNote.get(key) ?? [];
+      if (files.length + chips.length >= MAX_EXTRA_FILES) {
+        return { ok: false, reason: `At most ${MAX_EXTRA_FILES} files per question.` };
+      }
+      scratchByNote.set(key, [...chips, { docPath, snapshotPath: null }]);
+      notify();
+      return { ok: true };
+    },
+
+    removeScratch(docPath) {
+      const chips = scratchByNote.get(chipKey());
+      if (chips !== undefined && chips.some((chip) => chip.docPath === docPath)) {
+        scratchByNote.set(
+          chipKey(),
+          chips.filter((chip) => chip.docPath !== docPath),
+        );
+        notify();
+      }
+    },
+
     images: () => imagesByKey.get(chipKey()) ?? [],
 
     addImage(path) {
@@ -501,6 +566,34 @@ export function createAssistantState(ports: AssistantPorts, tasks: RunningTasks)
         // are skipped with a quiet notice as long as context remains.
         const extraFiles: NonNullable<AskRequest['note']>[] = [];
         const missing: string[] = [];
+        // Scratch tabs (the search summary) ride as their live buffer, and
+        // every send re-snapshots the current text under `.drafts/` — that
+        // vault path is what the turn cites and what later replays re-read,
+        // so the context survives the tab being closed. A closed tab falls
+        // back to its last snapshot.
+        const unavailable: string[] = [];
+        for (const chip of scratchByNote.get(chipKey()) ?? []) {
+          const live = ports.scratchBody(chip.docPath);
+          if (live !== null) {
+            try {
+              chip.snapshotPath = await ports.writeScratchSnapshot(chip.docPath, live);
+              extraFiles.push({ path: chip.snapshotPath, body: truncateFileBody(live) });
+              continue;
+            } catch {
+              // Snapshot failed — without a prior one there is nothing to send.
+            }
+          }
+          if (chip.snapshotPath !== null) {
+            const body = await ports.readVaultFile(chip.snapshotPath);
+            if (body === null) {
+              unavailable.push(chip.docPath);
+            } else {
+              extraFiles.push({ path: chip.snapshotPath, body: truncateFileBody(body) });
+            }
+          } else {
+            unavailable.push(chip.docPath);
+          }
+        }
         for (const file of attached) {
           const body = await ports.readVaultFile(file);
           if (body === null) {
@@ -509,11 +602,20 @@ export function createAssistantState(ports: AssistantPorts, tasks: RunningTasks)
             extraFiles.push({ path: file, body: truncateFileBody(body) });
           }
         }
-        if (missing.length > 0) {
+        if (missing.length > 0 || unavailable.length > 0) {
           if (note === null && extraFiles.length === 0 && images.length === 0) {
             throw new Error('The attached files are no longer in the vault.');
           }
-          notice = `Skipped ${missing.join(', ')} — no longer in the vault.`;
+          const notes: string[] = [];
+          if (missing.length > 0) {
+            notes.push(`Skipped ${missing.join(', ')} — no longer in the vault.`);
+          }
+          if (unavailable.length > 0) {
+            notes.push(
+              `Skipped ${unavailable.join(', ')} — tab not open and not sent before.`,
+            );
+          }
+          notice = notes.join(' ');
         }
 
         const request: AskRequest = {

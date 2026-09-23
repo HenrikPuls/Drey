@@ -46,12 +46,15 @@ export interface McpToolResult {
   isError?: boolean;
 }
 
-/** Asked before a `vault_write` hits disk (unless YOLO mode). */
+/** Asked before a `vault_write` hits disk (unless YOLO mode). `vaultId`/
+ * `vaultName` are present when the write targets a non-default vault. */
 export type ConfirmWrite = (request: {
   path: string;
   before: string;
   after: string;
   mode: 'overwrite' | 'append';
+  vaultId?: string;
+  vaultName?: string;
 }) => Promise<boolean>;
 
 export const VAULT_TOOL_DEFS: readonly McpToolDef[] = [
@@ -86,10 +89,17 @@ export const VAULT_TOOL_DEFS: readonly McpToolDef[] = [
   {
     name: 'vault_read',
     description:
-      'Read one file from the vault. `path` is vault-relative (e.g. daily/2026-09-08.md).',
+      'Read one file from the vault. `path` is vault-relative (e.g. daily/2026-09-08.md); ' +
+      '`vault` names the vault (see the registered vaults) and defaults to the active one.',
     inputSchema: {
       type: 'object',
-      properties: { path: { type: 'string' } },
+      properties: {
+        path: { type: 'string' },
+        vault: {
+          type: 'string',
+          description: 'Vault id. Default: the active vault.',
+        },
+      },
       required: ['path'],
     },
   },
@@ -98,13 +108,18 @@ export const VAULT_TOOL_DEFS: readonly McpToolDef[] = [
     description:
       'Write a file in the vault. `mode` "overwrite" (default) replaces the whole file; ' +
       '"append" adds `content` to the end. Unless the app is in YOLO mode the user must ' +
-      'confirm the change in a diff dialog first.',
+      'confirm the change in a diff dialog first. `vault` names the target vault (see the ' +
+      'registered vaults) and defaults to the active one.',
     inputSchema: {
       type: 'object',
       properties: {
         path: { type: 'string', description: 'Vault-relative path.' },
         content: { type: 'string' },
         mode: { type: 'string', enum: ['overwrite', 'append'] },
+        vault: {
+          type: 'string',
+          description: 'Vault id. Default: the active vault.',
+        },
       },
       required: ['path', 'content'],
     },
@@ -121,17 +136,36 @@ function textResult(text: string, isError = false): McpToolResult {
   return { content: [{ type: 'text', text }], isError: isError || undefined };
 }
 
-/** `path:line — heading` + snippet, one per hit. */
-function formatHits(hits: readonly TagSearchHit[], limit: number): string {
+/** `path:line — heading` + snippet, one per hit. `labelVaults` prefixes the
+ * vault id (the cross-vault scopes; the default active-vault search keeps
+ * the bare, backward-compatible paths). */
+function formatHits(hits: readonly TagSearchHit[], limit: number, labelVaults = false): string {
   if (hits.length === 0) {
     return 'No matches.';
   }
   const shown = hits.slice(0, limit);
+  const where = (hit: TagSearchHit): string =>
+    labelVaults && hit.vaultId !== undefined ? `${hit.vaultId}:${hit.path}` : hit.path;
   const body = shown
-    .map((hit) => `${hit.path}:${hit.line} — ${hit.heading}\n  ${hit.snippet}`)
+    .map((hit) => `${where(hit)}:${hit.line} — ${hit.heading}\n  ${hit.snippet}`)
     .join('\n\n');
   const more = hits.length > shown.length ? `\n\n(+${hits.length - shown.length} more)` : '';
   return `${shown.length} of ${hits.length} hit${hits.length === 1 ? '' : 's'}:\n\n${body}${more}`;
+}
+
+/**
+ * The optional `vault` argument of `vault_read`/`vault_write`: a vault id.
+ * `"all"` is meaningless for a single-file tool and is rejected explicitly,
+ * so the model corrects itself instead of silently hitting the active vault.
+ */
+function vaultIdArg(raw: unknown, tool: string): string | undefined | { error: string } {
+  if (typeof raw !== 'string' || raw === '') {
+    return undefined;
+  }
+  if (raw === 'all') {
+    return { error: `"all" is not valid for ${tool} — pass one vault id.` };
+  }
+  return raw;
 }
 
 function compileRegex(source: unknown, flags: unknown): RegExp | { error: string } {
@@ -246,7 +280,9 @@ export class VaultTools {
         return re.test(hit.text);
       });
     }
-    return textResult(formatHits(hits, limit));
+    // Cross-vault scopes label every hit with its vault, so the model can
+    // read the file back through `vault_read`'s own `vault` argument.
+    return textResult(formatHits(hits, limit, scope !== undefined));
   }
 
   /**
@@ -316,7 +352,11 @@ export class VaultTools {
     if (path === '') {
       return textResult('path is required', true);
     }
-    const { content } = await this.vault.readFile(path);
+    const vaultArg = vaultIdArg(args['vault'], 'vault_read');
+    if (typeof vaultArg === 'object') {
+      return textResult(vaultArg.error, true);
+    }
+    const { content } = await this.vault.readFile(path, vaultArg);
     return textResult(content);
   }
 
@@ -327,10 +367,14 @@ export class VaultTools {
     if (path === '' || content === null) {
       return textResult('path and content are required', true);
     }
+    const vaultArg = vaultIdArg(args['vault'], 'vault_write');
+    if (typeof vaultArg === 'object') {
+      return textResult(vaultArg.error, true);
+    }
 
     let before = '';
     try {
-      before = (await this.vault.readFile(path)).content;
+      before = (await this.vault.readFile(path, vaultArg)).content;
     } catch {
       before = ''; // new file
     }
@@ -346,18 +390,32 @@ export class VaultTools {
     }
 
     if (!this.getConfig().mcp.yolo) {
-      const approved = await this.confirmWrite({ path, before, after, mode });
+      const approved = await this.confirmWrite({
+        path,
+        before,
+        after,
+        mode,
+        ...(vaultArg !== undefined
+          ? { vaultId: vaultArg, vaultName: this.vaultName(vaultArg) }
+          : {}),
+      });
       if (!approved) {
         return textResult('The user declined the write.', true);
       }
     }
 
-    const vaultId = this.vault.resolveVaultId();
+    const vaultId = this.vault.resolveVaultId(vaultArg);
     await this.vault.writeFile(path, after, vaultId);
     // The write itself went through the vault manager (own-write ledger),
     // so the watcher suppresses the echo; this announcement keeps the
     // section index current for a follow-up search and nudges the renderer.
     this.onVaultChanged(path, vaultId);
-    return textResult(`Wrote ${path} (${after.length} chars, mode: ${mode}).`);
+    const where = vaultArg !== undefined ? `${vaultArg}:${path}` : path;
+    return textResult(`Wrote ${where} (${after.length} chars, mode: ${mode}).`);
+  }
+
+  /** A vault's display name for the confirmation dialog; falls back to the id. */
+  private vaultName(vaultId: string): string {
+    return this.vault.listVaults().find((entry) => entry.id === vaultId)?.name ?? vaultId;
   }
 }

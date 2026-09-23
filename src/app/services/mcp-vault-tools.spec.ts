@@ -17,21 +17,38 @@ function config(overrides: Partial<AppConfig['mcp']> = {}): AppConfig {
   } as AppConfig;
 }
 
-function fakeVault(files: Record<string, string>): VaultManager {
-  return {
-    resolveVaultId: () => 'vtest',
+interface FakeVault extends VaultManager {
+  reads: Array<{ path: string; vaultId?: string }>;
+  writes: Array<{ path: string; vaultId?: string }>;
+}
+
+function fakeVault(files: Record<string, string>): FakeVault {
+  const vaults = [
+    { id: 'vtest', name: 'Test Vault' },
+    { id: 'v2', name: 'Second Vault' },
+  ];
+  const reads: FakeVault['reads'] = [];
+  const writes: FakeVault['writes'] = [];
+  const manager = {
+    resolveVaultId: (vaultId?: string) => vaultId ?? 'vtest',
+    listVaults: () => vaults,
     listMarkdownFiles: async () => Object.keys(files),
-    readFile: async (p: string) => {
+    readFile: async (p: string, vaultId?: string) => {
+      reads.push({ path: p, vaultId });
       if (!(p in files)) {
         throw new Error(`not found: ${p}`);
       }
       return { content: files[p], modifiedMs: 1 };
     },
-    writeFile: async (p: string, content: string) => {
+    writeFile: async (p: string, content: string, vaultId?: string) => {
+      writes.push({ path: p, vaultId });
       files[p] = content;
       return 2;
     },
-  } as unknown as VaultManager;
+  } as FakeVault;
+  manager.reads = reads;
+  manager.writes = writes;
+  return manager;
 }
 
 function fakeProvider(hits: unknown[] = []): SectionSearchProvider {
@@ -177,5 +194,53 @@ describe('VaultTools', () => {
     const res = await tools.call('vault_search', { tags: ['a'] });
     expect(res.isError).toBe(true);
     expect(res.content[0].text).toContain('no plugin providing the tag/section index');
+  });
+
+  it('vault_read targets a named vault and rejects "all"', async () => {
+    const vault = fakeVault({ 'a.md': 'hi' });
+    const tools = new VaultTools(
+      vault,
+      () => fakeProvider(),
+      () => config(),
+      async () => true,
+    );
+    expect(
+      (await tools.call('vault_read', { path: 'a.md', vault: 'v2' })).content[0].text,
+    ).toBe('hi');
+    expect(vault.reads[0]).toEqual({ path: 'a.md', vaultId: 'v2' });
+
+    const res = await tools.call('vault_read', { path: 'a.md', vault: 'all' });
+    expect(res.isError).toBe(true);
+    expect(res.content[0].text).toContain('"all" is not valid');
+  });
+
+  it('vault_write targets a named vault and labels confirmation + result', async () => {
+    const vault = fakeVault({ 'note.md': 'x' });
+    const confirms: Array<Record<string, unknown>> = [];
+    const tools = new VaultTools(vault, () => fakeProvider(), () => config(), async (req) => {
+      confirms.push({ ...req });
+      return true;
+    });
+    const res = await tools.call('vault_write', { path: 'note.md', content: 'y', vault: 'v2' });
+    expect(res.isError).toBeUndefined();
+    expect(confirms[0]).toMatchObject({ vaultId: 'v2', vaultName: 'Second Vault' });
+    expect(vault.writes[0]).toEqual({ path: 'note.md', vaultId: 'v2' });
+    expect(res.content[0].text).toContain('Wrote v2:note.md');
+  });
+
+  it('labels cross-vault search hits with the vault id, keeps the default scope bare', async () => {
+    const hit = { path: 'a.md', heading: 'H', line: 3, snippet: 's', text: 't', vaultId: 'v9' };
+    const tools = new VaultTools(
+      fakeVault({}),
+      () => fakeProvider([hit]),
+      () => config(),
+      async () => true,
+    );
+    const bare = await tools.call('vault_search', { tags: ['x'] });
+    expect(bare.content[0].text).toContain('a.md:3');
+    expect(bare.content[0].text).not.toContain('v9:');
+
+    const scoped = await tools.call('vault_search', { tags: ['x'], vault: 'all' });
+    expect(scoped.content[0].text).toContain('v9:a.md:3');
   });
 });

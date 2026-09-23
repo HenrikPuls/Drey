@@ -203,6 +203,7 @@ function chatHarness(
     () => capabilities,
     {
       readVaultText: async (path) => (path === 'daily/a.md' || path === 'a.md' ? '# A body' : null),
+      listVaults: async () => [{ id: 'v1', name: 'Notes' }],
       resolveAssetPath: (path) => (path === 'attachments/pic.png' ? `C:/abs/${path}` : null),
       readAssetBase64: async () => 'xjaf=',
       onDelta: (taskId, text) => deltas.push({ taskId, text }),

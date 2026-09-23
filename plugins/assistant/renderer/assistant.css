@@ -413,6 +413,13 @@
   color: var(--text-4);
 }
 
+/* An unsaved scratch tab (e.g. the search summary): dashed border marks it
+   as "not a vault file" — its text is snapshotted to .drafts/ at send. */
+.assistant-composer .chip.scratch {
+  border-style: dashed;
+  color: var(--text-4);
+}
+
 .assistant-composer .chip .chip-name {
   overflow: hidden;
   text-overflow: ellipsis;
@@ -698,6 +705,13 @@
   margin-left: 8px;
   font-size: 11px;
   color: var(--text-6);
+}
+
+/* The attach picker's unsaved-tab rows (the scratch section above the
+   vault files): the detail label carries the accent instead of the muted
+   dir name. */
+.assistant-picker-row.scratch .assistant-picker-detail {
+  color: var(--accent-quote);
 }
 
 /* The prompt picker's row: title strong, description muted (a "" description

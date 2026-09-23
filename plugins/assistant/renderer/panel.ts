@@ -430,9 +430,12 @@ export function mountPanel(
   composer.append(box, meta);
   body.appendChild(composer);
 
-  const chipNode = (path: string, kind: 'note' | 'file' | 'image'): HTMLElement => {
+  const chipNode = (path: string, kind: 'note' | 'file' | 'image' | 'scratch'): HTMLElement => {
     const chip = el('span', kind === 'file' ? 'chip' : `chip ${kind}`);
-    chip.title = path;
+    chip.title =
+      kind === 'scratch'
+        ? `Unsaved tab: ${path} — attached via a .drafts/ snapshot at send time`
+        : path;
     chip.appendChild(el('span', 'chip-name', baseName(path)));
     const remove = el('button', 'chip-x', '×') as HTMLButtonElement;
     remove.type = 'button';
@@ -444,6 +447,8 @@ export function mountPanel(
         state.setNoteIncluded(false);
       } else if (kind === 'image') {
         state.removeImage(path);
+      } else if (kind === 'scratch') {
+        state.removeScratch(path);
       } else {
         state.removeFile(path);
       }
@@ -472,6 +477,9 @@ export function mountPanel(
     }
     for (const file of state.extraFiles()) {
       chipsRow.appendChild(chipNode(file, 'file'));
+    }
+    for (const scratch of state.scratchFiles()) {
+      chipsRow.appendChild(chipNode(scratch.docPath, 'scratch'));
     }
     for (const image of state.images()) {
       chipsRow.appendChild(chipNode(image, 'image'));
@@ -879,23 +887,77 @@ export function mountPanel(
     });
     bodyArea.append(tabsRow, filterInput, listBox, foot);
 
-    const visible = (): readonly string[] => {
-      const source = tab === 'files' ? files : images;
+    /** One selectable row: a vault file/image, or an unsaved scratch tab. */
+    interface PickRow {
+      id: string;
+      scratch: boolean;
+      label: string;
+      detail: string;
+      title: string;
+    }
+
+    /**
+     * Unsaved scratch tabs (e.g. the search summary) — re-collected on
+     * every render, so a tab opened while the picker sits open shows up.
+     * The focused tab is hidden while its note chip carries it (same rule
+     * as the open note among the vault files).
+     */
+    const scratchRows = (): PickRow[] =>
+      api.documents
+        .list()
+        .filter(
+          (doc) =>
+            doc.kind === 'text' &&
+            doc.saved === '' &&
+            doc.dirty &&
+            !(doc.path === notePath && state.noteIncluded()),
+        )
+        .map((doc) => ({
+          id: doc.path,
+          scratch: true,
+          label: baseName(doc.path),
+          detail: 'unsaved tab',
+          title: `Unsaved tab: ${doc.path} — its live text is attached (snapshotted to .drafts/ when sent)`,
+        }));
+
+    const rows = (): readonly PickRow[] => {
       const query = filter.trim().toLowerCase();
-      return source.filter((path) => {
-        if (tab === 'files' && path === notePath && state.noteIncluded()) {
-          return false; // already attached as the note chip
-        }
-        if (query === '') {
-          return true;
-        }
-        const base = baseName(path).toLowerCase();
-        return base.startsWith(query) || path.toLowerCase().includes(query);
-      });
+      const matches = (label: string, hay: string): boolean =>
+        query === '' || label.startsWith(query) || hay.includes(query);
+      if (tab === 'images') {
+        return images
+          .filter((path) => matches(baseName(path).toLowerCase(), path.toLowerCase()))
+          .map((path) => ({
+            id: path,
+            scratch: false,
+            label: baseName(path),
+            detail: dirName(path),
+            title: path,
+          }));
+      }
+      const vaultRows = files
+        .filter((path) => {
+          if (path === notePath && state.noteIncluded()) {
+            return false; // already attached as the note chip
+          }
+          return matches(baseName(path).toLowerCase(), path.toLowerCase());
+        })
+        .map((path) => ({
+          id: path,
+          scratch: false,
+          label: baseName(path),
+          detail: dirName(path),
+          title: path,
+        }));
+      return [...scratchRows(), ...vaultRows];
     };
 
-    const choose = (path: string): void => {
-      const result = tab === 'files' ? state.addFile(path) : state.addImage(path);
+    const choose = (row: PickRow): void => {
+      const result = row.scratch
+        ? state.addScratch(row.id)
+        : tab === 'images'
+          ? state.addImage(row.id)
+          : state.addFile(row.id);
       if (result.ok) {
         close();
       }
@@ -903,25 +965,27 @@ export function mountPanel(
 
     const renderList = (): void => {
       listBox.textContent = '';
-      const visiblePaths = visible();
-      if (activeIndex >= visiblePaths.length) {
-        activeIndex = Math.max(0, visiblePaths.length - 1);
+      const visibleRows = rows();
+      if (activeIndex >= visibleRows.length) {
+        activeIndex = Math.max(0, visibleRows.length - 1);
       }
-      visiblePaths.forEach((path, index) => {
+      visibleRows.forEach((row, index) => {
         const rowEl = el(
           'div',
           'assistant-picker-row' + (index === activeIndex ? ' active' : ''),
-          baseName(path),
+          row.label,
         );
-        if (tab === 'files' && path === notePath && !state.noteIncluded()) {
+        if (row.id === notePath && !row.scratch && !state.noteIncluded()) {
           rowEl.classList.add('this-note');
         }
-        const dir = dirName(path);
-        if (dir !== '') {
-          rowEl.appendChild(el('span', 'assistant-picker-detail', dir));
+        if (row.scratch) {
+          rowEl.classList.add('scratch');
         }
-        rowEl.title = path;
-        rowEl.addEventListener('click', () => choose(path));
+        if (row.detail !== '') {
+          rowEl.appendChild(el('span', 'assistant-picker-detail', row.detail));
+        }
+        rowEl.title = row.title;
+        rowEl.addEventListener('click', () => choose(row));
         rowEl.addEventListener('mousemove', () => {
           if (activeIndex !== index) {
             activeIndex = index;
@@ -930,13 +994,13 @@ export function mountPanel(
         });
         listBox.appendChild(rowEl);
       });
-      if (visiblePaths.length === 0) {
+      if (visibleRows.length === 0) {
         listBox.appendChild(
           el(
             'div',
             'assistant-picker-empty',
             tab === 'files'
-              ? files.length === 0
+              ? files.length === 0 && scratchRows().length === 0
                 ? 'No markdown files in the vault.'
                 : 'No matching file'
               : images.length === 0
@@ -958,7 +1022,7 @@ export function mountPanel(
         close();
       } else if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
         event.preventDefault();
-        const len = visible().length;
+        const len = rows().length;
         if (len > 0) {
           const delta = event.key === 'ArrowDown' ? 1 : -1;
           activeIndex = (activeIndex + delta + len) % len;
@@ -966,9 +1030,9 @@ export function mountPanel(
         }
       } else if (event.key === 'Enter') {
         event.preventDefault();
-        const path = visible()[activeIndex];
-        if (path !== undefined) {
-          choose(path);
+        const row = rows()[activeIndex];
+        if (row !== undefined) {
+          choose(row);
         }
       }
     });
