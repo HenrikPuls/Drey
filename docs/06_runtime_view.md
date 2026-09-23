@@ -1991,6 +1991,42 @@ Replace touches only occurrences inside the matching sections (the
 search model, applied as a batch); the file-scope variant patches the
 open buffer directly (a normal undoable edit, no confirmation round).
 
+## 6.42 Explorer double-click → tab ([ADR-0054](09_architecture_decisions/0054-opening-files-from-the-os.md))
+
+```mermaid
+sequenceDiagram
+    participant OS as Windows Explorer
+    participant M as main (external-open.ts)
+    participant R as Renderer (ExternalOpenService)
+    participant E as EditorService
+
+    OS->>M: drey.exe notes.md (cold start)
+    M->>M: extractOpenPaths(argv) → gate.enqueue (queued, not ready)
+    Note over R: vault registry + settings + session restore finish
+    R->>M: external:take-pending
+    M->>M: classify each: locateInVaults → vault | external (+ read/write allowlist)
+    M-->>R: OpenRequest[] (gate is now ready)
+    alt kind vault
+        R->>E: openFile(path, vaultId) — ordinary editable tab
+    else kind external
+        R->>M: external:read(absPath) — allowlist + extension + size gate
+        M-->>R: { content, modifiedMs }
+        R->>E: openExternalFile → pinned, editable tab (external://…)
+    end
+    Note over R: launch opened a file → startup daily-note fallback skipped
+
+    OS->>M: drey.exe other.md (Drey already running)
+    M->>M: second-instance → enqueue → classify (gate ready)
+    M-->>R: external:open-request push (window restored + focused)
+    R->>E: same routing as above
+```
+
+Ctrl+S on an external tab calls `external:write` (allowlisted path only;
+the file's line endings restored; no vault pipeline) and clears the dirty
+state; a refused write keeps the tab dirty with the error shown. "Save as…"
+still writes a *copy* into the active vault and swaps the tab for that vault
+file (pin kept).
+
 ## Planned flows (added as their milestone is built)
 
 - Dedicated keyword-search / FTS surface — the search panel's free-text

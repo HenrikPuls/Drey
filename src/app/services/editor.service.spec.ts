@@ -693,6 +693,139 @@ describe('EditorService', () => {
     });
   });
 
+  describe('external (out-of-vault) documents (ADR-0054)', () => {
+    const EXTERNAL = 'C:\\Users\\me\\Downloads\\note.md';
+    const KEY = 'external://C:/Users/me/Downloads/note.md';
+    let saved: NoteSaveRequest[];
+    let written: Array<{ path: string; content: string }>;
+    let picked: string | null;
+    let svc: EditorService;
+
+    beforeEach(() => {
+      TestBed.resetTestingModule();
+      saved = [];
+      written = [];
+      picked = 'notes/kept.md';
+      const api: Partial<DreyApi> = {
+        writeExternalFile: (path: string, content: string) => {
+          written.push({ path, content });
+          return Promise.resolve(99);
+        },
+        readExternalFile: () => Promise.resolve({ content: '# From outside\r\n\r\nbody\r\n', modifiedMs: 7 }),
+        readVaultFile: (p: string) => Promise.resolve({ content: `on disk: ${p}`, modifiedMs: 3 }),
+        saveNote: (req: NoteSaveRequest) => {
+          saved.push(req);
+          return echoSave(req);
+        },
+        getActiveVault: () => Promise.resolve('E:/vault'),
+        listVaultFiles: () => Promise.resolve([]),
+        pickSavePath: () => Promise.resolve(picked),
+      };
+      window.dreyApi = api as DreyApi;
+      svc = TestBed.inject(EditorService);
+    });
+
+    it('opens as a pinned, editable text tab keyed external://', async () => {
+      await svc.openExternalFile(EXTERNAL);
+
+      const doc = svc.docFor(KEY);
+      expect(doc).not.toBeNull();
+      expect(doc?.external).toBe(true);
+      expect(doc?.pinned).toBe(true);
+      expect(doc?.vaultId).toBeNull();
+      expect(doc?.name).toBe('note.md');
+      expect(doc?.path).toBe(EXTERNAL);
+      expect(doc?.bufferContent).toBe('# From outside\n\nbody\n');
+      expect(svc.isExternal(KEY)).toBe(true);
+      expect(svc.isDirty()).toBe(false);
+    });
+
+    it('reveals the already-open tab instead of opening a second one', async () => {
+      await svc.openExternalFile(EXTERNAL);
+      await svc.openExternalFile(EXTERNAL);
+      expect(svc.openDocs().filter((d) => d.external)).toHaveLength(1);
+    });
+
+    it('opening it replaces nothing, and it is never the tab the next file replaces', async () => {
+      await svc.openFile('a.md');
+      await svc.openExternalFile(EXTERNAL);
+      expect(svc.openDocs().map((d) => d.path)).toEqual(['a.md', EXTERNAL]);
+
+      // Pinned + active: the next file reuses the clean unpinned "preview"
+      // tab (milestone 35) -- the external tab itself stays.
+      await svc.openFile('b.md');
+      expect(svc.openDocs().map((d) => d.path)).toEqual([EXTERNAL, 'b.md']);
+    });
+
+    it('turns dirty on an edit', async () => {
+      await svc.openExternalFile(EXTERNAL);
+      svc.updateBuffer(KEY, '# Edited\n');
+
+      expect(svc.docFor(KEY)?.bufferContent).toBe('# Edited\n');
+      expect(svc.isDirty()).toBe(true);
+    });
+
+    it('saves in place through writeExternalFile, restoring the file line endings', async () => {
+      await svc.openExternalFile(EXTERNAL);
+      svc.updateBuffer(KEY, '# Edited\n\nbody\n');
+      await svc.save();
+
+      expect(written).toEqual([{ path: EXTERNAL, content: '# Edited\r\n\r\nbody\r\n' }]);
+      expect(saved).toEqual([]); // none of the vault pipeline
+      expect(svc.docFor(KEY)?.savedContent).toBe('# Edited\n\nbody\n');
+      expect(svc.docFor(KEY)?.modifiedMs).toBe(99);
+      expect(svc.isDirty()).toBe(false);
+    });
+
+    it('does not write an unchanged buffer', async () => {
+      await svc.openExternalFile(EXTERNAL);
+      await svc.save({ key: KEY });
+
+      expect(written).toEqual([]);
+    });
+
+    it('keeps the tab dirty and reports the error when the write is refused', async () => {
+      window.dreyApi = {
+        ...(window.dreyApi as DreyApi),
+        writeExternalFile: () => Promise.reject(new Error('no longer exists')),
+      };
+      await svc.openExternalFile(EXTERNAL);
+      svc.updateBuffer(KEY, '# Edited\n');
+      await svc.save();
+
+      expect(svc.isDirty()).toBe(true);
+      expect(svc.error()).toBe('no longer exists');
+    });
+
+    it('has no pin toggle', async () => {
+      await svc.openExternalFile(EXTERNAL);
+      svc.togglePin(KEY);
+      expect(svc.docFor(KEY)?.pinned).toBe(true);
+    });
+
+    it('Save as… copies it into the vault and swaps the tab for that copy', async () => {
+      await svc.openExternalFile(EXTERNAL);
+      await svc.saveAs(KEY);
+
+      expect(saved).toEqual([{ path: 'notes/kept.md', body: '# From outside\n\nbody\n', eol: '\r\n' }]);
+      expect(svc.docFor(KEY)).toBeNull();
+      const copy = svc.docFor('notes/kept.md');
+      expect(copy?.external).toBeUndefined();
+      expect(copy?.pinned).toBe(true); // the pin travels with the tab
+    });
+
+    it('reports an unreadable file as an error and opens nothing', async () => {
+      window.dreyApi = {
+        ...(window.dreyApi as DreyApi),
+        readExternalFile: () => Promise.reject(new Error('not allowed')),
+      };
+      await svc.openExternalFile(EXTERNAL);
+
+      expect(svc.openDocs()).toEqual([]);
+      expect(svc.error()).toBe('not allowed');
+    });
+  });
+
   describe('newDailyEntryEdit', () => {
     const at = (s: string) => s.length;
 

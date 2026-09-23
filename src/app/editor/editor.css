@@ -41,6 +41,14 @@
 
 /* The live-edit lock hint (ADR-0049): shown while the assistant edits this
    document and user input is blocked. */
+.external-note {
+  flex: none;
+  white-space: nowrap;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--text-4);
+}
+
 .edit-lock {
   flex: none;
   white-space: nowrap;

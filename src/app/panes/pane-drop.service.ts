@@ -26,7 +26,10 @@ const VAULT_PATH_DT_TYPE = 'application/x-drey-vault-path';
  * from outside the vault, a directory, or a URL-only / web-image drag is
  * left for `DropGuardService` to swallow: `Doc` is vault-relative
  * throughout (identity, save, re-index, tasks, `paneIdFor`), so opening an
- * arbitrary absolute path is a separate capability, not built here.
+ * arbitrary absolute path is a separate capability. The one out-of-vault
+ * path that exists is the OS launch (Explorer "Open with", ADR-0054) as an
+ * external tab -- a drag-in would need the same main-side read/write
+ * allowlist and is not built.
  */
 @Injectable({ providedIn: 'root' })
 export class PaneDropService {

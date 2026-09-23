@@ -15,6 +15,7 @@ import { UI_SCALE_FACTORS } from '../shared/app-config';
 import { AppConfigStore } from './app-config';
 import chokidar from 'chokidar';
 import { DailyNoteManager } from './daily-note';
+import { ExternalFileGate, extractOpenPaths } from './external-open';
 import { installMainProcessLogging, watchWebContents } from './logger';
 import { LlmDebugLog, LlmRouter, LlmTaskRegistry, TagSuggester, buildClients } from './llm';
 import { registerIpcHandlers, ExitBridge, McpWriteBridge } from './ipc';
@@ -267,6 +268,18 @@ const mcpWriteBridge = new McpWriteBridge(() => mainWindow);
 const exitBridge = new ExitBridge(() => mainWindow);
 
 /**
+ * Files the OS hands to Drey (Explorer "Open with" / a default-program
+ * association, ADR-0054). Module-level because a `second-instance` can fire
+ * before `whenReady` has built the vault manager -- the gate queues until
+ * the renderer pulls, and reads the registry lazily at classification time.
+ */
+let vaultManagerForGate: VaultManager | null = null;
+const externalFiles = new ExternalFileGate(
+  () => vaultManagerForGate?.listVaults() ?? [],
+  (requests) => mainWindow?.webContents.send(IPC_CHANNELS.externalOpenRequest, requests),
+);
+
+/**
  * Exit-prompt state machine (bug-5):
  * - `exitApproved` -- the renderer answered "save"/"exit without saving";
  *   the next `close` event is the real one and passes.
@@ -489,11 +502,21 @@ if (!app.requestSingleInstanceLock()) {
   app.quit();
 } else {
   installMainProcessLogging();
-  app.on('second-instance', () => {
+  // The launch's own files (`drey.exe notes.md`, an Explorer double-click on
+  // a cold start); the renderer pulls them once it has finished starting.
+  externalFiles.enqueue(
+    extractOpenPaths(process.argv, { isPackaged: app.isPackaged, cwd: process.cwd() }),
+  );
+  app.on('second-instance', (_event, argv, workingDirectory) => {
+    // A double-click while Drey runs: same window, the file arrives as a push.
+    externalFiles.enqueue(
+      extractOpenPaths(argv, { isPackaged: app.isPackaged, cwd: workingDirectory }),
+    );
     if (mainWindow) {
       if (mainWindow.isMinimized()) {
         mainWindow.restore();
       }
+      mainWindow.show();
       mainWindow.focus();
     }
   });
@@ -505,6 +528,7 @@ if (!app.requestSingleInstanceLock()) {
     // construction order stays free.
     const ownWrites = new OwnWriteLedger();
     const vaultManager = new VaultManager(ownWrites);
+    vaultManagerForGate = vaultManager;
     const appConfig = new AppConfigStore();
     const vaultAnnouncer = new VaultChangeAnnouncer(
       () => pluginHost,
@@ -655,6 +679,7 @@ if (!app.requestSingleInstanceLock()) {
       mcpHttp,
       mcpWriteBridge,
       exitBridge,
+      externalFiles,
       stdioBridgePath,
       syncMcpHttp: () => syncMcpHttpTransport(mcpHttp, appConfig),
       syncVaultWatcher: () => vaultWatcher.syncFromConfig(),

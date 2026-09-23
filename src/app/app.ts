@@ -4,6 +4,7 @@ import { ImageLightbox } from './image-viewer';
 import { ConfirmationDialog } from './confirmation-dialog/confirmation-dialog';
 import { ConfirmDialog } from './confirm-dialog/confirm-dialog';
 import { ExitConfirmDialog } from './exit-confirm-dialog/exit-confirm-dialog';
+import { ExternalOpenService } from './external-open';
 import { SessionService } from './session';
 import { AppearanceService } from './services/appearance.service';
 import { ThemeService } from './services/theme.service';
@@ -82,6 +83,11 @@ export class App {
   constructor() {
     // Subscribe to the quick-capture hotkey for the app's lifetime.
     inject(DailyNoteService).start();
+    // Files the OS hands to Drey (Explorer "Open with", ADR-0054): later
+    // launches arrive as a push; the launch's own files are pulled below,
+    // once startup has settled.
+    const externalOpen = inject(ExternalOpenService);
+    externalOpen.start();
     // Instantiate at startup so its global Ctrl+wheel guard is installed
     // even before the first document (and its editor) opens (ADR-0015).
     inject(EditorZoomService);
@@ -133,13 +139,22 @@ export class App {
     effect(() => {
       const vaultPath = this.vault.activeVaultPath();
       const loaded = this.settings.loaded();
+      // No active vault: nothing to restore, but a file the OS handed to Drey
+      // still opens (as an external tab, ADR-0054).
+      if (loaded && this.vault.registryLoaded() && !vaultPath) {
+        void externalOpen.onStartupSettled();
+      }
       if (this.dailyNoteStartupDone || !vaultPath || !loaded) {
         return;
       }
       this.dailyNoteStartupDone = true;
       void (async () => {
         const restored = await session.restore();
-        if (!restored && this.settings.dailyOpenOnStartup()) {
+        // After the restore, so the OS-opened file lands active on top of it.
+        // A launch that opened a file also skips the daily-note fallback --
+        // that async open would otherwise land last and steal the focus.
+        const openedFromOs = await externalOpen.onStartupSettled();
+        if (!restored && openedFromOs === 0 && this.settings.dailyOpenOnStartup()) {
           void this.editor.openDailyNote(formatDate(new Date()));
         }
       })();

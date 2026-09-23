@@ -227,12 +227,7 @@ export class Editor implements AfterViewInit {
     // The live-edit lock (ADR-0049): while the assistant edits this pane's
     // document, its surface is non-editable for the user (the model's own
     // buffer pushes keep flowing -- see markdown-surface.setEditable).
-    effect(() => {
-      const locked = this.editor.isEditLocked(this.shownPath());
-      if (this.surfaceReady) {
-        this.surface().setEditable(!locked);
-      }
-    });
+    effect(() => this.applyEditLock());
 
     // Re-judge the open document when the spelling settings change; the
     // extension itself only reacts to text edits.
@@ -258,9 +253,22 @@ export class Editor implements AfterViewInit {
     });
   }
 
+  /**
+   * Pushes the shown document's live-edit input lock (ADR-0049) onto the
+   * surface. Also called once the surface exists -- the effect's first run
+   * precedes it.
+   */
+  private applyEditLock(): void {
+    const locked = this.editor.isEditLocked(this.shownPath());
+    if (this.surfaceReady) {
+      this.surface().setEditable(!locked);
+    }
+  }
+
   ngAfterViewInit(): void {
     this.surfaceReady = true;
     this.loadActiveDoc();
+    this.applyEditLock();
     // A request may have arrived while this component was still mounting
     // (hotkey or capture on a not-yet-open file) -- the effect ran with no
     // view. Apply whatever is pending now.

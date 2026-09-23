@@ -26,6 +26,8 @@ export class VaultService {
   readonly activeVaultId = signal<string | null>(null);
   /** Each vault's file tree, keyed by vault id. Missing folders get `[]`. */
   readonly trees = signal<Record<string, VaultFileEntry[]>>({});
+  /** `true` once the registry has been read from main at least once -- tells "no vaults yet" from "not loaded yet". */
+  readonly registryLoaded = signal(false);
 
   /** Absolute path of the active vault root, or null when none is active. */
   readonly activeVaultPath = computed<string | null>(
@@ -115,6 +117,7 @@ export class VaultService {
   private async loadRegistry(): Promise<void> {
     this.activeVaultId.set(await window.dreyApi.getActiveVaultId());
     this.vaults.set(await window.dreyApi.listVaults());
+    this.registryLoaded.set(true);
   }
 
   /** Reloads one vault's tree (a scoped `vault:changed` push landed). */

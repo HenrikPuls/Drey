@@ -133,8 +133,15 @@ export class TabBar {
     this.menu.set(null);
   }
 
-  /** Only file-view tabs get replaced by the next open, so only they can be pinned. */
+  /**
+   * Only file-view tabs get replaced by the next open, so only they can be
+   * pinned. An external (out-of-vault) tab is permanently pinned (ADR-0054),
+   * so it offers no toggle.
+   */
   protected pinnable(path: string): boolean {
+    if (this.editor.isExternal(path)) {
+      return false;
+    }
     const kind = this.editor.docFor(path)?.kind;
     return kind === 'text' || kind === 'image' || kind === 'pdf';
   }

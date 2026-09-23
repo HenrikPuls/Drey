@@ -257,7 +257,10 @@ export class SessionService {
     const tabs: SessionTab[] = [];
     for (const key of keys) {
       const doc = this.editor.docFor(key);
-      if (!doc) {
+      // An external (out-of-vault) tab is not restored: main's read allowlist
+      // only lives for one run, and the OS association reopens it on demand
+      // (ADR-0054).
+      if (!doc || doc.external === true) {
         continue;
       }
       const pin = doc.pinned === true ? { pinned: true } : {};

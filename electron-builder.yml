@@ -49,6 +49,26 @@ extraResources:
   - from: build/icon.png
     to: icon.png
 
+# Explorer "Open with" / default-program registration (ADR-0054). NSIS only:
+# a per-user install writes HKCU/Software/Classes entries, the uninstaller
+# removes them; the portable build registers nothing. Keep the extensions in
+# step with shared/external-open.ts (EXTERNAL_OPEN_EXTENSIONS), which is what
+# main accepts from argv. NOTE: the NSIS macro also claims the class default
+# for each extension, so a .txt the user never explicitly bound to another
+# app (Windows' UserChoice) starts opening in Drey.
+fileAssociations:
+  # `name` becomes the ProgId (the registry class key) and the uninstaller
+  # deletes it again -- so it must be unique to Drey, never a generic label
+  # another program might register too; `description` is what Explorer shows.
+  - ext: [md, markdown, mdx]
+    name: Drey.Markdown
+    description: Markdown document
+    role: Editor
+  - ext: txt
+    name: Drey.Text
+    description: Text document
+    role: Editor
+
 win:
   target:
     - nsis

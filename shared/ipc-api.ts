@@ -71,6 +71,16 @@ export const IPC_CHANNELS = {
   draftSave: 'draft:save',
   vaultPickSavePath: 'vault:pick-save-path',
   dailyOpen: 'daily:open',
+  // Files the OS hands to Drey (Explorer "Open with" / default program,
+  // ADR-0054). `external:take-pending` is the renderer's cold-start PULL of
+  // whatever the launch argv carried; `external:open-request` is the PUSH for
+  // every later launch (`second-instance`); `external:read` reads one file
+  // main itself collected from the OS -- never an arbitrary renderer path;
+  // `external:write` saves back to exactly such a path, same allowlist.
+  externalTakePending: 'external:take-pending',
+  externalRead: 'external:read',
+  externalWrite: 'external:write',
+  externalOpenRequest: 'external:open-request',
   dailyBuildContent: 'daily:build-content',
   noteSave: 'note:save',
   exportNotePdf: 'export:note-pdf',
@@ -183,6 +193,23 @@ export interface McpWriteRequest {
 export interface VaultChangedPush {
   readonly vaultId?: string;
   readonly paths?: readonly string[];
+}
+
+/**
+ * One file the OS asked Drey to open (ADR-0054), already classified in main.
+ * `vault`: it sits inside a registered vault -- open it as an ordinary vault
+ * tab (`path` is vault-relative, forward-slash). `external`: it sits in no
+ * vault -- open it as a pinned external tab (`path` is the absolute OS
+ * path, the only handle `readExternalFile` / `writeExternalFile` accept).
+ */
+export type OpenRequest =
+  | { readonly kind: 'vault'; readonly vaultId: string; readonly path: string }
+  | { readonly kind: 'external'; readonly path: string };
+
+/** Result of `readExternalFile`. */
+export interface ExternalFileContent {
+  readonly content: string;
+  readonly modifiedMs: number;
 }
 
 /**
@@ -850,6 +877,35 @@ export interface DreyApi {
    * event is never forwarded (see docs/09_architecture_decisions/0001-*.md).
    */
   onOpenDailyNote(listener: (relativePath: string) => void): () => void;
+
+  /**
+   * Drains the files the launch itself carried (`drey.exe notes.md`, an
+   * Explorer double-click on a cold start), classified as vault / external
+   * (ADR-0054). A PULL, not a push: main would otherwise fire before the
+   * renderer has finished starting. Calling it also tells main the renderer
+   * is ready, so every later launch (`second-instance`) arrives through
+   * `onOpenRequest` instead. Resolves to `[]` when nothing was passed.
+   */
+  takePendingOpenRequests(): Promise<OpenRequest[]>;
+
+  /** Later OS launches while the app is running -- see `takePendingOpenRequests`. */
+  onOpenRequest(listener: (requests: OpenRequest[]) => void): () => void;
+
+  /**
+   * Reads one external file. Main only serves paths it collected from the OS
+   * itself (an allowlist) with a Markdown/text extension and a size cap, so
+   * this can never be turned into an arbitrary file read. Rejects otherwise.
+   */
+  readExternalFile(absolutePath: string): Promise<ExternalFileContent>;
+
+  /**
+   * Saves an external file back to its original location (UTF-8, `content`
+   * already carries the file's own line endings). Same allowlist as
+   * `readExternalFile`: only a path main collected from the OS itself, with
+   * a Markdown/text extension and under the size cap. Resolves to the new
+   * `modifiedMs`; rejects otherwise.
+   */
+  writeExternalFile(absolutePath: string, content: string): Promise<number>;
 
   /**
    * Saves a note through the tag pipeline (milestone 6): parses the

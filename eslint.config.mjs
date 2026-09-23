@@ -98,6 +98,7 @@ export default tseslint.config(
               'widgets',
               'calendar',
               'plugin-host',
+              'external-open',
             ]),
             // `llm` / `entry` / `vault` also exist as `src/app/settings/<mod>/`
             // plain folders -- from the settings screen the `./` form is that
@@ -126,6 +127,7 @@ export default tseslint.config(
       'src/app/calendar/**/*.ts',
       'src/app/vault/**/*.ts',
       'src/app/plugin-host/**/*.ts',
+      'src/app/external-open/**/*.ts',
     ],
     rules: {
       'no-restricted-imports': 'off',

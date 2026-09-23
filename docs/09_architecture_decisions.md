@@ -60,6 +60,7 @@ package, a minor naming convention).
 | [0050](09_architecture_decisions/0050-ocr-via-vision-llm.md)                       | OCR via the connected vision LLM: a `plugins/ocr/` context-menu row on embedded images + image tabs, capability-gated (deviates from req-9's Tesseract idea) | Accepted |
 | [0051](09_architecture_decisions/0051-multi-vault-registry.md)                     | Multi-vault registry: stable vault ids, `vaultId`-scoped IPC/docs/indexes/watcher, active-vault retention, `vaultId::path` doc keys (supersedes 0019's "no vault registry") | Accepted |
 | [0052](09_architecture_decisions/0052-pdf-embeds-and-viewer.md)                    | PDF embeds + viewer tab: the built-in PDFium viewer (`plugins: true`) over `drey-asset://` iframes, name-preserving `attachments/` staging, `kind: 'pdf'` base doc kind | Accepted |
+| [0054](09_architecture_decisions/0054-opening-files-from-the-os.md)                | Opening files from the OS: Explorer association for md/markdown/mdx/txt; vault files open normally, out-of-vault ones as pinned external tabs saved in place, behind a main-side read/write allowlist; pull-then-push delivery | Accepted |
 
 Decisions not yet written up (relevant spec already fixes them, but the
 ADR is deferred to the milestone that actually implements them, per

@@ -233,6 +233,20 @@ describe('SessionService', () => {
     expect(stored.tabs.map((t) => ('pinned' in t ? t.pinned : undefined))).toEqual([true, undefined]);
   });
 
+  it('leaves an external (out-of-vault) tab out of the snapshot (ADR-0054)', async () => {
+    (window.dreyApi as Partial<DreyApi>).readExternalFile = () =>
+      Promise.resolve({ content: 'outside', modifiedMs: 1 });
+    await editor.openFile('notes/a.md', VAULT_ID);
+    await editor.openExternalFile('/tmp/outside.md');
+    expect(editor.docFor('external:///tmp/outside.md')?.external).toBe(true);
+
+    await session.restore(); // nothing stored -- just arms persistence
+    await session.flushNow();
+    const stored = JSON.parse(localStorage.getItem('drey.session') ?? '{}') as SessionSnapshot;
+
+    expect(stored.tabs.map((t) => t.path)).toEqual(['notes/a.md']);
+  });
+
   it('restores a v1 snapshot by mapping every tab to the active vault', async () => {
     writeSession(
       [

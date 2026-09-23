@@ -7,6 +7,7 @@ import {
   EditCommand,
   ExitConfirmRequest,
   ExitDecision,
+  ExternalFileContent,
   IPC_CHANNELS,
   LlmCapabilities,
   LlmConnectionTest,
@@ -18,6 +19,7 @@ import {
   McpWriteRequest,
   NoteSaveRequest,
   NoteSaveResult,
+  OpenRequest,
   PdfExportRequest,
   PluginDescriptorForRenderer,
   PluginIpcEventPayload,
@@ -193,6 +195,19 @@ const dreyApi: DreyApi = {
     ipcRenderer.on(IPC_CHANNELS.dailyOpen, wrapped);
     return () => ipcRenderer.removeListener(IPC_CHANNELS.dailyOpen, wrapped);
   },
+  takePendingOpenRequests: (): Promise<OpenRequest[]> =>
+    ipcRenderer.invoke(IPC_CHANNELS.externalTakePending),
+  onOpenRequest: (listener: (requests: OpenRequest[]) => void): (() => void) => {
+    // Payload only, never the IpcRendererEvent (ADR-0001).
+    const wrapped = (_event: IpcRendererEvent, requests: OpenRequest[]): void =>
+      listener(requests);
+    ipcRenderer.on(IPC_CHANNELS.externalOpenRequest, wrapped);
+    return () => ipcRenderer.removeListener(IPC_CHANNELS.externalOpenRequest, wrapped);
+  },
+  readExternalFile: (absolutePath: string): Promise<ExternalFileContent> =>
+    ipcRenderer.invoke(IPC_CHANNELS.externalRead, absolutePath),
+  writeExternalFile: (absolutePath: string, content: string): Promise<number> =>
+    ipcRenderer.invoke(IPC_CHANNELS.externalWrite, absolutePath, content),
   getMcpStatus: (): Promise<McpStatus> => ipcRenderer.invoke(IPC_CHANNELS.mcpStatus),
   onMcpWriteRequest: (listener: (request: McpWriteRequest) => void): (() => void) => {
     const wrapped = (_event: IpcRendererEvent, request: McpWriteRequest): void => listener(request);

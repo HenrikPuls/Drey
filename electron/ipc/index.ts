@@ -7,6 +7,7 @@
 import { BrowserWindow } from 'electron';
 import { AppConfigStore } from '../app-config';
 import { DailyNoteManager } from '../daily-note';
+import { ExternalFileGate } from '../external-open';
 import { LlmClient, LlmDebugLog, LlmTaskRegistry, TagSuggester } from '../llm';
 import { McpHttpTransport } from '../mcp';
 import { NoteManager } from '../note-manager';
@@ -18,6 +19,7 @@ import { registerAppHandlers } from './app-handlers';
 import { registerConfigHandlers } from './config-handlers';
 import { ExitBridge } from './exit-bridge';
 import { registerExitHandlers } from './exit-handlers';
+import { registerExternalHandlers } from './external-handlers';
 import { registerExportHandlers } from './export-handlers';
 import { registerLlmHandlers } from './llm-handlers';
 import { registerMcpHandlers } from './mcp-handlers';
@@ -46,6 +48,7 @@ export interface IpcHandlerDeps {
   mcpHttp: McpHttpTransport;
   mcpWriteBridge: McpWriteBridge;
   exitBridge: ExitBridge;
+  externalFiles: ExternalFileGate;
   stdioBridgePath: () => string;
   syncMcpHttp: () => Promise<void>;
   syncVaultWatcher: () => Promise<void>;
@@ -59,6 +62,7 @@ export function registerIpcHandlers(deps: IpcHandlerDeps): void {
   registerSessionHandlers(deps);
   registerVaultHandlers(deps);
   registerExitHandlers(deps);
+  registerExternalHandlers(deps);
   registerQueryHandlers(deps);
   registerLlmHandlers(deps);
   registerConfigHandlers(deps);

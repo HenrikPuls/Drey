@@ -3,7 +3,14 @@
   @if (shownDoc()?.existsOnDisk === false) {
     <span class="draft">unsaved draft</span>
   }
-  @if (editor.isEditLocked(shownPath())) {
+  @if (editor.isExternal(shownPath())) {
+    <span
+      class="external-note"
+      title="This file sits outside your vaults. Save writes it back to its original location; Save as… copies it into a vault."
+    >
+      Outside your vaults
+    </span>
+  } @else if (editor.isEditLocked(shownPath())) {
     <span class="edit-lock">Assistant is editing…</span>
   }
 

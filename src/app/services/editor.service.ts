@@ -2,6 +2,7 @@ import { Injectable, computed, inject, signal } from '@angular/core';
 import { imageExtension, pdfExtension } from '../../../shared/asset-name';
 import { dailyPathFor } from '../../../shared/daily';
 import { EntryDraft } from '../../../shared/entry-compose';
+import { externalDocKey } from '../../../shared/external-open';
 import { ActionOutcome } from '../../../shared/ipc-api';
 import { isAutoSavePath, isChatNotePath } from '../../../shared/structural-folders';
 import { EditorCommandsService } from '../editor/editor-commands.service';
@@ -98,6 +99,15 @@ export interface OpenDoc {
    * closing a pinned tab stays an explicit act.
    */
   pinned?: boolean;
+  /**
+   * An out-of-vault file the OS handed to Drey (Explorer "Open with",
+   * ADR-0054). `path` is its ABSOLUTE path (shown in the meta bar, never sent
+   * over a vault IPC), `vaultId` is `null`, the key is `external://…`. It is
+   * edited like any note and saved IN PLACE through the gated
+   * `external:write` channel (no vault pipeline: no frontmatter bump, no
+   * index, no hooks); it opens pinned. "Save as…" copies it into a vault.
+   */
+  external?: boolean;
 }
 
 function baseName(relativePath: string): string {
@@ -191,6 +201,11 @@ export class EditorService {
   /** Whether `key` is currently locked against user input. */
   isEditLocked(key: string | null): boolean {
     return key !== null && this.editLocks().has(key);
+  }
+
+  /** Whether `key` is an external (out-of-vault) document (ADR-0054). */
+  isExternal(key: string | null): boolean {
+    return key !== null && this.docFor(key)?.external === true;
   }
 
   private readonly activeDoc = computed<OpenDoc | null>(
@@ -515,6 +530,42 @@ export class EditorService {
   }
 
   /**
+   * Opens a file the OS handed to Drey that sits in NO registered vault
+   * (ADR-0054): a pinned, editable tab keyed `external://<path>` that saves
+   * back to that path. Main only serves the read (and write) for paths it
+   * collected from the OS itself. Already open
+   * -> just reveal it. Being pinned, it is never the tab another file
+   * replaces, and opening it never replaces the focused tab either.
+   */
+  async openExternalFile(absolutePath: string): Promise<void> {
+    if (!this.api) {
+      return;
+    }
+    const key = externalDocKey(absolutePath);
+    if (this.docs().some((d) => d.key === key)) {
+      this.panes.open(key);
+      return;
+    }
+    this.isLoading.set(true);
+    this.error.set(null);
+    try {
+      const { content, modifiedMs } = await this.api.readExternalFile(absolutePath);
+      const doc = this.makeDoc(absolutePath, null, content, modifiedMs, true);
+      this.addDoc({
+        ...doc,
+        key,
+        name: baseName(absolutePath.replace(/\\/g, '/')),
+        external: true,
+        pinned: true,
+      });
+    } catch (err) {
+      this.error.set(err instanceof Error ? err.message : String(err));
+    } finally {
+      this.isLoading.set(false);
+    }
+  }
+
+  /**
    * The tab opening another file may replace: the focused pane's active
    * tab if it qualifies, else -- when the active tab is **pinned** -- the
    * pane's rightmost tab that does. Qualifying means a **clean** file-view
@@ -557,7 +608,8 @@ export class EditorService {
   /** Pins / unpins a tab; a no-op for a key that is not open. */
   togglePin(key: string): void {
     const doc = this.docFor(key);
-    if (doc !== null) {
+    // An external tab is permanently pinned (ADR-0054).
+    if (doc !== null && doc.external !== true) {
       this.patchDoc(key, { pinned: doc.pinned !== true });
     }
   }
@@ -942,6 +994,12 @@ export class EditorService {
     if (!this.api || doc === null || doc.kind !== 'text') {
       return;
     }
+    // An external doc saves in place through its own gated channel -- none
+    // of the vault pipeline (frontmatter, index, hooks) applies (ADR-0054).
+    if (doc.external === true) {
+      await this.saveExternal(doc);
+      return;
+    }
     // A generated scratch doc has no destination yet -- ask for one, even
     // if the buffer is untouched (the user wants to keep the export as-is).
     if (doc.askOnSave) {
@@ -1144,6 +1202,30 @@ export class EditorService {
     }
     void this.vault.refresh();
     return this.docFor(savedKey) !== null ? savedKey : null;
+  }
+
+  /**
+   * Writes an external document back to the path it was opened from. The
+   * buffer is held in `\n`; the file's own line ending is restored on the
+   * way out. What is committed is the buffer as of the call -- typing during
+   * the write keeps the tab dirty.
+   */
+  private async saveExternal(doc: OpenDoc): Promise<void> {
+    if (!this.api || doc.bufferContent === doc.savedContent) {
+      return;
+    }
+    const sentBody = doc.bufferContent;
+    this.isSaving.set(true);
+    this.error.set(null);
+    try {
+      const onDisk = doc.eol === '\r\n' ? sentBody.replace(/\n/g, '\r\n') : sentBody;
+      const modifiedMs = await this.api.writeExternalFile(doc.path, onDisk);
+      this.patchDoc(doc.key, { savedContent: sentBody, modifiedMs });
+    } catch (err) {
+      this.error.set(err instanceof Error ? err.message : String(err));
+    } finally {
+      this.isSaving.set(false);
+    }
   }
 
   /**

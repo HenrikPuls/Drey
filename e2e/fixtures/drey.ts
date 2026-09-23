@@ -46,6 +46,18 @@ interface DreyFixtures {
    * launch — the app-level discovery root, not a dev override.
    */
   userDataPlugins: Record<string, Record<string, string>> | null;
+  /**
+   * A folder OUTSIDE the seeded vault (ADR-0054): where `launchFiles` with
+   * `dir: 'external'` are written, so a test can tell an out-of-vault open
+   * from a vault one.
+   */
+  externalDir: string;
+  /**
+   * Files handed to the app on the command line at launch -- what an Explorer
+   * double-click on a cold start does (ADR-0054). Written to disk before
+   * launch; `dir` picks the seeded vault or `externalDir`.
+   */
+  launchFiles: Array<{ dir: 'vault' | 'external'; name: string; content: string }>;
   /** The launched Electron app. */
   electronApp: ElectronApplication;
   /** The main window's renderer page. */
@@ -74,8 +86,16 @@ export const test = base.extend<DreyFixtures>({
 
   userDataPlugins: [null, { option: true }],
 
+  launchFiles: [[], { option: true }],
+
+  externalDir: async ({}, use, testInfo) => {
+    const dir = path.join(testInfo.outputDir, 'external');
+    fs.mkdirSync(dir, { recursive: true });
+    await use(dir);
+  },
+
   electronApp: async (
-    { vaultDir, appConfig, seedVault, extraPluginDir, userDataPlugins },
+    { vaultDir, appConfig, seedVault, extraPluginDir, userDataPlugins, externalDir, launchFiles },
     use,
     testInfo,
   ) => {
@@ -134,8 +154,15 @@ export const test = base.extend<DreyFixtures>({
       env['DREY_EXTRA_PLUGIN_DIR'] = extraPluginDir;
     }
 
+    const launchPaths = launchFiles.map((file) => {
+      const target = path.join(file.dir === 'vault' ? vaultDir : externalDir, file.name);
+      fs.mkdirSync(path.dirname(target), { recursive: true });
+      fs.writeFileSync(target, file.content);
+      return target;
+    });
+
     const app = await electron.launch({
-      args: [repoRoot, `--user-data-dir=${userDataDir}`],
+      args: [repoRoot, `--user-data-dir=${userDataDir}`, ...launchPaths],
       env,
     });
 

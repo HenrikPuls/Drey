@@ -31,6 +31,16 @@ restore, keybindings, spellcheck, the MCP vault server, the LLM
 - `main.ts` — composition root: window creation, the privileged schemes
   (`app://`, `drey-asset://`, `plugin://`), single-instance lock,
   quick-capture hotkey, and the slimmed IPC handler registration.
+- `external-open.ts` + `ipc/external-handlers.ts` — files the OS hands to
+  Drey ([ADR-0054](09_architecture_decisions/0054-opening-files-from-the-os.md)):
+  `extractOpenPaths` (argv filter), `ExternalFileGate` (queue → classify
+  as vault / external via `locateInVaults` → read/write allowlist,
+  extension + 50 MB gate; pull at cold start, push for `second-instance`). Renderer
+  side: `src/app/external-open/ExternalOpenService` routes each request to
+  `EditorService.openFile` (vault) or `openExternalFile` (`OpenDoc.external`:
+  `vaultId: null`, absolute `path`, key `external://…`, pinned, edited
+  normally and saved in place via `external:write` — no vault pipeline —
+  skipped by the session snapshot; "Save as…" copies into the active vault).
 - `plugin-host/` — discovery (`plugin-discovery.ts`: built-in root,
   `<userData>/plugins/*`, `DREY_EXTRA_PLUGIN_DIR`; manifest validation;
   `plugins.disabled` + `apiVersion` gating), the host

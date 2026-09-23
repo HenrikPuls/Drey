@@ -105,6 +105,27 @@ entries plus an explicit `dist-electron/plugins/**/*.css`.
 No native modules anywhere (`nspell` and `yaml` are pure JS), so there is
 **no `node-gyp` / electron-rebuild step**.
 
+## File associations ([ADR-0054](09_architecture_decisions/0054-opening-files-from-the-os.md))
+
+`electron-builder.yml` `fileAssociations` registers `.md`, `.markdown`,
+`.mdx` and `.txt` for the **NSIS installer only** — per-user, under
+`HKCU\Software\Classes` (`perMachine: false`); the uninstaller removes
+them. The ProgIds are `Drey.Markdown` (`md`/`markdown`/`mdx`) and `Drey.Text`
+(`txt`) — unique on purpose, since the uninstaller deletes the class key.
+The **portable build registers nothing** (no installer to write the
+registry). Keep the extension list in step with
+`shared/external-open.ts`.
+
+- Windows 10/11 never lets an installer take over an extension the user has
+  explicitly bound (UserChoice). The installer adds Drey to "Open with";
+  the user picks "Always use this app".
+- electron-builder's NSIS macro also writes the extension's class default,
+  so a `.txt` with no explicit UserChoice starts opening in Drey (i.e.
+  Notepad loses the default). Drop the `txt` entry to avoid that.
+- A launched file arrives as a command-line argument; a second launch is
+  forwarded to the running instance (`second-instance`). Dev:
+  `npm run electron -- C:\path\x.md`.
+
 ## First run / limitations
 
 - The first `electron-builder` invocation downloads `winCodeSign` and the

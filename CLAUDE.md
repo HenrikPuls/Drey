@@ -185,6 +185,20 @@ Main process:
   (`vault:refresh`), registry mutations and MCP writes.
   `EditorService.reloadFromVaultChange` auto-reloads **clean** tabs among
   the changed paths; dirty tabs stay last-writer-wins
+- `ExternalFileGate` + `extractOpenPaths` (`electron/external-open.ts`,
+  [ADR-0054](docs/09_architecture_decisions/0054-opening-files-from-the-os.md)) —
+  files the OS hands to Drey (Explorer "Open with" / default program for
+  `.md`/`.markdown`/`.mdx`/`.txt`, registered by the NSIS installer's
+  `fileAssociations`; the portable build registers nothing). Launch argv and
+  `second-instance` are queued, classified by `locateInVaults` (inside a
+  registered vault → an ordinary vault tab; anywhere else → a **pinned
+  external tab**, `external://<path>`, edited normally and saved in place
+  via `external:write` without the vault pipeline; "Save as…" copies it
+  into the active vault) and gated by a read/write allowlist
+  (only OS-collected paths, registered extension, 50 MB). The renderer
+  *pulls* the queue once after session restore, later launches are
+  *pushed*; `src/app/external-open/ExternalOpenService` routes them.
+  External tabs are not session-restored
 - `electron/plugin-host/` — discovery (built-ins +
   `<userData>/plugins/*` + `DREY_EXTRA_PLUGIN_DIR`; manifest validation;
   `plugins.disabled` + `apiVersion` gating), main-side activation
@@ -576,7 +590,15 @@ can dock into the three docks (milestone 20,
 The milestone log lives in
 [docs/milestones-done.md](docs/milestones-done.md).
 
-**Just code-complete: milestone 34 — tasks across vaults + the editor's
+**Just code-complete: milestone 36 — Drey as an Explorer "Open with" /
+default program for Markdown and text** (installer `fileAssociations`;
+argv / `second-instance` → vault tab or pinned, in-place-saved external tab,
+[ADR-0054](docs/09_architecture_decisions/0054-opening-files-from-the-os.md)).
+**Not yet manually verified by the owner** — in particular the installed
+registration (`npm run pack`, then Explorer → Open with), which the
+automated tests cannot cover.
+
+**Also code-complete: milestone 34 — tasks across vaults + the editor's
 undo fix** (the tasks plugin mirrors the tags plugin's per-vault shape:
 Doc | Vault | All scope, `vaultId`-stamped records, vault badges; and a
 fresh CodeMirror state per first load / tab switch, so undo can no
@@ -595,7 +617,7 @@ scope) is **fully shipped** as of milestones 33 + 34.
 ## Milestones
 
 The completed milestone log (1–27) is archived in
-[docs/milestones-done.md](docs/milestones-done.md); milestones 22–34 are
+[docs/milestones-done.md](docs/milestones-done.md); milestones 22–36 are
 summarized in [specs/changelog.md](specs/changelog.md) ("Recent
 milestones") until owner-verified.
 
@@ -604,8 +626,9 @@ milestones") until owner-verified.
   27 (OCR), 28 (multi-vault) and 30 (PDF embeds + viewer tab) are
   likewise code-complete and **still awaiting manual verification by
   the owner**.
-- **Just code-complete:** milestones 33 (tag system round) and 34
-  (tasks across vaults + undo fix) — see "Current State" above.
+- **Just code-complete:** milestones 33 (tag system round), 34
+  (tasks across vaults + undo fix), 35 (pinned tabs) and 36 (open files
+  from the OS) — see "Current State" above.
 - **Next:** the provider program: Req-31 MCP client, then copilot-web
   re-apply + copilot-cli spike, or the Office remainder of Req-2 (needs
   a rendering strategy discussion first).

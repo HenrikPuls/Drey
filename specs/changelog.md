@@ -20,6 +20,32 @@ recorded as an explicit decision. The parity checklist lives in
 
 ## Recent milestones
 
+### Milestone 36 — Drey as an Explorer "Open with" / default program for Markdown and text
+
+- **File associations** — the NSIS installer registers `.md`, `.markdown`,
+  `.mdx` and `.txt` (per-user, `fileAssociations` in
+  `electron-builder.yml`); Drey shows up under "Open with" and can be made
+  the default ("Always use this app"). The portable build registers nothing.
+  Caveat: with no explicit user choice a `.txt` starts opening in Drey.
+- **A launched file opens in the running app** — the launch argv (cold
+  start) or `second-instance` (Drey already open, same window) is filtered
+  to existing md/markdown/mdx/txt files. Inside a registered vault → an
+  ordinary vault tab. **Outside every vault → a pinned external tab**
+  (`external://<path>`, marked "Outside your vaults"): edited normally and
+  **Ctrl+S saves back to the original location** (file's own line endings
+  kept; no vault pipeline — no frontmatter bump, index or on-save Actions);
+  never replaced by the next file, no unpin. "Save as…" still copies it
+  into the active vault. External tabs are not restored after a restart.
+- **Safety** — main keeps a read/write allowlist of the paths it collected
+  from the OS itself (plus extension + 10 MB gate; a write needs the file to
+  still exist), so the renderer can neither read nor write arbitrary files. Cold start is a renderer *pull* after session restore
+  (a push would race startup); later launches are a push. A launch that
+  opened a file skips the startup daily-note fallback.
+- Dev: `npm run electron -- C:\path\x.md` forwards arguments.
+- ADR: [0054](../docs/09_architecture_decisions/0054-opening-files-from-the-os.md).
+  Deferred: PDF/image/code associations, restoring external tabs, live
+  reload of a changed external file, drag-in of out-of-vault files.
+
 ### Milestone 35 — pinned tabs + a Save / Don't save / Cancel prompt on tab close
 
 - **Pin a tab** — tab context menu → "Pin tab" / "Unpin tab" (text, image

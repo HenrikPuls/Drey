@@ -22,7 +22,10 @@ const electronPath = require('electron');
 const env = { ...process.env };
 delete env.ELECTRON_RUN_AS_NODE;
 
-const child = spawn(electronPath, ['.'], {
+// Anything after `--` (`npm run electron -- C:\notes\x.md`) reaches the app's
+// argv, so a file launch can be tried in dev exactly like an Explorer
+// double-click (ADR-0054).
+const child = spawn(electronPath, ['.', ...process.argv.slice(2)], {
   stdio: 'inherit',
   env,
   cwd: path.join(__dirname, '..'),
