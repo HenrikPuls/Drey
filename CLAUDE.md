@@ -94,8 +94,10 @@ toolchain is removable by deleting `.tools/`). Never assume a bare `node`,
   a shared tag chip field (`TagField`, also handed to plugins as
   `api.ui.createTagField`). Its **search** panel: scope switch
   **File | Vault | All**, tag chips AND + free text with
-  case/whole-word/regex toggles, per-file grouped hits, and replace
-  (buffer patch in file scope; one bundled confirmation vault-wide, MCP
+  case/whole-word/regex toggles, per-file grouped hits, replace
+  (buffer patch in file scope; one bundled confirmation vault-wide), the
+  Export scratch tab and an LLM **Summarize** digest of the hits
+  (milestone 37, editable `builtin:search-summary` prompt). MCP
   `vault_search` takes an optional `vault` argument.
   The MCP server reads the index through the registered
   `SectionSearchProvider` (which also serves vocabulary + prefix styles)
@@ -277,9 +279,13 @@ Renderer (Angular):
   `Aa`/`ab`/`.*` match toggles → section hits **grouped per file** (click
   opens the file at the line through the document API, vault-aware), a
   replace row (file scope patches the buffer; vault/all goes through one
-  bundled per-file-diff confirmation), and an **Export** button that dumps
-  the hits into an unsaved `search-results.md` scratch tab. Panel + toggle
-  prefs persist in `localStorage['drey.search']`
+  bundled per-file-diff confirmation), an **Export** button that dumps
+  the hits into an unsaved `search-results.md` scratch tab, and a
+  **Summarize** button (when an LLM is configured) that streams a topic
+  digest of the hits — via the plugin's `summarise` backend over the
+  editable `builtin:search-summary` template — into an unsaved
+  `search-summary.md` scratch tab, cancellable (milestone 37). Panel +
+  toggle prefs persist in `localStorage['drey.search']`
 - Tasks panel — `plugins/tasks/` (DOM dock widget, ADR-0033):
   checkbox / `#task` lines in the open document, the whole vault, or all
   vaults (Doc | Vault | All scope toggle, milestone 34) · "hide done" · a

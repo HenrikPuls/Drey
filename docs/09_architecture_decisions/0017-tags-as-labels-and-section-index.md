@@ -113,6 +113,18 @@ Reason: the digest needs a configured local model, and a stale
 `dist-electron` (CLAUDE.md's staleness trap) surfaces the failure as an
 opaque "error invoking remote". Re-enabling it is a UI-only change.
 
+> **Milestone 37 — re-enabled inside the plugin.** The digest ships as the
+> tags plugin's own `summarise` backend method (not a base channel): the
+> panel passes its current hits, the main side loads the **editable**
+> `builtin:search-summary` template from app config (the base
+> `SEARCH_SUMMARY_PROMPT` constant only backs a broken stored text) and
+> runs one cancellable `ctx.llm.chat` call (whole sections up to a
+> 60 000-character budget; whole-section cut, the reply says so). Deltas
+> stream out-of-band (`summary:delta` plugin event / `llm:cancel` for the
+> Stop button, ADR-0014) into a `search-summary.md` scratch tab — the
+> staleness trap above is handled the usual way: rebuild + restart after
+> touching `plugins/**`.
+
 ### Tag _suggestion_ survives, reshaped
 
 The **Autotag** button (drawer) sends the entry text plus the tag

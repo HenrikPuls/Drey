@@ -4,12 +4,14 @@ import type {
   SectionSearchProvider,
   SectionSearchScope,
 } from '../../../shared/plugin-api';
+import { SEARCH_SUMMARY_PROMPT } from '../../../shared/config/schema';
+import type { ChatMessage } from '../../../shared/llm';
 import { TAG_AUTO_PALETTE, normalizeTagPrefix } from '../../../shared/tag-style';
 import type { TagPrefixStyle } from '../../../shared/tag-style';
 import { diffStats, lineDiff } from '../../../shared/text-diff';
 import type { DiffRow } from '../../../shared/text-diff';
-import { buildTextMatcher, patchContent } from '../shared/search';
-import type { TagSearchQuery } from '../shared/search';
+import { buildSearchSummaryMaterial, buildTextMatcher, patchContent } from '../shared/search';
+import type { TagSearchHit, TagSearchQuery } from '../shared/search';
 import { TagIndex } from './tag-index';
 
 /**
@@ -18,9 +20,17 @@ import { TagIndex } from './tag-index';
  * feeds them through the save-hook and vault-change registries, and
  * registers the section-search provider that MCP's `vault_search`, the
  * SDK's `api.search` and the base tag vocabulary service read. Also owns
- * the tag prefix colors (Settings → Tags, per-plugin config) and the
- * cross-file replace backend.
+ * the tag prefix colors (Settings → Tags, per-plugin config), the
+ * cross-file replace backend, and the search-result summarise backend
+ * (milestone 37 — the panel's "Summarize" button; the call runs main-side
+ * because the editable `builtin:search-summary` prompt lives in app
+ * config, and streaming/cancellation ride the plugin event + task
+ * registries).
  */
+
+/** Mirrors the base `isAbortError` (electron/llm/llm-tasks.ts); plugins cannot import from electron/. */
+const isAbort = (error: unknown): boolean =>
+  error instanceof Error && (error.name === 'AbortError' || error.name === 'TimeoutError');
 const plugin: MainPluginModule = {
   async activate(ctx: MainPluginContext) {
     const index = new TagIndex(
@@ -174,7 +184,7 @@ const plugin: MainPluginModule = {
       diff: DiffRow[];
     }
 
-    const queryOf = (request: ReplaceRequest): TagSearchQuery => ({
+    const queryOf = (request: { query?: TagSearchQuery }): TagSearchQuery => ({
       tags: Array.isArray(request.query?.tags) ? (request.query?.tags as string[]) : [],
       text: typeof request.query?.text === 'string' ? request.query.text : '',
       ...(request.query?.match !== undefined ? { match: request.query.match } : {}),
@@ -274,6 +284,100 @@ const plugin: MainPluginModule = {
         error = e instanceof Error ? e.message : String(e);
       }
       return { applied, ...(error !== undefined ? { error } : {}) };
+    });
+
+    // -- Search summarise (the panel's "Summarize" button, milestone 37) -----
+
+    type SummariseReply =
+      | { kind: 'ok'; text: string; included: number; total: number }
+      | { kind: 'cancelled' }
+      | { kind: 'error'; message: string };
+
+    interface SummariseRequest {
+      query?: TagSearchQuery;
+      /** The panel's current hits — already merged with unsaved open buffers there. */
+      hits?: unknown;
+      /** Renderer-minted llm task id — enables the panel's Stop via `llm:cancel`. */
+      taskId?: string;
+    }
+
+    /** Defensive re-shape of the renderer's hit list (kept to the fields used). */
+    const summariseHits = (raw: unknown): TagSearchHit[] => {
+      if (!Array.isArray(raw)) {
+        return [];
+      }
+      const hits: TagSearchHit[] = [];
+      for (const item of raw) {
+        const hit = item as Partial<TagSearchHit> | null;
+        if (
+          hit !== null &&
+          typeof hit === 'object' &&
+          typeof hit.path === 'string' &&
+          typeof hit.heading === 'string' &&
+          typeof hit.line === 'number' &&
+          typeof hit.text === 'string'
+        ) {
+          hits.push({
+            path: hit.path,
+            heading: hit.heading,
+            line: hit.line,
+            snippet: typeof hit.snippet === 'string' ? hit.snippet : '',
+            text: hit.text,
+            ...(typeof hit.vaultId === 'string' ? { vaultId: hit.vaultId } : {}),
+          });
+        }
+      }
+      return hits;
+    };
+
+    ctx.ipc.handle('summarise', async (payload) => {
+      const request = (payload ?? {}) as SummariseRequest;
+      try {
+        if (!ctx.llm.enabled()) {
+          throw new Error('Connect an LLM in Settings → LLM to summarize search results.');
+        }
+        const hits = summariseHits(request.hits);
+        if (hits.length === 0) {
+          throw new Error('There is nothing to summarize — run a search first.');
+        }
+        // The editable built-in template is the live prompt (the user can
+        // reword it under Settings → Actions); this constant only backs a
+        // broken/missing stored text.
+        const template = ctx.appConfig
+          .get()
+          .actions.templates.find((entry) => entry.builtin === 'search-summary');
+        const system =
+          template !== undefined && template.prompt.trim() !== ''
+            ? template.prompt
+            : SEARCH_SUMMARY_PROMPT;
+        const material = buildSearchSummaryMaterial(queryOf(request), hits);
+        const messages: ChatMessage[] = [
+          { role: 'system', content: system },
+          { role: 'user', content: material.message },
+        ];
+        const taskId = typeof request.taskId === 'string' ? request.taskId : undefined;
+        const result = await ctx.llm.chat(messages, {
+          ...(taskId !== undefined ? { taskId } : {}),
+          // Streaming reaches the renderer out-of-band (the plugin's
+          // `summary:delta` event); a non-streaming provider fires exactly
+          // once with the full text.
+          onDelta: (text) => ctx.ipc.emit('summary:delta', { taskId, text }),
+        });
+        return {
+          kind: 'ok' as const,
+          text: result.text,
+          included: material.included,
+          total: material.total,
+        };
+      } catch (error) {
+        if (isAbort(error)) {
+          return { kind: 'cancelled' as const };
+        }
+        return {
+          kind: 'error' as const,
+          message: error instanceof Error ? error.message : String(error),
+        };
+      }
     });
 
     ctx.log('activated');

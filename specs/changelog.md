@@ -20,6 +20,42 @@ recorded as an explicit decision. The parity checklist lives in
 
 ## Recent milestones
 
+### Milestone 37 — search summarise: an LLM topic digest from the search results
+
+- **"Summarize" in the Search panel** — next to Export (same visibility:
+  visible once a search has hits; it appears only when an LLM is
+  configured in Settings → LLM, disabled-state tooltip otherwise). Works
+  in every scope (File / Vault / All), including unsaved-buffer hits.
+- **How it runs** — the tags plugin's renderer passes its current hit set
+  to a new plugin-side `summarise` backend; main loads the **editable**
+  `builtin:search-summary` Action template from app config (reworded to a
+  comprehensive topic digest: thematic blocks with bold lead-ins, key
+  facts, an "Open questions / contradictions" paragraph, path citations,
+  in the notes' language — stored-but-never-edited copies refresh to the
+  new default), packs the whole matching sections up to a ~60 000
+  character budget (`buildSearchSummaryMaterial`, cuts at a whole-section
+  boundary and says so), and runs one `ctx.llm.chat` call.
+- **Streaming + cancellation** — deltas stream out-of-band (plugin
+  `summary:delta` event, ADR-0014/0047 contract: non-streaming providers
+  deliver once) into a new unsaved `search-summary.md` scratch tab
+  (throttled buffer flushes; the panel header shows "summarizing…"); the
+  button becomes **Stop** (`llm:cancel` → the same abort registry as
+  chat/OCR). Completed, cancelled and failed runs all leave the partial
+  digest in the tab; errors also surface in the panel. Save-as keeps the
+  digest as a note.
+- Tests: `buildSearchSummaryMaterial` / `formatSearchSummaryHeader` /
+  `describeSearchQuery` in `plugins/tags/shared/search.spec.ts`. The
+  plugin specs never actually ran (`ng test` ignores the
+  `plugins/**/*.spec.ts` entry in angular.json) — they now run via
+  `npm run test:plugins` (root `vitest.plugins.config.mts`), and their
+  stale never-executed expectations were repaired to the shipped
+  behavior (1-based inclusive replace ranges, literal regex replacement —
+  no `$1` refs, V8 regex error wording, extensionless `{{title}}`).
+- ADR: [0017](../docs/09_architecture_decisions/0017-tags-as-labels-and-section-index.md)
+  (digest section), runtime view §6.43. No new ADR — the feature follows
+  ADR-0044 (feature logic in the plugin), ADR-0047 (base transport) and
+  ADR-0014 (cancel, no timeout) as-is.
+
 ### Milestone 36 — Drey as an Explorer "Open with" / default program for Markdown and text
 
 - **File associations** — the NSIS installer registers `.md`, `.markdown`,

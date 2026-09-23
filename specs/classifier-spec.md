@@ -95,24 +95,34 @@ today.
 
 ---
 
-## Summarise search results (parked)
+## Summarise search results (shipped, milestone 37)
 
-A short prose digest of the sections a tag search returned.
-`SEARCH_SUMMARY_PROMPT` (`shared/app-config.ts`), the built-in
-**"Summarise search results"** Action template, run by
-`ActionRunner.summariseSearchResults(query)` over IPC
-`tags:summarise-results`. The backend is wired; the search panel's UI
-button is currently removed (a plain Markdown **Export** replaced it),
-because the digest needs a configured local LLM and a stale
-`dist-electron` surfaces the failure as an opaque "error invoking remote".
-Re-enabling it is a UI-only change.
+A comprehensive topic digest of the sections a tag search returned.
+`SEARCH_SUMMARY_PROMPT` (`shared/config/schema.ts`) ships as the built-in
+**"Summarise search results"** Action template and stays **editable** in
+Settings → Actions — the tags plugin's `summarise` backend loads the
+stored (possibly user-edited) text from app config and only falls back to
+the constant. The Search panel's **Summarize** button (visible when an
+LLM is configured) sends the hit sections — whole sections up to a
+~60 000-character budget, cut at a section boundary and stated — through
+`ctx.llm.chat`; the digest streams into an unsaved `search-summary.md`
+scratch tab (cancel via the panel's Stop button, ADR-0014). Details:
+runtime view §6.43 and [ADR-0017](../docs/09_architecture_decisions/0017-tags-as-labels-and-section-index.md).
 
 ```
 System:
-You are given the sections of a personal note vault that match a search.
-Write a short prose digest (3–6 sentences, present tense, no bullet
-points, no greeting, no heading) of what they collectively say. Note any
-contradictions or open questions last. Return only the digest text.
+You are given the sections of a personal note vault that matched a
+search, each introduced by its path, line and heading. Write a
+comprehensive digest of what they collectively say about the search
+topic, in the same language as the notes. Group the material into short
+thematic blocks, each opening with a bold lead-in; within a block state
+the key facts, decisions and arguments concretely (names, dates,
+numbers) instead of paraphrasing vaguely. Never invent content that is
+not in the sections. End with a paragraph "Open questions /
+contradictions" listing what the sections leave unresolved or state
+inconsistently — omit it when there is none. Cite sources by their path
+in parentheses where that helps navigation. No greeting, no top-level
+heading, no closing pleasantries. Return only the digest text.
 ```
 
 ---

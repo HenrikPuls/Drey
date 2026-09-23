@@ -290,7 +290,8 @@ function applyToLine(
 /**
  * A Markdown document listing the search hits: a header line describing the
  * query, then one `## <path>:<line>` section per hit followed by its full
- * text. No LLM -- this is the always-available alternative to the digest.
+ * text. No LLM — the deterministic alternative to the panel's "Summarize"
+ * digest (both start from the same hit list).
  */
 export function formatSearchResultsDoc(
   query: TagSearchQuery,
@@ -312,6 +313,99 @@ export function formatSearchResultsDoc(
   }
 
   return `${parts.join('\n\n')}\n`;
+}
+
+/** Rough character budget for the summarise user message (~15k tokens). */
+export const SEARCH_SUMMARY_CHAR_BUDGET = 60_000;
+
+/** One-line human description of a query — the digest header and the prompt. */
+export function describeSearchQuery(query: TagSearchQuery): string {
+  const parts: string[] = [];
+  if (query.tags.length > 0) {
+    parts.push(query.tags.map((tag) => `#${tag.replace(/^#/, '')}`).join(' + '));
+  }
+  const text = query.text.trim();
+  if (text !== '') {
+    parts.push(`"${text}"`);
+  }
+  return parts.length === 0 ? '(everything)' : parts.join(' · ');
+}
+
+/**
+ * The scratch-tab head the digest streams into below (title, query,
+ * timestamp line, rule). The timestamp is handed in preformatted — this
+ * module is shared by both sides and stays free of clock concerns.
+ */
+export function formatSearchSummaryHeader(
+  query: TagSearchQuery,
+  sectionCount: number,
+  timestamp: string,
+): string {
+  return [
+    '# Search summary',
+    '',
+    `Query: ${describeSearchQuery(query)}`,
+    `Generated from ${sectionCount} search section${sectionCount === 1 ? '' : 's'} on ${timestamp}. Review before keeping.`,
+    '',
+    '---',
+    '',
+  ].join('\n');
+}
+
+export interface SearchSummaryMaterial {
+  /** The complete user message for the summarise call. */
+  message: string;
+  /** Sections actually included — a prefix of the hits (whole sections only). */
+  included: number;
+  total: number;
+}
+
+/**
+ * Builds the summarise user message (milestone 37): a query line, then
+ * every hit as a `### path:line — heading` block with its full section
+ * text, up to `budget` characters. Cutting happens at a whole-section
+ * boundary and the message says so — the model must not summarize beyond
+ * what it was given. The first section always makes it in, however large.
+ * Sections spanning several vaults are labelled `vaultId/path` so the
+ * digest's path citations stay unambiguous.
+ */
+export function buildSearchSummaryMaterial(
+  query: TagSearchQuery,
+  hits: readonly TagSearchHit[],
+  budget: number = SEARCH_SUMMARY_CHAR_BUDGET,
+): SearchSummaryMaterial {
+  const multiVault =
+    new Set(hits.map((hit) => hit.vaultId).filter((id) => id !== undefined)).size > 1;
+  const blocks: string[] = [];
+  let used = 0;
+  for (const hit of hits) {
+    const where =
+      (multiVault && hit.vaultId !== undefined ? `${hit.vaultId}/${hit.path}` : hit.path) +
+      `:${hit.line}`;
+    const heading = hit.heading === '' ? '' : ` — ${hit.heading}`;
+    const block = `### ${where}${heading}\n${hit.text.trim()}`;
+    const cost = block.length + 2;
+    if (blocks.length > 0 && used + cost > budget) {
+      break;
+    }
+    blocks.push(block);
+    used += cost;
+  }
+  const intro = [
+    `Search query: ${describeSearchQuery(query)}`,
+    `Sections: ${blocks.length}${
+      blocks.length < hits.length
+        ? ` of ${hits.length} — the remaining sections exceeded the content budget and are NOT included`
+        : ''
+    }`,
+    '',
+    'Write the digest from ONLY these sections:',
+  ];
+  return {
+    message: [...intro, '', blocks.join('\n\n')].join('\n'),
+    included: blocks.length,
+    total: hits.length,
+  };
 }
 
 function makeSnippet(text: string, needles: readonly string[]): string {

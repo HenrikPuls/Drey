@@ -1,3 +1,4 @@
+// @vitest-environment jsdom
 import { TemplateLibrary } from './library';
 
 /**
@@ -80,7 +81,8 @@ describe('templates plugin library', () => {
     const result = await library.insert('templates/todo.md');
     expect(result.ok).toBe(true);
     expect(inserted[0]).not.toContain('title: internal');
-    expect(inserted[0]).toContain('# today.md');
+    // The tab name without the .md extension is the title.
+    expect(inserted[0]).toContain('# today');
     expect(inserted[0]).toMatch(/\d{4}-\d{2}-\d{2} \d{2}:\d{2}/);
   });
 
@@ -96,7 +98,13 @@ describe('templates plugin library', () => {
 
   it('tracks recents, most-recent first, capped, surviving reloads', async () => {
     localStorage.removeItem('drey.templates.recent');
-    const { api } = fakeApi({}, TREE);
+    const { api } = fakeApi(
+      {
+        'templates/todo.md': '# todo',
+        'templates/meetings/1-1.md': '# 1-1',
+      },
+      TREE,
+    );
     const library = new TemplateLibrary(api);
     await library.reload();
     await library.insert('templates/todo.md');

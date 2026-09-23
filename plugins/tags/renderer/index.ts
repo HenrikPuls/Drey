@@ -9,6 +9,7 @@ import type {
 import {
   buildTextMatcher,
   formatSearchResultsDoc,
+  formatSearchSummaryHeader,
   patchContent,
   runTagSearch,
 } from '../shared/search.js';
@@ -93,6 +94,13 @@ function toggleButton(
   return node;
 }
 
+/** `2026-09-20 18:42` — the summary header's generation stamp (local time). */
+function timestampNow(): string {
+  const pad = (value: number): string => String(value).padStart(2, '0');
+  const now = new Date();
+  return `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())} ${pad(now.getHours())}:${pad(now.getMinutes())}`;
+}
+
 /**
  * The Tags plugin's renderer: the redesigned Search dock panel (scopes
  * file/vault/all, match-case / whole-word / regex toggles, a replace row
@@ -135,6 +143,8 @@ const plugin: PluginRendererModule = {
       ran: false,
       /** Matcher / provider error, surfaced instead of a silent empty list. */
       error: null as string | null,
+      /** The summarise flow's error (a failed generation), beside the search error. */
+      summaryError: null as string | null,
     };
     /** File groups the user folded; a fresh result set starts unfolded. */
     const collapsedFiles = new Set<string>();
@@ -179,12 +189,128 @@ const plugin: PluginRendererModule = {
       return doc !== null && doc.kind === 'text' ? doc : null;
     };
 
+    // -- summarise (the LLM digest of the current hits, milestone 37) ---------
+
+    /** The scratch tab the digest streams into (Save-as keeps it). */
+    const SUMMARY_TAB = 'search-summary.md';
+
+    interface SummaryTask {
+      taskId: string;
+      /** Document head (title, query, timestamp) — written before any digest text. */
+      header: string;
+      /** Accumulated digest text from the streamed deltas. */
+      text: string;
+      /** Appended on the final flush (cancelled / failed marker, truncation note). */
+      tail: string;
+      flushTimer: number | null;
+    }
+
+    let summaryTask: SummaryTask | null = null;
+
+    const writeSummaryBuffer = (task: SummaryTask, tail: string): void => {
+      api.documents.setBuffer(SUMMARY_TAB, task.header + task.text + tail);
+    };
+
+    /** Stops the running generation; the invoke settles as cancelled and the completion closure finishes the tab. */
+    const cancelSummary = (): void => {
+      const task = summaryTask;
+      if (task === null) {
+        return;
+      }
+      void api.llm.cancelTask(task.taskId);
+    };
+
+    const startSummary = (): void => {
+      if (summaryTask !== null || state.hits.length === 0) {
+        return;
+      }
+      if (!api.llm.enabled()) {
+        state.summaryError = 'Connect an LLM in Settings → LLM to summarize search results.';
+        notify();
+        return;
+      }
+      const count = state.hits.length;
+      const task: SummaryTask = {
+        taskId: crypto.randomUUID(),
+        header: formatSearchSummaryHeader(currentQuery(), count, timestampNow()),
+        text: '',
+        tail: '',
+        flushTimer: null,
+      };
+      summaryTask = task;
+      state.summaryError = null;
+      api.documents.openScratch(SUMMARY_TAB, `${task.header}_Generating…_`);
+      notify();
+
+      const flush = (): void => {
+        if (task.flushTimer !== null) {
+          window.clearTimeout(task.flushTimer);
+          task.flushTimer = null;
+        }
+        writeSummaryBuffer(task, task.tail);
+      };
+      void (async () => {
+        try {
+          const reply = (await api.backend.invoke('summarise', {
+            query: currentQuery(),
+            hits: state.hits,
+            taskId: task.taskId,
+          })) as SummariseReply;
+          if (reply.kind === 'ok') {
+            // The return value is authoritative — a lost delta cannot truncate the digest.
+            task.text = reply.text;
+            if (reply.included < reply.total) {
+              task.tail = `\n\n> Generated from ${reply.included} of ${reply.total} matching sections — the rest exceeded the content budget.`;
+            }
+          } else if (reply.kind === 'cancelled') {
+            task.tail = '\n\n_(cancelled)_';
+          } else {
+            task.tail = `\n\n_(failed: ${reply.message})_`;
+            state.summaryError = reply.message;
+          }
+        } catch (error) {
+          const message = error instanceof Error ? error.message : String(error);
+          task.tail = `\n\n_(failed: ${message})_`;
+          state.summaryError = message;
+        }
+        flush();
+        if (summaryTask === task) {
+          summaryTask = null;
+        }
+        notify();
+      })();
+    };
+
+    // Deltas arrive out-of-band (ADR-0014/0047): accumulate, flush the tab
+    // throttled so the streaming stays visible without spamming undo steps.
+    api.backend.on('summary:delta', (payload) => {
+      const task = summaryTask;
+      if (task === null) {
+        return;
+      }
+      const data = (payload ?? {}) as { taskId?: unknown; text?: unknown };
+      if (data.taskId !== task.taskId || typeof data.text !== 'string') {
+        return;
+      }
+      task.text += data.text;
+      if (task.flushTimer === null) {
+        task.flushTimer = window.setTimeout(() => {
+          task.flushTimer = null;
+          if (summaryTask === task) {
+            writeSummaryBuffer(task, '\n\n_Generating…_');
+          }
+        }, 150);
+      }
+    });
+
     const clear = (): void => {
+      cancelSummary();
       state.queryTags = [];
       state.queryText = '';
       state.hits = [];
       state.ran = false;
       state.error = null;
+      state.summaryError = null;
       notify();
     };
 
@@ -468,10 +594,14 @@ const plugin: PluginRendererModule = {
       defaultOpen: false,
       defaultFlex: 260,
       flush: true,
-      status: () =>
-        state.ran && state.error === null
+      status: () => {
+        if (summaryTask !== null) {
+          return 'summarizing…';
+        }
+        return state.ran && state.error === null
           ? `${state.hits.length} hit${state.hits.length === 1 ? '' : 's'}`
-          : null,
+          : null;
+      },
       headerActions: (host) => {
         const row = el('div', 'tag-search-hdr');
         const seg = el('span', 'seg');
@@ -593,7 +723,14 @@ const plugin: PluginRendererModule = {
           );
           api.documents.openScratch('search-results.md', doc);
         });
-        summaryRow.append(summaryText, exportButton, clearButton);
+        const summarizeButton = button('ghost', 'Summarize', () => {
+          if (summaryTask !== null) {
+            cancelSummary();
+            return;
+          }
+          startSummary();
+        });
+        summaryRow.append(summaryText, exportButton, summarizeButton, clearButton);
 
         const renderToggles = (): void => {
           caseBtn.classList.toggle('on', prefs.matchCase);
@@ -639,7 +776,12 @@ const plugin: PluginRendererModule = {
             errorRow.hidden = false;
             return;
           }
-          errorRow.hidden = true;
+          if (state.summaryError !== null) {
+            errorRow.textContent = state.summaryError;
+            errorRow.hidden = false;
+          } else {
+            errorRow.hidden = true;
+          }
           if (state.hits.length === 0) {
             resultsBox.appendChild(el('p', 'tag-search-empty', 'No matches.'));
             return;
@@ -703,6 +845,19 @@ const plugin: PluginRendererModule = {
           replaceAllBtn.disabled = !hasQuery() || prefs.scope === 'file' && activeTextDoc() === null;
           clearButton.disabled = !hasQuery();
           exportButton.hidden = state.hits.length === 0 || !state.ran;
+          const summarizing = summaryTask !== null;
+          summarizeButton.hidden = !summarizing && (exportButton.hidden || !api.llm.enabled());
+          summarizeButton.textContent = summarizing ? 'Stop' : 'Summarize';
+          if (summarizing) {
+            summarizeButton.disabled = false;
+            summarizeButton.title = 'Cancel the summary generation';
+          } else {
+            const llmReady = api.llm.enabled();
+            summarizeButton.disabled = !llmReady;
+            summarizeButton.title = llmReady
+              ? 'Summarize the search results with the connected LLM'
+              : 'Connect an LLM in Settings → LLM to enable this';
+          }
           renderResults();
         };
 
@@ -746,5 +901,11 @@ interface ReplacePreview {
   ops?: ReplaceOp[];
   error?: string;
 }
+
+/** Mirrors the main-side 'summarise' reply. */
+type SummariseReply =
+  | { kind: 'ok'; text: string; included: number; total: number }
+  | { kind: 'cancelled' }
+  | { kind: 'error'; message: string };
 
 export default plugin;

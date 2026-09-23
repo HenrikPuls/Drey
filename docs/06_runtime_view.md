@@ -2037,3 +2037,57 @@ _(Dropped: the batch-tag-suggestion inbox — see [ADR-0017] and
 [ADR-0018](09_architecture_decisions/0018-manual-refresh-no-file-watcher.md).
 The chokidar file-watcher reaction, originally dropped with ADR-0018,
 came back as the opt-in §6.31 / [ADR-0045](09_architecture_decisions/0045-optional-vault-file-watcher.md).)_
+
+## 6.43 Search summarise → LLM digest → `search-summary.md` (milestone 37)
+
+The Search panel's **Summarize** button (next to Export; hidden while no
+LLM is configured, ADR-0014's "cancel instead of timeout" applies) turns
+the current hit list into a streamed, cancellable topic digest. The call
+lives in the tags plugin's main entry: the renderer owns the hit set
+(already merged with unsaved buffers), main owns the editable prompt and
+the LLM transport. The digest streams into an unsaved
+`search-summary.md` scratch tab — Save-as keeps it, same as Export.
+
+```mermaid
+sequenceDiagram
+    actor User
+    participant Panel as Search panel (tags plugin, renderer)
+    participant Backend as tags plugin main ('summarise')
+    participant Config as AppConfigStore
+    participant Chat as ctx.llm.chat → LlmTaskRegistry → provider
+    participant EditorService
+
+    User->>Panel: Summarize
+    Panel->>Panel: taskId = crypto.randomUUID()
+    Panel->>EditorService: openScratch('search-summary.md', header + '_Generating…_')
+    Panel->>Backend: invoke('summarise', { query, hits, taskId })
+    Backend->>Config: actions.templates → 'builtin:search-summary' prompt
+    Backend->>Backend: buildSearchSummaryMaterial (whole sections, ≤ 60 000 chars)
+    Backend->>Chat: chat(system, user) with taskId + onDelta
+    loop while generating
+        Chat-->>Backend: onDelta(text)
+        Backend--)Panel: 'summary:delta' { taskId, text }
+        Panel->>EditorService: setBuffer('search-summary.md', header + text) (throttled 150 ms)
+    end
+    alt user clicks Stop
+        User->>Panel: Stop
+        Panel->>Chat: llm:cancel(taskId) → AbortController
+        Chat-->>Backend: AbortError
+        Backend-->>Panel: { kind: 'cancelled' }
+        Panel->>EditorService: flush '(cancelled)' tail
+    else completed
+        Chat-->>Backend: LlmChatResult
+        Backend-->>Panel: { kind: 'ok', text, included, total }
+        Panel->>EditorService: setBuffer(digest + truncation note if included < total)
+    end
+    User->>EditorService: Ctrl+S → Save-as (keeps the digest as a note)
+```
+
+Scrolling during generation is stick-to-bottom: each 150 ms flush is an
+external in-place reload (`setContent`), which measures whether the view
+is pinned near the bottom (≤ 32 px) BEFORE the swap and restores the pin
+after it — the view follows the growing tail by default, keeps the user's
+position while they have scrolled up, and resumes following once they
+scroll back down. (The old `anchor === 0 → scrollTop = 0` snap in
+`setContent` is gone; fresh opens still start at the top via
+`loadDocument`.)

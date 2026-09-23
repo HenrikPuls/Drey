@@ -597,11 +597,23 @@ export const BUILTIN_TEMPLATE_IDS: Record<BuiltinAction, string> = {
 };
 
 /**
- * The system prompt for the tag-search "Summarise" button: the matching
- * sections go in as the user message, a short prose digest comes out.
- * English (the language sweep landed this one already).
+ * The system prompt for the tag-search "Summarize" button (milestone 37):
+ * the matching sections go in as the user message, a structured topic
+ * digest comes out. Shipped as the editable `builtin:search-summary`
+ * Action template — the summarise backend loads the stored (possibly
+ * user-edited) text from app config and only falls back to this constant.
+ * English (the language sweep landed this one already); the digest itself
+ * follows the notes' language.
  */
-export const SEARCH_SUMMARY_PROMPT = `You are given the sections of a personal note vault that match a search. Write a short prose digest (3–6 sentences, present tense, no bullet points, no greeting, no heading) of what they collectively say. Note any contradictions or open questions last. Return only the digest text.`;
+export const SEARCH_SUMMARY_PROMPT = `You are given the sections of a personal note vault that matched a search, each introduced by its path, line and heading. Write a comprehensive digest of what they collectively say about the search topic, in the same language as the notes. Group the material into short thematic blocks, each opening with a bold lead-in; within a block state the key facts, decisions and arguments concretely (names, dates, numbers) instead of paraphrasing vaguely. Never invent content that is not in the sections. End with a paragraph "Open questions / contradictions" listing what the sections leave unresolved or state inconsistently — omit it when there is none. Cite sources by their path in parentheses where that helps navigation. No greeting, no top-level heading, no closing pleasantries. Return only the digest text.`;
+
+/**
+ * The default `SEARCH_SUMMARY_PROMPT` text before milestone 37 reworded it.
+ * `normalizeAppConfig` refreshes a stored `builtin:search-summary` whose
+ * prompt still equals this — the user never edited it — while a genuine
+ * user edit keeps its text.
+ */
+export const LEGACY_SEARCH_SUMMARY_PROMPT = `You are given the sections of a personal note vault that match a search. Write a short prose digest (3–6 sentences, present tense, no bullet points, no greeting, no heading) of what they collectively say. Note any contradictions or open questions last. Return only the digest text.`;
 
 /**
  * The system prompt behind the drawer's "Autotag" button. `{tags}` is

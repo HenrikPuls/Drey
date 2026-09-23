@@ -1,5 +1,13 @@
-import { buildTextMatcher, replaceInRanges, runTagSearch } from './search';
-import type { SearchableSection } from './search';
+import {
+  buildSearchSummaryMaterial,
+  buildTextMatcher,
+  describeSearchQuery,
+  formatSearchResultsDoc,
+  formatSearchSummaryHeader,
+  replaceInRanges,
+  runTagSearch,
+} from './search';
+import type { SearchableSection, TagSearchHit } from './search';
 
 /**
  * The matcher flags (milestone 33): match-case, whole word, regex — plus
@@ -39,7 +47,7 @@ describe('buildTextMatcher', () => {
     const bad = buildTextMatcher({ tags: [], text: 'f(o', match: { regex: true } });
     expect(bad.ok).toBe(false);
     if (!bad.ok) {
-      expect(bad.error).toContain('RegExp');
+      expect(bad.error.toLowerCase()).toContain('regular expression');
     }
     // A non-compiling query matches nothing instead of throwing.
     expect(runTagSearch(SECTIONS, { tags: [], text: 'f(o', match: { regex: true } })).toEqual([]);
@@ -66,14 +74,16 @@ describe('runTagSearch with flags', () => {
 describe('replaceInRanges', () => {
   const lines = ['keep', 'foo says foo', 'bar', 'Foo stays'];
 
-  it('replaces only inside the given ranges', () => {
+  it('replaces only inside the given ranges (1-based, inclusive)', () => {
     const r = replaceInRanges(lines, { tags: [], text: 'foo' }, 'X', [
       { start: 2, end: 3 },
     ]);
     expect(r.ok).toBe(true);
     if (r.ok) {
-      expect(r.lines).toEqual(['keep', 'foo says foo', 'bar', 'X stays']);
-      expect(r.occurrences).toBe(1); // line 3 'Foo' — case-insensitive by default
+      // Lines 2–3 are in range: 'foo says foo' is replaced, 'bar' has no
+      // match, line 4 ('Foo stays') is out of range and untouched.
+      expect(r.lines).toEqual(['keep', 'X says X', 'bar', 'Foo stays']);
+      expect(r.occurrences).toBe(2);
     }
   });
 
@@ -86,24 +96,32 @@ describe('replaceInRanges', () => {
     }
   });
 
-  it('wholeWord leaves substrings alone', () => {
-    const r = replaceInRanges(['barfoobar foo'], { tags: [], text: 'foo' }, 'X', [
+  it('wholeWord leaves substrings alone (flag required)', () => {
+    const r = replaceInRanges(['barfoobar foo'], { tags: [], text: 'foo', match: { wholeWord: true } }, 'X', [
       { start: 1, end: 1 },
-    ], );
+    ]);
     expect(r.ok).toBe(true);
     if (r.ok) {
       expect(r.lines).toEqual(['barfoobar X']);
       expect(r.occurrences).toBe(1);
     }
+    // Without the flag the historical substring default applies.
+    const plain = replaceInRanges(['barfoobar foo'], { tags: [], text: 'foo' }, 'X', [
+      { start: 1, end: 1 },
+    ]);
+    expect(plain.ok).toBe(true);
+    if (plain.ok) {
+      expect(plain.lines).toEqual(['barXbar X']);
+    }
   });
 
-  it('regex mode replaces with the pattern (replacement refs work)', () => {
-    const r = replaceInRanges(['aa bb aa'], { tags: [], text: '(a+)', match: { regex: true } }, '<$1>', [
+  it('regex mode replaces literally (no $1 refs)', () => {
+    const r = replaceInRanges(['aa bb aa'], { tags: [], text: '(a+)', match: { regex: true } }, '<X>', [
       { start: 1, end: 1 },
     ]);
     expect(r.ok).toBe(true);
     if (r.ok) {
-      expect(r.lines).toEqual(['<aa> bb <aa>']);
+      expect(r.lines).toEqual(['<X> bb <X>']);
       expect(r.occurrences).toBe(2);
     }
   });
@@ -122,5 +140,76 @@ describe('replaceInRanges', () => {
       expect(r.lines).toEqual(lines);
       expect(r.occurrences).toBe(0);
     }
+  });
+});
+
+describe('buildSearchSummaryMaterial', () => {
+  const hit = (path: string, text: string, vaultId?: string): TagSearchHit => ({
+    path,
+    heading: `Head ${path}`,
+    line: 1,
+    snippet: '',
+    text,
+    ...(vaultId !== undefined ? { vaultId } : {}),
+  });
+
+  it('labels each section with path, line and heading', () => {
+    const material = buildSearchSummaryMaterial({ tags: [], text: 'foo' }, [hit('a.md', 'body')]);
+    expect(material.message).toContain('### a.md:1 — Head a.md');
+    expect(material.message).toContain('body');
+    expect(material.included).toBe(1);
+    expect(material.total).toBe(1);
+  });
+
+  it('describes the query (tags AND text, trimmed)', () => {
+    const material = buildSearchSummaryMaterial({ tags: ['x', 'y'], text: ' foo bar ' }, [
+      hit('a.md', 'body'),
+    ]);
+    expect(material.message).toContain('Search query: #x + #y · "foo bar"');
+    expect(describeSearchQuery({ tags: [], text: '   ' })).toBe('(everything)');
+  });
+
+  it('prefixes the vault id when the hits span several vaults', () => {
+    const material = buildSearchSummaryMaterial({ tags: [], text: '' }, [
+      hit('a.md', 'one', 'v1'),
+      hit('b.md', 'two', 'v2'),
+    ]);
+    expect(material.message).toContain('### v1/a.md:1');
+    expect(material.message).toContain('### v2/b.md:1');
+  });
+
+  it('cuts at a whole-section boundary and reports the truncation', () => {
+    // Each block costs ~75 chars (label + text); a 200 budget fits two.
+    const material = buildSearchSummaryMaterial(
+      { tags: [], text: '' },
+      [hit('a.md', 'x'.repeat(50)), hit('b.md', 'y'.repeat(50)), hit('c.md', 'z'.repeat(50))],
+      200,
+    );
+    expect(material.included).toBe(2);
+    expect(material.total).toBe(3);
+    expect(material.message).toContain('Sections: 2 of 3');
+    expect(material.message).not.toContain('zzzzz');
+  });
+
+  it('always includes the first section, however large', () => {
+    const material = buildSearchSummaryMaterial({ tags: [], text: '' }, [hit('a.md', 'x'.repeat(500))], 10);
+    expect(material.included).toBe(1);
+    expect(material.total).toBe(1);
+    expect(material.message).toContain('Sections: 1');
+  });
+});
+
+describe('formatSearchSummaryHeader', () => {
+  it('carries title, query, section count, timestamp and the digest rule', () => {
+    const header = formatSearchSummaryHeader({ tags: ['x'], text: 'foo' }, 12, '2026-09-20 18:42');
+    expect(header).toContain('# Search summary');
+    expect(header).toContain('Query: #x · "foo"');
+    expect(header).toContain('Generated from 12 search sections on 2026-09-20 18:42');
+    expect(header).toContain('---');
+  });
+
+  it('uses the singular for one section', () => {
+    const header = formatSearchSummaryHeader({ tags: [], text: '' }, 1, 't');
+    expect(header).toContain('Generated from 1 search section on t');
   });
 });

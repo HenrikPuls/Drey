@@ -31,6 +31,7 @@ import {
   EditorConfig,
   EntryConfig,
   EntryTemplate,
+  LEGACY_SEARCH_SUMMARY_PROMPT,
   LlmConfig,
   LlmProviderId,
   PROVIDER_PRESET_IDS,
@@ -354,6 +355,17 @@ function normalizeEvent(value: unknown): ActionEvent {
 const RETIRED_BUILTIN_TEMPLATE_IDS = new Set(['builtin:note-summary']);
 
 /**
+ * A stored built-in prompt that still equals an OLD shipped default (the
+ * user never edited it) refreshes to the current default; a genuine user
+ * edit is kept as-is. Only the search-summary prompt has a legacy text so
+ * far (its default was reworded when the summarise backend shipped,
+ * milestone 37).
+ */
+function refreshLegacyPrompt(builtin: ActionTemplate['builtin'], stored: string, current: string): string {
+  return builtin === 'search-summary' && stored === LEGACY_SEARCH_SUMMARY_PROMPT ? current : stored;
+}
+
+/**
  * Rebuilds the template list: every built-in is always present exactly
  * once (a user's `name` / `prompt` / `resultKind` edits are kept, matched
  * by id), followed by whatever well-formed user templates the file holds.
@@ -376,7 +388,7 @@ function normalizeTemplates(raw: unknown): ActionTemplate[] {
         ? {
             ...base,
             name: str(saved['name'], base.name),
-            prompt: str(saved['prompt'], base.prompt),
+            prompt: refreshLegacyPrompt(base.builtin, str(saved['prompt'], base.prompt), base.prompt),
             resultKind: normalizeResultKind(saved['resultKind']),
           }
         : base,

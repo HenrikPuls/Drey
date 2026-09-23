@@ -129,7 +129,7 @@
   overflow-wrap: anywhere;
 }
 
-/* summary row: counts · Export · Clear */
+/* summary row: counts · Export · Summarize · Clear */
 
 .tag-search-summary {
   display: flex;

@@ -10,6 +10,7 @@
     "start": "ng serve",
     "watch": "ng build --watch --configuration development",
     "test": "ng test",
+    "test:plugins": "vitest run --config vitest.plugins.config.mts",
     "lint": "eslint \"electron/**/*.ts\" \"shared/**/*.ts\" \"src/**/*.ts\" \"plugins/**/*.ts\"",
     "verify:pack": "node scripts/verify-pack.mjs",
     "build:renderer": "ng build",
