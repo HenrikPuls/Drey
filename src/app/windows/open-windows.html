@@ -3,8 +3,8 @@
 } @else {
   <div class="list">
     @for (doc of editor.openDocs(); track doc.path) {
-      <div class="row" [class.active]="doc.path === editor.activePath()" [title]="doc.path">
-        <button type="button" class="open" (click)="editor.activate(doc.path)">
+      <div class="row" [class.active]="doc.key === editor.activePath()" [title]="doc.path">
+        <button type="button" class="open" (click)="editor.activate(doc.key)">
           <span class="win-glyph" aria-hidden="true"></span>
           <span class="name">{{ doc.name }}</span>
         </button>

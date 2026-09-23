@@ -750,13 +750,15 @@ export class EditorService {
   /**
    * Reveals a tab app-wide: focuses + activates whichever pane already has
    * it open (the "Open windows" list, File-menu style global commands).
-   * No-op if it isn't open. A pane's *own* tab bar activates within itself
-   * via `PaneService.activate` directly -- it doesn't need this "search
-   * every pane" version of the same idea.
+   * Accepts a full tab key or a bare vault-relative path (resolved via
+   * {@link resolveDoc}). No-op if it isn't open. A pane's *own* tab bar
+   * activates within itself via `PaneService.activate` directly -- it
+   * doesn't need this "search every pane" version of the same idea.
    */
-  activate(key: string): void {
-    if (this.docs().some((d) => d.key === key)) {
-      this.panes.open(key);
+  activate(keyOrPath: string): void {
+    const doc = this.resolveDoc(keyOrPath);
+    if (doc !== null) {
+      this.panes.open(doc.key);
     }
   }
 

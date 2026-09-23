@@ -1,6 +1,7 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { OpenWindows } from './open-windows';
 import { EditorService } from '../services/editor.service';
+import { VaultService } from '../vault/vault.service';
 import { DreyApi } from '../../../shared/ipc-api';
 
 describe('OpenWindows', () => {
@@ -36,6 +37,24 @@ describe('OpenWindows', () => {
     expect(rows.length).toBe(2);
     (rows[0].querySelector('.open') as HTMLButtonElement).click();
     expect(editor.openPath()).toBe('a.md');
+  });
+
+  it('activates a vault-backed tab on click (tab key, not bare path)', async () => {
+    // The real app always has an active vault (ADR-0051): the tab key is
+    // `v1::a.md` while the row used to hand the bare path to `activate`.
+    TestBed.inject(VaultService).activeVaultId.set('v1');
+    await editor.openFile('a.md');
+    await editor.openFile('b.md', undefined, { keepFocused: true });
+    fixture.detectChanges();
+
+    const rows = (fixture.nativeElement as HTMLElement).querySelectorAll('.row');
+    expect(editor.openDocs().map((d) => d.key)).toEqual(['v1::a.md', 'v1::b.md']);
+
+    (rows[0].querySelector('.open') as HTMLButtonElement).click();
+    fixture.detectChanges();
+    expect(editor.openPath()).toBe('a.md');
+    expect(rows[0].classList.contains('active')).toBe(true);
+    expect(rows[1].classList.contains('active')).toBe(false);
   });
 
   it('closes a tab from the row X', async () => {
