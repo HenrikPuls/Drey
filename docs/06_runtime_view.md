@@ -619,22 +619,28 @@ sequenceDiagram
         opt unknown words remain
             Service->>Preload: checkSpelling(words)
             Preload->>Spell: check(words)
-            Note over Spell: nspell(active dictionary).correct() + .suggest()
-            Spell-->>Service: { language, issues[] }
+            Note over Spell: nspell(active dictionary).correct() only —\nsuggest() is 40–100 ms/word and stays out of the bulk check
+            Spell-->>Service: { language, misspelled[] }
             Service->>Service: cache verdicts (only if language still matches)
         end
-        Service-->>Ext: Map<word, suggestions>
+        Service-->>Ext: Set<misspelled words>
         alt a newer check has started
             Ext->>Ext: reply discarded
         else
-            Ext->>Words: issueSpans(spans, issues)
+            Ext->>Words: issueSpans(spans, misspelled)
             Ext->>CM: dispatch(setIssues) -> wavy underline decorations
         end
     end
 
     User->>CM: clicks an underlined word
     CM->>Ext: mousedown -> openPopup(flagged)
-    Ext-->>User: showTooltip popup with suggestions
+    Ext-->>User: showTooltip popup (placeholder row)
+    Ext->>Service: suggest(word)
+    Service->>Preload: suggestSpelling(word)  (cached + single-flighted)
+    Preload->>Spell: suggest(word)
+    Spell-->>Preload: nspell.suggest(word), capped at 5
+    Service-->>Ext: suggestions
+    Ext-->>User: popup fills in place (only if still open on that word)
     User->>Ext: clicks a suggestion (mousedown)
     Ext->>CM: dispatch(replace range) -- only if the text there is still that word
 ```
@@ -2037,7 +2043,6 @@ _(Dropped: the batch-tag-suggestion inbox — see [ADR-0017] and
 [ADR-0018](09_architecture_decisions/0018-manual-refresh-no-file-watcher.md).
 The chokidar file-watcher reaction, originally dropped with ADR-0018,
 came back as the opt-in §6.31 / [ADR-0045](09_architecture_decisions/0045-optional-vault-file-watcher.md).)_
-
 ## 6.43 Search summarise → LLM digest → `search-summary.md` (milestone 37)
 
 The Search panel's **Summarize** button (next to Export; hidden while no

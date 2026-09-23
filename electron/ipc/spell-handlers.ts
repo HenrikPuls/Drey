@@ -16,6 +16,9 @@ export function registerSpellHandlers({ appConfig, spellcheck }: SpellHandlerDep
   ipcMain.handle(IPC_CHANNELS.spellCheck, (_event, words: string[]): Promise<SpellCheckResult> =>
     spellcheck.check(words),
   );
+  ipcMain.handle(IPC_CHANNELS.spellSuggest, (_event, word: string): Promise<string[]> =>
+    spellcheck.suggest(word),
+  );
   ipcMain.handle(IPC_CHANNELS.spellLanguages, (): Promise<SpellLanguage[]> =>
     spellcheck.listLanguages(),
   );

@@ -20,6 +20,44 @@ recorded as an explicit decision. The parity checklist lives in
 
 ## Recent milestones
 
+### Fix — spellcheck: suggestions for typos inside compounds
+
+A flagged compound got an empty popup: nspell's suggest searches the
+dictionary's words, and neither the typo nor its correction is one.
+`compoundSuggestions` (`shared/spellcheck.ts`) rebuilds candidates from
+the half the dictionary can advise on (`Krankehnhaus` → `kranken` +
+`haus`), merged with plain suggestions and ranked by edit distance so
+the real fix leads (`Krankenhaus` first, `Arbeitsspeicher` first).
+Known limit: boundary-crossing typos without an accepted anchor half
+stay suggestionless, and `Testfhal` offers `Testfahl` before `Testfall`
+— closing that needs a real Hunspell engine
+([ADR-0013](../docs/09_architecture_decisions/0013-inline-spellcheck.md)).
+
+### Fix — spellcheck: legitimate German compounds are no longer flagged
+
+nspell never evaluates the Hunspell `COMPOUND*` rules `dictionary-de`
+declares, so every closed compound not literally listed came back
+flagged (`Testfall`, `Krankenhaus`, `Arbeitsspeicher` — 20 of 22
+everyday compounds in a measured sample). A rejected word now falls back
+to `compoundAcceptable` (`shared/spellcheck.ts`): it counts as correct
+when it decomposes into accepted parts, Fugenelemente (`Arbeit + s +
+Speicher`) included. Deliberately errs towards silence — any
+concatenation of valid words is accepted too
+([ADR-0013](../docs/09_architecture_decisions/0013-inline-spellcheck.md)).
+
+### Fix — spellcheck: the bulk check no longer computes suggestions
+
+Measured with the real German dictionary, nspell's `correct()` costs ~5 µs
+per word but `suggest()` costs **40–108 ms per misspelled word** — so the
+first `spell:check` of a document (open, session restore, after every
+`invalidate()`) blocked the main process for seconds. `spell:check` now
+returns only the misspelled words; the popup's suggestions are fetched
+lazily, one word per click, through the new `spell:suggest` IPC channel
+(`suggestSpelling`), with the popup opening on a placeholder row and
+filling in place. Renderer-side, `SpellcheckService` caches verdicts as
+booleans plus a separate single-flighted suggestion cache
+([ADR-0013](../docs/09_architecture_decisions/0013-inline-spellcheck.md)).
+
 ### Milestone 38 — summary streaming scroll, scratch-tab context, assistant tools across vaults
 
 - **Stick-to-bottom while the summary streams** — the old behaviour

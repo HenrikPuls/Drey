@@ -13,7 +13,10 @@
  * German coins compounds freely (`Rollout-Plan`), and no Hunspell
  * dictionary lists them -- checking the whole compound would underline
  * correct text constantly, which is the fastest way to get a spellchecker
- * switched off for good.
+ * switched off for good. Closed compounds (`Testfall`) get the same
+ * treatment on the verdict side, via `compoundAcceptable` below -- nspell
+ * does not evaluate the Hunspell `COMPOUND*` rules the dictionaries
+ * declare.
  */
 
 import type { SpellcheckConfig } from './app-config';
@@ -108,26 +111,203 @@ export function distinctWords(spans: readonly WordSpan[]): string[] {
   return [...new Set(spans.map((span) => span.word))];
 }
 
-/** One dictionary verdict: a misspelled word and what to offer instead. */
-export interface SpellIssue {
-  word: string;
-  suggestions: string[];
-}
-
 /**
- * Joins dictionary verdicts back onto the text's word spans. Words the
- * checker did not flag simply produce no span.
+ * Joins the dictionary's misspelling verdicts back onto the text's word
+ * spans. Suggestions are deliberately not part of this: the bulk check is
+ * verdict-only (suggest is the expensive operation), so the flagged spans
+ * carry no suggestion text -- the popup fetches those per word.
  */
 export function issueSpans(
   spans: readonly WordSpan[],
-  issues: ReadonlyMap<string, readonly string[]>,
-): Array<WordSpan & { suggestions: readonly string[] }> {
-  const out: Array<WordSpan & { suggestions: readonly string[] }> = [];
-  for (const span of spans) {
-    const suggestions = issues.get(span.word);
-    if (suggestions) {
-      out.push({ ...span, suggestions });
+  misspelled: ReadonlySet<string>,
+): WordSpan[] {
+  return spans.filter((span) => misspelled.has(span.word));
+}
+
+/**
+ * German coins compounds freely, and no Hunspell dictionary lists them
+ * all -- the bundled German one declares the Hunspell `COMPOUND*` rules,
+ * but nspell (a partial Hunspell reimplementation) does not evaluate
+ * them, so every closed compound not literally in the dictionary
+ * ("Testfall", "Krankenhaus", "Arbeitsspeicher") would be flagged. That
+ * is the fastest way to get a spellchecker switched off for good, so the
+ * verdict falls back to this splitter: `word` counts as acceptable when
+ * it decomposes into accepted parts (Fugenelemente like the "s" in
+ * "Arbeitsspeicher" consumed along the way).
+ *
+ * `has` is the dictionary's case-tolerant verdict for one word. The
+ * trade-off is deliberate: every concatenation of valid words is
+ * accepted ("Hausbaum"), i.e. the splitter errs towards silence -- a
+ * missed squiggle annoys far less than a wrong one on correct text.
+ *
+ * The scan is cheap (`correct` is a dictionary lookup, ~µs) and only ever
+ * runs for words the dictionary rejected outright.
+ */
+
+/** Shortest part worth looking up -- keeps the split positions sane. */
+const MIN_PART = 3;
+/** Fugenelemente consumed between parts, longest first. */
+const FUGES = ['es', 'en', 's', 'n', 'e'] as const;
+/** Compound depth -- "Geschwindigkeitsbegrenzung" is two parts + Fuge. */
+const MAX_PARTS = 3;
+
+export function compoundAcceptable(has: (word: string) => boolean, word: string): boolean {
+  if (word.length < 2 * MIN_PART) {
+    return false;
+  }
+  return partsAcceptable(has, word, MAX_PARTS);
+}
+
+function partsAcceptable(has: (word: string) => boolean, word: string, depth: number): boolean {
+  if (has(word)) {
+    return true;
+  }
+  if (depth <= 1) {
+    return false;
+  }
+  for (let cut = MIN_PART; cut <= word.length - MIN_PART; cut++) {
+    if (!has(word.slice(0, cut))) {
+      continue;
+    }
+    const rest = word.slice(cut);
+    if (partsAcceptable(has, rest, depth - 1)) {
+      return true;
+    }
+    for (const fuge of FUGES) {
+      if (rest.startsWith(fuge) && partsAcceptable(has, rest.slice(fuge.length), depth - 1)) {
+        return true;
+      }
     }
   }
+  return false;
+}
+
+/**
+ * Levenshtein distance, two-row DP. Suggestion ranking uses it: nspell's
+ * own suggest order is unreliable for compound typos (its candidates are
+ * not distance-ranked once its ngram search has nothing anchor on), and
+ * the recombinators' output needs to compete with it on equal terms.
+ */
+export function editDistance(a: string, b: string): number {
+  if (a === b) {
+    return 0;
+  }
+  if (a.length === 0) {
+    return b.length;
+  }
+  if (b.length === 0) {
+    return a.length;
+  }
+  let previous = Array.from({ length: b.length + 1 }, (_, i) => i);
+  for (let i = 1; i <= a.length; i++) {
+    const current = [i];
+    for (let j = 1; j <= b.length; j++) {
+      const substitution = previous[j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1);
+      current.push(Math.min(previous[j] + 1, current[j - 1] + 1, substitution));
+    }
+    previous = current;
+  }
+  return previous[b.length];
+}
+
+/**
+ * Suggestion synthesis for rejected compounds. The dictionary's own
+ * `suggest` cannot help here -- nspell searches the dictionary's words,
+ * and the compound (typo and correction alike) is not in it, so the
+ * popup would show nothing for a squiggle that is entirely justified.
+ *
+ * This walks the same split positions as `compoundAcceptable` and looks
+ * for cuts where exactly one half is accepted: the broken half is sent
+ * to `suggest` on its own (a fragment the dictionary *does* have
+ * neighbours for), stripped of a leading Fuge first if it has one, and
+ * the results are re-joined into whole-word candidates
+ * ("Krankehnhaus": "Kranken"? no -- "krankehn" suggests "kranken", join
+ * with "haus" -> "Krankenhaus"). Candidates survive only if `has`
+ * accepts the joined word, and the input itself is excluded -- a
+ * fragment suggestion can legitimately reconstruct the original typo.
+ *
+ * `suggest` is the raw per-word dictionary lookup (tens of ms per call),
+ * which is why this runs only in the lazy, per-click suggestion path --
+ * never inside the bulk verdict check.
+ */
+export function compoundSuggestions(
+  suggest: (word: string) => string[],
+  has: (word: string) => boolean,
+  word: string,
+): string[] {
+  if (word.length < 2 * MIN_PART) {
+    return [];
+  }
+  const capitalized = word[0] === word[0].toUpperCase() && word[0] !== word[0].toLowerCase();
+  const out: string[] = [];
+
+  for (let cut = MIN_PART; cut <= word.length - MIN_PART; cut++) {
+    const left = word.slice(0, cut);
+    const right = word.slice(cut);
+    const leftOk = has(left);
+    if (leftOk === has(right)) {
+      // Both halves fine -> not what the squiggle is about; both broken
+      // -> no anchor to re-join against.
+      continue;
+    }
+    const known = leftOk ? left : right;
+    const unknown = leftOk ? right : left;
+    // The broken half is replaced by its suggestion: if it sat on the
+    // right, the known half comes first ("Krankehn" + "haus" -> the fix
+    // lands in the middle); if it sat on the left, the suggestion does.
+    collectRecombinations(
+      out,
+      suggest,
+      has,
+      known,
+      unknown,
+      word,
+      capitalized,
+      /* knownFirst */ leftOk,
+    );
+  }
   return out;
+}
+
+/**
+ * Joins `known` with every suggestion for the (Fuge-stripped) `unknown`
+ * half, in the order the halves occur in the word. Suggestion case is
+ * flattened before the original's leading case is restored, so
+ * "Schreibt" + "Tisch" becomes "Schreibtisch" rather than
+ * "SchreibtTisch".
+ */
+function collectRecombinations(
+  out: string[],
+  suggest: (word: string) => string[],
+  has: (word: string) => boolean,
+  known: string,
+  unknown: string,
+  original: string,
+  capitalized: boolean,
+  knownFirst: boolean,
+): void {
+  const pieces: Array<[fuge: string, tail: string]> = [['', unknown]];
+  for (const fuge of FUGES) {
+    if (unknown.startsWith(fuge)) {
+      pieces.push([fuge, unknown.slice(fuge.length)]);
+    }
+  }
+  for (const [fuge, tail] of pieces) {
+    for (const suggestion of suggest(tail)) {
+      const joined = knownFirst
+        ? known + fuge + suggestion
+        : suggestion + fuge + known;
+      const candidate = joined.toLowerCase();
+      const final = capitalized
+        ? candidate.charAt(0).toUpperCase() + candidate.slice(1)
+        : candidate;
+      if (
+        final.toLowerCase() !== original.toLowerCase() &&
+        has(final) &&
+        !out.includes(final)
+      ) {
+        out.push(final);
+      }
+    }
+  }
 }

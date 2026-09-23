@@ -11,6 +11,7 @@
   margin: auto;
   z-index: 41;
   width: min(460px, calc(100vw - 48px));
+  height: fit-content;
   display: flex;
   flex-direction: column;
   background: var(--bg-main);

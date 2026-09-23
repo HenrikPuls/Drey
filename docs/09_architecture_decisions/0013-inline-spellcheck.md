@@ -81,6 +81,23 @@ part by part. That last rule matters in German — no dictionary lists
 `Rollout-Plan`, and underlining correct text is the fastest way to get a
 spellchecker switched off for good.
 
+_(Update: closed compounds are accepted by a splitter, not the
+dictionary.)_ The bundled German dictionary declares Hunspell's
+`COMPOUND*` rules (`COMPOUNDBEGIN/MIDDLE/END`, `COMPOUNDMIN 2`), but
+nspell — a partial Hunspell reimplementation — never evaluates them, so
+every closed compound not literally listed was flagged: `Testfall`,
+`Krankenhaus`, `Arbeitsspeicher`, the bread and butter of German notes.
+Measured before the fix, 20 of 22 everyday compounds came back flagged.
+The verdict therefore falls back to `compoundAcceptable`
+(`shared/spellcheck.ts`): a rejected word counts as correct when it
+decomposes into accepted parts, consuming Fugenelemente (`Arbeit` + `s` +
+`Speicher`). The trade-off is deliberate and errs towards silence — every
+concatenation of valid words (`Hausbaum`) is accepted too, because a
+missed squiggle annoys far less than a wrong one on correct text. The
+splitter only runs for words the dictionary rejected outright and each
+verdict is cached renderer-side, so the cost is a handful of ~µs lookups
+per new unknown word.
+
 **It checks from the first word, everywhere you type** — the entry drawer
 and the document editor both. An earlier version gated the drawer on the
 entry being "anchored" to a topic, person or meeting; in use that was
@@ -93,6 +110,37 @@ only, snapped out to whole lines, instead of the whole document on every
 typing pause. Below that it scans everything, which is what you want: the
 squiggle is already there when you scroll to it, and the syntax masking
 sees complete code fences and frontmatter.
+
+_(Update: suggestions are fetched lazily, per clicked word.)_ Measured
+with the real German dictionary, nspell's `correct()` costs ~5 µs per word
+while `suggest()` costs **40–108 ms per misspelled word** — computing
+suggestions eagerly inside the bulk `spell:check` turned the first check
+of a document (open, session restore, after every `invalidate()`) into
+seconds of synchronous main-process blocking. `spell:check` therefore
+returns only the misspelled words, and a separate `spell:suggest` IPC
+channel fetches the popup's suggestions when the user actually clicks a
+squiggle; the popup opens immediately with a placeholder row and fills in
+place (guarded, so a stale answer never lands in a re-opened popup). The
+renderer caches fetched suggestions per language alongside the verdicts.
+
+_(Update: compound typos get synthesized suggestions.)_ nspell's suggest
+searches the dictionary's words — and for a flagged compound, neither the
+typo nor its correction is one, so the popup showed "No suggestions" for
+a squiggle that was entirely justified. `compoundSuggestions`
+(`shared/spellcheck.ts`) walks the same split positions as the verdict
+splitter, finds cuts where exactly one half is accepted, asks the
+dictionary for suggestions of the broken half alone, and re-joins the
+results into whole-word candidates (`Krankehnhaus` → `kranken` + `haus`).
+Merged candidates are ranked by edit distance to the flagged word, which
+is what keeps nspell's unvalidated ngram noise behind the real fix. The
+honest boundary: a typo that crosses the part boundary with no accepted
+anchor half (a garbled `Schreibtsich` whose `schreib|tisch` split needs a
+word the dictionary does not list) yields nothing useful — and
+`Testfhal` suggests `Testfahl` (distance 1) before `Testfall`. A real
+Hunspell engine would close both gaps; the measured options
+(`hunspell-asm` WASM, 4.9 MB, unmaintained since 2020; `nodehun` native,
+also unmaintained and breaking the no-native-modules rule) are recorded
+here as the escalation path should everyday quality demand it.
 
 **This is the only spellchecker in the app.** Chromium's native checker is
 switched off for the whole window (`webPreferences.spellcheck: false`,
@@ -135,8 +183,15 @@ is normal.)_
   persisted on Save). `config:set` / the immediate handler both call
   `invalidate()`, so the next check reflects the change.
 - Verdicts are cached per language in `SpellcheckService`, so typing does
-  not re-ship the whole field across IPC on every pause. The cache is
-  dropped when the language or dictionary list changes.
+  not re-ship the whole field across IPC on every pause; fetched
+  suggestions are cached the same way (with a singleflight for a popup
+  re-opened before its fetch resolves). Both caches are dropped when the
+  language or dictionary list changes.
+- The compound splitter accepts some misspelled words ("Hausbaum") and a
+  truly misspelled compound part can hide ("Testfhal" survives as a
+  typo'd part only if it matches nothing — caught, but "Testfhall" also
+  decomposes cleanly). Word-level false negatives are the accepted price;
+  the personal-word lists remain the tool for the opposite case.
 - Because the underlines are ours and not Chromium's, they are themed with
   the app's tokens and work identically in both editor surfaces — but we
   also own the correctness of the word scanner, which is why it is pure and

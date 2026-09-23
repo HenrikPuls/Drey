@@ -14,6 +14,12 @@
  *   ADR-0001), so results arrive through a `StateEffect` rather than being
  *   returned. A `ViewPlugin` debounces the request and drops any answer
  *   the document has already moved past.
+ * - The verdict check deliberately carries no suggestions: generating
+ *   them costs the dictionary tens of milliseconds *per misspelled word*,
+ *   which would turn the bulk check after every typing pause into a
+ *   main-process stall. They are fetched lazily, one word at a time,
+ *   when a flagged word's popup opens (`SpellcheckSource.suggest`), and
+ *   the popup fills in place once they arrive.
  * - The popup is CodeMirror's own `showTooltip` facet, not a hand-placed
  *   absolutely-positioned div: it already solves flipping near the window
  *   edge and staying attached while the document scrolls.
@@ -41,8 +47,14 @@ export type AddWordTarget = 'language' | 'personal';
 export interface SpellcheckSource {
   /** Whether checking is switched on at all right now. */
   enabled(): boolean;
-  /** The misspelled subset of `words`, each with its suggestions. */
-  check(words: string[]): Promise<Map<string, readonly string[]>>;
+  /** The misspelled subset of `words`, as a set of the flagged words. */
+  check(words: string[]): Promise<ReadonlySet<string>>;
+  /**
+   * Suggestions for one misspelled word, fetched when its popup opens --
+   * deliberately not part of `check`, where the per-word cost would be
+   * paid for every flagged word on every typing pause.
+   */
+  suggest(word: string): Promise<readonly string[]>;
   /**
    * Adds `word` to an accepted-word list and repaints. Optional -- when
    * absent, the popup shows no "Add to dictionary" rows.
@@ -74,7 +86,6 @@ export interface Flagged {
   from: number;
   to: number;
   word: string;
-  suggestions: readonly string[];
 }
 
 const setIssues = StateEffect.define<Flagged[]>();
@@ -179,26 +190,24 @@ export function suggestionDom(
   head.textContent = issue.word;
   dom.appendChild(head);
 
-  if (issue.suggestions.length === 0) {
-    const empty = document.createElement('div');
-    empty.className = 'cm-spell-popup-empty';
-    empty.textContent = 'No suggestions';
-    dom.appendChild(empty);
-  } else {
-    for (const suggestion of issue.suggestions) {
-      const button = document.createElement('button');
-      button.type = 'button';
-      button.className = 'cm-spell-popup-item';
-      button.textContent = suggestion;
-      button.addEventListener('mousedown', (event) => {
-        // mousedown, not click: the editor takes the selection back on blur
-        // before a click would ever land.
-        event.preventDefault();
-        applySuggestion(view, issue, suggestion);
-      });
-      dom.appendChild(button);
+  // Suggestions arrive asynchronously (see `SpellcheckSource.suggest`);
+  // the popup opens immediately with a placeholder and is patched in
+  // place when they land -- a local fetch, so the gap is one frame to a
+  // few tens of milliseconds.
+  const body = document.createElement('div');
+  body.className = 'cm-spell-popup-body';
+  const loading = document.createElement('div');
+  loading.className = 'cm-spell-popup-empty';
+  loading.textContent = '…';
+  body.appendChild(loading);
+  dom.appendChild(body);
+  void source.suggest(issue.word).then((suggestions) => {
+    const current = view.state.field(spellState, false)?.open;
+    if (!current || current.from !== issue.from || current.word !== issue.word) {
+      return; // closed, or re-opened on a different word meanwhile
     }
-  }
+    fillSuggestions(view, body, issue, suggestions);
+  });
 
   if (typeof source.addWord === 'function') {
     const targets = source.wordTargets?.() ?? {
@@ -227,6 +236,36 @@ export function suggestionDom(
   }
 
   return dom;
+}
+
+/** Swaps the popup's loading placeholder for the fetched suggestions. */
+function fillSuggestions(
+  view: EditorView,
+  body: HTMLElement,
+  issue: Flagged,
+  suggestions: readonly string[],
+): void {
+  body.textContent = '';
+  if (suggestions.length === 0) {
+    const empty = document.createElement('div');
+    empty.className = 'cm-spell-popup-empty';
+    empty.textContent = 'No suggestions';
+    body.appendChild(empty);
+    return;
+  }
+  for (const suggestion of suggestions) {
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'cm-spell-popup-item';
+    button.textContent = suggestion;
+    button.addEventListener('mousedown', (event) => {
+      // mousedown, not click: the editor takes the selection back on blur
+      // before a click would ever land.
+      event.preventDefault();
+      applySuggestion(view, issue, suggestion);
+    });
+    body.appendChild(button);
+  }
 }
 
 function applySuggestion(view: EditorView, issue: Flagged, replacement: string): void {
@@ -259,7 +298,7 @@ const clickHandler = EditorView.domEventHandlers({
     }
     const hit = state.flagged.find((issue) => pos >= issue.from && pos <= issue.to);
     if (hit) {
-      view.dispatch({ effects: openPopup.of(hit) });
+      openSpellPopup(view, hit);
       return false; // let the caret land where the user clicked
     }
     if (state.open) {
@@ -324,9 +363,9 @@ function checker(config: SpellcheckConfig) {
           this.publish(token, []);
           return;
         }
-        let issues: Map<string, readonly string[]>;
+        let misspelled: ReadonlySet<string>;
         try {
-          issues = await config.source.check(distinctWords(spans));
+          misspelled = await config.source.check(distinctWords(spans));
         } catch {
           // A dictionary that is unreachable clears the underlines rather
           // than freezing the last verdict onto text that has since changed.
@@ -335,11 +374,10 @@ function checker(config: SpellcheckConfig) {
         }
         this.publish(
           token,
-          issueSpans(spans, issues).map((span) => ({
+          issueSpans(spans, misspelled).map((span) => ({
             from: span.from,
             to: span.to,
             word: span.word,
-            suggestions: span.suggestions,
           })),
         );
       }
@@ -468,6 +506,15 @@ export function inlineSpellcheck(config: SpellcheckConfig): Extension {
  */
 export function requestSpellcheck(view: EditorView): void {
   view.dispatch({ effects: recheck.of(null) });
+}
+
+/**
+ * Opens the suggestion popup for a flagged word. The click handler is the
+ * runtime caller; exported alongside `suggestionDom` as a test seam so
+ * the async suggestion fill can be driven without jsdom hit-testing.
+ */
+export function openSpellPopup(view: EditorView, issue: Flagged): void {
+  view.dispatch({ effects: openPopup.of(issue) });
 }
 
 /** Test seam: the words a view currently has flagged, in document order. */

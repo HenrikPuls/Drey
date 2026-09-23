@@ -3,6 +3,7 @@ import { EditorView } from '@codemirror/view';
 import {
   flaggedWords,
   inlineSpellcheck,
+  openSpellPopup,
   requestSpellcheck,
   SpellcheckSource,
   suggestionDom,
@@ -12,18 +13,22 @@ import {
 function fakeSource(
   issues: Record<string, string[]>,
   options: { enabled?: boolean; withAddWord?: boolean } = {},
-): SpellcheckSource & { calls: string[][]; added: Array<[string, string]> } {
+): SpellcheckSource & { calls: string[][]; suggestCalls: string[]; added: Array<[string, string]> } {
   const calls: string[][] = [];
+  const suggestCalls: string[] = [];
   const added: Array<[string, string]> = [];
   return {
     calls,
+    suggestCalls,
     added,
     enabled: () => options.enabled !== false,
     check: async (words) => {
       calls.push(words);
-      return new Map(
-        words.filter((word) => word in issues).map((word) => [word, issues[word]] as const),
-      );
+      return new Set(words.filter((word) => word in issues));
+    },
+    suggest: async (word) => {
+      suggestCalls.push(word);
+      return issues[word] ?? [];
     },
     ...(options.withAddWord
       ? {
@@ -61,9 +66,7 @@ describe('inlineSpellcheck', () => {
   it('flags the misspelled words the source reports, at their offsets', async () => {
     view = makeView('Risiken bei besprchen', fakeSource({ besprchen: ['besprochen'] }));
     await settle();
-    expect(flaggedWords(view)).toEqual([
-      { from: 12, to: 21, word: 'besprchen', suggestions: ['besprochen'] },
-    ]);
+    expect(flaggedWords(view)).toEqual([{ from: 12, to: 21, word: 'besprchen' }]);
   });
 
   it('renders a wavy-underline decoration for each flagged word', async () => {
@@ -101,7 +104,35 @@ describe('inlineSpellcheck', () => {
     expect(flaggedWords(view)).toEqual([]);
   });
 
-  it('opens a popup on click and replaces the word from it', async () => {
+  it('fetches no suggestions during the check, only when a popup opens', async () => {
+    const source = fakeSource({ besprchen: ['besprochen'] });
+    view = makeView('besprchen', source);
+    await settle();
+    expect(source.suggestCalls).toEqual([]);
+
+    openSpellPopup(view, { from: 0, to: 9, word: 'besprchen' });
+    await settle();
+    expect(source.suggestCalls).toEqual(['besprchen']);
+  });
+
+  it('opens the popup with a placeholder and fills the suggestions in place', async () => {
+    const source = fakeSource({ besprchen: ['besprochen', 'besprechen'] });
+    view = makeView('besprchen', source);
+    await settle();
+
+    openSpellPopup(view, { from: 0, to: 9, word: 'besprchen' });
+    const popup = document.querySelector('.cm-spell-popup');
+    // Before the fetch resolves there is only the placeholder row.
+    expect(popup?.querySelector('.cm-spell-popup-item')).toBeNull();
+
+    await settle();
+    const first = popup?.querySelector('.cm-spell-popup-item') as HTMLElement | null;
+    expect(first?.textContent).toBe('besprochen');
+    first?.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }));
+    expect(view.state.doc.toString()).toBe('besprochen');
+  });
+
+  it('replaces the word from a clicked popup suggestion', async () => {
     view = makeView('Risiken besprchen', fakeSource({ besprchen: ['besprochen', 'besprechen'] }));
     await settle();
 
@@ -113,10 +144,11 @@ describe('inlineSpellcheck', () => {
     const popup = document.querySelector('.cm-spell-popup');
     if (!popup) {
       // jsdom gives every element zero size, so `posAtCoords` can return
-      // null and the popup never opens -- the replacement logic below is
-      // still worth asserting, so drive it through the same public path.
+      // null and the popup never opens -- the fill logic above is still
+      // asserted through `openSpellPopup`.
       return;
     }
+    await settle();
     const first = popup.querySelector('.cm-spell-popup-item') as HTMLElement;
     expect(first.textContent).toBe('besprochen');
     first.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }));
@@ -129,8 +161,8 @@ describe('inlineSpellcheck', () => {
     let anchored = false;
     const source: SpellcheckSource = {
       enabled: () => anchored,
-      check: async (words) =>
-        new Map(words.filter((w) => w === 'besprchen').map((w) => [w, ['besprochen']] as const)),
+      check: async (words) => new Set(words.filter((w) => w === 'besprchen')),
+      suggest: async () => ['besprochen'],
     };
     view = makeView('Risiken besprchen', source);
     await settle();
@@ -142,9 +174,15 @@ describe('inlineSpellcheck', () => {
     expect(flaggedWords(view).map((f) => f.word)).toEqual(['besprchen']);
   });
 
-  it('offers two "Add to dictionary" rows only when the source can add words', () => {
-    const fakeView = { dispatch: () => {}, focus: () => {} } as unknown as EditorView;
-    const issue = { from: 0, to: 4, word: 'Drey', suggestions: [] };
+  it('offers two "Add to dictionary" rows only when the source can add words', async () => {
+    const fakeView = {
+      dispatch: () => {},
+      focus: () => {},
+      // `suggestionDom` consults the field when its async fill lands; a
+      // null field reads as "no popup open" and is a safe no-op here.
+      state: { field: () => null },
+    } as unknown as EditorView;
+    const issue = { from: 0, to: 4, word: 'Drey' };
 
     const without = suggestionDom(fakeView, issue, fakeSource({}));
     expect(without.querySelectorAll('.cm-spell-popup-add')).toHaveLength(0);
@@ -168,6 +206,7 @@ describe('inlineSpellcheck', () => {
     const source: SpellcheckSource = {
       enabled: () => true,
       check: () => Promise.reject(new Error('no dictionary')),
+      suggest: async () => [],
     };
     view = makeView('besprchen', source);
     await settle();

@@ -1483,9 +1483,10 @@ The bottom of the main area, replacing the old capture bar.
 - **Inline spellcheck** ([ADR-0013](09_architecture_decisions/0013-inline-spellcheck.md)):
   the body is a `MarkdownSurface` with the CodeMirror extension mixed in;
   `SpellcheckService` supplies the `SpellcheckSource` and caches verdicts
-  per language. It checks from the first word typed — the "anchored entry"
-  gate an earlier version had was removed — and the **document editor gets
-  the same extension**, viewport-scoped past 60 kB. Because the Settings
+  and fetched suggestions per language. It checks from the first word
+  typed — the "anchored entry" gate an earlier version had was removed —
+  and the **document editor gets the same extension**, viewport-scoped
+  past 60 kB. Because the Settings
   switch and the dictionary choice can change without the text changing,
   both surfaces hold an `effect` that calls
   `MarkdownSurface.recheckSpelling()`.

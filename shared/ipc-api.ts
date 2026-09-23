@@ -103,6 +103,7 @@ export const IPC_CHANNELS = {
   llmCancel: 'llm:cancel',
   llmCapabilitiesChanged: 'llm:capabilities-changed',
   spellCheck: 'spell:check',
+  spellSuggest: 'spell:suggest',
   spellLanguages: 'spell:languages',
   spellAddDictionary: 'spell:add-dictionary',
   spellAddWord: 'spell:add-word',
@@ -467,11 +468,16 @@ export interface SpellLanguage {
   error?: string;
 }
 
-/** Result of one `spell:check` round: only the words the dictionary rejects. */
+/**
+ * Result of one `spell:check` round: only the words the dictionary rejects.
+ * Suggestions are deliberately absent -- generating them is expensive
+ * (tens of milliseconds per word), so they are fetched per word through
+ * `spell:suggest` when the user actually clicks a flagged word.
+ */
 export interface SpellCheckResult {
   /** The dictionary that produced this verdict (`''` when spellcheck is off). */
   language: string;
-  issues: Array<{ word: string; suggestions: string[] }>;
+  misspelled: string[];
 }
 
 /** The API surface exposed on `window.dreyApi` by the preload script. */
@@ -624,11 +630,21 @@ export interface DreyApi {
 
   /**
    * Checks `words` against the active dictionary and returns only the ones
-   * it rejects, each with up to a handful of suggestions. Never rejects:
-   * spellcheck being off or a dictionary failing to load yields an empty
-   * issue list, because a broken checker must not break typing.
+   * it rejects. Never rejects: spellcheck being off or a dictionary
+   * failing to load yields an empty list, because a broken checker must
+   * not break typing. Deliberately carries no suggestions -- the
+   * suggestion search is the expensive part, so it is fetched per word
+   * via `suggestSpelling` when a flagged word's popup opens.
    */
   checkSpelling(words: string[]): Promise<SpellCheckResult>;
+
+  /**
+   * Suggestions for one misspelled word (up to a handful), fetched when
+   * the user opens its popup -- never during the bulk check. Returns `[]`
+   * for an accepted word (it may have been added since it was flagged) or
+   * when no dictionary is available.
+   */
+  suggestSpelling(word: string): Promise<string[]>;
 
   /** Every dictionary that can be selected, bundled and custom. */
   listSpellLanguages(): Promise<SpellLanguage[]>;

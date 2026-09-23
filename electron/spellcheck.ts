@@ -18,7 +18,7 @@
 import * as fsp from 'node:fs/promises';
 import { BUNDLED_DICTIONARIES, CustomDictionary } from '../shared/app-config';
 import { SpellCheckResult, SpellLanguage } from '../shared/ipc-api';
-import { personalDictionaryFor } from '../shared/spellcheck';
+import { compoundAcceptable, compoundSuggestions, editDistance, personalDictionaryFor } from '../shared/spellcheck';
 import { AppConfigStore } from './app-config';
 
 // nspell ships no type declarations; the surface used here is small
@@ -75,34 +75,87 @@ export class SpellcheckService {
   }
 
   /**
-   * The words of `words` the active dictionary rejects, with suggestions.
-   * Returns an empty list when spellcheck is off or the dictionary is
-   * unavailable -- never throws.
+   * The words of `words` the active dictionary rejects. Deliberately
+   * carries no suggestions: generating them costs tens of milliseconds
+   * per misspelled word (the bulk check sends dozens of words after every
+   * typing pause / tab open), so they are computed on demand in `suggest`
+   * when the user actually clicks a flagged word. Returns an empty list
+   * when spellcheck is off or the dictionary is unavailable -- never throws.
    */
   async check(words: readonly string[]): Promise<SpellCheckResult> {
     const settings = this.config.get().spellcheck;
     if (!settings.enabled || words.length === 0) {
-      return { language: settings.enabled ? settings.language : '', issues: [] };
+      return { language: settings.enabled ? settings.language : '', misspelled: [] };
     }
     const { spell } = await this.load(settings.language);
     if (!spell) {
-      return { language: settings.language, issues: [] };
+      return { language: settings.language, misspelled: [] };
     }
 
-    const issues: SpellCheckResult['issues'] = [];
+    const misspelled: string[] = [];
     for (const word of words) {
-      if (spell.correct(word)) {
+      if (this.accepts(spell, word)) {
         continue;
       }
-      // A word that only fails on capitalisation ("montag" at the start of
-      // a sentence is fine, "Montag" mid-sentence is too) is not worth a
-      // squiggle -- offsets carry no sentence context up here.
-      if (spell.correct(capitalize(word)) || spell.correct(word.toLowerCase())) {
-        continue;
-      }
-      issues.push({ word, suggestions: spell.suggest(word).slice(0, MAX_SUGGESTIONS) });
+      misspelled.push(word);
     }
-    return { language: settings.language, issues };
+    return { language: settings.language, misspelled };
+  }
+
+  /**
+   * Suggestions for one misspelled word, fetched when its popup opens.
+   * Suggest is the expensive nspell operation (tens of ms), which is why
+   * it lives here rather than in the bulk `check` -- paid once per click,
+   * cached renderer-side afterwards. `[]` for a word that is accepted by
+   * now (added to a dictionary between flag and click) or when the
+   * dictionary is unavailable.
+   */
+  async suggest(word: string): Promise<string[]> {
+    const settings = this.config.get().spellcheck;
+    if (!settings.enabled) {
+      return [];
+    }
+    const { spell } = await this.load(settings.language);
+    if (!spell || this.accepts(spell, word)) {
+      return [];
+    }
+    const has = (w: string): boolean => this.accepts(spell, w);
+    // nspell's suggest occasionally returns candidates it never checked
+    // against the dictionary (ngram noise like "Krankeinbaus"), which
+    // would crowd out the good recombination below -- so plain results
+    // pass the same acceptance filter as everything else.
+    const plain = spell.suggest(word).filter(has).slice(0, MAX_SUGGESTIONS);
+    if (plain.length >= MAX_SUGGESTIONS) {
+      return plain;
+    }
+    // A rejected compound leaves the dictionary's own suggest empty --
+    // neither the typo nor its correction is a dictionary word. The
+    // splitter rebuilds candidates from the one half the dictionary can
+    // advise on (shared/spellcheck.ts). The extra suggest calls are
+    // per-fragment tens of ms, acceptable here: this runs once per
+    // clicked squiggle and the renderer caches the answer.
+    const synthesized = compoundSuggestions((w) => spell.suggest(w), has, word);
+    // Rank by edit distance to the flagged word: nspell's suggest order
+    // is unreliable exactly where the recombination kicks in, and the
+    // closest correction is the one the user wants on top.
+    const merged = [...new Set([...plain, ...synthesized])];
+    merged.sort((a, b) => editDistance(a, word) - editDistance(b, word));
+    return merged.slice(0, MAX_SUGGESTIONS);
+  }
+
+  /** Accepts `word`, tolerating a case mismatch and German compounds. */
+  private accepts(spell: NSpell, word: string): boolean {
+    // A word that only fails on capitalisation ("montag" at the start of
+    // a sentence is fine, "Montag" mid-sentence is too) is not worth a
+    // squiggle -- offsets carry no sentence context up here.
+    if (spell.correct(word) || spell.correct(capitalize(word)) || spell.correct(word.toLowerCase())) {
+      return true;
+    }
+    // nspell does not evaluate the German dictionary's COMPOUND* rules,
+    // so every closed compound not literally listed would be flagged;
+    // the splitter accepts "Testfall" as "Test" + "Fall" (see
+    // shared/spellcheck.ts).
+    return compoundAcceptable((w) => spell.correct(w) || spell.correct(capitalize(w)) || spell.correct(w.toLowerCase()), word);
   }
 
   /** Drops cached dictionaries; called after the config changed. */

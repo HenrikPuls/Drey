@@ -180,6 +180,8 @@ const dreyApi: DreyApi = {
     ipcRenderer.invoke(IPC_CHANNELS.llmCancel, taskId),
   checkSpelling: (words: string[]): Promise<SpellCheckResult> =>
     ipcRenderer.invoke(IPC_CHANNELS.spellCheck, words),
+  suggestSpelling: (word: string): Promise<string[]> =>
+    ipcRenderer.invoke(IPC_CHANNELS.spellSuggest, word),
   listSpellLanguages: (): Promise<SpellLanguage[]> =>
     ipcRenderer.invoke(IPC_CHANNELS.spellLanguages),
   addSpellDictionary: (): Promise<CustomDictionary | null> =>
