@@ -40,6 +40,7 @@ import { WikilinkService, makeWikilinkCompletionSource, wikilinks } from '../wik
 import { pasteUrlAsMarkdownLink } from '../paste-link';
 import { assetUrlToVaultPath, resolveVaultImageCandidates } from '../vault-image';
 import { makeTagCompletionSource, tagPills, tagStyleRefresh } from '../tags';
+import { makeWordCompletionSource } from '../word-completion';
 import { TagVocabularyService } from '../../tags/tag-vocabulary.service';
 import { KeybindingService } from '../../keybindings';
 import { EditorExtensionRegistry, DropDecoderRegistry } from '../../plugin-host';
@@ -354,6 +355,14 @@ export class MarkdownSurface implements AfterViewInit, OnDestroy {
           this.wikiLinks.noteNames(this.docVaultId()),
         ),
       }),
+      // Word completion (milestone 40): repeat the document's own words in
+      // prose/heading/table contexts. Not on the Enter-submits composers --
+      // there the popup would swallow Enter (accept) that must submit.
+      !(this.compact() && this.submitOnEnter())
+        ? markdownLanguage.data.of({
+            autocomplete: makeWordCompletionSource(),
+          })
+        : [],
       // Paste a bare URL onto an empty caret -> `[url](url)` (lang-markdown's
       // own pasteURLAsLink only handles the wrap-a-selection case).
       pasteUrlAsMarkdownLink(),

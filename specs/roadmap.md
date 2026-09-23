@@ -79,6 +79,16 @@ whatever's next).
 
 ### Announced follow-ups
 
+- **Snippet completion** (designed during milestone 40, not built):
+  inline multi-line snippets with tabstop navigation via first-party
+  `snippetCompletion`, discovered by typing (e.g. `tbl` → a table
+  skeleton). Base-owned would grow `markdownBundle()` and re-open the
+  Tab-precedence question against `editorIndentation` (bug-9) — so the
+  plan is **plugin-owned in the templates plugin** via the unused
+  `api.editor.registerExtension('document', …)` seam
+  (`api.editor.cm.autocomplete`), later possibly fed by a
+  `templates/snippets/` folder. Open product question: which built-in
+  snippets ship.
 - **M-B remainder** (milestone 28, ADR-0051) — multi-vault round three,
   tasks side: per-vault tasks index, tasks panel "all vaults" scope.
   (Search halves shipped in milestone 33.)

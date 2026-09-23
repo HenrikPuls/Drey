@@ -600,17 +600,39 @@ src/                Angular renderer (standalone components, esbuild via Angular
                          editor resolves/creates, the drawer follows only).
                          languageFilename: the active tab's path -> its extension picks
                          the language compartment's contents. .md / null = the Markdown
-                         bundle (grammar + #tag autocomplete + pills + link activation
-                         + wikilinks + spellcheck + frontmatter fold); a code file (.cpp/.json/.ts)
+                          bundle (grammar + #tag autocomplete + pills + link activation
+                          + wikilinks + word completion + spellcheck + frontmatter fold); a code file (.cpp/.json/.ts)
                          = that language's grammar alone (lazy LanguageDescription.load,
                          @codemirror/language-data), source mode forced, none of the
                          Markdown chrome (ADR-0036). Compact composers pass nothing.
       tag-complete.ts   Pure #tag autocomplete completion source (vocabulary from
                          the live TagService signal).
       tag-pill.ts       ViewPlugin rendering inline #tags as pills in both modes;
-                         Ctrl/Cmd-click -> onTagActivate(tag). Matching delegated to
-                         shared/tags extractTagOccurrences. Pure tagPillDecorations
-                         split out for tests (like conceal.ts). §5.14
+                          Ctrl/Cmd-click -> onTagActivate(tag). Matching delegated to
+                          shared/tags extractTagOccurrences. Pure tagPillDecorations
+                          split out for tests (like conceal.ts). §5.14
+      markdown-context.ts  The shared "what is the caret in?" detector for the
+                          Markdown surface's completion sources (milestone 40):
+                          Lezer-tree walk (code block/span, link, raw HTML, GFM
+                          table, heading) + textual checks for what has no node
+                          (frontmatter, unclosed [[, trailing #tag) + a table
+                          fallback for rows typed before the parser builds a
+                          Table. Exposes markdownContextAt(state, pos) ->
+                          { kind }, inCompletableText() (the completion gate)
+                          and insideCode() (the decoration guard formerly
+                          duplicated in tag-pills.ts / wikilink.ts).
+      word-completion/  Word completion (milestone 40): a third language-data
+                          completion source next to #tag / [[wikilink]] --
+                          repeats the document's own words (frequency-ranked,
+                          vocabulary rebuilt per Text-object identity, only
+                          when a popup session opens; validFor re-filters
+                          while it stays open). Opens at >= 3 typed word
+                          characters, boost -30 so tags/wikilinks keep
+                          precedence, gated by markdown-context (silent in
+                          code/frontmatter/links/HTML); not mounted on the
+                          Enter-submits composers (the popup would swallow
+                          Enter). WordCompletionConfig { minWordLength,
+                          maxOptions }.
       link-open.ts      ViewPlugin marking Markdown links ([..](..), <autolink>,
                          bare URL) in both modes; Ctrl/Cmd-click -> onLinkActivate(href):
                          web/mail via the app:open-external IPC (shell.openExternal),

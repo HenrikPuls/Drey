@@ -145,8 +145,14 @@ interface ResultLike {
   validFor?: RegExp;
 }
 
-function ctx(match: { from: number; to: number; text: string } | null, explicit = false) {
-  return { explicit, matchBefore: () => match } as unknown as CompletionContext;
+function ctx(
+  doc: string,
+  pos: number,
+  match: { from: number; to: number; text: string } | null,
+  explicit = false,
+) {
+  const state = EditorState.create({ doc, extensions: MARKS.extensions });
+  return { state, pos, explicit, matchBefore: () => match } as unknown as CompletionContext;
 }
 
 describe('makeWikilinkCompletionSource', () => {
@@ -155,7 +161,7 @@ describe('makeWikilinkCompletionSource', () => {
   ) => ResultLike | null;
 
   it('offers basename prefix matches and inserts [[target]]', () => {
-    const result = source(ctx({ from: 0, to: 4, text: '[[pl' }));
+    const result = source(ctx('[[pl', 4, { from: 0, to: 4, text: '[[pl' }));
     expect(result?.from).toBe(0);
     expect(result?.options).toHaveLength(1);
     expect(result?.options[0]).toMatchObject({ label: 'plan', apply: '[[plan]]' });
@@ -163,23 +169,30 @@ describe('makeWikilinkCompletionSource', () => {
   });
 
   it('returns null on a bare [[ unless explicitly requested', () => {
-    expect(source(ctx({ from: 0, to: 2, text: '[[' }))).toBeNull();
-    expect(source(ctx({ from: 0, to: 2, text: '[[' }, true))?.options).toHaveLength(3);
+    expect(source(ctx('[[', 2, { from: 0, to: 2, text: '[[' }))).toBeNull();
+    expect(source(ctx('[[', 2, { from: 0, to: 2, text: '[[' }, true))?.options).toHaveLength(3);
   });
 
   it('falls back to a substring match on the vault path', () => {
-    const result = source(ctx({ from: 0, to: 6, text: '[[dail' }));
+    const result = source(ctx('[[dail', 6, { from: 0, to: 6, text: '[[dail' }));
     expect(result?.options.map((o) => o.label)).toEqual(['journal']);
     expect(result?.options[0].apply).toBe('[[daily/journal]]');
   });
 
   it('returns null when nothing matches or there is no token', () => {
-    expect(source(ctx({ from: 0, to: 7, text: '[[zzz' }))).toBeNull();
-    expect(source(ctx(null))).toBeNull();
+    expect(source(ctx('[[zzz', 5, { from: 0, to: 5, text: '[[zzz' }))).toBeNull();
+    expect(source(ctx('', 0, null))).toBeNull();
+  });
+
+  it('stays silent inside code spans, fenced code and frontmatter', () => {
+    expect(source(ctx('```\n[[pl\n```', 8, { from: 4, to: 8, text: '[[pl' }))).toBeNull();
+    expect(source(ctx('a `[[pl` b', 7, { from: 3, to: 7, text: '[[pl' }))).toBeNull();
+    const fm = '---\nref: "[[pl"\n---\n';
+    expect(source(ctx(fm, 14, { from: 10, to: 14, text: '[[pl' }))).toBeNull();
   });
 
   it('keeps the popup open while typing inside the brackets', () => {
-    const result = source(ctx({ from: 0, to: 4, text: '[[pl' }));
+    const result = source(ctx('[[pl', 4, { from: 0, to: 4, text: '[[pl' }));
     expect(result?.validFor?.test('[[plan')).toBe(true);
     expect(result?.validFor?.test('[[pl an')).toBe(true); // spaces are legal in targets
     // `#` (anchor) / `|` (alias) end the name query -- the popup closes.

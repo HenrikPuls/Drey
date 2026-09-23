@@ -1,9 +1,9 @@
 import { syntaxTree } from '@codemirror/language';
-import type { SyntaxNode } from '@lezer/common';
 import type { CompletionContext, CompletionResult } from '@codemirror/autocomplete';
 import { EditorState, Extension, Range } from '@codemirror/state';
 import { Decoration, DecorationSet, EditorView, ViewPlugin, ViewUpdate } from '@codemirror/view';
 import { frontmatterEnd } from '../markdown-frontmatter';
+import { inCompletableText, insideCode, markdownContextAt } from '../markdown-context';
 
 /**
  * Obsidian-style `[[wikilinks]]` (req-20), built the same way as the `#tag`
@@ -90,16 +90,6 @@ function wikilinkMark(resolved: boolean, attrs: Record<string, string>): Decorat
     markCache.set(cacheKey, deco);
   }
   return deco;
-}
-
-function insideCode(state: EditorState, pos: number): boolean {
-  let node: SyntaxNode | null = syntaxTree(state).resolveInner(pos, 1);
-  for (; node !== null; node = node.parent) {
-    if (/Code|Comment/.test(node.name)) {
-      return true;
-    }
-  }
-  return false;
 }
 
 /** The `resolve` probe: does this wikilink target exist in the vault? */
@@ -234,6 +224,9 @@ export interface WikilinkCandidate {
  * the typed `[[` is replaced whole.
  *
  * v1 completes note names only; a `#heading` anchor is typed by hand.
+ * Silent inside code, frontmatter, links and raw HTML (the shared
+ * Markdown-context gate) — documenting syntax in a code block must not
+ * open the popup.
  */
 export function makeWikilinkCompletionSource(
   getNotes: () => readonly WikilinkCandidate[],
@@ -241,6 +234,9 @@ export function makeWikilinkCompletionSource(
   return (context: CompletionContext): CompletionResult | null => {
     const token = context.matchBefore(/\[\[[^\[\]\n]*/);
     if (!token) {
+      return null;
+    }
+    if (!inCompletableText(markdownContextAt(context.state, context.pos))) {
       return null;
     }
     // A bare `[[` offers nothing until completion is explicitly requested

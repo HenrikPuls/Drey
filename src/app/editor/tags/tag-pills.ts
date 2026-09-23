@@ -1,4 +1,3 @@
-import { syntaxTree } from '@codemirror/language';
 import {
   RangeSet,
   StateEffect,
@@ -14,6 +13,7 @@ import {
   type ViewUpdate,
 } from '@codemirror/view';
 import { frontmatterEnd } from '../markdown-frontmatter';
+import { insideCode } from '../markdown-context';
 import { extractTagOccurrences } from '../../../../shared/tag-grammar';
 
 /**
@@ -137,16 +137,4 @@ export function tagPillDecorationSet(
     }
   }
   return RangeSet.of(deco, true);
-}
-
-/** True when `pos` sits inside a code span/block or comment syntax node. */
-function insideCode(state: EditorView['state'], pos: number): boolean {
-  let node: { name: string; parent: unknown } | null = syntaxTree(state).resolveInner(pos, 1);
-  while (node !== null) {
-    if (/Code|Comment/.test(node.name)) {
-      return true;
-    }
-    node = node.parent as { name: string; parent: unknown } | null;
-  }
-  return false;
 }

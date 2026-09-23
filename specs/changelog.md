@@ -20,6 +20,41 @@ recorded as an explicit decision. The parity checklist lives in
 
 ## Recent milestones
 
+### Milestone 40 — word completion + the shared Markdown context detector
+
+- **Word completion** (`src/app/editor/word-completion/`): a third
+  completion source in the Markdown bundle next to `#tag` / `[[wikilink]]`
+  — repeats the note's own words. Vocabulary = the current document,
+  frequency-ranked; opens at ≥ 3 typed word characters, options capped at
+  20 with `boost: -30` so tag/wikilink candidates keep precedence,
+  `validFor` lets the popup re-filter synchronously while it stays open.
+  The harvest runs only when a popup session opens (cache keyed on the
+  `Text` object's identity), not per keystroke. As-you-type via the
+  existing global `autocompletion()` from `basicSetup`; deliberately **not
+  mounted on the Enter-submits composers** (assistant composer), where an
+  active popup would swallow the submit-Enter.
+- **Shared Markdown context detector** (`src/app/editor/markdown-context.ts`):
+  one `markdownContextAt(state, pos)` answering "what is the caret in?" —
+  Lezer tree first (`code-block` / `code-span` / `link` / `html` / `table`
+  / `heading` — GFM table nodes included), then the constructs without a
+  parser node (`frontmatter`, unclosed `[[…` → `wikilink`, trailing
+  `#tag`), then a table fallback for row-shaped lines near a delimiter row
+  (a table is only a `Table` node once its delimiter row exists), else
+  `prose`. `inCompletableText()` is the shared completion gate.
+- **Tag/wikilink completion guarded** by the detector: both sources stay
+  silent inside fenced code, inline code, frontmatter, links and raw HTML
+  — previously a `#` in a code block or a YAML comment opened the tag
+  popup, and `[[` in code opened the wikilink popup (their decorations
+  were already guarded; the popups were not). Headings, tables and
+  blockquotes still complete. The two duplicated `insideCode()` tree walks
+  (tag pills, wikilink decorations) moved onto the shared module's
+  decoration twin — same semantics, no behavior change.
+- Tests: `markdown-context.spec.ts` (detector + gate), 
+  `word-completion.spec.ts` (ranking, min length, gates, cap, validFor),
+  guard cases in `tag-completion.spec.ts` / `wikilink.spec.ts` (their
+  mocked contexts now carry real Markdown states). No settings toggle —
+  the behavior follows these fixed rules.
+
 ### Milestone 39 — the Outline panel plugin (req-28)
 
 - The **Outline dock panel** (`plugins/outline/`, renderer-only like

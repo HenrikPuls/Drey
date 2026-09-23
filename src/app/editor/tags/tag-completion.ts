@@ -1,6 +1,7 @@
 import type { Completion, CompletionContext, CompletionResult } from '@codemirror/autocomplete';
 import type { TagEntry } from '../../../../shared/plugin-api/search-types';
 import { tagChipColors } from '../../../../shared/tag-style';
+import { inCompletableText, markdownContextAt } from '../markdown-context';
 
 /**
  * `#tag` completion against the live tag vocabulary (milestone 33: a BASE
@@ -8,6 +9,8 @@ import { tagChipColors } from '../../../../shared/tag-style';
  * data owner over the section-search provider). Ranked by use then name;
  * `/` is allowed so a nested tag (`#project/frontend`) completes segment by
  * segment; options render with the tag's resolved prefix/auto color.
+ * Silent inside code, frontmatter, links and raw HTML (the shared
+ * Markdown-context gate) — a `#` there is code or a YAML comment, not a tag.
  */
 
 export interface TagCompletionConfig {
@@ -21,6 +24,9 @@ export function makeTagCompletionSource(config: TagCompletionConfig) {
     // The canonical grammar is `TAG_NAME_SOURCE` in shared/tag-grammar.
     const token = context.matchBefore(/#[\p{L}\p{N}_/-]*/u);
     if (!token || (token.from === token.to && !context.explicit)) {
+      return null;
+    }
+    if (!inCompletableText(markdownContextAt(context.state, context.pos))) {
       return null;
     }
 

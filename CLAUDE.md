@@ -598,6 +598,16 @@ can dock into the three docks (milestone 20,
 The milestone log lives in
 [docs/milestones-done.md](docs/milestones-done.md).
 
+**Just code-complete: milestone 40 — word completion + the shared Markdown
+context detector** (`src/app/editor/word-completion/`,
+`src/app/editor/markdown-context.ts`: a third completion source repeating
+the document's own words — ≥ 3 chars, frequency-ranked, `boost: -30`, not
+on the Enter-submits composers — plus one shared caret-context detector
+that now also guards the tag/wikilink sources against code/frontmatter/
+link/HTML false positives; snippet completion announced as a follow-up,
+plugin-owned in the templates plugin). **Not yet manually verified by the
+owner.**
+
 **Just code-complete: milestone 39 — the Outline panel plugin (req-28)**
 (`plugins/outline/`, renderer-only: the open note's heading tree as a dock
 panel — collapsible levels, click to jump to the heading, caret-row
@@ -640,8 +650,9 @@ milestones") until owner-verified.
   likewise code-complete and **still awaiting manual verification by
   the owner**.
 - **Just code-complete:** milestones 33 (tag system round), 34
-  (tasks across vaults + undo fix), 35 (pinned tabs) and 36 (open files
-  from the OS) — see "Current State" above.
+  (tasks across vaults + undo fix), 35 (pinned tabs), 36 (open files
+  from the OS), 39 (Outline panel) and 40 (word completion +
+  markdown-context detector) — see "Current State" above.
 - **Next:** the provider program: Req-31 MCP client, then copilot-web
   re-apply + copilot-cli spike, or the Office remainder of Req-2 (needs
   a rendering strategy discussion first).
