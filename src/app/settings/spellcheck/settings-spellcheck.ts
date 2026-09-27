@@ -81,6 +81,13 @@ export class SettingsSpellcheck implements OnInit {
     this.spellcheck.invalidate();
   }
 
+  protected onAutoDetectChange(on: boolean): void {
+    this.settings.patchSpellcheck({ autoDetect: on });
+    // Cached verdicts are keyed by language, so they stay valid -- but the
+    // paragraph cache maps blocks onto the old policy.
+    this.spellcheck.invalidate();
+  }
+
   protected onLanguageChange(language: string): void {
     this.settings.patchSpellcheck({ language });
     // Cached verdicts belong to the old dictionary.

@@ -13,11 +13,11 @@ export interface SpellHandlerDeps {
 
 /** Spellcheck IPC: check words, list languages, add a dictionary / a word. */
 export function registerSpellHandlers({ appConfig, spellcheck }: SpellHandlerDeps): void {
-  ipcMain.handle(IPC_CHANNELS.spellCheck, (_event, words: string[]): Promise<SpellCheckResult> =>
-    spellcheck.check(words),
+  ipcMain.handle(IPC_CHANNELS.spellCheck, (_event, words: string[], language?: string): Promise<SpellCheckResult> =>
+    spellcheck.check(words, language),
   );
-  ipcMain.handle(IPC_CHANNELS.spellSuggest, (_event, word: string): Promise<string[]> =>
-    spellcheck.suggest(word),
+  ipcMain.handle(IPC_CHANNELS.spellSuggest, (_event, word: string, language?: string): Promise<string[]> =>
+    spellcheck.suggest(word, language),
   );
   ipcMain.handle(IPC_CHANNELS.spellLanguages, (): Promise<SpellLanguage[]> =>
     spellcheck.listLanguages(),
@@ -27,10 +27,13 @@ export function registerSpellHandlers({ appConfig, spellcheck }: SpellHandlerDep
   );
   ipcMain.handle(
     IPC_CHANNELS.spellAddWord,
-    (_event, word: string, target: 'language' | 'personal'): AppConfig => {
+    (_event, word: string, target: 'language' | 'personal', language?: string): AppConfig => {
       const trimmed = word.trim();
       const current = appConfig.get();
       const sc = current.spellcheck;
+      // The auto-detect path passes the language the word was flagged
+      // under; without it the word belongs to the configured dictionary.
+      const languageId = spellcheck.isKnownLanguage(language) ? language! : sc.language;
       const personalWords = [...sc.personalWords];
       const languageWords: Record<string, string[]> = {};
       for (const [id, list] of Object.entries(sc.languageWords)) {
@@ -42,9 +45,9 @@ export function registerSpellHandlers({ appConfig, spellcheck }: SpellHandlerDep
             personalWords.push(trimmed);
           }
         } else {
-          const list = languageWords[sc.language] ?? [];
+          const list = languageWords[languageId] ?? [];
           if (!list.includes(trimmed)) {
-            languageWords[sc.language] = [...list, trimmed];
+            languageWords[languageId] = [...list, trimmed];
           }
         }
       }

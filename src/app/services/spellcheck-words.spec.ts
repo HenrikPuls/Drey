@@ -160,6 +160,7 @@ describe('personalDictionaryFor', () => {
   const config = (patch: Partial<SpellcheckConfig>): SpellcheckConfig => ({
     enabled: true,
     language: 'de',
+    autoDetect: true,
     dictionaries: [],
     personalWords: [],
     languageWords: {},

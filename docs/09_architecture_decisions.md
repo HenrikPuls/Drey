@@ -62,6 +62,7 @@ package, a minor naming convention).
 | [0052](09_architecture_decisions/0052-pdf-embeds-and-viewer.md)                    | PDF embeds + viewer tab: the built-in PDFium viewer (`plugins: true`) over `drey-asset://` iframes, name-preserving `attachments/` staging, `kind: 'pdf'` base doc kind | Accepted |
 | [0054](09_architecture_decisions/0054-opening-files-from-the-os.md)                | Opening files from the OS: Explorer association for md/markdown/mdx/txt; vault files open normally, out-of-vault ones as pinned external tabs saved in place, behind a main-side read/write allowlist; pull-then-push delivery | Accepted |
 | [0055](09_architecture_decisions/0055-semantic-vault-retrieval.md)                 | Semantic vault retrieval: the assistant's Vault chip retrieves top-k note sections (transformers.js WASM in a worker, JSON index per vault, system-prompt injection — sqlite-vec dropped) | Accepted |
+| [0056](09_architecture_decisions/0056-spellcheck-language-autodetect.md)           | Spellcheck language auto-detect: `franc-min` detects each paragraph's language, words are checked per language group; fallback = configured dictionary; plus verdict memo + dictionary-eviction fixes | Accepted |
 
 Decisions not yet written up (relevant spec already fixes them, but the
 ADR is deferred to the milestone that actually implements them, per

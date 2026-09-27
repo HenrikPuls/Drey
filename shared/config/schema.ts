@@ -369,6 +369,14 @@ export interface SpellcheckConfig {
   enabled: boolean;
   /** Id of the active dictionary -- a bundled one (`de`, `en`) or a custom one. */
   language: string;
+  /**
+   * Detects the language of each paragraph and checks it against the
+   * dictionary of that language (ADR-0056). The `language` id above is
+   * the fallback for blocks too short or too ambiguous to detect and for
+   * detected languages that have no dictionary installed -- text in a
+   * language without a dictionary stays checked against the active one.
+   */
+  autoDetect: boolean;
   /** User-added dictionaries, offered alongside the bundled ones. */
   dictionaries: CustomDictionary[];
   /**

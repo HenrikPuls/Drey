@@ -39,7 +39,20 @@ const MAX_SUGGESTIONS = 5;
 interface LoadedDictionary {
   spell: NSpell | null;
   error?: string;
+  /**
+   * Case-tolerant verdict memo (`word -> dictionary accepts it`), shared
+   * by the bulk check and the suggestion path. A rejected word otherwise
+   * costs up to three `correct` calls -- and the compound splitter
+   * re-asks for the same word and its fragments many times over. Cleared
+   * wholesale when it outgrows its cap; `invalidate()` drops it with the
+   * dictionary.
+   */
+  readonly verdicts: Map<string, boolean>;
 }
+
+/** The memo clears once it holds this many words -- words are short, so
+ *  even tens of thousands of entries stay in the low single-digit MBs. */
+const VERDICT_MEMO_LIMIT = 100_000;
 
 export class SpellcheckService {
   /** Loaded (or failed) dictionaries by language id. */
@@ -50,9 +63,10 @@ export class SpellcheckService {
   /** Bundled + custom dictionaries, with their load state (Settings pane). */
   async listLanguages(): Promise<SpellLanguage[]> {
     const custom = this.config.get().spellcheck.dictionaries;
+    const active = this.config.get().spellcheck.language;
     const out: SpellLanguage[] = [];
     for (const bundled of BUNDLED_DICTIONARIES) {
-      const loaded = await this.load(bundled.id);
+      const loaded = await this.loadState(bundled.id, active);
       out.push({
         id: bundled.id,
         label: bundled.label,
@@ -62,7 +76,7 @@ export class SpellcheckService {
       });
     }
     for (const entry of custom) {
-      const loaded = await this.load(entry.id);
+      const loaded = await this.loadState(entry.id, active);
       out.push({
         id: entry.id,
         label: entry.label,
@@ -75,51 +89,56 @@ export class SpellcheckService {
   }
 
   /**
-   * The words of `words` the active dictionary rejects. Deliberately
-   * carries no suggestions: generating them costs tens of milliseconds
-   * per misspelled word (the bulk check sends dozens of words after every
-   * typing pause / tab open), so they are computed on demand in `suggest`
-   * when the user actually clicks a flagged word. Returns an empty list
-   * when spellcheck is off or the dictionary is unavailable -- never throws.
+   * The words of `words` the given dictionary rejects. `language` selects
+   * the dictionary explicitly (per-paragraph auto-detect, ADR-0056);
+   * without it -- or for an unknown id -- the configured active dictionary
+   * is used. Deliberately carries no suggestions: generating them costs
+   * tens of milliseconds per misspelled word (the bulk check sends dozens
+   * of words after every typing pause / tab open), so they are computed
+   * on demand in `suggest` when the user actually clicks a flagged word.
+   * Returns an empty list when spellcheck is off or the dictionary is
+   * unavailable -- never throws.
    */
-  async check(words: readonly string[]): Promise<SpellCheckResult> {
+  async check(words: readonly string[], language?: string): Promise<SpellCheckResult> {
     const settings = this.config.get().spellcheck;
     if (!settings.enabled || words.length === 0) {
       return { language: settings.enabled ? settings.language : '', misspelled: [] };
     }
-    const { spell } = await this.load(settings.language);
-    if (!spell) {
-      return { language: settings.language, misspelled: [] };
+    const id = this.resolveLanguage(language);
+    const entry = await this.load(id);
+    if (!entry.spell) {
+      return { language: id, misspelled: [] };
     }
 
     const misspelled: string[] = [];
     for (const word of words) {
-      if (this.accepts(spell, word)) {
-        continue;
+      if (!this.accepts(entry, word)) {
+        misspelled.push(word);
       }
-      misspelled.push(word);
     }
-    return { language: settings.language, misspelled };
+    return { language: id, misspelled };
   }
 
   /**
    * Suggestions for one misspelled word, fetched when its popup opens.
    * Suggest is the expensive nspell operation (tens of ms), which is why
    * it lives here rather than in the bulk `check` -- paid once per click,
-   * cached renderer-side afterwards. `[]` for a word that is accepted by
-   * now (added to a dictionary between flag and click) or when the
-   * dictionary is unavailable.
+   * cached renderer-side afterwards. `language` names the dictionary the
+   * word was flagged under (ADR-0056), defaulting to the configured one.
+   * `[]` for a word that is accepted by now (added to a dictionary
+   * between flag and click) or when the dictionary is unavailable.
    */
-  async suggest(word: string): Promise<string[]> {
+  async suggest(word: string, language?: string): Promise<string[]> {
     const settings = this.config.get().spellcheck;
     if (!settings.enabled) {
       return [];
     }
-    const { spell } = await this.load(settings.language);
-    if (!spell || this.accepts(spell, word)) {
+    const entry = await this.load(this.resolveLanguage(language));
+    const spell = entry.spell;
+    if (!spell || this.accepts(entry, word)) {
       return [];
     }
-    const has = (w: string): boolean => this.accepts(spell, w);
+    const has = (w: string): boolean => this.accepts(entry, w);
     // nspell's suggest occasionally returns candidates it never checked
     // against the dictionary (ngram noise like "Krankeinbaus"), which
     // would crowd out the good recombination below -- so plain results
@@ -143,19 +162,57 @@ export class SpellcheckService {
     return merged.slice(0, MAX_SUGGESTIONS);
   }
 
-  /** Accepts `word`, tolerating a case mismatch and German compounds. */
-  private accepts(spell: NSpell, word: string): boolean {
-    // A word that only fails on capitalisation ("montag" at the start of
-    // a sentence is fine, "Montag" mid-sentence is too) is not worth a
-    // squiggle -- offsets carry no sentence context up here.
-    if (spell.correct(word) || spell.correct(capitalize(word)) || spell.correct(word.toLowerCase())) {
+  /**
+   * Accepts `word`, tolerating a case mismatch and German compounds.
+   * Verdicts go through the dictionary's memo: a rejected word otherwise
+   * pays up to three `correct` calls here, and the compound splitter
+   * re-asks for the whole word and each candidate fragment.
+   */
+  private accepts(entry: LoadedDictionary, word: string): boolean {
+    const spell = entry.spell;
+    if (!spell) {
+      return true;
+    }
+    const has = (w: string): boolean => {
+      const cached = entry.verdicts.get(w);
+      if (cached !== undefined) {
+        return cached;
+      }
+      // A word that only fails on capitalisation ("montag" at the start of
+      // a sentence is fine, "Montag" mid-sentence is too) is not worth a
+      // squiggle -- offsets carry no sentence context up here.
+      const verdict =
+        spell.correct(w) || spell.correct(capitalize(w)) || spell.correct(w.toLowerCase());
+      if (entry.verdicts.size >= VERDICT_MEMO_LIMIT) {
+        entry.verdicts.clear();
+      }
+      entry.verdicts.set(w, verdict);
+      return verdict;
+    };
+    if (has(word)) {
       return true;
     }
     // nspell does not evaluate the German dictionary's COMPOUND* rules,
     // so every closed compound not literally listed would be flagged;
     // the splitter accepts "Testfall" as "Test" + "Fall" (see
     // shared/spellcheck.ts).
-    return compoundAcceptable((w) => spell.correct(w) || spell.correct(capitalize(w)) || spell.correct(w.toLowerCase()), word);
+    return compoundAcceptable(has, word);
+  }
+
+  /** Whether `language` names a bundled or custom dictionary. */
+  isKnownLanguage(language?: string): language is string {
+    if (language === undefined) {
+      return false;
+    }
+    return (
+      BUNDLED_DICTIONARIES.some((entry) => entry.id === language) ||
+      this.config.get().spellcheck.dictionaries.some((entry) => entry.id === language)
+    );
+  }
+
+  /** The requested language, or the configured one when it is unknown. */
+  private resolveLanguage(language?: string): string {
+    return this.isKnownLanguage(language) ? language : this.config.get().spellcheck.language;
   }
 
   /** Drops cached dictionaries; called after the config changed. */
@@ -163,12 +220,28 @@ export class SpellcheckService {
     this.cache.clear();
   }
 
+  /** The cached dictionary, loading (and caching) it on first use. */
   private async load(language: string): Promise<LoadedDictionary> {
     const cached = this.cache.get(language);
     if (cached) {
       return cached;
     }
-    let loaded: LoadedDictionary;
+    const loaded = await this.readDictionary(language);
+    this.cache.set(language, loaded);
+    return loaded;
+  }
+
+  /**
+   * The dictionary's load state WITHOUT caching it. The Settings list
+   * needs every dictionary's state, but caching each one would keep them
+   * all parsed and resident (the German dictionary alone is tens of MB);
+   * only the active language earns a cache entry.
+   */
+  private async loadState(language: string, active: string): Promise<LoadedDictionary> {
+    return language === active ? this.load(language) : this.readDictionary(language);
+  }
+
+  private async readDictionary(language: string): Promise<LoadedDictionary> {
     try {
       const custom = this.config
         .get()
@@ -181,12 +254,10 @@ export class SpellcheckService {
       if (personal !== '') {
         spell.personal(personal);
       }
-      loaded = { spell };
+      return { spell, verdicts: new Map() };
     } catch (err) {
-      loaded = { spell: null, error: err instanceof Error ? err.message : String(err) };
+      return { spell: null, error: err instanceof Error ? err.message : String(err), verdicts: new Map() };
     }
-    this.cache.set(language, loaded);
-    return loaded;
   }
 }
 

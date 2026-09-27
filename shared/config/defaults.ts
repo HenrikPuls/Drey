@@ -100,6 +100,7 @@ export const DEFAULT_APP_CONFIG: AppConfig = {
   spellcheck: {
     enabled: true,
     language: 'de',
+    autoDetect: true,
     dictionaries: [],
     personalWords: [],
     languageWords: {},

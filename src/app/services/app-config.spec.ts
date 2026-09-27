@@ -228,6 +228,7 @@ describe('normalizeAppConfig', () => {
     expect(config.spellcheck).toEqual({
       enabled: true,
       language: 'de',
+      autoDetect: true,
       dictionaries: [],
       personalWords: [],
       languageWords: {},

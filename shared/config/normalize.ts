@@ -331,6 +331,7 @@ function normalizeSpellcheck(raw: unknown): SpellcheckConfig {
     // A language whose custom dictionary was removed falls back to the
     // default rather than leaving the checker pointed at nothing.
     language: known.has(language) ? language : DEFAULT_APP_CONFIG.spellcheck.language,
+    autoDetect: bool(source['autoDetect'], DEFAULT_APP_CONFIG.spellcheck.autoDetect),
     dictionaries,
     personalWords: normalizeWordList(source['personalWords']),
     languageWords: normalizeLanguageWords(source['languageWords']),

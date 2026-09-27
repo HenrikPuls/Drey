@@ -670,7 +670,11 @@ src/                Angular renderer (standalone components, esbuild via Angular
                           holding wavy-underline decorations + flagged words (mapped
                           through edits), a debounced/version-guarded ViewPlugin that
                           asks a SpellcheckSource, and a showTooltip popup whose
-                          suggestions replace the word on click.
+                          suggestions replace the word on click. ADR-0056:
+                          language-detect.ts splits the scanned text into blank-line
+                          blocks and detects each block's language (franc-min), so the
+                          extension checks one word group per paragraph language and
+                          every Flagged carries its dictionary id.
       live-preview/     ADR-0009. conceal.ts: ViewPlugin hiding syntax markers away
                          from the selection (+ bullet/checkbox/rule widgets, quote/
                          code/frontmatter line classes; yields a ```mermaid fence to
@@ -1509,7 +1513,12 @@ The bottom of the main area, replacing the old capture bar.
   and fetched suggestions per language. It checks from the first word
   typed — the "anchored entry" gate an earlier version had was removed —
   and the **document editor gets the same extension**, viewport-scoped
-  past 60 kB. Because the Settings
+  past 60 kB. Since
+  [ADR-0056](09_architecture_decisions/0056-spellcheck-language-autodetect.md)
+  each paragraph is checked against its own detected language's
+  dictionary (`autoDetect`, fallback: the configured language); the
+  popup's suggest/"Add to dictionary" follow the flagging language.
+  Because the Settings
   switch and the dictionary choice can change without the text changing,
   both surfaces hold an `effect` that calls
   `MarkdownSurface.recheckSpelling()`.

@@ -595,6 +595,11 @@ triggers a debounced check whose answer arrives asynchronously. The
 interesting part is the version guard that discards a reply the document
 has already moved past
 ([ADR-0013](09_architecture_decisions/0013-inline-spellcheck.md)).
+Since [ADR-0056](09_architecture_decisions/0056-spellcheck-language-autodetect.md)
+the words are grouped by their paragraph's detected language and each
+group is judged by its own dictionary; a block too short to detect, or in
+a language without an installed dictionary, falls back to the configured
+one.
 
 ```mermaid
 sequenceDiagram
@@ -602,6 +607,7 @@ sequenceDiagram
     participant CM as CodeMirror (MarkdownSurface)
     participant Ext as inlineSpellcheck (ViewPlugin + StateField)
     participant Words as shared/spellcheck.ts (pure)
+    participant Detect as language-detect.ts (franc-min)
     participant Service as SpellcheckService
     participant Preload as preload (dreyApi)
     participant Spell as SpellcheckService (main, nspell)
@@ -614,30 +620,34 @@ sequenceDiagram
         Ext->>Words: collectWords(text)  (whole doc, or the visible ranges past 60 kB)
         Note over Words: masks frontmatter, code, #tags, [[links]], URLs,\nsplits hyphenated compounds, skips acronyms
         Words-->>Ext: WordSpan[]
-        Ext->>Service: check(distinctWords(spans))
-        Service->>Service: answer what the per-language cache knows
-        opt unknown words remain
-            Service->>Preload: checkSpelling(words)
-            Preload->>Spell: check(words)
-            Note over Spell: nspell(active dictionary).correct() only —\nsuggest() is 40–100 ms/word and stays out of the bulk check
-            Spell-->>Service: { language, misspelled[] }
-            Service->>Service: cache verdicts (only if language still matches)
+        Ext->>Detect: paragraphRanges(text) -> blockLanguage(block) per block
+        Note over Detect: franc-min per block (>= 6 words), cached by block text;\nfallback = configured language for short blocks / und / no dictionary
+        Ext->>Ext: group spans by block language
+        loop per language group
+            Ext->>Service: check(distinctWords(group), language)
+            Service->>Service: answer what the per-language cache knows
+            opt unknown words remain
+                Service->>Preload: checkSpelling(words, language)
+                Preload->>Spell: check(words, language)
+                Note over Spell: nspell.correct() through the per-dictionary\nverdict memo — suggest() stays out of the bulk check
+                Spell-->>Service: { language, misspelled[] }
+                Service->>Service: cache verdicts (only if language still matches)
+            end
+            Service-->>Ext: Set<misspelled words>
         end
-        Service-->>Ext: Set<misspelled words>
         alt a newer check has started
             Ext->>Ext: reply discarded
         else
-            Ext->>Words: issueSpans(spans, misspelled)
-            Ext->>CM: dispatch(setIssues) -> wavy underline decorations
+            Ext->>CM: dispatch(setIssues) -> wavy underlines, each Flagged carries its lang
         end
     end
 
     User->>CM: clicks an underlined word
     CM->>Ext: mousedown -> openPopup(flagged)
     Ext-->>User: showTooltip popup (placeholder row)
-    Ext->>Service: suggest(word)
-    Service->>Preload: suggestSpelling(word)  (cached + single-flighted)
-    Preload->>Spell: suggest(word)
+    Ext->>Service: suggest(word, flagged.lang)
+    Service->>Preload: suggestSpelling(word, language)  (cached + single-flighted)
+    Preload->>Spell: suggest(word, language)
     Spell-->>Preload: nspell.suggest(word), capped at 5
     Service-->>Ext: suggestions
     Ext-->>User: popup fills in place (only if still open on that word)

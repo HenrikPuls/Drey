@@ -178,16 +178,16 @@ const dreyApi: DreyApi = {
   },
   cancelLlmTask: (taskId: string): Promise<boolean> =>
     ipcRenderer.invoke(IPC_CHANNELS.llmCancel, taskId),
-  checkSpelling: (words: string[]): Promise<SpellCheckResult> =>
-    ipcRenderer.invoke(IPC_CHANNELS.spellCheck, words),
-  suggestSpelling: (word: string): Promise<string[]> =>
-    ipcRenderer.invoke(IPC_CHANNELS.spellSuggest, word),
+  checkSpelling: (words: string[], language?: string): Promise<SpellCheckResult> =>
+    ipcRenderer.invoke(IPC_CHANNELS.spellCheck, words, language),
+  suggestSpelling: (word: string, language?: string): Promise<string[]> =>
+    ipcRenderer.invoke(IPC_CHANNELS.spellSuggest, word, language),
   listSpellLanguages: (): Promise<SpellLanguage[]> =>
     ipcRenderer.invoke(IPC_CHANNELS.spellLanguages),
   addSpellDictionary: (): Promise<CustomDictionary | null> =>
     ipcRenderer.invoke(IPC_CHANNELS.spellAddDictionary),
-  addSpellWord: (word: string, target: 'language' | 'personal'): Promise<AppConfig> =>
-    ipcRenderer.invoke(IPC_CHANNELS.spellAddWord, word, target),
+  addSpellWord: (word: string, target: 'language' | 'personal', language?: string): Promise<AppConfig> =>
+    ipcRenderer.invoke(IPC_CHANNELS.spellAddWord, word, target, language),
   onOpenDailyNote: (listener: (relativePath: string) => void): (() => void) => {
     // The wrapper drops the IpcRendererEvent and forwards only the path --
     // the renderer must never get a handle to the event or to ipcRenderer

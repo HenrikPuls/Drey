@@ -234,6 +234,7 @@ export class Editor implements AfterViewInit {
     effect(() => {
       this.spellcheck.enabled();
       this.spellcheck.language();
+      this.spellcheck.autoDetect();
       if (this.surfaceReady) {
         this.surface().recheckSpelling();
       }

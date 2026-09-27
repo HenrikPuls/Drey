@@ -1,6 +1,7 @@
 import { EditorState } from '@codemirror/state';
 import { EditorView } from '@codemirror/view';
 import {
+  Flagged,
   flaggedWords,
   inlineSpellcheck,
   openSpellPopup,
@@ -9,31 +10,46 @@ import {
   suggestionDom,
 } from './spellcheck';
 
+/** One recorded `check` call: the words and the language asked for. */
+interface CheckCall {
+  words: string[];
+  language?: string;
+}
+
 /** A source that answers from a fixed misspelling list, on demand. */
 function fakeSource(
   issues: Record<string, string[]>,
-  options: { enabled?: boolean; withAddWord?: boolean } = {},
-): SpellcheckSource & { calls: string[][]; suggestCalls: string[]; added: Array<[string, string]> } {
-  const calls: string[][] = [];
-  const suggestCalls: string[] = [];
-  const added: Array<[string, string]> = [];
+  options: {
+    enabled?: boolean;
+    withAddWord?: boolean;
+    blockLanguage?: (block: string) => string;
+  } = {},
+): SpellcheckSource & {
+  calls: CheckCall[];
+  suggestCalls: Array<{ word: string; language?: string }>;
+  added: Array<[string, 'language' | 'personal', string?]>;
+} {
+  const calls: CheckCall[] = [];
+  const suggestCalls: Array<{ word: string; language?: string }> = [];
+  const added: Array<[string, 'language' | 'personal', string?]> = [];
   return {
     calls,
     suggestCalls,
     added,
     enabled: () => options.enabled !== false,
-    check: async (words) => {
-      calls.push(words);
+    blockLanguage: options.blockLanguage ?? (() => 'de'),
+    check: async (words, language) => {
+      calls.push({ words, language });
       return new Set(words.filter((word) => word in issues));
     },
-    suggest: async (word) => {
-      suggestCalls.push(word);
+    suggest: async (word, language) => {
+      suggestCalls.push({ word, language });
       return issues[word] ?? [];
     },
     ...(options.withAddWord
       ? {
-          addWord: async (word: string, target: 'language' | 'personal') => {
-            added.push([word, target]);
+          addWord: async (word: string, target: 'language' | 'personal', language?: string) => {
+            added.push([word, target, language]);
           },
           wordTargets: () => ({ language: 'Deutsch', personal: 'personal words' }),
         }
@@ -66,7 +82,9 @@ describe('inlineSpellcheck', () => {
   it('flags the misspelled words the source reports, at their offsets', async () => {
     view = makeView('Risiken bei besprchen', fakeSource({ besprchen: ['besprochen'] }));
     await settle();
-    expect(flaggedWords(view)).toEqual([{ from: 12, to: 21, word: 'besprchen' }]);
+    expect(flaggedWords(view)).toEqual([
+      { from: 12, to: 21, word: 'besprchen', lang: 'de' },
+    ]);
   });
 
   it('renders a wavy-underline decoration for each flagged word', async () => {
@@ -79,7 +97,7 @@ describe('inlineSpellcheck', () => {
     const source = fakeSource({});
     view = makeView('#daily besprchen `code` besprchen', source);
     await settle();
-    expect(source.calls.at(-1)).toEqual(['besprchen']);
+    expect(source.calls.at(-1)?.words).toEqual(['besprchen']);
   });
 
   it('checks nothing while the source is switched off', async () => {
@@ -88,6 +106,45 @@ describe('inlineSpellcheck', () => {
     await settle();
     expect(source.calls).toEqual([]);
     expect(flaggedWords(view)).toEqual([]);
+  });
+
+  it('checks each paragraph under the language its block is detected as', async () => {
+    // Two blank-line-separated paragraphs, one German, one English; the
+    // fake detector tells them apart by a marker word.
+    const source = fakeSource(
+      { falschen: ['falschen'], wronge: ['wrong'] },
+      {
+        blockLanguage: (block) => (block.includes('English') ? 'en' : 'de'),
+      },
+    );
+    view = makeView(
+      'Deutscher Satz mit einem falschen Wort hier\n\nEnglish text with one wronge word inside',
+      source,
+    );
+    await settle();
+    expect(source.calls).toEqual([
+      {
+        words: ['Deutscher', 'Satz', 'mit', 'einem', 'falschen', 'Wort', 'hier'],
+        language: 'de',
+      },
+      { words: ['English', 'text', 'with', 'one', 'wronge', 'word', 'inside'], language: 'en' },
+    ]);
+    expect(flaggedWords(view)).toEqual([
+      { from: 25, to: 33, word: 'falschen', lang: 'de' },
+      { from: 67, to: 73, word: 'wronge', lang: 'en' },
+    ] satisfies Flagged[]);
+  });
+
+  it('keeps only the verdict of a word under its own language', async () => {
+    // "wronge" is misspelled for the English dictionary but unknown to the
+    // German one too -- the flag must follow the block's language.
+    const source = fakeSource(
+      { wronge: ['wrong'] },
+      { blockLanguage: (block) => (block.includes('English') ? 'en' : 'de') },
+    );
+    view = makeView('Deutscher Satz mit einem falschen Wort hier\n\nEnglish text wronge here', source);
+    await settle();
+    expect(flaggedWords(view).map((f) => f.lang)).toEqual(['en']);
   });
 
   it('moves a flag with the text when an earlier edit shifts it', async () => {
@@ -110,9 +167,9 @@ describe('inlineSpellcheck', () => {
     await settle();
     expect(source.suggestCalls).toEqual([]);
 
-    openSpellPopup(view, { from: 0, to: 9, word: 'besprchen' });
+    openSpellPopup(view, { from: 0, to: 9, word: 'besprchen', lang: 'de' });
     await settle();
-    expect(source.suggestCalls).toEqual(['besprchen']);
+    expect(source.suggestCalls).toEqual([{ word: 'besprchen', language: 'de' }]);
   });
 
   it('opens the popup with a placeholder and fills the suggestions in place', async () => {
@@ -120,7 +177,7 @@ describe('inlineSpellcheck', () => {
     view = makeView('besprchen', source);
     await settle();
 
-    openSpellPopup(view, { from: 0, to: 9, word: 'besprchen' });
+    openSpellPopup(view, { from: 0, to: 9, word: 'besprchen', lang: 'de' });
     const popup = document.querySelector('.cm-spell-popup');
     // Before the fetch resolves there is only the placeholder row.
     expect(popup?.querySelector('.cm-spell-popup-item')).toBeNull();
@@ -163,6 +220,7 @@ describe('inlineSpellcheck', () => {
       enabled: () => anchored,
       check: async (words) => new Set(words.filter((w) => w === 'besprchen')),
       suggest: async () => ['besprochen'],
+      blockLanguage: () => 'de',
     };
     view = makeView('Risiken besprchen', source);
     await settle();
@@ -182,7 +240,7 @@ describe('inlineSpellcheck', () => {
       // null field reads as "no popup open" and is a safe no-op here.
       state: { field: () => null },
     } as unknown as EditorView;
-    const issue = { from: 0, to: 4, word: 'Drey' };
+    const issue = { from: 0, to: 4, word: 'Drey', lang: 'de' };
 
     const without = suggestionDom(fakeView, issue, fakeSource({}));
     expect(without.querySelectorAll('.cm-spell-popup-add')).toHaveLength(0);
@@ -197,8 +255,8 @@ describe('inlineSpellcheck', () => {
     rows[0].dispatchEvent(new MouseEvent('mousedown', { bubbles: true }));
     rows[1].dispatchEvent(new MouseEvent('mousedown', { bubbles: true }));
     expect(source.added).toEqual([
-      ['Drey', 'language'],
-      ['Drey', 'personal'],
+      ['Drey', 'language', 'de'],
+      ['Drey', 'personal', 'de'],
     ]);
   });
 
@@ -207,6 +265,7 @@ describe('inlineSpellcheck', () => {
       enabled: () => true,
       check: () => Promise.reject(new Error('no dictionary')),
       suggest: async () => [],
+      blockLanguage: () => 'de',
     };
     view = makeView('besprchen', source);
     await settle();

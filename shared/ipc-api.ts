@@ -629,22 +629,26 @@ export interface DreyApi {
   cancelLlmTask(taskId: string): Promise<boolean>;
 
   /**
-   * Checks `words` against the active dictionary and returns only the ones
-   * it rejects. Never rejects: spellcheck being off or a dictionary
-   * failing to load yields an empty list, because a broken checker must
-   * not break typing. Deliberately carries no suggestions -- the
-   * suggestion search is the expensive part, so it is fetched per word
+   * Checks `words` against the given dictionary and returns only the ones
+   * it rejects. `language` selects the dictionary explicitly (the
+   * per-paragraph auto-detect path, ADR-0056); without it the configured
+   * active dictionary is used. Never rejects: spellcheck being off or a
+   * dictionary failing to load yields an empty list, because a broken
+   * checker must not break typing. Deliberately carries no suggestions --
+   * the suggestion search is the expensive part, so it is fetched per word
    * via `suggestSpelling` when a flagged word's popup opens.
    */
-  checkSpelling(words: string[]): Promise<SpellCheckResult>;
+  checkSpelling(words: string[], language?: string): Promise<SpellCheckResult>;
 
   /**
    * Suggestions for one misspelled word (up to a handful), fetched when
-   * the user opens its popup -- never during the bulk check. Returns `[]`
-   * for an accepted word (it may have been added since it was flagged) or
-   * when no dictionary is available.
+   * the user opens its popup -- never during the bulk check. `language`
+   * selects the dictionary the word was flagged under (ADR-0056); without
+   * it the configured active dictionary is used. Returns `[]` for an
+   * accepted word (it may have been added since it was flagged) or when
+   * no dictionary is available.
    */
-  suggestSpelling(word: string): Promise<string[]>;
+  suggestSpelling(word: string, language?: string): Promise<string[]>;
 
   /** Every dictionary that can be selected, bundled and custom. */
   listSpellLanguages(): Promise<SpellLanguage[]>;
@@ -657,13 +661,15 @@ export interface DreyApi {
   addSpellDictionary(): Promise<CustomDictionary | null>;
 
   /**
-   * Adds `word` to the spellchecker's accepted words -- to the active
-   * dictionary's list (`target: 'language'`) or the global personal list
-   * (`target: 'personal'`) -- persists it, and reloads the checker so the
-   * squiggle clears immediately (no Settings round-trip). Returns the
-   * stored config so an open Settings screen can reconcile.
+   * Adds `word` to the spellchecker's accepted words -- to the given
+   * dictionary's list (`target: 'language'`, defaulting to the configured
+   * active one -- the auto-detect path passes the language the word was
+   * flagged under) or the global personal list (`target: 'personal'`) --
+   * persists it, and reloads the checker so the squiggle clears
+   * immediately (no Settings round-trip). Returns the stored config so an
+   * open Settings screen can reconcile.
    */
-  addSpellWord(word: string, target: 'language' | 'personal'): Promise<AppConfig>;
+  addSpellWord(word: string, target: 'language' | 'personal', language?: string): Promise<AppConfig>;
 
   /** Currently active vault path, or null if none is active. */
   getActiveVault(): Promise<string | null>;

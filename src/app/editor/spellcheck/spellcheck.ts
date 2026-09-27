@@ -38,7 +38,8 @@ import {
   ViewUpdate,
   showTooltip,
 } from '@codemirror/view';
-import { collectWords, distinctWords, issueSpans, WordSpan } from '../../../../shared/spellcheck';
+import { collectWords, WordSpan } from '../../../../shared/spellcheck';
+import { BlockRange, blockAt, paragraphRanges } from './language-detect';
 
 /** Which accepted-word list a popup "Add …" action targets. */
 export type AddWordTarget = 'language' | 'personal';
@@ -47,21 +48,35 @@ export type AddWordTarget = 'language' | 'personal';
 export interface SpellcheckSource {
   /** Whether checking is switched on at all right now. */
   enabled(): boolean;
-  /** The misspelled subset of `words`, as a set of the flagged words. */
-  check(words: string[]): Promise<ReadonlySet<string>>;
+  /**
+   * The misspelled subset of `words`, as a set of the flagged words.
+   * `language` names the dictionary to judge them by (ADR-0056): the
+   * extension groups each document's paragraphs by detected language and
+   * checks every group separately, so one document can mix verdicts from
+   * two dictionaries.
+   */
+  check(words: string[], language?: string): Promise<ReadonlySet<string>>;
   /**
    * Suggestions for one misspelled word, fetched when its popup opens --
    * deliberately not part of `check`, where the per-word cost would be
-   * paid for every flagged word on every typing pause.
+   * paid for every flagged word on every typing pause. `language` is the
+   * dictionary the word was flagged under.
    */
-  suggest(word: string): Promise<readonly string[]>;
+  suggest(word: string, language?: string): Promise<readonly string[]>;
   /**
-   * Adds `word` to an accepted-word list and repaints. Optional -- when
-   * absent, the popup shows no "Add to dictionary" rows.
+   * Adds `word` to an accepted-word list and repaints. `language` routes
+   * the word into that dictionary's list. Optional -- when absent, the
+   * popup shows no "Add to dictionary" rows.
    */
-  addWord?(word: string, target: AddWordTarget): Promise<void>;
-  /** Human labels for the two "Add …" rows (active dictionary / personal list). */
-  wordTargets?(): { language: string; personal: string };
+  addWord?(word: string, target: AddWordTarget, language?: string): Promise<void>;
+  /** Human labels for the two "Add …" rows (flagging dictionary / personal list). */
+  wordTargets?(language?: string): { language: string; personal: string };
+  /**
+   * The dictionary id to check `block` (one paragraph's text) with --
+   * the configured language, or the detected one when auto-detect is on.
+   * Called once per changed block; the source is expected to cache.
+   */
+  blockLanguage(block: string): string;
 }
 
 export interface SpellcheckConfig {
@@ -86,6 +101,8 @@ export interface Flagged {
   from: number;
   to: number;
   word: string;
+  /** The dictionary that rejected it -- the popup's suggest/add target. */
+  lang: string;
 }
 
 const setIssues = StateEffect.define<Flagged[]>();
@@ -201,7 +218,7 @@ export function suggestionDom(
   loading.textContent = '…';
   body.appendChild(loading);
   dom.appendChild(body);
-  void source.suggest(issue.word).then((suggestions) => {
+  void source.suggest(issue.word, issue.lang).then((suggestions) => {
     const current = view.state.field(spellState, false)?.open;
     if (!current || current.from !== issue.from || current.word !== issue.word) {
       return; // closed, or re-opened on a different word meanwhile
@@ -210,7 +227,7 @@ export function suggestionDom(
   });
 
   if (typeof source.addWord === 'function') {
-    const targets = source.wordTargets?.() ?? {
+    const targets = source.wordTargets?.(issue.lang) ?? {
       language: 'this dictionary',
       personal: 'personal words',
     };
@@ -224,7 +241,7 @@ export function suggestionDom(
       button.textContent = `Add “${issue.word}” to ${targets[target]}`;
       button.addEventListener('mousedown', (event) => {
         event.preventDefault();
-        void source.addWord!(issue.word, target).then(() => {
+        void source.addWord!(issue.word, target, issue.lang).then(() => {
           // Clear the popup and re-run the check now that the verdict
           // cache is stale -- the squiggle disappears without a keystroke.
           view.dispatch({ effects: [closePopup.of(null), recheck.of(null)] });
@@ -309,6 +326,18 @@ const clickHandler = EditorView.domEventHandlers({
 });
 
 /**
+ * One scanned region: the text it covers plus the words found in it.
+ * Whole-document scans produce a single chunk at offset 0; viewport scans
+ * produce one per visible range.
+ */
+interface ScannedChunk {
+  /** Absolute document offset of `text`'s first character. */
+  offset: number;
+  text: string;
+  spans: WordSpan[];
+}
+
+/**
  * Runs the checks. Debounced, and version-guarded: a reply that arrives
  * after the document moved on is discarded rather than painting stale
  * underlines.
@@ -358,48 +387,82 @@ function checker(config: SpellcheckConfig) {
           this.publish(token, []);
           return;
         }
-        const spans = this.scan();
-        if (spans.length === 0) {
+        const chunks = this.scan();
+        if (chunks.every((chunk) => chunk.spans.length === 0)) {
           this.publish(token, []);
           return;
         }
-        let misspelled: ReadonlySet<string>;
+        let flagged: Flagged[];
         try {
-          misspelled = await config.source.check(distinctWords(spans));
+          flagged = await this.judge(chunks);
         } catch {
           // A dictionary that is unreachable clears the underlines rather
           // than freezing the last verdict onto text that has since changed.
           this.publish(token, []);
           return;
         }
-        this.publish(
-          token,
-          issueSpans(spans, misspelled).map((span) => ({
-            from: span.from,
-            to: span.to,
-            word: span.word,
-          })),
+        this.publish(token, flagged);
+      }
+
+      /**
+       * Checks each paragraph language's word group once and joins the
+       * verdicts back onto the word spans (ADR-0056). A mixed de/en
+       * document becomes one IPC round per language -- usually one or
+       * two -- instead of every word being judged by whichever dictionary
+       * happens to be configured.
+       */
+      private async judge(chunks: ScannedChunk[]): Promise<Flagged[]> {
+        const groups = new Map<string, Set<string>>();
+        const tagged: Array<{ span: WordSpan; lang: string }> = [];
+        for (const chunk of chunks) {
+          const ranges: ReadonlyArray<BlockRange> = paragraphRanges(chunk.text);
+          for (const span of chunk.spans) {
+            const range = blockAt(ranges, span.from - chunk.offset);
+            const block = range ? chunk.text.slice(range.from, range.to) : '';
+            const lang = config.source.blockLanguage(block);
+            let words = groups.get(lang);
+            if (!words) {
+              words = new Set();
+              groups.set(lang, words);
+            }
+            words.add(span.word);
+            tagged.push({ span, lang });
+          }
+        }
+        const verdicts = new Map<string, ReadonlySet<string>>();
+        await Promise.all(
+          [...groups].map(async ([lang, words]) => {
+            verdicts.set(lang, await config.source.check([...words], lang));
+          }),
         );
+        const flagged: Flagged[] = [];
+        for (const { span, lang } of tagged) {
+          if (verdicts.get(lang)?.has(span.word)) {
+            flagged.push({ from: span.from, to: span.to, word: span.word, lang });
+          }
+        }
+        return flagged;
       }
 
       /**
        * The words to check, with document offsets. Whole document while it
        * is small enough, otherwise the visible ranges only -- each snapped
        * out to whole lines so a word is never cut in half by the viewport
-       * edge.
+       * edge. Chunks keep the text their spans refer to, so the caller can
+       * detect per-paragraph languages without re-reading the document.
        */
-      private scan(): WordSpan[] {
+      private scan(): ScannedChunk[] {
         const doc = this.view.state.doc;
         if (doc.length <= FULL_SCAN_LIMIT) {
-          return collectWords(doc.toString());
+          const text = doc.toString();
+          return [{ offset: 0, text, spans: collectWords(text) }];
         }
-        const out: WordSpan[] = [];
+        const out: ScannedChunk[] = [];
         for (const range of this.view.visibleRanges) {
           const from = doc.lineAt(range.from).from;
           const to = doc.lineAt(range.to).to;
-          for (const span of collectWords(doc.sliceString(from, to))) {
-            out.push({ word: span.word, from: from + span.from, to: from + span.to });
-          }
+          const text = doc.sliceString(from, to);
+          out.push({ offset: from, text, spans: collectWords(text) });
         }
         return out;
       }
@@ -518,6 +581,6 @@ export function openSpellPopup(view: EditorView, issue: Flagged): void {
 }
 
 /** Test seam: the words a view currently has flagged, in document order. */
-export function flaggedWords(view: EditorView): ReadonlyArray<{ from: number; word: string }> {
+export function flaggedWords(view: EditorView): ReadonlyArray<Flagged> {
   return view.state.field(spellState, false)?.flagged ?? [];
 }

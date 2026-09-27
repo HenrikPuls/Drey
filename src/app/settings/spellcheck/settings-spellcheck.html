@@ -20,6 +20,24 @@
 
     <fieldset [disabled]="!spell.enabled">
       <div class="field">
+        <label class="switch-row">
+          <input
+            type="checkbox"
+            [checked]="spell.autoDetect"
+            (change)="onAutoDetectChange($any($event.target).checked)"
+          />
+          <span>
+            <span class="switch-label">Detect the language of each paragraph</span>
+            <span class="switch-hint">
+              German and English paragraphs in one note are each checked against their own
+              dictionary. Paragraphs too short to recognise, and languages without a dictionary
+              here, use the language selected above.
+            </span>
+          </span>
+        </label>
+      </div>
+
+      <div class="field">
         <label for="spell-language">Language</label>
         <select
           id="spell-language"
