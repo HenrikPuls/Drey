@@ -2037,12 +2037,13 @@ file (pin kept).
 
 - Dedicated keyword-search / FTS surface — the search panel's free-text
   mode covers the common case for now (`specs/roadmap.md` Phase 2)
-- Chat/RAG scope resolution for a vault-wide scope (Phase 2)
 
 _(Dropped: the batch-tag-suggestion inbox — see [ADR-0017] and
 [ADR-0018](09_architecture_decisions/0018-manual-refresh-no-file-watcher.md).
 The chokidar file-watcher reaction, originally dropped with ADR-0018,
-came back as the opt-in §6.31 / [ADR-0045](09_architecture_decisions/0045-optional-vault-file-watcher.md).)_
+came back as the opt-in §6.31 / [ADR-0045](09_architecture_decisions/0045-optional-vault-file-watcher.md).
+The vault-wide chat/RAG scope shipped as §6.44 / milestone 41 /
+[ADR-0055](09_architecture_decisions/0055-semantic-vault-retrieval.md).)_
 ## 6.43 Search summarise → LLM digest → `search-summary.md` (milestone 37)
 
 The Search panel's **Summarize** button (next to Export; hidden while no
@@ -2104,3 +2105,56 @@ buffer, and each send snapshots the current text to
 `.drafts/assistant/<vaultId>-<name>.md` — that vault path is what the
 turn cites and what follow-up replays re-read, so the context survives
 the tab being closed (ADR-0048's paths-not-bodies rule stays intact).
+
+## 6.44 Semantic vault retrieval ? the ask's Vault chip (milestone 41, ADR-0055)
+
+The assistant composer's **Vault chip** cycles `off ? active vault ? all
+vaults` (remembered per app). With it on, the ask carries `vaultScope`
+and the assistant plugin's main side retrieves the top-k note sections
+most similar to the question � embeddings via the plugin's own
+transformers.js WASM worker, one JSON index per vault kept fresh by the
+save-hook / vault-change registries, section text hydrated from the
+vault at answer time. Independent of `mcp.enabled`; ignored for
+live-edit turns; a retrieval failure degrades to no context plus a quiet
+notice.
+
+```mermaid
+sequenceDiagram
+    actor User
+    participant Panel as Assistant panel (renderer)
+    participant Ask as main 'ask' ? ChatEngine
+    participant Sem as SemanticService (plugin main)
+    participant W as embed-worker (WASM, transformers.js)
+    participant Vault as ctx.vault
+    participant LLM as ctx.llm.chat ? provider
+
+    User->>Panel: click Vault chip (off ? vault ? all)
+    User->>Panel: send question (vaultScope: vault/all)
+    Panel->>Ask: invoke('ask', request)
+    Ask->>Sem: retrieveContext(question, scope)
+    Sem->>W: embed("query: �")
+    W-->>Sem: query vector (384 dims)
+    Sem->>Sem: cosine top-k over the scoped vault's index (min score floor)
+    loop each hit
+        Sem->>Vault: read(path)
+        Sem->>Sem: section text fresh from disk (hydration)
+    end
+    Sem-->>Ask: RetrievedSection[] (path, heading, line, score, text)
+    Ask->>Ask: system prompt += VAULT CONTEXT block
+    Ask->>LLM: chat(system, replay�, question)
+    LLM-->>Ask: answer
+    Ask-->>Panel: outcome + contextCount (+ contextError?)
+    Note over Ask: chat note turn persists a compact
+    Note over Ask: ```drey-context fence (path/heading/line);
+    Note over Ask: follow-up replays one [Vault context used �] line
+```
+
+Index freshness is the tags-index pattern: a save hook re-embeds the
+saved file (one worker round per batch of sections), a vault-change
+round deletes / re-reads / rebuilds, and enabling the feature (or a
+model change) triggers a background catch-up build with progress in
+Settings ? "Assistant retrieval" (per-vault status + Rebuild). Vectors
+are stamped with the embedding model; a mismatch marks the vault stale
+and search skips it until rebuilt. Retrieved text rides only the current
+call � it is never persisted into the note and never replayed, so a
+follow-up's context stays small (the small-model budget).

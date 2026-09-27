@@ -20,6 +20,7 @@ import {
   EDIT_PROPOSAL_MARKER,
   ChatToolEntry,
 } from './chat-note.js';
+import { compactContextLine } from './semantic.js';
 
 export interface ReplayResult {
   messages: ChatMessage[];
@@ -77,7 +78,9 @@ export async function buildReplayMessages(
 function replayAssistantTurn(turn: ChatNoteTurn, out: ChatMessage[]): void {
   if (turn.tool.length === 0) {
     if (turn.text !== '') {
-      out.push({ role: 'assistant', content: turn.text });
+      out.push({ role: 'assistant', content: withContextLine(turn.text, turn) });
+    } else if (turn.context.length > 0) {
+      out.push({ role: 'assistant', content: compactContextLine(turn.context) });
     }
     return;
   }
@@ -114,8 +117,24 @@ function replayAssistantTurn(turn: ChatNoteTurn, out: ChatMessage[]): void {
   // The turn's text after the tool sequence is the model's answer — unless
   // it is the edit-proposal stand-in, which the edit entries already carry.
   if (turn.text !== '' && !turn.text.startsWith(EDIT_PROPOSAL_MARKER)) {
-    out.push({ role: 'assistant', content: turn.text });
+    out.push({ role: 'assistant', content: withContextLine(turn.text, turn) });
+  } else if (turn.text === '' && turn.context.length > 0) {
+    // A retrieval-only turn (no answer text survived): the citation line
+    // still tells the model what it saw.
+    out.push({ role: 'assistant', content: compactContextLine(turn.context) });
   }
+}
+
+/**
+ * Older turns' retrieved sections are NOT replayed as text — that would
+ * grow every follow-up (the small-model budget). One compact line names
+ * what was consulted instead (ADR-0055).
+ */
+function withContextLine(text: string, turn: ChatNoteTurn): string {
+  if (turn.context.length === 0) {
+    return text;
+  }
+  return `${text}\n\n${compactContextLine(turn.context)}`;
 }
 
 /** `[Applied change to <path>]` + the document — the model must know what it changed. */

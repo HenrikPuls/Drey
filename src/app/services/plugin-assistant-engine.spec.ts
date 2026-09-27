@@ -208,6 +208,9 @@ function chatHarness(
       readAssetBase64: async () => 'xjaf=',
       onDelta: (taskId, text) => deltas.push({ taskId, text }),
       onLiveEdit: () => undefined,
+      // The Vault chip is off in every ASK below, so this is never called;
+      // it is here to satisfy the port.
+      retrieveContext: async () => [],
     },
   );
 
@@ -233,6 +236,7 @@ const ASK = {
   chatPath: null as string | null,
   liveEdit: false,
   noteKey: 'v1::a.md' as string | null,
+  vaultScope: 'off' as const,
 };
 
 describe('assistant plugin chat engine — persistence (bug-10b)', () => {

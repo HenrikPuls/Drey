@@ -312,6 +312,32 @@
   color: var(--text-5);
 }
 
+/* Retrieved-vault citations (ADR-0055): the collapsible context chip. */
+.assistant-thread .context-chip .tool-chip-body {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.assistant-thread .context-cite {
+  border: 0;
+  background: transparent;
+  color: var(--text-4);
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  text-align: left;
+  cursor: pointer;
+  padding: 1px 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.assistant-thread .context-cite:hover {
+  color: var(--text-6, var(--text-4));
+  text-decoration: underline;
+}
+
 /* Attachment links on a user turn (the persisted link block). */
 .assistant-thread .card-attachments {
   display: flex;
@@ -461,6 +487,27 @@
 }
 
 .assistant-composer .chip.live.on {
+  border-color: var(--accent-quote);
+  color: var(--text-primary);
+  background: color-mix(in srgb, var(--accent-quote) 14%, transparent);
+}
+
+/* The Vault chip (ADR-0055): same toggle shape as live edit. */
+.assistant-composer .chip.vault {
+  padding-right: 8px;
+  border: 1px solid var(--border-strong);
+  background: var(--hover-bg);
+  color: var(--text-3);
+  font: inherit;
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.assistant-composer .chip.vault:hover {
+  color: var(--text-primary);
+}
+
+.assistant-composer .chip.vault.on {
   border-color: var(--accent-quote);
   color: var(--text-primary);
   background: color-mix(in srgb, var(--accent-quote) 14%, transparent);

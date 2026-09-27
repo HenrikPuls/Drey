@@ -49,15 +49,16 @@ this file is req-34/Req-34, but changelog.md may already use higher
 numbers I can't see. Check there before assigning req-35/req-36 (or
 whatever's next).
 
-1. **Semantic Search** — embeddings via transformers.js + sqlite-vec,
-   wired into the "all notes" chat scope (RAG). Reindexing runs as a
-   scoped async background step (progress, crash-persisted, pauses on
-   interactive use) — sized for this one consumer only. Do not build a
-   generic Job Queue subsystem yet (see Excluded ideas).
-2. **Task Center** — stable `#task id:` addressing; migrate the Tasks
+1. **Task Center** — stable `#task id:` addressing; migrate the Tasks
    panel's write-back from line-number to id-based. Closes the silent
    mis-tick risk when a task's line number shifts between scan and
    write-back.
+2. **Semantic Search, remaining slices** — the core shipped as milestone
+   41 / ADR-0055 (the assistant's Vault chip: top-k section retrieval via
+   transformers.js WASM + a JSON index per vault; sqlite-vec was dropped —
+   see the ADR for why). Remaining ideas, none committed: a semantic MCP
+   `vault_search` mode (needs a plural base registry seam), and pause /
+   resume of large rebuilds on interactive use.
 
 ### Feature requests (backlog, unordered)
 

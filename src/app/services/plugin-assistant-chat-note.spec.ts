@@ -24,6 +24,7 @@ function userTurn(overrides: Partial<ChatNoteTurn> = {}): ChatNoteTurn {
     text: 'Please summarise the attached note.',
     attachments: [{ kind: 'note', path: 'daily/2026/09/2026-09-13.md' }],
     tool: [],
+    context: [],
     start: 0,
     ...overrides,
   };
@@ -232,6 +233,7 @@ describe('chat-note grammar — truncation', () => {
         text: 'Summary.',
         attachments: [],
         tool: [],
+        context: [],
         start: 0,
       },
     );
@@ -306,6 +308,7 @@ describe('chat-note grammar — small helpers', () => {
       text: 'Answer.',
       attachments: [],
       tool: [{ kind: 'call', id: 'a', name: 'vault_search', arguments: '{}' }],
+      context: [],
       start: 0,
     });
     expect(text).toBe(

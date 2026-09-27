@@ -27,6 +27,12 @@ import {
   toolEntriesFromTrace,
 } from '../shared/chat-note.js';
 import { buildReplayMessages } from '../shared/chat-replay.js';
+import {
+  buildVaultContextBlock,
+  contextCitations,
+  type ContextCite,
+  type RetrievedSection,
+} from '../shared/semantic.js';
 import { ChatStore } from './chat-store';
 import {
   ASK_ANSWER_SYSTEM,
@@ -76,11 +82,24 @@ export interface ChatEnginePorts {
    * doc-tool call; the renderer applies it to the open tab (`setBuffer`).
    */
   onLiveEdit(path: string, content: string): void;
+  /**
+   * Semantic vault retrieval for one question (ADR-0055): the top-k
+   * sections with their fresh text, best first. Only called when the ask
+   * turned the Vault chip on; failures degrade to no context.
+   */
+  retrieveContext(
+    question: string,
+    scope: 'vault' | 'all',
+  ): Promise<readonly RetrievedSection[]>;
 }
 
 export interface ChatAskResult {
   chatPath: string;
   outcome: AssistantOutcome;
+  /** How many vault sections were retrieved for this turn (0 when off). */
+  contextCount: number;
+  /** Set when retrieval was requested but failed — the panel shows it quiet. */
+  contextError?: string;
 }
 
 const IMAGE_MEDIA_TYPES: Record<string, string> = {
@@ -146,6 +165,7 @@ export class ChatEngine {
       text: request.question,
       attachments,
       tool: [],
+      context: [],
       start: 0,
     });
 
@@ -174,12 +194,27 @@ export class ChatEngine {
       : answerOnly
         ? ASK_ANSWER_SYSTEM
         : ASK_SYSTEM;
+    // Semantic vault retrieval (ADR-0055): only for a plain ask turn — a
+    // live-edit turn already carries the whole document + tool loop, so
+    // the scope is ignored there. Failure degrades to no context.
+    let contextHits: readonly RetrievedSection[] = [];
+    let contextError: string | undefined;
+    if (request.vaultScope !== 'off' && !live) {
+      try {
+        contextHits = await this.ports.retrieveContext(request.question, request.vaultScope);
+      } catch (err) {
+        contextError = err instanceof Error ? err.message : String(err);
+        contextHits = [];
+      }
+    }
     const toolsNote = toolsOn
       ? buildToolsNote(live ? LIVE_EDIT_TOOLS_NOTE : ASK_TOOLS_NOTE, await this.ports.listVaults())
       : null;
-    const baseMessages: ChatMessage[] = [
-      { role: 'system', content: toolsOn ? `${system}\n${toolsNote}` : system },
-    ];
+    const contextBlock = contextHits.length > 0 ? buildVaultContextBlock(contextHits) : null;
+    const systemContent = [system, toolsNote, contextBlock]
+      .filter((part): part is string => part !== null && part !== '')
+      .join('\n\n');
+    const baseMessages: ChatMessage[] = [{ role: 'system', content: systemContent }];
     const catchUp = resume ? this.catchUpLine(view) : '';
     const userBody = buildAskUserMessage(request);
     const questionMessage: ChatMessage = {
@@ -316,6 +351,7 @@ export class ChatEngine {
             : '',
       attachments: [],
       tool: toolEntriesFromTrace(result.toolTrace),
+      context: contextCitations(contextHits) as ContextCite[],
       start: 0,
     };
     await this.store.appendTurn(chatPath, assistantTurn, {
@@ -333,7 +369,12 @@ export class ChatEngine {
       });
     }
 
-    return { chatPath, outcome };
+    return {
+      chatPath,
+      outcome,
+      contextCount: contextHits.length,
+      ...(contextError !== undefined ? { contextError } : {}),
+    };
   }
 
   /** For a resumed session: the confirm result it never saw (one line). */

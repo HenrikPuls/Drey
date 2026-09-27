@@ -20,6 +20,13 @@ asarUnpack:
   # must be real files, not asar entries.
   - '**/node_modules/dictionary-de/**'
   - '**/node_modules/dictionary-en/**'
+  # The semantic retrieval worker (ADR-0055) dynamically import()s the
+  # ORT WASM glue + reads the .wasm from here; an asar-internal path is
+  # not a valid ESM import target.
+  - '**/node_modules/onnxruntime-web/dist/**'
+  # worker_threads + asar + dynamic import() is fragile — the embed worker
+  # stays a real file.
+  - 'dist-electron/plugins/assistant/main/semantic/embed-worker.js'
   # Spawned by an EXTERNAL `node` (an MCP client) -- cannot live in the asar.
   - 'dist-electron/electron/mcp/stdio-bridge.js'
 

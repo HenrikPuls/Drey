@@ -118,8 +118,17 @@ toolchain is removable by deleting `.tools/`). Never assume a bare `node`,
   `/v1/models` is reachable (the model id must stay hand-enterable;
   CLI/web providers advertise no model listing at all). API keys sit in
   `app-config.json` in plain text (`docs/11`).
-- sqlite-vec for vector search, transformers.js for embeddings (Phase 2,
-  not part of the MVP).
+- **Semantic vault retrieval** (milestone 41,
+  [ADR-0055](docs/09_architecture_decisions/0055-semantic-vault-retrieval.md)):
+  the assistant's **Vault chip** retrieves the top-k note sections most
+  similar to the question into the system prompt. Embeddings via
+  transformers.js **WASM-only in a worker thread** (the native
+  `onnxruntime-node`/`sharp` deps are stubbed; the WASM runtime is
+  injected via `globalThis[Symbol.for('onnxruntime')]`), one JSON index
+  per vault under `<userData>/plugins/assistant/semantic-index/` with
+  brute-force cosine — no sqlite-vec, no native modules, no database.
+  Owned by the assistant plugin (its only consumer); retrieval hydrates
+  section text fresh from the vault at answer time.
 - **Manual refresh, plus an opt-in watcher.** By default there is no file
   watcher ([ADR-0018](docs/09_architecture_decisions/0018-manual-refresh-no-file-watcher.md)):
   a manual refresh runs one full round in main (index rebuild + a
@@ -335,9 +344,22 @@ Renderer (Angular):
   call pushes via the `chat:liveEdit` event into `documents.setBuffer`
   (one Ctrl+Z step per push), the document is locked for user input
   while the turn runs (`documents.setEditLock` → an `EditorView.editable`
-  compartment + the meta bar's "Assistant is editing…" hint), the applied
-  document persists as the turn's `edit` fence entry, and providers
-  without tool support fail visibly
+   compartment + the meta bar's "Assistant is editing…" hint), the applied
+   document persists as the turn's `edit` fence entry, and providers
+   without tool support fail visibly
+- **Vault chip — semantic vault retrieval** (milestone 41,
+  [ADR-0055](docs/09_architecture_decisions/0055-semantic-vault-retrieval.md)):
+  a second composer chip cycles `off → active vault → all vaults`; each
+  ask with it on embeds the question in the assistant plugin's worker
+  (transformers.js WASM-only, `plugins/assistant/main/semantic/`) and
+  injects the top-k similar note sections into the system prompt —
+  section text rides ONLY that call (never the replay; older turns cite
+  via a compact ```drey-context fence). Index: one JSON file per vault
+  under `<userData>/plugins/assistant/semantic-index/`, kept fresh by the
+  save/vault hook registries, hydrated from the vault at answer time.
+  Settings → "Assistant retrieval" (enabled, model id, k, score floor,
+  per-vault status + rebuild). Independent of `mcp.enabled`; ignored for
+  live-edit turns.
 - `KeybindingService` (`src/app/keybindings/`) — one capture-phase
   `keydown` listener mapping chord strings onto `Command`s; features
   register from `App`. Commands: `search.open` (`Mod+Shift+F`),
@@ -598,6 +620,16 @@ can dock into the three docks (milestone 20,
 The milestone log lives in
 [docs/milestones-done.md](docs/milestones-done.md).
 
+**Just code-complete: milestone 41 — semantic vault retrieval, the
+assistant's Vault chip** ([ADR-0055](docs/09_architecture_decisions/0055-semantic-vault-retrieval.md)):
+the composer chip cycles `off → active vault → all vaults`; each ask
+retrieves the top-k similar note sections into the system prompt
+(transformers.js WASM-only in a worker — native deps stubbed — one JSON
+index per vault, no database; Settings → "Assistant retrieval"). **Not
+yet manually verified by the owner** — in particular first build (model
+download), retrieval quality on German daily notes, and the packaged
+`npm run pack` smoke (new asarUnpack entries).
+
 **Just code-complete: milestone 40 — word completion + the shared Markdown
 context detector** (`src/app/editor/word-completion/`,
 `src/app/editor/markdown-context.ts`: a third completion source repeating
@@ -651,8 +683,9 @@ milestones") until owner-verified.
   the owner**.
 - **Just code-complete:** milestones 33 (tag system round), 34
   (tasks across vaults + undo fix), 35 (pinned tabs), 36 (open files
-  from the OS), 39 (Outline panel) and 40 (word completion +
-  markdown-context detector) — see "Current State" above.
+  from the OS), 39 (Outline panel), 40 (word completion +
+  markdown-context detector) and 41 (semantic vault retrieval) — see
+  "Current State" above.
 - **Next:** the provider program: Req-31 MCP client, then copilot-web
   re-apply + copilot-cli spike, or the Office remainder of Req-2 (needs
   a rendering strategy discussion first).

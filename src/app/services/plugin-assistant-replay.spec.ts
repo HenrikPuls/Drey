@@ -9,6 +9,7 @@ function turn(overrides: Partial<ChatNoteTurn>): ChatNoteTurn {
     text: '',
     attachments: [],
     tool: [],
+    context: [],
     start: 0,
     ...overrides,
   };

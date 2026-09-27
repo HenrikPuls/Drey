@@ -1,0 +1,6 @@
+{
+  "name": "onnxruntime-node",
+  "version": "1.21.0",
+  "description": "Inert stub: Drey runs ONNX via the WASM backend injected through globalThis[Symbol.for('onnxruntime')] (ADR-0055, keeps ADR-0023 'no native modules' intact).",
+  "main": "index.js"
+}

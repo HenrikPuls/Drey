@@ -13,6 +13,7 @@
  * imports).
  */
 import type { AskOutcome } from '../../../shared/llm';
+import { normalizeVaultScope, type VaultScope } from './semantic.js';
 
 /** One file attached to an ask turn. `body` is the document text (LF). */
 export interface AskFile {
@@ -54,6 +55,13 @@ export interface AskRequest {
    * text-shaped is focused or the tab carries no vaultId (scratch).
    */
   noteKey: string | null;
+  /**
+   * Semantic vault retrieval for THIS turn (ADR-0055): `off` (chip dark),
+   * `vault` (active vault) or `all` (every registered vault). The main
+   * side retrieves the top-k sections and injects them into the system
+   * prompt; a live-edit turn ignores the scope.
+   */
+  vaultScope: VaultScope;
 }
 
 /**
@@ -105,7 +113,7 @@ export function parseAskPayload(payload: unknown): {
   taskId?: string;
 } {
   const shape = (payload ?? {}) as Record<string, unknown>;
-  const { question, note, extraFiles, images, chatPath, liveEdit, noteKey, taskId } = shape;
+  const { question, note, extraFiles, images, chatPath, liveEdit, noteKey, vaultScope, taskId } = shape;
   if (typeof question !== 'string') {
     throw new Error('malformed ask payload');
   }
@@ -139,6 +147,7 @@ export function parseAskPayload(payload: unknown): {
       chatPath,
       liveEdit,
       noteKey: noteKey === undefined ? null : (noteKey as string | null),
+      vaultScope: normalizeVaultScope(vaultScope),
     },
     ...(typeof taskId === 'string' ? { taskId } : {}),
   };

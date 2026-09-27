@@ -137,7 +137,7 @@ function setup(options: { llm?: boolean } = {}): Harness {
         path,
         `${current}\n## User\n\n${request.question}\n\n## Assistant\n\nAntwort.\n`,
       );
-      return { chatPath: path, outcome: h.nextOutcome };
+      return { chatPath: path, outcome: h.nextOutcome, contextCount: 0 };
     },
     appendEdit: async (path, applied, after) => {
       editOutcomes.push({ path, applied, after });
@@ -215,6 +215,7 @@ describe('assistant plugin state — chat-first asks (ADR-0048)', () => {
       chatPath: null,
       liveEdit: false,
       noteKey: 'v1::a.md',
+      vaultScope: 'off',
     });
   });
 

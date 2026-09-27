@@ -23,6 +23,7 @@ const VALID = {
   chatPath: 'chats/2026/09/2026-09-13-topic.md',
   liveEdit: false,
   noteKey: 'v1::a.md',
+  vaultScope: 'off',
 };
 
 describe('assistant plugin ask contract (plugins/assistant/shared/ask)', () => {

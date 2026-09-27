@@ -111,6 +111,7 @@ describe('ChatStore — append / truncate / outcomes', () => {
     text: 'What is this?',
     attachments: [{ kind: 'note' as const, path: 'daily/a.md' }],
     tool: [],
+    context: [],
     start: 0,
   };
 
@@ -142,6 +143,7 @@ describe('ChatStore — append / truncate / outcomes', () => {
         text: '[Proposed a change to `daily/a.md`]',
         attachments: [],
         tool: [],
+        context: [],
         start: 0,
       },
       { session: 'sess-1' },
@@ -170,6 +172,7 @@ describe('ChatStore — append / truncate / outcomes', () => {
         text: 'Because.',
         attachments: [],
         tool: [],
+        context: [],
         start: 0,
       },
       { session: 'sess-1' },

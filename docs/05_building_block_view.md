@@ -667,10 +667,10 @@ src/                Angular renderer (standalone components, esbuild via Angular
                          compartment; Editor remembers the state per document
                          path across tab switches.
       spellcheck/       ADR-0013. spellcheck.ts: the inline spellchecker -- StateField
-                         holding wavy-underline decorations + flagged words (mapped
-                         through edits), a debounced/version-guarded ViewPlugin that
-                         asks a SpellcheckSource, and a showTooltip popup whose
-                         suggestions replace the word on click.
+                          holding wavy-underline decorations + flagged words (mapped
+                          through edits), a debounced/version-guarded ViewPlugin that
+                          asks a SpellcheckSource, and a showTooltip popup whose
+                          suggestions replace the word on click.
       live-preview/     ADR-0009. conceal.ts: ViewPlugin hiding syntax markers away
                          from the selection (+ bullet/checkbox/rule widgets, quote/
                          code/frontmatter line classes; yields a ```mermaid fence to
@@ -2302,7 +2302,52 @@ one push per press, Ctrl+S saves (req-25 unchanged).
   model's own buffer pushes) plus the meta bar's "Assistant is
   editing…" hint. `PLUGIN_API_VERSION` minor → 4.
 
-## 5.27 PDF embeds + viewer tab (ADR-0052)
+## 5.27 Semantic vault retrieval (`plugins/assistant/main/semantic/`, ADR-0055)
+
+The **Vault chip** in the composer cycles `off → active vault → all
+vaults` (remembered in `localStorage['drey.assistant.vaultScope']`); each
+ask turned on carries `vaultScope` in the `AskRequest`, and
+`ChatEngine` retrieves the top-k note sections most similar to the
+question into the system prompt — a small fixed context, no tool loop,
+independent of `mcp.enabled`, ignored for live-edit turns.
+
+- **`shared/semantic.ts`** (pure, spec-importable) — the `VaultScope`
+  type + normalizer, config defaults, e5 `query:`/`passage:` prefixes,
+  the fence-aware section splitter (copied from the tags plugin's —
+  cross-plugin imports are banned), float32↔base64 vectors, cosine, the
+  `VAULT CONTEXT` block builder, citations + the compact replay line.
+- **`main/semantic/embed-worker.ts`** — the app's ONLY transformers.js
+  import: a worker_threads entry that injects the WASM ONNX runtime via
+  `globalThis[Symbol.for('onnxruntime')]` (the native
+  `onnxruntime-node`/`sharp` dependencies are satisfied by inert stub
+  packages, keeping ADR-0023 intact) and answers `{id, texts}` with
+  `{id, vectors}`. Configured per spawn (`model`, HF cache dir under
+  `<userData>/models`).
+- **`main/semantic/embedder.ts`** — worker supervision: lazy spawn,
+  sequential batches of 16, restart on model change or crash, fail-fast
+  pending rejection.
+- **`main/semantic/vector-index.ts`** — the in-memory index: per vault a
+  `{model, files: Map<path, {path, heading, line, vec}[]>}`; `search`
+  ranks across scoped vaults with a score floor and skips stale-model
+  vaults; `serialize`/`load` map a vault to its JSON file (base64
+  vectors, model stamped).
+- **`main/semantic/service.ts`** — orchestration: plugin config slice
+  (`semantic.enabled/model/topK/minScore`), save-hook + vault-change
+  freshness (per-vault work chains), boot/enabling catch-up of
+  un-indexed files with `semantic:progress` events, debounced atomic
+  JSON persistence (sync flush on quit), and `retrieve()` — embed,
+  top-k, then hydrate each hit's section text fresh from the vault.
+  Backend methods: `semantic:status` / `semantic:rebuild` /
+  `semantic:configChanged`.
+- **Ask flow** — retrieved text rides ONLY the current system prompt
+  (never persisted, never replayed); the turn persists a compact
+  ```drey-context fence rendered as a collapsible chip (click opens the
+  file); older turns replay one `[Vault context used …]` line;
+  `contextError` degrades to a quiet notice. **Settings → "Assistant
+  retrieval"** (plugin category): switch, model id, k, score floor,
+  per-vault status + rebuild.
+
+## 5.28 PDF embeds + viewer tab (ADR-0052)
 
 Dropped PDFs render in place; `.pdf` files open as viewer tabs. No PDF
 library — Chromium's built-in (PDFium) viewer, enabled by

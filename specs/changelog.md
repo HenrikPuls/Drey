@@ -20,6 +20,60 @@ recorded as an explicit decision. The parity checklist lives in
 
 ## Recent milestones
 
+### Milestone 41 — semantic vault retrieval: the assistant's Vault chip (ADR-0055)
+
+- **The Vault chip** (assistant composer, next to Live edit): cycles
+  `off → Vault (active vault) → Vault: all → off`, remembered in
+  `localStorage['drey.assistant.vaultScope']`. Each ask with the chip on
+  retrieves the **top-k note sections most similar to the question** from
+  the scoped vault(s) and injects them into the system prompt
+  (`VAULT CONTEXT` block, section text capped at 1200 chars each, cite
+  paths requested). No tool calls, a small fixed context — built for
+  small local models, independent of `mcp.enabled`.
+- **Embeddings in-app** (`plugins/assistant/main/semantic/`):
+  transformers.js **WASM-only in a worker thread** (the main process
+  never blocks). The native `onnxruntime-node` and `sharp` requirements
+  are satisfied by inert stub packages (`tools/stubs/*`, `file:`
+  dependencies with satisfying version numbers) while the WASM backend is
+  injected via `globalThis[Symbol.for('onnxruntime')]` before load —
+  ADR-0023 keeps "no native modules". The ORT WASM glue + the embed
+  worker are `asarUnpack`ed (dynamic `import()` cannot target asar).
+  Default model `Xenova/multilingual-e5-small` (q8, 384 dims,
+  multilingual — the vault content is German), configurable; e5
+  `query:`/`passage:` prefixes applied automatically. One-time model
+  download from the HF hub on first build, cached under `<userData>/models`.
+- **Index without a database** (deliberate deviation from the roadmap's
+  sqlite-vec sketch, see ADR-0055): one JSON file per vault under
+  `<userData>/plugins/assistant/semantic-index/` (base64 float32 vectors,
+  model id stamped, debounced atomic writes + sync flush on quit),
+  brute-force cosine in JS. Section unit = the tags index's
+  heading-delimited split (copied pure splitter, fence-aware); a model
+  change marks an index stale (search skips it) and the next build
+  re-embeds.
+- **Freshness + retrieval flow**: the index rides the save-hook /
+  vault-change registries like the tags index (incremental per file,
+  ~30 ms per section on first build; progress via `semantic:progress`).
+  Boot/enabling runs a catch-up build of un-indexed files. Retrieval
+  happens main-side in the ask flow: embed the question, top-k over the
+  scope, then **hydrate each hit's text fresh from the vault** — a stale
+  index degrades rankings, never content.
+- **Context stays small on follow-ups**: retrieved text rides only the
+  current call's system prompt — never the replay. The chat note persists
+  a compact ```drey-context fence (paths + headings + lines, rendered as
+  a collapsible chip; a click opens the file); older turns replay it as
+  one `[Vault context used …]` line. Live-edit turns ignore the scope.
+  A retrieval failure degrades to no context + a quiet notice
+  (`contextError`), never a failed ask.
+- **Settings → "Assistant retrieval"** (plugin category, saves
+  immediately): master switch, embedding model id, k (1–8, default 4),
+  minimum similarity (default 0.3), per-vault index status (section
+  count / stale badge / build progress) with per-vault Rebuild buttons.
+- Tests: `semantic.spec.ts` (splitter, prefixes, vectors, cosine, context
+  shaping), `ask-context.spec.ts` (`vaultScope` parsing incl. legacy
+  payloads, `drey-context` fence roundtrip incl. hand-mangled lines,
+  compact replay line), `vector-index.spec.ts` (ranking, k/threshold,
+  vault isolation, staleness, JSON roundtrip, corrupt-file tolerance).
+
 ### Milestone 40 — word completion + the shared Markdown context detector
 
 - **Word completion** (`src/app/editor/word-completion/`): a third

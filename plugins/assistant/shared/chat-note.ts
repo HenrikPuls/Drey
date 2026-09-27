@@ -24,6 +24,9 @@ export const CHATS_DIR = 'chats';
 /** The fence tag around persisted tool calls/results/edit outcomes. */
 export const TOOL_FENCE_TAG = 'drey-tool';
 
+/** The fence tag around one ask turn's retrieved-vault citations (ADR-0055). */
+export const CONTEXT_FENCE_TAG = 'drey-context';
+
 /** Frontmatter `kind:` marking an assistant conversation note (ADR-0048). */
 export const CHAT_KIND = 'chat';
 
@@ -64,8 +67,17 @@ export interface ChatNoteTurn {
   attachments: ChatNoteAttachment[];
   /** ```drey-tool lines in persisted order. */
   tool: ChatToolEntry[];
+  /** ```drey-context citations (ADR-0055): what this turn retrieved; assistant turns only. */
+  context: ChatContextEntry[];
   /** Char offset of this turn's heading — `truncateFrom` slices here. */
   start: number;
+}
+
+/** One persisted citation line inside a ```drey-context fence. */
+export interface ChatContextEntry {
+  path: string;
+  heading: string;
+  line: number;
 }
 
 /** The frontmatter fields a chat note reads. Everything else is the user's. */
@@ -237,6 +249,33 @@ function parseToolLine(line: string): ChatToolEntry | null {
   return null;
 }
 
+/** Parses one ```drey-context fence body line; null when it is not a citation. */
+function parseContextLine(line: string): ChatContextEntry | null {
+  let obj: Record<string, unknown>;
+  try {
+    const parsed = JSON.parse(line) as unknown;
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+      return null;
+    }
+    obj = parsed as Record<string, unknown>;
+  } catch {
+    return null;
+  }
+  const cite = obj['cite'];
+  if (!cite || typeof cite !== 'object' || Array.isArray(cite)) {
+    return null;
+  }
+  const c = cite as Record<string, unknown>;
+  if (typeof c['path'] !== 'string' || c['path'] === '') {
+    return null;
+  }
+  return {
+    path: c['path'],
+    heading: typeof c['heading'] === 'string' ? c['heading'] : '',
+    line: typeof c['line'] === 'number' ? c['line'] : 0,
+  };
+}
+
 /** True when the line is exactly one attachment link (a wikilink or an image). */
 export function isAttachmentLine(line: string): ChatNoteAttachment | null {
   const wiki = WIKILINK_LINE.exec(line.trim());
@@ -283,24 +322,37 @@ export function parseChatNote(noteText: string): ChatNoteView {
       return;
     }
     const { turn, raw } = current;
-    // Tool fences: ```drey-tool ... ``` — content lines parsed in order.
+    // Fences: ```drey-tool (calls/results/edits) and ```drey-context
+    // (retrieved-vault citations) — content lines parsed in order.
     const tool: ChatToolEntry[] = [];
-    let inFence = false;
+    const context: ChatContextEntry[] = [];
+    let fenceTag: 'tool' | 'context' | null = null;
     const textLines: string[] = [];
     for (const line of raw) {
       const trimmed = line.trim();
-      if (!inFence && trimmed === '```' + TOOL_FENCE_TAG) {
-        inFence = true;
+      if (fenceTag === null && trimmed === '```' + TOOL_FENCE_TAG) {
+        fenceTag = 'tool';
         continue;
       }
-      if (inFence && trimmed === '```') {
-        inFence = false;
+      if (fenceTag === null && trimmed === '```' + CONTEXT_FENCE_TAG) {
+        fenceTag = 'context';
         continue;
       }
-      if (inFence) {
+      if (fenceTag !== null && trimmed === '```') {
+        fenceTag = null;
+        continue;
+      }
+      if (fenceTag === 'tool') {
         const entry = parseToolLine(line);
         if (entry) {
           tool.push(entry);
+        }
+        continue;
+      }
+      if (fenceTag === 'context') {
+        const entry = parseContextLine(line);
+        if (entry) {
+          context.push(entry);
         }
         continue;
       }
@@ -310,6 +362,7 @@ export function parseChatNote(noteText: string): ChatNoteView {
       textLines.push(line);
     }
     turn.tool = tool;
+    turn.context = context;
 
     // Meta comment (first ```<!-- drey: … -->``` in the raw segment).
     for (const line of raw) {
@@ -377,6 +430,7 @@ export function parseChatNote(noteText: string): ChatNoteView {
         text: '',
         attachments: [],
         tool: [],
+        context: [],
         start: bodyStart + offset,
       };
       current = { turn, raw: [] };
@@ -411,6 +465,11 @@ export function toolEntryLine(entry: ChatToolEntry): string {
         edit: { path: entry.path, applied: entry.applied, ...(entry.after !== undefined ? { after: entry.after } : {}) },
       });
   }
+}
+
+/** One `{"cite":…}` fence line (```drey-context). */
+export function contextEntryLine(entry: ChatContextEntry): string {
+  return JSON.stringify({ cite: { path: entry.path, heading: entry.heading, line: entry.line } });
 }
 
 /**
@@ -471,6 +530,9 @@ export function serializeTurn(turn: ChatNoteTurn): string {
   if (turn.tool.length > 0) {
     out.push('', '```' + TOOL_FENCE_TAG, ...turn.tool.map(toolEntryLine), '```');
   }
+  if (turn.context.length > 0) {
+    out.push('', '```' + CONTEXT_FENCE_TAG, ...turn.context.map(contextEntryLine), '```');
+  }
   return out.join('\n');
 }
 
@@ -509,6 +571,7 @@ export function appendEditOutcome(
       tool: [
         { kind: 'edit', path: outcome.path, applied: outcome.applied, ...(outcome.after !== undefined ? { after: outcome.after } : {}) },
       ],
+      context: [],
       start: 0,
     });
   }

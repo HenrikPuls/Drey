@@ -11,7 +11,7 @@ import { resolveActions } from '../shared/resolve-actions.js';
 import { mountPanel, type PanelHandle } from './panel.js';
 import { createRunningTasks } from './running-tasks.js';
 import { createAssistantState, type AssistantPorts } from './state.js';
-import { actionsSettingsPage } from './settings-pages.js';
+import { actionsSettingsPage, retrievalSettingsPage } from './settings-pages.js';
 
 /**
  * The Assistant plugin's renderer (ADR-0044 stage 7): the assistant dock
@@ -42,6 +42,8 @@ const plugin: PluginRendererModule = {
         api.backend.invoke('ask', { ...request, taskId }) as Promise<{
           chatPath: string;
           outcome: AssistantOutcome;
+          contextCount: number;
+          contextError?: string;
         }>,
       appendEdit: (path, applied, after) =>
         api.backend.invoke('chat:appendEdit', { path, applied, after }) as Promise<void>,
@@ -272,6 +274,9 @@ const plugin: PluginRendererModule = {
       void refreshConfig();
     };
     api.ui.registerSettingsPage(actionsSettingsPage(api, onConfigPatched));
+    // The semantic retrieval page is plugin-config driven (not appConfig),
+    // so it does not need the patch announcement.
+    api.ui.registerSettingsPage(retrievalSettingsPage(api));
 
     void refreshConfig();
   },

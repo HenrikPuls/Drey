@@ -57,7 +57,8 @@ type IconName =
   | 'rotate-ccw'
   | 'wrench'
   | 'pencil'
-  | 'plus';
+  | 'plus'
+  | 'search';
 
 /** The Lucide glyphs the panel uses (same paths as `src/app/icons/icon.ts`). */
 const ICON_PATHS: Record<IconName, readonly string[]> = {
@@ -74,6 +75,7 @@ const ICON_PATHS: Record<IconName, readonly string[]> = {
     'M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z',
   ],
   pencil: ['M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z'],
+  search: ['m21 21-4.34-4.34', 'M11 3a8 8 0 1 0 0 16 8 8 0 0 0 0-16z'],
 };
 
 function icon(name: IconName, size = 12): SVGSVGElement {
@@ -220,6 +222,48 @@ export function mountPanel(
 
     for (let i = 0; i < turn.tool.length; i++) {
       article.appendChild(toolChipNode(turn.tool[i], `${index}:${i}`));
+    }
+
+    // Retrieved-vault citations (ADR-0055): one collapsible chip listing
+    // what this turn consulted; a click opens the source file.
+    if (turn.context.length > 0) {
+      const key = `${index}:ctx`;
+      const expanded = expandedChips.has(key);
+      const chip = el('div', 'tool-chip context-chip' + (expanded ? ' open' : ''));
+      const summary = el('button', 'tool-chip-summary') as HTMLButtonElement;
+      summary.type = 'button';
+      summary.appendChild(icon('search', 10));
+      summary.appendChild(
+        el(
+          'span',
+          undefined,
+          `vault context · ${turn.context.length} section${turn.context.length === 1 ? '' : 's'}`,
+        ),
+      );
+      summary.addEventListener('click', () => {
+        if (expanded) {
+          expandedChips.delete(key);
+        } else {
+          expandedChips.add(key);
+        }
+        render();
+      });
+      chip.appendChild(summary);
+      if (expanded) {
+        const list = el('div', 'tool-chip-body context-list');
+        for (const cite of turn.context) {
+          const row = el('button', 'context-cite') as HTMLButtonElement;
+          row.type = 'button';
+          row.textContent = `${baseName(cite.path)} — ${cite.heading}`;
+          row.title = `${cite.path} (line ${cite.line}) — click to open`;
+          row.addEventListener('click', () => {
+            void api.documents.open(cite.path);
+          });
+          list.appendChild(row);
+        }
+        chip.appendChild(list);
+      }
+      article.appendChild(chip);
     }
 
     if (turn.text !== '') {
@@ -471,6 +515,23 @@ export function mountPanel(
     live.appendChild(el('span', 'chip-name', 'Live edit'));
     live.addEventListener('click', () => state.toggleLiveEdit());
     chipsRow.appendChild(live);
+    // The Vault chip (ADR-0055): cycles off → active vault → all vaults;
+    // each ask then retrieves the most similar note sections as context.
+    const scope = state.vaultScope();
+    const vault = el('button', `chip vault${scope !== 'off' ? ' on' : ''}`) as HTMLButtonElement;
+    vault.type = 'button';
+    vault.textContent = scope === 'all' ? 'Vault: all' : 'Vault';
+    vault.title =
+      scope === 'off'
+        ? 'Search the vault for context: click once for the active vault, again for all vaults.'
+        : scope === 'vault'
+          ? 'Context: the most similar sections of the active vault. Click for all vaults, again to turn off.'
+          : 'Context: the most similar sections across every vault. Click to turn off.';
+    vault.setAttribute('aria-label', 'Toggle vault context');
+    vault.setAttribute('aria-pressed', String(scope !== 'off'));
+    vault.appendChild(icon('search', 11));
+    vault.addEventListener('click', () => state.cycleVaultScope());
+    chipsRow.appendChild(vault);
     const path = state.notePath();
     if (path !== null && state.noteIncluded()) {
       chipsRow.appendChild(chipNode(path, 'note'));

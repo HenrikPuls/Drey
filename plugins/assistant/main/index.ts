@@ -16,9 +16,18 @@ import {
 import { ActionEngine, type ChatFn } from './action-engine';
 import { ChatEngine } from './chat-engine';
 import { ChatStore } from './chat-store';
+import { createSemanticService, type SemanticService } from './semantic/service';
 import { readFile } from 'node:fs/promises';
-import { dialog } from 'electron';
+import { dialog, app } from 'electron';
 import * as path from 'node:path';
+
+/** `…/app.asar/…` → `…/app.asar.unpacked/…` (worker + glue must be real files). */
+function unpackedPath(p: string): string {
+  return p.replace(/app\.asar([\\/])/, 'app.asar.unpacked$1');
+}
+
+/** Module-level so `deactivate` can stop the worker + flush the indexes. */
+let disposeSemantic: (() => void) | null = null;
 
 /**
  * The Assistant plugin's main entry (ADR-0044 stage 7): the on-save Actions
@@ -45,6 +54,35 @@ const plugin: MainPluginModule = {
       writeAnnounced: (path, content) => ctx.vault.writeAnnounced(path, content),
       list: () => ctx.vault.list(),
     });
+
+    // -- semantic vault retrieval (ADR-0055) --------------------------------
+    // One worker owns the transformers.js WASM pipeline; indexes persist
+    // next to the plugin config and ride the save/vault registries like
+    // the tags index. Retrieval happens in the ask flow (see the port).
+    const semantic = createSemanticService(ctx, {
+      dataDir: path.join(app.getPath('userData'), 'plugins', ctx.pluginId),
+      workerPath: unpackedPath(path.join(__dirname, 'semantic', 'embed-worker.js')),
+      modelCacheDir: path.join(app.getPath('userData'), 'models'),
+    });
+    disposeSemantic = () => semantic.dispose();
+    void semantic
+      .refreshConfig()
+      .then(() => (semantic.isEnabled ? semantic.catchUpAll() : undefined))
+      .catch((err: unknown) => ctx.log(err instanceof Error ? err.message : String(err), 'warn'));
+    ctx.save.onNoteSaved((event) => {
+      semantic.onSaved(event.vaultId, event.path, event.content);
+    });
+    ctx.vault.onChanged((event) => semantic.onVaultChanged(event));
+    ctx.ipc.handle('semantic:status', () => semantic.status());
+    ctx.ipc.handle('semantic:rebuild', (payload) => {
+      const { vaultId } = (payload ?? {}) as { vaultId?: unknown };
+      if (vaultId !== undefined && typeof vaultId !== 'string') {
+        throw new Error('malformed semantic:rebuild payload');
+      }
+      return semantic.rebuild(vaultId as string | undefined);
+    });
+    ctx.ipc.handle('semantic:configChanged', () => semantic.onConfigChanged());
+
     const chatEngine = new ChatEngine(
       chatStore,
       () => ctx.appConfig.get(),
@@ -84,6 +122,7 @@ const plugin: MainPluginModule = {
         },
         onDelta: (taskId, text) => ctx.ipc.emit('chat:delta', { taskId, text }),
         onLiveEdit: (path, content) => ctx.ipc.emit('chat:liveEdit', { path, content }),
+        retrieveContext: (question, scope) => semantic.retrieve(question, scope),
       },
     );
 
@@ -163,6 +202,11 @@ const plugin: MainPluginModule = {
       }
       return stageExternalFiles(ctx, referenceNote);
     });
+  },
+
+  deactivate() {
+    disposeSemantic?.();
+    disposeSemantic = null;
   },
 };
 

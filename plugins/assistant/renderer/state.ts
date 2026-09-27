@@ -12,12 +12,36 @@
 import type { ActionOutcome } from '../../../shared/plugin-api';
 import type { AskRequest, AssistantOutcome } from '../shared/ask';
 import { MAX_EXTRA_FILES, MAX_IMAGES, truncateFileBody } from '../shared/ask.js';
+import { normalizeVaultScope, type VaultScope } from '../shared/semantic.js';
 import type { ChatNoteView, ChatSummary } from '../shared/chat-note';
 import { ipcErrorMessage } from '../shared/format.js';
 import { type RunningTasks } from './running-tasks.js';
 
 /** The text a cancelled generation reports. */
 const CANCELLED = 'Generation cancelled.';
+
+/** localStorage key for the Vault chip's remembered scope. */
+const VAULT_SCOPE_KEY = 'drey.assistant.vaultScope';
+
+function loadVaultScope(): VaultScope {
+  try {
+    return normalizeVaultScope(globalThis.localStorage?.getItem(VAULT_SCOPE_KEY) ?? 'off');
+  } catch {
+    return 'off';
+  }
+}
+
+function storeVaultScope(scope: VaultScope): void {
+  try {
+    if (scope === 'off') {
+      globalThis.localStorage?.removeItem(VAULT_SCOPE_KEY);
+    } else {
+      globalThis.localStorage?.setItem(VAULT_SCOPE_KEY, scope);
+    }
+  } catch {
+    // Storage unavailable (tests, privacy mode) — session state only.
+  }
+}
 
 /**
  * An attached unsaved scratch tab (e.g. the search summary). The live
@@ -42,7 +66,15 @@ export interface AssistantPorts {
   // -- chat notes (ADR-0048) ----------------------------------------------
   listChats(): Promise<ChatSummary[]>;
   readChat(path: string): Promise<ChatNoteView>;
-  ask(request: AskRequest, taskId?: string): Promise<{ chatPath: string; outcome: AssistantOutcome }>;
+  ask(
+    request: AskRequest,
+    taskId?: string,
+  ): Promise<{
+    chatPath: string;
+    outcome: AssistantOutcome;
+    contextCount: number;
+    contextError?: string;
+  }>;
   /** Persists the confirm outcome into the last assistant turn's fence. */
   appendEdit(path: string, applied: boolean, after?: string): Promise<void>;
   /** Drops every turn from `turnIndex` on (restart-from-here). */
@@ -143,6 +175,12 @@ export interface AssistantState {
    */
   liveEdit(): boolean;
   toggleLiveEdit(): void;
+  /**
+   * Semantic vault retrieval (ADR-0055): `off` (chip dark) / `vault` /
+   * `all`. Session state persisted to localStorage; cycled by the chip.
+   */
+  vaultScope(): VaultScope;
+  cycleVaultScope(): void;
   extraFiles(): readonly string[];
   /** Adds a file chip; resolves to a reason string when refused. */
   addFile(path: string): { ok: boolean; reason?: string };
@@ -218,6 +256,8 @@ export function createAssistantState(ports: AssistantPorts, tasks: RunningTasks)
   let deferredFollowKey: string | null | undefined;
   /** Live edit (ADR-0049) — session flag, one toggle in the chips row. */
   let liveEdit = false;
+  /** Semantic vault retrieval (ADR-0055) — remembered across sessions. */
+  let vaultScope: VaultScope = loadVaultScope();
   let streaming: { taskId: string; text: string } | null = null;
   let error: string | null = null;
   let notice: string | null = null;
@@ -331,6 +371,14 @@ export function createAssistantState(ports: AssistantPorts, tasks: RunningTasks)
       if (liveEdit) {
         noteExcluded.delete(activePath);
       }
+      notify();
+    },
+
+    vaultScope: () => vaultScope,
+
+    cycleVaultScope() {
+      vaultScope = vaultScope === 'off' ? 'vault' : vaultScope === 'vault' ? 'all' : 'off';
+      storeVaultScope(vaultScope);
       notify();
     },
 
@@ -628,6 +676,7 @@ export function createAssistantState(ports: AssistantPorts, tasks: RunningTasks)
           // note could be a chats/ auto-save note — never a live target.
           liveEdit: liveEdit && note !== null && isLiveEditablePath(note.path),
           noteKey,
+          vaultScope,
         };
         // While the model edits the document, the user cannot: the lock
         // covers the whole turn and releases on success, error AND cancel.
@@ -647,6 +696,9 @@ export function createAssistantState(ports: AssistantPorts, tasks: RunningTasks)
           streaming = null;
           activeChat = result.chatPath;
           await loadView(result.chatPath);
+          if (result.contextError !== undefined) {
+            notice = `Vault context unavailable: ${result.contextError}`;
+          }
           notify();
 
           if (result.outcome.kind === 'answer') {
