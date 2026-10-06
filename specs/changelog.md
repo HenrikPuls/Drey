@@ -847,7 +847,8 @@ req-23 — drag & drop of files **and folders** within the Files panel
 (HTML5 DnD,
 [ADR-0039](../docs/09_architecture_decisions/0039-drag-and-drop-chrome.md)
 "Later change"): drop on a folder row moves into it, on a file row into
-that file's folder, on the tree background to the vault root. Same-dir
+that file's folder, on a vault header row to that vault's root (other
+vault → cross-vault move, milestone 28). Same-dir
 drops and a folder into its own subtree are no-ops (no-drop cursor;
 `VaultManager.renameEntry` now guards the subtree case main-side too).
 Valid drops run the rename sequence — `renameEntry` (sidecar moves along)
@@ -855,7 +856,11 @@ Valid drops run the rename sequence — `renameEntry` (sidecar moves along)
 clipboard remap → the destination expands — and a name collision alerts
 without touching anything. Files keep dragging into the editor
 (ADR-0028); a folder carries no vault-path data type, so it can only move
-inside the panel.
+inside the panel. *Fix:* file dragstarts announced
+`effectAllowed: 'copyLink'` while the tree rows negotiate `move` — an
+empty intersection, so Chromium showed no-drop and file drags could
+never move (folder drags always worked). Now `copyMove`, with the
+editor's `copy` still covered; the spec pins the negotiation.
 
 req-14 — an **optional** chokidar file watcher (Settings → Vault →
 "Watch the vault for external changes", off by default — ADR-0045,

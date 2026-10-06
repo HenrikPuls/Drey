@@ -75,7 +75,10 @@ describe('FilesPanel.onFileDragStart', () => {
     });
     expect(dt.getData('application/x-drey-vault-path')).toBe(`${V}::assets/logo.png`);
     expect(dt.getData('text/plain')).toBe('assets/logo.png');
-    expect(dt.effectAllowed).toBe('copyLink');
+    // The drag must allow BOTH drop effects it can end in: the editor
+    // negotiates `copy`, the tree rows `move` -- a value missing `move`
+    // makes Chromium silently no-drop every tree move (req-23).
+    expect(dt.effectAllowed).toBe('copyMove');
   });
 
   it('sets nothing for a directory', () => {

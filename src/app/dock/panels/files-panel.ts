@@ -758,7 +758,11 @@ export class FilesPanel {
     }
     event.dataTransfer.setData('application/x-drey-vault-path', docKey(vaultId, entry.relativePath));
     event.dataTransfer.setData('text/plain', entry.relativePath);
-    event.dataTransfer.effectAllowed = 'copyLink';
+    // Both halves of this gesture must be in effectAllowed: the editor's
+    // drop handler negotiates `copy`, the tree rows (req-23 moves) `move`.
+    // A `copyLink` here made Chromium refuse every tree drop (no-drop
+    // cursor, `drop` never fires) -- file drags could not move at all.
+    event.dataTransfer.effectAllowed = 'copyMove';
     this.dragEntry.set({ vaultId, entry });
   }
 
