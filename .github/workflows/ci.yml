@@ -83,6 +83,23 @@ jobs:
       - name: E2E (Playwright drives the built Electron app)
         run: npm run e2e:run
 
+      - name: Report display size (e2e layout debugging)
+        if: always()
+        run: |
+          Add-Type -AssemblyName System.Windows.Forms
+          [System.Windows.Forms.Screen]::AllScreens | ForEach-Object { $_.Bounds }
+
+      - name: Upload e2e failure diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-diagnostics-${{ github.sha }}
+          path: |
+            test-results/
+            playwright-report/
+          if-no-files-found: ignore
+          retention-days: 7
+
       # pack = clean + build + electron-builder --win; the clean build above
       # is the same tree the e2e suite just passed on, so invoke
       # electron-builder directly (by script path, per repo convention).
