@@ -87,5 +87,11 @@ export function slashCommandSource(context: CompletionContext): CompletionResult
     type: 'keyword',
     apply: (view, _completion, from, to) => applySlash(view, cmd.action, from, to),
   }));
-  return { from: token.from, options, validFor: /^\/[\w-]*$/u };
+  // `filter: false` -- CodeMirror would fuzzy-match the labels against the
+  // query text (`/`, `/head`), and no label contains a slash, so every
+  // option would be dropped and the popup would never open. The list is
+  // already narrowed by the startsWith check above. No `validFor` either:
+  // with filtering off, a cached result would keep showing all commands
+  // while typing on -- the source re-runs per keystroke instead.
+  return { from: token.from, options, filter: false };
 }
