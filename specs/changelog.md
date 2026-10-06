@@ -20,6 +20,47 @@ recorded as an explicit decision. The parity checklist lives in
 
 ## Recent milestones
 
+### Milestone 42 — the editor round: View mode, formatting toolbar, engine polish (ported from the Lariscus editor)
+
+The Lariscus app took Drey's editor in 2026-09 and evolved it; this
+milestone back-ports that evolution (only the new features — Drey's own
+extras stay, no Anthrazit tokens, no attachment/link services).
+
+- **View mode** — a third `⋯` mode next to Live Preview and Source:
+  read-only rendering through the same Live Preview engine
+  (`livePreview(config, { revealSelection: false })` — the selection is
+  ignored, so no construct ever flips back to raw Markdown), links and
+  *resolved* wikilinks open on a plain click (a read-only state has no
+  caret to place; wikilink create stays the explicit Ctrl/Cmd gesture),
+  the embed editing chrome (`</>`, zoom lens, resize grip) is hidden and
+  task checkboxes are inert. `EditorViewMode` is
+  `'live' | 'view' | 'source'`; per-doc like the other modes, the last
+  choice persists as the default.
+- **Formatting toolbar** (`src/app/editor/markdown-toolbar.ts` +
+  the pure `toolbar-commands.ts`, both ported): heading menu (Body/H1–H3),
+  list menu (bullet/numbered/task), bold/italic/strikethrough, link
+  (selects the `https://` placeholder), an image button (native picker →
+  the same per-note `attachments/` vault chain a pasted image takes) and
+  a Word-style 5×5 table grid picker. All commands are toggles where it
+  makes sense and act on every line the selection touches. Rendered by
+  the `MarkdownSurface` above the editor via its `toolbar` input; the
+  full-page editor toggles it from the `⋯` menu ("Formatting toolbar",
+  persisted in `localStorage['drey.editor']`, default off). Compact
+  composers (entry drawer) stay bare.
+- **Engine polish** (back-ported): a bigger, hover-revealed fold chevron
+  and a dark-themed fold placeholder; the **link-target fix** —
+  `[url](url)` links (what paste-link inserts) used to render empty
+  because the whole Link was hidden, now only the target behind `](`
+  conceals; task-checkbox clicks and the image resize grip no longer
+  dispatch in a read-only state. `livePreviewConceal` /
+  `livePreviewBlocks` became opts-taking factories
+  (`revealSelection`), threaded through `block-render` and `conceal`.
+- **Fix — req-23:** file dragstarts announced
+  `effectAllowed: 'copyLink'` while the Files panel's tree rows negotiate
+  `dropEffect: 'move'` — an empty intersection, so Chromium showed
+  no-drop and **file drags could never move within/across vaults**
+  (folder drags always worked; the spec pins the negotiation now).
+
 ### Milestone 41 — semantic vault retrieval: the assistant's Vault chip (ADR-0055)
 
 - **The Vault chip** (assistant composer, next to Live edit): cycles

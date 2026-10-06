@@ -184,9 +184,9 @@ Electron main process, Angular renderer, the IPC bridge between them,
 vault selection + file listing, and the full two-column shell from the
 design prototype: a sidebar (mini-calendar, vault file tree,
 open-windows list, settings entry) and a main area with a **tab bar**, the
-editor (one CodeMirror 6 view with an inline **Live Preview** mode and a
-raw **Source** mode, switched by a `⋯` mode menu, Live Preview by
-default, explicit save), and the **"Add entry" drawer** pinned to
+editor (one CodeMirror 6 view with an inline **Live Preview** mode, a
+read-only **View** mode and a raw **Source** mode, switched by a `⋯` mode
+menu, Live Preview by default, explicit save), and the **"Add entry" drawer** pinned to
 its bottom (optional TOPIC field, one Tags chip row, a spellchecked
 Markdown body — §5.12). A third column on the right holds the **note
 assistant** (auto-summary + Q&A thread, §5.11). The bottom chat bar that
@@ -584,7 +584,8 @@ src/                Angular renderer (standalone components, esbuild via Angular
     editor/
       editor.ts         One CodeMirror 6 EditorView (document swapped per active tab);
                          Live Preview extensions swapped in/out via a Compartment
-                         (`⋯` mode menu, Live Preview by default). Fenced code gets
+                         (`⋯` mode menu, three modes since milestone 42: Live
+                         Preview / View / Source). Fenced code gets
                          nested language parsing via @codemirror/language-data. The
                          only place CodeMirror is referenced; applies newEntryRequest.
       markdown-surface/ MarkdownSurface: THE shared CodeMirror component (full editor
@@ -598,6 +599,11 @@ src/                Angular renderer (standalone components, esbuild via Angular
                          link-open extension (full editor only);
                          onWikilinkActivate = wire the wikilink extension (full
                          editor resolves/creates, the drawer follows only).
+                         toolbar = render the formatting toolbar (milestone 42,
+                         full editor only, toggled from the `⋯` menu and persisted
+                         in `localStorage['drey.editor']`); its image button routes
+                         through the same image-paste vault asset chain as pasted
+                         images (imagePasteConfig() shared by both).
                          languageFilename: the active tab's path -> its extension picks
                          the language compartment's contents. .md / null = the Markdown
                           bundle (grammar + #tag autocomplete + pills + link activation
@@ -605,6 +611,11 @@ src/                Angular renderer (standalone components, esbuild via Angular
                          = that language's grammar alone (lazy LanguageDescription.load,
                          @codemirror/language-data), source mode forced, none of the
                          Markdown chrome (ADR-0036). Compact composers pass nothing.
+      markdown-toolbar.ts  The formatting toolbar (milestone 42, ported from the
+                         Lariscus editor): headings/list menus, bold/italic/strike,
+                         link, image file picker, 5x5 table grid -- pure emitter of
+                         ToolbarAction; toolbar-commands.ts is the pure reducer
+                         layer (toggles, block-wise, no CodeMirror types).
       tag-complete.ts   Pure #tag autocomplete completion source (vocabulary from
                          the live TagService signal).
       tag-pill.ts       ViewPlugin rendering inline #tags as pills in both modes;
@@ -903,10 +914,13 @@ the path, never the raw `ipcRenderer` event (ADR-0001).
   preview half of
   [ADR-0008](09_architecture_decisions/0008-editor-mode-menu-and-rendered-preview.md).
 - **Mode is a `⋯` menu, not toggle buttons.** `EditorViewMode` is
-  `'live' | 'source'` (a stored `'preview'` migrates to `'live'`), a
+  `'live' | 'view' | 'source'` (a stored `'preview'` migrates to `'live'`), a
   per-tab `OpenDoc` field; the last choice is persisted (`drey.editor` →
   `{ defaultMode }`) as the landing mode for new notes. A `Compartment`
-  swaps the Live Preview extensions in and out. Auto-switch /
+  swaps the Live Preview extensions in and out; **view** (milestone 42)
+  keeps them mounted read-only with `revealSelection: false` — nothing
+  ever flips back to raw Markdown, links and resolved wikilinks open on a
+  plain click, and the embed editing chrome is hidden. Auto-switch /
   `caretOffset` / `source-map.ts` / `preview-caret.ts` from ADR-0004 are
   gone.
 - **Explicit save (Ctrl+S) + dirty indicator, not autosave.** Autosave's
