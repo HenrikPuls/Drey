@@ -14,41 +14,55 @@
     <span class="edit-lock">Assistant is editing…</span>
   }
 
+  @if (prefs.toolbar() && editor.isMarkdown(shownPath()) && (shownDoc()?.viewMode ?? 'live') !== 'view') {
+    <app-markdown-toolbar
+      class="format"
+      [imagesEnabled]="true"
+      (action)="surface().applyToolbarAction($event)"
+      (imageFiles)="surface().insertToolbarImages($event)"
+    />
+    <span class="bar-sep" aria-hidden="true"></span>
+  }
+
   <div class="actions">
+    @let dirty = shownDoc() && shownDoc()!.bufferContent !== shownDoc()!.savedContent;
+    @if (dirty) {
+      <span class="unsaved">Unsaved</span>
+    }
     <button
       type="button"
-      class="lines"
+      class="icon-btn lines"
       [class.on]="editor.lineNumbers()"
       (click)="editor.toggleLineNumbers()"
       title="Toggle line numbers (Ctrl G)"
       aria-label="Toggle line numbers"
     >
-      <app-icon name="list-ordered" [size]="12" [strokeWidth]="1.1" />
+      <app-icon name="list-ordered" [size]="14" [strokeWidth]="1.5" />
     </button>
 
-    @let dirty = shownDoc() && shownDoc()!.bufferContent !== shownDoc()!.savedContent;
     <button
       type="button"
-      class="save"
+      class="icon-btn save"
       [class.dirty]="dirty"
       [disabled]="!dirty || editor.isSaving()"
       (click)="editor.save({ path: shownPath() ?? undefined })"
       [title]="editor.isSaving() ? 'Saving…' : dirty ? 'Save' : 'Saved'"
       [attr.aria-label]="editor.isSaving() ? 'Saving…' : dirty ? 'Save' : 'Saved'"
     >
-      <app-icon name="save" [size]="12" [strokeWidth]="1.1" />
+      <app-icon name="save" [size]="14" [strokeWidth]="1.5" />
     </button>
 
     <button
       #moreBtn
       type="button"
-      class="more"
+      class="icon-btn more"
       aria-haspopup="menu"
       [attr.aria-expanded]="menuOpen()"
       (click)="toggleMenu()"
-      title="Editor mode"
+      title="More"
+      aria-label="More"
     >
-      <app-icon name="more-horizontal" [size]="14" />
+      <app-icon name="more-horizontal" [size]="14" [strokeWidth]="1.5" />
     </button>
   </div>
 </div>
@@ -165,7 +179,6 @@
   <app-markdown-surface
     class="cm-host"
     [mode]="shownDoc()?.viewMode ?? 'live'"
-    [toolbar]="prefs.toolbar() && editor.isMarkdown(shownPath())"
     [lineNumbers]="editor.lineNumbers()"
     [foldFrontmatter]="true"
     [languageFilename]="shownDoc()?.path ?? shownPath()"

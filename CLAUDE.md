@@ -92,9 +92,10 @@ toolchain is removable by deleting `.tools/`). Never assume a bare `node`,
   `#tag` completion (`src/app/editor/tags/`, fed by the base
   `TagVocabularyService` over `search:vocabulary` + `search:changed`) and
   a shared tag chip field (`TagField`, also handed to plugins as
-  `api.ui.createTagField`). Its **search** panel: scope switch
-  **File | Vault | All**, tag chips AND + free text with
-  case/whole-word/regex toggles, per-file grouped hits, replace
+  `api.ui.createTagField`; its free-text mode lifts typed `#tag` words
+  into chips, ADR-0057). Its **search** panel: an icon scope switch
+  (document | vault | all vaults), **one** field for tag chips AND free
+  text with case/whole-word/regex toggles, per-file grouped hits, replace
   (buffer patch in file scope; one bundled confirmation vault-wide), the
   Export scratch tab and an LLM **Summarize** digest of the hits
   (milestone 37, editable `builtin:search-summary` prompt). MCP
@@ -103,7 +104,9 @@ toolchain is removable by deleting `.tools/`). Never assume a bare `node`,
   `SectionSearchProvider` (which also serves vocabulary + prefix styles)
   and degrades with a clear error when the tags plugin is disabled.
   `#task` is reserved; the LLM only _suggests_ tags
-  (the drawer's Autotag button). See `specs/classifier-spec.md`.
+  (Autotag — its backend stays, but it has had no button since the entry
+  drawer was removed in milestone 43, ADR-0057). See
+  `specs/classifier-spec.md`.
 - LLM transport behind a provider abstraction
   ([ADR-0047](docs/09_architecture_decisions/0047-llm-provider-abstraction.md)):
   base-owned `LlmClient` interface + a per-call `LlmRouter` over
@@ -261,8 +264,7 @@ Renderer (Angular):
   rename / remove / set-active vault management in the vault row's
   context menu, and drag & drop of files/folders within or across
   vaults, req-23),
-  `WindowsPanel`, `SearchPanelHost`, `EntryPanel` (the "Add entry"
-  drawer — default home: the bottom dock) — while the templates / search
+  `WindowsPanel`, `SearchPanelHost` — while the templates / search
   / tasks / assistant panels are plugin widgets mounting plain DOM into
   `PluginWidgetHost`. Persisted layout keys on widget ids — plugin
   widgets keep their ids (ADR-0044 rule 5).
@@ -280,17 +282,19 @@ Renderer (Angular):
   CodeMirror commands against the surface `EditTargetService` last saw
   focused (Find in note, Select line, Move line, Duplicate selection,
   Toggle task done — disabled when no editor is focused).
-- `StatusBarComponent` (`src/app/status-bar/`) — the 26px bottom bar:
+- `StatusBarComponent` (`src/app/status-bar/`) — the 28px bottom bar:
   word/char count, a context hint (the drag instruction while a panel is
   moving), and the Settings entry.
-- Search panel — `plugins/tags/` (DOM dock widget): a **File | Vault |
-  All** scope switch, tag chips (the shared tag field) + free text with
-  `Aa`/`ab`/`.*` match toggles → section hits **grouped per file** (click
-  opens the file at the line through the document API, vault-aware), a
-  replace row (file scope patches the buffer; vault/all goes through one
-  bundled per-file-diff confirmation), an **Export** button that dumps
-  the hits into an unsaved `search-results.md` scratch tab, and a
-  **Summarize** button (when an LLM is configured) that streams a topic
+- Search panel — `plugins/tags/` (DOM dock widget): an icon scope
+  switch (document | vault | all vaults), **one** field (the shared tag
+  field in free-text mode: a typed `#name` becomes a chip, the rest is
+  the text query) with `Aa`/`ab`/`.*` match toggles → section hits
+  **grouped per file** (click opens the file at the line through the
+  document API, vault-aware), and — as icon buttons on the result line —
+  a replace row (file scope patches the buffer; vault/all goes through one
+  bundled per-file-diff confirmation), **Export** (dumps the hits into an
+  unsaved `search-results.md` scratch tab) and
+  **Summarize** (when an LLM is configured), which streams a topic
   digest of the hits — via the plugin's `summarise` backend over the
   editable `builtin:search-summary` template — into an unsaved
   `search-summary.md` scratch tab, cancellable (milestone 37). Panel +
@@ -405,9 +409,14 @@ Renderer (Angular):
   `PaneService`) with an inline Live Preview mode (decoration-based,
   ADR-0009) and a raw source mode, switched via a `⋯` mode menu
   (ADR-0008); the same `⋯` menu lists the manual Actions and "Save as…".
-  A 34px meta bar carries the path, a **Lines** toggle (line-number
-  gutter, `Ctrl+G`, an app-wide preference — not per-pane), Save/Saved and
-  the `⋯` menu. The **fold gutter** is always live (Obsidian-style
+  A 40px meta bar carries the path, the **formatting buttons**
+  (`MarkdownToolbar`, icon-only; hidden via `⋯` → "Formatting toolbar"),
+  an "Unsaved" label, a **Lines** toggle (line-number gutter, `Ctrl+G`, an
+  app-wide preference — not per-pane), Save and the `⋯` menu. Typing `/`
+  opens the **slash menu** (`slash-commands.ts`): a **Templates** section
+  — the built-in **Entry** block (the configured entry format, ADR-0022)
+  plus the templates plugin's library entries, each with a preview card —
+  then **Formatting** (ADR-0057). The **fold gutter** is always live (Obsidian-style
   collapsible headings, hover-revealed chevron); only the line-number
   column follows the Lines toggle (`editorStructure` / `gutterTheme`).
   Inline `#tag`s render as pills; `Ctrl`/`Cmd`-click runs a tag search.
@@ -421,13 +430,11 @@ Renderer (Angular):
   insert-into-note) are gated on `PaneService.focusedId()`, so only the
   focused pane's instance acts on one. `EditorService.requestInsertText`
   (consumed here) backs the assistant's insert-into-note arrow
-- `EntryDrawerComponent` — the "Add entry" capture surface: an optional
-  TOPIC field, **one** Tags chip row (+ an Autotag button), then the
-  shared Markdown editor component in compact mode with inline
-  spellcheck. An empty TOPIC is fine — no confirmation
-  ([ADR-0013](docs/09_architecture_decisions/0013-inline-spellcheck.md)).
-  It is the body of `EntryPanel`, a movable dock panel (default home: the
-  bottom dock) — no self-toggle button; `PanelFrame`'s chevron collapses it
+- _(Removed in milestone 43,
+  [ADR-0057](docs/09_architecture_decisions/0057-ui-refinement-icon-chrome-anthrazit-and-slash-capture.md):
+  `EntryDrawerComponent` / `EntryPanel`, the "Add entry" capture surface.
+  Capture is the slash menu's Entry block; the entry format stays
+  configurable under Settings → "Entry format".)_
 - `McpBridgeService` — renderer side of the vault MCP server: shows an
   MCP client's `vault_write` in the shared confirmation diff and replies
   (the tree/index refresh after that write rides the shared
@@ -442,10 +449,10 @@ Renderer (Angular):
   menu contributions, settings pages) and the three DOM mount hosts for
   widgets / settings pages / doc kinds
 - `SettingsComponent` — master-detail settings screen (category list +
-  detail pane), core categories in alphabetical order — "Add entry",
-  "Appearance",
+  detail pane), core categories in alphabetical order — "Appearance",
   [ADR-0020](docs/09_architecture_decisions/0020-app-wide-appearance-accent-and-ui-scale.md),
-  "Daily notes", "LLM", "MCP", "Panels & plugins" (`widgets.disabled` +
+  "Daily notes", "Entry format" (what the slash menu's Entry block
+  inserts, ADR-0022), "LLM", "MCP", "Panels & plugins" (`widgets.disabled` +
   `plugins.disabled` + each discovered plugin's live status),
   "Spelling", "Vault" (`vault.watch`, the opt-in external-change
   watcher, ADR-0045) — then **plugin-contributed categories** (sorted by
@@ -470,25 +477,35 @@ be called out explicitly (see Working Style below), not introduced silently.
 - Visual style: dark theme by default, minimal and unobtrusive — visual
   language similar to claude.ai (flat surfaces, no heavy borders or
   shadows, generous whitespace, sentence-case labels, no visual clutter).
+  Since milestone 43
+  ([ADR-0057](docs/09_architecture_decisions/0057-ui-refinement-icon-chrome-anthrazit-and-slash-capture.md)):
+  chrome labels are sentence-case **sans** (mono only for code, the
+  meta-bar path and line numbers); panel controls are **icon-only** with a
+  `title` + `aria-label`, drawn with the global `.icon-btn` / `.seg`
+  classes (plugins get glyphs via `api.ui.icon`); panel fields carry no
+  placeholder text. Two bespoke themes ship — **Drey** (terracotta) and
+  **Anthrazit** (warm charcoal, blue accent; the fresh-install default).
 - Overall layout ([ADR-0019](docs/09_architecture_decisions/0019-movable-dock-panels-and-layout-state.md)):
   a frameless window with a **custom titlebar** (accent square + "Drey" +
   an HTML File/Edit/Selection/View menu bar + window controls), then a row
   of **[left dock | centre column | right dock]** — the centre column
-  being the editor area above a **bottom dock** band — then a **26px
+  being the editor area above a **bottom dock** band — then a **28px
   status bar** (word/char count · context hint · Settings entry).
   - **Docks**: three (`left`, `right`, `bottom`), each an ordered list of
-    the nine panels — **Calendar, Files, Templates, Search, Tasks, Open
-    windows, Outline, Assistant, Add entry** (the core ones registered by
+    the eight panels — **Calendar, Files, Templates, Search, Tasks, Open
+    windows, Outline, Assistant** (the core ones registered by
     the base; Templates/Search/Tasks/Assistant/Outline are provided by
     plugins, ADR-0044). A
     panel is dragged between docks by its header, resized against its
     neighbour by a splitter, and collapsed to its 32px header. Every
-    panel header is built the same way (chevron +
-    mono-uppercase title + optional status value + drag grip). Default:
+    panel header is built the same way (sentence-case title + optional
+    status value + the panel's icon controls + drag grip). Default:
     Calendar/Files/Templates/Search/Tasks/Open windows/Outline left,
-    Assistant right, Add entry in the bottom band, Templates + Search +
-    Tasks + Outline + Add
-    entry collapsed. Calendar takes its content height, not a flex share.
+    Assistant right, nothing in the bottom band, Templates + Search +
+    Tasks + Outline collapsed. Calendar takes its content height, not a
+    flex share; expanded, its header is the **month/year dropdown**
+    itself (no "Calendar" title) with **Today** (opens today's daily
+    note) and the month arrows.
     Each dock can additionally host one **editor band** above its panels
     (milestone 20, ADR-0038): a docked editor pane, its 32px header
     carrying the active tab's name, movable by header drag or the tab
@@ -500,29 +517,31 @@ be called out explicitly (see Working Style below), not introduced silently.
     row (name, active-vault dot, fold chevron, path tooltip) above that
     vault's file tree, with the refresh + "Add vault …" buttons in the
     panel header. Clicking a file opens it (in its vault); right-click on
-    a file/folder → new file/folder/delete; right-click on a vault row →
+    a file/folder → new file/folder/rename/delete, edited **in place** in
+    the tree (names stay on one line and fade at the right edge); right-click on a vault row →
     Set active / Rename / Add vault / Open in File Explorer / Remove
     (ADR-0051). Dragging a row onto a folder / file row / another vault's
     header row moves it (within or across vaults, req-23; no-drop on a
     same-dir no-op or a folder into itself).
-  - **Centre column**: a 34px tab bar for open documents, a 34px meta bar
-    (path · Lines toggle · Save/Saved · `⋯` — no assistant sparkle
-    button any more), the editor (Live Preview ⇄ source via the `⋯` menu
-    — no toggle buttons; see ADR-0008/0009), then the **bottom dock** band
-    (default: the "Add entry" panel).
+  - **Centre column**: a 36px tab bar for open documents, a 40px meta bar
+    (path · formatting buttons · Unsaved · Lines toggle · Save · `⋯`),
+    the editor (Live Preview ⇄ source via the `⋯` menu — no toggle
+    buttons; see ADR-0008/0009), then the **bottom dock** band (empty by
+    default). Capture is the `/` menu's **Entry** block.
   - **Assistant panel**: chat-first head (chat-title picker + a "+"
     icon for a new chat), turn cards with collapsible tool chips, a
     streamed partial answer while generating (the transcript follows the
     stream; scrolling up unpins), and the
-    composer (context chips incl. images, a Prompts picker, auto-grow,
-    model row). The panel follows the focused document (each note's
-    newest chat; a non-note focus shows a fresh chat). No
-    bottom chat bar; capture lives in the Add entry panel.
+    composer (context chips incl. images, auto-grow, and an icon tool
+    row: Attach · Live edit · Vault context · Prompts · model picker).
+    The panel follows the focused document (each note's newest chat; a
+    non-note focus shows a fresh chat). No bottom chat bar.
   - **Settings**: a full-surface overlay opened from the status-bar entry
     — master-detail (category list on the left, detail pane on the
-    right), core categories in alphabetical order ("Add entry",
-    "Appearance" (app-wide base font size + highlight colour + editor
-    typeface, ADR-0020), "Daily notes", "LLM", "MCP", "Panels &
+    right), core categories in alphabetical order (
+    "Appearance" (theme, app-wide base font size + highlight colour +
+    editor typeface, ADR-0020), "Daily notes", "Entry format", "LLM",
+    "MCP", "Panels &
     plugins", "Spelling", "Vault" (ADR-0045)
     (ADR-0010; descriptor-driven list, ADR-0016)); plugin-contributed
     categories (sorted by label) append before "About".
@@ -553,7 +572,10 @@ be called out explicitly (see Working Style below), not introduced silently.
   prototype, reference only) + `handoff/screenshots/`. Design tokens live
   centrally in `src/styles.css`. Deviations from the prototype are
   recorded in [ADR-0019](docs/09_architecture_decisions/0019-movable-dock-panels-and-layout-state.md)
-  and `specs/`.
+  and `specs/`. The milestone-43 refinement
+  ([ADR-0057](docs/09_architecture_decisions/0057-ui-refinement-icon-chrome-anthrazit-and-slash-capture.md))
+  supersedes the handoff's mono-uppercase chrome and text buttons; where
+  the two disagree, ADR-0057 and this section win.
 
 ## Coding & Style Conventions
 
@@ -620,6 +642,15 @@ can dock into the three docks (milestone 20,
 The milestone log lives in
 [docs/milestones-done.md](docs/milestones-done.md).
 
+**Just code-complete: milestone 43 — UI refinement**
+([ADR-0057](docs/09_architecture_decisions/0057-ui-refinement-icon-chrome-anthrazit-and-slash-capture.md)):
+sentence-case sans chrome with shared icon controls, the Anthrazit theme,
+one text-and-tag field in Search and Tasks, the sectioned slash menu
+(built-in Entry + templates with preview) replacing the removed "Add
+entry" panel, formatting buttons in the meta bar, in-place file
+create/rename and the calendar's Today button. **Not yet manually
+verified by the owner.** Open follow-up: Autotag has no button.
+
 **Just code-complete: milestone 41 — semantic vault retrieval, the
 assistant's Vault chip** ([ADR-0055](docs/09_architecture_decisions/0055-semantic-vault-retrieval.md)):
 the composer chip cycles `off → active vault → all vaults`; each ask
@@ -684,7 +715,8 @@ milestones") until owner-verified.
 - **Just code-complete:** milestones 33 (tag system round), 34
   (tasks across vaults + undo fix), 35 (pinned tabs), 36 (open files
   from the OS), 39 (Outline panel), 40 (word completion +
-  markdown-context detector) and 41 (semantic vault retrieval) — see
+  markdown-context detector), 41 (semantic vault retrieval) and 43 (UI
+  refinement, ADR-0057) — see
   "Current State" above.
 - **Next:** the provider program: Req-31 MCP client, then copilot-web
   re-apply + copilot-cli spike, or the Office remainder of Req-2 (needs

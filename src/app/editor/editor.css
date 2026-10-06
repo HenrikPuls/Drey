@@ -12,8 +12,8 @@
   gap: 10px;
   flex: none;
   min-width: 0;
-  height: var(--bar-h);
-  padding: 0 14px 0 20px;
+  height: var(--meta-h);
+  padding: 0 8px 0 16px;
   border-bottom: 1px solid var(--border);
   overflow: hidden;
 }
@@ -34,8 +34,8 @@
 .draft {
   flex: none;
   white-space: nowrap;
-  font-family: var(--font-mono);
-  font-size: 10px;
+  font-family: var(--font-sans);
+  font-size: 12px;
   color: var(--accent);
 }
 
@@ -44,92 +44,56 @@
 .external-note {
   flex: none;
   white-space: nowrap;
-  font-family: var(--font-mono);
-  font-size: 10px;
+  font-family: var(--font-sans);
+  font-size: 12px;
   color: var(--text-4);
 }
 
 .edit-lock {
   flex: none;
   white-space: nowrap;
-  font-family: var(--font-mono);
-  font-size: 10px;
+  font-family: var(--font-sans);
+  font-size: 12px;
   color: var(--accent);
+}
+
+/* The formatting buttons, merged into the meta bar (milestone 43). They
+   sit between the path and the save cluster and never shrink -- the path
+   stays the row's one ellipsis child. */
+.format {
+  flex: none;
+}
+
+.bar-sep {
+  flex: none;
+  width: 1px;
+  height: 16px;
+  background: var(--border);
 }
 
 .actions {
   flex: none;
   display: flex;
   align-items: center;
-  gap: 3px;
+  gap: 2px;
 }
 
-.lines {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 24px;
-  height: 24px;
-  border: none;
-  border-radius: var(--radius-sm);
-  background: transparent;
-  color: var(--text-5);
-  cursor: pointer;
+.unsaved {
+  flex: none;
+  margin-right: 6px;
+  white-space: nowrap;
+  font-size: 12px;
+  color: var(--text-4);
 }
 
-.lines:hover {
-  background: var(--hover-bg-strong);
-  color: var(--text-primary);
-}
-
-.lines.on {
-  background: var(--hover-bg-strong);
-  color: var(--text-primary);
-}
-
-.save {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 24px;
-  height: 24px;
-  border: none;
-  border-radius: var(--radius-sm);
-  background: transparent;
+/* Save reads as "nothing to do" until the buffer is dirty. */
+.save:disabled {
+  opacity: 1;
   color: var(--text-7);
-  cursor: pointer;
 }
 
 .save.dirty {
-  background: var(--hover-bg);
-  color: var(--text-primary);
-}
-
-.save:hover:not(:disabled) {
-  background: var(--hover-bg-strong);
-}
-
-.save:disabled {
-  cursor: default;
-}
-
-.more {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 24px;
-  height: 24px;
-  background: transparent;
-  color: var(--text-5);
-  border: none;
-  border-radius: var(--radius-sm);
-  cursor: pointer;
-}
-
-.more:hover,
-.more[aria-expanded='true'] {
-  background: var(--hover-bg);
-  color: var(--text-primary);
+  color: var(--accent);
 }
 
 .ctx-backdrop {
@@ -159,7 +123,7 @@
   text-align: left;
   padding: 6px 9px;
   border-radius: var(--radius-sm);
-  font-size: 12px;
+  font-size: 13px;
   color: var(--text-3);
   cursor: pointer;
 }
@@ -167,8 +131,8 @@
 .ctx-key {
   flex: none;
   margin-left: auto;
-  font-family: var(--font-mono);
-  font-size: 10px;
+  font-family: var(--font-sans);
+  font-size: 11px;
   color: var(--text-7);
 }
 

@@ -92,20 +92,25 @@
   --z-lightbox: 60;
 
   /* ---- Line grid (DESIGN.md principle 2: no in-between sizes) ---- */
-  --row-h: 26px; /* every list row */
-  --bar-h: 34px; /* every chrome / header bar (32-34px; panel headers use 32) */
+  --row-h: 28px; /* every list row */
+  --bar-h: 36px; /* titlebar + tab bar */
+  --meta-h: 40px; /* editor meta bar (path + formatting + save) */
   --panel-head-h: 32px;
-  --status-h: 26px; /* status bar */
-  --field-h: 34px; /* text inputs */
+  --status-h: 28px; /* status bar */
+  --field-h: 32px; /* text inputs */
+  --icon-btn: 24px; /* every icon button (milestone 43) */
 
-  /* ---- Metadata type sizes (all IBM Plex Mono, DESIGN.md "Typografie") ---- */
-  --fs-mono-title: 10px; /* panel titles, uppercase */
-  --fs-mono-meta: 10px; /* status bar, panel status, shortcuts */
-  --fs-mono-tab: 11.5px; /* tabs, file names */
-  --fs-mono-path: 10.5px; /* meta-bar path */
+  /* ---- Chrome type sizes ---- Since milestone 43 (ADR-0057) the chrome is
+     sentence-case sans; only paths, line numbers and code stay mono. The
+     token names keep their historical `mono` prefix so every call site
+     keeps working. */
+  --fs-mono-title: 13px; /* panel titles */
+  --fs-mono-meta: 12px; /* status bar, panel status, shortcuts */
+  --fs-mono-tab: 13px; /* tabs, file names */
+  --fs-mono-path: 11.5px; /* meta-bar path */
   --fs-mono-num: 10.5px; /* line numbers */
-  --fs-mono-tag: 10.5px; /* tags */
-  --ls-mono-title: 0.09em;
+  --fs-mono-tag: 12px; /* tags */
+  --ls-mono-title: 0;
 
   /* ---- Layout ---- */
   --sidebar-width: 220px; /* legacy; the dock system owns its own widths */
@@ -173,6 +178,53 @@
   --focus-bg: color-mix(in srgb, var(--_fg) 5%, transparent);
 }
 
+/* ---- Anthrazit (milestone 43, ADR-0057) ----
+
+   A bespoke palette like Drey's, but shipped as a selectable theme: it
+   carries a `data-theme` attribute, so the derived block above applies
+   first and this one (same specificity, later in the sheet) replaces every
+   derived value with the exact Anthrazit token. Docks and bars sit on
+   surface-200, the editor on surface-100, raised fields on surface-300;
+   lines are solid, and nothing casts a shadow. */
+:root[data-theme='anthrazit'] {
+  color-scheme: dark;
+
+  --bg-dock: #262220;
+  --bg-editor: #1e1b17;
+  --bg-input: #2e2a26;
+  --bg-search: #1e1b17;
+  --bg-bar: #262220;
+  --bg-sidebar: #262220;
+  --bg-main: #1e1b17;
+
+  --text-heading: #f3efe9;
+  --text-primary: #f3efe9;
+  --text-2: #e2ddd5;
+  --text-3: #c9c3b9;
+  --text-4: #ada69c;
+  --text-5: #ada69c;
+  --text-6: #8f887f;
+  --text-7: #7a746c;
+  --text-faint: #5f5a53;
+  --gutter: #5f5a53;
+  --placeholder: #8f887f;
+  --calendar-muted: #5f5a53;
+
+  --border: #3a3530;
+  --border-strong: #4d4740;
+  --field-border: #3a3530;
+  --popover-border: #4d4740;
+  --hover-bg: #2e2a26;
+  --hover-bg-strong: #3a3530;
+  --hover-bg-loud: #4d4740;
+  --active-bg: #2e2a26;
+  --focus-bg: rgba(243, 239, 233, 0.03);
+
+  --accent-contrast: #2a2622;
+  --on-accent: #2a2622;
+  --popover-shadow: none;
+}
+
 html,
 body {
   margin: 0;
@@ -235,13 +287,12 @@ textarea::placeholder {
   border: 1px solid var(--border-strong);
   box-shadow: var(--popover-shadow);
   color: var(--text-2);
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
 }
 
 .dock-drag-ghost {
   font-size: var(--fs-mono-title);
-  letter-spacing: var(--ls-mono-title);
-  text-transform: uppercase;
+  font-weight: 600;
 }
 
 /* A tab ghost reads like a tab label: mixed case, the tab font size, and a
@@ -292,6 +343,72 @@ textarea::placeholder {
 }
 
 /* ---------------------------------------------------------------------------
+ * Shared chrome controls (milestone 43, ADR-0057). Global on purpose: core
+ * panels and plugin panels (plain DOM over `plugin://`) draw the same icon
+ * button and the same segmented switch instead of one copy per panel.
+ * ------------------------------------------------------------------------- */
+
+.icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  width: var(--icon-btn);
+  height: var(--icon-btn);
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-xs);
+  background: transparent;
+  color: var(--text-4);
+  font: inherit;
+  cursor: pointer;
+}
+
+.icon-btn:hover:not(:disabled) {
+  background: var(--hover-bg);
+  color: var(--text-primary);
+}
+
+.icon-btn:focus-visible {
+  outline: 1px solid var(--accent-ring);
+  outline-offset: -1px;
+}
+
+.icon-btn.on,
+.icon-btn[aria-pressed='true'],
+.icon-btn[aria-selected='true'] {
+  background: var(--accent-surface);
+  color: var(--accent);
+}
+
+.icon-btn:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+/* A text glyph in an icon button (`Aa`, `.*`): same box, small label. */
+.icon-btn.glyph {
+  font-family: var(--font-mono);
+  font-size: 11px;
+}
+
+.seg {
+  display: inline-flex;
+  align-items: center;
+  flex: none;
+  gap: 0;
+  padding: 1px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+}
+
+.seg .icon-btn {
+  width: 22px;
+  height: 20px;
+  border-radius: 3px;
+}
+
+/* ---------------------------------------------------------------------------
  * Tag field (milestone 33) — the shared tag chip field mounted by the entry
  * drawer and, through `api.ui.createTagField`, by plugin panels (Search,
  * Tasks). Chip colors come in as inline `color`/`background` (resolved per
@@ -321,8 +438,8 @@ textarea::placeholder {
   gap: 4px;
   height: 22px;
   padding: 0 4px 0 8px;
-  border-radius: var(--radius-sm);
-  font-family: var(--font-mono);
+  border-radius: var(--radius-xs);
+  font-family: var(--font-sans);
   font-size: var(--fs-mono-tag);
   white-space: nowrap;
 }
@@ -358,6 +475,12 @@ textarea::placeholder {
   color: var(--text-primary);
   font-family: var(--font-sans);
   font-size: inherit;
+}
+
+/* Free-text mode (milestone 43): the input is the query field itself, so
+   it may shrink much further before it wraps under the chips. */
+.tag-field--free .tag-field-input {
+  min-width: 40px;
 }
 
 .tag-field-input::placeholder {
@@ -397,7 +520,7 @@ textarea::placeholder {
 }
 
 .tag-field-option-tag {
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   font-size: var(--fs-mono-tag);
   padding: 0 5px;
   border-radius: 4px;
@@ -406,6 +529,114 @@ textarea::placeholder {
 .tag-field-option-count {
   color: var(--text-3);
   font-size: 11px;
+}
+
+/* ---------------------------------------------------------------------------
+ * Completion popup + the slash menu's preview card (milestone 43). Global:
+ * the popup is CodeMirror DOM inside every Markdown surface, and the
+ * templates plugin builds the same `.slash-preview` card in plain DOM.
+ * The doubled `.cm-editor` outranks CodeMirror's generated base theme.
+ * ------------------------------------------------------------------------- */
+
+.cm-editor.cm-editor .cm-tooltip {
+  background: var(--bg-input);
+  border: 1px solid var(--popover-border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--popover-shadow);
+  color: var(--text-2);
+}
+
+.cm-editor.cm-editor .cm-tooltip-autocomplete > ul {
+  min-width: 220px;
+  max-height: 320px;
+  padding: 4px;
+  font-family: var(--font-sans);
+  font-size: 13px;
+}
+
+.cm-editor.cm-editor .cm-tooltip-autocomplete > ul > li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: var(--row-h);
+  padding: 0 8px;
+  border-radius: var(--radius-xs);
+  color: var(--text-2);
+}
+
+.cm-editor.cm-editor .cm-tooltip-autocomplete > ul > li[aria-selected] {
+  background: var(--hover-bg-strong);
+  color: var(--text-primary);
+}
+
+.cm-editor.cm-editor .cm-tooltip-autocomplete > ul > completion-section {
+  display: block;
+  padding: 6px 8px 2px;
+  border-bottom: 0;
+  color: var(--text-5);
+  font-size: 12px;
+  font-weight: 600;
+  opacity: 1;
+}
+
+.cm-editor.cm-editor .cm-completionIcon-slash {
+  display: none;
+}
+
+.cm-editor.cm-editor .cm-completionDetail {
+  margin-left: auto;
+  color: var(--text-5);
+  font-size: 12px;
+  font-style: normal;
+}
+
+.cm-editor.cm-editor .cm-tooltip.cm-completionInfo {
+  width: 260px;
+  max-width: 260px;
+  margin: 0 6px;
+  padding: 0;
+}
+
+.slash-preview {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px;
+  font-family: var(--font-sans);
+}
+
+.slash-preview-head,
+.slash-preview-foot {
+  color: var(--text-5);
+  font-size: 12px;
+}
+
+.slash-preview-body {
+  margin: 0;
+  max-height: 200px;
+  overflow: hidden;
+  padding: 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-xs);
+  background: var(--bg-editor);
+  color: var(--text-2);
+  font-family: var(--font-sans);
+  font-size: 13px;
+  line-height: 18px;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+/* The Templates panel reuses the card as a hover popover. */
+.slash-preview-pop {
+  position: fixed;
+  z-index: 45;
+  width: 260px;
+  background: var(--bg-input);
+  border: 1px solid var(--popover-border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--popover-shadow);
+  pointer-events: none;
 }
 
 /* Completion option for `#tag` suggestions (base editor tag completion,

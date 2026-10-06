@@ -108,7 +108,7 @@ export interface PluginStatusContext {
  */
 export interface PluginWidgetContrib {
   readonly id: string;
-  /** Header label (mono-uppercase styling is the shell's). */
+  /** Header label (the shell styles it; sentence case). */
   readonly title: string;
   readonly defaultDock: PluginDockSide;
   readonly defaultOpen: boolean;
@@ -274,6 +274,17 @@ export interface TagFieldOptions {
   readonly ariaLabel?: string;
   /** Vocabulary completion dropdown; default true. `false` = plain chip field. */
   readonly completions?: boolean;
+  /**
+   * Free-text mode (SDK 1.10): the input holds a free-text query and a
+   * typed `#name` word lifts out into a chip, so one field carries both a
+   * tag filter and a text filter. `onInput` gets the remaining text,
+   * `onSubmit` fires on Enter.
+   */
+  readonly freeText?: {
+    readonly value?: string;
+    onInput(text: string): void;
+    onSubmit?(): void;
+  };
 }
 
 /** Handle to a mounted tag field (see `ui.createTagField`). */
@@ -284,6 +295,8 @@ export interface TagFieldHandle {
   focus(): void;
   /** Replaces the chips without firing `onChange`. */
   setValues(values: readonly string[]): void;
+  /** Free-text mode: replaces the input text without firing `onInput`. */
+  setText(text: string): void;
   /** Detaches the field and releases listeners; call when the panel unmounts. */
   dispose(): void;
 }
@@ -392,7 +405,11 @@ export interface DreyPluginApi {
     registerSettingsPage(page: PluginSettingsPageContrib): Unsubscribe;
     registerDocKind(kind: PluginDocKindContrib): Unsubscribe;
     registerMenuContributions(items: readonly MenuContribution[]): Unsubscribe;
-    /** A mount in the "Add entry" drawer (chip rows, helper buttons). */
+    /**
+     * @deprecated The "Add entry" drawer was removed in milestone 43
+     * (ADR-0057). Kept as a no-op so existing plugins keep loading; the
+     * mount is never called.
+     */
     registerComposerContribution(mount: (el: HTMLElement) => () => void): Unsubscribe;
     /** Un-hide, open and focus a dock widget (e.g. a tag pill click revealing Search). */
     revealWidget(id: string): void;
@@ -416,6 +433,14 @@ export interface DreyPluginApi {
      * via `setValues`, dispose with the panel.
      */
     createTagField(opts: TagFieldOptions): TagFieldHandle;
+    /**
+     * A glyph from the host's vendored icon set as a plain SVG element
+     * (SDK 1.10) -- `currentColor` stroke, sized by `size` (px, default 16).
+     * Use it for icon-only controls instead of carrying path data; always
+     * pair the button with a `title` and an `aria-label`. An unknown name
+     * yields an empty SVG of the right size.
+     */
+    icon(name: string, size?: number): SVGElement;
   };
 
   readonly editor: {

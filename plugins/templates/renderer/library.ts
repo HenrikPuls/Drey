@@ -188,13 +188,35 @@ export class TemplateLibrary {
     if (active === null || active.kind !== 'text') {
       return { ok: false, message: 'Open a note before inserting a template.' };
     }
-    const file = await this.api.vault.readFile(relativePath);
-    const body = substitutePlaceholders(stripFrontmatter(file.content), this.placeholders(active.path));
-    if (!this.api.documents.insertAtCursor(body)) {
+    const body = await this.render(relativePath);
+    if (body === null || !this.api.documents.insertAtCursor(body)) {
       return { ok: false, message: 'Open a note before inserting a template.' };
     }
     this.pushRecent(relativePath);
     return { ok: true };
+  }
+
+  /**
+   * The template as it would be inserted right now: frontmatter stripped,
+   * placeholders filled against the active note. Used by `insert`, the
+   * slash menu and the hover previews; null when the file cannot be read.
+   */
+  async render(relativePath: string): Promise<string | null> {
+    try {
+      const file = await this.api.vault.readFile(relativePath);
+      const active = this.api.documents.active();
+      return substitutePlaceholders(
+        stripFrontmatter(file.content),
+        this.placeholders(active?.path ?? ''),
+      );
+    } catch {
+      return null;
+    }
+  }
+
+  /** Records a template inserted outside `insert` (the slash menu) in the recents. */
+  markUsed(relativePath: string): void {
+    this.pushRecent(relativePath);
   }
 
   private placeholders(activePath: string): Record<string, string> {

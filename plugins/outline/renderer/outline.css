@@ -39,30 +39,6 @@
   gap: 5px;
 }
 
-.outline-hdr .tgl {
-  height: 20px;
-  min-width: 20px;
-  padding: 0 5px;
-  border: 1px solid var(--field-border);
-  border-radius: var(--radius-sm);
-  background: transparent;
-  color: var(--text-5);
-  font-family: var(--font-mono);
-  font-size: 10px;
-  line-height: 1;
-  cursor: pointer;
-}
-
-.outline-hdr .tgl:hover:not(.on) {
-  color: var(--text-2);
-}
-
-.outline-hdr .tgl.on {
-  background: var(--accent-surface);
-  border-color: var(--accent-quote);
-  color: var(--accent-text);
-}
-
 /* ---- tree rows ---- */
 
 .outline-panel .row {

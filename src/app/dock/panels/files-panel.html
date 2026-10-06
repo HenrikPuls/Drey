@@ -1,87 +1,37 @@
 <ng-template appPanelHeaderActions="files">
   <button
     type="button"
-    class="hdr-btn"
+    class="icon-btn hdr-btn"
     (click)="onAddVault()"
     title="Add vault folder"
     aria-label="Add vault"
   >
-    <app-icon name="plus" [size]="12" />
+    <app-icon name="plus" [size]="14" [strokeWidth]="1.5" />
   </button>
   @if (vault.vaults().length > 0) {
     <button
       type="button"
-      class="hdr-btn"
+      class="icon-btn hdr-btn"
       (click)="toggleAllFolders()"
       [title]="allFoldersExpanded() ? 'Collapse all folders' : 'Expand all folders'"
       [attr.aria-label]="allFoldersExpanded() ? 'Collapse all folders' : 'Expand all folders'"
     >
-      <app-icon name="chevrons-down-up" [size]="12" />
+      <app-icon name="chevrons-down-up" [size]="14" [strokeWidth]="1.5" />
     </button>
     <button
       type="button"
-      class="hdr-btn"
+      class="icon-btn hdr-btn"
       (click)="onRefresh()"
       [disabled]="vault.isLoading()"
       title="Re-read the vaults from disk"
       aria-label="Refresh files"
     >
-      <app-icon name="refresh-cw" [size]="12" />
+      <app-icon name="refresh-cw" [size]="14" [strokeWidth]="1.5" />
     </button>
   }
 </ng-template>
 
 <div class="files">
-  @if (creating(); as pending) {
-    <div class="create-row">
-      <app-icon [name]="pending.kind === 'directory' ? 'chevron-right' : 'plus'" [size]="10" />
-      <input
-        #createInput
-        class="create-input"
-        type="text"
-        [attr.placeholder]="
-          (pending.kind === 'directory' ? 'New folder' : 'New file') +
-          (pending.dir ? ' in ' + pending.dir : '')
-        "
-        (keydown.enter)="commitCreate(createInput.value)"
-        (keydown.escape)="cancelCreate()"
-        (blur)="commitCreate(createInput.value)"
-      />
-    </div>
-  }
-
-  @if (renaming(); as pending) {
-    <div class="create-row">
-      <app-icon [name]="pending.entry.type === 'directory' ? 'chevron-right' : 'pencil'" [size]="10" />
-      <input
-        #renameInput
-        class="create-input"
-        type="text"
-        [value]="pending.entry.name"
-        [attr.aria-label]="'Rename ' + pending.entry.relativePath"
-        (keydown.enter)="commitRename(renameInput.value)"
-        (keydown.escape)="cancelRename()"
-        (blur)="commitRename(renameInput.value)"
-      />
-    </div>
-  }
-
-  @if (renamingVault(); as pending) {
-    <div class="create-row">
-      <app-icon name="folder" [size]="10" />
-      <input
-        #vaultRenameInput
-        class="create-input"
-        type="text"
-        [value]="renamingVaultName()"
-        aria-label="Rename vault"
-        (keydown.enter)="commitVaultRename(vaultRenameInput.value)"
-        (keydown.escape)="cancelVaultRename()"
-        (blur)="commitVaultRename(vaultRenameInput.value)"
-      />
-    </div>
-  }
-
   @if (vault.vaults().length === 0) {
     <div class="vault-empty">
       <p>No vault registered yet.</p>
@@ -154,7 +104,21 @@
 
 <ng-template #tree>
   @for (node of visibleNodes(); track keyOf(node)) {
-    @if (node.kind === 'vault') {
+    @if (node.kind === 'vault' && renamingVault()?.vaultId === node.vault.id) {
+      <div class="node vault-row editing">
+        <app-icon name="folder" [size]="14" [strokeWidth]="1.5" />
+        <input
+          #vaultRenameInput
+          class="create-input"
+          type="text"
+          [value]="renamingVaultName()"
+          aria-label="Rename vault"
+          (keydown.enter)="commitVaultRename(vaultRenameInput.value)"
+          (keydown.escape)="cancelVaultRename()"
+          (blur)="commitVaultRename(vaultRenameInput.value)"
+        />
+      </div>
+    } @else if (node.kind === 'vault') {
       <button
         type="button"
         class="node vault-row"
@@ -173,18 +137,30 @@
         <app-icon
           class="twist"
           name="chevron-right"
-          [size]="9"
-          [strokeWidth]="1.2"
+          [size]="14"
+          [strokeWidth]="1.5"
           [style.transform]="collapsedVaults().has(node.vault.id) ? 'none' : 'rotate(90deg)'"
         />
-        <app-icon name="folder" [size]="11" [strokeWidth]="1.2" />
         <span class="node-name">{{ node.vault.name }}</span>
         @if (node.vault.active) {
           <span class="active-dot" aria-label="Active vault"></span>
         }
       </button>
     } @if (node.kind === 'entry') {
-      @if (node.entry.type === 'directory') {
+      @if (isRenaming(node.vaultId, node.entry)) {
+        <div class="node editing" [style.padding-left.px]="8 + node.depth * 16">
+          <input
+            #renameInput
+            class="create-input"
+            type="text"
+            [value]="node.entry.name"
+            [attr.aria-label]="'Rename ' + node.entry.relativePath"
+            (keydown.enter)="commitRename(renameInput.value)"
+            (keydown.escape)="cancelRename()"
+            (blur)="commitRename(renameInput.value)"
+          />
+        </div>
+      } @else if (node.entry.type === 'directory') {
         <button
           type="button"
           class="node folder"
@@ -192,7 +168,7 @@
           [class.selected]="selection().has(keyOf(node))"
           [class.drop-target]="dropHover() === keyOf(node)"
           [attr.tabindex]="selected() === keyOf(node) ? 0 : -1"
-          [style.padding-left.px]="8 + node.depth * 13"
+          [style.padding-left.px]="8 + node.depth * 16"
           (click)="onFolderClick(node.vaultId, node.entry, $event)"
           (contextmenu)="openTreeMenu($event, node.vaultId, node.entry)"
           (dragstart)="onFolderDragStart($event, node.vaultId, node.entry)"
@@ -205,8 +181,8 @@
           <app-icon
             class="twist"
             name="chevron-right"
-            [size]="9"
-            [strokeWidth]="1.2"
+            [size]="14"
+            [strokeWidth]="1.5"
             [style.transform]="isCollapsed(keyOf(node)) ? 'none' : 'rotate(90deg)'"
           />
           <span class="node-name">{{ node.entry.name }}</span>
@@ -221,7 +197,7 @@
           [class.selected]="selection().has(keyOf(node))"
           [class.drop-target]="dropHover() === keyOf(node)"
           [attr.tabindex]="selected() === keyOf(node) ? 0 : -1"
-          [style.padding-left.px]="8 + node.depth * 13"
+          [style.padding-left.px]="8 + node.depth * 16"
           (click)="onFileClick(node.vaultId, node.entry, $event)"
           (contextmenu)="openTreeMenu($event, node.vaultId, node.entry)"
           (dragstart)="onFileDragStart($event, node.vaultId, node.entry)"
@@ -235,6 +211,26 @@
           <span class="node-name">{{ node.entry.name }}</span>
         </button>
       }
+    }
+    @if (createDepth(node); as depth) {
+      @let pending = creating()!;
+      <div class="node editing" [style.padding-left.px]="8 + (depth - 1) * 16">
+        <input
+          #createInput
+          class="create-input"
+          type="text"
+          [attr.aria-label]="
+            (pending.kind === 'directory' ? 'New folder' : 'New file') +
+            (pending.dir ? ' in ' + pending.dir : '')
+          "
+          (keydown.enter)="commitCreate(createInput.value)"
+          (keydown.escape)="cancelCreate()"
+          (blur)="commitCreate(createInput.value)"
+        />
+        @if (pending.kind === 'file') {
+          <span class="create-ext">.md</span>
+        }
+      </div>
     }
   }
 </ng-template>

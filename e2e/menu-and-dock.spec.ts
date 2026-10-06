@@ -9,8 +9,6 @@ import { test, expect } from './fixtures/drey';
  *  2. the native right-click menu — that its context-menu params stay
  *     sound, and that an open titlebar menu no longer swallows a
  *     right-click via its overlay;
- *  3. the bottom-dock resize divider stayed visible while "Add entry"
- *     (its only panel) was collapsed.
  */
 
 async function openANote(page: import('@playwright/test').Page, vaultDir: string): Promise<void> {
@@ -125,73 +123,29 @@ test.describe('Edit menu — history / clipboard act on the focused editor', () 
   });
 });
 
-test.describe('bottom dock — "Add entry" panel', () => {
-  test('collapsing "Add entry" removes the bottom-dock resize divider', async ({ page }) => {
-    const bottom = page.locator('app-dock[side="bottom"]');
-    const head = bottom.locator('app-panel-frame .head').first();
-    const divider = page.locator('.center-col .divider-y[aria-label="Resize bottom dock"]');
-
-    // Default: "Add entry" starts collapsed → no divider.
-    await expect(divider).toHaveCount(0);
-
-    // Expand it → divider appears and the band takes bottomH (poll past the
-    // ~140ms collapse/expand height animation).
-    await head.click();
-    await expect(divider).toHaveCount(1);
-    await expect
-      .poll(() => bottom.evaluate((el) => el.getBoundingClientRect().height))
-      .toBeGreaterThan(120);
-
-    // Collapse again → divider gone, band is just the header.
-    await head.click();
-    await expect(divider).toHaveCount(0);
-    await expect
-      .poll(() => bottom.evaluate((el) => el.getBoundingClientRect().height))
-      .toBeLessThan(80);
-  });
-
-  test('the "Add entry" text field grows to fill the expanded panel', async ({ page }) => {
-    const bottom = page.locator('app-dock[side="bottom"]');
-    await bottom.locator('app-panel-frame .head').first().click();
-
-    const field = bottom.locator('app-entry-drawer .md-editor');
-    const short = await field.evaluate((el) => el.getBoundingClientRect().height);
-
-    // Drag the bottom-dock divider up ~150px to enlarge the band.
-    const divider = page.locator('.center-col .divider-y[aria-label="Resize bottom dock"]');
-    const box = await divider.boundingBox();
-    await page.mouse.move(box!.x + box!.width / 2, box!.y + box!.height / 2);
-    await page.mouse.down();
-    await page.mouse.move(box!.x + box!.width / 2, box!.y - 150, { steps: 8 });
-    await page.mouse.up();
-
-    const tall = await field.evaluate((el) => el.getBoundingClientRect().height);
-    expect(tall).toBeGreaterThan(short + 100);
-  });
-});
-
 test.describe('View menu — widget visibility (ADR-0034)', () => {
-  test('deselecting "Add entry" removes the whole panel; reselecting brings it back', async ({
+  test('deselecting "Open windows" removes the whole panel; reselecting brings it back', async ({
     page,
   }) => {
-    const entry = page.locator('app-entry-drawer');
-    await expect(entry).toHaveCount(1);
+    const frame = page.locator('app-panel-frame', {
+      has: page.locator('.head[aria-label$="Open windows"]'),
+    });
+    await expect(frame).toHaveCount(1);
 
-    // View -> "Add entry" is checked (present).
     await page.locator('app-titlebar .menu-label', { hasText: 'View' }).click();
-    const row = page.locator('app-titlebar .popover .row', { hasText: 'Add entry' });
-    await expect(row.locator('.check')).toHaveText('✓');
-    await row.click();
+    await page.locator('app-titlebar .popover .row', { hasText: 'Open windows' }).click();
+    await expect(frame).toHaveCount(0);
 
-    // The whole panel is gone -- not just collapsed.
-    await expect(entry).toHaveCount(0);
-
-    // Reselect -> back.
     await page.locator('app-titlebar .menu-label', { hasText: 'View' }).click();
-    const row2 = page.locator('app-titlebar .popover .row', { hasText: 'Add entry' });
-    await expect(row2.locator('.check')).toHaveText('');
-    await row2.click();
-    await expect(entry).toHaveCount(1);
+    await page.locator('app-titlebar .popover .row', { hasText: 'Open windows' }).click();
+    await expect(frame).toHaveCount(1);
+  });
+
+  test('the "Add entry" panel is gone: no View row, no bottom dock by default', async ({ page }) => {
+    await page.locator('app-titlebar .menu-label', { hasText: 'View' }).click();
+    await expect(page.locator('app-titlebar .popover .row', { hasText: 'Add entry' })).toHaveCount(0);
+    await page.keyboard.press('Escape');
+    await expect(page.locator('app-dock[side="bottom"] app-panel-frame')).toHaveCount(0);
   });
 });
 

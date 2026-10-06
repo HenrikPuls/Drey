@@ -6,8 +6,8 @@
 .tpl-panel {
   height: 100%;
   overflow: auto;
-  padding: 6px 4px;
-  font-size: 12.5px;
+  padding: 0 8px 8px;
+  font-size: 13px;
 }
 
 .tpl-list {
@@ -27,7 +27,8 @@
   align-items: center;
   gap: 6px;
   width: 100%;
-  padding: 4px 10px;
+  height: var(--row-h);
+  padding: 0 8px;
   border: 0;
   background: transparent;
   color: inherit;
@@ -35,10 +36,10 @@
   font-weight: 600;
   text-align: left;
   cursor: pointer;
-  border-radius: 6px;
+  border-radius: var(--radius-xs);
 }
 .tpl-cat-head:hover {
-  background: color-mix(in srgb, var(--accent) 8%, transparent);
+  background: var(--hover-bg);
 }
 
 .tpl-chevron {
@@ -52,9 +53,12 @@
 }
 
 .tpl-row {
-  padding: 4px 10px 4px 22px;
+  height: var(--row-h);
+  line-height: var(--row-h);
+  padding: 0 8px 0 24px;
   cursor: pointer;
-  border-radius: 6px;
+  border-radius: var(--radius-xs);
+  color: var(--text-3);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -97,25 +101,6 @@
 }
 
 /* header refresh button (mounted into the shared panel header) */
-.tpl-hdr-btn {
-  border: 0;
-  background: transparent;
-  color: inherit;
-  opacity: 0.7;
-  cursor: pointer;
-  padding: 2px;
-  border-radius: 4px;
-  font-size: 12px;
-}
-.tpl-hdr-btn::before {
-  content: '⟳';
-  font-size: 13px;
-}
-.tpl-hdr-btn:hover {
-  opacity: 1;
-  background: color-mix(in srgb, var(--accent) 12%, transparent);
-}
-
 /* -- picker --------------------------------------------------------------- */
 
 .plugin-modal-backdrop {
@@ -171,7 +156,6 @@
   float: right;
   opacity: 0.5;
   font-size: 10px;
-  text-transform: uppercase;
   letter-spacing: 0.08em;
 }
 .tpl-picker-row.active {

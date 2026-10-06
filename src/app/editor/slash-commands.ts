@@ -12,6 +12,12 @@ import { applyAction, ToolbarAction } from './toolbar-commands';
  * reducer the toolbar uses (`toolbar-commands.ts`) -- one code path, two
  * entries.
  *
+ * Since milestone 43 the popup is sectioned: **Templates** first -- the
+ * built-in **Entry** block (the configurable entry format, ADR-0022; it
+ * replaced the "Add entry" drawer) plus whatever the templates plugin
+ * contributes through its own source -- then **Formatting**. The selected
+ * template shows a preview card beside the list (`info`).
+ *
  * Silent inside code, frontmatter, links and raw HTML (the shared
  * Markdown-context gate) and after a non-space character, so URLs, paths,
  * `and/or` and dates never trigger it.
@@ -19,6 +25,57 @@ import { applyAction, ToolbarAction } from './toolbar-commands';
 interface SlashCommand {
   label: string;
   action: ToolbarAction;
+}
+
+/**
+ * Section descriptors. The templates plugin builds the same `Templates`
+ * section by name (it cannot import this file -- plugin renderers load
+ * over `plugin://`), and CodeMirror merges equal-named sections.
+ */
+export const SLASH_SECTION_TEMPLATES = { name: 'Templates', rank: 0 } as const;
+export const SLASH_SECTION_FORMATTING = { name: 'Formatting', rank: 1 } as const;
+
+/** What the surface hands the source so it can offer the built-in Entry block. */
+export interface SlashSourceOptions {
+  /** The entry block as it would be inserted right now (heading with the time). */
+  entryText?: () => string;
+}
+
+/**
+ * The preview card beside the list: a small caption, the snippet as
+ * plain text, and the key hint. Styled globally (`src/styles.css`,
+ * `.slash-preview*`) so the templates plugin's cards look identical.
+ */
+export function slashPreviewCard(title: string, snippet: string): HTMLElement {
+  const card = document.createElement('div');
+  card.className = 'slash-preview';
+  const head = document.createElement('div');
+  head.className = 'slash-preview-head';
+  head.textContent = `Preview · ${title}`;
+  const body = document.createElement('pre');
+  body.className = 'slash-preview-body';
+  body.textContent = snippet;
+  const foot = document.createElement('div');
+  foot.className = 'slash-preview-foot';
+  foot.textContent = 'Enter to insert';
+  card.append(head, body, foot);
+  return card;
+}
+
+/**
+ * Replaces the typed `/query` by `text` as one change, the caret at the
+ * end of the snippet's first line (for the Entry block: right after the
+ * time, where the topic goes).
+ */
+export function insertSlashSnippet(view: EditorView, text: string, from: number, to: number): void {
+  const firstLine = text.indexOf('\n');
+  const caret = from + (firstLine === -1 ? text.length : firstLine);
+  view.dispatch({
+    changes: { from, to, insert: text },
+    selection: EditorSelection.cursor(caret),
+    scrollIntoView: true,
+    userEvent: 'input.slashCommand',
+  });
 }
 
 export const SLASH_COMMANDS: readonly SlashCommand[] = [
@@ -64,6 +121,20 @@ function applySlash(
  * swallows Enter must not eat the chat composer's submit).
  */
 export function slashCommandSource(context: CompletionContext): CompletionResult | null {
+  return makeSlashCommandSource()(context);
+}
+
+/**
+ * The source with the built-in Entry block wired in (`MarkdownSurface`
+ * passes the composer over the active entry pattern).
+ */
+export function makeSlashCommandSource(
+  opts: SlashSourceOptions = {},
+): (context: CompletionContext) => CompletionResult | null {
+  return (context) => slashResult(context, opts);
+}
+
+function slashResult(context: CompletionContext, opts: SlashSourceOptions): CompletionResult | null {
   const token = context.matchBefore(/\/[\w-]*/);
   if (!token) {
     return null;
@@ -79,14 +150,29 @@ export function slashCommandSource(context: CompletionContext): CompletionResult
 
   const query = token.text.slice(1).toLowerCase();
   const matches = SLASH_COMMANDS.filter((cmd) => cmd.label.toLowerCase().startsWith(query));
-  if (matches.length === 0) {
+  const options: Completion[] = [];
+  const entryText = opts.entryText;
+  if (entryText !== undefined && 'entry'.startsWith(query)) {
+    options.push({
+      label: 'Entry',
+      detail: 'Time, topic, tags',
+      type: 'slash',
+      section: SLASH_SECTION_TEMPLATES,
+      info: () => slashPreviewCard('Entry', entryText()),
+      apply: (view, _completion, from, to) => insertSlashSnippet(view, entryText(), from, to),
+    });
+  }
+  for (const cmd of matches) {
+    options.push({
+      label: cmd.label,
+      type: 'slash',
+      section: SLASH_SECTION_FORMATTING,
+      apply: (view, _completion, from, to) => applySlash(view, cmd.action, from, to),
+    });
+  }
+  if (options.length === 0) {
     return null;
   }
-  const options: Completion[] = matches.map((cmd) => ({
-    label: cmd.label,
-    type: 'keyword',
-    apply: (view, _completion, from, to) => applySlash(view, cmd.action, from, to),
-  }));
   // `filter: false` -- CodeMirror would fuzzy-match the labels against the
   // query text (`/`, `/head`), and no label contains a slash, so every
   // option would be dropped and the popup would never open. The list is

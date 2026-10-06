@@ -26,7 +26,7 @@
   border: 0;
   background: color-mix(in srgb, var(--text-heading) 3%, transparent);
   text-align: left;
-  height: 30px;
+  height: var(--row-h);
   padding: 0 8px;
   border-radius: var(--radius-sm);
   cursor: pointer;
@@ -46,7 +46,7 @@
 
 .node.vault-row .node-name {
   font-weight: 600;
-  font-size: 12.5px;
+  font-size: 13px;
 }
 
 /* The active vault's header: the accent-tinted edge marks the vault that
@@ -106,7 +106,7 @@
   flex: none;
   width: 10px;
   text-align: center;
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   font-size: 10px;
   color: var(--accent);
 }
@@ -149,7 +149,7 @@
   flex: none;
   width: 10px;
   text-align: center;
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   font-size: 10px;
   color: var(--accent);
 }
@@ -167,33 +167,6 @@
   background: var(--border);
 }
 
-/* ---- header actions (rendered in the PanelFrame header, req-7) ---- */
-
-.hdr-btn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  flex: none;
-  width: 22px;
-  height: 22px;
-  border: 0;
-  border-radius: var(--radius-sm);
-  background: transparent;
-  color: var(--text-5);
-  cursor: pointer;
-  padding: 0;
-}
-
-.hdr-btn:hover:not(:disabled) {
-  background: var(--hover-bg);
-  color: var(--text-primary);
-}
-
-.hdr-btn:disabled {
-  opacity: 0.4;
-  cursor: default;
-}
-
 /* ---- tree ---- */
 
 .tree-scroll {
@@ -204,25 +177,36 @@
   outline: none;
 }
 
-.create-row {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 2px 6px 6px;
-  color: var(--text-6);
+/* In-place editing (milestone 43): a new file / folder or a rename is a
+   row of the tree itself -- an input where the name would be -- instead of
+   a field pinned above the tree. */
+.node.editing {
+  cursor: default;
+  gap: 4px;
+}
+
+.node.editing:hover {
+  background: transparent;
 }
 
 .create-input {
   flex: 1;
   min-width: 0;
-  border: 1px solid var(--accent-ring);
-  border-radius: var(--radius);
-  background: var(--bg-input);
+  height: 24px;
+  border: 1px solid var(--accent);
+  border-radius: var(--radius-xs);
+  background: var(--bg-editor);
   color: var(--text-primary);
-  font-size: 12px;
+  font-size: 13px;
   font-family: inherit;
-  padding: 4px 6px;
+  padding: 0 6px;
   outline: none;
+}
+
+.create-ext {
+  flex: none;
+  font-size: 13px;
+  color: var(--text-5);
 }
 
 .ctx-backdrop {
@@ -313,9 +297,9 @@
   border: 0;
   background: transparent;
   text-align: left;
-  height: 26px;
+  height: var(--row-h);
   padding: 0 8px 0 8px;
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-xs);
   cursor: pointer;
   color: var(--text-3);
   overflow: hidden;
@@ -326,13 +310,16 @@
   color: var(--text-primary);
 }
 
+/* One line per name; a name longer than the dock fades out at the right
+   edge (so it reads as "there is more") and the row's tooltip carries the
+   full path. */
 .node-name {
   flex: 1;
   min-width: 0;
-  font-size: 12px;
+  font-size: 13px;
   overflow: hidden;
-  text-overflow: ellipsis;
   white-space: nowrap;
+  mask-image: linear-gradient(to right, #000 calc(100% - 24px), transparent);
 }
 
 .folder .node-name {
@@ -348,9 +335,9 @@
 .count {
   flex: none;
   margin-left: auto;
-  font-size: 10px;
+  font-size: 11px;
   color: var(--text-7);
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
 }
 
 .bullet {
@@ -366,6 +353,7 @@
 .file.active {
   background: var(--active-bg);
   color: var(--text-heading);
+  box-shadow: inset 2px 0 0 var(--accent);
 }
 
 /* Roving keyboard selection -- a faint ring so it reads under the pointer

@@ -48,8 +48,10 @@ async function openSearchPanel(page: Page): Promise<void> {
 
 async function runSearch(page: Page, text: string): Promise<void> {
   const panel = page.locator('app-panel-frame', { has: page.locator('.tag-search') });
-  await panel.locator('.tag-search-input').first().fill(text);
-  await panel.locator('.tag-search-input').first().press('Enter');
+  // One field for text and #tags (milestone 43): the shared tag field's input.
+  const field = panel.locator('.tag-search-field .tag-field-input').first();
+  await field.fill(text);
+  await field.press('Enter');
 }
 
 test.describe('Search panel (Tags plugin, milestone 33)', () => {
@@ -63,12 +65,12 @@ test.describe('Search panel (Tags plugin, milestone 33)', () => {
 
     // Terms AND within one section: only the sailing Morning section has
     // both "flat" and "water".
-    await expect(panel.locator('.tag-search-summary-text')).toHaveText(/1 match · 1 file/);
+    await expect(panel.locator('.tag-search-summary-text')).toHaveText(/1 section in 1 file/);
 
     // THE FIX under test: the untagged note is searchable at all — its only
     // section carries no inline #tag.
     await runSearch(page, 'peaches');
-    await expect(panel.locator('.tag-search-summary-text')).toHaveText(/1 match · 1 file/);
+    await expect(panel.locator('.tag-search-summary-text')).toHaveText(/1 section in 1 file/);
     await expect(panel.locator('.tag-search-file')).toHaveCount(1);
 
     // Opening a hit lands in the file at the section's line.
@@ -80,7 +82,7 @@ test.describe('Search panel (Tags plugin, milestone 33)', () => {
     await openSearchPanel(page);
     const panel = page.locator('app-panel-frame', { has: page.locator('.tag-search') });
 
-    await panel.locator('.tag-search-tgl[title="Regular expression"]').click();
+    await panel.locator('.icon-btn[title="Regular expression"]').click();
     await runSearch(page, 'flat(');
 
     await expect(panel.locator('.tag-search-error')).toBeVisible();
@@ -93,10 +95,10 @@ test.describe('Search panel (Tags plugin, milestone 33)', () => {
 
     // As a substring, "at" lives inside "flat"/"watch" — both files match.
     await runSearch(page, 'at');
-    await expect(panel.locator('.tag-search-summary-text')).toHaveText(/3 matches · 2 files/);
+    await expect(panel.locator('.tag-search-summary-text')).toHaveText(/3 sections in 2 files/);
 
     // As a whole word, "at" occurs nowhere.
-    await panel.locator('.tag-search-tgl[title="Whole word"]').click();
+    await panel.locator('.icon-btn[title="Whole word"]').click();
     await runSearch(page, 'at');
     await expect(panel.locator('.tag-search-empty')).toHaveText('No matches.');
   });
@@ -112,13 +114,13 @@ test.describe('Search panel (Tags plugin, milestone 33)', () => {
     await page.locator('app-dock[side="left"] .node.file', { hasText: 'sailing.md' }).click();
     await expect(page.locator('app-editor .cm-content')).toContainText('flat water');
 
-    await panel.locator('.tag-search-hdr .seg button', { hasText: 'File' }).click();
+    await panel.locator('.seg [aria-label="Search the open document"]').click();
     await runSearch(page, 'flat');
-    await expect(panel.locator('.tag-search-summary-text')).toHaveText(/1 match · 1 file/);
+    await expect(panel.locator('.tag-search-summary-text')).toHaveText(/1 section in 1 file/);
 
-    await panel.locator('.tag-search-tgl[title="Toggle replace row"]').click();
+    await panel.locator('.tag-search-summary [aria-label="Replace"]').click();
     await panel.locator('.tag-search-replace input').fill('smooth');
-    await panel.locator('.tag-search-replace button', { hasText: 'Replace all' }).click();
+    await panel.locator('.tag-search-replace [aria-label="Replace all"]').click();
 
     // The replace patches the live buffer (like any typed edit): the tab
     // turns dirty and nothing reaches disk until the user saves.
@@ -137,11 +139,11 @@ test.describe('Search panel (Tags plugin, milestone 33)', () => {
     const panel = page.locator('app-panel-frame', { has: page.locator('.tag-search') });
 
     await runSearch(page, 'sunset');
-    await expect(panel.locator('.tag-search-summary-text')).toHaveText(/1 match · 1 file/);
+    await expect(panel.locator('.tag-search-summary-text')).toHaveText(/1 section in 1 file/);
 
-    await panel.locator('.tag-search-tgl[title="Toggle replace row"]').click();
+    await panel.locator('.tag-search-summary [aria-label="Replace"]').click();
     await panel.locator('.tag-search-replace input').fill('sunrise');
-    await panel.locator('.tag-search-replace button', { hasText: 'Replace all' }).click();
+    await panel.locator('.tag-search-replace [aria-label="Replace all"]').click();
 
     // The bundled confirmation lists the affected file before anything lands.
     // (The host's modal box carries both classes — `plugin-modal` + the

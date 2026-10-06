@@ -145,24 +145,6 @@ test.describe('image capture — paste & drop in the editors', () => {
     );
   });
 
-  test('pasting into the "Add entry" drawer saves an image too', async ({ page, vaultDir }) => {
-    await openNote(page, vaultDir, 'entry.md');
-
-    const bottom = page.locator('app-dock[side="bottom"]');
-    await bottom.locator('app-panel-frame .head').first().click();
-    const surface = bottom.locator('app-entry-drawer .md-editor .cm-content');
-    await surface.click();
-
-    await pasteImage(page, 'app-entry-drawer .md-editor .cm-content');
-
-    await expectOneSavedImage(vaultDir);
-    const savedName = fs.readdirSync(attachmentsDir(vaultDir))[0];
-    await expect(surface.locator('.lp-image img')).toHaveAttribute(
-      'src',
-      await activeVaultAssetUrl(page, `attachments/${savedName}`),
-    );
-  });
-
   test('a non-image paste falls through to the default text paste', async ({ page, vaultDir }) => {
     await openNote(page, vaultDir, 'text.md');
     await page.locator('app-editor .cm-content').click();

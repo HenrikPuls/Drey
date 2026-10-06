@@ -12,7 +12,7 @@ import {
   BUILTIN_TEMPLATE_IDS,
   CLASSIC_ENTRY_PATTERN,
   DEFAULT_EDITOR_FONT_FAMILY,
-  DEFAULT_THEME,
+  ANTHRAZIT_THEME,
   DailyConfig,
   EntryTemplate,
   LM_STUDIO_DEFAULT_BASE_URL,
@@ -40,7 +40,7 @@ export const DEFAULT_VAULT_CONFIG: VaultConfig = { watch: false };
 export const DEFAULT_APPEARANCE: AppearanceConfig = {
   uiScale: 'default',
   accent: THEME_ACCENT,
-  theme: DEFAULT_THEME,
+  theme: ANTHRAZIT_THEME,
 };
 
 export const DEFAULT_MCP_CONFIG: McpConfig = {

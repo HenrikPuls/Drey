@@ -1,34 +1,52 @@
-<div class="head">
-  <button
-    type="button"
-    class="month"
-    [class.open]="pickerOpen()"
-    (click)="togglePicker()"
-    [attr.aria-expanded]="pickerOpen()"
-    aria-label="Choose month and year"
-  >
-    <span>{{ headLabel() }}</span>
-    <app-icon name="chevron-down" [size]="10" />
-  </button>
-  <span class="nav">
+<!-- The month row. Standalone it renders right here; inside a dock panel
+     (`frameId` set) it is handed to the PanelFrame and BECOMES the panel
+     header -- month/year dropdown instead of a "Calendar" title. -->
+<ng-template #headTpl>
+  <div class="head" [class.in-frame]="frameId() !== null">
     <button
       type="button"
-      class="nav-btn"
-      (click)="onPrev()"
-      [attr.aria-label]="'Previous ' + stepUnit()"
+      class="month"
+      [class.open]="pickerOpen()"
+      (mousedown)="$event.stopPropagation()"
+      (click)="togglePicker()"
+      [attr.aria-expanded]="pickerOpen()"
+      aria-label="Choose month and year"
     >
-      <app-icon name="chevron-left" [size]="10" />
+      <span>{{ headLabel() }}</span>
+      <app-icon name="chevron-down" [size]="14" [strokeWidth]="1.5" />
     </button>
-    <button
-      type="button"
-      class="nav-btn"
-      (click)="onNext()"
-      [attr.aria-label]="'Next ' + stepUnit()"
-    >
-      <app-icon name="chevron-right" [size]="10" />
-    </button>
-  </span>
-</div>
+    <span class="nav" (mousedown)="$event.stopPropagation()">
+      <button
+        type="button"
+        class="icon-btn"
+        (click)="onToday()"
+        title="Today"
+        aria-label="Open today's daily note"
+      >
+        <app-icon name="calendar-check" [size]="14" [strokeWidth]="1.5" />
+      </button>
+      <button
+        type="button"
+        class="icon-btn"
+        (click)="onPrev()"
+        [attr.aria-label]="'Previous ' + stepUnit()"
+      >
+        <app-icon name="chevron-left" [size]="14" [strokeWidth]="1.5" />
+      </button>
+      <button
+        type="button"
+        class="icon-btn"
+        (click)="onNext()"
+        [attr.aria-label]="'Next ' + stepUnit()"
+      >
+        <app-icon name="chevron-right" [size]="14" [strokeWidth]="1.5" />
+      </button>
+    </span>
+  </div>
+</ng-template>
+@if (frameId() === null) {
+  <ng-container [ngTemplateOutlet]="headTpl" />
+}
 
 @if (pickerOpen()) {
   <div class="months">

@@ -4,7 +4,7 @@ import { EditorState } from '@codemirror/state';
 import { EditorView } from '@codemirror/view';
 import { describe, expect, it } from 'vitest';
 
-import { slashCommandSource, SLASH_COMMANDS } from './slash-commands';
+import { makeSlashCommandSource, slashCommandSource, SLASH_COMMANDS } from './slash-commands';
 
 interface ResultLike {
   from: number;
@@ -33,6 +33,48 @@ function ctx(doc: string, pos: number, explicit = false): CompletionContext {
     },
   } as unknown as CompletionContext;
 }
+
+describe('the Entry block (makeSlashCommandSource)', () => {
+  const ENTRY = '## 09:41\n';
+  const source = makeSlashCommandSource({ entryText: () => ENTRY }) as (
+    c: CompletionContext,
+  ) => (ResultLike & { options: Array<{ section?: { name: string }; info?: () => Node }> }) | null;
+
+  it('leads the menu in the Templates section, formatting follows', () => {
+    const result = source(ctx('/', 1));
+    expect(result?.options[0].label).toBe('Entry');
+    expect(result?.options[0].section?.name).toBe('Templates');
+    expect(result?.options[1].section?.name).toBe('Formatting');
+  });
+
+  it('is found by its name and absent for other queries', () => {
+    expect(source(ctx('/ent', 4))?.options.map((o) => o.label)).toEqual(['Entry']);
+    expect(source(ctx('/head', 5))?.options.map((o) => o.label)).not.toContain('Entry');
+  });
+
+  it('previews the block and inserts it in place of the typed slash', () => {
+    const result = source(ctx('/', 1));
+    const card = result!.options[0].info!() as HTMLElement;
+    expect(card.querySelector('.slash-preview-body')?.textContent).toBe(ENTRY);
+
+    const view = new EditorView({
+      state: EditorState.create({ doc: 'intro\n/ent', extensions: [markdown({ base: markdownLanguage })] }),
+    });
+    try {
+      result!.options[0].apply!(view, null, 6, 10);
+      expect(view.state.doc.toString()).toBe('intro\n## 09:41\n');
+      // The caret waits right after the time, where the topic goes.
+      expect(view.state.selection.main.head).toBe(6 + '## 09:41'.length);
+    } finally {
+      view.destroy();
+    }
+  });
+
+  it('offers no Entry without the composer (plain source)', () => {
+    const plain = slashCommandSource as (c: CompletionContext) => ResultLike | null;
+    expect(plain(ctx('/', 1))?.options.map((o) => o.label)).not.toContain('Entry');
+  });
+});
 
 describe('slashCommandSource', () => {
   const source = slashCommandSource as (c: CompletionContext) => ResultLike | null;

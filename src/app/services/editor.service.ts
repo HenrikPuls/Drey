@@ -1,7 +1,6 @@
 import { Injectable, computed, inject, signal } from '@angular/core';
 import { imageExtension, pdfExtension } from '../../../shared/asset-name';
 import { dailyPathFor } from '../../../shared/daily';
-import { EntryDraft } from '../../../shared/entry-compose';
 import { externalDocKey } from '../../../shared/external-open';
 import { ActionOutcome } from '../../../shared/ipc-api';
 import { isAutoSavePath, isChatNotePath } from '../../../shared/structural-folders';
@@ -339,11 +338,10 @@ export class EditorService {
 
   /**
    * The deferred editor-command bus (`EditorCommandsService`), re-exposed
-   * here so its callers (`Editor`, `DailyNoteService`, `EntryDraftService`)
+   * here so its callers (`Editor`, `DailyNoteService`)
    * keep going through `EditorService`.
    *
-   * `newEntryRequest` is bumped by the quick-capture hotkey flow and the
-   * entry drawer to ask the `Editor` component to start a fresh `## HH:mm`
+   * `newEntryRequest` is bumped by the quick-capture hotkey flow to ask the `Editor` component to start a fresh `## HH:mm`
    * entry; `insertRequest` drops text at the caret (the assistant's
    * insert-into-note arrow). Both are id counters, not payload signals: the
    * component computes the real CodeMirror change against live state when it
@@ -377,21 +375,6 @@ export class EditorService {
       return;
     }
     this.commands.requestInsertText(text);
-  }
-
-  /** The entry drawer's "Add to document"; `pattern` is the active template. */
-  requestEntryFromDraft(draft: EntryDraft, pattern: string): void {
-    this.commands.requestEntryFromDraft(draft, pattern);
-  }
-
-  /** @see EditorCommandsService.entryDraftEdit */
-  entryDraftEdit(
-    currentText: string,
-    draft: EntryDraft,
-    pattern: string,
-    now: Date = new Date(),
-  ): { from: number; to: number; insert: string } {
-    return this.commands.entryDraftEdit(currentText, draft, pattern, now);
   }
 
   /** @see EditorCommandsService.newDailyEntryEdit */

@@ -2168,3 +2168,46 @@ are stamped with the embedding model; a mismatch marks the vault stale
 and search skips it until rebuilt. Retrieved text rides only the current
 call � it is never persisted into the note and never replayed, so a
 follow-up's context stays small (the small-model budget).
+
+## 6.45 Capture through the `/` menu — Entry block and templates (milestone 43, ADR-0057)
+
+Replaces the entry-drawer flow (§6.9 and the Autotag flow §6.13 are
+historical: the drawer is gone).
+
+```mermaid
+sequenceDiagram
+    actor User
+    participant CM as CodeMirror (MarkdownSurface)
+    participant Base as makeSlashCommandSource (base)
+    participant Tpl as templateSlashExtension (templates plugin)
+    participant Lib as TemplateLibrary
+    participant Vault as vault (IPC)
+
+    User->>CM: types "/" at a line start
+    CM->>Base: completion source(context)
+    Base-->>CM: Entry (section Templates) + Formatting options
+    CM->>Tpl: completion source(context)
+    Tpl-->>CM: one option per library template (section Templates)
+    Note over CM: one popup, sections merged by name
+
+    User->>CM: arrow to a template
+    CM->>Tpl: option.info()
+    Tpl->>Lib: render(path)
+    Lib->>Vault: readFile(path)
+    Vault-->>Lib: content
+    Lib-->>Tpl: frontmatter stripped, placeholders filled
+    Tpl-->>CM: preview card (plain text)
+
+    alt Enter on "Entry"
+        CM->>Base: apply
+        Base->>CM: replace "/…" with composeEntry(empty draft, active pattern), caret after the time
+    else Enter on a template
+        CM->>Tpl: apply
+        Tpl->>Lib: render(path)
+        Tpl->>CM: replace "/…" with the rendered body, mark recent
+    end
+```
+
+The note is saved by the user like any edit; nothing is appended behind
+their back. With no note open, the calendar's **Today** button (or the
+quick-capture hotkey) opens the daily note first.

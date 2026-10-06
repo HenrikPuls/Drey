@@ -31,7 +31,6 @@
   font-size: 0.82rem;
   font-weight: 600;
   color: var(--text-4);
-  text-transform: uppercase;
   letter-spacing: 0.04em;
 }
 
@@ -201,8 +200,6 @@
 .plugin-settings-body .badge {
   font-family: var(--font-mono);
   font-size: 0.62rem;
-  text-transform: uppercase;
-  letter-spacing: var(--ls-mono-title);
   color: var(--text-5);
   border: 1px solid var(--border-strong);
   border-radius: 999px;

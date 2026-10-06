@@ -63,6 +63,7 @@ package, a minor naming convention).
 | [0054](09_architecture_decisions/0054-opening-files-from-the-os.md)                | Opening files from the OS: Explorer association for md/markdown/mdx/txt; vault files open normally, out-of-vault ones as pinned external tabs saved in place, behind a main-side read/write allowlist; pull-then-push delivery | Accepted |
 | [0055](09_architecture_decisions/0055-semantic-vault-retrieval.md)                 | Semantic vault retrieval: the assistant's Vault chip retrieves top-k note sections (transformers.js WASM in a worker, JSON index per vault, system-prompt injection — sqlite-vec dropped) | Accepted |
 | [0056](09_architecture_decisions/0056-spellcheck-language-autodetect.md)           | Spellcheck language auto-detect: `franc-min` detects each paragraph's language, words are checked per language group; fallback = configured dictionary; plus verdict memo + dictionary-eviction fixes | Accepted |
+| [0057](09_architecture_decisions/0057-ui-refinement-icon-chrome-anthrazit-and-slash-capture.md) | UI refinement: sentence-case sans chrome with one shared icon button / segmented switch, the Anthrazit theme next to Drey, one text-and-tag query field, capture through the `/` menu (built-in Entry + templates with preview) replacing the "Add entry" drawer, formatting buttons in the meta bar, in-place file create/rename | Accepted |
 
 Decisions not yet written up (relevant spec already fixes them, but the
 ADR is deferred to the milestone that actually implements them, per

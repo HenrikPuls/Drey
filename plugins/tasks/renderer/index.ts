@@ -23,20 +23,6 @@ function el<K extends keyof HTMLElementTagNameMap>(
   return node;
 }
 
-function toggleButton(
-  className: string,
-  label: string,
-  title: string,
-  onPress: () => void,
-): HTMLButtonElement {
-  const node = el('button', className, label) as HTMLButtonElement;
-  node.type = 'button';
-  node.title = title;
-  node.setAttribute('aria-label', title);
-  node.addEventListener('click', onPress);
-  return node;
-}
-
 /** Files under here are kept out of the vault list (mirrors the main-side index). */
 const TEMPLATES_PREFIX = 'templates/';
 
@@ -198,6 +184,17 @@ const plugin: PluginRendererModule = {
 
     const hasFilter = (): boolean => state.queryTags.length > 0 || state.queryText.trim() !== '';
 
+    /** Icon-only control: the words live in `title` + `aria-label`. */
+    const iconButton = (icon: string, label: string, onClick: () => void): HTMLButtonElement => {
+      const node = el('button', 'icon-btn') as HTMLButtonElement;
+      node.type = 'button';
+      node.appendChild(api.ui.icon(icon, 14));
+      node.title = label;
+      node.setAttribute('aria-label', label);
+      node.addEventListener('click', onClick);
+      return node;
+    };
+
     // -- mutations -------------------------------------------------------------
     const setScope = (scope: TaskScope): void => {
       state.scope = scope;
@@ -303,48 +300,32 @@ const plugin: PluginRendererModule = {
         return open > 0 ? `${open} open` : null;
       },
       headerActions: (host) => {
-        const row = el('div', 'tasks-hdr');
         const seg = el('span', 'seg');
         seg.setAttribute('role', 'tablist');
         seg.setAttribute('aria-label', 'Task scope');
-        const docBtn = toggleButton('', 'Doc', 'Tasks in the open document', () =>
-          setScope('document'),
-        );
-        docBtn.setAttribute('role', 'tab');
-        const vaultBtn = toggleButton('', 'Vault', 'Tasks across the whole vault', () =>
-          setScope('vault'),
-        );
-        vaultBtn.setAttribute('role', 'tab');
-        const allBtn = toggleButton('', 'All', 'Tasks across every vault', () => setScope('all'));
-        allBtn.setAttribute('role', 'tab');
-        seg.append(docBtn, vaultBtn, allBtn);
-
-        const doneBtn = toggleButton('tgl', 'done', 'Hide completed tasks', toggleHideDone);
-        const boxBtn = toggleButton('tgl', '[ ]', 'Show - [ ] checkbox tasks', () =>
-          toggleKind('checkbox'),
-        );
-        const tagBtn = toggleButton('tgl', '#', 'Show lines tagged #task', () => toggleKind('tag'));
-        row.append(seg, doneBtn, boxBtn, tagBtn);
+        const scopes: Array<[TaskScope, string, string]> = [
+          ['document', 'file-text', 'Tasks in the open document'],
+          ['vault', 'folder', 'Tasks across the whole vault'],
+          ['all', 'layers', 'Tasks across every vault'],
+        ];
+        const buttons = scopes.map(([scope, icon, label]) => {
+          const btn = iconButton(icon, label, () => setScope(scope));
+          btn.setAttribute('role', 'tab');
+          btn.dataset['scope'] = scope;
+          seg.appendChild(btn);
+          return btn;
+        });
 
         const render = (): void => {
-          docBtn.classList.toggle('on', state.scope === 'document');
-          docBtn.setAttribute('aria-selected', String(state.scope === 'document'));
-          vaultBtn.classList.toggle('on', state.scope === 'vault');
-          vaultBtn.setAttribute('aria-selected', String(state.scope === 'vault'));
-          allBtn.classList.toggle('on', state.scope === 'all');
-          allBtn.setAttribute('aria-selected', String(state.scope === 'all'));
-          for (const [btn, on] of [
-            [doneBtn, state.hideDone],
-            [boxBtn, state.kinds.includes('checkbox')],
-            [tagBtn, state.kinds.includes('tag')],
-          ] as const) {
+          for (const btn of buttons) {
+            const on = btn.dataset['scope'] === state.scope;
             btn.classList.toggle('on', on);
-            btn.setAttribute('aria-pressed', String(on));
+            btn.setAttribute('aria-selected', String(on));
           }
         };
         render();
         listeners.add(render);
-        host.appendChild(row);
+        host.appendChild(seg);
         return () => {
           listeners.delete(render);
         };
@@ -353,24 +334,32 @@ const plugin: PluginRendererModule = {
         body.classList.add('tasks-panel');
 
         // -- filter block (pinned; only the list scrolls -- widget is flush) --
-        // The shared tag chip field (milestone 33): colored chips + a
-        // completion dropdown from the Tags plugin's vocabulary, exactly
-        // what the Search panel and the entry drawer use.
+        // ONE field (milestone 43): the shared tag field in free-text mode,
+        // so a typed `#name` becomes a chip and the rest filters by text;
+        // the three view toggles sit at its right edge as icons.
+        const fieldIcon = el('span', 'filter-icon');
+        fieldIcon.appendChild(api.ui.icon('filter', 14));
         const tagField = api.ui.createTagField({
           values: state.queryTags,
           onChange: (values) => {
             state.queryTags = values;
             notify();
           },
-          placeholder: '+ tag',
-          ariaLabel: 'Tag filter',
+          ariaLabel: 'Filter tasks by text and #tags',
+          freeText: {
+            value: state.queryText,
+            onInput: (text) => setText(text),
+          },
         });
-        const textInput = el('input', 'text-input') as HTMLInputElement;
-        textInput.type = 'text';
-        textInput.autocomplete = 'off';
-        textInput.placeholder = 'filter text…';
-        const clearButton = toggleButton('clear', 'Clear filter', 'Drop the filter', clearFilter);
-        clearButton.className = 'clear';
+        const clearButton = iconButton('x', 'Clear filter', clearFilter);
+        const doneBtn = iconButton('circle-check', 'Hide completed tasks', toggleHideDone);
+        const boxBtn = iconButton('check-square', 'Show - [ ] checkbox tasks', () =>
+          toggleKind('checkbox'),
+        );
+        const tagBtn = iconButton('hash', 'Show lines tagged #task', () => toggleKind('tag'));
+        for (const btn of [doneBtn, boxBtn, tagBtn]) {
+          btn.setAttribute('aria-pressed', 'false');
+        }
 
         const filter = el('div', 'filter');
         const content = el('div', 'content');
@@ -463,16 +452,22 @@ const plugin: PluginRendererModule = {
 
         const render = (): void => {
           renderChips();
-          textInput.value = state.queryText;
-          clearButton.style.display = hasFilter() ? '' : 'none';
+          if (!filter.contains(document.activeElement)) {
+            tagField.setText(state.queryText);
+          }
+          clearButton.hidden = !hasFilter();
+          for (const [btn, on] of [
+            [doneBtn, state.hideDone],
+            [boxBtn, state.kinds.includes('checkbox')],
+            [tagBtn, state.kinds.includes('tag')],
+          ] as const) {
+            btn.classList.toggle('on', on);
+            btn.setAttribute('aria-pressed', String(on));
+          }
           renderContent();
         };
 
-        textInput.addEventListener('input', () => {
-          setText(textInput.value);
-        });
-
-        filter.append(tagField.element, textInput, clearButton);
+        filter.append(fieldIcon, tagField.element, clearButton, doneBtn, boxBtn, tagBtn);
         body.append(filter, content);
         render();
         listeners.add(render);

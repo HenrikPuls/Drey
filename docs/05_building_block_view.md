@@ -2421,3 +2421,45 @@ library — Chromium's built-in (PDFium) viewer, enabled by
   inverse of `resolveVaultImageUrl` (mirrors the serving handler's
   `/asset/` + slash stripping exactly), used by the embed lens to open
   the probed URL as a tab.
+
+## 5.29 UI refinement — shared chrome, Anthrazit, slash-menu capture (milestone 43, ADR-0057)
+
+> Supersedes the entry-drawer parts of §5.12, §5.14 and §5.16: the
+> "Add entry" panel, `EntryDrawer`, `EntryDraftService` and
+> `AutotagButton` no longer exist. The `suggestTags` backend
+> (`electron/llm/tag-suggest.ts`, `tags:suggest`) stays without a caller.
+
+- **Shared chrome** (`src/styles.css`): `.icon-btn` and `.seg` are the
+  one icon button and segmented switch for core and plugin panels;
+  chrome labels are sentence-case sans (the `--fs-mono-*` tokens keep
+  their names, with 12–13px values). `src/app/icons/icon.ts` holds the
+  vendored glyphs and `createIconElement()`, the plain-DOM factory behind
+  `api.ui.icon` (SDK 1.10).
+- **Anthrazit** (`theme-catalog.ts` + the `:root[data-theme='anthrazit']`
+  block): a bespoke palette layered over the seed-derived block;
+  `ANTHRAZIT_THEME` is the fresh-install default, `DEFAULT_THEME` (`drey`)
+  the missing-key fallback.
+- **Combined query field** (`src/app/tags/`): `TagField`'s `freeText` mode
+  over the pure `tag-query.ts` (`splitQuery`, `tagQueryAtCaret`). The
+  Search (`plugins/tags/`) and Tasks (`plugins/tasks/`) panels mount it
+  through `api.ui.createTagField`.
+- **Slash menu** — two completion sources on the Markdown language data,
+  merged by CodeMirror: the base `makeSlashCommandSource`
+  (`src/app/editor/slash-commands.ts`: built-in Entry via
+  `composeEntry`, then Formatting) and the templates plugin's
+  `templateSlashExtension` (`plugins/templates/renderer/slash.ts`). Both
+  use the section name `Templates` and the same `.slash-preview` card
+  (global styles) for `info`; the Templates panel reuses the card as a
+  hover popover.
+- **Meta bar** — `Editor` hosts `MarkdownToolbar` and forwards its actions
+  to `MarkdownSurface.applyToolbarAction` / `insertToolbarImages`; the
+  surface renders no toolbar of its own.
+- **Files panel** — the in-place editor rows are part of the tree
+  template: `createDepth(node)` places the new-entry row under its target,
+  `isRenaming()` swaps a row for its rename input; commit/cancel logic is
+  unchanged.
+- **Calendar** — `Calendar.onToday()` (set month, select, open the daily
+  note). Its month row is a template registered with
+  `PanelHeaderActionsStore` (`frameId` input); the descriptor's
+  `headerReplacesTitle` makes `PanelFrame` show that row instead of the
+  title while expanded.

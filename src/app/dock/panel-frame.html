@@ -8,14 +8,17 @@
   (mousedown)="onHeaderPress($event)"
   (keydown)="onHeaderKey($event)"
 >
-  <span class="title">{{ title() }}</span>
-  @if (status(); as s) {
-    <span class="status">{{ s }}</span>
+  @if (!titleReplaced()) {
+    <span class="title">{{ title() }}</span>
+    @if (status(); as s) {
+      <span class="status">{{ s }}</span>
+    }
   }
   @if (!collapsed() && headerActions(); as tpl) {
     <div
       class="head-actions"
-      (mousedown)="$event.stopPropagation()"
+      [class.fill]="titleReplaced()"
+      (mousedown)="onActionsPress($event)"
       (keydown)="$event.stopPropagation()"
     >
       <ng-container [ngTemplateOutlet]="tpl" />

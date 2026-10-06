@@ -1,6 +1,5 @@
 import { Injectable, Signal, computed, inject, signal } from '@angular/core';
 import { CalendarService } from '../calendar';
-import { EntryDraftService } from '../entry';
 import { EditorService } from '../services/editor.service';
 import type { PluginWidgetContrib, Unsubscribe } from '../../../shared/plugin-api/renderer';
 import { CORE_WIDGETS, type WidgetDescriptor, type WidgetId, type WidgetStatusContext } from './widget-registry';
@@ -53,7 +52,6 @@ export class WidgetRegistryService {
     // widget; a converted plugin brings its own `status()` callback.
     const calendar = inject(CalendarService);
     const editor = inject(EditorService);
-    const entryDraft = inject(EntryDraftService);
 
     const statusCallbacks: Record<WidgetId, (context: WidgetStatusContext) => string | null> = {
       calendar: ({ collapsed }) =>
@@ -63,7 +61,6 @@ export class WidgetRegistryService {
           ? `${String(calendar.viewMonth() + 1).padStart(2, '0')}/${calendar.viewYear()}`
           : null,
       windows: () => String(editor.openDocs().length),
-      entry: () => (entryDraft.hasContent() ? 'unsent draft' : null),
     };
 
     this.coreWidgets = CORE_WIDGETS.map((w) => {

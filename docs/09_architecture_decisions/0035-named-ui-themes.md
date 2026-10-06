@@ -113,3 +113,12 @@ the derived shell tokens.
 - New surface for `specs/` -- `roadmap.md` Phase 1 UI-shell bullet now
   mentions selectable themes; `handoff/DESIGN.md` notes Drey as the
   reference look, others derived.
+
+## Later change — Anthrazit, a second bespoke theme ([ADR-0057](0057-ui-refinement-icon-chrome-anthrazit-and-slash-capture.md))
+
+Milestone 43 adds `anthrazit` to the catalog (group "Drey"). It is not a
+published theme: like Drey it has exact token values, shipped as a
+`:root[data-theme='anthrazit']` block that follows — and so overrides —
+the seed-derived block, and it reuses the token-driven Drey editor look.
+A fresh install defaults to it (`DEFAULT_APPEARANCE.theme`); a stored
+config without a `theme` key still normalizes to `drey`.

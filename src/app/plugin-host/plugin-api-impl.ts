@@ -20,6 +20,7 @@ import { WidgetRegistryService } from '../dock/widget-registry.service';
 import { SettingsCategoryRegistry } from '../settings/settings-registry.service';
 import { ConfirmationService } from '../llm/confirmation.service';
 import { KeybindingService } from '../keybindings';
+import { createIconElement } from '../icons/icon';
 import { TagField } from '../tags/tag-field';
 import { TagVocabularyService } from '../tags/tag-vocabulary.service';
 import { EditTargetService } from '../services/edit-target.service';
@@ -110,10 +111,6 @@ export class PluginApiFactory {
     const pluginId = plugin.id;
     const invokeBackend = (method: string, payload?: unknown): Promise<unknown> =>
       window.dreyApi.invokePlugin(pluginId, method, payload);
-
-    const notYet = (what: string): never => {
-      throw new Error(`${what} is not available in this build (planned stage not reached yet)`);
-    };
 
     const toOpenDoc = (doc: {
       vaultId: string | null;
@@ -255,8 +252,9 @@ export class PluginApiFactory {
         registerDocKind: (kind: PluginDocKindContrib) => track(this.docKinds.register(kind)),
         registerMenuContributions: (items: readonly MenuContribution[]) =>
           track(this.menuContributions.register(pluginId, items)),
-        registerComposerContribution: (_mount: (el: HTMLElement) => () => void) =>
-          notYet('ui.registerComposerContribution'),
+        // The "Add entry" drawer it mounted into is gone (milestone 43,
+        // ADR-0057); the call is accepted and ignored so plugins keep loading.
+        registerComposerContribution: (_mount: (el: HTMLElement) => () => void) => () => undefined,
         revealWidget: (id) => this.dock.openAndExpand(id),
         showModal: (mount) => {
           // Minimal v1: a centred overlay above everything, holding an
@@ -309,9 +307,11 @@ export class PluginApiFactory {
             ...(opts.placeholder !== undefined ? { placeholder: opts.placeholder } : {}),
             ...(opts.ariaLabel !== undefined ? { ariaLabel: opts.ariaLabel } : {}),
             ...(opts.completions !== undefined ? { completions: opts.completions } : {}),
+            ...(opts.freeText !== undefined ? { freeText: opts.freeText } : {}),
           });
           return field;
         },
+        icon: (name, size) => createIconElement(name, size),
       },
       editor: {
         cm: HOST_CODEMIRROR,

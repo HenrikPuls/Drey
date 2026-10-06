@@ -196,3 +196,10 @@ is normal.)_
   the app's tokens and work identically in both editor surfaces — but we
   also own the correctness of the word scanner, which is why it is pure and
   directly tested.
+
+## Later change — the entry drawer is gone ([ADR-0057](0057-ui-refinement-icon-chrome-anthrazit-and-slash-capture.md))
+
+The "Add entry" drawer this ADR was implemented with was removed in
+milestone 43; capture happens in the note through the `/` menu. The
+inline spellchecker itself is unaffected — it runs in the document editor
+and the remaining compact surfaces as decided above.

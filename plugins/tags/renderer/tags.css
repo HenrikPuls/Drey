@@ -18,105 +18,59 @@
   padding: 8px 12px 12px;
 }
 
-/* header scope segment — mirrors the Tasks panel's control strip */
-.tag-search-hdr {
-  display: flex;
-  align-items: center;
-  gap: 5px;
-}
+/* query block: ONE bordered field carries the search icon, the tag chips,
+   the free text and the three match toggles (milestone 43). The scope
+   switch in the panel header and every icon button use the shell's shared
+   `.seg` / `.icon-btn` (src/styles.css). */
 
-.tag-search-hdr .seg {
-  display: inline-flex;
-  gap: 1px;
-  padding: 1px;
-  background: var(--bg-search);
-  border: 1px solid var(--field-border);
-  border-radius: var(--radius-sm);
-}
-
-.tag-search-hdr .seg button {
-  height: 18px;
-  padding: 0 6px;
-  border: 0;
-  border-radius: 3px;
-  background: transparent;
-  color: var(--text-5);
-  font-family: var(--font-sans);
-  font-size: 10.5px;
-  line-height: 1;
-  cursor: pointer;
-}
-
-.tag-search-hdr .seg button:hover:not(.on) {
-  color: var(--text-2);
-}
-
-.tag-search-hdr .seg button.on {
-  background: var(--accent-surface);
-  color: var(--accent-text);
-}
-
-/* query block */
-
-.tag-search-inputrow {
+.tag-search-field {
   display: flex;
   align-items: center;
   gap: 4px;
   flex: none;
+  min-height: var(--field-h);
+  padding: 3px 4px 3px 8px;
+  background: var(--bg-editor);
+  border: 1px solid var(--field-border);
+  border-radius: var(--radius-xs);
+}
+
+.tag-search-field:focus-within {
+  border-color: var(--accent);
+}
+
+.tag-search-field-icon {
+  display: inline-flex;
+  flex: none;
+  color: var(--text-5);
+}
+
+.tag-search-field .tag-field {
+  flex: 1;
+}
+
+.tag-search-field .tag-field-input {
+  height: 22px;
+  font-size: 13px;
 }
 
 .tag-search-input {
   flex: 1;
   min-width: 0;
-  height: 26px;
-  padding: 0 8px;
-  background: var(--bg-input);
-  border: 1px solid var(--field-border);
-  border-radius: var(--radius-sm);
-  color: var(--text-2);
-  font-family: var(--font-sans);
-  font-size: 0.8125rem;
-}
-
-.tag-search-input:focus {
-  outline: none;
-  border-color: var(--accent-edge);
-}
-
-.tag-search-tgl {
   height: 22px;
-  min-width: 24px;
-  padding: 0 5px;
-  border: 1px solid var(--field-border);
-  border-radius: var(--radius-xs);
+  padding: 0;
   background: transparent;
-  color: var(--text-5);
-  font-family: var(--font-mono);
-  font-size: 10px;
-  line-height: 1;
-  cursor: pointer;
-}
-
-.tag-search-tgl:hover:not(.on) {
-  color: var(--text-2);
-}
-
-.tag-search-tgl.on {
-  background: var(--accent-surface);
-  border-color: var(--accent-quote);
-  color: var(--accent-text);
-}
-
-.tag-search-replace {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  flex: none;
+  border: 0;
+  outline: none;
+  color: var(--text-primary);
+  font-family: var(--font-sans);
+  font-size: 13px;
 }
 
 /* `hidden` must win over the class's display:flex (the author rule
    otherwise overrides the UA hidden style). */
-.tag-search-replace[hidden] {
+.tag-search-replace[hidden],
+.tag-search .icon-btn[hidden] {
   display: none;
 }
 
@@ -129,12 +83,12 @@
   overflow-wrap: anywhere;
 }
 
-/* summary row: counts · Export · Summarize · Clear */
+/* summary row: counts · Replace · Export · Summarize · Clear (icons) */
 
 .tag-search-summary {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 2px;
   flex: none;
 }
 
@@ -184,14 +138,14 @@
   display: none;
 }
 
-.tag-search-file-head::before {
-  content: '▸';
+.tag-search-file-chevron {
+  display: inline-flex;
+  flex: none;
   color: var(--text-5);
-  font-size: 9px;
   transition: transform 0.12s ease;
 }
 
-.tag-search-file[open] > .tag-search-file-head::before {
+.tag-search-file[open] > .tag-search-file-head .tag-search-file-chevron {
   transform: rotate(90deg);
 }
 
@@ -211,14 +165,14 @@
   border-radius: 999px;
   background: var(--bg-search);
   color: var(--text-3);
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   font-size: var(--fs-mono-tag);
 }
 
 .tag-search-file-count {
   flex: none;
   color: var(--text-3);
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   font-size: var(--fs-mono-tag);
 }
 
@@ -259,7 +213,7 @@
 
 .tag-search-hit-loc {
   color: var(--text-5);
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   font-size: var(--fs-mono-tag);
 }
 
@@ -281,29 +235,13 @@
 }
 
 .tag-search-hit-replace {
-  flex: none;
   float: right;
-  height: 18px;
-  min-width: 18px;
-  padding: 0 4px;
-  border: 1px solid var(--field-border);
-  border-radius: var(--radius-xs);
-  background: transparent;
-  color: var(--text-5);
-  font-size: 10px;
-  line-height: 1;
-  cursor: pointer;
   opacity: 0;
 }
 
 .tag-search-hit:hover .tag-search-hit-replace,
 .tag-search-hit-replace:focus-visible {
   opacity: 1;
-}
-
-.tag-search-hit-replace:hover {
-  color: var(--accent-text);
-  border-color: var(--accent-edge);
 }
 
 /* ---- the bundled replace confirmation (api.ui.showModal) ---- */
@@ -361,14 +299,14 @@
   border-radius: 999px;
   background: var(--bg-search);
   color: var(--text-3);
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   font-size: var(--fs-mono-tag);
 }
 
 .tag-search-modal-count {
   flex: none;
   color: var(--text-3);
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   font-size: var(--fs-mono-tag);
 }
 
@@ -431,7 +369,7 @@
   text-align: center;
   padding: 2px 8px;
   border-radius: var(--radius-sm);
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   font-size: var(--fs-mono-tag);
 }
 
@@ -443,7 +381,7 @@
   border: 1px solid var(--field-border);
   border-radius: var(--radius-sm);
   color: var(--text-2);
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   font-size: 0.8125rem;
 }
 

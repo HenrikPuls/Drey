@@ -82,14 +82,11 @@ function button(className: string, label: string, onClick: () => void): HTMLButt
   return node;
 }
 
-function toggleButton(
-  className: string,
-  label: string,
-  title: string,
-  onClick: () => void,
-): HTMLButtonElement {
-  const node = button(className, label, onClick);
+/** A text-glyph toggle (`Aa`, `ab`, `.*`) in the shared icon-button box. */
+function toggleButton(label: string, title: string, onClick: () => void): HTMLButtonElement {
+  const node = button('icon-btn glyph', label, onClick);
   node.title = title;
+  node.setAttribute('aria-label', title);
   node.setAttribute('aria-pressed', 'false');
   return node;
 }
@@ -560,10 +557,19 @@ const plugin: PluginRendererModule = {
 
     // -- search.open: Mod+Shift+F, focus + the pills' `{ tag }` payload -------
 
-    let searchInput: HTMLInputElement | null = null;
+    /** Icon-only control: the words live in `title` + `aria-label`. */
+    const iconButton = (icon: string, label: string, onClick: () => void): HTMLButtonElement => {
+      const node = button('icon-btn', '', onClick);
+      node.appendChild(api.ui.icon(icon, 14));
+      node.title = label;
+      node.setAttribute('aria-label', label);
+      return node;
+    };
+
+    let searchField: ReturnType<DreyPluginApi['ui']['createTagField']> | null = null;
     const focusSearch = (): void => {
       // The dock may mount the widget lazily; a later tick reaches a fresh mount.
-      window.setTimeout(() => searchInput?.focus(), 0);
+      window.setTimeout(() => searchField?.focus(), 0);
     };
     api.commands.register({
       id: 'search.open',
@@ -575,6 +581,7 @@ const plugin: PluginRendererModule = {
           // A base tag pill click: reset the query to this tag, reveal + run.
           clear();
           state.queryTags = [tag.toLowerCase().replace(/^#/, '')];
+          searchField?.setText('');
         }
         api.ui.revealWidget('search');
         notify();
@@ -603,42 +610,36 @@ const plugin: PluginRendererModule = {
           : null;
       },
       headerActions: (host) => {
-        const row = el('div', 'tag-search-hdr');
         const seg = el('span', 'seg');
         seg.setAttribute('role', 'tablist');
         seg.setAttribute('aria-label', 'Search scope');
-        const fileBtn = toggleButton('', 'File', 'Search the open document', () => {
-          prefs.scope = 'file';
-          persistPrefs();
-          notify();
-        });
-        const vaultBtn = toggleButton('', 'Vault', 'Search the active vault', () => {
-          prefs.scope = 'vault';
-          persistPrefs();
-          notify();
-        });
-        const allBtn = toggleButton('', 'All', 'Search every vault', () => {
-          prefs.scope = 'all';
-          persistPrefs();
-          notify();
-        });
-        for (const btn of [fileBtn, vaultBtn, allBtn]) {
+        const scopes: Array<[Scope, string, string]> = [
+          ['file', 'file-text', 'Search the open document'],
+          ['vault', 'folder', 'Search the active vault'],
+          ['all', 'layers', 'Search every vault'],
+        ];
+        const buttons = scopes.map(([scope, icon, label]) => {
+          const btn = iconButton(icon, label, () => {
+            prefs.scope = scope;
+            persistPrefs();
+            notify();
+          });
           btn.setAttribute('role', 'tab');
-        }
-        seg.append(fileBtn, vaultBtn, allBtn);
-        row.appendChild(seg);
+          btn.dataset['scope'] = scope;
+          seg.appendChild(btn);
+          return btn;
+        });
 
         const render = (): void => {
-          fileBtn.classList.toggle('on', prefs.scope === 'file');
-          fileBtn.setAttribute('aria-selected', String(prefs.scope === 'file'));
-          vaultBtn.classList.toggle('on', prefs.scope === 'vault');
-          vaultBtn.setAttribute('aria-selected', String(prefs.scope === 'vault'));
-          allBtn.classList.toggle('on', prefs.scope === 'all');
-          allBtn.setAttribute('aria-selected', String(prefs.scope === 'all'));
+          for (const btn of buttons) {
+            const on = btn.dataset['scope'] === prefs.scope;
+            btn.classList.toggle('on', on);
+            btn.setAttribute('aria-selected', String(on));
+          }
         };
         render();
         listeners.add(render);
-        host.appendChild(row);
+        host.appendChild(seg);
         return () => {
           listeners.delete(render);
         };
@@ -647,90 +648,91 @@ const plugin: PluginRendererModule = {
         body.classList.add('tag-search');
 
         // -- query block (pinned; only the results scroll — flush widget) --
-        const inputRow = el('div', 'tag-search-inputrow');
-        const textInput = el('input', 'tag-search-input') as HTMLInputElement;
-        textInput.type = 'text';
-        textInput.autocomplete = 'off';
-        textInput.placeholder = 'Search';
-        textInput.setAttribute('aria-label', 'Search text');
-        searchInput = textInput;
+        // ONE field for text and tags (milestone 43): a typed `#name` word
+        // lifts out into a coloured chip, everything else is the text query.
+        const field = el('div', 'tag-search-field');
+        const fieldIcon = el('span', 'tag-search-field-icon');
+        fieldIcon.appendChild(api.ui.icon('search', 14));
+        const tagField = api.ui.createTagField({
+          values: state.queryTags,
+          onChange: (values) => {
+            state.queryTags = values;
+            notify();
+            void run();
+          },
+          ariaLabel: 'Search text and #tags',
+          freeText: {
+            value: state.queryText,
+            onInput: (text) => {
+              state.queryText = text;
+              notify();
+            },
+            onSubmit: () => void run(),
+          },
+        });
+        searchField = tagField;
 
-        const caseBtn = toggleButton('tag-search-tgl', 'Aa', 'Match case', () => {
+        const caseBtn = toggleButton('Aa', 'Match case', () => {
           prefs.matchCase = !prefs.matchCase;
           persistPrefs();
           notify();
         });
-        const wordBtn = toggleButton('tag-search-tgl', 'ab', 'Whole word', () => {
+        const wordBtn = toggleButton('ab', 'Whole word', () => {
           prefs.wholeWord = !prefs.wholeWord;
           persistPrefs();
           notify();
         });
-        const regexBtn = toggleButton('tag-search-tgl', '.*', 'Regular expression', () => {
+        const regexBtn = toggleButton('.*', 'Regular expression', () => {
           prefs.regex = !prefs.regex;
           persistPrefs();
           notify();
         });
-        const replaceBtn = toggleButton(
-          'tag-search-tgl',
-          '⇄',
-          'Toggle replace row',
-          () => {
-            prefs.replaceOpen = !prefs.replaceOpen;
-            persistPrefs();
-            notify();
-          },
-        );
+        field.append(fieldIcon, tagField.element, caseBtn, wordBtn, regexBtn);
 
-        const replaceRow = el('div', 'tag-search-replace');
+        const replaceRow = el('div', 'tag-search-field tag-search-replace');
+        const replaceIcon = el('span', 'tag-search-field-icon');
+        replaceIcon.appendChild(api.ui.icon('replace', 14));
         const replaceInput = el('input', 'tag-search-input') as HTMLInputElement;
         replaceInput.type = 'text';
         replaceInput.autocomplete = 'off';
-        replaceInput.placeholder = 'Replace';
         replaceInput.setAttribute('aria-label', 'Replace with');
-        const replaceAllBtn = button('primary', 'Replace all', () => {
+        const replaceAllBtn = iconButton('check', 'Replace all', () => {
           if (prefs.scope === 'file') {
             applyReplaceInFileScope();
           } else {
             void replaceAllInVaultScope();
           }
         });
-        replaceRow.append(replaceInput, replaceAllBtn);
-
-        inputRow.append(textInput, caseBtn, wordBtn, regexBtn, replaceBtn);
-
-        // The shared tag chip field: colored chips + completion dropdown.
-        const tagField = api.ui.createTagField({
-          values: state.queryTags,
-          onChange: (values) => {
-            state.queryTags = values;
-            notify();
-          },
-          placeholder: '+ tag',
-          ariaLabel: 'Tag filter',
-        });
+        replaceRow.append(replaceIcon, replaceInput, replaceAllBtn);
 
         const errorRow = el('p', 'tag-search-error');
         const resultsBox = el('div', 'tag-search-results');
         const summaryRow = el('div', 'tag-search-summary');
         const summaryText = el('span', 'tag-search-summary-text');
-        const clearButton = button('ghost', 'Clear', () => {
-          clear();
+        const replaceBtn = iconButton('replace', 'Replace', () => {
+          prefs.replaceOpen = !prefs.replaceOpen;
+          persistPrefs();
+          notify();
         });
-        const exportButton = button('ghost', 'Export', () => {
+        replaceBtn.setAttribute('aria-pressed', 'false');
+        const exportButton = iconButton('download', 'Export results to a note', () => {
           const doc = formatSearchResultsDoc(
             { tags: state.queryTags, text: state.queryText },
             state.hits,
           );
           api.documents.openScratch('search-results.md', doc);
         });
-        const summarizeButton = button('ghost', 'Summarize', () => {
+        const summarizeButton = iconButton('sparkles', 'Summarize', () => {
           if (summaryTask !== null) {
             cancelSummary();
             return;
           }
           startSummary();
         });
-        summaryRow.append(summaryText, exportButton, summarizeButton, clearButton);
+        const clearButton = iconButton('x', 'Clear search', () => {
+          clear();
+        });
+        summaryRow.append(summaryText, replaceBtn, exportButton, summarizeButton, clearButton);
 
         const renderToggles = (): void => {
           caseBtn.classList.toggle('on', prefs.matchCase);
@@ -764,13 +766,14 @@ const plugin: PluginRendererModule = {
           resultsBox.textContent = '';
           summaryRow.hidden = !state.ran;
           if (!state.ran) {
+            errorRow.hidden = true;
             return;
           }
           const files = new Set(groupHits().map((g) => g.key));
           summaryText.textContent =
             state.error !== null
               ? ''
-              : `${state.hits.length} match${state.hits.length === 1 ? '' : 'es'} · ${files.size} file${files.size === 1 ? '' : 's'}`;
+              : `${state.hits.length} section${state.hits.length === 1 ? '' : 's'} in ${files.size} file${files.size === 1 ? '' : 's'}`;
           if (state.error !== null) {
             errorRow.textContent = state.error;
             errorRow.hidden = false;
@@ -797,7 +800,12 @@ const plugin: PluginRendererModule = {
               }
             });
             const summary = el('summary', 'tag-search-file-head');
-            summary.appendChild(el('span', 'tag-search-file-path', group.path));
+            const chevron = el('span', 'tag-search-file-chevron');
+            chevron.appendChild(api.ui.icon('chevron-right', 14));
+            summary.appendChild(chevron);
+            const pathLabel = el('span', 'tag-search-file-path', group.path);
+            pathLabel.title = group.path;
+            summary.appendChild(pathLabel);
             if (group.vaultId !== null && group.vaultId !== activeVaultId) {
               summary.appendChild(el('span', 'tag-search-file-vault', group.vaultId));
             }
@@ -821,65 +829,69 @@ const plugin: PluginRendererModule = {
                 }
                 void api.documents.open(hit.path, hit.line, { vaultId: hit.vaultId });
               });
-              const replaceOne = el('button', 'tag-search-hit-replace', '⇄') as HTMLButtonElement;
-              replaceOne.type = 'button';
-              replaceOne.title = `Replace matches in this file`;
-              replaceOne.setAttribute('aria-label', `Replace matches in ${hit.path}`);
-              replaceOne.addEventListener('click', (event) => {
-                event.stopPropagation();
-                replaceInFile(hit);
-              });
-              hitButton.appendChild(replaceOne);
+              if (prefs.replaceOpen) {
+                const replaceOne = el('button', 'icon-btn tag-search-hit-replace') as HTMLButtonElement;
+                replaceOne.type = 'button';
+                replaceOne.appendChild(api.ui.icon('replace', 14));
+                replaceOne.title = 'Replace matches in this file';
+                replaceOne.setAttribute('aria-label', `Replace matches in ${hit.path}`);
+                replaceOne.addEventListener('click', (event) => {
+                  event.stopPropagation();
+                  replaceInFile(hit);
+                });
+                hitButton.appendChild(replaceOne);
+              }
               details.appendChild(hitButton);
             }
             resultsBox.appendChild(details);
           }
         };
 
+        const setIcon = (btn: HTMLButtonElement, icon: string): void => {
+          btn.textContent = '';
+          btn.appendChild(api.ui.icon(icon, 14));
+        };
+        let shownSummarizing: boolean | null = null;
+
         const render = (): void => {
           renderToggles();
-          if (document.activeElement !== textInput) {
-            textInput.value = state.queryText;
+          tagField.setValues(state.queryTags);
+          if (!field.contains(document.activeElement)) {
+            tagField.setText(state.queryText);
           }
           replaceInput.value = state.replacement;
-          replaceAllBtn.disabled = !hasQuery() || prefs.scope === 'file' && activeTextDoc() === null;
-          clearButton.disabled = !hasQuery();
-          exportButton.hidden = state.hits.length === 0 || !state.ran;
+          replaceAllBtn.disabled = !hasQuery() || (prefs.scope === 'file' && activeTextDoc() === null);
+          const noHits = state.hits.length === 0 || !state.ran;
+          exportButton.hidden = noHits;
+          replaceBtn.hidden = noHits && !prefs.replaceOpen;
           const summarizing = summaryTask !== null;
-          summarizeButton.hidden = !summarizing && (exportButton.hidden || !api.llm.enabled());
-          summarizeButton.textContent = summarizing ? 'Stop' : 'Summarize';
-          if (summarizing) {
-            summarizeButton.disabled = false;
-            summarizeButton.title = 'Cancel the summary generation';
-          } else {
-            const llmReady = api.llm.enabled();
-            summarizeButton.disabled = !llmReady;
-            summarizeButton.title = llmReady
+          summarizeButton.hidden = !summarizing && (noHits || !api.llm.enabled());
+          if (shownSummarizing !== summarizing) {
+            shownSummarizing = summarizing;
+            setIcon(summarizeButton, summarizing ? 'square' : 'sparkles');
+          }
+          const summarizeLabel = summarizing
+            ? 'Stop summarizing'
+            : api.llm.enabled()
               ? 'Summarize the search results with the connected LLM'
               : 'Connect an LLM in Settings → LLM to enable this';
-          }
+          summarizeButton.title = summarizeLabel;
+          summarizeButton.setAttribute('aria-label', summarizing ? 'Stop summarizing' : 'Summarize');
+          summarizeButton.disabled = !summarizing && !api.llm.enabled();
           renderResults();
         };
 
-        textInput.addEventListener('input', () => {
-          state.queryText = textInput.value;
-          notify();
-        });
-        textInput.addEventListener('keydown', (event) => {
-          if (event.key === 'Enter') {
-            void run();
-          }
-        });
         replaceInput.addEventListener('input', () => {
           state.replacement = replaceInput.value;
         });
 
-        body.append(inputRow, replaceRow, tagField.element, errorRow, summaryRow, resultsBox);
+        body.append(field, replaceRow, errorRow, summaryRow, resultsBox);
         render();
         listeners.add(render);
         return () => {
           listeners.delete(render);
-          searchInput = null;
+          tagField.dispose();
+          searchField = null;
         };
       },
     });

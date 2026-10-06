@@ -1,17 +1,24 @@
+import { NgTemplateOutlet } from '@angular/common';
 import {
   ChangeDetectionStrategy,
   Component,
   HostListener,
+  TemplateRef,
   computed,
+  effect,
   inject,
+  input,
   signal,
+  viewChild,
 } from '@angular/core';
+import { PanelHeaderActionsStore } from '../dock/panel-header-actions';
 import {
   CalendarDay,
   CalendarService,
   MONTH_SHORT_NAMES,
   WEEKDAY_INITIALS,
 } from './calendar.service';
+import { formatDate } from '../../../shared/timestamp';
 import { EditorService } from '../services/editor.service';
 import { Icon } from '../icons/icon';
 
@@ -32,13 +39,35 @@ import { Icon } from '../icons/icon';
 @Component({
   selector: 'app-calendar',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [Icon],
+  imports: [Icon, NgTemplateOutlet],
   templateUrl: './calendar.html',
   styleUrl: './calendar.css',
 })
 export class Calendar {
   protected readonly cal = inject(CalendarService);
   private readonly editor = inject(EditorService);
+  private readonly headerStore = inject(PanelHeaderActionsStore);
+
+  /**
+   * The widget id of the dock panel hosting this calendar, or null when it
+   * stands alone. Set, the month row is not rendered here: it is registered
+   * as that panel's header content, so the expanded panel shows the
+   * month/year dropdown where other panels show their title.
+   */
+  readonly frameId = input<string | null>(null);
+  private readonly headTpl = viewChild.required<TemplateRef<unknown>>('headTpl');
+
+  constructor() {
+    effect((onCleanup) => {
+      const id = this.frameId();
+      if (id === null) {
+        return;
+      }
+      const tpl = this.headTpl();
+      this.headerStore.set(id, tpl);
+      onCleanup(() => this.headerStore.clear(id, tpl));
+    });
+  }
 
   protected readonly weekdays = WEEKDAY_INITIALS;
   protected readonly months = MONTH_SHORT_NAMES;
@@ -54,6 +83,20 @@ export class Calendar {
   protected onDayClick(day: CalendarDay): void {
     this.cal.select(day.iso);
     void this.editor.openDailyNote(day.iso);
+  }
+
+  /**
+   * The Today button: jump the grid back to the current month, select
+   * today and open its daily note -- the one-click way to the daily note
+   * from anywhere in the calendar.
+   */
+  protected onToday(): void {
+    const now = new Date();
+    this.pickerOpen.set(false);
+    this.cal.setMonth(now.getFullYear(), now.getMonth());
+    const iso = formatDate(now);
+    this.cal.select(iso);
+    void this.editor.openDailyNote(iso);
   }
 
   protected togglePicker(): void {

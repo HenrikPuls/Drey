@@ -82,7 +82,6 @@ export class SettingsCategoryRegistry {
 
 /** Core categories, kept in alphabetical label order (req-33). */
 const CORE_CATEGORIES: readonly SettingsCategory[] = [
-  { id: 'entry', label: 'Add entry', hint: 'Append template', component: SettingsEntry },
   {
     id: 'appearance',
     label: 'Appearance',
@@ -90,6 +89,7 @@ const CORE_CATEGORIES: readonly SettingsCategory[] = [
     component: SettingsAppearance,
   },
   { id: 'daily', label: 'Daily notes', hint: 'Startup & storage folder', component: SettingsDaily },
+  { id: 'entry', label: 'Entry format', hint: 'The / menu Entry block', component: SettingsEntry },
   { id: 'llm', label: 'LLM', hint: 'Local model connection', component: SettingsLlm },
   { id: 'mcp', label: 'MCP', hint: 'Vault server & tools', component: SettingsMcp },
   {

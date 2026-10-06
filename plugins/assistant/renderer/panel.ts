@@ -452,23 +452,39 @@ export function mountPanel(
   sendButton.type = 'button';
   sendButton.setAttribute('aria-label', 'Send question');
   sendButton.appendChild(icon('arrow-up', 13));
-  const plusButton = el('button', 'plus', '+') as HTMLButtonElement;
-  plusButton.type = 'button';
-  plusButton.title = 'Add a file or image to the context';
-  plusButton.setAttribute('aria-label', 'Add a file or image to the context');
+  // The composer's tools are icon-only (milestone 43): the words live in
+  // each button's `title` + `aria-label`.
+  const toolButton = (className: string, iconName: string): HTMLButtonElement => {
+    const node = el('button', `icon-btn ${className}`) as HTMLButtonElement;
+    node.type = 'button';
+    node.appendChild(api.ui.icon(iconName, 14));
+    return node;
+  };
+  const plusButton = toolButton('plus', 'paperclip');
+  plusButton.title = 'Attach a file or image';
+  plusButton.setAttribute('aria-label', 'Attach a file or image');
+  // The live-edit toggle (ADR-0049): when on, the next ask applies the
+  // model's changes to the open note immediately.
+  const liveButton = toolButton('live', 'pencil-line');
+  liveButton.title =
+    'Live edit: let the assistant edit this note directly — changes apply immediately (no confirmation). Undo with Ctrl+Z, save with Ctrl+S.';
+  liveButton.setAttribute('aria-label', 'Toggle live edit');
+  // The Vault toggle (ADR-0055): cycles off → active vault → all vaults;
+  // each ask then retrieves the most similar note sections as context.
+  const vaultButton = toolButton('vault', 'database');
+  vaultButton.setAttribute('aria-label', 'Toggle vault context');
   const row = el('div', 'composer-row');
-  row.append(plusButton, composerHost, sendButton);
+  row.append(composerHost, sendButton);
   const modelButton = el('button', 'model-btn', '…') as HTMLButtonElement;
   modelButton.type = 'button';
   modelButton.title = 'Pick the model';
   modelButton.setAttribute('aria-label', 'Pick the model');
-  const promptsButton = el('button', 'prompt-btn', 'Prompts') as HTMLButtonElement;
-  promptsButton.type = 'button';
-  promptsButton.title = 'Pick a prompt from templates/prompts/';
+  const promptsButton = toolButton('prompt-btn', 'book-open');
+  promptsButton.title = 'Prompts: pick one from templates/prompts/';
   promptsButton.setAttribute('aria-label', 'Pick a prompt');
   promptsButton.addEventListener('click', () => void openPromptPicker());
   const meta = el('div', 'composer-meta');
-  meta.append(modelButton, promptsButton);
+  meta.append(plusButton, liveButton, vaultButton, promptsButton, modelButton);
   const box = el('div', 'composer-box');
   box.append(chipsRow, row);
   composer.append(box, meta);
@@ -503,35 +519,19 @@ export function mountPanel(
 
   const renderChips = (): void => {
     chipsRow.textContent = '';
-    // The live-edit toggle (ADR-0049) is pinned first: when on, the next
-    // ask applies the model's changes to the open note immediately.
-    const live = el('button', `chip live${state.liveEdit() ? ' on' : ''}`) as HTMLButtonElement;
-    live.type = 'button';
-    live.title =
-      'Let the assistant edit this note directly — changes apply immediately (no confirmation). Undo with Ctrl+Z, save with Ctrl+S.';
-    live.setAttribute('aria-label', 'Toggle live edit');
-    live.setAttribute('aria-pressed', String(state.liveEdit()));
-    live.appendChild(icon('pencil', 11));
-    live.appendChild(el('span', 'chip-name', 'Live edit'));
-    live.addEventListener('click', () => state.toggleLiveEdit());
-    chipsRow.appendChild(live);
-    // The Vault chip (ADR-0055): cycles off → active vault → all vaults;
-    // each ask then retrieves the most similar note sections as context.
+    const liveOn = state.liveEdit();
+    liveButton.classList.toggle('on', liveOn);
+    liveButton.setAttribute('aria-pressed', String(liveOn));
     const scope = state.vaultScope();
-    const vault = el('button', `chip vault${scope !== 'off' ? ' on' : ''}`) as HTMLButtonElement;
-    vault.type = 'button';
-    vault.textContent = scope === 'all' ? 'Vault: all' : 'Vault';
-    vault.title =
+    vaultButton.classList.toggle('on', scope !== 'off');
+    vaultButton.classList.toggle('all', scope === 'all');
+    vaultButton.setAttribute('aria-pressed', String(scope !== 'off'));
+    vaultButton.title =
       scope === 'off'
-        ? 'Search the vault for context: click once for the active vault, again for all vaults.'
+        ? 'Vault context: click once for the active vault, again for all vaults.'
         : scope === 'vault'
-          ? 'Context: the most similar sections of the active vault. Click for all vaults, again to turn off.'
-          : 'Context: the most similar sections across every vault. Click to turn off.';
-    vault.setAttribute('aria-label', 'Toggle vault context');
-    vault.setAttribute('aria-pressed', String(scope !== 'off'));
-    vault.appendChild(icon('search', 11));
-    vault.addEventListener('click', () => state.cycleVaultScope());
-    chipsRow.appendChild(vault);
+          ? 'Vault context: the most similar sections of the active vault. Click for all vaults, again to turn off.'
+          : 'Vault context: the most similar sections across every vault. Click to turn off.';
     const path = state.notePath();
     if (path !== null && state.noteIncluded()) {
       chipsRow.appendChild(chipNode(path, 'note'));
@@ -596,6 +596,8 @@ export function mountPanel(
 
   modelButton.addEventListener('click', openModelPicker);
   plusButton.addEventListener('click', openFilePicker);
+  liveButton.addEventListener('click', () => state.toggleLiveEdit());
+  vaultButton.addEventListener('click', () => state.cycleVaultScope());
   refreshModelLabel();
 
   // -- the three pickers (api.ui.showModal; same gesture as the templates picker) --

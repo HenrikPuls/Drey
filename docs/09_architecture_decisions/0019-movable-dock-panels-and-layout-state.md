@@ -174,3 +174,20 @@ through `widget-registry.ts` (which references every panel class). The
 directive registers on `afterNextRender` and clears (identity-guarded, for
 the destroy/recreate of a panel move) on destroy. Not a new mechanism for
 the widget registry — `WidgetDescriptor` is untouched.
+
+## Later change — sentence-case headers, shared icon controls, no default bottom panel ([ADR-0057](0057-ui-refinement-icon-chrome-anthrazit-and-slash-capture.md))
+
+Milestone 43 supersedes two points above:
+
+- **Header typography.** The panel title is sentence-case sans (13px,
+  600) instead of mono uppercase; the header controls of every panel —
+  core and plugin — are the global `.icon-btn` / `.seg`, not per-panel
+  button styles. Chevron-less click-to-collapse, the status value and the
+  drag grip are unchanged.
+- **The bottom dock has no default resident.** The "Add entry" panel was
+  removed, so a default layout shows no bottom band; the dock itself
+  (and docking a panel or an editor band there) is unchanged. A stored
+  layout that still names the `entry` widget drops the id on load.
+
+Bar heights moved with the same change: titlebar and tab bar 36px, the
+editor meta bar 40px, the status bar 28px.

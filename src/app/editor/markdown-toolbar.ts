@@ -1,27 +1,31 @@
 import { ChangeDetectionStrategy, Component, input, output, signal } from '@angular/core';
 
+import { Icon } from '../icons/icon';
 import { ToolbarAction } from './toolbar-commands';
 
 /**
- * The formatting bar above the Markdown surface (rendered by the surface
- * itself when its `toolbar` input is on). Pure emitter: every button turns
- * into a `ToolbarAction`, the surface owns the editor and applies it.
+ * The formatting buttons in the editor's meta bar (milestone 43: merged
+ * into the bar, icon-only, drawn from the shared icon set). Pure emitter:
+ * every button turns into a `ToolbarAction`; the `Editor` hands it to its
+ * `MarkdownSurface`, which owns the CodeMirror view and applies it.
  */
 @Component({
   selector: 'app-markdown-toolbar',
   changeDetection: ChangeDetectionStrategy.OnPush,
+  imports: [Icon],
   template: `
     <div class="bar">
       <!-- Heading level -->
       <div class="group">
         <button
           type="button"
-          class="tb-btn wide"
+          class="icon-btn tb-btn"
           title="Heading"
           aria-label="Heading level"
+          aria-haspopup="menu"
           (click)="menuOpen.set(menuOpen() === 'heading' ? null : 'heading')"
         >
-          H1 <span class="chev" aria-hidden="true">&#8250;</span>
+          <app-icon name="heading" [size]="14" [strokeWidth]="1.5" />
         </button>
         @if (menuOpen() === 'heading') {
           <div class="backdrop" (click)="menuOpen.set(null)"></div>
@@ -35,178 +39,110 @@ import { ToolbarAction } from './toolbar-commands';
         }
       </div>
 
+      <button
+        type="button"
+        class="icon-btn tb-btn"
+        title="Bold"
+        aria-label="Bold"
+        (click)="emit({ kind: 'wrap', marker: '**' })"
+      >
+        <app-icon name="bold" [size]="14" [strokeWidth]="1.5" />
+      </button>
+      <button
+        type="button"
+        class="icon-btn tb-btn"
+        title="Italic"
+        aria-label="Italic"
+        (click)="emit({ kind: 'wrap', marker: '*' })"
+      >
+        <app-icon name="italic" [size]="14" [strokeWidth]="1.5" />
+      </button>
+      <button
+        type="button"
+        class="icon-btn tb-btn"
+        title="Strikethrough"
+        aria-label="Strikethrough"
+        (click)="emit({ kind: 'wrap', marker: '~~' })"
+      >
+        <app-icon name="strikethrough" [size]="14" [strokeWidth]="1.5" />
+      </button>
+
+      <span class="divider" aria-hidden="true"></span>
+
       <!-- Lists -->
       <div class="group">
         <button
           type="button"
-          class="tb-btn wide"
+          class="icon-btn tb-btn"
           title="List"
           aria-label="List style"
+          aria-haspopup="menu"
           (click)="menuOpen.set(menuOpen() === 'list' ? null : 'list')"
         >
-          <svg
-            width="14"
-            height="14"
-            viewBox="0 0 16 16"
-            fill="none"
-            stroke="currentColor"
-            stroke-width="1.5"
-            aria-hidden="true"
-          >
-            <path d="M5.5 3.5h8M5.5 8h8M5.5 12.5h8" stroke-linecap="round" />
-            <circle cx="2.5" cy="3.5" r="1" fill="currentColor" stroke="none" />
-            <circle cx="2.5" cy="8" r="1" fill="currentColor" stroke="none" />
-            <circle cx="2.5" cy="12.5" r="1" fill="currentColor" stroke="none" />
-          </svg>
-          <span class="chev" aria-hidden="true">&#8250;</span>
+          <app-icon name="list" [size]="14" [strokeWidth]="1.5" />
         </button>
-      @if (menuOpen() === 'list') {
-        <div class="backdrop" (click)="menuOpen.set(null)"></div>
-        <nav class="menu" role="menu">
-          <button type="button" role="menuitem" (click)="emit({ kind: 'list', style: 'bullet' })">
-            Bullet list
-          </button>
-          <button
-            type="button"
-            role="menuitem"
-            (click)="emit({ kind: 'list', style: 'ordered' })"
-          >
-            Numbered list
-          </button>
-          <button type="button" role="menuitem" (click)="emit({ kind: 'list', style: 'task' })">
-            Task list
-          </button>
-        </nav>
-      }
+        @if (menuOpen() === 'list') {
+          <div class="backdrop" (click)="menuOpen.set(null)"></div>
+          <nav class="menu" role="menu">
+            <button type="button" role="menuitem" (click)="emit({ kind: 'list', style: 'bullet' })">
+              Bullet list
+            </button>
+            <button
+              type="button"
+              role="menuitem"
+              (click)="emit({ kind: 'list', style: 'ordered' })"
+            >
+              Numbered list
+            </button>
+            <button type="button" role="menuitem" (click)="emit({ kind: 'list', style: 'task' })">
+              Task list
+            </button>
+          </nav>
+        }
       </div>
 
       <!-- Task list as its own button (the one list style with a workflow
            behind it -- the Tasks panel picks these up). -->
       <button
         type="button"
-        class="tb-btn"
+        class="icon-btn tb-btn"
         title="Task list"
         aria-label="Task list"
         (click)="emit({ kind: 'list', style: 'task' })"
       >
-        <svg
-          width="14"
-          height="14"
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          stroke-width="1.8"
-          stroke-linecap="round"
-          stroke-linejoin="round"
-          aria-hidden="true"
-        >
-          <path d="M21 10.5V19a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h12.5" />
-          <path d="m9 11.5 3 3L22 4.5" />
-        </svg>
+        <app-icon name="check-square" [size]="14" [strokeWidth]="1.5" />
       </button>
-
-      <!-- Blockquote -->
       <button
         type="button"
-        class="tb-btn"
+        class="icon-btn tb-btn"
         title="Blockquote"
         aria-label="Blockquote"
         (click)="emit({ kind: 'quote' })"
       >
-        <svg
-          width="14"
-          height="14"
-          viewBox="0 0 24 24"
-          fill="currentColor"
-          stroke="none"
-          aria-hidden="true"
-        >
-          <path
-            d="M4.6 4C3.2 4 2 5.2 2 6.6s1.2 2.6 2.6 2.6c2.3 0 2.8 1.6 2.8 3.4 0 3.1-1.9 5.2-4.8 5.9-.4.1-.6.5-.6.9v1.4c0 .5.5.9 1 .8 4.5-.9 7.6-4.5 7.6-9.6C10.6 7 8.3 4 4.6 4z"
-          />
-          <path
-            d="M16.6 4C15.2 4 14 5.2 14 6.6s1.2 2.6 2.6 2.6c2.3 0 2.8 1.6 2.8 3.4 0 3.1-1.9 5.2-4.8 5.9-.4.1-.6.5-.6.9v1.4c0 .5.5.9 1 .8 4.5-.9 7.6-4.5 7.6-9.6C22.6 7 20.3 4 16.6 4z"
-          />
-        </svg>
+        <app-icon name="quote" [size]="14" [strokeWidth]="1.5" />
       </button>
 
       <span class="divider" aria-hidden="true"></span>
 
       <button
         type="button"
-        class="tb-btn bold"
-        title="Bold"
-        aria-label="Bold"
-        (click)="emit({ kind: 'wrap', marker: '**' })"
-      >
-        B
-      </button>
-      <button
-        type="button"
-        class="tb-btn italic"
-        title="Italic"
-        aria-label="Italic"
-        (click)="emit({ kind: 'wrap', marker: '*' })"
-      >
-        I
-      </button>
-      <button
-        type="button"
-        class="tb-btn strike"
-        title="Strikethrough"
-        aria-label="Strikethrough"
-        (click)="emit({ kind: 'wrap', marker: '~~' })"
-      >
-        S
-      </button>
-
-      <span class="divider" aria-hidden="true"></span>
-
-      <button
-        type="button"
-        class="tb-btn"
+        class="icon-btn tb-btn"
         title="Link"
         aria-label="Insert link"
         (click)="emit({ kind: 'link' })"
       >
-        <svg
-          width="14"
-          height="14"
-          viewBox="0 0 16 16"
-          fill="none"
-          stroke="currentColor"
-          stroke-width="1.4"
-          stroke-linecap="round"
-          aria-hidden="true"
-        >
-          <path d="M6.5 9.5 9.5 6.5" />
-          <path d="M5.2 7.2 3.9 8.5a2.2 2.2 0 0 0 3.1 3.1l1.3-1.3" />
-          <path d="M10.8 8.8l1.3-1.3a2.2 2.2 0 0 0-3.1-3.1L7.7 5.7" />
-        </svg>
+        <app-icon name="link" [size]="14" [strokeWidth]="1.5" />
       </button>
 
       @if (imagesEnabled()) {
         <button
           type="button"
-          class="tb-btn"
+          class="icon-btn tb-btn"
           title="Image"
           aria-label="Insert image"
           (click)="imageInput.click()"
         >
-          <svg
-            width="14"
-            height="14"
-            viewBox="0 0 16 16"
-            fill="none"
-            stroke="currentColor"
-            stroke-width="1.4"
-            stroke-linejoin="round"
-            aria-hidden="true"
-          >
-            <rect x="2" y="3" width="12" height="10" rx="1.5" />
-            <circle cx="5.8" cy="6.5" r="1.2" />
-            <path d="M2.5 12 6.5 8.5l2.5 2.2 2-1.7 2.5 2.5" />
-          </svg>
+          <app-icon name="image" [size]="14" [strokeWidth]="1.5" />
         </button>
         <input
           #imageInput
@@ -222,24 +158,13 @@ import { ToolbarAction } from './toolbar-commands';
       <div class="group">
         <button
           type="button"
-          class="tb-btn wide"
+          class="icon-btn tb-btn"
           title="Table"
           aria-label="Insert table"
+          aria-haspopup="menu"
           (click)="toggleTableMenu()"
         >
-          <svg
-            width="14"
-            height="14"
-            viewBox="0 0 16 16"
-            fill="none"
-            stroke="currentColor"
-            stroke-width="1.4"
-            aria-hidden="true"
-          >
-            <rect x="2" y="3" width="12" height="10" rx="1.5" />
-            <path d="M2 6.5h12M6 6.5V13M10 6.5V13" />
-          </svg>
-          <span class="chev" aria-hidden="true">&#8250;</span>
+          <app-icon name="table" [size]="14" [strokeWidth]="1.5" />
         </button>
         @if (menuOpen() === 'table') {
           <div class="backdrop" (click)="menuOpen.set(null)"></div>
@@ -282,52 +207,11 @@ import { ToolbarAction } from './toolbar-commands';
       position: relative;
       display: inline-flex;
     }
-    .tb-btn {
-      min-width: 26px;
-      height: 26px;
-      padding: 0 4px;
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-      gap: 2px;
-      border: none;
-      border-radius: var(--radius-xs);
-      background: none;
-      color: var(--text-3);
-      font: 600 12.5px/1 var(--font-sans);
-      cursor: pointer;
-      transition:
-        background 120ms ease,
-        color 120ms ease;
-    }
-    .tb-btn:hover {
-      background: var(--hover-bg);
-      color: var(--text-2);
-    }
-    .tb-btn.wide {
-      padding: 0 6px;
-    }
-    .tb-btn.bold {
-      font-weight: 700;
-    }
-    .tb-btn.italic {
-      font-style: italic;
-      font-family: Georgia, serif;
-      font-weight: 500;
-    }
-    .tb-btn.strike {
-      text-decoration: line-through;
-    }
-    .chev {
-      font-size: 10px;
-      margin-left: 1px;
-      color: var(--text-4);
-    }
     .divider {
       width: 1px;
       height: 16px;
-      margin: 0 4px;
-      background: var(--border-strong);
+      margin: 0 6px;
+      background: var(--border);
     }
     .backdrop {
       position: fixed;
@@ -342,29 +226,30 @@ import { ToolbarAction } from './toolbar-commands';
       display: flex;
       flex-direction: column;
       min-width: 140px;
-      padding: 6px;
+      padding: 4px;
       background: var(--bg-input);
-      border: 1px solid var(--border-strong);
-      border-radius: var(--radius-sm);
-      box-shadow: 0 6px 18px rgb(0 0 0 / 25%);
+      border: 1px solid var(--popover-border);
+      border-radius: var(--radius-md);
+      box-shadow: var(--popover-shadow);
     }
     .menu button {
-      padding: 5px 8px;
+      padding: 6px 8px;
       border: none;
       border-radius: var(--radius-xs);
       background: none;
       color: var(--text-2);
-      font: 400 12.5px/1.3 var(--font-sans);
+      font: 400 13px/1.3 var(--font-sans);
       text-align: left;
       cursor: pointer;
     }
     .menu button:hover {
-      background: var(--hover-bg);
-      color: var(--text-1);
+      background: var(--hover-bg-strong);
+      color: var(--text-primary);
     }
     .table-menu {
       min-width: 0;
       gap: 6px;
+      padding: 8px;
     }
     .grid-label {
       min-height: 14px;

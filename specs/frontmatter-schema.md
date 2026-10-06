@@ -30,7 +30,7 @@ updated: '2026-09-05T14:32:00'
 - **Entries** are separated by `## HH:mm` or `## YYYY-MM-DD HH:mm` heading,
   optionally ` — Topic` plus a trailing `#tag` meta line (en dash or `--`
   accepted as separator). Both topic and meta line are optional. The layout
-  is a template (`AppConfig.entry`, Settings → Add entry) with `{{time}}
+  is a template (`AppConfig.entry`, Settings → Entry format) with `{{time}}
   {{date}} {{datetime}} {{title}} {{tags}} {{content}}` placeholders.
 - **Tags**: `#` + a letter, then letters/digits/`_`/`-`, lower-cased; nested
   with `/` (`#project/2024` — first segment must start with a letter, so

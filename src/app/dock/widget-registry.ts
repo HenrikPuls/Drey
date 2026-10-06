@@ -2,7 +2,6 @@ import { Type } from '@angular/core';
 import type { WidgetCapability } from '../widgets';
 import type { DockSide } from './dock.service';
 import { CalendarPanel } from './panels/calendar-panel';
-import { EntryPanel } from './panels/entry-panel';
 import { FilesPanel } from './panels/files-panel';
 import { WindowsPanel } from './panels/windows-panel';
 
@@ -30,7 +29,7 @@ export interface WidgetStatusContext {
 export interface WidgetDescriptor {
   /** Stored in `DockState` and (milestone 18) `AppConfig.widgets`. */
   id: WidgetId;
-  /** Mono-uppercase header label. */
+  /** Header label (sentence case). */
   title: string;
   /**
    * Body component, rendered via `*ngComponentOutlet`. Unset for a
@@ -47,6 +46,13 @@ export interface WidgetDescriptor {
   contentHeight?: boolean;
   /** Body fills the frame instead of scrolling (was `PanelFrame.flush`). */
   flush?: boolean;
+  /**
+   * While expanded, the panel's header content (its
+   * `appPanelHeaderActions` template) takes the whole header row and the
+   * title + status are not shown -- the calendar's month/year dropdown IS
+   * its heading. Collapsed, the title and status show as usual.
+   */
+  headerReplacesTitle?: boolean;
   /** Can be hidden from the View menu / disabled in Settings. */
   removable: boolean;
   /** Read surfaces it declares (descriptive; see `WidgetCapability`). */
@@ -77,6 +83,7 @@ export const CORE_WIDGETS: readonly WidgetDescriptor[] = [
     defaultOpen: true,
     defaultFlex: 250,
     contentHeight: true,
+    headerReplacesTitle: true,
     removable: true,
     capabilities: ['active-document'],
   },
@@ -104,15 +111,7 @@ export const CORE_WIDGETS: readonly WidgetDescriptor[] = [
     removable: true,
     capabilities: ['active-document'],
   },
-  {
-    id: 'entry',
-    title: 'Add entry',
-    component: EntryPanel,
-    defaultDock: 'bottom',
-    defaultOpen: false,
-    defaultFlex: 200,
-    flush: true,
-    removable: true,
-    capabilities: ['active-document', 'tag-queries'],
-  },
+  // The `entry` widget ("Add entry", bottom dock) was removed in milestone
+  // 43 (ADR-0057): capture is the `/` menu's Entry block now. A persisted
+  // layout still naming the id is dropped by `DockService` on load.
 ];

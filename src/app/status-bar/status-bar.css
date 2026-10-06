@@ -13,7 +13,7 @@
 .count {
   flex: none;
   white-space: nowrap;
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   font-size: var(--fs-mono-meta);
   color: var(--text-3);
 }
@@ -27,7 +27,7 @@
 
 .dot {
   flex: none;
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   font-size: var(--fs-mono-meta);
   color: var(--text-faint);
 }

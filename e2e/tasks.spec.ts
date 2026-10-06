@@ -81,7 +81,7 @@ test.describe('Tasks plugin panel', () => {
     await openTasksPanel(page);
 
     const panel = page.locator('app-panel-frame', { has: page.locator('.tasks-panel') });
-    await panel.locator('.tasks-hdr .seg button', { hasText: 'Vault' }).click();
+    await panel.locator('.seg [aria-label="Tasks across the whole vault"]').click();
     const rows = panel.locator('.task');
     await expect(rows).toHaveCount(4); // 3 in tasks-demo.md (1 done) + 1 in other.md
 
@@ -112,7 +112,7 @@ test.describe('Tasks plugin panel', () => {
     await openTasksPanel(page);
 
     const panel = page.locator('app-panel-frame', { has: page.locator('.tasks-panel') });
-    await panel.locator('.tasks-hdr .seg button', { hasText: 'Vault' }).click();
+    await panel.locator('.seg [aria-label="Tasks across the whole vault"]').click();
     const rows = panel.locator('.task');
     await expect(rows.filter({ hasText: 'draft the brief' })).toHaveCount(1);
 
@@ -152,14 +152,14 @@ test.describe('Tasks plugin panel', () => {
     await expect(rows).toHaveCount(3);
 
     // `#` toggles the #task kind off: only the checkboxes remain.
-    await panel.locator('.tasks-hdr .tgl[aria-label="Show lines tagged #task"]').click();
+    await panel.locator('.icon-btn[aria-label="Show lines tagged #task"]').click();
     await expect(rows).toHaveCount(2);
 
     // Free text narrows further, and the Clear filter row appears.
-    await panel.locator('.text-input').fill('invoice');
+    await panel.locator('.filter .tag-field-input').fill('invoice');
     await expect(rows).toHaveCount(1);
     await expect(rows.filter({ hasText: 'send the invoice' })).toHaveCount(1);
-    await panel.locator('.clear').click();
+    await panel.locator('.filter [aria-label="Clear filter"]').click();
     await expect(rows).toHaveCount(2);
   });
 
@@ -169,7 +169,7 @@ test.describe('Tasks plugin panel', () => {
     await openTasksPanel(page);
 
     const panel = page.locator('app-panel-frame', { has: page.locator('.tasks-panel') });
-    await panel.locator('.tasks-hdr .seg button', { hasText: 'Vault' }).click();
+    await panel.locator('.seg [aria-label="Tasks across the whole vault"]').click();
 
     // Grouped by file, full paths as headers, 1-based line locations.
     const groups = panel.locator('.group');
@@ -185,7 +185,7 @@ test.describe('Tasks plugin panel', () => {
     await page.reload();
     const reloaded = page.locator('app-panel-frame', { has: page.locator('.tasks-panel') });
     await expect(
-      reloaded.locator('.tasks-hdr .seg button.on', { hasText: 'Vault' }),
+      reloaded.locator('.seg .on[aria-label="Tasks across the whole vault"]'),
     ).toHaveCount(1);
     await expect(reloaded.locator('.group', { hasText: 'tasks-demo.md' })).toHaveCount(1);
   });

@@ -87,7 +87,7 @@
   flex: none;
   width: 12px;
   text-align: center;
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   font-size: 10px;
   color: var(--accent);
 }
@@ -104,7 +104,7 @@
 .hint {
   flex: none;
   white-space: nowrap;
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   font-size: 10px;
   color: var(--text-7);
 }

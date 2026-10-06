@@ -87,3 +87,15 @@ parser tweak.**
   Classic body is never eaten — covered by `entries.spec.ts`.
 - `substitutePlaceholders` is shared with the daily-note template, so
   both substitution paths behave identically.
+
+## Later change — the format outlives the drawer ([ADR-0057](0057-ui-refinement-icon-chrome-anthrazit-and-slash-capture.md))
+
+The "Add entry" drawer was removed in milestone 43. The entry templates
+stay exactly as decided here — `AppConfig.entry`, the placeholders, the
+built-in re-injection — but their consumer is now the **Entry** item of
+the editor's `/` menu, which inserts
+`composeEntry(EMPTY_ENTRY_DRAFT, activePattern)`: the active pattern with
+an empty draft, so in practice the heading line with the current time.
+`{{title}}`, `{{tags}}` and `{{content}}` render empty there (their lines
+drop out as before); the user types topic, tags and body straight into
+the note. The Settings category is renamed **"Entry format"**.

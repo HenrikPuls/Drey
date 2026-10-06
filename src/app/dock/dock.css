@@ -44,7 +44,6 @@
   text-align: center;
   font-size: 11px;
   letter-spacing: 0.08em;
-  text-transform: uppercase;
   color: var(--text-5);
 }
 
@@ -123,9 +122,8 @@ app-panel-frame {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   font-size: var(--fs-mono-title);
-  letter-spacing: var(--ls-mono-title);
 }
 
 .editor-band .grip {

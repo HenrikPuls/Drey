@@ -10,7 +10,7 @@ import {
   viewChild,
 } from '@angular/core';
 import { EditorView } from '@codemirror/view';
-import { CLASSIC_ENTRY_PATTERN, editorFontFamilyStacks } from '../../../shared/app-config';
+import { editorFontFamilyStacks } from '../../../shared/app-config';
 import type { MenuContribution } from '../../../shared/plugin-api/renderer';
 import { EditorService, EditorViewMode, NewEntryRequest } from '../services/editor.service';
 import { EditorZoomService } from '../services/editor-zoom.service';
@@ -24,6 +24,7 @@ import { resolveVaultLinkPath } from './link-open';
 import { EditorPrefsService } from './editor-prefs.service';
 import { WikilinkService } from './wikilinks';
 import { MarkdownSurface } from './markdown-surface/markdown-surface';
+import { MarkdownToolbar } from './markdown-toolbar';
 
 /**
  * One pane's document editor (ADR-0037): hosts one `MarkdownSurface` (the
@@ -56,7 +57,7 @@ import { MarkdownSurface } from './markdown-surface/markdown-surface';
   selector: 'app-editor',
   templateUrl: './editor.html',
   styleUrl: './editor.css',
-  imports: [Icon, MarkdownSurface, OverlayGuardDirective],
+  imports: [Icon, MarkdownSurface, MarkdownToolbar, OverlayGuardDirective],
   host: {
     '(wheel)': 'onWheel($event)',
     // Editor content zoom (Ctrl +/-/0, ADR-0015). The keydown is bound on
@@ -150,7 +151,7 @@ export class Editor implements AfterViewInit {
    */
   protected readonly spellcheckSource = this.spellcheck.makeSource();
 
-  private readonly surface = viewChild.required(MarkdownSurface);
+  protected readonly surface = viewChild.required(MarkdownSurface);
   private readonly moreBtn = viewChild.required<ElementRef<HTMLButtonElement>>('moreBtn');
 
   /** Path whose text CodeMirror currently holds -- distinguishes a tab switch from an in-place reload. */
@@ -348,34 +349,12 @@ export class Editor implements AfterViewInit {
    * trailing `## HH:mm` heading instead of stacking a second one. The
    * hotkey flow (no text) also moves focus into the editor; a capture
    * leaves focus where the user is typing.
-   *
-   * A request carrying a `draft` comes from the entry drawer and takes the
-   * `shared/entry-compose.ts` path instead: a complete
-   * `## HH:mm — <Thema>` block, saved right away so its `#tag`s reach
-   * their master documents through the save pipeline.
    */
   private applyNewEntryRequest(request: NewEntryRequest): void {
     const view = this.view;
     // The claim is global (see EditorCommandsService) so a freshly mounted
     // editor can never re-apply a request an earlier instance consumed.
     if (!view || !this.editor.claimNewEntryRequest(request.id)) {
-      return;
-    }
-
-    if (request.draft) {
-      const edit = this.editor.entryDraftEdit(
-        view.state.doc.toString(),
-        request.draft,
-        request.pattern ?? CLASSIC_ENTRY_PATTERN,
-      );
-      view.dispatch({
-        changes: edit,
-        selection: { anchor: edit.from + edit.insert.length },
-        scrollIntoView: true,
-      });
-      // `docChanged` has already pushed the new text into the buffer, so
-      // the save below writes exactly what was just inserted.
-      void this.editor.save({ path: this.shownPath() ?? undefined });
       return;
     }
 

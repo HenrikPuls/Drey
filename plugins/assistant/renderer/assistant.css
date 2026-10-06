@@ -90,7 +90,7 @@
 
 /* A cancellation is not a fault: same quiet grey as the timestamps. */
 .assistant-panel .notice {
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   font-size: 10px;
   color: var(--text-faint);
   cursor: pointer;
@@ -114,10 +114,8 @@
 }
 
 .assistant-thread .card-label {
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   font-size: 9.5px;
-  letter-spacing: var(--ls-mono-title);
-  text-transform: uppercase;
   margin-bottom: 6px;
   color: var(--text-4);
 }
@@ -142,7 +140,7 @@
   display: flex;
   align-items: center;
   gap: 4px;
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   font-size: 10px;
 }
 
@@ -207,7 +205,7 @@
   display: flex;
   align-items: center;
   gap: 8px;
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   font-size: 10px;
   color: var(--text-faint);
 }
@@ -282,7 +280,7 @@
   border: none;
   background: transparent;
   color: var(--text-5);
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   font-size: 10px;
   text-align: left;
   cursor: pointer;
@@ -351,7 +349,7 @@
   border-radius: 999px;
   background: transparent;
   color: var(--text-4);
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   font-size: 10px;
   padding: 1px 8px;
   cursor: pointer;
@@ -401,7 +399,7 @@
   gap: 6px;
   background: var(--bg-input);
   border: 1px solid var(--border-strong);
-  border-radius: 10px;
+  border-radius: var(--radius-md);
   padding: 8px 8px 8px 12px;
 }
 
@@ -470,73 +468,27 @@
   color: var(--text-primary);
 }
 
-/* The live-edit toggle (ADR-0049): a button-shaped chip with no × — the
-   whole chip toggles. `.on` carries the accent like the note chip. */
-.assistant-composer .chip.live {
-  padding-right: 8px;
-  border: 1px solid var(--border-strong);
-  background: var(--hover-bg);
-  color: var(--text-3);
-  font: inherit;
-  font-size: 11px;
-  cursor: pointer;
+/* The Vault toggle's "all vaults" state (ADR-0055): a small accent dot at
+   the icon's corner tells it apart from "active vault". */
+.assistant-composer .icon-btn.vault {
+  position: relative;
 }
 
-.assistant-composer .chip.live:hover {
-  color: var(--text-primary);
-}
-
-.assistant-composer .chip.live.on {
-  border-color: var(--accent-quote);
-  color: var(--text-primary);
-  background: color-mix(in srgb, var(--accent-quote) 14%, transparent);
-}
-
-/* The Vault chip (ADR-0055): same toggle shape as live edit. */
-.assistant-composer .chip.vault {
-  padding-right: 8px;
-  border: 1px solid var(--border-strong);
-  background: var(--hover-bg);
-  color: var(--text-3);
-  font: inherit;
-  font-size: 11px;
-  cursor: pointer;
-}
-
-.assistant-composer .chip.vault:hover {
-  color: var(--text-primary);
-}
-
-.assistant-composer .chip.vault.on {
-  border-color: var(--accent-quote);
-  color: var(--text-primary);
-  background: color-mix(in srgb, var(--accent-quote) 14%, transparent);
+.assistant-composer .icon-btn.vault.all::after {
+  content: '';
+  position: absolute;
+  top: 3px;
+  right: 3px;
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--accent);
 }
 
 .assistant-composer .composer-row {
   display: flex;
   align-items: flex-end;
   gap: 6px;
-}
-
-/* The "+" that opens the file picker. */
-.assistant-composer .plus {
-  flex: 0 0 auto;
-  width: 24px;
-  height: 24px;
-  margin-bottom: 2px;
-  border: none;
-  border-radius: var(--radius);
-  background: transparent;
-  color: var(--text-5);
-  font-size: 15px;
-  line-height: 1;
-  cursor: pointer;
-}
-
-.assistant-composer .plus:hover {
-  color: var(--text-3);
-  background: var(--hover-bg);
 }
 
 /* The host CodeMirror view as the composer. Its height is set inline by
@@ -573,7 +525,7 @@
   width: 28px;
   height: 28px;
   border: none;
-  border-radius: var(--radius);
+  border-radius: var(--radius-xs);
   background: var(--accent);
   color: var(--accent-contrast);
   cursor: pointer;
@@ -585,22 +537,23 @@
   cursor: default;
 }
 
-/* Meta row: model picker left, Summarise now right. */
+/* Tool row (milestone 43): attach, live edit, vault context and prompts as
+   icon buttons on the left, the model picker at the right end. */
 .assistant-composer .composer-meta {
   display: flex;
   align-items: center;
-  gap: 8px;
-  min-height: 20px;
+  gap: 2px;
+  min-height: 24px;
 }
 
 .assistant-composer .model-btn {
+  margin-left: auto;
   padding: 2px 4px;
   border: none;
   background: transparent;
   color: var(--text-6);
-  font-family: var(--font-mono);
-  font-size: 10px;
-  letter-spacing: var(--ls-mono-title);
+  font-family: var(--font-sans);
+  font-size: 12px;
   max-width: 60%;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -612,23 +565,6 @@
   color: var(--text-3);
 }
 
-/* The prompt picker's opener — the slot at the row's right end. */
-.assistant-composer .prompt-btn {
-  margin-left: auto;
-  background: transparent;
-  border: 1px solid var(--border-strong);
-  border-radius: var(--radius);
-  color: var(--text-4);
-  font-family: var(--font-sans);
-  font-size: 12px;
-  padding: 4px 10px;
-  cursor: pointer;
-}
-
-.assistant-composer .prompt-btn:hover {
-  color: var(--text-primary);
-  background: var(--hover-bg);
-}
 
 /* -- pickers (file + model; api.ui.showModal, centred overlay) ---------------
    The modal box (.plugin-modal) gets .assistant-picker-host added by the
@@ -662,10 +598,8 @@
 
 .assistant-picker-head {
   padding: 10px 14px 6px;
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   font-size: 10px;
-  letter-spacing: var(--ls-mono-title);
-  text-transform: uppercase;
   color: var(--text-faint);
 }
 
@@ -772,7 +706,6 @@
   float: right;
   opacity: 0.5;
   font-size: 10px;
-  text-transform: uppercase;
   letter-spacing: 0.08em;
 }
 

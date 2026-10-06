@@ -240,6 +240,37 @@ export class FilesPanel {
     });
   }
 
+  /** True for the row whose name is being edited in place. */
+  protected isRenaming(vaultId: string, entry: VaultFileEntry): boolean {
+    const pending = this.renaming();
+    return (
+      pending !== null &&
+      pending.vaultId === vaultId &&
+      pending.entry.relativePath === entry.relativePath
+    );
+  }
+
+  /**
+   * Where the in-place "new file / new folder" row goes: directly under
+   * the row of its target -- the folder it is created in, or the vault
+   * header for the vault root. Returns the new row's depth + 1 (so the
+   * template's `@if` stays truthy at depth 0), or 0 for every other row.
+   */
+  protected createDepth(node: VisibleNode): number {
+    const pending = this.creating();
+    if (pending === null) {
+      return 0;
+    }
+    if (node.kind === 'vault') {
+      return pending.dir === '' && node.vault.id === pending.vaultId ? 1 : 0;
+    }
+    return node.vaultId === pending.vaultId &&
+      node.entry.type === 'directory' &&
+      node.entry.relativePath === pending.dir
+      ? node.depth + 2
+      : 0;
+  }
+
   protected vaultKey(vaultId: string, relativePath: string): string {
     return docKey(vaultId, relativePath);
   }
@@ -977,6 +1008,15 @@ export class FilesPanel {
     }
     this.creating.set({ kind, vaultId: menu.vaultId, dir: menu.dir });
     this.closeMenus();
+    // The input row renders under its target, so the target must be visible.
+    this.collapsedVaults.update((set) => {
+      if (!set.has(menu.vaultId)) {
+        return set;
+      }
+      const next = new Set(set);
+      next.delete(menu.vaultId);
+      return next;
+    });
     if (menu.dir) {
       this.expandAncestors(menu.vaultId, menu.dir);
     }

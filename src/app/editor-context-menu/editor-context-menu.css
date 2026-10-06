@@ -39,7 +39,7 @@
 
 .ctx-key {
   flex: none;
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   font-size: 10px;
   color: var(--text-7);
 }
@@ -73,7 +73,6 @@
   padding: 4px 9px 2px;
   font-size: 10px;
   letter-spacing: 0.07em;
-  text-transform: uppercase;
   color: var(--text-6);
 }
 

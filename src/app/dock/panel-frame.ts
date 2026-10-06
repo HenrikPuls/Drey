@@ -57,6 +57,17 @@ export class PanelFrame implements OnInit {
   );
   protected readonly collapsed = computed(() => this.dock.collapsed(this.panelId()));
   /**
+   * True while the panel's own header content stands in for the title
+   * (`WidgetDescriptor.headerReplacesTitle`, the calendar): expanded, and
+   * the content template has registered.
+   */
+  protected readonly titleReplaced = computed(
+    () =>
+      !this.collapsed() &&
+      this.headerActions() !== null &&
+      (this.registry.descriptor(this.panelId())?.headerReplacesTitle ?? false),
+  );
+  /**
    * Panels whose body fills the frame (a flex column) instead of
    * scrolling: the assistant (own header + composer stay put) and the
    * "Add entry" drawer (its text field grows with the panel).
@@ -108,6 +119,18 @@ export class PanelFrame implements OnInit {
 
   protected onHeaderPress(event: MouseEvent): void {
     this.dock.beginHeaderPress(this.panelId(), this.title(), event);
+  }
+
+  /**
+   * A press inside the header controls must not start the collapse / drag
+   * gesture. A title-replacing row spans the whole header, so there the
+   * controls stop their own presses and the gaps between them still reach
+   * the header.
+   */
+  protected onActionsPress(event: Event): void {
+    if (!this.titleReplaced()) {
+      event.stopPropagation();
+    }
   }
 
   protected onHeaderKey(event: KeyboardEvent): void {

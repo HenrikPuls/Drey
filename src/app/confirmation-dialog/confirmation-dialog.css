@@ -107,7 +107,6 @@ h2 {
   background: var(--bg-main);
   font-family: var(--font-sans);
   font-size: 11px;
-  text-transform: uppercase;
   letter-spacing: 0.04em;
   color: var(--text-6);
 }

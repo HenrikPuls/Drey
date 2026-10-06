@@ -141,4 +141,78 @@ describe('TagField', () => {
     x.click();
     expect(changes).toEqual([['b']]);
   });
+
+  describe('free-text mode (one field for text and tags)', () => {
+    function freeField(text = '') {
+      const texts: string[] = [];
+      let submits = 0;
+      const made = field([], {
+        freeText: {
+          value: text,
+          onInput: (next) => texts.push(next),
+          onSubmit: () => (submits += 1),
+        },
+      });
+      return { ...made, texts, submits: () => submits };
+    }
+
+    /** Types into the field the way a user does: value, caret at the end, input event. */
+    function typeText(f: TagField, value: string): void {
+      const el = input(f);
+      el.value = value;
+      el.setSelectionRange(value.length, value.length);
+      el.dispatchEvent(new Event('input', { bubbles: true }));
+    }
+
+    it('has no placeholder and keeps plain text as the query', () => {
+      const { f, texts, changes } = freeField();
+      expect(input(f).placeholder).toBe('');
+      typeText(f, 'wachsender block');
+      expect(texts).toEqual(['wachsender block']);
+      expect(changes).toEqual([]);
+      expect(chips(f)).toHaveLength(0);
+    });
+
+    it('lifts a typed #tag into a chip once a space follows it', () => {
+      const { f, texts, changes } = freeField();
+      typeText(f, 'block #sailing');
+      // Still being typed: it stays text (and offers completions).
+      expect(chips(f)).toHaveLength(0);
+      expect(options(f).length).toBeGreaterThan(0);
+
+      typeText(f, 'block #sailing ');
+      expect(chips(f).map((c) => c.textContent)).toEqual(['#sailing×']);
+      expect(changes).toEqual([['sailing']]);
+      expect(input(f).value).toBe('block ');
+      expect(texts[texts.length - 1]).toBe('block ');
+    });
+
+    it('Enter picks the highlighted completion, then submits the query', () => {
+      const { f, changes, submits } = freeField();
+      typeText(f, 'block #sai');
+      type(f, 'Enter');
+      expect(changes).toEqual([['sailing']]);
+      expect(input(f).value).toBe('block ');
+      expect(submits()).toBe(0);
+
+      type(f, 'Enter');
+      expect(submits()).toBe(1);
+    });
+
+    it('a blur that lifts nothing reports nothing (no re-render under a pending click)', () => {
+      const { f, texts } = freeField('block');
+      input(f).dispatchEvent(new Event('blur'));
+      expect(texts).toEqual([]);
+    });
+
+    it('Backspace at the start of the text pops the last chip', () => {
+      const { f, changes } = freeField();
+      typeText(f, '#sailing ');
+      typeText(f, 'block');
+      input(f).setSelectionRange(0, 0);
+      type(f, 'Backspace');
+      expect(changes).toEqual([['sailing'], []]);
+      expect(input(f).value).toBe('block');
+    });
+  });
 });

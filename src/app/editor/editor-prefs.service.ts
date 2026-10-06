@@ -67,27 +67,15 @@ export class EditorPrefsService {
   }
 
   /**
-   * Whether the editor shows the formatting toolbar above the content.
-   * App-wide and persisted like the line numbers; toggled from the
-   * editor's `⋯` menu.
+   * Whether the editor's meta bar shows the formatting buttons. App-wide
+   * and persisted like the line numbers; toggled from the editor's `⋯`
+   * menu. On unless explicitly switched off (milestone 43: the buttons
+   * are part of the bar, no longer an extra strip).
    */
-  readonly toolbar = signal(readPrefs()['toolbar'] === true);
+  readonly toolbar = signal(readPrefs()['toolbar'] !== false);
 
   toggleToolbar(): void {
     this.toolbar.update((v) => !v);
     writePrefs({ toolbar: this.toolbar() });
-  }
-
-  /**
-   * Whether the "Add entry" drawer shows the formatting toolbar in its
-   * body field. Its own value (independent of the editor's `toolbar`):
-   * the drawer is a capture surface, so its toolbar starts hidden and is
-   * toggled from the symbol at the tags row's right edge.
-   */
-  readonly entryToolbar = signal(readPrefs()['entryToolbar'] === true);
-
-  toggleEntryToolbar(): void {
-    this.entryToolbar.update((v) => !v);
-    writePrefs({ entryToolbar: this.entryToolbar() });
   }
 }

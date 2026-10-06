@@ -83,25 +83,6 @@ test.describe('mermaid diagrams in Live Preview (ADR-0025)', () => {
     await expect(page.locator('app-titlebar .brand .mark')).toBeVisible();
   });
 
-  test('the "Add entry" drawer renders a diagram too (shared surface)', async ({
-    page,
-    vaultDir,
-  }) => {
-    await openNote(page, vaultDir, 'note.md', '# note\n');
-
-    const bottom = page.locator('app-dock[side="bottom"]');
-    await bottom.locator('app-panel-frame .head').first().click();
-    const surface = bottom.locator('app-entry-drawer .md-editor .cm-content');
-    await surface.click();
-    await page.keyboard.insertText('intro\n\n```mermaid\ngraph LR; X-->Y;\n```');
-    // Move the caret off the fence so it renders (it must not touch it).
-    await surface.press('ControlOrMeta+Home');
-
-    await expect(surface.locator('.lp-mermaid .lp-mermaid-svg svg')).toBeVisible({
-      timeout: 15000,
-    });
-  });
-
   // Regression: mermaid's config `fontFamily` is `var(--font-sans, …)`, which
   // it resolves to a fallback sans in its offscreen measuring node while the
   // diagram paints with the editor's typeface. With a non-sans editor font

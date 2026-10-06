@@ -4,9 +4,9 @@ describe('SettingsCategoryRegistry category order (req-33)', () => {
   it('lists the core categories alphabetically with About last', () => {
     const registry = new SettingsCategoryRegistry();
     expect(registry.categories().map((c) => c.label)).toEqual([
-      'Add entry',
       'Appearance',
       'Daily notes',
+      'Entry format',
       'LLM',
       'MCP',
       'Panels & plugins',
@@ -31,9 +31,9 @@ describe('SettingsCategoryRegistry category order (req-33)', () => {
       mount: () => () => undefined,
     });
     expect(registry.categories().map((c) => c.label)).toEqual([
-      'Add entry',
       'Appearance',
       'Daily notes',
+      'Entry format',
       'LLM',
       'MCP',
       'Panels & plugins',

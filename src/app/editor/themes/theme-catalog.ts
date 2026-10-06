@@ -1,5 +1,5 @@
 import type { Extension } from '@codemirror/state';
-import { DEFAULT_THEME } from '../../../../shared/app-config';
+import { ANTHRAZIT_THEME, DEFAULT_THEME } from '../../../../shared/app-config';
 import { dreyEditorLook } from '../editor-theme';
 
 /**
@@ -86,8 +86,24 @@ const DREY: ThemeCatalogEntry = {
   load: () => Promise.resolve(dreyEditorLook),
 };
 
+/**
+ * Anthrazit (milestone 43): warm charcoal surfaces with a blue accent. Like
+ * Drey it is a bespoke palette -- `styles.css` carries a
+ * `:root[data-theme='anthrazit']` block that overrides the derived tokens
+ * with exact values -- and it reuses the token-driven Drey editor look, so
+ * the editor follows the same variables.
+ */
+const ANTHRAZIT: ThemeCatalogEntry = {
+  id: ANTHRAZIT_THEME,
+  label: 'Anthrazit',
+  group: 'Drey',
+  seed: { bg: '#1e1b17', fg: '#f3efe9', accent: '#8ecbef', dark: true },
+  load: () => Promise.resolve(dreyEditorLook),
+};
+
 export const THEME_CATALOG: readonly ThemeCatalogEntry[] = [
   DREY,
+  ANTHRAZIT,
   published('vscode-dark', 'VS Code Dark', 'Dark', 'vscodeDark', { bg: '#1e1e1e', fg: '#d4d4d4', accent: '#569cd6' }),
   published('vscode-light', 'VS Code Light', 'Light', 'vscodeLight', { bg: '#ffffff', fg: '#383a42', accent: '#0067c0' }),
   published('github-dark', 'GitHub Dark', 'Dark', 'githubDark', { bg: '#0d1117', fg: '#c9d1d9', accent: '#58a6ff' }),

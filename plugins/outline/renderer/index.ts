@@ -207,12 +207,15 @@ const plugin: PluginRendererModule = {
       },
       headerActions: (host) => {
         const row = el('div', 'outline-hdr');
-        const fold = el('button', 'tgl', 'fold') as HTMLButtonElement;
+        const fold = el('button', 'icon-btn') as HTMLButtonElement;
         fold.type = 'button';
+        fold.appendChild(api.ui.icon('chevrons-down-up', 14));
         const renderFold = (): void => {
+          const label = state.allCollapsed ? 'Expand all levels' : 'Collapse all levels';
           fold.classList.toggle('on', state.allCollapsed);
           fold.setAttribute('aria-pressed', String(state.allCollapsed));
-          fold.title = state.allCollapsed ? 'Expand all levels' : 'Collapse all levels';
+          fold.setAttribute('aria-label', label);
+          fold.title = label;
         };
         fold.addEventListener('click', () => {
           state.allCollapsed = !state.allCollapsed;

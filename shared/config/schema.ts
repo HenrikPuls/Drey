@@ -528,6 +528,14 @@ export const THEME_ACCENT = 'theme';
 export const DEFAULT_THEME = 'drey';
 
 /**
+ * The Anthrazit theme (milestone 43): the warm-charcoal palette with the
+ * blue accent. A fresh install starts on it (`DEFAULT_APPEARANCE`); a
+ * stored config without a `theme` key still resolves to `DEFAULT_THEME`,
+ * so nobody's existing look changes under them.
+ */
+export const ANTHRAZIT_THEME = 'anthrazit';
+
+/**
  * The vault MCP server (`electron/mcp/`,
  * `docs/09_architecture_decisions/0021-*.md`). One tool set --
  * `vault_search` (with a regex filter), `vault_read`, `vault_write` --

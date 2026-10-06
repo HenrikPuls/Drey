@@ -66,7 +66,7 @@ describe('slash dialog activation (real view)', () => {
       type(view, '\n/head');
       await new Promise((resolve) => setTimeout(resolve, 200));
       const items = [
-        ...(view.dom.querySelector('.cm-tooltip-autocomplete ul')?.children ?? []),
+        ...(view.dom.querySelectorAll('.cm-tooltip-autocomplete ul > li') ?? []),
       ].map((li) => li.textContent ?? '');
       expect(items).toEqual(['Heading 1', 'Heading 2', 'Heading 3']);
     } finally {

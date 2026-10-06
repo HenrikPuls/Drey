@@ -5,6 +5,7 @@ import type {
 } from '../../../shared/plugin-api/renderer';
 import { TemplateLibrary, type TemplateCategory, type TemplateEntry } from './library.js';
 import { formatDate, formatDateTime, formatTime, stripFrontmatter, substitutePlaceholders } from './pure.js';
+import { previewCard, templateSlashExtension } from './slash.js';
 
 /** The DataTransfer type template rows set on dragstart (drop side: our decoder). */
 const TEMPLATE_DT_TYPE = 'application/x-drey-template';
@@ -52,9 +53,12 @@ const plugin: PluginRendererModule = {
       defaultOpen: false,
       defaultFlex: 200,
       headerActions: (actions) => {
-        actions.appendChild(
-          button('tpl-hdr-btn', 'Re-read the vault from disk', () => void library.reload()),
+        const refresh = button('icon-btn', 'Re-read the templates from disk', () =>
+          void library.reload(),
         );
+        refresh.setAttribute('aria-label', 'Refresh templates');
+        refresh.appendChild(api.ui.icon('refresh-cw', 14));
+        actions.appendChild(refresh);
         return () => undefined;
       },
       mount: (body) => mountPanel(api, library, body),
@@ -67,6 +71,9 @@ const plugin: PluginRendererModule = {
       keybinding: 'Mod+T',
       run: () => openPicker(api, library),
     });
+
+    // -- the `/` menu's Templates section (milestone 43) ------------------------
+    api.editor.registerExtension('document', () => templateSlashExtension(api, library));
 
     // -- drag source -> decoder ------------------------------------------------
     api.editor.registerDropDecoder({
@@ -199,9 +206,53 @@ function templateRow(api: DreyPluginApi, library: TemplateLibrary, entry: Templa
   row.addEventListener('contextmenu', (event) => {
     event.preventDefault();
     event.stopPropagation();
+    closePreview();
     openRowMenu(event as MouseEvent, api, library, entry);
   });
+  // Hover preview: the snippet as it would be inserted, in the same card
+  // the slash menu shows. A short delay keeps a pointer just passing over
+  // the list from flashing cards.
+  row.addEventListener('mouseenter', () => schedulePreview(row, library, entry));
+  row.addEventListener('mouseleave', closePreview);
+  row.addEventListener('mousedown', closePreview);
   return row;
+}
+
+const PREVIEW_DELAY_MS = 350;
+let previewTimer: number | null = null;
+let previewToken = 0;
+
+function closePreview(): void {
+  previewToken += 1;
+  if (previewTimer !== null) {
+    window.clearTimeout(previewTimer);
+    previewTimer = null;
+  }
+  document.querySelectorAll('.slash-preview-pop').forEach((n) => n.remove());
+}
+
+function schedulePreview(row: HTMLElement, library: TemplateLibrary, entry: TemplateEntry): void {
+  closePreview();
+  const token = previewToken;
+  previewTimer = window.setTimeout(() => {
+    previewTimer = null;
+    void library.render(entry.relativePath).then((text) => {
+      if (token !== previewToken || text === null || !row.isConnected) {
+        return;
+      }
+      const pop = el('div', 'slash-preview-pop');
+      pop.appendChild(previewCard(entry.name, text));
+      document.body.appendChild(pop);
+      // Beside the row, on whichever side has room; clamped to the window.
+      const rect = row.getBoundingClientRect();
+      const width = pop.offsetWidth;
+      const left =
+        rect.right + 8 + width <= window.innerWidth ? rect.right + 8 : Math.max(8, rect.left - 8 - width);
+      const top = Math.max(8, Math.min(rect.top, window.innerHeight - pop.offsetHeight - 8));
+      pop.style.left = `${left}px`;
+      pop.style.top = `${top}px`;
+    });
+  }, PREVIEW_DELAY_MS);
 }
 
 /** The row's right-click menu: Insert / Edit template (ADR-0029). */

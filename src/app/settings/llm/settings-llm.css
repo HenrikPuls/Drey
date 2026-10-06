@@ -181,7 +181,6 @@
 .block-label {
   flex: 1;
   font-size: 0.72rem;
-  text-transform: uppercase;
   letter-spacing: 0.04em;
   color: var(--text-6);
 }

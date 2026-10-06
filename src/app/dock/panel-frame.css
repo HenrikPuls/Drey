@@ -12,7 +12,7 @@
   gap: 7px;
   flex: none;
   height: var(--panel-head-h);
-  padding: 0 10px 0 12px;
+  padding: 0 8px 0 16px;
   color: var(--text-4);
   cursor: grab;
   user-select: none;
@@ -36,16 +36,15 @@
 .title {
   flex: none;
   white-space: nowrap;
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   font-size: var(--fs-mono-title);
-  letter-spacing: var(--ls-mono-title);
-  text-transform: uppercase;
+  font-weight: 600;
 }
 
 .status {
   flex: none;
   white-space: nowrap;
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   font-size: var(--fs-mono-meta);
   color: var(--text-6);
 }
@@ -61,9 +60,19 @@
   flex: none;
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 2px;
   /* Undo the header's grab cursor for the interactive strip. */
   cursor: default;
+}
+
+/* A title-replacing row (the calendar's month dropdown + nav) takes the
+   whole header; its gaps keep the header's grab cursor and gestures. */
+.head-actions.fill {
+  flex: 1;
+  min-width: 0;
+  margin-left: 0;
+  align-self: stretch;
+  cursor: inherit;
 }
 
 .grip {

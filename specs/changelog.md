@@ -20,6 +20,54 @@ recorded as an explicit decision. The parity checklist lives in
 
 ## Recent milestones
 
+### Milestone 43 — UI refinement: calmer chrome, Anthrazit, capture through the `/` menu ([ADR-0057](../docs/09_architecture_decisions/0057-ui-refinement-icon-chrome-anthrazit-and-slash-capture.md))
+
+Implements the "Drey UI Refinement" design mockup. **Not yet manually
+verified by the owner.**
+
+- **Chrome typography and controls (all themes).** Panel titles, tabs,
+  file names, menus and the status bar are sentence-case sans; mono stays
+  for code, the meta-bar path and line numbers. One global icon button
+  (`.icon-btn`) and one segmented switch (`.seg`) replace the per-panel
+  button styles. Bars: titlebar/tab bar 36px, meta bar 40px, status bar
+  28px, rows 28px.
+- **Anthrazit theme** — a second bespoke theme next to Drey (Settings →
+  Appearance): warm charcoal surfaces, solid lines, a blue accent, no
+  shadows. Default for a fresh install only; existing configs keep their
+  theme. _(This retracts milestone 42's "no Anthrazit tokens" note.)_
+- **Icon-only controls on the right-hand panels.** Search and Tasks scope
+  switches (document / vault / all vaults), Search's Replace / Export /
+  Summarize / Clear, the Tasks view toggles, Outline's fold-all, and the
+  assistant composer's Attach / Live edit / Vault context / Prompts are
+  icons with tooltips and accessible names. Placeholder texts are gone.
+- **One field for text and tags** in Search and Tasks: typing `#name`
+  turns into a coloured tag chip (with completion), the rest is the text
+  query. The separate tag rows are removed. The summary line reads
+  "N sections in M files".
+- **Slash menu** — sectioned **Templates** / **Formatting**. New built-in
+  **Entry** item (the configured entry format: a heading with the current
+  time, caret ready for the topic) and every template from the templates
+  folder, each with a **preview card** beside the list. The Templates
+  panel shows the same preview on hover.
+- **"Add entry" removed** — panel, drawer, draft service and the Autotag
+  button's surface (the `suggestTags` backend stays, currently without a
+  button). Settings → "Add entry" is now **"Entry format"**. The bottom
+  dock has no default panel any more.
+- **Formatting buttons in the meta bar** — the toolbar is no longer a
+  separate strip; shown by default, still hidden via `⋯` → "Formatting
+  toolbar". An "Unsaved" label sits beside Save.
+- **Files panel** — create and rename happen **in place** in the tree (a
+  new row under the target folder; the name turns into an input), file
+  names stay on one line and fade out at the right edge, the open file
+  carries an accent edge.
+- **Calendar** — the **month/year dropdown is the panel header** (no
+  "Calendar" title while expanded; collapsed it shows the title and the
+  month as before), with a **Today** button beside the month arrows that
+  opens today's daily note and jumps back to the current month.
+- **Plugin SDK 1.10** (additive): `api.ui.icon(name, size)`, the
+  `freeText` mode of `api.ui.createTagField` (+ `setText`);
+  `api.ui.registerComposerContribution` is a deprecated no-op.
+
 ### Milestone 42 — the editor round: View mode, formatting toolbar, engine polish (ported from the Lariscus editor)
 
 The Lariscus app took Drey's editor in 2026-09 and evolved it; this

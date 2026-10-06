@@ -291,21 +291,10 @@ describe('Editor', () => {
       expect(compiled().querySelector('.editor-menu')).toBeNull();
     });
 
-    it('toggles the formatting toolbar on, and its buttons edit the document', async () => {
-      expect(compiled().querySelector('app-markdown-toolbar')).toBeNull(); // off by default
-
-      const menu = openMenu();
-      const toolbarItem = [...menu.querySelectorAll('button')].find(
-        (b) => b.textContent?.trim() === 'Formatting toolbar',
-      ) as HTMLButtonElement;
-      expect(toolbarItem.getAttribute('aria-checked')).toBe('false');
-      toolbarItem.click();
-      fixture.detectChanges();
-      await fixture.whenStable();
-
-      const bar = compiled().querySelector('app-markdown-toolbar');
+    it('shows the formatting buttons in the meta bar, and they edit the document', async () => {
+      // Part of the meta bar since milestone 43 -- on unless switched off.
+      const bar = compiled().querySelector('.chrome app-markdown-toolbar');
       expect(bar).toBeTruthy();
-      expect(JSON.parse(localStorage.getItem('drey.editor')!).toolbar).toBe(true);
 
       // The two dedicated buttons exist alongside the list menu…
       expect(bar?.querySelector('button[aria-label="Task list"]')).toBeTruthy();
@@ -323,6 +312,20 @@ describe('Editor', () => {
       fixture.detectChanges();
       await fixture.whenStable();
       expect(cmText()).toContain('> ');
+    });
+
+    it('hides the formatting buttons from the ⋯ menu and persists that', async () => {
+      const menu = openMenu();
+      const toolbarItem = [...menu.querySelectorAll('button')].find(
+        (b) => b.textContent?.trim() === 'Formatting toolbar',
+      ) as HTMLButtonElement;
+      expect(toolbarItem.getAttribute('aria-checked')).toBe('true');
+      toolbarItem.click();
+      fixture.detectChanges();
+      await fixture.whenStable();
+
+      expect(compiled().querySelector('app-markdown-toolbar')).toBeNull();
+      expect(JSON.parse(localStorage.getItem('drey.editor')!).toolbar).toBe(false);
     });
 
     it('renders the toolbar from the persisted pref at startup (vault docKey)', async () => {

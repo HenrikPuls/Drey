@@ -42,9 +42,10 @@ import { pasteUrlAsMarkdownLink } from '../paste-link';
 import { assetUrlToVaultPath, resolveVaultImageCandidates } from '../vault-image';
 import { makeTagCompletionSource, tagPills, tagStyleRefresh } from '../tags';
 import { makeWordCompletionSource } from '../word-completion';
-import { MarkdownToolbar } from '../markdown-toolbar';
 import { applyAction, ToolbarAction } from '../toolbar-commands';
-import { slashCommandSource } from '../slash-commands';
+import { makeSlashCommandSource } from '../slash-commands';
+import { SettingsService } from '../../services/settings.service';
+import { composeEntry, EMPTY_ENTRY_DRAFT } from '../../../../shared/entry-compose';
 import { TagVocabularyService } from '../../tags/tag-vocabulary.service';
 import { KeybindingService } from '../../keybindings';
 import { EditorExtensionRegistry, DropDecoderRegistry } from '../../plugin-host';
@@ -76,19 +77,7 @@ const STICK_TO_BOTTOM_PX = 32;
  */
 @Component({
   selector: 'app-markdown-surface',
-  imports: [MarkdownToolbar],
-  template: `
-    @if (showToolbar()) {
-      <div class="toolbar-row">
-        <app-markdown-toolbar
-          [imagesEnabled]="imageCapture()"
-          (action)="applyToolbarAction($event)"
-          (imageFiles)="insertToolbarImages($event)"
-        />
-      </div>
-    }
-    <div #host class="host"></div>
-  `,
+  template: `<div #host class="host"></div>`,
   styles: `
     :host {
       display: flex;
@@ -99,15 +88,11 @@ const STICK_TO_BOTTOM_PX = 32;
       flex: 1;
       min-height: 0;
     }
-    .toolbar-row {
-      flex: none;
-      padding: 4px 10px 2px;
-      border-bottom: 1px solid var(--border);
-    }
   `,
 })
 export class MarkdownSurface implements AfterViewInit, OnDestroy {
   private readonly editor = inject(EditorService);
+  private readonly settings = inject(SettingsService);
   private readonly editTarget = inject(EditTargetService);
   private readonly vault = inject(VaultService);
   private readonly themes = inject(ThemeService);
@@ -160,14 +145,6 @@ export class MarkdownSurface implements AfterViewInit, OnDestroy {
    * assistant composer (a prompt box, not a document) does not.
    */
   readonly imageCapture = input(false);
-  /**
-   * Renders the formatting toolbar above the editor (headings, lists,
-   * bold/italic/strikethrough, link, image picker, table grid -- the
-   * ported Lariscus toolbar). Never in view mode. The full-page editor
-   * toggles it from its `⋯` menu; the entry drawer from the symbol at
-   * its tags row's right edge (both persisted, each with its own value).
-   */
-  readonly toolbar = input(false);
   /**
    * Makes the surface non-editable (the note assistant composer while no
    * note is open). Programmatic `setContent` still works -- this only
@@ -253,15 +230,13 @@ export class MarkdownSurface implements AfterViewInit, OnDestroy {
     return this._view;
   }
 
-  /** The toolbar renders for a non-view surface whose owner asked for it. */
-  private readonly showToolbar = computed(() => this.toolbar() && this.mode() !== 'view');
-
   /**
    * A toolbar button: reduce the action to one change + selection (pure,
    * `toolbar-commands.ts`) and dispatch it, then hand focus back to the
-   * editor so typing continues where the toolbar left the caret.
+   * editor so typing continues where the toolbar left the caret. Called by
+   * the owning `Editor`, whose meta bar hosts the buttons (milestone 43).
    */
-  private applyToolbarAction(action: ToolbarAction): void {
+  applyToolbarAction(action: ToolbarAction): void {
     const view = this._view;
     if (!view || view.state.readOnly) {
       return;
@@ -281,7 +256,7 @@ export class MarkdownSurface implements AfterViewInit, OnDestroy {
    * pasted image takes (`image-paste.ts`): saved into the vault's
    * per-note `attachments/`, placeholder swapped for the real link.
    */
-  private async insertToolbarImages(files: File[]): Promise<void> {
+  async insertToolbarImages(files: File[]): Promise<void> {
     const view = this._view;
     if (!view || view.state.readOnly || !this.imageCapture()) {
       return;
@@ -443,7 +418,14 @@ export class MarkdownSurface implements AfterViewInit, OnDestroy {
       // The `/` selection dialog: the toolbar's block commands as
       // completions. Same Enter-submits gate as the word completion.
       !(this.compact() && this.submitOnEnter())
-        ? markdownLanguage.data.of({ autocomplete: slashCommandSource })
+        ? markdownLanguage.data.of({
+            autocomplete: makeSlashCommandSource({
+              // The built-in Entry block: the configured entry format
+              // (ADR-0022) with an empty draft -- a heading with the time.
+              entryText: () =>
+                composeEntry(EMPTY_ENTRY_DRAFT, this.settings.activeEntryPattern()) + '\n',
+            }),
+          })
         : [],
       // Paste a bare URL onto an empty caret -> `[url](url)` (lang-markdown's
       // own pasteURLAsLink only handles the wrap-a-selection case).

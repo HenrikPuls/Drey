@@ -18,9 +18,18 @@
 .tasks-panel .filter {
   flex: none;
   display: flex;
-  flex-direction: column;
-  gap: 5px;
+  align-items: center;
+  gap: 2px;
+  min-height: var(--field-h);
   margin-bottom: 8px;
+  padding: 3px 4px 3px 8px;
+  background: var(--bg-editor);
+  border: 1px solid var(--field-border);
+  border-radius: var(--radius-xs);
+}
+
+.tasks-panel .filter:focus-within {
+  border-color: var(--accent);
 }
 
 .tasks-panel .content {
@@ -30,122 +39,28 @@
   flex-direction: column;
 }
 
-/* ---- header-strip controls (rendered in the PanelFrame header) ---- */
+/* ---- filter: one bordered field (milestone 43) ----
+   The scope switch in the panel header and every icon button use the
+   shell's shared `.seg` / `.icon-btn` (src/styles.css); the tag chips and
+   the input are the shared tag field in free-text mode. */
 
-.tasks-hdr {
-  display: flex;
-  align-items: center;
-  gap: 5px;
-}
-
-.tasks-hdr .seg {
+.tasks-panel .filter-icon {
   display: inline-flex;
-  gap: 1px;
-  padding: 1px;
-  background: var(--bg-search);
-  border: 1px solid var(--field-border);
-  border-radius: var(--radius-sm);
-}
-
-.tasks-hdr .seg button {
-  height: 18px;
-  padding: 0 6px;
-  border: 0;
-  border-radius: 3px;
-  background: transparent;
+  flex: none;
   color: var(--text-5);
-  font-family: var(--font-sans);
-  font-size: 10.5px;
-  line-height: 1;
-  cursor: pointer;
 }
-
-.tasks-hdr .seg button:hover:not(.on) {
-  color: var(--text-2);
-}
-
-.tasks-hdr .seg button.on {
-  /* A quiet accent tint, not a solid fill -- matches the kind toggles. */
-  background: var(--accent-surface);
-  color: var(--accent-text);
-}
-
-.tasks-hdr .tgl {
-  height: 20px;
-  min-width: 20px;
-  padding: 0 5px;
-  border: 1px solid var(--field-border);
-  border-radius: var(--radius-sm);
-  background: transparent;
-  color: var(--text-5);
-  font-family: var(--font-mono);
-  font-size: 10px;
-  line-height: 1;
-  cursor: pointer;
-}
-
-.tasks-hdr .tgl:hover:not(.on) {
-  color: var(--text-2);
-}
-
-.tasks-hdr .tgl.on {
-  background: var(--accent-surface);
-  border-color: var(--accent-quote);
-  color: var(--accent-text);
-}
-
-/* ---- body: free-text + tag filter ---- */
-
-/* The tag chips + their input come from the shared tag field
-   (`src/styles.css` `.tag-field*`, milestone 33) — the Search panel and the
-   entry drawer mount the exact same component. The field sits inside the
-   tasks `.filter` row, so only the frame styling lives here. */
 
 .tasks-panel .tag-field {
   flex: 1;
-  min-width: 90px;
 }
 
-.tasks-panel .tag-field-chips {
-  min-height: 28px;
-  padding: 4px 7px;
-  background: var(--bg-search);
-  border: 1px solid var(--field-border);
-  border-radius: var(--radius);
+.tasks-panel .tag-field-input {
+  height: 22px;
+  font-size: 13px;
 }
 
-.tasks-panel .text-input {
-  height: 28px;
-  background: var(--bg-search);
-  border: 1px solid var(--field-border);
-  border-radius: var(--radius);
-  color: var(--text-primary);
-  font: inherit;
-  font-size: 11.5px;
-  padding: 0 8px;
-  outline: none;
-}
-
-.tasks-panel .text-input:focus,
-.tasks-panel .chip-field:focus-within {
-  border-color: var(--accent-ring);
-}
-
-.tasks-panel .clear {
-  align-self: flex-start;
-  height: 20px;
-  padding: 0 8px;
-  border: 0;
-  border-radius: var(--radius-sm);
-  background: var(--hover-bg);
-  color: var(--text-4);
-  font-size: 11px;
-  cursor: pointer;
-}
-
-.tasks-panel .clear:hover {
-  background: var(--hover-bg-strong);
-  color: var(--text-primary);
+.tasks-panel .icon-btn[hidden] {
+  display: none;
 }
 
 /* ---- list ---- */
@@ -170,7 +85,7 @@
 .tasks-panel .group {
   flex: 0 0 auto;
   margin: 8px 0 2px;
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   font-size: 10.5px;
   line-height: 1.4;
   color: var(--text-6);
@@ -250,7 +165,7 @@
   align-items: center;
   gap: 6px;
   min-width: 0;
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   font-size: 9.5px;
   color: var(--path-muted);
   overflow: hidden;

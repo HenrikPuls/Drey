@@ -62,6 +62,12 @@ whatever's next).
 
 ### Feature requests (backlog, unordered)
 
+- **Autotag needs a new home** (no id yet) — the "Add entry" drawer that
+  carried the Autotag button was removed in milestone 43 (ADR-0057). The
+  `suggestTags` backend and the `tags:suggest` channel still exist but
+  nothing calls them. Options: a row in the editor's `⋯` menu acting on
+  the section under the caret, or dropping the feature.
+
 - **Req-2 (remainder)** — render Office documents inline (Word, Excel,
   PowerPoint, Loop). PDF slice shipped (milestone 30, ADR-0052: drag-in
   → `attachments/` → built-in viewer); PDF export also shipped (req-16).

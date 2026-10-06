@@ -46,12 +46,23 @@ running the previous build (a changed renderer module 404s). Verify with
 
 - `apiVersion` is a **major gate**: a manifest whose major differs from
   `PLUGIN_API_VERSION.major` (`shared/plugin-api/versions.ts`, currently
-  `{ major: 1, minor: 9 }`) is never imported — the plugin shows up in
+  `{ major: 1, minor: 10 }`) is never imported — the plugin shows up in
   Settings → Panels & plugins as incompatible. Minor bumps are additive;
   1.9 added `commands.run(id, payload?)`, `ui.createTagField` (the shared
   tag chip field — prefer it over a hand-rolled chip row), the main-side
   `ctx.search.notifyChanged()` push and the section-search provider's
-  optional `styles()` (tag prefix colors).
+  optional `styles()` (tag prefix colors). 1.10 added `ui.icon(name, size)`
+  (a glyph from the host's icon set as a plain SVG element — use it for
+  icon-only controls and always give the button a `title` and an
+  `aria-label`) and the `freeText` mode of `ui.createTagField` (one input
+  for a text query and `#tag` chips, plus `setText`);
+  `ui.registerComposerContribution` is a deprecated no-op since the
+  "Add entry" drawer was removed (ADR-0057).
+- **Shared chrome classes.** Panel controls use the shell's global
+  `.icon-btn` (24px icon button, `.on` / `aria-pressed` = accent tint,
+  `.glyph` for a short text glyph) and `.seg` (segmented switch of icon
+  buttons) instead of per-plugin button styles; panel labels are sentence
+  case.
 - `main` is optional (a renderer-only plugin needs none); `css` is a list
   of stylesheets injected next to the renderer module.
 - Discovery: built-in `plugins/` + `<userData>/plugins/<id>/` +

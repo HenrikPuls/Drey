@@ -33,7 +33,7 @@ describe('DockService', () => {
   it('moves a panel into the bottom dock and clamps its height', () => {
     const dock = make();
     dock.move('calendar', 'bottom', 0);
-    expect(dock.bottomIds()).toEqual(['calendar', 'entry']);
+    expect(dock.bottomIds()).toEqual(['calendar']);
     expect(dock.leftIds()).toEqual(['files', 'windows']);
     dock.setBottomHeight(10);
     expect(dock.dockHeight()).toBe(140);
@@ -41,18 +41,23 @@ describe('DockService', () => {
     expect(dock.dockHeight()).toBe(680);
   });
 
-  it('re-places the entry panel into the bottom dock when a stored blob predates it', () => {
+  it('drops widget ids the registry no longer knows from a stored blob (the removed entry panel)', () => {
     localStorage.setItem(
       'drey.dock',
       JSON.stringify({
         // `assistant` is a plugin widget id now (ADR-0044) -- unknown to the
         // core registry, so it folds out of the stored blob.
-        dock: { left: ['calendar', 'files', 'search', 'windows'], right: ['assistant'] },
+        dock: {
+          left: ['calendar', 'files', 'search', 'windows'],
+          right: ['assistant'],
+          bottom: ['entry'],
+        },
       }),
     );
     const dock = make();
-    expect(dock.bottomIds()).toEqual(['entry']);
+    expect(dock.bottomIds()).toEqual([]);
     expect(dock.rightIds()).toEqual([]);
+    expect(dock.leftIds()).toEqual(['calendar', 'files', 'windows']);
   });
 
   it('promotes a header press to a drag only past the movement threshold', () => {
@@ -188,10 +193,12 @@ describe('DockService', () => {
 
   it('openAndExpand expands a collapsed docked panel', () => {
     const dock = make();
-    expect(dock.collapsed('entry')).toBe(true);
-    dock.openAndExpand('entry');
-    expect(dock.collapsed('entry')).toBe(false);
-    expect(dock.sideOf('entry')).toBe('bottom');
+    dock.move('windows', 'bottom', 0);
+    dock.toggleCollapse('windows');
+    expect(dock.collapsed('windows')).toBe(true);
+    dock.openAndExpand('windows');
+    expect(dock.collapsed('windows')).toBe(false);
+    expect(dock.sideOf('windows')).toBe('bottom');
   });
 
   it('reset restores every default', () => {
@@ -266,13 +273,15 @@ describe('DockService', () => {
       expect(dock.collapsed('files')).toBe(false);
     });
 
-    it('hides the bottom-dock entry widget and restores it', () => {
+    it('hides a bottom-dock widget and restores it to its default dock', () => {
       const dock = make();
-      dock.hide('entry');
+      dock.move('windows', 'bottom', 0);
+      dock.hide('windows');
       expect(dock.bottomIds()).toEqual([]);
-      expect(dock.isHidden('entry')).toBe(true);
-      dock.show('entry');
-      expect(dock.bottomIds()).toEqual(['entry']);
+      expect(dock.isHidden('windows')).toBe(true);
+      dock.show('windows');
+      expect(dock.isHidden('windows')).toBe(false);
+      expect(dock.sideOf('windows')).toBe('left');
     });
 
     it('round-trips the hidden set through persistence', () => {

@@ -70,7 +70,7 @@ describe('Calendar', () => {
 
     // While the picker is open the ‹ › buttons step the year, and stepping
     // alone must not move the calendar underneath.
-    compiled.querySelector<HTMLButtonElement>('.nav-btn')!.click();
+    compiled.querySelector<HTMLButtonElement>('[aria-label="Previous year"]')!.click();
     fixture.detectChanges();
     expect(compiled.querySelector('.month')?.textContent).toContain('2025');
     expect(cal.viewYear()).toBe(2026);
@@ -82,6 +82,24 @@ describe('Calendar', () => {
     expect([cal.viewYear(), cal.viewMonth()]).toEqual([2025, 2]);
     expect(compiled.querySelector('.month')?.textContent).toContain('March 2025');
     expect(compiled.querySelectorAll('.day').length).toBe(42);
+  });
+
+  it('Today jumps back to the current month and opens today\'s daily note', async () => {
+    cal.viewYear.set(2020);
+    cal.viewMonth.set(0);
+    fixture.detectChanges();
+    const compiled = fixture.nativeElement as HTMLElement;
+
+    const today = compiled.querySelector<HTMLButtonElement>(
+      '[aria-label="Open today\'s daily note"]',
+    )!;
+    expect(today.title).toBe('Today');
+    today.click();
+    await fixture.whenStable();
+
+    const now = new Date();
+    expect([cal.viewYear(), cal.viewMonth()]).toEqual([now.getFullYear(), now.getMonth()]);
+    expect(editor.openPath()).toMatch(/^daily\/\d{4}\/\d{2}\/\d{4}-\d{2}-\d{2}\.md$/);
   });
 
   it('closes the picker on Escape without changing the shown month', () => {

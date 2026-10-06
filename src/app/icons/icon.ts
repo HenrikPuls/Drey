@@ -43,7 +43,31 @@ export type IconName =
   | 'square'
   | 'save'
   | 'pin'
-  | 'type';
+  | 'calendar-check'
+  | 'search'
+  | 'file-text'
+  | 'layers'
+  | 'replace'
+  | 'download'
+  | 'filter'
+  | 'check-square'
+  | 'circle-check'
+  | 'hash'
+  | 'paperclip'
+  | 'pencil-line'
+  | 'database'
+  | 'book-open'
+  | 'heading'
+  | 'bold'
+  | 'italic'
+  | 'strikethrough'
+  | 'list'
+  | 'quote'
+  | 'link'
+  | 'image'
+  | 'table'
+  | 'code'
+  | 'trash';
 
 const ICONS: Record<IconName, readonly IconShape[]> = {
   'chevron-right': [{ kind: 'path', d: 'm9 18 6-6-6-6' }],
@@ -178,13 +202,175 @@ const ICONS: Record<IconName, readonly IconShape[]> = {
       d: 'M9 10.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24V16a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V7a1 1 0 0 1 1-1 2 2 0 0 0 0-4H8a2 2 0 0 0 0 4 1 1 0 0 1 1 1z',
     },
   ],
-  // Lucide "type" -- the entry drawer's formatting-toolbar toggle (a T glyph).
-  type: [
-    { kind: 'path', d: 'M4 7V5h16v2' },
-    { kind: 'path', d: 'M12 5v14' },
-    { kind: 'path', d: 'M9 19h6' },
+  // Milestone 43 (ADR-0057): the icon-only chrome. Lucide path data; rects
+  // and ellipses are re-expressed as paths (this map renders path/circle).
+  'calendar-check': [
+    { kind: 'path', d: 'M8 2v4' },
+    { kind: 'path', d: 'M16 2v4' },
+    { kind: 'path', d: 'M5 4h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2z' },
+    { kind: 'path', d: 'M3 10h18' },
+    { kind: 'path', d: 'm9 16 2 2 4-4' },
+  ],
+  search: [
+    { kind: 'circle', cx: 11, cy: 11, r: 8 },
+    { kind: 'path', d: 'm21 21-4.3-4.3' },
+  ],
+  'file-text': [
+    { kind: 'path', d: 'M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z' },
+    { kind: 'path', d: 'M14 2v4a2 2 0 0 0 2 2h4' },
+    { kind: 'path', d: 'M10 9H8' },
+    { kind: 'path', d: 'M16 13H8' },
+    { kind: 'path', d: 'M16 17H8' },
+  ],
+  layers: [
+    { kind: 'path', d: 'm12.83 2.18a2 2 0 0 0-1.66 0L2.6 6.08a1 1 0 0 0 0 1.83l8.58 3.91a2 2 0 0 0 1.66 0l8.58-3.9a1 1 0 0 0 0-1.83Z' },
+    { kind: 'path', d: 'm22 17.65-9.17 4.16a2 2 0 0 1-1.66 0L2 17.65' },
+    { kind: 'path', d: 'm22 12.65-9.17 4.16a2 2 0 0 1-1.66 0L2 12.65' },
+  ],
+  replace: [
+    { kind: 'path', d: 'M8 3 4 7l4 4' },
+    { kind: 'path', d: 'M4 7h16' },
+    { kind: 'path', d: 'm16 21 4-4-4-4' },
+    { kind: 'path', d: 'M20 17H4' },
+  ],
+  download: [
+    { kind: 'path', d: 'M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4' },
+    { kind: 'path', d: 'm7 10 5 5 5-5' },
+    { kind: 'path', d: 'M12 15V3' },
+  ],
+  filter: [
+    { kind: 'path', d: 'M3 6h18' },
+    { kind: 'path', d: 'M7 12h10' },
+    { kind: 'path', d: 'M10 18h4' },
+  ],
+  'check-square': [
+    { kind: 'path', d: 'M21 10.5V19a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h12.5' },
+    { kind: 'path', d: 'm9 11 3 3L22 4' },
+  ],
+  'circle-check': [
+    { kind: 'circle', cx: 12, cy: 12, r: 10 },
+    { kind: 'path', d: 'm9 12 2 2 4-4' },
+  ],
+  hash: [
+    { kind: 'path', d: 'M4 9h16' },
+    { kind: 'path', d: 'M4 15h16' },
+    { kind: 'path', d: 'M10 3 8 21' },
+    { kind: 'path', d: 'M16 3l-2 18' },
+  ],
+  paperclip: [
+    { kind: 'path', d: 'm21.44 11.05-9.19 9.19a6 6 0 0 1-8.49-8.49l8.57-8.57A4 4 0 1 1 18 8.84l-8.59 8.57a2 2 0 0 1-2.83-2.83l8.49-8.48' },
+  ],
+  'pencil-line': [
+    { kind: 'path', d: 'M12 20h9' },
+    { kind: 'path', d: 'M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z' },
+  ],
+  database: [
+    { kind: 'path', d: 'M3 5c0-1.66 4.03-3 9-3s9 1.34 9 3-4.03 3-9 3-9-1.34-9-3z' },
+    { kind: 'path', d: 'M3 5v14c0 1.66 4.03 3 9 3s9-1.34 9-3V5' },
+    { kind: 'path', d: 'M3 12c0 1.66 4.03 3 9 3s9-1.34 9-3' },
+  ],
+  'book-open': [
+    { kind: 'path', d: 'M12 7v14' },
+    { kind: 'path', d: 'M3 18a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h5a4 4 0 0 1 4 4 4 4 0 0 1 4-4h5a1 1 0 0 1 1 1v13a1 1 0 0 1-1 1h-6a3 3 0 0 0-3 3 3 3 0 0 0-3-3z' },
+  ],
+  heading: [
+    { kind: 'path', d: 'M6 12h12' },
+    { kind: 'path', d: 'M6 20V4' },
+    { kind: 'path', d: 'M18 20V4' },
+  ],
+  bold: [
+    { kind: 'path', d: 'M6 12h9a4 4 0 0 1 0 8H7a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1h7a4 4 0 0 1 0 8' },
+  ],
+  italic: [
+    { kind: 'path', d: 'M19 4h-9' },
+    { kind: 'path', d: 'M14 20H5' },
+    { kind: 'path', d: 'M15 4 9 20' },
+  ],
+  strikethrough: [
+    { kind: 'path', d: 'M16 4H9a3 3 0 0 0-2.83 4' },
+    { kind: 'path', d: 'M14 12a4 4 0 0 1 0 8H6' },
+    { kind: 'path', d: 'M4 12h16' },
+  ],
+  list: [
+    { kind: 'path', d: 'M8 6h13' },
+    { kind: 'path', d: 'M8 12h13' },
+    { kind: 'path', d: 'M8 18h13' },
+    { kind: 'path', d: 'M3 6h.01' },
+    { kind: 'path', d: 'M3 12h.01' },
+    { kind: 'path', d: 'M3 18h.01' },
+  ],
+  quote: [
+    { kind: 'path', d: 'M17 6H3' },
+    { kind: 'path', d: 'M21 12H8' },
+    { kind: 'path', d: 'M21 18H8' },
+    { kind: 'path', d: 'M3 12v6' },
+  ],
+  link: [
+    { kind: 'path', d: 'M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71' },
+    { kind: 'path', d: 'M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71' },
+  ],
+  image: [
+    { kind: 'path', d: 'M5 3h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2z' },
+    { kind: 'circle', cx: 9, cy: 9, r: 2 },
+    { kind: 'path', d: 'm21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21' },
+  ],
+  table: [
+    { kind: 'path', d: 'M5 3h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2z' },
+    { kind: 'path', d: 'M12 3v18' },
+    { kind: 'path', d: 'M3 9h18' },
+    { kind: 'path', d: 'M3 15h18' },
+  ],
+  code: [
+    { kind: 'path', d: 'm16 18 6-6-6-6' },
+    { kind: 'path', d: 'm8 6-6 6 6 6' },
+  ],
+  trash: [
+    { kind: 'path', d: 'M3 6h18' },
+    { kind: 'path', d: 'M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6' },
+    { kind: 'path', d: 'M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2' },
   ],
 };
+
+/** Whether `name` is in the vendored set (plugin callers pass plain strings). */
+export function isIconName(name: string): name is IconName {
+  return Object.prototype.hasOwnProperty.call(ICONS, name);
+}
+
+const SVG_NS = 'http://www.w3.org/2000/svg';
+
+/**
+ * The same glyph as `<app-icon>`, built as a plain SVG element -- what
+ * `api.ui.icon` hands to plugin panels (plain DOM, ADR-0044 rule 2), so no
+ * plugin carries its own copy of the path data. An unknown name yields an
+ * empty, correctly sized SVG rather than throwing into plugin code.
+ */
+export function createIconElement(name: string, size = 16, strokeWidth = 1.75): SVGSVGElement {
+  const svg = document.createElementNS(SVG_NS, 'svg');
+  svg.setAttribute('viewBox', '0 0 24 24');
+  svg.setAttribute('fill', 'none');
+  svg.setAttribute('stroke', 'currentColor');
+  svg.setAttribute('stroke-width', String(strokeWidth));
+  svg.setAttribute('stroke-linecap', 'round');
+  svg.setAttribute('stroke-linejoin', 'round');
+  svg.setAttribute('width', String(size));
+  svg.setAttribute('height', String(size));
+  svg.setAttribute('aria-hidden', 'true');
+  svg.setAttribute('focusable', 'false');
+  for (const shape of isIconName(name) ? ICONS[name] : []) {
+    if (shape.kind === 'path') {
+      const path = document.createElementNS(SVG_NS, 'path');
+      path.setAttribute('d', shape.d);
+      svg.appendChild(path);
+    } else {
+      const circle = document.createElementNS(SVG_NS, 'circle');
+      circle.setAttribute('cx', String(shape.cx));
+      circle.setAttribute('cy', String(shape.cy));
+      circle.setAttribute('r', String(shape.r));
+      svg.appendChild(circle);
+    }
+  }
+  return svg;
+}
 
 @Component({
   selector: 'app-icon',
