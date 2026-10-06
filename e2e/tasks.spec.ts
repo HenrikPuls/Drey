@@ -35,6 +35,11 @@ test.use({ seedVault: { 'tasks-demo.md': NOTE, 'other.md': OTHER } });
 async function openTasksPanel(page: Page): Promise<void> {
   await page.locator('app-dock[side="left"] .node.file', { hasText: 'tasks-demo.md' }).click();
   await expect(page.locator('app-editor .cm-content')).toBeVisible();
+  // The content-height Calendar would leave the expanded panel's first rows
+  // under its scroll clip at short windows (a ~48px body scrolls, but the
+  // row's click point still sits past the clip edge) -- collapse it first so
+  // the panel gets room at any window height.
+  await page.locator('app-panel-frame .head[aria-label="Collapse Calendar"]').click();
   // The plugin's panel: collapsed by default, its header press expands it.
   await page.locator('app-panel-frame .head[aria-label="Expand Tasks"]').click();
   await expect(page.locator('app-panel-frame .tasks-panel')).toBeVisible();

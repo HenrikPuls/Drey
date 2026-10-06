@@ -66,10 +66,10 @@ Details worth knowing:
 - Playwright runs the real Electron app on the runner (no browser
   download needed); its `CI`-aware config (github reporter, 1 retry)
   applies automatically. The runner's display is only 1024x768, so the
-  job sets `DREY_E2E_SCALE=0.5` — the fixture launches Electron with
-  `--force-device-scale-factor`, packing the unchanged 1280x800 CSS-px
-  window into 640x400 physical pixels instead of letting Windows clamp
-  the window and squeeze the dock layout under the click targets.
+  1280x800 app window clamps to it — the dock-panel e2e specs
+  (search/tasks) collapse the content-height Calendar before expanding
+  the panel under test, which keeps the panel's rows inside their scroll
+  clip at any window height.
 - Still no code signing — see "First run / limitations" below.
 
 ## App layout & the `app://` renderer

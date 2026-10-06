@@ -15,7 +15,7 @@ test.describe('mermaid diagrams in Live Preview (ADR-0025)', () => {
   test('a ```mermaid fence renders as an <svg> in the main editor', async ({ page, vaultDir }) => {
     await openNote(page, vaultDir, 'flow.md', DIAGRAM);
 
-    const svg = page.locator('app-editor .cm-content .lp-mermaid svg');
+    const svg = page.locator('app-editor .cm-content .lp-mermaid .lp-mermaid-svg svg');
     await expect(svg).toBeVisible({ timeout: 15000 });
     // A real diagram, not the pending placeholder or an error box.
     await expect(page.locator('app-editor .cm-content .lp-mermaid-pending')).toHaveCount(0);
@@ -35,7 +35,7 @@ test.describe('mermaid diagrams in Live Preview (ADR-0025)', () => {
 
   test('the raw fence comes back when the cursor moves inside it', async ({ page, vaultDir }) => {
     await openNote(page, vaultDir, 'reveal.md', DIAGRAM);
-    await expect(page.locator('app-editor .cm-content .lp-mermaid svg')).toBeVisible({
+    await expect(page.locator('app-editor .cm-content .lp-mermaid .lp-mermaid-svg svg')).toBeVisible({
       timeout: 15000,
     });
 
@@ -97,7 +97,9 @@ test.describe('mermaid diagrams in Live Preview (ADR-0025)', () => {
     // Move the caret off the fence so it renders (it must not touch it).
     await surface.press('ControlOrMeta+Home');
 
-    await expect(surface.locator('.lp-mermaid svg')).toBeVisible({ timeout: 15000 });
+    await expect(surface.locator('.lp-mermaid .lp-mermaid-svg svg')).toBeVisible({
+      timeout: 15000,
+    });
   });
 
   // Regression: mermaid's config `fontFamily` is `var(--font-sans, …)`, which
@@ -111,7 +113,7 @@ test.describe('mermaid diagrams in Live Preview (ADR-0025)', () => {
 
     test('node label boxes fit the rendered monospace text', async ({ page, vaultDir }) => {
       await openNote(page, vaultDir, 'mono.md', DIAGRAM);
-      await expect(page.locator('app-editor .cm-content .lp-mermaid svg')).toBeVisible({
+      await expect(page.locator('app-editor .cm-content .lp-mermaid .lp-mermaid-svg svg')).toBeVisible({
         timeout: 15000,
       });
       await page.waitForTimeout(300);

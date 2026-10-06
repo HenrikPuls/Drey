@@ -35,6 +35,10 @@ const PLAIN = ['# Plain notes', '', '## Groceries', '', 'Buy flat peaches and br
 test.use({ seedVault: { 'sailing.md': TAGGED, 'plain.md': PLAIN } });
 
 async function openSearchPanel(page: Page): Promise<void> {
+  // The plugin's panel needs vertical room -- collapse the content-height
+  // Calendar first so the expanded panel's hit rows stay inside its scroll
+  // clip at short windows (see tasks.spec openTasksPanel).
+  await page.locator('app-panel-frame .head[aria-label="Collapse Calendar"]').click();
   // The chord needs the plugin's renderer module activated (it registers
   // the `search.open` command) — wait for the widget frame to exist first.
   await expect(page.locator('app-panel-frame .head[aria-label="Expand Search"]')).toBeVisible();
