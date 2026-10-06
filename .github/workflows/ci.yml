@@ -62,21 +62,25 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      # npm ci does not always materialize the transformers sharp-stub
-      # junction the lockfile records (file:tools-stub resolution inside the
-      # transformers package, ADR-0055's WASM-only setup); electron-builder's
-      # node-modules collector stats that exact path and ENOENTs without it.
-      # No-op wherever npm created the junction (dev machines).
+      # npm ci does not materialize the transformers nested-sharp junction
+      # the lockfile records (electron-builder's node-modules collector
+      # stats that exact path and ENOENTs without it). The published
+      # transformers package does not ship its tools/stubs folder, so the
+      # junction points at the repo's own sharp stub -- the same package the
+      # root `sharp` dependency resolves to (ADR-0055's WASM-only setup).
+      # No-op wherever the junction already exists (dev machines).
       - name: Restore transformers sharp-stub junction
         shell: pwsh
         run: |
-          $link = "node_modules/@huggingface/transformers/node_modules/sharp"
-          $stub = "node_modules/@huggingface/transformers/tools/stubs/sharp-stub"
-          if (-not (Test-Path "$link/package.json")) {
+          $root = (Get-Location).Path
+          $link = Join-Path $root "node_modules/@huggingface/transformers/node_modules/sharp"
+          $stub = Join-Path $root "tools/stubs/sharp-stub"
+          if (-not (Test-Path (Join-Path $link "package.json"))) {
             if (Test-Path $link) { Remove-Item $link -Force -Recurse }
+            New-Item -ItemType Directory -Force -Path (Split-Path $link) | Out-Null
             New-Item -ItemType Junction -Path $link -Target $stub | Out-Null
           }
-          "sharp stub resolvable: $(Test-Path "$link/package.json")"
+          "sharp stub resolvable: $(Test-Path (Join-Path $link 'package.json'))"
 
       - name: Lint
         run: npm run lint
