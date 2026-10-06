@@ -17,7 +17,10 @@ export type ToolbarAction =
   | { kind: 'wrap'; marker: '**' | '*' | '~~' }
   | { kind: 'link' }
   | { kind: 'table'; rows: number; cols: number }
-  | { kind: 'image'; alt: string; url: string };
+  | { kind: 'image'; alt: string; url: string }
+  | { kind: 'quote' }
+  | { kind: 'fence' }
+  | { kind: 'divider' };
 
 /** A single change plus the selection to land in afterwards. */
 export interface Edit {
@@ -154,6 +157,50 @@ function lineEnd(text: string, pos: number): number {
   return idx === -1 ? text.length : idx;
 }
 
+/**
+ * Toggles a `> ` blockquote prefix on every touched line. Works on RAW
+ * lines, unlike the heading/list rewrites: a quote wraps whatever else the
+ * line carries (a heading keeps its `#`, a list its `-`), and quoting an
+ * already-quoted line deepens it by one level.
+ */
+function toggleQuote(text: string, from: number, to: number): Edit {
+  const start = text.lastIndexOf('\n', Math.max(0, from - 1)) + 1;
+  const quoting = !/^\s*> /.test(text.slice(start, lineEnd(text, from)));
+  const lines: MappedLine[] = [];
+  let pos = start;
+  for (;;) {
+    const nl = text.indexOf('\n', pos);
+    const end = nl === -1 ? text.length : nl;
+    const raw = text.slice(pos, end);
+    const indent = /^[ \t]*/.exec(raw)![0];
+    const rest = raw.slice(indent.length);
+    const hadQuote = rest.startsWith('> ');
+    const replacement =
+      indent + (quoting ? `> ${rest}` : hadQuote ? rest.slice(2) : rest);
+    lines.push({
+      start: pos,
+      end,
+      text: raw,
+      replacement,
+      indentLen: indent.length,
+      oldPrefixLen: indent.length + (hadQuote ? 2 : 0),
+      newPrefixLen: indent.length + (quoting ? 2 : hadQuote ? 0 : 0),
+    });
+    if (end >= to || end >= text.length) {
+      break;
+    }
+    pos = end + 1;
+  }
+  const insert = lines.map((l) => l.replacement).join('\n');
+  return {
+    from: lines[0].start,
+    to: lines[lines.length - 1].end,
+    insert,
+    selFrom: mapPos(lines, from),
+    selTo: mapPos(lines, to),
+  };
+}
+
 function wrapInline(text: string, from: number, to: number, marker: '**' | '*' | '~~'): Edit {
   const m = marker.length;
   if (from !== to) {
@@ -228,6 +275,47 @@ function insertImage(text: string, from: number, alt: string, url: string): Edit
   return { from: at, to: at, insert, selFrom: caret, selTo: caret };
 }
 
+/**
+ * Places an empty fenced code block after the caret's line; the caret sits
+ * on the blank line between the fences, ready for the code.
+ */
+function insertFence(text: string, from: number): Edit {
+  const end = lineEnd(text, from);
+  const at = Math.min(text.length, end + (end < text.length ? 1 : 0));
+  const lead = end < text.length ? '' : '\n';
+  const insert = `${lead}\`\`\`\n\n\`\`\`\n`;
+  const caret = at + lead.length + 4;
+  return { from: at, to: at, insert, selFrom: caret, selTo: caret };
+}
+
+/**
+ * Places a `---` divider as its own block. Unlike the other block inserts
+ * it needs a BLANK line before it when the caret's line is not empty --
+ * `---` directly under a paragraph is a Setext heading, not a rule.
+ */
+function insertDivider(text: string, from: number): Edit {
+  const lineStart = text.lastIndexOf('\n', Math.max(0, from - 1)) + 1;
+  const lineEndPos = lineEnd(text, from);
+  const line = text.slice(lineStart, lineEndPos);
+  if (/^\s*$/.test(line)) {
+    // Replace the empty line (and its newline) with the divider.
+    const caret = lineStart + 4;
+    return {
+      from: lineStart,
+      to: lineEndPos + (lineEndPos < text.length ? 1 : 0),
+      insert: `---\n`,
+      selFrom: caret,
+      selTo: caret,
+    };
+  }
+  const hasNl = lineEndPos < text.length;
+  const at = lineEndPos + (hasNl ? 1 : 0); // past the newline / at doc end
+  const lead = hasNl ? '' : '\n'; // a doc end needs its own line break
+  const insert = `${lead}\n---\n`; // blank separator + rule
+  const caret = at + lead.length + 5;
+  return { from: at, to: at, insert, selFrom: caret, selTo: caret };
+}
+
 /** Reduces a toolbar action to one change + selection, pure and testable. */
 export function applyAction(text: string, from: number, to: number, action: ToolbarAction): Edit {
   switch (action.kind) {
@@ -243,5 +331,11 @@ export function applyAction(text: string, from: number, to: number, action: Tool
       return insertTable(text, from, to, action.rows, action.cols);
     case 'image':
       return insertImage(text, from, action.alt, action.url);
+    case 'quote':
+      return toggleQuote(text, from, to);
+    case 'fence':
+      return insertFence(text, from);
+    case 'divider':
+      return insertDivider(text, from);
   }
 }

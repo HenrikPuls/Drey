@@ -44,6 +44,7 @@ import { makeTagCompletionSource, tagPills, tagStyleRefresh } from '../tags';
 import { makeWordCompletionSource } from '../word-completion';
 import { MarkdownToolbar } from '../markdown-toolbar';
 import { applyAction, ToolbarAction } from '../toolbar-commands';
+import { slashCommandSource } from '../slash-commands';
 import { TagVocabularyService } from '../../tags/tag-vocabulary.service';
 import { KeybindingService } from '../../keybindings';
 import { EditorExtensionRegistry, DropDecoderRegistry } from '../../plugin-host';
@@ -438,6 +439,11 @@ export class MarkdownSurface implements AfterViewInit, OnDestroy {
         ? markdownLanguage.data.of({
             autocomplete: makeWordCompletionSource(),
           })
+        : [],
+      // The `/` selection dialog: the toolbar's block commands as
+      // completions. Same Enter-submits gate as the word completion.
+      !(this.compact() && this.submitOnEnter())
+        ? markdownLanguage.data.of({ autocomplete: slashCommandSource })
         : [],
       // Paste a bare URL onto an empty caret -> `[url](url)` (lang-markdown's
       // own pasteURLAsLink only handles the wrap-a-selection case).

@@ -60,25 +60,75 @@ import { ToolbarAction } from './toolbar-commands';
           </svg>
           <span class="chev" aria-hidden="true">&#8250;</span>
         </button>
-        @if (menuOpen() === 'list') {
-          <div class="backdrop" (click)="menuOpen.set(null)"></div>
-          <nav class="menu" role="menu">
-            <button type="button" role="menuitem" (click)="emit({ kind: 'list', style: 'bullet' })">
-              Bullet list
-            </button>
-            <button
-              type="button"
-              role="menuitem"
-              (click)="emit({ kind: 'list', style: 'ordered' })"
-            >
-              Numbered list
-            </button>
-            <button type="button" role="menuitem" (click)="emit({ kind: 'list', style: 'task' })">
-              Task list
-            </button>
-          </nav>
-        }
+      @if (menuOpen() === 'list') {
+        <div class="backdrop" (click)="menuOpen.set(null)"></div>
+        <nav class="menu" role="menu">
+          <button type="button" role="menuitem" (click)="emit({ kind: 'list', style: 'bullet' })">
+            Bullet list
+          </button>
+          <button
+            type="button"
+            role="menuitem"
+            (click)="emit({ kind: 'list', style: 'ordered' })"
+          >
+            Numbered list
+          </button>
+          <button type="button" role="menuitem" (click)="emit({ kind: 'list', style: 'task' })">
+            Task list
+          </button>
+        </nav>
+      }
       </div>
+
+      <!-- Task list as its own button (the one list style with a workflow
+           behind it -- the Tasks panel picks these up). -->
+      <button
+        type="button"
+        class="tb-btn"
+        title="Task list"
+        aria-label="Task list"
+        (click)="emit({ kind: 'list', style: 'task' })"
+      >
+        <svg
+          width="14"
+          height="14"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="1.8"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+          aria-hidden="true"
+        >
+          <path d="M21 10.5V19a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h12.5" />
+          <path d="m9 11.5 3 3L22 4.5" />
+        </svg>
+      </button>
+
+      <!-- Blockquote -->
+      <button
+        type="button"
+        class="tb-btn"
+        title="Blockquote"
+        aria-label="Blockquote"
+        (click)="emit({ kind: 'quote' })"
+      >
+        <svg
+          width="14"
+          height="14"
+          viewBox="0 0 24 24"
+          fill="currentColor"
+          stroke="none"
+          aria-hidden="true"
+        >
+          <path
+            d="M4.6 4C3.2 4 2 5.2 2 6.6s1.2 2.6 2.6 2.6c2.3 0 2.8 1.6 2.8 3.4 0 3.1-1.9 5.2-4.8 5.9-.4.1-.6.5-.6.9v1.4c0 .5.5.9 1 .8 4.5-.9 7.6-4.5 7.6-9.6C10.6 7 8.3 4 4.6 4z"
+          />
+          <path
+            d="M16.6 4C15.2 4 14 5.2 14 6.6s1.2 2.6 2.6 2.6c2.3 0 2.8 1.6 2.8 3.4 0 3.1-1.9 5.2-4.8 5.9-.4.1-.6.5-.6.9v1.4c0 .5.5.9 1 .8 4.5-.9 7.6-4.5 7.6-9.6C22.6 7 20.3 4 16.6 4z"
+          />
+        </svg>
+      </button>
 
       <span class="divider" aria-hidden="true"></span>
 

@@ -38,7 +38,8 @@ extras stay, no Anthrazit tokens, no attachment/link services).
   choice persists as the default.
 - **Formatting toolbar** (`src/app/editor/markdown-toolbar.ts` +
   the pure `toolbar-commands.ts`, both ported): heading menu (Body/H1–H3),
-  list menu (bullet/numbered/task), bold/italic/strikethrough, link
+  list menu (bullet/numbered/task), dedicated **Task list** and
+  **Blockquote** buttons, bold/italic/strikethrough, link
   (selects the `https://` placeholder), an image button (native picker →
   the same per-note `attachments/` vault chain a pasted image takes) and
   a Word-style 5×5 table grid picker. All commands are toggles where it
@@ -47,6 +48,15 @@ extras stay, no Anthrazit tokens, no attachment/link services).
   full-page editor toggles it from the `⋯` menu ("Formatting toolbar",
   persisted in `localStorage['drey.editor']`, default off). Compact
   composers (entry drawer) stay bare.
+- **Slash dialog** (`src/app/editor/slash-commands.ts`): typing `/` at a
+  line start or after whitespace opens the completion popup with the
+  toolbar's block commands plus **Code block** (` ``` ` fence pair) and
+  **Divider** (`---`, blank-line separated so it never parses as a
+  Setext heading); picking one removes the slash and runs the same pure
+  reducer the toolbar uses — one code path. Silent after a non-space
+  character (URLs, paths, `and/or`, dates) and in code/frontmatter/links
+  (the shared markdown-context gate); not on the Enter-submits
+  composers.
 - **Engine polish** (back-ported): a bigger, hover-revealed fold chevron
   and a dark-themed fold placeholder; the **link-target fix** —
   `[url](url)` links (what paste-link inserts) used to render empty

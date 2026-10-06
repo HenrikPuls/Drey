@@ -612,10 +612,19 @@ src/                Angular renderer (standalone components, esbuild via Angular
                          @codemirror/language-data), source mode forced, none of the
                          Markdown chrome (ADR-0036). Compact composers pass nothing.
       markdown-toolbar.ts  The formatting toolbar (milestone 42, ported from the
-                         Lariscus editor): headings/list menus, bold/italic/strike,
-                         link, image file picker, 5x5 table grid -- pure emitter of
-                         ToolbarAction; toolbar-commands.ts is the pure reducer
-                         layer (toggles, block-wise, no CodeMirror types).
+                         Lariscus editor): headings/list menus, dedicated
+                         task-list + blockquote buttons, bold/italic/strike,
+                         link, image file picker, 5x5 table grid -- pure
+                         emitter of ToolbarAction; toolbar-commands.ts is the
+                         pure reducer layer (toggles, block-wise, no CodeMirror
+                         types).
+      slash-commands.ts  The `/` selection dialog (milestone 42): the toolbar's
+                         block commands + code block + divider as a
+                         CodeMirror completion source on the Markdown
+                         language; applying one cuts the typed slash and runs
+                         the same toolbar reducer. Gated by markdown-context
+                         and a whitespace-before-slash rule; not on the
+                         Enter-submits composers.
       tag-complete.ts   Pure #tag autocomplete completion source (vocabulary from
                          the live TagService signal).
       tag-pill.ts       ViewPlugin rendering inline #tags as pills in both modes;

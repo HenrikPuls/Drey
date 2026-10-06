@@ -307,12 +307,37 @@ describe('Editor', () => {
       expect(bar).toBeTruthy();
       expect(JSON.parse(localStorage.getItem('drey.editor')!).toolbar).toBe(true);
 
+      // The two dedicated buttons exist alongside the list menu…
+      expect(bar?.querySelector('button[aria-label="Task list"]')).toBeTruthy();
+      const quote = bar?.querySelector('button[aria-label="Blockquote"]') as HTMLButtonElement;
+
       // Bold with the caret at 0 drops an empty marker pair.
       const bold = bar?.querySelector('button[aria-label="Bold"]') as HTMLButtonElement;
       bold.click();
       fixture.detectChanges();
       await fixture.whenStable();
       expect(cmText()).toContain('****');
+
+      // Blockquote prefixes the caret's line.
+      quote.click();
+      fixture.detectChanges();
+      await fixture.whenStable();
+      expect(cmText()).toContain('> ');
+    });
+
+    it('renders the toolbar from the persisted pref at startup (vault docKey)', async () => {
+      // The real app persists the pref and reopens notes as vault docKeys
+      // (`v1::daily/x.md`) after a restart -- the toolbar must survive both.
+      localStorage.setItem('drey.editor', JSON.stringify({ toolbar: true }));
+      TestBed.resetTestingModule();
+      await TestBed.configureTestingModule({ imports: [Editor] }).compileComponents();
+      const freshEditor = TestBed.inject(EditorService);
+      await freshEditor.openFile('daily/plan.md', 'v1');
+      const fresh = TestBed.createComponent(Editor);
+      fresh.componentRef.setInput('paneId', 'p1');
+      await fresh.whenStable();
+      fresh.detectChanges();
+      expect(fresh.nativeElement.querySelector('app-markdown-toolbar')).toBeTruthy();
     });
   });
 

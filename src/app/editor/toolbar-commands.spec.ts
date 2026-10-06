@@ -127,6 +127,52 @@ describe('insertImage', () => {
   });
 });
 
+describe('toggleQuote', () => {
+  it('adds and removes the > prefix', () => {
+    expect(run('quoted text', 4, 4, { kind: 'quote' })[0]).toBe('> quoted text');
+    expect(run('> quoted text', 4, 4, { kind: 'quote' })[0]).toBe('quoted text');
+  });
+
+  it('wraps a list line without losing its marker', () => {
+    expect(run('- item', 2, 2, { kind: 'quote' })[0]).toBe('> - item');
+    expect(run('> - item', 2, 2, { kind: 'quote' })[0]).toBe('- item');
+  });
+
+  it('applies to every touched line; unquoting leaves a non-quoted line alone', () => {
+    expect(run('a\nb', 0, 3, { kind: 'quote' })[0]).toBe('> a\n> b');
+    expect(run('> a\nb', 0, 4, { kind: 'quote' })[0]).toBe('a\nb');
+  });
+
+  it('keeps indentation and deepens a quote on a middle line', () => {
+    expect(run('  deep', 3, 3, { kind: 'quote' })[0]).toBe('  > deep');
+    expect(run('a\n> b', 0, 4, { kind: 'quote' })[0]).toBe('> a\n> > b');
+  });
+});
+
+describe('insertFence', () => {
+  it('places an empty fence block after the caret line with the caret inside', () => {
+    const [text, selFrom, selTo] = run('intro\nnext', 2, 2, { kind: 'fence' });
+    expect(text).toBe('intro\n```\n\n```\nnext');
+    expect(selFrom).toBe('intro\n```'.length + 1);
+    expect(selTo).toBe(selFrom);
+  });
+
+  it('appends after a last line without trailing newline', () => {
+    const [text] = run('end', 3, 3, { kind: 'fence' });
+    expect(text).toBe('end\n```\n\n```\n');
+  });
+});
+
+describe('insertDivider', () => {
+  it('separates from a paragraph with a blank line (a bare --- would be a setext heading)', () => {
+    expect(run('para\nnext', 2, 2, { kind: 'divider' })[0]).toBe('para\n\n---\nnext');
+  });
+
+  it('replaces an empty line in place', () => {
+    expect(run('a\n\nb', 2, 2, { kind: 'divider' })[0]).toBe('a\n---\nb');
+  });
+});
+
 describe('imageAltFromFileName', () => {
   it('drops the extension', () => {
     expect(imageAltFromFileName('screen shot.png')).toBe('screen shot');
