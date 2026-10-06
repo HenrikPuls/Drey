@@ -194,14 +194,16 @@ export const editorStructure = EditorView.theme({
   // The fold chevron column. The `.cm-gutterElement` box gets the same
   // vertical metrics as the line-number element (`gutterTheme`) so the
   // marker sits on the heading's first visual row and never reintroduces
-  // the milestone-19a gutter drift.
+  // the milestone-19a gutter drift. 18px + 15px glyph: the default marker
+  // is nearly invisible at inherited size.
   '.cm-foldGutter .cm-gutterElement': {
     display: 'flex',
     alignItems: 'flex-start',
     justifyContent: 'center',
-    width: '16px',
+    width: '18px',
     padding: '0',
     lineHeight: 'calc(14.5px * 1.72 * var(--drey-editor-scale, 1))',
+    fontSize: '15px',
   },
   // Obsidian-ish reveal: the `⌄` marker (CM's default `foldGutter` renders a
   // `<span>` only on foldable lines) is invisible until the gutter is
@@ -212,11 +214,25 @@ export const editorStructure = EditorView.theme({
     cursor: 'pointer',
     opacity: '0',
     transition: 'opacity 80ms ease',
+    fontSize: '15px',
+    lineHeight: 1,
   },
   '.cm-gutters:hover .cm-foldGutter span': { opacity: '1' },
   '.cm-foldGutter span[title="Unfold line"]': {
     opacity: '1',
     color: 'var(--accent)',
+  },
+  // The folded-content pill: CM's default is a light `#eee` chip, which
+  // glares in the dark theme. Keep it a quiet "…" that still clicks to
+  // unfold (the handler sits on the element, not the styling).
+  '.cm-foldPlaceholder': {
+    backgroundColor: 'transparent',
+    border: 'none',
+    color: 'var(--text-3)',
+    margin: '0 0 0 6px',
+    padding: '0 4px',
+    fontFamily: 'var(--font-mono)',
+    fontSize: '12px',
   },
 });
 

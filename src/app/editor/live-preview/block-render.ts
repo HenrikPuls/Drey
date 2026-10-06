@@ -424,10 +424,17 @@ interface BlockState {
  * `ImagePreviewWidget` below an image's markup), which must stay
  * non-atomic so the caret can sit in the raw source.
  */
-function buildBlockState(state: EditorState, config: LivePreviewConfig): BlockState {
+function buildBlockState(
+  state: EditorState,
+  config: LivePreviewConfig,
+  opts: { revealSelection?: boolean } = {},
+): BlockState {
   const doc = state.doc;
+  // Read-only rendering (view mode): embeds stay widgets forever, no
+  // reveal layer regardless of where the selection sits.
+  const selectionReveal = opts.revealSelection !== false;
   const touches = (from: number, to: number): boolean =>
-    state.selection.ranges.some((r) => r.from <= to && r.to >= from);
+    selectionReveal && state.selection.ranges.some((r) => r.from <= to && r.to >= from);
 
   const atoms: Range<Decoration>[] = [];
   const reveal: Range<Decoration>[] = [];
@@ -463,8 +470,12 @@ function buildBlockState(state: EditorState, config: LivePreviewConfig): BlockSt
  * The widget layer: a `Decoration.replace` per un-revealed table / diagram /
  * image / HTML region. Also the source of `EditorView.atomicRanges`.
  */
-export function blockDecorations(state: EditorState, config: LivePreviewConfig): DecorationSet {
-  return buildBlockState(state, config).atoms;
+export function blockDecorations(
+  state: EditorState,
+  config: LivePreviewConfig,
+  opts?: { revealSelection?: boolean },
+): DecorationSet {
+  return buildBlockState(state, config, opts).atoms;
 }
 
 /**
@@ -474,8 +485,12 @@ export function blockDecorations(state: EditorState, config: LivePreviewConfig):
  * (`ImagePreviewWidget`) below the markup. Separate from `blockDecorations`
  * because these decorations must NOT feed `EditorView.atomicRanges`.
  */
-export function revealDecorations(state: EditorState, config: LivePreviewConfig): DecorationSet {
-  return buildBlockState(state, config).reveal;
+export function revealDecorations(
+  state: EditorState,
+  config: LivePreviewConfig,
+  opts?: { revealSelection?: boolean },
+): DecorationSet {
+  return buildBlockState(state, config, opts).reveal;
 }
 
 /**
@@ -507,11 +522,14 @@ function parseImage(
   return { alt, url: rawUrl, width, height, altFrom, altTo };
 }
 
-export function livePreviewBlocks(config: LivePreviewConfig): Extension {
+export function livePreviewBlocks(
+  config: LivePreviewConfig,
+  opts: { revealSelection?: boolean } = {},
+): Extension {
   const field = StateField.define<BlockState>({
-    create: (state) => buildBlockState(state, config),
+    create: (state) => buildBlockState(state, config, opts),
     update: (value, tr) =>
-      tr.docChanged || tr.selection ? buildBlockState(tr.state, config) : value,
+      tr.docChanged || tr.selection ? buildBlockState(tr.state, config, opts) : value,
     provide: (f) => [
       EditorView.decorations.from(f, (v) => v.atoms),
       EditorView.decorations.from(f, (v) => v.reveal),
@@ -529,9 +547,13 @@ export function livePreviewBlocks(config: LivePreviewConfig): Extension {
   // content (toggling a <details>, selecting table text) -- its
   // `ignoreEvent` keeps CodeMirror out of those. Exception: a mermaid
   // *error* box is clickable anywhere -- the whole point is to get back
-  // into the fence.
+  // into the fence. Dormant in view mode (`revealSelection: false`): the
+  // click would reveal nothing anyway.
   const clickToReveal = EditorView.domEventHandlers({
     mousedown(event, view) {
+      if (opts.revealSelection === false) {
+        return false;
+      }
       const target = event.target as HTMLElement | null;
       if (
         !target?.closest('.lp-edit') &&
@@ -567,6 +589,9 @@ export function livePreviewBlocks(config: LivePreviewConfig): Extension {
       return target?.closest('.lp-resize') != null;
     },
     pointerdown(event, view) {
+      if (opts.revealSelection === false) {
+        return false; // view mode is read-only -- the grip must not edit
+      }
       const target = event.target as HTMLElement | null;
       const grip = target?.closest('.lp-resize') as HTMLElement | null;
       if (!grip || event.button !== 0) {

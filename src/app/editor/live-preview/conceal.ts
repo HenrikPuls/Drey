@@ -60,13 +60,17 @@ function codeLineFirstWithLang(lang: string): Decoration {
 export function concealDecorations(
   state: EditorState,
   ranges: readonly { from: number; to: number }[],
+  opts: { revealSelection?: boolean } = {},
 ): DecorationSet {
   const deco: Range<Decoration>[] = [];
   const doc = state.doc;
   const fmEnd = frontmatterEnd(state.sliceDoc());
 
+  // Read-only rendering (view mode) never reveals: the selection is
+  // ignored entirely, so no line can "activate" and flip to raw Markdown.
+  const reveal = opts.revealSelection !== false;
   const touches = (from: number, to: number): boolean =>
-    state.selection.ranges.some((r) => r.from <= to && r.to >= from);
+    reveal && state.selection.ranges.some((r) => r.from <= to && r.to >= from);
   const touchesLine = (pos: number): boolean => {
     const line = doc.lineAt(pos);
     return touches(line.from, line.to);
@@ -167,9 +171,18 @@ export function concealDecorations(
           case 'LinkTitle': {
             // Hide the target, keep the label. Only inside `Link` -- an
             // autolink's URL *is* the label, and an Image is replaced whole
-            // by the block-render layer.
+            // by the block-render layer. A URL that IS the label (e.g.
+            // `[https://example.com](https://example.com)`, what the
+            // paste-link flow inserts) parses as a `URL` with parent
+            // `Link` too, so only the target part (behind the `](`) may be
+            // hidden -- otherwise the whole link renders empty.
             const parent = node.node.parent;
-            if (parent?.name === 'Link' && !touches(parent.from, parent.to) && !inWiki(node.from)) {
+            if (
+              parent?.name === 'Link' &&
+              !touches(parent.from, parent.to) &&
+              !inWiki(node.from) &&
+              isLinkTarget(node.node, parent)
+            ) {
               hide(node.from, node.to);
             }
             return;
@@ -307,6 +320,16 @@ export function concealDecorations(
   return Decoration.set(deco, true);
 }
 
+/**
+ * True when `node` is part of the Link's TARGET (the `(url "title")` behind
+ * the label), not its label: the label ends at the second `]` LinkMark.
+ */
+function isLinkTarget(node: SyntaxNode, link: SyntaxNode): boolean {
+  const marks = link.getChildren('LinkMark');
+  const labelEnd = marks.length >= 2 ? marks[1].to : link.from;
+  return node.from >= labelEnd;
+}
+
 /** Flip `[ ]` ⇄ `[x]` at `pos` (the marker start a checkbox widget replaced). */
 function toggleTask(view: EditorView, pos: number): boolean {
   const match = /^\[([ xX])\]/.exec(view.state.sliceDoc(pos, pos + 3));
@@ -325,36 +348,42 @@ function toggleTask(view: EditorView, pos: number): boolean {
   return true;
 }
 
-export const livePreviewConceal = ViewPlugin.fromClass(
-  class {
-    decorations: DecorationSet;
+export const livePreviewConceal = (opts: { revealSelection?: boolean } = {}) =>
+  ViewPlugin.fromClass(
+    class {
+      decorations: DecorationSet;
 
-    constructor(view: EditorView) {
-      this.decorations = concealDecorations(view.state, view.visibleRanges);
-    }
-
-    update(update: ViewUpdate): void {
-      // The tree-identity check catches the async parser finishing after the
-      // doc/selection/viewport last changed -- without it, constructs beyond
-      // the initial parse budget would stay raw until the next interaction.
-      if (
-        update.docChanged ||
-        update.selectionSet ||
-        update.viewportChanged ||
-        syntaxTree(update.state) !== syntaxTree(update.startState)
-      ) {
-        this.decorations = concealDecorations(update.state, update.view.visibleRanges);
+      constructor(view: EditorView) {
+        this.decorations = concealDecorations(view.state, view.visibleRanges, opts);
       }
-    }
-  },
-  {
-    decorations: (v) => v.decorations,
-    eventHandlers: {
-      mousedown(event, view) {
-        const target = event.target as HTMLElement | null;
-        const wrap = target instanceof HTMLInputElement ? target.closest('.lp-task') : null;
-        return wrap ? toggleTask(view, view.posAtDOM(wrap)) : false;
+
+      update(update: ViewUpdate): void {
+        // The tree-identity check catches the async parser finishing after the
+        // doc/selection/viewport last changed -- without it, constructs beyond
+        // the initial parse budget would stay raw until the next interaction.
+        if (
+          update.docChanged ||
+          update.selectionSet ||
+          update.viewportChanged ||
+          syntaxTree(update.state) !== syntaxTree(update.startState)
+        ) {
+          this.decorations = concealDecorations(update.state, update.view.visibleRanges, opts);
+        }
+      }
+    },
+    {
+      decorations: (v) => v.decorations,
+      eventHandlers: {
+        mousedown(event, view) {
+          // Toggling a task checkbox edits the document -- never in a
+          // read-only state (the dispatch itself would bypass `readOnly`).
+          if (view.state.readOnly) {
+            return false;
+          }
+          const target = event.target as HTMLElement | null;
+          const wrap = target instanceof HTMLInputElement ? target.closest('.lp-task') : null;
+          return wrap ? toggleTask(view, view.posAtDOM(wrap)) : false;
+        },
       },
     },
-  },
-);
+  );

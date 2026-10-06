@@ -78,6 +78,27 @@ describe('concealDecorations', () => {
     expect(hidden.some((e) => e.from === 12 && e.to === 26)).toBe(true);
   });
 
+  it('keeps a URL that IS the link label visible (only the target hides)', () => {
+    // What the paste-link flow inserts: `[url](url)`. The label parses as a
+    // `URL` node with parent `Link` too -- without the target-only guard
+    // the whole link rendered empty.
+    const doc = 'see [https://x.test](https://x.test) end';
+    const hidden = conceals(build(doc, 0)).map((e) => [e.from, e.to]);
+    // The label chars 5..19 stay visible; only the target (21..35) hides.
+    expect(hidden.some(([f, t]) => f < 19 && t > 5)).toBe(false);
+    expect(hidden).toContainEqual([21, 35]);
+  });
+
+  it('never reveals while the selection is ignored (view mode)', () => {
+    // `revealSelection: false` -- the read-only view mode: the cursor sits
+    // on the heading line yet the marks stay concealed.
+    const s = state('# Title\n\ntext', 3);
+    const all = entries(
+      concealDecorations(s, [{ from: 0, to: s.doc.length }], { revealSelection: false }),
+    );
+    expect(conceals(all).some((e) => e.from === 0)).toBe(true);
+  });
+
   it('replaces task markers with checkbox widgets carrying the checked state', () => {
     const all = build('- [ ] todo\n- [x] done\n\nend');
     const boxes = widgets(all)

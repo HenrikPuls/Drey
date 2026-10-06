@@ -51,6 +51,16 @@ describe('blockDecorations', () => {
     expect(widgets(blockDecorations(state(doc, inTable), passThrough))).toHaveLength(0);
   });
 
+  it('view mode keeps the widget even while the selection touches it', () => {
+    // `revealSelection: false` -- the read-only view mode: the embed stays
+    // a rendered atom and no reveal layer is built, wherever the caret sits.
+    const doc = `intro\n\n${TABLE}\n\nend`;
+    const s = state(doc, doc.indexOf('| 1 |') + 2);
+    const opts = { revealSelection: false } as const;
+    expect(widgets(blockDecorations(s, passThrough, opts))).toHaveLength(1);
+    expect(widgets(revealDecorations(s, passThrough, opts))).toHaveLength(0);
+  });
+
   it('replaces an image with a widget carrying the resolved src and alt text', () => {
     const all = widgets(blockDecorations(state('![a boat](img/boat.png)\n\nend', 28), passThrough));
     expect(all).toHaveLength(1);
