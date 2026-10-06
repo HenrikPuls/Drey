@@ -18,6 +18,19 @@
          completion dropdown from the tag vocabulary, the exact component
          the Search/Tasks panels get through `api.ui.createTagField`. -->
     <div #tagFieldHost class="chip-field"></div>
+    <!-- Show/hide the formatting toolbar in the body field below (own
+         persisted pref, hidden by default). -->
+    <button
+      type="button"
+      class="tb-toggle"
+      [class.on]="prefs.entryToolbar()"
+      [attr.aria-pressed]="prefs.entryToolbar()"
+      title="Formatting toolbar"
+      aria-label="Formatting toolbar"
+      (click)="prefs.toggleEntryToolbar()"
+    >
+      <app-icon name="type" [size]="13" />
+    </button>
   </div>
 
   <!-- The shared Markdown surface in compact mode, with the inline
@@ -26,6 +39,7 @@
     class="md-editor"
     [compact]="true"
     [submitOnEnter]="false"
+    [toolbar]="prefs.entryToolbar()"
     [spellcheck]="spellcheckSource"
     [imageCapture]="true"
     [onLinkActivate]="activateLink"

@@ -46,8 +46,11 @@ extras stay, no Anthrazit tokens, no attachment/link services).
   makes sense and act on every line the selection touches. Rendered by
   the `MarkdownSurface` above the editor via its `toolbar` input; the
   full-page editor toggles it from the `⋯` menu ("Formatting toolbar",
-  persisted in `localStorage['drey.editor']`, default off). Compact
-  composers (entry drawer) stay bare.
+  persisted in `localStorage['drey.editor']`, default off). The **entry
+  drawer** shows the same toolbar in its body field, toggled by a `T`
+  symbol at the tags row's right edge (own persisted value
+  `entryToolbar`, also default off; the band renders as the input box's
+  flush top strip). Compact one-line composers stay bare.
 - **Slash dialog** (`src/app/editor/slash-commands.ts`): typing `/` at a
   line start or after whitespace opens the completion popup with the
   toolbar's block commands plus **Code block** (` ``` ` fence pair) and
@@ -56,7 +59,8 @@ extras stay, no Anthrazit tokens, no attachment/link services).
   reducer the toolbar uses — one code path. Silent after a non-space
   character (URLs, paths, `and/or`, dates) and in code/frontmatter/links
   (the shared markdown-context gate); not on the Enter-submits
-  composers.
+  composers — the entry drawer's body (multi-line, `submitOnEnter`
+  off) has it.
 - **Engine polish** (back-ported): a bigger, hover-revealed fold chevron
   and a dark-themed fold placeholder; the **link-target fix** —
   `[url](url)` links (what paste-link inserts) used to render empty

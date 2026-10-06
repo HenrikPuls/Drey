@@ -163,9 +163,9 @@ export class MarkdownSurface implements AfterViewInit, OnDestroy {
   /**
    * Renders the formatting toolbar above the editor (headings, lists,
    * bold/italic/strikethrough, link, image picker, table grid -- the
-   * ported Lariscus toolbar). Never in view mode and never on compact
-   * surfaces (the entry drawer's composer is deliberately bare); the
-   * full-page editor toggles it from its `⋯` menu.
+   * ported Lariscus toolbar). Never in view mode. The full-page editor
+   * toggles it from its `⋯` menu; the entry drawer from the symbol at
+   * its tags row's right edge (both persisted, each with its own value).
    */
   readonly toolbar = input(false);
   /**

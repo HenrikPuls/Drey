@@ -15,8 +15,10 @@ import { TagField } from '../tags/tag-field';
 import { TagVocabularyService } from '../tags/tag-vocabulary.service';
 import { EntryDraftService } from './entry-draft.service';
 import { EditorService } from '../services/editor.service';
+import { EditorPrefsService } from '../editor/editor-prefs.service';
 import { SpellcheckService } from '../services/spellcheck.service';
 import { AutotagButton } from './autotag-button';
+import { Icon } from '../icons/icon';
 
 /**
  * The "Add entry" panel body: an optional TOPIC, a row of tag chips, then
@@ -32,13 +34,15 @@ import { AutotagButton } from './autotag-button';
 @Component({
   selector: 'app-entry-drawer',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [MarkdownSurface, AutotagButton],
+  imports: [MarkdownSurface, AutotagButton, Icon],
   templateUrl: './entry-drawer.html',
   styleUrl: './entry-drawer.css',
 })
 export class EntryDrawer implements AfterViewInit, OnDestroy {
   protected readonly drawer = inject(EntryDraftService);
   protected readonly editor = inject(EditorService);
+  /** The drawer's formatting-toolbar toggle (own persisted value). */
+  protected readonly prefs = inject(EditorPrefsService);
   private readonly spellcheck = inject(SpellcheckService);
   private readonly wikiLinks = inject(WikilinkService);
   private readonly tagVocab = inject(TagVocabularyService);

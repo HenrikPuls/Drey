@@ -77,4 +77,17 @@ export class EditorPrefsService {
     this.toolbar.update((v) => !v);
     writePrefs({ toolbar: this.toolbar() });
   }
+
+  /**
+   * Whether the "Add entry" drawer shows the formatting toolbar in its
+   * body field. Its own value (independent of the editor's `toolbar`):
+   * the drawer is a capture surface, so its toolbar starts hidden and is
+   * toggled from the symbol at the tags row's right edge.
+   */
+  readonly entryToolbar = signal(readPrefs()['entryToolbar'] === true);
+
+  toggleEntryToolbar(): void {
+    this.entryToolbar.update((v) => !v);
+    writePrefs({ entryToolbar: this.entryToolbar() });
+  }
 }

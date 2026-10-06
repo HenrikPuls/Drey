@@ -1,5 +1,5 @@
 import { ensureSyntaxTree, syntaxTree } from '@codemirror/language';
-import { EditorState, Extension, Range, StateField } from '@codemirror/state';
+import { EditorState, Extension, Range, StateField, Transaction } from '@codemirror/state';
 import { Decoration, DecorationSet, EditorView } from '@codemirror/view';
 import type { SyntaxNode } from '@lezer/common';
 import MarkdownIt from 'markdown-it';
@@ -102,6 +102,29 @@ interface Embed {
 }
 
 /**
+ * The table's REAL extent inside its `Table` node: the delimiter row plus
+ * every body row that actually carries a pipe. lezer-markdown keeps
+ * absorbing: every following paragraph line becomes a `TableRow` (a
+ * pipe-less line arrives as a single-cell row with no delimiter) and the
+ * node ends at the PARAGRAPH -- so a paragraph glued to the table (no blank
+ * line, e.g. a Backspace ate it) would be swallowed by the widget: its
+ * lines render as table rows and the reveal/atomic ranges stretch over
+ * them. This walk is the shared clamp for the widget range, the reveal
+ * container and the table-Enter handler. `null` for a degenerate node
+ * without a delimiter row.
+ */
+export function realTableExtent(table: SyntaxNode): SyntaxNode | null {
+  let extent: SyntaxNode | null = table.getChild('TableDelimiter');
+  for (const row of table.getChildren('TableRow')) {
+    if (row.getChild('TableDelimiter') === null) {
+      break;
+    }
+    extent = row;
+  }
+  return extent;
+}
+
+/**
  * Walks the tree once and collects every rendered embed (tables, `mermaid`
  * fences, images, merged HTML regions), past the frontmatter. Whether an
  * embed is currently revealed is decided later, in `buildBlockState`.
@@ -126,23 +149,33 @@ function scanEmbeds(state: EditorState, config: LivePreviewConfig): Embed[] {
     enter: (node) => {
       if (node.name === 'Table') {
         if (node.from >= fmEnd) {
-          // Block decorations must cover whole lines.
-          const from = doc.lineAt(node.from).from;
-          const to = doc.lineAt(node.to).to;
-          const source = state.sliceDoc(node.from, node.to);
-          embeds.push({
-            kind: 'table',
-            from: node.from,
-            to: node.to,
-            lineFrom: from,
-            lineTo: to,
-            atom: () =>
-              Decoration.replace({
-                widget: new TableWidget(tableMd.render(source), source),
-                block: true,
-              }).range(from, to),
-            preview: null,
-          });
+          // Widget, reveal container, atomic range and touch test all span
+          // only the REAL rows (`realTableExtent`): lezer-markdown absorbs
+          // following paragraph lines into the Table node, and a caret on
+          // such a glued line must keep the table rendered, not flip it
+          // into the raw source. Row growth is the table-Enter handler's
+          // job (`table-enter.ts`), so the caret never has to sit on a
+          // glued line to extend the table.
+          const extent = realTableExtent(node.node);
+          if (extent) {
+            // Block decorations must cover whole lines.
+            const from = doc.lineAt(node.from).from;
+            const rowTo = doc.lineAt(extent.to).to;
+            const source = state.sliceDoc(from, rowTo);
+            embeds.push({
+              kind: 'table',
+              from: node.from,
+              to: rowTo,
+              lineFrom: from,
+              lineTo: rowTo,
+              atom: () =>
+                Decoration.replace({
+                  widget: new TableWidget(tableMd.render(source), source),
+                  block: true,
+                }).range(from, rowTo),
+              preview: null,
+            });
+          }
         }
         return false;
       }
@@ -417,24 +450,55 @@ interface BlockState {
 }
 
 /**
+ * The one-step deletion grace: a Backspace can drop the caret out of the
+ * table's clamped extent -- eating a row's content empties the line, the
+ * paragraph splits there and the extent retracts past the caret -- which
+ * would snap the widget shut mid-delete. So a deletion transaction keeps
+ * the table near the caret revealed. The grace is recomputed per
+ * transaction and vanishes with the first non-deletion change (typing,
+ * motion, click), handing the decision back to the normal touch test.
+ */
+export function deletionSticky(state: EditorState): { from: number; to: number } | null {
+  const head = state.selection.main.head;
+  const tree = ensureSyntaxTree(state, state.doc.length, PARSE_BUDGET_MS) ?? syntaxTree(state);
+  // The caret itself, then one back: an emptied row line is no longer part
+  // of the paragraph, so the table only reaches the position before it.
+  for (const pos of [head, Math.max(0, head - 1)]) {
+    let node: SyntaxNode | null = tree.resolveInner(pos, -1);
+    while (node !== null && node.name !== 'Table') {
+      node = node.parent;
+    }
+    const extent = node === null ? null : realTableExtent(node);
+    if (node !== null && extent !== null) {
+      return { from: node.from, to: extent.to };
+    }
+  }
+  return null;
+}
+
+/**
  * One tree walk (`scanEmbeds`), partitioned by whether each embed's node is
  * currently touched by the selection: not touched -> the `atoms` layer
  * (rendered widget, also fed to `EditorView.atomicRanges`); touched -> the
  * `reveal` layer (the `.lp-reveal*` line container, plus an
  * `ImagePreviewWidget` below an image's markup), which must stay
- * non-atomic so the caret can sit in the raw source.
+ * non-atomic so the caret can sit in the raw source. `sticky` extends the
+ * touch test across a deletion (`deletionSticky`).
  */
 function buildBlockState(
   state: EditorState,
   config: LivePreviewConfig,
   opts: { revealSelection?: boolean } = {},
+  sticky: { from: number; to: number } | null = null,
 ): BlockState {
   const doc = state.doc;
   // Read-only rendering (view mode): embeds stay widgets forever, no
   // reveal layer regardless of where the selection sits.
   const selectionReveal = opts.revealSelection !== false;
   const touches = (from: number, to: number): boolean =>
-    selectionReveal && state.selection.ranges.some((r) => r.from <= to && r.to >= from);
+    selectionReveal &&
+    (state.selection.ranges.some((r) => r.from <= to && r.to >= from) ||
+      (sticky !== null && sticky.from <= to && sticky.to >= from));
 
   const atoms: Range<Decoration>[] = [];
   const reveal: Range<Decoration>[] = [];
@@ -528,8 +592,15 @@ export function livePreviewBlocks(
 ): Extension {
   const field = StateField.define<BlockState>({
     create: (state) => buildBlockState(state, config, opts),
-    update: (value, tr) =>
-      tr.docChanged || tr.selection ? buildBlockState(tr.state, config, opts) : value,
+    update: (value, tr) => {
+      if (!(tr.docChanged || tr.selection)) {
+        return value;
+      }
+      const event = tr.annotation(Transaction.userEvent);
+      const sticky =
+        event !== undefined && event.startsWith('delete') ? deletionSticky(tr.state) : null;
+      return buildBlockState(tr.state, config, opts, sticky);
+    },
     provide: (f) => [
       EditorView.decorations.from(f, (v) => v.atoms),
       EditorView.decorations.from(f, (v) => v.reveal),

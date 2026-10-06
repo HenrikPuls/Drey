@@ -1,7 +1,12 @@
 import { markdown, markdownLanguage } from '@codemirror/lang-markdown';
-import { EditorState } from '@codemirror/state';
-import { Decoration, DecorationSet } from '@codemirror/view';
-import { blockDecorations, LivePreviewConfig, revealDecorations } from './block-render';
+import { EditorState, Extension, StateField } from '@codemirror/state';
+import { Decoration, DecorationSet, EditorView } from '@codemirror/view';
+import {
+  blockDecorations,
+  LivePreviewConfig,
+  livePreviewBlocks,
+  revealDecorations,
+} from './block-render';
 import {
   HtmlBlockWidget,
   ImagePreviewWidget,
@@ -49,6 +54,35 @@ describe('blockDecorations', () => {
     const doc = `intro\n\n${TABLE}\n\nend`;
     const inTable = doc.indexOf('| 1 |') + 2;
     expect(widgets(blockDecorations(state(doc, inTable), passThrough))).toHaveLength(0);
+  });
+
+  it('ends the widget at the last pipe row when a paragraph follows without a blank line', () => {
+    // lezer-markdown absorbs every following paragraph line into the Table
+    // node -- without the clamp a Backspace on the blank line would turn
+    // the paragraph into table rows inside the widget.
+    const doc = 'intro\n\n| a | b |\n| - | - |\n| 1 | 2 |\ncx\nWas bleibt?\n\nend';
+    const all = widgets(blockDecorations(state(doc, 0), passThrough));
+    expect(all).toHaveLength(1);
+    const widget = all[0].deco.spec['widget'] as TableWidget;
+    expect(widget.html).toContain('<td>1</td>');
+    expect(widget.html).not.toContain('cx');
+    expect(doc.slice(all[0].from, all[0].to)).toBe('| a | b |\n| - | - |\n| 1 | 2 |');
+    // A caret on the line glued to the table (no blank line) keeps the
+    // widget rendered -- only the table's own rows reveal the raw source.
+    const atGlue = doc.indexOf('cx');
+    expect(widgets(blockDecorations(state(doc, atGlue), passThrough))).toHaveLength(1);
+    expect(widgets(revealDecorations(state(doc, atGlue), passThrough))).toHaveLength(0);
+    const apart = 'intro\n\n| a | b |\n| - | - |\n| 1 | 2 |\n\ncx';
+    const atApart = apart.indexOf('cx');
+    expect(widgets(blockDecorations(state(apart, atApart), passThrough))).toHaveLength(1);
+    expect(widgets(revealDecorations(state(apart, atApart), passThrough))).toHaveLength(0);
+  });
+
+  it('still renders a header-only table after the clamp', () => {
+    const doc = 'intro\n\n| a | b |\n| - | - |\n\ntext';
+    const all = widgets(blockDecorations(state(doc, 0), passThrough));
+    expect(all).toHaveLength(1);
+    expect((all[0].deco.spec['widget'] as TableWidget).source).toBe('| a | b |\n| - | - |');
   });
 
   it('view mode keeps the widget even while the selection touches it', () => {
@@ -348,5 +382,80 @@ describe('wikilink media embeds ![[...]] (milestone 31)', () => {
   it('leaves note links, anchors and code spans alone', () => {
     const notes = '[[Some note]]\n\n![[Note#Heading]]\n\n`![[pic.png]]`\n\nend';
     expect(widgets(blockDecorations(state(notes, 0), passThrough))).toHaveLength(0);
+  });
+});
+
+describe('deletion grace (Backspace holds the table open)', () => {
+  const DOC = 'intro\n\n| a | b |\n| - | - |\n| 1 | 2 |\n\nend';
+  const ROW = '| 1 | 2 |';
+
+  // The grace lives in the StateField's update (it reads the transaction's
+  // userEvent), so the assertions must read the FIELD, not recompute the
+  // pure decoration functions.
+  const extensions = livePreviewBlocks(passThrough) as unknown as [
+    StateField<{ atoms: DecorationSet; reveal: DecorationSet }>,
+    ...Extension[],
+  ];
+  const field = extensions[0];
+  const atomWidgets = () => widgets(view!.state.field(field).atoms);
+  const revealDecorated = () => widgets(view!.state.field(field).reveal);
+
+  let view: EditorView | undefined;
+  afterEach(() => {
+    view?.destroy();
+    view = undefined;
+  });
+
+  function makeView(anchor: number): void {
+    view = new EditorView({
+      parent: document.body,
+      state: EditorState.create({
+        doc: DOC,
+        selection: { anchor },
+        extensions: [markdown({ base: markdownLanguage }), extensions],
+      }),
+    });
+  }
+
+  function backspace(from: number, to: number): void {
+    view!.dispatch({
+      changes: { from, to },
+      selection: { anchor: from },
+      userEvent: 'delete.backward',
+    });
+  }
+
+  it('a deletion that empties the last row keeps the table revealed', () => {
+    // the emptied line leaves the paragraph, the extent retracts past the
+    // caret -- the grace must hold the reveal where the touch test would
+    // already show the widget again
+    const at = DOC.indexOf(ROW);
+    makeView(at + 2);
+    backspace(at, at + ROW.length);
+    expect(atomWidgets()).toHaveLength(0);
+    expect(revealDecorated().length).toBeGreaterThan(0);
+  });
+
+  it('a second deletion holds it, the first non-deletion change hands back', () => {
+    const at = DOC.indexOf(ROW);
+    makeView(at + 2);
+    backspace(at, at + ROW.length);
+    backspace(at, at + 1); // one of the blank newlines
+    expect(atomWidgets()).toHaveLength(0);
+    view!.dispatch({
+      changes: { from: at, insert: 'x' },
+      selection: { anchor: at + 1 },
+      userEvent: 'input.type',
+    });
+    expect(atomWidgets()).toHaveLength(1);
+    expect(revealDecorated()).toHaveLength(0);
+  });
+
+  it('a deletion away from the table changes nothing', () => {
+    const at = DOC.indexOf('end') + 1;
+    makeView(at);
+    backspace(at, at + 1);
+    expect(atomWidgets()).toHaveLength(1);
+    expect(revealDecorated()).toHaveLength(0);
   });
 });

@@ -42,7 +42,8 @@ export type IconName =
   | 'globe'
   | 'square'
   | 'save'
-  | 'pin';
+  | 'pin'
+  | 'type';
 
 const ICONS: Record<IconName, readonly IconShape[]> = {
   'chevron-right': [{ kind: 'path', d: 'm9 18 6-6-6-6' }],
@@ -176,6 +177,12 @@ const ICONS: Record<IconName, readonly IconShape[]> = {
       kind: 'path',
       d: 'M9 10.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24V16a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V7a1 1 0 0 1 1-1 2 2 0 0 0 0-4H8a2 2 0 0 0 0 4 1 1 0 0 1 1 1z',
     },
+  ],
+  // Lucide "type" -- the entry drawer's formatting-toolbar toggle (a T glyph).
+  type: [
+    { kind: 'path', d: 'M4 7V5h16v2' },
+    { kind: 'path', d: 'M12 5v14' },
+    { kind: 'path', d: 'M9 19h6' },
   ],
 };
 
