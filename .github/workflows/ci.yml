@@ -62,6 +62,22 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      # npm ci does not always materialize the transformers sharp-stub
+      # junction the lockfile records (file:tools-stub resolution inside the
+      # transformers package, ADR-0055's WASM-only setup); electron-builder's
+      # node-modules collector stats that exact path and ENOENTs without it.
+      # No-op wherever npm created the junction (dev machines).
+      - name: Restore transformers sharp-stub junction
+        shell: pwsh
+        run: |
+          $link = "node_modules/@huggingface/transformers/node_modules/sharp"
+          $stub = "node_modules/@huggingface/transformers/tools/stubs/sharp-stub"
+          if (-not (Test-Path "$link/package.json")) {
+            if (Test-Path $link) { Remove-Item $link -Force -Recurse }
+            New-Item -ItemType Junction -Path $link -Target $stub | Out-Null
+          }
+          "sharp stub resolvable: $(Test-Path "$link/package.json")"
+
       - name: Lint
         run: npm run lint
 
@@ -103,8 +119,10 @@ jobs:
       # pack = clean + build + electron-builder --win; the clean build above
       # is the same tree the e2e suite just passed on, so invoke
       # electron-builder directly (by script path, per repo convention).
+      # --publish never: releases are attached by the softprops step below,
+      # not by electron-builder's implicit CI publishing.
       - name: Package (NSIS setup + portable exe)
-        run: node node_modules/electron-builder/cli.js --win
+        run: node node_modules/electron-builder/cli.js --win --publish never
 
       - name: Smoke-test the packed app
         run: npm run verify:pack
