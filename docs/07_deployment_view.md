@@ -40,6 +40,34 @@ Both installed and portable builds use the **same** config directory,
 (LLM / Actions / spellcheck / appearance / MCP / entry templates) and
 `vault-config.json` (the active vault path).
 
+## CI (GitHub Actions, `.github/workflows/ci.yml`)
+
+One `windows-latest` job per push to `main` / PR / `v*` tag, one build, in
+pipeline order: lint → both tsc typechecks → unit tests (`ng test`,
+`test:plugins`) → build → e2e → `electron-builder --win` →
+`verify:pack`. The two exes are uploaded as workflow **artifacts** on every
+run (14 days, run page); a `v*` tag push additionally attaches them to a
+**GitHub Release** (`softprops/action-gh-release`), which is the public,
+permanent download channel.
+
+Details worth knowing:
+
+- `checkout` runs with `fetch-depth: 0` — `stamp-build.mjs` derives the
+  build number from `git rev-list --count HEAD` (shallow clones would
+  stamp every build `1`).
+- `ELECTRON_CACHE` / `ELECTRON_BUILDER_CACHE` are redirected into the
+  workspace (`.cache/`) and restored via `actions/cache` keyed on the
+  lockfile hash — this pre-seeds exactly the caches the "first run"
+  section below describes, without Windows `%LOCALAPPDATA%` path
+  expansion issues in `actions/cache`.
+- The packaging step invokes `electron-builder` directly instead of
+  `npm run pack`: the workflow has just built and e2e-tested that exact
+  tree, so skipping the second `clean && build` inside `pack` is safe.
+- Playwright runs the real Electron app on the runner (no browser
+  download needed); its `CI`-aware config (github reporter, 1 retry)
+  applies automatically.
+- Still no code signing — see "First run / limitations" below.
+
 ## App layout & the `app://` renderer
 
 `main` is `dist-electron/electron/main.js`. The production renderer is

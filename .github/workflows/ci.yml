@@ -1,0 +1,112 @@
+# CI for Drey (Windows-first, see docs/07_deployment_view.md).
+#
+# One windows-latest job, one build, in pipeline order:
+# lint -> typechecks -> unit tests -> build -> e2e (real Electron app)
+# -> NSIS + portable pack -> packed-app smoke test -> artifacts.
+#
+# Every run uploads the two exes as workflow artifacts (downloadable from
+# the run page); a `v*` tag push additionally attaches them to a GitHub
+# Release (public, permanent download).
+#
+# Caching: ELECTRON_CACHE / ELECTRON_BUILDER_CACHE are redirected into the
+# workspace so actions/cache can pick them up without Windows path
+# expansion issues (the electron binary ~120 MB, electron-builder's
+# winCodeSign + NSIS toolchain ~100 MB -- only paid once per lockfile).
+# fetch-depth: 0 because scripts/stamp-build.mjs uses `git rev-list --count
+# HEAD` as the build number (depth 1 would always stamp 1).
+
+name: CI
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  pull_request:
+    branches: [main]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: write
+
+jobs:
+  windows:
+    name: Build, test & package (Windows)
+    runs-on: windows-latest
+    timeout-minutes: 60
+    env:
+      ELECTRON_CACHE: ${{ github.workspace }}\.cache\electron
+      ELECTRON_BUILDER_CACHE: ${{ github.workspace }}\.cache\electron-builder
+    steps:
+      - name: Checkout (full history for the build stamp)
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Node 24
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Cache Electron + electron-builder downloads
+        uses: actions/cache@v4
+        with:
+          path: |
+            .cache/electron
+            .cache/electron-builder
+          key: electron-cache-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Typecheck main + shared
+        run: node node_modules/typescript/bin/tsc -p electron/tsconfig.json --noEmit
+
+      - name: Typecheck renderer
+        run: node node_modules/typescript/bin/tsc -p tsconfig.app.json --noEmit
+
+      - name: Unit tests (Angular/renderer)
+        run: npm run test -- --watch=false
+
+      - name: Unit tests (plugins)
+        run: npm run test:plugins
+
+      - name: Build (renderer + main + plugins)
+        run: npm run build
+
+      - name: E2E (Playwright drives the built Electron app)
+        run: npm run e2e:run
+
+      # pack = clean + build + electron-builder --win; the clean build above
+      # is the same tree the e2e suite just passed on, so invoke
+      # electron-builder directly (by script path, per repo convention).
+      - name: Package (NSIS setup + portable exe)
+        run: node node_modules/electron-builder/cli.js --win
+
+      - name: Smoke-test the packed app
+        run: npm run verify:pack
+
+      - name: Upload exes as workflow artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: drey-windows-${{ github.sha }}
+          path: |
+            release/drey-*-setup.exe
+            release/drey-*-portable.exe
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Attach exes to GitHub Release (v* tags only)
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            release/drey-*-setup.exe
+            release/drey-*-portable.exe
+          generate_release_notes: true
