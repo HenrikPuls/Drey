@@ -65,6 +65,20 @@ interface DreyFixtures {
 }
 
 /**
+ * Optional device-scale override for the launched app (`DREY_E2E_SCALE`,
+ * e.g. `0.5`). The BrowserWindow is 1280x800 CSS px; on a host whose
+ * physical display is smaller (the 1024x768 GitHub Windows runner), Windows
+ * clamps the window and the dock layout squeezes until click targets fall
+ * under neighbouring panels. At half scale the same CSS-px window packs
+ * into 640x400 physical pixels -- identical layout math, nothing clamps.
+ * A no-op on any display that fits 1280x800.
+ */
+function scaleArgs(): string[] {
+  const scale = process.env['DREY_E2E_SCALE'];
+  return scale ? [`--force-device-scale-factor=${scale}`] : [];
+}
+
+/**
  * Every test gets an isolated `--user-data-dir`, so app config
  * (`vault-config.json`, `app-config.json`) never touches the real profile
  * and never leaks between tests. We seed `vault-config.json` up front
@@ -162,7 +176,7 @@ export const test = base.extend<DreyFixtures>({
     });
 
     const app = await electron.launch({
-      args: [repoRoot, `--user-data-dir=${userDataDir}`, ...launchPaths],
+      args: [repoRoot, ...scaleArgs(), `--user-data-dir=${userDataDir}`, ...launchPaths],
       env,
     });
 

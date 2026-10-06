@@ -65,7 +65,11 @@ Details worth knowing:
   tree, so skipping the second `clean && build` inside `pack` is safe.
 - Playwright runs the real Electron app on the runner (no browser
   download needed); its `CI`-aware config (github reporter, 1 retry)
-  applies automatically.
+  applies automatically. The runner's display is only 1024x768, so the
+  job sets `DREY_E2E_SCALE=0.5` — the fixture launches Electron with
+  `--force-device-scale-factor`, packing the unchanged 1280x800 CSS-px
+  window into 640x400 physical pixels instead of letting Windows clamp
+  the window and squeeze the dock layout under the click targets.
 - Still no code signing — see "First run / limitations" below.
 
 ## App layout & the `app://` renderer

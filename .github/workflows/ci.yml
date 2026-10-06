@@ -39,6 +39,11 @@ jobs:
     env:
       ELECTRON_CACHE: ${{ github.workspace }}\.cache\electron
       ELECTRON_BUILDER_CACHE: ${{ github.workspace }}\.cache\electron-builder
+      # The runner's display is 1024x768; the app window (1280x800 CSS px)
+      # would clamp and squeeze the dock layout until e2e click targets land
+      # under neighbouring panels. Half scale packs the same CSS-px window
+      # into 640x400 physical pixels (see e2e/fixtures/drey.ts).
+      DREY_E2E_SCALE: '0.5'
     steps:
       - name: Checkout (full history for the build stamp)
         uses: actions/checkout@v4
