@@ -113,6 +113,19 @@
       </button>
 
       <div class="menu-sep" role="separator"></div>
+      <button
+        type="button"
+        role="menuitemcheckbox"
+        [attr.aria-checked]="prefs.toolbar()"
+        (click)="toggleToolbar()"
+      >
+        <span class="tick">
+          @if (prefs.toolbar()) {
+            <app-icon name="check" [size]="13" />
+          }
+        </span>
+        Formatting toolbar
+      </button>
     }
     <button
       type="button"
@@ -152,6 +165,7 @@
   <app-markdown-surface
     class="cm-host"
     [mode]="shownDoc()?.viewMode ?? 'live'"
+    [toolbar]="prefs.toolbar() && editor.isMarkdown(shownPath())"
     [lineNumbers]="editor.lineNumbers()"
     [foldFrontmatter]="true"
     [languageFilename]="shownDoc()?.path ?? shownPath()"

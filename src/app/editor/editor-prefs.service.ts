@@ -65,4 +65,16 @@ export class EditorPrefsService {
     this.lineNumbers.update((v) => !v);
     writePrefs({ lineNumbers: this.lineNumbers() });
   }
+
+  /**
+   * Whether the editor shows the formatting toolbar above the content.
+   * App-wide and persisted like the line numbers; toggled from the
+   * editor's `⋯` menu.
+   */
+  readonly toolbar = signal(readPrefs()['toolbar'] === true);
+
+  toggleToolbar(): void {
+    this.toolbar.update((v) => !v);
+    writePrefs({ toolbar: this.toolbar() });
+  }
 }

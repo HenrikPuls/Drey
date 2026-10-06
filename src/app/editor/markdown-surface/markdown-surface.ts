@@ -3,6 +3,7 @@ import {
   Component,
   ElementRef,
   OnDestroy,
+  computed,
   effect,
   inject,
   input,
@@ -27,7 +28,7 @@ import { ThemeService } from '../../services/theme.service';
 import { ThemeCatalogEntry } from '../themes/theme-catalog';
 import { dreyEditorLook, editorStructure, headingTypographyStyle } from '../editor-theme';
 import { editorIndentation } from '../editor-indent';
-import { imagePaste } from '../image-paste';
+import { imagePaste, ImagePasteConfig, insertImageFiles } from '../image-paste';
 import {
   frontmatterExpandedOf,
   frontmatterFold,
@@ -41,6 +42,8 @@ import { pasteUrlAsMarkdownLink } from '../paste-link';
 import { assetUrlToVaultPath, resolveVaultImageCandidates } from '../vault-image';
 import { makeTagCompletionSource, tagPills, tagStyleRefresh } from '../tags';
 import { makeWordCompletionSource } from '../word-completion';
+import { MarkdownToolbar } from '../markdown-toolbar';
+import { applyAction, ToolbarAction } from '../toolbar-commands';
 import { TagVocabularyService } from '../../tags/tag-vocabulary.service';
 import { KeybindingService } from '../../keybindings';
 import { EditorExtensionRegistry, DropDecoderRegistry } from '../../plugin-host';
@@ -72,8 +75,35 @@ const STICK_TO_BOTTOM_PX = 32;
  */
 @Component({
   selector: 'app-markdown-surface',
-  template: '<div #host class="host"></div>',
-  styles: ':host { display: block; min-height: 0; } .host { height: 100%; }',
+  imports: [MarkdownToolbar],
+  template: `
+    @if (showToolbar()) {
+      <div class="toolbar-row">
+        <app-markdown-toolbar
+          [imagesEnabled]="imageCapture()"
+          (action)="applyToolbarAction($event)"
+          (imageFiles)="insertToolbarImages($event)"
+        />
+      </div>
+    }
+    <div #host class="host"></div>
+  `,
+  styles: `
+    :host {
+      display: flex;
+      flex-direction: column;
+      min-height: 0;
+    }
+    .host {
+      flex: 1;
+      min-height: 0;
+    }
+    .toolbar-row {
+      flex: none;
+      padding: 4px 10px 2px;
+      border-bottom: 1px solid var(--border);
+    }
+  `,
 })
 export class MarkdownSurface implements AfterViewInit, OnDestroy {
   private readonly editor = inject(EditorService);
@@ -129,6 +159,14 @@ export class MarkdownSurface implements AfterViewInit, OnDestroy {
    * assistant composer (a prompt box, not a document) does not.
    */
   readonly imageCapture = input(false);
+  /**
+   * Renders the formatting toolbar above the editor (headings, lists,
+   * bold/italic/strikethrough, link, image picker, table grid -- the
+   * ported Lariscus toolbar). Never in view mode and never on compact
+   * surfaces (the entry drawer's composer is deliberately bare); the
+   * full-page editor toggles it from its `⋯` menu.
+   */
+  readonly toolbar = input(false);
   /**
    * Makes the surface non-editable (the note assistant composer while no
    * note is open). Programmatic `setContent` still works -- this only
@@ -212,6 +250,42 @@ export class MarkdownSurface implements AfterViewInit, OnDestroy {
   /** The CodeMirror view; defined after `ngAfterViewInit`. */
   get view(): EditorView | undefined {
     return this._view;
+  }
+
+  /** The toolbar renders for a non-view surface whose owner asked for it. */
+  private readonly showToolbar = computed(() => this.toolbar() && this.mode() !== 'view');
+
+  /**
+   * A toolbar button: reduce the action to one change + selection (pure,
+   * `toolbar-commands.ts`) and dispatch it, then hand focus back to the
+   * editor so typing continues where the toolbar left the caret.
+   */
+  private applyToolbarAction(action: ToolbarAction): void {
+    const view = this._view;
+    if (!view || view.state.readOnly) {
+      return;
+    }
+    const { from, to } = view.state.selection.main;
+    const edit = applyAction(view.state.doc.toString(), from, to, action);
+    view.dispatch({
+      changes: { from: edit.from, to: edit.to, insert: edit.insert },
+      selection: { anchor: edit.selFrom, head: edit.selTo },
+      scrollIntoView: true,
+    });
+    view.focus();
+  }
+
+  /**
+   * Images picked through the toolbar's file input take the exact path a
+   * pasted image takes (`image-paste.ts`): saved into the vault's
+   * per-note `attachments/`, placeholder swapped for the real link.
+   */
+  private async insertToolbarImages(files: File[]): Promise<void> {
+    const view = this._view;
+    if (!view || view.state.readOnly || !this.imageCapture()) {
+      return;
+    }
+    await insertImageFiles(view, files, this.imagePasteConfig());
   }
 
   constructor() {
@@ -542,39 +616,7 @@ export class MarkdownSurface implements AfterViewInit, OnDestroy {
       // compartment above -- win the cascade, so the compact field would
       // otherwise open with its first line pushed 40px down.
       this.compact() ? Prec.high(compactTheme) : [],
-      this.imageCapture()
-        ? imagePaste({
-            save: (bytes, ext) =>
-              this.vault.saveAsset(
-                bytes,
-                ext,
-                this.editor.openPath() ?? '',
-                this.editor.openVaultId() ?? this.vault.activeVaultId(),
-              ),
-            // PDFs keep their file name in attachments/ (ADR-0052).
-            saveNamed: (bytes, fileName) =>
-              this.vault.saveNamedAsset(
-                bytes,
-                fileName,
-                this.editor.openPath() ?? '',
-                this.editor.openVaultId() ?? this.vault.activeVaultId(),
-              ),
-            notePath: () => this.editor.openPath(),
-            readTextFile: (path, vaultId) =>
-              this.vault.readTextFile(path, vaultId ?? this.editor.openVaultId() ?? undefined),
-            saveFromUrl: (url) =>
-              this.vault.saveAssetFromUrl(
-                url,
-                this.editor.openPath() ?? '',
-                this.editor.openVaultId() ?? this.vault.activeVaultId(),
-              ),
-            // Plugin drop decoders claim a drop before the base cascade
-            // (the .ics/.msg meeting decoder is the Meeting plugin's).
-            dropClaimed: (data) => this.dropDecoders.claims(data),
-            decodeDropped: async (data) => (await this.dropDecoders.decode(data)) ?? '',
-            onError: (message) => this.editor.error.set(message),
-          })
-        : [],
+      this.imageCapture() ? imagePaste(this.imagePasteConfig()) : [],
       this.placeholderCompartment.of(
         seed(
           this.placeholderCompartment,
@@ -712,6 +754,45 @@ export class MarkdownSurface implements AfterViewInit, OnDestroy {
     if (view && frontmatterExpandedOf(view.state) !== expanded) {
       view.dispatch({ effects: setFrontmatterExpanded.of(expanded) });
     }
+  }
+
+  /**
+   * The `image-paste` config shared by the paste/drop extension and the
+   * formatting toolbar's image button: vault-scoped asset saves around the
+   * open document, plus the plugin drop decoders.
+   */
+  private imagePasteConfig(): ImagePasteConfig {
+    return {
+      save: (bytes, ext) =>
+        this.vault.saveAsset(
+          bytes,
+          ext,
+          this.editor.openPath() ?? '',
+          this.editor.openVaultId() ?? this.vault.activeVaultId(),
+        ),
+      // PDFs keep their file name in attachments/ (ADR-0052).
+      saveNamed: (bytes, fileName) =>
+        this.vault.saveNamedAsset(
+          bytes,
+          fileName,
+          this.editor.openPath() ?? '',
+          this.editor.openVaultId() ?? this.vault.activeVaultId(),
+        ),
+      notePath: () => this.editor.openPath(),
+      readTextFile: (path, vaultId) =>
+        this.vault.readTextFile(path, vaultId ?? this.editor.openVaultId() ?? undefined),
+      saveFromUrl: (url) =>
+        this.vault.saveAssetFromUrl(
+          url,
+          this.editor.openPath() ?? '',
+          this.editor.openVaultId() ?? this.vault.activeVaultId(),
+        ),
+      // Plugin drop decoders claim a drop before the base cascade
+      // (the .ics/.msg meeting decoder is the Meeting plugin's).
+      dropClaimed: (data) => this.dropDecoders.claims(data),
+      decodeDropped: async (data) => (await this.dropDecoders.decode(data)) ?? '',
+      onError: (message) => this.editor.error.set(message),
+    };
   }
 
   private modeExtensions(mode: EditorViewMode): Extension {

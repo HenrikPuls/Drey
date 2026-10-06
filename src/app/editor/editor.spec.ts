@@ -290,6 +290,30 @@ describe('Editor', () => {
       fixture.detectChanges();
       expect(compiled().querySelector('.editor-menu')).toBeNull();
     });
+
+    it('toggles the formatting toolbar on, and its buttons edit the document', async () => {
+      expect(compiled().querySelector('app-markdown-toolbar')).toBeNull(); // off by default
+
+      const menu = openMenu();
+      const toolbarItem = [...menu.querySelectorAll('button')].find(
+        (b) => b.textContent?.trim() === 'Formatting toolbar',
+      ) as HTMLButtonElement;
+      expect(toolbarItem.getAttribute('aria-checked')).toBe('false');
+      toolbarItem.click();
+      fixture.detectChanges();
+      await fixture.whenStable();
+
+      const bar = compiled().querySelector('app-markdown-toolbar');
+      expect(bar).toBeTruthy();
+      expect(JSON.parse(localStorage.getItem('drey.editor')!).toolbar).toBe(true);
+
+      // Bold with the caret at 0 drops an empty marker pair.
+      const bold = bar?.querySelector('button[aria-label="Bold"]') as HTMLButtonElement;
+      bold.click();
+      fixture.detectChanges();
+      await fixture.whenStable();
+      expect(cmText()).toContain('****');
+    });
   });
 
   it('keeps the document intact across mode swaps', async () => {

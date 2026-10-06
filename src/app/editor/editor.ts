@@ -21,6 +21,7 @@ import { SettingsService } from '../services/settings.service';
 import { SpellcheckService } from '../services/spellcheck.service';
 import { Icon } from '../icons/icon';
 import { resolveVaultLinkPath } from './link-open';
+import { EditorPrefsService } from './editor-prefs.service';
 import { WikilinkService } from './wikilinks';
 import { MarkdownSurface } from './markdown-surface/markdown-surface';
 
@@ -83,6 +84,8 @@ export class Editor implements AfterViewInit {
   protected readonly settings = inject(SettingsService);
   protected readonly zoom = inject(EditorZoomService);
   protected readonly menuContributions = inject(MenuContributionsService);
+  /** The formatting-toolbar toggle (`⋯` menu, persisted per machine). */
+  protected readonly prefs = inject(EditorPrefsService);
   private readonly panes = inject(PaneService);
   private readonly spellcheck = inject(SpellcheckService);
   private readonly wikiLinks = inject(WikilinkService);
@@ -329,6 +332,12 @@ export class Editor implements AfterViewInit {
   protected chooseMode(mode: EditorViewMode): void {
     this.closeMenu();
     this.editor.setViewMode(mode, this.shownPath() ?? undefined);
+  }
+
+  /** `⋯` -> "Formatting toolbar": app-wide, persisted with the editor prefs. */
+  protected toggleToolbar(): void {
+    this.closeMenu();
+    this.prefs.toggleToolbar();
   }
 
   /**

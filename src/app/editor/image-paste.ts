@@ -278,6 +278,20 @@ async function insertImage(view: EditorView, file: File, config: ImagePasteConfi
 }
 
 /**
+ * Image files picked through the formatting toolbar's image button: the
+ * same save-and-insert path a pasted image takes, one after another.
+ */
+export async function insertImageFiles(
+  view: EditorView,
+  files: readonly File[],
+  config: ImagePasteConfig,
+): Promise<void> {
+  for (const file of files) {
+    await insertImage(view, file, config);
+  }
+}
+
+/**
  * A PDF file (paste / OS drag, ADR-0052): staged name-preserving into the
  * note's `attachments/`, inserted as `![name](attachments/…)`. The
  * original name is the alt text -- it becomes the embed's caption and
