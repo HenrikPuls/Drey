@@ -88,6 +88,19 @@
       <button
         type="button"
         role="menuitemradio"
+        [attr.aria-checked]="mode === 'view'"
+        (click)="chooseMode('view')"
+      >
+        <span class="tick">
+          @if (mode === 'view') {
+            <app-icon name="check" [size]="13" />
+          }
+        </span>
+        View
+      </button>
+      <button
+        type="button"
+        role="menuitemradio"
         [attr.aria-checked]="mode === 'source'"
         (click)="chooseMode('source')"
       >

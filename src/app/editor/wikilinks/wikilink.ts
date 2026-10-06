@@ -166,17 +166,24 @@ export function wikilinks(options: {
     {
       decorations: (v) => v.decorations,
       eventHandlers: {
-        mousedown(event) {
-          if (!options.onActivate || (!event.ctrlKey && !event.metaKey)) {
+        mousedown(event, view) {
+          const el = (event.target as HTMLElement | null)?.closest('.cm-wikilink');
+          if (!el || !options.onActivate) {
             return false;
           }
-          const el = (event.target as HTMLElement | null)?.closest('.cm-wikilink');
-          const target = el?.getAttribute('data-wikilink');
+          const modifier = event.ctrlKey || event.metaKey;
+          // Read-only (the view mode): no caret to place, a plain click
+          // opens -- but never *creates*: an unresolved target stays inert
+          // (its Ctrl-click create is an explicit editing gesture).
+          if (!modifier && !(view.state.readOnly && !el.classList.contains('cm-wikilink-unresolved'))) {
+            return false;
+          }
+          const target = el.getAttribute('data-wikilink');
           if (target === null || target === undefined) {
             return false;
           }
           event.preventDefault();
-          options.onActivate(target, el?.getAttribute('data-anchor') ?? null);
+          options.onActivate(target, el.getAttribute('data-anchor') ?? null);
           return true;
         },
       },

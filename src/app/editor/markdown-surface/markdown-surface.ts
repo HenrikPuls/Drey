@@ -228,7 +228,9 @@ export class MarkdownSurface implements AfterViewInit, OnDestroy {
       });
     });
     effect(() => {
-      const ro = this.readOnly();
+      // 'view' forces read-only whatever the input says (the read-only
+      // surface is what makes plain clicks open links -- see link-open.ts).
+      const ro = this.readOnly() || this.mode() === 'view';
       this._view?.dispatch({
         effects: this.readOnlyCompartment.reconfigure(ro ? readOnlyExtension : []),
       });
@@ -580,7 +582,7 @@ export class MarkdownSurface implements AfterViewInit, OnDestroy {
         ),
       ),
       this.readOnlyCompartment.of(
-        seed(this.readOnlyCompartment, this.readOnly() ? readOnlyExtension : []),
+        seed(this.readOnlyCompartment, this.readOnly() || this.mode() === 'view' ? readOnlyExtension : []),
       ),
       this.editLockCompartment.of(seed(this.editLockCompartment, [])),
       this.lineNumberCompartment.of(
@@ -713,21 +715,36 @@ export class MarkdownSurface implements AfterViewInit, OnDestroy {
   }
 
   private modeExtensions(mode: EditorViewMode): Extension {
-    return mode === 'live'
-      ? livePreview({
-          resolveImage: (url) =>
-            resolveVaultImageCandidates(this.editor.openPath(), url, this.editor.openVaultId()),
-          onOpenImage: (src) => this.lightbox.open(src),
-          onZoomDiagram: (dataUrl) => this.lightbox.open(dataUrl),
-          // The PDF embed's lens opens the file as a full PDF tab.
-          onOpenPdf: (src) => {
-            const target = assetUrlToVaultPath(src);
-            if (target) {
-              void this.editor.openFile(target.path, target.vaultId ?? undefined);
-            }
-          },
-        })
-      : [];
+    const live = {
+      resolveImage: (url: string) =>
+        resolveVaultImageCandidates(this.editor.openPath(), url, this.editor.openVaultId()),
+      onOpenImage: (src: string) => this.lightbox.open(src),
+      onZoomDiagram: (dataUrl: string) => this.lightbox.open(dataUrl),
+      // The PDF embed's lens opens the file as a full PDF tab.
+      onOpenPdf: (src: string) => {
+        const target = assetUrlToVaultPath(src);
+        if (target) {
+          void this.editor.openFile(target.path, target.vaultId ?? undefined);
+        }
+      },
+    };
+    if (mode === 'source') {
+      return [];
+    }
+    if (mode === 'view') {
+      // Read-only rendering: everything stays rendered (the selection is
+      // ignored), links open on a plain click, and the editing chrome on
+      // embeds (view-source, zoom lens, resize grip) is hidden -- its
+      // handlers are dormant in read-only state anyway.
+      return [
+        livePreview(live, { revealSelection: false }),
+        EditorView.theme({
+          '.lp-edit, .lp-lens, .lp-resize': { display: 'none' },
+          '.lp-task input': { pointerEvents: 'none' },
+        }),
+      ];
+    }
+    return livePreview(live);
   }
 
   private submitKeymap() {

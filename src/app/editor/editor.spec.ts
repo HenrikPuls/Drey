@@ -258,6 +258,25 @@ describe('Editor', () => {
       expect(cmText()).toContain('**bold**');
     });
 
+    it('switches to view mode: read-only and never revealing raw markdown', async () => {
+      await openRich();
+      const menu = openMenu();
+      const viewItem = [...menu.querySelectorAll('button')].find(
+        (b) => b.textContent?.trim() === 'View',
+      ) as HTMLButtonElement;
+      viewItem.click();
+      fixture.detectChanges();
+      await fixture.whenStable();
+
+      expect(editor.viewMode()).toBe('view');
+      // The caret sits at the top of the document, yet the heading marks
+      // stay concealed (the view mode ignores the selection).
+      expect(cmText()).toContain('Doc');
+      expect(cmText()).not.toContain('# Doc');
+      // Read-only: no editable surface for the user.
+      expect(cm().getAttribute('contenteditable')).toBe('false');
+    });
+
     it('marks the active mode with a check', () => {
       const menu = openMenu();
       const checked = menu.querySelector('button[aria-checked="true"]') as HTMLElement;
@@ -277,6 +296,8 @@ describe('Editor', () => {
     editor.setViewMode('source');
     fixture.detectChanges();
     editor.setViewMode('live');
+    fixture.detectChanges();
+    editor.setViewMode('view');
     fixture.detectChanges();
     editor.setViewMode('source');
     fixture.detectChanges();

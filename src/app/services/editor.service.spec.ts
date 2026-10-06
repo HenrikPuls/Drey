@@ -875,6 +875,12 @@ describe('EditorService', () => {
       await fresh.openFile('b.md');
       expect(fresh.viewMode()).toBe('source');
     });
+
+    it("stores and restores a 'view' default", async () => {
+      localStorage.setItem('drey.editor', JSON.stringify({ defaultMode: 'view' }));
+      await service.openFile('a.md');
+      expect(service.viewMode()).toBe('view');
+    });
   });
 
   it('requestNewDailyEntry bumps the request counter', () => {

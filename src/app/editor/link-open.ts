@@ -8,7 +8,9 @@ import { normalizeRelative } from './vault-image';
 /**
  * Makes Markdown links in the editor openable with a `Ctrl`/`Cmd`-click
  * (both Live Preview and source mode, like the `#tag` pills). A plain click
- * is left alone so the caret can still be placed inside the link text.
+ * is left alone so the caret can still be placed inside the link text --
+ * except in a read-only state (the view mode), where there is no caret and
+ * a plain click opens.
  *
  * Covers `[label](target)`, `<autolink>` and a bare GFM URL. The link-target
  * span is marked with `data-href`; the owner's `onOpen` callback classifies
@@ -125,8 +127,10 @@ export function linkActivation(onOpen: (href: string) => void): Extension {
     {
       decorations: (v) => v.decorations,
       eventHandlers: {
-        mousedown(event) {
-          if (!event.ctrlKey && !event.metaKey) {
+        mousedown(event, view) {
+          const modifier = event.ctrlKey || event.metaKey;
+          // Read-only (the view mode): no caret to place, a plain click opens.
+          if (!modifier && !view.state.readOnly) {
             return false;
           }
           const el = (event.target as HTMLElement | null)?.closest('.cm-lp-link');

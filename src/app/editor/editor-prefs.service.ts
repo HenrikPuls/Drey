@@ -1,11 +1,13 @@
 import { Injectable, signal } from '@angular/core';
 
 /**
- * Which mode the editor shows. One `EditorView` runs both; `'live'` adds
- * the Live Preview extensions (ADR-0009), `'source'` shows the raw Markdown.
- * Both share the same typography (`editor-theme.ts`).
+ * Which mode the editor shows. One `EditorView` runs all three; `'live'`
+ * adds the Live Preview extensions (ADR-0009), `'source'` shows the raw
+ * Markdown, `'view'` renders read-only through the Live Preview engine
+ * (no reveal-on-selection, links open on a plain click). All share the
+ * same typography (`editor-theme.ts`).
  */
-export type EditorViewMode = 'source' | 'live';
+export type EditorViewMode = 'source' | 'live' | 'view';
 
 /** `localStorage` key for editor-wide preferences. */
 const PREFS_KEY = 'drey.editor';
@@ -41,10 +43,11 @@ export class EditorPrefsService {
    * The mode a freshly opened note lands in: whatever the user last switched
    * to via the `⋯` menu, defaulting to `'live'`. A stored `'preview'` (the
    * pre-ADR-0009 name of the rendered mode) migrates to `'live'` by falling
-   * through the `'source'` check.
+   * through the checks.
    */
   defaultMode(): EditorViewMode {
-    return readPrefs()['defaultMode'] === 'source' ? 'source' : 'live';
+    const stored = readPrefs()['defaultMode'];
+    return stored === 'source' || stored === 'view' ? stored : 'live';
   }
 
   setDefaultMode(mode: EditorViewMode): void {

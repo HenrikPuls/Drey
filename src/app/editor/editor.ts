@@ -41,9 +41,11 @@ import { MarkdownSurface } from './markdown-surface/markdown-surface';
  * `revealRequest` needs no such gate -- it is scoped by path instead
  * (`loadedPath === request.path`), and a path lives in exactly one pane.
  *
- * Two modes over the one always-visible surface, switched from the `⋯`
- * menu: **live** (Live Preview decorations) and **source** (raw Markdown,
- * the escape hatch). The mode travels through the surface's `mode` input.
+  * Three modes over the one always-visible surface, switched from the `⋯`
+  * menu: **live** (Live Preview decorations), **view** (read-only through
+  * the same engine, links open on a plain click) and **source** (raw
+  * Markdown, the escape hatch). The mode travels through the surface's
+  * `mode` input.
  *
  * Multi-tab (ADR-0003): one view per pane; a tab switch within the pane
  * swaps its document via `loadActiveDoc()`. Undo history does not survive
