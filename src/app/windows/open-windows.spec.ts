@@ -1,7 +1,7 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { OpenWindows } from './open-windows';
 import { EditorService } from '../services/editor.service';
-import { VaultService } from '../vault/vault.service';
+import { VaultService } from '../vault';
 import { DreyApi } from '../../../shared/ipc-api';
 
 describe('OpenWindows', () => {
