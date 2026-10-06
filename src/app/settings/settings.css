@@ -14,6 +14,9 @@
   height: min(640px, calc(100vh - 48px));
   display: grid;
   grid-template-columns: 200px 1fr;
+  /* Cap the single row at the panel height -- an implicit `auto` row would
+     size to the (plugin-extended) category list and push the footer out. */
+  grid-template-rows: minmax(0, 1fr);
   background: var(--bg-main);
   border: 1px solid var(--border-strong);
   border-radius: var(--radius-md);
@@ -26,14 +29,23 @@
   flex-direction: column;
   padding: 8px;
   gap: 2px;
+  min-height: 0;
+  overflow-y: auto;
   background: var(--bg-sidebar);
   border-right: 1px solid var(--border);
 }
 
 .head {
+  position: sticky;
+  top: 0;
+  z-index: 1;
   display: flex;
   align-items: center;
-  padding: 6px 6px 10px;
+  /* Stretch to the nav's edges so scrolled rows pass under an opaque head:
+     -8px margins undo the nav padding, the padding adds it back visually. */
+  margin: -8px -8px 0;
+  padding: 14px 14px 10px;
+  background: var(--bg-sidebar);
 }
 
 .head .title {
