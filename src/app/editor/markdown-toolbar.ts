@@ -23,13 +23,13 @@ import { ToolbarAction } from './toolbar-commands';
           title="Heading"
           aria-label="Heading level"
           aria-haspopup="menu"
-          (click)="menuOpen.set(menuOpen() === 'heading' ? null : 'heading')"
+          (click)="toggleMenu('heading', $event)"
         >
           <app-icon name="heading" [size]="14" [strokeWidth]="1.5" />
         </button>
         @if (menuOpen() === 'heading') {
           <div class="backdrop" (click)="menuOpen.set(null)"></div>
-          <nav class="menu" role="menu">
+          <nav class="menu" role="menu" [style.left.px]="menuPos().x" [style.top.px]="menuPos().y">
             @for (h of headings; track h.level) {
               <button type="button" role="menuitem" (click)="emit({ kind: 'heading', level: h.level })">
                 {{ h.label }}
@@ -77,13 +77,13 @@ import { ToolbarAction } from './toolbar-commands';
           title="List"
           aria-label="List style"
           aria-haspopup="menu"
-          (click)="menuOpen.set(menuOpen() === 'list' ? null : 'list')"
+          (click)="toggleMenu('list', $event)"
         >
           <app-icon name="list" [size]="14" [strokeWidth]="1.5" />
         </button>
         @if (menuOpen() === 'list') {
           <div class="backdrop" (click)="menuOpen.set(null)"></div>
-          <nav class="menu" role="menu">
+          <nav class="menu" role="menu" [style.left.px]="menuPos().x" [style.top.px]="menuPos().y">
             <button type="button" role="menuitem" (click)="emit({ kind: 'list', style: 'bullet' })">
               Bullet list
             </button>
@@ -162,13 +162,13 @@ import { ToolbarAction } from './toolbar-commands';
           title="Table"
           aria-label="Insert table"
           aria-haspopup="menu"
-          (click)="toggleTableMenu()"
+          (click)="toggleTableMenu($event)"
         >
           <app-icon name="table" [size]="14" [strokeWidth]="1.5" />
         </button>
         @if (menuOpen() === 'table') {
           <div class="backdrop" (click)="menuOpen.set(null)"></div>
-          <div class="menu table-menu">
+          <div class="menu table-menu" [style.left.px]="menuPos().x" [style.top.px]="menuPos().y">
             <span class="grid-label">
               @if (tableHover(); as h) {
                 {{ h.r + 1 }} &times; {{ h.c + 1 }}
@@ -219,9 +219,10 @@ import { ToolbarAction } from './toolbar-commands';
       z-index: 45;
     }
     .menu {
-      position: absolute;
-      left: 0;
-      top: 30px;
+      /* Fixed, anchored under the trigger button (see anchorFrom): the meta
+         bar clips its contents (overflow hidden), so an absolute menu would
+         be cut off to a sliver at the bar's bottom edge. */
+      position: fixed;
       z-index: 46;
       display: flex;
       flex-direction: column;
@@ -286,6 +287,9 @@ export class MarkdownToolbar {
 
   protected readonly menuOpen = signal<'heading' | 'list' | 'table' | null>(null);
 
+  /** Viewport anchor for the open menu, taken from the trigger button. */
+  protected readonly menuPos = signal<{ x: number; y: number }>({ x: 0, y: 0 });
+
   protected readonly headings: { level: 0 | 1 | 2 | 3; label: string }[] = [
     { level: 0, label: 'Body text' },
     { level: 1, label: 'Heading 1' },
@@ -298,13 +302,33 @@ export class MarkdownToolbar {
 
   protected readonly tableHover = signal<{ r: number; c: number } | null>(null);
 
-  protected toggleTableMenu(): void {
+  protected toggleMenu(which: 'heading' | 'list', event: MouseEvent): void {
+    if (this.menuOpen() === which) {
+      this.menuOpen.set(null);
+      return;
+    }
+    this.anchorFrom(event);
+    this.menuOpen.set(which);
+  }
+
+  protected toggleTableMenu(event: MouseEvent): void {
     if (this.menuOpen() === 'table') {
       this.menuOpen.set(null);
       return;
     }
     this.tableHover.set(null);
+    this.anchorFrom(event);
     this.menuOpen.set('table');
+  }
+
+  /** Anchors the menu just below the trigger button. The 150px clamp keeps
+      a near-right-edge button from pushing the menu out of the window. */
+  private anchorFrom(event: MouseEvent): void {
+    const rect = (event.currentTarget as HTMLElement).getBoundingClientRect();
+    this.menuPos.set({
+      x: Math.max(0, Math.round(Math.min(rect.left, window.innerWidth - 150))),
+      y: Math.round(rect.bottom + 4),
+    });
   }
 
   /** True for every cell up to and including the hovered one (row AND col). */
