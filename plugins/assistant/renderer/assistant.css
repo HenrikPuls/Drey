@@ -568,26 +568,12 @@
 
 /* -- pickers (file + model; api.ui.showModal, centred overlay) ---------------
    The modal box (.plugin-modal) gets .assistant-picker-host added by the
-   panel; plugin CSS is global, so the assistant ships its own backdrop copy
-   (the templates plugin's copy only loads when that plugin is enabled). */
-.plugin-modal-backdrop {
-  position: fixed;
-  inset: 0;
-  z-index: var(--z-modal, 1000);
-  background: rgba(0, 0, 0, 0.35);
-  display: flex;
-  align-items: flex-start;
-  justify-content: center;
-  padding-top: 12vh;
-}
-
+   panel; backdrop + box chrome are base-owned (styles.css, .plugin-modal*),
+   so the host class only shapes the box — flush content, fixed width. */
 .plugin-modal.assistant-picker-host {
   width: min(440px, 90vw);
-  background: var(--surface-raised, var(--bg-bar, #222));
-  border: 1px solid var(--border-strong);
-  border-radius: 10px;
+  padding: 0;
   overflow: hidden;
-  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.45);
 }
 
 .assistant-picker {

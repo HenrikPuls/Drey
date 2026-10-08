@@ -101,28 +101,16 @@
 }
 
 /* header refresh button (mounted into the shared panel header) */
-/* -- picker --------------------------------------------------------------- */
-
-.plugin-modal-backdrop {
-  position: fixed;
-  inset: 0;
-  z-index: var(--z-modal, 1000);
-  background: rgba(0, 0, 0, 0.35);
-  display: flex;
-  align-items: flex-start;
-  justify-content: center;
-  padding-top: 12vh;
-}
+/* -- picker ---------------------------------------------------------------
+   Backdrop + box chrome are base-owned (styles.css, .plugin-modal*); the
+   host class only shapes the box — flush content, the list scrolls. */
 
 /* showModal adds both classes to the SAME element (the mount IS the
    .plugin-modal box), so this must be a compound selector. */
 .plugin-modal.tpl-picker-host {
   width: min(480px, 90vw);
-  background: var(--surface-raised, var(--surface, #222));
-  border: 1px solid color-mix(in srgb, currentColor 15%, transparent);
-  border-radius: 10px;
+  padding: 0;
   overflow: hidden;
-  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.45);
 }
 
 .tpl-picker {

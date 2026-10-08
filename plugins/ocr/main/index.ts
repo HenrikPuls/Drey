@@ -76,6 +76,13 @@ async function runOcr(ctx: MainPluginContext, imageVaultPath: string, taskId?: s
     if (isAbortError(err)) {
       return { kind: 'cancelled' };
     }
+    if (err instanceof TypeError && /^fetch failed/i.test(err.message)) {
+      // undici's opaque transport failure — the endpoint is unreachable.
+      throw new Error(
+        `Could not reach the LLM endpoint — is the provider server running? ` +
+          `(Settings → LLM; ${String(err)})`,
+      );
+    }
     throw err;
   }
 }

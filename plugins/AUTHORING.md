@@ -100,10 +100,15 @@ Styling rules, in order of enforcement:
    `0.8–0.88rem` body — see `src/app/settings/settings-forms.css` for the
    scale) so the app-wide type-size setting applies to your UI too.
 4. **No native dialogs.** `window.alert()` / `confirm()` break Windows
-   keyboard focus after dismissal (electron#41602). Use
-   `api.ui.showMessage(message, title?)` for acknowledgements — the app's
-   own OK-only dialog, queuing like the native calls did — and
-   `api.ui.showModal` for anything interactive.
+    keyboard focus after dismissal (electron#41602). Use
+    `api.ui.showMessage(message, title?)` for acknowledgements — the app's
+    own OK-only dialog, queuing like the native calls did — and
+    `api.ui.showModal` for anything interactive. A `showModal` overlay comes
+    with base chrome (`src/styles.css`, `.plugin-modal-backdrop` /
+    `.plugin-modal`): a dimmed backdrop and a padded raised box. Style only
+    your content; add a host class (`mount.classList.add('my-host')`) and a
+    compound rule `.plugin-modal.my-host` when you need a fixed width or
+    flush edges (`padding: 0`).
 
 ## Settings pages
 

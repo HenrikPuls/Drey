@@ -87,8 +87,10 @@
   --popover-shadow: 0 14px 34px rgba(0, 0, 0, 0.55);
 
   /* ---- Z-index ---- the rest of the ladder is hardcoded per component
-     (dock 6, content 5, menu-bar 30/40, Settings 30/31, confirmation
-     dialog / menus 40/41); the image lightbox is the ceiling (ADR-0026). */
+     (dock 6, content 5, menu-bar 30/40, Settings 30/31, plugin modals 39,
+     confirmation dialog / menus 40/41); the image lightbox is the ceiling
+     (ADR-0026). */
+  --z-modal: 39; /* api.ui.showModal overlay — below the confirmation dialog */
   --z-lightbox: 60;
 
   /* ---- Line grid (DESIGN.md principle 2: no in-between sizes) ---- */
@@ -646,4 +648,32 @@ textarea::placeholder {
   padding: 0 5px;
   font-family: var(--font-mono);
   font-size: var(--fs-mono-tag);
+}
+
+/* -- plugin modals (api.ui.showModal) ----------------------------------------
+   Base-owned chrome for the overlay plugin-api-impl mounts on document.body:
+   every plugin modal (the pickers, the OCR progress view, the tags replace
+   confirmation) gets the same dimmed backdrop + raised box, so a plugin
+   without its own CSS never renders transparent. Plugins style only their
+   content; a host class on the box (`.plugin-modal.<host>`) may override
+   width and other box metrics. */
+.plugin-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: var(--z-modal);
+  background: rgba(0, 0, 0, 0.45);
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding-top: 12vh;
+}
+
+.plugin-modal {
+  max-width: calc(100vw - 48px);
+  max-height: 72vh;
+  padding: 16px;
+  background: var(--bg-input);
+  border: 1px solid var(--popover-border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--popover-shadow);
 }

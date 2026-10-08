@@ -110,7 +110,21 @@ export class PluginApiFactory {
     };
     const pluginId = plugin.id;
     const invokeBackend = (method: string, payload?: unknown): Promise<unknown> =>
-      window.dreyApi.invokePlugin(pluginId, method, payload);
+      window.dreyApi.invokePlugin(pluginId, method, payload).catch((error: unknown) => {
+        // Electron wraps a handler throw into "Error invoking remote method
+        // '<channel>': Error: <original>" — plugins surface err.message to
+        // users, so unwrap the wrapper before it reaches them.
+        if (error instanceof Error) {
+          const cleaned = error.message.replace(
+            /^Error invoking remote method '[^']*':\s*(?:Error:\s*)?/,
+            '',
+          );
+          if (cleaned !== error.message) {
+            throw new Error(cleaned);
+          }
+        }
+        throw error;
+      });
 
     const toOpenDoc = (doc: {
       vaultId: string | null;
