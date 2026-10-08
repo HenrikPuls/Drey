@@ -117,3 +117,24 @@ tabs resolve by bare path as the Search panel does), and the
 unsaved-buffer fold keys on `(vaultId, path)` so the same relative path
 in two vaults cannot clobber rows. This closed the last item of
 milestone 28's announced M-B follow-up.
+
+## Considered and rejected — stable `#task/id:` addressing (req-35, milestone 44)
+
+The roadmap's "Task Center" item named a real hazard: a panel tick
+resolved against a *recorded* line can mis-route when lines shifted.
+Investigation showed the design already re-scans fresh content at tick
+time (`resolveTaskLine`) and matches by text+kind, so plain line drift
+was never the issue — only duplicate task texts under a shift are, and
+in a single-user vault that window is negligible.
+
+The implemented fix — `#task/id:<id>` attributes minted into task lines
+on their first panel tick — was **reverted before release**: the token
+is permanent noise in plain Markdown (source mode, exports, every other
+tool reading the vault), adoption is inherently partial (editor
+checkboxes and external editors never mint), and the guarded case
+barely occurs. What survived is a hardening of the resolution itself:
+`resolveTaskLine` follows a *unique* task across any shift, and when
+duplicate texts leave the recorded line ambiguous it returns `null` —
+the toggle skips (safe no-op) instead of ticking the nearest twin.
+An id-style addressing scheme stays open for a genuine multi-writer
+future, but not at the cost of machine tokens in single-user notes.

@@ -40,7 +40,9 @@ describe('Editor', () => {
               ? RICH
               : relativePath === 'wiki.md'
                 ? WIKI
-                : '# Title\n\nsome **bold** text';
+                : relativePath === 'tags.md'
+                  ? '# Head\n\ntagged body #sailing\n'
+                  : '# Title\n\nsome **bold** text';
         return Promise.resolve({ content, modifiedMs: 1 });
       },
       writeVaultFile: () => Promise.resolve(2),
@@ -447,6 +449,69 @@ describe('Editor', () => {
 
       expect(editor.activePath()).toBe('rich.md');
       expect(editor.bufferContent()).toBe(RICH);
+    });
+  });
+
+  describe('Suggest tags (req-36)', () => {
+    const menuRow = (): HTMLButtonElement => {
+      const more = compiled().querySelector('.more') as HTMLButtonElement;
+      more.click();
+      fixture.detectChanges();
+      const row = [...compiled().querySelectorAll('.editor-menu [role="menuitem"]')].find(
+        (el) => el.textContent?.trim() === 'Suggest tags',
+      );
+      expect(row).toBeTruthy();
+      return row as HTMLButtonElement;
+    };
+
+    const settle = async (): Promise<void> => {
+      await new Promise((resolve) => setTimeout(resolve, 20));
+      await fixture.whenStable();
+      fixture.detectChanges();
+    };
+
+    it('appends the suggested tags to the caret section, deduped, and saves', async () => {
+      const saves: string[] = [];
+      let sentText = '';
+      window.dreyApi = {
+        ...window.dreyApi,
+        suggestTags: (entryText: string) => {
+          sentText = entryText;
+          return Promise.resolve(['sailing', 'outdoors']);
+        },
+        saveNote: (request: NoteSaveRequest) => {
+          saves.push(request.body);
+          return Promise.resolve({ path: request.path, content: request.body, modifiedMs: 2 });
+        },
+      } as DreyApi;
+      await editor.openFile('tags.md');
+      fixture.detectChanges();
+      await fixture.whenStable();
+
+      menuRow().click();
+      await settle();
+
+      // The section text rode the call (heading included, blanks trimmed).
+      expect(sentText).toBe('# Head\n\ntagged body #sailing');
+      // `#sailing` was already on the section; only the new tag lands.
+      expect(editor.bufferContent()).toBe('# Head\n\ntagged body #sailing #outdoors\n');
+      expect(saves.some((body) => body.includes('#outdoors'))).toBe(true);
+    });
+
+    it('reports it when every suggestion is already on the section', async () => {
+      window.dreyApi = {
+        ...window.dreyApi,
+        suggestTags: () => Promise.resolve(['sailing']),
+      } as DreyApi;
+      await editor.openFile('tags.md');
+      fixture.detectChanges();
+      await fixture.whenStable();
+
+      menuRow().click();
+      await settle();
+
+      expect(editor.bufferContent()).toBe('# Head\n\ntagged body #sailing\n');
+      expect(compiled().querySelector('.err')?.textContent).toContain('already carries');
     });
   });
 });

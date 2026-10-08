@@ -54,13 +54,18 @@ already uses where they fit and otherwise proposing new ones. There is no
 tag registry with descriptions any more, and **no folder proposal** — a
 tag is just a label.
 
-**Status**: this is the live prompt behind the drawer's **Autotag**
-button. It is the built-in **"Autotag"** Action template
-(`AUTOTAG_PROMPT` in `shared/app-config.ts`), run by
-`ActionRunner.suggestTags(entryText, vocabulary)`; `{tags}` is substituted
-with the current tag vocabulary (one tag per line) at call time. Explicit
-invocation only — no on-save, no `⋯` trigger. The reply only **pre-fills**
-the drawer's tag field; the user confirms by saving.
+**Status**: this is the live prompt behind the editor's `⋯` **Suggest
+tags** row (req-36, milestone 45 — the re-homed Autotag; the entry drawer
+that carried the old button is gone since ADR-0057). It is the built-in
+**"Autotag"** Action template (`AUTOTAG_PROMPT` in `shared/app-config.ts`),
+run by `TagSuggester.suggest(entryText, vocabulary)` over the
+`tags:suggest` channel; `{tags}` is substituted with the current tag
+vocabulary (one tag per line) at call time. The row sends the
+heading-delimited section under the caret (`shared/note-sections.ts` —
+the same unit the tag search reports on) and **applies the reply
+directly**: the suggested tags are appended to the section's last prose
+line, deduplicated against the tags it already carries, one undo step,
+saved immediately. Explicit invocation only — no on-save trigger.
 
 ```
 System:

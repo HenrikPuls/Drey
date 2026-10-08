@@ -942,10 +942,10 @@ export interface DreyApi {
 
   
   /**
-   * The drawer's "Autotag" button: `entryText` plus the vault tag
-   * vocabulary in, up to four suggested tags out. Only pre-fills the tag
-   * field -- the user still confirms by saving. `taskId` makes it
-   * cancellable. Rejects when LLM features are off.
+   * The editor's `⋯` "Suggest tags" row: `entryText` (a note section)
+   * plus the vault tag vocabulary in, up to four suggested tags out.
+   * `taskId` makes it cancellable. Rejects when LLM features are off or
+   * the Tags plugin is disabled.
    */
   suggestTags(entryText: string, taskId?: string): Promise<string[]>;
 

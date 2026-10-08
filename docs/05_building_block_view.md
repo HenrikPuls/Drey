@@ -2427,7 +2427,10 @@ library — Chromium's built-in (PDFium) viewer, enabled by
 > Supersedes the entry-drawer parts of §5.12, §5.14 and §5.16: the
 > "Add entry" panel, `EntryDrawer`, `EntryDraftService` and
 > `AutotagButton` no longer exist. The `suggestTags` backend
-> (`electron/llm/tag-suggest.ts`, `tags:suggest`) stays without a caller.
+> (`electron/llm/tag-suggest.ts`, `tags:suggest`) stayed; since milestone
+> 45 (req-36) the editor's `⋯` **Suggest tags** row is its caller again
+> — it sends the caret's heading section (`shared/note-sections.ts`) and
+> applies the tags directly; the runtime shape is §6.13's note.
 
 - **Shared chrome** (`src/styles.css`): `.icon-btn` and `.seg` are the
   one icon button and segmented switch for core and plugin panels;

@@ -218,4 +218,20 @@ describe('resolveTaskLine', () => {
     };
     expect(resolveTaskLine(doc, staleRow)).toBeNull();
   });
+
+  it('keeps the recorded twin when it still sits there among duplicates', () => {
+    const twins = '- [ ] buy milk\n\n- [ ] buy milk\n';
+    const [row] = scanTasks('a.md', twins).filter((t) => t.text === 'buy milk');
+    expect(row.line).toBe(1);
+    expect(resolveTaskLine(twins, row)).toBe(1);
+  });
+
+  it('refuses to guess when duplicates shifted and the recorded line holds neither', () => {
+    // One line inserted above shifts both twins; the row recorded line 1,
+    // which now holds the SECOND twin. "Nearest" would mis-tick it.
+    const twins = '- [ ] buy milk\n\n- [ ] buy milk\n';
+    const [row] = scanTasks('a.md', twins).filter((t) => t.text === 'buy milk');
+    const shifted = `\n${twins}`;
+    expect(resolveTaskLine(shifted, row)).toBeNull();
+  });
 });

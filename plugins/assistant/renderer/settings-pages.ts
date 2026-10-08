@@ -91,7 +91,7 @@ export function actionsSettingsPage(
         el(
           'p',
           'section-hint',
-          'A template is a name, a prompt, and the kind of change it makes. “Autotagging” suggests tags for the entry drawer; “Update summary” rebuilds a master document’s Summary section.',
+          'A template is a name, a prompt, and the kind of change it makes. “Autotagging” suggests tags for a note section (the editor’s “Suggest tags” row); “Update summary” rebuilds a master document’s Summary section.',
         ),
       );
       const templateList = el('ul', 'templates');

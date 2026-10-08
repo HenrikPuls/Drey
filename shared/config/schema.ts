@@ -632,10 +632,10 @@ export const SEARCH_SUMMARY_PROMPT = `You are given the sections of a personal n
 export const LEGACY_SEARCH_SUMMARY_PROMPT = `You are given the sections of a personal note vault that match a search. Write a short prose digest (3–6 sentences, present tense, no bullet points, no greeting, no heading) of what they collectively say. Note any contradictions or open questions last. Return only the digest text.`;
 
 /**
- * The system prompt behind the drawer's "Autotag" button. `{tags}` is
- * swapped for the vocabulary list (one tag per line) at call time. The
- * reply only pre-fills the drawer's tag field -- the user still confirms
- * by saving.
+ * The system prompt behind the editor's `⋯` "Suggest tags" row (the
+ * re-homed Autotag). `{tags}` is swapped for the vocabulary list (one tag
+ * per line) at call time; the suggested tags are applied to the note
+ * section directly, deduplicated against the tags it already carries.
  */
 export const AUTOTAG_PROMPT = `You are given a short note and the tags already used in this vault. Suggest 1 to 4 tags for the note: reuse tags from the list where they fit, and otherwise propose new tags (one word, lowercase, no spaces).
 

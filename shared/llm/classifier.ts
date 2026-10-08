@@ -81,7 +81,7 @@ export function buildTagSuggestionMessages(
 }
 
 /**
- * Parses the drawer "Autotag" reply -- `{"tags": ["a", "b"]}` -- into up to
+ * Parses the "Autotag" reply -- `{"tags": ["a", "b"]}` -- into up to
  * four normalised, de-duplicated tag tokens. Anything unparseable yields `[]`.
  */
 export function parseSuggestedTags(reply: string): string[] {

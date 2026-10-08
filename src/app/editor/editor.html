@@ -13,6 +13,9 @@
   } @else if (editor.isEditLocked(shownPath())) {
     <span class="edit-lock">Assistant is editing…</span>
   }
+  @if (suggestingTags()) {
+    <span class="suggesting">Suggesting tags…</span>
+  }
 
   @if (prefs.toolbar() && editor.isMarkdown(shownPath()) && (shownDoc()?.viewMode ?? 'live') !== 'view') {
     <app-markdown-toolbar
@@ -158,6 +161,15 @@
       >
         <span class="tick"></span>
         Export as PDF…
+      </button>
+      <button
+        type="button"
+        role="menuitem"
+        [disabled]="suggestingTags()"
+        (click)="closeMenu(); suggestTags()"
+      >
+        <span class="tick"></span>
+        Suggest tags
       </button>
     }
 

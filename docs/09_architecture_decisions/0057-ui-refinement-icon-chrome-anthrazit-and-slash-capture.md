@@ -125,7 +125,9 @@ button that jumps to the current month and opens today's daily note.
 
 - **Autotag has no surface.** Its only button lived in the drawer. The
   `suggestTags` backend and IPC stay; re-homing it (e.g. an editor `⋯`
-  row) is open work.
+  row) is open work. _(Resolved since milestone 45: the `⋯` menu's
+  "Suggest tags" row is its new surface, acting on the caret's note
+  section.)_
 - **The bottom dock has no default resident.** It renders only when the
   user docks a panel or an editor band there. A persisted layout naming
   the `entry` widget drops the id on load (unknown ids already fold out).

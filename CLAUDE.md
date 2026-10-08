@@ -103,10 +103,10 @@ toolchain is removable by deleting `.tools/`). Never assume a bare `node`,
   The MCP server reads the index through the registered
   `SectionSearchProvider` (which also serves vocabulary + prefix styles)
   and degrades with a clear error when the tags plugin is disabled.
-  `#task` is reserved; the LLM only _suggests_ tags
-  (Autotag — its backend stays, but it has had no button since the entry
-  drawer was removed in milestone 43, ADR-0057). See
-  `specs/classifier-spec.md`.
+  `#task` is reserved; the LLM only _suggests_ tags (Autotag — re-homed in
+  milestone 45 as the editor `⋯` menu's "Suggest tags" row: it sends the
+  caret's heading section (`shared/note-sections.ts`) and applies the
+  suggested tags to it directly). See `specs/classifier-spec.md`.
 - LLM transport behind a provider abstraction
   ([ADR-0047](docs/09_architecture_decisions/0047-llm-provider-abstraction.md)):
   base-owned `LlmClient` interface + a per-call `LlmRouter` over
@@ -642,6 +642,14 @@ can dock into the three docks (milestone 20,
 The milestone log lives in
 [docs/milestones-done.md](docs/milestones-done.md).
 
+**Just code-complete: milestone 45 — Autotag re-homing** (req-36): the
+editor `⋯` menu's **"Suggest tags"** row sends the caret's heading
+section (new pure helper `shared/note-sections.ts`) to the unchanged
+`tags:suggest` backend and applies the suggested tags to it directly —
+deduplicated, one undo step, saved. Errors surface in the editor's error
+row, with a "Suggesting tags…" meta-bar hint while the model answers.
+**Not yet manually verified by the owner.**
+
 **Just code-complete: milestone 43 — UI refinement**
 ([ADR-0057](docs/09_architecture_decisions/0057-ui-refinement-icon-chrome-anthrazit-and-slash-capture.md)):
 sentence-case sans chrome with shared icon controls, the Anthrazit theme,
@@ -649,7 +657,8 @@ one text-and-tag field in Search and Tasks, the sectioned slash menu
 (built-in Entry + templates with preview) replacing the removed "Add
 entry" panel, formatting buttons in the meta bar, in-place file
 create/rename and the calendar's Today button. **Not yet manually
-verified by the owner.** Open follow-up: Autotag has no button.
+verified by the owner.** (Its open follow-up — Autotag had no button —
+is resolved by milestone 45.)
 
 **Just code-complete: milestone 41 — semantic vault retrieval, the
 assistant's Vault chip** ([ADR-0055](docs/09_architecture_decisions/0055-semantic-vault-retrieval.md)):
@@ -715,9 +724,12 @@ milestones") until owner-verified.
 - **Just code-complete:** milestones 33 (tag system round), 34
   (tasks across vaults + undo fix), 35 (pinned tabs), 36 (open files
   from the OS), 39 (Outline panel), 40 (word completion +
-  markdown-context detector), 41 (semantic vault retrieval) and 43 (UI
-  refinement, ADR-0057) — see
-  "Current State" above.
+  markdown-context detector), 41 (semantic vault retrieval), 43 (UI
+  refinement, ADR-0057) and 45 (Autotag re-homing) — see
+  "Current State" above. (Milestone 44, the Task Center's `#task/id:`
+  addressing, was reverted before release — ADR-0033 "considered and
+  rejected"; the surviving piece is the ambiguity skip in
+  `resolveTaskLine`.)
 - **Next:** the provider program: Req-31 MCP client, then copilot-web
   re-apply + copilot-cli spike, or the Office remainder of Req-2 (needs
   a rendering strategy discussion first).

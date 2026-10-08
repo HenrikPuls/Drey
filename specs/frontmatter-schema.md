@@ -37,9 +37,12 @@ updated: '2026-09-05T14:32:00'
   timestamp headings never match). These are label hierarchies, not folders:
   searching `#project` also returns every `#project/*` section. Fenced and
   inline code spans are ignored. Grammar: `shared/tags/tags.ts`.
-- **Tasks**: `#task` with a mandatory `id:` (so checkbox clicks can be
-  written back unambiguously); optional `due:` / `prio:`; `done:` only once
-  checked off. `#task` is a reserved structural marker, never a tag.
+- **Tasks**: a GFM checkbox line and/or a line carrying the reserved
+  `#task` marker (structural, never a tag; a bare `#task` line is done
+  when it also carries `#task/done`). Task lines carry **no** machine
+  tokens — the Tasks panel writes checkbox state back by re-resolving
+  the line against fresh content at tick time and skipping ambiguous
+  duplicates (never guessing a twin).
 
 ## Daily notes — `<dir>/<year>/<month>/YYYY-MM-DD.md`
 

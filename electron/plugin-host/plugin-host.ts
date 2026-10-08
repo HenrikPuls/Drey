@@ -78,7 +78,7 @@ export interface PluginHostDeps {
    * never gets the instance itself.
    */
   readonly vaultTools: VaultTools;
-  /** The vocabulary-based tag suggestion (the drawer's Autotag; also `ctx.llm.suggestTags`). */
+  /** The vocabulary-based tag suggestion (the editor's "Suggest tags" row; also `ctx.llm.suggestTags`). */
   readonly tagSuggester: TagSuggester;
   readonly llmDebug: LlmDebugLog;
   /**
@@ -584,7 +584,7 @@ export class PluginHost {
             }),
           ),
         capabilities: () => llm.capabilities(),
-        // The vocabulary-based Autotag — a base surface (drawer + Tags
+        // The vocabulary-based Autotag — a base surface (editor + Tags
         // plugin vocabulary) also reachable from plugins.
         suggestTags: (entryText, vocabulary, taskId) =>
           tagSuggester.suggest(entryText, [...vocabulary], taskId),

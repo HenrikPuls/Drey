@@ -14,6 +14,6 @@
 | Tag-first capture | Typing a known `#tag` routes a note deterministically with no LLM call — the fast/common path. |
 | Inbox | Review queue (`inbox.md`) for untagged captures, new-folder proposals, and untracked externally-created files. Schema-free by design. |
 | `#important` | Marker on a History entry that keeps it in the master document's Summary regardless of age/recency window. |
-| `#task` | Inline task syntax in any note body; requires a stable `id:` (not line-number-based) so a future task center can write checkbox state back unambiguously. |
+| `#task` | Inline task syntax in any note body; a structural marker, never a tag. The Tasks panel writes checkbox state back by re-resolving the line at tick time (fresh content, text match) and skipping ambiguous duplicates rather than guessing. |
 | Quick-capture | Global-hotkey popup window for fast text entry with inline `#tag` support, independent of whatever's currently open in the main window. |
 | Batch tag suggestion | Prompt 2 (`specs/classifier-spec.md`) — LLM-suggested tags for untagged inbox entries, shown as clickable chips, run only when the inbox is opened (not live). |

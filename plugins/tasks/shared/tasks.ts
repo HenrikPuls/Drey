@@ -192,19 +192,26 @@ export function setDoneOnLine(content: string, line: number, done: boolean): str
  * shifting every task down — and a toggle against the old number then
  * lands on a shifted line, where it silently no-ops (or worse, flips a
  * neighbouring task). So: the exact line when a task still sits there,
- * otherwise the nearest line carrying the SAME text and kind (duplicate
- * texts resolve to the occurrence closest to the recorded line).
- * `null` when the task is gone from the content entirely.
+ * otherwise the one line carrying the SAME text and kind. A shift with
+ * SEVERAL identical candidates is ambiguous — the recorded line can no
+ * longer tell the twins apart — so this returns `null` rather than
+ * guessing; the caller skips the toggle (never mis-ticks a twin).
+ * `null` also when the task is gone from the content entirely.
  */
 export function resolveTaskLine(content: string, task: TaskRecord): number | null {
-  let best: TaskRecord | null = null;
+  let found: TaskRecord | null = null;
+  let ambiguous = false;
   for (const candidate of scanTasks(task.path, content)) {
     if (candidate.text !== task.text || candidate.kind !== task.kind) {
       continue;
     }
-    if (best === null || Math.abs(candidate.line - task.line) < Math.abs(best.line - task.line)) {
-      best = candidate;
+    if (candidate.line === task.line) {
+      return candidate.line;
     }
+    if (found !== null) {
+      ambiguous = true;
+    }
+    found = candidate;
   }
-  return best?.line ?? null;
+  return found !== null && !ambiguous ? found.line : null;
 }

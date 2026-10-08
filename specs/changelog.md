@@ -20,6 +20,46 @@ recorded as an explicit decision. The parity checklist lives in
 
 ## Recent milestones
 
+### Milestone 45 — Autotag re-homed into the editor's `⋯` menu (req-36)
+
+The `suggestTags` backend orphaned by the drawer's removal (ADR-0057) has
+a new trigger. **Not yet manually verified by the owner.**
+
+- **`⋯` → "Suggest tags"** — sends the **section under the caret** (the
+  same heading-delimited unit the tag search reports on; fences hide `#`
+  runs) plus the vault vocabulary to the unchanged `tags:suggest`
+  backend (`TagSuggester`, the editable `autotag` template). New pure
+  helper `shared/note-sections.ts` — a base-side twin of the tags
+  plugin's section splitter, since base cannot import plugin modules
+  (ADR-0044).
+- **Direct apply** — the suggested tags are appended to the section's
+  last prose line (fence/table/quote/HTML-safe; a new line when the
+  section has no prose), deduplicated against the tags it already
+  carries, as one undo step, saved immediately. No chips, no dialog.
+- **Failure surface** — LLM off, tags plugin disabled, model failure and
+  the every-suggestion-already-present case all show in the editor's
+  error row; a small "Suggesting tags…" meta-bar hint shows while the
+  model answers (no timeout — cancel stays the escape hatch).
+- Caret inside frontmatter asks to be moved into the body first.
+  `ctx.llm.suggestTags` for plugins is untouched.
+
+### Milestone 44 — Task Center: implemented, then reverted before release (req-35)
+
+The roadmap's priority-1 "Task Center" item ([ADR-0033](../docs/09_architecture_decisions/0033-tasks-panel-and-index.md),
+"considered and rejected") shipped as stable `#task/id:<id>` write-back
+addressing and was pulled again the same session, before any release:
+minting put a permanent `#task/id:k3f9a2b1` token into every panel-ticked
+task line (visible in source mode, exports and every other Markdown
+tool), editor-checkbox and external ticks never minted at all, and the
+mis-tick scenario it guarded — duplicate task texts *plus* a shift
+*plus* a tick inside that unsaved window — is vanishingly rare in a
+single-user vault. What survives from the investigation: the write-back's
+`resolveTaskLine` now **refuses to guess** — with duplicate task texts
+and a shifted recorded line it skips the toggle (safe no-op) instead of
+ticking the nearest twin, and follows a *unique* task across any shift.
+Single-user vaults lose nothing; nobody's task lines carry machine
+tokens.
+
 ### Milestone 43 — UI refinement: calmer chrome, Anthrazit, capture through the `/` menu ([ADR-0057](../docs/09_architecture_decisions/0057-ui-refinement-icon-chrome-anthrazit-and-slash-capture.md))
 
 Implements the "Drey UI Refinement" design mockup. **Not yet manually

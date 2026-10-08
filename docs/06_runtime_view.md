@@ -763,6 +763,16 @@ sequenceDiagram
 
 ## 6.13 Autotag button → suggestTags → chips (milestone 11)
 
+> _(Historical: the drawer and its Autotag button are gone since
+> [ADR-0044](09_architecture_decisions/0044-runtime-plugin-system.md) /
+> [ADR-0057](09_architecture_decisions/0057-ui-refinement-icon-chrome-anthrazit-and-slash-capture.md).
+> Since milestone 45 (req-36) the flow lives in the editor `⋯` menu's
+> **Suggest tags** row: the same `tags:suggest` call (`TagSuggester`), but
+> the payload is the heading section under the caret
+> (`shared/note-sections.ts`) and the reply is appended into that section
+> directly — deduplicated, one undo step, saved — instead of pre-filling
+> chips. The diagram below is the pre-plugin shape.)_
+
 The drawer's **Autotag** button sends the current entry text plus the tag
 vocabulary to the model; the reply pre-fills the tag chip row. Nothing is
 saved — the user still confirms by adding the entry.
@@ -1088,11 +1098,20 @@ destination → tree reload.
 
 ## 6.21 Tasks panel: list + tick a task ([ADR-0033](09_architecture_decisions/0033-tasks-panel-and-index.md))
 
+> _(Since [ADR-0044](09_architecture_decisions/0044-runtime-plugin-system.md)
+> stage 6 this flow runs in `plugins/tasks/` — panel widget + main-side
+> index over the plugin bridge — instead of `TaskService` /
+> `EditorService.setTaskDone`; the shape below is unchanged.)_
+
 The panel shows `TaskService.visible()`. In **document** scope that is
 `scanTasks` over the live editor buffer, so it tracks unsaved edits with no
 IPC. In **vault** scope it is `listTasks()` from the main-process
 `TaskIndex`, refreshed on construct / after each save / on
-`vault:changed` (ADR-0045). Ticking a row toggles the source line and saves.
+`vault:changed` (ADR-0045). Ticking a row toggles the source line and saves;
+the line is re-resolved against the *current* content at tick time, and
+when duplicate task texts make that resolution ambiguous the toggle is
+skipped — a safe no-op, never a guess at the wrong twin
+(ADR-0033, "considered and rejected").
 
 ```mermaid
 sequenceDiagram

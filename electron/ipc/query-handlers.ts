@@ -10,13 +10,14 @@ export interface QueryHandlerDeps {
 }
 
 /**
- * Read-side index IPC: the LLM-backed `tags:suggest` (the drawer's
- * Autotag) and the base `search:vocabulary` pull (tag completion, prefix
- * colors). Both read through the section-search provider -- the Tags
- * plugin -- which stays the single data owner (ADR-0044); the Autotag
- * stays a base surface because it writes into the entry drawer's draft
- * (ADR-0044 stage 7), and the vocabulary pull is base transport so base
- * surfaces never hardcode a plugin id.
+ * Read-side index IPC: the LLM-backed `tags:suggest` (the editor's
+ * `⋯` "Suggest tags" row, req-36) and the base `search:vocabulary` pull
+ * (tag completion, prefix colors). Both read through the section-search
+ * provider -- the Tags plugin -- which stays the single data owner
+ * (ADR-0044); the Autotag stays a base surface because its write target is
+ * the base editor (formerly the entry drawer's draft, ADR-0044 stage 7),
+ * and the vocabulary pull is base transport so base surfaces never
+ * hardcode a plugin id.
  */
 export function registerQueryHandlers({ tagSuggester, pluginHost }: QueryHandlerDeps): void {
   ipcMain.handle(

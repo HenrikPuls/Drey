@@ -11,6 +11,11 @@ import {
 } from '@angular/core';
 import { EditorView } from '@codemirror/view';
 import { editorFontFamilyStacks } from '../../../shared/app-config';
+import {
+  appendTagsToSection,
+  frontmatterEndLine,
+  sectionAtLine,
+} from '../../../shared/note-sections';
 import type { MenuContribution } from '../../../shared/plugin-api/renderer';
 import { EditorService, EditorViewMode, NewEntryRequest } from '../services/editor.service';
 import { EditorZoomService } from '../services/editor-zoom.service';
@@ -168,6 +173,9 @@ export class Editor implements AfterViewInit {
   /** `⋯` mode menu: open state and viewport-anchored position. */
   protected readonly menuOpen = signal(false);
   protected readonly menuPos = signal({ x: 0, y: 0 });
+
+  /** "Suggest tags" in flight: shows the meta-bar hint and blocks re-entry. */
+  protected readonly suggestingTags = signal(false);
 
   /** `--font-sans` / `--drey-heading-font` overrides for the chosen editor typeface. */
   protected readonly fontStacks = computed(() =>
@@ -339,6 +347,45 @@ export class Editor implements AfterViewInit {
   protected toggleToolbar(): void {
     this.closeMenu();
     this.prefs.toggleToolbar();
+  }
+
+  /**
+   * `⋯` -> "Suggest tags" (req-36, the re-homed Autotag): sends the
+   * caret's heading section to the base `tags:suggest` backend and appends
+   * the returned tags into that section directly -- one undo step, saved
+   * immediately -- deduplicated against the tags it already carries. The
+   * entry drawer's old Autotag button, whose backend stayed base-owned
+   * (ADR-0044 stage 7); failures and empty results surface through the
+   * editor's `.err` row.
+   */
+  protected async suggestTags(): Promise<void> {
+    const view = this.view;
+    const doc = this.shownDoc();
+    if (!view || doc === null || doc.kind !== 'text' || this.suggestingTags()) {
+      return;
+    }
+    const content = view.state.doc.toString();
+    const line = view.state.doc.lineAt(view.state.selection.main.head).number;
+    if (line <= frontmatterEndLine(content)) {
+      this.editor.error.set('Move the caret into the note body to suggest tags.');
+      return;
+    }
+    const section = sectionAtLine(content, line);
+    this.suggestingTags.set(true);
+    try {
+      const suggested = await window.dreyApi.suggestTags(section.text, `suggest-tags:${doc.key}`);
+      const next = appendTagsToSection(content, section.startLine, section.endLine, suggested);
+      if (next === content) {
+        this.editor.error.set('No new tags — the section already carries the suggestions.');
+        return;
+      }
+      this.editor.updateBuffer(doc.key, next);
+      await this.editor.save({ key: doc.key });
+    } catch (err) {
+      this.editor.error.set(err instanceof Error ? err.message : String(err));
+    } finally {
+      this.suggestingTags.set(false);
+    }
   }
 
   /**

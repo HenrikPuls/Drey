@@ -44,29 +44,32 @@ starts on an item without an id, assign the next free one.
 
 ### Next milestones (priority order)
 
-⚠️ Neither item below has an id assigned yet — the highest visible id in
-this file is req-34/Req-34, but changelog.md may already use higher
-numbers I can't see. Check there before assigning req-35/req-36 (or
-whatever's next).
+⚠️ Milestone ids: req-35 went to the Task Center (implemented as
+milestone 44, then **reverted before release** — see the closed item
+below and changelog.md); req-36 to the Autotag re-homing (shipped).
+Check changelog.md for anything higher before assigning req-37+.
 
-1. **Task Center** — stable `#task id:` addressing; migrate the Tasks
-   panel's write-back from line-number to id-based. Closes the silent
-   mis-tick risk when a task's line number shifts between scan and
-   write-back.
-2. **Semantic Search, remaining slices** — the core shipped as milestone
+1. **Semantic Search, remaining slices** — the core shipped as milestone
    41 / ADR-0055 (the assistant's Vault chip: top-k section retrieval via
    transformers.js WASM + a JSON index per vault; sqlite-vec was dropped —
    see the ADR for why). Remaining ideas, none committed: a semantic MCP
    `vault_search` mode (needs a plural base registry seam), and pause /
    resume of large rebuilds on interactive use.
 
-### Feature requests (backlog, unordered)
+### Closed (won't do)
 
-- **Autotag needs a new home** (no id yet) — the "Add entry" drawer that
-  carried the Autotag button was removed in milestone 43 (ADR-0057). The
-  `suggestTags` backend and the `tags:suggest` channel still exist but
-  nothing calls them. Options: a row in the editor's `⋯` menu acting on
-  the section under the caret, or dropping the feature.
+- **Task Center / stable task ids** (req-35) — implemented as milestone
+  44 (`#task/id:<id>` mint-on-tick write-back) and reverted before
+  release: the token is permanent noise in plain Markdown, adoption is
+  inherently partial (editor checkboxes and external editors never
+  mint), and the guarded mis-tick scenario (duplicate texts + shift +
+  tick inside the unsaved window) is negligible for a single user. The
+  Tasks panel's write-back resolves against fresh content at tick time
+  and skips ambiguous duplicates instead of guessing — that is the
+  whole fix ([ADR-0033](../docs/09_architecture_decisions/0033-tasks-panel-and-index.md),
+  "considered and rejected").
+
+### Feature requests (backlog, unordered)
 
 - **Req-2 (remainder)** — render Office documents inline (Word, Excel,
   PowerPoint, Loop). PDF slice shipped (milestone 30, ADR-0052: drag-in

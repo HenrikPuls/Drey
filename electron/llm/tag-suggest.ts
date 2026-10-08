@@ -1,14 +1,16 @@
 /**
- * The vocabulary-based tag suggestion behind the drawer's "Autotag" button
- * (and `ctx.llm.suggestTags` for plugins): the entry text + the vault's tag
- * vocabulary in, up to four suggested tags out (normalised, de-duplicated).
+ * The vocabulary-based tag suggestion behind the editor's `⋯` "Suggest
+ * tags" row (and `ctx.llm.suggestTags` for plugins): one note section + the
+ * vault's tag vocabulary in, up to four suggested tags out (normalised,
+ * de-duplicated).
  *
  * Extracted from the pre-conversion `ActionRunner` (ADR-0044 stage 7): the
  * action *engine* moved into the assistant plugin, but the Autotag stays a
- * base surface — it writes into the base entry drawer and joins the Tags
- * plugin's vocabulary (via the section-search provider) with the base LLM
- * transport, so neither side owns it alone. Uses the editable `autotag`
- * built-in template. Cancellable via `taskId`.
+ * base surface -- it writes into the base editor (the "Suggest tags" row,
+ * the removed entry drawer's old button) and joins the Tags plugin's
+ * vocabulary (via the section-search provider) with the base LLM transport,
+ * so neither side owns it alone. Uses the editable `autotag` built-in
+ * template. Cancellable via `taskId`.
  */
 import { AUTOTAG_PROMPT } from '../../shared/app-config';
 import { parseSuggestedTags } from '../../shared/llm';
