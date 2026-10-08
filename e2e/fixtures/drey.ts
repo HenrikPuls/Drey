@@ -187,7 +187,12 @@ export const test = base.extend<DreyFixtures>({
   },
 
   page: async ({ electronApp }, use) => {
-    const page = await electronApp.firstWindow();
+    // Generous on purpose: a cold Electron boot on a loaded CI runner can
+    // blow past Playwright's 30s default before the window event fires
+    // (CI 2026-10-08: four suite failures, all this timeout, zero real
+    // assertion failures). The window either appears or the whole run is
+    // broken either way -- 2 minutes only ever changes the verdict.
+    const page = await electronApp.firstWindow({ timeout: 120_000 });
     await page.waitForLoadState('domcontentloaded');
     await use(page);
   },
