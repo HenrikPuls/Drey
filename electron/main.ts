@@ -419,6 +419,13 @@ function createMainWindow(getUiScaleFactor?: () => number): BrowserWindow {
   };
   window.on('maximize', emitMaximizeState);
   window.on('unmaximize', emitMaximizeState);
+  // Same sync for fullscreen (the View menu's "Full screen" check mark) --
+  // also covers an F11 pressed outside the renderer's keybindings.
+  const emitFullScreenState = (): void => {
+    window.webContents.send(IPC_CHANNELS.windowFullScreenChanged, window.isFullScreen());
+  };
+  window.on('enter-full-screen', emitFullScreenState);
+  window.on('leave-full-screen', emitFullScreenState);
   // The app is not a zoomable web page: Ctrl +/-/0 scales the editor
   // content in the renderer (ADR-0015), and the touchpad pinch gesture
   // must not zoom the whole window. Ctrl+wheel is suppressed renderer-side

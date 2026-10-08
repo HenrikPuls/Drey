@@ -272,9 +272,9 @@ Renderer (Angular):
   `DockService.contentHeight(id)` marks a panel (currently `calendar`)
   that sizes to its content rather than a flex share.
 - `TitlebarComponent` + `MenuBar` + `MenuService` (`src/app/titlebar/`) —
-  the frameless-window titlebar: accent square, the HTML File/Edit/
-  Selection/View menu bar, and — off macOS — minimize/maximize/close over
-  the `window:*` IPC channels
+  the frameless-window titlebar: accent square, the left dock toggle,
+  the HTML File/Edit/Selection/View menu bar, the right dock toggle, and
+  — off macOS — minimize/maximize/close over the `window:*` IPC channels
   ([ADR-0019](docs/09_architecture_decisions/0019-movable-dock-panels-and-layout-state.md)).
   Menu rows dispatch three ways: `KeybindingService` command ids
   (New note, Save, Search…), the `edit:exec` IPC → `webContents`
@@ -369,7 +369,10 @@ Renderer (Angular):
   register from `App`. Commands: `search.open` (`Mod+Shift+F`),
   `note.new` (`Mod+N`), `note.save` (`Mod+S`), `note.saveAs`
   (`Mod+Shift+S`), `note.saveAll` (`Mod+Alt+S`),
-  `editor.toggleLineNumbers` (`Mod+G`) — the titlebar menu invokes the
+  `editor.toggleLineNumbers` (`Mod+G`), `window.toggleFullScreen` (`F11`,
+  OS fullscreen via `window:toggle-fullscreen`; the native menu's
+  `togglefullscreen` role is deliberately absent — its F11 accelerator
+  would swallow the key) — the titlebar menu invokes the
   same ids
 - `PaneService` (`src/app/panes/`, ADR-0037) — the split-view editor
   layout: an arbitrary tree of row/column splits down to leaf panes, each
@@ -490,8 +493,10 @@ be called out explicitly (see Working Style below), not introduced silently.
   placeholder text. Two bespoke themes ship — **Drey** (terracotta) and
   **Anthrazit** (warm charcoal, blue accent; the fresh-install default).
 - Overall layout ([ADR-0019](docs/09_architecture_decisions/0019-movable-dock-panels-and-layout-state.md)):
-  a frameless window with a **custom titlebar** (accent square + "Drey" +
-  an HTML File/Edit/Selection/View menu bar + window controls), then a row
+  a frameless window with a **custom titlebar** (accent square + the
+  left dock toggle + an HTML File/Edit/Selection/View menu bar + the right
+  dock toggle + window controls; each toggle folds its whole side dock
+  away, `Ctrl+B` / `Ctrl+Alt+B`, state kept and persisted), then a row
   of **[left dock | centre column | right dock]** — the centre column
   being the editor area above a **bottom dock** band — then a **28px
   status bar** (word/char count · context hint · Settings entry).
@@ -646,6 +651,21 @@ can dock into the three docks (milestone 20,
 The milestone log lives in
 [docs/milestones-done.md](docs/milestones-done.md).
 
+**Just code-complete: milestone 48 — F11 full screen**: the
+`window.toggleFullScreen` command (`F11`) toggles OS fullscreen through
+`window:toggle-fullscreen`; the View menu's "Full screen" row shares the id
+and tracks the real state via the `window:fullscreen-changed` push; the
+native menu's `togglefullscreen` role is removed (its default F11
+accelerator would swallow the key). **Not yet manually verified by the
+owner.**
+
+**Just code-complete: milestone 47 — foldable side docks**: two
+titlebar toggles (one above each dock) fold the left / right dock away as
+a whole (`dock.toggleLeft` `Ctrl+B`, `dock.toggleRight` `Ctrl+Alt+B`,
+View-menu rows); the dock stays mounted, so panel state survives, and it
+unfolds when one of its panels is revealed (ADR-0019 amendment). **Not
+yet manually verified by the owner.**
+
 **Just code-complete: milestone 46 — editor snippets** (templates
 plugin): typing a trigger word — `tbl`, `code`, `task` or any
 user-defined one — offers a multi-line Markdown block with
@@ -738,8 +758,8 @@ milestones") until owner-verified.
   (tasks across vaults + undo fix), 35 (pinned tabs), 36 (open files
   from the OS), 39 (Outline panel), 40 (word completion +
   markdown-context detector), 41 (semantic vault retrieval), 43 (UI
-  refinement, ADR-0057), 45 (Autotag re-homing) and 46 (editor
-  snippets) — see
+  refinement, ADR-0057), 45 (Autotag re-homing), 46 (editor
+  snippets), 47 (foldable side docks) and 48 (F11 full screen) — see
   "Current State" above. (Milestone 44, the Task Center's `#task/id:`
   addressing, was reverted before release — ADR-0033 "considered and
   rejected"; the surviving piece is the ambiguity skip in

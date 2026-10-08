@@ -20,6 +20,7 @@ import { EditorService } from '../services/editor.service';
 import { EditTargetService } from '../services/edit-target.service';
 import { SettingsService } from '../services/settings.service';
 import { VaultService } from '../vault';
+import { WindowChromeService } from './window-chrome.service';
 import { duplicateSelection } from '../editor/markdown-commands';
 import type { EditCommand } from '../../../shared/ipc-api';
 
@@ -72,6 +73,7 @@ export class MenuService {
   private readonly vault = inject(VaultService);
   private readonly widgets = inject(WidgetRegistryService);
   private readonly contributions = inject(MenuContributionsService);
+  private readonly windowChrome = inject(WindowChromeService);
 
   readonly open = signal<MenuId | null>(null);
 
@@ -297,6 +299,27 @@ export class MenuService {
           hint: 'Ctrl G',
           checked: () => this.editor.lineNumbers(),
           run: () => this.run('editor.toggleLineNumbers'),
+        },
+        {
+          kind: 'item',
+          label: 'Left dock',
+          hint: 'Ctrl B',
+          checked: () => !this.dock.sideFolded('left'),
+          run: () => this.run('dock.toggleLeft'),
+        },
+        {
+          kind: 'item',
+          label: 'Right dock',
+          hint: 'Ctrl Alt B',
+          checked: () => !this.dock.sideFolded('right'),
+          run: () => this.run('dock.toggleRight'),
+        },
+        {
+          kind: 'item',
+          label: 'Full screen',
+          hint: 'F11',
+          checked: () => this.windowChrome.fullscreen(),
+          run: () => this.run('window.toggleFullScreen'),
         },
         ...this.widgets
           .widgets()

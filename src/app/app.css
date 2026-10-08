@@ -53,6 +53,13 @@
   background: var(--resize-hover);
 }
 
+/* A side dock folded away by its titlebar toggle. It stays mounted, so its
+   panels keep their state (a streaming chat, scroll positions, a docked
+   editor) and reappear as they were. */
+app-dock.folded {
+  display: none;
+}
+
 /* The editor area stacked above the bottom dock. */
 .center-col {
   flex: 1;

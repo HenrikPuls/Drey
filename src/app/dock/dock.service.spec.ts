@@ -30,6 +30,49 @@ describe('DockService', () => {
     expect(dock.dockHeight()).toBe(280);
   });
 
+  describe('folding a side dock (the titlebar toggles)', () => {
+    it('folds and unfolds a side, keeping its panels, and persists it', () => {
+      const dock = make();
+      const before = dock.leftIds();
+      expect(dock.sideFolded('left')).toBe(false);
+
+      dock.toggleSide('left');
+      expect(dock.sideFolded('left')).toBe(true);
+      expect(dock.sideFolded('right')).toBe(false);
+      expect(dock.leftIds()).toEqual(before);
+      expect(JSON.parse(localStorage.getItem('drey.dock')!).foldedSides).toEqual(['left']);
+
+      dock.toggleSide('left');
+      expect(dock.sideFolded('left')).toBe(false);
+    });
+
+    it('restores the folded sides from storage and ignores junk', () => {
+      localStorage.setItem('drey.dock', JSON.stringify({ foldedSides: ['right', 'bottom', 7] }));
+      const dock = make();
+      expect(dock.sideFolded('right')).toBe(true);
+      expect(dock.sideFolded('left')).toBe(false);
+      expect(dock.sideFolded('bottom')).toBe(false);
+    });
+
+    it('revealing a panel unfolds the dock it sits in', () => {
+      const dock = make();
+      dock.toggleSide('left');
+      dock.openAndExpand('files');
+      expect(dock.sideFolded('left')).toBe(false);
+    });
+
+    it('a drop into a folded dock keeps it open; reset unfolds everything', () => {
+      const dock = make();
+      dock.toggleSide('right');
+      dock.move('calendar', 'right', 0);
+      expect(dock.sideFolded('right')).toBe(false);
+
+      dock.toggleSide('left');
+      dock.reset();
+      expect(dock.sideFolded('left')).toBe(false);
+    });
+  });
+
   it('moves a panel into the bottom dock and clamps its height', () => {
     const dock = make();
     dock.move('calendar', 'bottom', 0);

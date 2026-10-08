@@ -50,6 +50,17 @@ export function registerAppHandlers(getMainWindow: () => BrowserWindow | null): 
     IPC_CHANNELS.windowIsMaximized,
     (): boolean => getMainWindow()?.isMaximized() ?? false,
   );
+  // Fullscreen toggle (the renderer's F11 command / View-menu row).
+  ipcMain.handle(IPC_CHANNELS.windowToggleFullScreen, (): void => {
+    const win = getMainWindow();
+    if (win) {
+      win.setFullScreen(!win.isFullScreen());
+    }
+  });
+  ipcMain.handle(
+    IPC_CHANNELS.windowIsFullScreen,
+    (): boolean => getMainWindow()?.isFullScreen() ?? false,
+  );
 
   // The HTML Edit menu (frameless titlebar, ADR-0019) drives the focused
   // editable element through the same native editing commands the

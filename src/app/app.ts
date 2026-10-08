@@ -22,6 +22,7 @@ import { VaultService } from './vault';
 import { KeybindingService } from './keybindings';
 import { Dock, DockService } from './dock';
 import { Titlebar } from './titlebar';
+import { WindowChromeService } from './titlebar';
 import { StatusBar } from './status-bar/status-bar';
 import { Settings } from './settings/settings';
 import { EditorContextMenu } from './editor-context-menu/editor-context-menu';
@@ -62,6 +63,14 @@ export class App {
   protected readonly editor = inject(EditorService);
   protected readonly settings = inject(SettingsService);
   protected readonly dock = inject(DockService);
+
+  /**
+   * A folded side dock is out of the layout -- except during a panel drag,
+   * when it shows like an empty dock does, so it can still be dropped into.
+   */
+  protected folded(side: 'left' | 'right'): boolean {
+    return this.dock.sideFolded(side) && !this.dock.dragActive();
+  }
   protected readonly panes = inject(PaneService);
   private readonly vault = inject(VaultService);
 
@@ -227,6 +236,31 @@ export class App {
       label: 'Focus previous pane',
       keybinding: 'Shift+F6',
       run: () => this.stepPaneFocus(-1),
+    });
+
+    // Fold a whole side dock away (the titlebar toggles + View menu rows).
+    keys.register({
+      id: 'dock.toggleLeft',
+      label: 'Toggle left dock',
+      keybinding: 'Mod+B',
+      run: () => this.dock.toggleSide('left'),
+    });
+    keys.register({
+      id: 'dock.toggleRight',
+      label: 'Toggle right dock',
+      keybinding: 'Mod+Alt+B',
+      run: () => this.dock.toggleSide('right'),
+    });
+
+    // OS fullscreen (the View menu's "Full screen" row shares the id). F11
+    // must stay renderer-owned: the old native `togglefullscreen` menu role
+    // swallowed the key in main before the command could see it.
+    const windowChrome = inject(WindowChromeService);
+    keys.register({
+      id: 'window.toggleFullScreen',
+      label: 'Toggle full screen',
+      keybinding: 'F11',
+      run: () => windowChrome.toggleFullScreen(),
     });
 
     keys.register({

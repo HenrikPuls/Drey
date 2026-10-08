@@ -52,8 +52,11 @@ export function buildApplicationMenu(): Menu {
         // No window-zoom items here on purpose. Ctrl +/-/0 is handled in
         // the renderer and scales the editor *content* only, not the whole
         // window (ADR-0015). Menu accelerators would swallow those keys
-        // before the renderer ever saw them.
-        { role: 'togglefullscreen' },
+        // before the renderer ever saw them. The same applies to the old
+        // `togglefullscreen` role: its default F11 accelerator would eat
+        // the key before the renderer's `window.toggleFullscreen` command
+        // (the View-menu row) could handle it -- fullscreen lives entirely
+        // in the renderer now (window:toggle-fullscreen IPC).
       ],
     },
     {

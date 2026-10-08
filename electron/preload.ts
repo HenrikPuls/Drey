@@ -65,6 +65,14 @@ const dreyApi: DreyApi = {
     ipcRenderer.on(IPC_CHANNELS.windowMaximizeChanged, wrapped);
     return () => ipcRenderer.removeListener(IPC_CHANNELS.windowMaximizeChanged, wrapped);
   },
+  toggleFullScreen: (): Promise<void> => ipcRenderer.invoke(IPC_CHANNELS.windowToggleFullScreen),
+  isWindowFullScreen: (): Promise<boolean> => ipcRenderer.invoke(IPC_CHANNELS.windowIsFullScreen),
+  onWindowFullScreenChange: (listener: (fullScreen: boolean) => void): (() => void) => {
+    // Forward only the payload, never the IpcRendererEvent (ADR-0001).
+    const wrapped = (_event: IpcRendererEvent, fullScreen: boolean): void => listener(fullScreen);
+    ipcRenderer.on(IPC_CHANNELS.windowFullScreenChanged, wrapped);
+    return () => ipcRenderer.removeListener(IPC_CHANNELS.windowFullScreenChanged, wrapped);
+  },
   execEditCommand: (command: EditCommand): Promise<void> =>
     ipcRenderer.invoke(IPC_CHANNELS.editExec, command),
   setUiZoomFactor: (factor: number): Promise<void> =>

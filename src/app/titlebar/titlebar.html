@@ -2,9 +2,36 @@
   <img class="mark" src="icon.png" alt="" aria-hidden="true" />
 </div>
 
+<ng-container
+  [ngTemplateOutlet]="dockToggle"
+  [ngTemplateOutletContext]="{ side: 'left', icon: 'panel-left' }"
+/>
+
 <app-menu-bar />
 
 <span class="spacer"></span>
+
+<ng-container
+  [ngTemplateOutlet]="dockToggle"
+  [ngTemplateOutletContext]="{ side: 'right', icon: 'panel-right' }"
+/>
+
+<!-- One toggle per side dock, each above the dock it folds away. -->
+<ng-template #dockToggle let-side="side" let-icon="icon">
+  <button
+    type="button"
+    class="icon-btn dock-toggle"
+    [class.right]="side === 'right'"
+    [class.folded]="dock.sideFolded(side)"
+    [disabled]="!hasPanels(side)"
+    [attr.aria-expanded]="!dock.sideFolded(side)"
+    [attr.aria-label]="toggleLabel(side)"
+    [title]="toggleLabel(side)"
+    (click)="dock.toggleSide(side)"
+  >
+    <app-icon [name]="icon" [size]="15" />
+  </button>
+</ng-template>
 
 @if (!chrome.isMac()) {
   <div class="controls">

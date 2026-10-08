@@ -37,6 +37,9 @@ export const IPC_CHANNELS = {
   exitListenerReady: 'exit:listener-ready',
   windowIsMaximized: 'window:is-maximized',
   windowMaximizeChanged: 'window:maximize-changed',
+  windowToggleFullScreen: 'window:toggle-fullscreen',
+  windowIsFullScreen: 'window:is-fullscreen',
+  windowFullScreenChanged: 'window:fullscreen-changed',
   editExec: 'edit:exec',
   uiSetZoom: 'ui:set-zoom',
   openExternal: 'app:open-external',
@@ -494,6 +497,9 @@ export interface DreyApi {
   toggleMaximizeWindow(): Promise<void>;
   closeWindow(): Promise<void>;
   isWindowMaximized(): Promise<boolean>;
+  /** Toggles OS fullscreen (the `F11` command / View-menu row). */
+  toggleFullScreen(): Promise<void>;
+  isWindowFullScreen(): Promise<boolean>;
 
   /**
    * Fires when the window is about to close and the renderer must decide
@@ -529,6 +535,13 @@ export interface DreyApi {
    * shape as `onOpenDailyNote`). Returns an unsubscribe.
    */
   onWindowMaximizeChange(listener: (maximized: boolean) => void): () => void;
+
+  /**
+   * Fires when the window enters or leaves OS fullscreen, so the View
+   * menu's "Full screen" check mark can follow along (main -> renderer
+   * push, same shape as `onWindowMaximizeChange`). Returns an unsubscribe.
+   */
+  onWindowFullScreenChange(listener: (fullScreen: boolean) => void): () => void;
 
   /**
    * Runs a standard editing command against the focused editable element

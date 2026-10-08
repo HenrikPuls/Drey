@@ -11,8 +11,8 @@
 
   <div class="layout">
     @if (dock.hasLeft() || dock.dragActive()) {
-      <app-dock side="left" />
-      @if (dock.hasLeft()) {
+      <app-dock side="left" [class.folded]="folded('left')" />
+      @if (dock.hasLeft() && !folded('left')) {
         <div
           class="divider divider-x"
           role="separator"
@@ -49,7 +49,7 @@
     </div>
 
     @if (dock.hasRight() || dock.dragActive()) {
-      @if (dock.hasRight()) {
+      @if (dock.hasRight() && !folded('right')) {
         <div
           class="divider divider-x"
           role="separator"
@@ -58,7 +58,7 @@
           (pointerdown)="dock.startDockResize('right', $event)"
         ></div>
       }
-      <app-dock side="right" />
+      <app-dock side="right" [class.folded]="folded('right')" />
     }
   </div>
 

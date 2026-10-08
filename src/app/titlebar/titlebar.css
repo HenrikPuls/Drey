@@ -14,7 +14,7 @@
   display: flex;
   align-items: center;
   flex: none;
-  margin-right: 12px;
+  margin-right: 8px;
 }
 
 /* Leave room for the macOS traffic lights when they sit inset over the bar. */
@@ -28,6 +28,23 @@
   border-radius: 4px;
   object-fit: cover;
   flex: none;
+}
+
+/* The dock toggles: left one beside the brand, right one before the window
+   controls -- each above the dock it folds away. Dimmed while folded. */
+.dock-toggle {
+  width: 28px;
+  height: 26px;
+  margin-right: 6px;
+  -webkit-app-region: no-drag;
+}
+
+.dock-toggle.right {
+  margin: 0 6px;
+}
+
+.dock-toggle.folded {
+  color: var(--text-6);
 }
 
 .spacer {

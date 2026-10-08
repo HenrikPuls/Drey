@@ -191,3 +191,25 @@ Milestone 43 supersedes two points above:
 
 Bar heights moved with the same change: titlebar and tab bar 36px, the
 editor meta bar 40px, the status bar 28px.
+
+## Amendment — foldable side docks (milestone 47)
+
+`DockState` gains **`foldedSides: ('left' | 'right')[]`**: a side dock
+folded away as a whole by its titlebar toggle (`DockService.toggleSide`,
+commands `dock.toggleLeft` `Mod+B` / `dock.toggleRight` `Mod+Alt+B`,
+View-menu rows). It is orthogonal to `hidden` (per widget) and `open`
+(per panel): nothing about the panels changes.
+
+- **Hidden, not unmounted.** `App` keeps the `Dock` in the DOM with
+  `display: none`. Removing it would destroy plugin widget DOM and a
+  docked editor's view on every toggle — losing a streaming answer or
+  scroll position for what is meant to be a cheap, frequent gesture.
+- **The toggles sit in the titlebar, one above each dock** (left: beside
+  the app mark; right: before the window controls). They stay in place
+  whatever the layout does; the tab bar (Obsidian's spot) exists once per
+  pane, so a toggle there would move with splits.
+- A folded dock **unfolds on demand**: `openAndExpand` / `show` for a
+  panel in it, and `move` into it. During a panel drag it is shown like an
+  empty dock, so it stays a drop target.
+- The bottom dock is not part of this — with every panel collapsed it is
+  already just its header rows.

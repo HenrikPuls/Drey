@@ -66,6 +66,8 @@ export type IconName =
   | 'link'
   | 'image'
   | 'table'
+  | 'panel-left'
+  | 'panel-right'
   | 'code'
   | 'trash';
 
@@ -323,6 +325,15 @@ const ICONS: Record<IconName, readonly IconShape[]> = {
   code: [
     { kind: 'path', d: 'm16 18 6-6-6-6' },
     { kind: 'path', d: 'm8 6-6 6 6 6' },
+  ],
+  // Lucide "panel-left" / "panel-right" -- the titlebar's dock toggles.
+  'panel-left': [
+    { kind: 'path', d: 'M5 3h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2z' },
+    { kind: 'path', d: 'M9 3v18' },
+  ],
+  'panel-right': [
+    { kind: 'path', d: 'M5 3h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2z' },
+    { kind: 'path', d: 'M15 3v18' },
   ],
   trash: [
     { kind: 'path', d: 'M3 6h18' },

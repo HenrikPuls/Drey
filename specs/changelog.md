@@ -20,6 +20,39 @@ recorded as an explicit decision. The parity checklist lives in
 
 ## Recent milestones
 
+### Milestone 48 — Full screen (F11)
+
+- **F11 toggles OS fullscreen.** The new `window.toggleFullScreen` command
+  carries the keybinding; View → "Full screen" runs the same id and shows a
+  check mark that tracks the real window state via the
+  `window:fullscreen-changed` push — correct even when fullscreen is left
+  by another route (Esc, the OS).
+- **The key stays renderer-owned.** The auto-hidden native menu's
+  `togglefullscreen` role is gone: its default F11 accelerator swallowed
+  the key in main before the renderer's command could see it (the same
+  reason the Ctrl +/-/0 zoom items were never menu accelerators).
+  Fullscreen rides the `window:toggle-fullscreen` IPC next to
+  minimize/maximize/close.
+
+### Milestone 47 — foldable side docks (titlebar toggles)
+
+- **Fold a whole side dock away.** Two icon toggles in the titlebar — the
+  left one beside the app mark, the right one before the window controls,
+  each above the dock it controls — hide and show the left / right dock as
+  a whole (`Ctrl+B` / `Ctrl+Alt+B`, also View → "Left dock" / "Right
+  dock"). The editor takes the freed width.
+- **Nothing is lost underneath.** A folded dock stays mounted, so its
+  panels keep their state (a streaming chat, scroll positions, a docked
+  editor); panel order, sizes and collapse state are untouched. The folded
+  state persists with the layout (`foldedSides` in
+  `localStorage['drey.dock']`); View → Reset layout unfolds both.
+- **It opens when it is needed.** Revealing a panel (Search via
+  `Ctrl+Shift+F`, a View-menu re-select) unfolds its dock; during a panel
+  drag a folded dock shows like an empty one, and a drop into it keeps it
+  open.
+- Not foldable this way: the bottom dock (it already shrinks to its panel
+  headers). An empty dock's toggle is disabled.
+
 ### Milestone 46 — Editor snippets: trigger words for Markdown blocks (templates plugin)
 
 Ships the milestone-40 announced follow-up: typing a trigger word —

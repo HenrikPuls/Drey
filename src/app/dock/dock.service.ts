@@ -34,6 +34,9 @@ export type DockDropTarget = DockSide | 'center';
 
 const DOCK_SIDES: readonly DockSide[] = ['left', 'right', 'bottom'];
 
+/** The two column docks -- the ones that can be folded away as a whole. */
+export type SideDock = 'left' | 'right';
+
 /** Persisted layout state (DESIGN.md "Datenmodell", minus the transient drag fields). */
 interface DockState {
   dock: Record<DockSide, WidgetId[]>;
@@ -47,6 +50,11 @@ interface DockState {
   rightW: number;
   /** Height of the bottom dock band. */
   bottomH: number;
+  /**
+   * Side docks folded away as a whole (the titlebar toggles). Panels keep
+   * their slots, flexes and collapse state underneath.
+   */
+  foldedSides: SideDock[];
 }
 
 const WIDTH = { min: 180, max: 560 } as const;
@@ -239,6 +247,34 @@ export class DockService {
     return this.state().bottomH;
   }
 
+  /**
+   * True while a side dock is folded away as a whole. A panel drag shows
+   * it regardless, so it stays a reachable drop target -- that is the
+   * caller's concern (`App`), not this flag's.
+   */
+  sideFolded(side: DockSide): boolean {
+    return side !== 'bottom' && this.state().foldedSides.includes(side);
+  }
+
+  /** The titlebar toggle / `dock.toggleLeft` + `dock.toggleRight`. */
+  toggleSide(side: SideDock): void {
+    this.patch((s) => ({
+      ...s,
+      foldedSides: s.foldedSides.includes(side)
+        ? s.foldedSides.filter((x) => x !== side)
+        : [...s.foldedSides, side],
+    }));
+  }
+
+  /** `folded` without the dock that holds `id` -- revealing a panel unfolds its dock. */
+  private unfoldedFor(
+    dock: Record<DockSide, WidgetId[]>,
+    folded: SideDock[],
+    id: WidgetId,
+  ): SideDock[] {
+    return folded.filter((side) => !dock[side].includes(id));
+  }
+
   toggleCollapse(id: WidgetId): void {
     this.patch((s) => ({ ...s, open: { ...s.open, [id]: !s.open[id] } }));
   }
@@ -273,11 +309,13 @@ export class DockService {
       if (!s.hidden.includes(id)) {
         return s;
       }
+      const dock = this.withInserted(s.dock, id);
       return {
         ...s,
-        dock: this.withInserted(s.dock, id),
+        dock,
         hidden: s.hidden.filter((x) => x !== id),
         open: { ...s.open, [id]: true },
+        foldedSides: this.unfoldedFor(dock, s.foldedSides, id),
       };
     });
   }
@@ -287,15 +325,18 @@ export class DockService {
     this.patch((s) => {
       const hidden = s.hidden.filter((x) => x !== id);
       const wasHidden = hidden.length !== s.hidden.length;
-      if (!wasHidden && s.open[id] && DOCK_SIDES.some((side) => s.dock[side].includes(id))) {
+      const docked = DOCK_SIDES.some((side) => s.dock[side].includes(id));
+      const dock = docked ? s.dock : this.withInserted(s.dock, id);
+      const foldedSides = this.unfoldedFor(dock, s.foldedSides, id);
+      if (!wasHidden && s.open[id] && docked && foldedSides.length === s.foldedSides.length) {
         return s;
       }
-      const docked = DOCK_SIDES.some((side) => s.dock[side].includes(id));
       return {
         ...s,
-        dock: docked ? s.dock : this.withInserted(s.dock, id),
+        dock,
         hidden,
         open: { ...s.open, [id]: true },
+        foldedSides,
       };
     });
   }
@@ -329,6 +370,7 @@ export class DockService {
       leftW: DEFAULT_LEFT_W,
       rightW: DEFAULT_RIGHT_W,
       bottomH: DEFAULT_BOTTOM_H,
+      foldedSides: [],
     };
   }
 
@@ -660,7 +702,13 @@ export class DockService {
         bottom: s.dock.bottom.filter((x) => x !== id),
       };
       lists[dock].splice(from, 0, id);
-      return { ...s, dock: lists, hidden: s.hidden.filter((x) => x !== id) };
+      return {
+        ...s,
+        dock: lists,
+        hidden: s.hidden.filter((x) => x !== id),
+        // A drop into a folded dock (shown for the drag) keeps it open.
+        foldedSides: s.foldedSides.filter((x) => x !== dock),
+      };
     });
   }
 
@@ -779,10 +827,10 @@ export class DockService {
 
   private persist(): void {
     try {
-      const { dock, flexes, open, hidden, leftW, rightW, bottomH } = this.state();
+      const { dock, flexes, open, hidden, leftW, rightW, bottomH, foldedSides } = this.state();
       localStorage.setItem(
         DockService.KEY,
-        JSON.stringify({ dock, flexes, open, hidden, leftW, rightW, bottomH }),
+        JSON.stringify({ dock, flexes, open, hidden, leftW, rightW, bottomH, foldedSides }),
       );
     } catch {
       // Private-mode / storage-disabled: a non-persisted session is fine.
@@ -846,6 +894,9 @@ export class DockService {
       leftW: Math.max(WIDTH.min, Math.min(WIDTH.max, num(saved.leftW, base.leftW))),
       rightW: Math.max(WIDTH.min, Math.min(WIDTH.max, num(saved.rightW, base.rightW))),
       bottomH: Math.max(HEIGHT.min, Math.min(HEIGHT.max, num(saved.bottomH, base.bottomH))),
+      foldedSides: (['left', 'right'] as const).filter(
+        (side) => Array.isArray(saved.foldedSides) && saved.foldedSides.includes(side),
+      ),
     };
   }
 }

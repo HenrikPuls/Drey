@@ -1768,6 +1768,8 @@ graph TB
   pointer is above. `nextOpenId` skips collapsed neighbours, so N open
   panels have N−1 splitters. Persisted (minus the transient drag fields)
   to `localStorage['drey.dock']`, merged defensively onto the defaults.
+  `foldedSides` + `toggleSide` / `sideFolded` fold a whole side dock away
+  (the `Titlebar`'s two toggles; `App` hides the still-mounted `Dock`).
 - **`PanelFrame`** renders the header every panel shares (DESIGN.md
   principle 3). Title + "fills the frame vs. scrolls" (`flush`) come from
   the widget descriptor; the body stays mounted while collapsed.
