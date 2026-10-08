@@ -60,7 +60,9 @@ The Live Preview layer lives in `src/app/editor/live-preview/`:
   replaces through `EditorView.atomicRanges` — arrow keys then step over a
   rendered table / diagram / folded frontmatter in one move. The atomic
   set is derived from the same decoration field, so a revealed block
-  (selection inside it) contributes no atom and stays editable.
+  (selection inside it) contributes no atom and stays editable. (Refined
+  later: ArrowDown/ArrowUp now *enter* a rendered table and reveal it —
+  see the last Later change below.)
 - **`block-render.ts` — a `StateField` for what a `ViewPlugin` may not
   provide.** GFM tables become `Decoration.replace({block: true})` widgets
   rendered by a minimal markdown-it instance (`html: false`, one block at a
@@ -240,3 +242,29 @@ of each other… take `</>` as the symbol to view the code or source").
 - **Known wart:** an inline image inside a paragraph is boxed and mirrored
   at paragraph granularity (the whole line), since the reveal container
   wraps whole lines.
+
+## Later change — ArrowDown/ArrowUp enters a rendered table; row numbers rejected
+
+- **Vertical arrows are also the way IN.** The one-move atomic skip stays
+  for Left/Right and PageUp/PageDown, but the table-Enter keymap
+  (`table-enter.ts`) now also owns vertical entry: when the motion leaves
+  the caret's line onto one of a rendered table span's lines — the main
+  extent or an absorbed glued-in run (`absorbedTableRunAt`) — the caret
+  moves into the span's first (ArrowDown) or last (ArrowUp) row, and the
+  touch test flips the widget into its raw source, the same reveal a click
+  or the `</>` button produces. Mid-line the arrows keep their normal
+  motion (visual-row check via `coordsAtPos`, with a logical-boundary
+  fallback where no coordinates exist), so a wrapped paragraph is still
+  walked row by row before the table is entered. Tables glued to a
+  following paragraph line (ONE `Table` node for the parser) render as
+  separate embeds per run, so each can be revealed and entered
+  independently; Enter grows the run the caret is in.
+- **Table row numbers: tried and reverted.** The line-number gutter
+  numbers `.cm-line` elements; a block-replacing widget removes those
+  lines from the DOM entirely, so no gutter number can exist there without
+  abandoning the widget approach (the M3 prototype's dead end). An
+  in-widget number rail was built and rejected — it lives in the content
+  padding rather than the gutter column and cannot align vertically
+  (rendered rows are taller than source lines), so it read as misplaced.
+  The gutter jumping over a rendered table is accepted; the numbers are
+  visible in the revealed raw source.

@@ -1,6 +1,7 @@
 import { markdown, markdownLanguage } from '@codemirror/lang-markdown';
-import { EditorState, Extension } from '@codemirror/state';
-import { EditorView } from '@codemirror/view';
+import { EditorState, Extension, StateField } from '@codemirror/state';
+import { DecorationSet, EditorView } from '@codemirror/view';
+import { livePreviewBlocks } from './block-render';
 import { insertTableRow, tableEnter } from './table-enter';
 
 /**
@@ -71,6 +72,16 @@ describe('table row Enter', () => {
     expect(view.state.doc.toString()).toBe(doc);
   });
 
+  it('Enter in a glued-in second table grows that table, not the first', () => {
+    // `plain` + the second table are rows of the SAME `Table` node for the
+    // parser -- the run beyond the clamp is the one Enter must serve.
+    const doc = `${TABLE}\nplain\n| c | d |\n| - | - |\n| 3 | 4 |`;
+    view = makeView(doc, doc.length);
+    expect(insertTableRow(view)).toBe(true);
+    expect(view.state.doc.toString()).toBe(`${doc}\n|  |  |`);
+    expect(view.state.selection.main.anchor).toBe(`${doc}\n| `.length);
+  });
+
   it('caret in a blank-separated paragraph falls through', () => {
     const doc = `${TABLE}\n\nplain`;
     view = makeView(doc, doc.length);
@@ -135,6 +146,14 @@ describe('table exit arrows', () => {
     expect(view.state.doc.toString()).toBe(doc);
   });
 
+  it('ArrowDown on the last row of a document-ending glued table opens a line below', () => {
+    const doc = `${TABLE}\nplain\n| c | d |\n| - | - |\n| 3 | 4 |`;
+    view = makeView(doc, doc.length);
+    pressKey(view, 'ArrowDown');
+    expect(view.state.doc.toString()).toBe(`${doc}\n`);
+    expect(view.state.selection.main.anchor).toBe(doc.length + 1);
+  });
+
   it('ArrowDown in a read-only state falls through', () => {
     view = makeView(TABLE, TABLE.length, TABLE.length, [EditorState.readOnly.of(true)]);
     pressKey(view, 'ArrowDown');
@@ -159,5 +178,77 @@ describe('table exit arrows', () => {
     view = makeView(doc, 8); // on the header row, line 2
     pressKey(view, 'ArrowUp');
     expect(view.state.doc.toString()).toBe(doc);
+  });
+});
+
+describe('arrow into a rendered table', () => {
+  const DOC_ABOVE = `intro\n\n${TABLE}`;
+  const BLANK = DOC_ABOVE.indexOf('\n') + 1; // the blank line above the table
+
+  let view: EditorView | undefined;
+
+  afterEach(() => {
+    view?.destroy();
+    view = undefined;
+  });
+
+  it('ArrowDown from the blank line above puts the caret into the first cell', () => {
+    view = makeView(DOC_ABOVE, BLANK);
+    pressKey(view, 'ArrowDown');
+    expect(view!.state.selection.main.anchor).toBe(DOC_ABOVE.indexOf(TABLE) + 2);
+  });
+
+  it('ArrowUp from the blank line below puts the caret into the last row', () => {
+    const doc = `intro\n\n${TABLE}\n\nend`;
+    view = makeView(doc, doc.indexOf('\n\nend') + 1); // the blank line below
+    pressKey(view, 'ArrowUp');
+    expect(view!.state.selection.main.anchor).toBe(doc.lastIndexOf('| 1 |') + 2);
+  });
+
+  it('ArrowDown mid-line above a blank line falls through (no entry)', () => {
+    view = makeView(DOC_ABOVE, 2); // inside 'intro'
+    pressKey(view, 'ArrowDown');
+    // not intercepted -- the default keymap (absent in this bare view)
+    // owns the motion
+    expect(view!.state.selection.main.anchor).toBe(2);
+  });
+
+  it('the caret enters a glued-in second table, not the first', () => {
+    const doc = `${TABLE}\nplain\n| c | d |\n| - | - |\n| 3 | 4 |`;
+    view = makeView(doc, doc.indexOf('plain') + 'plain'.length);
+    pressKey(view, 'ArrowDown');
+    expect(view!.state.selection.main.anchor).toBe(doc.indexOf('| c |') + 2);
+  });
+
+  it('read-only falls through', () => {
+    view = makeView(DOC_ABOVE, BLANK, BLANK, [EditorState.readOnly.of(true)]);
+    pressKey(view, 'ArrowDown');
+    expect(view!.state.selection.main.anchor).toBe(BLANK);
+  });
+
+  it('entering the table flips it to the raw source', () => {
+    const extensions = livePreviewBlocks({
+      resolveImage: (url: string) => [url],
+    }) as unknown as [StateField<{ atoms: DecorationSet; reveal: DecorationSet }>, ...Extension[]];
+    view = new EditorView({
+      parent: document.body,
+      state: EditorState.create({
+        doc: DOC_ABOVE,
+        selection: { anchor: BLANK },
+        extensions: [markdown({ base: markdownLanguage }), extensions, tableEnter()],
+      }),
+    });
+    pressKey(view, 'ArrowDown');
+    const field = view.state.field(extensions[0]);
+    let atoms = 0;
+    let reveal = 0;
+    field.atoms.between(0, Number.MAX_SAFE_INTEGER, () => {
+      atoms++;
+    });
+    field.reveal.between(0, Number.MAX_SAFE_INTEGER, () => {
+      reveal++;
+    });
+    expect(atoms).toBe(0);
+    expect(reveal).toBeGreaterThan(0);
   });
 });
