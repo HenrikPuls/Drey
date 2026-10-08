@@ -6,15 +6,16 @@
  *   node scripts/verify-pack.mjs [--exe release/win-unpacked/drey.exe]
  *
  * Verifies, against the real packaged app:
- *  1. app.asar carries every built-in plugin tree (manifest + main +
- *     renderer entry + at least the browser plugin's stylesheet);
+ *  1. app.asar carries every shipped built-in plugin tree (manifest + main +
+ *     renderer entry + at least the browser plugin's stylesheet) and does
+ *     NOT carry the sample plugin (dev/e2e-only, excluded from packaging);
  *  2. the packed exe boots from a throwaway profile with every built-in
  *     enabled: all plugins report `active`, `builtin: true` and a
  *     `plugin://` renderer url;
  *  3. plugin:// serves renderer modules out of the asar -- proven by the
- *     sample plugin's renderer having executed (its File-menu row exists);
+ *     assistant plugin's renderer having executed (its panel is mounted);
  *  4. a `plugin:invoke` roundtrip reaches a plugin main inside the asar
- *     (the sample plugin's `ping`, the tasks plugin's `list`);
+ *     (the tags plugin's `palette`, the tasks plugin's `list`);
  *  5. startup timings: window DOM ready + the plugin DOM marker.
  *
  * Exits 0 when every check passes, 1 otherwise.
@@ -52,7 +53,10 @@ if (!fs.existsSync(exePath)) {
 
 const asarLib = require('@electron/asar');
 const asarPath = path.join(path.dirname(exePath), 'resources', 'app.asar');
-const BUILTIN_IDS = ['assistant', 'browser', 'meeting', 'sample', 'tags', 'tasks', 'templates'];
+const BUILTIN_IDS = ['assistant', 'browser', 'meeting', 'tags', 'tasks', 'templates'];
+// Built but never shipped: the executable authoring reference stays out of
+// the package (electron-builder.yml files negation).
+const NOT_SHIPPED_IDS = ['sample'];
 
 if (fs.existsSync(asarPath)) {
   const listed = /** @type {string[]} */ (asarLib.listPackage(asarPath)).map((p) =>
@@ -85,6 +89,12 @@ if (fs.existsSync(asarPath)) {
     }
   }
   check('asar: browser renderer css', listed.includes('dist-electron/plugins/browser/renderer/browser.css'));
+  for (const id of NOT_SHIPPED_IDS) {
+    check(
+      `asar: plugin ${id} excluded`,
+      !listed.some((p) => p.startsWith(`dist-electron/plugins/${id}/`)),
+    );
+  }
 } else {
   check(`asar present at ${asarPath}`, false);
 }
@@ -98,8 +108,7 @@ fs.writeFileSync(
   path.join(userDataDir, 'vault-config.json'),
   JSON.stringify({ activeVaultPath: vaultDir }, null, 2),
 );
-// Every built-in enabled (the sample plugin included) -- the startup-time
-// question is "with all built-ins".
+// Every built-in enabled -- the startup-time question is "with all built-ins".
 fs.writeFileSync(
   path.join(userDataDir, 'app-config.json'),
   JSON.stringify({ plugins: { disabled: [] } }, null, 2),
@@ -136,21 +145,16 @@ try {
     );
   }
 
-  // -- 3. the renderer modules executed over plugin:// (the sample
-  //       plugin registered its File-menu row)
-  await page
-    .locator('app-menu-bar .menu', { hasText: 'File' })
-    .first()
-    .locator('.menu-label')
-    .click();
-  const row = page.locator('app-menu-bar .popover .row', { hasText: 'Sample: open clock tab' });
-  await row.waitFor({ state: 'visible', timeout: 10_000 });
+  // -- 3. the renderer modules executed over plugin:// (the assistant
+  //       plugin's panel body is mounted in the right dock, expanded by
+  //       default)
+  const marker = page.locator('.assistant-panel').first();
+  await marker.waitFor({ state: 'visible', timeout: 10_000 });
   const tMarker = Date.now() - t0;
-  check('plugin:// renderer executed (sample File row visible)', true);
-  await page.keyboard.press('Escape');
+  check('plugin:// renderer executed (assistant panel mounted)', true);
 
   // -- 4. plugin:invoke roundtrips into asar-loaded mains
-  await checkInvoke('sample', 'ping', null);
+  await checkInvoke('tags', 'palette', null);
   await checkInvoke('tasks', 'list', null);
 
   console.log(`timing: window DOM ready ${tDom} ms; plugins fully up (menu marker) ${tMarker} ms`);

@@ -15,6 +15,12 @@ plugins, plus a `sample` plugin exercising every surface. "As shipped"
 below records where the conversions *reshaped* the frozen v1 SDK — the
 frozen-contract stage did its job exactly there.
 
+Packaging addendum: the `sample` plugin stays a dev-time artifact — built
+into `dist-electron/` for `npm run dev` and the e2e suite (it is the
+executable authoring reference, `plugins/AUTHORING.md`), but excluded from
+the installer / portable exe by a `files` negation in
+`electron-builder.yml` (see [docs/07](../07_deployment_view.md)).
+
 ## Context
 
 ADR-0016 deliberately stopped short of a plugin runtime: feature modules

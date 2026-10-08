@@ -44,6 +44,10 @@ files:
   - '!dist-electron/electron/quick-capture.js'
   - '!dist-electron/electron/timestamp.js'
   - '!dist-electron/electron/zoom.js'
+  # The sample plugin is the executable authoring reference
+  # (plugins/AUTHORING.md) and dev/e2e fixture — still built into
+  # dist-electron/, but never shipped in the installer / portable exe.
+  - '!dist-electron/plugins/sample/**'
 
 # The BrowserWindow / taskbar icon at runtime (win.icon below covers the
 # exe + installer). Copied to resources/ ; main.ts reads it from
