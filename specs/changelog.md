@@ -20,6 +20,18 @@ recorded as an explicit decision. The parity checklist lives in
 
 ## Recent milestones
 
+### Fix — editor: a table-only document can be left again
+
+- **ArrowDown opens the line below a document-ending table.** When the
+  table was the note's last block, every caret position sat inside its
+  revealed raw source and Enter only ever added rows — the view could not
+  be left to type a following paragraph without switching to source mode
+  (the extent's end IS the document end, so no position "behind" the table
+  existed). ArrowDown on the last real row now appends one blank line and
+  parks the caret there; the widget snaps shut. ArrowUp mirrors it when
+  the table starts the document at line 1. Everywhere else the arrows keep
+  their normal motion, and Enter keeps growing the table.
+
 ### Milestone 48 — Full screen (F11)
 
 - **F11 toggles OS fullscreen.** The new `window.toggleFullScreen` command

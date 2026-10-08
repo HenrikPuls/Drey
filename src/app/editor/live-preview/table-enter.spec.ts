@@ -24,9 +24,13 @@ function makeView(
   });
 }
 
-function pressEnter(view: EditorView): void {
+function pressKey(view: EditorView, key: string): void {
   const content = view.dom.querySelector('.cm-content') as HTMLElement;
-  content.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+  content.dispatchEvent(new KeyboardEvent('keydown', { key, bubbles: true }));
+}
+
+function pressEnter(view: EditorView): void {
+  pressKey(view, 'Enter');
 }
 
 const TABLE = '| a | b |\n| - | - |\n| 1 | 2 |';
@@ -91,5 +95,69 @@ describe('table row Enter', () => {
     view = makeView(TABLE, TABLE.length, TABLE.length, [EditorState.readOnly.of(true)]);
     expect(insertTableRow(view)).toBe(false);
     expect(view.state.doc.toString()).toBe(TABLE);
+  });
+});
+
+describe('table exit arrows', () => {
+  let view: EditorView | undefined;
+
+  afterEach(() => {
+    view?.destroy();
+    view = undefined;
+  });
+
+  it('ArrowDown on the last row of a document-ending table opens a line below, caret on it', () => {
+    view = makeView(TABLE, TABLE.length);
+    pressKey(view, 'ArrowDown');
+    expect(view.state.doc.toString()).toBe(`${TABLE}\n`);
+    expect(view.state.selection.main.anchor).toBe(TABLE.length + 1);
+  });
+
+  it('ArrowDown mid-table falls through to the default motion (no line appended)', () => {
+    const doc = `${TABLE}\n| 3 | 4 |`;
+    // caret on the second body row, one row above the extent's last line
+    view = makeView(doc, 22);
+    pressKey(view, 'ArrowDown');
+    expect(view.state.doc.toString()).toBe(doc);
+  });
+
+  it('ArrowDown with a real line below the table falls through (that line is the exit)', () => {
+    view = makeView(`${TABLE}\n`, TABLE.length - 1);
+    pressKey(view, 'ArrowDown');
+    // no second blank line appended -- the trailing line already is the exit
+    expect(view.state.doc.toString()).toBe(`${TABLE}\n`);
+  });
+
+  it('ArrowDown on a glued line below the extent falls through', () => {
+    const doc = `${TABLE}\nplain`;
+    view = makeView(doc, doc.length);
+    pressKey(view, 'ArrowDown');
+    expect(view.state.doc.toString()).toBe(doc);
+  });
+
+  it('ArrowDown in a read-only state falls through', () => {
+    view = makeView(TABLE, TABLE.length, TABLE.length, [EditorState.readOnly.of(true)]);
+    pressKey(view, 'ArrowDown');
+    expect(view.state.doc.toString()).toBe(TABLE);
+  });
+
+  it('ArrowDown with a non-empty selection falls through', () => {
+    view = makeView(TABLE, 0, 4);
+    pressKey(view, 'ArrowDown');
+    expect(view.state.doc.toString()).toBe(TABLE);
+  });
+
+  it('ArrowUp from the header of a table at line 1 opens a line above, caret on it', () => {
+    view = makeView(TABLE, 2);
+    pressKey(view, 'ArrowUp');
+    expect(view.state.doc.toString()).toBe(`\n${TABLE}`);
+    expect(view.state.selection.main.anchor).toBe(0);
+  });
+
+  it('ArrowUp with a line above the table falls through', () => {
+    const doc = `intro\n${TABLE}`;
+    view = makeView(doc, 8); // on the header row, line 2
+    pressKey(view, 'ArrowUp');
+    expect(view.state.doc.toString()).toBe(doc);
   });
 });

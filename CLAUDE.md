@@ -562,8 +562,11 @@ be called out explicitly (see Working Style below), not introduced silently.
 - Editing model: true in-place Live Preview (Obsidian-style, ADR-0009) —
   the cursor sits in the rendered document, syntax markers reveal only
   around the selection, tables/images render as widgets that show their
-  raw Markdown while the selection is inside them. Source mode stays in
-  the `⋯` menu as the escape hatch, not a separate "edit mode".
+  raw Markdown while the selection is inside them; ArrowDown at the last
+  row of a document-ending table (ArrowUp at one starting line 1) opens
+  the missing line and steps out, so a table-only note stays editable.
+  Source mode stays in the `⋯` menu as the escape hatch, not a separate
+  "edit mode".
 - Revealed embed source is always visibly contained: whenever an embed's
   Markdown source is shown (via the corner **`</>` View source** button or
   by moving the caret in), its raw lines sit inside a rounded, bordered
