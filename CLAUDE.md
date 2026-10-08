@@ -416,7 +416,11 @@ Renderer (Angular):
   opens the **slash menu** (`slash-commands.ts`): a **Templates** section
   — the built-in **Entry** block (the configured entry format, ADR-0022)
   plus the templates plugin's library entries, each with a preview card —
-  then **Formatting** (ADR-0057). The **fold gutter** is always live (Obsidian-style
+  then **Formatting** (ADR-0057). Typing a **snippet trigger** (`tbl`,
+  `code`, `task`, …) offers a multi-line Markdown block with
+  `${n:placeholder}` tabstops (milestone 46, templates plugin; the
+  library is user-owned in app config and edited in Settings →
+  Templates). The **fold gutter** is always live (Obsidian-style
   collapsible headings, hover-revealed chevron); only the line-number
   column follows the Lines toggle (`editorStructure` / `gutterTheme`).
   Inline `#tag`s render as pills; `Ctrl`/`Cmd`-click runs a tag search.
@@ -642,6 +646,15 @@ can dock into the three docks (milestone 20,
 The milestone log lives in
 [docs/milestones-done.md](docs/milestones-done.md).
 
+**Just code-complete: milestone 46 — editor snippets** (templates
+plugin): typing a trigger word — `tbl`, `code`, `task` or any
+user-defined one — offers a multi-line Markdown block with
+`${n:placeholder}` tabstops (`snippetCompletion`; Tab navigates fields
+while active, otherwise falls through to indentation). The library is
+user-owned app config (`templates.snippets`, seeded with the three
+built-ins), edited in Settings → Templates — every entry editable,
+removable, extendable. **Not yet manually verified by the owner.**
+
 **Just code-complete: milestone 45 — Autotag re-homing** (req-36): the
 editor `⋯` menu's **"Suggest tags"** row sends the caret's heading
 section (new pure helper `shared/note-sections.ts`) to the unchanged
@@ -725,7 +738,8 @@ milestones") until owner-verified.
   (tasks across vaults + undo fix), 35 (pinned tabs), 36 (open files
   from the OS), 39 (Outline panel), 40 (word completion +
   markdown-context detector), 41 (semantic vault retrieval), 43 (UI
-  refinement, ADR-0057) and 45 (Autotag re-homing) — see
+  refinement, ADR-0057), 45 (Autotag re-homing) and 46 (editor
+  snippets) — see
   "Current State" above. (Milestone 44, the Task Center's `#task/id:`
   addressing, was reverted before release — ADR-0033 "considered and
   rejected"; the surviving piece is the ambiguity skip in

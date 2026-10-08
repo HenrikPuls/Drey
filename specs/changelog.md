@@ -20,6 +20,40 @@ recorded as an explicit decision. The parity checklist lives in
 
 ## Recent milestones
 
+### Milestone 46 — Editor snippets: trigger words for Markdown blocks (templates plugin)
+
+Ships the milestone-40 announced follow-up: typing a trigger word —
+`tbl`, `code`, `task` or any user-defined one — offers a multi-line
+Markdown block; Tab walks its `${n:placeholder}` fields. **Not yet
+manually verified by the owner.**
+
+- **Plugin-owned by design**: `plugins/templates/renderer/snippets.ts`
+  over the `registerExtension('document', …)` seam and the host's CM
+  module instances (`api.editor.cm.autocomplete.snippetCompletion`) —
+  `markdownBundle()` stays untouched, and the Tab-precedence question
+  that blocked a base-owned source dissolved on inspection: the snippet
+  keymap is `Prec.highest` while a snippet is active, so
+  `editorIndentation` keeps Tab otherwise (bug-9 untouched). Composers
+  are excluded (`document` slot only) — no Enter-submits conflict. The
+  built-ins exist as a **parity-tested twin** in the plugin: a plugin
+  renderer cannot value-import base `shared/` (the import would resolve
+  outside its `plugin://<id>/` root and quarantine the plugin — caught
+  by the slash-menu e2e during verification).
+- **Fully user-owned library**: `templates.snippets` in app config
+  (ADR-0010 — machine-level, not vault data). Seeded with the three
+  built-ins on a missing key; Settings → Templates edits, removes and
+  adds entries — defaults included — plus a "Restore built-ins" button;
+  an explicitly emptied list stays empty. The whole `templates` slice
+  travels on every write (`appConfig.patch` merges one level deep).
+- **Caret gate**: the slash menu's gate (inline code, links, raw HTML,
+  frontmatter) plus every block-level structure — tables, headings,
+  list items, blockquotes — since a multi-line block inside one is
+  nonsense. Fires on a typed word at a word boundary; `boost: 5` ranks
+  it above word completion.
+- The renderer keeps one `SnippetStore` snapshot the source reads
+  synchronously per keystroke (`appConfig` has no change push) and the
+  settings page writes through.
+
 ### Milestone 45 — Autotag re-homed into the editor's `⋯` menu (req-36)
 
 The `suggestTags` backend orphaned by the drawer's removal (ADR-0057) has

@@ -20,6 +20,7 @@ import {
   RULED_ENTRY_PATTERN,
   SEARCH_SUMMARY_PROMPT,
   AUTOTAG_PROMPT,
+  SnippetConfig,
   TemplatesConfig,
   THEME_ACCENT,
   VaultConfig,
@@ -33,7 +34,30 @@ export const DEFAULT_DAILY_CONFIG: DailyConfig = {
 
 export const DEFAULT_WIDGETS_CONFIG: WidgetsConfig = { disabled: [] };
 
-export const DEFAULT_TEMPLATES_CONFIG: TemplatesConfig = { dir: 'templates' };
+/**
+ * The snippet library's seed (milestone 46): shipped as the starting point,
+ * then user-owned — every entry is editable and removable in Settings →
+ * Templates, and "Restore built-ins" puts exactly these back.
+ */
+export const SNIPPET_DEFAULTS: SnippetConfig[] = [
+  {
+    trigger: 'tbl',
+    label: 'Table',
+    template: '| ${1:Column} | ${2:Column} | ${3:Column} |\n| --- | --- | --- |\n| ${4:} | ${5:} | ${6:} |',
+  },
+  {
+    trigger: 'code',
+    label: 'Code block',
+    template: '```${1:ts}\n$0\n```',
+  },
+  {
+    trigger: 'task',
+    label: 'Checklist',
+    template: '- [ ] ${1:First}\n- [ ] ${2:Second}\n- [ ] ${3:Third}',
+  },
+];
+
+export const DEFAULT_TEMPLATES_CONFIG: TemplatesConfig = { dir: 'templates', snippets: SNIPPET_DEFAULTS };
 
 export const DEFAULT_VAULT_CONFIG: VaultConfig = { watch: false };
 

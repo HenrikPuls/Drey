@@ -335,6 +335,22 @@ export interface PluginsConfig {
 }
 
 /**
+/**
+ * One editable editor snippet (milestone 46): a typed trigger word that
+ * offers a multi-line Markdown block with CodeMirror `${n:placeholder}`
+ * tabstops. Part of the app config (ADR-0010) — a machine-level editing
+ * preference, not vault data.
+ */
+export interface SnippetConfig {
+  /** The typed word that offers the snippet: letters/digits/`-`, lower-cased. */
+  trigger: string;
+  /** Display name in the completion popup and the Settings list. */
+  label: string;
+  /** CodeMirror snippet template: `${1:placeholder}` fields, `$0` final caret. */
+  template: string;
+}
+
+/**
  * Settings category "Templates": the vault folder whose `.md` files back
  * the Templates panel and the `Mod+T` picker. Folders are categories,
  * sub-folders sub-categories; a template is inserted at the cursor with its
@@ -344,6 +360,13 @@ export interface PluginsConfig {
 export interface TemplatesConfig {
   /** Vault-relative folder, forward-slash, no leading/trailing slash. */
   dir: string;
+  /**
+   * The editor snippet library (milestone 46), seeded with the three
+   * built-ins when the key is absent, then fully user-owned: Settings →
+   * Templates edits, removes and adds entries — defaults included — and
+   * an explicitly emptied list stays empty (only a MISSING key re-seeds).
+   */
+  snippets: SnippetConfig[];
 }
 
 /**

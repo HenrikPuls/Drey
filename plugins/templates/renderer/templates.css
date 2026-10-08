@@ -164,6 +164,58 @@
 
 /* -- settings ------------------------------------------------------------- */
 
-/* The settings page is built entirely from the shared `.plugin-settings-body`
-   vocabulary (fields, hints, inputs — see plugins/AUTHORING.md); nothing
-   page-specific to declare here. */
+/* The dir field is pure shared vocabulary; the snippet library adds one
+   row layout: remove button left, then trigger / name on a line and the
+   template textarea below. */
+
+.tpl-snippet-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.tpl-snippet-row {
+  position: relative;
+  display: grid;
+  grid-template-columns: 110px 1fr;
+  gap: 4px 10px;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-xs);
+}
+
+.tpl-snippet-row > label {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: 12px;
+  color: var(--text-3);
+}
+
+.tpl-snippet-row .tpl-snippet-trigger {
+  font-family: var(--font-mono);
+}
+
+.tpl-snippet-row .tpl-snippet-template {
+  grid-column: 1 / -1;
+  font-family: var(--font-mono);
+  font-size: 12px;
+}
+
+.tpl-snippet-row .tpl-snippet-remove {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+}
+
+.tpl-snippet-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.tpl-snippet-status {
+  min-width: 48px;
+  font-size: 12px;
+  color: var(--text-3);
+}

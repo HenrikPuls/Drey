@@ -1,6 +1,7 @@
 import {
   BUILTIN_TEMPLATE_IDS,
   DEFAULT_APP_CONFIG,
+  DEFAULT_TEMPLATES_CONFIG,
   EDITOR_FONT_SCALE_MAX,
   EDITOR_FONT_SCALE_MIN,
   normalizeAppConfig,
@@ -210,7 +211,10 @@ describe('normalizeAppConfig', () => {
   });
 
   it('normalises the templates folder: default, slash-trim, nested path, .. rejection', () => {
-    expect(normalizeAppConfig({}).templates).toEqual({ dir: 'templates' });
+    // A missing config seeds the snippet library (milestone 46); the dir
+    // rules are unaffected.
+    expect(normalizeAppConfig({}).templates).toEqual(DEFAULT_TEMPLATES_CONFIG);
+    expect(normalizeAppConfig({ templates: { snippets: [] } }).templates.dir).toBe('templates');
     expect(normalizeAppConfig({ templates: { dir: '  /snippets/  ' } }).templates.dir).toBe(
       'snippets',
     );

@@ -19,8 +19,10 @@ import type { TemplateEntry, TemplateLibrary } from './library.js';
 /** Must match the base source's section (merged by name). */
 const SECTION = { name: 'Templates', rank: 0 } as const;
 
-/** Syntax nodes the menu stays out of (mirrors the base Markdown-context gate). */
-const BLOCKED_NODES = new Set([
+/** Syntax nodes the menu stays out of (mirrors the base Markdown-context gate).
+ * Exported for the snippet source, which blocks these plus every block-level
+ * structure (see `snippets.ts`). */
+export const BLOCKED_NODES = new Set([
   'InlineCode',
   'FencedCode',
   'CodeText',
@@ -70,7 +72,7 @@ export function categoryOf(entry: TemplateEntry, libraryDir: string): string {
   return slash === -1 ? 'General' : inner.slice(0, slash);
 }
 
-function inFrontmatter(doc: string, pos: number): boolean {
+export function inFrontmatter(doc: string, pos: number): boolean {
   if (!doc.startsWith('---\n')) {
     return false;
   }

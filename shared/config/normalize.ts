@@ -38,6 +38,7 @@ import {
   MCP_PORT_MAX,
   MCP_PORT_MIN,
   McpConfig,
+  SnippetConfig,
   SpellcheckConfig,
   TemplatesConfig,
   THEME_ACCENT,
@@ -302,7 +303,37 @@ export function normalizeVaultDir(raw: unknown, fallback: string): string {
 
 function normalizeTemplatesConfig(raw: unknown): TemplatesConfig {
   const source = (raw ?? {}) as Record<string, unknown>;
-  return { dir: normalizeVaultDir(source['dir'], DEFAULT_TEMPLATES_CONFIG.dir) };
+  return {
+    dir: normalizeVaultDir(source['dir'], DEFAULT_TEMPLATES_CONFIG.dir),
+    // A MISSING key seeds the built-ins (fresh installs and pre-46 configs);
+    // an explicit array — empty included — is the user's library and stays.
+    snippets:
+      source['snippets'] === undefined
+        ? [...DEFAULT_TEMPLATES_CONFIG.snippets]
+        : normalizeSnippets(source['snippets']),
+  };
+}
+
+/** Keeps well-formed snippets in order, dropping malformed rows and duplicate triggers. */
+function normalizeSnippets(raw: unknown): SnippetConfig[] {
+  if (!Array.isArray(raw)) {
+    return [];
+  }
+  const out: SnippetConfig[] = [];
+  for (const entry of raw) {
+    const source = (entry ?? {}) as Record<string, unknown>;
+    const trigger = typeof source['trigger'] === 'string' ? source['trigger'].trim().toLowerCase() : '';
+    const label = typeof source['label'] === 'string' ? source['label'].trim() : '';
+    const template = typeof source['template'] === 'string' ? source['template'] : '';
+    if (trigger === '' || !/^[\w-]+$/.test(trigger) || template === '') {
+      continue;
+    }
+    if (out.some((snippet) => snippet.trigger === trigger)) {
+      continue;
+    }
+    out.push({ trigger, label: label === '' ? trigger : label, template });
+  }
+  return out;
 }
 
 function normalizeVault(raw: unknown): VaultConfig {

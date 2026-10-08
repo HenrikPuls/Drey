@@ -2454,6 +2454,16 @@ library — Chromium's built-in (PDFium) viewer, enabled by
   use the section name `Templates` and the same `.slash-preview` card
   (global styles) for `info`; the Templates panel reuses the card as a
   hover popover.
+- **Editor snippets** (milestone 46) — a third templates-plugin source
+  (`plugins/templates/renderer/snippets.ts`, registered on the
+  `document` slot): typing a trigger word offers a multi-line Markdown
+  block via the host's `snippetCompletion` (its `Prec.highest` snippet
+  keymap owns Tab while a snippet is active; `editorIndentation`
+  otherwise). The library is user-owned app config
+  (`templates.snippets`, seeded with the three built-ins on a missing
+  key), edited in Settings → Templates — defaults included; the gate is
+  the slash source's plus every block-level structure (tables, headings,
+  list items, blockquotes).
 - **Meta bar** — `Editor` hosts `MarkdownToolbar` and forwards its actions
   to `MarkdownSurface.applyToolbarAction` / `insertToolbarImages`; the
   surface renders no toolbar of its own.

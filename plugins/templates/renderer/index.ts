@@ -3,9 +3,11 @@ import type {
   DreyPluginApi,
   PluginRendererModule,
 } from '../../../shared/plugin-api/renderer';
+import type { SnippetConfig } from '../../../shared/config/schema';
 import { TemplateLibrary, type TemplateCategory, type TemplateEntry } from './library.js';
 import { formatDate, formatDateTime, formatTime, stripFrontmatter, substitutePlaceholders } from './pure.js';
 import { previewCard, templateSlashExtension } from './slash.js';
+import { SNIPPET_DEFAULTS, SnippetStore, expandForPreview, snippetExtension } from './snippets.js';
 
 /** The DataTransfer type template rows set on dragstart (drop side: our decoder). */
 const TEMPLATE_DT_TYPE = 'application/x-drey-template';
@@ -45,6 +47,10 @@ const plugin: PluginRendererModule = {
     void library.reload();
     api.vault.onChanged(() => void library.reload());
 
+    // -- editor snippets (milestone 46) ---------------------------------------
+    const snippets = new SnippetStore(api);
+    void snippets.load();
+
     // -- panel ---------------------------------------------------------------
     api.ui.registerWidget({
       id: 'templates',
@@ -75,6 +81,9 @@ const plugin: PluginRendererModule = {
     // -- the `/` menu's Templates section (milestone 43) ------------------------
     api.editor.registerExtension('document', () => templateSlashExtension(api, library));
 
+    // -- snippet completion (milestone 46): trigger words -> template blocks ----
+    api.editor.registerExtension('document', () => snippetExtension(api, snippets));
+
     // -- drag source -> decoder ------------------------------------------------
     api.editor.registerDropDecoder({
       match: (data) => data.types.includes(TEMPLATE_DT_TYPE),
@@ -104,12 +113,12 @@ const plugin: PluginRendererModule = {
       return items;
     });
 
-    // -- settings page: the templates folder -----------------------------------
+    // -- settings page: the templates folder + the snippet library --------------
     api.ui.registerSettingsPage({
       id: 'templates',
       label: 'Templates',
       hint: 'Snippet library folder',
-      mount: (body) => mountSettings(api, library, body),
+      mount: (body) => mountSettings(api, library, snippets, body),
     });
   },
 };
@@ -390,7 +399,12 @@ function openPicker(api: DreyPluginApi, library: TemplateLibrary): void {
 
 // -- settings page -----------------------------------------------------------
 
-function mountSettings(api: DreyPluginApi, library: TemplateLibrary, body: HTMLElement): () => void {
+function mountSettings(
+  api: DreyPluginApi,
+  library: TemplateLibrary,
+  snippets: SnippetStore,
+  body: HTMLElement,
+): () => void {
   // Built from the shared settings vocabulary (`plugin-settings-body`
   // classes — see plugins/AUTHORING.md): a field, its input, its hint.
   const field = el('div', 'field');
@@ -411,23 +425,168 @@ function mountSettings(api: DreyPluginApi, library: TemplateLibrary, body: HTMLE
     note.textContent =
       message ??
       'Folders are categories, .md files are templates. Saved immediately; invalid paths (e.g. "..") are rejected by the app config.';
+    // The whole `templates` slice travels together: `appConfig.patch`
+    // merges one level deep, so patching `{ dir }` alone would drop the
+    // snippet library. `replaceDir` preserves it and the library re-reads
+    // from the new folder.
     library.dir = value;
     void library.reload();
+    void snippets.replaceDir(value);
   };
 
   void api.appConfig.get().then((config) => {
     input.value = config.templates.dir;
     library.dir = config.templates.dir;
     void library.reload();
+    void renderSnippets(config.templates.snippets);
   });
   input.addEventListener('change', () => {
     const next = input.value.trim() === '' ? 'templates' : input.value;
     void api.appConfig
-      .patch({ templates: { dir: next } })
+      .get()
+      .then((config) =>
+        api.appConfig.patch({ templates: { ...config.templates, dir: next } }),
+      )
       .then(() => api.appConfig.get())
       .then((config) => show(config.templates.dir, 'Saved.'))
       .catch((error: unknown) => show(input.value, String(error)));
   });
+
+  // -- snippet library (milestone 46) -----------------------------------------
+
+  const section = el('section');
+  section.appendChild(el('h3', undefined, 'Editor snippets'));
+  section.appendChild(
+    el(
+      'p',
+      'section-hint',
+      'Typing a trigger word in a note offers the snippet\'s Markdown block; Tab walks its placeholders. Every snippet — the built-ins included — can be edited, removed or added to here. Changes are saved immediately.',
+    ),
+  );
+  const rows = el('div', 'tpl-snippet-rows');
+  section.appendChild(rows);
+
+  const footer = el('div', 'tpl-snippet-actions');
+  const status = el('span', 'tpl-snippet-status');
+  const flashSaved = (): void => {
+    status.textContent = 'Saved.';
+    window.setTimeout(() => {
+      if (status.textContent === 'Saved.') {
+        status.textContent = '';
+      }
+    }, 1500);
+  };
+
+  const persist = (next: readonly SnippetConfig[]): void => {
+    void snippets
+      .replace(next)
+      .then(flashSaved)
+      .catch((error: unknown) => {
+        status.textContent = String(error);
+      });
+  };
+
+  const collect = (): SnippetConfig[] => {
+    const out: SnippetConfig[] = [];
+    for (const row of rows.querySelectorAll<HTMLDivElement>('.tpl-snippet-row')) {
+      const trigger = (row.querySelector('.tpl-snippet-trigger') as HTMLInputElement).value
+        .trim()
+        .toLowerCase();
+      const rowLabel = (row.querySelector('.tpl-snippet-label') as HTMLInputElement).value.trim();
+      const template = (row.querySelector('.tpl-snippet-template') as HTMLTextAreaElement).value;
+      if (trigger === '' || template.trim() === '') {
+        continue;
+      }
+      out.push({
+        trigger,
+        label: rowLabel === '' ? trigger : rowLabel,
+        template: template.replace(/\r\n/g, '\n'),
+      });
+    }
+    return out;
+  };
+
+  let saveTimer: number | null = null;
+  const scheduleSave = (): void => {
+    if (saveTimer !== null) {
+      window.clearTimeout(saveTimer);
+    }
+    saveTimer = window.setTimeout(() => {
+      saveTimer = null;
+      persist(collect());
+    }, 500);
+  };
+
+  const snippetRow = (snippet: SnippetConfig): HTMLElement => {
+    const row = el('div', 'tpl-snippet-row');
+
+    const triggerLabel = el('label', undefined, 'Trigger');
+    const trigger = el('input', 'tpl-snippet-trigger') as HTMLInputElement;
+    trigger.value = snippet.trigger;
+    trigger.addEventListener('input', scheduleSave);
+    triggerLabel.append(trigger);
+
+    const nameLabel = el('label', undefined, 'Name');
+    const name = el('input', 'tpl-snippet-label') as HTMLInputElement;
+    name.value = snippet.label;
+    name.addEventListener('input', scheduleSave);
+    nameLabel.append(name);
+
+    const templateLabel = el('label', undefined, 'Template (${1:placeholder} = Tab stop, $0 = final caret)');
+    const template = el('textarea', 'tpl-snippet-template') as HTMLTextAreaElement;
+    template.rows = 3;
+    template.value = snippet.template;
+    template.addEventListener('input', scheduleSave);
+    templateLabel.append(template);
+
+    const remove = button('icon-btn tpl-snippet-remove', 'Remove this snippet', () => {
+      row.remove();
+      scheduleSave();
+    });
+    remove.setAttribute('aria-label', 'Remove this snippet');
+    remove.appendChild(api.ui.icon('trash', 14));
+    row.appendChild(remove);
+
+    row.append(triggerLabel, nameLabel, templateLabel);
+    return row;
+  };
+
+  const renderSnippets = (items: readonly SnippetConfig[]): void => {
+    rows.textContent = '';
+    for (const snippet of items) {
+      rows.appendChild(snippetRow(snippet));
+    }
+    if (items.length === 0) {
+      rows.appendChild(
+        el('div', 'empty', 'No snippets. Add one below — typing its trigger word in a note will offer it.'),
+      );
+    }
+  };
+
+  const addRow = button('ghost tpl-add-snippet', 'Add snippet', () => {
+    rows.querySelector('.tpl-empty')?.remove();
+    const row = snippetRow({ trigger: '', label: '', template: '' });
+    rows.appendChild(row);
+    (row.querySelector('.tpl-snippet-trigger') as HTMLInputElement).focus();
+  });
+  addRow.appendChild(api.ui.icon('plus', 14));
+
+  const restore = button('ghost tpl-restore-snippets', 'Restore the three built-ins (tbl, code, task)', () => {
+    const current = collect();
+    const merged = [...current];
+    for (const fallback of SNIPPET_DEFAULTS) {
+      if (!merged.some((snippet) => snippet.trigger === fallback.trigger)) {
+        merged.push({ ...fallback });
+      }
+    }
+    renderSnippets(merged);
+    persist(merged);
+  });
+  restore.appendChild(api.ui.icon('rotate-ccw', 14));
+
+  footer.append(status, addRow, restore);
+  section.appendChild(footer);
+  body.appendChild(section);
   return () => undefined;
 }
 
