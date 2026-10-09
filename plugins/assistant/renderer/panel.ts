@@ -1253,6 +1253,10 @@ export function mountPanel(
       state: cm.state.EditorState.create({
         doc: '',
         extensions: [
+          // The composer sits on a dark surface: mark the view dark so CM's
+          // base theme switches the native caret from black ("&light") to
+          // white ("&dark") -- otherwise the caret is invisible.
+          EditorView.theme({}, { dark: true }),
           EditorView.lineWrapping,
           cm.view.placeholder('Ask anything …'),
           cm.view.keymap.of(cm.autocomplete.completionKeymap),

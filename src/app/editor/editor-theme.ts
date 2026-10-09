@@ -248,8 +248,12 @@ export const dreyEditorTheme = EditorView.theme(
       color: 'var(--text-2)',
       backgroundColor: 'var(--bg-main)',
     },
-    '.cm-content': { caretColor: 'var(--accent)' },
-    '.cm-cursor, .cm-dropCursor': { borderLeftColor: 'var(--accent)' },
+    // The caret is neutral text colour, decoupled from the highlight colour
+    // (which can be any user hex): it must stay visible on every accent. The
+    // drop cursor is drag chrome, not the caret -- it stays accent.
+    '.cm-content': { caretColor: 'var(--text-primary)' },
+    '.cm-cursor': { borderLeftColor: 'var(--text-primary)' },
+    '.cm-dropCursor': { borderLeftColor: 'var(--accent)' },
     '&.cm-focused .cm-selectionBackground, .cm-selectionBackground, .cm-content ::selection': {
       backgroundColor: 'color-mix(in srgb, var(--accent) 28%, transparent)',
     },

@@ -510,6 +510,8 @@
 .assistant-composer .composer-input .cm-content {
   font-size: 12.5px;
   padding: 2px 0;
+  /* Same caret colour as the editor (neutral text, not the highlight/accent). */
+  caret-color: var(--text-primary);
 }
 
 /* CodeMirror's base theme hardcodes the placeholder to #888. */
