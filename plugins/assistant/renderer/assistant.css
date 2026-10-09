@@ -522,6 +522,10 @@
 
 .assistant-composer .composer-input .cm-content {
   font-size: 12.5px;
+  /* CM's base theme hardcodes a monospace face on `.cm-scroller`; a direct
+     rule here beats that inheritance and keeps the composer sans like the
+     rest of the panel. */
+  font-family: var(--font-sans);
   padding: 2px 0;
   /* Same caret colour as the editor (neutral text, not the highlight/accent). */
   caret-color: var(--text-primary);
