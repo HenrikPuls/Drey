@@ -40,7 +40,7 @@ package, a minor naming convention).
 | [0029](09_architecture_decisions/0029-template-library.md)                        | Template library: a configurable vault sub-folder, folder = category, insert at cursor (frontmatter stripped, placeholders substituted) | Accepted |
 | [0030](09_architecture_decisions/0030-renderer-editor-context-menu.md)            | Renderer-owned editor context menu, replacing the OS menu (`formControlType` gate) | Accepted |
 | [0031](09_architecture_decisions/0031-editor-link-activation.md)                  | Ctrl/Cmd-click to open a link in the editor (web via `shell.openExternal`, vault path as a tab) | Accepted |
-| [0032](09_architecture_decisions/0032-field-logging-and-input-recovery.md)        | Field log file + a manual/​watchdog "Recover input" escape hatch for the intermittent input lock | Accepted |
+| [0032](09_architecture_decisions/0032-field-logging-and-input-recovery.md)        | Field log file (the "Recover input" watchdog half was removed again — see the ADR's later-change note) | Accepted |
 | [0033](09_architecture_decisions/0033-tasks-panel-and-index.md)                   | Tasks dock panel + whole-vault `TaskIndex` (checkbox / `#task` lines, `#task/done`, document = live buffer) | Accepted |
 | [0034](09_architecture_decisions/0034-internal-widget-model.md)                   | Internal widget model: `WIDGETS` registry, `WidgetContext` capability facade, per-widget View-menu hide/show | Accepted |
 | [0035](09_architecture_decisions/0035-named-ui-themes.md)                          | Named UI themes: `@uiw/codemirror-themes-all` catalog, shell palette derived from a per-theme seed, live compartment swap | Accepted |

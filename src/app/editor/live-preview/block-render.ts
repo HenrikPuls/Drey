@@ -809,9 +809,6 @@ function startImageResize(view: EditorView, grip: HTMLElement, event: PointerEve
   const prevSelect = document.body.style.userSelect;
   document.body.style.cursor = 'nwse-resize';
   document.body.style.userSelect = 'none';
-  // The input-recovery watchdog reads this marker: `user-select:none` on
-  // <body> is only legitimate while a gesture flag is set (ADR-0032).
-  document.body.setAttribute('data-drey-gesture', 'image-resize');
 
   let liveWidth = clampEmbedWidth(startWidth);
   let ended = false;
@@ -832,7 +829,6 @@ function startImageResize(view: EditorView, grip: HTMLElement, event: PointerEve
     window.removeEventListener('blur', end);
     document.body.style.cursor = prevCursor;
     document.body.style.userSelect = prevSelect;
-    document.body.removeAttribute('data-drey-gesture');
 
     if (parseImageEmbed(startAlt).width !== liveWidth) {
       view.dispatch({

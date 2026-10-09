@@ -314,6 +314,12 @@ export class MenuService {
           checked: () => !this.dock.sideFolded('right'),
           run: () => this.run('dock.toggleRight'),
         },
+        SEP,
+        ...this.widgets
+          .widgets()
+          .filter((w) => w.removable && this.settings.widgetEnabled(w.id))
+          .map((w) => this.widgetRow(w.id, w.title)),
+        SEP,
         {
           kind: 'item',
           label: 'Full screen',
@@ -321,11 +327,6 @@ export class MenuService {
           checked: () => this.windowChrome.fullscreen(),
           run: () => this.run('window.toggleFullScreen'),
         },
-        ...this.widgets
-          .widgets()
-          .filter((w) => w.removable && this.settings.widgetEnabled(w.id))
-          .map((w) => this.widgetRow(w.id, w.title)),
-        SEP,
         {
           kind: 'item',
           label: 'Split editor right',
@@ -349,13 +350,6 @@ export class MenuService {
           label: 'Focus previous pane',
           hint: 'Shift F6',
           run: this.panes.paneIds().length > 1 ? () => this.run('pane.focusPrev') : undefined,
-        },
-        SEP,
-        {
-          kind: 'item',
-          label: 'Recover input focus',
-          hint: 'Ctrl Alt Shift R',
-          run: () => this.run('input.recover'),
         },
         {
           kind: 'item',

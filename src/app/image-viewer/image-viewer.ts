@@ -158,7 +158,6 @@ export class ImageViewer implements AfterViewInit, OnDestroy {
     el.setPointerCapture?.(event.pointerId);
     document.body.style.cursor = 'grabbing';
     document.body.style.userSelect = 'none';
-    document.body.setAttribute('data-drey-gesture', 'image-pan');
 
     const startX = event.clientX;
     const startY = event.clientY;
@@ -179,7 +178,6 @@ export class ImageViewer implements AfterViewInit, OnDestroy {
       window.removeEventListener('blur', end);
       document.body.style.cursor = '';
       document.body.style.userSelect = '';
-      document.body.removeAttribute('data-drey-gesture');
       this.panCleanup = null;
       if (moved) {
         // A real pan synthesises a `click` on release. Swallow that one

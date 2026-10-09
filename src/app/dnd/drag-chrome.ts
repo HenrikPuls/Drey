@@ -15,17 +15,12 @@
  *
  * The **ghost** is the small label chip that follows the cursor.
  *
- * `<body>` gets `user-select: none`, a cursor, and `data-drey-gesture` --
- * the last is the marker `InputRecoveryService`'s watchdog reads to know a
- * gesture is legitimately in progress (ADR-0032); without it a slow drag
- * gets "recovered" out from under the user.
+ * `<body>` gets `user-select: none` and a cursor while a drag is in flight.
  */
 
 export type DragCursor = 'grabbing' | 'no-drop';
 
 interface DragChromeOptions {
-  /** `data-drey-gesture` value -- any non-empty marker (e.g. `'dock'`, `'tab-drag'`). */
-  gesture: string;
   /** CSS class for the ghost chip (`dock-drag-ghost` / `tab-drag-ghost`). */
   ghostClass: string;
   /** Inner HTML of the ghost (plain text for a title, or a small markup fragment). */
@@ -59,7 +54,6 @@ export function startDragChrome(options: DragChromeOptions): void {
 
   document.body.style.userSelect = 'none';
   document.body.style.cursor = 'grabbing';
-  document.body.setAttribute('data-drey-gesture', options.gesture);
 }
 
 /** Switches the drag cursor (valid target vs. `no-drop`). */
@@ -108,6 +102,5 @@ export function endDragChrome(): void {
   if (typeof document !== 'undefined') {
     document.body.style.userSelect = '';
     document.body.style.cursor = '';
-    document.body.removeAttribute('data-drey-gesture');
   }
 }

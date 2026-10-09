@@ -530,8 +530,7 @@ src/                Angular renderer (standalone components, esbuild via Angular
                          (DockService header drag, TabDragService): a module-level
                          .drag-overlay that captures the pointer (no hover/selection
                          leak underneath, owns the cursor grabbing<->no-drop), the ghost
-                         chip, and the <body> user-select / data-drey-gesture flags
-                         (InputRecoveryService watchdog contract, ADR-0032).
+                         chip, and the <body> user-select flags.
                          startDragChrome / moveDragChrome / setDragCursor /
                          hitTestUnderPointer / endDragChrome.
     panes/             (ADR-0037, ADR-0038) PaneService: the split-view layout -- an arbitrary
@@ -848,7 +847,6 @@ env.ps1             Puts .tools/node on PATH for the current shell session
 | `llm:debug-entry`                    | `webContents.send` — **main → renderer** push, one per completed LLM request, so the debug panel updates live. Preload exposes it as `onLlmDebugEntry(listener)` returning an unsubscribe, same rule as `daily:open`.                                                                                                                                                                                                                                                         |
 | `action:run`                         | Run one Action (by trigger id) against `ActionContext` (`{ path, body, selection? }` — the active document). Returns `ActionOutcome`: an `'edit'` (`before`/`after` for the confirmation flow), a `'noop'` (ran, nothing to change), or an `'error'`.                                                                                                                                                                                                                         |
 | `chat:ask`                           | Chat Ask mode: `ActionContext` + question → `AskOutcome`, either `{ kind: 'answer', text }` (read-only) or `{ kind: 'edit', before, after, previewStyle, summary }` (routed through the same confirmation flow).                                                                                                                                                                                                                                                              |
-| `window:recover-input`               | Bug-6: the renderer's "Recover input focus" reaching main — closes a native context-menu popup whose capture loop never unwound (tracked in `electron/menu.ts`, also closed on window blur/minimize), logging the attempt. Resolves to whether a popup was actually closed.                                                                                                                                                                                                    |
 | `exit:confirm-request` / `exit:decision` | Bug-5: the save-before-exit bridge. Main intercepts `BrowserWindow 'close'`, pushes `{ id }` (main → renderer), and the renderer's `ExitConfirmService` answers `'save' \| 'discard' \| 'cancel'` (clean state answers `'discard'` with no dialog). No timeout by design (see `ExitBridge`); requests are readiness-gated (`exit:listener-ready`) so a close racing app bootstrap cannot lose the request.                                                                                                                                                                                  |
 | `draft:save`                         | Bug-5: commits an untitled buffer into the hidden `<vault>/.drafts/` as the next `unnamed-N.md` through the `note:save` pipeline with `runOnSaveActions: false`; the tab is re-keyed to the returned path. No Save-As dialog on exit (the Notepad++ model).                                                                                                                                                                                                                  |
 
@@ -1686,7 +1684,7 @@ vocabulary, taskId)` → the `autotag` built-in template
   `register({ id, label, keybinding, run })` is called from `App`
   alongside the other app-lifetime wiring: `search.open`, `note.new/save/
   saveAs/saveAll`, `editor.toggleLineNumbers`, `template.insert`,
-  `input.recover`, and the split-view pane commands (ADR-0037) —
+  and the split-view pane commands (ADR-0037) —
   `pane.splitRight` (`Ctrl+Alt+Enter`), `pane.splitDown`
   (`Ctrl+Alt+Shift+Enter`) → `PaneService.splitPane(focusedId, dir,
   activePath)`, `pane.focusNext` (`F6`) / `pane.focusPrev` (`Shift+F6`) →
@@ -1932,7 +1930,7 @@ src/app/templates/
   `excludedPrefixes()` = `['templates/', '<configured>/']`. `config:set`
   rebuilds the index when `templates.dir` changed.
 
-## 5.19 Field logging + input recovery (ADR-0032)
+## 5.19 Field logging (ADR-0032)
 
 - `electron/logger.ts` — append-only `<userData>/logs/drey.log` (rotate at
   ~1 MB). Fed by main `process` `uncaughtException`/`unhandledRejection`,
@@ -1942,20 +1940,13 @@ src/app/templates/
   `console.error/warn` + `window.onerror` + `unhandledrejection`;
   `LoggingErrorHandler` is registered as Angular's `ErrorHandler`
   (`app.config.ts`).
-- `src/app/services/input-recovery.service.ts` — `InputRecoveryService`:
-  `recover(reason)` (View → *Recover input focus* / `Ctrl+Alt+Shift+R`,
-  command id `input.recover`) dispatches a document Escape, clears
-  `document.body` `user-select`/`cursor` + orphan `.ctx-backdrop`, refocuses
-  the editor; a 4 s `startWatchdog()` auto-recovers unambiguous leftovers.
-  `DockService` / `ImageViewer` gestures now set a `data-drey-gesture` body
-  attribute (so a legit `user-select:none` is distinguishable) and end on
-  `window` `blur` — as of bug-6 the pane splitter and the Live-Preview
-  image-resize gestures do too. `recover()` also reaches main over
-  `window:recover-input` to force-close a native context-menu popup whose
-  capture loop never unwound (`electron/menu.ts` tracks them per window,
-  closes them on window blur/minimize, and logs every open/force-close to
-  `drey.log`) — the leading suspect for the packaged build's stuck-input
-  state, which the renderer can neither see nor fix.
+
+(The ADR's second half — the `InputRecoveryService` watchdog and the
+"Recover input focus" command incl. the `window:recover-input` IPC — was
+removed again once the stuck-input culprits were fixed at the source:
+native dialogs refocus via `electron/focus.ts`, native context-menu popups
+are closed on window blur/minimize, and every renderer dialog is an in-app
+surface. See the later-change note on ADR-0032.)
 
 ### Startup daily note (ADR-0002 flow, opened automatically)
 

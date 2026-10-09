@@ -111,7 +111,7 @@ to a plain `src/app/windows/` folder.
 
 What **stays** in `src/app/services/` is the app-wide infrastructure that
 belongs to no one feature: `settings`, `log`, `drop-guard`,
-`input-recovery`, `theme`, `appearance`, `about`, `layout`, `mcp-bridge`,
+`theme`, `appearance`, `about`, `layout`, `mcp-bridge`,
 `editor-zoom`, `edit-target`, `spellcheck`, `tag`, and the `editor`
 facade itself.
 

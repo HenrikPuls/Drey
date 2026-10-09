@@ -31,7 +31,6 @@ export const IPC_CHANNELS = {
   windowMinimize: 'window:minimize',
   windowToggleMaximize: 'window:toggle-maximize',
   windowClose: 'window:close',
-  windowRecoverInput: 'window:recover-input',
   exitConfirmRequest: 'exit:confirm-request',
   exitDecision: 'exit:decision',
   exitListenerReady: 'exit:listener-ready',
@@ -521,15 +520,6 @@ export interface DreyApi {
   saveDraftNote(request: DraftSaveRequest): Promise<NoteSaveResult>;
 
   /**
-   * Asks main to close any native context-menu popup still popped over the
-   * window and log the attempt (bug-6): a popup whose capture loop never
-   * unwinds swallows every keystroke -- invisible to the renderer, so the
-   * "Recover input focus" command forwards here as the escape hatch.
-   * Resolves to `true` when a popup was actually closed.
-   */
-  recoverInputFocus(): Promise<boolean>;
-
-  /**
    * Fires whenever the window is maximized or restored, so the titlebar's
    * maximize/restore glyph can follow along (main -> renderer push, same
    * shape as `onOpenDailyNote`). Returns an unsubscribe.
@@ -572,7 +562,7 @@ export interface DreyApi {
    * Appends a line to the main process's log file
    * (`<userData>/logs/drey.log`). Best-effort, fire-and-forget -- the
    * renderer mirrors `console.error` / `window.onerror` /
-   * `unhandledrejection` and the input-recovery snapshot here so a field
+   * `unhandledrejection` here so a field problem in the packaged build
    * problem in the packaged build (no DevTools) leaves a trace.
    */
   logMessage(entry: LogEntry): Promise<void>;

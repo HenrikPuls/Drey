@@ -119,7 +119,6 @@ export class TabDragService {
         dirty: press.dirty,
       });
       startDragChrome({
-        gesture: 'tab-drag',
         ghostClass: 'tab-drag-ghost',
         ghostHtml:
           `<span class="label">${escapeHtml(press.name)}</span>` +

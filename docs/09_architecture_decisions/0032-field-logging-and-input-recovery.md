@@ -5,6 +5,17 @@
 Accepted. A pragmatic response to a bug that could not be reproduced on
 the dev machine; not a root-cause fix.
 
+**Later change:** the input-recovery half (the "Recover input focus"
+command, the `InputRecoveryService` watchdog and the
+`window:recover-input` IPC) was **removed** again — the plausible culprits
+were fixed at the source instead: renderer dialogs are in-app surfaces
+(`ConfirmDialogService`), every main-side dialog refocuses the renderer as
+it resolves (`electron/focus.ts`), and native context-menu popups are
+closed on window blur/minimize (`electron/menu.ts`, bug-6 hardening). The
+`data-drey-gesture` watchdog marker went with it; the `window` `blur` /
+`minimize` teardown of the gestures stays (it fixes lost `pointerup`s
+independently). Field logging — this ADR's first half — is unaffected.
+
 ## Context
 
 The project owner hits an intermittent state in the **packaged** build:

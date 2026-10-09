@@ -13,7 +13,6 @@ import { EditorService } from './services/editor.service';
 import { ExitConfirmService } from './services/exit-confirm.service';
 import { DropGuardService } from './services/drop-guard.service';
 import { EditorZoomService } from './services/editor-zoom.service';
-import { InputRecoveryService } from './services/input-recovery.service';
 import { LogService } from './services/log.service';
 import { McpBridgeService } from './services/mcp-bridge.service';
 import { PaneLayout, PaneService } from './panes';
@@ -102,9 +101,6 @@ export class App {
     inject(EditorZoomService);
     // Mirror uncaught renderer errors + rejections into the log file (ADR-0032).
     inject(LogService).install();
-    // Manual "unstick the keyboard" escape hatch + watchdog (ADR-0032).
-    const recovery = inject(InputRecoveryService);
-    recovery.startWatchdog();
 
     // Install the window-level drag/drop navigation guard (ADR-0027).
     inject(DropGuardService);
@@ -263,11 +259,5 @@ export class App {
       run: () => windowChrome.toggleFullScreen(),
     });
 
-    keys.register({
-      id: 'input.recover',
-      label: 'Recover input focus',
-      keybinding: 'Mod+Alt+Shift+R',
-      run: () => recovery.recover('manual'),
-    });
   }
 }

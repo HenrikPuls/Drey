@@ -56,7 +56,6 @@ describe('TabDragService', () => {
       .querySelectorAll('[data-tabstrip-pane], [data-pane-id], .drag-overlay, .tab-drag-ghost')
       .forEach((el) => el.remove());
     delete (document as unknown as Record<string, unknown>)['elementFromPoint'];
-    document.body.removeAttribute('data-drey-gesture');
     document.body.style.cursor = '';
     document.body.style.userSelect = '';
   });
@@ -70,14 +69,13 @@ describe('TabDragService', () => {
     expect(document.querySelector('.drag-overlay')).toBeNull();
   });
 
-  it('promotes past the threshold: dragging set, chrome mounted, watchdog marker set', () => {
+  it('promotes past the threshold: dragging set, chrome mounted', () => {
     stubPointTarget(document.body);
     down(svc, 'p1', 'a.md');
     move(20);
     expect(svc.dragging()?.path).toBe('a.md');
     expect(document.querySelector('.tab-drag-ghost')?.textContent).toContain('a.md');
     expect(document.querySelector('.drag-overlay')).not.toBeNull();
-    expect(document.body.getAttribute('data-drey-gesture')).toBe('tab-drag');
   });
 
   it('over a tab strip: dropTarget is the slot from the pointer x; commits once on drop', () => {
@@ -89,7 +87,6 @@ describe('TabDragService', () => {
     expect(panes.pane('p1')!.tabs).toEqual(['a.md', 'b.md']); // deferred
     up();
     expect(panes.pane('p1')!.tabs).toEqual(['b.md', 'a.md']); // committed
-    expect(document.body.hasAttribute('data-drey-gesture')).toBe(false);
   });
 
   it('over a pane body: dropTarget is "body", appended at the end', () => {

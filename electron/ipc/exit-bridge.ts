@@ -13,8 +13,7 @@ import { ExitDecision, IPC_CHANNELS } from '../../shared/ipc-api';
  * an unanswered "Save all?" or re-prompting after they already chose. If the
  * renderer is truly hung, the window stays open until killed from the
  * taskbar; the session backups (ADR-0043) have preserved all buffer text
- * continuously, so nothing is lost. The renderer's own "Recover input focus"
- * command (`window:recover-input`) is the lighter escape hatch.
+ * continuously, so nothing is lost.
  *
  * The request is **readiness-gated**: `wc.send` is fire-and-forget, so a
  * close racing the renderer's bootstrap (the window is closable within the
