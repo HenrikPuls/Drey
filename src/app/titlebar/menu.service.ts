@@ -112,10 +112,15 @@ export class MenuService {
    * and not on whatever the menu click left focused. With no editor
    * focused (a native `<input>` in Settings, the entry topic field) fall
    * straight through to `webContents`.
+   *
+   * The right-click menu passes the view of the surface it was opened on
+   * (`target`) so the command lands there instead of on the last-focused
+   * pane editor -- plugin composer surfaces never register with
+   * `EditTargetService`, and a right-click must act where it clicked.
    */
-  execEdit(command: EditCommand): void {
+  execEdit(command: EditCommand, target?: EditorView | null): void {
     this.close();
-    const view = this.editTarget.view;
+    const view = target !== undefined ? target : this.editTarget.view;
     const api = typeof window !== 'undefined' ? window.dreyApi : undefined;
     if (view) {
       view.focus();

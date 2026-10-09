@@ -91,6 +91,22 @@ export class EditorContextMenuService {
     this.menuTarget.set(null);
   }
 
+  /**
+   * The CodeMirror view of the surface the open menu sits on, or `null`
+   * (menu closed, image target, view already gone). The clipboard rows
+   * dispatch against THIS view -- not `EditTargetService`'s last-focused
+   * pane editor -- so a right-click on a plugin composer (which never
+   * registers with the edit target) cuts/copies/pastes right there.
+   */
+  resolveView(): EditorView | null {
+    const target = this.menuTarget();
+    if (target === null || target.surface !== 'editor') {
+      return null;
+    }
+    const host = target.target.closest('.cm-editor');
+    return host === null ? null : EditorView.findFromDOM(host as HTMLElement);
+  }
+
   private readonly onContextMenu = (event: MouseEvent): void => {
     const target = event.target;
     if (!(target instanceof Element)) {
