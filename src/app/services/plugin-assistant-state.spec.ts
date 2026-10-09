@@ -431,19 +431,61 @@ describe('assistant plugin state — following the active document (chat binding
     expect(h.state.activeChatPath()).toBe('chats/2026/09/new.md');
   });
 
-  it('resets to a fresh chat when no chat is bound to the document', async () => {
+  it('keeps the current chat when no chat is bound to the document', async () => {
     const h = setup();
     h.chatNotes.set(...boundChat('other', '2026-09-13T13:00:00', 'v1::b.md'));
-    await h.state.followActiveDoc('v1::a.md'); // binds nothing
-    expect(h.state.activeChatPath()).toBeNull();
-
-    // A previously open chat does not survive the switch to an unbound doc.
     h.chatNotes.set(...boundChat('mine', '2026-09-13T09:00:00', null));
     await h.state.openChat('chats/2026/09/mine.md');
     expect(h.state.activeChatPath()).toBe('chats/2026/09/mine.md');
 
+    // An unbound document no longer wipes the panel (ADR-0048 later change).
     await h.state.followActiveDoc('v1::a.md');
-    expect(h.state.activeChatPath()).toBeNull();
+    expect(h.state.activeChatPath()).toBe('chats/2026/09/mine.md');
+
+    // A non-note focus keeps it too.
+    await h.state.followActiveDoc(null);
+    expect(h.state.activeChatPath()).toBe('chats/2026/09/mine.md');
+  });
+
+  it('a focused chat-note tab opens that chat in the panel', async () => {
+    const h = setup();
+    h.chatNotes.set(...boundChat('mine', '2026-09-13T10:00:00', null));
+    h.chatNotes.set(...boundChat('other', '2026-09-13T11:00:00', 'v1::b.md'));
+
+    await h.state.followActiveDoc('v1::chats/2026/09/mine.md');
+
+    expect(h.state.activeChatPath()).toBe('chats/2026/09/mine.md');
+  });
+
+  it('a chat tab outside the listing (other vault) keeps the current chat', async () => {
+    const h = setup();
+    h.chatNotes.set(...boundChat('mine', '2026-09-13T10:00:00', null));
+    await h.state.openChat('chats/2026/09/mine.md');
+
+    await h.state.followActiveDoc('v2::chats/2026/09/elsewhere.md');
+
+    expect(h.state.activeChatPath()).toBe('chats/2026/09/mine.md');
+  });
+
+  it('the first follow with nothing open continues the newest chat (startup)', async () => {
+    const h = setup();
+    h.chatNotes.set(...boundChat('old', '2026-09-13T10:00:00', null));
+    h.chatNotes.set(...boundChat('new', '2026-09-13T12:00:00', null));
+
+    await h.state.followActiveDoc(null);
+
+    expect(h.state.activeChatPath()).toBe('chats/2026/09/new.md');
+  });
+
+  it('an explicit new chat survives tab switches (only activation auto-opens)', async () => {
+    const h = setup();
+    h.chatNotes.set(...boundChat('mine', '2026-09-13T10:00:00', null));
+    await h.state.followActiveDoc('v1::a.md'); // activation: opens the newest chat
+    expect(h.state.activeChatPath()).toBe('chats/2026/09/mine.md');
+
+    h.state.newChat();
+    await h.state.followActiveDoc('v1::b.md');
+    expect(h.state.activeChatPath()).toBeNull(); // stays the fresh chat
   });
 
   it('a bound chat already open stays put (no reload churn on docs-changed)', async () => {
@@ -478,8 +520,42 @@ describe('assistant plugin state — following the active document (chat binding
     const second = h.state.followActiveDoc('v1::b.md');
     await Promise.all([first, second]);
 
-    // The b-follow decided "fresh"; the slower a-follow must not reopen.
-    expect(h.state.activeChatPath()).toBeNull();
+    // The b-follow found no bound chat and, being the first completed
+    // follow, falls back to the newest chat; the slower a-follow never lands.
+    expect(h.state.activeChatPath()).toBe('chats/2026/09/a-chat.md');
+  });
+
+  it('asking with a chat-note tab focused continues that chat and binds nothing', async () => {
+    const h = setup();
+    h.setActive('chats/2026/09/mine.md', '---\nkind: chat\n---\n');
+    h.chatNotes.set(
+      'chats/2026/09/mine.md',
+      '---\nkind: chat\ntitle: mine\nupdated: 2026-09-13\n---\n\n## User\n\nalt\n',
+    );
+    await h.state.openNote('chats/2026/09/mine.md');
+    await h.state.openChat('chats/2026/09/mine.md');
+
+    const sent = await h.state.ask('weiter?');
+
+    expect(sent).toBe(true);
+    // The open chat continues — no new file chained onto the chat note.
+    expect(h.asks[0]?.chatPath).toBe('chats/2026/09/mine.md');
+    // The focused chat never becomes the new chat's binding…
+    expect(h.asks[0]?.noteKey).toBeNull();
+    // …but it still rides as the note chip's context.
+    expect(h.asks[0]?.note).toEqual({ path: 'chats/2026/09/mine.md', body: '---\nkind: chat\n---\n' });
+  });
+
+  it('a fresh ask with a chat-note tab focused creates an unbound chat', async () => {
+    const h = setup();
+    h.setActive('chats/2026/09/other.md', '---\nkind: chat\n---\n');
+    await h.state.openNote('chats/2026/09/other.md');
+
+    const sent = await h.state.ask('neu ohne bindung');
+
+    expect(sent).toBe(true);
+    expect(h.asks[0]?.chatPath).toBeNull();
+    expect(h.asks[0]?.noteKey).toBeNull();
   });
 });
 

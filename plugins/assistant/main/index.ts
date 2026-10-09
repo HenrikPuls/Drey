@@ -53,6 +53,7 @@ const plugin: MainPluginModule = {
       read: (path) => ctx.vault.read(path),
       writeAnnounced: (path, content) => ctx.vault.writeAnnounced(path, content),
       list: () => ctx.vault.list(),
+      log: (message, level) => ctx.log(message, level),
     });
 
     // -- semantic vault retrieval (ADR-0055) --------------------------------

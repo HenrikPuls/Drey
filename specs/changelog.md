@@ -20,6 +20,30 @@ recorded as an explicit decision. The parity checklist lives in
 
 ## Recent milestones
 
+### Milestone 56 — the assistant panel keeps its chat
+
+- **The panel no longer resets away.** Beta feedback read as "chats are
+  not saved": the chat notes were on disk, but every restart or tab
+  switch to a document without an exact `note:` match came back as an
+  empty fresh chat, so conversations felt gone and the same question
+  produced duplicate chat files. Follow rules revised (ADR-0048 later
+  change): a focused **chat-note tab** opens that chat in the panel; a
+  note without a bound chat and every non-note focus **keep the current
+  chat**; the **first follow at activation continues the newest chat**
+  (startup shows the last conversation, a bound chat still wins on its
+  restored document). Only the picker and "+ New chat" start fresh.
+- **`note:` bindings never point into `chats/`** — asking with a chat
+  tab focused continues that chat (or creates an unbound one) instead of
+  chaining chat → chat; the note chip still attaches it as context.
+- **Visibility hardening:** `listChats` logs skipped (vanished/
+  unreadable) chat files via `ctx.log` instead of thinning the picker
+  silently; a fenceless (corrupted) chat file still lists, with its path
+  as the fallback title.
+- Tests: `plugin-assistant-state.spec.ts` (follow semantics, chat-tab
+  focus, startup fallback, unbound asks with a focused chat) and
+  `plugin-assistant-chat-store.spec.ts` (corrupt-tolerant listing, skip
+  logging).
+
 ### Milestone 54 — the Backlinks panel (req-39)
 
 - **`plugins/backlinks/`** (new): a per-vault **outlink index** — every

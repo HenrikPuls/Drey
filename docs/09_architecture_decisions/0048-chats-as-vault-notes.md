@@ -158,3 +158,33 @@ persisted with full fidelity and replayed in full.
   prompt body; missing description = `""`, missing title = file name).
   Picking replaces the composer's text — the user reviews and sends it as
   a normal question; no placeholder substitution.
+
+## Later change — the panel keeps its chat (milestone 56)
+
+Beta feedback read as "chats are not saved": the notes were on disk, but
+after a restart — or any tab switch to a document without an exact
+`note:` match — the panel always came back as an empty fresh chat, so the
+conversation felt gone and the same question was asked into new chat
+notes again and again. Revisions, all renderer/grammar level — the
+storage format is untouched:
+
+- **A focused chat-note tab opens that chat in the panel** (the tab is
+  the note's view; the panel now agrees with it). A chat note can no
+  longer become a *binding*: `ask()` never mints a `note:` doc key from a
+  `chats/` path — asking with a chat tab focused continues the panel's
+  active chat, and a fresh one stays unbound, instead of chaining
+  chat → chat (observed in the wild: a chat note bound to another chat
+  note). The note chip still attaches the focused chat as context.
+- **An unbound focus keeps the current chat.** Switching to a note with
+  no bound chat, or to a non-note surface (scratch/external/image), no
+  longer resets the panel to a fresh chat; only the picker and
+  "+ New chat" do.
+- **The first follow at activation continues the newest chat** (by
+  `updated:`), so a restarted app shows the last conversation instead of
+  an empty panel — with a bound chat still winning on the restored
+  document. Only that one auto-open happens; an explicit new chat
+  survives every later switch.
+- `listChats` logs the chat files it must skip (vanished/unreadable
+  between listing and read) through `ctx.log` instead of thinning the
+  picker silently; a fenceless (corrupted) chat file still lists, with
+  its path as the fallback title.

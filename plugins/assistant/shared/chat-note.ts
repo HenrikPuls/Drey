@@ -21,6 +21,15 @@ import type { ChatMessage } from '../../../shared/llm';
 /** Where conversations live, nested per year/month like `daily/`. */
 export const CHATS_DIR = 'chats';
 
+/**
+ * Whether a vault-relative path is a chat note (the `chats/` auto-save
+ * area). The renderer-safe twin of the app's `isAutoSavePath` chats half —
+ * plugin modules cannot runtime-import app `shared/`.
+ */
+export function isChatNotePath(path: string): boolean {
+  return path === CHATS_DIR || path.startsWith(`${CHATS_DIR}/`);
+}
+
 /** The fence tag around persisted tool calls/results/edit outcomes. */
 export const TOOL_FENCE_TAG = 'drey-tool';
 

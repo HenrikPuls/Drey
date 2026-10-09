@@ -357,10 +357,13 @@ Renderer (Angular):
   auto-summary sidecar feature was removed entirely — ADR-0012
   superseded; pre-existing `.{name}.chat.json` files stay on disk,
   unread.) **Chats are bound to the active document**: a chat note's
-  `note:` frontmatter holds the doc key it was started under, the panel
-  follows tab switches (newest bound chat opens; a non-note focus resets
-  to a fresh chat), and the picker / new-chat button still allow manual
-  chats — honoured until the next document switch. A "Prompts" picker in
+  `note:` frontmatter holds the doc key it was started under (never a
+  `chats/` path — a focused chat tab binds nothing and instead opens
+  that chat in the panel), the panel follows tab switches (a bound note
+  opens its newest chat; an unbound note or non-note focus keeps the
+  current chat; at startup the newest chat loads), and the picker /
+  new-chat button still allow manual chats — honoured until the next
+  document switch. A "Prompts" picker in
   the composer inserts a prompt from `templates/prompts/*.md`
   (`# Titel` / `> Beschreibung` / body) into the composer for editing.
   Manual
@@ -692,6 +695,16 @@ can dock into the three docks (milestone 20,
 The milestone log lives in
 [docs/milestones-done.md](docs/milestones-done.md).
 
+**Just code-complete: milestone 56 — the assistant panel keeps its chat**:
+beta feedback read as "chats are not saved" (the notes were on disk; the
+panel just always reset). Follow rules revised (ADR-0048 later change):
+a focused chat-note tab opens that chat in the panel, an unbound note or
+non-note focus keeps the current chat (no more fresh-chat reset), the
+first follow at activation continues the newest chat (startup shows the
+last conversation), `note:` never binds into `chats/` (no chat→chat
+chains), and `listChats` logs skipped files via `ctx.log`. **Not yet
+manually verified by the owner.**
+
 **Just code-complete: milestone 55 — document history back/forward**:
 new `DocHistoryService` (`src/app/services/doc-history.service.ts`) —
 one global, session-scoped history of the viewed documents (VS Code
@@ -883,8 +896,8 @@ milestones") until owner-verified.
   snippets), 47 (foldable side docks), 48 (F11 full screen), 49
   (search-summary Sources links), 50 (caret survives a tab switch),
   51 (task due dates + priorities), 52 (recycle-bin deletes),
-  53 (tag rename / merge), 54 (Backlinks panel) and 55 (document
-  history back/forward) — see
+  53 (tag rename / merge), 54 (Backlinks panel), 55 (document
+  history back/forward) and 56 (assistant panel keeps its chat) — see
   "Current State" above. (Milestone 44, the Task Center's `#task/id:`
   addressing, was reverted before release — ADR-0033 "considered and
   rejected"; the surviving piece is the ambiguity skip in

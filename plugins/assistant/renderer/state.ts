@@ -13,7 +13,7 @@ import type { ActionOutcome } from '../../../shared/plugin-api';
 import type { AskRequest, AssistantOutcome } from '../shared/ask';
 import { MAX_EXTRA_FILES, MAX_IMAGES, truncateFileBody } from '../shared/ask.js';
 import { normalizeVaultScope, type VaultScope } from '../shared/semantic.js';
-import type { ChatNoteView, ChatSummary } from '../shared/chat-note';
+import { isChatNotePath, type ChatNoteView, type ChatSummary } from '../shared/chat-note.js';
 import { ipcErrorMessage } from '../shared/format.js';
 import { type RunningTasks } from './running-tasks.js';
 
@@ -128,16 +128,20 @@ export interface AssistantPorts {
 
 /**
  * Live edit only ever targets a user note: never the app-owned auto-save
- * paths (`chats/`, `.drafts/`). Local copy — plugin renderers cannot
- * runtime-import the app's `shared/` (same reason as `format.ts`).
+ * paths (`chats/` via the shared helper, `.drafts/` locally — plugin
+ * renderers cannot runtime-import the app's `shared/`).
  */
 function isLiveEditablePath(path: string): boolean {
-  return (
-    path !== 'chats' &&
-    !path.startsWith('chats/') &&
-    path !== '.drafts' &&
-    !path.startsWith('.drafts/')
-  );
+  return !isChatNotePath(path) && path !== '.drafts' && !path.startsWith('.drafts/');
+}
+
+/** The relative-path half of a doc key (`vaultId::relativePath`); null when malformed. */
+function docKeyPath(noteKey: string): string | null {
+  const sep = noteKey.indexOf('::');
+  if (sep <= 0 || sep === noteKey.length - 2) {
+    return null;
+  }
+  return noteKey.slice(sep + 2);
 }
 
 export interface AssistantState {
@@ -200,9 +204,11 @@ export interface AssistantState {
   closeNote(): void;
   /**
    * Follows the active document (req: the panel is bound to the open
-   * note): opens the NEWEST chat bound to that doc key, or resets to a
-   * fresh chat when none is. Skipped while a generation runs; a stale
-   * in-flight follow (superseded by a newer switch) never lands.
+   * note): a chat-note tab opens that chat, a bound note opens its NEWEST
+   * chat, and an unbound focus keeps the current chat (only the first
+   * follow at activation falls back to the newest chat). Skipped while a
+   * generation runs; a stale in-flight follow (superseded by a newer
+   * switch) never lands.
    */
   followActiveDoc(noteKey: string | null): Promise<void>;
   /** Loads a chat into the panel (the picker's click). */
@@ -248,6 +254,13 @@ export function createAssistantState(ports: AssistantPorts, tasks: RunningTasks)
   let asking = false;
   /** Counts followActiveDoc calls so a slow listChats can't clobber a newer switch. */
   let followSeq = 0;
+  /**
+   * True until the first follow completes: the panel then starts on the
+   * newest chat instead of empty (app start, nothing restored). Only that
+   * one call auto-opens — an explicit "New chat" afterwards must survive
+   * tab switches.
+   */
+  let firstFollow = true;
   /**
    * The doc key a switch wanted followed while a generation was running —
    * re-run when the ask finishes, or the switch is lost and the panel
@@ -503,6 +516,7 @@ export function createAssistantState(ports: AssistantPorts, tasks: RunningTasks)
       try {
         candidates = await ports.listChats();
       } catch {
+        firstFollow = false;
         return; // the picker keeps whatever it had; nothing to follow against
       }
       if (seq !== followSeq || asking) {
@@ -510,15 +524,39 @@ export function createAssistantState(ports: AssistantPorts, tasks: RunningTasks)
       }
       chats = candidates;
       chatsLoaded = true;
+      const activation = firstFollow;
+      firstFollow = false;
+
+      // Focusing a chat note's own tab loads THAT chat into the panel —
+      // the tab is the note's view, the panel should agree with it.
+      if (noteKey !== null) {
+        const chatPath = docKeyPath(noteKey);
+        if (chatPath !== null && isChatNotePath(chatPath)) {
+          const focused = chats.find((chat) => chat.path === chatPath);
+          if (focused !== undefined && focused.path !== activeChat) {
+            await this.openChat(focused.path);
+          }
+          return;
+        }
+      }
+
+      // A document with a bound chat opens its newest one.
       const bound = noteKey === null
         ? undefined
         : chats.find((chat) => chat.note === noteKey); // listChats: newest first
-      if (bound !== undefined && bound.path !== activeChat) {
-        await this.openChat(bound.path);
+      if (bound !== undefined) {
+        if (bound.path !== activeChat) {
+          await this.openChat(bound.path);
+        }
         return;
       }
-      if (bound === undefined && activeChat !== null) {
-        this.newChat();
+
+      // Anything else — an unbound note or a non-note focus — keeps the
+      // current chat (a tab switch no longer wipes the panel; ADR-0048
+      // later change). Only the very first follow continues the newest
+      // conversation instead of showing an empty panel.
+      if (activation && activeChat === null && chats.length > 0) {
+        await this.openChat(chats[0].path);
       }
     },
 
@@ -600,8 +638,14 @@ export function createAssistantState(ports: AssistantPorts, tasks: RunningTasks)
         // `note:` binding is the focused doc key — even when the chip is
         // off, the chat belongs to the workspace it was started in.
         const active = ports.activeDoc();
+        // A focused chat-note tab must never become a chat's binding —
+        // asking with a chat tab focused continues THAT chat (it is the
+        // panel's active chat), and a fresh one stays unbound instead of
+        // chaining chat → chat. The note chip still rides as context.
         const noteKey =
-          active !== null && active.vaultId !== null ? `${active.vaultId}::${active.path}` : null;
+          active !== null && active.vaultId !== null && !isChatNotePath(active.path)
+            ? `${active.vaultId}::${active.path}`
+            : null;
         let note: AskRequest['note'] = null;
         if (includeNote) {
           if (active === null) {

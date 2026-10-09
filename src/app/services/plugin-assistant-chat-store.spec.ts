@@ -205,4 +205,39 @@ describe('ChatStore — listChats', () => {
     expect(chats.map((c) => c.title)).toEqual(['Newer', 'Older']);
     expect(chats[0].path).toBe('chats/2026/09/2026-09-13-b.md');
   });
+
+  it('tolerates a fenceless (corrupted) chat file: lists it with the path as title', async () => {
+    const vault = fakeVault({
+      'chats/2026/09/broken.md':
+        'frage"---\nkind: chat\ntitle: "x"\n---\n\n## User\n\nalt\n',
+      'chats/2026/09/good.md': "---\nkind: chat\ntitle: 'Good'\nupdated: '2026-09-13T09:00:00'\n---\n",
+    });
+    const store = new ChatStore(vault.ports);
+    const chats = await store.listChats();
+    // No fence at the start → empty frontmatter degrades, the file still lists.
+    expect(chats.map((c) => c.title)).toEqual(['Good', 'chats/2026/09/broken.md']);
+    expect(chats[1].updated).toBeNull();
+  });
+
+  it('logs chat files it must skip (vanished between listing and read)', async () => {
+    const vault = fakeVault({
+      'chats/2026/09/good.md': "---\nkind: chat\ntitle: 'Good'\nupdated: '2026-09-13T09:00:00'\n---\n",
+    });
+    const logs: Array<{ message: string; level?: string }> = [];
+    const store = new ChatStore({
+      ...vault.ports,
+      list: async () => [
+        ...(await vault.ports.list()),
+        { name: 'gone.md', relativePath: 'chats/2026/09/gone.md', type: 'file' as const },
+      ],
+      log: (message, level) => {
+        logs.push({ message, level });
+      },
+    });
+    const chats = await store.listChats();
+    expect(chats.map((c) => c.title)).toEqual(['Good']);
+    expect(logs).toHaveLength(1);
+    expect(logs[0].level).toBe('warn');
+    expect(logs[0].message).toContain('chats/2026/09/gone.md');
+  });
 });

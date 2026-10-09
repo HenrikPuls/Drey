@@ -31,6 +31,12 @@ export interface ChatStorePorts {
   read(path: string): Promise<string>;
   writeAnnounced(path: string, content: string): Promise<unknown>;
   list(): Promise<readonly { name: string; relativePath: string; type: 'file' | 'directory' }[]>;
+  /**
+   * Optional sink for chat files that drop from the picker (vanished or
+   * unreadable between listing and read) — the field log makes the drop
+   * visible instead of silently thinning the list.
+   */
+  log?(message: string, level?: 'info' | 'warn' | 'error'): void;
 }
 
 /** Frontmatter fields a chat turn append may bump. */
@@ -159,8 +165,13 @@ export class ChatStore {
           updated: view.frontmatter.updated,
           note: view.frontmatter.note,
         });
-      } catch {
-        // A vanished or unreadable file just drops from the picker.
+      } catch (err) {
+        // A vanished or unreadable file just drops from the picker — but
+        // the drop lands in the field log instead of staying silent.
+        this.ports.log?.(
+          `chat:list skips ${path}: ${err instanceof Error ? err.message : String(err)}`,
+          'warn',
+        );
       }
     }
     summaries.sort((a, b) => (b.updated ?? '').localeCompare(a.updated ?? ''));
