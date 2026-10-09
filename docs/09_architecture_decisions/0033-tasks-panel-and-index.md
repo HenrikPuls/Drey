@@ -118,6 +118,24 @@ unsaved-buffer fold keys on `(vaultId, path)` so the same relative path
 in two vaults cannot clobber rows. This closed the last item of
 milestone 28's announced M-B follow-up.
 
+## Later change — inline metadata: due date + priority (req-37, milestone 51)
+
+Task lines can now carry an **Obsidian-Tasks-compatible due date**
+(`📅 YYYY-MM-DD`) and **priority glyph** (`🔺` highest, `⏫` high, `🔽`
+low; absent = normal) anywhere on the line. This is deliberately not a
+`#task/id:`-style machine token: the emojis are human-legible
+annotations with an established ecosystem meaning, the vault stays
+readable/writable by Obsidian's Tasks plugin, and the scanner
+(`plugins/tasks/shared/tasks.ts`) strips them from the task text — so
+the text+kind matching of `resolveTaskLine` is unaffected by metadata
+edits (the hazard the id scheme tried to fix never even arises). The
+scanner exposes `due` / `priority` on `TaskRecord`, pure
+`setDueOnLine` / `setPriorityOnLine` setters write the tokens back
+(append-or-replace, guarded to task lines), the panel sorts by both
+and shows badges, and a plugin completion source with a native
+date-picker popover authors them in the editor. See
+`specs/frontmatter-schema.md` for the line format.
+
 ## Considered and rejected — stable `#task/id:` addressing (req-35, milestone 44)
 
 The roadmap's "Task Center" item named a real hazard: a panel tick

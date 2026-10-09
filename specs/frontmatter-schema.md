@@ -43,6 +43,15 @@ updated: '2026-09-05T14:32:00'
   tokens — the Tasks panel writes checkbox state back by re-resolving
   the line against fresh content at tick time and skipping ambiguous
   duplicates (never guessing a twin).
+- **Task metadata** (req-37, Obsidian-Tasks compatible): a due date
+  `📅 YYYY-MM-DD` and a priority glyph (`🔺` highest, `⏫` high,
+  `🔽` low; absent = normal) may sit anywhere on a task line,
+  whitespace-delimited. Both are parsed into the task record and kept
+  out of the task text; malformed dates are ordinary content. The
+  emojis stay human-legible annotations — unlike the rejected
+  `#task/id:` scheme, they carry no opaque ids, and notes remain fully
+  interoperable with Obsidian's Tasks plugin. Grammar:
+  `plugins/tasks/shared/tasks.ts`.
 
 ## Daily notes — `<dir>/<year>/<month>/YYYY-MM-DD.md`
 

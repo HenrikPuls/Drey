@@ -16,11 +16,23 @@
  *
  * Fenced code blocks (``` / ~~~) are skipped so a checkbox or `#task`
  * written inside an example does not become a real task.
+ *
+ * Inline metadata (Obsidian Tasks-compatible emoji, req-37): a due date
+ * `📅 YYYY-MM-DD` and a priority glyph (`🔺` highest, `⏫` high, `🔽` low;
+ * none = normal) may sit anywhere on the task line. Both are parsed into
+ * the record and STRIPPED from `text`, so the toggle resolution
+ * (`resolveTaskLine`, text+kind matching) is unaffected by metadata edits
+ * -- and a vault stays readable/writable by Obsidian's Tasks plugin. The
+ * tokens are human-legible annotations, not machine ids (ADR-0033's
+ * rejection of `#task/id:` stands).
  */
 
 import { extractInlineTags, splitSections } from './support.js';
 
 export type TaskKind = 'checkbox' | 'tag';
+
+/** The explicit priority levels a glyph may name; `null` means normal. */
+export type TaskPriority = 'highest' | 'high' | 'low';
 
 /** One task line found in a note. */
 export interface TaskRecord {
@@ -34,7 +46,7 @@ export interface TaskRecord {
   vaultId: string;
   /** 1-based line the task sits on. */
   line: number;
-  /** The task text: list marker, checkbox and `#task*` markers stripped. */
+  /** The task text: list marker, checkbox, `#task*` markers and metadata stripped. */
   text: string;
   done: boolean;
   kind: TaskKind;
@@ -46,6 +58,10 @@ export interface TaskRecord {
    * written directly on the task line. Empty when the section carries none.
    */
   tags: readonly string[];
+  /** Due date as written (`YYYY-MM-DD`), or `null` without a `📅` token. */
+  due: string | null;
+  /** The line's priority glyph, or `null` (= normal, no glyph). */
+  priority: TaskPriority | null;
 }
 
 const FENCE = /^[ \t]*(```|~~~)/;
@@ -56,6 +72,132 @@ const CHECKBOX = /^([ \t]*[-*+][ \t]+\[)([ xX])(\].*)$/;
 const TASK_MARKER = /(^|\s)#task(?:\/[\p{L}\p{N}_-]+)*(?=\s|$)/u;
 /** The `#task/done` completion marker. */
 const TASK_DONE = /(^|\s)#task\/done(?=\s|$)/u;
+
+/**
+ * The Obsidian-Tasks metadata tokens, whitespace-delimited (see the file
+ * header): the due `📅 YYYY-MM-DD` and the priority glyphs. Each pattern
+ * exists twice -- global for replace-all stripping, non-global for the
+ * first-match parse (a global regex's `exec` carries `lastIndex` between
+ * calls, which would silently skip tokens). The strip patterns also eat
+ * ONE trailing separator, so removal never leaves a double gap and never
+ * touches anything else on the line.
+ */
+const DUE_TOKEN = /(^|\s)📅[ \t]+\d{4}-\d{2}-\d{2}(?:[ \t]+(?=\S)|[ \t]*(?=$))/gu;
+const DUE_ONE = /(^|\s)📅[ \t]+(\d{4}-\d{2}-\d{2})(?=\s|$)/u;
+const PRIORITY_TOKEN = /(^|\s)([🔺⏫🔽])(?:[ \t]+(?=\S)|[ \t]*(?=$))/gu;
+const PRIORITY_ONE = /(^|\s)([🔺⏫🔽])(?=\s|$)/u;
+const PRIORITY_OF: Readonly<Record<string, TaskPriority>> = {
+  '🔺': 'highest',
+  '⏫': 'high',
+  '🔽': 'low',
+};
+const GLYPH_OF: Readonly<Record<TaskPriority, string>> = {
+  highest: '🔺',
+  high: '⏫',
+  low: '🔽',
+};
+/** The exact shape a due date must have to be set (the parse stays tolerant). */
+const DUE_SHAPE = /^\d{4}-\d{2}-\d{2}$/;
+
+/** The priority a glyph names, or `null` for `normal` (no glyph). */
+export function priorityOfGlyph(glyph: string): TaskPriority | null {
+  return PRIORITY_OF[glyph] ?? null;
+}
+
+/** The line token a priority renders as. */
+export function glyphOfPriority(priority: TaskPriority): string {
+  return GLYPH_OF[priority];
+}
+
+/** Today as `YYYY-MM-DD`, in the local timezone (the due badge's baseline). */
+export function todayIso(now = new Date()): string {
+  const month = String(now.getMonth() + 1).padStart(2, '0');
+  const day = String(now.getDate()).padStart(2, '0');
+  return `${now.getFullYear()}-${month}-${day}`;
+}
+
+/** How a due date sits against `today` (defaults to the real today). */
+export type DueState = 'overdue' | 'today' | 'future';
+
+/** Classifies a `YYYY-MM-DD` due date against a baseline date. */
+export function dueState(due: string, today = todayIso()): DueState {
+  if (due < today) {
+    return 'overdue';
+  }
+  return due === today ? 'today' : 'future';
+}
+
+/**
+ * Span patterns for the token finder: like the strip patterns above but
+ * WITH the value captured (the date / the glyph), so click targets and
+ * decorations can be derived from a line.
+ */
+const DUE_SPAN = /(^|\s)📅[ \t]+(\d{4}-\d{2}-\d{2})(?=\s|$)/gu;
+const PRIORITY_SPAN = /(^|\s)([🔺⏫🔽])(?=\s|$)/gu;
+
+/** True when `line` parses as a task line (a checkbox or carries `#task`). */
+export function isTaskLine(line: string): boolean {
+  return CHECKBOX.test(line) || TASK_MARKER.test(line);
+}
+
+/** One metadata token's span on a line (0-based, `to` exclusive). */
+export interface TaskTokenSpan {
+  from: number;
+  to: number;
+  kind: 'due' | 'priority';
+  /** The ISO date, or the priority name the glyph stands for. */
+  value: string;
+}
+
+/**
+ * The metadata token spans on `line`, left to right (empty when the line
+ * parses as no task). Spans start after the separating whitespace, so a
+ * decoration/click target covers exactly the token text.
+ */
+export function taskLineTokens(line: string): TaskTokenSpan[] {
+  if (!isTaskLine(line)) {
+    return [];
+  }
+  const out: TaskTokenSpan[] = [];
+  for (const match of line.matchAll(DUE_SPAN)) {
+    out.push({
+      from: match.index + match[1].length,
+      to: match.index + match[0].length,
+      kind: 'due',
+      value: match[2],
+    });
+  }
+  for (const match of line.matchAll(PRIORITY_SPAN)) {
+    const value = PRIORITY_OF[match[2]] ?? null;
+    if (value !== null) {
+      out.push({
+        from: match.index + match[1].length,
+        to: match.index + match[0].length,
+        kind: 'priority',
+        value,
+      });
+    }
+  }
+  return out.sort((a, b) => a.from - b.from);
+}
+
+/**
+ * Splits the metadata tokens off a task line's text: the first `📅` date
+ * becomes `due`, the first priority glyph becomes `priority`, and every
+ * such token is removed from the returned text (gap collapsed, the same
+ * normalization `stripTaskMarkers` applies).
+ */
+function splitTaskMeta(text: string): {
+  text: string;
+  due: string | null;
+  priority: TaskPriority | null;
+} {
+  const due = DUE_ONE.exec(text)?.[2] ?? null;
+  const glyph = PRIORITY_ONE.exec(text)?.[2] ?? null;
+  // The strip patterns eat one trailing separator, so nothing doubles up.
+  const stripped = text.replace(DUE_TOKEN, '$1').replace(PRIORITY_TOKEN, '$1').trim();
+  return { text: stripped, due, priority: glyph === null ? null : (PRIORITY_OF[glyph] ?? null) };
+}
 
 /** Strips a leading list bullet (`- `, `* `, `+ `) and surrounding whitespace. */
 function stripBullet(line: string): string {
@@ -115,29 +257,35 @@ export function scanTasks(path: string, content: string, vaultId = ''): TaskReco
 
     const box = CHECKBOX.exec(raw);
     if (box) {
+      const meta = splitTaskMeta(stripTaskMarkers(box[3].slice(1).trim()));
       out.push({
         path,
         vaultId,
         line: i + 1,
-        text: stripTaskMarkers(box[3].slice(1).trim()),
+        text: meta.text,
         done: box[2].toLowerCase() === 'x',
         kind: 'checkbox',
         heading,
         tags: tagsForLine(i + 1),
+        due: meta.due,
+        priority: meta.priority,
       });
       continue;
     }
 
     if (TASK_MARKER.test(raw)) {
+      const meta = splitTaskMeta(stripTaskMarkers(stripBullet(raw)));
       out.push({
         path,
         vaultId,
         line: i + 1,
-        text: stripTaskMarkers(stripBullet(raw)),
+        text: meta.text,
         done: TASK_DONE.test(raw),
         kind: 'tag',
         heading,
         tags: tagsForLine(i + 1),
+        due: meta.due,
+        priority: meta.priority,
       });
     }
   }
@@ -183,6 +331,77 @@ export function setDoneOnLine(content: string, line: number, done: boolean): str
   }
 
   return content;
+}
+
+/**
+ * Returns `content` with the due date of the task on 1-based `line` set to
+ * `due` (`YYYY-MM-DD`) or removed (`null`). A missing token is appended at
+ * the line's end (Obsidian keeps the token's position; we append —
+ * deterministic, and the text is unaffected either way since parsing
+ * strips metadata). A malformed date, an out-of-range line or a line that
+ * does not parse as a task leaves `content` unchanged.
+ */
+export function setDueOnLine(content: string, line: number, due: string | null): string {
+  if (due !== null && !DUE_SHAPE.test(due)) {
+    return content;
+  }
+  return setTokenOnLine(content, line, DUE_TOKEN, due === null ? null : `📅 ${due}`);
+}
+
+/**
+ * Returns `content` with the priority glyph of the task on 1-based `line`
+ * set to `priority` or removed (`null` = normal). Same append / guard
+ * rules as {@link setDueOnLine}.
+ */
+export function setPriorityOnLine(
+  content: string,
+  line: number,
+  priority: TaskPriority | null,
+): string {
+  return setTokenOnLine(
+    content,
+    line,
+    PRIORITY_TOKEN,
+    priority === null ? null : glyphOfPriority(priority),
+  );
+}
+
+/** The one line-level token splice both setters share (see their docs). */
+function setTokenOnLine(
+  content: string,
+  line: number,
+  token: RegExp,
+  tokenText: string | null,
+): string {
+  const lines = content.split('\n');
+  const i = line - 1;
+  if (i < 0 || i >= lines.length) {
+    return content;
+  }
+  const original = lines[i];
+  // Guard the same way setDoneOnLine does: metadata is only ever written
+  // onto a line that parses as a task.
+  if (!CHECKBOX.test(original) && !TASK_MARKER.test(original)) {
+    return content;
+  }
+  const had = original.search(token) !== -1;
+  if (tokenText === null && !had) {
+    return content;
+  }
+  // The removal pattern eats one trailing separator, so the rest of the
+  // line (indentation included) stays byte-identical; a line-final token
+  // only leaves its lead separator behind, which the trim below drops.
+  let next = original.replace(token, '$1');
+  if (tokenText !== null) {
+    next = `${next.replace(/[ \t]+$/, '')} ${tokenText}`;
+  } else {
+    next = next.replace(/[ \t]+$/, '');
+  }
+  if (next === original) {
+    return content;
+  }
+  lines[i] = next;
+  return lines.join('\n');
 }
 
 /**

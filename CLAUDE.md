@@ -302,7 +302,22 @@ Renderer (Angular):
 - Tasks panel — `plugins/tasks/` (DOM dock widget, ADR-0033):
   checkbox / `#task` lines in the open document, the whole vault, or all
   vaults (Doc | Vault | All scope toggle, milestone 34) · "hide done" · a
-  kind filter (persisted to `localStorage['drey.tasks']`). Document scope
+  kind filter · a sort cycle (file order | due | priority, milestone 51 —
+  due/priority sorts flatten the grouped view) — all persisted to
+  `localStorage['drey.tasks']`. Task lines carry **Obsidian-compatible
+  inline metadata** (req-37): a due `📅 YYYY-MM-DD` and a priority glyph
+  (`🔺`/`⏫`/`🔽`), parsed + stripped by the shared scanner into
+  `TaskRecord.due`/`TaskRecord.priority` (so `resolveTaskLine`'s
+  text+kind matching never sees them; `specs/frontmatter-schema.md`,
+  ADR-0033 later-change). Rows show a due badge (overdue/today colored)
+  + the glyph — both are buttons that re-open their picker at the badge
+  and write back through the shared `applyToTaskLine` routing; editor
+  completion on task lines (`due`/`fällig` with a native date-picker
+  popover defaulting to today, `prio`/`priority` with the glyph list)
+  and a plain click on a token chip re-opens the same pickers in place —
+  `task-meta.ts` over the host's markdown language data (options ride
+  `filter: false`, else CM's label fuzzy-matcher drops the
+  emoji-prefixed labels). Document scope
   scans the live editor buffer through the document API; vault/all scope
   calls the plugin's `backend.invoke('list', …)` over its **per-vault
   index** (every record stamped `vaultId`; vault scope filters to the
@@ -654,6 +669,19 @@ can dock into the three docks (milestone 20,
 The milestone log lives in
 [docs/milestones-done.md](docs/milestones-done.md).
 
+**Just code-complete: milestone 51 — task due dates + priorities
+(req-37)**: task lines carry Obsidian-Tasks-compatible inline metadata —
+a due `📅 YYYY-MM-DD` and a priority glyph (`🔺`/`⏫`/`🔽`) — parsed and
+stripped from the text by the shared scanner (`TaskRecord.due` /
+`TaskRecord.priority`, `resolveTaskLine` unaffected), pure
+`setDueOnLine`/`setPriorityOnLine` setters; the Tasks panel shows a due
+badge (overdue/today colored) + glyph and gains a sort cycle
+(file | due | priority, persisted; non-file sorts flatten the grouped
+view); editor completion on task lines authors them (`due`/`fällig`
+with a native date-picker popover defaulting to today, `prio` with the
+glyph list — `plugins/tasks/renderer/task-meta.ts`).
+**Not yet manually verified by the owner.**
+
 **Just code-complete: milestone 50 — the caret survives a tab switch**:
 caret AND scroll offset are remembered per doc key for the whole
 app session (a map in `EditorService`, surviving even a clean tab's
@@ -794,8 +822,8 @@ milestones") until owner-verified.
   markdown-context detector), 41 (semantic vault retrieval), 43 (UI
   refinement, ADR-0057), 45 (Autotag re-homing), 46 (editor
   snippets), 47 (foldable side docks), 48 (F11 full screen), 49
-  (search-summary Sources links) and 50 (caret survives a tab switch)
-  — see
+  (search-summary Sources links), 50 (caret survives a tab switch)
+  and 51 (task due dates + priorities) — see
   "Current State" above. (Milestone 44, the Task Center's `#task/id:`
   addressing, was reverted before release — ADR-0033 "considered and
   rejected"; the surviving piece is the ambiguity skip in

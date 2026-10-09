@@ -9,6 +9,11 @@ import { tagSetMatches } from '../shared/support.js';
 /** Which set of task lines the panel shows. */
 export type TaskScope = 'document' | 'vault' | 'all';
 
+/** The list order: file/document order, due date ascending, or priority. */
+export type TaskSort = 'file' | 'due' | 'priority';
+
+export const ALL_SORTS: readonly TaskSort[] = ['file', 'due', 'priority'];
+
 export const ALL_KINDS: readonly TaskKind[] = ['checkbox', 'tag'];
 
 const PREFS_KEY = 'drey.tasks';
@@ -21,6 +26,8 @@ export interface TaskPrefs {
   queryTags: string[];
   /** Free text; whitespace-split into terms that must all appear. */
   queryText: string;
+  /** The list order (req-37). */
+  sort: TaskSort;
 }
 
 export function normalizeTag(raw: string): string {
@@ -35,6 +42,7 @@ export function readPrefs(): TaskPrefs {
     kinds: [...ALL_KINDS],
     queryTags: [],
     queryText: '',
+    sort: 'file',
   };
   try {
     const raw = JSON.parse(localStorage.getItem(PREFS_KEY) ?? '{}') as Partial<TaskPrefs>;
@@ -51,6 +59,7 @@ export function readPrefs(): TaskPrefs {
       kinds: kinds.length > 0 ? kinds : base.kinds,
       queryTags,
       queryText: typeof raw.queryText === 'string' ? raw.queryText : base.queryText,
+      sort: raw.sort === 'due' || raw.sort === 'priority' ? raw.sort : 'file',
     };
   } catch {
     return base;
@@ -72,11 +81,16 @@ export interface TaskFilter {
   readonly hideDone: boolean;
   readonly queryTags: readonly string[];
   readonly queryText: string;
+  /** The list order (req-37). */
+  readonly sort: TaskSort;
 }
 
 /**
- * Kind / done / tag+text filtering and the canonical sort (file order then
- * document order). Same semantics as before the conversion.
+ * Kind / done / tag+text filtering and the list order (req-37): `file`
+ * keeps the canonical file-then-document order; `due` sorts by due date
+ * ascending (ISO orders lexicographically) with undated tasks last;
+ * `priority` sorts highest > high > normal > low. Ties fall back to
+ * path + line in every mode.
  */
 export function filterVisibleTasks(tasks: readonly TaskRecord[], filter: TaskFilter): TaskRecord[] {
   let list = tasks.filter((t) => filter.kinds.includes(t.kind));
@@ -98,5 +112,35 @@ export function filterVisibleTasks(tasks: readonly TaskRecord[], filter: TaskFil
       return terms.every((term) => hay.includes(term));
     });
   }
-  return [...list].sort((a, b) => a.path.localeCompare(b.path) || a.line - b.line);
+  const byLocation = (a: TaskRecord, b: TaskRecord): number =>
+    a.path.localeCompare(b.path) || a.line - b.line;
+  const sort = filter.sort;
+  const sorted = [...list];
+  if (sort === 'due') {
+    sorted.sort((a, b) => {
+      if (a.due === b.due) {
+        return byLocation(a, b);
+      }
+      return a.due !== null && (b.due === null || a.due < b.due) ? -1 : 1;
+    });
+  } else if (sort === 'priority') {
+    sorted.sort((a, b) => priorityRank(a) - priorityRank(b) || byLocation(a, b));
+  } else {
+    sorted.sort(byLocation);
+  }
+  return sorted;
+}
+
+/** The sort rank of a record's priority: highest, high, normal, low. */
+function priorityRank(task: TaskRecord): number {
+  switch (task.priority) {
+    case 'highest':
+      return 0;
+    case 'high':
+      return 1;
+    case null:
+      return 2;
+    case 'low':
+      return 3;
+  }
 }

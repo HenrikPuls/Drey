@@ -59,6 +59,8 @@ describe('TaskIndex', () => {
         kind: 'checkbox',
         heading: null,
         tags: [],
+        due: null,
+        priority: null,
       },
     ]);
     expect(index.all().every((t) => t.vaultId === 'home' || t.vaultId === 'work')).toBe(true);

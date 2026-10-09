@@ -23,6 +23,8 @@ describe('scanTasks', () => {
         kind: 'checkbox',
         heading: null,
         tags: [],
+        due: null,
+        priority: null,
       },
       {
         path: 'n.md',
@@ -33,6 +35,8 @@ describe('scanTasks', () => {
         kind: 'checkbox',
         heading: null,
         tags: [],
+        due: null,
+        priority: null,
       },
       {
         path: 'n.md',
@@ -43,6 +47,8 @@ describe('scanTasks', () => {
         kind: 'checkbox',
         heading: null,
         tags: [],
+        due: null,
+        priority: null,
       },
     ]);
   });
@@ -60,6 +66,8 @@ describe('scanTasks', () => {
         kind: 'tag',
         heading: null,
         tags: [],
+        due: null,
+        priority: null,
       },
       {
         path: 'n.md',
@@ -70,6 +78,8 @@ describe('scanTasks', () => {
         kind: 'tag',
         heading: null,
         tags: [],
+        due: null,
+        priority: null,
       },
     ]);
   });
@@ -86,8 +96,17 @@ describe('scanTasks', () => {
         kind: 'checkbox',
         heading: null,
         tags: [],
+        due: null,
+        priority: null,
       },
     ]);
+  });
+
+  it('parses Obsidian-Tasks metadata into due/priority, stripped from the text (req-37)', () => {
+    const tasks = scanTasks('n.md', '- [ ] ship it 📅 2026-10-09 ⏫\n');
+    expect(tasks[0].text).toBe('ship it');
+    expect(tasks[0].due).toBe('2026-10-09');
+    expect(tasks[0].priority).toBe('high');
   });
 
   it('keeps ordinary #tags in the text but drops #task markers', () => {
@@ -201,6 +220,8 @@ describe('resolveTaskLine', () => {
       kind: 'tag' as const,
       heading: 'Wohnen',
       tags: [],
+      due: null,
+      priority: null,
     };
     expect(resolveTaskLine(grown, staleRow)).toBe(8);
   });
@@ -215,6 +236,8 @@ describe('resolveTaskLine', () => {
       kind: 'tag' as const,
       heading: null,
       tags: [],
+      due: null,
+      priority: null,
     };
     expect(resolveTaskLine(doc, staleRow)).toBeNull();
   });

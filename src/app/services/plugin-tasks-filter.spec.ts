@@ -25,6 +25,8 @@ const VAULT_TASKS: TaskRecord[] = [
     kind: 'checkbox',
     heading: 'Projekt Alpha',
     tags: ['project', 'project/frontend'],
+    due: null,
+    priority: null,
   },
   {
     path: 'a.md',
@@ -35,6 +37,8 @@ const VAULT_TASKS: TaskRecord[] = [
     kind: 'checkbox',
     heading: 'Projekt Alpha',
     tags: ['project', 'buchhaltung'],
+    due: null,
+    priority: null,
   },
   {
     path: 'b.md',
@@ -45,6 +49,8 @@ const VAULT_TASKS: TaskRecord[] = [
     kind: 'tag',
     heading: 'Wohnung',
     tags: ['wohnung'],
+    due: null,
+    priority: null,
   },
   {
     path: 'b.md',
@@ -55,6 +61,8 @@ const VAULT_TASKS: TaskRecord[] = [
     kind: 'checkbox',
     heading: null,
     tags: [],
+    due: null,
+    priority: null,
   },
 ];
 
@@ -63,6 +71,7 @@ const NO_FILTER: TaskFilter = {
   hideDone: false,
   queryTags: [],
   queryText: '',
+  sort: 'file',
 };
 
 describe('Tasks plugin filter (req-8)', () => {
@@ -132,6 +141,51 @@ describe('Tasks plugin filter (req-8)', () => {
   it('normalizes typed tags (leading #, case, whitespace)', () => {
     expect(normalizeTag('  #Project ')).toBe('project');
   });
+
+  it('sorts by due date ascending, undated last (req-37)', () => {
+    const dated: TaskRecord[] = [
+      { ...VAULT_TASKS[0]!, due: '2026-03-02' },
+      { ...VAULT_TASKS[1]!, done: false, due: '2026-01-15' },
+      { ...VAULT_TASKS[2]!, due: null },
+      { ...VAULT_TASKS[3]!, due: '2026-02-20' },
+    ];
+    expect(filterVisibleTasks(dated, { ...NO_FILTER, sort: 'due' }).map((t) => t.due)).toEqual([
+      '2026-01-15',
+      '2026-02-20',
+      '2026-03-02',
+      null,
+    ]);
+  });
+
+  it('sorts by priority: highest, high, normal, low (req-37)', () => {
+    const ranked: TaskRecord[] = [
+      { ...VAULT_TASKS[0]!, priority: null },
+      { ...VAULT_TASKS[1]!, done: false, priority: 'low' },
+      { ...VAULT_TASKS[2]!, priority: 'high' },
+      { ...VAULT_TASKS[3]!, priority: 'highest' },
+    ];
+    expect(
+      filterVisibleTasks(ranked, { ...NO_FILTER, sort: 'priority' }).map((t) => t.priority),
+    ).toEqual(['highest', 'high', null, 'low']);
+  });
+
+  it('ties in both sorts fall back to path then line', () => {
+    const tied: TaskRecord[] = [
+      { ...VAULT_TASKS[3]!, due: '2026-01-01' },
+      { ...VAULT_TASKS[0]!, due: '2026-01-01' },
+    ];
+    expect(filterVisibleTasks(tied, { ...NO_FILTER, sort: 'due' }).map((t) => t.path)).toEqual([
+      'a.md',
+      'b.md',
+    ]);
+    const tiedPriority: TaskRecord[] = [
+      { ...VAULT_TASKS[3]!, priority: 'high' },
+      { ...VAULT_TASKS[0]!, priority: 'high' },
+    ];
+    expect(
+      filterVisibleTasks(tiedPriority, { ...NO_FILTER, sort: 'priority' }).map((t) => t.path),
+    ).toEqual(['a.md', 'b.md']);
+  });
 });
 
 describe('Tasks plugin persisted prefs', () => {
@@ -150,6 +204,7 @@ describe('Tasks plugin persisted prefs', () => {
       kinds: ['checkbox', 'tag'],
       queryTags: [],
       queryText: '',
+      sort: 'file',
     });
   });
 
@@ -160,6 +215,7 @@ describe('Tasks plugin persisted prefs', () => {
       kinds: ['checkbox'],
       queryTags: ['project'],
       queryText: 'brief',
+      sort: 'due',
     });
     expect(readPrefs()).toEqual({
       scope: 'vault',
@@ -167,6 +223,7 @@ describe('Tasks plugin persisted prefs', () => {
       kinds: ['checkbox'],
       queryTags: ['project'],
       queryText: 'brief',
+      sort: 'due',
     });
   });
 
@@ -177,6 +234,7 @@ describe('Tasks plugin persisted prefs', () => {
       kinds: ['checkbox', 'tag'],
       queryTags: [],
       queryText: '',
+      sort: 'file',
     });
     expect(readPrefs().scope).toBe('all');
   });

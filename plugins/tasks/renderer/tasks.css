@@ -130,8 +130,15 @@
   cursor: pointer;
 }
 
-.tasks-panel .task .body {
+.tasks-panel .task .rows {
   flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.tasks-panel .task .body {
   min-width: 0;
   display: flex;
   flex-direction: column;
@@ -185,4 +192,144 @@
 
 .tasks-panel .task .meta .loc {
   flex: none;
+}
+
+/* ---- inline metadata badges (req-37) ----
+   The emoji glyphs carry their own font colours; only the date text is
+   state-styled (overdue red, today accent, future default). The badges
+   are BUTTONS: a plain click re-opens the matching picker at the badge. */
+
+.tasks-panel .task .meta .due,
+.tasks-panel .task .meta .prio {
+  flex: none;
+  border: 0;
+  background: transparent;
+  padding: 0;
+  font: inherit;
+  cursor: pointer;
+}
+
+.tasks-panel .task .meta .due:hover,
+.tasks-panel .task .meta .prio:hover {
+  text-decoration: underline;
+}
+
+.tasks-panel .task .meta .due.overdue {
+  color: #e5484d;
+}
+
+.tasks-panel .task .meta .due.today {
+  color: var(--accent-text);
+  font-weight: 600;
+}
+
+.tasks-panel .task .meta .prio {
+  font-size: 10.5px;
+}
+
+/* ---- editor token chips (req-37): the same metadata decorated in the
+        note editor -- a plain click on a chip re-opens its picker ---- */
+
+.cm-task-due,
+.cm-task-prio {
+  cursor: pointer;
+  border-radius: var(--radius-xs);
+}
+
+.cm-task-due:hover,
+.cm-task-prio:hover {
+  background: var(--hover-bg);
+}
+
+.cm-task-due.overdue {
+  color: #e5484d;
+}
+
+.cm-task-due.today {
+  color: var(--accent-text);
+  font-weight: 600;
+}
+
+/* ---- the shared pickers (date + priority; editor and panel hosts) ----
+   `.tasks-picker` is the root hook for both variants. */
+
+.tasks-picker {
+  z-index: var(--z-modal);
+  background: var(--bg-input);
+  border: 1px solid var(--field-border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--popover-shadow);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px;
+}
+
+.tasks-picker.tasks-prio-picker {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 2px;
+  min-width: 150px;
+}
+
+.tasks-picker.tasks-prio-picker button {
+  height: 26px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-2);
+  font: 12px/1 var(--font-sans);
+  text-align: left;
+  cursor: pointer;
+}
+
+.tasks-picker.tasks-prio-picker button:hover {
+  background: var(--hover-bg);
+}
+
+.tasks-picker.tasks-prio-picker button.normal {
+  color: var(--text-5);
+}
+
+/* ---- the date picker popover (editor, not panel -- the rule is
+        global like every plugin stylesheet, root class kept unique) ---- */
+
+.tasks-due-picker input[type='date'] {
+  height: 26px;
+  padding: 0 6px;
+  background: transparent;
+  border: 1px solid var(--field-border);
+  border-radius: var(--radius-xs);
+  color: var(--text-2);
+  color-scheme: dark;
+  font: 12px/1.4 var(--font-sans);
+}
+
+.tasks-due-picker input[type='date']:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+.tasks-picker button.apply,
+.tasks-picker button.cancel {
+  height: 26px;
+  padding: 0 10px;
+  border: 1px solid var(--field-border);
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-2);
+  font: 12px/1 var(--font-sans);
+  cursor: pointer;
+}
+
+.tasks-picker button.apply {
+  background: var(--accent);
+  border-color: transparent;
+  color: var(--accent-contrast);
+}
+
+.tasks-picker button.apply:hover,
+.tasks-picker button.cancel:hover {
+  border-color: var(--accent-edge);
 }

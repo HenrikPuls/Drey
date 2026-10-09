@@ -20,6 +20,62 @@ recorded as an explicit decision. The parity checklist lives in
 
 ## Recent milestones
 
+### Milestone 51 — task due dates + priorities (req-37)
+
+- **Task lines carry inline metadata, Obsidian-Tasks compatible.** A due
+  date (`📅 2026-10-09`, ISO) and a priority (`🔺` highest, `⏫` high,
+  `🔽` low; none = normal) may sit anywhere on a checkbox or `#task` line.
+  The tokens are human-legible annotations, not machine ids (ADR-0033's
+  `#task/id:` rejection stands), and they are parsed + stripped by the
+  shared scanner (`plugins/tasks/shared/tasks.ts`): `TaskRecord` gains
+  `due: string | null` and `priority`, and `text` stays clean — so a
+  metadata edit never disturbs `resolveTaskLine`'s text+kind matching, and
+  a vault stays readable/writable by Obsidian's Tasks plugin. New pure
+  setters `setDueOnLine` / `setPriorityOnLine` (append-or-replace, guarded
+  to task lines, indentation-safe) round-trip through the scan.
+- **The Tasks panel shows both and can sort by them.** Rows carry a due
+  badge (overdue red, today accented, future neutral) and the priority
+  glyph; a new sort cycle in the filter row — file order → due date
+  (ascending, undated last) → priority (highest > high > normal > low,
+  ties by path + line) — persists in `localStorage['drey.tasks']`. The
+  file sort keeps the grouped-by-file view; due/priority sorts show a
+  flat list (grouping would fight the ordering), in every scope.
+- **Editor completion with a date picker.** On a task line (never in
+  frontmatter or a fence), typing `due` / `fällig` offers Today /
+  Tomorrow / In a week / **Pick a date…** — the last opens a
+  caret-anchored popover with a native `<input type="date">` defaulting
+  to today that writes the token over the trigger word — plus "Remove
+  due date" when one exists; `prio` / `priority` offers the three glyph
+  levels and "Normal (remove priority)". The source rides the host's
+  markdown language data (the same seam as tag / wikilink / word
+  completion, so popups merge) as a plugin editor extension
+  (`plugins/tasks/renderer/task-meta.ts`). Completion options ship with
+  `filter: false` — CM's label fuzzy-matcher would otherwise drop the
+  emoji-prefixed labels ("📅 Today" vs "due"); the whole-word trigger is
+  the filter.
+- **Click-to-change (req-37 add-on).** The tokens are decorated as chips
+  in the editor (`cm-task-due` / `cm-task-prio`, overdue/today colored
+  like the panel badges) and a **plain click** on a chip re-opens its
+  picker in place — the date picker with the current date prefilled
+  (Apply replaces the token, a cleared field removes it) or the glyph
+  menu (🔺/⏫/🔽/Normal). The Tasks panel's due/priority badges are
+  buttons with the same pickers; both surfaces share one picker
+  implementation (anchor + `onCommit`), and panel commits go through the
+  shared `applyToTaskLine` routing (open buffer → `setBuffer` + save,
+  closed file → read/patch/write + index refresh) — the same path the
+  done toggle uses. The row meta moved beside (not inside) the body
+  button: a button in a button is invalid HTML and would bubble into the
+  open-file action. Click hit-testing is by the token's screen width
+  (`coordsAtPos` bounds), not the caret position: a click on the token
+  (its right half included) opens the picker, a click beside it — even
+  the trailing whitespace behind a line-ending token — places the caret
+  normally; the date popover opens the native calendar once on mount
+  (one-shot retry on first field interaction), never re-opening by
+  itself after a date was chosen.
+- Docs: `specs/frontmatter-schema.md` records the line format,
+  [ADR-0033](../docs/09_architecture_decisions/0033-tasks-panel-and-index.md)
+  gained a "later change" note.
+
 ### Milestone 50 — the caret survives a tab switch
 
 - **Switching back to an open tab restores the cursor — the exact
