@@ -284,7 +284,6 @@ export class MenuService {
         this.editorRow('Duplicate selection', '', (view) => duplicateSelection(view)),
         this.editorRow('Move line up', 'Alt Up', moveLineUp),
         this.editorRow('Move line down', 'Alt Down', moveLineDown),
-        SEP,
         // "Toggle task done" is a Tasks-plugin menu contribution now.
         ...this.contributionRows('selection'),
       ],
