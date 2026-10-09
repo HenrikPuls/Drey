@@ -132,6 +132,9 @@ toolchain is removable by deleting `.tools/`). Never assume a bare `node`,
   injected via `globalThis[Symbol.for('onnxruntime')]`), one JSON index
   per vault under `<userData>/plugins/assistant/semantic-index/` with
   brute-force cosine — no sqlite-vec, no native modules, no database.
+  **Chat notes are excluded** (`chats/` would embed the literal question
+  text of past conversations and displace the notes that answer them;
+  ADR-0055 later-change).
   Owned by the assistant plugin (its only consumer); retrieval hydrates
   section text fresh from the vault at answer time.
 - **Manual refresh, plus an opt-in watcher.** By default there is no file

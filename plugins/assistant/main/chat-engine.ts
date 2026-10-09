@@ -21,6 +21,7 @@ import type { LlmCapabilities } from '../../../shared/llm';
 import type { AskRequest, AssistantOutcome } from '../shared/ask';
 import { extractDocumentFence } from '../shared/document-fence';
 import {
+  ChatContextStatus,
   ChatNoteAttachment,
   ChatNoteTurn,
   EDIT_PROPOSAL_MARKER,
@@ -32,6 +33,7 @@ import {
   contextCitations,
   type ContextCite,
   type RetrievedSection,
+  type RetrievalOutcome,
 } from '../shared/semantic.js';
 import { ChatStore } from './chat-store';
 import {
@@ -83,14 +85,16 @@ export interface ChatEnginePorts {
    */
   onLiveEdit(path: string, content: string): void;
   /**
-   * Semantic vault retrieval for one question (ADR-0055): the top-k
-   * sections with their fresh text, best first. Only called when the ask
-   * turned the Vault chip on; failures degrade to no context.
+   * Semantic vault retrieval for one question (ADR-0055): the outcome —
+   * hits with their fresh text, best first, plus WHY there are none
+   * (feature off / floor too high). Only called when the ask turned the
+   * Vault chip on; hard failures throw, the caller catches and degrades
+   * to no context.
    */
   retrieveContext(
     question: string,
     scope: 'vault' | 'all',
-  ): Promise<readonly RetrievedSection[]>;
+  ): Promise<RetrievalOutcome>;
 }
 
 export interface ChatAskResult {
@@ -166,6 +170,7 @@ export class ChatEngine {
       attachments,
       tool: [],
       context: [],
+      contextStatus: null,
       start: 0,
     });
 
@@ -196,14 +201,24 @@ export class ChatEngine {
         : ASK_SYSTEM;
     // Semantic vault retrieval (ADR-0055): only for a plain ask turn — a
     // live-edit turn already carries the whole document + tool loop, so
-    // the scope is ignored there. Failure degrades to no context.
+    // the scope is ignored there. Failure degrades to no context, but the
+    // REASON persists on the turn (contextStatus) so the panel can show
+    // why nothing came back instead of staying silent.
     let contextHits: readonly RetrievedSection[] = [];
+    let contextStatus: ChatContextStatus | null = null;
     let contextError: string | undefined;
     if (request.vaultScope !== 'off' && !live) {
       try {
-        contextHits = await this.ports.retrieveContext(request.question, request.vaultScope);
+        const outcome = await this.ports.retrieveContext(request.question, request.vaultScope);
+        contextHits = outcome.hits;
+        if (!outcome.enabled) {
+          contextStatus = { kind: 'disabled' };
+        } else if (outcome.hits.length === 0) {
+          contextStatus = { kind: 'empty', floor: outcome.minScore };
+        }
       } catch (err) {
         contextError = err instanceof Error ? err.message : String(err);
+        contextStatus = { kind: 'error', message: contextError };
         contextHits = [];
       }
     }
@@ -352,6 +367,7 @@ export class ChatEngine {
       attachments: [],
       tool: toolEntriesFromTrace(result.toolTrace),
       context: contextCitations(contextHits) as ContextCite[],
+      contextStatus,
       start: 0,
     };
     await this.store.appendTurn(chatPath, assistantTurn, {

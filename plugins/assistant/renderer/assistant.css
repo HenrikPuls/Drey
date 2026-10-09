@@ -336,6 +336,19 @@
   text-decoration: underline;
 }
 
+/* A chip-on turn that retrieved nothing: the status chip reads muted, its
+   body carries the why (floor hint / disabled hint / error message). */
+.assistant-thread .context-chip.muted .tool-chip-summary {
+  color: var(--text-5);
+}
+
+.assistant-thread .context-hint {
+  color: var(--text-5);
+  font-size: 10.5px;
+  line-height: 1.5;
+  padding: 2px 0;
+}
+
 /* Attachment links on a user turn (the persisted link block). */
 .assistant-thread .card-attachments {
   display: flex;

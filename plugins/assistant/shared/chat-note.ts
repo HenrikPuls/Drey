@@ -69,16 +69,32 @@ export interface ChatNoteTurn {
   tool: ChatToolEntry[];
   /** ```drey-context citations (ADR-0055): what this turn retrieved; assistant turns only. */
   context: ChatContextEntry[];
+  /** Why a chip-on turn retrieved nothing (`null` when off or hits came back). */
+  contextStatus: ChatContextStatus | null;
   /** Char offset of this turn's heading — `truncateFrom` slices here. */
   start: number;
 }
 
-/** One persisted citation line inside a ```drey-context fence. */
+/**
+ * One persisted citation line inside a ```drey-context fence.
+ */
 export interface ChatContextEntry {
   path: string;
   heading: string;
   line: number;
 }
+
+/**
+ * What happened when this turn asked the vault (ADR-0055): persisted as a
+ * `{"status":…}` line inside the ```drey-context fence whenever the Vault
+ * chip was on but produced NO hits — so the panel can say WHY nothing
+ * came back (floor too high / retrieval disabled / retrieval failed)
+ * instead of staying silent. Plain hits carry no status, just cites.
+ */
+export type ChatContextStatus =
+  | { kind: 'empty'; floor: number }
+  | { kind: 'disabled' }
+  | { kind: 'error'; message: string };
 
 /** The frontmatter fields a chat note reads. Everything else is the user's. */
 export interface ChatNoteFrontmatter {
@@ -249,8 +265,8 @@ function parseToolLine(line: string): ChatToolEntry | null {
   return null;
 }
 
-/** Parses one ```drey-context fence body line; null when it is not a citation. */
-function parseContextLine(line: string): ChatContextEntry | null {
+/** Parses one ```drey-context fence body line; null when it is neither a citation nor a status. */
+function parseContextLine(line: string): ChatContextEntry | ChatContextStatus | null {
   let obj: Record<string, unknown>;
   try {
     const parsed = JSON.parse(line) as unknown;
@@ -259,6 +275,19 @@ function parseContextLine(line: string): ChatContextEntry | null {
     }
     obj = parsed as Record<string, unknown>;
   } catch {
+    return null;
+  }
+  const status = obj['status'];
+  if (typeof status === 'string') {
+    if (status === 'empty' && typeof obj['floor'] === 'number' && Number.isFinite(obj['floor'])) {
+      return { kind: 'empty', floor: obj['floor'] };
+    }
+    if (status === 'disabled') {
+      return { kind: 'disabled' };
+    }
+    if (status === 'error' && typeof obj['message'] === 'string') {
+      return { kind: 'error', message: obj['message'] };
+    }
     return null;
   }
   const cite = obj['cite'];
@@ -351,7 +380,11 @@ export function parseChatNote(noteText: string): ChatNoteView {
       }
       if (fenceTag === 'context') {
         const entry = parseContextLine(line);
-        if (entry) {
+        if (entry && 'kind' in entry) {
+          if (turn.contextStatus === null) {
+            turn.contextStatus = entry; // first status line wins; we write one
+          }
+        } else if (entry) {
           context.push(entry);
         }
         continue;
@@ -431,6 +464,7 @@ export function parseChatNote(noteText: string): ChatNoteView {
         attachments: [],
         tool: [],
         context: [],
+        contextStatus: null,
         start: bodyStart + offset,
       };
       current = { turn, raw: [] };
@@ -470,6 +504,18 @@ export function toolEntryLine(entry: ChatToolEntry): string {
 /** One `{"cite":…}` fence line (```drey-context). */
 export function contextEntryLine(entry: ChatContextEntry): string {
   return JSON.stringify({ cite: { path: entry.path, heading: entry.heading, line: entry.line } });
+}
+
+/** One `{"status":…}` fence line (```drey-context) — the no-hits explanation. */
+export function contextStatusLine(status: ChatContextStatus): string {
+  switch (status.kind) {
+    case 'empty':
+      return JSON.stringify({ status: 'empty', floor: status.floor });
+    case 'disabled':
+      return JSON.stringify({ status: 'disabled' });
+    case 'error':
+      return JSON.stringify({ status: 'error', message: status.message });
+  }
 }
 
 /**
@@ -530,8 +576,14 @@ export function serializeTurn(turn: ChatNoteTurn): string {
   if (turn.tool.length > 0) {
     out.push('', '```' + TOOL_FENCE_TAG, ...turn.tool.map(toolEntryLine), '```');
   }
-  if (turn.context.length > 0) {
-    out.push('', '```' + CONTEXT_FENCE_TAG, ...turn.context.map(contextEntryLine), '```');
+  if (turn.context.length > 0 || turn.contextStatus !== null) {
+    out.push(
+      '',
+      '```' + CONTEXT_FENCE_TAG,
+      ...(turn.contextStatus !== null ? [contextStatusLine(turn.contextStatus)] : []),
+      ...turn.context.map(contextEntryLine),
+      '```',
+    );
   }
   return out.join('\n');
 }
@@ -572,6 +624,7 @@ export function appendEditOutcome(
         { kind: 'edit', path: outcome.path, applied: outcome.applied, ...(outcome.after !== undefined ? { after: outcome.after } : {}) },
       ],
       context: [],
+      contextStatus: null,
       start: 0,
     });
   }

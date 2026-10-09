@@ -225,21 +225,43 @@ export function mountPanel(
     }
 
     // Retrieved-vault citations (ADR-0055): one collapsible chip listing
-    // what this turn consulted; a click opens the source file.
-    if (turn.context.length > 0) {
+    // what this turn consulted; a click opens the source file. A chip-on
+    // turn with NO hits still gets a chip — the persisted contextStatus
+    // says why (floor / disabled / failed) instead of silent nothing.
+    if (turn.context.length > 0 || turn.contextStatus !== null) {
       const key = `${index}:ctx`;
       const expanded = expandedChips.has(key);
       const chip = el('div', 'tool-chip context-chip' + (expanded ? ' open' : ''));
       const summary = el('button', 'tool-chip-summary') as HTMLButtonElement;
       summary.type = 'button';
       summary.appendChild(icon('search', 10));
-      summary.appendChild(
-        el(
-          'span',
-          undefined,
-          `vault context · ${turn.context.length} section${turn.context.length === 1 ? '' : 's'}`,
-        ),
-      );
+      const status = turn.contextStatus;
+      if (status === null) {
+        summary.appendChild(
+          el(
+            'span',
+            undefined,
+            `vault context · ${turn.context.length} section${turn.context.length === 1 ? '' : 's'}`,
+          ),
+        );
+      } else if (status.kind === 'empty') {
+        chip.classList.add('muted');
+        summary.appendChild(
+          el(
+            'span',
+            undefined,
+            `vault context · no sections above the score floor (${status.floor.toFixed(2)})`,
+          ),
+        );
+      } else if (status.kind === 'disabled') {
+        chip.classList.add('muted');
+        summary.appendChild(
+          el('span', undefined, 'vault context · retrieval is off in Settings → Assistant retrieval'),
+        );
+      } else {
+        chip.classList.add('muted');
+        summary.appendChild(el('span', undefined, `vault context failed · ${firstLine(status.message)}`));
+      }
       summary.addEventListener('click', () => {
         if (expanded) {
           expandedChips.delete(key);
@@ -251,15 +273,31 @@ export function mountPanel(
       chip.appendChild(summary);
       if (expanded) {
         const list = el('div', 'tool-chip-body context-list');
-        for (const cite of turn.context) {
-          const row = el('button', 'context-cite') as HTMLButtonElement;
-          row.type = 'button';
-          row.textContent = `${baseName(cite.path)} — ${cite.heading}`;
-          row.title = `${cite.path} (line ${cite.line}) — click to open`;
-          row.addEventListener('click', () => {
-            void api.documents.open(cite.path);
-          });
-          list.appendChild(row);
+        if (status === null) {
+          for (const cite of turn.context) {
+            const row = el('button', 'context-cite') as HTMLButtonElement;
+            row.type = 'button';
+            row.textContent = `${baseName(cite.path)} — ${cite.heading}`;
+            row.title = `${cite.path} (line ${cite.line}) — click to open`;
+            row.addEventListener('click', () => {
+              void api.documents.open(cite.path);
+            });
+            list.appendChild(row);
+          }
+        } else if (status.kind === 'empty') {
+          const hint = el('div', 'context-hint');
+          hint.textContent =
+            'Nothing matched above the similarity cutoff. Raise k or lower the minimum score under Settings → Assistant retrieval.';
+          list.appendChild(hint);
+        } else if (status.kind === 'disabled') {
+          const hint = el('div', 'context-hint');
+          hint.textContent =
+            'The Vault chip was on, but semantic retrieval is turned off. Enable it under Settings → Assistant retrieval (the first build downloads the embedding model once).';
+          list.appendChild(hint);
+        } else {
+          const hint = el('div', 'context-hint');
+          hint.textContent = status.message;
+          list.appendChild(hint);
         }
         chip.appendChild(list);
       }

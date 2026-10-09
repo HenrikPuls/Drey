@@ -45,6 +45,20 @@ export function passageText(model: string, sectionText: string): string {
 /** Passage cap before embedding — e5 truncates at 512 tokens anyway. */
 export const PASSAGE_MAX_CHARS = 2000;
 
+/**
+ * Paths that never enter (or surface from) the semantic index. Chat notes
+ * (`chats/`, mirroring `CHATS_DIR` in `shared/chat-note.ts` — kept local
+ * so this module stays dependency-free) are excluded on purpose: a chat
+ * about a question embeds the literal question text, so every
+ * conversation self-amplifies and outranks the note that actually answers
+ * the question (observed in practice — four chat turns displaced the
+ * "Kaffee trinken" daily note). The conversation transcript is not vault
+ * knowledge; the tags/search index still covers chats (ADR-0048).
+ */
+export function isSemanticIndexPath(path: string): boolean {
+  return !path.startsWith('chats/');
+}
+
 /** Cap on one retrieved section's text inside the system-prompt block. */
 export const CONTEXT_MAX_CHARS = 1200;
 
@@ -178,6 +192,19 @@ export interface RetrievedSection {
   line: number;
   score: number;
   text: string;
+}
+
+/**
+ * One retrieval attempt's full result: not just the hits, but WHY there
+ * are none — `enabled: false` means nothing was searched at all (the
+ * Vault chip was on while the feature is off in Settings), and
+ * `minScore` lets the caller report the floor an empty result fell
+ * under. Retrieval failures still throw; the caller catches.
+ */
+export interface RetrievalOutcome {
+  enabled: boolean;
+  minScore: number;
+  hits: RetrievedSection[];
 }
 
 /** The persisted per-turn citation (the ```drey-context fence entry). */

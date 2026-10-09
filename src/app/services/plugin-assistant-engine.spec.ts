@@ -210,7 +210,7 @@ function chatHarness(
       onLiveEdit: () => undefined,
       // The Vault chip is off in every ASK below, so this is never called;
       // it is here to satisfy the port.
-      retrieveContext: async () => [],
+      retrieveContext: async () => ({ enabled: true, minScore: 0.3, hits: [] }),
     },
   );
 

@@ -112,6 +112,7 @@ describe('ChatStore — append / truncate / outcomes', () => {
     attachments: [{ kind: 'note' as const, path: 'daily/a.md' }],
     tool: [],
     context: [],
+    contextStatus: null,
     start: 0,
   };
 
@@ -144,6 +145,7 @@ describe('ChatStore — append / truncate / outcomes', () => {
         attachments: [],
         tool: [],
         context: [],
+        contextStatus: null,
         start: 0,
       },
       { session: 'sess-1' },
@@ -173,6 +175,7 @@ describe('ChatStore — append / truncate / outcomes', () => {
         attachments: [],
         tool: [],
         context: [],
+        contextStatus: null,
         start: 0,
       },
       { session: 'sess-1' },
