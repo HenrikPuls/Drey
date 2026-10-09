@@ -2293,3 +2293,30 @@ registry changes) rebuilds the vaults — each mutation pushes
 time against the current file list, so a rename or a new file reshapes
 the backlinks without re-reading every note's links. Known v1 limits:
 same-vault only, `.md` files only, unsaved buffers don't count.
+
+## 6.47 Back / forward through the document history (milestone 55, `DocHistoryService`)
+
+```mermaid
+sequenceDiagram
+    actor User
+    participant Ed as EditorService / PaneService
+    participant H as DocHistoryService
+    participant TB as Titlebar arrows<br/>(Alt+Left / Alt+Right)
+
+    User->>Ed: open / activate a document<br/>(tree, calendar, hit, tab click, pane focus)
+    Ed-->>H: activePath changed
+    H->>H: effect: not suspended, nav == 0,<br/>not a duplicate -> push (truncate forward branch,<br/>circular drop past HISTORY_LIMIT)
+
+    User->>TB: Go back
+    TB->>H: back() (serialized on the step queue)
+    H->>H: walk pointer down to the next showable entry<br/>(nav guard held across every await)
+    alt document still open
+        H->>Ed: activate(key) -> the pane focuses it
+    else document closed
+        H->>Ed: openFile / openExternalFile<br/>(keepFocused: never a clean-tab replace)
+        Ed-->>H: docFor(key) again -> shown
+    else nothing behind it (scratch / plugin kind / read failed)
+        H->>H: prune the entry, keep walking
+    end
+    Note over H: state written back; the walk's own<br/>activation never records itself
+    Note over Ed: the fresh state restores caret + scroll<br/>through the milestone-50 memory

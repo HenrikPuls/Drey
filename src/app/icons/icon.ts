@@ -28,6 +28,8 @@ export type IconName =
   | 'check'
   | 'plus'
   | 'arrow-up'
+  | 'arrow-left'
+  | 'arrow-right'
   | 'sparkles'
   | 'more-horizontal'
   | 'copy'
@@ -103,6 +105,15 @@ const ICONS: Record<IconName, readonly IconShape[]> = {
   'arrow-up': [
     { kind: 'path', d: 'm5 12 7-7 7 7' },
     { kind: 'path', d: 'M12 19V5' },
+  ],
+  // Lucide "arrow-left" / "arrow-right" -- document-history navigation.
+  'arrow-left': [
+    { kind: 'path', d: 'm12 19-7-7 7-7' },
+    { kind: 'path', d: 'M19 12H5' },
+  ],
+  'arrow-right': [
+    { kind: 'path', d: 'M5 12h14' },
+    { kind: 'path', d: 'm12 5 7 7-7 7' },
   ],
   // Lucide "sparkles" -- the assistant / AI affordance.
   sparkles: [

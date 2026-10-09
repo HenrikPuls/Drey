@@ -16,6 +16,7 @@ import {
   type ContributableMenu,
 } from '../plugin-host/menu-contributions.service';
 import { PaneService } from '../panes';
+import { DocHistoryService } from '../services/doc-history.service';
 import { EditorService } from '../services/editor.service';
 import { EditTargetService } from '../services/edit-target.service';
 import { SettingsService } from '../services/settings.service';
@@ -68,6 +69,7 @@ export class MenuService {
   private readonly dock = inject(DockService);
   private readonly panes = inject(PaneService);
   private readonly editor = inject(EditorService);
+  private readonly history = inject(DocHistoryService);
   private readonly editTarget = inject(EditTargetService);
   private readonly settings = inject(SettingsService);
   private readonly vault = inject(VaultService);
@@ -292,6 +294,19 @@ export class MenuService {
       id: 'view',
       label: 'View',
       rows: [
+        {
+          kind: 'item',
+          label: 'Back',
+          hint: 'Alt Left',
+          run: this.history.canBack() ? () => this.run('doc.back') : undefined,
+        },
+        {
+          kind: 'item',
+          label: 'Forward',
+          hint: 'Alt Right',
+          run: this.history.canForward() ? () => this.run('doc.forward') : undefined,
+        },
+        SEP,
         {
           kind: 'item',
           label: 'Line numbers',

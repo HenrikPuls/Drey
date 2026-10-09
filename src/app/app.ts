@@ -12,6 +12,7 @@ import { DailyNoteService } from './vault';
 import { EditorService } from './services/editor.service';
 import { ExitConfirmService } from './services/exit-confirm.service';
 import { DropGuardService } from './services/drop-guard.service';
+import { DocHistoryService } from './services/doc-history.service';
 import { EditorZoomService } from './services/editor-zoom.service';
 import { LogService } from './services/log.service';
 import { McpBridgeService } from './services/mcp-bridge.service';
@@ -89,6 +90,14 @@ export class App {
   }
 
   constructor() {
+    // Document history (back/forward, Alt+Arrow): recording starts
+    // SUSPENDED -- the startup flows below mass-open tabs (session
+    // restore, OS-collected files, the daily-note fallback) and none of
+    // that churn is navigation. Resumed with a seed of whatever document
+    // the user actually landed on.
+    const history = inject(DocHistoryService);
+    history.suspend();
+
     // Subscribe to the quick-capture hotkey for the app's lifetime.
     inject(DailyNoteService).start();
     // Files the OS hands to Drey (Explorer "Open with", ADR-0054): later
@@ -147,7 +156,7 @@ export class App {
       // No active vault: nothing to restore, but a file the OS handed to Drey
       // still opens (as an external tab, ADR-0054).
       if (loaded && this.vault.registryLoaded() && !vaultPath) {
-        void externalOpen.onStartupSettled();
+        void externalOpen.onStartupSettled().then(() => history.resume());
       }
       if (this.dailyNoteStartupDone || !vaultPath || !loaded) {
         return;
@@ -162,6 +171,7 @@ export class App {
         if (!restored && openedFromOs === 0 && this.settings.dailyOpenOnStartup()) {
           void this.editor.openDailyNote(formatDate(new Date()));
         }
+        history.resume();
       })();
     });
 
@@ -197,6 +207,24 @@ export class App {
       label: 'Toggle line numbers',
       keybinding: 'Mod+G',
       run: () => this.editor.toggleLineNumbers(),
+    });
+
+    // Back / forward through the session's document history (the titlebar
+    // arrows, View menu). `ArrowLeft`/`ArrowRight` spell out the
+    // `KeyboardEvent.key` ("arrowleft" after lower-casing); this shadows
+    // CodeMirror's Alt+Arrow subword steps, accepted for the browser-standard
+    // chord.
+    keys.register({
+      id: 'doc.back',
+      label: 'Go back',
+      keybinding: 'Alt+ArrowLeft',
+      run: () => void history.back(),
+    });
+    keys.register({
+      id: 'doc.forward',
+      label: 'Go forward',
+      keybinding: 'Alt+ArrowRight',
+      run: () => void history.forward(),
     });
 
     // Split-view panes (ADR-0037). The layout mechanics already exist

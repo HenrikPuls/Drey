@@ -2471,3 +2471,39 @@ library — Chromium's built-in (PDFium) viewer, enabled by
   `PanelHeaderActionsStore` (`frameId` input); the descriptor's
   `headerReplacesTitle` makes `PanelFrame` show that row instead of the
   title while expanded.
+
+## 5.30 Document history — back/forward over the session's viewed documents (milestone 55)
+
+`DocHistoryService` (`src/app/services/doc-history.service.ts`) is a
+base-owned, purely in-memory navigation history — the editor analogue of
+a browser's back/forward, but ONE global pointer-based list of tab keys
+however many panes are split (the VS Code model). Nothing rides into the
+session snapshot (ADR-0043); a restart starts empty, like the caret
+memory (milestone 50).
+
+- **Recording** is a single `effect` over `EditorService.activePath()`:
+  every activation pushes — Files tree, calendar, search hit, wikilink,
+  tab click, pane focus flip. Consecutive duplicates collapse; a NEW
+  activation truncates the forward branch, exactly like a browser.
+  Bounded circularly at `HISTORY_LIMIT` (100): past the limit the oldest
+  entry falls off.
+- **Guards**: `suspend()`/`resume()` around App startup (session restore,
+  OS-collected files, the daily-note fallback are not navigation —
+  `resume()` seeds the doc the user landed on as the base entry), and a
+  `nav` counter spanning each `back()`/`forward()` walk so the
+  navigation's own activation never records itself. Steps serialize on a
+  promise queue; rapid clicks step one at a time.
+- **Closed documents reopen** on traversal: `vaultId::path` keys via a
+  vault-scoped `openFile(…, { keepFocused: true })` (a history step is a
+  view switch, never a clean-tab replace), `external://…` keys via
+  `openExternalFile`. Keys with nothing behind them — scratch tabs,
+  registered plugin doc kinds — are pruned and stepped over (the same
+  lazy prune absorbs a stale key after a rename: `retargetTabs` re-points
+  panes, not history entries).
+- **Surfaces**: two titlebar icon buttons right of the menu bar (`←`
+  `→`, disabled-bound `canBack`/`canForward`), View-menu rows, and the
+  `doc.back` / `doc.forward` commands (`Alt+ArrowLeft` /
+  `Alt+ArrowRight`; deliberately shadows CodeMirror's Alt+Arrow subword
+  steps for the browser-standard chord). Landing on a document restores
+  its caret/scroll through the existing milestone-50 memory — no
+  extra wiring.

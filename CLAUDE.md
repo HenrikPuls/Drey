@@ -277,7 +277,9 @@ Renderer (Angular):
   that sizes to its content rather than a flex share.
 - `TitlebarComponent` + `MenuBar` + `MenuService` (`src/app/titlebar/`) —
   the frameless-window titlebar: accent square, the left dock toggle,
-  the HTML File/Edit/Selection/View menu bar, the right dock toggle, and
+  the HTML File/Edit/Selection/View menu bar, the **back/forward arrows**
+  (milestone 55, right of the menu bar — `DocHistoryService`), the right
+  dock toggle, and
   — off macOS — minimize/maximize/close over the `window:*` IPC channels
   ([ADR-0019](docs/09_architecture_decisions/0019-movable-dock-panels-and-layout-state.md)).
   Menu rows dispatch three ways: `KeybindingService` command ids
@@ -388,11 +390,25 @@ Renderer (Angular):
   register from `App`. Commands: `search.open` (`Mod+Shift+F`),
   `note.new` (`Mod+N`), `note.save` (`Mod+S`), `note.saveAs`
   (`Mod+Shift+S`), `note.saveAll` (`Mod+Alt+S`),
-  `editor.toggleLineNumbers` (`Mod+G`), `window.toggleFullScreen` (`F11`,
+  `editor.toggleLineNumbers` (`Mod+G`), `doc.back` (`Alt+Left`) /
+  `doc.forward` (`Alt+Right`, the session document history over
+  `DocHistoryService`), `window.toggleFullScreen` (`F11`,
   OS fullscreen via `window:toggle-fullscreen`; the native menu's
   `togglefullscreen` role is deliberately absent — its F11 accelerator
   would swallow the key) — the titlebar menu invokes the
   same ids
+- `DocHistoryService` (`src/app/services/doc-history.service.ts`,
+  milestone 55) — one global, pointer-based back/forward history of the
+  documents viewed this session (VS Code model over any number of
+  panes; browser truncation of the forward branch; circular drop past
+  100 entries). An `effect` on `EditorService.activePath()` records
+  every activation; App `suspend()`s around the startup mass-opens and
+  `resume()` seeds the landed-on doc; `back()`/`forward()` walk the
+  pointer (serialized, `nav`-guarded), REOPEN closed vault/external
+  documents (`keepFocused`, never a clean-tab replace) and lazily prune
+  unrestorable entries (scratch tabs, plugin doc kinds). Purely
+  in-memory — nothing rides into the session snapshot; caret/scroll
+  restore rides the existing milestone-50 memory
 - `PaneService` (`src/app/panes/`, ADR-0037) — the split-view editor
   layout: an arbitrary tree of row/column splits down to leaf panes, each
   a `{ tabs, active }` record. `PaneLayout` renders the tree recursively
@@ -673,6 +689,17 @@ can dock into the three docks (milestone 20,
 The milestone log lives in
 [docs/milestones-done.md](docs/milestones-done.md).
 
+**Just code-complete: milestone 55 — document history back/forward**:
+new `DocHistoryService` (`src/app/services/doc-history.service.ts`) —
+one global, session-scoped history of the viewed documents (VS Code
+model, circular buffer of 100, not persisted); the titlebar's back/
+forward arrows (right of the menu bar), View-menu rows and
+`doc.back`/`doc.forward` (`Alt+Left`/`Alt+Right`) walk it; closed
+vault/external docs reopen, unrestorable entries (scratch/plugin kinds)
+prune. Recording suspends across the startup restore, resuming seeds
+the landed-on doc. §5.30 / §6.47. **Not yet manually verified by the
+owner.**
+
 **Just code-complete: milestone 54 — the Backlinks panel (req-39)**:
 new `plugins/backlinks/` — a per-vault outlink index over the save/vault
 hooks (tag-index shape) plus a dock panel that follows the focused note
@@ -851,8 +878,10 @@ milestones") until owner-verified.
   markdown-context detector), 41 (semantic vault retrieval), 43 (UI
   refinement, ADR-0057), 45 (Autotag re-homing), 46 (editor
   snippets), 47 (foldable side docks), 48 (F11 full screen), 49
-  (search-summary Sources links), 50 (caret survives a tab switch)
-  and 51 (task due dates + priorities) — see
+  (search-summary Sources links), 50 (caret survives a tab switch),
+  51 (task due dates + priorities), 52 (recycle-bin deletes),
+  53 (tag rename / merge), 54 (Backlinks panel) and 55 (document
+  history back/forward) — see
   "Current State" above. (Milestone 44, the Task Center's `#task/id:`
   addressing, was reverted before release — ADR-0033 "considered and
   rejected"; the surviving piece is the ambiguity skip in

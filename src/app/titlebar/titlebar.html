@@ -9,6 +9,30 @@
 
 <app-menu-bar />
 
+<!-- Session document history (back / forward), right of the menu bar. -->
+<span class="hist-nav">
+  <button
+    type="button"
+    class="icon-btn"
+    [disabled]="!history.canBack()"
+    aria-label="Go back"
+    title="Go back"
+    (click)="history.back()"
+  >
+    <app-icon name="arrow-left" [size]="15" />
+  </button>
+  <button
+    type="button"
+    class="icon-btn"
+    [disabled]="!history.canForward()"
+    aria-label="Go forward"
+    title="Go forward"
+    (click)="history.forward()"
+  >
+    <app-icon name="arrow-right" [size]="15" />
+  </button>
+</span>
+
 <span class="spacer"></span>
 
 <ng-container
