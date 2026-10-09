@@ -26,6 +26,30 @@ function unpackedPath(p: string): string {
   return p.replace(/app\.asar([\\/])/, 'app.asar.unpacked$1');
 }
 
+/**
+ * Flattens the tree-shaped `ctx.vault.list()` result into vault-relative
+ * file paths (`children` recursed). `ctx.vault.list()` is the ONLY port
+ * carrying non-`.md` files, so the staging-uniquing needs this walk —
+ * everything markdown-shaped goes through `listMarkdownFiles()` (flat).
+ */
+function flattenFileTree(
+  entries: readonly {
+    relativePath: string;
+    type: 'file' | 'directory';
+    children?: readonly unknown[];
+  }[],
+): string[] {
+  const out: string[] = [];
+  for (const entry of entries) {
+    if (entry.type === 'file') {
+      out.push(entry.relativePath);
+      continue;
+    }
+    out.push(...flattenFileTree((entry.children ?? []) as typeof entries));
+  }
+  return out;
+}
+
 /** Module-level so `deactivate` can stop the worker + flush the indexes. */
 let disposeSemantic: (() => void) | null = null;
 
@@ -52,7 +76,7 @@ const plugin: MainPluginModule = {
     const chatStore = new ChatStore({
       read: (path) => ctx.vault.read(path),
       writeAnnounced: (path, content) => ctx.vault.writeAnnounced(path, content),
-      list: () => ctx.vault.list(),
+      listMarkdownFiles: () => ctx.vault.listMarkdownFiles(),
       log: (message, level) => ctx.log(message, level),
     });
 
@@ -290,11 +314,7 @@ async function stageExternalFiles(
   }
 
   const targetDir = stagedAttachmentsDir(referenceNote);
-  const existing = new Set(
-    (await ctx.vault.list())
-      .filter((entry) => entry.type === 'file')
-      .map((entry) => entry.relativePath),
-  );
+  const existing = new Set(flattenFileTree(await ctx.vault.list()));
   const staged: StagedFile[] = [];
   const skipped: string[] = [];
   for (const absolute of result.filePaths) {

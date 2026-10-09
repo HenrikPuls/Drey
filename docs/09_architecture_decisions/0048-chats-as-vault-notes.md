@@ -188,3 +188,17 @@ storage format is untouched:
   between listing and read) through `ctx.log` instead of thinning the
   picker silently; a fenceless (corrupted) chat file still lists, with
   its path as the fallback title.
+- **Root cause of "the chats are not saved" (found in 56a):** the chat
+  store consumed `ctx.vault.list()`'s **tree** result as if it were
+  flat — filtering top-level entries only, and under `chats/` the
+  top level holds only directories. The picker was therefore empty and
+  `followActiveDoc` never found a bound chat **since the ADR-0048
+  milestone** (the spec harness fed a flat fake list, masking it), while
+  every write worked. All markdown consumers now use the flat
+  `ctx.vault.listMarkdownFiles()` (the same port the tags/tasks/backlinks
+  plugins scan); `freePath`'s sibling uniquing is fixed by the same
+  change, and `chat:attachExternal` flattens the tree locally (it must
+  see non-`.md` staged files too). The picker also re-renders while open
+  (the list once rendered once, before async data could land) and a
+  failed list says "Chats could not be listed." instead of reading as
+  "No chats yet".

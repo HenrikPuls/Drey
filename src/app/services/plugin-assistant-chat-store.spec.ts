@@ -21,12 +21,8 @@ function fakeVault(initial: Record<string, string> = {}) {
         written.push(path);
         return 0;
       },
-      list: async () =>
-        [...files.keys()].map((relativePath) => ({
-          name: relativePath,
-          relativePath,
-          type: 'file' as const,
-        })),
+      listMarkdownFiles: async () =>
+        [...files.keys()].filter((p) => p.toLowerCase().endsWith('.md')),
     },
   };
 }
@@ -226,9 +222,9 @@ describe('ChatStore — listChats', () => {
     const logs: Array<{ message: string; level?: string }> = [];
     const store = new ChatStore({
       ...vault.ports,
-      list: async () => [
-        ...(await vault.ports.list()),
-        { name: 'gone.md', relativePath: 'chats/2026/09/gone.md', type: 'file' as const },
+      listMarkdownFiles: async () => [
+        ...(await vault.ports.listMarkdownFiles()),
+        'chats/2026/09/gone.md',
       ],
       log: (message, level) => {
         logs.push({ message, level });

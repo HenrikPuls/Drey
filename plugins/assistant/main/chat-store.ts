@@ -30,7 +30,14 @@ import {
 export interface ChatStorePorts {
   read(path: string): Promise<string>;
   writeAnnounced(path: string, content: string): Promise<unknown>;
-  list(): Promise<readonly { name: string; relativePath: string; type: 'file' | 'directory' }[]>;
+  /**
+   * Flat, forward-slash, `.md`-only vault paths (`ctx.vault.listMarkdownFiles`,
+   * the same flat listing the tags/tasks/backlinks plugins scan) — chat
+   * notes are always `.md`, and this is what every consumer here needs:
+   * `ctx.vault.list()`'s nested tree was once filtered top-level-only,
+   * silently emptying the picker (bug: `children` ignored).
+   */
+  listMarkdownFiles(): Promise<readonly string[]>;
   /**
    * Optional sink for chat files that drop from the picker (vanished or
    * unreadable between listing and read) — the field log makes the drop
@@ -151,10 +158,9 @@ export class ChatStore {
    * few, and the read is cheap frontmatter-only work.
    */
   async listChats(cap = 50): Promise<ChatSummary[]> {
-    const entries = await this.ports.list();
-    const paths = entries
-      .filter((e) => e.type === 'file' && e.relativePath.startsWith(`${CHATS_DIR}/`))
-      .map((e) => e.relativePath);
+    const paths = (await this.ports.listMarkdownFiles()).filter((p) =>
+      p.startsWith(`${CHATS_DIR}/`),
+    );
     const summaries: ChatSummary[] = [];
     for (const path of paths) {
       try {
@@ -189,10 +195,7 @@ export class ChatStore {
   }
 
   private async freePath(dateStr: string, firstQuestion: string): Promise<string> {
-    const entries = await this.ports.list();
-    const existing = new Set(
-      entries.filter((e) => e.type === 'file').map((e) => e.relativePath),
-    );
+    const existing = new Set(await this.ports.listMarkdownFiles());
     const base = chatNotePathFor(dateStr, slugifyChatTitle(firstQuestion));
     return uniqueChatPath(base, existing);
   }

@@ -697,7 +697,10 @@ The milestone log lives in
 
 **Just code-complete: milestone 56 — the assistant panel keeps its chat**:
 beta feedback read as "chats are not saved" (the notes were on disk; the
-panel just always reset). Follow rules revised (ADR-0048 later change):
+panel just always reset). Root cause (56a): the chat store consumed the
+tree-shaped `ctx.vault.list()` as flat — the picker and chat-follow were
+empty since ADR-0048; now `ctx.vault.listMarkdownFiles()` like every
+other plugin. Follow rules revised (ADR-0048 later change):
 a focused chat-note tab opens that chat in the panel, an unbound note or
 non-note focus keeps the current chat (no more fresh-chat reset), the
 first follow at activation continues the newest chat (startup shows the

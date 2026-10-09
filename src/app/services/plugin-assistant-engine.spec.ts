@@ -158,12 +158,7 @@ function chatHarness(
       files.set(path, content);
       return 0;
     },
-    list: async () =>
-      [...files.keys()].map((relativePath) => ({
-        name: relativePath,
-        relativePath,
-        type: 'file' as const,
-      })),
+    listMarkdownFiles: async () => [...files.keys()],
   });
 
   const llmConfig: AppConfig['llm'] = {
@@ -407,7 +402,7 @@ describe('assistant plugin chat engine — sessions vs replay', () => {
     const store = new ChatStore({
       read: async (p) => edited.files.get(p)!,
       writeAnnounced: async (p, c) => void edited.files.set(p, c),
-      list: async () => [],
+      listMarkdownFiles: async () => [],
     });
     await store.appendEditOutcome(e1.chatPath, { path: 'a.md', applied: true, after: '# Geändert\n' });
 
@@ -480,7 +475,7 @@ describe('assistant plugin chat engine — edit proposals', () => {
     const store = new ChatStore({
       read: async (p) => h.files.get(p)!,
       writeAnnounced: async (p, c) => void h.files.set(p, c),
-      list: async () => [],
+      listMarkdownFiles: async () => [],
     });
     await store.appendEditOutcome(chatPath, { path: 'a.md', applied: true, after: '# Geändert\n' });
     const updated = parseChatNote(h.files.get(chatPath)!);

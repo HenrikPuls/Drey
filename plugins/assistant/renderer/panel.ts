@@ -642,6 +642,13 @@ export function mountPanel(
 
   function openChatPicker(): void {
     let close: () => void = () => undefined;
+    let unsubscribe: (() => void) | null = null;
+
+    const closePicker = (): void => {
+      unsubscribe?.();
+      unsubscribe = null;
+      close();
+    };
 
     const box = el('div', 'assistant-picker');
     const headLabel = el('div', 'assistant-picker-head', 'Chats');
@@ -652,11 +659,16 @@ export function mountPanel(
     const newRow = el('div', 'assistant-picker-row new-chat', 'New chat');
     newRow.addEventListener('click', () => {
       state.newChat();
-      close();
+      closePicker();
     });
     listBox.appendChild(newRow);
 
     const renderList = (): void => {
+      // Rebuild everything below the "New chat" row: this also runs when
+      // the (async) list lands or changes while the picker sits open.
+      for (const row of listBox.querySelectorAll('.assistant-picker-row:not(.new-chat), .assistant-picker-empty')) {
+        row.remove();
+      }
       for (const chat of state.chats()) {
         const rowEl = el(
           'div',
@@ -669,13 +681,19 @@ export function mountPanel(
         rowEl.title = chat.path;
         rowEl.addEventListener('click', () => {
           void state.openChat(chat.path);
-          close();
+          closePicker();
         });
         listBox.appendChild(rowEl);
       }
       if (state.chats().length === 0) {
         listBox.appendChild(
-          el('div', 'assistant-picker-empty', 'No chats yet — the first question creates one.'),
+          el(
+            'div',
+            'assistant-picker-empty',
+            state.chatsFailed()
+              ? 'Chats could not be listed.'
+              : 'No chats yet — the first question creates one.',
+          ),
         );
       }
     };
@@ -685,7 +703,7 @@ export function mountPanel(
     box.addEventListener('keydown', (event) => {
       if (event.key === 'Escape') {
         event.preventDefault();
-        close();
+        closePicker();
       }
     });
 
@@ -693,6 +711,7 @@ export function mountPanel(
       mount.classList.add('assistant-picker-host');
       mount.appendChild(box);
     });
+    unsubscribe = state.subscribe(renderList);
     void state.invalidateChats();
   }
 

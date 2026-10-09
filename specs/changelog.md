@@ -22,6 +22,15 @@ recorded as an explicit decision. The parity checklist lives in
 
 ### Milestone 56 — the assistant panel keeps its chat
 
+- **Root cause found (56a):** the chat store consumed the **tree**-shaped
+  `ctx.vault.list()` as if flat — top-level filter only, and `chats/`'s
+  top level holds only directories. Picker, chat-follow and path-uniquing
+  were dead since the ADR-0048 milestone (writes always worked; the spec
+  harness fed a flat fake list and masked it). Markdown consumers now use
+  the flat `ctx.vault.listMarkdownFiles()` (same as tags/tasks/backlinks);
+  `chat:attachExternal` flattens the tree locally; the picker re-renders
+  while open, and a failed list reads "Chats could not be listed." rather
+  than "No chats yet".
 - **The panel no longer resets away.** Beta feedback read as "chats are
   not saved": the chat notes were on disk, but every restart or tab
   switch to a document without an exact `note:` match came back as an

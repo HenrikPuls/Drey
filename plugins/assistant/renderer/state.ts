@@ -149,6 +149,12 @@ export interface AssistantState {
   notePath(): string | null;
   /** The picker list (most recently updated chat first). */
   chats(): readonly ChatSummary[];
+  /**
+   * True when the last chat-list attempt failed — the picker says so
+   * instead of "No chats yet" (a silently empty list once hid a real
+   * listing bug for weeks).
+   */
+  chatsFailed(): boolean;
   /** The active chat's path, or null when the next ask starts a NEW chat. */
   activeChatPath(): string | null;
   /** The active chat's parsed note; null when none is loaded. */
@@ -252,6 +258,8 @@ export function createAssistantState(ports: AssistantPorts, tasks: RunningTasks)
   const imagesByKey = new Map<string, string[]>();
 
   let asking = false;
+  /** True after a failed chat-list attempt; cleared by the next success. */
+  let chatsError = false;
   /** Counts followActiveDoc calls so a slow listChats can't clobber a newer switch. */
   let followSeq = 0;
   /**
@@ -315,9 +323,12 @@ export function createAssistantState(ports: AssistantPorts, tasks: RunningTasks)
     try {
       chats = await ports.listChats();
       chatsLoaded = true;
+      chatsError = false;
     } catch {
       // The picker keeps whatever it had; the error line stays reserved
-      // for things the user can act on.
+      // for things the user can act on — the picker itself reports the
+      // failure through `chatsFailed()` instead of reading as "no chats".
+      chatsError = true;
     }
     notify();
   };
@@ -329,6 +340,7 @@ export function createAssistantState(ports: AssistantPorts, tasks: RunningTasks)
   return {
     notePath: () => activePath,
     chats: () => chats,
+    chatsFailed: () => chatsError,
     activeChatPath: () => activeChat,
     view: () => view,
     asking: () => asking,
@@ -516,6 +528,7 @@ export function createAssistantState(ports: AssistantPorts, tasks: RunningTasks)
       try {
         candidates = await ports.listChats();
       } catch {
+        chatsError = true;
         firstFollow = false;
         return; // the picker keeps whatever it had; nothing to follow against
       }

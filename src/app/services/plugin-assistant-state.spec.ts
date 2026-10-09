@@ -49,6 +49,8 @@ interface Harness {
   nextOutcome: AssistantOutcome;
   /** When set, the ask port stalls on it (streaming tests). */
   askGate: Promise<void> | null;
+  /** When set, the listChats port rejects (picker failure state). */
+  failListChats: boolean;
 }
 
 function viewOf(text: string): ChatNoteView {
@@ -99,6 +101,7 @@ function setup(options: { llm?: boolean } = {}): Harness {
     },
     nextOutcome: { kind: 'answer', text: 'Antwort.' },
     askGate: null,
+    failListChats: false,
     state: undefined as never,
     tasks: undefined as never,
   };
@@ -110,10 +113,14 @@ function setup(options: { llm?: boolean } = {}): Harness {
   const tasks = createRunningTasks(async () => true);
 
   const ports: AssistantPorts = {
-    listChats: async () =>
-      [...chatNotes.entries()]
+    listChats: async () => {
+      if (h.failListChats) {
+        throw new Error('list failed');
+      }
+      return [...chatNotes.entries()]
         .map(([path, text]) => summaryOf(path, text))
-        .sort((a, b) => (b.updated ?? '').localeCompare(a.updated ?? '')),
+        .sort((a, b) => (b.updated ?? '').localeCompare(a.updated ?? ''));
+    },
     readChat: async (path) => {
       const text = chatNotes.get(path);
       if (text === undefined) {
@@ -475,6 +482,20 @@ describe('assistant plugin state — following the active document (chat binding
     await h.state.followActiveDoc(null);
 
     expect(h.state.activeChatPath()).toBe('chats/2026/09/new.md');
+  });
+
+  it('a failed list is reported instead of reading as "no chats yet"', async () => {
+    const h = setup();
+    h.failListChats = true;
+    await h.state.followActiveDoc(null);
+
+    expect(h.state.chats()).toEqual([]);
+    expect(h.state.chatsFailed()).toBe(true);
+
+    // The next successful load clears the flag.
+    h.failListChats = false;
+    await h.state.invalidateChats();
+    expect(h.state.chatsFailed()).toBe(false);
   });
 
   it('an explicit new chat survives tab switches (only activation auto-opens)', async () => {
