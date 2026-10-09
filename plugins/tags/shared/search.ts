@@ -408,6 +408,45 @@ export function buildSearchSummaryMaterial(
   };
 }
 
+/**
+ * The `## Sources` section appended under the digest: one line per section
+ * the material actually included (same order, same whole-section cut —
+ * `included` is a prefix length of `hits`), carrying a `[[wikilink]]` to
+ * the section. Deterministic on purpose — the model never mints links
+ * (anchors must match a real heading, and sections without one cannot be
+ * anchored at all). The link target is the extension-less path
+ * (Obsidian-style; a non-`.md` extension stays so the target still
+ * resolves) plus a `#heading` anchor when the section has one — wikilinks
+ * have no line anchor, so the exact line rides the plain label after the
+ * dash. With `vaultNames` given and the hits spanning more than one
+ * vault, each label is prefixed with the vault's name; the link itself
+ * cannot say which vault it means (when two vaults hold the same relative
+ * path, the active one wins — a documented limitation). Returns '' when
+ * nothing was included.
+ */
+export function buildSearchSummarySources(
+  hits: readonly TagSearchHit[],
+  included: number,
+  vaultNames: Readonly<Record<string, string>> = {},
+): string {
+  const used = hits.slice(0, Math.max(0, Math.min(included, hits.length)));
+  if (used.length === 0) {
+    return '';
+  }
+  const multiVault =
+    new Set(used.map((hit) => hit.vaultId).filter((id) => id !== undefined)).size > 1;
+  const lines: string[] = [];
+  for (const hit of used) {
+    const path = hit.path.replace(/\\/g, '/');
+    const target = /\.md$/i.test(path) ? path.replace(/\.[^/]+$/, '') : path;
+    const anchor = hit.heading !== '' && !/[\][|]/.test(hit.heading) ? `#${hit.heading}` : '';
+    const vault =
+      multiVault && hit.vaultId !== undefined ? `${vaultNames[hit.vaultId] ?? hit.vaultId} · ` : '';
+    lines.push(`- [[${target}${anchor}]] — ${vault}${path}:${hit.line}`);
+  }
+  return `\n\n## Sources\n\n${lines.join('\n')}\n`;
+}
+
 function makeSnippet(text: string, needles: readonly string[]): string {
   const flat = text.replace(/\s+/g, ' ').trim();
   const lower = flat.toLowerCase();

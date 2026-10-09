@@ -7,6 +7,8 @@ import type {
   TagSearchQuery,
 } from '../../../shared/plugin-api/renderer';
 import {
+  buildSearchSummaryMaterial,
+  buildSearchSummarySources,
   buildTextMatcher,
   formatSearchResultsDoc,
   formatSearchSummaryHeader,
@@ -217,6 +219,24 @@ const plugin: PluginRendererModule = {
       void api.llm.cancelTask(task.taskId);
     };
 
+    /**
+     * The `## Sources` link section for the sections the digest covered.
+     * Vault names from the registry decorate the labels (links themselves
+     * resolve wherever the note lives); on failure the labels fall back
+     * to the raw vault ids.
+     */
+    const sourcesSection = async (included: number): Promise<string> => {
+      const vaultNames: Record<string, string> = {};
+      try {
+        for (const vault of await api.vault.listVaults()) {
+          vaultNames[vault.id] = vault.name;
+        }
+      } catch {
+        // Labels only — keep going with raw ids.
+      }
+      return buildSearchSummarySources(state.hits, included, vaultNames);
+    };
+
     const startSummary = (): void => {
       if (summaryTask !== null || state.hits.length === 0) {
         return;
@@ -255,11 +275,14 @@ const plugin: PluginRendererModule = {
           })) as SummariseReply;
           if (reply.kind === 'ok') {
             // The return value is authoritative — a lost delta cannot truncate the digest.
-            task.text = reply.text;
+            task.text = reply.text + (await sourcesSection(reply.included));
             if (reply.included < reply.total) {
               task.tail = `\n\n> Generated from ${reply.included} of ${reply.total} matching sections — the rest exceeded the content budget.`;
             }
           } else if (reply.kind === 'cancelled') {
+            // The covered hits are known regardless of the abort — their links stay useful.
+            task.text +=
+              await sourcesSection(buildSearchSummaryMaterial(currentQuery(), state.hits).included);
             task.tail = '\n\n_(cancelled)_';
           } else {
             task.tail = `\n\n_(failed: ${reply.message})_`;

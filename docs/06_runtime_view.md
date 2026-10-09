@@ -2113,10 +2113,22 @@ sequenceDiagram
     else completed
         Chat-->>Backend: LlmChatResult
         Backend-->>Panel: { kind: 'ok', text, included, total }
-        Panel->>EditorService: setBuffer(digest + truncation note if included < total)
+        Panel->>Panel: buildSearchSummarySources(hits, included, vaultNames)
+        Panel->>EditorService: setBuffer(digest + '## Sources' + truncation note if included < total)
     end
     User->>EditorService: Ctrl+S → Save-as (keeps the digest as a note)
 ```
+
+Since milestone 49 the settled digest (a stopped one too) ends with a
+`## Sources` section built deterministically by the panel — one
+`[[extension-less-path#heading]]` wikilink per covered section, the
+exact `path:line` as plain text beside it (wikilinks have no line
+anchor), and the vault's name in the label when the hits span several
+vaults. The model never writes links itself. The scratch tab is
+vault-less, so its wikilinks resolve through `WikilinkService`'s merged
+cross-vault index (active vault preferred) and open the note in its
+owning vault — an unresolved target is reported, never created
+(ADR-0046's milestone-49 addendum).
 
 Scrolling during generation is stick-to-bottom: each 150 ms flush is an
 external in-place reload (`setContent`), which measures whether the view

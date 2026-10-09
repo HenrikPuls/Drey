@@ -144,3 +144,54 @@ facade over the *focused* pane, so every other consumer needs no change.**
   designed as its own milestone in
   [ADR-0038](0038-editor-panes-in-docks.md) (a `PaneService` region model +
   a dock "editor slot"; the `WidgetDescriptor` registry stays untouched).
+
+## Later change — the caret survives a tab switch (milestone 50)
+
+The fresh-state-per-swap rule above deliberately reset the *selection*
+too: switching tabs landed at offset 0. That fought the wikilink/search
+flows (follow a link, switch away, come back — the caret had vanished).
+The viewport (caret head plus scroll offset) is now remembered per doc
+key for the WHOLE APP SESSION — a map in `EditorService`, deliberately
+decoupled from the doc records, because a clean tab is *replaced* when
+another file opens (milestone 32) and the memory must survive that
+close/reopen cycle too. It is captured by `Editor.loadActiveDoc` when a
+pane leaves a document (plus `ngOnDestroy` for a destroyed pane) and
+replayed into every fresh state; purely in-memory (never in the session
+snapshot, bounded FIFO past 200 keys). Entering a tab also focuses the
+editor, so typing lands in the document without a click first (a pane's
+first load — app start, session restore — still does not grab focus).
+
+The scroll restore is exact only because the stored offset is
+**re-asserted, not merely applied once**: focusing the freshly swapped
+editor makes the BROWSER scroll the caret into view, and that implicit
+scroll can land after the first application -- so the restore chain
+(frame 1: raw offset, clamped against the settled geometry; frame 2:
+RE-ASSERT of the same value) makes the stored offset the last word
+whatever moved the viewport in between. On top, frame 2 applies a
+caret-anchored refinement: a fresh `setState` builds its height map
+from `HeightMap.empty` -- every block height an ESTIMATE until measured
+-- so a raw pixel offset alone lands a few lines off in content space;
+measuring the caret's rendered position on both ends (the capture also
+records the caret's viewport-relative offset, when rendered) cancels
+the estimates out. The refinement is strictly gated (caret captured,
+caret inside `visibleRanges` -- `coordsAtPos` misbehaves off-render --
+sub-viewport delta) and every failure degrades to the raw offset, never
+to a scroll-to-caret. A Playwright spec (`e2e/caret-scroll-restore`)
+drives the real Electron app — jsdom cannot see the browser's
+focus-scroll interference at all. The restore applies whenever a memory
+EXISTS — including a caret that never left offset 0 (scroll-only
+browsing) and across the clean-tab replacement/reopen cycle (the gate
+must be "is there a memory", never "is the head > 0": a fresh-opened
+document's caret sits at 0 until clicked, and `loadDocument`'s
+show-the-top reset is skipped via a `keepScroll` flag for the same
+reason). In-place reloads of the SAME tab (every save of a frontmattered
+note bumps `updated:`, so the renderer adopts new text and reloads;
+watcher rounds; live-edit pushes) ride the same chain: the viewport is
+captured before the full replace and replayed after — except when the
+view is pinned to the bottom, where stick-to-bottom stays the
+destination.
+
+Undo history still resets per switch (ADR-0003's rule stands); an
+explicit reveal (a link click's target line, a search hit) cancels the
+whole restore chain and still wins; a stale caret past a shrunken
+buffer is clamped to the document length.

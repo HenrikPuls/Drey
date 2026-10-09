@@ -654,6 +654,37 @@ can dock into the three docks (milestone 20,
 The milestone log lives in
 [docs/milestones-done.md](docs/milestones-done.md).
 
+**Just code-complete: milestone 50 — the caret survives a tab switch**:
+caret AND scroll offset are remembered per doc key for the whole
+app session (a map in `EditorService`, surviving even a clean tab's
+replacement/reopen; in-memory only, bounded FIFO) and replayed into
+every fresh state — the scroll restore APPLIES then RE-ASSERTS the
+stored offset (the browser's focus-scroll to the caret must never win),
+with a gated caret-anchored correction absorbing CodeMirror's
+fresh-state height ESTIMATES; entering a tab also focuses the editor so
+typing works immediately (a pane's first load keeps the no-focus
+behavior); the restore applies whenever a memory exists — never gated on
+`head > 0`, so scroll-only browsing (caret never left offset 0) and the
+clean-tab replace/reopen cycle restore too (`keepScroll` skips
+`loadDocument`'s top reset); in-place reloads of the same tab (every
+save of a frontmattered note bumps `updated:` and reloads in place)
+capture the viewport and replay it through the same chain — a
+bottom-pinned view keeps following the tail instead; reveals cancel the
+restore chain and still
+win, stale carets clamp (ADR-0037 later-change note; e2e guard
+`e2e/caret-scroll-restore`).
+**Not yet manually verified by the owner.**
+
+**Just code-complete: milestone 49 — search-summary Sources links**: the
+settled digest (a cancelled one too) ends with a deterministic `##
+Sources` section — one `[[extension-less-path#heading]]` wikilink per
+covered section (model never mints links; `path:line` rides the label,
+vault name when hits span vaults). Base fix that makes it work:
+wikilinks from **vault-less scratch tabs** resolve through a merged
+cross-vault index (active vault wins collisions, `vaultOf` routes the
+open to the owning vault) and never create notes (ADR-0046 addendum).
+**Not yet manually verified by the owner.**
+
 **Just code-complete: milestone 48 — F11 full screen**: the
 `window.toggleFullScreen` command (`F11`) toggles OS fullscreen through
 `window:toggle-fullscreen`; the View menu's "Full screen" row shares the id
@@ -762,7 +793,9 @@ milestones") until owner-verified.
   from the OS), 39 (Outline panel), 40 (word completion +
   markdown-context detector), 41 (semantic vault retrieval), 43 (UI
   refinement, ADR-0057), 45 (Autotag re-homing), 46 (editor
-  snippets), 47 (foldable side docks) and 48 (F11 full screen) — see
+  snippets), 47 (foldable side docks), 48 (F11 full screen), 49
+  (search-summary Sources links) and 50 (caret survives a tab switch)
+  — see
   "Current State" above. (Milestone 44, the Task Center's `#task/id:`
   addressing, was reverted before release — ADR-0033 "considered and
   rejected"; the surviving piece is the ambiguity skip in

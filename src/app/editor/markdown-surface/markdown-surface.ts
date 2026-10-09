@@ -642,7 +642,7 @@ export class MarkdownSurface implements AfterViewInit, OnDestroy {
    * reload of the same document (save pipeline, watcher, live-edit pushes)
    * must stay undoable -- use `setContent` there.
    */
-  loadDocument(text: string, anchor = 0): void {
+  loadDocument(text: string, anchor = 0, keepScroll = false): void {
     const view = this._view;
     if (!view) {
       return;
@@ -655,10 +655,29 @@ export class MarkdownSurface implements AfterViewInit, OnDestroy {
         selection: { anchor: resolvedAnchor },
       }),
     );
-    // Same reasoning as in `setContent`: a fresh open must *show* the top.
-    if (resolvedAnchor === 0) {
+    // A fresh open at the top must *show* the top -- unless the owner is
+    // about to restore a remembered viewport (`keepScroll`, milestone 50):
+    // that applies the stored scroll offset in its own animation frames,
+    // including the case of a caret that never left offset 0.
+    if (resolvedAnchor === 0 && !keepScroll) {
       view.scrollDOM.scrollTop = 0;
     }
+  }
+
+  /**
+   * True when the scroller sits at (or within {@link STICK_TO_BOTTOM_PX}
+   * of) the document's end -- the stick-to-bottom zone. `setContent` then
+   * follows the growing tail; the owner skips a viewport restore for the
+   * same reason (a pinned view's destination is the bottom, not the
+   * offset it had before the replace).
+   */
+  pinnedToBottom(): boolean {
+    const dom = this._view?.scrollDOM;
+    return (
+      dom !== undefined &&
+      dom.clientHeight > 0 &&
+      dom.scrollHeight - dom.scrollTop - dom.clientHeight <= STICK_TO_BOTTOM_PX
+    );
   }
 
   /**
@@ -681,17 +700,13 @@ export class MarkdownSurface implements AfterViewInit, OnDestroy {
     // a full document replace, so a pinned view would drift off the bottom
     // as the content grows. This dispatch carries no `scrollIntoView`, so
     // CodeMirror does not re-scroll to the selection afterwards.
-    const scrollDOM = view.scrollDOM;
-    const pinned =
-      scrollDOM.clientHeight > 0 &&
-      scrollDOM.scrollHeight - scrollDOM.scrollTop - scrollDOM.clientHeight <=
-        STICK_TO_BOTTOM_PX;
+    const pinned = this.pinnedToBottom();
     view.dispatch({
       changes: { from: 0, to: view.state.doc.length, insert: text },
       selection: { anchor: resolvedAnchor },
     });
     if (pinned) {
-      scrollDOM.scrollTop = scrollDOM.scrollHeight;
+      view.scrollDOM.scrollTop = view.scrollDOM.scrollHeight;
     }
   }
 

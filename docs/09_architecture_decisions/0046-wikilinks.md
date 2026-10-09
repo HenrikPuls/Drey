@@ -98,3 +98,19 @@ transclude; a `|alias` suffix on a media embed is alt text, or the display
 size when it is a bare `W`/`WxH`. The PDF export rewrites media embeds to
 standard image references before its markdown pass
 (`shared/pdf-html.ts rewriteEmbedWikilinks`).
+
+## Addendum (milestone 49) — vault-less documents resolve across all vaults
+
+Scratch tabs (`search-summary.md`, Export dumps) are vault-less, and the
+milestone-49 Sources links live in one. A wikilink there previously
+resolved against an empty index — a Ctrl-click fell through to "create
+the note in the active vault". Vault-less documents now resolve through
+a **merged index** over every registered vault: the active vault is
+merged first, so it wins both path collisions and basename ambiguities
+(one deterministic target per link), and a `vaultOf` map routes the open
+to the target's **owning** vault. Creation stays vault-scoped: from a
+vault-less document an unresolved target is reported ("Cannot follow"),
+never created — the same no-mint rule as the entry drawer. The wikilink
+syntax still cannot name a vault; when two vaults hold the same relative
+path, the active one wins, and labels (the summary's Sources lines)
+carry the vault name as the only disambiguator.

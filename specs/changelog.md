@@ -20,6 +20,91 @@ recorded as an explicit decision. The parity checklist lives in
 
 ## Recent milestones
 
+### Milestone 50 — the caret survives a tab switch
+
+- **Switching back to an open tab restores the cursor — the exact
+  viewport, and focus.** Every fresh editor state built for a tab switch
+  (or a recreated pane) now replays the remembered caret AND the
+  remembered scroll offset instead of landing at the top, and entering a
+  tab puts the caret INTO the document: typing works immediately,
+  without a click into the editor first (a pane's first load — app
+  start, session restore — keeps the old no-focus behavior). The exact
+  flow the milestone-49 Sources links exposed: follow a link, switch
+  away, come back, and the document sits where you left it, ready to
+  type.
+- **The memory outlives the tab.** Caret and scroll offset are stored
+  per doc key for the whole app session — deliberately decoupled from
+  the doc records, because a *clean* tab is REPLACED when another file
+  opens (milestone 32): reopening such a tab (file tree, Files panel,
+  another link) restores its viewport too. Strictly in-memory (nothing
+  rides into the session snapshot, a restart starts without carets),
+  bounded FIFO past 200 doc keys.
+- **The restore applies whenever a memory exists — never gated on the
+  caret's offset.** A caret that never left offset 0 (open a document,
+  only scroll) used to skip the restore entirely: the `anchor > 0` gate
+  confused "no memory" with "memory with head 0", and `loadDocument`'s
+  show-the-top reset made it worse. The gate is now "memory exists",
+  and the top-reset is skipped (`keepScroll`) whenever a viewport is
+  about to be restored — which also fixes the replace/reopen cycle
+  (a fresh-opened, never-clicked clean tab replaced by another file
+  reopens on its remembered scroll position).
+- **Saving keeps the viewport too.** Every save of a frontmattered note
+  rewrites the fence (the `updated:` bump) — the renderer adopts the new
+  text and reloads the SAME tab in place, and that full replace discards
+  CodeMirror's height map: holding the numeric scroll offset alone let
+  the browser clamp the scroller (block widgets collapse the height
+  estimates) and the view landed at the top. The in-place reload now
+  captures the viewport before the swap and replays it through the same
+  restore chain a tab switch uses — unless the view is pinned to the
+  bottom, where stick-to-bottom stays the destination (the streamed
+  search summary keeps following the tail; the same goes for
+  non-pinned live-edit pushes, which now hold the position cleanly
+  instead of drifting).
+- **The scroll restore re-asserts the stored offset.** Two production
+  findings shaped it (both invisible in jsdom, both pinned by the new
+  Playwright spec `caret-scroll-restore` against the real Electron
+  app): focusing the freshly swapped editor makes the BROWSER scroll
+  the caret into view — possibly after the restore's first frame — and
+  a fresh editor state starts with every block height ESTIMATED
+  (CodeMirror's `HeightMap` begins empty), so a raw pixel offset alone
+  lands a few lines off in content space. The chain therefore applies
+  the raw offset, then RE-ASSERTS it one frame later (the stored value
+  is the last word, never a scroll-to-caret), with a strictly gated
+  caret-anchored correction on top (capture records the caret's
+  viewport-relative position when rendered; the correction only runs
+  when the caret is inside `visibleRanges` and the delta is
+  sub-viewport — every failure degrades to the raw offset).
+- **Explicit jumps still win.** An `openFileAt` reveal (a wikilink's
+  heading line, a search hit, a tasks row) runs after the restore,
+  CANCELS the scroll restore and moves the caret to its target; a stale
+  caret past a shrunken buffer is clamped to the document length. Undo
+  history still resets per tab switch (ADR-0003 unchanged);
+  multi-cursor selections collapse to the main caret
+  (ADR-0037 later-change note).
+
+### Milestone 49 — search summary: Sources links (wikilinks from the digest)
+
+- **The digest ends in a `## Sources` list.** After the model's reply
+  settles (or the user stops it), the Search panel appends one line per
+  section the prompt actually covered — same order, same whole-section
+  budget cut as the material — each carrying a `[[wikilink]]` to that
+  section plus the exact `path:line` as plain text (wikilinks have no
+  line anchor). Deterministic by design: the model never mints links —
+  anchors must match a real heading, and heading-less sections cannot be
+  anchored at all. When the hits span several vaults, the label carries
+  the vault's name as a prefix.
+- **Wikilinks work from vault-less scratch tabs.** A `[[link]]` in the
+  `search-summary.md` scratch tab (no vault of its own) previously
+  resolved against an empty index — Ctrl-click fell through to "create
+  note in the active vault". Vault-less documents now resolve through a
+  merged index over every registered vault (the active vault wins path
+  collisions and basename ambiguities), open the target in its OWNING
+  vault, and never create notes — an unresolved link is reported, like
+  the entry drawer's no-mint rule (ADR-0046 addendum). Known limit: the
+  link syntax cannot name a vault, so the same relative path in two
+  vaults lands in the active one; the label's vault name is the only
+  disambiguator.
+
 ### Fix — editor: a table-only document can be left again
 
 - **ArrowDown opens the line below a document-ending table.** When the

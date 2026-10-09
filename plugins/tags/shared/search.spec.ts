@@ -1,5 +1,6 @@
 import {
   buildSearchSummaryMaterial,
+  buildSearchSummarySources,
   buildTextMatcher,
   describeSearchQuery,
   formatSearchResultsDoc,
@@ -211,5 +212,66 @@ describe('formatSearchSummaryHeader', () => {
   it('uses the singular for one section', () => {
     const header = formatSearchSummaryHeader({ tags: [], text: '' }, 1, 't');
     expect(header).toContain('Generated from 1 search section on t');
+  });
+});
+
+describe('buildSearchSummarySources', () => {
+  const hit = (path: string, heading: string, line: number, vaultId?: string): TagSearchHit => ({
+    path,
+    heading,
+    line,
+    snippet: '',
+    text: 'body',
+    ...(vaultId !== undefined ? { vaultId } : {}),
+  });
+
+  it('links each included hit with an extension-less path and a heading anchor', () => {
+    const sources = buildSearchSummarySources(
+      [hit('daily/journal.md', 'Standup', 12), hit('notes/plan.md', 'Next steps', 40)],
+      2,
+    );
+    expect(sources).toContain('## Sources');
+    expect(sources).toContain('- [[daily/journal#Standup]] — daily/journal.md:12');
+    expect(sources).toContain('- [[notes/plan#Next steps]] — notes/plan.md:40');
+  });
+
+  it('omits the anchor for heading-less sections and keeps non-.md extensions', () => {
+    const sources = buildSearchSummarySources(
+      [hit('notes/intro.md', '', 1), hit('pad/note.markdown', 'Log', 3)],
+      2,
+    );
+    expect(sources).toContain('- [[notes/intro]] — notes/intro.md:1');
+    expect(sources).toContain('- [[pad/note.markdown#Log]] — pad/note.markdown:3');
+  });
+
+  it('drops the anchor when the heading would break the wikilink syntax', () => {
+    const sources = buildSearchSummarySources([hit('a.md', 'See [refs] | done', 7)], 1);
+    expect(sources).toContain('- [[a]] — a.md:7');
+  });
+
+  it('keeps only the included prefix (same cut as the material) and tolerates over-given counts', () => {
+    const hits = [hit('a.md', 'A', 1), hit('b.md', 'B', 2), hit('c.md', 'C', 3)];
+    expect(buildSearchSummarySources(hits, 2)).not.toContain('c.md');
+    const all = buildSearchSummarySources(hits, 99).split('\n').filter((l) => l.startsWith('- '));
+    expect(all).toHaveLength(3);
+    expect(buildSearchSummarySources(hits, 0)).toBe('');
+  });
+
+  it('labels the vault name only when the hits span several vaults', () => {
+    const multi = buildSearchSummarySources(
+      [hit('a.md', 'A', 1, 'v1'), hit('b.md', 'B', 2, 'v2')],
+      2,
+      { v1: 'Work', v2: 'Private' },
+    );
+    expect(multi).toContain('- [[a#A]] — Work · a.md:1');
+    expect(multi).toContain('- [[b#B]] — Private · b.md:2');
+
+    const single = buildSearchSummarySources([hit('a.md', 'A', 1, 'v1')], 1, { v1: 'Work' });
+    expect(single).toContain('- [[a#A]] — a.md:1');
+  });
+
+  it('normalises backslash separators', () => {
+    const sources = buildSearchSummarySources([hit('daily\\win.md', 'Tag', 4)], 1);
+    expect(sources).toContain('- [[daily/win#Tag]] — daily/win.md:4');
   });
 });

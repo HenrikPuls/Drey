@@ -2,6 +2,7 @@ import {
   AfterViewInit,
   Component,
   ElementRef,
+  OnDestroy,
   computed,
   effect,
   inject,
@@ -17,7 +18,7 @@ import {
   sectionAtLine,
 } from '../../../shared/note-sections';
 import type { MenuContribution } from '../../../shared/plugin-api/renderer';
-import { EditorService, EditorViewMode, NewEntryRequest } from '../services/editor.service';
+import { CaretMemory, EditorService, EditorViewMode, NewEntryRequest } from '../services/editor.service';
 import { EditorZoomService } from '../services/editor-zoom.service';
 import { MenuContributionsService } from '../plugin-host';
 import { OverlayGuardDirective } from '../services/overlay-guard.directive';
@@ -56,7 +57,11 @@ import { MarkdownToolbar } from './markdown-toolbar';
  *
  * Multi-tab (ADR-0003): one view per pane; a tab switch within the pane
  * swaps its document via `loadActiveDoc()`. Undo history does not survive
- * a tab switch.
+ * a tab switch; the caret does -- it is remembered per doc key for the
+ * whole app session (milestone 50, surviving even a clean tab's
+ * replacement) and replayed into every fresh state, an explicit reveal
+ * (link click, search hit) still winning. Entering a tab also focuses the
+ * editor, so typing lands in the document without a click first.
  */
 @Component({
   selector: 'app-editor',
@@ -85,7 +90,7 @@ import { MarkdownToolbar } from './markdown-toolbar';
     '(document:keydown.escape)': 'closeMenu()',
   },
 })
-export class Editor implements AfterViewInit {
+export class Editor implements AfterViewInit, OnDestroy {
   protected readonly editor = inject(EditorService);
   protected readonly settings = inject(SettingsService);
   protected readonly zoom = inject(EditorZoomService);
@@ -169,6 +174,12 @@ export class Editor implements AfterViewInit {
   private readonly frontmatterFoldByPath = new Map<string, boolean>();
   /** Set once the child surface's view exists (its ngAfterViewInit runs before ours). */
   private surfaceReady = false;
+  /**
+   * The surface's CodeMirror view, cached when it appears: `ngOnDestroy`
+   * must be able to read its (still queryable) selection without going
+   * through the viewChild query, which may already be torn down.
+   */
+  private currentView: EditorView | undefined;
 
   /** `⋯` mode menu: open state and viewport-anchored position. */
   protected readonly menuOpen = signal(false);
@@ -282,6 +293,7 @@ export class Editor implements AfterViewInit {
 
   ngAfterViewInit(): void {
     this.surfaceReady = true;
+    this.currentView = this.surface().view;
     this.loadActiveDoc();
     this.applyEditLock();
     // A request may have arrived while this component was still mounting
@@ -295,6 +307,18 @@ export class Editor implements AfterViewInit {
     // caret here now.
     if (this.isFocusedPane && this.panes.paneIds().length > 1) {
       this.view?.focus();
+    }
+  }
+
+  ngOnDestroy(): void {
+    this.cancelScrollRestore();
+    // A destroyed pane (closed, docked elsewhere, app teardown) can no
+    // longer capture on a tab switch -- record the shown document's
+    // viewport so reopening it lands where the user left it (milestone
+    // 50). The cached view reference still works even if the surface is
+    // already gone; a destroyed CodeMirror view keeps a readable state.
+    if (this.currentView && this.loadedPath !== null) {
+      this.editor.recordCaret(this.loadedPath, this.viewportMemory(this.currentView));
     }
   }
 
@@ -453,11 +477,120 @@ export class Editor implements AfterViewInit {
     if (!view || !this.editor.claimRevealRequest(request.id)) {
       return;
     }
+    // An explicit jump replaces the remembered viewport wholesale -- a
+    // scroll restore scheduled by the load below must not fight it.
+    this.cancelScrollRestore();
     const doc = view.state.doc;
     const lineNo = Math.min(Math.max(1, request.line), doc.lines);
     const anchor = doc.line(lineNo).from;
     view.dispatch({ selection: { anchor }, scrollIntoView: true });
     view.focus();
+  }
+
+  /** The pending scroll-restore animation frame of the chain below. */
+  private scrollRestoreFrame: number | null = null;
+
+  /** How many frames the caret measurement may retry before giving up. */
+  private static readonly RESTORE_RETRY_FRAMES = 5;
+
+  /**
+   * Restores the remembered viewport in animation-frame steps (milestone
+   * 50). Frame 1 applies the raw scroll offset -- right after `setState`
+   * the scroller still reports the previous document's metrics, and
+   * CodeMirror measures the swapped document in its own rAF (registered
+   * during `setState`, i.e. before this one), so the clamp runs against
+   * settled geometry. Frame 2 RE-ASSERTS the raw offset: focusing the
+   * freshly swapped editor makes the BROWSER scroll the caret into view,
+   * and that implicit scroll can land after frame 1 -- whatever moved
+   * the viewport since, the stored value wins. On top of the re-assert,
+   * frame 2 optionally applies the caret-anchored correction: a fresh
+   * state's height map is entirely ESTIMATED (`HeightMap.empty`), so the
+   * raw pixel offset alone lands a few lines off in content space;
+   * measuring the caret's rendered position on both ends cancels the
+   * estimates out. The correction is a refinement, gated on being safely
+   * measurable (`caretRel` captured, the caret inside `visibleRanges` --
+   * `coordsAtPos` misbehaves off-render -- and a sub-viewport delta);
+   * every failure degrades to the raw offset, never to a
+   * scroll-to-caret. The chain is cancelled by a reveal
+   * ({@link applyRevealRequest}) and by the next restore.
+   */
+  private scheduleScrollRestore(memory: CaretMemory): void {
+    this.cancelScrollRestore();
+    this.scrollRestoreFrame = requestAnimationFrame(() => this.applyScrollRestore(memory, 1));
+  }
+
+  private applyScrollRestore(memory: CaretMemory, frame: number): void {
+    this.scrollRestoreFrame = null;
+    const view = this.currentView;
+    if (!view) {
+      return;
+    }
+    const dom = view.scrollDOM;
+    const clamp = (value: number): number =>
+      Math.max(0, Math.min(value, dom.scrollHeight - dom.clientHeight));
+    if (frame === 1) {
+      dom.scrollTop = clamp(memory.scrollTop);
+      this.scrollRestoreFrame = requestAnimationFrame(() => this.applyScrollRestore(memory, 2));
+      return;
+    }
+    // The re-assert: undo any scroll that happened since frame 1 (the
+    // browser's focus-scroll to the caret above all) and make CodeMirror
+    // render around the remembered offset.
+    dom.scrollTop = clamp(memory.scrollTop);
+    if (memory.caretRel === undefined) {
+      return; // nothing to anchor to -- the raw offset stands
+    }
+    const head = view.state.selection.main.head;
+    const rendered = view.visibleRanges.some((range) => head >= range.from && head <= range.to);
+    const coords = rendered ? this.caretCoords(view, head) : null;
+    if (coords === null) {
+      // Not rendered yet -- one more frame may see it; the re-asserted
+      // raw offset stands meanwhile.
+      if (frame < Editor.RESTORE_RETRY_FRAMES) {
+        this.scrollRestoreFrame = requestAnimationFrame(() =>
+          this.applyScrollRestore(memory, frame + 1),
+        );
+      }
+      return;
+    }
+    const delta = coords.top - dom.getBoundingClientRect().top - memory.caretRel;
+    if (Math.abs(delta) > dom.clientHeight) {
+      return; // a delta that size is a bad measurement, not drift
+    }
+    dom.scrollTop = clamp(dom.scrollTop + delta);
+  }
+
+  /** `coordsAtPos` that never throws (a headless DOM lacks layout APIs). */
+  private caretCoords(view: EditorView, pos: number): { top: number } | null {
+    try {
+      return view.coordsAtPos(pos);
+    } catch {
+      return null;
+    }
+  }
+
+  private cancelScrollRestore(): void {
+    if (this.scrollRestoreFrame !== null) {
+      cancelAnimationFrame(this.scrollRestoreFrame);
+      this.scrollRestoreFrame = null;
+    }
+  }
+
+  /**
+   * The leaving document's viewport (milestone 50): caret head, raw scroll
+   * offset, and -- when the caret is rendered -- its offset from the
+   * viewport top, which is what makes the restore exact (see
+   * {@link applyScrollRestore}).
+   */
+  private viewportMemory(view: EditorView): CaretMemory {
+    const head = view.state.selection.main.head;
+    const scrollTop = view.scrollDOM.scrollTop;
+    const coords = this.caretCoords(view, head);
+    if (coords === null) {
+      return { head, scrollTop };
+    }
+    const rel = coords.top - view.scrollDOM.getBoundingClientRect().top;
+    return Number.isFinite(rel) ? { head, scrollTop, caretRel: rel } : { head, scrollTop };
   }
 
   /**
@@ -477,27 +610,61 @@ export class Editor implements AfterViewInit {
     const next = this.shownDoc()?.bufferContent ?? '';
     // Same file, new text = an in-place reload (the save pipeline rewrote
     // the frontmatter). Keep the caret roughly where it was instead of
-    // snapping to the top; a tab switch still lands at offset 0.
+    // snapping to the top; a tab switch restores the remembered caret.
     const samePath = path === this.loadedPath;
+    // A real tab switch inside a live pane (not the pane's first load) --
+    // drives both the leave-capture below and the focus on entering.
+    const leavingPath = !samePath && this.loadedPath !== null ? this.loadedPath : null;
 
-    if (!samePath && this.loadedPath !== null) {
-      // Leaving a tab: remember whether its frontmatter was expanded.
-      this.frontmatterFoldByPath.set(this.loadedPath, this.surface().frontmatterExpanded());
+    if (leavingPath !== null) {
+      // Leaving a tab: remember whether its frontmatter was expanded and
+      // its viewport (milestone 50) -- both replayed on the way back in.
+      // The view still holds the leaving document's state here.
+      this.frontmatterFoldByPath.set(leavingPath, this.surface().frontmatterExpanded());
+      this.editor.recordCaret(leavingPath, this.viewportMemory(view));
     }
 
     if (next !== current) {
       if (samePath) {
         // Same file, new text = an in-place reload (the save pipeline
-        // rewrote the frontmatter, a watcher reload, a live-edit push):
-        // a plain undoable edit that keeps the caret where it was.
+        // rewrote the frontmatter -- every save of a frontmattered note
+        // bumps `updated:`, a watcher reload, a live-edit push): a plain
+        // undoable edit that keeps the caret where it was. The viewport
+        // must survive it too (milestone 50): the full replace discards
+        // CodeMirror's height map, and holding the numeric scroll offset
+        // alone only works while the estimates hold -- with block widgets
+        // they collapse, the browser clamps the scroller, and the view
+        // ends up near the top. Capture the user's viewport before the
+        // swap and replay it through the same restore chain a tab switch
+        // uses -- unless the view is pinned to the bottom, where
+        // stick-to-bottom stays the right destination (the streamed
+        // search summary follows the tail).
         const prevHead = view.state.selection.main.head;
+        const pinned = this.surface().pinnedToBottom();
+        const memory = this.viewportMemory(view);
         this.surface().setContent(next, prevHead);
+        if (!pinned) {
+          this.scheduleScrollRestore(memory);
+        }
       } else {
         // First load / tab switch: a fresh state. The load must not be an
         // undo event -- a second Ctrl+Z in a freshly opened tab used to
         // roll the load back and wipe the document -- and undo history
         // does not survive a tab switch anyway (see this file's header).
-        this.surface().loadDocument(next, 0);
+        // The viewport, however, is remembered per doc key for the whole
+        // app session (milestone 50) -- including a clean tab that was
+        // replaced and reopened, and including a caret that never left
+        // offset 0 (scroll-only browsing): whenever a memory EXISTS the
+        // restore chain applies it; `loadDocument` skips its show-the-top
+        // reset for the same reason. A pending reveal (a link click's
+        // target line) runs after this and still wins, cancelling the
+        // chain.
+        const memory = path !== null ? this.editor.caretFor(path) : undefined;
+        const anchor = memory?.head ?? 0;
+        this.surface().loadDocument(next, anchor, memory !== undefined);
+        if (memory !== undefined) {
+          this.scheduleScrollRestore(memory);
+        }
       }
     }
     this.loadedPath = path;
@@ -507,6 +674,14 @@ export class Editor implements AfterViewInit {
       this.surface().setFrontmatterExpanded(
         path !== null && this.frontmatterFoldByPath.get(path) === true,
       );
+      // Land the caret IN the document: switching to a tab is an intent
+      // to work there, so typing must work without a click into the
+      // editor first. Only on a real switch -- a pane's first load (app
+      // start, session restore, a freshly split pane) keeps the old
+      // no-focus behavior.
+      if (leavingPath !== null && path !== null) {
+        this.surface().focus();
+      }
     }
   }
 }

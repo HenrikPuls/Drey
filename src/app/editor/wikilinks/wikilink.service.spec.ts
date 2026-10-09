@@ -1,9 +1,11 @@
 import { TestBed } from '@angular/core/testing';
 import { DreyApi, VaultFileEntry } from '../../../../shared/ipc-api';
 import { EditorService } from '../../services/editor.service';
+import { VaultService } from '../../vault';
 import { WikilinkService } from './wikilink.service';
 
 const V = 'v1';
+const V2 = 'v2';
 
 const TREE: VaultFileEntry[] = [
   {
@@ -18,6 +20,12 @@ const TREE: VaultFileEntry[] = [
   { name: 'plan.md', relativePath: 'plan.md', type: 'file' },
   { name: 'journal.md', relativePath: 'daily/journal.md', type: 'file' },
   { name: 'pic.png', relativePath: 'pic.png', type: 'file' },
+];
+
+/** A second vault: `plan.md` collides with v1's, `only/other.md` is unique. */
+const TREE_V2: VaultFileEntry[] = [
+  { name: 'plan.md', relativePath: 'plan.md', type: 'file' },
+  { name: 'other.md', relativePath: 'only/other.md', type: 'file' },
 ];
 
 describe('WikilinkService', () => {
@@ -162,6 +170,55 @@ describe('WikilinkService', () => {
       await service.openResolvedOnly('missing note', null);
       expect(created).toEqual([]);
       expect(editor.activePath()).toBeNull();
+    });
+  });
+
+  describe('vault-less documents (scratch tabs)', () => {
+    /** Re-registers a second vault and reloads -- the computed indexes follow the trees signal. */
+    const registerSecondVault = async (): Promise<void> => {
+      window.dreyApi = {
+        ...window.dreyApi,
+        listVaults: () =>
+          Promise.resolve([
+            { id: V, name: 'one', path: 'C:/one', exists: true, active: true },
+            { id: V2, name: 'two', path: 'C:/two', exists: true, active: false },
+          ]),
+        listVaultFiles: (vaultId?: string) =>
+          Promise.resolve(vaultId === V2 ? TREE_V2 : TREE),
+      } as unknown as DreyApi;
+      await TestBed.inject(VaultService).refresh();
+    };
+
+    it('resolves basenames from any registered vault', async () => {
+      await registerSecondVault();
+      expect(service.resolve('other', null, null)).toBe('only/other.md');
+      expect(service.resolve('journal', null, null)).toBe('daily/journal.md');
+    });
+
+    it('opens a vault-less link in the OWNING vault', async () => {
+      await registerSecondVault();
+      await service.open('only/other', null, null, null);
+      expect(editor.activePath()).toBe(`${V2}::only/other.md`);
+    });
+
+    it('prefers the active vault when the same path lives in two vaults', async () => {
+      await registerSecondVault();
+      await service.open('plan', null, null, null);
+      expect(editor.activePath()).toBe(`${V}::plan.md`);
+    });
+
+    it('never creates from a vault-less document -- unknown targets are reported', async () => {
+      await registerSecondVault();
+      await service.open('missing note', null, null, null);
+      expect(created).toEqual([]);
+      expect(editor.activePath()).toBeNull();
+      expect(editor.error()).toContain('Cannot follow');
+    });
+
+    it('stays silent on an empty target', async () => {
+      await service.open(' ', null, null, null);
+      expect(created).toEqual([]);
+      expect(editor.error()).toBeNull();
     });
   });
 });
