@@ -1236,10 +1236,12 @@ export class EditorService {
       this.setPinned(savedKey, true);
     }
     // Moving a file out of `.drafts/` (bug-5's exit auto-saves) deletes the
-    // draft original -- move semantics, so drafts don't linger in two places.
+    // draft original -- move semantics, so drafts don't linger in two
+    // places, and permanent (a recycle-bin copy would pile up on every
+    // save-as; the content lives at the target).
     if (doc.vaultId !== null && doc.path.startsWith('.drafts/') && doc.path !== target) {
       try {
-        await this.vault.deleteEntry(doc.path, doc.vaultId);
+        await this.vault.deleteEntry(doc.path, doc.vaultId, { trash: false });
       } catch {
         // The original staying behind is annoying, not fatal.
       }

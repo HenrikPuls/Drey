@@ -143,7 +143,8 @@ Check changelog.md for anything higher before assigning req-37+.
 - Model contention: assistant usage vs. parallel benchmarking runs —
   needs an availability check before every call.
 - Tag sprawl: no near-duplicate detection (`sailing` vs. `boat`).
-  Autotagging biases toward existing vocabulary; no merge/alias tool yet.
+  Autotagging biases toward existing vocabulary; the rename/merge tool
+  (milestone 53) allows consolidating by hand — detection stays missing.
 - Very large vocabularies: autotag prompt embeds the full tag list — fine
   to low hundreds, needs a pre-filter beyond that (see
   `classifier-spec.md`).

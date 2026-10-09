@@ -13,6 +13,7 @@ import {
 import { sidecarPathFor } from '../shared/sidecar';
 import { VaultFileContent, VaultFileEntry, VaultRegistration, VaultStatus } from '../shared/ipc-api';
 import { uniqueCopyName } from '../shared/unique-name';
+import { removeEntryFromDisk } from './trash-delete';
 import { OwnWriteLedger } from './own-write-ledger';
 import { refocusRenderer } from './focus';
 
@@ -531,26 +532,44 @@ export class VaultManager {
   }
 
   /**
-   * Deletes a file or folder (recursively). `resolveInVault` is the path
+   * Deletes a file or folder -- by default to the OS recycle bin
+   * (milestone 52), permanently for `{ trash: false }` (move-semantics
+   * callers) and on volumes without a bin. `resolveInVault` is the path
    * guard; the vault root itself is refused. A `.md` note's assistant
-   * sidecar (`.{name}.chat.json`) goes with it. `fsp.rm` with `force`
-   * treats a missing target as success -- the tree the renderer showed can
-   * be a step stale.
+   * sidecar (`.{name}.chat.json`) goes with it, mirroring the note's
+   * disposition. `force` treats a missing target as success -- the tree
+   * the renderer showed can be a step stale.
    */
-  async deleteEntry(relativePath: string, vaultId?: string): Promise<void> {
+  async deleteEntry(
+    relativePath: string,
+    vaultId?: string,
+    opts?: { trash?: boolean },
+  ): Promise<{ trashed: boolean }> {
     const resolvedVault = this.registrationFor(vaultId);
     const target = this.resolveInVault(relativePath, resolvedVault.id);
     if (target === path.resolve(resolvedVault.path)) {
       throw new Error('Refusing to delete the vault root.');
     }
-    // Before the rm: the watcher's unlink echoes arrive right behind it,
-    // and the record covers the children via the prefix rule.
+    // Before the removal: the watcher's unlink echoes arrive right behind
+    // it, and the record covers the children via the prefix rule.
     this.ownWrites?.recordStructural(resolvedVault.id, relativePath);
-    await fsp.rm(target, { recursive: true, force: true });
+    const removal = await removeEntryFromDisk(target, opts, {
+      trashItem: (p) => shell.trashItem(p),
+      rm: (p) => fsp.rm(p, { recursive: true, force: true }),
+    });
     if (relativePath.toLowerCase().endsWith('.md')) {
       const sidecar = this.resolveInVault(sidecarPathFor(relativePath), resolvedVault.id);
-      await fsp.rm(sidecar, { force: true }).catch(() => undefined);
+      // Best effort: a sidecar that will not move never blocks the note.
+      await removeEntryFromDisk(
+        sidecar,
+        { trash: removal === 'trashed' },
+        {
+          trashItem: (p) => shell.trashItem(p),
+          rm: (p) => fsp.rm(p, { force: true }).catch(() => undefined),
+        },
+      ).catch(() => undefined);
     }
+    return { trashed: removal === 'trashed' };
   }
 
   /**

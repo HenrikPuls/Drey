@@ -152,24 +152,42 @@ export function registerVaultHandlers({
   );
   ipcMain.handle(
     IPC_CHANNELS.vaultDelete,
-    async (_event, relativePath: string, vaultId?: string): Promise<void> => {
+    async (
+      _event,
+      relativePath: string,
+      vaultId?: string,
+      opts?: { trash?: boolean },
+    ): Promise<string[]> => {
       const resolvedVaultId = vaultManager.resolveVaultId(vaultId);
-      await vaultManager.deleteEntry(relativePath, resolvedVaultId);
+      const result = await vaultManager.deleteEntry(relativePath, resolvedVaultId, opts);
       // No file watcher -- the tag / task indexes would otherwise still list
       // entries from the deleted file until the next full rebuild.
       await rebuildIndexes();
+      return opts?.trash === false || result.trashed ? [] : [relativePath];
     },
   );
   // Multi-select delete (bug-8): one round trip, one re-index for the whole
   // batch. Missing targets are not errors, so overlapping paths (a folder
-  // and a file inside it) just work.
+  // and a file inside it) just work. Resolves to the paths that fell back
+  // to a permanent delete (no recycle bin on their volume) -- empty when
+  // everything was trashed or `trash: false` was asked for anyway.
   ipcMain.handle(
     IPC_CHANNELS.vaultDeleteMany,
-    async (_event, relativePaths: string[], vaultId?: string): Promise<void> => {
+    async (
+      _event,
+      relativePaths: string[],
+      vaultId?: string,
+      opts?: { trash?: boolean },
+    ): Promise<string[]> => {
+      const notTrashed: string[] = [];
       for (const relativePath of relativePaths) {
-        await vaultManager.deleteEntry(relativePath, vaultId);
+        const result = await vaultManager.deleteEntry(relativePath, vaultId, opts);
+        if (opts?.trash !== false && !result.trashed) {
+          notTrashed.push(relativePath);
+        }
       }
       await rebuildIndexes();
+      return notTrashed;
     },
   );
   // Rename / copy / duplicate can move `.md` content in or out of the

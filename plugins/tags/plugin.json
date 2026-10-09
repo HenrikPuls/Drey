@@ -3,7 +3,7 @@
   "name": "Tags",
   "version": "2.0.0",
   "apiVersion": 1,
-  "description": "Inline #tag vocabulary and section index: the tag data behind editor pills and completion, prefix colors (Settings → Tags), the scoped Search panel with replace and LLM summarise, and the section search behind MCP vault_search.",
+  "description": "Inline #tag vocabulary and section index: the tag data behind editor pills and completion, prefix colors and tag rename/merge (Settings → Tags), the scoped Search panel with replace and LLM summarise, and the section search behind MCP vault_search.",
   "author": "Drey",
   "main": "main/index.js",
   "renderer": "renderer/index.js",

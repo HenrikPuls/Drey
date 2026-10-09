@@ -1190,7 +1190,7 @@ export class FilesPanel {
     const names = targets.map((t) => `"${t.entry.relativePath}"`).join(', ');
     const deleteConfirmed = await this.dialogs.confirm({
       title: `Delete ${what}`,
-      message: `${names} will be deleted. This cannot be undone.`,
+      message: `${names} will be moved to the recycle bin.`,
       confirmLabel: 'Delete',
       danger: true,
     });
@@ -1216,8 +1216,20 @@ export class FilesPanel {
         list.push(target.entry.relativePath);
         byVault.set(target.vaultId, list);
       }
+      const notTrashed: string[] = [];
       for (const [vaultId, paths] of byVault) {
-        await this.vault.deleteEntries(paths, vaultId);
+        notTrashed.push(...(await this.vault.deleteEntries(paths, vaultId)));
+      }
+      if (notTrashed.length > 0) {
+        // The volume has no recycle bin (network share, some removable
+        // drives): the delete stood, but permanently -- say so.
+        await this.dialogs.message({
+          title: 'Deleted permanently',
+          message:
+            notTrashed.length === 1
+              ? `"${notTrashed[0]}" could not be moved to the recycle bin and was deleted permanently.`
+              : `${notTrashed.length} items could not be moved to the recycle bin and were deleted permanently.`,
+        });
       }
     } catch (err) {
       this.showError(err);

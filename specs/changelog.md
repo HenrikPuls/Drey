@@ -20,6 +20,91 @@ recorded as an explicit decision. The parity checklist lives in
 
 ## Recent milestones
 
+### Milestone 54 — the Backlinks panel (req-39)
+
+- **`plugins/backlinks/`** (new): a per-vault **outlink index** — every
+  `.md` file's parsed `[[wikilink]]` occurrences — kept fresh through the
+  save-hook and vault-change registries exactly like the tags/tasks
+  indexes (coalesced boot sweep, incremental re-index per save/write,
+  drop per delete, rebuild on renames/registry rounds).
+- **The Backlinks dock panel** follows the focused vault note like
+  Outline: every note whose wikilink resolves TO it, one row per
+  occurrence — file, section heading, the linking line — and a click
+  opens the linking note at the line (vault-aware through the document
+  API). Lands collapsed at the bottom of the left dock; the header shows
+  the count; empty states for notes nobody links to and non-note tabs.
+- **Resolution is the parity twin of the base wikilink service**
+  (`shared/link-index.ts`): path targets (`/` or extension, `.md`
+  appended), bare-name targets by basename, sibling preference and
+  shortest-path tie-break on ambiguity — a link counts as a backlink of
+  exactly the note the editor's Ctrl-click would open. The link grammar
+  (`shared/link-targets.ts`) is a verbatim twin of the base WIKILINK
+  regex (alias, `#anchor`, embeds `![[…]]` count; frontmatter, fences
+  and inline code never yield links). Resolution happens at query time
+  against the current file list, so renames/new files reshape the
+  backlinks without re-reading every note.
+- Known v1 limits: same-vault only (no cross-vault inlinks), `.md` files
+  only (`listMarkdownFiles` — same base the tag index scans), and
+  unsaved buffers don't count (a freshly typed link appears after its
+  save; a note's own links never affect its backlinks anyway).
+- Tests: 12 spec cases (`plugins/backlinks/shared/backlinks.spec.ts` —
+  grammar parity, resolution parity incl. ambiguity, query semantics)
+  and one e2e (`e2e/backlinks.spec.ts`: rows appear, row click opens at
+  the line, empty state).
+
+### Milestone 53 — tag rename / merge (req-38)
+
+- **Settings → Tags gained the tag list with Rename/Merge.** Every
+  vault's vocabulary merged into one filterable list (chip in its
+  resolved color, section count); "Rename…" opens a modal over the
+  same preview/apply discipline the Search panel's vault replace uses:
+  bundled per-file-diff confirmation, TOCTOU re-read + re-patch before
+  every write, CRLF preserved, announced writes. When several vaults
+  carry the tag they are individually selectable (all on by default).
+- **A grammar-faithful rename, not a text replace.**
+  `plugins/tags/shared/rename.ts` walks the same `extractTagOccurrences`
+  the index uses: fenced and inline code, URL fragments and
+  `#oldnet`-style near-names are never touched. Nested `#old/…` tags
+  come along by default (tails keep their spelling, switchable in the
+  modal); renaming INTO the reserved `task` root is rejected.
+- **Merge semantics.** When the target tag already exists, the modal
+  says "Merge", and a duplicate the merge would create on a line
+  (`#old #new` → `#new`) is dropped — pre-existing duplicates stay.
+- Backend: `tag-list` (vaults + per-vault vocabularies),
+  `rename-preview` / `rename-apply` (`TagIndex.vocabularyFor`,
+  `isIndexExcludedPath` now exported and shared with the index itself —
+  templates folders are skipped like the index skips them). Both plugin
+  modals (replace + rename) share styled action buttons now (the
+  confirm dialog's recipe — they were unstyled before).
+- The tag-sprawl risk in the roadmap is addressed (consolidation now
+  possible); near-duplicate *detection* stays out of scope.
+  ADR-0017 gained a "Later change" note; 13 new spec cases in
+  `plugins/tags/shared/rename.spec.ts` plus two e2e specs (rename across
+  the vault, merge dedupe — `e2e/search.spec.ts`).
+
+### Milestone 52 — deletes go to the OS recycle bin
+
+- **Explicit deletes are undoable.** The Files panel's "Delete" (single
+  and multi-select, bug-8) moves the target — and a `.md` note's
+  `.{name}.chat.json` sidecar — to the OS recycle bin via
+  `shell.trashItem`; the confirm dialog now reads "will be moved to the
+  recycle bin" instead of "cannot be undone".
+- **Move semantics stay permanent.** A Save-as out of `.drafts/` deletes
+  the draft original with `{ trash: false }`, and the cross-vault move's
+  delete leg inside `renameEntry` keeps its plain `fsp.rm` — the content
+  already lives at the target, a bin copy would only litter.
+- **Volumes without a recycle bin** (network shares, some removable
+  drives) fall back to the permanent delete instead of failing the delete:
+  `vault:delete` / `vault:delete-many` resolve to the fallback paths and
+  the Files panel messages the user ("could not be moved to the recycle
+  bin and was deleted permanently").
+- `electron/trash-delete.ts` holds the disposition (injected
+  `trashItem`/`rm` IO — `shell` only exists inside a running Electron),
+  covered by `electron/trash-delete.spec.ts`; the out-of-Angular vitest
+  config now also runs `electron/**/*.spec.ts`.
+- Docs: runtime view §6.20 gained the delete flow; docs/05's IPC table
+  and VaultManager block updated.
+
 ### Milestone 51 — task due dates + priorities (req-37)
 
 - **Task lines carry inline metadata, Obsidian-Tasks compatible.** A due

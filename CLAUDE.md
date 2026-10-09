@@ -86,9 +86,11 @@ toolchain is removable by deleting `.tools/`). Never assume a bare `node`,
   The **tags plugin** (`plugins/tags/`) is the tag **data owner**: a
   per-vault index of *every* heading-delimited section (tagged or not —
   milestone 33, so text search reaches untagged notes), kept fresh through
-  the save/vault hook registries, plus the tag **prefix colors**
-  (Settings → Tags; longest `/`-namespace prefix wins, deterministic auto
-  palette otherwise). The tag **chrome is base**: editor pills +
+  the save/vault hook registries, plus the tag **prefix colors** and the
+  **tag rename/merge** (Settings → Tags; longest `/`-namespace prefix
+  wins, deterministic auto palette otherwise; the rename is a
+  grammar-faithful token rewrite over the M33 replace discipline,
+  descendants included by default, milestone 53). The tag **chrome is base**: editor pills +
   `#tag` completion (`src/app/editor/tags/`, fed by the base
   `TagVocabularyService` over `search:vocabulary` + `search:changed`) and
   a shared tag chip field (`TagField`, also handed to plugins as
@@ -150,7 +152,8 @@ toolchain is removable by deleting `.tools/`). Never assume a bare `node`,
   two plugin hosts) plus **runtime-loadable, in-process, trusted plugins**
   under `plugins/<id>/` — templates, meeting, tags, tasks, assistant
   (Assistant + Actions), browser, `ocr` (vision-LLM OCR, ADR-0050),
-  `outline` (the open note's heading tree, renderer-only), `sample`. Each is `plugin.json` +
+  `outline` (the open note's heading tree, renderer-only), `backlinks`
+  (the "what links here" panel, milestone 54), `sample`. Each is `plugin.json` +
   `main/` (CommonJS, Node) + `renderer/` (browser-context ESM + CSS over
   `plugin://`, **plain DOM**) + `shared/` types, built by
   `scripts/build-plugins.mjs` into `dist-electron/plugins/<id>/`.
@@ -223,7 +226,8 @@ Main process:
   **section-search provider** (the MCP `vault_search` backend)
 - The feature backends — `TagIndex`, `TaskIndex`, the assistant's
   ActionEngine (Actions) and ChatEngine/ChatStore (chat notes,
-  ADR-0048) — live in their plugins.
+  ADR-0048), the backlinks `BacklinkIndex` (milestone 54) — live in
+  their plugins.
   `suggestTags` (the Autotag prompt) stayed base:
   `electron/llm/tag-suggest.ts`
 - `LmStudioClient` — HTTP client for the local OpenAI-compatible endpoint
@@ -516,17 +520,17 @@ be called out explicitly (see Working Style below), not introduced silently.
   being the editor area above a **bottom dock** band — then a **28px
   status bar** (word/char count · context hint · Settings entry).
   - **Docks**: three (`left`, `right`, `bottom`), each an ordered list of
-    the eight panels — **Calendar, Files, Templates, Search, Tasks, Open
-    windows, Outline, Assistant** (the core ones registered by
-    the base; Templates/Search/Tasks/Assistant/Outline are provided by
-    plugins, ADR-0044). A
+    the nine panels — **Calendar, Files, Templates, Search, Tasks, Open
+    windows, Outline, Backlinks, Assistant** (the core ones registered by
+    the base; Templates/Search/Tasks/Assistant/Outline/Backlinks are
+    provided by plugins, ADR-0044). A
     panel is dragged between docks by its header, resized against its
     neighbour by a splitter, and collapsed to its 32px header. Every
     panel header is built the same way (sentence-case title + optional
     status value + the panel's icon controls + drag grip). Default:
-    Calendar/Files/Templates/Search/Tasks/Open windows/Outline left,
+    Calendar/Files/Templates/Search/Tasks/Open windows/Outline/Backlinks left,
     Assistant right, nothing in the bottom band, Templates + Search +
-    Tasks + Outline collapsed. Calendar takes its content height, not a
+    Tasks + Outline + Backlinks collapsed. Calendar takes its content height, not a
     flex share; expanded, its header is the **month/year dropdown**
     itself (no "Calendar" title) with **Today** (opens today's daily
     note) and the month arrows.
@@ -668,6 +672,31 @@ can dock into the three docks (milestone 20,
 [ADR-0038](docs/09_architecture_decisions/0038-editor-panes-in-docks.md)).
 The milestone log lives in
 [docs/milestones-done.md](docs/milestones-done.md).
+
+**Just code-complete: milestone 54 — the Backlinks panel (req-39)**:
+new `plugins/backlinks/` — a per-vault outlink index over the save/vault
+hooks (tag-index shape) plus a dock panel that follows the focused note
+and lists every linking file/section/line (click → open at line);
+resolution is the parity twin of the base wikilink service (grammar twin,
+sibling/shortest-path ambiguity, query-time against the current file
+list). v1: same-vault, `.md`-only, no unsaved buffers.
+**Not yet manually verified by the owner.**
+
+**Just code-complete: milestone 53 — tag rename / merge (req-38)**:
+Settings → Tags gained the merged, filterable tag list with
+"Rename…": a grammar-faithful token rewrite (`plugins/tags/shared/rename.ts`)
+over the M33 replace discipline (bundled per-file-diff confirmation,
+TOCTOU re-read, CRLF kept, per-vault checkboxes, `#old/…` descendants by
+default, merge-duplicate drop, `task` root rejected as target).
+**Not yet manually verified by the owner.**
+
+**Just code-complete: milestone 52 — deletes go to the OS recycle bin**:
+the Files panel's explicit deletes (single + multi-select) move the target
+and a `.md` note's assistant sidecar to the OS bin via `shell.trashItem`
+(`electron/trash-delete.ts`, injected IO); volumes without a bin fall back
+to the permanent delete and say so in a renderer message, while
+move-semantics deletes (Save-as out of `.drafts/`, the cross-vault move's
+delete leg) stay permanent. **Not yet manually verified by the owner.**
 
 **Just code-complete: milestone 51 — task due dates + priorities
 (req-37)**: task lines carry Obsidian-Tasks-compatible inline metadata —

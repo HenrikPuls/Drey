@@ -1052,13 +1052,24 @@ sequenceDiagram
     Note over User,Editor: drag a row instead → image-paste.ts TEMPLATE_DT_TYPE branch:<br/>read → strip → substitute → insert at posAtCoords(x,y)
 ```
 
-## 6.20 Files panel: copy / paste / duplicate / rename (ADR-0018 refresh model)
+## 6.20 Files panel: copy / paste / duplicate / rename / delete (ADR-0018 refresh model; delete → recycle bin since milestone 52)
 
 Context-menu rows on the file tree. "Copy" only stashes a `{ path, name }`
 on `VaultService.clipboard`; the fs work happens on "Paste" / "Duplicate" /
 "Rename". Each mutating IPC handler rebuilds the tag index (same reason as
 `vault:delete` — a `.md` file can move in or out of scope), and the
 renderer reloads the tree. A rename also re-points open tabs.
+
+**Delete goes to the OS recycle bin (milestone 52).** After the confirm
+dialog, `vault:delete(-many)` moves the target — and a `.md` note's
+`.{name}.chat.json` sidecar — via `shell.trashItem`
+(`electron/trash-delete.ts`, injected IO). A volume without a recycle bin
+(network share, some removable drives) falls back to the permanent
+`fsp.rm`; the IPC then resolves to the fallback paths and the Files panel
+messages the user. `{ trash: false }` keeps move-semantics callers
+permanent (Save-as out of `.drafts/`), and the cross-vault move's delete
+leg inside `renameEntry` keeps its plain `rm` — the content already lives
+at the target, a bin copy would only litter.
 
 ```mermaid
 sequenceDiagram
@@ -2026,6 +2037,15 @@ Replace touches only occurrences inside the matching sections (the
 search model, applied as a batch); the file-scope variant patches the
 open buffer directly (a normal undoable edit, no confirmation round).
 
+**Tag rename / merge (milestone 53)** rides the same discipline from
+Settings → Tags: `rename-preview`/`rename-apply` walk every `.md` of the
+selected vault(s) (templates folders excluded like the index),
+`renameTagInContent` rewrites the tag tokens the grammar sees (fences
+and code never match; `#old/…` descendants by default; a merge drops
+the duplicate it would create), and apply re-reads + re-patches each
+file right before its announced write — the bundled per-file-diff
+confirmation is the same modal.
+
 ## 6.42 Explorer double-click → tab ([ADR-0054](09_architecture_decisions/0054-opening-files-from-the-os.md))
 
 ```mermaid
@@ -2242,3 +2262,34 @@ sequenceDiagram
 The note is saved by the user like any edit; nothing is appended behind
 their back. With no note open, the calendar's **Today** button (or the
 quick-capture hotkey) opens the daily note first.
+
+## 6.46 The Backlinks panel — focus → query → open at the line (milestone 54, `plugins/backlinks/`)
+
+```mermaid
+sequenceDiagram
+    actor User
+    participant Panel as Backlinks panel (plugin renderer)
+    participant Doc as documents API
+    participant BE as plugin main (BacklinkIndex)
+    participant FS as VaultManager
+
+    Note over BE: boot: one coalesced sweep per vault (list + read every .md,<br/>extract [[targets]] — frontmatter/fences/code skipped)
+    BE-->>Panel: links-updated push
+    User->>Doc: focus a note (tab switch)
+    Doc-->>Panel: active-changed (path + vaultId)
+    Panel->>BE: backlinks {path, vaultId}
+    BE->>BE: buildNoteIndex(current file list)
+    BE->>BE: collectBacklinks: every OTHER file's link where<br/>resolveTargetLink(target, fromPath) === path<br/>(parity twin of the base WikilinkService)
+    BE-->>Panel: rows (path · heading · line · snippet)
+    User->>Panel: click a row
+    Panel->>Doc: open(row.path, row.line, {vaultId})
+```
+
+Freshness rides the hook registries (the tag-index shape): a save
+re-indexes that one file, a scoped vault-change write/delete does the
+same through the announcer, every other round (refresh, renames,
+registry changes) rebuilds the vaults — each mutation pushes
+`links-updated` and the panel re-queries. Resolution happens at QUERY
+time against the current file list, so a rename or a new file reshapes
+the backlinks without re-reading every note's links. Known v1 limits:
+same-vault only, `.md` files only, unsaved buffers don't count.

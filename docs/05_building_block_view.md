@@ -96,10 +96,12 @@ against: `manifest.ts` (`PluginManifest` + `validateManifest`),
 major mismatch ⇒ `incompatible`). Exempt from module-boundary lint, like
 `shared/ipc-api.ts`.
 
-**Plugins** (`plugins/<id>/`, nine shipped): `sample` (exercises every
+**Plugins** (`plugins/<id>/`, ten shipped): `sample` (exercises every
 surface), `templates`, `meeting`, `tags`, `tasks`, `assistant`
 (Assistant + Actions), `browser`, `ocr` (vision-LLM OCR, ADR-0050),
-`outline` (the open note's heading tree, renderer-only). Each
+`outline` (the open note's heading tree, renderer-only), `backlinks`
+(the "what links here" panel over a per-vault outlink index,
+milestone 54). Each
 is a full stack: `plugin.json` +
 `main/` (CommonJS, Node access — `electron/` and app-`shared/` CJS
 allowed) + `renderer/` (browser-context ES modules + CSS, served over
@@ -128,7 +130,7 @@ graph TB
         MCP["mcp/: VaultTools (vault_search via\nregistered SectionSearchProvider)"]
     end
     subgraph Plugins["plugins/<id>/  (dist-electron/plugins/<id>/)"]
-        P1["templates · meeting · tags ·\ntasks · assistant · browser · ocr ·\noutline · sample"]
+        P1["templates · meeting · tags ·\ntasks · assistant · browser · ocr ·\noutline · backlinks · sample"]
         P2["each: plugin.json + main/ (CJS,\nNode ok) + renderer/ (ESM + CSS over\nplugin://, plain DOM) + shared/"]
     end
     SDK["shared/plugin-api/\nmanifest · DreyPluginApi ·\nMainPluginContext · PLUGIN_API_VERSION"]
@@ -285,7 +287,7 @@ graph TB
         IpcHandlers["ipcMain.handle(...)"]
         Protocol["app:// protocol handler\n(serves the built renderer)"]
         Hotkey["globalShortcut (Ctrl+Alt+N)\n+ single-instance lock\n-> openTodayDailyNote()"]
-        VaultManager["VaultManager (electron/vault-manager.ts)\nmulti-vault registry (ADR-0051) + active vault +\nper-vault directory listing + file read/write/create +\ndir create + rename/copy/duplicate (sidecar-aware,\ncross-vault = copy+delete) + binary asset write\n(attachments/) + listAllMarkdownFiles\n(path-guarded per vault)"]
+        VaultManager["VaultManager (electron/vault-manager.ts)\nmulti-vault registry (ADR-0051) + active vault +\nper-vault directory listing + file read/write/create +\ndir create + rename/copy/duplicate (sidecar-aware,\ncross-vault = copy+delete) + delete → OS recycle bin\n(milestone 52, trash-delete.ts, permanent fallback) +\nbinary asset write (attachments/) +\nlistAllMarkdownFiles (path-guarded per vault)"]
         DailyNoteManager["DailyNoteManager (electron/daily-note.ts)\nensureTodayNote(): create <daily.dir>/ note from\ntemplates/daily.md, scaffold template;\nnoteContentFor(date): substituted template, no write"]
         TagIndex["TagIndex (electron/tag-index.ts)\nin-memory tag vocabulary + master metadata;\nrebuild() scans all .md frontmatter\n(skips daily/ + templates/); tag:list / tag:registry"]
         NoteManager["NoteManager (electron/note-manager.ts)\nnote:save pipeline: merge inline #tags -> frontmatter,\nbump updated:, (6b) route entries to master docs"]
@@ -827,8 +829,8 @@ env.ps1             Puts .tools/node on PATH for the current shell session
 | `vault:save-asset-from-url`          | ADR-0028. Downloads a web image dragged from a browser: main-process `fetch` (http(s) only, redirects + final-protocol re-check, 15 s timeout, 25 MB cap, image content-type / extension), then `saveAsset`. Rejects with a user-facing message.                                                                                                                                                                                                                                 |
 | `vault:create-file`                  | Creates an empty vault-relative file (missing parent folders included, `wx` flag); rejects if anything already exists there, the path escapes the vault, or no vault is active; resolves to the created path. Backs the file-tree right-click "New file".                                                                                                                                                                                                                     |
 | `vault:create-directory`             | Creates a vault-relative directory; same guards/rejections as `vault:create-file`. Backs "New folder".                                                                                                                                                                                                                                                                                                                                                                        |
-| `vault:delete`                       | Deletes one vault-relative file or folder (`fs.rm` recursive) plus its `.{name}.chat.json` sidecar; same path guard. Backs the file-tree "Delete". The renderer closes any open tab(s) under it first and refreshes the tag index after.                                                                                                                                                                                                                                      |
-| `vault:delete-many`                  | Bug-8: the Files panel's multi-select delete. Same per-path rules as `vault:delete`, one round trip, **one** vault-change re-index for the whole batch. Overlapping paths are fine (a missing target is not an error).                                                                                                                                                                                                                                                         |
+| `vault:delete`                       | Deletes one vault-relative file or folder — to the OS recycle bin by default (`shell.trashItem`, milestone 52; permanent `fsp.rm` fallback on volumes without a bin, `{ trash: false }` for move-semantics callers) — plus its `.{name}.chat.json` sidecar; same path guard. Resolves to the paths that fell back to a permanent delete. Backs the file-tree "Delete". The renderer closes any open tab(s) under it first and refreshes the tag index after.                                                                                                                                                                                                               |
+| `vault:delete-many`                  | Bug-8: the Files panel's multi-select delete. Same per-path rules as `vault:delete`, one round trip, **one** vault-change re-index for the whole batch. Overlapping paths are fine (a missing target is not an error). Resolves to the fallback (permanent-delete) paths; the panel messages the user when non-empty.                                                                                                                                                                                                                                                                                          |
 | `vault:pick-save-path`               | Native save dialog rooted at the vault; forces a `.md` extension and **rejects a target outside the vault**. Returns the vault-relative path, or `null` on cancel. Backs `EditorService.saveAs()` / the first save of an export scratch tab.                                                                                                                                                                                                                                  |
 | `daily:build-content`                | Returns the substituted `templates/daily.md` for a given `YYYY-MM-DD`, **without** creating the file or scaffolding the template. Backs the calendar's "open a draft for a day with no note yet". Rejects if no vault is active or the date is malformed.                                                                                                                                                                                                                     |
 | `daily:open`                         | `webContents.send` / `ipcRenderer.on` — **main → renderer** push, fired by the quick-capture hotkey after `DailyNoteManager.ensureTodayNote()`. Payload: the vault-relative path of today's daily note. Preload exposes it as `onOpenDailyNote(listener)` returning an unsubscribe.                                                                                                                                                                                           |

@@ -1,0 +1,12 @@
+{
+  "id": "backlinks",
+  "name": "Backlinks",
+  "version": "1.0.0",
+  "apiVersion": 1,
+  "description": "What links here: a per-vault outlink index over [[wikilinks]] (kept fresh through the save/vault hooks) and the Backlinks dock panel that follows the focused note and opens every linking file at the line.",
+  "author": "Drey",
+  "main": "main/index.js",
+  "renderer": "renderer/index.js",
+  "css": ["renderer/backlinks.css"],
+  "permissions": ["documents", "vault", "main-process"]
+}

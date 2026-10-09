@@ -206,3 +206,21 @@ One coherent evolution of the tag system, keeping every earlier decision:
   File scope patches the open buffer (undoable); vault/all scope goes
   through one bundled confirmation (per-file diffs) and re-reads +
   re-matches every file right before writing (TOCTOU), CRLF preserved.
+
+## Later change — milestone 53: tag rename / merge
+
+Settings → Tags gained the **tag list** (every vault's vocabulary merged,
+filterable) with **Rename/Merge**. The rename is a grammar-faithful token
+rewrite (`plugins/tags/shared/rename.ts`), not a text replace: it walks
+the same `extractTagOccurrences` the index uses, so fenced and inline
+code, URL fragments and `#oldnet`-style near-names are never touched.
+Nested `#old/…` tags come along by default (the tail segments keep their
+spelling); a **merge** (target tag already exists) drops the duplicate it
+would create on a line — pre-existing duplicates are the user's text and
+stay. Backend rides the milestone-33 replace discipline: templates
+folders excluded like the index, TOCTOU re-read + re-patch before every
+write, CRLF preserved, announced writes, one bundled per-file-diff
+confirmation; vaults are individually selectable when several carry the
+tag. Renaming INTO the reserved `task` root is rejected. This is the
+planned remedy for the tag-sprawl risk (`#sailing` vs. `#boat` can now
+be consolidated); near-duplicate *detection* stays out of scope.

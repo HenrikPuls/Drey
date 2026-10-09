@@ -133,10 +133,18 @@ const dreyApi: DreyApi = {
     ipcRenderer.invoke(IPC_CHANNELS.vaultCopy, sourceRelativePath, destDirRelativePath, sourceVaultId, destVaultId),
   duplicateVaultEntry: (sourceRelativePath: string, vaultId?: string): Promise<string> =>
     ipcRenderer.invoke(IPC_CHANNELS.vaultDuplicate, sourceRelativePath, vaultId),
-  deleteVaultEntry: (relativePath: string, vaultId?: string): Promise<void> =>
-    ipcRenderer.invoke(IPC_CHANNELS.vaultDelete, relativePath, vaultId),
-  deleteVaultEntries: (relativePaths: string[], vaultId?: string): Promise<void> =>
-    ipcRenderer.invoke(IPC_CHANNELS.vaultDeleteMany, relativePaths, vaultId),
+  deleteVaultEntry: (
+    relativePath: string,
+    vaultId?: string,
+    opts?: { trash?: boolean },
+  ): Promise<string[]> =>
+    ipcRenderer.invoke(IPC_CHANNELS.vaultDelete, relativePath, vaultId, opts),
+  deleteVaultEntries: (
+    relativePaths: string[],
+    vaultId?: string,
+    opts?: { trash?: boolean },
+  ): Promise<string[]> =>
+    ipcRenderer.invoke(IPC_CHANNELS.vaultDeleteMany, relativePaths, vaultId, opts),
   pickSavePath: (suggestedName: string, vaultId?: string): Promise<string | null> =>
     ipcRenderer.invoke(IPC_CHANNELS.vaultPickSavePath, suggestedName, vaultId),
   exportNotePdf: (request: PdfExportRequest): Promise<string | null> =>
