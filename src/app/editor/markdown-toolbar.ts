@@ -1,6 +1,9 @@
-import { ChangeDetectionStrategy, Component, input, output, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, inject, input, output, signal } from '@angular/core';
 
-import { Icon } from '../icons/icon';
+import type { ToolbarButtonContrib } from '../../../shared/plugin-api/renderer';
+import { Icon, IconName } from '../icons/icon';
+import { KeybindingService } from '../keybindings';
+import { ToolbarContributionsService } from '../plugin-host';
 import { ToolbarAction } from './toolbar-commands';
 
 /**
@@ -191,6 +194,22 @@ import { ToolbarAction } from './toolbar-commands';
           </div>
         }
       </div>
+
+      <!-- Plugin buttons (SDK 1.16), after the built-in ones. -->
+      @if (contributed().length > 0) {
+        <span class="divider" aria-hidden="true"></span>
+        @for (button of contributed(); track button) {
+          <button
+            type="button"
+            class="icon-btn tb-btn"
+            [title]="button.title"
+            [attr.aria-label]="button.title"
+            (click)="runContributed(button)"
+          >
+            <app-icon [name]="iconOf(button)" [size]="14" [strokeWidth]="1.5" />
+          </button>
+        }
+      }
     </div>
   `,
   styles: `
@@ -285,6 +304,9 @@ export class MarkdownToolbar {
   /** Picture files chosen through the image button; the surface saves them into the vault. */
   readonly imageFiles = output<File[]>();
 
+  private readonly keys = inject(KeybindingService);
+  protected readonly contributed = inject(ToolbarContributionsService).buttons;
+
   protected readonly menuOpen = signal<'heading' | 'list' | 'table' | null>(null);
 
   /** Viewport anchor for the open menu, taken from the trigger button. */
@@ -343,6 +365,20 @@ export class MarkdownToolbar {
     el.value = '';
     if (files.length > 0) {
       this.imageFiles.emit(files);
+    }
+  }
+
+  /** The icon component draws an empty glyph for a name it does not know. */
+  protected iconOf(button: ToolbarButtonContrib): IconName {
+    return button.icon as IconName;
+  }
+
+  protected runContributed(button: ToolbarButtonContrib): void {
+    this.menuOpen.set(null);
+    if (button.commandId !== undefined) {
+      this.keys.run(button.commandId);
+    } else {
+      button.run?.();
     }
   }
 

@@ -72,6 +72,7 @@ export type IconName =
   | 'panel-left'
   | 'panel-right'
   | 'code'
+  | 'shapes'
   | 'trash';
 
 const ICONS: Record<IconName, readonly IconShape[]> = {
@@ -237,6 +238,12 @@ const ICONS: Record<IconName, readonly IconShape[]> = {
     { kind: 'path', d: 'M10 9H8' },
     { kind: 'path', d: 'M16 13H8' },
     { kind: 'path', d: 'M16 17H8' },
+  ],
+  // Triangle, square, circle -- the usual mark for diagrams (ADR-0064).
+  shapes: [
+    { kind: 'path', d: 'M8.3 10a.7.7 0 0 1-.626-1.079L11.4 3a.7.7 0 0 1 1.198-.043L16.3 8.9a.7.7 0 0 1-.572 1.1Z' },
+    { kind: 'path', d: 'M4 14h5a1 1 0 0 1 1 1v5a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1v-5a1 1 0 0 1 1-1z' },
+    { kind: 'circle', cx: 17.5, cy: 17.5, r: 3.5 },
   ],
   layers: [
     { kind: 'path', d: 'm12.83 2.18a2 2 0 0 0-1.66 0L2.6 6.08a1 1 0 0 0 0 1.83l8.58 3.91a2 2 0 0 0 1.66 0l8.58-3.9a1 1 0 0 0 0-1.83Z' },

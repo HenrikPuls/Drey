@@ -6,10 +6,12 @@ import { ActionOutcome, NoteSaveRequest } from '../../../shared/ipc-api';
 import { isAutoSavePath, isChatNotePath } from '../../../shared/structural-folders';
 import { ConflictService } from '../conflict';
 import { EditorCommandsService } from '../editor/editor-commands.service';
+import { refreshChangedAssets } from '../editor/vault-image';
 import { EditorPrefsService, EditorViewMode } from '../editor/editor-prefs.service';
 import { PaneService } from '../panes/pane.service';
 import { VaultService } from '../vault';
 import { ConfirmDialogService } from './confirm-dialog.service';
+import { FileOpenerRegistry } from './file-opener-registry.service';
 import { SettingsService } from './settings.service';
 
 /** Re-exported for existing importers (`Editor`, specs); defined in `markdown-frontmatter.ts`. */
@@ -184,6 +186,7 @@ export class EditorService {
   private readonly dialogs = inject(ConfirmDialogService);
   private readonly settings = inject(SettingsService);
   private readonly conflicts = inject(ConflictService);
+  private readonly fileOpeners = inject(FileOpenerRegistry);
 
   private readonly docs = signal<OpenDoc[]>([]);
 
@@ -429,9 +432,12 @@ export class EditorService {
     // clean tabs among them re-read from disk here. Lives for the app's
     // lifetime -- no teardown.
     if (typeof window !== 'undefined' && typeof window.dreyApi?.onVaultChanged === 'function') {
-      window.dreyApi.onVaultChanged((push) =>
-        void this.reloadFromVaultChange(push.vaultId, push.paths),
-      );
+      window.dreyApi.onVaultChanged((push) => {
+        if (push.paths !== undefined && typeof document !== 'undefined') {
+          refreshChangedAssets(push.vaultId, push.paths, document);
+        }
+        void this.reloadFromVaultChange(push.vaultId, push.paths);
+      });
     }
   }
 
@@ -638,6 +644,14 @@ export class EditorService {
       if (opts.pinned === true) {
         this.setPinned(key, true);
       }
+      return;
+    }
+
+    // A plugin that claims this name suffix opens it as its own doc kind
+    // (SDK 1.16, ADR-0064) -- asked first, because `.drawio.svg` would
+    // otherwise be an image.
+    if (this.fileOpeners.open(relativePath, resolvedVault)) {
+      this.closeReplacedTab(victim);
       return;
     }
 

@@ -55,7 +55,7 @@ const relativeModulePatternsDeepOnly = (mods) =>
 
 export default tseslint.config(
   {
-    ignores: ['dist/**', 'dist-electron/**', 'dist-plugins/**', '.angular/**', '.tools/**', 'node_modules/**'],
+    ignores: ['dist/**', 'dist-electron/**', 'dist-plugins/**', '.angular/**', '.tools/**', 'node_modules/**', 'plugins/*/vendor/**'],
   },
   {
     // A full lint pass (which would use these directives) is not set up yet;

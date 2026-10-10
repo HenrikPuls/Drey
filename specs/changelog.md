@@ -31,6 +31,58 @@ recorded as an explicit decision. The parity checklist lives in
   (milestone 35): shown as the pin glyph, removable via "Unpin tab",
   and it rides the session snapshot across restarts.
 
+### Milestone 64 — draw.io diagrams (req-19)
+
+**Not yet manually verified by the owner.**
+
+([ADR-0064](../docs/09_architecture_decisions/0064-drawio-diagrams.md))
+
+- **Diagrams open and are edited in Drey.** A `.drawio.svg`,
+  `.drawio.png` or `.drawio` file opens in a tab with the full draw.io
+  editor. The editor ships with Drey and runs offline; it follows the
+  app's dark or light theme.
+- **A diagram file is a picture.** `.drawio.svg` and `.drawio.png` are an
+  ordinary SVG / PNG with the diagram inside. A note embeds one like any
+  image (`![diagram](attachments/x.drawio.svg)`), and it shows in Live
+  Preview, the PDF export, on GitHub and in Obsidian without a viewer.
+- **Ways in.** Right-click an embedded diagram → **Edit diagram**.
+  **Insert diagram** (creates the file in `attachments/` beside the
+  note, inserts the embed, opens the editor): the shapes button in the
+  formatting bar, `/diagram` in the slash menu, or right-click in a
+  note. File menu / command palette → **New diagram**. A diagram file
+  dragged from the Files panel into a note is embedded like any image.
+- **A new diagram is a visible placeholder** (a dashed frame, "Empty
+  diagram") until it is first drawn. The first build wrote a 1 px
+  picture, which was invisible in a note; such files, and any other
+  picture of a few pixels, now get a box with room for the hover
+  buttons.
+- **The format of new diagrams is a setting** (Settings → Diagrams): SVG
+  (default) or PNG. Existing diagrams keep their format.
+- **Saved automatically** — about a second after the last change and
+  when the tab closes. There is no "Unsaved" state and no exit prompt
+  for diagrams.
+- **The picture in the note follows.** After a save, every open note
+  that shows the diagram reloads it. (This also covers any image changed
+  on disk while the app knows about the change.)
+- **Plugin** `drawio` ("Diagrams" in Settings → Panels & plugins). With
+  it disabled the picture formats open in the image tab and `.drawio` as
+  text, as before.
+- **SDK 1.16**: `documents.registerFileOpener` (a plugin opens files by
+  name suffix), `vault.readBinary` / `vault.writeBinary`, `announce` on
+  vault writes, and `editor.registerToolbarButtons` (plugin buttons in
+  the formatting bar). New icon `shapes`.
+- **Build**: `npm run fetch:drawio` downloads the pinned draw.io release
+  (checksum-verified, trimmed from 118 MB to 55 MB); `npm run pack` runs
+  it. The web app is not in git.
+- Deviation from the plan agreed for this milestone: PNG as a second
+  picture format and the format setting were added on request during the
+  work; binary read / write and announced writes joined the SDK because
+  of them and because a plugin's write did not reach the file tree.
+- Limits: keys pressed in the editor frame go to draw.io, not to Drey's
+  shortcuts; no conversion between formats; a plain `.drawio` cannot be
+  embedded; a diagram renamed while open shows "Diagram not found" until
+  reopened; no local history for diagrams.
+
 ### Milestone 63 — MCP client, web fetch, assistant tool groups (Req-31)
 
 **Not yet manually verified by the owner.**

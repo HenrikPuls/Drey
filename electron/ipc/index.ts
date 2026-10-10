@@ -32,6 +32,7 @@ import { registerQueryHandlers } from './query-handlers';
 import { registerSessionHandlers } from './session-handlers';
 import { registerSpellHandlers } from './spell-handlers';
 import { registerVaultHandlers } from './vault-handlers';
+import type { ExternalVaultChanges } from '../vault-change-announcer';
 
 export { McpWriteBridge } from './mcp-write-bridge';
 export { ToolApprovalBridge } from './tool-approval-bridge';
@@ -61,6 +62,7 @@ export interface IpcHandlerDeps {
   syncMcpHttp: () => Promise<void>;
   syncVaultWatcher: () => Promise<void>;
   fullVaultRefresh: () => void;
+  announceVaultChange: (changes: ExternalVaultChanges) => void;
   pluginHost: PluginHost;
 }
 

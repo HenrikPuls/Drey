@@ -183,3 +183,34 @@ the mixed case, the templates page for the pure-field case.
   shared confirmation diff and resolves whether the user approved it.
   It writes nothing; write after a `true`. Use it when your tool group's
   write rule is "confirm".
+
+## SDK 1.16 — file openers, binary files, announced writes
+
+- `api.documents.registerFileOpener({ extensions, open })` lets your
+  plugin open vault files with certain name suffixes instead of the base
+  text / image / PDF routing. `extensions` are lower-case suffixes with
+  the dot (`['.drawio.svg', '.drawio']`); across all plugins the longest
+  match wins, so a compound suffix beats the base's `.svg`. In `open(path,
+  vaultId)` add a tab of your own doc kind (`documents.addDoc`) under a
+  scheme key that encodes vault and path. If `open` throws, the file
+  opens the base way. With your plugin disabled the files simply open as
+  before — choose formats that degrade well (ADR-0064).
+- `api.vault.readBinary(path)` / `api.vault.writeBinary(path, bytes)`
+  read and overwrite a binary file at an exact path. Use them for a file
+  your plugin owns and saves in place; `saveAsset` stays the way to stage
+  a new attachment under a name the host picks.
+- `api.vault.writeFile(path, content, { announce: true })` (and the same
+  option on `writeBinary`) also runs the change round for that path: the
+  file tree shows a new file and pictures of the file reload. Without it
+  a write is silent towards the renderer. Do not announce high-frequency
+  writes — each one reloads the vault's tree.
+- `api.editor.registerToolbarButtons([{ icon, title, run | commandId }])`
+  appends icon buttons to the formatting bar of every document editor.
+  `icon` is a name from the host's set (as for `api.ui.icon`), `title` is
+  both tooltip and accessible name. A button acts on the focused
+  document: use `api.documents.insertAtCursor`. That insert lands on the
+  editor's next render — wait for it (the buffer contains your text)
+  before you open a tab that may replace the editor.
+- A doc kind has no dirty state. A plugin tab that edits a file saves on
+  its own (debounced, and when it unmounts); see the diagrams plugin's
+  `embed-session.ts` for the pattern.

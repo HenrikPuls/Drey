@@ -96,7 +96,8 @@ against: `manifest.ts` (`PluginManifest` + `validateManifest`),
 major mismatch ⇒ `incompatible`). Exempt from module-boundary lint, like
 `shared/ipc-api.ts`.
 
-**Plugins** (`plugins/<id>/`, ten shipped): `sample` (exercises every
+**Plugins** (`plugins/<id>/`, eleven shipped — `drawio`, the diagram
+editor tab of milestone 64, is described in §5.37): `sample` (exercises every
 surface), `templates`, `meeting`, `tags`, `tasks`, `assistant`
 (Assistant + Actions), `browser`, `ocr` (vision-LLM OCR, ADR-0050),
 `outline` (the open note's heading tree, renderer-only), `backlinks`
@@ -2642,3 +2643,16 @@ main-side plugin writes.
 | Settings | `src/app/settings/tools/` | "Assistant tools": the group switches and rules, and the server list (name, connection, command / arguments / environment or address / headers, approval, live status, reconnect). Settings → MCP keeps the server offered to other programs. |
 | IPC | `shared/ipc-api.ts` | `tools:status`, `tools:reconnect`, `tools:approval-request` / `tools:approval-decision`. |
 | Drey's own server | `electron/mcp/server.ts` + `http-transport.ts` | Same milestone: the protocol layer is the SDK (`createVaultMcpServer`, one stateless Streamable HTTP transport per `POST /mcp`, JSON answers). `isLocalHost` / `isLocalOrigin` refuse anything that is not this machine — including a web page in a local browser. `VaultTools` and the dependency-free `stdio-bridge.ts` are unchanged apart from the bridge's `Accept` header. |
+
+## 5.37 draw.io diagrams (milestone 64, [ADR-0064](09_architecture_decisions/0064-drawio-diagrams.md))
+
+| Block | Where | Responsibility |
+| --- | --- | --- |
+| File openers | `src/app/services/file-opener-registry.service.ts` | `FileOpenerRegistry` (SDK 1.16, `documents.registerFileOpener`): a plugin claims vault files by name suffix; the longest suffix wins. `EditorService.openFile` asks it before its own text / image / PDF routing; an opener that throws falls back to that routing. |
+| Diagram files | `plugins/drawio/renderer/diagram-file.ts` | Pure: the three formats (`.drawio.svg`, `.drawio.png`, `.drawio`), the tab key `drawio://<vaultId>/<path>`, where a new diagram goes (`attachments/` beside the note), blank files, and reading / replacing the diagram XML inside an SVG (`content` attribute) or a PNG (`tEXt` chunk `mxfile`). |
+| Embed session | `plugins/drawio/renderer/embed-session.ts` | `EmbedSession`: draw.io's JSON embed protocol and the autosave rule — load on `init`, export on every change (one in flight), debounced write, flush on close, the newest XML put into the last picture when the tab closes mid-export. Frame, file and clock are ports. |
+| Plugin entry | `plugins/drawio/renderer/index.ts` | The `drawio` doc kind (an iframe over `plugin://drawio/webapp/`), the file opener, "Edit diagram" / "Insert diagram" in the editor context menu, the formatting-bar button, the `drawio.new` command + File row, and the Settings → Diagrams page (format of new diagrams, in the plugin's own config). `slash.ts` adds `/diagram` to the slash menu's "Formatting" section. |
+| Toolbar buttons | `src/app/plugin-host/menu-contributions.service.ts`, `src/app/editor/markdown-toolbar.ts` | `ToolbarContributionsService` (SDK 1.16, `editor.registerToolbarButtons`): plugin icon buttons, rendered after the built-in ones of the formatting bar. |
+| Web app | `plugins/drawio/vendor/webapp/` (gitignored) | draw.io itself, fetched by `scripts/fetch-drawio.mjs` from the release pinned in `plugins/drawio/drawio-version.json`, trimmed to what the offline embed loads; copied to `dist-electron/plugins/drawio/webapp/` by `build-plugins.mjs`. |
+| Binary + announced writes | `electron/ipc/vault-handlers.ts`, `VaultManager` | `vault:read-binary` / `vault:write-binary` (a file at an exact path, unlike `saveAsset`), and `announce` on both writes: the change round for that path (plugins + `vault:changed` push) instead of the plugins-only event. SDK: `vault.readBinary`, `vault.writeBinary`, `vault.writeFile(…, { announce })`. |
+| Picture refresh | `src/app/editor/vault-image.ts` | `refreshChangedAssets`: on a `vault:changed` push with paths, a per-path revision goes into the `drey-asset://` URL (`?v=<n>`) and pictures already on screen get the new URL — a saved diagram shows in every open note. |

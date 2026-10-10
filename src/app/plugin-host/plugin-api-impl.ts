@@ -36,10 +36,12 @@ import { extractWikilinks } from '../editor/wikilinks/wikilink';
 import { HOST_CODEMIRROR } from './runtime-exports';
 import { EditorExtensionRegistry } from './editor-extension-registry.service';
 import { DropDecoderRegistry } from './drop-decoder-registry.service';
+import { FileOpenerRegistry } from '../services/file-opener-registry.service';
 import { DocKindRegistry } from './doc-kind-registry.service';
 import {
   EditorContextMenuRegistry,
   MenuContributionsService,
+  ToolbarContributionsService,
 } from './menu-contributions.service';
 
 /** Listener channels the host service backs with its own `effect()`s. */
@@ -74,9 +76,11 @@ export class PluginApiFactory {
   private readonly overlayGuard = inject(OverlayGuardService);
   private readonly extensions = inject(EditorExtensionRegistry);
   private readonly dropDecoders = inject(DropDecoderRegistry);
+  private readonly fileOpeners = inject(FileOpenerRegistry);
   private readonly docKinds = inject(DocKindRegistry);
   private readonly menuContributions = inject(MenuContributionsService);
   private readonly contextMenuItems = inject(EditorContextMenuRegistry);
+  private readonly toolbarButtons = inject(ToolbarContributionsService);
   private readonly log = inject(LogService);
   /**
    * Resolved LAZILY inside `createTagField`: `TagVocabularyService` needs
@@ -179,6 +183,7 @@ export class PluginApiFactory {
           }
           this.editor.addPluginDoc(kind, key, name);
         },
+        registerFileOpener: (opener) => track(this.fileOpeners.register(opener)),
         rename: (path, name) => this.editor.renameDoc(path, name),
         insertAtCursor: (text) => {
           if (text === '' || this.editor.activePath() === null || this.editor.activeKind() !== 'text') {
@@ -234,7 +239,20 @@ export class PluginApiFactory {
         listVaults: () => window.dreyApi.listVaults(),
         readFile: (path, opts) => window.dreyApi.readVaultFile(path, opts?.vaultId),
         writeFile: (path, content, opts) =>
-          window.dreyApi.writeVaultFile(path, content, opts?.vaultId),
+          window.dreyApi.writeVaultFile(
+            path,
+            content,
+            opts?.vaultId,
+            opts?.announce === true ? { announce: true } : undefined,
+          ),
+        readBinary: (path, opts) => window.dreyApi.readVaultBinary(path, opts?.vaultId),
+        writeBinary: (path, bytes, opts) =>
+          window.dreyApi.writeVaultBinary(
+            path,
+            bytes,
+            opts?.vaultId,
+            opts?.announce === true ? { announce: true } : undefined,
+          ),
         saveAsset: (bytes, ext, noteRelPath, opts) =>
           invokeBackend('drey.vault.saveAsset', {
             bytes,
@@ -337,6 +355,7 @@ export class PluginApiFactory {
           track(this.extensions.register(pluginId, slot, factory)),
         registerDropDecoder: (decoder) => track(this.dropDecoders.register(decoder)),
         registerContextMenuItems: (items) => track(this.contextMenuItems.register(items)),
+        registerToolbarButtons: (buttons) => track(this.toolbarButtons.register(buttons)),
       },
       search: {
         // Routed through the host's reserved methods so the surface reads

@@ -16,6 +16,10 @@
 /.tools/
 /handoff/
 
+# The draw.io web app the diagrams plugin embeds -- fetched by
+# scripts/fetch-drawio.mjs (pinned release + checksum), never checked in.
+/plugins/*/vendor/
+
 # Node
 /node_modules
 npm-debug.log

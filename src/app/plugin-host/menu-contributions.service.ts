@@ -3,6 +3,7 @@ import type {
   ContextMenuItem,
   EditorContextMenuTarget,
   MenuContribution,
+  ToolbarButtonContrib,
   Unsubscribe,
 } from '../../../shared/plugin-api/renderer';
 
@@ -42,6 +43,25 @@ export class MenuContributionsService {
   /** Derived per-menu row list, flattened in registration order. */
   itemsFor(menu: ContributableMenu): readonly MenuContribution[] {
     return this.entries().flatMap((e) => e.items.filter((item) => item.menu === menu));
+  }
+}
+
+/**
+ * The formatting-bar seam (SDK 1.16, ADR-0064): plugins append icon
+ * buttons to the editor's formatting bar, after the built-in ones, in
+ * registration order.
+ */
+@Injectable({ providedIn: 'root' })
+export class ToolbarContributionsService {
+  private readonly entries = signal<readonly (readonly ToolbarButtonContrib[])[]>([]);
+
+  readonly buttons = computed(() => this.entries().flat());
+
+  register(buttons: readonly ToolbarButtonContrib[]): Unsubscribe {
+    this.entries.update((list) => [...list, buttons]);
+    return () => {
+      this.entries.update((list) => list.filter((entry) => entry !== buttons));
+    };
   }
 }
 

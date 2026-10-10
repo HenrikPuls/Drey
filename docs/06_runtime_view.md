@@ -2596,3 +2596,44 @@ sequenceDiagram
 call. A denial is an ordinary tool result: the model reads it and
 answers without the call. Cancelling the generation aborts a running
 call through the task's abort signal.
+
+## 6.54 Edit a diagram → autosave → the picture in the note follows (milestone 64, [ADR-0064](09_architecture_decisions/0064-drawio-diagrams.md))
+
+```mermaid
+sequenceDiagram
+    actor User
+    participant ES as EditorService.openFile
+    participant Reg as FileOpenerRegistry
+    participant Tab as Diagram tab (plugin)
+    participant Sess as EmbedSession
+    participant Frame as draw.io frame (plugin://drawio/webapp)
+    participant Main as vault handlers (main)
+    participant Img as Pictures in open notes
+
+    User->>ES: open plan.drawio.svg (Files panel, link, "Edit diagram")
+    ES->>Reg: open(path, vaultId)
+    Reg->>Tab: longest suffix → addDoc('drawio', drawio://vault/path)
+    Tab->>Main: read the file (text, or bytes for a PNG)
+    Tab->>Tab: take the diagram XML out of the picture
+    Tab->>Frame: load index.html?embed=1&proto=json&offline=1
+    Frame-->>Sess: {event: init}
+    Sess->>Frame: {action: load, xml, autosave: 1}
+    Frame-->>Sess: {event: load}
+    User->>Frame: draws
+    Frame-->>Sess: {event: autosave, xml}
+    alt picture format (.drawio.svg / .drawio.png)
+        Sess->>Frame: {action: export, format: xmlsvg | xmlpng}
+        Frame-->>Sess: {event: export, data: picture with the diagram inside}
+    end
+    Sess->>Sess: wait for 1 s without a change
+    Sess->>Main: vault.writeFile / writeBinary { announce }
+    Main-->>Img: vault:changed { vaultId, paths }
+    Img->>Img: drey-asset URL gets ?v=n → the picture reloads
+    Sess->>Frame: {action: status, modified: false}
+```
+
+A plain `.drawio` skips the export: the XML of the `autosave` event is
+written as it is. Closing the tab writes what is pending at once; if an
+export is still out, the last picture is written with the newest XML put
+into it. A file that disappears while its tab is open stops the session
+("Diagram not found") instead of recreating the old path.

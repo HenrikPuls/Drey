@@ -54,10 +54,17 @@ Order set on 2026-10-10 after the milestone 33–58 verification round.
 command palette as milestone 59, the conflict dialog + local note
 history as milestone 60. The 2026-10-10 startup work followed: analysis
 + speed as milestone 61, the splash window as milestone 62. Then Req-31,
-the MCP client with the assistant's tool groups, as milestone 63.)
+the MCP client with the assistant's tool groups, as milestone 63, and
+req-19, draw.io diagrams, as milestone 64.)
 
-1. **req-19 — draw.io**, then the **Req-2 Office remainder** (both in the
-   backlog below).
+1. The **Req-2 Office remainder** (in the backlog below). The file-opener
+   seam of milestone 64 (a plugin opens files by name suffix) is the
+   intended way in.
+
+Follow-ups of milestone 64 (ADR-0064), none committed: a dirty state /
+manual save for plugin tabs, "New diagram" in the Files panel's context
+menu, converting a diagram between SVG and PNG, embedding a plain
+`.drawio`, letting the assistant read a diagram.
 
 Follow-ups of milestone 63 (ADR-0063), none committed: OAuth-protected
 MCP servers, a per-question tools switch in the composer, handing the
@@ -99,7 +106,6 @@ on interactive use.
 - **req-13** — footnote rendering in Live Preview (needs a custom Lezer
   extension). (`Ctrl`-click for external links shipped as Req-5, wikilinks
   as req-20.)
-- **req-19** — draw.io view/edit integration.
 - **req-27** — review internal prompts (partial: ask protocol reworked in
   milestone 31, ADR-0053).
 - **Math (KaTeX) and callouts in Live Preview** — neither renders today

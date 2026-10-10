@@ -36,6 +36,10 @@ files:
   # Plugin renderer stylesheets (the .js/.json globs above already carry
   # the plugin mains, manifests and renderer modules).
   - 'dist-electron/plugins/**/*.css'
+  # The draw.io web app the diagrams plugin embeds (ADR-0064): every file
+  # type, served as-is over plugin://. Present only after
+  # `npm run fetch:drawio` -- `npm run pack` runs it.
+  - 'dist-electron/plugins/drawio/webapp/**'
   - 'dist/drey/browser/**'
   - 'package.json'
   - '!dist-electron/**/*.map'

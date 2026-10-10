@@ -96,6 +96,14 @@ for (const entry of readdirSync(pluginsDir)) {
       }
     }
   }
+  // Third-party runtime files a plugin serves as they are (the diagrams
+  // plugin's draw.io web app, fetched by scripts/fetch-drawio.mjs and not
+  // in git): `plugins/<id>/vendor/*` lands at the plugin root, so
+  // `vendor/webapp/` is `plugin://<id>/webapp/`. Absent when not fetched.
+  const vendorSrc = path.join(pluginDir, 'vendor');
+  if (existsSync(vendorSrc)) {
+    cpSync(vendorSrc, pluginOut, { recursive: true });
+  }
 }
 
 rmSync(rendererOut, { recursive: true, force: true });

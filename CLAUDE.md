@@ -168,6 +168,22 @@ toolchain is removable by deleting `.tools/`). Never assume a bare `node`,
   `mcp__<id>__<tool>`. `mcp.enabled` / `mcp.yolo` only govern the
   server Drey offers to other programs. Opt-in, off by default — a
   further exception to "no cloud calls".
+- **draw.io diagrams** (milestone 64,
+  [ADR-0064](docs/09_architecture_decisions/0064-drawio-diagrams.md)): the `drawio` plugin opens `.drawio.svg` /
+  `.drawio.png` / `.drawio` files in a tab holding draw.io's own web
+  app — bundled, offline, in an iframe over `plugin://drawio/webapp/`
+  (fetched by `npm run fetch:drawio` from a pinned, checksummed release;
+  not in git). The two picture formats are ordinary images that carry
+  the diagram, so a note embeds them with the existing image embed and
+  the PDF export needs nothing; which one a new diagram gets is
+  Settings → Diagrams (SVG by default). A diagram is inserted from the
+  formatting bar's shapes button, `/diagram` or the context menu; until
+  first drawn it is a placeholder picture. Diagram tabs **save
+  automatically**. SDK 1.16 added what it needed: file openers by name
+  suffix (`FileOpenerRegistry`, asked first in `EditorService.openFile`),
+  binary read / write, `announce` on vault writes, and plugin buttons in
+  the formatting bar (`ToolbarContributionsService`); a changed picture
+  now reloads in open notes (`refreshChangedAssets`).
 - **Runtime plugin system**
   ([ADR-0044](docs/09_architecture_decisions/0044-runtime-plugin-system.md)):
   a **base application** (shell, editor + panes, vault/note IO, session
@@ -176,7 +192,8 @@ toolchain is removable by deleting `.tools/`). Never assume a bare `node`,
   under `plugins/<id>/` — templates, meeting, tags, tasks, assistant
   (Assistant + Actions), browser, `ocr` (vision-LLM OCR, ADR-0050),
   `outline` (the open note's heading tree, renderer-only), `backlinks`
-  (the "what links here" panel, milestone 54), `sample`. Each is `plugin.json` +
+  (the "what links here" panel, milestone 54), `drawio` (the diagram
+  editor tab, milestone 64), `sample`. Each is `plugin.json` +
   `main/` (CommonJS, Node) + `renderer/` (browser-context ESM + CSS over
   `plugin://`, **plain DOM**) + `shared/` types, built by
   `scripts/build-plugins.mjs` into `dist-electron/plugins/<id>/`.
@@ -787,12 +804,12 @@ Open work and its order live in [specs/roadmap.md](specs/roadmap.md)
 ("Next milestones") — that list is binding; keep this summary in step
 with it.
 
-- **Last completed:** milestone 63 — MCP client, built-in `web_fetch`
-  and the assistant's tool groups (ADR-0063, Req-31). Milestones 59–63
-  are code-complete, owner verification pending.
+- **Last completed:** milestone 64 — draw.io diagrams (ADR-0064,
+  req-19). Milestones 59–64 are code-complete, owner verification
+  pending.
 - **Next, in order:**
-  1. draw.io (req-19), then the Office remainder of Req-2 (needs a
-     rendering strategy discussion first)
+  1. the Office remainder of Req-2 (needs a rendering strategy
+     discussion first)
 
 A milestone that is code-complete but not yet verified by the owner is
 marked "**Not yet manually verified by the owner**" in its changelog
