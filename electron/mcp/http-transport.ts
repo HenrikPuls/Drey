@@ -1,21 +1,52 @@
 /**
- * The localhost HTTP face of the MCP server. A single `POST /mcp`
- * endpoint that takes one JSON-RPC message (or a batch array) and returns
- * the response(s) as JSON -- the "Streamable HTTP" shape, minus the
- * optional SSE stream (a tools-only server never pushes to the client).
+ * The localhost HTTP face of the MCP server: a single `POST /mcp`
+ * endpoint over the SDK's Streamable HTTP transport, **stateless** and
+ * answering in plain JSON (a tools-only server never pushes to the
+ * client, so there is no session and no SSE stream).
  *
  * Bound to 127.0.0.1 only. It is opt-in on top of `mcp.enabled`
  * (`McpConfig.httpEnabled`) precisely because it is a listening socket --
  * see `docs/09_architecture_decisions/0021-mcp-vault-server.md`.
+ *
+ * Binding to loopback does not keep a web page out: a browser on this
+ * machine can reach it too. So every request must carry a local `Host`,
+ * and an `Origin` -- which only a browser sends -- must be local as well.
  */
 import * as http from 'node:http';
-import type { JsonRpcResponse, McpServer } from './server';
+import type { Server } from '@modelcontextprotocol/sdk/server/index.js';
+import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
+
+const LOCAL_HOSTNAMES = new Set(['127.0.0.1', 'localhost', '[::1]']);
+
+/** Whether a `Host` header names this machine on the endpoint's port. */
+export function isLocalHost(host: string | undefined, port: number | null): boolean {
+  if (host === undefined) {
+    return false;
+  }
+  const cut = host.lastIndexOf(':');
+  const name = cut > 0 && !host.endsWith(']') ? host.slice(0, cut) : host;
+  const hostPort = cut > 0 && !host.endsWith(']') ? host.slice(cut + 1) : '';
+  return LOCAL_HOSTNAMES.has(name.toLowerCase()) && (hostPort === '' || hostPort === String(port));
+}
+
+/** Whether an `Origin` header is absent (not a browser) or a local page. */
+export function isLocalOrigin(origin: string | undefined): boolean {
+  if (origin === undefined) {
+    return true;
+  }
+  try {
+    return LOCAL_HOSTNAMES.has(new URL(origin).host.replace(/:\d+$/, '').toLowerCase());
+  } catch {
+    return false;
+  }
+}
 
 export class McpHttpTransport {
   private server: http.Server | null = null;
   private port: number | null = null;
 
-  constructor(private readonly mcp: McpServer) {}
+  /** `createServer` builds one MCP server per request (stateless mode). */
+  constructor(private readonly createServer: () => Server) {}
 
   /** True while the endpoint is listening. */
   get running(): boolean {
@@ -55,79 +86,44 @@ export class McpHttpTransport {
   }
 
   private async onRequest(req: http.IncomingMessage, res: http.ServerResponse): Promise<void> {
-    // Permissive CORS: the endpoint is already localhost-only and the
-    // tools carry their own confirmation gate.
-    res.setHeader('Access-Control-Allow-Origin', '*');
-    res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
-    res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
-
-    if (req.method === 'OPTIONS') {
-      res.writeHead(204).end();
+    if (!isLocalHost(req.headers.host, this.port) || !isLocalOrigin(req.headers.origin)) {
+      res.writeHead(403, { 'Content-Type': 'text/plain' }).end('Forbidden.');
       return;
     }
-    if (req.method !== 'POST' || (req.url ?? '/').split('?')[0] !== '/mcp') {
+    if ((req.url ?? '/').split('?')[0] !== '/mcp') {
       res.writeHead(404, { 'Content-Type': 'text/plain' }).end('Not found. POST JSON-RPC to /mcp.');
       return;
     }
-
-    let raw = '';
-    try {
-      raw = await readBody(req);
-    } catch {
-      res
-        .writeHead(400, { 'Content-Type': 'application/json' })
-        .end(JSON.stringify(rpcError(null, -32700, 'Could not read request body.')));
+    if (req.method !== 'POST') {
+      // Stateless: no GET stream to open, no session to DELETE.
+      res.writeHead(405, { Allow: 'POST', 'Content-Type': 'text/plain' }).end('Method not allowed.');
       return;
     }
 
-    let parsed: unknown;
-    try {
-      parsed = JSON.parse(raw);
-    } catch {
-      res
-        .writeHead(400, { 'Content-Type': 'application/json' })
-        .end(JSON.stringify(rpcError(null, -32700, 'Invalid JSON.')));
-      return;
-    }
-
-    const messages = Array.isArray(parsed) ? parsed : [parsed];
-    const responses: JsonRpcResponse[] = [];
-    for (const message of messages) {
-      const response = await this.mcp.handle(message);
-      if (response) {
-        responses.push(response);
-      }
-    }
-
-    // A batch of only notifications gets a bare 202.
-    if (responses.length === 0) {
-      res.writeHead(202).end();
-      return;
-    }
-    res
-      .writeHead(200, { 'Content-Type': 'application/json' })
-      .end(JSON.stringify(Array.isArray(parsed) ? responses : responses[0]));
-  }
-}
-
-function readBody(req: http.IncomingMessage): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const chunks: Buffer[] = [];
-    let size = 0;
-    req.on('data', (chunk: Buffer) => {
-      size += chunk.length;
-      if (size > 8 * 1024 * 1024) {
-        reject(new Error('body too large'));
-        req.destroy();
-        return;
-      }
-      chunks.push(chunk);
+    // A stateless transport serves exactly one request, so each gets its
+    // own transport and server; both go when the response is done.
+    const transport = new StreamableHTTPServerTransport({
+      sessionIdGenerator: undefined,
+      enableJsonResponse: true,
     });
-    req.on('end', () => resolve(Buffer.concat(chunks).toString('utf-8')));
-    req.on('error', reject);
-  });
-}
-
-function rpcError(id: null, code: number, message: string): JsonRpcResponse {
-  return { jsonrpc: '2.0', id, error: { code, message } };
+    const server = this.createServer();
+    res.on('close', () => {
+      void transport.close().catch(() => undefined);
+      void server.close().catch(() => undefined);
+    });
+    try {
+      await server.connect(transport);
+      await transport.handleRequest(req, res);
+    } catch (err) {
+      if (!res.headersSent) {
+        res.writeHead(500, { 'Content-Type': 'application/json' }).end(
+          JSON.stringify({
+            jsonrpc: '2.0',
+            id: null,
+            error: { code: -32603, message: err instanceof Error ? err.message : String(err) },
+          }),
+        );
+      }
+    }
+  }
 }

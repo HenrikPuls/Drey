@@ -5,6 +5,7 @@ describe('SettingsCategoryRegistry category order (req-33)', () => {
     const registry = new SettingsCategoryRegistry();
     expect(registry.categories().map((c) => c.label)).toEqual([
       'Appearance',
+      'Assistant tools',
       'Daily notes',
       'Entry format',
       'LLM',
@@ -32,6 +33,7 @@ describe('SettingsCategoryRegistry category order (req-33)', () => {
     });
     expect(registry.categories().map((c) => c.label)).toEqual([
       'Appearance',
+      'Assistant tools',
       'Daily notes',
       'Entry format',
       'LLM',

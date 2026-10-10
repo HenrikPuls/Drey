@@ -6,10 +6,11 @@
  * Mod+T picker pick the change up immediately (the library reloads on
  * every `vault:changed`).
  *
- * Unlike the vault_* set this tier is NOT gated on `mcp.enabled`, and —
- * per the ADR-0011 later-change — needs no confirmation: template files
- * are small structural content outside the tag index (never user notes),
- * and a delete lands in the OS recycle bin.
+ * The tier is its own tool group (`tools.templates`, ADR-0063). Its
+ * write rule defaults to `auto` — per the ADR-0011 later-change template
+ * files are small structural content outside the tag index (never user
+ * notes), and a delete lands in the OS recycle bin; set to `confirm`, a
+ * write or delete is shown in the shared diff first (the `confirm` port).
  *
  * Guards are baked into the pure path resolver: names may carry
  * subfolders (a category in the Templates panel), `..`/absolute escapes
@@ -93,6 +94,11 @@ export interface TemplateToolsPort {
   writeAnnounced(path: string, content: string): Promise<unknown>;
   /** Announced delete to the recycle bin; resolves `true` when trashed. */
   remove(path: string): Promise<boolean>;
+  /**
+   * Asks the user about one change before it is applied; `null` or absent
+   * means the group's write rule is `auto`.
+   */
+  confirm?: ((request: { path: string; before: string; after: string }) => Promise<boolean>) | null;
 }
 
 /** The tool bundle one ask carries: specs for the wire, names for dispatch. */
@@ -154,8 +160,7 @@ function buildSpecs(dir: string): readonly ToolSpec[] {
         'Markdown body) and "overwrite" (REQUIRED boolean: false creates only and fails ' +
         'when the template exists; true replaces an existing template). The content may ' +
         'use the placeholders {{date}}, {{time}}, {{datetime}} and {{title}}, which the ' +
-        'app substitutes when the template is inserted. Writing applies immediately — ' +
-        'there is no confirmation step.',
+        'app substitutes when the template is inserted.',
       parameters: {
         type: 'object',
         properties: {
@@ -240,6 +245,12 @@ export function createTemplateTools(port: TemplateToolsPort): TemplateTools {
     if (exists && !overwrite) {
       return `A template already exists at ${resolved.path}. Pass "overwrite": true to replace it, or choose another name.`;
     }
+    if (port.confirm) {
+      const before = exists ? await port.read(resolved.path) : '';
+      if (!(await port.confirm({ path: resolved.path, before, after: content }))) {
+        return 'The user declined the change.';
+      }
+    }
     await port.writeAnnounced(resolved.path, content);
     return exists
       ? `Replaced the template ${resolved.path}.`
@@ -256,6 +267,12 @@ export function createTemplateTools(port: TemplateToolsPort): TemplateTools {
     }
     if (!(await existingPaths()).has(resolved.path)) {
       return `No template at ${resolved.path}.`;
+    }
+    if (port.confirm) {
+      const before = await port.read(resolved.path);
+      if (!(await port.confirm({ path: resolved.path, before, after: '' }))) {
+        return 'The user declined the deletion.';
+      }
     }
     const trashed = await port.remove(resolved.path);
     return trashed

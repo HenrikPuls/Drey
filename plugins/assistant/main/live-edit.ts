@@ -258,4 +258,4 @@ When the requested changes are done, reply with a SHORT plain-text summary of wh
  * (ADR-0021). Unlike `ASK_TOOLS_NOTE` this makes no mention of a JSON
  * answer — the live protocol is plain text.
  */
-export const LIVE_EDIT_TOOLS_NOTE = `You may also call the vault tools (vault_search, vault_read, vault_write) to look things up in the wider vault or to make changes elsewhere. A vault_write is confirmed by the user unless the app is in YOLO mode.`;
+export const LIVE_EDIT_TOOLS_NOTE = `You may also call the vault tools (vault_search, vault_read, vault_write) to look things up in the wider vault or to make changes elsewhere.`;

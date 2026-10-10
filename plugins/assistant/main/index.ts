@@ -122,6 +122,9 @@ const plugin: MainPluginModule = {
         ctx.llm.chat(messages, {
           taskId: options?.taskId,
           ...(options?.vaultTools !== undefined ? { vaultTools: options.vaultTools } : {}),
+          ...(options?.externalTools !== undefined
+            ? { externalTools: options.externalTools }
+            : {}),
           ...(options?.tools !== undefined ? { tools: options.tools } : {}),
           ...(options?.onToolCall !== undefined ? { onToolCall: options.onToolCall } : {}),
           ...(options?.maxToolRounds !== undefined
@@ -179,6 +182,12 @@ const plugin: MainPluginModule = {
             read: (path) => ctx.vault.read(path),
             writeAnnounced: (path, content) => ctx.vault.writeAnnounced(path, content),
             remove: async (path) => ctx.vault.delete(path),
+            // The group's write rule (ADR-0063): `confirm` shows the
+            // change in the shared diff first.
+            confirm:
+              ctx.appConfig.get().tools.templates.write === 'confirm'
+                ? (request) => ctx.vault.confirmWrite(request)
+                : null,
           }),
       },
     );

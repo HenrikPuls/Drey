@@ -10,6 +10,8 @@ export interface ConfigHandlerDeps {
   pluginHost: PluginHost;
   /** Opens / closes the localhost MCP HTTP endpoint to match the stored config. */
   syncMcpHttp: () => Promise<void>;
+  /** Connects / drops the external MCP servers to match the stored config (ADR-0063). */
+  syncMcpClients: () => void;
   /** Starts / stops the vault watcher to match the stored config (ADR-0045). */
   syncVaultWatcher: () => Promise<void>;
 }
@@ -20,6 +22,7 @@ export function registerConfigHandlers({
   spellcheck,
   pluginHost,
   syncMcpHttp,
+  syncMcpClients,
   syncVaultWatcher,
 }: ConfigHandlerDeps): void {
   ipcMain.handle(IPC_CHANNELS.configGet, (): AppConfig => appConfig.get());
@@ -31,6 +34,7 @@ export function registerConfigHandlers({
     spellcheck.invalidate();
     // The MCP block may have flipped -- open/close the HTTP endpoint to match.
     await syncMcpHttp();
+    syncMcpClients();
     // The vault watch switch may have flipped -- start/stop to match.
     await syncVaultWatcher();
     // A changed templates folder shifts which files the plugins' indexes

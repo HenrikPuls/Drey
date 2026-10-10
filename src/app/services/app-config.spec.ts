@@ -210,6 +210,55 @@ describe('normalizeAppConfig', () => {
     expect(normalizeAppConfig({ vault: { watch: true } }).vault.watch).toBe(true);
   });
 
+  it('tools (ADR-0063): defaults, and a config from before the slice inherits the MCP switch', () => {
+    expect(normalizeAppConfig({ tools: {} }).tools).toEqual({
+      vault: { enabled: false, write: 'confirm' },
+      tasks: { enabled: true },
+      templates: { enabled: true, write: 'auto' },
+      webFetch: { enabled: false, approval: 'ask' },
+      servers: [],
+    });
+    // No `tools` key at all: what mcp.enabled / mcp.yolo meant for the assistant carries over.
+    expect(normalizeAppConfig({ mcp: { enabled: true, yolo: true } }).tools.vault).toEqual({
+      enabled: true,
+      write: 'auto',
+    });
+    expect(normalizeAppConfig({ mcp: { enabled: true } }).tools.vault).toEqual({
+      enabled: true,
+      write: 'confirm',
+    });
+    // Once the slice exists, the MCP switch no longer steers it.
+    expect(normalizeAppConfig({ mcp: { enabled: true }, tools: {} }).tools.vault.enabled).toBe(false);
+  });
+
+  it('tools.servers: slug ids made unique, transport by kind, junk dropped', () => {
+    const { servers } = normalizeAppConfig({
+      tools: {
+        servers: [
+          { name: 'Brave Search!', transport: { kind: 'http', url: ' https://x/mcp ', headers: { A: 'b', n: 3 } } },
+          { id: 'Brave Search', name: '', approval: 'allow', enabled: false, transport: { command: 'npx', args: ['-y', 4, 'pkg'], env: { KEY: 'v' } } },
+          'junk',
+        ],
+      },
+    }).tools;
+    expect(servers).toEqual([
+      {
+        id: 'brave-search',
+        name: 'Brave Search!',
+        enabled: true,
+        approval: 'ask',
+        transport: { kind: 'http', url: 'https://x/mcp', headers: { A: 'b' } },
+      },
+      {
+        id: 'brave-search-2',
+        name: 'brave-search-2',
+        enabled: false,
+        approval: 'allow',
+        transport: { kind: 'stdio', command: 'npx', args: ['-y', 'pkg'], env: { KEY: 'v' } },
+      },
+    ]);
+  });
+
   it('normalises the widgets block: empty default, string list, dedupe, junk drop', () => {
     expect(normalizeAppConfig({}).widgets).toEqual({ disabled: [] });
     expect(normalizeAppConfig({ widgets: { disabled: 'nope' } }).widgets.disabled).toEqual([]);

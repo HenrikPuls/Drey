@@ -160,3 +160,10 @@ retrofitting it afterwards would re-touch the plugin-SDK surface twice.
 - Future knobs (`--allowedTools` for Claude Code, per-server MCP tool
   policy, streamed tool-call deltas) have reserved room in the options
   bag and the capabilities descriptor without another interface break.
+- _(Later change, milestone 63, [ADR-0063](0063-mcp-client-and-assistant-tool-groups.md):
+  the reserved "per-server MCP tool policy" exists. External MCP servers
+  and a built-in `web_fetch` are a third tool source beside plugin tools
+  and the vault set, merged in the plugin host behind
+  `externalTools: true`; each source has an approval rule. They are a
+  further opt-in exception to "no cloud calls", off by default. The CLI
+  providers still get no Drey-side tools.)_

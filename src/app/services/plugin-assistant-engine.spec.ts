@@ -47,7 +47,10 @@ function engineWith(reply: string | Error, options: { llm?: boolean; mcp?: boole
   const config = normalizeAppConfig({
     ...DEFAULT_APP_CONFIG,
     llm: { ...DEFAULT_APP_CONFIG.llm, enabled: options.llm !== false },
-    mcp: { ...DEFAULT_APP_CONFIG.mcp, enabled: options.mcp === true },
+    tools: {
+      ...DEFAULT_APP_CONFIG.tools,
+      vault: { enabled: options.mcp === true, write: 'confirm' },
+    },
   });
   // One enabled manual trigger over the Reformat-style user template.
   config.actions.triggers.push({
@@ -156,6 +159,8 @@ interface ChatHarness {
     query(opts?: { includeDone?: boolean; vaultId?: string }): Promise<readonly SdkTaskRecord[]>;
   } | null;
   setConfig(patch: Partial<AppConfig['llm']>): void;
+  /** The live config object the engine reads -- tests flip tool groups on it. */
+  config: AppConfig;
   setCapabilities(caps: Partial<LlmCapabilities>): void;
 }
 
@@ -191,7 +196,12 @@ function chatHarness(
   };
   const config: AppConfig = {
     ...normalizeAppConfig({ ...DEFAULT_APP_CONFIG, llm: llmConfig }),
-    mcp: { ...DEFAULT_APP_CONFIG.mcp, enabled: options.mcp === true },
+    // The vault tool group (ADR-0063) -- `mcp.enabled` no longer steers
+    // the assistant.
+    tools: {
+      ...structuredClone(DEFAULT_APP_CONFIG.tools),
+      vault: { enabled: options.mcp === true, write: 'confirm' },
+    },
   };
 
   const capabilities: LlmCapabilities = {
@@ -212,6 +222,7 @@ function chatHarness(
     setConfig(patch) {
       Object.assign(config.llm, patch);
     },
+    config,
     setCapabilities(caps) {
       Object.assign(capabilities, caps);
     },
@@ -382,6 +393,47 @@ describe('assistant plugin chat engine — persistence (bug-10b)', () => {
     expect(h.calls[0].opts['attachments']).toEqual([
       { kind: 'image', mediaType: 'image/png', base64: 'xjaf=' },
     ]);
+  });
+
+  it('tool groups (ADR-0063): a group that is off rides neither the call nor the prompt', async () => {
+    const h = chatHarness();
+    h.tasksTool = {
+      spec: { name: 'tasks_list', description: 'd', parameters: { type: 'object', properties: {} } },
+      run: async () => '',
+      query: async () => [],
+    };
+    await h.engine.ask({ ...ASK });
+    expect((h.calls[0].opts['tools'] as { name: string }[]).map((t) => t.name)).toEqual(['tasks_list']);
+    expect(h.calls[0].opts['vaultTools']).toBeUndefined();
+    expect(h.calls[0].opts['externalTools']).toBeUndefined();
+
+    h.config.tools.tasks.enabled = false;
+    await h.engine.ask({ ...ASK });
+    expect(h.calls[1].opts['tools']).toBeUndefined();
+    expect(h.calls[1].messages[0].content).not.toContain('tasks_list');
+  });
+
+  it('external tools (ADR-0063): on with web fetch or a server, with the note and more rounds', async () => {
+    const h = chatHarness();
+    h.config.tools.webFetch.enabled = true;
+    await h.engine.ask({ ...ASK });
+    expect(h.calls[0].opts).toMatchObject({ externalTools: true, maxToolRounds: 8 });
+    expect(h.calls[0].messages[0].content).toContain('web_fetch');
+
+    // A provider without a tool loop gets neither the option nor the promise.
+    h.setCapabilities({ tools: false });
+    await h.engine.ask({ ...ASK });
+    expect(h.calls[1].opts['externalTools']).toBeUndefined();
+    expect(h.calls[1].messages[0].content).not.toContain('web_fetch');
+  });
+
+  it('the vault write rule reaches the prompt', async () => {
+    const h = chatHarness(undefined, { mcp: true });
+    await h.engine.ask({ ...ASK });
+    expect(h.calls[0].messages[0].content).toContain('confirms every vault_write');
+    h.config.tools.vault.write = 'auto';
+    await h.engine.ask({ ...ASK });
+    expect(h.calls[1].messages[0].content).toContain('applies immediately');
   });
 
   it('drops image attachments when the provider lacks the capability', async () => {

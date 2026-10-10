@@ -220,11 +220,20 @@ export interface MainChatOptions {
   /**
    * Opts this ONE call into the vault tool loop (ADR-0021): the model may
    * call `vault_search`/`vault_read`/`vault_write` before its final answer
-   * (a write still goes through the user's confirmation). Only meaningful
-   * when the base MCP switch is on; the tools stay base — the plugin never
-   * gets the `VaultTools` instance itself.
+   * (a write follows `tools.vault.write`: confirmed in the diff dialog, or
+   * applied directly). The caller decides when to opt in -- the assistant
+   * does so per `tools.vault.enabled`. The tools stay base — the plugin
+   * never gets the `VaultTools` instance itself.
    */
   readonly vaultTools?: boolean;
+  /**
+   * Opts this ONE call into the EXTERNAL tool set (SDK 1.15, ADR-0063):
+   * the built-in `web_fetch` and the tools of the user's MCP servers
+   * (`mcp__<serverId>__<tool>`), as far as `tools` config enables them.
+   * Each call passes its source's approval rule in the host. Plugin tools
+   * and the vault set win a name collision.
+   */
+  readonly externalTools?: boolean;
   /**
    * The plugin's OWN tool specs for this ONE call (ADR-0049): the model may
    * call them before its final answer, and `onToolCall` runs each one.
@@ -301,6 +310,13 @@ export interface MainPluginContext {
      * template_delete is the first consumer.)
      */
     delete(path: string, opts?: VaultOpOptions): Promise<boolean>;
+    /**
+     * Shows the user a change in the shared confirmation diff (ADR-0011)
+     * and resolves whether they approved it. Nothing is written -- the
+     * caller writes after a `true`. (SDK 1.15: a tool group whose write
+     * rule is `confirm`.)
+     */
+    confirmWrite(request: { path: string; before: string; after: string }): Promise<boolean>;
     /**
      * Stage binary bytes as a vault asset (the editor's ADR-0024 path):
      * hash-named under `attachments/` beside `noteRelPath`, collisions

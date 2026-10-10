@@ -142,6 +142,13 @@ portable exe. `verify:pack` asserts the absence.
   `main.ts`, guarded by `app.isPackaged`) so the Settings → MCP config
   snippet points at a file that exists.
 
+- `@modelcontextprotocol/sdk` (milestone 63, ADR-0063) ships inside the
+  asar like any other production dependency — pure JS, loaded through
+  its CommonJS client entry points. A **stdio MCP server** the user
+  configured runs as a child process of the app, with whatever command
+  they entered (`npx …`, `uvx …`, an executable): the runtime it needs
+  must be installed on the machine, Drey bundles none.
+
 No native modules anywhere (`nspell` and `yaml` are pure JS), so there is
 **no `node-gyp` / electron-rebuild step**.
 

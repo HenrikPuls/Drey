@@ -19,8 +19,9 @@ import { DailyNoteManager } from './daily-note';
 import { ExternalFileGate, extractOpenPaths } from './external-open';
 import { installMainProcessLogging, logLine, watchWebContents } from './logger';
 import { LlmDebugLog, LlmRouter, LlmTaskRegistry, TagSuggester, buildClients } from './llm';
-import { registerIpcHandlers, ExitBridge, McpWriteBridge } from './ipc';
-import { McpHttpTransport, McpServer, VaultTools } from './mcp';
+import { registerIpcHandlers, ExitBridge, McpWriteBridge, ToolApprovalBridge } from './ipc';
+import { McpHttpTransport, VaultTools, createVaultMcpServer } from './mcp';
+import { AssistantToolbox, McpClientManager, createMcpClientManager } from './mcp-client';
 import { attachContextMenu, buildApplicationMenu } from './menu';
 import { NoteManager } from './note-manager';
 import { OwnWriteLedger } from './own-write-ledger';
@@ -259,6 +260,7 @@ function stdioBridgePath(): string {
 
 /** Module-scope handle so the `will-quit` listener can close the socket. */
 let mcpHttpForShutdown: McpHttpTransport | null = null;
+let mcpClientsForShutdown: McpClientManager | null = null;
 
 /** Module-scope handle so the `will-quit` listener can stop the watcher. */
 let vaultWatcherForShutdown: VaultWatcher | null = null;
@@ -272,6 +274,8 @@ let splashForShutdown: SplashController | null = null;
  * `mcp:write-decision` IPC handler.
  */
 const mcpWriteBridge = new McpWriteBridge(() => mainWindow);
+/** The same pattern for one external tool call's approval (ADR-0063). */
+const toolApprovalBridge = new ToolApprovalBridge(() => mainWindow);
 
 /**
  * The main<->renderer bridge for the save-before-exit prompt (bug-5). The
@@ -681,6 +685,19 @@ if (!app.requestSingleInstanceLock()) {
           deletedPaths: [],
         }),
     );
+    // The assistant's external tools (ADR-0063): the configured MCP
+    // servers plus the built-in web_fetch, each behind its approval rule.
+    // Connecting is fire-and-forget -- a slow or broken server never
+    // delays the start.
+    const mcpClients = createMcpClientManager(app.getVersion(), (message, level) =>
+      level === 'warn' || level === 'error' ? console.warn(message) : console.log(message),
+    );
+    mcpClientsForShutdown = mcpClients;
+    const assistantToolbox = new AssistantToolbox(
+      () => appConfig.get(),
+      mcpClients,
+      (request) => toolApprovalBridge.request(request),
+    );
     const tagSuggester = new TagSuggester(appConfig, llm, llmTasks);
     // The plugin host registers its method handlers during activate().
     // Since milestone 61 discovery+activation STARTS before the window is
@@ -699,6 +716,8 @@ if (!app.requestSingleInstanceLock()) {
       llm,
       llmTasks,
       vaultTools,
+      assistantToolbox,
+      confirmWrite: (request) => mcpWriteBridge.requestConfirmation(request),
       tagSuggester,
       llmDebug,
       // Plugin vault writes that must be visible immediately (chat notes)
@@ -728,8 +747,9 @@ if (!app.requestSingleInstanceLock()) {
       emitNoteSaved: (event) => pluginHostRef.emitNoteSaved(event),
     });
     const spellcheck = new SpellcheckService(appConfig);
-    const mcpServer = new McpServer(vaultTools, app.getVersion());
-    const mcpHttp = new McpHttpTransport(mcpServer);
+    const mcpHttp = new McpHttpTransport(() =>
+      createVaultMcpServer(vaultTools, app.getVersion()),
+    );
     mcpHttpForShutdown = mcpHttp;
     const sessionBackups = new SessionBackupStore();
     startupMark('base services + plugin host constructed');
@@ -771,6 +791,9 @@ if (!app.requestSingleInstanceLock()) {
       spellcheck,
       mcpHttp,
       mcpWriteBridge,
+      mcpClients,
+      toolApprovalBridge,
+      syncMcpClients: () => mcpClients.sync(appConfig.get().tools.servers),
       exitBridge,
       externalFiles,
       stdioBridgePath,
@@ -827,6 +850,7 @@ if (!app.requestSingleInstanceLock()) {
     // bundle fetches.
 
     await syncMcpHttpTransport(mcpHttp, appConfig);
+    mcpClients.sync(appConfig.get().tools.servers);
     // Start watching if the stored config enables it (ADR-0045).
     await vaultWatcher.syncFromConfig();
     startupMark('MCP transport + vault watcher synced');
@@ -872,6 +896,7 @@ if (!app.requestSingleInstanceLock()) {
     globalShortcut.unregisterAll();
     splashForShutdown?.close();
     void mcpHttpForShutdown?.stop();
+    void mcpClientsForShutdown?.dispose();
     void vaultWatcherForShutdown?.stop();
     // Plugin will-quit hooks first (native teardown, e.g. the browser
     // plugin's WebContentsViews), then deactivate.

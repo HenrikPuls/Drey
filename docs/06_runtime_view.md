@@ -918,7 +918,7 @@ Wired rows: File → New note (`note.new`), Switch vault … (`vault.selectVault
 sequenceDiagram
     participant Client as MCP client (stdio bridge / HTTP)
     participant HTTP as McpHttpTransport
-    participant Srv as McpServer
+    participant Srv as MCP server (SDK)
     participant Tools as VaultTools
     participant Main as main.ts (ConfirmWrite)
     participant Bridge as McpBridgeService (renderer)
@@ -2523,18 +2523,18 @@ sequenceDiagram
 
     M->>S: create + show (frameless, skipTaskbar)
     S->>S: paints instantly (inline page, no bundle)
-    M->>S: Starting� 3 % � version
+    M->>S: Starting… 3 % · version
     M->>S: Loading settings 10 %
     loop each main-side plugin
-        M->>S: Loading plugin {name} 15�60 %
+        M->>S: Loading plugin {name} 15–60 %
     end
     M->>R: createMainWindow (show: false) + loadURL
     M->>S: Starting the interface 68 %
-    Note over R: boots hidden � renders anyway<br/>(paintWhenInitiallyHidden)
+    Note over R: boots hidden — renders anyway<br/>(paintWhenInitiallyHidden)
     R->>M: startup:progress "Preparing workspace" 85 %
-    R->>M: startup:progress "Restoring session�" 92 %
+    R->>M: startup:progress "Restoring session…" 92 %
     R->>M: startup:ready
-    M->>R: show() � then splash.close() ~120 ms later
+    M->>R: show() — then splash.close() ~120 ms later
     Note over M: fail-opens reach the same handover:<br/>30 s absolute, 15 s after page load,<br/>render-process-gone, window closed, quit
 ```
 
@@ -2544,3 +2544,55 @@ index/total), the renderer owns everything after `did-finish-load`
 (fire-and-forget `startup:progress` sends; `startup:ready` triggers the
 handover). `SplashController` latches the latest payload and replays it
 once the splash page listens.
+
+
+## 6.53 Ask → external tool → approval → result (milestone 63, [ADR-0063](09_architecture_decisions/0063-mcp-client-and-assistant-tool-groups.md))
+
+```mermaid
+sequenceDiagram
+    actor User
+    participant Panel as Assistant panel
+    participant CE as ChatEngine (plugin)
+    participant Host as PluginHost (ctx.llm.chat)
+    participant LLM as Provider tool loop
+    participant TB as AssistantToolbox
+    participant AD as ToolApprovalDialog
+    participant MCP as McpClientManager
+    participant Srv as External MCP server
+
+    User->>Panel: question
+    Panel->>CE: ask
+    CE->>CE: read tools config (groups on / off)
+    CE->>Host: chat(messages, { externalTools: true, … })
+    Host->>TB: specs()
+    TB->>MCP: toolSpecs() (connected servers only)
+    Host->>LLM: chat with the merged tool set
+    LLM-->>Host: tool call mcp__brave__web_search { query }
+    Host->>TB: run(name, args, signal)
+    alt the server's rule is "ask"
+        TB->>AD: tools:approval-request (source, tool, arguments)
+        User->>AD: Allow / Always allow / Deny
+        opt Always allow
+            AD->>AD: persist approval: allow for this source
+        end
+        AD-->>TB: approved?
+    end
+    alt approved or rule is "allow"
+        TB->>MCP: call(name, args)
+        MCP->>Srv: tools/call web_search
+        Srv-->>MCP: result
+        MCP-->>TB: text, capped
+    else denied
+        TB-->>Host: "The user declined this call."
+    end
+    Host-->>LLM: tool result
+    LLM-->>Host: answer (with sources)
+    Host-->>CE: text + toolTrace
+    CE->>CE: persist the turn, tool pairs as drey-tool lines
+    CE-->>Panel: answer card with tool chips
+```
+
+`web_fetch` takes the same path with `runWebFetch` in place of the MCP
+call. A denial is an ordinary tool result: the model reads it and
+answers without the call. Cancelling the generation aborts a running
+call through the task's abort signal.

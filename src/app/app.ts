@@ -4,6 +4,7 @@ import { ImageLightbox } from './image-viewer';
 import { ConfirmationDialog } from './confirmation-dialog/confirmation-dialog';
 import { ConfirmDialog } from './confirm-dialog/confirm-dialog';
 import { ConflictDialog } from './conflict';
+import { ToolApprovalDialog, ToolApprovalService } from './tool-approval';
 import { HistoryDialog, HistoryService } from './history';
 import { LinkUpdateDialog } from './link-update';
 import { Palette, PaletteService } from './palette';
@@ -56,6 +57,7 @@ import { EditorContextMenuRegistry } from './plugin-host';
     ConfirmationDialog,
     LinkUpdateDialog,
     ConflictDialog,
+    ToolApprovalDialog,
     HistoryDialog,
     Palette,
     ConfirmDialog,
@@ -130,6 +132,8 @@ export class App {
     inject(AppearanceService);
     // Listen for MCP client write-confirmations / vault-changed pushes (ADR-0021).
     inject(McpBridgeService).start();
+    // External tool calls that need the user's approval (ADR-0063).
+    inject(ToolApprovalService).start();
     // Answer main's save-before-exit question (bug-5) and show the dialog
     // when there are dirty documents.
     inject(ExitConfirmService).start();

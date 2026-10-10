@@ -15,8 +15,10 @@ import {
   LlmDeltaEvent,
   LlmEndpoint,
   LogEntry,
+  McpClientServerStatus,
   McpStatus,
   McpWriteRequest,
+  ToolApprovalRequest,
   NoteSaveRequest,
   NoteSaveResult,
   OpenRequest,
@@ -249,6 +251,16 @@ const dreyApi: DreyApi = {
   },
   resolveMcpWrite: (id: number, approved: boolean): Promise<void> =>
     ipcRenderer.invoke(IPC_CHANNELS.mcpWriteDecision, id, approved),
+  getToolsStatus: (): Promise<McpClientServerStatus[]> => ipcRenderer.invoke(IPC_CHANNELS.toolsStatus),
+  reconnectToolServer: (id: string): Promise<McpClientServerStatus[]> =>
+    ipcRenderer.invoke(IPC_CHANNELS.toolsReconnect, id),
+  onToolApprovalRequest: (listener: (request: ToolApprovalRequest) => void): (() => void) => {
+    const wrapped = (_event: IpcRendererEvent, request: ToolApprovalRequest): void => listener(request);
+    ipcRenderer.on(IPC_CHANNELS.toolsApprovalRequest, wrapped);
+    return () => ipcRenderer.removeListener(IPC_CHANNELS.toolsApprovalRequest, wrapped);
+  },
+  resolveToolApproval: (id: number, approved: boolean): Promise<void> =>
+    ipcRenderer.invoke(IPC_CHANNELS.toolsApprovalDecision, id, approved),
   onVaultChanged: (listener: (push: VaultChangedPush) => void): (() => void) => {
     // Forward only the payload, never the IpcRendererEvent (ADR-0001).
     const wrapped = (_event: IpcRendererEvent, push: VaultChangedPush): void => listener(push);

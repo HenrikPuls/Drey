@@ -16,6 +16,7 @@ import {
   McpConfig,
   SpellcheckConfig,
   TemplatesConfig,
+  ToolsConfig,
   UiScale,
   UpdateLinksMode,
   VaultConfig,
@@ -283,6 +284,13 @@ export class SettingsService {
   patchVault(patch: Partial<VaultConfig>): void {
     this.mutate((config) => {
       config.vault = { ...config.vault, ...patch };
+    });
+  }
+
+  /** Settings -> Assistant tools: one edit of the tool groups (draft; saved on Save). */
+  patchTools(change: (tools: ToolsConfig) => void): void {
+    this.mutate((config) => {
+      change(config.tools);
     });
   }
 
@@ -615,6 +623,42 @@ export class SettingsService {
   }
 
   /** Applies `change` to a clone of the draft. No IPC -- `save()` does that. */
+  /**
+   * The approval dialog's "Always allow" (milestone 63, ADR-0063): sets one
+   * external tool source -- `'web'` for web_fetch, otherwise an MCP server
+   * id -- to `allow`, persisted immediately and mirrored into an open
+   * draft, like the other dialog-side switches above.
+   */
+  async allowToolSourceImmediate(source: string): Promise<void> {
+    const config = this._config();
+    if (!config) {
+      return;
+    }
+    const apply = (tools: ToolsConfig): void => {
+      if (source === 'web') {
+        tools.webFetch.approval = 'allow';
+      } else {
+        const server = tools.servers.find((s) => s.id === source);
+        if (server) {
+          server.approval = 'allow';
+        }
+      }
+    };
+    const next = structuredClone(config);
+    apply(next.tools);
+    this._config.set(next);
+    this.mutate((draft) => apply(draft.tools));
+    if (!this.api) {
+      return;
+    }
+    try {
+      this._config.set(normalizeAppConfig(await this.api.setConfig(next)));
+    } catch (err) {
+      this.saveError.set(err instanceof Error ? err.message : String(err));
+      void this.load();
+    }
+  }
+
   private mutate(change: (config: AppConfig) => void): void {
     const current = this._draft();
     if (!current) {

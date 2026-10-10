@@ -1,0 +1,266 @@
+<app-settings-pane
+  title="Assistant tools"
+  description="What the built-in assistant may call while it answers. Each group has its own switch; groups that write can ask first, and anything that reaches outside this computer can ask before every call."
+>
+  @if (tools(); as tools) {
+    @if (!providerHasTools()) {
+      <p class="note warn">
+        The selected LLM provider does not support tool calls — none of these tools reach it.
+      </p>
+    }
+
+    <section class="group">
+      <label class="switch-row">
+        <input
+          type="checkbox"
+          [checked]="tools.vault.enabled"
+          (change)="setVaultEnabled($any($event.target).checked)"
+        />
+        <span>
+          <span class="switch-label">Vault</span>
+          <span class="switch-hint">
+            Search and read notes in every registered vault, and write notes
+            (<span class="mono">vault_search</span>, <span class="mono">vault_read</span>,
+            <span class="mono">vault_write</span>).
+          </span>
+        </span>
+      </label>
+      <div class="field sub">
+        <label for="tools-vault-write">When the assistant writes a note</label>
+        <select
+          id="tools-vault-write"
+          [disabled]="!tools.vault.enabled"
+          (change)="setVaultWrite($any($event.target).value)"
+        >
+          <option value="confirm" [selected]="tools.vault.write === 'confirm'">
+            Show the change and ask first
+          </option>
+          <option value="auto" [selected]="tools.vault.write === 'auto'">
+            Write without asking
+          </option>
+        </select>
+      </div>
+    </section>
+
+    <section class="group">
+      <label class="switch-row">
+        <input
+          type="checkbox"
+          [checked]="tools.tasks.enabled"
+          (change)="setTasksEnabled($any($event.target).checked)"
+        />
+        <span>
+          <span class="switch-label">Tasks</span>
+          <span class="switch-hint">
+            Answer questions about tasks from the task index
+            (<span class="mono">tasks_list</span>). Needs the Tasks plugin.
+          </span>
+        </span>
+      </label>
+    </section>
+
+    <section class="group">
+      <label class="switch-row">
+        <input
+          type="checkbox"
+          [checked]="tools.templates.enabled"
+          (change)="setTemplatesEnabled($any($event.target).checked)"
+        />
+        <span>
+          <span class="switch-label">Templates</span>
+          <span class="switch-hint">
+            List, read, create and delete templates in the template folder
+            (<span class="mono">template_*</span>). Deleted templates go to the recycle bin.
+          </span>
+        </span>
+      </label>
+      <div class="field sub">
+        <label for="tools-templates-write">When the assistant changes a template</label>
+        <select
+          id="tools-templates-write"
+          [disabled]="!tools.templates.enabled"
+          (change)="setTemplatesWrite($any($event.target).value)"
+        >
+          <option value="confirm" [selected]="tools.templates.write === 'confirm'">
+            Show the change and ask first
+          </option>
+          <option value="auto" [selected]="tools.templates.write === 'auto'">
+            Change without asking
+          </option>
+        </select>
+      </div>
+    </section>
+
+    <h3>Outside this computer</h3>
+    <p class="note">
+      These tools send data to other services. A search query or a web address is the one way
+      note content could leave the vault through a tool — with “ask”, you see every call before
+      it runs.
+    </p>
+
+    <section class="group">
+      <label class="switch-row">
+        <input
+          type="checkbox"
+          [checked]="tools.webFetch.enabled"
+          (change)="setWebFetchEnabled($any($event.target).checked)"
+        />
+        <span>
+          <span class="switch-label">Web fetch</span>
+          <span class="switch-hint">
+            Read one web page by its address (<span class="mono">web_fetch</span>). It does not
+            search — for web search, add a search server below.
+          </span>
+        </span>
+      </label>
+      <div class="field sub">
+        <label for="tools-web-approval">Before a page is fetched</label>
+        <select
+          id="tools-web-approval"
+          [disabled]="!tools.webFetch.enabled"
+          (change)="setWebFetchApproval($any($event.target).value)"
+        >
+          <option value="ask" [selected]="tools.webFetch.approval === 'ask'">Ask every time</option>
+          <option value="allow" [selected]="tools.webFetch.approval === 'allow'">
+            Allow without asking
+          </option>
+        </select>
+      </div>
+    </section>
+
+    <h3>MCP servers</h3>
+    <p class="note">
+      Connect services that speak the Model Context Protocol — a web search, an issue tracker.
+      Their tools appear to the assistant as
+      <span class="mono">mcp__&lt;id&gt;__&lt;tool&gt;</span>. Keys entered here are stored
+      unencrypted in the app settings on this computer.
+    </p>
+
+    @for (server of tools.servers; track $index) {
+      <section class="server">
+        <div class="row head">
+          <input
+            type="checkbox"
+            title="Enabled"
+            aria-label="Enabled"
+            [checked]="server.enabled"
+            (change)="setServerEnabled(server.id, $any($event.target).checked)"
+          />
+          <input
+            type="text"
+            aria-label="Server name"
+            [value]="server.name"
+            (change)="setName(server.id, $any($event.target).value)"
+          />
+          <button type="button" class="ghost" (click)="removeServer(server.id)">Remove</button>
+        </div>
+
+        <p class="field-hint status">
+          <span class="mono">mcp__{{ server.id }}__…</span>
+          ·
+          @if (isUnsaved(server)) {
+            Save to connect.
+          } @else if (!server.enabled) {
+            Disabled.
+          } @else {
+            @if (statusOf(server.id); as st) {
+              @if (st.state === 'ready') {
+                Connected — {{ toolSummary(st.tools) }}
+              } @else if (st.state === 'connecting') {
+                Connecting…
+              } @else {
+                <span class="error">Not connected: {{ st.error }}</span>
+              }
+              <button type="button" class="link" (click)="reconnect(server.id)">Reconnect</button>
+            } @else {
+              Connecting…
+            }
+          }
+        </p>
+
+        <div class="field">
+          <label [for]="'srv-kind-' + $index">Connection</label>
+          <select [id]="'srv-kind-' + $index" (change)="setKind(server.id, $any($event.target).value)">
+            <option value="stdio" [selected]="server.transport.kind === 'stdio'">
+              Local command (stdio)
+            </option>
+            <option value="http" [selected]="server.transport.kind === 'http'">
+              Web address (HTTP)
+            </option>
+          </select>
+        </div>
+
+        @if (server.transport.kind === 'stdio') {
+          <div class="field">
+            <label [for]="'srv-cmd-' + $index">Command</label>
+            <input
+              type="text"
+              class="mono-input"
+              [id]="'srv-cmd-' + $index"
+              [value]="server.transport.command"
+              (change)="setCommand(server.id, $any($event.target).value)"
+            />
+          </div>
+          <div class="field">
+            <label [for]="'srv-args-' + $index">Arguments, one per line</label>
+            <textarea
+              rows="3"
+              spellcheck="false"
+              [id]="'srv-args-' + $index"
+              [value]="argsText(server.transport.args)"
+              (change)="setArgs(server.id, $any($event.target).value)"
+            ></textarea>
+          </div>
+          <div class="field">
+            <label [for]="'srv-env-' + $index">Environment variables, NAME=value per line</label>
+            <textarea
+              rows="2"
+              spellcheck="false"
+              [id]="'srv-env-' + $index"
+              [value]="formatPairs(server.transport.env, '=')"
+              (change)="setEnv(server.id, $any($event.target).value)"
+            ></textarea>
+          </div>
+        } @else {
+          <div class="field">
+            <label [for]="'srv-url-' + $index">Address</label>
+            <input
+              type="text"
+              class="mono-input"
+              [id]="'srv-url-' + $index"
+              [value]="server.transport.url"
+              (change)="setUrl(server.id, $any($event.target).value)"
+            />
+          </div>
+          <div class="field">
+            <label [for]="'srv-headers-' + $index">Headers, Name: value per line</label>
+            <textarea
+              rows="2"
+              spellcheck="false"
+              [id]="'srv-headers-' + $index"
+              [value]="formatPairs(server.transport.headers, ':')"
+              (change)="setHeaders(server.id, $any($event.target).value)"
+            ></textarea>
+          </div>
+        }
+
+        <div class="field">
+          <label [for]="'srv-approval-' + $index">Before one of its tools is called</label>
+          <select
+            [id]="'srv-approval-' + $index"
+            (change)="setServerApproval(server.id, $any($event.target).value)"
+          >
+            <option value="ask" [selected]="server.approval === 'ask'">Ask every time</option>
+            <option value="allow" [selected]="server.approval === 'allow'">
+              Allow without asking
+            </option>
+          </select>
+        </div>
+      </section>
+    } @empty {
+      <p class="empty">No servers yet.</p>
+    }
+
+    <button type="button" class="ghost" (click)="addServer()">Add server</button>
+  }
+</app-settings-pane>

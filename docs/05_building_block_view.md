@@ -1866,7 +1866,7 @@ electron/mcp/
                     whole-vault regex line scan) / vault_read /
                     vault_write (overwrite|append, confirm gate);
                     openAiToolSpec() for the assistant loop
-  server.ts         McpServer.handle() — JSON-RPC 2.0 dispatch, no IO
+  server.ts         createVaultMcpServer() — the SDK's Server over VaultTools (ADR-0063)
   http-transport.ts McpHttpTransport — POST /mcp on 127.0.0.1:<port>
   stdio-bridge.ts   standalone: stdin/stdout JSON-RPC <-> the HTTP endpoint
 ```
@@ -2612,7 +2612,7 @@ main-side plugin writes.
 | Activation gate | `electron/plugin-host/plugin-host.ts` | `activationDone()` resolves when discovery+activation finished (promise assigned synchronously at start, before the window exists). The IPC handlers that expose plugin-owned state await it: `plugin-handlers.ts` (`plugins:list`, `plugin:invoke`), `query-handlers.ts` (`tags:suggest`, `search:vocabulary`), `vault-handlers.ts` (`vault:refresh`). `onMainWindowCreated` replays the already-created window to plugins activating late. |
 | Parallel plugin loads | `src/app/plugin-host/plugin-host.service.ts` | `loadAll` prefetches every `plugin://` module with `Promise.all`, then activates sequentially in descriptor order (deterministic registration); a failed import carries into the quarantine path unchanged. |
 | Parallel session restore | `src/app/session/session.service.ts` + `EditorService.openFile` | `restore` fires all `readVaultFile` / `readSessionBackup` reads concurrently (`prefetchTab`), applies them in order; `openFile` accepts `prefetched: { content, modifiedMs }` and falls back to its own read when a prefetch failed. |
-| Scheme serving | `electron/protocol-cache.ts` | Shared `app://` / `plugin://` serving: streamed (the plugin handler used to buffer whole files), explicit MIME map, ETag (`mtime36-size36`) + 304 + `no-cache`/`immutable` + the `codeCache` privilege. Measured: Chromium keeps custom-scheme responses out of its caches � kept as correct, forward-looking plumbing. |
+| Scheme serving | `electron/protocol-cache.ts` | Shared `app://` / `plugin://` serving: streamed (the plugin handler used to buffer whole files), explicit MIME map, ETag (`mtime36-size36`) + 304 + `no-cache`/`immutable` + the `codeCache` privilege. Measured: Chromium keeps custom-scheme responses out of its caches — kept as correct, forward-looking plumbing. |
 | Timing | `electron/startup-timing.ts` + renderer marks | `[startup]` lines in `drey.log` (main phases, per-plugin activation ms; renderer: bundle evaluated, plugins loaded, shell painted, session restored). `scripts/measure-startup.mjs` measures the packaged exe end to end (Playwright, wall-clock to titlebar). |
 
 
@@ -2620,9 +2620,25 @@ main-side plugin writes.
 
 | Block | Where | Responsibility |
 | --- | --- | --- |
-| Splash page | `public/splash.html` | Dependency-free inline page (copied verbatim into the renderer dist): logo mark, wordmark, version, bar, activity line. Token values copied from `src/styles.css` � keep in step on palette changes. |
+| Splash page | `public/splash.html` | Dependency-free inline page (copied verbatim into the renderer dist): logo mark, wordmark, version, bar, activity line. Token values copied from `src/styles.css` — keep in step on palette changes. |
 | Splash preload | `electron/splash-preload.ts` | `splashApi.onProgress(cb)` over the `splash:progress` channel; contextIsolation on, sandboxed (imports nothing from shared/). |
-| Controller | `electron/splash.ts` | `SplashController` � frameless/resizable:false/`skipTaskbar` ~400�300 window, `show` on `ready-to-show`; `progress()` latches the latest payload and replays it on `did-finish-load` (early pushes are otherwise dropped); idempotent `close()`. |
-| Progress contract | `shared/ipc-api.ts` + `electron/preload.ts` + `src/app/app.ts` | Main-side stages (settings, per-plugin via the `onPluginActivated` hook's index/total, interface) pushed by main; renderer stages (`Preparing workspace`, `Restoring session�`) over fire-and-forget `startup:progress` sends; `startup:ready` = the handover trigger. |
+| Controller | `electron/splash.ts` | `SplashController` — frameless/resizable:false/`skipTaskbar` ~400×300 window, `show` on `ready-to-show`; `progress()` latches the latest payload and replays it on `did-finish-load` (early pushes are otherwise dropped); idempotent `close()`. |
+| Progress contract | `shared/ipc-api.ts` + `electron/preload.ts` + `src/app/app.ts` | Main-side stages (settings, per-plugin via the `onPluginActivated` hook's index/total, interface) pushed by main; renderer stages (`Preparing workspace`, `Restoring session…`) over fire-and-forget `startup:progress` sends; `startup:ready` = the handover trigger. |
 | Handover + fail-opens | `electron/main.ts` | Boot window `show: false`; `splashHandover()` (one-shot) shows it and closes the splash ~120 ms later. Reached by the ready signal, the 30 s absolute / 15 s after-load timers, `render-process-gone`; splash closed on main-window `closed` and `will-quit`; macOS `activate` checks `mainWindow`, not the window count. |
 | E2e targeting | `e2e/fixtures/drey.ts` + `e2e/splash.spec.ts` | Fixtures pick the `app://` window by URL (the splash is window #1) and wait for shown+focus; `splash.spec.ts` watches windows from its own launch to assert splash content and the handover. |
+
+
+## 5.36 MCP client + assistant tool groups (milestone 63, [ADR-0063](09_architecture_decisions/0063-mcp-client-and-assistant-tool-groups.md))
+
+| Block | Where | Responsibility |
+| --- | --- | --- |
+| Tool groups | `shared/config/` (`ToolsConfig`) | `tools.vault` / `tasks` / `templates` (switch, plus `write: confirm \| auto` on the writing ones), `tools.webFetch` and `tools.servers[]` (switch, plus `approval: ask \| allow`). `normalizeTools` migrates a config without the slice from `mcp.enabled` / `mcp.yolo`. |
+| Client manager | `electron/mcp-client/mcp-client-manager.ts` | `McpClientManager`: one SDK client per enabled server, `sync()` on start and after `config:set`, cached tool list, status per server, one reconnect attempt on a call to a failed server. Names tools `mcp__<id>__<tool>`, flattens and caps results. The SDK client and transports are injected (`index.ts` wires the real ones: stdio, Streamable HTTP). |
+| Web fetch | `electron/mcp-client/web-fetch.ts` | The built-in `web_fetch` tool: http(s) only, time / size caps, HTML → Markdown (`turndown`). Pure helpers + one I/O function. |
+| Toolbox | `electron/mcp-client/assistant-toolbox.ts` | `AssistantToolbox`: the external tool set a chat call may use (`specs()`), and `run()` — source enabled? approval rule? then the call. |
+| Approval bridge | `electron/ipc/tool-approval-bridge.ts` + `src/app/tool-approval/` | Main parks a promise and pushes `tools:approval-request`; `ToolApprovalService` queues the calls, `ToolApprovalDialog` shows source, tool and arguments; "Always allow" persists the source rule (`SettingsService.allowToolSourceImmediate`). |
+| Host merge | `electron/plugin-host/plugin-host.ts` | `ctx.llm.chat` merges plugin tools, the vault set (`vaultTools`) and the external set (`externalTools`, SDK 1.15); earlier wins a name collision. The vault set's write rule comes from `tools.vault.write`; `ctx.vault.confirmWrite` exposes the ADR-0011 diff as a question. |
+| Assistant | `plugins/assistant/main/chat-engine.ts` | Reads the groups per ask: vault → `vaultTools`, tasks / templates → its own tools, web fetch or any enabled server → `externalTools` + `ASK_WEB_NOTE` + 8 tool rounds. Not on live-edit turns. |
+| Settings | `src/app/settings/tools/` | "Assistant tools": the group switches and rules, and the server list (name, connection, command / arguments / environment or address / headers, approval, live status, reconnect). Settings → MCP keeps the server offered to other programs. |
+| IPC | `shared/ipc-api.ts` | `tools:status`, `tools:reconnect`, `tools:approval-request` / `tools:approval-decision`. |
+| Drey's own server | `electron/mcp/server.ts` + `http-transport.ts` | Same milestone: the protocol layer is the SDK (`createVaultMcpServer`, one stateless Streamable HTTP transport per `POST /mcp`, JSON answers). `isLocalHost` / `isLocalOrigin` refuse anything that is not this machine — including a web page in a local browser. `VaultTools` and the dependency-free `stdio-bridge.ts` are unchanged apart from the bridge's `Accept` header. |

@@ -4,6 +4,5 @@
  */
 export { VaultTools, VAULT_TOOL_DEFS } from './vault-tools';
 export type { ConfirmWrite, McpToolDef, McpToolResult, McpTextContent } from './vault-tools';
-export { McpServer, PROTOCOL_VERSION } from './server';
-export type { JsonRpcRequest, JsonRpcResponse } from './server';
+export { createVaultMcpServer, MCP_SERVER_NAME } from './server';
 export { McpHttpTransport } from './http-transport';

@@ -566,9 +566,9 @@ export const ANTHRAZIT_THEME = 'anthrazit';
  */
 export interface McpConfig {
   /**
-   * Master switch. Off: no MCP server, and the assistant does not call
-   * vault tools. On: the tool set is available in-process to the
-   * assistant, and (with `httpEnabled`) over the network.
+   * Master switch of the server Drey offers to OTHER programs. What the
+   * built-in assistant may call is `tools` (milestone 63, ADR-0063) --
+   * the two were one switch before.
    */
   enabled: boolean;
   /**
@@ -581,12 +581,56 @@ export interface McpConfig {
   /** Port for the localhost HTTP endpoint. */
   httpPort: number;
   /**
-   * "YOLO mode": apply a `vault_write` tool call WITHOUT the confirmation
-   * diff. Off by default and meant to stay off -- a model (local or a
-   * remote client's) can otherwise overwrite vault files unattended.
+   * "YOLO mode": apply an MCP client's `vault_write` WITHOUT the
+   * confirmation diff. Off by default and meant to stay off. The
+   * assistant's own writes follow `tools.vault.write`.
    */
   yolo: boolean;
 }
+
+/** Whether a tool group's writes show the ADR-0011 diff first. */
+export type ToolWriteMode = 'confirm' | 'auto';
+/** Whether a call that leaves the machine is asked for first. */
+export type ToolApprovalMode = 'ask' | 'allow';
+
+export interface McpStdioTransport {
+  kind: 'stdio';
+  command: string;
+  args: string[];
+  env: Record<string, string>;
+}
+
+export interface McpHttpTransportConfig {
+  kind: 'http';
+  url: string;
+  headers: Record<string, string>;
+}
+
+/** One external MCP server the assistant may call (milestone 63, ADR-0063). */
+export interface McpClientServer {
+  /** Slug (`[a-z0-9-]`), unique; the tool prefix `mcp__<id>__`. */
+  id: string;
+  name: string;
+  enabled: boolean;
+  approval: ToolApprovalMode;
+  transport: McpStdioTransport | McpHttpTransportConfig;
+}
+
+/**
+ * What the built-in assistant may call (milestone 63, ADR-0063): one
+ * switch per tool group, one write rule per writing group, one approval
+ * rule per source that leaves the machine. Everything external is off by
+ * default.
+ */
+export interface ToolsConfig {
+  vault: { enabled: boolean; write: ToolWriteMode };
+  tasks: { enabled: boolean };
+  templates: { enabled: boolean; write: ToolWriteMode };
+  webFetch: { enabled: boolean; approval: ToolApprovalMode };
+  servers: McpClientServer[];
+}
+
+export const MCP_SERVER_ID_MAX = 24;
 
 export const MCP_PORT_MIN = 1024;
 export const MCP_PORT_MAX = 65535;
@@ -634,6 +678,7 @@ export interface AppConfig {
   editor: EditorConfig;
   appearance: AppearanceConfig;
   mcp: McpConfig;
+  tools: ToolsConfig;
   entry: EntryConfig;
   daily: DailyConfig;
   templates: TemplatesConfig;
