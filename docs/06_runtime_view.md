@@ -304,7 +304,7 @@ sequenceDiagram
         NoteManager->>Pure: readFrontmatter(body)
         NoteManager->>Pure: extractInlineTags(body)  (skips code, ## HH:mm, #task/#important)
         Note over NoteManager: daily/ + templates/ -> keep tags, still bump updated
-        NoteManager->>Pure: bumpUpdated(fm)  ->  { updated: now, created }
+        NoteManager->>Pure: touchUpdated  ->  updated: now, only where the key exists (milestone 65)
         NoteManager->>Pure: writeFrontmatter(body, { tags, updated, created })
         Note over Pure: yaml parseDocument -> mutate only those keys,<br/>comments + styles preserved, dates double-quoted
         NoteManager->>VaultManager: writeFile(path, newText with EOL)
@@ -684,8 +684,7 @@ sequenceDiagram
     Preload->>NoteManager: note:save
     NoteManager->>Pure: readFrontmatter(body)
     alt has --- fence
-        NoteManager->>Pure: bumpUpdated(fm) -> { updated: now, created }
-        NoteManager->>Pure: writeFrontmatter(body, { updated, created })
+        NoteManager->>Pure: touchUpdated(body) -> updated: now, only where the key exists (milestone 65)
     else no fence
         Note over NoteManager: body used verbatim
     end
@@ -2637,3 +2636,70 @@ written as it is. Closing the tab writes what is pending at once; if an
 export is still out, the last picture is written with the newest XML put
 into it. A file that disappears while its tab is open stops the session
 ("Diagram not found") instead of recreating the old path.
+## 6.55 Git vault: save → status → Files panel; commit; switch branch (milestone 65, [ADR-0065](09_architecture_decisions/0065-git-vaults-source-control-plugin.md))
+
+```mermaid
+sequenceDiagram
+    participant Ed as EditorService
+    participant NM as NoteManager (main)
+    participant Git as git plugin (main)
+    participant CLI as git (process)
+    participant Panel as Source control panel
+    participant Deco as FileDecorationService
+    participant Files as FilesPanel
+
+    Ed->>NM: note:save
+    NM->>NM: touchUpdated — only an existing updated: changes
+    NM-->>Git: onNoteSaved(vaultId)
+    Git->>Git: debounce 250 ms
+    Git->>CLI: status --porcelain=v2 -z --branch -- .
+    CLI-->>Git: records
+    Git->>Git: parseStatus(prefix) → VaultGitState
+    Git-->>Panel: status-updated [states]
+    Panel->>Deco: setFileDecorations(vaultId, decorationsFor(status))
+    Deco-->>Files: tone per row, badge per file
+    Panel->>Panel: render lists
+```
+
+A save of a file that is not a note reaches the same path through the
+panel: the tab turning clean makes it ask for a fresh status. So does
+the window regaining focus (somebody may have used git elsewhere).
+
+```mermaid
+sequenceDiagram
+    participant User
+    participant Panel as Source control panel
+    participant Git as git plugin (main)
+    participant CLI as git (process)
+    participant Host as plugin host (main)
+    participant App as tree · indexes · tabs
+
+    User->>Panel: Commit
+    alt tabs of the vault are unsaved
+        Panel->>User: Commit anyway / Save all and commit
+    end
+    Panel->>Git: commit { vaultId, message }
+    Git->>CLI: commit -F -   (message on stdin)
+    Git-->>Panel: new states
+
+    User->>Panel: pick a branch
+    alt tabs of the vault are unsaved
+        Panel->>User: refused — save or close them first
+    else
+        Panel->>Git: checkout { vaultId, name }
+        Git->>CLI: rev-parse HEAD (before)
+        Git->>CLI: switch name
+        Git->>CLI: diff --name-status --relative before after
+        Git->>Host: ctx.vault.announceChanges({ changedPaths, deletedPaths })
+        Host->>App: external-change round (ADR-0045): index events, vault:changed push
+        App->>App: tree reloads, clean tabs of the changed files reload
+        Git-->>Panel: new states
+    end
+```
+
+Pull follows the checkout path with `git pull` in the middle and can be
+cancelled; a pull that stops in a conflict still announces (the whole
+vault) before the error is shown. A row click compares through
+`fileAt` — last commit ↔ staged for a staged row, staged ↔ working copy
+(the open tab's text, when there is one) for a changed row — in
+`api.ui.showDiff`.

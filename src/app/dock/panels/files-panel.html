@@ -179,7 +179,8 @@
           (dragleave)="onRowDragLeave($event, node.vaultId, node.entry)"
           (drop)="onRowDrop($event, node.vaultId, node.entry)"
           (dragend)="onDragEnd()"
-          [title]="absPathOf(node.vaultId, node.entry.relativePath)"
+          [attr.data-status]="decorationOf(node.vaultId, node.entry.relativePath)?.tone ?? null"
+          [title]="titleOf(node.vaultId, node.entry.relativePath)"
         >
           <app-icon
             class="twist"
@@ -208,10 +209,14 @@
           (dragleave)="onRowDragLeave($event, node.vaultId, node.entry)"
           (drop)="onRowDrop($event, node.vaultId, node.entry)"
           (dragend)="onDragEnd()"
-          [title]="absPathOf(node.vaultId, node.entry.relativePath)"
+          [attr.data-status]="decorationOf(node.vaultId, node.entry.relativePath)?.tone ?? null"
+          [title]="titleOf(node.vaultId, node.entry.relativePath)"
         >
           <span class="bullet" aria-hidden="true"></span>
           <span class="node-name">{{ node.entry.name }}</span>
+          @if (decorationOf(node.vaultId, node.entry.relativePath)?.badge; as badge) {
+            <span class="status-badge" aria-hidden="true">{{ badge }}</span>
+          }
         </button>
       }
     }

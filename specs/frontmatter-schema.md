@@ -14,10 +14,14 @@ updated: '2026-09-05T14:32:00'
 ```
 - All fields optional. A file with **no `---` fence** is written back
   byte-for-byte on save — the app never adds a header that wasn't there.
-- With a fence, `note:save` bumps `updated:` to the save time and fills a
-  missing `created:`; no other field is touched, added or removed.
-- `created:` is a **date+time** stamp (`YYYY-MM-DDTHH:mm:ss`) on newly
-  created files (notes, daily notes, chat notes — since milestone 31).
+- With a fence, `note:save` sets `updated:` to the save time **only when
+  the note already has that key**. Nothing is ever added — no `updated:`,
+  no `created:` — and no other field is touched or removed, so a note
+  whose frontmatter belongs to another tool (a mkdocs page) is saved as
+  it is (milestone 65, ADR-0065).
+- `created:` is a **date+time** stamp (`YYYY-MM-DDTHH:mm:ss`) written by
+  whatever creates the file (the daily template, chat notes — since
+  milestone 31); a save never adds it afterwards.
   Legacy date-only values (`'2026-08-01'`) in existing files remain valid,
   are displayed as-is, and are **never rewritten** to the new format.
 - Always write dates as a **quoted string** — unquoted YAML dates break

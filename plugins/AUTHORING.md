@@ -46,7 +46,7 @@ running the previous build (a changed renderer module 404s). Verify with
 
 - `apiVersion` is a **major gate**: a manifest whose major differs from
   `PLUGIN_API_VERSION.major` (`shared/plugin-api/versions.ts`, currently
-  `{ major: 1, minor: 11 }`) is never imported — the plugin shows up in
+  `{ major: 1, minor: 17 }`) is never imported — the plugin shows up in
   Settings → Panels & plugins as incompatible. Minor bumps are additive;
   1.9 added `commands.run(id, payload?)`, `ui.createTagField` (the shared
   tag chip field — prefer it over a hand-rolled chip row), the main-side
@@ -214,3 +214,21 @@ the mixed case, the templates page for the pure-field case.
 - A doc kind has no dirty state. A plugin tab that edits a file saves on
   its own (debounced, and when it unmounts); see the diagrams plugin's
   `embed-session.ts` for the pattern.
+## SDK 1.17 — file decorations, the diff dialog, announcing changes
+
+- `api.ui.setFileDecorations(vaultId, decorations | null)` replaces your
+  plugin's Files-panel decorations for one vault: `{ path, badge, tone,
+  tooltip? }` per file, `tone` one of `modified | added | untracked |
+  conflict | deleted`. The base colours the row, shows the badge on the
+  file and lets each folder inherit the strongest tone below it — also
+  for a path that no longer exists. Send the full list each time; `null`
+  clears it. Your set is dropped when the plugin is deactivated.
+- `api.ui.showDiff({ title, path, before, after, beforeLabel?,
+  afterLabel? })` opens the app's read-only split diff and resolves when
+  it is closed. Use it instead of drawing a diff yourself.
+- `ctx.vault.announceChanges({ vaultId, changedPaths?, deletedPaths? })`
+  (main): call it after your plugin ran something that rewrote vault
+  files behind the app's back. With paths, exactly those files are
+  re-indexed and clean open tabs of them reload; without, the vault is
+  re-read (open tabs are then left alone). The git plugin
+  (`plugins/git/`) is the reference for all three.

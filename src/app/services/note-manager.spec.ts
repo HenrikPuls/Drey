@@ -58,4 +58,15 @@ describe('NoteManager save conflicts', () => {
       { origin: 'save', throttled: true },
     ]);
   });
+
+  it('writes a frontmatter without `updated:` verbatim and bumps an existing one', async () => {
+    const foreign = '---\ntitle: Architecture\n---\n# Page\n';
+    await manager.saveNote({ ...request, body: foreign });
+    expect(writes[0].content).toBe(foreign);
+
+    await manager.saveNote({ ...request, body: '---\nupdated: "2020-01-01T00:00:00"\n---\nbody\n' });
+    expect(writes[1].content).toMatch(/^---\nupdated: "\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d"\n---\nbody\n$/);
+    expect(writes[1].content).not.toContain('2020-01-01');
+    expect(writes[1].content).not.toContain('created');
+  });
 });

@@ -119,22 +119,23 @@ export function writeFrontmatter(text: string, patch: Partial<Frontmatter>): str
 }
 
 /**
- * The `updated:` value for a save (always now) and the `created:` value to
- * use (the existing one, or now as a full datetime if the file has none —
- * schema change: new files timestamp `created`, legacy date-only values in
- * existing files are kept verbatim). `now` is injectable for tests, same
- * pattern as `newDailyEntryEdit` / `applyPlaceholders`.
+ * The save-time frontmatter touch: sets `updated:` to now -- but only in a
+ * note that already carries the key. Nothing is ever added (no `updated:`,
+ * no `created:`), so a file whose frontmatter belongs to another tool (a
+ * mkdocs page, an Obsidian note) is written back as it was. New notes get
+ * their dates from the template that creates them. `now` is injectable for
+ * tests, same pattern as `newDailyEntryEdit` / `applyPlaceholders`.
  */
-export function bumpUpdated(
-  frontmatter: Frontmatter | null,
-  now: Date = new Date(),
-): { updated: string; created: string } {
-  const existingCreated = frontmatter?.created;
-  return {
-    updated: formatDateTime(now),
-    created:
-      existingCreated && existingCreated.trim() !== '' ? existingCreated : formatDateTime(now),
-  };
+export function touchUpdated(text: string, now: Date = new Date()): string {
+  const { yamlText, hadFence } = splitFrontmatter(text);
+  if (!hadFence || yamlText === null) {
+    return text;
+  }
+  const doc = parseDocument(yamlText);
+  if (doc.errors.length > 0 || !doc.has('updated')) {
+    return text;
+  }
+  return writeFrontmatter(text, { updated: formatDateTime(now) });
 }
 
 function setScalar(doc: Document, key: string, value: string, quoted: boolean): void {

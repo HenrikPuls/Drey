@@ -654,6 +654,23 @@ export class PluginHost {
         },
         confirmWrite: (request) =>
           this.deps.confirmWrite?.({ ...request, mode: 'overwrite', origin: 'assistant' }) ?? Promise.resolve(false),
+        // A plugin rewrote the working tree itself (a git checkout / pull):
+        // the same round the watcher would run, scoped when paths are known.
+        announceChanges: (changes) => {
+          const changedPaths = changes.changedPaths ?? [];
+          const deletedPaths = changes.deletedPaths ?? [];
+          if (changedPaths.length === 0 && deletedPaths.length === 0) {
+            this.deps.vaultAnnouncer()?.announceFullRefresh(changes.vaultId);
+            return;
+          }
+          const isNote = (p: string): boolean => p.toLowerCase().endsWith('.md');
+          this.deps.vaultAnnouncer()?.announceExternal({
+            vaultId: changes.vaultId,
+            changedPaths: changedPaths.filter(isNote),
+            deletedPaths: deletedPaths.filter(isNote),
+            otherPaths: [...changedPaths, ...deletedPaths].filter((p) => !isNote(p)),
+          });
+        },
         saveAsset: (bytes, ext, noteRelPath, opts) =>
           vaultManager.saveAsset(bytes, ext, noteRelPath, opts?.vaultId),
         list: (opts) => vaultManager.listFiles(opts?.vaultId),

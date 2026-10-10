@@ -1,0 +1,12 @@
+{
+  "id": "git",
+  "name": "Git",
+  "version": "1.0.0",
+  "apiVersion": 1,
+  "description": "Git vaults: the status of every file of a vault that lives in a Git repository shown in the Files panel, and the Source control dock panel -- stage, commit, push / pull / fetch, switch and create branches, compare against the last commit, discard changes, read the commit log. Runs the installed git.",
+  "author": "Drey",
+  "main": "main/index.js",
+  "renderer": "renderer/index.js",
+  "css": ["renderer/git.css"],
+  "permissions": ["documents", "vault", "commands", "settings", "main-process"]
+}

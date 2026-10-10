@@ -22,7 +22,7 @@ const LINES = 160;
 const LONG = `# Long note\n\n${Array.from({ length: LINES }, (_, i) => `Line ${i} of the long note.`).join('\n')}\n`;
 const OTHER = '# Other\n\nshort body\n';
 /** Frontmattered twin of LONG: a save rewrites the fence (the `updated:` bump). */
-const SAVED = `---\ntitle: Save me\n---\n\n# Save note\n\n${Array.from({ length: LINES }, (_, i) => `Line ${i} of the save note.`).join('\n')}\n`;
+const SAVED = `---\ntitle: Save me\nupdated: "2026-01-01T00:00:00"\n---\n\n# Save note\n\n${Array.from({ length: LINES }, (_, i) => `Line ${i} of the save note.`).join('\n')}\n`;
 
 test.use({ seedVault: { 'long.md': LONG, 'other.md': OTHER, 'saved.md': SAVED } });
 
@@ -133,7 +133,7 @@ test.describe('caret + scroll restore (milestone 50)', () => {
     const setTo = 600;
     await scrollTo(page, setTo);
     // Dirty the note inside the scrolled viewport, then save. The pipeline
-    // bumps `updated:` (+ fills `created:`), the renderer adopts the
+    // bumps the note's existing `updated:`, the renderer adopts the
     // rewritten text, and the effect reloads the SAME tab in place -- the
     // resulting full replace must not cost the user their viewport.
     await page.locator('.cm-line', { hasText: 'Line 30 of the save note.' }).click();

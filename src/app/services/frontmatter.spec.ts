@@ -1,5 +1,5 @@
 import {
-  bumpUpdated,
+  touchUpdated,
   readFrontmatter,
   splitFrontmatter,
   writeFrontmatter,
@@ -113,23 +113,30 @@ describe('writeFrontmatter', () => {
   });
 });
 
-describe('bumpUpdated', () => {
+describe('touchUpdated', () => {
   const now = new Date(2026, 8, 6, 10, 0, 0);
 
-  it('sets updated to now and keeps an existing created', () => {
-    const fm = { created: '2026-08-01' } as Frontmatter;
-    expect(bumpUpdated(fm, now)).toEqual({ updated: '2026-09-06T10:00:00', created: '2026-08-01' });
+  it('sets an existing updated to now and leaves every other key alone', () => {
+    const text = '---\ntitle: A\ncreated: "2026-08-01"\nupdated: "2026-08-02T09:00:00"\n---\nbody\n';
+    expect(touchUpdated(text, now)).toBe(
+      '---\ntitle: A\ncreated: "2026-08-01"\nupdated: "2026-09-06T10:00:00"\n---\nbody\n',
+    );
   });
 
-  it('fills created with the full datetime when the file has none', () => {
-    expect(bumpUpdated(null, now)).toEqual({
-      updated: '2026-09-06T10:00:00',
-      created: '2026-09-06T10:00:00',
-    });
+  it('adds nothing to a frontmatter without updated (no created either)', () => {
+    const text = '---\ntitle: Architecture\nhide:\n  - toc\n---\n# Page\n';
+    expect(touchUpdated(text, now)).toBe(text);
   });
 
-  it('keeps a legacy date-only created verbatim (no rewrite to datetime)', () => {
-    const fm = { created: '2026-08-01' } as Frontmatter;
-    expect(bumpUpdated(fm, now)).toEqual({ updated: '2026-09-06T10:00:00', created: '2026-08-01' });
+  it('fills an updated key that is present but empty', () => {
+    expect(touchUpdated('---\nupdated:\n---\nbody\n', now)).toBe(
+      '---\nupdated: "2026-09-06T10:00:00"\n---\nbody\n',
+    );
+  });
+
+  it('returns a note without a fence, or with broken YAML, unchanged', () => {
+    expect(touchUpdated('# just a note\n', now)).toBe('# just a note\n');
+    const broken = '---\nupdated: [unclosed\n---\nbody\n';
+    expect(touchUpdated(broken, now)).toBe(broken);
   });
 });

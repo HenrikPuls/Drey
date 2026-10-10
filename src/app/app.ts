@@ -6,6 +6,7 @@ import { ConfirmDialog } from './confirm-dialog/confirm-dialog';
 import { ConflictDialog } from './conflict';
 import { ToolApprovalDialog, ToolApprovalService } from './tool-approval';
 import { HistoryDialog, HistoryService } from './history';
+import { DiffDialog } from './diff-view';
 import { LinkUpdateDialog } from './link-update';
 import { Palette, PaletteService } from './palette';
 import { ExitConfirmDialog } from './exit-confirm-dialog/exit-confirm-dialog';
@@ -59,6 +60,7 @@ import { EditorContextMenuRegistry } from './plugin-host';
     ConflictDialog,
     ToolApprovalDialog,
     HistoryDialog,
+    DiffDialog,
     Palette,
     ConfirmDialog,
     ExitConfirmDialog,

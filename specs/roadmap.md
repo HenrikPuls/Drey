@@ -47,15 +47,17 @@ starts on an item without an id, assign the next free one.
 ⚠️ Milestone ids: req-35 went to the Task Center (implemented as
 milestone 44, then **reverted before release** — see the closed item
 below and changelog.md); req-36 to the Autotag re-homing (shipped).
-Check changelog.md for anything higher before assigning req-37+.
+Check changelog.md for anything higher before assigning a new id
+(req-40 went to the Git vaults, milestone 65).
 
 Order set on 2026-10-10 after the milestone 33–58 verification round.
 (Its first two items shipped: link update on rename + quick switcher /
 command palette as milestone 59, the conflict dialog + local note
 history as milestone 60. The 2026-10-10 startup work followed: analysis
 + speed as milestone 61, the splash window as milestone 62. Then Req-31,
-the MCP client with the assistant's tool groups, as milestone 63, and
-req-19, draw.io diagrams, as milestone 64.)
+the MCP client with the assistant's tool groups, as milestone 63,
+req-19, draw.io diagrams, as milestone 64, and — on an owner request
+outside the list — Git vaults (req-40) as milestone 65.)
 
 1. The **Req-2 Office remainder** (in the backlog below). The file-opener
    seam of milestone 64 (a plugin opens files by name suffix) is the
@@ -70,6 +72,11 @@ Follow-ups of milestone 63 (ADR-0063), none committed: OAuth-protected
 MCP servers, a per-question tools switch in the composer, handing the
 configured servers to the Claude Code CLI provider, MCP resources /
 prompts.
+
+Follow-ups of milestone 65 (ADR-0065), none committed: clone a
+repository as a new vault, stash, a merge / rebase surface, staging
+parts of a file, amend, showing dotfiles such as `.gitignore` in the
+tree.
 
 Not ordered: **Semantic Search, remaining slices** — the core shipped as
 milestone 41 / ADR-0055 (the assistant's Vault chip: top-k section

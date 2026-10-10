@@ -318,6 +318,19 @@ export interface MainPluginContext {
      */
     confirmWrite(request: { path: string; before: string; after: string }): Promise<boolean>;
     /**
+     * Tells the app that files of one vault changed on disk behind its
+     * back (SDK 1.17 -- a plugin ran a tool that rewrites the working
+     * tree, e.g. a git checkout). Runs the external-change round: the
+     * Files tree reloads, the indexes follow and clean open tabs reload.
+     * With paths the round is scoped to them; without, the whole vault is
+     * re-read.
+     */
+    announceChanges(changes: {
+      vaultId: string;
+      changedPaths?: readonly string[];
+      deletedPaths?: readonly string[];
+    }): void;
+    /**
      * Stage binary bytes as a vault asset (the editor's ADR-0024 path):
      * hash-named under `attachments/` beside `noteRelPath`, collisions
      * suffixed. Returns the vault-relative path to reference.

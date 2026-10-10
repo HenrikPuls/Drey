@@ -96,13 +96,14 @@ against: `manifest.ts` (`PluginManifest` + `validateManifest`),
 major mismatch ⇒ `incompatible`). Exempt from module-boundary lint, like
 `shared/ipc-api.ts`.
 
-**Plugins** (`plugins/<id>/`, eleven shipped — `drawio`, the diagram
+**Plugins** (`plugins/<id>/`, twelve shipped — `drawio`, the diagram
 editor tab of milestone 64, is described in §5.37): `sample` (exercises every
 surface), `templates`, `meeting`, `tags`, `tasks`, `assistant`
 (Assistant + Actions), `browser`, `ocr` (vision-LLM OCR, ADR-0050),
 `outline` (the open note's heading tree, renderer-only), `backlinks`
 (the "what links here" panel over a per-vault outlink index,
-milestone 54). Each
+milestone 54), `git` (file status in the Files panel + the Source
+control panel over the installed git, milestone 65, ADR-0065). Each
 is a full stack: `plugin.json` +
 `main/` (CommonJS, Node access — `electron/` and app-`shared/` CJS
 allowed) + `renderer/` (browser-context ES modules + CSS, served over
@@ -131,7 +132,7 @@ graph TB
         MCP["mcp/: VaultTools (vault_search via<br/>registered SectionSearchProvider)"]
     end
     subgraph Plugins["plugins/<id>/  (dist-electron/plugins/<id>/)"]
-        P1["templates · meeting · tags ·<br/>tasks · assistant · browser · ocr ·<br/>outline · backlinks · sample"]
+        P1["templates · meeting · tags ·<br/>tasks · assistant · browser · ocr ·<br/>outline · backlinks · drawio · git · sample"]
         P2["each: plugin.json + main/ (CJS,<br/>Node ok) + renderer/ (ESM + CSS over<br/>plugin://, plain DOM) + shared/"]
     end
     SDK["shared/plugin-api/<br/>manifest · DreyPluginApi ·<br/>MainPluginContext · PLUGIN_API_VERSION"]
@@ -163,12 +164,14 @@ fills** — base knows the interfaces, not the features:
 | Dock panels + status values | `ui.registerWidget` | — |
 | Non-file editor tabs (doc kinds) | `ui.registerDocKind` | — |
 | Settings pages | `ui.registerSettingsPage` | — |
+| Files-panel row decorations (badge + tone per path, folders inherit; SDK 1.17) | `ui.setFileDecorations` | — |
+| Read-only before / after dialog (the shared `DiffView`; SDK 1.17) | `ui.showDiff` | — |
 | Menu rows (`file`/`edit`/`selection`/`view`/`editor-more`) | `ui.registerMenuContributions` | — |
 | Commands + keybindings | `commands.register` / `run(id, payload?)` (payload carries invoker context, SDK 1.9 — the base tag pills run `search.open` with `{ tag }`) | — |
 | Shared tag chip field (colored chips + completion, milestone 33) | `ui.createTagField` | — |
 | Editor extensions (host CM instances), drop decoders, context-menu items (with the click target, ADR-0050), composer slot | `editor.*` | — |
 | Document read/observe/insert/confirmed rewrite/open + the live-edit input lock | `documents.*` (incl. `setEditLock`, ADR-0049) | — |
-| Vault IO + change push | `vault.*` (incl. `saveAsset`) | `ctx.vault.*` (incl. `writeAnnounced`) |
+| Vault IO + change push | `vault.*` (incl. `saveAsset`) | `ctx.vault.*` (incl. `writeAnnounced`; `announceChanges` after a plugin rewrote the working tree, SDK 1.17) |
 | Backend methods + pushes (the plugin's own IPC) | `backend.invoke` / `backend.on` | `ctx.ipc.handle` / `ctx.ipc.emit` |
 | Save pipeline (`{content?, pendingActions?}`), vault lifecycle, section search | — | `ctx.save`, `ctx.vault` hooks, `ctx.search` (`notifyChanged` pushes `search:changed` to the base vocabulary service, SDK 1.9; the provider's optional `styles()` serves the tag prefix colors) |
 | LLM transport | `llm.chat/cancelTask/onDebugEntry/onDelta/listModels/capabilities/onCapabilitiesChanged` | `ctx.llm.chat/suggestTags/capabilities` (chat gains `tools`/`onToolCall`/`maxToolRounds`, ADR-0049; `maxOutputTokens` + the capability push, ADR-0050) |
@@ -770,7 +773,7 @@ shared/             Code compiled into BOTH electron/ and src/ (two separate
                       and dailyDateFromPath(path, dir) (nested + legacy flat,
                       both inside the configured folder); DEFAULT_DAILY_DIR = 'daily'
   timestamp.ts       Pure local-time formatters (date / time / datetime / timestamp)
-  frontmatter.ts     Pure YAML frontmatter engine (split / read / write / bumpUpdated),
+  frontmatter.ts     Pure YAML frontmatter engine (split / read / write / touchUpdated),
                       built on the `yaml` package's parseDocument for a lossless
                       round-trip; forces date fields to double-quoted scalars
   entries.ts         Pure: split a note body into dated entries (## HH:mm /
@@ -2656,3 +2659,15 @@ main-side plugin writes.
 | Web app | `plugins/drawio/vendor/webapp/` (gitignored) | draw.io itself, fetched by `scripts/fetch-drawio.mjs` from the release pinned in `plugins/drawio/drawio-version.json`, trimmed to what the offline embed loads; copied to `dist-electron/plugins/drawio/webapp/` by `build-plugins.mjs`. |
 | Binary + announced writes | `electron/ipc/vault-handlers.ts`, `VaultManager` | `vault:read-binary` / `vault:write-binary` (a file at an exact path, unlike `saveAsset`), and `announce` on both writes: the change round for that path (plugins + `vault:changed` push) instead of the plugins-only event. SDK: `vault.readBinary`, `vault.writeBinary`, `vault.writeFile(…, { announce })`. |
 | Picture refresh | `src/app/editor/vault-image.ts` | `refreshChangedAssets`: on a `vault:changed` push with paths, a per-path revision goes into the `drey-asset://` URL (`?v=<n>`) and pictures already on screen get the new URL — a saved diagram shows in every open note. |
+## 5.38 Git vaults — the source-control plugin (milestone 65, [ADR-0065](09_architecture_decisions/0065-git-vaults-source-control-plugin.md))
+
+| Block | Where | Responsibility |
+| --- | --- | --- |
+| Git runner | `plugins/git/main/git-runner.ts` | `GitRunner.run(cwd, args, options)`: the installed `git` via `execFile` — no shell, literal pathspecs, no terminal prompt, `GIT_OPTIONAL_LOCKS=0` on reads. One queue per repository; an abort kills the process tree (`taskkill /T` on Windows). Errors are `GitError` (`not-found` / `failed` / `cancelled`) with git's own message. |
+| Parsers | `plugins/git/shared/status.ts` | Pure, shared by both sides: `parseStatus` (porcelain v2, `-z`), `parseBranches`, `parseLog`, `parseNameStatus`, the repository ↔ vault path mapping (`toVaultPath` / `toRepoPath` over the vault's `prefix`), `decorationsFor`, `isPlausibleBranchName`. |
+| Backend | `plugins/git/main/index.ts` | Locates each vault's repository (`rev-parse --show-toplevel --show-prefix`; root or subfolder), keeps a `VaultGitState` per vault and pushes `status-updated` (debounced after saves and vault change rounds, immediately after its own commands). Handlers: `status`, `stage`, `unstage`, `discard`, `commit` (message over stdin), `branches`, `checkout`, `createBranch`, `fetch` / `pull` / `push` (cancellable; first push publishes with `-u`), `log`, `fileAt`, `cancel`, `configChanged`. After checkout / pull / discard it calls `ctx.vault.announceChanges` with the files that differ. |
+| Panel | `plugins/git/renderer/index.ts` + `git.css` | The "Source control" dock widget (`id: git`): branch button → branch picker, commit message + commit, the lists *Merge conflicts* / *Staged changes* / *Changes* (row click = diff; stage / unstage / discard / open), a collapsible *History*; header icons Fetch · Pull · Push · Refresh. Shows the repository of the focused document's vault. Asks before a commit with unsaved tabs, refuses checkout / pull while tabs are unsaved, confirms a discard. Settings page "Git" (`gitPath`). Commands `git.commit` / `git.push` / `git.pull` / `git.refresh`. |
+| File decorations | `src/app/services/file-decoration.service.ts` | `FileDecorationService` (SDK 1.17, `api.ui.setFileDecorations`): one set per plugin and vault, merged into a lookup; a folder inherits the strongest tone among its descendants (deleted files included). Cleared when the plugin is deactivated. `FilesPanel` reads it per row: `data-status` (tone → `--status-*` token) on files and folders, the badge and tooltip on files. |
+| Diff dialog | `src/app/diff-view/diff-dialog.ts` + `diff-dialog.service.ts` | `api.ui.showDiff` (SDK 1.17): the shared `DiffView` as a read-only dialog, one comparison at a time. |
+| Change announcement | `electron/plugin-host/plugin-host.ts` + `vault-change-announcer.ts` | `ctx.vault.announceChanges` (SDK 1.17): with paths → `announceExternal` (index events for the `.md` paths, every path in the renderer push via `otherPaths`, so a clean tab of any file kind reloads); without → `announceFullRefresh(vaultId)`. |
+| Frontmatter rule | `shared/frontmatter.ts` (`touchUpdated`) + `electron/note-manager.ts` | A save sets `updated:` only where the key exists and adds nothing. Replaces `bumpUpdated` (which also filled `created:`). |

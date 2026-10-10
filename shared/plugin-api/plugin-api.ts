@@ -349,6 +349,39 @@ export interface InlineLinkSegment {
 
 export type InlineSegment = InlineTextSegment | InlineLinkSegment;
 
+/**
+ * What a decoration says about a file (SDK 1.17). The base maps each tone
+ * onto a colour; a folder shows the strongest tone among its descendants.
+ */
+export type FileDecorationTone = 'modified' | 'added' | 'untracked' | 'conflict' | 'deleted';
+
+/**
+ * One Files-panel row decoration (SDK 1.17): a short badge and a tone for
+ * the file at `path`. A path that no longer exists (`deleted`) draws no
+ * row of its own but still marks its ancestor folders.
+ */
+export interface FileDecoration {
+  /** Vault-relative path, forward slashes. */
+  readonly path: string;
+  /** One or two characters shown at the row's right edge (`M`, `U`, …). */
+  readonly badge: string;
+  readonly tone: FileDecorationTone;
+  /** Appended to the row's tooltip, e.g. "Modified". */
+  readonly tooltip?: string;
+}
+
+/** A read-only before/after comparison for `ui.showDiff` (SDK 1.17). */
+export interface DiffRequest {
+  /** Dialog header, e.g. "Changes". */
+  readonly title: string;
+  /** Shown under the title (the file's path). */
+  readonly path: string;
+  readonly before: string;
+  readonly after: string;
+  readonly beforeLabel?: string;
+  readonly afterLabel?: string;
+}
+
 /** Options for the LLM chat facade. `taskId` enables `llm.cancelTask(taskId)`. */
 export interface PluginChatOptions {
   readonly temperature?: number;
@@ -515,6 +548,18 @@ export interface DreyPluginApi {
      * yields an empty SVG of the right size.
      */
     icon(name: string, size?: number): SVGElement;
+    /**
+     * Replaces this plugin's Files-panel decorations for one vault (SDK
+     * 1.17); `null` or an empty list clears them. Each plugin owns its own
+     * set -- the base merges them and clears a plugin's set when it is
+     * deactivated.
+     */
+    setFileDecorations(vaultId: string, decorations: readonly FileDecoration[] | null): void;
+    /**
+     * Opens the app's read-only diff dialog (SDK 1.17) -- the same split
+     * view the note history shows. Resolves when the user closes it.
+     */
+    showDiff(request: DiffRequest): Promise<void>;
   };
 
   readonly editor: {
