@@ -105,8 +105,13 @@ export function registerVaultHandlers({
   // --- Filesystem ops -----------------------------------------------------
   // The manual refresh (Files panel button / ADR-0045): one full round in
   // main -- index rebuild plus the renderer push -- instead of the old
-  // tree-only pull that left the tag/task indexes stale.
+  // tree-only pull that left the tag/task indexes stale. Awaits plugin
+  // activation first (milestone 61): the renderer fires this from its
+  // VaultService constructor while main may still be activating plugins;
+  // without the gate the round would land on unregistered vault hooks and
+  // the boot would come up with empty indexes.
   ipcMain.handle(IPC_CHANNELS.vaultRefresh, async (): Promise<void> => {
+    await pluginHost.activationDone();
     fullVaultRefresh();
   });
   ipcMain.handle(
@@ -122,7 +127,9 @@ export function registerVaultHandlers({
     IPC_CHANNELS.vaultWriteFile,
     async (_event, relativePath: string, content: string, vaultId?: string): Promise<number> => {
       const resolvedVaultId = vaultManager.resolveVaultId(vaultId);
-      const modifiedMs = await vaultManager.writeFile(relativePath, content, resolvedVaultId);
+      const modifiedMs = await vaultManager.writeFile(relativePath, content, resolvedVaultId, {
+        origin: 'app',
+      });
       // A raw write bypasses the note:save pipeline — tell plugins directly.
       pluginHost.emitVaultChange({ kind: 'write', path: relativePath, vaultId: resolvedVaultId });
       return modifiedMs;

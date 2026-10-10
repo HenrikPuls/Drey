@@ -2420,3 +2420,127 @@ The plan is computed twice on purpose: the preview is what the user
 sees, the apply reads the vault again â€” a file changed in between
 contributes what it matches then. The index round after the rename is
 the plain rename's (`refresh` + the `rename` vault-change event).
+
+## 6.50 Save â†’ the file changed on disk â†’ merge (milestone 60, [ADR-0060](09_architecture_decisions/0060-save-conflicts-and-local-note-history.md))
+
+```mermaid
+sequenceDiagram
+    actor User
+    participant ES as EditorService
+    participant NM as NoteManager (main)
+    participant VM as VaultManager
+    participant H as NoteHistoryStore
+    participant CD as ConflictDialog
+
+    User->>ES: Ctrl+S (dirty tab)
+    ES->>NM: note:save { body, baseModifiedMs }
+    NM->>VM: readFile (mtime + text)
+    alt mtime matches the base
+        NM->>VM: writeFile(origin: save, throttled)
+        VM->>H: capture(previous text)
+        NM-->>ES: { content, modifiedMs }
+    else file changed since the tab read it
+        NM-->>ES: { conflict: { content, modifiedMs } } â€” nothing written
+        alt disk text == what the tab last read
+            ES->>NM: note:save { force } (timestamp-only change, no question)
+        else real conflict
+            ES->>CD: merge view: On disk | Result | Your version
+            User->>CD: tick blocks / edit the result, then Save result (or Cancel)
+            CD-->>ES: merged text, or null
+            alt result == disk version
+                ES->>H: history:capture(buffer, conflict)
+                ES->>VM: readVaultFile â†’ tab reloads, clean
+            else any other result
+                opt result differs from the buffer
+                    ES->>H: history:capture(buffer, conflict)
+                    Note over ES: buffer := result
+                end
+                ES->>NM: note:save { body: result, force, origin: conflict }
+                NM->>VM: writeFile
+                VM->>H: capture(disk version, conflict)
+            else Cancel
+                Note over ES: tab stays dirty, nothing written
+            end
+        end
+    end
+```
+
+With the watcher on, the same dialog is reachable before the save: the
+`vault:changed` round marks the dirty tab (`diskChanged`), the meta bar
+shows "Changed on disk", and `resolveDiskChange` asks without writing â€”
+a result other than the disk version records both versions, becomes the
+buffer and re-bases the tab so the next save goes through.
+
+"File historyâ€¦" reads the other way: `history:list` â†’ pick a version â†’
+`history:read` â†’ diff against the buffer â†’ **Restore** replaces the
+buffer (one undo step); the save that follows records what it replaces.
+
+
+## 6.51 Startup (milestone 61, [ADR-0061](09_architecture_decisions/0061-window-first-startup.md))
+
+```mermaid
+sequenceDiagram
+    participant M as Main (main.ts)
+    participant PH as PluginHost (main)
+    participant W as Main window
+    participant R as Renderer (Angular)
+    participant VS as VaultService
+
+    Note over M: [startup] marks land in drey.log the whole way
+    M->>M: whenReady -> cheap services, protocols, IPC handlers
+    M->>PH: discoverAndActivate() -- completion promise assigned NOW
+    M->>W: createMainWindow + loadURL(app://...)
+    Note over PH: imports + activate() run<br/>while the renderer parses
+    W->>R: app:// bundle (parse ~0.5 s)
+    PH-->>M: activation finished (+per-plugin ms logged)
+    R->>PH: plugins:list -- awaits activationDone()
+    PH-->>R: descriptors
+    R->>R: prefetch ALL plugin:// modules (Promise.all),<br/>then activate sequentially
+    Note over R: plugins loaded+activated (~70 ms)
+    R->>VS: constructor fires vault:refresh
+    VS->>M: vault:refresh -- awaits activationDone()
+    M-->>VS: announcer round: plugin indexes rebuild (background)<br/>+ vault:changed push (tree)
+    R->>R: first paint (shell painted)
+    Note over R: session restore: all reads in parallel,<br/>applied in order, then panes.restore
+```
+
+The gated handlers (`plugins:list`, `plugin:invoke`, `search:vocabulary`
+/ `tags:suggest`, `vault:refresh`) are what make the overlap safe: the
+renderer boots against a host that is either already activated or
+completes activation before the answer. There is exactly one boot index
+round (the renderer's; main's own emission was removed), and
+`onMainWindowCreated` replays the existing window to plugins that
+activate after it exists.
+
+
+## 6.52 Startup splash + handover (milestone 62, [ADR-0062](09_architecture_decisions/0062-splash-window.md))
+
+```mermaid
+sequenceDiagram
+    participant M as Main (main.ts)
+    participant S as Splash window
+    participant R as Renderer (Angular)
+
+    M->>S: create + show (frameless, skipTaskbar)
+    S->>S: paints instantly (inline page, no bundle)
+    M->>S: Starting… 3 % · version
+    M->>S: Loading settings 10 %
+    loop each main-side plugin
+        M->>S: Loading plugin {name} 15–60 %
+    end
+    M->>R: createMainWindow (show: false) + loadURL
+    M->>S: Starting the interface 68 %
+    Note over R: boots hidden — renders anyway<br/>(paintWhenInitiallyHidden)
+    R->>M: startup:progress "Preparing workspace" 85 %
+    R->>M: startup:progress "Restoring session…" 92 %
+    R->>M: startup:ready
+    M->>R: show() — then splash.close() ~120 ms later
+    Note over M: fail-opens reach the same handover:<br/>30 s absolute, 15 s after page load,<br/>render-process-gone, window closed, quit
+```
+
+The splash's progress feed is one shared scale: main owns the pre-render
+stages (its per-plugin steps ride the `onPluginActivated` host hook with
+index/total), the renderer owns everything after `did-finish-load`
+(fire-and-forget `startup:progress` sends; `startup:ready` triggers the
+handover). `SplashController` latches the latest payload and replays it
+once the splash page listens.

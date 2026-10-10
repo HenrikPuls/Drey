@@ -62,6 +62,7 @@ export const DEFAULT_TEMPLATES_CONFIG: TemplatesConfig = { dir: 'templates', sni
 export const DEFAULT_VAULT_CONFIG: VaultConfig = {
   watch: false,
   updateLinksOnRename: 'ask',
+  history: { enabled: true, keepDays: 30, maxPerFile: 50 },
 };
 
 export const DEFAULT_APPEARANCE: AppearanceConfig = {

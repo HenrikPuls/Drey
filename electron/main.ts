@@ -2,6 +2,7 @@ import {
   app,
   BrowserWindow,
   globalShortcut,
+  ipcMain,
   Menu,
   net,
   protocol,
@@ -10,23 +11,27 @@ import {
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { pathToFileURL } from 'node:url';
-import { IPC_CHANNELS } from '../shared/ipc-api';
+import { IPC_CHANNELS, type StartupProgressReport } from '../shared/ipc-api';
 import { UI_SCALE_FACTORS } from '../shared/app-config';
 import { AppConfigStore } from './app-config';
 import chokidar from 'chokidar';
 import { DailyNoteManager } from './daily-note';
 import { ExternalFileGate, extractOpenPaths } from './external-open';
-import { installMainProcessLogging, watchWebContents } from './logger';
+import { installMainProcessLogging, logLine, watchWebContents } from './logger';
 import { LlmDebugLog, LlmRouter, LlmTaskRegistry, TagSuggester, buildClients } from './llm';
 import { registerIpcHandlers, ExitBridge, McpWriteBridge } from './ipc';
 import { McpHttpTransport, McpServer, VaultTools } from './mcp';
 import { attachContextMenu, buildApplicationMenu } from './menu';
 import { NoteManager } from './note-manager';
 import { OwnWriteLedger } from './own-write-ledger';
+import { isHashedAsset, serveWithCaching } from './protocol-cache';
 import { PluginHost } from './plugin-host';
 import { SessionBackupStore } from './session';
 import { SpellcheckService } from './spellcheck';
+import { SplashController } from './splash';
+import { startupMark } from './startup-timing';
 import { VaultChangeAnnouncer } from './vault-change-announcer';
+import { NoteHistoryStore } from './history/note-history-store';
 import { VaultManager } from './vault-manager';
 import { VaultWatcher } from './vault-watcher';
 
@@ -73,6 +78,11 @@ protocol.registerSchemesAsPrivileged([
       supportFetchAPI: true,
       corsEnabled: true,
       stream: true,
+      // V8 code cache opt-in (milestone 61). Measured effect on the dev
+      // machine: none (Chromium currently keeps custom-scheme responses
+      // out of its caches no matter the headers) — kept as the
+      // documented switch for the day that changes.
+      codeCache: true,
     },
   },
   // Serves images referenced from notes (`![](relative/path.png)`) straight
@@ -98,6 +108,8 @@ protocol.registerSchemesAsPrivileged([
       supportFetchAPI: true,
       corsEnabled: true,
       stream: true,
+      // Same V8 code cache opt-in and caveat as `app` (milestone 61).
+      codeCache: true,
     },
   },
 ]);
@@ -115,7 +127,9 @@ function registerAppProtocol(): void {
       return new Response('Forbidden', { status: 403 });
     }
 
-    return net.fetch(pathToFileURL(filePath).toString());
+    // Cache headers (milestone 61): hashed bundle files are immutable,
+    // everything else (index.html, public/ assets) revalidates via ETag.
+    return serveWithCaching(request, filePath, { immutable: isHashedAsset(relativePath) });
   });
 }
 
@@ -205,20 +219,15 @@ function registerPluginProtocol(): void {
     if (path.relative(rootDir, filePath).startsWith('..')) {
       return new Response('Forbidden', { status: 403 });
     }
-    try {
-      const fileResponse = await net.fetch(pathToFileURL(filePath).toString());
-      const body = await fileResponse.arrayBuffer();
-      const ext = path.extname(filePath).toLowerCase();
-      return new Response(body, {
-        status: 200,
-        headers: {
-          'Content-Type': MIME_BY_EXT[ext] ?? 'application/octet-stream',
-          'Access-Control-Allow-Origin': '*',
-        },
-      });
-    } catch {
-      return new Response('Not found', { status: 404 });
-    }
+    const ext = path.extname(filePath).toLowerCase();
+    // ETag revalidation, never immutable (milestone 61): an app update
+    // rewrites plugin files under stable names, so every launch
+    // revalidates and only unchanged files answer 304 — the cached
+    // scripts (and V8's bytecode for them) survive, changed ones reload.
+    return serveWithCaching(request, filePath, {
+      immutable: false,
+      contentType: MIME_BY_EXT[ext],
+    });
   });
 }
 
@@ -253,6 +262,9 @@ let mcpHttpForShutdown: McpHttpTransport | null = null;
 
 /** Module-scope handle so the `will-quit` listener can stop the watcher. */
 let vaultWatcherForShutdown: VaultWatcher | null = null;
+
+/** Module-scope handle so the `will-quit` listener can drop the splash. */
+let splashForShutdown: SplashController | null = null;
 
 /**
  * The main<->renderer bridge for confirming an MCP `vault_write` (ADR-0011 /
@@ -338,12 +350,20 @@ async function openTodayDailyNote(dailyNotes: DailyNoteManager): Promise<void> {
   }
 }
 
-function createMainWindow(getUiScaleFactor?: () => number): BrowserWindow {
+function createMainWindow(
+  getUiScaleFactor?: () => number,
+  opts: { hiddenUntilReady?: boolean } = {},
+): BrowserWindow {
   // A fresh window is a fresh session: the next close prompts again.
   quitIntent = false;
   const window = new BrowserWindow({
     width: 1280,
     height: 800,
+    // Milestone 62 (ADR-0062): the boot window stays hidden until the
+    // renderer reports the workspace ready — the splash covers the parse
+    // and the handover shows a painted app. Later windows (macOS
+    // reopen) show immediately as before.
+    show: opts.hiddenUntilReady !== true,
     // The frameless window draws no title bar, but this still sets the
     // taskbar / Alt-Tab icon (dev too, where there is no exe icon to
     // inherit).
@@ -529,14 +549,76 @@ if (!app.requestSingleInstanceLock()) {
   });
 
   app.whenReady().then(async () => {
+    startupMark('Electron app ready');
+
+    // The startup splash (milestone 62, ADR-0062): shown before anything
+    // heavy, closed at the handover below. Every later stage — main's and
+    // the renderer's — feeds its bar + activity line.
+    const splash = new SplashController({
+      rendererDistDir,
+      // `|| null`: an EMPTY DREY_RENDERER_URL (the e2e fixtures force it)
+      // must take the packaged `app://` path, not a relative dev URL.
+      rendererDevServerUrl: rendererDevServerUrl || null,
+      iconPath: fs.existsSync(windowIconPath) ? windowIconPath : null,
+    });
+    splashForShutdown = splash;
+    splash.create();
+    splash.progress('Starting…', 3, app.getVersion());
+
+    /**
+     * The hidden-until-ready handover: show the main window, then close
+     * the splash a beat later (the brief overlap hides the swap). One-
+     * shot; the fail-open timers below reach it too, so a splash can
+     * never trap the app behind a ready signal that never comes.
+     */
+    let splashHandoverDone = false;
+    let absoluteSplashFailOpen: NodeJS.Timeout | undefined;
+    let loadSplashFailOpen: NodeJS.Timeout | undefined;
+    const splashHandover = (): void => {
+      if (splashHandoverDone) {
+        return;
+      }
+      splashHandoverDone = true;
+      clearTimeout(absoluteSplashFailOpen);
+      clearTimeout(loadSplashFailOpen);
+      mainWindow?.show();
+      setTimeout(() => splash.close(), 120);
+      startupMark('workspace ready — main window shown, splash closing');
+    };
+    // Fail-open 1: nothing (not even the main window's page) loaded in
+    // 30 s — show whatever there is and drop the splash.
+    absoluteSplashFailOpen = setTimeout(() => {
+      if (!splashHandoverDone) {
+        logLine('[startup] splash fail-open: 30 s absolute timer fired');
+      }
+      splashHandover();
+    }, 30_000);
+    // Renderer-fed stages while the splash is up (fire-and-forget sends).
+    ipcMain.on(IPC_CHANNELS.startupProgress, (_event, report: StartupProgressReport) => {
+      if (splashHandoverDone || report === null || typeof report !== 'object') {
+        return;
+      }
+      if (typeof report.label === 'string' && typeof report.pct === 'number') {
+        splash.progress(report.label, report.pct);
+      }
+    });
+    ipcMain.on(IPC_CHANNELS.startupReady, () => splashHandover());
+
     // The own-write ledger records every mutating vault-manager call so the
     // watcher can drop the app's own echoes (ADR-0045). Must exist before
     // the manager; the announcer closes over module state lazily, so
     // construction order stays free.
     const ownWrites = new OwnWriteLedger();
-    const vaultManager = new VaultManager(ownWrites);
-    vaultManagerForGate = vaultManager;
     const appConfig = new AppConfigStore();
+    // Local note history (ADR-0060): earlier versions under the user-data
+    // dir, fed by every vault write. Expired versions go once per start.
+    const noteHistory = new NoteHistoryStore(
+      path.join(app.getPath('userData'), 'history'),
+      () => appConfig.get().vault.history,
+    );
+    void noteHistory.sweep();
+    const vaultManager = new VaultManager(ownWrites, noteHistory);
+    vaultManagerForGate = vaultManager;
     const vaultAnnouncer = new VaultChangeAnnouncer(
       () => pluginHost,
       () => mainWindow,
@@ -600,11 +682,11 @@ if (!app.requestSingleInstanceLock()) {
         }),
     );
     const tagSuggester = new TagSuggester(appConfig, llm, llmTasks);
-    // The plugin host activates main entries before the window exists and
-    // before IPC registration — plugins register their method handlers in
-    // activate(), and the window-created callback reaches them afterwards.
-    // It sits between the LLM facade (which plugins consume) and the
-    // NoteManager (whose save hooks it carries).
+    // The plugin host registers its method handlers during activate().
+    // Since milestone 61 discovery+activation STARTS before the window is
+    // created and runs while the renderer parses its bundle — every IPC
+    // handler that exposes plugin-owned state awaits `activationDone()`,
+    // so the renderer can never observe a half-activated host.
     pluginHost = new PluginHost({
       // `__dirname` is `dist-electron/electron`, so the built-ins the plugin
       // build script emits live one level up.
@@ -622,6 +704,14 @@ if (!app.requestSingleInstanceLock()) {
       // Plugin vault writes that must be visible immediately (chat notes)
       // run the same external-change round as an MCP write.
       vaultAnnouncer: () => vaultAnnouncer,
+      onPluginActivated: ({ id, name, ok, ms, index, total }) => {
+        logLine(
+          `[startup] plugin "${id}" ${ok ? 'activated' : 'FAILED'} in ${Math.round(ms)}ms`,
+        );
+        // The splash band for plugin activation (milestone 62): 15–60 %,
+        // one step per main entry, named for the user.
+        splash.progress(`Loading plugin ${name}`, 15 + (45 * index) / total);
+      },
       log: (message, level) => {
         if (level === 'error') {
           console.error(message);
@@ -632,9 +722,6 @@ if (!app.requestSingleInstanceLock()) {
         }
       },
     });
-    await pluginHost.discoverAndActivate();
-    // The on-save Actions are the assistant plugin's save hook since
-    // ADR-0044 stage 7 — the last base adapter is gone.
     const pluginHostRef = pluginHost;
     const noteManager = new NoteManager(vaultManager, {
       onNoteSaved: (hook) => pluginHostRef.save.onNoteSaved(hook),
@@ -645,12 +732,8 @@ if (!app.requestSingleInstanceLock()) {
     const mcpHttp = new McpHttpTransport(mcpServer);
     mcpHttpForShutdown = mcpHttp;
     const sessionBackups = new SessionBackupStore();
-    // Plugins can react to the initial vault load like any later refresh
-    // (the tags and tasks plugins rebuild their indexes from this event).
-    pluginHostRef.emitVaultChange({ kind: 'refresh' });
-    await syncMcpHttpTransport(mcpHttp, appConfig);
-    // Start watching if the stored config enables it (ADR-0045).
-    await vaultWatcher.syncFromConfig();
+    startupMark('base services + plugin host constructed');
+    splash.progress('Loading settings', 10);
 
     // Push each new debug entry to the renderer so the LLM settings pane
     // updates live while a request is in flight.
@@ -676,6 +759,7 @@ if (!app.requestSingleInstanceLock()) {
     registerIpcHandlers({
       getMainWindow: () => mainWindow,
       sessionBackups,
+      noteHistory,
       vaultManager,
       dailyNotes,
       noteManager,
@@ -700,7 +784,52 @@ if (!app.requestSingleInstanceLock()) {
     // belongs to the system and its accelerators are expected there.
     Menu.setApplicationMenu(process.platform === 'darwin' ? buildApplicationMenu() : null);
     const uiScaleFactor = (): number => UI_SCALE_FACTORS[appConfig.get().appearance.uiScale];
-    createMainWindow(uiScaleFactor);
+    startupMark('protocols + IPC registered');
+
+    // Window-first startup (milestone 61): the discovery+activation round
+    // starts here and runs while the window below loads the renderer —
+    // the renderer's JS parse used to wait for it serially. The gated
+    // handlers make the overlap safe; `discoverAndActivate()` assigns its
+    // completion promise synchronously, before the window exists.
+    // Since milestone 62 the window is HIDDEN until the renderer reports
+    // ready (ADR-0062): the user sees the splash instead of a blank dark
+    // frame during the parse.
+    const activation = pluginHostRef.discoverAndActivate();
+    const bootWindow = createMainWindow(uiScaleFactor, { hiddenUntilReady: true });
+    splash.progress('Starting the interface', 68);
+    startupMark('main window created (plugin activation running)');
+
+    // Fail-open 2: the page loaded but "ready" never arrived within 15 s
+    // (a crashed or wedged renderer must not leave the splash up).
+    bootWindow.webContents.once('did-finish-load', () => {
+      loadSplashFailOpen = setTimeout(() => {
+        if (!splashHandoverDone) {
+          logLine('[startup] splash fail-open: ready signal missing 15 s after page load');
+        }
+        splashHandover();
+      }, 15_000);
+    });
+    // A renderer that died shows whatever there is and drops the splash;
+    // a closed main window takes the splash with it (it must never be the
+    // last window standing — `window-all-closed` would never fire).
+    bootWindow.webContents.once('render-process-gone', () => splashHandover());
+    bootWindow.once('closed', () => splash.close());
+
+    await activation;
+    startupMark('plugin activation finished');
+
+    // No boot index round from main anymore (milestone 61): the
+    // renderer's boot `vault:refresh` (VaultService's constructor) runs
+    // the identical full announcer round — plugin index rebuilds plus the
+    // `vault:changed` push — and that handler awaits `activationDone()`,
+    // so the round always lands on fully registered plugin hooks. One
+    // round instead of two, and it no longer contends with the renderer
+    // bundle fetches.
+
+    await syncMcpHttpTransport(mcpHttp, appConfig);
+    // Start watching if the stored config enables it (ADR-0045).
+    await vaultWatcher.syncFromConfig();
+    startupMark('MCP transport + vault watcher synced');
 
     const shortcutRegistered = globalShortcut.register(CAPTURE_SHORTCUT, () => {
       void openTodayDailyNote(dailyNotes);
@@ -714,10 +843,13 @@ if (!app.requestSingleInstanceLock()) {
     }
 
     app.on('activate', () => {
-      if (BrowserWindow.getAllWindows().length === 0) {
+      // `mainWindow`, not `getAllWindows().length`: the splash also is a
+      // window, and it is no reason to skip recreating the main one.
+      if (mainWindow === null || mainWindow.isDestroyed()) {
         createMainWindow(uiScaleFactor);
       }
     });
+    startupMark('main-process startup complete');
   });
 
   // An app-level quit (taskbar "Quit", Cmd+Q / role quit) with the window
@@ -738,6 +870,7 @@ if (!app.requestSingleInstanceLock()) {
 
   app.on('will-quit', () => {
     globalShortcut.unregisterAll();
+    splashForShutdown?.close();
     void mcpHttpForShutdown?.stop();
     void vaultWatcherForShutdown?.stop();
     // Plugin will-quit hooks first (native teardown, e.g. the browser

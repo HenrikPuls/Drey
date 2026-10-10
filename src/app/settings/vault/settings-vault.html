@@ -14,8 +14,9 @@
         <span class="switch-hint">
           When another program (a sync service, a second editor) changes a file in the vault, the
           file tree, the search and task indexes update on their own, and open tabs without
-          unsaved edits reload from disk. Tabs with unsaved edits are never overwritten. Off by
-          default — the refresh button does the same thing manually.
+          unsaved edits reload from disk. Tabs with unsaved edits are never overwritten — they show
+          “Changed on disk” and let you choose a version. Off by default; the refresh button does
+          the same thing manually.
         </span>
       </span>
     </label>
@@ -41,6 +42,34 @@
         attachments used only by a moved note move along with it. An attachment other notes use
         too stays where it is and the moved note's link is adjusted instead.
       </p>
+    </div>
+    <label class="switch-row">
+      <input
+        type="checkbox"
+        [checked]="vault.history.enabled"
+        (change)="onHistoryEnabledChange($any($event.target).checked)"
+      />
+      <span>
+        <span class="switch-label">Keep a local history of notes</span>
+        <span class="switch-hint">
+          Before a note is overwritten — by a save, the assistant, an MCP client, replace-all or a
+          link update — its previous version is kept on this computer, outside the vault. Open it
+          with “File history…” in a tab's menu. Chat notes are not included.
+        </span>
+      </span>
+    </label>
+    <div class="field">
+      <label for="vault-history-days">Keep versions for (days)</label>
+      <input
+        id="vault-history-days"
+        type="number"
+        min="1"
+        max="365"
+        [disabled]="!vault.history.enabled"
+        [value]="vault.history.keepDays"
+        (change)="onHistoryDaysChange($any($event.target).value)"
+      />
+      <p class="field-hint">At most {{ vault.history.maxPerFile }} versions are kept per note.</p>
     </div>
   }
 </app-settings-pane>

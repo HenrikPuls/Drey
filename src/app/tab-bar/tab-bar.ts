@@ -1,6 +1,7 @@
 import { ChangeDetectionStrategy, Component, HostListener, computed, inject, input, signal } from '@angular/core';
 import { EditorService, type OpenDoc } from '../services/editor.service';
 import { DocKindRegistry } from '../plugin-host';
+import { HistoryService } from '../history';
 import { PaneService, type PaneRegion } from '../panes/pane.service';
 import { TabDragService } from './tab-drag.service';
 import { Icon, type IconName } from '../icons/icon';
@@ -45,6 +46,7 @@ export class TabBar {
   protected readonly editor = inject(EditorService);
   protected readonly panes = inject(PaneService);
   protected readonly tabDrag = inject(TabDragService);
+  protected readonly history = inject(HistoryService);
   private readonly docKinds = inject(DocKindRegistry);
 
   readonly paneId = input.required<string>();
@@ -166,6 +168,12 @@ export class TabBar {
   protected exportPdf(path: string): void {
     this.closeMenu();
     void this.editor.exportPdf(path);
+  }
+
+  /** "File history…" on the right-clicked tab (ADR-0060). */
+  protected showHistory(path: string): void {
+    this.closeMenu();
+    void this.history.show(path);
   }
 
   /** Moves this whole pane into a dock's editor band (ADR-0038). */

@@ -86,6 +86,9 @@
         <div class="ctx-sep" role="separator"></div>
         <button type="button" (click)="exportPdf(m.path)">Export as PDF…</button>
       }
+      @if (history.canShow(m.path)) {
+        <button type="button" (click)="showHistory(m.path)">File history…</button>
+      }
       <div class="ctx-sep" role="separator"></div>
       <button type="button" (click)="closeOthers(m.path)">Close others</button>
       <button type="button" (click)="closeAll()">Close all</button>

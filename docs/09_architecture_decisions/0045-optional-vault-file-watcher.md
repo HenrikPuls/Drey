@@ -107,3 +107,13 @@ removed, keep untouched — no restart churn on unrelated registry edits),
 a shared debounce, and per-vault announce batches stamped with the
 vault id. The own-write ledger's keys became `vaultId:path`, so a write
 in one vault can never suppress another vault's echo.
+
+## Later change — a dirty tab is marked, and its save asks (milestone 60)
+
+Decision 5's "a dirty tab is untouched, last-writer-wins" is superseded by
+[ADR-0060](0060-save-conflicts-and-local-note-history.md): the watcher
+round now marks a dirty tab whose file changed (`diskChanged`, the meta
+bar's "Changed on disk" button), and the save itself refuses to overwrite
+a file that changed since the tab read it — with the watcher on or off.
+A clean tab still reloads; its previous text goes into the local history
+first.

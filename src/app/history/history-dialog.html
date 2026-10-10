@@ -1,0 +1,54 @@
+@if (history.target(); as target) {
+  <div class="backdrop" appOverlayGuard (click)="close()"></div>
+  <div class="dialog" role="dialog" aria-modal="true" aria-labelledby="history-title">
+    <header>
+      <h2 id="history-title">File history</h2>
+      <p class="summary">{{ target.path }}</p>
+    </header>
+
+    <div class="body">
+      @if (rows().length === 0) {
+        <p class="empty">
+          {{ history.loading() ? 'Loading…' : 'No earlier versions of this note have been recorded yet.' }}
+        </p>
+      } @else {
+        <ul class="versions" role="listbox" aria-label="Earlier versions">
+          @for (row of rows(); track row.id) {
+            <li>
+              <button
+                type="button"
+                role="option"
+                [attr.aria-selected]="row.id === history.selectedId()"
+                [class.on]="row.id === history.selectedId()"
+                (click)="history.select(row.id)"
+              >
+                <span class="when">{{ row.when }}</span>
+                <span class="what">{{ row.what }}</span>
+              </button>
+            </li>
+          }
+        </ul>
+        <div class="preview">
+          @if (history.selectedContent() !== null) {
+            <app-diff-view
+              [before]="history.selectedContent()!"
+              [after]="history.current()"
+              mode="split"
+              beforeLabel="This version"
+              afterLabel="Now in the editor"
+            />
+          }
+        </div>
+      }
+    </div>
+
+    <footer>
+      <span class="note">Restore changes the editor only — save to keep it.</span>
+      <div class="spacer"></div>
+      <button type="button" class="ghost" (click)="close()">Close</button>
+      <button type="button" class="primary" [disabled]="!canRestore()" (click)="history.restore()">
+        Restore this version
+      </button>
+    </footer>
+  </div>
+}

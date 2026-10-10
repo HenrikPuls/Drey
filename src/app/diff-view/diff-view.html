@@ -1,0 +1,53 @@
+@if (unchanged()) {
+  <p class="same">No differences.</p>
+} @else if (mode() === 'inline') {
+  <div class="diff" role="figure" aria-label="Line changes">
+    @for (line of inlineRows(); track $index) {
+      @if (line.type === 'gap') {
+        <div class="row gap">
+          ⋯ {{ line.count }} unchanged line{{ line.count === 1 ? '' : 's' }}
+        </div>
+      } @else {
+        <div class="row" [class.add]="line.type === 'add'" [class.del]="line.type === 'del'">
+          <span class="sign">{{
+            line.type === 'add' ? '+' : line.type === 'del' ? '−' : ' '
+          }}</span>
+          <span class="text">{{ line.text || ' ' }}</span>
+        </div>
+      }
+    }
+  </div>
+} @else {
+  <div class="split-diff" role="figure" [attr.aria-label]="beforeLabel() + ' and ' + afterLabel() + ', side by side'">
+    <div class="split-head">
+      <span>{{ beforeLabel() }}</span>
+      <span>{{ afterLabel() }}</span>
+    </div>
+    @for (row of splitRows(); track $index) {
+      @if (row.type === 'gap') {
+        <div class="split-gap">
+          ⋯ {{ row.count }} unchanged line{{ row.count === 1 ? '' : 's' }}
+        </div>
+      } @else {
+        <div class="split-row">
+          <div
+            class="cell"
+            [class.del]="row.left.type === 'del'"
+            [class.empty]="row.left.type === 'empty'"
+          >
+            <span class="ln">{{ row.left.lineNo }}</span>
+            <span class="text">{{ row.left.text || ' ' }}</span>
+          </div>
+          <div
+            class="cell"
+            [class.add]="row.right.type === 'add'"
+            [class.empty]="row.right.type === 'empty'"
+          >
+            <span class="ln">{{ row.right.lineNo }}</span>
+            <span class="text">{{ row.right.text || ' ' }}</span>
+          </div>
+        </div>
+      }
+    }
+  </div>
+}

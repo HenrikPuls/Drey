@@ -43,6 +43,10 @@ export const IPC_CHANNELS = {
   uiSetZoom: 'ui:set-zoom',
   openExternal: 'app:open-external',
   appLog: 'app:log',
+  // Startup splash (milestone 62): renderer stage reports + the one-shot
+  // "workspace ready" that triggers the hidden-until-ready handover.
+  startupProgress: 'startup:progress',
+  startupReady: 'startup:ready',
   vaultGetActive: 'vault:get-active',
   // Multi-vault registry (ADR-0051): the vaults the app knows about, one
   // native-picker add, registry-only remove, display-name rename, explicit
@@ -126,6 +130,10 @@ export const IPC_CHANNELS = {
   // the text of tabs that have no file on disk (or unsaved edits), so they
   // survive a restart. The layout / tab list itself lives in the
   // renderer's localStorage, like the dock layout.
+  // Local note history (milestone 60, ADR-0060).
+  historyList: 'history:list',
+  historyRead: 'history:read',
+  historyCapture: 'history:capture',
   sessionWriteBackup: 'session:write-backup',
   sessionReadBackup: 'session:read-backup',
   sessionListBackups: 'session:list-backups',
@@ -271,6 +279,16 @@ export interface LogEntry {
   message: string;
   /** Optional structured payload (a stack, a state snapshot); JSON-stringified. */
   context?: unknown;
+}
+
+/**
+ * One startup progress stage (milestone 62): `pct` is 0–100 on the
+ * stage-weighted scale main and the renderer share (main: settings →
+ * plugins → interface; renderer: workspace → session → ready).
+ */
+export interface StartupProgressReport {
+  label: string;
+  pct: number;
 }
 
 /**
@@ -469,6 +487,42 @@ export interface NoteSaveRequest {
    * save is itself applying an Action's result, so it can't recurse.
    */
   runOnSaveActions?: boolean;
+  /**
+   * The file's `modifiedMs` as the tab last saw it (milestone 60,
+   * ADR-0060). When the file on disk carries a different one, nothing is
+   * written and the result reports a {@link NoteSaveConflict}. `0` means
+   * "the tab believes there is no file yet" (a draft). Absent: no check --
+   * auto-saved paths (chat notes, drafts) and "Save as…".
+   */
+  baseModifiedMs?: number;
+  /** Write regardless of `baseModifiedMs` -- the conflict was resolved. */
+  force?: boolean;
+  /**
+   * Who is behind this save, for the local history: a plain user save
+   * (`'save'`, the default) records at most one earlier version per few
+   * minutes; any other origin always records one.
+   */
+  origin?: string;
+}
+
+/** The file changed on disk since the saving tab last read it. */
+export interface NoteSaveConflict {
+  /** What is on disk now, in `\n` form. */
+  content: string;
+  modifiedMs: number;
+}
+
+/** One earlier version of a note in the local history (ADR-0060). */
+export interface NoteHistoryEntry {
+  id: string;
+  /** Epoch ms the version was recorded. */
+  at: number;
+  /**
+   * What was about to replace this version: `save`, `mcp`, `links`,
+   * `conflict`, `external`, `restore`, `app` or a plugin id.
+   */
+  origin: string;
+  bytes: number;
 }
 
 /**
@@ -488,6 +542,11 @@ export interface NoteSaveResult {
    * absent when LLM features are off or there are no `on-save` triggers.
    */
   pendingActions?: ActionOutcome[];
+  /**
+   * Set when the save was REFUSED because the file changed on disk --
+   * nothing was written, `content` echoes the request body.
+   */
+  conflict?: NoteSaveConflict;
 }
 
 /** Result of `llm:test-connection` / the model-list probe (`GET /models`). */
@@ -621,6 +680,19 @@ export interface DreyApi {
    * problem in the packaged build (no DevTools) leaves a trace.
    */
   logMessage(entry: LogEntry): Promise<void>;
+
+  /**
+   * Startup progress (milestone 62): fire-and-forget stage reports the
+   * renderer feeds to main while the splash window is up — main forwards
+   * them to the splash's bar + activity line. Silently ignored after the
+   * handover.
+   */
+  reportStartupProgress(report: StartupProgressReport): void;
+  /**
+   * The workspace is ready: main shows the (until now hidden) main window
+   * and closes the splash — the ADR-0062 handover. One-shot per boot.
+   */
+  reportStartupReady(): void;
 
   /** The full app config (`shared/app-config.ts`), always normalised/complete. */
   getConfig(): Promise<AppConfig>;
@@ -1079,6 +1151,26 @@ export interface DreyApi {
   // buffers with nothing on disk to reload from (a never-saved scratch
   // tab, or unsaved edits to a real file) -- one file per `id` under
   // `<userData>/session-backups/`.
+
+  // --- Local note history (milestone 60, ADR-0060) -----------------------
+
+  /** The recorded earlier versions of a note, newest first. */
+  listNoteHistory(relativePath: string, vaultId?: string): Promise<NoteHistoryEntry[]>;
+
+  /** One version's text (as recorded), or `null` when it has expired. */
+  readNoteHistory(relativePath: string, entryId: string, vaultId?: string): Promise<string | null>;
+
+  /**
+   * Records `content` as a version -- for text that exists only in the
+   * renderer (a buffer about to be discarded, a tab's last known disk
+   * state). Resolves to whether a version was written.
+   */
+  captureNoteHistory(
+    relativePath: string,
+    content: string,
+    origin: string,
+    vaultId?: string,
+  ): Promise<boolean>;
 
   /** Writes (or overwrites) the backup for `id`. `id` must be a UUID. */
   writeSessionBackup(id: string, content: string): Promise<void>;

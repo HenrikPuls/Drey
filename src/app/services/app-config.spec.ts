@@ -196,7 +196,14 @@ describe('normalizeAppConfig', () => {
   });
 
   it('defaults the vault block to not watching and coerces a junk value', () => {
-    expect(normalizeAppConfig({}).vault).toEqual({ watch: false, updateLinksOnRename: 'ask' });
+    expect(normalizeAppConfig({}).vault).toEqual({
+      watch: false,
+      updateLinksOnRename: 'ask',
+      history: { enabled: true, keepDays: 30, maxPerFile: 50 },
+    });
+    expect(
+      normalizeAppConfig({ vault: { history: { enabled: false, keepDays: 9999, maxPerFile: 'x' } } }).vault.history,
+    ).toEqual({ enabled: false, keepDays: 365, maxPerFile: 50 });
     expect(normalizeAppConfig({ vault: { updateLinksOnRename: 'x' } }).vault.updateLinksOnRename).toBe('ask');
     expect(normalizeAppConfig({ vault: { updateLinksOnRename: 'never' } }).vault.updateLinksOnRename).toBe('never');
     expect(normalizeAppConfig({ vault: { watch: 'yes' } }).vault.watch).toBe(false);

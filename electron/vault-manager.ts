@@ -14,6 +14,8 @@ import { sidecarPathFor } from '../shared/sidecar';
 import { VaultFileContent, VaultFileEntry, VaultRegistration, VaultStatus } from '../shared/ipc-api';
 import { uniqueCopyName } from '../shared/unique-name';
 import { removeEntryFromDisk } from './trash-delete';
+import { NOTE_FILE } from '../shared/wikilinks';
+import type { NoteHistoryStore } from './history/note-history-store';
 import { OwnWriteLedger } from './own-write-ledger';
 import { refocusRenderer } from './focus';
 
@@ -114,8 +116,16 @@ export class VaultManager {
    */
   private readonly ownWrites?: OwnWriteLedger;
 
-  constructor(ownWrites?: OwnWriteLedger) {
+  /**
+   * The local note history (ADR-0060): `writeFile` hands it the version a
+   * write is about to replace, `renameEntry` keeps it attached to a moved
+   * note. Optional for the same reason as the ledger.
+   */
+  private readonly history?: NoteHistoryStore;
+
+  constructor(ownWrites?: OwnWriteLedger, history?: NoteHistoryStore) {
     this.ownWrites = ownWrites;
+    this.history = history;
     const file = readRegistryFile();
     this.registry = file.vaults;
     this.activeVaultId = file.activeVaultId;
@@ -368,9 +378,30 @@ export class VaultManager {
     return { content, modifiedMs: stat.mtimeMs };
   }
 
-  async writeFile(relativePath: string, content: string, vaultId?: string): Promise<number> {
+  /**
+   * Writes a text file. Before a note is overwritten, the version on disk
+   * goes into the local history (ADR-0060) -- every writer passes through
+   * here, so that is the one place that can promise "the previous text is
+   * still somewhere". `origin` names the writer for the history list; a
+   * `throttled` origin (the user's own saves) records at most one version
+   * per few minutes.
+   */
+  async writeFile(
+    relativePath: string,
+    content: string,
+    vaultId?: string,
+    opts?: { origin?: string; throttled?: boolean },
+  ): Promise<number> {
     const resolvedVault = this.registrationFor(vaultId);
     const filePath = this.resolveInVault(relativePath, resolvedVault.id);
+    if (this.history !== undefined && NOTE_FILE.test(relativePath)) {
+      const previous = await fsp.readFile(filePath, 'utf-8').catch(() => null);
+      if (previous !== null && previous !== content) {
+        await this.history.capture(resolvedVault.id, relativePath, previous, opts?.origin ?? 'app', {
+          throttled: opts?.throttled,
+        });
+      }
+    }
     // Create intermediate folders (e.g. `daily/` on the first save of a
     // calendar-created draft note) -- `fsp.writeFile` won't on its own.
     await fsp.mkdir(path.dirname(filePath), { recursive: true });
@@ -640,6 +671,7 @@ export class VaultManager {
           await fsp.rename(sidecarFrom, sidecarTo).catch(() => undefined);
         }
       }
+      await this.history?.rename(fromVault.id, fromRel, toVault.id, toRel);
       return this.toRelative(to, toVault.id);
     }
 
@@ -665,6 +697,7 @@ export class VaultManager {
         await fsp.rm(sidecarFrom, { force: true }).catch(() => undefined);
       }
     }
+    await this.history?.rename(fromVault.id, fromRel, toVault.id, toRel);
     return this.toRelative(to, toVault.id);
   }
 

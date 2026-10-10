@@ -36,6 +36,9 @@ export interface NoteSaveHooks {
   emitNoteSaved(event: NoteSavedEvent): Promise<SaveHookResult[]>;
 }
 
+/** Same slack the own-write ledger allows between two reads of one mtime. */
+const MTIME_TOLERANCE_MS = 2;
+
 export class NoteManager {
   constructor(
     private readonly vault: VaultManager,
@@ -48,6 +51,21 @@ export class NoteManager {
     // vault), used for the write AND the save-hook event's identity.
     const vaultId = this.vault.resolveVaultId(request.vaultId);
     const toDisk = (text: string): string => (eol === '\r\n' ? text.replace(/\n/g, '\r\n') : text);
+
+    // The conflict guard (ADR-0060): the tab says which state of the file
+    // it edited; a different one on disk means somebody else wrote in
+    // between, and overwriting it is the user's call, not ours.
+    if (request.baseModifiedMs !== undefined && request.force !== true) {
+      const disk = await this.vault.readFile(relPath, vaultId).catch(() => null);
+      if (disk !== null && Math.abs(disk.modifiedMs - request.baseModifiedMs) > MTIME_TOLERANCE_MS) {
+        return {
+          path: relPath,
+          content: body,
+          modifiedMs: request.baseModifiedMs,
+          conflict: { content: disk.content.replace(/\r\n/g, '\n'), modifiedMs: disk.modifiedMs },
+        };
+      }
+    }
 
     const split = splitFrontmatter(body);
 
@@ -64,7 +82,11 @@ export class NoteManager {
       written = writeFrontmatter(body, patch);
     }
 
-    const modifiedMs = await this.vault.writeFile(relPath, toDisk(written), vaultId);
+    const origin = request.origin ?? 'save';
+    const modifiedMs = await this.vault.writeFile(relPath, toDisk(written), vaultId, {
+      origin,
+      throttled: origin === 'save',
+    });
 
     // Save hooks fire unless this save IS the application of a confirmed
     // rewrite (`runOnSaveActions: false` semantics -- a hook must not

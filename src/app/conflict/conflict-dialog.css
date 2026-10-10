@@ -1,0 +1,249 @@
+/* Above the exit prompt: a "Save all" on quit can raise this question. */
+.backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.5);
+  z-index: 60;
+}
+
+.dialog {
+  position: fixed;
+  inset: 0;
+  margin: auto;
+  z-index: 61;
+  width: min(1500px, calc(100vw - 48px));
+  height: calc(100vh - 64px);
+  display: flex;
+  flex-direction: column;
+  background: var(--bg-main);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-md);
+  box-shadow: 0 24px 64px rgba(0, 0, 0, 0.5);
+}
+
+header {
+  padding: 16px 20px 12px;
+  border-bottom: 1px solid var(--border);
+}
+
+h2 {
+  margin: 0;
+  font-family: var(--font-serif);
+  font-size: 1.05rem;
+  font-weight: 600;
+  color: var(--text-heading);
+}
+
+.summary {
+  margin: 4px 0 0;
+  font-size: 0.82rem;
+  color: var(--text-4);
+}
+
+/* Three equal columns; every block is one grid row, so the versions and
+   the result stay aligned however long a block is. */
+.merge {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding: 0 12px 12px;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.heads,
+.row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1fr);
+  column-gap: 8px;
+}
+
+.heads {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  padding: 10px 0 6px;
+  background: var(--bg-main);
+  font-family: var(--font-sans);
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  color: var(--text-6);
+}
+
+.head {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  padding: 0 8px;
+}
+
+.link {
+  padding: 0;
+  font: inherit;
+  color: var(--accent);
+  background: none;
+  border: 0;
+  cursor: pointer;
+}
+
+.link:hover {
+  text-decoration: underline;
+}
+
+.row + .row,
+.row + .fold,
+.fold + .row {
+  margin-top: 2px;
+}
+
+pre {
+  margin: 0;
+  font: inherit;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.side {
+  padding: 2px 8px;
+  color: var(--text-4);
+  border-radius: var(--radius);
+}
+
+.hunk .side {
+  color: var(--text-2);
+  background: var(--bg-inset, rgba(255, 255, 255, 0.03));
+  border: 1px solid transparent;
+  opacity: 0.6;
+}
+
+.hunk .side.on {
+  opacity: 1;
+}
+
+.hunk .side.disk.on {
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+  border-color: color-mix(in srgb, var(--accent) 35%, transparent);
+}
+
+.hunk .side.mine.on {
+  background: rgba(125, 143, 110, 0.16);
+  border-color: rgba(125, 143, 110, 0.4);
+}
+
+.pick {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 2px;
+  font-family: var(--font-sans);
+  font-size: 11px;
+  color: var(--text-4);
+  cursor: pointer;
+  user-select: none;
+}
+
+.none {
+  font-family: var(--font-sans);
+  font-size: 11px;
+  font-style: italic;
+  color: var(--text-6);
+}
+
+/* The result grows with its text (no inner scrollbar): the whole merge
+   scrolls as one document. */
+.result {
+  field-sizing: content;
+  min-height: calc(1.5em + 6px);
+  width: 100%;
+  box-sizing: border-box;
+  margin: 0;
+  padding: 2px 8px;
+  resize: none;
+  overflow: hidden;
+  font: inherit;
+  white-space: pre-wrap;
+  word-break: break-word;
+  color: var(--text-1, var(--text-2));
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--radius);
+  outline: none;
+}
+
+.result:hover {
+  border-color: var(--border);
+}
+
+.result:focus {
+  border-color: var(--accent);
+}
+
+.hunk .result {
+  background: var(--bg-inset, rgba(255, 255, 255, 0.03));
+  border-color: var(--border-strong);
+}
+
+.hunk.conflict .result {
+  border-style: dashed;
+}
+
+.hunk .result.typed {
+  border-color: var(--accent);
+}
+
+.fold {
+  display: block;
+  width: 100%;
+  padding: 3px 8px;
+  text-align: center;
+  font-family: var(--font-sans);
+  font-size: 11px;
+  font-style: italic;
+  color: var(--text-6);
+  background: transparent;
+  border: 0;
+  border-radius: var(--radius);
+  cursor: pointer;
+}
+
+.fold:hover {
+  background: var(--bg-hover, rgba(255, 255, 255, 0.04));
+  color: var(--text-4);
+}
+
+footer {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 20px 14px;
+  border-top: 1px solid var(--border);
+}
+
+.note {
+  font-size: 0.8rem;
+  color: var(--text-6);
+}
+
+.spacer {
+  flex: 1;
+}
+
+footer button {
+  font-size: 0.82rem;
+  padding: 7px 14px;
+  border-radius: var(--radius);
+  border: 1px solid transparent;
+  cursor: pointer;
+}
+
+.ghost {
+  background: transparent;
+  border-color: var(--border-strong);
+  color: var(--text-3);
+}
+
+.primary {
+  background: var(--accent);
+  color: var(--accent-contrast);
+}

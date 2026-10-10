@@ -20,6 +20,7 @@ import {
 import type { MenuContribution } from '../../../shared/plugin-api/renderer';
 import { CaretMemory, EditorService, EditorViewMode, NewEntryRequest } from '../services/editor.service';
 import { EditorZoomService } from '../services/editor-zoom.service';
+import { HistoryService } from '../history';
 import { MenuContributionsService } from '../plugin-host';
 import { OverlayGuardDirective } from '../services/overlay-guard.directive';
 import { PaneService } from '../panes/pane.service';
@@ -93,6 +94,7 @@ import { MarkdownToolbar } from './markdown-toolbar';
 export class Editor implements AfterViewInit, OnDestroy {
   protected readonly editor = inject(EditorService);
   protected readonly settings = inject(SettingsService);
+  protected readonly history = inject(HistoryService);
   protected readonly zoom = inject(EditorZoomService);
   protected readonly menuContributions = inject(MenuContributionsService);
   /** The formatting-toolbar toggle (`⋯` menu, persisted per machine). */

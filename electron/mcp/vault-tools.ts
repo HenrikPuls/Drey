@@ -526,7 +526,7 @@ export class VaultTools {
     }
 
     const vaultId = this.vault.resolveVaultId(vaultArg);
-    await this.vault.writeFile(path, after, vaultId);
+    await this.vault.writeFile(path, after, vaultId, { origin: 'mcp' });
     // The write itself went through the vault manager (own-write ledger),
     // so the watcher suppresses the echo; this announcement keeps the
     // section index current for a follow-up search and nudges the renderer.

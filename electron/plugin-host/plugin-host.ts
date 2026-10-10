@@ -90,6 +90,21 @@ export interface PluginHostDeps {
    * succeed, nothing is announced).
    */
   readonly vaultAnnouncer: () => VaultChangeAnnouncer | null;
+  /**
+   * Per-plugin activation telemetry (milestones 61 + 62): fired for every
+   * discovered main entry that attempts activation, with the wall-clock
+   * duration and its 1-based position among the attempted entries (the
+   * splash's "Loading plugin X" progress math). Optional; main.ts wires
+   * it to the log file and the splash.
+   */
+  readonly onPluginActivated?: (info: {
+    id: string;
+    name: string;
+    ok: boolean;
+    ms: number;
+    index: number;
+    total: number;
+  }) => void;
   readonly log: (message: string, level?: 'info' | 'warn' | 'error') => void;
 }
 
@@ -102,6 +117,20 @@ export class PluginHost {
   private readonly saveHooks: Array<SaveHook> = [];
   private searchProvider: SectionSearchProvider | null = null;
   private taskProvider: TaskQueryProvider | null = null;
+  /**
+   * The discovery+activation round, assigned synchronously by the first
+   * `discoverAndActivate()` call. `activationDone()` hands it to IPC
+   * handlers so the renderer — which now loads while activation is still
+   * running (milestone 61) — can never observe a half-activated host.
+   */
+  private activationDonePromise: Promise<void> | null = null;
+  /**
+   * The window main.ts last announced (milestone 61): with the window
+   * created before activation finishes, a plugin subscribing via
+   * `ctx.app.onMainWindowCreated` during a LATE activate() would
+   * otherwise never hear about the window that already exists.
+   */
+  private currentMainWindow: BrowserWindow | null = null;
 
   /**
    * Public registration facades — what `MainPluginContext` exposes to a
@@ -160,8 +189,30 @@ export class PluginHost {
     this.deps.getMainWindow()?.webContents.send(IPC_CHANNELS.searchChanged);
   }
 
+  /**
+   * Resolves once `discoverAndActivate()` has finished. Handlers that
+   * expose plugin-owned state to the renderer (`plugins:list`,
+   * `plugin:invoke`, `search:vocabulary`, `vault:refresh`) await this so
+   * the window-first startup order (milestone 61) cannot serve an empty
+   * plugin list or drop a boot refresh round onto unregistered hooks.
+   */
+  async activationDone(): Promise<void> {
+    if (this.activationDonePromise !== null) {
+      await this.activationDonePromise;
+    }
+  }
+
   /** Scans the roots, then imports + activates every main entry that may load. */
   async discoverAndActivate(): Promise<void> {
+    // Assigned synchronously: main.ts calls this before creating the
+    // window, so every gated IPC handler finds the promise in place.
+    if (this.activationDonePromise === null) {
+      this.activationDonePromise = this.runDiscoveryAndActivation();
+    }
+    await this.activationDonePromise;
+  }
+
+  private async runDiscoveryAndActivation(): Promise<void> {
     const found = await discoverPlugins({
       builtinRoot: this.deps.builtinRoot,
       userRoot: this.deps.userRoot,
@@ -174,11 +225,24 @@ export class PluginHost {
       this.discovered.set(plugin.manifest.id, plugin);
     }
 
+    const attempted: DiscoveredPlugin[] = [];
     for (const plugin of found) {
       if (plugin.status !== 'active' || plugin.manifest.main === undefined) {
         continue;
       }
-      await this.activate(plugin);
+      attempted.push(plugin);
+    }
+    for (const [index, plugin] of attempted.entries()) {
+      const started = performance.now();
+      const ok = await this.activate(plugin);
+      this.deps.onPluginActivated?.({
+        id: plugin.manifest.id,
+        name: plugin.manifest.name,
+        ok,
+        ms: performance.now() - started,
+        index: index + 1,
+        total: attempted.length,
+      });
     }
   }
 
@@ -384,8 +448,14 @@ export class PluginHost {
     this.deps.getMainWindow()?.webContents.send(PLUGIN_IPC_CHANNELS.pluginEvent, payload);
   }
 
-  /** Main.ts notifies on window creation (plugins activate before the window exists). */
+  /**
+   * Main.ts notifies on window creation. With the window-first startup
+   * order (milestone 61) this can fire while activation is still
+   * running — the window is also remembered so a plugin activating later
+   * gets it replayed by its `ctx.app.onMainWindowCreated` subscription.
+   */
   notifyMainWindowCreated(win: BrowserWindow): void {
+    this.currentMainWindow = win;
     for (const cb of this.mainWindowCreatedCallbacks) {
       this.runGuarded(() => cb(win), 'onMainWindowCreated');
     }
@@ -455,7 +525,7 @@ export class PluginHost {
 
   // -- activation ----------------------------------------------------------
 
-  private async activate(discovered: DiscoveredPlugin): Promise<void> {
+  private async activate(discovered: DiscoveredPlugin): Promise<boolean> {
     const id = discovered.manifest.id;
     const plugin: ActivatedPlugin = {
       discovered,
@@ -485,6 +555,7 @@ export class PluginHost {
       plugin.module = module as PluginMainModule;
       await plugin.module.activate(context);
       this.deps.log(`plugin "${id}" activated (main)`, 'info');
+      return true;
     } catch (error) {
       this.activated.delete(id);
       this.discovered.set(id, {
@@ -493,6 +564,7 @@ export class PluginHost {
         error: String(error instanceof Error ? error.message : error),
       });
       this.deps.log(`plugin "${id}" failed to activate: ${String(error)}`, 'error');
+      return false;
     }
   }
 
@@ -512,6 +584,18 @@ export class PluginHost {
       app: {
         onMainWindowCreated: (cb) => {
           this.mainWindowCreatedCallbacks.push(cb);
+          // Window-first startup (milestone 61): a plugin subscribing
+          // after the window exists gets it replayed (microtask, so the
+          // subscribe call returns first) — identical behaviour to a
+          // plugin that activated before the window was created.
+          const existing = this.currentMainWindow;
+          if (existing !== null && !existing.isDestroyed()) {
+            queueMicrotask(() => {
+              if (!existing.isDestroyed()) {
+                this.runGuarded(() => cb(existing), 'onMainWindowCreated');
+              }
+            });
+          }
           return track(() => removeItem(this.mainWindowCreatedCallbacks, cb));
         },
         getMainWindow: () => this.deps.getMainWindow(),
@@ -524,7 +608,7 @@ export class PluginHost {
       vault: {
         listVaults: () => Promise.resolve(vaultManager.listVaults()),
         read: (p, opts) => vaultManager.readFile(p, opts?.vaultId).then((f) => f.content),
-        write: (p, content, opts) => vaultManager.writeFile(p, content, opts?.vaultId),
+        write: (p, content, opts) => vaultManager.writeFile(p, content, opts?.vaultId, { origin: id }),
         // A write the tree/index/open tabs must see NOW (chat notes, a
         // plugin-generated note): same round an MCP write runs — per-file
         // index events + one scoped `vault:changed` push. A plain `write`
@@ -532,7 +616,7 @@ export class PluginHost {
         // the watcher off nothing else would fire for it.
         writeAnnounced: async (p, content, opts) => {
           const vaultId = vaultManager.resolveVaultId(opts?.vaultId);
-          const modifiedMs = await vaultManager.writeFile(p, content, vaultId);
+          const modifiedMs = await vaultManager.writeFile(p, content, vaultId, { origin: id });
           this.deps.vaultAnnouncer()?.announceExternal({ vaultId, changedPaths: [p], deletedPaths: [] });
           return modifiedMs;
         },

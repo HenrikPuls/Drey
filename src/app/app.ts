@@ -1,8 +1,10 @@
-import { Component, computed, effect, inject } from '@angular/core';
+import { Component, computed, effect, afterNextRender, inject } from '@angular/core';
 import { formatDate } from '../../shared/timestamp';
 import { ImageLightbox } from './image-viewer';
 import { ConfirmationDialog } from './confirmation-dialog/confirmation-dialog';
 import { ConfirmDialog } from './confirm-dialog/confirm-dialog';
+import { ConflictDialog } from './conflict';
+import { HistoryDialog, HistoryService } from './history';
 import { LinkUpdateDialog } from './link-update';
 import { Palette, PaletteService } from './palette';
 import { ExitConfirmDialog } from './exit-confirm-dialog/exit-confirm-dialog';
@@ -53,6 +55,8 @@ import { EditorContextMenuRegistry } from './plugin-host';
     Settings,
     ConfirmationDialog,
     LinkUpdateDialog,
+    ConflictDialog,
+    HistoryDialog,
     Palette,
     ConfirmDialog,
     ExitConfirmDialog,
@@ -77,6 +81,7 @@ export class App {
   }
   protected readonly panes = inject(PaneService);
   private readonly vault = inject(VaultService);
+  private readonly fileHistory = inject(HistoryService);
 
   /** The pane docked in each dock's editor band -- extends the dock render gates beyond widgets. */
 
@@ -160,22 +165,32 @@ export class App {
       // No active vault: nothing to restore, but a file the OS handed to Drey
       // still opens (as an external tab, ADR-0054).
       if (loaded && this.vault.registryLoaded() && !vaultPath) {
-        void externalOpen.onStartupSettled().then(() => history.resume());
+        void externalOpen.onStartupSettled().then(() => {
+          history.resume();
+          // The ADR-0062 handover: main shows the (hidden) main window and
+          // closes the splash. Optional-chained: harmless without a bridge.
+          window.dreyApi?.reportStartupReady?.();
+        });
       }
       if (this.dailyNoteStartupDone || !vaultPath || !loaded) {
         return;
       }
       this.dailyNoteStartupDone = true;
       void (async () => {
+        // The splash's activity line while the tabs come back.
+        window.dreyApi?.reportStartupProgress?.({ label: 'Restoring session…', pct: 92 });
         const restored = await session.restore();
         // After the restore, so the OS-opened file lands active on top of it.
         // A launch that opened a file also skips the daily-note fallback --
         // that async open would otherwise land last and steal the focus.
         const openedFromOs = await externalOpen.onStartupSettled();
         if (!restored && openedFromOs === 0 && this.settings.dailyOpenOnStartup()) {
-          void this.editor.openDailyNote(formatDate(new Date()));
+          // Awaited so the window the splash hands over to already carries
+          // the daily note instead of gaining it a beat later.
+          await this.editor.openDailyNote(formatDate(new Date()));
         }
         history.resume();
+        window.dreyApi?.reportStartupReady?.();
       })();
     });
 
@@ -356,6 +371,23 @@ export class App {
         }
       },
     });
+    keys.register({
+      id: 'note.history',
+      label: 'File history…',
+      run: () => void this.fileHistory.show(),
+    });
 
+    // Startup mark (milestone 61): the first paint of the app shell —
+    // everything before this line in the log was pre-paint cost. Also the
+    // splash's "workspace" stage (milestone 62): the hidden window has
+    // painted, the session follows.
+    const startupLog = inject(LogService);
+    afterNextRender(() => {
+      startupLog.record(
+        'info',
+        `[startup] renderer: shell painted +${Math.round(performance.now())}ms since navigation start`,
+      );
+      window.dreyApi?.reportStartupProgress?.({ label: 'Preparing workspace', pct: 85 });
+    });
   }
 }

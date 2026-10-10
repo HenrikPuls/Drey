@@ -20,6 +20,140 @@ recorded as an explicit decision. The parity checklist lives in
 
 ## Recent milestones
 
+### Milestone 62 — splash window with logo + progress
+
+**Not yet manually verified by the owner.**
+
+([ADR-0062](../docs/09_architecture_decisions/0062-splash-window.md))
+
+- **A splash window now covers the startup.** A small frameless,
+  taskbar-less window (~400×300, dark) appears as the first thing after
+  Electron is ready: the About-page logo mark, the "drey" wordmark, the
+  version, a thin progress bar and a sentence-case activity line. It is
+  dependency-free (`public/splash.html`, inline CSS/JS + a micro-preload
+  with `contextIsolation` on) so it paints immediately — no Angular, no
+  bundle.
+- **The bar states what is happening**: `Starting…` → `Loading settings`
+  → `Loading plugin Tags` … (one step per main-side plugin, manifest
+  name) → `Starting the interface` (main), then `Preparing workspace` →
+  `Restoring session…` (renderer, over the new fire-and-forget
+  `startup:progress` channel). Determinate by stages, short CSS
+  transition, no fake animation.
+- **Hidden-until-ready handover.** The main window is created hidden and
+  only shown when the renderer reports ready (`startup:ready`, after
+  plugins + first paint + session restore + daily-note fallback): splash
+  → painted app, no blank dark frame at any point. The splash closes
+  ~120 ms after the show. Warm-measured handover: ~0.6 s after process
+  start; a Defender-scanned cold start shows the live splash for as
+  long as the scan takes.
+- **Fail-opens.** The splash can never trap the app: 30 s absolute and
+  15 s after-page-load timers hand over with a log line;
+  `render-process-gone` hands over; a closed main window and app quit
+  close the splash; macOS `activate` checks `mainWindow` (the splash is
+  also a window). Reloads re-send `ready` — ignored (one-shot).
+- **E2e.** The Playwright fixtures pick the `app://` window by URL (the
+  splash is window #1 now) and wait for shown+focus (input dispatched
+  into the visibility-flip-to-mapping gap is dropped by Chromium —
+  found by a now-flaky `Ctrl+B` dock-fold test); new `splash.spec.ts`
+  asserts splash content and the handover with its own launch. New
+  `[startup]` mark: `workspace ready — main window shown, splash
+  closing`.
+
+### Milestone 61 — startup analysis + window-first boot
+
+**Not yet manually verified by the owner.**
+
+([ADR-0061](../docs/09_architecture_decisions/0061-window-first-startup.md))
+
+- **What was slow.** The boot was fully serial: main activated every
+  plugin and synced MCP/watcher **before creating the window** (blank
+  taskbar the whole time), the renderer then activated ten plugin
+  modules **one protocol round trip each** before Angular painted
+  anything, session restore read each tab's file one IPC round trip at
+  a time, and the boot ran the full-vault index round **twice** (main's
+  own + the renderer's `vault:refresh`), three full vault re-reads
+  (tags/tasks/backlinks) contending with the very file serving the boot
+  needed. The irreducible floor is process spawn + Defender's scan of a
+  freshly built exe (~3–9 s, one 28 s outlier in the measurements).
+- **Window-first with a gate.** The window is created right after
+  protocols/IPC registration; plugin discovery+activation runs while the
+  renderer parses its bundle. The handlers that expose plugin-owned
+  state (`plugins:list`, `plugin:invoke`, `search:vocabulary` /
+  `tags:suggest`, `vault:refresh`) `await activationDone()` — the
+  renderer can never see a half-activated host. `onMainWindowCreated`
+  replays the existing window to plugins that activate late.
+- **Parallel loads.** All `plugin://` renderer modules are prefetched
+  with `Promise.all`, then activated in descriptor order (registration
+  order stays deterministic) — measured 66–70 ms total, was the biggest
+  renderer-side serial chunk.
+- **One boot index round.** Main's own boot `emitVaultChange(refresh)`
+  is gone — the renderer's boot refresh (now gated on activation) runs
+  the identical announcer round exactly once.
+- **Parallel session restore.** All `readVaultFile` / `readSessionBackup`
+  calls fire concurrently and apply in order (`openFile` takes a
+  `prefetched` result; a failed prefetch falls back to the old path).
+- **Instrumentation + tooling.** `[startup]` timing lines in
+  `drey.log` (main: ready → window → per-plugin ms → complete; renderer:
+  bundle evaluated → plugins loaded → shell painted → session
+  restored), `scripts/measure-startup.mjs` (Playwright over the
+  packaged exe, wall-clock to titlebar), `favicon.ico` 370 KB → 15 KB.
+  Custom-scheme serving centralized in `electron/protocol-cache.ts`
+  (streaming + ETag/304 + `codeCache` privilege — measured as a no-op
+  on this machine, kept as correct forward-looking plumbing).
+- **Warm start, measured**: ~665 ms to titlebar (was ~680–700 ms on the
+  same fast dev machine; the structural wins grow with slower disks,
+  more plugins/tabs and OneDrive contention). The perceived remainder —
+  the Defender-scanned cold start and the sub-second warm blank — is
+  milestone 62's splash window with logo + progress.
+- **Fix along the way:** `e2e/assistant.spec.ts` asserted the
+  frame-header status milestone 57e deliberately removed (pre-existing
+  failure, verified against the unmodified tree); it now asserts the
+  panel's chat label.
+
+### Milestone 60 — save conflicts are asked; local note history
+
+**Not yet manually verified by the owner.**
+
+([ADR-0060](../docs/09_architecture_decisions/0060-save-conflicts-and-local-note-history.md))
+
+- **60a · A dirty tab no longer overwrites an external change silently.**
+  Every save tells main which state of the file the tab edited
+  (`baseModifiedMs`); when the file on disk is a different one, nothing
+  is written and a **merge view** opens: *On disk* | *Result* | *Your
+  version*, block by block. Each differing block takes the disk side,
+  mine, both (disk's lines, then mine) or neither; "Take all" per
+  column; the Result column is editable throughout for own text. Blocks
+  only one side changed since the tab read the file are preselected from
+  that side, blocks both changed are flagged. Works with the watcher off. A file whose timestamp moved but whose text did not (a
+  sync client touching it) is saved without a question. Raised by "Save
+  all" on quit, Cancel also keeps the app open.
+- **"Changed on disk" with the watcher on.** A dirty tab whose file
+  changes is marked in the meta bar; the button opens the same dialog
+  before any save. Chat notes keep following the disk.
+- **60b · Local note history.** Before a note is overwritten — by a
+  save, the assistant (live edit, applied rewrites, template tools), an
+  MCP client, replace-all, the tag rename or a link update — its previous
+  text is kept under `<userData>/history/`, outside the vault. The
+  user's own saves record at most one version per note per five minutes,
+  every other writer each time. The version a conflict or a restore
+  discards, and the previous text of a tab the watcher reloads, are kept
+  too. Chat notes, `.drafts/`, attachments and notes over 2 MB are not
+  versioned. A rename or move keeps the history with the note.
+- **File history…** in the editor `⋯` menu, the tab context menu and the
+  command palette: the versions with what replaced them, the selected one
+  diffed against the editor, **Restore this version** (into the editor,
+  one undo step — nothing is written until the next save).
+- **Settings → Vault:** "Keep a local history of notes" (default on) and
+  the retention in days (default 30; at most 50 versions per note).
+- **Under the hood:** the line diff of the ADR-0011 dialog is now the
+  shared `DiffView`; `VaultManager.writeFile` takes the writer's
+  `origin`. Specs: history store, the save guard, the conflict flow,
+  the merge model, the history service.
+- **Not covered:** external (out-of-vault) tabs; a file changed while the
+  app was closed under a tab restored with unsaved edits; browsing the
+  history of a deleted note; automatic merging and word-level highlighting
+  inside a block.
+
 ### Milestone 59 — links survive a rename; quick switcher + command palette
 
 **Not yet manually verified by the owner.**

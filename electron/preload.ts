@@ -25,7 +25,9 @@ import {
   PluginIpcEventPayload,
   SpellCheckResult,
   SpellLanguage,
+  StartupProgressReport,
   TagVocabularyPayload,
+  NoteHistoryEntry,
   RenameLinksPreview,
   RenameLinksRequest,
   RenameLinksResult,
@@ -83,6 +85,13 @@ const dreyApi: DreyApi = {
     ipcRenderer.invoke(IPC_CHANNELS.openExternal, url),
   logMessage: (entry: LogEntry): Promise<void> =>
     ipcRenderer.invoke(IPC_CHANNELS.appLog, entry),
+  // Startup splash (milestone 62): plain sends, no reply is needed.
+  reportStartupProgress: (report: StartupProgressReport): void => {
+    ipcRenderer.send(IPC_CHANNELS.startupProgress, report);
+  },
+  reportStartupReady: (): void => {
+    ipcRenderer.send(IPC_CHANNELS.startupReady);
+  },
   getActiveVault: () => ipcRenderer.invoke(IPC_CHANNELS.vaultGetActive),
   // Vault registry (ADR-0051).
   listVaults: (): Promise<VaultStatus[]> => ipcRenderer.invoke(IPC_CHANNELS.vaultList),
@@ -247,6 +256,18 @@ const dreyApi: DreyApi = {
     return () => ipcRenderer.removeListener(IPC_CHANNELS.vaultChanged, wrapped);
   },
   refreshVault: (): Promise<void> => ipcRenderer.invoke(IPC_CHANNELS.vaultRefresh),
+  // Local note history (ADR-0060).
+  listNoteHistory: (relativePath: string, vaultId?: string): Promise<NoteHistoryEntry[]> =>
+    ipcRenderer.invoke(IPC_CHANNELS.historyList, relativePath, vaultId),
+  readNoteHistory: (relativePath: string, entryId: string, vaultId?: string): Promise<string | null> =>
+    ipcRenderer.invoke(IPC_CHANNELS.historyRead, relativePath, entryId, vaultId),
+  captureNoteHistory: (
+    relativePath: string,
+    content: string,
+    origin: string,
+    vaultId?: string,
+  ): Promise<boolean> =>
+    ipcRenderer.invoke(IPC_CHANNELS.historyCapture, relativePath, content, origin, vaultId),
   // Session history (ADR-0043).
   writeSessionBackup: (id: string, content: string): Promise<void> =>
     ipcRenderer.invoke(IPC_CHANNELS.sessionWriteBackup, id, content),
