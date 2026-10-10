@@ -14,6 +14,14 @@
           @if (about.buildInfo(); as build) {
             <dt>Build</dt>
             <dd class="mono">{{ build.buildNumber }} · {{ build.commit }}</dd>
+            @if (build.branch) {
+              <dt>Branch</dt>
+              <dd class="mono">{{ build.branch }}</dd>
+            }
+            @if (build.checkoutPath) {
+              <dt>Checkout</dt>
+              <dd class="mono">{{ build.checkoutPath }}</dd>
+            }
           }
           <dt>Copyright</dt>
           <dd>© 2026 Henrik Puls</dd>

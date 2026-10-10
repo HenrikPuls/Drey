@@ -14,8 +14,12 @@ electron-builder ([ADR-0023](09_architecture_decisions/0023-windows-packaging-el
    files).
 2. `build` → `prebuild` regenerates `src/assets/build-info.json`
    (`scripts/stamp-build.mjs`: `buildNumber` = `git rev-list --count HEAD`,
-   plus the short SHA and build timestamp — a unique, monotonic id the
-   About pane shows so builds already in testing can be told apart; the
+   plus the short SHA, build timestamp, and the branch + checkout path
+   the build ran in — a unique, monotonic id the
+   About pane shows so builds already in testing can be told apart, and
+   the branch also suffixes the native window title (`Drey — <branch>`,
+   `worktree/` stripped), telling apart concurrent dev instances from
+   different checkouts in the taskbar; the
    file is gitignored, it is not byte-stable) and `src/assets/licenses.json`
    (`scripts/generate-licenses.mjs`, production deps only — a superset of
    Angular's `3rdpartylicenses.txt` because it also covers the

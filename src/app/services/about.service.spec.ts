@@ -1,4 +1,5 @@
 import { TestBed } from '@angular/core/testing';
+import { Title } from '@angular/platform-browser';
 import { AboutService } from './about.service';
 import { AppInfo, DreyApi } from '../../../shared/ipc-api';
 
@@ -26,7 +27,13 @@ describe('AboutService', () => {
       'assets/licenses.json': () => licenseManifest([]),
       'assets/build-info.json': () =>
         new Response(
-          JSON.stringify({ buildNumber: 68, commit: 'd1d3088', builtAt: '2026-09-08T18:00:00.000Z' }),
+          JSON.stringify({
+            buildNumber: 68,
+            commit: 'd1d3088',
+            branch: 'worktree/silver-forest-0d1f',
+            checkoutPath: 'C:/Users/puls/.herdr/worktrees/Drey/worktree-silver-forest-0d1f',
+            builtAt: '2026-09-08T18:00:00.000Z',
+          }),
         ),
     };
     realFetch = globalThis.fetch;
@@ -64,6 +71,8 @@ describe('AboutService', () => {
     expect(service.appInfo()).toEqual(appInfo);
     expect(service.buildInfo()?.buildNumber).toBe(68);
     expect(service.buildInfo()?.commit).toBe('d1d3088');
+    expect(service.buildInfo()?.branch).toBe('worktree/silver-forest-0d1f');
+    expect(service.buildInfo()?.checkoutPath).toContain('worktree-silver-forest-0d1f');
     expect(service.licenses().map((p) => p.name)).toEqual(['yaml']);
     expect(service.licensesError()).toBeNull();
   });
@@ -102,5 +111,28 @@ describe('AboutService', () => {
 
     expect(service.appInfo()).toBeNull();
     expect(service.licenses()).toEqual([]);
+  });
+
+  it('applyWindowTitle suffixes the branch, stripping the worktree prefix', async () => {
+    await service.applyWindowTitle();
+
+    expect(TestBed.inject(Title).getTitle()).toBe('Drey — silver-forest-0d1f');
+  });
+
+  it('applyWindowTitle keeps the plain title when there is no build info', async () => {
+    delete responses['assets/build-info.json'];
+
+    await service.applyWindowTitle();
+
+    expect(TestBed.inject(Title).getTitle()).toBe('Drey');
+  });
+
+  it('applyWindowTitle keeps the plain title on an unknown or detached branch', async () => {
+    responses['assets/build-info.json'] = () =>
+      new Response(JSON.stringify({ buildNumber: 68, commit: 'd1d3088', branch: 'unknown' }));
+
+    await service.applyWindowTitle();
+
+    expect(TestBed.inject(Title).getTitle()).toBe('Drey');
   });
 });
