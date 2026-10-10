@@ -229,7 +229,9 @@ Main process:
   **section-search provider** (the MCP `vault_search` backend)
 - The feature backends — `TagIndex`, `TaskIndex`, the assistant's
   ActionEngine (Actions) and ChatEngine/ChatStore (chat notes,
-  ADR-0048), the backlinks `BacklinkIndex` (milestone 54) — live in
+  ADR-0048), the assistant's template tools (`template-tools.ts`,
+  milestone 58, over `ctx.vault.delete` — SDK 1.14's new plugin delete
+  seam), the backlinks `BacklinkIndex` (milestone 54) — live in
   their plugins.
   `suggestTags` (the Autotag prompt) stayed base:
   `electron/llm/tag-suggest.ts`
@@ -306,7 +308,11 @@ Renderer (Angular):
   **Summarize** (when an LLM is configured), which streams a topic
   digest of the hits — via the plugin's `summarise` backend over the
   editable `builtin:search-summary` template — into an unsaved
-  `search-summary.md` scratch tab, cancellable (milestone 37). Panel +
+  `search-summary.md` scratch tab, cancellable (milestone 37). Next to
+  the scope switch a speech-bubble **Include chats** toggle: chat notes
+  (`chats/`) stay indexed but are left out of vault / all-vault hits —
+  and out of "Replace all" — unless it is on (off by default; the
+  document scope searches the open note as it is). Panel +
   toggle prefs persist in `localStorage['drey.search']`
 - Tasks panel — `plugins/tasks/` (DOM dock widget, ADR-0033):
   checkbox / `#task` lines in the open document, the whole vault, or all
@@ -579,9 +585,12 @@ be called out explicitly (see Working Style below), not introduced silently.
     the editor (Live Preview ⇄ source via the `⋯` menu — no toggle
     buttons; see ADR-0008/0009), then the **bottom dock** band (empty by
     default). Capture is the `/` menu's **Entry** block.
-  - **Assistant panel**: chat-first head (icon-only: a chat-list button
-    opening the chat picker + a "+" icon for a new chat — no chat-title
-    text, it was stale on a switch), turn cards with collapsible tool
+  - **Assistant panel**: chat-first head (the active chat's title as a
+    muted label + a chat-list button opening the chat picker + a "+"
+    icon for a new chat; the title is model-named — 57e's background
+    naming call rewrites the question placeholder after the first turn,
+    and the label re-renders live through the change rounds), turn cards
+    with collapsible tool
     chips, a
     streamed partial answer while generating (the transcript follows the
     stream; scrolling up unpins), and the
@@ -692,263 +701,41 @@ and push details into the per-decision documents.
 The roadmap's Phase 1 (MVP) is complete, and the codebase has since been
 restructured into a **base application with runtime plugins** (milestone
 21, [ADR-0044](docs/09_architecture_decisions/0044-runtime-plugin-system.md);
-packaging verified — see `docs/07_deployment_view.md`), and editor panes
-can dock into the three docks (milestone 20,
-[ADR-0038](docs/09_architecture_decisions/0038-editor-panes-in-docks.md)).
-The milestone log lives in
-[docs/milestones-done.md](docs/milestones-done.md).
+packaging verified — see `docs/07_deployment_view.md`).
 
-**Just code-complete: milestone 57 — the assistant as the task &
-navigation surface** ([ADR-0058](docs/09_architecture_decisions/0058-assistant-task-and-navigation-surface.md)):
-new base seams (SDK minors 1.11 – 1.13) — `ctx.tasks` + `TaskQueryProvider` (the
-tasks plugin registers its index, sole grammar owner; MCP `tasks_list`
-reads it read-only) and `api.links` (base-owned wikilink parse/resolve/
-open for plugin-rendered text). The assistant's `tasks_list` tool (every
-non-live ask, no MCP gate) answers task questions from index rows; the
-panel renders the persisted result as an interactive task block
-(checkbox → provider `setDone`, due/prio badges, row click opens at the
-line, live hydration at render time). **Deterministic views (57c, SDK
-1.12):** the provider sorts and filters (`sort` incl. the due-dominant
-`importance`, `text`, `tag`, `overdue`) over the same comparators the
-Tasks panel uses; the model is demoted to intent (tool args, few-shot
-prompted) + framing prose, with the answer-scoped post-hoc block (57b,
-the answer-matched synthetic pair — and an unrestricted model call's
-result is trimmed to the answer's subset) as the safety net. Chat cards render a small Markdown
-subset with clickable `[[wikilinks]]` (resolve probe styles them;
-unresolved links create on click, editor semantics) and the ask prompt
-invites model-written links from context paths. **Daily notes never
-bind (57c):** asks under daily focus leave the chat unbound, and the
-implicit follow is gone entirely — only a focused chat-note tab switches
-the panel, everything else keeps the current chat (ADR-0048 later
-change). **Done tasks + completion dates + the edit guard (57d, SDK
-1.13):** completing a task stamps an Obsidian-Tasks-compatible
-`✅ YYYY-MM-DD` on the line (reopening removes it — every toggle
-surface, the editor's via a tasks-plugin transaction filter on
-`input.toggleTask`; `TaskRecord.completed`, legacy fallback = the date
-in the note's file name); `TaskQueryOptions` gains `status`
-(`open` | `done` | `all`), `completedSince` and the `completed` sort,
-which both `tasks_list` tools accept; the ask prompt carries today's
-date, done-task few-shots and the task rule AFTER the vault context;
-and a `document` fence is only an edit proposal when it changes the
-document and the turn made no `tasks_list` call (a "yes, do that"
-follow-up no longer rewrites the focused note). Short tasks (2–3
-significant words) can match an answer. **Not yet manually verified by
-the owner.**
+**Milestones 1–58 are complete and owner-verified** (verification round
+closed 2026-10-10). This file does not restate them — the per-milestone
+record is:
 
-**Just code-complete: milestone 56 — the assistant panel keeps its chat**:
-beta feedback read as "chats are not saved" (the notes were on disk; the
-panel just always reset). Root cause (56a): the chat store consumed the
-tree-shaped `ctx.vault.list()` as flat — the picker and chat-follow were
-empty since ADR-0048; now `ctx.vault.listMarkdownFiles()` like every
-other plugin. Follow rules revised (ADR-0048 later change):
-a focused chat-note tab opens that chat in the panel, an unbound note or
-non-note focus keeps the current chat (no more fresh-chat reset), the
-first follow at activation continues the newest chat (startup shows the
-last conversation), `note:` never binds into `chats/` (no chat→chat
-chains), and `listChats` logs skipped files via `ctx.log`. **Not yet
-manually verified by the owner.**
+- [specs/changelog.md](specs/changelog.md) — milestones 22–58, newest
+  first, plus requirements and fixes
+- [docs/milestones-done.md](docs/milestones-done.md) — the archived
+  build log, milestones 1–27
+- the ADRs and `docs/05` / `docs/06` for the lasting structure
 
-**Just code-complete: milestone 55 — document history back/forward**:
-new `DocHistoryService` (`src/app/services/doc-history.service.ts`) —
-one global, session-scoped history of the viewed documents (VS Code
-model, circular buffer of 100, not persisted); the titlebar's back/
-forward arrows (right of the menu bar), View-menu rows and
-`doc.back`/`doc.forward` (`Alt+Left`/`Alt+Right`) walk it; closed
-vault/external docs reopen, unrestorable entries (scratch/plugin kinds)
-prune. Recording suspends across the startup restore, resuming seeds
-the landed-on doc. §5.30 / §6.47. **Not yet manually verified by the
-owner.**
-
-**Just code-complete: milestone 54 — the Backlinks panel (req-39)**:
-new `plugins/backlinks/` — a per-vault outlink index over the save/vault
-hooks (tag-index shape) plus a dock panel that follows the focused note
-and lists every linking file/section/line (click → open at line);
-resolution is the parity twin of the base wikilink service (grammar twin,
-sibling/shortest-path ambiguity, query-time against the current file
-list). v1: same-vault, `.md`-only, no unsaved buffers.
-**Not yet manually verified by the owner.**
-
-**Just code-complete: milestone 53 — tag rename / merge (req-38)**:
-Settings → Tags gained the merged, filterable tag list with
-"Rename…": a grammar-faithful token rewrite (`plugins/tags/shared/rename.ts`)
-over the M33 replace discipline (bundled per-file-diff confirmation,
-TOCTOU re-read, CRLF kept, per-vault checkboxes, `#old/…` descendants by
-default, merge-duplicate drop, `task` root rejected as target).
-**Not yet manually verified by the owner.**
-
-**Just code-complete: milestone 52 — deletes go to the OS recycle bin**:
-the Files panel's explicit deletes (single + multi-select) move the target
-and a `.md` note's assistant sidecar to the OS bin via `shell.trashItem`
-(`electron/trash-delete.ts`, injected IO); volumes without a bin fall back
-to the permanent delete and say so in a renderer message, while
-move-semantics deletes (Save-as out of `.drafts/`, the cross-vault move's
-delete leg) stay permanent. **Not yet manually verified by the owner.**
-
-**Just code-complete: milestone 51 — task due dates + priorities
-(req-37)**: task lines carry Obsidian-Tasks-compatible inline metadata —
-a due `📅 YYYY-MM-DD` and a priority glyph (`🔺`/`⏫`/`🔽`) — parsed and
-stripped from the text by the shared scanner (`TaskRecord.due` /
-`TaskRecord.priority`, `resolveTaskLine` unaffected), pure
-`setDueOnLine`/`setPriorityOnLine` setters; the Tasks panel shows a due
-badge (overdue/today colored) + glyph and gains a sort cycle
-(file | due | priority, persisted; non-file sorts flatten the grouped
-view); editor completion on task lines authors them (`due`/`fällig`
-with a native date-picker popover defaulting to today, `prio` with the
-glyph list — `plugins/tasks/renderer/task-meta.ts`).
-**Not yet manually verified by the owner.**
-
-**Just code-complete: milestone 50 — the caret survives a tab switch**:
-caret AND scroll offset are remembered per doc key for the whole
-app session (a map in `EditorService`, surviving even a clean tab's
-replacement/reopen; in-memory only, bounded FIFO) and replayed into
-every fresh state — the scroll restore APPLIES then RE-ASSERTS the
-stored offset (the browser's focus-scroll to the caret must never win),
-with a gated caret-anchored correction absorbing CodeMirror's
-fresh-state height ESTIMATES; entering a tab also focuses the editor so
-typing works immediately (a pane's first load keeps the no-focus
-behavior); the restore applies whenever a memory exists — never gated on
-`head > 0`, so scroll-only browsing (caret never left offset 0) and the
-clean-tab replace/reopen cycle restore too (`keepScroll` skips
-`loadDocument`'s top reset); in-place reloads of the same tab (every
-save of a frontmattered note bumps `updated:` and reloads in place)
-capture the viewport and replay it through the same chain — a
-bottom-pinned view keeps following the tail instead; reveals cancel the
-restore chain and still
-win, stale carets clamp (ADR-0037 later-change note; e2e guard
-`e2e/caret-scroll-restore`).
-**Not yet manually verified by the owner.**
-
-**Just code-complete: milestone 49 — search-summary Sources links**: the
-settled digest (a cancelled one too) ends with a deterministic `##
-Sources` section — one `[[extension-less-path#heading]]` wikilink per
-covered section (model never mints links; `path:line` rides the label,
-vault name when hits span vaults). Base fix that makes it work:
-wikilinks from **vault-less scratch tabs** resolve through a merged
-cross-vault index (active vault wins collisions, `vaultOf` routes the
-open to the owning vault) and never create notes (ADR-0046 addendum).
-**Not yet manually verified by the owner.**
-
-**Just code-complete: milestone 48 — F11 full screen**: the
-`window.toggleFullScreen` command (`F11`) toggles OS fullscreen through
-`window:toggle-fullscreen`; the View menu's "Full screen" row shares the id
-and tracks the real state via the `window:fullscreen-changed` push; the
-native menu's `togglefullscreen` role is removed (its default F11
-accelerator would swallow the key). **Not yet manually verified by the
-owner.**
-
-**Just code-complete: milestone 47 — foldable side docks**: two
-titlebar toggles (one above each dock) fold the left / right dock away as
-a whole (`dock.toggleLeft` `Ctrl+B`, `dock.toggleRight` `Ctrl+Alt+B`,
-View-menu rows); the dock stays mounted, so panel state survives, and it
-unfolds when one of its panels is revealed (ADR-0019 amendment). **Not
-yet manually verified by the owner.**
-
-**Just code-complete: milestone 46 — editor snippets** (templates
-plugin): typing a trigger word — `tbl`, `code`, `task` or any
-user-defined one — offers a multi-line Markdown block with
-`${n:placeholder}` tabstops (`snippetCompletion`; Tab navigates fields
-while active, otherwise falls through to indentation). The library is
-user-owned app config (`templates.snippets`, seeded with the three
-built-ins), edited in Settings → Templates — every entry editable,
-removable, extendable. **Not yet manually verified by the owner.**
-
-**Just code-complete: milestone 45 — Autotag re-homing** (req-36): the
-editor `⋯` menu's **"Suggest tags"** row sends the caret's heading
-section (new pure helper `shared/note-sections.ts`) to the unchanged
-`tags:suggest` backend and applies the suggested tags to it directly —
-deduplicated, one undo step, saved. Errors surface in the editor's error
-row, with a "Suggesting tags…" meta-bar hint while the model answers.
-**Not yet manually verified by the owner.**
-
-**Just code-complete: milestone 43 — UI refinement**
-([ADR-0057](docs/09_architecture_decisions/0057-ui-refinement-icon-chrome-anthrazit-and-slash-capture.md)):
-sentence-case sans chrome with shared icon controls, the Anthrazit theme,
-one text-and-tag field in Search and Tasks, the sectioned slash menu
-(built-in Entry + templates with preview) replacing the removed "Add
-entry" panel, formatting buttons in the meta bar, in-place file
-create/rename and the calendar's Today button. **Not yet manually
-verified by the owner.** (Its open follow-up — Autotag had no button —
-is resolved by milestone 45.)
-
-**Just code-complete: milestone 41 — semantic vault retrieval, the
-assistant's Vault chip** ([ADR-0055](docs/09_architecture_decisions/0055-semantic-vault-retrieval.md)):
-the composer chip cycles `off → active vault → all vaults`; each ask
-retrieves the top-k similar note sections into the system prompt
-(transformers.js WASM-only in a worker — native deps stubbed — one JSON
-index per vault, no database; Settings → "Assistant retrieval"). **Not
-yet manually verified by the owner** — in particular first build (model
-download), retrieval quality on German daily notes, and the packaged
-`npm run pack` smoke (new asarUnpack entries).
-
-**Just code-complete: milestone 40 — word completion + the shared Markdown
-context detector** (`src/app/editor/word-completion/`,
-`src/app/editor/markdown-context.ts`: a third completion source repeating
-the document's own words — ≥ 3 chars, frequency-ranked, `boost: -30`, not
-on the Enter-submits composers — plus one shared caret-context detector
-that now also guards the tag/wikilink sources against code/frontmatter/
-link/HTML false positives; snippet completion announced as a follow-up,
-plugin-owned in the templates plugin). **Not yet manually verified by the
-owner.**
-
-**Just code-complete: milestone 39 — the Outline panel plugin (req-28)**
-(`plugins/outline/`, renderer-only: the open note's heading tree as a dock
-panel — collapsible levels, click to jump to the heading, caret-row
-highlight). **Not yet manually verified by the owner.**
-
-**Just code-complete: milestone 36 — Drey as an Explorer "Open with" /
-default program for Markdown and text** (installer `fileAssociations`;
-argv / `second-instance` → vault tab or pinned, in-place-saved external tab,
-[ADR-0054](docs/09_architecture_decisions/0054-opening-files-from-the-os.md)).
-**Not yet manually verified by the owner** — in particular the installed
-registration (`npm run pack`, then Explorer → Open with), which the
-automated tests cannot cover.
-
-**Also code-complete: milestone 34 — tasks across vaults + the editor's
-undo fix** (the tasks plugin mirrors the tags plugin's per-vault shape:
-Doc | Vault | All scope, `vaultId`-stamped records, vault badges; and a
-fresh CodeMirror state per first load / tab switch, so undo can no
-longer wipe a freshly opened tab). **Not yet manually verified by the
-owner.** Milestone 33 (tag system round: prefix colors, central tag
-completion, search fix + redesign), milestone 32 (beta-feedback batch
-II), milestone 28 (multi-vault,
-[ADR-0051](docs/09_architecture_decisions/0051-multi-vault-registry.md)),
-30 (PDF embeds + a PDF viewer tab,
-[ADR-0052](docs/09_architecture_decisions/0052-pdf-embeds-and-viewer.md))
-and 31 (feedback batch I) are code-complete and likewise awaiting manual
-verification. Milestone 28's announced M-B follow-up (search scopes,
-per-vault tags/tasks indexes, MCP `vault` arguments, tasks "all vaults"
-scope) is **fully shipped** as of milestones 33 + 34.
+(Milestone 44, the Task Center's `#task/id:` addressing, was reverted
+before release — ADR-0033 "considered and rejected"; the surviving piece
+is the ambiguity skip in `resolveTaskLine`.)
 
 ## Milestones
 
-The completed milestone log (1–27) is archived in
-[docs/milestones-done.md](docs/milestones-done.md); milestones 22–36 are
-summarized in [specs/changelog.md](specs/changelog.md) ("Recent
-milestones") until owner-verified.
+Open work and its order live in [specs/roadmap.md](specs/roadmap.md)
+("Next milestones") — that list is binding; keep this summary in step
+with it.
 
-- **Last completed:** milestone 32 — beta-feedback batch II, per
-  changelog. Milestones 25 (chats as vault notes), 26 (live edit mode),
-  27 (OCR), 28 (multi-vault) and 30 (PDF embeds + viewer tab) are
-  likewise code-complete and **still awaiting manual verification by
-  the owner**.
-- **Just code-complete:** milestones 33 (tag system round), 34
-  (tasks across vaults + undo fix), 35 (pinned tabs), 36 (open files
-  from the OS), 39 (Outline panel), 40 (word completion +
-  markdown-context detector), 41 (semantic vault retrieval), 43 (UI
-  refinement, ADR-0057), 45 (Autotag re-homing), 46 (editor
-  snippets), 47 (foldable side docks), 48 (F11 full screen), 49
-  (search-summary Sources links), 50 (caret survives a tab switch),
-  51 (task due dates + priorities), 52 (recycle-bin deletes),
-  53 (tag rename / merge), 54 (Backlinks panel), 55 (document
-  history back/forward), 56 (assistant panel keeps its chat) and 57
-  (assistant task & navigation surface) — see
-  "Current State" above. (Milestone 44, the Task Center's `#task/id:`
-  addressing, was reverted before release — ADR-0033 "considered and
-  rejected"; the surviving piece is the ambiguity skip in
-  `resolveTaskLine`.)
-- **Next:** the provider program: Req-31 MCP client, then copilot-web
-  re-apply + copilot-cli spike, or the Office remainder of Req-2 (needs
-  a rendering strategy discussion first).
+- **Last completed:** milestone 58 — the assistant manages the template
+  library (SDK 1.14).
+- **Next, in order:**
+  1. Wikilink update on rename/move + a quick switcher / command palette
+  2. Conflict dialog for external changes + local snapshots
+  3. MCP client (Req-31) with unified assistant tool gating — the vehicle
+     for web search in the assistant
+  4. draw.io (req-19), then the Office remainder of Req-2 (needs a
+     rendering strategy discussion first)
+
+A milestone that is code-complete but not yet verified by the owner is
+marked "**Not yet manually verified by the owner**" in its changelog
+entry — not here.
 
 Pause after each milestone, show what works, don't push through several
 milestones in one uninterrupted stretch. (Milestones 10, 11, 15 and 19

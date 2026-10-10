@@ -144,8 +144,11 @@ export function mountPanel(
   body.classList.add('assistant-panel');
 
   // -- head: the chat selector -----------------------------------------------
-  // Icon-only (ADR-0057): no chat-title text — it was stale on a switch and
-  // the picker it opens lists the chats anyway.
+  // Icon-only controls (ADR-0057) + the active chat's title as a muted
+  // label (57e): it reads from the live chat list (and the loaded view as
+  // a fallback), so it is never stale — the model-named title replaces
+  // the question placeholder through the change round.
+  const chatLabel = el('span', 'chat-label');
   const chatSwitchButton = el('button', 'chat-switch') as HTMLButtonElement;
   chatSwitchButton.type = 'button';
   chatSwitchButton.title = 'Switch chat';
@@ -161,7 +164,7 @@ export function mountPanel(
 
   const head = el('header', 'assistant-head');
   const chatHead = el('div', 'chat-head');
-  chatHead.append(chatSwitchButton, chatNewButton);
+  chatHead.append(chatLabel, chatSwitchButton, chatNewButton);
   head.append(chatHead);
   body.appendChild(head);
 
@@ -1623,6 +1626,19 @@ export function mountPanel(
 
   // -- render loop -----------------------------------------------------------
   const render = (): void => {
+    // The active chat's title: the live list wins (fresh after every
+    // change round), the loaded view's frontmatter is the fallback for
+    // a just-created chat the list has not re-read yet.
+    const activePath = state.activeChatPath();
+    const chatTitle =
+      activePath === null
+        ? null
+        : (state.chats().find((chat) => chat.path === activePath)?.title ??
+          state.view()?.frontmatter.title ??
+          null);
+    chatLabel.textContent = chatTitle ?? 'New chat';
+    chatLabel.title = chatTitle ?? 'New chat';
+
     sendButton.disabled = state.asking();
     renderChips();
     renderThread();

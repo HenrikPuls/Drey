@@ -128,6 +128,49 @@ describe('ChatStore — append / truncate / outcomes', () => {
     expect(vault.files.get(path)).toContain('my-note: keep me');
   });
 
+  it('setTitle rewrites the quoted title, bumps updated, keeps turns and user keys (57e)', async () => {
+    const { vault, store, path } = await storeWithNote();
+    vault.files.set(
+      path,
+      vault.files.get(path)!.replace('---\n', '---\nmy-note: keep me\n'),
+    );
+    await store.appendTurn(path, userTurn);
+    await store.appendTurn(path, { ...userTurn, role: 'assistant', text: 'Answer.' });
+
+    await store.setTitle(path, 'Rigg-Aufteilung im Vergleich', new Date(2026, 8, 13, 16, 0, 0));
+
+    const view = parseChatNote(vault.files.get(path)!);
+    expect(view.frontmatter.title).toBe('Rigg-Aufteilung im Vergleich');
+    expect(view.frontmatter.updated).toBe('2026-09-13T16:00:00');
+    expect(view.turns).toHaveLength(2);
+    expect(vault.files.get(path)).toContain('my-note: keep me');
+    expect(vault.files.get(path)).toContain('title: "Rigg-Aufteilung im Vergleich"');
+    // The write is announced, so the change round refreshes the picker.
+    expect(vault.written).toContain(path);
+  });
+
+  it('serialises concurrent writes — a late title write cannot revert a turn (57e)', async () => {
+    const { vault, store, path } = await storeWithNote();
+    await store.appendTurn(path, userTurn);
+
+    // Both in flight at once: whichever queues first, the other re-reads
+    // the post-write raw — the final file carries BOTH effects.
+    await Promise.all([
+      store.appendTurn(path, {
+        ...userTurn,
+        role: 'assistant',
+        text: 'Answer.',
+        attachments: [],
+      }),
+      store.setTitle(path, 'Neuer Titel'),
+    ]);
+
+    const view = parseChatNote(vault.files.get(path)!);
+    expect(view.frontmatter.title).toBe('Neuer Titel');
+    expect(view.turns).toHaveLength(2);
+    expect(view.turns[1]?.text).toBe('Answer.');
+  });
+
   it('appendEditOutcome lands in the last assistant turn and bumps updated', async () => {
     const { vault, store, path } = await storeWithNote();
     await store.appendTurn(path, userTurn);

@@ -226,3 +226,30 @@ storage format is untouched:
   provenance and drives only the picker's "this note" marker; it no
   longer steers anything. A chat changes through the picker, "New chat",
   or a chat-note tab — nothing else.
+- **Model-named chats (57e).** The creation title — the first question's
+  first line — was a placeholder: often a long unpunctuated sentence.
+  After a brand-new chat's first turn settles, the engine fires a tiny
+  background naming call (same model, plain messages, no tools/history —
+  question plus a short answer snippet) and rewrites `title:` through a
+  sanitized reply (first line, wrapping quotes and a trailing period
+  dropped, capped at 60 chars). Best-effort: an unusable or failing
+  reply keeps the placeholder; the ask itself never waits on it.
+  ChatStore writes are now **serialized per note** — a late title write
+  re-reads the current raw instead of reverting a turn that landed in
+  between. The panel head shows the active chat's title as a muted
+  label next to the "+" (live from the chat list, the loaded view as
+  the fallback) — never stale, since it re-renders on every change
+  round instead of the frame header's shell-detection schedule (the
+  frame `status()` was removed for exactly that staleness).
+
+## Later change — chats are opt-in in the Search panel
+
+Chat notes stay indexed like `daily/` (this ADR's decision stands: MCP
+`vault_search`, the tag vocabulary and tag rename cover them). The
+Search panel, however, lists them only on request: a transcript repeats
+the questions asked of it, so chat hits crowded almost every query. The
+panel's "Include chats" toggle (off by default) filters `chats/` hits in
+the vault / all-vault scopes and keeps "Replace all" off chat notes the
+list did not show; the document scope searches an open chat note as it
+is. A view option of the panel, not an index rule — the same stance as
+ADR-0055's exclusion of chats from semantic retrieval, one layer up.

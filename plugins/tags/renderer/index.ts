@@ -10,6 +10,7 @@ import {
   buildSearchSummaryMaterial,
   buildSearchSummarySources,
   buildTextMatcher,
+  filterChatHits,
   formatSearchResultsDoc,
   formatSearchSummaryHeader,
   patchContent,
@@ -31,9 +32,12 @@ interface SearchPrefs {
   wholeWord: boolean;
   regex: boolean;
   replaceOpen: boolean;
+  /** Vault / all scope: list hits from assistant chat notes (`chats/`) too. */
+  includeChats: boolean;
 }
 
 const DEFAULT_PREFS: SearchPrefs = {
+  includeChats: false,
   scope: 'vault',
   matchCase: false,
   wholeWord: false,
@@ -56,6 +60,7 @@ function loadPrefs(): SearchPrefs {
       wholeWord: parsed.wholeWord === true,
       regex: parsed.regex === true,
       replaceOpen: parsed.replaceOpen === true,
+      includeChats: parsed.includeChats === true,
     };
   } catch {
     return { ...DEFAULT_PREFS };
@@ -418,7 +423,8 @@ const plugin: PluginRendererModule = {
                 ? { kind: 'vault', vaultId: activeVaultId }
                 : undefined;
           const diskHits = await api.search.searchSections(query, scope);
-          state.hits = withOpenBufferHits(diskHits, query);
+          // Chats stay indexed; the panel lists them only on request.
+          state.hits = filterChatHits(withOpenBufferHits(diskHits, query), prefs.includeChats);
           state.ran = true;
         }
       } catch (error) {
@@ -511,6 +517,7 @@ const plugin: PluginRendererModule = {
                 query: currentQuery(),
                 replacement: state.replacement,
                 scope: prefs.scope === 'all' ? { kind: 'all' } : undefined,
+                excludeChats: !prefs.includeChats,
               })) as { error?: string };
               if (result?.error !== undefined) {
                 state.error = result.error;
@@ -533,6 +540,7 @@ const plugin: PluginRendererModule = {
           query: currentQuery(),
           replacement: state.replacement,
           scope: prefs.scope === 'all' ? { kind: 'all' } : undefined,
+          excludeChats: !prefs.includeChats,
         })) as ReplacePreview;
         if (!preview.ok || preview.ops === undefined) {
           state.error = preview.error ?? 'Replace preview failed.';
@@ -653,16 +661,29 @@ const plugin: PluginRendererModule = {
           return btn;
         });
 
+        // Chat transcripts repeat the questions asked of them, so they stay
+        // out of a vault search unless asked for. The file scope searches
+        // the open document as it is — a focused chat note included.
+        const chatsBtn = iconButton('message-circle', 'Include chats', () => {
+          prefs.includeChats = !prefs.includeChats;
+          persistPrefs();
+          notify();
+          void run();
+        });
+
         const render = (): void => {
           for (const btn of buttons) {
             const on = btn.dataset['scope'] === prefs.scope;
             btn.classList.toggle('on', on);
             btn.setAttribute('aria-selected', String(on));
           }
+          chatsBtn.classList.toggle('on', prefs.includeChats);
+          chatsBtn.setAttribute('aria-pressed', String(prefs.includeChats));
+          chatsBtn.disabled = prefs.scope === 'file';
         };
         render();
         listeners.add(render);
-        host.appendChild(seg);
+        host.append(seg, chatsBtn);
         return () => {
           listeners.delete(render);
         };

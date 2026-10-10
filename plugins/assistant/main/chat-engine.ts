@@ -42,13 +42,18 @@ import {
   ASK_ANSWER_SYSTEM,
   ASK_LINKS_NOTE,
   ASK_SYSTEM,
+  ASK_TEMPLATES_NOTE,
   ASK_TASKS_NOTE,
   ASK_TOOLS_NOTE,
+  TITLE_SYSTEM,
   buildAskUserMessage,
   buildDateNote,
+  buildTitleUserMessage,
   buildToolsNote,
   editCatchUpLine,
+  sanitizeChatTitle,
 } from './ask-prompts';
+import type { TemplateTools } from './template-tools';
 import {
   TASKS_LIST_TOOL_NAME,
   matchTasksInAnswer,
@@ -122,6 +127,13 @@ export interface ChatEnginePorts {
       sort?: 'file' | 'due' | 'priority' | 'importance' | 'completed';
     }): Promise<readonly SdkTaskRecord[]>;
   } | null;
+  /**
+   * The template_* tools for NON-live asks (SDK 1.14): list/read/write/
+   * delete over the vault's configured template folder. Independent of
+   * the MCP switch and unconfirmed (ADR-0011 later-change — structural,
+   * low-risk content; deletes go to the recycle bin).
+   */
+  templateTools(): TemplateTools | null;
 }
 
 export interface ChatAskResult {
@@ -276,6 +288,10 @@ export class ChatEngine {
     // to prefer it over quoting task lines from retrieved context.
     const tasksTool = live ? null : this.ports.tasksTool();
     const tasksNote = tasksTool !== null ? ASK_TASKS_NOTE : null;
+    // The template tools ride every non-live ask too (SDK 1.14) — always
+    // on, no MCP gate, no confirmation (ADR-0011 later-change).
+    const templateTools = live ? null : this.ports.templateTools();
+    const templatesNote = templateTools !== null ? ASK_TEMPLATES_NOTE : null;
     const contextBlock = contextHits.length > 0 ? buildVaultContextBlock(contextHits) : null;
     // Order matters (57d): the retrieved context sits BEFORE the task note,
     // so "answer tasks only from the tool" is the later instruction and
@@ -285,6 +301,7 @@ export class ChatEngine {
       toolsNote,
       contextBlock,
       tasksNote,
+      templatesNote,
       ASK_LINKS_NOTE,
       buildDateNote(new Date()),
     ]
@@ -329,16 +346,24 @@ export class ChatEngine {
                 return run.text;
               }),
           }
-        : tasksTool !== null
+        : tasksTool !== null || templateTools !== null
           ? {
-              // One lookup + the answer: a small cap keeps a loop-happy
-              // model from re-listing tasks for rounds on end.
-              tools: [tasksTool.spec],
-              maxToolRounds: 3,
-              onToolCall: (name: string, argsJson: string) =>
-                name === tasksTool.spec.name
+              // Template flows (list → read → write) need a few more
+              // rounds than a single tasks lookup; the cap stays small
+              // enough to stop a loop-happy model from circling.
+              maxToolRounds: templateTools !== null ? 5 : 3,
+              tools: [
+                ...(templateTools !== null ? templateTools.specs : []),
+                ...(tasksTool !== null ? [tasksTool.spec] : []),
+              ],
+              onToolCall: (name: string, argsJson: string) => {
+                if (templateTools !== null && templateTools.names.has(name)) {
+                  return templateTools.run(name, argsJson);
+                }
+                return tasksTool !== null && name === tasksTool.spec.name
                   ? tasksTool.run(argsJson)
-                  : Promise.resolve(`Unknown tool: ${name}`),
+                  : Promise.resolve(`Unknown tool: ${name}`);
+              },
             }
           : {}),
       ...(useSession && view.frontmatter.session !== null
@@ -529,12 +554,45 @@ export class ChatEngine {
       });
     }
 
+    // 7 · A brand-new chat gets its TITLE from the model (57e) — the first
+    // question was only the placeholder. Fire-and-forget: the ask result
+    // returns immediately, the announced title write lands a moment later
+    // and the picker/head label pick it up through the change round. Any
+    // failure keeps the question-derived title.
+    if (created) {
+      const answerText =
+        outcome.kind === 'answer' || outcome.kind === 'liveEdit' ? outcome.text : '';
+      void this.generateTitle(chatPath, request.question, answerText);
+    }
+
     return {
       chatPath,
       outcome,
       contextCount: contextHits.length,
       ...(contextError !== undefined ? { contextError } : {}),
     };
+  }
+
+  /**
+   * The naming call (57e): same model, plain messages, no tools, no
+   * history — question plus a short answer snippet. Never throws; an
+   * unusable reply leaves the placeholder title as-is.
+   */
+  private async generateTitle(chatPath: string, question: string, answer: string): Promise<void> {
+    try {
+      const result = await this.chat(
+        [
+          { role: 'system', content: TITLE_SYSTEM },
+          { role: 'user', content: buildTitleUserMessage(question, answer) },
+        ],
+      );
+      const title = sanitizeChatTitle(result.text);
+      if (title !== null) {
+        await this.store.setTitle(chatPath, title);
+      }
+    } catch {
+      // The question title stands.
+    }
   }
 
   /** For a resumed session: the confirm result it never saw (one line). */

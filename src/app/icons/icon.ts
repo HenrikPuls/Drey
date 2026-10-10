@@ -31,6 +31,7 @@ export type IconName =
   | 'arrow-left'
   | 'arrow-right'
   | 'sparkles'
+  | 'message-circle'
   | 'more-horizontal'
   | 'copy'
   | 'corner-down-left'
@@ -115,6 +116,8 @@ const ICONS: Record<IconName, readonly IconShape[]> = {
     { kind: 'path', d: 'M5 12h14' },
     { kind: 'path', d: 'm12 5 7 7-7 7' },
   ],
+  // Lucide "message-circle" -- the Search panel's "Include chats" toggle.
+  'message-circle': [{ kind: 'path', d: 'M7.9 20A9 9 0 1 0 4 16.1L2 22Z' }],
   // Lucide "sparkles" -- the assistant / AI affordance.
   sparkles: [
     {

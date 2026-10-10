@@ -51,6 +51,8 @@ export interface ChatNotePatch {
   updated?: string;
   model?: string;
   session?: string | null;
+  /** Rewrites the title (the model-named chat, 57e). */
+  title?: string;
 }
 
 export class ChatNoteMissingError extends Error {
@@ -61,7 +63,22 @@ export class ChatNoteMissingError extends Error {
 }
 
 export class ChatStore {
+  /** Per-note write serialization (57e): a late title write must never revert a turn that landed meanwhile. */
+  private readonly queues = new Map<string, Promise<unknown>>();
+
   constructor(private readonly ports: ChatStorePorts) {}
+
+  private enqueue<T>(path: string, op: () => Promise<T>): Promise<T> {
+    const prev = this.queues.get(path) ?? Promise.resolve();
+    const next = prev.catch(() => undefined).then(op);
+    this.queues.set(path, next);
+    void next.finally(() => {
+      if (this.queues.get(path) === next) {
+        this.queues.delete(path);
+      }
+    });
+    return next;
+  }
 
   /**
    * The path for a new chat: date + slug of the first question, uniqued
@@ -116,9 +133,14 @@ export class ChatStore {
     patch: ChatNotePatch = {},
     now: Date = new Date(),
   ): Promise<void> {
-    const raw = await this.requireRaw(path);
-    const next = appendTurnText(raw, turn);
-    await this.ports.writeAnnounced(path, this.patchFrontmatter(next, { ...patch, updated: toTimestamp(now) }));
+    await this.enqueue(path, async () => {
+      const raw = await this.requireRaw(path);
+      const next = appendTurnText(raw, turn);
+      await this.ports.writeAnnounced(
+        path,
+        this.patchFrontmatter(next, { ...patch, updated: toTimestamp(now) }),
+      );
+    });
   }
 
   /**
@@ -130,12 +152,14 @@ export class ChatStore {
     outcome: { path: string; applied: boolean; after?: string },
     now: Date = new Date(),
   ): Promise<void> {
-    const raw = await this.requireRaw(path);
-    const next = appendEditOutcomeText(raw, outcome);
-    await this.ports.writeAnnounced(
-      path,
-      this.patchFrontmatter(next, { updated: toTimestamp(now) }),
-    );
+    await this.enqueue(path, async () => {
+      const raw = await this.requireRaw(path);
+      const next = appendEditOutcomeText(raw, outcome);
+      await this.ports.writeAnnounced(
+        path,
+        this.patchFrontmatter(next, { updated: toTimestamp(now) }),
+      );
+    });
   }
 
   /**
@@ -144,12 +168,29 @@ export class ChatStore {
    * provider-side session, so the next turn must full-replay.
    */
   async truncateFrom(path: string, turnIndex: number, now: Date = new Date()): Promise<void> {
-    const raw = await this.requireRaw(path);
-    const next = truncateFromText(raw, turnIndex);
-    await this.ports.writeAnnounced(
-      path,
-      this.patchFrontmatter(next, { updated: toTimestamp(now), session: null }),
-    );
+    await this.enqueue(path, async () => {
+      const raw = await this.requireRaw(path);
+      const next = truncateFromText(raw, turnIndex);
+      await this.ports.writeAnnounced(
+        path,
+        this.patchFrontmatter(next, { updated: toTimestamp(now), session: null }),
+      );
+    });
+  }
+
+  /**
+   * Renames the chat (the model-written title, 57e) and bumps `updated:`
+   * so the picker re-sorts. Announced — the change round refreshes the
+   * picker list and the panel's head label.
+   */
+  async setTitle(path: string, title: string, now: Date = new Date()): Promise<void> {
+    await this.enqueue(path, async () => {
+      const raw = await this.requireRaw(path);
+      await this.ports.writeAnnounced(
+        path,
+        this.patchFrontmatter(raw, { title, updated: toTimestamp(now) }),
+      );
+    });
   }
 
   /**
@@ -216,6 +257,10 @@ export class ChatStore {
     }
     if (patch.updated !== undefined) {
       setScalar(doc, 'updated', patch.updated, true);
+    }
+    if (patch.title !== undefined) {
+      // Quoted like at creation — titles carry spaces, colons, quotes.
+      setScalar(doc, 'title', patch.title, true);
     }
     if (patch.model !== undefined) {
       setScalar(doc, 'model', patch.model, false);

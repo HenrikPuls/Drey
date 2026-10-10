@@ -2320,3 +2320,47 @@ sequenceDiagram
     end
     Note over H: state written back; the walk's own<br/>activation never records itself
     Note over Ed: the fresh state restores caret + scroll<br/>through the milestone-50 memory
+
+## 6.48 The assistant creates / deletes a template (milestone 58, SDK 1.14)
+
+```mermaid
+sequenceDiagram
+    actor User
+    participant P as Assistant panel
+    participant CE as ChatEngine (main)
+    participant TT as template-tools.ts
+    participant V as ctx.vault<br/>(writeAnnounced / delete)
+    participant VM as VaultManager + announcer
+
+    User->>P: "Create a meeting template"
+    P->>CE: ask (non-live)
+    CE->>CE: build ask tool set:<br/>template specs + tasks_list spec<br/>(independent of mcp.enabled)
+    CE->>TT: template_list {} (fresh bundle —<br/>current templates.dir in the descriptions)
+    TT->>V: listMarkdownFiles()
+    V-->>TT: flat .md listing
+    TT-->>CE: paths under templates/ (one per line)
+    CE->>TT: template_write {name, content, overwrite:false}
+    TT->>TT: resolveTemplate: normalize, refuse ../absolute,<br/>reserved prompts/, refuse silent overwrite
+    TT->>V: writeAnnounced("templates/meetings/retro.md", body)
+    V->>VM: writeFile (own-write ledger)
+    VM-->>P: vault:changed push (changedPaths)
+    Note over P: Templates panel, slash menu and Mod+T<br/>reload on the same round — no extra wiring
+    TT-->>CE: "Created the template …"
+    CE-->>P: answer turn (tool pair persisted as drey-tool entries)
+
+    User->>P: "Delete the retro template"
+    P->>CE: ask (non-live)
+    CE->>TT: template_delete {name:"meetings/retro"}
+    TT->>V: ctx.vault.delete (NEW SDK 1.14 surface)
+    V->>VM: deleteEntry → OS recycle bin (milestone 52)
+    VM-->>P: vault:changed push (deletedPaths)
+    TT-->>CE: "Deleted … (moved to the recycle bin)"
+```
+
+Guard rails baked into the pure resolver, not the prompt: `daily.md` is
+refused on delete (it seeds new daily notes; overwrite stays allowed),
+`prompts/` is refused everywhere (the composer prompt picker's format),
+and `template_write` without `overwrite: true` fails on an existing
+template instead of replacing it. No confirmation dialog — ADR-0011's
+later-change: structural, low-risk content, and deletes stay
+recoverable through the bin.

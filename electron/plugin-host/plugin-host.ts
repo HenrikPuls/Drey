@@ -536,6 +536,19 @@ export class PluginHost {
           this.deps.vaultAnnouncer()?.announceExternal({ vaultId, changedPaths: [p], deletedPaths: [] });
           return modifiedMs;
         },
+        // The app's own delete path (recycle bin first, milestone 52) plus
+        // the same announcement round — a plugin delete looks exactly like
+        // a Files-panel delete to tree and indexes.
+        delete: async (p, opts) => {
+          const vaultId = vaultManager.resolveVaultId(opts?.vaultId);
+          const { trashed } = await vaultManager.deleteEntry(p, vaultId);
+          this.deps.vaultAnnouncer()?.announceExternal({
+            vaultId,
+            changedPaths: [],
+            deletedPaths: [p],
+          });
+          return trashed;
+        },
         saveAsset: (bytes, ext, noteRelPath, opts) =>
           vaultManager.saveAsset(bytes, ext, noteRelPath, opts?.vaultId),
         list: (opts) => vaultManager.listFiles(opts?.vaultId),

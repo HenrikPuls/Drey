@@ -2507,3 +2507,44 @@ memory (milestone 50).
   steps for the browser-standard chord). Landing on a document restores
   its caret/scroll through the existing milestone-50 memory — no
   extra wiring.
+
+## 5.31 The assistant manages the template library (milestone 58, SDK 1.14)
+
+Four chat tools — `template_list`, `template_read`, `template_write`,
+`template_delete` — let the ask flow's model work directly on the vault's
+template library (the configured `templates.dir`, default `templates/`,
+active vault): `main/template-tools.ts` in `plugins/assistant/`, built
+after the `tasks-tool` shape. The tools ride **every non-live ask** —
+independent of `mcp.enabled` (the `vault_*` set stays gated; MCP clients
+keep plain `vault_write`).
+
+- **No confirmation** (ADR-0011 later-change): template files are small
+  structural content outside the tag index, never the user's notes. A
+  write still refuses to overwrite unless the model passes the explicit
+  `overwrite: true`; a delete goes through the milestone-52 recycle-bin
+  path. Both ride the announced round, so the Templates panel, the slash
+  menu and Mod+T pick the change up on the same `vault:changed` push —
+  zero changes in the templates plugin.
+- **New base seam** — `ctx.vault.delete(path, opts?)` (the SDK's first
+  delete): `VaultManager.deleteEntry` (vault-escape guard, own-write
+  ledger, sidecar travels) + the announcer's `deletedPaths` push;
+  resolves whether the target landed in the bin.
+  `PLUGIN_API_VERSION` minor → 14.
+- **Guards, pure and spec'd** (`resolveTemplate` /
+  `templatePathsInDir`): names normalize to paths under the folder
+  (subfolders become Templates-panel categories, `.md` appended),
+  `..`/absolute escapes are refused, the top-level `prompts/` subfolder
+  is reserved for the composer prompt picker's own format, and
+  `daily.md` — the daily-note seed — can be overwritten but never
+  deleted. Handlers never throw; errors return as text (the live-edit
+  rule).
+- **Wiring**: the engine merges the template specs with the
+  `tasks_list` spec in one ask-branch tool set (`maxToolRounds` 5 when
+  templates ride, else the tasks cap 3) and dispatches by name; the
+  bundle is built fresh per ask so a renamed `templates.dir` reaches
+  the tool descriptions immediately, and `ASK_TEMPLATES_NOTE` tells the
+  model to list before creating (no duplicates) and that a write
+  applies immediately.
+- Live-edit turns never see the tools (the note is the target there),
+  and the tool calls surface as ordinary `drey-tool` chips in the turn
+  card.

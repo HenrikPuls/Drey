@@ -22,13 +22,25 @@
   border-bottom: 1px solid var(--border);
 }
 
-/* Chat selector (icon-only, ADR-0057: the list opens the chat picker, + starts a new chat). */
+/* Chat selector (icon-only controls, ADR-0057, + the active chat's muted
+   title label, 57e — the list button opens the chat picker, + starts a
+   new chat). */
 .assistant-head .chat-head {
   flex: 1;
   min-width: 0;
   display: flex;
   align-items: center;
   gap: 4px;
+}
+
+.assistant-head .chat-label {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-4);
+  font-size: 12px;
 }
 
 .assistant-head .chat-switch,

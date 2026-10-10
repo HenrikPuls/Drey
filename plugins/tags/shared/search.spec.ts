@@ -3,7 +3,9 @@ import {
   buildSearchSummarySources,
   buildTextMatcher,
   describeSearchQuery,
+  filterChatHits,
   formatSearchResultsDoc,
+  isChatNotePath,
   formatSearchSummaryHeader,
   replaceInRanges,
   runTagSearch,
@@ -19,6 +21,30 @@ const SECTIONS: SearchableSection[] = [
   { path: 'a.md', heading: 'Alpha', line: 1, tags: ['x'], text: 'Foo foo FOO barfoobar foobaz' },
   { path: 'b.md', heading: 'Beta', line: 5, tags: [], text: 'plain body only' },
 ];
+
+describe('filterChatHits — the panel\'s "Include chats" toggle', () => {
+  const HITS = [
+    { path: 'chats/2026/10/frage.md' },
+    { path: 'daily/2026/10/2026-10-10.md' },
+    { path: 'notes/chats/not-a-chat.md' },
+    { path: 'chatsworth.md' },
+  ];
+
+  it('drops chat notes unless they were asked for', () => {
+    expect(filterChatHits(HITS, false).map((h) => h.path)).toEqual([
+      'daily/2026/10/2026-10-10.md',
+      'notes/chats/not-a-chat.md',
+      'chatsworth.md',
+    ]);
+    expect(filterChatHits(HITS, true)).toEqual(HITS);
+  });
+
+  it('only the vault-root chats/ folder counts', () => {
+    expect(isChatNotePath('chats/a.md')).toBe(true);
+    expect(isChatNotePath('chats')).toBe(true);
+    expect(isChatNotePath('archive/chats/a.md')).toBe(false);
+  });
+});
 
 describe('buildTextMatcher', () => {
   it('defaults to case-insensitive substring terms (historical behavior)', () => {

@@ -293,6 +293,15 @@ export interface MainPluginContext {
      */
     writeAnnounced(path: string, content: string, opts?: VaultOpOptions): Promise<number>;
     /**
+     * Deletes a vault file or folder over the app's delete path (milestone
+     * 52): to the OS recycle bin by default, permanently on volumes
+     * without a bin — never silently unrecoverable. Returns whether the
+     * target landed in the bin. Announced like `writeAnnounced`, so tree
+     * and indexes follow immediately. (SDK 1.14 — the assistant's
+     * template_delete is the first consumer.)
+     */
+    delete(path: string, opts?: VaultOpOptions): Promise<boolean>;
+    /**
      * Stage binary bytes as a vault asset (the editor's ADR-0024 path):
      * hash-named under `attachments/` beside `noteRelPath`, collisions
      * suffixed. Returns the vault-relative path to reference.

@@ -22,6 +22,7 @@ import {
 import { ActionEngine, type ChatFn } from './action-engine';
 import { ChatEngine } from './chat-engine';
 import { ChatStore } from './chat-store';
+import { createTemplateTools } from './template-tools';
 import { createSemanticService, type SemanticService } from './semantic/service';
 import { readFile } from 'node:fs/promises';
 import { dialog, app } from 'electron';
@@ -168,6 +169,17 @@ const plugin: MainPluginModule = {
             query: (opts) => provider.query(opts),
           };
         },
+        // Live at call time too: the folder is user-configurable
+        // (Settings → Templates), and a fresh bundle carries its current
+        // name in the tool descriptions.
+        templateTools: () =>
+          createTemplateTools({
+            templatesDir: () => ctx.appConfig.get().templates?.dir,
+            listMarkdownFiles: () => ctx.vault.listMarkdownFiles(),
+            read: (path) => ctx.vault.read(path),
+            writeAnnounced: (path, content) => ctx.vault.writeAnnounced(path, content),
+            remove: async (path) => ctx.vault.delete(path),
+          }),
       },
     );
 

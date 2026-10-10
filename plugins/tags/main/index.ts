@@ -11,7 +11,12 @@ import { TAG_AUTO_PALETTE, normalizeTagPrefix } from '../../../shared/tag-style'
 import type { TagPrefixStyle } from '../../../shared/tag-style';
 import { diffStats, lineDiff } from '../../../shared/text-diff';
 import type { DiffRow } from '../../../shared/text-diff';
-import { buildSearchSummaryMaterial, buildTextMatcher, patchContent } from '../shared/search';
+import {
+  buildSearchSummaryMaterial,
+  buildTextMatcher,
+  filterChatHits,
+  patchContent,
+} from '../shared/search';
 import type { TagSearchHit, TagSearchQuery } from '../shared/search';
 import { normalizeTagName, renameTagInContent } from '../shared/rename';
 import { TagIndex, isIndexExcludedPath } from './tag-index';
@@ -174,6 +179,11 @@ const plugin: MainPluginModule = {
       scope?: SectionSearchScope;
       /** Narrow the operation to these files (per-hit / per-file replace). */
       files?: readonly { vaultId: string; path: string }[];
+      /**
+       * Leave chat notes alone — the panel's "Include chats" toggle is off,
+       * so a replace must not rewrite files the result list never showed.
+       */
+      excludeChats?: boolean;
     }
 
     interface ReplaceOpDto {
@@ -201,7 +211,10 @@ const plugin: MainPluginModule = {
         // An invalid regex is a user-facing message, not an exception diet.
         throw new Error(matcher.error);
       }
-      const hits = index.search(query, request.scope, await activeVaultId());
+      const hits = filterChatHits(
+        index.search(query, request.scope, await activeVaultId()),
+        request.excludeChats !== true,
+      );
       const wanted = new Set((request.files ?? []).map((f) => `${f.vaultId} ${f.path}`));
 
       const groups = new Map<string, { vaultId: string; path: string }>();

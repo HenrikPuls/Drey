@@ -10,7 +10,12 @@ import {
   runTasksListTool,
   taskArgsCarryScopeRestriction,
 } from '../../../plugins/assistant/main/tasks-tool';
-import { buildDateNote } from '../../../plugins/assistant/main/ask-prompts';
+import {
+  TITLE_SYSTEM,
+  buildDateNote,
+  buildTitleUserMessage,
+  sanitizeChatTitle,
+} from '../../../plugins/assistant/main/ask-prompts';
 import { DEFAULT_APP_CONFIG, normalizeAppConfig, AppConfig } from '../../../shared/app-config';
 import type { LlmChatResult, ChatMessage, LlmCapabilities, ToolSpec } from '../../../shared/llm';
 import type { SdkTaskRecord } from '../../../shared/plugin-api';
@@ -140,6 +145,8 @@ interface ChatCall {
 interface ChatHarness {
   engine: ChatEngine;
   calls: ChatCall[];
+  /** The 57e chat-naming calls (background traffic, recorded separately). */
+  titleCalls: ChatCall[];
   files: Map<string, string>;
   deltas: Array<{ taskId: string; text: string }>;
   /** The tasks_list tool the harness offers (null = none); replaced per test. */
@@ -156,9 +163,10 @@ function chatHarness(
   reply: (call: ChatCall, index: number) => LlmChatResult | Error = () => ({
     text: 'Antwort.',
   }),
-  options: { llm?: boolean; mcp?: boolean } = {},
+  options: { llm?: boolean; mcp?: boolean; titleReply?: string | Error } = {},
 ): ChatHarness {
   const calls: ChatCall[] = [];
+  const titleCalls: ChatCall[] = [];
   const deltas: Array<{ taskId: string; text: string }> = [];
   const files = new Map<string, string>();
   const store = new ChatStore({
@@ -197,6 +205,7 @@ function chatHarness(
   const harness: ChatHarness = {
     engine: undefined as never,
     calls,
+    titleCalls,
     files,
     deltas,
     tasksTool: null,
@@ -213,6 +222,18 @@ function chatHarness(
     () => config,
     async (messages, opts) => {
       const call: ChatCall = { messages: [...messages], opts: opts ?? {} };
+      // The 57e naming call is background traffic: it records into its
+      // own list and answers from `options.titleReply` (default a sane
+      // title) — never through the test's reply fn, whose call indexes
+      // and attempt counters describe the MAIN flow.
+      if ((messages[0]?.content ?? '') === TITLE_SYSTEM) {
+        titleCalls.push(call);
+        const titled = options.titleReply ?? 'Benannter Chat';
+        if (titled instanceof Error) {
+          throw titled;
+        }
+        return { text: titled };
+      }
       const index = calls.length;
       calls.push(call);
       if (opts?.onDelta !== undefined) {
@@ -236,6 +257,9 @@ function chatHarness(
       // it is here to satisfy the port.
       retrieveContext: async () => ({ enabled: true, minScore: 0.3, hits: [] }),
       tasksTool: () => harness.tasksTool,
+      // The template tools would change the prompt shape in every ASK
+      // below (SDK 1.14); these tests pin the pre-template prompts.
+      templateTools: () => null,
     },
   );
 
@@ -1130,5 +1154,94 @@ describe('assistant plugin — task evaluation fixes (57d)', () => {
     expect(tool[1]?.kind === 'result' && JSON.parse(tool[1].content)).toMatchObject({
       completed: '2026-10-09',
     });
+  });
+});
+
+describe('assistant plugin chat engine — model-named chats (57e)', () => {
+  /** Waits for the fire-and-forget naming call to settle on the note. */
+  async function untilTitleLands(h: ReturnType<typeof chatHarness>, chatPath: string): Promise<void> {
+    for (let i = 0; i < 200; i++) {
+      if (parseChatNote(h.files.get(chatPath)!).frontmatter.title !== 'Worum geht es?') {
+        return;
+      }
+      await new Promise((resolve) => setTimeout(resolve, 1));
+    }
+  }
+
+  it('a brand-new chat asks the model for a title and replaces the placeholder', async () => {
+    const h = chatHarness(() => ({ text: 'Antwort.' }), { titleReply: '  "Kaffee am Morgen."\nDanke.' });
+
+    const { chatPath } = await h.engine.ask(ASK);
+    await untilTitleLands(h, chatPath);
+
+    const view = parseChatNote(h.files.get(chatPath)!);
+    expect(view.frontmatter.title).toBe('Kaffee am Morgen');
+    // The naming call: plain — no tools, no vault tools, no stream.
+    const titleCall = h.titleCalls[0];
+    expect(titleCall?.opts['tools']).toBeUndefined();
+    expect(titleCall?.opts['vaultTools']).toBeUndefined();
+    expect(titleCall?.messages[1]?.content).toContain('Worum geht es?');
+    expect(titleCall?.messages[1]?.content).toContain('Antwort.');
+  });
+
+  it('a follow-up ask never renames the chat', async () => {
+    const h = chatHarness(() => ({ text: 'Antwort.' }), { titleReply: 'Ersttitel' });
+    const first = await h.engine.ask(ASK);
+    await untilTitleLands(h, first.chatPath);
+
+    await h.engine.ask({ ...ASK, question: 'Und weiter?', chatPath: first.chatPath });
+    await new Promise((resolve) => setTimeout(resolve, 20));
+
+    expect(h.titleCalls).toHaveLength(1);
+  });
+
+  it('an unusable naming reply keeps the question placeholder', async () => {
+    const h = chatHarness(() => ({ text: 'Antwort.' }), { titleReply: '""' });
+    const { chatPath } = await h.engine.ask(ASK);
+    await new Promise((resolve) => setTimeout(resolve, 20));
+
+    expect(parseChatNote(h.files.get(chatPath)!).frontmatter.title).toBe('Worum geht es?');
+  });
+
+  it('a failing naming call keeps the placeholder and never fails the ask', async () => {
+    const h = chatHarness(
+      () => ({ text: 'Antwort.' }),
+      { titleReply: new Error('model down') },
+    );
+    const { chatPath, outcome } = await h.engine.ask(ASK);
+    await new Promise((resolve) => setTimeout(resolve, 20));
+
+    expect(outcome.kind).toBe('answer');
+    expect(parseChatNote(h.files.get(chatPath)!).frontmatter.title).toBe('Worum geht es?');
+  });
+});
+
+describe('assistant plugin — title sanitising (57e)', () => {
+  it('strips wrapping quotes and a trailing period, keeps the first line only', () => {
+    expect(sanitizeChatTitle('  "Kaffee am Morgen. "\nDanke.')).toBe('Kaffee am Morgen');
+    expect(sanitizeChatTitle('„Blockuniversum und Zeit«')).toBe('Blockuniversum und Zeit');
+  });
+
+  it('caps at 60 chars on a word boundary', () => {
+    const long = 'Ein sehr langer Titel der die Sechzig-Zeichen-Grenze deutlich übersteigt und weiter läuft';
+    const title = sanitizeChatTitle(long);
+    expect(title).not.toBeNull();
+    expect(title!.length).toBeLessThanOrEqual(60);
+    expect(title!.endsWith(' ')).toBe(false);
+  });
+
+  it('null for junk — the placeholder stands', () => {
+    expect(sanitizeChatTitle('""')).toBeNull();
+    expect(sanitizeChatTitle('x')).toBeNull();
+    expect(sanitizeChatTitle(' . ')).toBeNull();
+    expect(sanitizeChatTitle('')).toBeNull();
+  });
+
+  it('buildTitleUserMessage caps the snippets and skips an empty answer', () => {
+    expect(buildTitleUserMessage('Frage', '')).toBe('User: Frage');
+    const long = 'x'.repeat(900);
+    const built = buildTitleUserMessage(long, long);
+    expect(built).not.toContain(long);
+    expect(built).toContain('Assistant:');
   });
 });

@@ -64,6 +64,27 @@ export interface TagSearchHit {
   vaultId?: string;
 }
 
+/**
+ * True when `path` is an assistant chat note (`chats/…`, ADR-0048). The
+ * plugin-local twin of `shared/structural-folders.ts`' `isChatNotePath`:
+ * plugin renderer modules load unbundled over `plugin://` and cannot take
+ * a runtime import from base `shared/`.
+ */
+export function isChatNotePath(path: string): boolean {
+  return path === 'chats' || path.startsWith('chats/');
+}
+
+/**
+ * The Search panel's "Include chats" view filter: chat transcripts stay
+ * indexed, but drop out of a result list unless the user asked for them.
+ */
+export function filterChatHits<T extends { path: string }>(
+  hits: readonly T[],
+  includeChats: boolean,
+): T[] {
+  return includeChats ? [...hits] : hits.filter((hit) => !isChatNotePath(hit.path));
+}
+
 const SNIPPET_WINDOW = 240;
 const SNIPPET_LEAD = 60;
 

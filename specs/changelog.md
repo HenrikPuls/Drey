@@ -20,6 +20,47 @@ recorded as an explicit decision. The parity checklist lives in
 
 ## Recent milestones
 
+### Milestone 58 — the assistant manages the template library (SDK 1.14)
+
+- **The agent can create templates.** Four new chat tools —
+  `template_list`, `template_read`, `template_write`, `template_delete`
+  (`plugins/assistant/main/template-tools.ts`, the `tasks-tool` shape) —
+  work directly on the vault's template library (the configured
+  `templates.dir`, active vault). `template_write` requires an explicit
+  `overwrite` flag (create-only by default), subfolder names become
+  Templates-panel categories, and `{{date}}` / `{{time}}` /
+  `{{datetime}}` / `{{title}}` placeholders are documented to the model.
+  The tools ride every non-live ask, independent of `mcp.enabled`;
+  live-edit turns are untouched.
+- **Guard rails, deterministic**: `..`/absolute path escapes refused,
+  the top-level `prompts/` subfolder reserved (composer prompt picker's
+  format), `daily.md` refused on delete (daily-note seed; overwrite
+  stays allowed). Errors return as tool-result text, never throw.
+- **No confirmation (ADR-0011 later-change):** templates are small
+  structural content outside the tag index. Writes ride
+  `writeAnnounced`, deletes the milestone-52 recycle-bin path — both
+  announced, so the Templates panel, the slash menu and Mod+T update on
+  the same `vault:changed` round with zero changes in the templates
+  plugin.
+- **New base seam** `ctx.vault.delete(path, opts?)` (SDK minor → 14):
+  `VaultManager.deleteEntry` (escape guard, own-write ledger, assistant
+  sidecar) + the announcer's `deletedPaths` push; resolves whether the
+  target landed in the bin.
+
+### Search — "Include chats" toggle
+
+- A speech-bubble button next to the Search panel's scope switch.
+  **Behaviour change:** chat notes (`chats/`) are no longer listed in
+  vault / all-vault search hits unless it is on (off by default,
+  persisted in `localStorage['drey.search']`) — transcripts repeat the
+  questions asked of them and crowded almost every query. Export and
+  Summarize follow the visible hits; "Replace all" passes
+  `excludeChats` to the replace backend so it never rewrites chat notes
+  the list did not show. The document scope is unaffected (an open chat
+  note stays searchable), and so is the index: MCP `vault_search`, the
+  tag vocabulary and tag rename still cover chats. New icon
+  `message-circle`.
+
 ### Milestone 57 — the assistant as the task & navigation surface (ADR-0058)
 
 - **Task answers become actionable.** The assistant gained a
@@ -63,6 +104,14 @@ recorded as an explicit decision. The parity checklist lives in
   The panel renders the filter as head chips and a real empty state for
   a filtered no-hit result; MCP passes the same args through but keeps
   the provider's file-order default when `sort` is absent.
+- **M57e — model-named chats + the active chat in the head:** a
+  brand-new chat's title comes from a tiny background naming call
+  (same model, no tools — question + answer snippet; sanitized, capped
+  at 60 chars; failures keep the question placeholder, the ask never
+  waits). ChatStore writes are serialized per note so a late title
+  write cannot revert a meanwhile-landed turn. The panel head shows the
+  active chat's title as a muted label next to the "+" (live from the
+  chat list — the old frame `status()` was stale by design).
 - **M57c — the implicit chat-follow is gone:** the "a bound note opens
   its newest bound chat" rule silently yanked the panel to the newest
   match when several chats shared a title, and every day/meeting switch
@@ -174,6 +223,23 @@ recorded as an explicit decision. The parity checklist lives in
   focus, startup fallback, unbound asks with a focused chat) and
   `plugin-assistant-chat-store.spec.ts` (corrupt-tolerant listing, skip
   logging).
+
+### Milestone 55 — document history back/forward
+
+- **`DocHistoryService`** (`src/app/services/doc-history.service.ts`,
+  new): one global, session-scoped history of the viewed documents — the
+  VS Code model over any number of panes, browser truncation of the
+  forward branch, a circular buffer of 100, purely in-memory (nothing
+  rides into the session snapshot).
+- **Surfaces:** the titlebar's back/forward arrows (right of the menu
+  bar), View-menu rows and `doc.back` / `doc.forward` (`Alt+Left` /
+  `Alt+Right`).
+- Closed vault/external documents **reopen** (`keepFocused`, never a
+  clean-tab replace); unrestorable entries (scratch tabs, plugin doc
+  kinds) prune lazily. Recording suspends across the startup restore and
+  resuming seeds the landed-on document; caret/scroll restore rides the
+  milestone-50 memory.
+- Docs: `docs/05` §5.30, `docs/06` §6.47.
 
 ### Milestone 54 — the Backlinks panel (req-39)
 
@@ -483,7 +549,7 @@ manually verified by the owner.**
 ### Milestone 45 — Autotag re-homed into the editor's `⋯` menu (req-36)
 
 The `suggestTags` backend orphaned by the drawer's removal (ADR-0057) has
-a new trigger. **Not yet manually verified by the owner.**
+a new trigger.
 
 - **`⋯` → "Suggest tags"** — sends the **section under the caret** (the
   same heading-delimited unit the tag search reports on; fences hide `#`

@@ -55,6 +55,13 @@ export const ASK_TASKS_NOTE = `Questions about the user's tasks (open, done, due
 - Only when the question is about the WHOLE open task set ("what are my most important tasks", "what is there to do") → call with {} and no restriction.
 Never omit a restriction the question names. The tool returns OPEN tasks unless status says otherwise — if a result does not cover the question, call the tool AGAIN with other arguments instead of telling the user what you would have to query. Never mention the tool or its argument names in your answer. The result is already filtered and sorted; keep your text to a brief highlight of what matters most — the app renders the returned list itself.`;
 
+/**
+ * Appended when the template tools are attached (SDK 1.14): the model
+ * should check the library before creating (no duplicates), know the
+ * placeholder contract, and treat the unconfirmed write with care.
+ */
+export const ASK_TEMPLATES_NOTE = `You can manage the user's template library (template_list, template_read, template_write, template_delete) — reusable Markdown blocks inserted via the slash menu, Mod+T or the Templates panel. When the user asks for a template, call template_list first to avoid duplicates and to pick a fitting name; subfolders in the name become categories. Template bodies are plain Markdown; {{date}}, {{time}}, {{datetime}} and {{title}} are substituted when a template is inserted. A template_write applies immediately without confirmation — write only what was asked for.`;
+
 const WEEKDAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 
 /**
@@ -111,4 +118,44 @@ export function buildAskUserMessage(request: AskRequest): string {
     parts.push(`FILE (${file.path}):\n${file.body}`);
   }
   return parts.join('\n\n');
+}
+
+/**
+ * Chat naming (57e): a brand-new chat's title comes from the model, not
+ * from the raw first question (which was a placeholder — often a long,
+ * unpunctuated sentence). The call rides the SAME model, plain, no tools
+ * and no history; the question plus a short answer snippet are enough.
+ */
+export const TITLE_SYSTEM = `You name chat conversations. Read the exchange below and reply with a concise title of two to six words, in the language of the conversation. Reply with the title only — no quotes, no surrounding punctuation, no sentence, no explanation.`;
+
+/** The user message for the naming call: the exchange, capped. */
+export function buildTitleUserMessage(question: string, answer: string): string {
+  const parts = [`User: ${question.slice(0, 400)}`];
+  if (answer !== '') {
+    parts.push(`Assistant: ${answer.slice(0, 600)}`);
+  }
+  return parts.join('\n');
+}
+
+/**
+ * Cleans a model reply into a frontmatter title: first non-empty line,
+ * wrapping quotes and a trailing period dropped, whitespace collapsed,
+ * capped at 60 chars on a word boundary. `null` when nothing usable
+ * remains (the engine then keeps the question-derived title).
+ */
+export function sanitizeChatTitle(raw: string): string | null {
+  const line = (raw ?? '').split('\n').map((l) => l.trim()).find((l) => l !== '') ?? '';
+  let title = line
+    .replace(/^["'„“«»‘’]+/, '')
+    .replace(/["'„“«»‘’]+$/, '')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .replace(/[.!…]+$/, '')
+    .trim();
+  if (title.length > 60) {
+    const cut = title.slice(0, 60);
+    const lastSpace = cut.lastIndexOf(' ');
+    title = (lastSpace > 20 ? cut.slice(0, lastSpace) : cut).trim();
+  }
+  return title.length >= 2 ? title : null;
 }
