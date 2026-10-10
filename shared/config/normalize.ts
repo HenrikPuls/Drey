@@ -38,6 +38,9 @@ import {
   MCP_PORT_MAX,
   MCP_PORT_MIN,
   McpConfig,
+  McpClientServer,
+  MCP_SERVER_ID_MAX,
+  ToolsConfig,
   SnippetConfig,
   SpellcheckConfig,
   TemplatesConfig,
@@ -56,6 +59,7 @@ import {
   DEFAULT_APPEARANCE,
   DEFAULT_DAILY_CONFIG,
   DEFAULT_MCP_CONFIG,
+  defaultToolsConfig,
   DEFAULT_TEMPLATES_CONFIG,
   DEFAULT_VAULT_CONFIG,
   ruledEntryTemplate,
@@ -255,6 +259,102 @@ function normalizeMcp(raw: unknown): McpConfig {
     httpEnabled: bool(source['httpEnabled'], DEFAULT_MCP_CONFIG.httpEnabled),
     httpPort: port,
     yolo: bool(source['yolo'], DEFAULT_MCP_CONFIG.yolo),
+  };
+}
+
+/** String-to-string map with non-empty keys (env vars, HTTP headers). */
+function stringMap(raw: unknown): Record<string, string> {
+  const out: Record<string, string> = {};
+  if (raw && typeof raw === 'object' && !Array.isArray(raw)) {
+    for (const [key, value] of Object.entries(raw as Record<string, unknown>)) {
+      if (key.trim() !== '' && typeof value === 'string') {
+        out[key.trim()] = value;
+      }
+    }
+  }
+  return out;
+}
+
+/** A server id as a tool-name-safe slug; `''` when nothing usable remains. */
+export function mcpServerSlug(raw: string): string {
+  return raw
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, MCP_SERVER_ID_MAX)
+    .replace(/-+$/, '');
+}
+
+function normalizeMcpServers(raw: unknown): McpClientServer[] {
+  const out: McpClientServer[] = [];
+  const seen = new Set<string>();
+  for (const item of Array.isArray(raw) ? raw : []) {
+    if (!item || typeof item !== 'object') {
+      continue;
+    }
+    const source = item as Record<string, unknown>;
+    const transportSource = (source['transport'] ?? {}) as Record<string, unknown>;
+    const name = str(source['name'], '').trim();
+    const base = mcpServerSlug(str(source['id'], '') || name) || 'server';
+    let id = base;
+    for (let n = 2; seen.has(id); n++) {
+      id = `${base.slice(0, MCP_SERVER_ID_MAX - 3)}-${n}`;
+    }
+    seen.add(id);
+    out.push({
+      id,
+      name: name || id,
+      enabled: bool(source['enabled'], true),
+      approval: source['approval'] === 'allow' ? 'allow' : 'ask',
+      transport:
+        transportSource['kind'] === 'http'
+          ? {
+              kind: 'http',
+              url: str(transportSource['url'], '').trim(),
+              headers: stringMap(transportSource['headers']),
+            }
+          : {
+              kind: 'stdio',
+              command: str(transportSource['command'], '').trim(),
+              args: Array.isArray(transportSource['args'])
+                ? transportSource['args'].filter((a): a is string => typeof a === 'string')
+                : [],
+              env: stringMap(transportSource['env']),
+            },
+    });
+  }
+  return out;
+}
+
+/**
+ * The assistant's tool groups. A config written before milestone 63 has
+ * no `tools` slice: the vault group then inherits what `mcp.enabled` /
+ * `mcp.yolo` meant for the assistant, so nobody's behaviour changes.
+ */
+function normalizeTools(raw: unknown, mcp: McpConfig): ToolsConfig {
+  const fallback = defaultToolsConfig();
+  if (raw === undefined || raw === null || typeof raw !== 'object') {
+    return { ...fallback, vault: { enabled: mcp.enabled, write: mcp.yolo ? 'auto' : 'confirm' } };
+  }
+  const source = raw as Record<string, unknown>;
+  const group = (key: string): Record<string, unknown> => (source[key] ?? {}) as Record<string, unknown>;
+  const write = (value: unknown, def: 'confirm' | 'auto'): 'confirm' | 'auto' =>
+    value === 'confirm' || value === 'auto' ? value : def;
+  return {
+    vault: {
+      enabled: bool(group('vault')['enabled'], fallback.vault.enabled),
+      write: write(group('vault')['write'], fallback.vault.write),
+    },
+    tasks: { enabled: bool(group('tasks')['enabled'], fallback.tasks.enabled) },
+    templates: {
+      enabled: bool(group('templates')['enabled'], fallback.templates.enabled),
+      write: write(group('templates')['write'], fallback.templates.write),
+    },
+    webFetch: {
+      enabled: bool(group('webFetch')['enabled'], fallback.webFetch.enabled),
+      approval: group('webFetch')['approval'] === 'allow' ? 'allow' : 'ask',
+    },
+    servers: normalizeMcpServers(source['servers']),
   };
 }
 
@@ -561,13 +661,15 @@ export function normalizeAppConfig(raw: unknown): AppConfig {
   const source = (raw ?? {}) as Record<string, unknown>;
   const actionsSource = (source['actions'] ?? {}) as Record<string, unknown>;
   const templates = normalizeTemplates(actionsSource['templates']);
+  const mcp = normalizeMcp(source['mcp']);
   return {
     version: 1,
     llm: normalizeLlm(source['llm']),
     spellcheck: normalizeSpellcheck(source['spellcheck']),
     editor: normalizeEditor(source['editor']),
     appearance: normalizeAppearance(source['appearance']),
-    mcp: normalizeMcp(source['mcp']),
+    mcp,
+    tools: normalizeTools(source['tools'], mcp),
     entry: normalizeEntryConfig(source['entry']),
     daily: normalizeDaily(source['daily']),
     templates: normalizeTemplatesConfig(source['templates']),

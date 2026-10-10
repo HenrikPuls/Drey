@@ -20,6 +20,69 @@ recorded as an explicit decision. The parity checklist lives in
 
 ## Recent milestones
 
+### Milestone 63 — MCP client, web fetch, assistant tool groups (Req-31)
+
+**Not yet manually verified by the owner.**
+
+([ADR-0063](../docs/09_architecture_decisions/0063-mcp-client-and-assistant-tool-groups.md))
+
+- **The assistant can use external tools.** Settings → **Assistant
+  tools** lists MCP servers you add: a local command (stdio) or a web
+  address (Streamable HTTP, with headers for a key). Their tools reach
+  the model as `mcp__<id>__<tool>`; a web search is any search server
+  you connect. Built on the official `@modelcontextprotocol/sdk`; tools
+  only (no resources, prompts, OAuth). The page shows each server's
+  state, its tools, and a Reconnect.
+- **Built-in `web_fetch`.** Reads one web page by address and returns it
+  as Markdown. Off by default; it does not search.
+- **Calls that leave the computer are asked for.** Each server — and web
+  fetch — is set to *Ask every time* (default) or *Allow without
+  asking*. The question shows the service, the tool and exactly what
+  would be sent: Allow / Always allow / Deny. The prompt tells the model
+  not to put note text into such calls and to treat results as
+  untrusted.
+- **One switch per tool group.** Vault (`vault_search` / `_read` /
+  `_write`), Tasks (`tasks_list`), Templates (`template_*`), Web fetch
+  and each server have their own switch. The writing groups have a
+  write rule — *show the change and ask first* or *write without
+  asking*; defaults as before (notes ask, templates do not).
+- **Changed:** the assistant's vault tools no longer hang on Settings →
+  MCP. That page now only governs the server Drey offers to other
+  programs, and its YOLO switch only affects MCP clients. Existing
+  settings carry over: if the MCP server was on, the Vault group is on;
+  if YOLO was on, the Vault group writes without asking.
+- **Drey's own MCP server now runs on the SDK as well.** Same address,
+  same bridge configuration, same tools. The protocol version is
+  negotiated with the client instead of fixed, and the localhost
+  endpoint no longer answers web pages: it used to accept requests from
+  any origin, so with the endpoint on a page in your browser could have
+  searched and read the vault. Requests must now come from this
+  computer and not from a foreign page.
+- **Plugin SDK 1.15:** `ctx.llm.chat({ externalTools })`,
+  `ctx.vault.confirmWrite`.
+- **Not covered:** OAuth-protected servers; a per-question tools switch;
+  external tools in live edit and in Actions; the CLI providers (they
+  run no Drey-side tools).
+- Specs: config migration + server normalisation, the client manager,
+  the toolbox's approval rule, web fetch, the approval queue, the
+  engine's group gating, the template confirm rule, the vault write
+  rule per caller. Verified once against the real SDK with a stdio test
+  server (connect, list, call, dispose).
+
+### Fix — Files panel: "Open in Terminal" now opens a window on Windows
+
+- **The terminal appears.** The row context menu's "Open in Terminal"
+  spawned `cmd /K` detached — on Windows that creates the child with
+  `DETACHED_PROCESS`, which means *no console of its own*, so cmd ran
+  invisibly and nothing happened. Windows now tries **Windows Terminal**
+  (`wt.exe -d <folder>`, what the Win11 Explorer entry opens) and falls
+  back to `cmd /c start "" cmd`, which gets its window through `start`.
+  Everything still spawns by arg array with `cwd` — the path is never
+  interpolated into a shell string. macOS and Linux keep their launchers,
+  but all platforms now detect a failed spawn (`error` event) instead of
+  letting it surface as an unhandled error in main; a failure shows in
+  the panel like every other vault error.
+
 ### Milestone 62 — splash window with logo + progress
 
 **Not yet manually verified by the owner.**

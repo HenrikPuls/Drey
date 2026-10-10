@@ -116,3 +116,11 @@ applying one action's result never fires the on-save triggers again.
   model the write applies immediately. Vault notes keep their flows:
   MCP `vault_write` confirms here, live edit runs behind the
   [ADR-0049](0049-live-edit-mode.md) input lock.)_
+- _(Later change, milestone 63, [ADR-0063](0063-mcp-client-and-assistant-tool-groups.md):
+  the milestone-58 exception became a setting. Every writing tool group
+  of the assistant is `confirm` or `auto` (Settings → Assistant tools):
+  vault notes default to `confirm`, templates to `auto`. On `confirm`
+  the template tools show this dialog too, through the plugin port
+  `ctx.vault.confirmWrite` (SDK 1.15). Calls to external tools have their
+  own, different question — "may this be sent?" — in
+  `ToolApprovalDialog`, not this diff.)_

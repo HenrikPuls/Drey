@@ -45,8 +45,14 @@ export class McpBridgeService {
           ? `${request.path} in vault ${request.vaultName ?? request.vaultId}`
           : request.path;
       approved = await this.confirmation.request({
-        title: 'Apply a change from an MCP client',
-        summary: `${request.mode === 'append' ? 'Append to' : 'Overwrite'} ${target}`,
+        title:
+          request.origin === 'assistant'
+            ? 'Apply a change from the assistant'
+            : 'Apply a change from an MCP client',
+        summary:
+          request.after === ''
+            ? `Delete ${target}`
+            : `${request.mode === 'append' ? 'Append to' : 'Overwrite'} ${target}`,
         previewStyle: pickPreviewStyle(request.before, request.after),
         before: request.before,
         after: request.after,

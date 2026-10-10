@@ -1,0 +1,103 @@
+/* Above the settings overlay and the other dialogs: a call waits on it. */
+.backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.5);
+  z-index: 70;
+}
+
+.dialog {
+  position: fixed;
+  inset: 0;
+  margin: auto;
+  z-index: 71;
+  width: min(620px, calc(100vw - 48px));
+  height: fit-content;
+  max-height: calc(100vh - 96px);
+  display: flex;
+  flex-direction: column;
+  background: var(--bg-main);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-md);
+  box-shadow: 0 24px 64px rgba(0, 0, 0, 0.5);
+}
+
+header {
+  padding: 16px 20px 12px;
+}
+
+h2 {
+  margin: 0;
+  font-family: var(--font-serif);
+  font-size: 1.05rem;
+  font-weight: 600;
+  color: var(--text-heading);
+}
+
+.summary {
+  margin: 6px 0 0;
+  font-size: 0.84rem;
+  line-height: 1.5;
+  color: var(--text-3);
+}
+
+.mono {
+  font-family: var(--font-mono);
+  font-size: 0.95em;
+}
+
+.args {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  margin: 0 20px;
+  padding: 10px 12px;
+  background: var(--bg-input);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--text-2);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+footer {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 14px 20px;
+}
+
+.note {
+  font-size: 0.8rem;
+  color: var(--text-6);
+}
+
+.spacer {
+  flex: 1;
+}
+
+footer button {
+  font-size: 0.82rem;
+  padding: 7px 14px;
+  border-radius: var(--radius);
+  border: 1px solid transparent;
+  cursor: pointer;
+}
+
+.ghost {
+  background: transparent;
+  border-color: var(--border-strong);
+  color: var(--text-3);
+}
+
+.ghost:hover {
+  background: var(--hover-bg);
+}
+
+.primary {
+  background: var(--accent);
+  color: var(--accent-contrast);
+}

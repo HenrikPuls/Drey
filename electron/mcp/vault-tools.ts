@@ -109,8 +109,8 @@ export const VAULT_TOOL_DEFS: readonly McpToolDef[] = [
     name: 'vault_write',
     description:
       'Write a file in the vault. `mode` "overwrite" (default) replaces the whole file; ' +
-      '"append" adds `content` to the end. Unless the app is in YOLO mode the user must ' +
-      'confirm the change in a diff dialog first. `vault` names the target vault (see the ' +
+      '"append" adds `content` to the end. Depending on the settings the user ' +
+      'confirms the change in a diff dialog first. `vault` names the target vault (see the ' +
       'registered vaults) and defaults to the active one.',
     inputSchema: {
       type: 'object',
@@ -275,7 +275,16 @@ export class VaultTools {
   }
 
   /** Runs one tool by name. Unknown names and bad arguments come back as `isError` text. */
-  async call(name: string, args: Record<string, unknown>): Promise<McpToolResult> {
+  async call(
+    name: string,
+    args: Record<string, unknown>,
+    /**
+     * Who is calling decides the write rule (ADR-0063): an MCP client
+     * follows `mcp.yolo` (the default here), the built-in assistant passes
+     * its own `tools.vault.write`.
+     */
+    opts?: { confirmWrites?: boolean },
+  ): Promise<McpToolResult> {
     try {
       switch (name) {
         case 'vault_search':
@@ -283,7 +292,7 @@ export class VaultTools {
         case 'vault_read':
           return await this.read(args);
         case 'vault_write':
-          return await this.write(args);
+          return await this.write(args, opts?.confirmWrites ?? !this.getConfig().mcp.yolo);
         case 'tasks_list':
           return await this.tasksList(args);
         default:
@@ -481,7 +490,7 @@ export class VaultTools {
     return textResult(content);
   }
 
-  private async write(args: Record<string, unknown>): Promise<McpToolResult> {
+  private async write(args: Record<string, unknown>, confirm: boolean): Promise<McpToolResult> {
     const path = typeof args['path'] === 'string' ? args['path'] : '';
     const content = typeof args['content'] === 'string' ? args['content'] : null;
     const mode = args['mode'] === 'append' ? 'append' : 'overwrite';
@@ -510,7 +519,7 @@ export class VaultTools {
       return textResult('No change — the file already has this content.');
     }
 
-    if (!this.getConfig().mcp.yolo) {
+    if (confirm) {
       const approved = await this.confirmWrite({
         path,
         before,

@@ -17,6 +17,7 @@ import {
   EntryTemplate,
   LM_STUDIO_DEFAULT_BASE_URL,
   McpConfig,
+  ToolsConfig,
   RULED_ENTRY_PATTERN,
   SEARCH_SUMMARY_PROMPT,
   AUTOTAG_PROMPT,
@@ -77,6 +78,16 @@ export const DEFAULT_MCP_CONFIG: McpConfig = {
   httpPort: 4319,
   yolo: false,
 };
+
+export function defaultToolsConfig(): ToolsConfig {
+  return {
+    vault: { enabled: false, write: 'confirm' },
+    tasks: { enabled: true },
+    templates: { enabled: true, write: 'auto' },
+    webFetch: { enabled: false, approval: 'ask' },
+    servers: [],
+  };
+}
 
 export function classicEntryTemplate(): EntryTemplate {
   return {
@@ -139,6 +150,7 @@ export const DEFAULT_APP_CONFIG: AppConfig = {
   },
   appearance: { ...DEFAULT_APPEARANCE },
   mcp: { ...DEFAULT_MCP_CONFIG },
+  tools: defaultToolsConfig(),
   entry: {
     templates: [classicEntryTemplate(), ruledEntryTemplate()],
     activeId: BUILTIN_ENTRY_TEMPLATE_IDS.classic,

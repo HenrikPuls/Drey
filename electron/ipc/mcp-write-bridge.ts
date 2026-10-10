@@ -22,6 +22,7 @@ export class McpWriteBridge {
     before: string;
     after: string;
     mode: 'overwrite' | 'append';
+    origin?: 'assistant';
   }): Promise<boolean> {
     const wc = this.getMainWindow()?.webContents;
     if (!wc) {

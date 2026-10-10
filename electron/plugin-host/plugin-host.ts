@@ -35,6 +35,7 @@ import type { AppConfigStore } from '../app-config';
 import type { LlmClient, LlmDebugLog, LlmTaskRegistry, TagSuggester } from '../llm';
 import { IPC_CHANNELS } from '../../shared/ipc-api';
 import type { VaultTools } from '../mcp';
+import type { AssistantToolbox } from '../mcp-client';
 import type { VaultManager } from '../vault-manager';
 import type { VaultChangeAnnouncer } from '../vault-change-announcer';
 import { PluginConfigStore } from './plugin-config-store';
@@ -79,6 +80,19 @@ export interface PluginHostDeps {
    * never gets the instance itself.
    */
   readonly vaultTools: VaultTools;
+  /**
+   * The assistant's external tool set (ADR-0063): `web_fetch` + the
+   * user's MCP servers, wired in when a plugin passes `externalTools`.
+   */
+  readonly assistantToolbox?: AssistantToolbox;
+  /** The ADR-0011 diff as a plain question (`ctx.vault.confirmWrite`). */
+  readonly confirmWrite?: (request: {
+    path: string;
+    before: string;
+    after: string;
+    mode: 'overwrite' | 'append';
+    origin?: 'assistant';
+  }) => Promise<boolean>;
   /** The vocabulary-based tag suggestion (the editor's "Suggest tags" row; also `ctx.llm.suggestTags`). */
   readonly tagSuggester: TagSuggester;
   readonly llmDebug: LlmDebugLog;
@@ -327,7 +341,12 @@ export class PluginHost {
             ...(withTools
               ? {
                   tools: this.deps.vaultTools.toolSpecs(),
-                  onToolCall: (name, argsJson) => this.runVaultTool(name, argsJson),
+                  onToolCall: (name, argsJson) =>
+                    this.runVaultTool(
+                      name,
+                      argsJson,
+                      this.deps.appConfig.get().tools.vault.write === 'confirm',
+                    ),
                 }
               : {}),
             ...(taskId !== undefined
@@ -633,6 +652,8 @@ export class PluginHost {
           });
           return trashed;
         },
+        confirmWrite: (request) =>
+          this.deps.confirmWrite?.({ ...request, mode: 'overwrite', origin: 'assistant' }) ?? Promise.resolve(false),
         saveAsset: (bytes, ext, noteRelPath, opts) =>
           vaultManager.saveAsset(bytes, ext, noteRelPath, opts?.vaultId),
         list: (opts) => vaultManager.listFiles(opts?.vaultId),
@@ -677,20 +698,33 @@ export class PluginHost {
               ...(() => {
                 const pluginTools = [...(options?.tools ?? [])];
                 const pluginNames = new Set(pluginTools.map((tool) => tool.name));
+                const groups = appConfig.get().tools;
+                // tasks_list also sits in the vault set (for MCP clients);
+                // towards the assistant it follows its own group switch.
                 const vaultSpecs =
                   options?.vaultTools === true && this.deps.vaultTools !== undefined
                     ? this.deps.vaultTools
                         .toolSpecs()
                         .filter((spec) => !pluginNames.has(spec.name))
+                        .filter((spec) => groups.tasks.enabled || spec.name !== 'tasks_list')
                     : [];
-                const merged = [...pluginTools, ...vaultSpecs];
+                const taken = new Set([...pluginNames, ...vaultSpecs.map((spec) => spec.name)]);
+                const toolbox = this.deps.assistantToolbox;
+                const externalSpecs =
+                  options?.externalTools === true && toolbox !== undefined
+                    ? toolbox.specs().filter((spec) => !taken.has(spec.name))
+                    : [];
+                const externalNames = new Set(externalSpecs.map((spec) => spec.name));
+                const merged = [...pluginTools, ...vaultSpecs, ...externalSpecs];
                 return merged.length > 0
                   ? {
                       tools: merged,
                       onToolCall: (name: string, argsJson: string) =>
                         pluginNames.has(name) && options?.onToolCall !== undefined
                           ? options.onToolCall(name, argsJson)
-                          : this.runVaultTool(name, argsJson),
+                          : externalNames.has(name) && toolbox !== undefined
+                            ? toolbox.run(name, argsJson, signal)
+                            : this.runVaultTool(name, argsJson, groups.vault.write === 'confirm'),
                     }
                   : {};
               })(),
@@ -724,7 +758,11 @@ export class PluginHost {
   }
 
   /** Bridges one model tool call to the base `VaultTools`, flattening the result to text. */
-  private async runVaultTool(name: string, argsJson: string): Promise<string> {
+  private async runVaultTool(
+    name: string,
+    argsJson: string,
+    confirmWrites?: boolean,
+  ): Promise<string> {
     if (!this.deps.vaultTools) {
       return 'Vault tools are not available.';
     }
@@ -737,7 +775,11 @@ export class PluginHost {
     } catch {
       return `Could not parse arguments for ${name}: ${argsJson}`;
     }
-    const result = await this.deps.vaultTools.call(name, args);
+    const result = await this.deps.vaultTools.call(
+      name,
+      args,
+      confirmWrites !== undefined ? { confirmWrites } : undefined,
+    );
     return result.content.map((block) => block.text).join('\n');
   }
 

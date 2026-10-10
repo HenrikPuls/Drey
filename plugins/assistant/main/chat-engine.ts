@@ -45,6 +45,7 @@ import {
   ASK_TEMPLATES_NOTE,
   ASK_TASKS_NOTE,
   ASK_TOOLS_NOTE,
+  ASK_WEB_NOTE,
   TITLE_SYSTEM,
   buildAskUserMessage,
   buildDateNote,
@@ -52,6 +53,7 @@ import {
   buildToolsNote,
   editCatchUpLine,
   sanitizeChatTitle,
+  vaultWriteNote,
 } from './ask-prompts';
 import type { TemplateTools } from './template-tools';
 import {
@@ -73,6 +75,8 @@ export type ChatFn = (
   options?: {
     taskId?: string;
     vaultTools?: boolean;
+    /** web_fetch + the user's MCP servers (SDK 1.15, ADR-0063). */
+    externalTools?: boolean;
     sessionRef?: string;
     attachments?: ChatAttachment[];
     onDelta?: (text: string) => void;
@@ -129,9 +133,10 @@ export interface ChatEnginePorts {
   } | null;
   /**
    * The template_* tools for NON-live asks (SDK 1.14): list/read/write/
-   * delete over the vault's configured template folder. Independent of
-   * the MCP switch and unconfirmed (ADR-0011 later-change — structural,
-   * low-risk content; deletes go to the recycle bin).
+   * delete over the vault's configured template folder. Gated by the
+   * `tools.templates` group; its write rule defaults to unconfirmed
+   * (ADR-0011 later-change — structural, low-risk content; deletes go to
+   * the recycle bin).
    */
   templateTools(): TemplateTools | null;
 }
@@ -241,7 +246,9 @@ export class ChatEngine {
       view.frontmatter.session !== null &&
       view.frontmatter.provider === config.llm.provider;
 
-    const toolsOn = config.mcp.enabled;
+    // The tool groups (ADR-0063): one switch each, read per ask.
+    const groups = config.tools;
+    const toolsOn = groups.vault.enabled;
     // Live branch (ADR-0049): the note IS the edit target, edited through
     // the doc tools over a main-side working copy seeded from the live
     // buffer. `note !== null` is guaranteed by the payload validation for a
@@ -281,17 +288,36 @@ export class ChatEngine {
       }
     }
     const toolsNote = toolsOn
-      ? buildToolsNote(live ? LIVE_EDIT_TOOLS_NOTE : ASK_TOOLS_NOTE, await this.ports.listVaults())
+      ? buildToolsNote(
+          `${live ? LIVE_EDIT_TOOLS_NOTE : ASK_TOOLS_NOTE} ${vaultWriteNote(groups.vault.write)}`,
+          await this.ports.listVaults(),
+        )
       : null;
+    // External tools (ADR-0063): web_fetch and the user's MCP servers.
+    // Never on a live-edit turn, and only where the provider runs a tool
+    // loop at all -- otherwise the note would promise tools that are not
+    // there.
+    const externalOn =
+      !live &&
+      caps.tools &&
+      (groups.webFetch.enabled || groups.servers.some((server) => server.enabled));
+    const webNote = externalOn ? ASK_WEB_NOTE : null;
     // The tasks tool rides every non-live ask when a task provider exists
-    // (SDK 1.11) — independent of the MCP switch; the note tells the model
-    // to prefer it over quoting task lines from retrieved context.
-    const tasksTool = live ? null : this.ports.tasksTool();
+    // (SDK 1.11) and its group is on; the note tells the model to prefer
+    // it over quoting task lines from retrieved context.
+    const tasksTool = live || !groups.tasks.enabled ? null : this.ports.tasksTool();
     const tasksNote = tasksTool !== null ? ASK_TASKS_NOTE : null;
-    // The template tools ride every non-live ask too (SDK 1.14) — always
-    // on, no MCP gate, no confirmation (ADR-0011 later-change).
-    const templateTools = live ? null : this.ports.templateTools();
-    const templatesNote = templateTools !== null ? ASK_TEMPLATES_NOTE : null;
+    // The template tools ride every non-live ask too (SDK 1.14) while
+    // their group is on; whether a write asks first is the group's rule.
+    const templateTools = live || !groups.templates.enabled ? null : this.ports.templateTools();
+    const templatesNote =
+      templateTools !== null
+        ? `${ASK_TEMPLATES_NOTE} ${
+            groups.templates.write === 'confirm'
+              ? 'The user confirms a template_write or template_delete before it is applied.'
+              : 'A template_write applies immediately without confirmation — write only what was asked for.'
+          }`
+        : null;
     const contextBlock = contextHits.length > 0 ? buildVaultContextBlock(contextHits) : null;
     // Order matters (57d): the retrieved context sits BEFORE the task note,
     // so "answer tasks only from the tool" is the later instruction and
@@ -302,6 +328,7 @@ export class ChatEngine {
       contextBlock,
       tasksNote,
       templatesNote,
+      webNote,
       ASK_LINKS_NOTE,
       buildDateNote(new Date()),
     ]
@@ -332,6 +359,7 @@ export class ChatEngine {
     const options = (useSession: boolean) => ({
       taskId,
       ...(toolsOn ? { vaultTools: true } : {}),
+      ...(externalOn ? { externalTools: true } : {}),
       // The doc tools + a higher round cap: a multi-hunk editing turn
       // needs more call/answer rounds than the provider default of 5.
       ...(liveSession !== null
@@ -351,7 +379,8 @@ export class ChatEngine {
               // Template flows (list → read → write) need a few more
               // rounds than a single tasks lookup; the cap stays small
               // enough to stop a loop-happy model from circling.
-              maxToolRounds: templateTools !== null ? 5 : 3,
+              // A search → fetch → answer chain needs more again.
+              maxToolRounds: externalOn ? 8 : templateTools !== null ? 5 : 3,
               tools: [
                 ...(templateTools !== null ? templateTools.specs : []),
                 ...(tasksTool !== null ? [tasksTool.spec] : []),
@@ -365,7 +394,9 @@ export class ChatEngine {
                   : Promise.resolve(`Unknown tool: ${name}`);
               },
             }
-          : {}),
+          : externalOn
+            ? { maxToolRounds: 8 }
+            : {}),
       ...(useSession && view.frontmatter.session !== null
         ? { sessionRef: view.frontmatter.session }
         : {}),

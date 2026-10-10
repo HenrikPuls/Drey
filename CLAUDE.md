@@ -157,6 +157,17 @@ toolchain is removable by deleting `.tools/`). Never assume a bare `node`,
   text every write replaces in a local history under
   `<userData>/history/` (never in the vault; the user's own saves
   throttled, chats and `.drafts/` excluded).
+- **Assistant tool groups + MCP client** (milestone 63,
+  [ADR-0063](docs/09_architecture_decisions/0063-mcp-client-and-assistant-tool-groups.md)):
+  what the assistant may call is the `tools` config slice (Settings →
+  Assistant tools) — one switch per group (vault, tasks, templates, web
+  fetch, each external MCP server), `write: confirm | auto` on the
+  writing groups, `approval: ask | allow` on everything that leaves the
+  machine. External servers connect in main over the official MCP SDK
+  (stdio / Streamable HTTP, tools only) and reach the model as
+  `mcp__<id>__<tool>`. `mcp.enabled` / `mcp.yolo` only govern the
+  server Drey offers to other programs. Opt-in, off by default — a
+  further exception to "no cloud calls".
 - **Runtime plugin system**
   ([ADR-0044](docs/09_architecture_decisions/0044-runtime-plugin-system.md)):
   a **base application** (shell, editor + panes, vault/note IO, session
@@ -255,7 +266,7 @@ Main process:
   **No timeout on generation** — a local model may think for minutes; the
   user cancels instead ([ADR-0014](docs/09_architecture_decisions/0014-no-chat-timeout-cancellable-tasks.md)).
   Its optional tool loop (`vaultTools` chat option) backs the assistant
-  plugin's vault tool use when `mcp.enabled`
+  plugin's vault tool use when `tools.vault.enabled`
 - `LlmTaskRegistry` — one `AbortController` per in-flight generation, so
   `llm:cancel` can abort it
 - `AppConfigStore` — reads/persists `app-config.json` under the OS user-data
@@ -264,10 +275,17 @@ Main process:
   ([ADR-0010](docs/09_architecture_decisions/0010-app-settings-storage.md))
 - `electron/mcp/` ([ADR-0021](docs/09_architecture_decisions/0021-mcp-vault-server.md)) —
   the vault MCP server. `VaultTools` (`vault_search` with a regex filter /
-  `vault_read` / `vault_write`), `McpServer` (hand-rolled JSON-RPC 2.0),
+  `vault_read` / `vault_write`), `createVaultMcpServer` (the MCP SDK's `Server`, since milestone 63),
   `McpHttpTransport` (opt-in localhost `POST /mcp`) and a standalone
   `stdio-bridge.ts` script. `vault_write` routes through the ADR-0011
   confirmation dialog (main→renderer bridge) unless "YOLO mode" is on
+  (for MCP clients; the assistant's writes follow `tools.vault.write`)
+- `electron/mcp-client/` (milestone 63, ADR-0063) — the other direction:
+  `McpClientManager` (one SDK client per configured external server,
+  tool list + status), `web-fetch.ts` (the built-in `web_fetch`) and
+  `AssistantToolbox` (the external tool set of a chat call, each source
+  behind its approval rule via `ToolApprovalBridge`). The plugin host
+  merges it into `ctx.llm.chat` when a plugin passes `externalTools`
 - `SpellcheckService` (main) — nspell + the bundled/added Hunspell
   dictionaries; answers `spell:check` with misspelled words + suggestions
 
@@ -530,6 +548,10 @@ Renderer (Angular):
   `EntryDrawerComponent` / `EntryPanel`, the "Add entry" capture surface.
   Capture is the slash menu's Entry block; the entry format stays
   configurable under Settings → "Entry format".)_
+- `ToolApprovalService` + `ToolApprovalDialog` (`src/app/tool-approval/`,
+  milestone 63, ADR-0063) — the question before an external tool call
+  runs (source, tool, arguments; Allow / Always allow / Deny), queued
+  one at a time
 - `McpBridgeService` — renderer side of the vault MCP server: shows an
   MCP client's `vault_write` in the shared confirmation diff and replies
   (the tree/index refresh after that write rides the shared
@@ -546,6 +568,8 @@ Renderer (Angular):
 - `SettingsComponent` — master-detail settings screen (category list +
   detail pane), core categories in alphabetical order — "Appearance",
   [ADR-0020](docs/09_architecture_decisions/0020-app-wide-appearance-accent-and-ui-scale.md),
+  "Assistant tools" (the `tools` slice: group switches, write and
+  approval rules, the external MCP servers — ADR-0063),
   "Daily notes", "Entry format" (what the slash menu's Entry block
   inserts, ADR-0022), "LLM", "MCP", "Panels & plugins" (`widgets.disabled` +
   `plugins.disabled` + each discovered plugin's live status),
@@ -642,7 +666,7 @@ be called out explicitly (see Working Style below), not introduced silently.
     — master-detail (category list on the left, detail pane on the
     right), core categories in alphabetical order (
     "Appearance" (theme, app-wide base font size + highlight colour +
-    editor typeface, ADR-0020), "Daily notes", "Entry format", "LLM",
+    editor typeface, ADR-0020), "Assistant tools" (ADR-0063), "Daily notes", "Entry format", "LLM",
     "MCP", "Panels &
     plugins", "Spelling", "Vault" (ADR-0045)
     (ADR-0010; descriptor-driven list, ADR-0016)); plugin-contributed
@@ -763,15 +787,11 @@ Open work and its order live in [specs/roadmap.md](specs/roadmap.md)
 ("Next milestones") — that list is binding; keep this summary in step
 with it.
 
-- **Last completed:** milestone 62 — splash window with logo + progress
-  (ADR-0062: separate frameless splash fed by main + renderer stages,
-  main window hidden until the renderer reports ready, fail-open
-  timers). Milestones 59–62 are code-complete, owner verification
-  pending.
+- **Last completed:** milestone 63 — MCP client, built-in `web_fetch`
+  and the assistant's tool groups (ADR-0063, Req-31). Milestones 59–63
+  are code-complete, owner verification pending.
 - **Next, in order:**
-  1. MCP client (Req-31) with unified assistant tool gating — the vehicle
-     for web search in the assistant
-  2. draw.io (req-19), then the Office remainder of Req-2 (needs a
+  1. draw.io (req-19), then the Office remainder of Req-2 (needs a
      rendering strategy discussion first)
 
 A milestone that is code-complete but not yet verified by the owner is

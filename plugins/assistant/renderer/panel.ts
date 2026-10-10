@@ -383,7 +383,7 @@ export function mountPanel(
     summary.type = 'button';
     let text: string;
     if (entry.kind === 'call') {
-      text = `tool · ${entry.name}(${summarizeArguments(entry.arguments)})`;
+      text = `tool · ${toolDisplayName(entry.name)}(${summarizeArguments(entry.arguments)})`;
     } else if (entry.kind === 'result') {
       text = `result · ${firstLine(entry.content)}`;
     } else {
@@ -1665,6 +1665,12 @@ function firstLine(text: string): string {
 }
 
 /** Compact argument summary for a call chip. */
+/** `mcp__<server>__<tool>` reads as "server · tool"; any other name as it is. */
+function toolDisplayName(name: string): string {
+  const match = /^mcp__(.+?)__(.+)$/.exec(name);
+  return match !== null ? `${match[1]} · ${match[2]}` : name;
+}
+
 function summarizeArguments(args: unknown): string {
   if (typeof args === 'string') {
     const cleaned = args.replace(/^\{|\}$/g, '').trim();

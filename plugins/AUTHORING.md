@@ -168,3 +168,18 @@ the mixed case, the templates page for the pure-field case.
   `data-*` attribute rather than styling hooks.
 - No plugin tests import from `src/` — the plugin is a consumer of the
   SDK, not of the app's internals (same boundary the loader enforces).
+
+## SDK 1.15 — external tools and the confirmation question
+
+- `ctx.llm.chat(messages, { externalTools: true })` adds the user's
+  external tool set to ONE call: the built-in `web_fetch` and the tools
+  of their MCP servers (`mcp__<serverId>__<tool>`), as far as Settings →
+  Assistant tools enables them. The host runs each call and asks the
+  user first when the source is set to "ask" — a plugin never sees the
+  servers or their keys. Your own `tools` and the vault set win a name
+  collision. Leave it off for calls that must not reach outside the
+  machine (ADR-0063).
+- `ctx.vault.confirmWrite({ path, before, after })` shows a change in the
+  shared confirmation diff and resolves whether the user approved it.
+  It writes nothing; write after a `true`. Use it when your tool group's
+  write rule is "confirm".

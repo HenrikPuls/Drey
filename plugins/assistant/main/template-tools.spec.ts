@@ -125,6 +125,31 @@ describe('template tools', () => {
     );
   });
 
+  it('write rule "confirm" (ADR-0063): a declined change or deletion does not happen', async () => {
+    const port = makePort(['templates/retro.md']);
+    const asked: Array<{ path: string; before: string; after: string }> = [];
+    let answer = false;
+    const tools = createTemplateTools({
+      ...port,
+      confirm: async (request) => {
+        asked.push(request);
+        return answer;
+      },
+    });
+
+    expect(await tools.run('template_write', '{"name":"new","content":"x"}')).toMatch(/declined/);
+    expect(await tools.run('template_delete', '{"name":"retro"}')).toMatch(/declined/);
+    expect(port.written).toEqual([]);
+    expect(asked).toEqual([
+      { path: 'templates/new.md', before: '', after: 'x' },
+      { path: 'templates/retro.md', before: 'content of templates/retro.md', after: '' },
+    ]);
+
+    answer = true;
+    expect(await tools.run('template_write', '{"name":"new","content":"x"}')).toMatch(/Created/);
+    expect(port.written).toEqual([{ path: 'templates/new.md', content: 'x' }]);
+  });
+
   it('template_write creates, refuses silent overwrite, replaces on flag', async () => {
     const port = makePort(['templates/retro.md']);
     const tools = createTemplateTools(port);

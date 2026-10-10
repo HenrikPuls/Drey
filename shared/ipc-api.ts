@@ -122,6 +122,11 @@ export const IPC_CHANNELS = {
   mcpStatus: 'mcp:status',
   mcpWriteRequest: 'mcp:write-request',
   mcpWriteDecision: 'mcp:write-decision',
+  // The assistant's external tools (milestone 63, ADR-0063).
+  toolsStatus: 'tools:status',
+  toolsReconnect: 'tools:reconnect',
+  toolsApprovalRequest: 'tools:approval-request',
+  toolsApprovalDecision: 'tools:approval-decision',
   // Vault change push (ADR-0045): main -> renderer after any external or
   // MCP write lands -- formerly the MCP-only 'mcp:vault-changed'. Carries
   // the changed paths when a scoped reload is possible.
@@ -190,6 +195,30 @@ export interface McpWriteRequest {
   mode: 'overwrite' | 'append';
   vaultId?: string;
   vaultName?: string;
+  /** Set when the built-in assistant asks (a tool group on `confirm`, ADR-0063). */
+  origin?: 'assistant';
+}
+
+/** One configured external MCP server as the Settings page shows it (ADR-0063). */
+export interface McpClientServerStatus {
+  id: string;
+  state: 'connecting' | 'ready' | 'error';
+  error: string | null;
+  /** The server's own tool names (without the `mcp__<id>__` prefix). */
+  tools: string[];
+}
+
+/**
+ * One external tool call waiting for the user (ADR-0063): pushed to the
+ * renderer when the call's source is set to "ask". `source` is `'web'`
+ * for the built-in `web_fetch`, otherwise the MCP server id.
+ */
+export interface ToolApprovalRequest {
+  id: number;
+  source: string;
+  sourceName: string;
+  tool: string;
+  args: Record<string, unknown>;
 }
 
 /**
@@ -1134,6 +1163,20 @@ export interface DreyApi {
 
   /** Answers an `onMcpWriteRequest` (approve / reject the write). */
   resolveMcpWrite(id: number, approved: boolean): Promise<void>;
+
+  /** Connection state of the configured external MCP servers (ADR-0063). */
+  getToolsStatus(): Promise<McpClientServerStatus[]>;
+
+  /** Drops and re-opens one external MCP server connection. */
+  reconnectToolServer(id: string): Promise<McpClientServerStatus[]>;
+
+  /**
+   * Subscribes to external tool calls that need the user's approval
+   * (ADR-0063). Answer with `resolveToolApproval(request.id, approved)`.
+   */
+  onToolApprovalRequest(listener: (request: ToolApprovalRequest) => void): () => void;
+
+  resolveToolApproval(id: number, approved: boolean): Promise<void>;
 
   /**
    * Fires when vault changes have landed in main (ADR-0045): a watcher

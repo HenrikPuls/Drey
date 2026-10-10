@@ -1,0 +1,86 @@
+.group {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+/* A group's own option, aligned under its label rather than the checkbox. */
+.field.sub {
+  margin-left: 23px;
+  max-width: 320px;
+}
+
+h3 {
+  margin: 10px 0 0;
+  font-size: 0.86rem;
+  font-weight: 600;
+  color: var(--text-2);
+}
+
+.note {
+  margin: 0;
+  font-size: 0.76rem;
+  line-height: 1.6;
+  color: var(--text-6);
+}
+
+.note.warn {
+  color: var(--accent-hover);
+}
+
+.server {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 12px 14px 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+
+.row.head {
+  align-items: center;
+}
+
+.row.head .ghost {
+  align-self: center;
+}
+
+.status .error {
+  color: var(--accent-hover);
+}
+
+.link {
+  background: none;
+  border: 0;
+  padding: 0;
+  margin-left: 6px;
+  font: inherit;
+  color: var(--text-4);
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+textarea {
+  background: var(--bg-input);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+  color: var(--text-primary);
+  font-family: var(--font-mono);
+  font-size: 0.78rem;
+  line-height: 1.5;
+  padding: 7px 9px;
+  outline: none;
+  resize: vertical;
+}
+
+textarea:focus {
+  border-color: var(--accent-ring);
+}
+
+.mono-input {
+  font-family: var(--font-mono);
+}
+
+select:disabled {
+  opacity: 0.5;
+}

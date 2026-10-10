@@ -32,7 +32,12 @@ function forward(message: string): Promise<string> {
         port,
         path: '/mcp',
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Content-Length': body.length },
+        headers: {
+          'Content-Type': 'application/json',
+          // The endpoint's Streamable HTTP transport requires both.
+          Accept: 'application/json, text/event-stream',
+          'Content-Length': body.length,
+        },
       },
       (res) => {
         const chunks: Buffer[] = [];

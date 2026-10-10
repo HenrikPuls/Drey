@@ -123,3 +123,22 @@ instance was injected, and appends a one-line tools note to `ASK_SYSTEM`.
 - Assistant tool use is gated by `mcp.enabled` (default off), so the
   no-tools Ask path — and its cost/latency profile — is completely
   unchanged for everyone who has not opted in.
+- _(Later change, milestone 63, [ADR-0063](0063-mcp-client-and-assistant-tool-groups.md):
+  the assistant is no longer gated by `mcp.enabled`. Its vault tools
+  follow `tools.vault.enabled`, and whether its `vault_write` asks
+  follows `tools.vault.write` — `VaultTools.call` takes the write rule
+  from its caller. `mcp.enabled` and `mcp.yolo` only govern MCP clients.
+  A config from before that milestone carries both values over, so
+  behaviour is unchanged on update. The "no SDK dependency" point above
+  still holds for this server; the new **client** uses the SDK.)_
+- _(Later change, same milestone: the protocol layer moved onto the SDK.
+  `server.ts` is `createVaultMcpServer` — the SDK's low-level `Server`
+  with `tools/list` and `tools/call` handlers over `VaultTools` — and
+  `http-transport.ts` hands each `POST /mcp` to a fresh stateless
+  Streamable HTTP transport (`enableJsonResponse`). The protocol version
+  is negotiated instead of pinned. The permissive CORS described above is
+  gone: a request needs a local `Host` and, if it carries an `Origin`, a
+  local one — a web page can no longer reach the endpoint. A client must
+  send the `Accept` header the specification asks for. The stdio bridge
+  is still a plain proxy without dependencies. The "hand-rolled" and "no
+  SDK dependency" statements above are superseded.)_

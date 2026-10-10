@@ -1,4 +1,7 @@
-import { McpServer } from '../../../electron/mcp/server';
+import { Client } from '@modelcontextprotocol/sdk/client/index.js';
+import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
+import { isLocalHost, isLocalOrigin } from '../../../electron/mcp/http-transport';
+import { createVaultMcpServer } from '../../../electron/mcp/server';
 import { VaultTools } from '../../../electron/mcp/vault-tools';
 import type { AppConfig } from '../../../shared/app-config';
 import type { SectionSearchProvider, SdkTaskRecord } from '../../../shared/plugin-api';
@@ -59,45 +62,62 @@ function fakeProvider(hits: unknown[] = []): SectionSearchProvider {
 }
 
 
-describe('McpServer.handle', () => {
+describe('the vault MCP server (SDK protocol layer)', () => {
   const tools = {
     list: () => [
       { name: 'vault_read', description: 'x', inputSchema: { type: 'object', properties: {} } },
     ],
-    call: async (name: string, args: Record<string, unknown>) => ({
-      content: [{ type: 'text' as const, text: `${name}:${JSON.stringify(args)}` }],
-    }),
+    call: async (name: string, args: Record<string, unknown>) =>
+      name === 'vault_read'
+        ? { content: [{ type: 'text' as const, text: `${name}:${JSON.stringify(args)}` }] }
+        : { content: [{ type: 'text' as const, text: `Unknown tool: ${name}` }], isError: true },
   };
-  const server = new McpServer(tools as unknown as VaultTools, '9.9.9');
 
-  it('answers initialize with a protocol version and the tools capability', async () => {
-    const res = await server.handle({ jsonrpc: '2.0', id: 1, method: 'initialize' });
-    expect(res?.result).toMatchObject({
-      protocolVersion: expect.any(String),
-      capabilities: { tools: {} },
-      serverInfo: { name: 'drey-vault', version: '9.9.9' },
-    });
+  async function connected(): Promise<Client> {
+    const [clientSide, serverSide] = InMemoryTransport.createLinkedPair();
+    await createVaultMcpServer(tools as unknown as VaultTools, '9.9.9').connect(serverSide);
+    const client = new Client({ name: 'spec', version: '1' }, { capabilities: {} });
+    await client.connect(clientSide);
+    return client;
+  }
+
+  it('introduces itself and offers tools only', async () => {
+    const client = await connected();
+    expect(client.getServerVersion()).toMatchObject({ name: 'drey-vault', version: '9.9.9' });
+    expect(client.getServerCapabilities()).toEqual({ tools: {} });
   });
 
   it('lists tools and runs a tools/call through VaultTools', async () => {
-    const list = await server.handle({ jsonrpc: '2.0', id: 2, method: 'tools/list' });
-    expect((list?.result as { tools: unknown[] }).tools).toHaveLength(1);
-
-    const call = await server.handle({
-      jsonrpc: '2.0',
-      id: 3,
-      method: 'tools/call',
-      params: { name: 'vault_read', arguments: { path: 'a.md' } },
-    });
-    expect(call?.result).toEqual({
-      content: [{ type: 'text', text: 'vault_read:{"path":"a.md"}' }],
-    });
+    const client = await connected();
+    expect((await client.listTools()).tools.map((t) => t.name)).toEqual(['vault_read']);
+    const result = await client.callTool({ name: 'vault_read', arguments: { path: 'a.md' } });
+    expect(result.content).toEqual([{ type: 'text', text: 'vault_read:{"path":"a.md"}' }]);
   });
 
-  it('returns null for a notification and an error for an unknown method', async () => {
-    expect(await server.handle({ jsonrpc: '2.0', method: 'notifications/initialized' })).toBeNull();
-    const res = await server.handle({ jsonrpc: '2.0', id: 4, method: 'no/such' });
-    expect(res?.error?.code).toBe(-32601);
+  it('passes a tool error through as an error result', async () => {
+    const client = await connected();
+    const result = await client.callTool({ name: 'nope', arguments: {} });
+    expect(result.isError).toBe(true);
+  });
+});
+
+describe('the HTTP endpoint guards', () => {
+  it('accepts only a local Host on its own port', () => {
+    expect(isLocalHost('127.0.0.1:4319', 4319)).toBe(true);
+    expect(isLocalHost('localhost:4319', 4319)).toBe(true);
+    expect(isLocalHost('localhost:9999', 4319)).toBe(false);
+    expect(isLocalHost('evil.example', 4319)).toBe(false);
+    expect(isLocalHost('evil.example:4319', 4319)).toBe(false);
+    expect(isLocalHost(undefined, 4319)).toBe(false);
+  });
+
+  it('accepts no Origin (not a browser) or a local page, nothing else', () => {
+    expect(isLocalOrigin(undefined)).toBe(true);
+    expect(isLocalOrigin('http://localhost:5173')).toBe(true);
+    expect(isLocalOrigin('http://127.0.0.1')).toBe(true);
+    expect(isLocalOrigin('https://evil.example')).toBe(false);
+    expect(isLocalOrigin('http://localhost.evil.example')).toBe(false);
+    expect(isLocalOrigin('null')).toBe(false);
   });
 });
 
@@ -188,6 +208,27 @@ describe('VaultTools', () => {
     await tools.call('vault_write', { path: 'note.md', content: 'new' });
     expect(files['note.md']).toBe('new');
     expect(asked).toBe(0);
+  });
+
+  it('the caller can set the write rule (ADR-0063): the assistant overrides mcp.yolo both ways', async () => {
+    const files = { 'note.md': 'old' };
+    let asked = 0;
+    const make = (yolo: boolean): VaultTools =>
+      new VaultTools(
+        fakeVault(files),
+        () => fakeProvider(),
+        () => null,
+        () => config({ yolo }),
+        async () => {
+          asked++;
+          return true;
+        },
+      );
+    await make(true).call('vault_write', { path: 'note.md', content: 'a' }, { confirmWrites: true });
+    expect(asked).toBe(1);
+    await make(false).call('vault_write', { path: 'note.md', content: 'b' }, { confirmWrites: false });
+    expect(asked).toBe(1);
+    expect(files['note.md']).toBe('b');
   });
 
   it('degrades vault_search with a clear error when no provider is registered', async () => {

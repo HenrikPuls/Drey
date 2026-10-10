@@ -53,18 +53,16 @@ Order set on 2026-10-10 after the milestone 33–58 verification round.
 (Its first two items shipped: link update on rename + quick switcher /
 command palette as milestone 59, the conflict dialog + local note
 history as milestone 60. The 2026-10-10 startup work followed: analysis
-+ speed as milestone 61, the splash window as milestone 62.)
++ speed as milestone 61, the splash window as milestone 62. Then Req-31,
+the MCP client with the assistant's tool groups, as milestone 63.)
 
-1. **Req-31 — MCP client** (connect Drey to external MCP servers), built
-   on the Req-29 provider interface. The vehicle for **web search in the
-   assistant** (any search MCP server) and later Jira (Req-17); add a
-   small built-in `web_fetch`. Opt-in, off by default (another ADR-0047
-   exception). Unify the assistant's tool gating in the same step: today
-   the chat's `vault_*` tools hang on `mcp.enabled` (the outward server
-   switch) while `tasks_list` / `template_*` do not, and `vault_write`
-   confirms while `template_write` does not.
-2. **req-19 — draw.io**, then the **Req-2 Office remainder** (both in the
+1. **req-19 — draw.io**, then the **Req-2 Office remainder** (both in the
    backlog below).
+
+Follow-ups of milestone 63 (ADR-0063), none committed: OAuth-protected
+MCP servers, a per-question tools switch in the composer, handing the
+configured servers to the Claude Code CLI provider, MCP resources /
+prompts.
 
 Not ordered: **Semantic Search, remaining slices** — the core shipped as
 milestone 41 / ADR-0055 (the assistant's Vault chip: top-k section

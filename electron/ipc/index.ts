@@ -11,6 +11,7 @@ import { ExternalFileGate } from '../external-open';
 import { NoteHistoryStore } from '../history/note-history-store';
 import { LlmClient, LlmDebugLog, LlmTaskRegistry, TagSuggester } from '../llm';
 import { McpHttpTransport } from '../mcp';
+import { McpClientManager } from '../mcp-client';
 import { NoteManager } from '../note-manager';
 import { PluginHost } from '../plugin-host';
 import { SessionBackupStore } from '../session';
@@ -25,6 +26,7 @@ import { registerExportHandlers } from './export-handlers';
 import { registerLlmHandlers } from './llm-handlers';
 import { registerMcpHandlers } from './mcp-handlers';
 import { McpWriteBridge } from './mcp-write-bridge';
+import { ToolApprovalBridge } from './tool-approval-bridge';
 import { registerPluginHandlers } from './plugin-handlers';
 import { registerQueryHandlers } from './query-handlers';
 import { registerSessionHandlers } from './session-handlers';
@@ -32,6 +34,7 @@ import { registerSpellHandlers } from './spell-handlers';
 import { registerVaultHandlers } from './vault-handlers';
 
 export { McpWriteBridge } from './mcp-write-bridge';
+export { ToolApprovalBridge } from './tool-approval-bridge';
 export { ExitBridge } from './exit-bridge';
 
 export interface IpcHandlerDeps {
@@ -49,6 +52,9 @@ export interface IpcHandlerDeps {
   spellcheck: SpellcheckService;
   mcpHttp: McpHttpTransport;
   mcpWriteBridge: McpWriteBridge;
+  mcpClients: McpClientManager;
+  toolApprovalBridge: ToolApprovalBridge;
+  syncMcpClients: () => void;
   exitBridge: ExitBridge;
   externalFiles: ExternalFileGate;
   stdioBridgePath: () => string;

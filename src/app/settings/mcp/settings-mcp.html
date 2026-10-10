@@ -1,6 +1,6 @@
 <app-settings-pane
   title="MCP"
-  description="A local Model Context Protocol server that gives an AI client read, search and write access to the active vault. The built-in assistant uses the same tools."
+  description="A local Model Context Protocol server that gives another program — an AI client such as Claude Desktop — read, search and write access to the vault. What the built-in assistant may use is set under Assistant tools."
 >
   @if (mcp(); as mcp) {
     <label class="switch-row">
@@ -13,8 +13,8 @@
         <span class="switch-label">Enable the vault MCP server</span>
         <span class="switch-hint">
           Exposes <span class="mono">vault_search</span>, <span class="mono">vault_read</span> and
-          <span class="mono">vault_write</span>. Off means no client — and the built-in assistant —
-          can reach the vault through tools.
+          <span class="mono">vault_write</span> to MCP clients. Off means no other program can
+          reach the vault through this server.
         </span>
       </span>
     </label>
@@ -30,7 +30,7 @@
           <span class="switch-label">Open the localhost HTTP endpoint</span>
           <span class="switch-hint">
             A listening socket on <span class="mono">127.0.0.1</span> for network MCP clients and
-            the bundled stdio bridge. Leave off if only the built-in assistant needs the tools.
+            the bundled stdio bridge.
           </span>
         </span>
       </label>
@@ -66,7 +66,7 @@
           <span class="switch-label">YOLO mode — apply writes without confirmation</span>
           <span class="switch-hint">
             Off by default, and best left off. When on, a <span class="mono">vault_write</span>
-            from any client (or the assistant) changes files immediately, with no diff to approve.
+            from an MCP client changes files immediately, with no diff to approve.
           </span>
         </span>
       </label>
@@ -87,7 +87,7 @@
 
     <p class="note">
       A <span class="mono">vault_write</span> is shown in the same diff dialog as an assistant edit
-      before it touches disk — unless YOLO mode is on. All paths stay inside the active vault.
+      before it touches disk — unless YOLO mode is on. All paths stay inside a registered vault.
     </p>
   }
 </app-settings-pane>
