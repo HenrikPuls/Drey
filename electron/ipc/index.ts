@@ -8,6 +8,7 @@ import { BrowserWindow } from 'electron';
 import { AppConfigStore } from '../app-config';
 import { DailyNoteManager } from '../daily-note';
 import { ExternalFileGate } from '../external-open';
+import { NoteHistoryStore } from '../history/note-history-store';
 import { LlmClient, LlmDebugLog, LlmTaskRegistry, TagSuggester } from '../llm';
 import { McpHttpTransport } from '../mcp';
 import { NoteManager } from '../note-manager';
@@ -36,6 +37,7 @@ export { ExitBridge } from './exit-bridge';
 export interface IpcHandlerDeps {
   getMainWindow: () => BrowserWindow | null;
   sessionBackups: SessionBackupStore;
+  noteHistory: NoteHistoryStore;
   vaultManager: VaultManager;
   dailyNotes: DailyNoteManager;
   noteManager: NoteManager;

@@ -2420,3 +2420,57 @@ The plan is computed twice on purpose: the preview is what the user
 sees, the apply reads the vault again — a file changed in between
 contributes what it matches then. The index round after the rename is
 the plain rename's (`refresh` + the `rename` vault-change event).
+
+## 6.50 Save → the file changed on disk → merge (milestone 60, [ADR-0060](09_architecture_decisions/0060-save-conflicts-and-local-note-history.md))
+
+```mermaid
+sequenceDiagram
+    actor User
+    participant ES as EditorService
+    participant NM as NoteManager (main)
+    participant VM as VaultManager
+    participant H as NoteHistoryStore
+    participant CD as ConflictDialog
+
+    User->>ES: Ctrl+S (dirty tab)
+    ES->>NM: note:save { body, baseModifiedMs }
+    NM->>VM: readFile (mtime + text)
+    alt mtime matches the base
+        NM->>VM: writeFile(origin: save, throttled)
+        VM->>H: capture(previous text)
+        NM-->>ES: { content, modifiedMs }
+    else file changed since the tab read it
+        NM-->>ES: { conflict: { content, modifiedMs } } — nothing written
+        alt disk text == what the tab last read
+            ES->>NM: note:save { force } (timestamp-only change, no question)
+        else real conflict
+            ES->>CD: merge view: On disk | Result | Your version
+            User->>CD: tick blocks / edit the result, then Save result (or Cancel)
+            CD-->>ES: merged text, or null
+            alt result == disk version
+                ES->>H: history:capture(buffer, conflict)
+                ES->>VM: readVaultFile → tab reloads, clean
+            else any other result
+                opt result differs from the buffer
+                    ES->>H: history:capture(buffer, conflict)
+                    Note over ES: buffer := result
+                end
+                ES->>NM: note:save { body: result, force, origin: conflict }
+                NM->>VM: writeFile
+                VM->>H: capture(disk version, conflict)
+            else Cancel
+                Note over ES: tab stays dirty, nothing written
+            end
+        end
+    end
+```
+
+With the watcher on, the same dialog is reachable before the save: the
+`vault:changed` round marks the dirty tab (`diskChanged`), the meta bar
+shows "Changed on disk", and `resolveDiskChange` asks without writing —
+a result other than the disk version records both versions, becomes the
+buffer and re-bases the tab so the next save goes through.
+
+"File history…" reads the other way: `history:list` → pick a version →
+`history:read` → diff against the buffer → **Restore** replaces the
+buffer (one undo step); the save that follows records what it replaces.

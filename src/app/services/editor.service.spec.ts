@@ -53,7 +53,9 @@ describe('EditorService', () => {
 
     await service.save();
 
-    expect(saves).toEqual([{ path: 'note.md', body: 'content of note.md + edit', eol: '\n' }]);
+    expect(saves).toEqual([
+      { path: 'note.md', body: 'content of note.md + edit', eol: '\n', baseModifiedMs: 100 },
+    ]);
     expect(service.savedContent()).toBe('content of note.md + edit');
     expect(service.isDirty()).toBe(false);
   });
@@ -202,7 +204,7 @@ describe('EditorService', () => {
 
     // The renderer sends LF + the EOL flag; restoring CRLF on disk is the
     // main process's job now (note:save), not the editor service's.
-    expect(crlfSaves).toEqual([
+    expect(crlfSaves).toMatchObject([
       { path: 'crlf.md', body: 'line one\nline two\nline three\n', eol: '\r\n' },
     ]);
     expect(crlfService.isDirty()).toBe(false);
@@ -439,7 +441,7 @@ describe('EditorService', () => {
         await openDirty();
 
         expect(await service.closeTab('a.md')).toBe(true);
-        expect(saves).toEqual([{ path: 'a.md', body: 'content of a.md + edit', eol: '\n' }]);
+        expect(saves).toMatchObject([{ path: 'a.md', body: 'content of a.md + edit', eol: '\n' }]);
         expect(service.openDocs()).toEqual([]);
       });
 
@@ -648,6 +650,8 @@ describe('EditorService', () => {
           path: 'daily/2026/09/2026-09-06.md',
           body: '# 2026-09-06\n\n## 08:00\nEndlich getippt\n',
           eol: '\n',
+          // A draft says "there is no file yet" (ADR-0060).
+          baseModifiedMs: 0,
         },
       ]);
       expect(draftService.activeIsDraft()).toBe(false);

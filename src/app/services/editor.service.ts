@@ -2,8 +2,9 @@ import { Injectable, computed, inject, signal } from '@angular/core';
 import { imageExtension, pdfExtension } from '../../../shared/asset-name';
 import { dailyPathFor } from '../../../shared/daily';
 import { externalDocKey } from '../../../shared/external-open';
-import { ActionOutcome } from '../../../shared/ipc-api';
+import { ActionOutcome, NoteSaveRequest } from '../../../shared/ipc-api';
 import { isAutoSavePath, isChatNotePath } from '../../../shared/structural-folders';
+import { ConflictService } from '../conflict';
 import { EditorCommandsService } from '../editor/editor-commands.service';
 import { EditorPrefsService, EditorViewMode } from '../editor/editor-prefs.service';
 import { PaneService } from '../panes/pane.service';
@@ -84,6 +85,12 @@ export interface OpenDoc {
   /** `modifiedMs` from the last read/write -- round-tripped for the future file watcher. */
   modifiedMs: number;
   existsOnDisk: boolean;
+  /**
+   * The file changed on disk while this tab holds unsaved edits (ADR-0060)
+   * -- noticed by the watcher round, shown in the meta bar, settled through
+   * `EditorService.resolveDiskChange` or by the next save's own check.
+   */
+  diskChanged?: boolean;
   /**
    * `true` for a generated scratch doc (the tag-search export) that has no
    * intended location: `save()` routes to `saveAs()` so the user picks one.
@@ -176,6 +183,7 @@ export class EditorService {
   private readonly commands = inject(EditorCommandsService);
   private readonly dialogs = inject(ConfirmDialogService);
   private readonly settings = inject(SettingsService);
+  private readonly conflicts = inject(ConflictService);
 
   private readonly docs = signal<OpenDoc[]>([]);
 
@@ -195,8 +203,19 @@ export class EditorService {
    */
   private readonly editLocks = signal<ReadonlySet<string>>(new Set());
 
+  /**
+   * Docs the assistant has edited since their last save (a live-edit lock
+   * was taken, or a confirmed rewrite applied): that save tells the local
+   * history so -- its version is always recorded, never throttled away
+   * like the user's own saves (ADR-0060).
+   */
+  private readonly assistantEdited = new Set<string>();
+
   /** Adds or removes `key`'s user-input lock. Unknown keys are ignored. */
   setEditLock(key: string, locked: boolean): void {
+    if (locked) {
+      this.assistantEdited.add(key);
+    }
     this.editLocks.update((locks) => {
       const has = locks.has(key);
       if (locked === has) {
@@ -421,8 +440,8 @@ export class EditorService {
    * disk -- the renderer half of the watcher round (ADR-0045, req-14).
    * `vaultId` scopes the round to one vault's tabs (ADR-0051); when absent
    * the paths are matched against every vault's tabs (a push from an older
-   * main). Dirty tabs are untouched: last-writer-wins on save stays
-   * (ADR-0018's deferred conflict dialog is deliberately not built). A file
+   * main). A dirty tab keeps its buffer and is marked `diskChanged`
+   * instead -- the conflict is the user's to settle (ADR-0060). A file
    * that no longer exists flips its tab to draft semantics
    * (`existsOnDisk: false`) -- the tab stays open and the next edit + save
    * resurrects the file. `paths === undefined` (a full refresh -- huge
@@ -441,32 +460,133 @@ export class EditorService {
     // truth, ADR-0048), so the tab is a view of it, not an independent
     // buffer. Only typing inside the auto-save window can be lost —
     // sub-second, and the conversation content always wins. Every other
-    // file keeps the clean-tab-only rule (last-writer-wins).
+    // dirty tab keeps its buffer and is only MARKED (`diskChanged`): which
+    // version survives is the user's call (ADR-0060).
     const targets = this.docs().filter(
       (d) =>
         d.kind === 'text' &&
         d.existsOnDisk &&
+        d.external !== true &&
         (vaultId === undefined || d.vaultId === vaultId) &&
-        changed.has(d.path) &&
-        (d.bufferContent === d.savedContent || isChatNotePath(d.path)),
+        changed.has(d.path),
     );
     for (const doc of targets) {
+      const follows = doc.bufferContent === doc.savedContent || isChatNotePath(doc.path);
       try {
         const { content, modifiedMs } = await this.api.readVaultFile(doc.path, doc.vaultId ?? undefined);
         // Same normalization as `makeDoc`: hold `\n` in the buffer, keep
         // the file's dominant ending for the write-back.
         const normalized = content.replace(/\r\n/g, '\n');
+        if (!follows) {
+          if (normalized !== doc.savedContent) {
+            this.patchDoc(doc.key, { diskChanged: true });
+          }
+          continue;
+        }
+        if (normalized !== doc.savedContent) {
+          // The tab is the last place that still knows the previous text.
+          this.captureHistory(doc, doc.savedContent, 'external');
+        }
         this.patchDoc(doc.key, {
           savedContent: normalized,
           bufferContent: normalized,
           eol: content.includes('\r\n') ? '\r\n' : '\n',
           modifiedMs,
           existsOnDisk: true,
+          diskChanged: false,
         });
       } catch {
-        this.patchDoc(doc.key, { existsOnDisk: false });
+        if (follows) {
+          this.patchDoc(doc.key, { existsOnDisk: false });
+        }
       }
     }
+  }
+
+  /**
+   * The meta bar's "Changed on disk" button: settles a marked tab without
+   * saving, through the same merge dialog. A result that is exactly the
+   * disk version reloads the tab (the buffer goes into the history); any
+   * other result becomes the buffer on top of the disk state, both
+   * versions recorded, and the next save writes it.
+   */
+  async resolveDiskChange(key: string): Promise<void> {
+    const doc = this.docFor(key);
+    if (!this.api || doc === null || doc.kind !== 'text') {
+      return;
+    }
+    let disk: { content: string; modifiedMs: number };
+    try {
+      disk = await this.api.readVaultFile(doc.path, doc.vaultId ?? undefined);
+    } catch {
+      // Gone again: nothing to compare with; a save recreates the file.
+      this.patchDoc(key, { diskChanged: false });
+      return;
+    }
+    const normalized = disk.content.replace(/\r\n/g, '\n');
+    let buffer = doc.bufferContent;
+    if (normalized !== doc.savedContent) {
+      const merged = await this.conflicts.ask({
+        path: doc.path,
+        base: doc.savedContent,
+        disk: normalized,
+        mine: buffer,
+        saving: false,
+      });
+      if (merged === null) {
+        return;
+      }
+      if (merged === normalized) {
+        await this.adoptDisk(key);
+        return;
+      }
+      // The next save overwrites the disk version; a plain save's history
+      // record is throttled, so keep it now. A merge also replaces the
+      // buffer as it was.
+      this.captureHistory(doc, normalized, 'conflict');
+      if (merged !== buffer) {
+        this.captureHistory(doc, buffer, 'conflict');
+        buffer = merged;
+      }
+    }
+    // The tab now knowingly sits on top of the disk state.
+    this.patchDoc(key, {
+      savedContent: normalized,
+      bufferContent: buffer,
+      modifiedMs: disk.modifiedMs,
+      diskChanged: false,
+    });
+  }
+
+  /** Replaces a tab's buffer with the file on disk; the buffer goes into the history first. */
+  private async adoptDisk(key: string): Promise<void> {
+    const doc = this.docFor(key);
+    if (!this.api || doc === null) {
+      return;
+    }
+    this.captureHistory(doc, doc.bufferContent, 'conflict');
+    try {
+      const { content, modifiedMs } = await this.api.readVaultFile(doc.path, doc.vaultId ?? undefined);
+      const normalized = content.replace(/\r\n/g, '\n');
+      this.patchDoc(key, {
+        savedContent: normalized,
+        bufferContent: normalized,
+        eol: content.includes('\r\n') ? '\r\n' : '\n',
+        modifiedMs,
+        existsOnDisk: true,
+        diskChanged: false,
+      });
+    } catch (err) {
+      this.error.set(err instanceof Error ? err.message : String(err));
+    }
+  }
+
+  /** Best-effort history record of text only this tab still holds (ADR-0060). */
+  private captureHistory(doc: OpenDoc, content: string, origin: string): void {
+    if (doc.vaultId === null || typeof this.api?.captureNoteHistory !== 'function') {
+      return;
+    }
+    void this.api.captureNoteHistory(doc.path, content, origin, doc.vaultId).catch(() => undefined);
   }
 
   /**
@@ -1019,7 +1139,9 @@ export class EditorService {
    * next index pull "reset" the row). The doc is resolved inside the
    * chained run, so the trailing save sees the state as of its turn.
    */
-  async save(options: { runOnSaveActions?: boolean; key?: string; path?: string } = {}): Promise<void> {
+  async save(
+    options: { runOnSaveActions?: boolean; key?: string; path?: string; origin?: string } = {},
+  ): Promise<void> {
     const run = this.saveQueue.then(() => this.saveNow(options));
     this.saveQueue = run.then(
       () => undefined,
@@ -1028,7 +1150,9 @@ export class EditorService {
     return run;
   }
 
-  private async saveNow(options: { runOnSaveActions?: boolean; key?: string; path?: string } = {}): Promise<void> {
+  private async saveNow(
+    options: { runOnSaveActions?: boolean; key?: string; path?: string; origin?: string } = {},
+  ): Promise<void> {
     const doc =
       options.key !== undefined
         ? this.docFor(options.key)
@@ -1058,18 +1182,61 @@ export class EditorService {
     // What this save is committing — a buffer edited while the save runs
     // (a checkbox ticked mid-save, typing) must not be clobbered by the
     // response.
-    const sentBody = doc.bufferContent;
+    let sentBody = doc.bufferContent;
 
     this.isSaving.set(true);
     this.error.set(null);
     try {
-      const result = await this.api.saveNote({
+      const request: NoteSaveRequest = {
         path: doc.path,
         vaultId: doc.vaultId ?? undefined,
         body: sentBody,
         eol: doc.eol,
         runOnSaveActions: options.runOnSaveActions,
-      });
+      };
+      const origin = options.origin ?? (this.assistantEdited.has(doc.key) ? 'assistant' : undefined);
+      if (origin !== undefined) {
+        request.origin = origin;
+      }
+      // The conflict guard (ADR-0060): say which state of the file this
+      // tab edited. Auto-saved paths skip it -- a chat note follows the
+      // disk by design.
+      if (!isAutoSavePath(doc.path)) {
+        request.baseModifiedMs = wasDraft ? 0 : doc.modifiedMs;
+      }
+      let result = await this.api.saveNote(request);
+      if (result.conflict !== undefined) {
+        const disk = result.conflict;
+        // Same text as the tab last read: only the timestamp moved (a sync
+        // client touching the file) -- nothing to ask about.
+        if (disk.content !== doc.savedContent) {
+          const merged = await this.conflicts.ask({
+            path: doc.path,
+            base: doc.savedContent,
+            disk: disk.content,
+            mine: sentBody,
+            saving: true,
+          });
+          if (merged === null) {
+            return;
+          }
+          if (merged === disk.content) {
+            await this.adoptDisk(doc.key);
+            return;
+          }
+          if (merged !== sentBody) {
+            // A merge replaces the buffer as it was; main records the disk
+            // version when the forced write overwrites it.
+            this.captureHistory(doc, sentBody, 'conflict');
+            this.patchDoc(doc.key, { bufferContent: merged });
+            sentBody = merged;
+            request.body = merged;
+          }
+          request.origin = 'conflict';
+        }
+        result = await this.api.saveNote({ ...request, force: true });
+      }
+      this.assistantEdited.delete(doc.key);
       // Adopt the pipeline's rewrite (frontmatter bump) only when the
       // buffer still holds what was sent; otherwise keep the live buffer.
       const fresh = this.docFor(doc.key);
@@ -1079,6 +1246,7 @@ export class EditorService {
         bufferContent: currentBuffer === sentBody ? result.content : currentBuffer,
         modifiedMs: result.modifiedMs,
         existsOnDisk: true,
+        diskChanged: false,
       });
       // A first save of a draft (a daily note opened from the calendar, or
       // the quick-capture hotkey) creates a file the sidebar tree does not
@@ -1313,7 +1481,7 @@ export class EditorService {
     }
     this.panes.open(doc.key); // reveal: focuses + activates wherever it is
     this.patchDoc(doc.key, { bufferContent: content });
-    await this.save({ runOnSaveActions: false, key: doc.key });
+    await this.save({ runOnSaveActions: false, key: doc.key, origin: 'assistant' });
   }
 
   private makeDoc(

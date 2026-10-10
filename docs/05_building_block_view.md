@@ -2580,3 +2580,25 @@ documents first via `DocHistoryService.recentKeys()`) and commands
 are registered in `App`, next to the commands added so the palette can
 reach them (`settings.open`, `layout.reset`, `vault.refresh`,
 `daily.today`, `editor.toggleSource`, `note.exportPdf`).
+
+## 5.33 Save conflicts + local note history (milestone 60, [ADR-0060](09_architecture_decisions/0060-save-conflicts-and-local-note-history.md))
+
+| Block | Where | Responsibility |
+| --- | --- | --- |
+| Conflict guard | `electron/note-manager.ts` | `saveNote` compares `NoteSaveRequest.baseModifiedMs` with the file on disk; on a mismatch nothing is written and `NoteSaveResult.conflict` carries the disk text. `force` skips the check, `origin` names the writer for the history. |
+| History store | `electron/history/note-history-store.ts` | `NoteHistoryStore` — `capture` / `list` / `read` / `rename` / `sweep` over `<userData>/history/<vaultId>/` (`index.json` + one folder per note). Serialized on one queue; never throws into a write. |
+| Choke point | `VaultManager.writeFile` | Reads the note it is about to overwrite and captures it with the write's `origin` (`throttled` for the user's own saves). `renameEntry` keeps the history attached. |
+| Conflict flow | `EditorService` + `src/app/conflict/` | `saveNow` sends the base, repeats a timestamp-only mismatch with `force`, otherwise asks through `ConflictService` / `ConflictDialog` — a three-column merge view (On disk | Result | Your version) over the pure `merge-model.ts` (`buildMerge` / `mergeResult`); the answer is the merged text or `null`. `reloadFromVaultChange` marks dirty tabs (`OpenDoc.diskChanged`); `resolveDiskChange` settles a mark without saving. |
+| History UI | `src/app/history/` | `HistoryService` (versions of one open note, selected text, restore into the buffer) + `HistoryDialog`. Entries: editor `⋯` menu, tab context menu, command `note.history`. |
+| Diff | `src/app/diff-view/` | `DiffView` — the inline / split line diff, extracted from the ADR-0011 dialog and shared by confirmation, conflict and history. |
+
+IPC: `history:list`, `history:read`, `history:capture` (the last for
+text only the renderer holds: a discarded buffer, a reloaded tab's
+previous text). Config: `VaultConfig.history`
+(`enabled` / `keepDays` / `maxPerFile`), Settings → Vault.
+
+Origins a version can carry: `save` (throttled), `assistant` (a save
+after a live-edit lock or an applied rewrite), `mcp`, `links`,
+`conflict`, `external`, `restore`, `app` (a renderer-side raw write —
+replace-all, a panel's task toggle on a closed file) and plugin ids for
+main-side plugin writes.

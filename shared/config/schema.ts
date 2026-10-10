@@ -608,6 +608,19 @@ export interface VaultConfig {
    * only renames.
    */
   updateLinksOnRename: UpdateLinksMode;
+  /** Local note history (milestone 60, ADR-0060). */
+  history: VaultHistoryConfig;
+}
+
+/**
+ * Earlier versions of notes, kept under the OS user-data dir -- never in
+ * the vault. `keepDays` and `maxPerFile` bound it; whichever is hit
+ * first drops the oldest version.
+ */
+export interface VaultHistoryConfig {
+  enabled: boolean;
+  keepDays: number;
+  maxPerFile: number;
 }
 
 export type UpdateLinksMode = 'ask' | 'always' | 'never';

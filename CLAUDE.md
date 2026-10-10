@@ -147,7 +147,16 @@ toolchain is removable by deleting `.tools/`). Never assume a bare `node`,
   [ADR-0045](docs/09_architecture_decisions/0045-optional-vault-file-watcher.md)):
   chokidar + an own-write ledger (mtime matching, so the app's own saves
   never echo) feed the same external-change round; clean open tabs
-  auto-reload from disk, dirty tabs stay last-writer-wins.
+  auto-reload from disk; a dirty tab is marked "Changed on disk".
+- **Save conflicts are asked, overwrites leave a version** (milestone 60,
+  [ADR-0060](docs/09_architecture_decisions/0060-save-conflicts-and-local-note-history.md)):
+  `note:save` carries the mtime the tab last saw; when the file changed
+  since, main writes nothing and the renderer opens a merge view (on disk
+  | result | mine, per-block checkboxes, editable result) — watcher on or
+  off. `VaultManager.writeFile` records the
+  text every write replaces in a local history under
+  `<userData>/history/` (never in the vault; the user's own saves
+  throttled, chats and `.drafts/` excluded).
 - **Runtime plugin system**
   ([ADR-0044](docs/09_architecture_decisions/0044-runtime-plugin-system.md)):
   a **base application** (shell, editor + panes, vault/note IO, session
@@ -204,7 +213,13 @@ Main process:
   the registry-level round). The same round backs the manual refresh
   (`vault:refresh`), registry mutations and MCP writes.
   `EditorService.reloadFromVaultChange` auto-reloads **clean** tabs among
-  the changed paths; dirty tabs stay last-writer-wins
+  the changed paths and marks dirty ones `diskChanged` (ADR-0060)
+- `NoteHistoryStore` (`electron/history/note-history-store.ts`,
+  milestone 60, ADR-0060) — earlier versions of notes under
+  `<userData>/history/<vaultId>/`, fed by `VaultManager.writeFile` (each
+  write names its `origin`) and kept attached across renames; bounded by
+  `vault.history`. `NoteManager.saveNote` holds the conflict guard
+  (`baseModifiedMs` → `NoteSaveResult.conflict`)
 - `ExternalFileGate` + `extractOpenPaths` (`electron/external-open.ts`,
   [ADR-0054](docs/09_architecture_decisions/0054-opening-files-from-the-os.md)) —
   files the OS hands to Drey (Explorer "Open with" / default program for
@@ -426,6 +441,15 @@ Renderer (Angular):
   `vault.updateLinksOnRename` (`ask | always | never`), dirty tabs are
   patched in the buffer. Wikilink grammar + resolver live in
   `shared/wikilinks.ts` (the backlinks plugin keeps its twin)
+- `ConflictService` + `ConflictDialog` (`src/app/conflict/`) and
+  `HistoryService` + `HistoryDialog` (`src/app/history/`), milestone 60
+  (ADR-0060) — the save-conflict merge view over the pure
+  `merge-model.ts` (`EditorService.saveNow` asks when main refuses a
+  save; the meta bar's "Changed on disk" button asks early; the answer
+  is the merged text) and "File history…" (editor `⋯` menu, tab context menu, command
+  `note.history`): versions of the open note, diffed against the buffer,
+  restored INTO the buffer. The history and the ADR-0011 dialog render
+  through the shared `DiffView` (`src/app/diff-view/`)
 - `DocHistoryService` (`src/app/services/doc-history.service.ts`,
   milestone 55) — one global, pointer-based back/forward history of the
   documents viewed this session (VS Code model over any number of
@@ -526,7 +550,7 @@ Renderer (Angular):
   inserts, ADR-0022), "LLM", "MCP", "Panels & plugins" (`widgets.disabled` +
   `plugins.disabled` + each discovered plugin's live status),
   "Spelling", "Vault" (`vault.watch`, the opt-in external-change
-  watcher, ADR-0045; `vault.updateLinksOnRename`, ADR-0059) — then **plugin-contributed categories** (sorted by
+  watcher, ADR-0045; `vault.updateLinksOnRename`, ADR-0059; `vault.history`, ADR-0060) — then **plugin-contributed categories** (sorted by
   label) before "About" and rendered through
   `PluginSettingsHost` (shared form vocabulary `plugin-settings.css`,
   author guide `plugins/AUTHORING.md`), saving immediately rather than
@@ -723,7 +747,7 @@ packaging verified — see `docs/07_deployment_view.md`).
 closed 2026-10-10). This file does not restate them — the per-milestone
 record is:
 
-- [specs/changelog.md](specs/changelog.md) — milestones 22–59, newest
+- [specs/changelog.md](specs/changelog.md) — milestones 22–60, newest
   first, plus requirements and fixes
 - [docs/milestones-done.md](docs/milestones-done.md) — the archived
   build log, milestones 1–27
@@ -739,14 +763,13 @@ Open work and its order live in [specs/roadmap.md](specs/roadmap.md)
 ("Next milestones") — that list is binding; keep this summary in step
 with it.
 
-- **Last completed:** milestone 59 — links survive a rename / move
-  (ADR-0059) + quick switcher / command palette. Code-complete, owner
+- **Last completed:** milestone 60 — save conflicts are asked + local
+  note history (ADR-0060). Milestones 59 and 60 are code-complete, owner
   verification pending.
 - **Next, in order:**
-  1. Conflict dialog for external changes + local snapshots
-  2. MCP client (Req-31) with unified assistant tool gating — the vehicle
+  1. MCP client (Req-31) with unified assistant tool gating — the vehicle
      for web search in the assistant
-  3. draw.io (req-19), then the Office remainder of Req-2 (needs a
+  2. draw.io (req-19), then the Office remainder of Req-2 (needs a
      rendering strategy discussion first)
 
 A milestone that is code-complete but not yet verified by the owner is

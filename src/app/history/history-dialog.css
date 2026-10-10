@@ -1,0 +1,142 @@
+.backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.5);
+  z-index: 40;
+}
+
+.dialog {
+  position: fixed;
+  inset: 0;
+  margin: auto;
+  z-index: 41;
+  width: min(1120px, calc(100vw - 48px));
+  height: min(720px, calc(100vh - 64px));
+  display: flex;
+  flex-direction: column;
+  background: var(--bg-main);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-md);
+  box-shadow: 0 24px 64px rgba(0, 0, 0, 0.5);
+}
+
+header {
+  padding: 16px 20px 12px;
+  border-bottom: 1px solid var(--border);
+}
+
+h2 {
+  margin: 0;
+  font-family: var(--font-serif);
+  font-size: 1.05rem;
+  font-weight: 600;
+  color: var(--text-heading);
+}
+
+.summary {
+  margin: 4px 0 0;
+  font-family: var(--font-mono);
+  font-size: 0.78rem;
+  color: var(--text-4);
+}
+
+.body {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+}
+
+.empty {
+  margin: auto;
+  font-size: 0.85rem;
+  color: var(--text-6);
+}
+
+.versions {
+  flex: none;
+  width: 230px;
+  margin: 0;
+  padding: 8px;
+  list-style: none;
+  overflow: auto;
+  border-right: 1px solid var(--border);
+}
+
+.versions button {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  width: 100%;
+  padding: 6px 8px;
+  text-align: left;
+  background: transparent;
+  border: 0;
+  border-radius: var(--radius);
+  cursor: pointer;
+}
+
+.versions button:hover {
+  background: var(--bg-hover, rgba(255, 255, 255, 0.04));
+}
+
+.versions button.on {
+  background: color-mix(in srgb, var(--accent) 16%, transparent);
+}
+
+.when {
+  font-size: 0.82rem;
+  color: var(--text-2);
+}
+
+.what {
+  font-size: 0.74rem;
+  color: var(--text-6);
+}
+
+.preview {
+  flex: 1;
+  min-width: 0;
+  overflow: auto;
+  margin: 12px;
+}
+
+footer {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 20px 14px;
+  border-top: 1px solid var(--border);
+}
+
+.note {
+  font-size: 0.8rem;
+  color: var(--text-6);
+}
+
+.spacer {
+  flex: 1;
+}
+
+footer button {
+  font-size: 0.82rem;
+  padding: 7px 14px;
+  border-radius: var(--radius);
+  border: 1px solid transparent;
+  cursor: pointer;
+}
+
+.ghost {
+  background: transparent;
+  border-color: var(--border-strong);
+  color: var(--text-3);
+}
+
+.primary {
+  background: var(--accent);
+  color: var(--accent-contrast);
+}
+
+.primary:disabled {
+  opacity: 0.45;
+  cursor: default;
+}

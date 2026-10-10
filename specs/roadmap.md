@@ -50,16 +50,11 @@ below and changelog.md); req-36 to the Autotag re-homing (shipped).
 Check changelog.md for anything higher before assigning req-37+.
 
 Order set on 2026-10-10 after the milestone 33–58 verification round.
-(Its first item — link update on rename + quick switcher / command
-palette — shipped as milestone 59.)
+(Its first two items shipped: link update on rename + quick switcher /
+command palette as milestone 59, the conflict dialog + local note
+history as milestone 60.)
 
-1. **Conflict dialog for external changes + local snapshots** — a dirty
-   tab still wins silently over an external change (see "Open Risks");
-   on a synced vault that loses data. Keep-mine / take-external over the
-   ADR-0011 diff, plus a simple local version history as the safety net
-   for unconfirmed writes (live edit, template tools, MCP YOLO, replace
-   all).
-2. **Req-31 — MCP client** (connect Drey to external MCP servers), built
+1. **Req-31 — MCP client** (connect Drey to external MCP servers), built
    on the Req-29 provider interface. The vehicle for **web search in the
    assistant** (any search MCP server) and later Jira (Req-17); add a
    small built-in `web_fetch`. Opt-in, off by default (another ADR-0047
@@ -67,7 +62,7 @@ palette — shipped as milestone 59.)
    the chat's `vault_*` tools hang on `mcp.enabled` (the outward server
    switch) while `tasks_list` / `template_*` do not, and `vault_write`
    confirms while `template_write` does not.
-3. **req-19 — draw.io**, then the **Req-2 Office remainder** (both in the
+2. **req-19 — draw.io**, then the **Req-2 Office remainder** (both in the
    backlog below).
 
 Not ordered: **Semantic Search, remaining slices** — the core shipped as
@@ -170,8 +165,8 @@ on interactive use.
 
 - Stale view with the watcher off: external file changes go unnoticed
   until manual refresh. Opt-in watcher (req-14, ADR-0045) covers it when
-  it bites. With the watcher on: dirty open tab still wins over an
-  external change on save (last-writer-wins, no conflict dialog).
+  it bites. A dirty tab no longer wins silently: the save asks
+  (milestone 60, ADR-0060).
 - Model contention: assistant usage vs. parallel benchmarking runs —
   needs an availability check before every call.
 - Tag sprawl: no near-duplicate detection (`sailing` vs. `boat`).

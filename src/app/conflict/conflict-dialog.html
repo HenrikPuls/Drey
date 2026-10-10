@@ -1,0 +1,98 @@
+@if (pending(); as req) {
+  <div class="backdrop" appOverlayGuard (click)="cancel()"></div>
+  <div class="dialog" role="dialog" aria-modal="true" aria-labelledby="conflict-title">
+    <header>
+      <h2 id="conflict-title">File changed on disk</h2>
+      <p class="summary">
+        “{{ req.path }}” was changed outside this tab while it has unsaved edits — {{ summary() }}.
+        Tick the blocks to keep; the result in the middle can be edited.
+      </p>
+    </header>
+
+    <div class="merge">
+      <div class="heads">
+        <div class="head">
+          <span>On disk</span>
+          <button type="button" class="link" (click)="takeAll('disk')">Take all</button>
+        </div>
+        <div class="head">Result</div>
+        <div class="head">
+          <span>Your version</span>
+          <button type="button" class="link" (click)="takeAll('mine')">Take all</button>
+        </div>
+      </div>
+
+      @for (segment of segments(); track $index; let i = $index) {
+        @if (segment.kind === 'context') {
+          @if (folded(i, segment)) {
+            <button type="button" class="fold" (click)="unfold(i)">
+              ⋯ {{ segment.lines.length }} unchanged lines — show
+            </button>
+          } @else {
+            <div class="row context">
+              <pre class="side">{{ segment.lines.join('\n') }}</pre>
+              <textarea
+                class="result"
+                spellcheck="false"
+                aria-label="Result, unchanged block"
+                [value]="text(segment)"
+                (input)="edit(i, $any($event.target).value)"
+              ></textarea>
+              <pre class="side">{{ segment.lines.join('\n') }}</pre>
+            </div>
+          }
+        } @else {
+          <div class="row hunk" [class.conflict]="segment.conflict">
+            <div class="side disk" [class.on]="segment.takeDisk">
+              @if (segment.disk.length > 0) {
+                <label class="pick">
+                  <input
+                    type="checkbox"
+                    [checked]="segment.takeDisk"
+                    (change)="take(i, 'disk', $any($event.target).checked)"
+                  />
+                  Use this block
+                </label>
+                <pre>{{ segment.disk.join('\n') }}</pre>
+              } @else {
+                <span class="none">Not in this version</span>
+              }
+            </div>
+            <textarea
+              class="result"
+              spellcheck="false"
+              aria-label="Result of this block"
+              [class.typed]="segment.edited !== null"
+              [value]="text(segment)"
+              (input)="edit(i, $any($event.target).value)"
+            ></textarea>
+            <div class="side mine" [class.on]="segment.takeMine">
+              @if (segment.mine.length > 0) {
+                <label class="pick">
+                  <input
+                    type="checkbox"
+                    [checked]="segment.takeMine"
+                    (change)="take(i, 'mine', $any($event.target).checked)"
+                  />
+                  Use this block
+                </label>
+                <pre>{{ segment.mine.join('\n') }}</pre>
+              } @else {
+                <span class="none">Not in this version</span>
+              }
+            </div>
+          </div>
+        }
+      }
+    </div>
+
+    <footer>
+      <span class="note">Both versions stay in the file history.</span>
+      <div class="spacer"></div>
+      <button type="button" class="ghost" (click)="cancel()">Cancel</button>
+      <button type="button" class="primary" (click)="apply()">
+        {{ req.saving ? 'Save result' : 'Use result' }}
+      </button>
+    </footer>
+  </div>
+}

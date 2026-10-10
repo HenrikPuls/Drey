@@ -3,6 +3,8 @@ import { formatDate } from '../../shared/timestamp';
 import { ImageLightbox } from './image-viewer';
 import { ConfirmationDialog } from './confirmation-dialog/confirmation-dialog';
 import { ConfirmDialog } from './confirm-dialog/confirm-dialog';
+import { ConflictDialog } from './conflict';
+import { HistoryDialog, HistoryService } from './history';
 import { LinkUpdateDialog } from './link-update';
 import { Palette, PaletteService } from './palette';
 import { ExitConfirmDialog } from './exit-confirm-dialog/exit-confirm-dialog';
@@ -53,6 +55,8 @@ import { EditorContextMenuRegistry } from './plugin-host';
     Settings,
     ConfirmationDialog,
     LinkUpdateDialog,
+    ConflictDialog,
+    HistoryDialog,
     Palette,
     ConfirmDialog,
     ExitConfirmDialog,
@@ -77,6 +81,7 @@ export class App {
   }
   protected readonly panes = inject(PaneService);
   private readonly vault = inject(VaultService);
+  private readonly fileHistory = inject(HistoryService);
 
   /** The pane docked in each dock's editor band -- extends the dock render gates beyond widgets. */
 
@@ -355,6 +360,11 @@ export class App {
           void this.editor.exportPdf();
         }
       },
+    });
+    keys.register({
+      id: 'note.history',
+      label: 'File history…',
+      run: () => void this.fileHistory.show(),
     });
 
   }

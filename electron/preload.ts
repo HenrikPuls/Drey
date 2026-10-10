@@ -26,6 +26,7 @@ import {
   SpellCheckResult,
   SpellLanguage,
   TagVocabularyPayload,
+  NoteHistoryEntry,
   RenameLinksPreview,
   RenameLinksRequest,
   RenameLinksResult,
@@ -247,6 +248,18 @@ const dreyApi: DreyApi = {
     return () => ipcRenderer.removeListener(IPC_CHANNELS.vaultChanged, wrapped);
   },
   refreshVault: (): Promise<void> => ipcRenderer.invoke(IPC_CHANNELS.vaultRefresh),
+  // Local note history (ADR-0060).
+  listNoteHistory: (relativePath: string, vaultId?: string): Promise<NoteHistoryEntry[]> =>
+    ipcRenderer.invoke(IPC_CHANNELS.historyList, relativePath, vaultId),
+  readNoteHistory: (relativePath: string, entryId: string, vaultId?: string): Promise<string | null> =>
+    ipcRenderer.invoke(IPC_CHANNELS.historyRead, relativePath, entryId, vaultId),
+  captureNoteHistory: (
+    relativePath: string,
+    content: string,
+    origin: string,
+    vaultId?: string,
+  ): Promise<boolean> =>
+    ipcRenderer.invoke(IPC_CHANNELS.historyCapture, relativePath, content, origin, vaultId),
   // Session history (ADR-0043).
   writeSessionBackup: (id: string, content: string): Promise<void> =>
     ipcRenderer.invoke(IPC_CHANNELS.sessionWriteBackup, id, content),

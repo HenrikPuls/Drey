@@ -122,7 +122,9 @@ export function registerVaultHandlers({
     IPC_CHANNELS.vaultWriteFile,
     async (_event, relativePath: string, content: string, vaultId?: string): Promise<number> => {
       const resolvedVaultId = vaultManager.resolveVaultId(vaultId);
-      const modifiedMs = await vaultManager.writeFile(relativePath, content, resolvedVaultId);
+      const modifiedMs = await vaultManager.writeFile(relativePath, content, resolvedVaultId, {
+        origin: 'app',
+      });
       // A raw write bypasses the note:save pipeline — tell plugins directly.
       pluginHost.emitVaultChange({ kind: 'write', path: relativePath, vaultId: resolvedVaultId });
       return modifiedMs;

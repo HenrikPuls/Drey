@@ -27,6 +27,7 @@ import { PluginHost } from './plugin-host';
 import { SessionBackupStore } from './session';
 import { SpellcheckService } from './spellcheck';
 import { VaultChangeAnnouncer } from './vault-change-announcer';
+import { NoteHistoryStore } from './history/note-history-store';
 import { VaultManager } from './vault-manager';
 import { VaultWatcher } from './vault-watcher';
 
@@ -534,9 +535,16 @@ if (!app.requestSingleInstanceLock()) {
     // the manager; the announcer closes over module state lazily, so
     // construction order stays free.
     const ownWrites = new OwnWriteLedger();
-    const vaultManager = new VaultManager(ownWrites);
-    vaultManagerForGate = vaultManager;
     const appConfig = new AppConfigStore();
+    // Local note history (ADR-0060): earlier versions under the user-data
+    // dir, fed by every vault write. Expired versions go once per start.
+    const noteHistory = new NoteHistoryStore(
+      path.join(app.getPath('userData'), 'history'),
+      () => appConfig.get().vault.history,
+    );
+    void noteHistory.sweep();
+    const vaultManager = new VaultManager(ownWrites, noteHistory);
+    vaultManagerForGate = vaultManager;
     const vaultAnnouncer = new VaultChangeAnnouncer(
       () => pluginHost,
       () => mainWindow,
@@ -676,6 +684,7 @@ if (!app.requestSingleInstanceLock()) {
     registerIpcHandlers({
       getMainWindow: () => mainWindow,
       sessionBackups,
+      noteHistory,
       vaultManager,
       dailyNotes,
       noteManager,

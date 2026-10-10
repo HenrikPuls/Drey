@@ -13,6 +13,16 @@
   } @else if (editor.isEditLocked(shownPath())) {
     <span class="edit-lock">Assistant is editing…</span>
   }
+  @if (shownDoc()?.diskChanged) {
+    <button
+      type="button"
+      class="disk-changed"
+      title="This file was changed outside this tab. Click to compare and choose a version."
+      (click)="editor.resolveDiskChange(shownPath()!)"
+    >
+      Changed on disk
+    </button>
+  }
   @if (suggestingTags()) {
     <span class="suggesting">Suggesting tags…</span>
   }
@@ -153,6 +163,16 @@
       Save as…
       <span class="ctx-key">Ctrl Shift S</span>
     </button>
+    @if (history.canShow(shownPath())) {
+      <button
+        type="button"
+        role="menuitem"
+        (click)="closeMenu(); history.show(shownPath() ?? undefined)"
+      >
+        <span class="tick"></span>
+        File history…
+      </button>
+    }
     @if (editor.isMarkdown(shownPath())) {
       <button
         type="button"

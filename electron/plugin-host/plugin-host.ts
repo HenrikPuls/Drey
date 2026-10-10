@@ -524,7 +524,7 @@ export class PluginHost {
       vault: {
         listVaults: () => Promise.resolve(vaultManager.listVaults()),
         read: (p, opts) => vaultManager.readFile(p, opts?.vaultId).then((f) => f.content),
-        write: (p, content, opts) => vaultManager.writeFile(p, content, opts?.vaultId),
+        write: (p, content, opts) => vaultManager.writeFile(p, content, opts?.vaultId, { origin: id }),
         // A write the tree/index/open tabs must see NOW (chat notes, a
         // plugin-generated note): same round an MCP write runs — per-file
         // index events + one scoped `vault:changed` push. A plain `write`
@@ -532,7 +532,7 @@ export class PluginHost {
         // the watcher off nothing else would fire for it.
         writeAnnounced: async (p, content, opts) => {
           const vaultId = vaultManager.resolveVaultId(opts?.vaultId);
-          const modifiedMs = await vaultManager.writeFile(p, content, vaultId);
+          const modifiedMs = await vaultManager.writeFile(p, content, vaultId, { origin: id });
           this.deps.vaultAnnouncer()?.announceExternal({ vaultId, changedPaths: [p], deletedPaths: [] });
           return modifiedMs;
         },

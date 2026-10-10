@@ -20,6 +20,50 @@ recorded as an explicit decision. The parity checklist lives in
 
 ## Recent milestones
 
+### Milestone 60 — save conflicts are asked; local note history
+
+**Not yet manually verified by the owner.**
+
+([ADR-0060](../docs/09_architecture_decisions/0060-save-conflicts-and-local-note-history.md))
+
+- **60a · A dirty tab no longer overwrites an external change silently.**
+  Every save tells main which state of the file the tab edited
+  (`baseModifiedMs`); when the file on disk is a different one, nothing
+  is written and a **merge view** opens: *On disk* | *Result* | *Your
+  version*, block by block. Each differing block takes the disk side,
+  mine, both (disk's lines, then mine) or neither; "Take all" per
+  column; the Result column is editable throughout for own text. Blocks
+  only one side changed since the tab read the file are preselected from
+  that side, blocks both changed are flagged. Works with the watcher off. A file whose timestamp moved but whose text did not (a
+  sync client touching it) is saved without a question. Raised by "Save
+  all" on quit, Cancel also keeps the app open.
+- **"Changed on disk" with the watcher on.** A dirty tab whose file
+  changes is marked in the meta bar; the button opens the same dialog
+  before any save. Chat notes keep following the disk.
+- **60b · Local note history.** Before a note is overwritten — by a
+  save, the assistant (live edit, applied rewrites, template tools), an
+  MCP client, replace-all, the tag rename or a link update — its previous
+  text is kept under `<userData>/history/`, outside the vault. The
+  user's own saves record at most one version per note per five minutes,
+  every other writer each time. The version a conflict or a restore
+  discards, and the previous text of a tab the watcher reloads, are kept
+  too. Chat notes, `.drafts/`, attachments and notes over 2 MB are not
+  versioned. A rename or move keeps the history with the note.
+- **File history…** in the editor `⋯` menu, the tab context menu and the
+  command palette: the versions with what replaced them, the selected one
+  diffed against the editor, **Restore this version** (into the editor,
+  one undo step — nothing is written until the next save).
+- **Settings → Vault:** "Keep a local history of notes" (default on) and
+  the retention in days (default 30; at most 50 versions per note).
+- **Under the hood:** the line diff of the ADR-0011 dialog is now the
+  shared `DiffView`; `VaultManager.writeFile` takes the writer's
+  `origin`. Specs: history store, the save guard, the conflict flow,
+  the merge model, the history service.
+- **Not covered:** external (out-of-vault) tabs; a file changed while the
+  app was closed under a tab restored with unsaved edits; browsing the
+  history of a deleted note; automatic merging and word-level highlighting
+  inside a block.
+
 ### Milestone 59 — links survive a rename; quick switcher + command palette
 
 **Not yet manually verified by the owner.**

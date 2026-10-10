@@ -31,4 +31,19 @@ export class SettingsVault {
       this.settings.patchVault({ updateLinksOnRename: mode as UpdateLinksMode });
     }
   }
+
+  protected onHistoryEnabledChange(on: boolean): void {
+    const history = this.vault()?.history;
+    if (history) {
+      this.settings.patchVault({ history: { ...history, enabled: on } });
+    }
+  }
+
+  protected onHistoryDaysChange(raw: string): void {
+    const history = this.vault()?.history;
+    const days = Math.round(Number(raw));
+    if (history && Number.isFinite(days) && days >= 1) {
+      this.settings.patchVault({ history: { ...history, keepDays: Math.min(365, days) } });
+    }
+  }
 }

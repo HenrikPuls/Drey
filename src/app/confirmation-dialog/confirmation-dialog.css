@@ -39,115 +39,12 @@ h2 {
   color: var(--text-4);
 }
 
+/* The scroll container; the diff itself is `DiffView`. */
 .preview {
   flex: 1;
   min-height: 0;
   overflow: auto;
   margin: 12px;
-  font-family: var(--font-mono);
-  font-size: 12px;
-  line-height: 1.5;
-}
-
-.diff .row {
-  display: flex;
-  gap: 8px;
-  padding: 0 8px;
-  white-space: pre-wrap;
-  word-break: break-word;
-}
-
-.diff .sign {
-  flex: none;
-  width: 1ch;
-  color: var(--text-6);
-  user-select: none;
-}
-
-.diff .row.add {
-  background: rgba(125, 143, 110, 0.16);
-}
-
-.diff .row.add .sign {
-  color: #7d8f6e;
-}
-
-.diff .row.del {
-  background: color-mix(in srgb, var(--accent) 14%, transparent);
-}
-
-.diff .row.del .sign {
-  color: var(--accent);
-}
-
-.diff .row.gap {
-  color: var(--text-6);
-  padding: 2px 8px;
-  font-style: italic;
-}
-
-/* Side-by-side diff. Every row is a 2-column grid with identical column
-   tracks, so the two halves are always the exact same size. */
-.split-diff {
-  display: flex;
-  flex-direction: column;
-}
-
-.split-head,
-.split-row {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-  column-gap: 1px;
-}
-
-.split-head {
-  position: sticky;
-  top: 0;
-  z-index: 1;
-  background: var(--bg-main);
-  font-family: var(--font-sans);
-  font-size: 11px;
-  letter-spacing: 0.04em;
-  color: var(--text-6);
-}
-
-.split-head span {
-  padding: 2px 8px 6px;
-}
-
-.split-row .cell {
-  display: flex;
-  gap: 8px;
-  padding: 0 8px;
-  white-space: pre-wrap;
-  word-break: break-word;
-  color: var(--text-2);
-}
-
-.split-row .ln {
-  flex: none;
-  width: 3ch;
-  text-align: right;
-  color: var(--text-7);
-  user-select: none;
-}
-
-.split-row .cell.add {
-  background: rgba(125, 143, 110, 0.16);
-}
-
-.split-row .cell.del {
-  background: color-mix(in srgb, var(--accent) 14%, transparent);
-}
-
-.split-row .cell.empty {
-  background: var(--bg-inset, rgba(255, 255, 255, 0.02));
-}
-
-.split-gap {
-  color: var(--text-6);
-  padding: 2px 8px;
-  font-style: italic;
 }
 
 footer {

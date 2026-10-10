@@ -346,6 +346,21 @@ function normalizeVault(raw: unknown): VaultConfig {
     updateLinksOnRename: UPDATE_LINKS_MODES.includes(mode as UpdateLinksMode)
       ? (mode as UpdateLinksMode)
       : DEFAULT_VAULT_CONFIG.updateLinksOnRename,
+    history: normalizeVaultHistory(source['history']),
+  };
+}
+
+function normalizeVaultHistory(raw: unknown): VaultConfig['history'] {
+  const source = (raw ?? {}) as Record<string, unknown>;
+  const fallback = DEFAULT_VAULT_CONFIG.history;
+  const within = (value: unknown, min: number, max: number, otherwise: number): number =>
+    typeof value === 'number' && Number.isFinite(value)
+      ? Math.min(max, Math.max(min, Math.round(value)))
+      : otherwise;
+  return {
+    enabled: bool(source['enabled'], fallback.enabled),
+    keepDays: within(source['keepDays'], 1, 365, fallback.keepDays),
+    maxPerFile: within(source['maxPerFile'], 1, 500, fallback.maxPerFile),
   };
 }
 

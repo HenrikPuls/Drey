@@ -98,7 +98,7 @@ describe('ExitConfirmService', () => {
 
     await service.choose('save');
 
-    expect(saves).toEqual([
+    expect(saves).toMatchObject([
       { path: 'note.md', body: 'an edit', eol: '\n', runOnSaveActions: false },
     ]);
     expect(draftSaves).toEqual([{ body: 'search export', eol: '\n' }]);

@@ -54,7 +54,7 @@ export class LinkRewriter {
       }
       try {
         const content = crlf.has(patch.path) ? patch.after.replace(/\n/g, '\r\n') : patch.after;
-        await this.vaults.writeFile(patch.newPath, content, fromVaultId);
+        await this.vaults.writeFile(patch.newPath, content, fromVaultId, { origin: 'links' });
         result.written.push(patch.newPath);
       } catch (error) {
         result.failed.push(`${patch.newPath}: ${message(error)}`);

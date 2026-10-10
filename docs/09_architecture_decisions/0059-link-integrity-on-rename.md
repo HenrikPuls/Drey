@@ -104,3 +104,11 @@ re-read after their keys follow the rename.
 - **Rewrite attachment links instead of moving the file** — leaves
   images scattered in the folders their notes left. Most images belong
   to exactly one note, so moving is the natural default.
+
+## Later change — the safety net exists (milestone 60)
+
+"No undo beyond renaming back" is softened by
+[ADR-0060](0060-save-conflicts-and-local-note-history.md): every note a
+link update rewrites has its previous text in the local history (origin
+`links`), and the history follows the renamed note. Moved attachments
+are still not versioned.
