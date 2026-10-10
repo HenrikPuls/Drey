@@ -8,8 +8,8 @@ service the app depends on to function.
 ```mermaid
 graph LR
     User((User)) -->|quick-capture, chat, edits| App[Drey]
-    App -->|reads/writes .md files| Vault[(Vault folder\non disk / OneDrive)]
-    App -->|classification prompts,\nOpenAI-compatible HTTP| LMStudio[LM Studio\nlocal LLM server]
+    App -->|reads/writes .md files| Vault[("Vault folder<br/>on disk / OneDrive")]
+    App -->|classification prompts,<br/>OpenAI-compatible HTTP| LMStudio["LM Studio<br/>local LLM server"]
 ```
 
 - **Vault folder** — plain files on disk. May be inside a OneDrive-synced
