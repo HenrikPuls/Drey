@@ -1,0 +1,167 @@
+.backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.5);
+  z-index: 40;
+}
+
+.dialog {
+  position: fixed;
+  inset: 0;
+  margin: auto;
+  z-index: 41;
+  width: min(860px, calc(100vw - 48px));
+  height: fit-content;
+  max-height: calc(100vh - 64px);
+  display: flex;
+  flex-direction: column;
+  background: var(--bg-main);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-md);
+  box-shadow: 0 24px 64px rgba(0, 0, 0, 0.5);
+}
+
+header {
+  padding: 16px 20px 12px;
+  border-bottom: 1px solid var(--border);
+}
+
+h2 {
+  margin: 0;
+  font-family: var(--font-serif);
+  font-size: 1.05rem;
+  font-weight: 600;
+  color: var(--text-heading);
+}
+
+.summary {
+  margin: 4px 0 0;
+  font-size: 0.82rem;
+  color: var(--text-4);
+}
+
+.preview {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  margin: 12px;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.file + .file {
+  margin-top: 14px;
+}
+
+.file-head {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  padding: 0 8px 4px;
+}
+
+.file-path {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-2);
+}
+
+.file-path.sans,
+.file-count {
+  font-family: var(--font-sans);
+}
+
+.file-count {
+  flex: none;
+  font-size: 11px;
+  color: var(--text-6);
+}
+
+.row {
+  display: flex;
+  gap: 8px;
+  padding: 0 8px;
+  white-space: pre-wrap;
+  word-break: break-word;
+  color: var(--text-2);
+}
+
+.ln {
+  flex: none;
+  width: 4ch;
+  text-align: right;
+  color: var(--text-7);
+  user-select: none;
+}
+
+.sign {
+  flex: none;
+  width: 1ch;
+  color: var(--text-6);
+  user-select: none;
+}
+
+.text {
+  flex: 1;
+  min-width: 0;
+}
+
+.row.add {
+  background: rgba(125, 143, 110, 0.16);
+}
+
+.row.add .sign {
+  color: #7d8f6e;
+}
+
+.row.del {
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+}
+
+.row.del .sign {
+  color: var(--accent);
+}
+
+footer {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 20px 14px;
+  border-top: 1px solid var(--border);
+}
+
+.spacer {
+  flex: 1;
+}
+
+.dont-ask {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.8rem;
+  color: var(--text-4);
+  cursor: pointer;
+}
+
+button {
+  font-size: 0.82rem;
+  padding: 7px 14px;
+  border-radius: var(--radius);
+  border: 1px solid transparent;
+  cursor: pointer;
+}
+
+.ghost {
+  background: transparent;
+  border: 1px solid var(--border-strong);
+  color: var(--text-3);
+}
+
+.primary {
+  background: var(--accent);
+  color: var(--accent-contrast);
+}

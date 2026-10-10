@@ -26,6 +26,9 @@ import {
   SpellCheckResult,
   SpellLanguage,
   TagVocabularyPayload,
+  RenameLinksPreview,
+  RenameLinksRequest,
+  RenameLinksResult,
   VaultChangedPush,
   VaultFileContent,
   VaultFileEntry,
@@ -124,6 +127,10 @@ const dreyApi: DreyApi = {
     toVaultId?: string,
   ): Promise<string> =>
     ipcRenderer.invoke(IPC_CHANNELS.vaultRename, fromRelativePath, toRelativePath, fromVaultId, toVaultId),
+  previewVaultRename: (request: RenameLinksRequest): Promise<RenameLinksPreview> =>
+    ipcRenderer.invoke(IPC_CHANNELS.vaultRenamePreview, request),
+  renameVaultEntryWithLinks: (request: RenameLinksRequest): Promise<RenameLinksResult> =>
+    ipcRenderer.invoke(IPC_CHANNELS.vaultRenameWithLinks, request),
   copyVaultEntry: (
     sourceRelativePath: string,
     destDirRelativePath: string,

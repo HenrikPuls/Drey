@@ -2364,3 +2364,59 @@ and `template_write` without `overwrite: true` fails on an existing
 template instead of replacing it. No confirmation dialog — ADR-0011's
 later-change: structural, low-risk content, and deletes stay
 recoverable through the bin.
+
+## 6.49 Rename a note → links rewritten, attachments follow (milestone 59, [ADR-0059](09_architecture_decisions/0059-link-integrity-on-rename.md))
+
+```mermaid
+sequenceDiagram
+    actor User
+    participant FP as FilesPanel
+    participant LU as LinkUpdateService
+    participant D as LinkUpdateDialog
+    participant LR as LinkRewriter (main)
+    participant PL as planRename (shared)
+    participant VM as VaultManager
+    participant ES as EditorService
+
+    User->>FP: rename "Old.md" → "New.md" (or drag to a folder)
+    FP->>LU: rename(vault, from, vault, to)
+    alt vault.updateLinksOnRename = never
+        LU->>VM: vault:rename-entry
+    else ask / always
+        LU->>LR: vault:rename-preview { from, to, buffers: dirty open notes }
+        LR->>VM: listFiles + read every note (buffer wins over file)
+        LR->>PL: planRename(files, contents, from → to)
+        PL-->>LR: patches (notes to rewrite) + assets (files that travel)
+        LR-->>LU: preview
+        opt nothing affected
+            LU->>VM: vault:rename-entry (no dialog)
+        end
+        opt mode = ask
+            LU->>D: show notes + changed lines + attachments
+            User->>D: Update links / Rename only / Cancel (+ Don't ask again)
+            D-->>LU: answer (persisted as always / never when ticked)
+        end
+        LU->>LR: vault:rename-with-links (same request)
+        LR->>PL: planRename again — fresh, not the preview's
+        LR->>VM: renameEntry(from, to)
+        loop each patch
+            alt note was sent as a dirty buffer
+                LR-->>LU: patched content (not written)
+            else
+                LR->>VM: writeFile(newPath, content, CRLF restored)
+            end
+        end
+        loop each attachment
+            LR->>VM: renameEntry / copyEntry, removeDirIfEmpty
+        end
+        LR-->>LU: { path, written, buffers, assets, failed }
+        LU->>ES: retargetTabs (entry + moved attachments)
+        LU->>ES: updateBuffer (dirty notes), reloadFromVaultChange (clean ones)
+    end
+    LU-->>FP: new path (null = cancelled)
+```
+
+The plan is computed twice on purpose: the preview is what the user
+sees, the apply reads the vault again — a file changed in between
+contributes what it matches then. The index round after the rename is
+the plain rename's (`refresh` + the `rename` vault-change event).

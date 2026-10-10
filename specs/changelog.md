@@ -20,6 +20,55 @@ recorded as an explicit decision. The parity checklist lives in
 
 ## Recent milestones
 
+### Milestone 59 — links survive a rename; quick switcher + command palette
+
+**Not yet manually verified by the owner.**
+
+- **59a · Renaming or moving keeps links intact**
+  ([ADR-0059](../docs/09_architecture_decisions/0059-link-integrity-on-rename.md)).
+  A rename / move in the Files panel (inline rename, drag & drop, folders
+  included) now plans what it would break and repairs it: `[[wikilinks]]`
+  to a renamed note follow (anchor, alias and embed `!` kept), a moved
+  note keeps `[[Note]]` while the name is unique and only path-form links
+  change, and references to a renamed attachment follow too. The rule is
+  "what did this reference open before, and does the same text still open
+  it after" — only references whose answer changes are rewritten; code
+  and frontmatter are never touched.
+- **Attachments travel with their note.** When a note changes folder, a
+  file it references relative to itself (`![](attachments/x.png)`,
+  `![[x.png]]`, `[doc](<attachments/a.pdf>)`, `<img src>`) and that no
+  other note uses moves along, link text unchanged; an emptied
+  `attachments/` folder is removed. A shared file stays and the moved
+  note's link is rewritten to a relative path. Across vaults the
+  exclusive file moves and a shared one is copied (wikilinks stay
+  vault-scoped, ADR-0051). Nothing is overwritten.
+- **Ask / always / never** — new `vault.updateLinksOnRename` (Settings →
+  Vault, default *ask*): a dialog lists the affected notes with their
+  changed lines and the attachments that go along — *Update links*,
+  *Rename only*, *Cancel*, "Don't ask again". No dialog when nothing is
+  affected. Dirty open notes are patched in the buffer, not on disk.
+- **Base-owned, deviating from the roadmap wording** ("through the
+  backlinks index"): link integrity must not depend on an optional
+  plugin, and the rewrite reads every file fresh anyway. Grammar +
+  resolver moved to `shared/wikilinks.ts` (one definition for renderer
+  and main); planner `shared/link-rewrite.ts`, executor
+  `electron/link-rewriter.ts`, IPC `vault:rename-preview` /
+  `vault:rename-with-links`, renderer `src/app/link-update/`.
+- **59b · Quick switcher + command palette** (`src/app/palette/`): one
+  overlay. `Ctrl+P` lists the files of every vault, fuzzy-matched on
+  name then path, the documents visited this session first (so
+  `Ctrl+P`, Enter flips back); Enter opens, `Ctrl+Enter` opens beside
+  the current tab, and a query without a match offers "Create note".
+  A leading `>` — or `Ctrl+Shift+P` — lists every registered command
+  with its shortcut (plugin commands included). View menu rows "Go to
+  file…" / "Command palette…".
+- **New commands** so the palette can reach them: `settings.open`
+  (`Ctrl+,` — the File menu printed that hint without a binding
+  behind it), `layout.reset`, `vault.refresh`, `daily.today`,
+  `editor.toggleSource`, `note.exportPdf`.
+- Not covered (ADR-0059): renames made outside the app, links into a
+  note moved to another vault, heading-anchor renames.
+
 ### Milestone 58 — the assistant manages the template library (SDK 1.14)
 
 - **The agent can create templates.** Four new chat tools —

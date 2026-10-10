@@ -2548,3 +2548,35 @@ keep plain `vault_write`).
 - Live-edit turns never see the tools (the note is the target there),
   and the tool calls surface as ordinary `drey-tool` chips in the turn
   card.
+
+## 5.32 Link integrity on rename + quick switcher / command palette (milestone 59, ADR-0059)
+
+**Link rewrite — three layers, base-owned.**
+
+| Block | Where | Responsibility |
+| --- | --- | --- |
+| Wikilink grammar + resolver | `shared/wikilinks.ts` | `extractWikilinks`, `buildNoteIndex`, `resolveNoteTarget` — ONE definition for the renderer (`WikilinkService`, editor decorations) and main. The backlinks plugin keeps its parity-tested twin. |
+| Planner | `shared/link-rewrite.ts` | `planRename` — pure: file list + note contents + one `from → to` in, `{ patches, assets }` out. Rule: a reference is rewritten only when what it opened before differs from what the unchanged text opens after. Attachments referenced relative to a moved note and used by nothing outside the move travel with it. |
+| Executor | `electron/link-rewriter.ts` | `LinkRewriter.preview` / `.apply`: one fresh scan of the source vault (dirty buffers substituted for their files), `VaultManager.renameEntry`, then the writes (CRLF kept) and attachment moves / copies; `removeDirIfEmpty` tidies an emptied `attachments/`. |
+| Orchestration | `src/app/link-update/` | `LinkUpdateService.rename` — the Files panel's single entry for rename and move: reads `vault.updateLinksOnRename`, previews, asks through `LinkUpdateDialog` (per-note changed lines, attachments, three answers + "Don't ask again"), then re-keys tabs, patches dirty buffers and re-reads clean ones. |
+
+IPC: `vault:rename-preview` and `vault:rename-with-links`
+(`RenameLinksRequest` → `RenameLinksPreview` / `RenameLinksResult`);
+the plain `vault:rename-entry` remains for "Rename only" and the
+`never` mode. Config: `VaultConfig.updateLinksOnRename`
+(`ask | always | never`).
+
+There is deliberately no index behind this: the rewrite must read every
+affected file at apply time anyway, so a standing index would only add a
+second source of truth.
+
+**Palette — `src/app/palette/`.** `PaletteService` holds the state
+and both lists: files (every registered vault's tree, session-visited
+documents first via `DocHistoryService.recentKeys()`) and commands
+(`KeybindingService.all()`, shortcuts printed by `formatChord`).
+`fuzzy.ts` is the matcher — a scored subsequence match, no dependency.
+`Palette` is the overlay view; focus stays in its field. Commands
+`palette.files` (`Mod+P`) and `palette.commands` (`Mod+Shift+P`)
+are registered in `App`, next to the commands added so the palette can
+reach them (`settings.open`, `layout.reset`, `vault.refresh`,
+`daily.today`, `editor.toggleSource`, `note.exportPdf`).

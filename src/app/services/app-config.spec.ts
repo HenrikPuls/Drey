@@ -196,7 +196,9 @@ describe('normalizeAppConfig', () => {
   });
 
   it('defaults the vault block to not watching and coerces a junk value', () => {
-    expect(normalizeAppConfig({}).vault).toEqual({ watch: false });
+    expect(normalizeAppConfig({}).vault).toEqual({ watch: false, updateLinksOnRename: 'ask' });
+    expect(normalizeAppConfig({ vault: { updateLinksOnRename: 'x' } }).vault.updateLinksOnRename).toBe('ask');
+    expect(normalizeAppConfig({ vault: { updateLinksOnRename: 'never' } }).vault.updateLinksOnRename).toBe('never');
     expect(normalizeAppConfig({ vault: { watch: 'yes' } }).vault.watch).toBe(false);
     expect(normalizeAppConfig({ vault: { watch: true } }).vault.watch).toBe(true);
   });

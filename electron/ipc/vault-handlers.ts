@@ -3,11 +3,15 @@ import {
   IPC_CHANNELS,
   NoteSaveRequest,
   NoteSaveResult,
+  RenameLinksPreview,
+  RenameLinksRequest,
+  RenameLinksResult,
   VaultFileContent,
   VaultFileEntry,
   VaultRegistration,
 } from '../../shared/ipc-api';
 import { DailyNoteManager } from '../daily-note';
+import { LinkRewriter } from '../link-rewriter';
 import { NoteManager } from '../note-manager';
 import { PluginHost } from '../plugin-host';
 import { VaultManager } from '../vault-manager';
@@ -212,6 +216,38 @@ export function registerVaultHandlers({
         fullVaultRefresh();
       }
       return next;
+    },
+  );
+  // The rename that keeps links intact (milestone 59, ADR-0059). The index
+  // round is the plain rename's; the renderer re-reads the rewritten notes'
+  // clean tabs itself, AFTER it has re-keyed them to the new paths.
+  const linkRewriter = new LinkRewriter(vaultManager);
+  const resolveRenameRequest = (request: RenameLinksRequest): RenameLinksRequest => {
+    const fromVaultId = vaultManager.resolveVaultId(request.fromVaultId);
+    return {
+      ...request,
+      fromVaultId,
+      toVaultId: vaultManager.resolveVaultId(request.toVaultId ?? fromVaultId),
+      buffers: Array.isArray(request.buffers) ? request.buffers : [],
+    };
+  };
+  ipcMain.handle(
+    IPC_CHANNELS.vaultRenamePreview,
+    (_event, request: RenameLinksRequest): Promise<RenameLinksPreview> =>
+      linkRewriter.preview(resolveRenameRequest(request)),
+  );
+  ipcMain.handle(
+    IPC_CHANNELS.vaultRenameWithLinks,
+    async (_event, request: RenameLinksRequest): Promise<RenameLinksResult> => {
+      const resolved = resolveRenameRequest(request);
+      const result = await linkRewriter.apply(resolved);
+      if (resolved.fromVaultId === resolved.toVaultId) {
+        await rebuildIndexes();
+        pluginHost.emitVaultChange({ kind: 'rename', path: result.path, vaultId: resolved.toVaultId });
+      } else {
+        fullVaultRefresh();
+      }
+      return result;
     },
   );
   ipcMain.handle(

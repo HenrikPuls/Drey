@@ -1,5 +1,12 @@
 import { Injectable, computed, signal } from '@angular/core';
-import { VaultFileEntry, VaultRegistration, VaultStatus } from '../../../shared/ipc-api';
+import {
+  RenameLinksPreview,
+  RenameLinksRequest,
+  RenameLinksResult,
+  VaultFileEntry,
+  VaultRegistration,
+  VaultStatus,
+} from '../../../shared/ipc-api';
 
 /**
  * Thin wrapper around `window.dreyApi`'s vault methods, exposed as signals
@@ -248,6 +255,31 @@ export class VaultService {
       await Promise.all([this.loadTree(fromVaultId), this.loadTree(toVaultId)]);
     }
     return next;
+  }
+
+  /** What a link-keeping rename would change (milestone 59). Touches nothing. */
+  async previewRename(request: RenameLinksRequest): Promise<RenameLinksPreview> {
+    if (typeof window === 'undefined' || !window.dreyApi?.previewVaultRename) {
+      return { files: [], assets: [] };
+    }
+    return window.dreyApi.previewVaultRename(request);
+  }
+
+  /**
+   * {@link renameEntry} plus the link rewrite and the attachment moves
+   * (milestone 59, ADR-0059); reloads the touched trees.
+   */
+  async renameWithLinks(request: RenameLinksRequest): Promise<RenameLinksResult> {
+    if (typeof window === 'undefined' || !window.dreyApi?.renameVaultEntryWithLinks) {
+      throw new Error('Renaming needs the desktop app.');
+    }
+    const result = await window.dreyApi.renameVaultEntryWithLinks(request);
+    if (request.fromVaultId === request.toVaultId) {
+      await this.loadTree(request.fromVaultId);
+    } else {
+      await Promise.all([this.loadTree(request.fromVaultId), this.loadTree(request.toVaultId)]);
+    }
+    return result;
   }
 
   /** Copies an entry into `destDirRelativePath` (`''` = vault root) and reloads. */

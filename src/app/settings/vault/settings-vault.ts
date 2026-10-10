@@ -1,4 +1,5 @@
 import { ChangeDetectionStrategy, Component, computed, inject } from '@angular/core';
+import { UPDATE_LINKS_MODES, UpdateLinksMode } from '../../../../shared/app-config';
 import { SettingsService } from '../../services/settings.service';
 import { SettingsPane } from '../settings-pane/settings-pane';
 
@@ -23,5 +24,11 @@ export class SettingsVault {
 
   protected onWatchChange(on: boolean): void {
     this.settings.patchVault({ watch: on });
+  }
+
+  protected onUpdateLinksChange(mode: string): void {
+    if (UPDATE_LINKS_MODES.includes(mode as UpdateLinksMode)) {
+      this.settings.patchVault({ updateLinksOnRename: mode as UpdateLinksMode });
+    }
   }
 }

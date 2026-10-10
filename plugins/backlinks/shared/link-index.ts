@@ -4,7 +4,7 @@ import type { LinkOccurrence } from './link-targets.js';
 
 /**
  * Obsidian-style link resolution — a parity twin of the base
- * `WikilinkService.resolve` (`src/app/editor/wikilinks/wikilink.service.ts`;
+ * `resolveNoteTarget` (`shared/wikilinks.ts`;
  * plugin code cannot import base modules). A target containing `/` or an
  * extension is a vault-relative path (`.md` appended when bare); anything
  * else is a note basename — unique names win outright, ambiguous ones

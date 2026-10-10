@@ -1,5 +1,7 @@
 import { Injectable, computed, inject } from '@angular/core';
 import { VaultFileEntry } from '../../../../shared/ipc-api';
+import { NOTE_FILE, buildNoteIndex, resolveNoteTarget } from '../../../../shared/wikilinks';
+import type { NoteIndex } from '../../../../shared/wikilinks';
 import { EditorService, docKey } from '../../services/editor.service';
 import { VaultService } from '../../vault';
 import type { WikilinkCandidate } from './wikilink';
@@ -31,16 +33,7 @@ import type { WikilinkCandidate } from './wikilink';
  * (`[[#heading]]`) means the linking note itself.
  */
 
-const MARKDOWN_FILE = /\.(md|markdown|mdx)$/i;
-
-interface NoteIndex {
-  /** lowercase full path -> real path */
-  byPath: Map<string, string>;
-  /** lowercase basename (no extension) -> real paths */
-  byName: Map<string, string[]>;
-  /** real paths, sorted */
-  all: string[];
-}
+const MARKDOWN_FILE = NOTE_FILE;
 
 /** A merged index additionally remembers which vault each path lives in. */
 interface MergedIndex extends NoteIndex {
@@ -71,21 +64,7 @@ export class WikilinkService {
       };
       walk(tree);
 
-      paths.sort((a, b) => a.localeCompare(b));
-      const byPath = new Map<string, string>();
-      const byName = new Map<string, string[]>();
-      for (const path of paths) {
-        byPath.set(path.toLowerCase(), path);
-        const file = path.slice(path.lastIndexOf('/') + 1);
-        const base = file.replace(/\.[^.]+$/, '').toLowerCase();
-        const list = byName.get(base);
-        if (list) {
-          list.push(path);
-        } else {
-          byName.set(base, [path]);
-        }
-      }
-      out[vaultId] = { byPath, byName, all: paths };
+      out[vaultId] = buildNoteIndex(paths);
     }
     return out;
   });
@@ -152,33 +131,7 @@ export class WikilinkService {
    * or null when unknown.
    */
   resolve(rawTarget: string, fromVaultId: string | null, fromPath: string | null): string | null {
-    const target = rawTarget.trim();
-    if (target === '') {
-      // `[[#heading]]` -- the linking note itself.
-      return fromPath;
-    }
-    const { byPath, byName } = this.indexFor(fromVaultId);
-    if (target.includes('/') || /\.[^/]+$/.test(target)) {
-      const key = (/\.[^/]+$/.test(target) ? target : `${target}.md`).toLowerCase();
-      return byPath.get(key) ?? null;
-    }
-    const hits = byName.get(target.toLowerCase());
-    if (!hits || hits.length === 0) {
-      return null;
-    }
-    if (hits.length === 1) {
-      return hits[0];
-    }
-    // Ambiguous basename: prefer a sibling of the linking note, then the
-    // shortest path (both deterministic -- `all` is pre-sorted for the
-    // locale-compare tie-break).
-    const fromDir =
-      fromPath && fromPath.includes('/') ? fromPath.slice(0, fromPath.lastIndexOf('/')) : '';
-    const sibling = hits.find((p) => parentDir(p) === fromDir);
-    if (sibling) {
-      return sibling;
-    }
-    return [...hits].sort((a, b) => a.length - b.length || a.localeCompare(b))[0];
+    return resolveNoteTarget(rawTarget, fromPath, this.indexFor(fromVaultId));
   }
 
   /** The flattened note list of `vaultId`'s vault for the `[[` completion popup. */
@@ -316,8 +269,4 @@ export class WikilinkService {
     }
     await this.editor.openFile(path, resolvedVaultId);
   }
-}
-
-function parentDir(path: string): string {
-  return path.includes('/') ? path.slice(0, path.lastIndexOf('/')) : '';
 }

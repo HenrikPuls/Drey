@@ -4,7 +4,7 @@ import { splitSections } from './sections.js';
 
 /**
  * Wikilink extraction for the backlink index (milestone 54). The regex is
- * a verbatim twin of the base editor's (`src/app/editor/wikilinks/wikilink.ts`)
+ * a verbatim twin of the base editor's (`shared/wikilinks.ts`)
  * — plugin renderers cannot import base modules, so the grammar lives here
  * as a parity-tested copy: `[[target]]`, `[[target#heading]]`,
  * `[[target|alias]]`, `[[target#heading|alias]]` and embeds (`![[…]]` —

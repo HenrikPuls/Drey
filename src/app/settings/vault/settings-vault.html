@@ -19,5 +19,28 @@
         </span>
       </span>
     </label>
+    <div class="field">
+      <label for="vault-update-links">When a note is renamed or moved</label>
+      <select
+        id="vault-update-links"
+        [value]="vault.updateLinksOnRename"
+        (change)="onUpdateLinksChange($any($event.target).value)"
+      >
+        <option value="ask" [selected]="vault.updateLinksOnRename === 'ask'">
+          Ask before updating links
+        </option>
+        <option value="always" [selected]="vault.updateLinksOnRename === 'always'">
+          Always update links
+        </option>
+        <option value="never" [selected]="vault.updateLinksOnRename === 'never'">
+          Never update links
+        </option>
+      </select>
+      <p class="field-hint">
+        Renaming or moving a note in the Files panel rewrites the links that point to it, and
+        attachments used only by a moved note move along with it. An attachment other notes use
+        too stays where it is and the moved note's link is adjusted instead.
+      </p>
+    </div>
   }
 </app-settings-pane>

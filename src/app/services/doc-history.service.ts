@@ -60,6 +60,11 @@ export class DocHistoryService {
   /** For tests and status surfaces: how many documents the history holds. */
   readonly size = computed(() => this.state().entries.length);
 
+  /** The visited tab keys, most recent first, each once (the quick switcher's empty-query order). */
+  recentKeys(): string[] {
+    return [...new Set([...this.state().entries].reverse())];
+  }
+
   /** Set around App startup; recording resumes with a fresh seed. */
   private suspended = false;
   /** Held while a back/forward activation is in flight (across awaits). */

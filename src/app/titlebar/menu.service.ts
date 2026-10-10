@@ -311,6 +311,13 @@ export class MenuService {
           hint: 'Alt Right',
           run: this.history.canForward() ? () => this.run('doc.forward') : undefined,
         },
+        { kind: 'item', label: 'Go to file…', hint: 'Ctrl P', run: () => this.run('palette.files') },
+        {
+          kind: 'item',
+          label: 'Command palette…',
+          hint: 'Ctrl Shift P',
+          run: () => this.run('palette.commands'),
+        },
         SEP,
         {
           kind: 'item',

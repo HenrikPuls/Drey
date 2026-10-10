@@ -532,6 +532,28 @@ export class VaultManager {
   }
 
   /**
+   * Removes the folder at `relativePath` when it is empty -- the tidy-up
+   * after an attachment travelled with its note (milestone 59) and left
+   * its `attachments/` folder behind with nothing in it. A non-empty or
+   * missing folder, and the vault root, are left alone.
+   */
+  async removeDirIfEmpty(relativePath: string, vaultId?: string): Promise<void> {
+    if (relativePath === '') {
+      return;
+    }
+    const resolvedVault = this.registrationFor(vaultId);
+    const dirPath = this.resolveInVault(relativePath, resolvedVault.id);
+    try {
+      if ((await fsp.readdir(dirPath)).length === 0) {
+        this.ownWrites?.recordStructural(resolvedVault.id, relativePath);
+        await fsp.rmdir(dirPath);
+      }
+    } catch {
+      // Gone already, or not a folder -- nothing to tidy.
+    }
+  }
+
+  /**
    * Deletes a file or folder -- by default to the OS recycle bin
    * (milestone 52), permanently for `{ trash: false }` (move-semantics
    * callers) and on volumes without a bin. `resolveInVault` is the path

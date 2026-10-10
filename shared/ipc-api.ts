@@ -65,6 +65,11 @@ export const IPC_CHANNELS = {
   vaultCreateFile: 'vault:create-file',
   vaultCreateDirectory: 'vault:create-directory',
   vaultRename: 'vault:rename-entry',
+  // Milestone 59 (ADR-0059): the rename that keeps links intact -- a
+  // preview of the affected notes / attachments, and the rename that
+  // carries the plan out.
+  vaultRenamePreview: 'vault:rename-preview',
+  vaultRenameWithLinks: 'vault:rename-with-links',
   vaultCopy: 'vault:copy-entry',
   vaultDuplicate: 'vault:duplicate-entry',
   vaultDelete: 'vault:delete',
@@ -314,6 +319,56 @@ export interface VaultFileEntry {
   type: 'file' | 'directory';
   /** Present (possibly empty) for directories only. */
   children?: VaultFileEntry[];
+}
+
+/**
+ * A rename / move whose links should stay intact (milestone 59, ADR-0059).
+ * `buffers` are the source vault's DIRTY open notes (path before the
+ * rename, `\n` content): they are planned against the buffer instead of
+ * the file and come back patched in {@link RenameLinksResult.buffers}
+ * rather than being written -- the next save would otherwise undo the
+ * rewrite.
+ */
+export interface RenameLinksRequest {
+  fromRel: string;
+  toRel: string;
+  fromVaultId: string;
+  toVaultId: string;
+  buffers: Array<{ path: string; content: string }>;
+}
+
+/** One note whose links the rename rewrites. `path` is before the rename. */
+export interface RenameLinkFile {
+  path: string;
+  newPath: string;
+  links: number;
+  before: string;
+  after: string;
+}
+
+/** An attachment that travels with its note (vault-relative paths). */
+export interface RenameAssetMove {
+  kind: 'move' | 'copy';
+  from: string;
+  to: string;
+}
+
+export interface RenameLinksPreview {
+  files: RenameLinkFile[];
+  assets: RenameAssetMove[];
+}
+
+export interface RenameLinksResult {
+  /** The renamed entry's new vault-relative path (in the target vault). */
+  path: string;
+  /** Notes rewritten on disk -- paths AFTER the rename, in the source vault. */
+  written: string[];
+  /** Patched contents for the dirty buffers -- paths AFTER the rename. */
+  buffers: Array<{ path: string; content: string }>;
+  /** The attachments that actually moved / were copied. */
+  assets: RenameAssetMove[];
+  /** What could not be carried out, as user-readable lines. */
+  failed: string[];
 }
 
 /**
@@ -818,6 +873,20 @@ export interface DreyApi {
     fromVaultId?: string,
     toVaultId?: string,
   ): Promise<string>;
+
+  /**
+   * What `renameVaultEntryWithLinks` would change (milestone 59): the notes
+   * whose links need rewriting and the attachments that travel along.
+   * Nothing is touched.
+   */
+  previewVaultRename(request: RenameLinksRequest): Promise<RenameLinksPreview>;
+
+  /**
+   * `renameVaultEntry` plus the link rewrite: the plan is computed fresh
+   * (not taken from the preview), the entry is renamed, the affected notes
+   * are rewritten and the attachments moved.
+   */
+  renameVaultEntryWithLinks(request: RenameLinksRequest): Promise<RenameLinksResult>;
 
   /**
    * Copies a file or folder (recursively) into `destDirRelativePath`

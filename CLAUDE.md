@@ -409,7 +409,23 @@ Renderer (Angular):
   OS fullscreen via `window:toggle-fullscreen`; the native menu's
   `togglefullscreen` role is deliberately absent — its F11 accelerator
   would swallow the key) — the titlebar menu invokes the
-  same ids
+  same ids; milestone 59 adds `palette.files` (`Mod+P`) /
+  `palette.commands` (`Mod+Shift+P`) and `settings.open` (`Mod+,`)
+- `PaletteService` + `Palette` (`src/app/palette/`, milestone 59) — the
+  quick switcher / command palette, one overlay: files of every vault
+  (fuzzy on name then path, session-visited documents first, `Ctrl+Enter`
+  opens beside the current tab, "Create note" on no match) or — behind
+  a leading `>` — every `KeybindingService` command with its shortcut
+- `LinkUpdateService` + `LinkUpdateDialog` (`src/app/link-update/`,
+  milestone 59, [ADR-0059](docs/09_architecture_decisions/0059-link-integrity-on-rename.md)) —
+  every Files-panel rename / move goes through `rename()`: main's
+  `LinkRewriter` (`electron/link-rewriter.ts`) plans over the pure
+  `shared/link-rewrite.ts` (a reference is rewritten only when what it
+  opened before differs from what the same text opens after; attachments
+  used only by a moved note travel with it), the dialog asks per
+  `vault.updateLinksOnRename` (`ask | always | never`), dirty tabs are
+  patched in the buffer. Wikilink grammar + resolver live in
+  `shared/wikilinks.ts` (the backlinks plugin keeps its twin)
 - `DocHistoryService` (`src/app/services/doc-history.service.ts`,
   milestone 55) — one global, pointer-based back/forward history of the
   documents viewed this session (VS Code model over any number of
@@ -510,7 +526,7 @@ Renderer (Angular):
   inserts, ADR-0022), "LLM", "MCP", "Panels & plugins" (`widgets.disabled` +
   `plugins.disabled` + each discovered plugin's live status),
   "Spelling", "Vault" (`vault.watch`, the opt-in external-change
-  watcher, ADR-0045) — then **plugin-contributed categories** (sorted by
+  watcher, ADR-0045; `vault.updateLinksOnRename`, ADR-0059) — then **plugin-contributed categories** (sorted by
   label) before "About" and rendered through
   `PluginSettingsHost` (shared form vocabulary `plugin-settings.css`,
   author guide `plugins/AUTHORING.md`), saving immediately rather than
@@ -707,7 +723,7 @@ packaging verified — see `docs/07_deployment_view.md`).
 closed 2026-10-10). This file does not restate them — the per-milestone
 record is:
 
-- [specs/changelog.md](specs/changelog.md) — milestones 22–58, newest
+- [specs/changelog.md](specs/changelog.md) — milestones 22–59, newest
   first, plus requirements and fixes
 - [docs/milestones-done.md](docs/milestones-done.md) — the archived
   build log, milestones 1–27
@@ -723,14 +739,14 @@ Open work and its order live in [specs/roadmap.md](specs/roadmap.md)
 ("Next milestones") — that list is binding; keep this summary in step
 with it.
 
-- **Last completed:** milestone 58 — the assistant manages the template
-  library (SDK 1.14).
+- **Last completed:** milestone 59 — links survive a rename / move
+  (ADR-0059) + quick switcher / command palette. Code-complete, owner
+  verification pending.
 - **Next, in order:**
-  1. Wikilink update on rename/move + a quick switcher / command palette
-  2. Conflict dialog for external changes + local snapshots
-  3. MCP client (Req-31) with unified assistant tool gating — the vehicle
+  1. Conflict dialog for external changes + local snapshots
+  2. MCP client (Req-31) with unified assistant tool gating — the vehicle
      for web search in the assistant
-  4. draw.io (req-19), then the Office remainder of Req-2 (needs a
+  3. draw.io (req-19), then the Office remainder of Req-2 (needs a
      rendering strategy discussion first)
 
 A milestone that is code-complete but not yet verified by the owner is

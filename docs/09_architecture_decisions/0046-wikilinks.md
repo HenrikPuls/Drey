@@ -114,3 +114,12 @@ never created — the same no-mint rule as the entry drawer. The wikilink
 syntax still cannot name a vault; when two vaults hold the same relative
 path, the active one wins, and labels (the summary's Sources lines)
 carry the vault name as the only disambiguator.
+
+## Addendum (milestone 59, ADR-0059) — grammar and resolver in `shared/`
+
+The wikilink regex (`extractWikilinks`) and the resolution
+(`buildNoteIndex` / `resolveNoteTarget`) moved from
+`src/app/editor/wikilinks/` to `shared/wikilinks.ts`, because the main
+process needs the same definition to rewrite links on a rename / move.
+`WikilinkService` and the editor decorations import it; behaviour is
+unchanged. The backlinks plugin keeps its parity-tested twin.

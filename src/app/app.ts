@@ -3,6 +3,8 @@ import { formatDate } from '../../shared/timestamp';
 import { ImageLightbox } from './image-viewer';
 import { ConfirmationDialog } from './confirmation-dialog/confirmation-dialog';
 import { ConfirmDialog } from './confirm-dialog/confirm-dialog';
+import { LinkUpdateDialog } from './link-update';
+import { Palette, PaletteService } from './palette';
 import { ExitConfirmDialog } from './exit-confirm-dialog/exit-confirm-dialog';
 import { ExternalOpenService } from './external-open';
 import { SessionService } from './session';
@@ -50,6 +52,8 @@ import { EditorContextMenuRegistry } from './plugin-host';
     PaneLayout,
     Settings,
     ConfirmationDialog,
+    LinkUpdateDialog,
+    Palette,
     ConfirmDialog,
     ExitConfirmDialog,
     ImageLightbox,
@@ -285,6 +289,72 @@ export class App {
       label: 'Toggle full screen',
       keybinding: 'F11',
       run: () => windowChrome.toggleFullScreen(),
+    });
+
+    // The quick switcher / command palette (milestone 59): one overlay,
+    // opened on its file list or -- with a leading `>` -- its command list.
+    const palette = inject(PaletteService);
+    keys.register({
+      id: 'palette.files',
+      label: 'Go to file…',
+      keybinding: 'Mod+P',
+      run: () => palette.show('files'),
+    });
+    keys.register({
+      id: 'palette.commands',
+      label: 'Command palette…',
+      keybinding: 'Mod+Shift+P',
+      run: () => palette.show('commands'),
+    });
+
+    // Actions that so far lived only in a menu row or a button -- registered
+    // as commands so the palette can list them.
+    keys.register({
+      id: 'settings.open',
+      label: 'Open settings',
+      keybinding: 'Mod+,',
+      run: () => {
+        // Re-opening would re-seed the draft and drop unsaved changes.
+        if (!this.settings.screenOpen()) {
+          this.settings.openScreen();
+        }
+      },
+    });
+    keys.register({
+      id: 'layout.reset',
+      label: 'Reset layout',
+      run: () => {
+        this.dock.reset();
+        this.panes.resetRegions();
+      },
+    });
+    keys.register({
+      id: 'vault.refresh',
+      label: 'Refresh vault',
+      run: () => void this.vault.refresh(),
+    });
+    keys.register({
+      id: 'daily.today',
+      label: 'Open today’s daily note',
+      run: () => void this.editor.openDailyNote(formatDate(new Date())),
+    });
+    keys.register({
+      id: 'editor.toggleSource',
+      label: 'Toggle source mode',
+      run: () => {
+        if (this.editor.activeKind() === 'text' && this.editor.isMarkdown(this.editor.activePath())) {
+          this.editor.setViewMode(this.editor.viewMode() === 'source' ? 'live' : 'source');
+        }
+      },
+    });
+    keys.register({
+      id: 'note.exportPdf',
+      label: 'Export as PDF…',
+      run: () => {
+        if (this.editor.activeKind() === 'text' && this.editor.isMarkdown(this.editor.activePath())) {
+          void this.editor.exportPdf();
+        }
+      },
     });
 
   }
