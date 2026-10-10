@@ -10,6 +10,7 @@
 import type { ChangeSpec } from '@codemirror/state';
 import type { EditorView } from '@codemirror/view';
 import type { CodeMirrorModules } from '../../../shared/plugin-api/renderer';
+import { syncCompletionDateOnLineText } from '../shared/tasks.js';
 
 const TASK_RE = /^(\s*(?:[-*+]|\d+[.)])\s+)\[( |x|X)\]\s/;
 const LIST_RE = /^(\s*(?:[-*+]|\d+[.)])\s+)/;
@@ -33,7 +34,59 @@ export function taskToggleExtension(cm: CodeMirrorModules): unknown {
   const modEnter = cm.view.keymap.of([
     { key: 'Mod-Enter', run: (view) => toggleTaskDone(cm, view) },
   ]);
-  return [trackFocus, modEnter];
+  return [trackFocus, modEnter, completionDateSync(cm)];
+}
+
+/**
+ * Keeps the completion date in step with every editor checkbox toggle
+ * (57d): `Mod+Enter` here and the base Live Preview checkbox click both
+ * tag their transaction `input.toggleTask…`; this filter appends the
+ * `✅ today` stamp (or its removal) to that same transaction, so the flip
+ * and the date are one undo step — the same line shape the Tasks panel's
+ * row toggle writes through `setDoneOnLine`.
+ */
+function completionDateSync(cm: CodeMirrorModules): unknown {
+  return cm.state.EditorState.transactionFilter.of((tr) => {
+    if (!tr.docChanged || !tr.isUserEvent('input.toggleTask')) {
+      return tr;
+    }
+    const changes: ChangeSpec[] = [];
+    const seen = new Set<number>();
+    tr.changes.iterChangedRanges((_fromA, _toA, fromB, toB) => {
+      const first = tr.newDoc.lineAt(fromB).number;
+      const last = tr.newDoc.lineAt(toB).number;
+      for (let n = first; n <= last; n++) {
+        if (seen.has(n)) {
+          continue;
+        }
+        seen.add(n);
+        const line = tr.newDoc.line(n);
+        const next = syncCompletionDateOnLineText(line.text);
+        if (next === line.text) {
+          continue;
+        }
+        // The minimal splice, so the caret keeps its place on the line.
+        let prefix = 0;
+        const max = Math.min(line.text.length, next.length);
+        while (prefix < max && line.text[prefix] === next[prefix]) {
+          prefix++;
+        }
+        let suffix = 0;
+        while (
+          suffix < max - prefix &&
+          line.text[line.text.length - 1 - suffix] === next[next.length - 1 - suffix]
+        ) {
+          suffix++;
+        }
+        changes.push({
+          from: line.from + prefix,
+          to: line.to - suffix,
+          insert: next.slice(prefix, next.length - suffix),
+        });
+      }
+    });
+    return changes.length === 0 ? tr : [tr, { changes, sequential: true }];
+  });
 }
 
 /** Toggles the task boxes on the selected line(s) of `view`. */

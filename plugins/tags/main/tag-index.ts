@@ -45,6 +45,21 @@ export interface SectionRecord {
 
 const ALWAYS_EXCLUDED_PREFIX = 'templates/';
 
+/**
+ * Path prefixes kept out of the index (and the tag rename): the literal
+ * `templates/` plus the configured templates folder when it differs.
+ */
+export function indexExcludedPrefixes(templatesDir: string): string[] {
+  const raw = (templatesDir ?? '').trim().replace(/^\/+|\/+$/g, '');
+  const configured = raw === '' ? ALWAYS_EXCLUDED_PREFIX : `${raw}/`;
+  return Array.from(new Set([ALWAYS_EXCLUDED_PREFIX, configured]));
+}
+
+/** Whether a vault-relative path sits under an excluded prefix. */
+export function isIndexExcludedPath(path: string, templatesDir: string): boolean {
+  return indexExcludedPrefixes(templatesDir).some((prefix) => path.startsWith(prefix));
+}
+
 /** One vault's index: files → their section records, with its own sweep state. */
 class VaultIndex {
   /**
@@ -74,9 +89,7 @@ class VaultIndex {
 
   /** Path prefixes whose files are kept out of the index. */
   private excludedPrefixes(): string[] {
-    const raw = (this.getTemplatesDir?.() ?? '').trim().replace(/^\/+|\/+$/g, '');
-    const configured = raw === '' ? ALWAYS_EXCLUDED_PREFIX : `${raw}/`;
-    return Array.from(new Set([ALWAYS_EXCLUDED_PREFIX, configured]));
+    return indexExcludedPrefixes(this.getTemplatesDir?.() ?? '');
   }
 
   private isExcluded(path: string): boolean {
@@ -249,12 +262,21 @@ export class TagIndex {
   /** `{ tag, count }` for every known tag across ALL vaults, most-used first, then alphabetical. */
   getVocabulary(): TagEntry[] {
     const counts = new Map<string, number>();
-    for (const index of this.byVault.values()) {
-      index.getVocabulary(counts);
+    for (const vaultId of this.byVault.keys()) {
+      this.byVault.get(vaultId)?.getVocabulary(counts);
     }
-    return [...counts.entries()]
-      .map(([tag, count]) => ({ tag, count }))
-      .sort((a, b) => b.count - a.count || a.tag.localeCompare(b.tag));
+    return sortedVocabulary(counts);
+  }
+
+  /**
+   * `{ tag, count }` for ONE vault's tags (milestone 53 — the rename /
+   * merge UI's per-vault list), same ordering. A vault without an index
+   * (not yet built) contributes nothing.
+   */
+  vocabularyFor(vaultId: string): TagEntry[] {
+    const counts = new Map<string, number>();
+    this.byVault.get(vaultId)?.getVocabulary(counts);
+    return sortedVocabulary(counts);
   }
 
   /**
@@ -295,4 +317,10 @@ function recordsFor(path: string, content: string): SectionRecord[] {
     ...record,
     tags: [...record.tags],
   }));
+}
+
+function sortedVocabulary(counts: ReadonlyMap<string, number>): TagEntry[] {
+  return [...counts.entries()]
+    .map(([tag, count]) => ({ tag, count }))
+    .sort((a, b) => b.count - a.count || a.tag.localeCompare(b.tag));
 }

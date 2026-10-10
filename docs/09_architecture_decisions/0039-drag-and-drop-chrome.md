@@ -18,9 +18,8 @@ Two press-then-promote drag gestures existed, built independently:
 - **`TabBar`** (editor tab) called `PaneService.moveToPane` on *every*
   `mousemove`, so the tab list mutated live. No drag image, no drop
   indicator, no invalid-target feedback, no ESC / window-blur cancel, and
-  it set `body { user-select: none }` **without** the `data-drey-gesture`
-  marker that `InputRecoveryService`'s watchdog (ADR-0032) reads — so a
-  slow drag could be "recovered" out from under the user.
+  it set `body { user-select: none }` without any coordination, so a slow
+  drag fought the since-removed input-recovery watchdog (ADR-0032).
 
 ## Decision
 
@@ -37,8 +36,7 @@ gestures.**
     single `elementFromPoint` call.
   - The **ghost** chip that follows the cursor (`.dock-drag-ghost` /
     `.tab-drag-ghost`, styled in `src/styles.css`).
-  - `<body>` gets `user-select: none`, a cursor, and
-    `data-drey-gesture` — the watchdog contract, set for the whole gesture
+  - `<body>` gets `user-select: none` and a cursor for the whole gesture
     including while the cursor is `no-drop`.
 - **`TabDragService` (`src/app/tab-bar/tab-drag.service.ts`)** — the
   tab-side analogue of `DockService`'s gesture ownership. `TabBar` reports
@@ -70,9 +68,9 @@ gestures.**
   show `no-drop`, and nothing underneath reacts to the pointer.
 - The tab move is now atomic and cancellable; `PaneService.moveToPane` is
   called exactly once per drop (or never).
-- `InputRecoveryService`'s watchdog no longer races the tab drag — the
-  `data-drey-gesture` marker is set for the whole gesture, and a lost
-  `mouseup` (Alt-Tab) is caught by the `window` `blur` handler.
+- A lost `mouseup` (Alt-Tab) is caught by the `window` `blur` handler.
+  (The `data-drey-gesture` watchdog marker this ADR originally specified
+  went away with the watchdog itself — see ADR-0032's later-change note.)
 - A dock panel drag has no `no-drop` state — every position resolves to a
   dock, by design (unchanged).
 - The shared `src/app/dnd/` overlay is the natural place to hang the pane

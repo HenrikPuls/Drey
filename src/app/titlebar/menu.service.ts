@@ -16,6 +16,7 @@ import {
   type ContributableMenu,
 } from '../plugin-host/menu-contributions.service';
 import { PaneService } from '../panes';
+import { DocHistoryService } from '../services/doc-history.service';
 import { EditorService } from '../services/editor.service';
 import { EditTargetService } from '../services/edit-target.service';
 import { SettingsService } from '../services/settings.service';
@@ -68,6 +69,7 @@ export class MenuService {
   private readonly dock = inject(DockService);
   private readonly panes = inject(PaneService);
   private readonly editor = inject(EditorService);
+  private readonly history = inject(DocHistoryService);
   private readonly editTarget = inject(EditTargetService);
   private readonly settings = inject(SettingsService);
   private readonly vault = inject(VaultService);
@@ -110,10 +112,15 @@ export class MenuService {
    * and not on whatever the menu click left focused. With no editor
    * focused (a native `<input>` in Settings, the entry topic field) fall
    * straight through to `webContents`.
+   *
+   * The right-click menu passes the view of the surface it was opened on
+   * (`target`) so the command lands there instead of on the last-focused
+   * pane editor -- plugin composer surfaces never register with
+   * `EditTargetService`, and a right-click must act where it clicked.
    */
-  execEdit(command: EditCommand): void {
+  execEdit(command: EditCommand, target?: EditorView | null): void {
     this.close();
-    const view = this.editTarget.view;
+    const view = target !== undefined ? target : this.editTarget.view;
     const api = typeof window !== 'undefined' ? window.dreyApi : undefined;
     if (view) {
       view.focus();
@@ -284,7 +291,6 @@ export class MenuService {
         this.editorRow('Duplicate selection', '', (view) => duplicateSelection(view)),
         this.editorRow('Move line up', 'Alt Up', moveLineUp),
         this.editorRow('Move line down', 'Alt Down', moveLineDown),
-        SEP,
         // "Toggle task done" is a Tasks-plugin menu contribution now.
         ...this.contributionRows('selection'),
       ],
@@ -293,6 +299,26 @@ export class MenuService {
       id: 'view',
       label: 'View',
       rows: [
+        {
+          kind: 'item',
+          label: 'Back',
+          hint: 'Alt Left',
+          run: this.history.canBack() ? () => this.run('doc.back') : undefined,
+        },
+        {
+          kind: 'item',
+          label: 'Forward',
+          hint: 'Alt Right',
+          run: this.history.canForward() ? () => this.run('doc.forward') : undefined,
+        },
+        { kind: 'item', label: 'Go to file…', hint: 'Ctrl P', run: () => this.run('palette.files') },
+        {
+          kind: 'item',
+          label: 'Command palette…',
+          hint: 'Ctrl Shift P',
+          run: () => this.run('palette.commands'),
+        },
+        SEP,
         {
           kind: 'item',
           label: 'Line numbers',
@@ -314,6 +340,12 @@ export class MenuService {
           checked: () => !this.dock.sideFolded('right'),
           run: () => this.run('dock.toggleRight'),
         },
+        SEP,
+        ...this.widgets
+          .widgets()
+          .filter((w) => w.removable && this.settings.widgetEnabled(w.id))
+          .map((w) => this.widgetRow(w.id, w.title)),
+        SEP,
         {
           kind: 'item',
           label: 'Full screen',
@@ -321,11 +353,6 @@ export class MenuService {
           checked: () => this.windowChrome.fullscreen(),
           run: () => this.run('window.toggleFullScreen'),
         },
-        ...this.widgets
-          .widgets()
-          .filter((w) => w.removable && this.settings.widgetEnabled(w.id))
-          .map((w) => this.widgetRow(w.id, w.title)),
-        SEP,
         {
           kind: 'item',
           label: 'Split editor right',
@@ -349,13 +376,6 @@ export class MenuService {
           label: 'Focus previous pane',
           hint: 'Shift F6',
           run: this.panes.paneIds().length > 1 ? () => this.run('pane.focusPrev') : undefined,
-        },
-        SEP,
-        {
-          kind: 'item',
-          label: 'Recover input focus',
-          hint: 'Ctrl Alt Shift R',
-          run: () => this.run('input.recover'),
         },
         {
           kind: 'item',

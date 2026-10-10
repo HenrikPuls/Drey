@@ -32,7 +32,11 @@ const PLAIN = ['# Plain notes', '', '## Groceries', '', 'Buy flat peaches and br
   '\n',
 );
 
-test.use({ seedVault: { 'sailing.md': TAGGED, 'plain.md': PLAIN } });
+const MERGE = ['# Merge note', '', '## Link list', '', 'Ref #alpha and #beta here.', ''].join('\n');
+
+test.use({
+  seedVault: { 'sailing.md': TAGGED, 'plain.md': PLAIN, 'merge.md': MERGE },
+});
 
 async function openSearchPanel(page: Page): Promise<void> {
   // The plugin's panel needs vertical room -- collapse the content-height
@@ -189,5 +193,62 @@ test.describe('Tags settings (prefix colors)', () => {
       const style = await pill.getAttribute('style');
       expect(style).toContain('#123456');
     }).toPass({ timeout: 10_000 });
+  });
+
+  test('rename rewrites the tag across the vault (milestone 53)', async ({ page, vaultDir }) => {
+    await page.locator('app-status-bar .settings').click();
+    await page.locator('app-settings .category', { hasText: 'Tags' }).click();
+    const pane = page.locator('app-settings .plugin-settings-body.tags-settings');
+
+    // The tag list lands when the index's boot sweep has finished.
+    const row = pane.locator('.tags-settings-tag-row', { hasText: 'sailing' });
+    await expect(row).toBeVisible({ timeout: 10_000 });
+    await row.locator('button', { hasText: 'Rename…' }).click();
+
+    const modal = page.locator('.plugin-modal.tags-rename-modal');
+    await expect(modal).toBeVisible();
+    await modal.locator('.tags-settings-rename-input').fill('segeln');
+    await modal.locator('button', { hasText: 'Preview' }).click();
+
+    const apply = modal.locator('button', { hasText: 'Rename' });
+    await expect(apply).toBeVisible();
+    await apply.click();
+    await expect(modal).toHaveCount(0);
+
+    // Both occurrences in the file on disk are rewritten.
+    await expect
+      .poll(() => fs.readFileSync(path.join(vaultDir, 'sailing.md'), 'utf-8'))
+      .toContain('#segeln');
+    const content = fs.readFileSync(path.join(vaultDir, 'sailing.md'), 'utf-8');
+    expect(content).not.toContain('#sailing');
+  });
+
+  test('a merge drops the duplicate it would create (milestone 53)', async ({ page, vaultDir }) => {
+    await page.locator('app-status-bar .settings').click();
+    await page.locator('app-settings .category', { hasText: 'Tags' }).click();
+    const pane = page.locator('app-settings .plugin-settings-body.tags-settings');
+
+    const row = pane.locator('.tags-settings-tag-row', { hasText: 'alpha' });
+    await expect(row).toBeVisible({ timeout: 10_000 });
+    await row.locator('button', { hasText: 'Rename…' }).click();
+
+    const modal = page.locator('.plugin-modal.tags-rename-modal');
+    await expect(modal).toBeVisible();
+    await modal.locator('.tags-settings-rename-input').fill('beta');
+    await modal.locator('button', { hasText: 'Preview' }).click();
+
+    // The target exists — the modal switches to merge wording.
+    await expect(modal.locator('.tag-search-modal-title')).toHaveText(/Merge #alpha into #beta/);
+    await modal.locator('button', { hasText: 'Merge' }).click();
+    await expect(modal).toHaveCount(0);
+
+    // One #beta token stays (the newcomer position wins, prose untouched);
+    // #alpha is gone.
+    await expect
+      .poll(() => fs.readFileSync(path.join(vaultDir, 'merge.md'), 'utf-8'))
+      .toContain('Ref #beta and here.');
+    const content = fs.readFileSync(path.join(vaultDir, 'merge.md'), 'utf-8');
+    expect(content).not.toContain('#alpha');
+    expect(content.match(/#beta/g)?.length).toBe(1);
   });
 });

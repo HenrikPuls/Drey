@@ -42,6 +42,14 @@ export type {
   TextMatchOptions,
 } from './search-types';
 export type { SectionSearchScope } from './main-plugin-api';
+export type { InlineSegment, InlineLinkSegment, InlineTextSegment } from './plugin-api';
+export type {
+  SdkTaskRecord,
+  TaskQueryOptions,
+  TaskQueryProvider,
+  TaskQuerySort,
+  TaskQueryStatus,
+} from './main-plugin-api';
 
 export type {
   ActiveDocument,

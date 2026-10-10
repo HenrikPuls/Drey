@@ -22,40 +22,28 @@
   border-bottom: 1px solid var(--border);
 }
 
-/* Chat selector (title opens the picker, + starts a new chat). */
+/* Chat selector (icon-only controls, ADR-0057, + the active chat's muted
+   title label, 57e — the list button opens the chat picker, + starts a
+   new chat). */
 .assistant-head .chat-head {
   flex: 1;
   min-width: 0;
   display: flex;
   align-items: center;
-  gap: 2px;
+  gap: 4px;
 }
 
-.assistant-head .chat-title {
+.assistant-head .chat-label {
   flex: 1;
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  text-align: left;
-  background: transparent;
-  border: none;
-  color: var(--text-primary);
-  font: inherit;
-  font-size: 12.5px;
-  padding: 3px 6px;
-  cursor: pointer;
-}
-
-.assistant-head .chat-title:hover {
-  background: var(--hover-bg);
-  border-radius: var(--radius);
-}
-
-.assistant-head .chat-title.fresh {
   color: var(--text-4);
+  font-size: 12px;
 }
 
+.assistant-head .chat-switch,
 .assistant-head .chat-new {
   flex: none;
   display: inline-flex;
@@ -70,6 +58,7 @@
   cursor: pointer;
 }
 
+.assistant-head .chat-switch:hover,
 .assistant-head .chat-new:hover {
   color: var(--text-primary);
   background: var(--hover-bg);
@@ -236,6 +225,192 @@
   color: var(--text-3);
 }
 
+/* Rich card bodies (SDK 1.11): the div replaces the plain <p> — block
+   Markdown inside, wikilinks + inline formatting as real nodes. */
+.assistant-thread div.card-body {
+  font-size: 12px;
+}
+
+.assistant-thread div.card-body p {
+  margin: 0 0 6px;
+}
+
+.assistant-thread div.card-body p:last-child {
+  margin-bottom: 0;
+}
+
+.assistant-thread div.card-body ul,
+.assistant-thread div.card-body ol {
+  margin: 0 0 6px;
+  padding-left: 18px;
+}
+
+.assistant-thread div.card-body li {
+  margin: 2px 0;
+}
+
+.assistant-thread .inline-code {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  background: var(--bg-input);
+  border-radius: var(--radius-xs);
+  padding: 0 3px;
+}
+
+/* Wikilinks in answers: accent, hover underline; unresolved = muted +
+   dotted (the editor's missing-note look) and a click creates the note. */
+.assistant-thread .chat-link {
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: var(--accent);
+  font: inherit;
+  cursor: pointer;
+}
+
+.assistant-thread .chat-link:hover {
+  color: var(--accent-hover);
+  text-decoration: underline;
+}
+
+.assistant-thread .chat-link.unresolved {
+  color: var(--text-6);
+  text-decoration: underline dotted;
+  text-underline-offset: 2px;
+}
+
+.assistant-thread .chat-link.unresolved:hover {
+  color: var(--text-5);
+}
+
+/* The interactive task block (SDK 1.11): a tasks_list tool result renders
+   as rows — checkbox, text, priority glyph, due badge — instead of the
+   raw tool chips. Same visual family as the tool chips. */
+.assistant-thread .task-block {
+  margin: 4px 0;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm, var(--radius-xs));
+  background: var(--bg-input);
+  font-size: 11px;
+  overflow: hidden;
+}
+
+.assistant-thread .task-block-head {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 7px;
+  color: var(--text-5);
+  border-bottom: 1px solid var(--border);
+}
+
+/* The filter chips a tasks_list call carried (57c): #tag · "text" · overdue. */
+.assistant-thread .task-block-filter {
+  margin-left: auto;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-4);
+}
+
+.assistant-thread .task-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 7px;
+  border-bottom: 1px solid var(--border);
+}
+
+.assistant-thread .task-row:last-child {
+  border-bottom: none;
+}
+
+.assistant-thread .task-check {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  width: 14px;
+  height: 14px;
+  padding: 0;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-xs);
+  background: transparent;
+  color: transparent;
+  cursor: pointer;
+}
+
+.assistant-thread .task-check:hover {
+  border-color: var(--accent);
+}
+
+.assistant-thread .task-check.checked {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--accent-contrast);
+}
+
+.assistant-thread .task-open {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: 1;
+  min-width: 0;
+  padding: 2px 0;
+  border: none;
+  background: transparent;
+  color: var(--text-2);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.assistant-thread .task-open:hover .task-text {
+  color: var(--text-primary);
+}
+
+.assistant-thread .task-row.done .task-text {
+  color: var(--text-6);
+  text-decoration: line-through;
+}
+
+.assistant-thread .task-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.assistant-thread .task-prio {
+  flex: none;
+  font-size: 10px;
+}
+
+.assistant-thread .task-due {
+  flex: none;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--text-5);
+}
+
+.assistant-thread .task-due.today {
+  color: var(--accent);
+}
+
+.assistant-thread .task-due.overdue {
+  color: var(--accent-hover);
+}
+
+.assistant-thread .task-block-error {
+  padding: 3px 7px;
+  color: var(--accent-hover);
+}
+
+.assistant-thread .task-block-empty,
+.assistant-thread .task-block-more {
+  padding: 3px 7px;
+  color: var(--text-6);
+}
+
 /* Question / answer read as a conversation: a thin accent rule instead of
    a filled bubble, which would fight the flat surfaces everywhere else. */
 .assistant-thread .card.q,
@@ -334,6 +509,19 @@
 .assistant-thread .context-cite:hover {
   color: var(--text-6, var(--text-4));
   text-decoration: underline;
+}
+
+/* A chip-on turn that retrieved nothing: the status chip reads muted, its
+   body carries the why (floor hint / disabled hint / error message). */
+.assistant-thread .context-chip.muted .tool-chip-summary {
+  color: var(--text-5);
+}
+
+.assistant-thread .context-hint {
+  color: var(--text-5);
+  font-size: 10.5px;
+  line-height: 1.5;
+  padding: 2px 0;
 }
 
 /* Attachment links on a user turn (the persisted link block). */
@@ -509,7 +697,13 @@
 
 .assistant-composer .composer-input .cm-content {
   font-size: 12.5px;
+  /* CM's base theme hardcodes a monospace face on `.cm-scroller`; a direct
+     rule here beats that inheritance and keeps the composer sans like the
+     rest of the panel. */
+  font-family: var(--font-sans);
   padding: 2px 0;
+  /* Same caret colour as the editor (neutral text, not the highlight/accent). */
+  caret-color: var(--text-primary);
 }
 
 /* CodeMirror's base theme hardcodes the placeholder to #888. */
@@ -568,26 +762,12 @@
 
 /* -- pickers (file + model; api.ui.showModal, centred overlay) ---------------
    The modal box (.plugin-modal) gets .assistant-picker-host added by the
-   panel; plugin CSS is global, so the assistant ships its own backdrop copy
-   (the templates plugin's copy only loads when that plugin is enabled). */
-.plugin-modal-backdrop {
-  position: fixed;
-  inset: 0;
-  z-index: var(--z-modal, 1000);
-  background: rgba(0, 0, 0, 0.35);
-  display: flex;
-  align-items: flex-start;
-  justify-content: center;
-  padding-top: 12vh;
-}
-
+   panel; backdrop + box chrome are base-owned (styles.css, .plugin-modal*),
+   so the host class only shapes the box — flush content, fixed width. */
 .plugin-modal.assistant-picker-host {
   width: min(440px, 90vw);
-  background: var(--surface-raised, var(--bg-bar, #222));
-  border: 1px solid var(--border-strong);
-  border-radius: 10px;
+  padding: 0;
   overflow: hidden;
-  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.45);
 }
 
 .assistant-picker {

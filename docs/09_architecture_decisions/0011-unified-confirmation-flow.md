@@ -101,8 +101,18 @@ applying one action's result never fires the on-save triggers again.
   per-note "Summarise note", [ADR-0012](0012-note-assistant-sidecar-thread.md).)_
 - _(Update: the `'document'` preview is now an **aligned split diff**, not
   two raw before/after dumps. `lineDiff` rows are context-collapsed
-  (`pad 4`) and then zipped into two-column rows — removed lines left,
+  (`pad 4`) and then zipped into two-column rows - removed lines left,
   added lines right, `empty` placeholder cells keeping every row's two
   halves structurally identical in size. The `'localized'` inline diff is
   unchanged. Same `ConfirmationRequest` shape; also reused by
   [ADR-0021](0021-mcp-vault-server.md) for MCP `vault_write` confirmations.)_
+- _(Later change, milestone 58: the assistant's `template_*` chat tools
+  (SDK 1.14) write and delete template-library files WITHOUT this
+  dialog. Templates are small structural content outside the tag index —
+  never the user's notes — and a delete lands in the OS recycle bin
+  (milestone 52's path, exposed to plugins as the new
+  `ctx.vault.delete`). `template_write` still refuses to overwrite
+  without an explicit `overwrite: true`, and the ask prompt tells the
+  model the write applies immediately. Vault notes keep their flows:
+  MCP `vault_write` confirms here, live edit runs behind the
+  [ADR-0049](0049-live-edit-mode.md) input lock.)_

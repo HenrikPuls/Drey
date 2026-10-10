@@ -67,9 +67,6 @@ export class PaneLayout {
     handle.setPointerCapture?.(event.pointerId);
     document.body.style.cursor = horizontal ? 'col-resize' : 'row-resize';
     document.body.style.userSelect = 'none';
-    // The input-recovery watchdog reads this marker: `user-select:none` on
-    // <body> is only legitimate while a gesture flag is set (ADR-0032).
-    document.body.setAttribute('data-drey-gesture', 'pane-splitter');
     // Hide any in-editor browser view for the drag -- its native bounds
     // trail the DOM by a frame otherwise (ADR-0042).
     this.layoutGesture.set('pane-splitter', true);
@@ -90,7 +87,6 @@ export class PaneLayout {
       window.removeEventListener('blur', up);
       document.body.style.cursor = '';
       document.body.style.userSelect = '';
-      document.body.removeAttribute('data-drey-gesture');
       this.layoutGesture.set('pane-splitter', false);
     };
     window.addEventListener('pointermove', move);

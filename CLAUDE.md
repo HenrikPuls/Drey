@@ -86,9 +86,11 @@ toolchain is removable by deleting `.tools/`). Never assume a bare `node`,
   The **tags plugin** (`plugins/tags/`) is the tag **data owner**: a
   per-vault index of *every* heading-delimited section (tagged or not —
   milestone 33, so text search reaches untagged notes), kept fresh through
-  the save/vault hook registries, plus the tag **prefix colors**
-  (Settings → Tags; longest `/`-namespace prefix wins, deterministic auto
-  palette otherwise). The tag **chrome is base**: editor pills +
+  the save/vault hook registries, plus the tag **prefix colors** and the
+  **tag rename/merge** (Settings → Tags; longest `/`-namespace prefix
+  wins, deterministic auto palette otherwise; the rename is a
+  grammar-faithful token rewrite over the M33 replace discipline,
+  descendants included by default, milestone 53). The tag **chrome is base**: editor pills +
   `#tag` completion (`src/app/editor/tags/`, fed by the base
   `TagVocabularyService` over `search:vocabulary` + `search:changed`) and
   a shared tag chip field (`TagField`, also handed to plugins as
@@ -130,6 +132,9 @@ toolchain is removable by deleting `.tools/`). Never assume a bare `node`,
   injected via `globalThis[Symbol.for('onnxruntime')]`), one JSON index
   per vault under `<userData>/plugins/assistant/semantic-index/` with
   brute-force cosine — no sqlite-vec, no native modules, no database.
+  **Chat notes are excluded** (`chats/` would embed the literal question
+  text of past conversations and displace the notes that answer them;
+  ADR-0055 later-change).
   Owned by the assistant plugin (its only consumer); retrieval hydrates
   section text fresh from the vault at answer time.
 - **Manual refresh, plus an opt-in watcher.** By default there is no file
@@ -150,7 +155,8 @@ toolchain is removable by deleting `.tools/`). Never assume a bare `node`,
   two plugin hosts) plus **runtime-loadable, in-process, trusted plugins**
   under `plugins/<id>/` — templates, meeting, tags, tasks, assistant
   (Assistant + Actions), browser, `ocr` (vision-LLM OCR, ADR-0050),
-  `outline` (the open note's heading tree, renderer-only), `sample`. Each is `plugin.json` +
+  `outline` (the open note's heading tree, renderer-only), `backlinks`
+  (the "what links here" panel, milestone 54), `sample`. Each is `plugin.json` +
   `main/` (CommonJS, Node) + `renderer/` (browser-context ESM + CSS over
   `plugin://`, **plain DOM**) + `shared/` types, built by
   `scripts/build-plugins.mjs` into `dist-electron/plugins/<id>/`.
@@ -223,7 +229,10 @@ Main process:
   **section-search provider** (the MCP `vault_search` backend)
 - The feature backends — `TagIndex`, `TaskIndex`, the assistant's
   ActionEngine (Actions) and ChatEngine/ChatStore (chat notes,
-  ADR-0048) — live in their plugins.
+  ADR-0048), the assistant's template tools (`template-tools.ts`,
+  milestone 58, over `ctx.vault.delete` — SDK 1.14's new plugin delete
+  seam), the backlinks `BacklinkIndex` (milestone 54) — live in
+  their plugins.
   `suggestTags` (the Autotag prompt) stayed base:
   `electron/llm/tag-suggest.ts`
 - `LmStudioClient` — HTTP client for the local OpenAI-compatible endpoint
@@ -273,7 +282,9 @@ Renderer (Angular):
   that sizes to its content rather than a flex share.
 - `TitlebarComponent` + `MenuBar` + `MenuService` (`src/app/titlebar/`) —
   the frameless-window titlebar: accent square, the left dock toggle,
-  the HTML File/Edit/Selection/View menu bar, the right dock toggle, and
+  the HTML File/Edit/Selection/View menu bar, the **back/forward arrows**
+  (milestone 55, right of the menu bar — `DocHistoryService`), the right
+  dock toggle, and
   — off macOS — minimize/maximize/close over the `window:*` IPC channels
   ([ADR-0019](docs/09_architecture_decisions/0019-movable-dock-panels-and-layout-state.md)).
   Menu rows dispatch three ways: `KeybindingService` command ids
@@ -297,12 +308,31 @@ Renderer (Angular):
   **Summarize** (when an LLM is configured), which streams a topic
   digest of the hits — via the plugin's `summarise` backend over the
   editable `builtin:search-summary` template — into an unsaved
-  `search-summary.md` scratch tab, cancellable (milestone 37). Panel +
+  `search-summary.md` scratch tab, cancellable (milestone 37). Next to
+  the scope switch a speech-bubble **Include chats** toggle: chat notes
+  (`chats/`) stay indexed but are left out of vault / all-vault hits —
+  and out of "Replace all" — unless it is on (off by default; the
+  document scope searches the open note as it is). Panel +
   toggle prefs persist in `localStorage['drey.search']`
 - Tasks panel — `plugins/tasks/` (DOM dock widget, ADR-0033):
   checkbox / `#task` lines in the open document, the whole vault, or all
   vaults (Doc | Vault | All scope toggle, milestone 34) · "hide done" · a
-  kind filter (persisted to `localStorage['drey.tasks']`). Document scope
+  kind filter · a sort cycle (file order | due | priority, milestone 51 —
+  due/priority sorts flatten the grouped view) — all persisted to
+  `localStorage['drey.tasks']`. Task lines carry **Obsidian-compatible
+  inline metadata** (req-37): a due `📅 YYYY-MM-DD` and a priority glyph
+  (`🔺`/`⏫`/`🔽`), parsed + stripped by the shared scanner into
+  `TaskRecord.due`/`TaskRecord.priority` (so `resolveTaskLine`'s
+  text+kind matching never sees them; `specs/frontmatter-schema.md`,
+  ADR-0033 later-change). Rows show a due badge (overdue/today colored)
+  + the glyph — both are buttons that re-open their picker at the badge
+  and write back through the shared `applyToTaskLine` routing; editor
+  completion on task lines (`due`/`fällig` with a native date-picker
+  popover defaulting to today, `prio`/`priority` with the glyph list)
+  and a plain click on a token chip re-opens the same pickers in place —
+  `task-meta.ts` over the host's markdown language data (options ride
+  `filter: false`, else CM's label fuzzy-matcher drops the
+  emoji-prefixed labels). Document scope
   scans the live editor buffer through the document API; vault/all scope
   calls the plugin's `backend.invoke('list', …)` over its **per-vault
   index** (every record stamped `vaultId`; vault scope filters to the
@@ -332,11 +362,15 @@ Renderer (Angular):
   raise the exit prompt — only the user's own notes do. (The old
   auto-summary sidecar feature was removed entirely — ADR-0012
   superseded; pre-existing `.{name}.chat.json` files stay on disk,
-  unread.) **Chats are bound to the active document**: a chat note's
-  `note:` frontmatter holds the doc key it was started under, the panel
-  follows tab switches (newest bound chat opens; a non-note focus resets
-  to a fresh chat), and the picker / new-chat button still allow manual
-  chats — honoured until the next document switch. A "Prompts" picker in
+  unread.) **Chat switching is explicit** (ADR-0048 later change): a
+  chat note's `note:` frontmatter records the doc key the chat was
+  started under (provenance + the picker's "this note" marker only — it
+  steers nothing), and the ONLY implicit panel switch is a focused
+  **chat-note tab** (opening a chat's Markdown from the vault hydrates
+  the panel with it). Every other focus — daily, meeting, topic note,
+  non-document — keeps exactly the current chat; at startup the newest
+  chat loads once. A chat otherwise changes through the picker or
+  "New chat". A "Prompts" picker in
   the composer inserts a prompt from `templates/prompts/*.md`
   (`# Titel` / `> Beschreibung` / body) into the composer for editing.
   Manual
@@ -369,11 +403,41 @@ Renderer (Angular):
   register from `App`. Commands: `search.open` (`Mod+Shift+F`),
   `note.new` (`Mod+N`), `note.save` (`Mod+S`), `note.saveAs`
   (`Mod+Shift+S`), `note.saveAll` (`Mod+Alt+S`),
-  `editor.toggleLineNumbers` (`Mod+G`), `window.toggleFullScreen` (`F11`,
+  `editor.toggleLineNumbers` (`Mod+G`), `doc.back` (`Alt+Left`) /
+  `doc.forward` (`Alt+Right`, the session document history over
+  `DocHistoryService`), `window.toggleFullScreen` (`F11`,
   OS fullscreen via `window:toggle-fullscreen`; the native menu's
   `togglefullscreen` role is deliberately absent — its F11 accelerator
   would swallow the key) — the titlebar menu invokes the
-  same ids
+  same ids; milestone 59 adds `palette.files` (`Mod+P`) /
+  `palette.commands` (`Mod+Shift+P`) and `settings.open` (`Mod+,`)
+- `PaletteService` + `Palette` (`src/app/palette/`, milestone 59) — the
+  quick switcher / command palette, one overlay: files of every vault
+  (fuzzy on name then path, session-visited documents first, `Ctrl+Enter`
+  opens beside the current tab, "Create note" on no match) or — behind
+  a leading `>` — every `KeybindingService` command with its shortcut
+- `LinkUpdateService` + `LinkUpdateDialog` (`src/app/link-update/`,
+  milestone 59, [ADR-0059](docs/09_architecture_decisions/0059-link-integrity-on-rename.md)) —
+  every Files-panel rename / move goes through `rename()`: main's
+  `LinkRewriter` (`electron/link-rewriter.ts`) plans over the pure
+  `shared/link-rewrite.ts` (a reference is rewritten only when what it
+  opened before differs from what the same text opens after; attachments
+  used only by a moved note travel with it), the dialog asks per
+  `vault.updateLinksOnRename` (`ask | always | never`), dirty tabs are
+  patched in the buffer. Wikilink grammar + resolver live in
+  `shared/wikilinks.ts` (the backlinks plugin keeps its twin)
+- `DocHistoryService` (`src/app/services/doc-history.service.ts`,
+  milestone 55) — one global, pointer-based back/forward history of the
+  documents viewed this session (VS Code model over any number of
+  panes; browser truncation of the forward branch; circular drop past
+  100 entries). An `effect` on `EditorService.activePath()` records
+  every activation; App `suspend()`s around the startup mass-opens and
+  `resume()` seeds the landed-on doc; `back()`/`forward()` walk the
+  pointer (serialized, `nav`-guarded), REOPEN closed vault/external
+  documents (`keepFocused`, never a clean-tab replace) and lazily prune
+  unrestorable entries (scratch tabs, plugin doc kinds). Purely
+  in-memory — nothing rides into the session snapshot; caret/scroll
+  restore rides the existing milestone-50 memory
 - `PaneService` (`src/app/panes/`, ADR-0037) — the split-view editor
   layout: an arbitrary tree of row/column splits down to leaf panes, each
   a `{ tabs, active }` record. `PaneLayout` renders the tree recursively
@@ -462,7 +526,7 @@ Renderer (Angular):
   inserts, ADR-0022), "LLM", "MCP", "Panels & plugins" (`widgets.disabled` +
   `plugins.disabled` + each discovered plugin's live status),
   "Spelling", "Vault" (`vault.watch`, the opt-in external-change
-  watcher, ADR-0045) — then **plugin-contributed categories** (sorted by
+  watcher, ADR-0045; `vault.updateLinksOnRename`, ADR-0059) — then **plugin-contributed categories** (sorted by
   label) before "About" and rendered through
   `PluginSettingsHost` (shared form vocabulary `plugin-settings.css`,
   author guide `plugins/AUTHORING.md`), saving immediately rather than
@@ -501,17 +565,17 @@ be called out explicitly (see Working Style below), not introduced silently.
   being the editor area above a **bottom dock** band — then a **28px
   status bar** (word/char count · context hint · Settings entry).
   - **Docks**: three (`left`, `right`, `bottom`), each an ordered list of
-    the eight panels — **Calendar, Files, Templates, Search, Tasks, Open
-    windows, Outline, Assistant** (the core ones registered by
-    the base; Templates/Search/Tasks/Assistant/Outline are provided by
-    plugins, ADR-0044). A
+    the nine panels — **Calendar, Files, Templates, Search, Tasks, Open
+    windows, Outline, Backlinks, Assistant** (the core ones registered by
+    the base; Templates/Search/Tasks/Assistant/Outline/Backlinks are
+    provided by plugins, ADR-0044). A
     panel is dragged between docks by its header, resized against its
     neighbour by a splitter, and collapsed to its 32px header. Every
     panel header is built the same way (sentence-case title + optional
     status value + the panel's icon controls + drag grip). Default:
-    Calendar/Files/Templates/Search/Tasks/Open windows/Outline left,
+    Calendar/Files/Templates/Search/Tasks/Open windows/Outline/Backlinks left,
     Assistant right, nothing in the bottom band, Templates + Search +
-    Tasks + Outline collapsed. Calendar takes its content height, not a
+    Tasks + Outline + Backlinks collapsed. Calendar takes its content height, not a
     flex share; expanded, its header is the **month/year dropdown**
     itself (no "Calendar" title) with **Today** (opens today's daily
     note) and the month arrows.
@@ -537,14 +601,19 @@ be called out explicitly (see Working Style below), not introduced silently.
     the editor (Live Preview ⇄ source via the `⋯` menu — no toggle
     buttons; see ADR-0008/0009), then the **bottom dock** band (empty by
     default). Capture is the `/` menu's **Entry** block.
-  - **Assistant panel**: chat-first head (chat-title picker + a "+"
-    icon for a new chat), turn cards with collapsible tool chips, a
+  - **Assistant panel**: chat-first head (the active chat's title as a
+    muted label + a chat-list button opening the chat picker + a "+"
+    icon for a new chat; the title is model-named — 57e's background
+    naming call rewrites the question placeholder after the first turn,
+    and the label re-renders live through the change rounds), turn cards
+    with collapsible tool
+    chips, a
     streamed partial answer while generating (the transcript follows the
     stream; scrolling up unpins), and the
     composer (context chips incl. images, auto-grow, and an icon tool
     row: Attach · Live edit · Vault context · Prompts · model picker).
-    The panel follows the focused document (each note's newest chat; a
-    non-note focus shows a fresh chat). No bottom chat bar.
+    The panel keeps its chat across focus switches (only a focused
+    chat-note tab or a picker/new-chat action changes it). No bottom chat bar.
   - **Settings**: a full-surface overlay opened from the status-bar entry
     — master-detail (category list on the left, detail pane on the
     right), core categories in alphabetical order (
@@ -562,8 +631,11 @@ be called out explicitly (see Working Style below), not introduced silently.
 - Editing model: true in-place Live Preview (Obsidian-style, ADR-0009) —
   the cursor sits in the rendered document, syntax markers reveal only
   around the selection, tables/images render as widgets that show their
-  raw Markdown while the selection is inside them. Source mode stays in
-  the `⋯` menu as the escape hatch, not a separate "edit mode".
+  raw Markdown while the selection is inside them; ArrowDown at the last
+  row of a document-ending table (ArrowUp at one starting line 1) opens
+  the missing line and steps out, so a table-only note stays editable.
+  Source mode stays in the `⋯` menu as the escape hatch, not a separate
+  "edit mode".
 - Revealed embed source is always visibly contained: whenever an embed's
   Markdown source is shown (via the corner **`</>` View source** button or
   by moving the caret in), its raw lines sit inside a rounded, bordered
@@ -645,128 +717,41 @@ and push details into the per-decision documents.
 The roadmap's Phase 1 (MVP) is complete, and the codebase has since been
 restructured into a **base application with runtime plugins** (milestone
 21, [ADR-0044](docs/09_architecture_decisions/0044-runtime-plugin-system.md);
-packaging verified — see `docs/07_deployment_view.md`), and editor panes
-can dock into the three docks (milestone 20,
-[ADR-0038](docs/09_architecture_decisions/0038-editor-panes-in-docks.md)).
-The milestone log lives in
-[docs/milestones-done.md](docs/milestones-done.md).
+packaging verified — see `docs/07_deployment_view.md`).
 
-**Just code-complete: milestone 48 — F11 full screen**: the
-`window.toggleFullScreen` command (`F11`) toggles OS fullscreen through
-`window:toggle-fullscreen`; the View menu's "Full screen" row shares the id
-and tracks the real state via the `window:fullscreen-changed` push; the
-native menu's `togglefullscreen` role is removed (its default F11
-accelerator would swallow the key). **Not yet manually verified by the
-owner.**
+**Milestones 1–58 are complete and owner-verified** (verification round
+closed 2026-10-10). This file does not restate them — the per-milestone
+record is:
 
-**Just code-complete: milestone 47 — foldable side docks**: two
-titlebar toggles (one above each dock) fold the left / right dock away as
-a whole (`dock.toggleLeft` `Ctrl+B`, `dock.toggleRight` `Ctrl+Alt+B`,
-View-menu rows); the dock stays mounted, so panel state survives, and it
-unfolds when one of its panels is revealed (ADR-0019 amendment). **Not
-yet manually verified by the owner.**
+- [specs/changelog.md](specs/changelog.md) — milestones 22–59, newest
+  first, plus requirements and fixes
+- [docs/milestones-done.md](docs/milestones-done.md) — the archived
+  build log, milestones 1–27
+- the ADRs and `docs/05` / `docs/06` for the lasting structure
 
-**Just code-complete: milestone 46 — editor snippets** (templates
-plugin): typing a trigger word — `tbl`, `code`, `task` or any
-user-defined one — offers a multi-line Markdown block with
-`${n:placeholder}` tabstops (`snippetCompletion`; Tab navigates fields
-while active, otherwise falls through to indentation). The library is
-user-owned app config (`templates.snippets`, seeded with the three
-built-ins), edited in Settings → Templates — every entry editable,
-removable, extendable. **Not yet manually verified by the owner.**
-
-**Just code-complete: milestone 45 — Autotag re-homing** (req-36): the
-editor `⋯` menu's **"Suggest tags"** row sends the caret's heading
-section (new pure helper `shared/note-sections.ts`) to the unchanged
-`tags:suggest` backend and applies the suggested tags to it directly —
-deduplicated, one undo step, saved. Errors surface in the editor's error
-row, with a "Suggesting tags…" meta-bar hint while the model answers.
-**Not yet manually verified by the owner.**
-
-**Just code-complete: milestone 43 — UI refinement**
-([ADR-0057](docs/09_architecture_decisions/0057-ui-refinement-icon-chrome-anthrazit-and-slash-capture.md)):
-sentence-case sans chrome with shared icon controls, the Anthrazit theme,
-one text-and-tag field in Search and Tasks, the sectioned slash menu
-(built-in Entry + templates with preview) replacing the removed "Add
-entry" panel, formatting buttons in the meta bar, in-place file
-create/rename and the calendar's Today button. **Not yet manually
-verified by the owner.** (Its open follow-up — Autotag had no button —
-is resolved by milestone 45.)
-
-**Just code-complete: milestone 41 — semantic vault retrieval, the
-assistant's Vault chip** ([ADR-0055](docs/09_architecture_decisions/0055-semantic-vault-retrieval.md)):
-the composer chip cycles `off → active vault → all vaults`; each ask
-retrieves the top-k similar note sections into the system prompt
-(transformers.js WASM-only in a worker — native deps stubbed — one JSON
-index per vault, no database; Settings → "Assistant retrieval"). **Not
-yet manually verified by the owner** — in particular first build (model
-download), retrieval quality on German daily notes, and the packaged
-`npm run pack` smoke (new asarUnpack entries).
-
-**Just code-complete: milestone 40 — word completion + the shared Markdown
-context detector** (`src/app/editor/word-completion/`,
-`src/app/editor/markdown-context.ts`: a third completion source repeating
-the document's own words — ≥ 3 chars, frequency-ranked, `boost: -30`, not
-on the Enter-submits composers — plus one shared caret-context detector
-that now also guards the tag/wikilink sources against code/frontmatter/
-link/HTML false positives; snippet completion announced as a follow-up,
-plugin-owned in the templates plugin). **Not yet manually verified by the
-owner.**
-
-**Just code-complete: milestone 39 — the Outline panel plugin (req-28)**
-(`plugins/outline/`, renderer-only: the open note's heading tree as a dock
-panel — collapsible levels, click to jump to the heading, caret-row
-highlight). **Not yet manually verified by the owner.**
-
-**Just code-complete: milestone 36 — Drey as an Explorer "Open with" /
-default program for Markdown and text** (installer `fileAssociations`;
-argv / `second-instance` → vault tab or pinned, in-place-saved external tab,
-[ADR-0054](docs/09_architecture_decisions/0054-opening-files-from-the-os.md)).
-**Not yet manually verified by the owner** — in particular the installed
-registration (`npm run pack`, then Explorer → Open with), which the
-automated tests cannot cover.
-
-**Also code-complete: milestone 34 — tasks across vaults + the editor's
-undo fix** (the tasks plugin mirrors the tags plugin's per-vault shape:
-Doc | Vault | All scope, `vaultId`-stamped records, vault badges; and a
-fresh CodeMirror state per first load / tab switch, so undo can no
-longer wipe a freshly opened tab). **Not yet manually verified by the
-owner.** Milestone 33 (tag system round: prefix colors, central tag
-completion, search fix + redesign), milestone 32 (beta-feedback batch
-II), milestone 28 (multi-vault,
-[ADR-0051](docs/09_architecture_decisions/0051-multi-vault-registry.md)),
-30 (PDF embeds + a PDF viewer tab,
-[ADR-0052](docs/09_architecture_decisions/0052-pdf-embeds-and-viewer.md))
-and 31 (feedback batch I) are code-complete and likewise awaiting manual
-verification. Milestone 28's announced M-B follow-up (search scopes,
-per-vault tags/tasks indexes, MCP `vault` arguments, tasks "all vaults"
-scope) is **fully shipped** as of milestones 33 + 34.
+(Milestone 44, the Task Center's `#task/id:` addressing, was reverted
+before release — ADR-0033 "considered and rejected"; the surviving piece
+is the ambiguity skip in `resolveTaskLine`.)
 
 ## Milestones
 
-The completed milestone log (1–27) is archived in
-[docs/milestones-done.md](docs/milestones-done.md); milestones 22–36 are
-summarized in [specs/changelog.md](specs/changelog.md) ("Recent
-milestones") until owner-verified.
+Open work and its order live in [specs/roadmap.md](specs/roadmap.md)
+("Next milestones") — that list is binding; keep this summary in step
+with it.
 
-- **Last completed:** milestone 32 — beta-feedback batch II, per
-  changelog. Milestones 25 (chats as vault notes), 26 (live edit mode),
-  27 (OCR), 28 (multi-vault) and 30 (PDF embeds + viewer tab) are
-  likewise code-complete and **still awaiting manual verification by
-  the owner**.
-- **Just code-complete:** milestones 33 (tag system round), 34
-  (tasks across vaults + undo fix), 35 (pinned tabs), 36 (open files
-  from the OS), 39 (Outline panel), 40 (word completion +
-  markdown-context detector), 41 (semantic vault retrieval), 43 (UI
-  refinement, ADR-0057), 45 (Autotag re-homing), 46 (editor
-  snippets), 47 (foldable side docks) and 48 (F11 full screen) — see
-  "Current State" above. (Milestone 44, the Task Center's `#task/id:`
-  addressing, was reverted before release — ADR-0033 "considered and
-  rejected"; the surviving piece is the ambiguity skip in
-  `resolveTaskLine`.)
-- **Next:** the provider program: Req-31 MCP client, then copilot-web
-  re-apply + copilot-cli spike, or the Office remainder of Req-2 (needs
-  a rendering strategy discussion first).
+- **Last completed:** milestone 59 — links survive a rename / move
+  (ADR-0059) + quick switcher / command palette. Code-complete, owner
+  verification pending.
+- **Next, in order:**
+  1. Conflict dialog for external changes + local snapshots
+  2. MCP client (Req-31) with unified assistant tool gating — the vehicle
+     for web search in the assistant
+  3. draw.io (req-19), then the Office remainder of Req-2 (needs a
+     rendering strategy discussion first)
+
+A milestone that is code-complete but not yet verified by the owner is
+marked "**Not yet manually verified by the owner**" in its changelog
+entry — not here.
 
 Pause after each milestone, show what works, don't push through several
 milestones in one uninterrupted stretch. (Milestones 10, 11, 15 and 19

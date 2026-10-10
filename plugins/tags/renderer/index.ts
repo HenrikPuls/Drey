@@ -7,7 +7,10 @@ import type {
   TagSearchQuery,
 } from '../../../shared/plugin-api/renderer';
 import {
+  buildSearchSummaryMaterial,
+  buildSearchSummarySources,
   buildTextMatcher,
+  filterChatHits,
   formatSearchResultsDoc,
   formatSearchSummaryHeader,
   patchContent,
@@ -29,9 +32,12 @@ interface SearchPrefs {
   wholeWord: boolean;
   regex: boolean;
   replaceOpen: boolean;
+  /** Vault / all scope: list hits from assistant chat notes (`chats/`) too. */
+  includeChats: boolean;
 }
 
 const DEFAULT_PREFS: SearchPrefs = {
+  includeChats: false,
   scope: 'vault',
   matchCase: false,
   wholeWord: false,
@@ -54,6 +60,7 @@ function loadPrefs(): SearchPrefs {
       wholeWord: parsed.wholeWord === true,
       regex: parsed.regex === true,
       replaceOpen: parsed.replaceOpen === true,
+      includeChats: parsed.includeChats === true,
     };
   } catch {
     return { ...DEFAULT_PREFS };
@@ -217,6 +224,24 @@ const plugin: PluginRendererModule = {
       void api.llm.cancelTask(task.taskId);
     };
 
+    /**
+     * The `## Sources` link section for the sections the digest covered.
+     * Vault names from the registry decorate the labels (links themselves
+     * resolve wherever the note lives); on failure the labels fall back
+     * to the raw vault ids.
+     */
+    const sourcesSection = async (included: number): Promise<string> => {
+      const vaultNames: Record<string, string> = {};
+      try {
+        for (const vault of await api.vault.listVaults()) {
+          vaultNames[vault.id] = vault.name;
+        }
+      } catch {
+        // Labels only — keep going with raw ids.
+      }
+      return buildSearchSummarySources(state.hits, included, vaultNames);
+    };
+
     const startSummary = (): void => {
       if (summaryTask !== null || state.hits.length === 0) {
         return;
@@ -255,11 +280,14 @@ const plugin: PluginRendererModule = {
           })) as SummariseReply;
           if (reply.kind === 'ok') {
             // The return value is authoritative — a lost delta cannot truncate the digest.
-            task.text = reply.text;
+            task.text = reply.text + (await sourcesSection(reply.included));
             if (reply.included < reply.total) {
               task.tail = `\n\n> Generated from ${reply.included} of ${reply.total} matching sections — the rest exceeded the content budget.`;
             }
           } else if (reply.kind === 'cancelled') {
+            // The covered hits are known regardless of the abort — their links stay useful.
+            task.text +=
+              await sourcesSection(buildSearchSummaryMaterial(currentQuery(), state.hits).included);
             task.tail = '\n\n_(cancelled)_';
           } else {
             task.tail = `\n\n_(failed: ${reply.message})_`;
@@ -395,7 +423,8 @@ const plugin: PluginRendererModule = {
                 ? { kind: 'vault', vaultId: activeVaultId }
                 : undefined;
           const diskHits = await api.search.searchSections(query, scope);
-          state.hits = withOpenBufferHits(diskHits, query);
+          // Chats stay indexed; the panel lists them only on request.
+          state.hits = filterChatHits(withOpenBufferHits(diskHits, query), prefs.includeChats);
           state.ran = true;
         }
       } catch (error) {
@@ -488,6 +517,7 @@ const plugin: PluginRendererModule = {
                 query: currentQuery(),
                 replacement: state.replacement,
                 scope: prefs.scope === 'all' ? { kind: 'all' } : undefined,
+                excludeChats: !prefs.includeChats,
               })) as { error?: string };
               if (result?.error !== undefined) {
                 state.error = result.error;
@@ -510,6 +540,7 @@ const plugin: PluginRendererModule = {
           query: currentQuery(),
           replacement: state.replacement,
           scope: prefs.scope === 'all' ? { kind: 'all' } : undefined,
+          excludeChats: !prefs.includeChats,
         })) as ReplacePreview;
         if (!preview.ok || preview.ops === undefined) {
           state.error = preview.error ?? 'Replace preview failed.';
@@ -630,16 +661,29 @@ const plugin: PluginRendererModule = {
           return btn;
         });
 
+        // Chat transcripts repeat the questions asked of them, so they stay
+        // out of a vault search unless asked for. The file scope searches
+        // the open document as it is — a focused chat note included.
+        const chatsBtn = iconButton('message-circle', 'Include chats', () => {
+          prefs.includeChats = !prefs.includeChats;
+          persistPrefs();
+          notify();
+          void run();
+        });
+
         const render = (): void => {
           for (const btn of buttons) {
             const on = btn.dataset['scope'] === prefs.scope;
             btn.classList.toggle('on', on);
             btn.setAttribute('aria-selected', String(on));
           }
+          chatsBtn.classList.toggle('on', prefs.includeChats);
+          chatsBtn.setAttribute('aria-pressed', String(prefs.includeChats));
+          chatsBtn.disabled = prefs.scope === 'file';
         };
         render();
         listeners.add(render);
-        host.appendChild(seg);
+        host.append(seg, chatsBtn);
         return () => {
           listeners.delete(render);
         };

@@ -3,6 +3,7 @@ import type {
   MainPluginModule,
   SectionSearchProvider,
   SectionSearchScope,
+  TagEntry,
 } from '../../../shared/plugin-api';
 import { SEARCH_SUMMARY_PROMPT } from '../../../shared/config/schema';
 import type { ChatMessage } from '../../../shared/llm';
@@ -10,9 +11,15 @@ import { TAG_AUTO_PALETTE, normalizeTagPrefix } from '../../../shared/tag-style'
 import type { TagPrefixStyle } from '../../../shared/tag-style';
 import { diffStats, lineDiff } from '../../../shared/text-diff';
 import type { DiffRow } from '../../../shared/text-diff';
-import { buildSearchSummaryMaterial, buildTextMatcher, patchContent } from '../shared/search';
+import {
+  buildSearchSummaryMaterial,
+  buildTextMatcher,
+  filterChatHits,
+  patchContent,
+} from '../shared/search';
 import type { TagSearchHit, TagSearchQuery } from '../shared/search';
-import { TagIndex } from './tag-index';
+import { normalizeTagName, renameTagInContent } from '../shared/rename';
+import { TagIndex, isIndexExcludedPath } from './tag-index';
 
 /**
  * The Tags plugin's main entry (ADR-0017, converted in ADR-0044 stage 5,
@@ -21,7 +28,9 @@ import { TagIndex } from './tag-index';
  * registers the section-search provider that MCP's `vault_search`, the
  * SDK's `api.search` and the base tag vocabulary service read. Also owns
  * the tag prefix colors (Settings → Tags, per-plugin config), the
- * cross-file replace backend, and the search-result summarise backend
+ * cross-file replace backend, the tag rename / merge backend
+ * (milestone 53, Settings → Tags over the same TOCTOU/CRLF discipline),
+ * and the search-result summarise backend
  * (milestone 37 — the panel's "Summarize" button; the call runs main-side
  * because the editable `builtin:search-summary` prompt lives in app
  * config, and streaming/cancellation ride the plugin event + task
@@ -170,6 +179,11 @@ const plugin: MainPluginModule = {
       scope?: SectionSearchScope;
       /** Narrow the operation to these files (per-hit / per-file replace). */
       files?: readonly { vaultId: string; path: string }[];
+      /**
+       * Leave chat notes alone — the panel's "Include chats" toggle is off,
+       * so a replace must not rewrite files the result list never showed.
+       */
+      excludeChats?: boolean;
     }
 
     interface ReplaceOpDto {
@@ -197,7 +211,10 @@ const plugin: MainPluginModule = {
         // An invalid regex is a user-facing message, not an exception diet.
         throw new Error(matcher.error);
       }
-      const hits = index.search(query, request.scope, await activeVaultId());
+      const hits = filterChatHits(
+        index.search(query, request.scope, await activeVaultId()),
+        request.excludeChats !== true,
+      );
       const wanted = new Set((request.files ?? []).map((f) => `${f.vaultId} ${f.path}`));
 
       const groups = new Map<string, { vaultId: string; path: string }>();
@@ -272,6 +289,171 @@ const plugin: MainPluginModule = {
             content.replace(/\r\n/g, '\n'),
             query,
             request.replacement ?? '',
+          );
+          if (patch === null || patch.after === patch.before) {
+            continue;
+          }
+          const restored = crlf ? patch.after.replace(/\n/g, '\r\n') : patch.after;
+          await ctx.vault.writeAnnounced(op.path, restored, { vaultId: op.vaultId });
+          applied.push({ vaultId: op.vaultId, path: op.path, occurrences: patch.occurrences });
+        }
+      } catch (e) {
+        error = e instanceof Error ? e.message : String(e);
+      }
+      return { applied, ...(error !== undefined ? { error } : {}) };
+    });
+
+    // -- Tag rename / merge (Settings → Tags, milestone 53) -------------------
+
+    /** `tag-list` reply: the vault registry plus each vault's vocabulary. */
+    ctx.ipc.handle('tag-list', async () => {
+      const vaults = await ctx.vault.listVaults();
+      const tags: Record<string, TagEntry[]> = {};
+      for (const vault of vaults) {
+        tags[vault.id] = index.vocabularyFor(vault.id);
+      }
+      return { vaults, tags };
+    });
+
+    interface RenameRequest {
+      from?: string;
+      to?: string;
+      includeDescendants?: boolean;
+      vaults?: string[];
+    }
+
+    interface RenameOpDto {
+      vaultId: string;
+      path: string;
+      /** Tag tokens rewritten (merged-away duplicates included). */
+      occurrences: number;
+      added: number;
+      removed: number;
+      diff: DiffRow[];
+    }
+
+    type ValidRename = {
+      ok: true;
+      from: string;
+      to: string;
+      includeDescendants: boolean;
+      vaultIds: string[];
+    };
+
+    /** Validates the request against the registry, or says why not. */
+    const renameOf = async (request: RenameRequest): Promise<ValidRename | { ok: false; error: string }> => {
+      const from = normalizeTagName(typeof request.from === 'string' ? request.from : '');
+      const to = normalizeTagName(typeof request.to === 'string' ? request.to : '');
+      if (from === null) {
+        return { ok: false, error: 'The tag to rename is not a valid tag name.' };
+      }
+      if (to === null) {
+        return { ok: false, error: 'The new name is not a valid tag name (and "task" is reserved).' };
+      }
+      if (to === from) {
+        return { ok: false, error: 'The new name is the same as the old one.' };
+      }
+      const vaults = await ctx.vault.listVaults();
+      const wanted = new Set(Array.isArray(request.vaults) ? request.vaults : []);
+      const vaultIds = vaults.filter((v) => wanted.size === 0 || wanted.has(v.id)).map((v) => v.id);
+      if (vaultIds.length === 0) {
+        return { ok: false, error: 'No vault is selected.' };
+      }
+      return {
+        ok: true,
+        from,
+        to,
+        includeDescendants: request.includeDescendants !== false,
+        vaultIds,
+      };
+    };
+
+    /**
+     * The rename ops over every selected vault: templates folders are
+     * skipped (same exclusion as the index), each file is read and patched
+     * fresh — the same TOCTOU stance as the text replace.
+     */
+    const computeRenameOps = async (request: RenameRequest): Promise<ValidRename & { ops: RenameOpDto[] }> => {
+      const rename = await renameOf(request);
+      if (!rename.ok) {
+        throw new Error(rename.error);
+      }
+      const templatesDir = ctx.appConfig.get().templates.dir;
+      const ops: RenameOpDto[] = [];
+      for (const vaultId of rename.vaultIds) {
+        let paths: readonly string[];
+        try {
+          paths = await ctx.vault.listMarkdownFiles({ vaultId });
+        } catch {
+          continue; // Vault gone or unreadable — nothing to rename there.
+        }
+        for (const path of paths) {
+          if (isIndexExcludedPath(path, templatesDir)) {
+            continue;
+          }
+          let content: string;
+          try {
+            content = await ctx.vault.read(path, { vaultId });
+          } catch {
+            continue;
+          }
+          const patch = renameTagInContent(
+            content.replace(/\r\n/g, '\n'),
+            rename.from,
+            rename.to,
+            rename.includeDescendants,
+          );
+          if (patch === null) {
+            continue;
+          }
+          ops.push({
+            vaultId,
+            path,
+            occurrences: patch.occurrences,
+            ...diffStats(patch.before, patch.after),
+            diff: lineDiff(patch.before, patch.after),
+          });
+        }
+      }
+      return { ...rename, ops };
+    };
+
+    ctx.ipc.handle('rename-preview', async (payload) => {
+      const request = (payload ?? {}) as RenameRequest;
+      try {
+        const { ops, to } = await computeRenameOps(request);
+        // "Merge" = the target tag already exists in a touched vault.
+        const merged = ops.some((op) =>
+          index.vocabularyFor(op.vaultId).some((t) => t.tag === to),
+        );
+        return { ok: true as const, ops, ...(merged ? { merged: true as const } : {}) };
+      } catch (error) {
+        return { ok: false as const, error: error instanceof Error ? error.message : String(error) };
+      }
+    });
+
+    ctx.ipc.handle('rename-apply', async (payload) => {
+      const request = (payload ?? {}) as RenameRequest;
+      const applied: Array<{ vaultId: string; path: string; occurrences: number }> = [];
+      let error: string | undefined;
+      try {
+        const candidates = await computeRenameOps(request);
+        for (const op of candidates.ops) {
+          // Re-read + re-patch at apply time: what gets written is computed
+          // NOW, not what the preview showed (a file changed in between
+          // simply contributes what it matches now, or nothing).
+          let content: string;
+          try {
+            content = await ctx.vault.read(op.path, { vaultId: op.vaultId });
+          } catch {
+            continue;
+          }
+          const crlf = content.includes('\r\n');
+          const patch = renameTagInContent(
+            content.replace(/\r\n/g, '\n'),
+            candidates.from,
+            candidates.to,
+            candidates.includeDescendants,
           );
           if (patch === null || patch.after === patch.before) {
             continue;

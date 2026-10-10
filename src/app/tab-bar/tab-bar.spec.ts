@@ -35,7 +35,6 @@ describe('TabBar', () => {
     document.querySelectorAll('.drag-overlay, .tab-drag-ghost').forEach((el) => el.remove());
     document.body.style.userSelect = '';
     document.body.style.cursor = '';
-    document.body.removeAttribute('data-drey-gesture');
   });
 
   /** A real left-button press (mousedown + mouseup) on `el`, below the drag threshold. */
@@ -111,7 +110,6 @@ describe('TabBar', () => {
       expect(compiled.querySelector('.tab.dragging')).toBeNull();
       expect(compiled.querySelector('.drop-line')).toBeNull();
       expect(document.querySelector('.drag-overlay')).toBeNull();
-      expect(document.body.hasAttribute('data-drey-gesture')).toBe(false);
     } finally {
       delete (document as unknown as Record<string, unknown>)['elementFromPoint'];
     }

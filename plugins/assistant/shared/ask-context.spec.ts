@@ -55,6 +55,7 @@ describe('the ```drey-context fence', () => {
         { path: 'daily/a.md', heading: 'Motivation', line: 4 },
         { path: 'notes/b.md', heading: 'Laufen', line: 9 },
       ],
+      contextStatus: null,
       start: 0,
     };
     const noteText = serializeTurn(turn);
@@ -63,6 +64,43 @@ describe('the ```drey-context fence', () => {
     expect(view.turns).toHaveLength(1);
     expect(view.turns[0].text).toBe('The answer.');
     expect(view.turns[0].context).toEqual(turn.context);
+    expect(view.turns[0].contextStatus).toBeNull();
+  });
+
+  it('persists the no-hits status: an empty turn still writes the fence', () => {
+    const turn = {
+      role: 'assistant' as const,
+      at: null,
+      meta: {},
+      text: 'I do not know.',
+      attachments: [],
+      tool: [],
+      context: [],
+      contextStatus: { kind: 'empty' as const, floor: 0.3 },
+      start: 0,
+    };
+    const view = parseChatNote(`# Chat\n\n${serializeTurn(turn)}\n`);
+    expect(view.turns[0].context).toEqual([]);
+    expect(view.turns[0].contextStatus).toEqual({ kind: 'empty', floor: 0.3 });
+  });
+
+  it('roundtrips the disabled and error statuses', () => {
+    const base = {
+      role: 'assistant' as const,
+      at: null,
+      meta: {},
+      text: '…',
+      attachments: [],
+      tool: [],
+      context: [],
+      start: 0,
+    };
+    const disabled = parseChatNote(serializeTurn({ ...base, contextStatus: { kind: 'disabled' } }));
+    expect(disabled.turns[0].contextStatus).toEqual({ kind: 'disabled' });
+    const failed = parseChatNote(
+      serializeTurn({ ...base, contextStatus: { kind: 'error', message: 'worker died' } }),
+    );
+    expect(failed.turns[0].contextStatus).toEqual({ kind: 'error', message: 'worker died' });
   });
 
   it('tolerates a hand-mangled context line (dropped, not fatal)', () => {
@@ -74,16 +112,20 @@ describe('the ```drey-context fence', () => {
       '```drey-context',
       '{not json',
       '{"cite":{"path":"ok.md","heading":"H","line":2}}',
+      '{"status":"nonsense"}',
+      '{"status":"empty"}',
       '```',
       '',
     ].join('\n');
     const view = parseChatNote(note);
     expect(view.turns[0].context).toEqual([{ path: 'ok.md', heading: 'H', line: 2 }]);
+    expect(view.turns[0].contextStatus).toBeNull();
   });
 
   it('turns without context parse to an empty list', () => {
     const view = parseChatNote('## User\n\nhello\n');
     expect(view.turns[0].context).toEqual([]);
+    expect(view.turns[0].contextStatus).toBeNull();
   });
 });
 
@@ -98,6 +140,7 @@ describe('replay with context citations', () => {
         attachments: [],
         tool: [],
         context: [],
+        contextStatus: null,
         start: 0,
       },
       {
@@ -108,6 +151,7 @@ describe('replay with context citations', () => {
         attachments: [],
         tool: [],
         context: [{ path: 'daily/a.md', heading: 'Motivation', line: 4 }],
+        contextStatus: null,
         start: 0,
       },
       {
@@ -118,6 +162,7 @@ describe('replay with context citations', () => {
         attachments: [],
         tool: [],
         context: [],
+        contextStatus: null,
         start: 0,
       },
     ];
@@ -137,6 +182,7 @@ describe('replay with context citations', () => {
         attachments: [],
         tool: [],
         context: [{ path: 'x.md', heading: 'X', line: 1 }],
+        contextStatus: null,
         start: 0,
       },
     ];

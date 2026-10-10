@@ -18,6 +18,7 @@ Two reply forms, nothing else:
 \`\`\`\`
 
 For a change you ALWAYS return the whole document, not just the changed part.
+Use the Change form ONLY when the user explicitly asks you to modify, add to or rewrite the document. Everything else is a Question — including a short confirmation or follow-up to your own previous reply ("yes, do that", "go ahead"): continue what you offered there (look it up with your tools if you have any) and answer in prose. Never put an answer, a list or a lookup result into the document unless the user asked for it to be written there.
 Earlier turns of this conversation are shown as plain text; these two reply forms still apply.`;
 
 /**
@@ -34,6 +35,53 @@ Earlier turns of this conversation are shown as plain text; this reply form stil
 
 /** Appended to `ASK_SYSTEM` when the vault tool set is available (ADR-0021). */
 export const ASK_TOOLS_NOTE = `You may call the vault tools (vault_search, vault_read, vault_write) to look things up in the wider vault or to make changes elsewhere before you give your final answer. A vault_write is confirmed by the user unless the app is in YOLO mode.`;
+
+/**
+ * Appended when the `tasks_list` tool is attached (SDK 1.11/1.12): task
+ * questions answer from the index, not from quoting task lines that
+ * happened to ride along in retrieved context — and the question's
+ * restriction goes into the tool ARGUMENTS (few-shot examples included;
+ * small local models need them — the done-task rows gained theirs in 57d,
+ * after a model answered "I would have to query with includeDone"). When the model still under-filters, the
+ * engine trims the persisted result to the answer's task subset (57c), so
+ * the block is scoped either way.
+ */
+export const ASK_TASKS_NOTE = `Questions about the user's tasks (open, done, due, important, overdue, by tag, by person or topic, or by date) are answered ONLY from the tasks_list tool — never from task lines seen in other context. Call it FIRST, passing the question's restriction in the arguments:
+- A person, project or topic in the question → {"text": "<that word>"}. Example: "Which tasks does Henrik have?" → {"text":"Henrik"}.
+- A #tag in the question → {"tag": "<tag without #>"}. Example: "tasks for #blockuniversum" → {"tag":"blockuniversum"}.
+- "overdue" → {"overdue": true}.
+- Completed / finished / done tasks asked for → {"status": "done"}. Example: "Which tasks did I finish?" → {"status":"done"}.
+- "recently" / "lately" completed → add completedSince, a date about two weeks before today. Example (today 2026-10-10): "Which tasks were completed recently?" → {"status":"done","completedSince":"2026-09-26"}.
+- Only when the question is about the WHOLE open task set ("what are my most important tasks", "what is there to do") → call with {} and no restriction.
+Never omit a restriction the question names. The tool returns OPEN tasks unless status says otherwise — if a result does not cover the question, call the tool AGAIN with other arguments instead of telling the user what you would have to query. Never mention the tool or its argument names in your answer. The result is already filtered and sorted; keep your text to a brief highlight of what matters most — the app renders the returned list itself.`;
+
+/**
+ * Appended when the template tools are attached (SDK 1.14): the model
+ * should check the library before creating (no duplicates), know the
+ * placeholder contract, and treat the unconfirmed write with care.
+ */
+export const ASK_TEMPLATES_NOTE = `You can manage the user's template library (template_list, template_read, template_write, template_delete) — reusable Markdown blocks inserted via the slash menu, Mod+T or the Templates panel. When the user asks for a template, call template_list first to avoid duplicates and to pick a fitting name; subfolders in the name become categories. Template bodies are plain Markdown; {{date}}, {{time}}, {{datetime}} and {{title}} are substituted when a template is inserted. A template_write applies immediately without confirmation — write only what was asked for.`;
+
+const WEEKDAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+
+/**
+ * The current date for every ask (57d): without it "recently", "overdue"
+ * or "this week" cannot be judged — or turned into a date argument.
+ */
+export function buildDateNote(now: Date): string {
+  const month = String(now.getMonth() + 1).padStart(2, '0');
+  const day = String(now.getDate()).padStart(2, '0');
+  return `Today is ${now.getFullYear()}-${month}-${day} (${WEEKDAYS[now.getDay()]}).`;
+}
+
+/**
+ * Appended to every non-live ask (SDK 1.11): the panel renders
+ * `[[wikilinks]]` in answers as clickable navigation. Only note
+ * references the model actually saw should be linked — an unresolved
+ * link is styled as missing (and a click creates the note, editor
+ * semantics), so hallucinated paths become real files.
+ */
+export const ASK_LINKS_NOTE = `When your answer refers to notes in the vault, write them as [[vault-relative/path]] or [[vault-relative/path#heading]] wikilinks — use exactly the paths you saw in the attached context or tool results, not invented names.`;
 
 /**
  * Appends the registered vaults (id + name) to a tools note: without this
@@ -70,4 +118,44 @@ export function buildAskUserMessage(request: AskRequest): string {
     parts.push(`FILE (${file.path}):\n${file.body}`);
   }
   return parts.join('\n\n');
+}
+
+/**
+ * Chat naming (57e): a brand-new chat's title comes from the model, not
+ * from the raw first question (which was a placeholder — often a long,
+ * unpunctuated sentence). The call rides the SAME model, plain, no tools
+ * and no history; the question plus a short answer snippet are enough.
+ */
+export const TITLE_SYSTEM = `You name chat conversations. Read the exchange below and reply with a concise title of two to six words, in the language of the conversation. Reply with the title only — no quotes, no surrounding punctuation, no sentence, no explanation.`;
+
+/** The user message for the naming call: the exchange, capped. */
+export function buildTitleUserMessage(question: string, answer: string): string {
+  const parts = [`User: ${question.slice(0, 400)}`];
+  if (answer !== '') {
+    parts.push(`Assistant: ${answer.slice(0, 600)}`);
+  }
+  return parts.join('\n');
+}
+
+/**
+ * Cleans a model reply into a frontmatter title: first non-empty line,
+ * wrapping quotes and a trailing period dropped, whitespace collapsed,
+ * capped at 60 chars on a word boundary. `null` when nothing usable
+ * remains (the engine then keeps the question-derived title).
+ */
+export function sanitizeChatTitle(raw: string): string | null {
+  const line = (raw ?? '').split('\n').map((l) => l.trim()).find((l) => l !== '') ?? '';
+  let title = line
+    .replace(/^["'„“«»‘’]+/, '')
+    .replace(/["'„“«»‘’]+$/, '')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .replace(/[.!…]+$/, '')
+    .trim();
+  if (title.length > 60) {
+    const cut = title.slice(0, 60);
+    const lastSpace = cut.lastIndexOf(' ');
+    title = (lastSpace > 20 ? cut.slice(0, lastSpace) : cut).trim();
+  }
+  return title.length >= 2 ? title : null;
 }

@@ -58,6 +58,30 @@ describe('EditorService', () => {
     expect(service.isDirty()).toBe(false);
   });
 
+  describe('caret memory (milestone 50)', () => {
+    it('stores and updates the viewport (caret + scroll offset) per doc key', () => {
+      service.recordCaret('note.md', { head: 7, scrollTop: 120, caretRel: 88 });
+      expect(service.caretFor('note.md')).toEqual({ head: 7, scrollTop: 120, caretRel: 88 });
+      service.recordCaret('note.md', { head: 42, scrollTop: 0 });
+      expect(service.caretFor('note.md')).toEqual({ head: 42, scrollTop: 0 });
+    });
+
+    it('needs no open doc -- the memory is what outlives the tab', () => {
+      service.recordCaret('ghost.md', { head: 3, scrollTop: 10 });
+      expect(service.caretFor('ghost.md')).toEqual({ head: 3, scrollTop: 10 });
+    });
+
+    it('survives closing and reopening the tab (app-session scoped)', async () => {
+      await service.openFile('note.md');
+      service.recordCaret('note.md', { head: 9, scrollTop: 240 });
+      await service.closeTab('note.md');
+      expect(service.docFor('note.md')).toBeNull();
+      // Remembered past the tab -- a clean tab replaced by another file
+      // reopens on its viewport, not at the top.
+      expect(service.caretFor('note.md')).toEqual({ head: 9, scrollTop: 240 });
+    });
+  });
+
   it('adopts the frontmatter the save pipeline rewrites and refreshes the tag list', async () => {
     TestBed.resetTestingModule();
     const rewriteApi: Partial<DreyApi> = {

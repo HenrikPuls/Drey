@@ -47,6 +47,17 @@
   color: var(--text-6);
 }
 
+/* Back / forward through the session's document history, right of the
+   menu bar, left of the right-dock toggle. */
+.hist-nav {
+  display: flex;
+  align-items: center;
+  gap: 0;
+  flex: none;
+  margin: 0 6px;
+  -webkit-app-region: no-drag;
+}
+
 .spacer {
   flex: 1;
   min-width: 0;

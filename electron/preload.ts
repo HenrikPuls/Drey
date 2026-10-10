@@ -26,6 +26,9 @@ import {
   SpellCheckResult,
   SpellLanguage,
   TagVocabularyPayload,
+  RenameLinksPreview,
+  RenameLinksRequest,
+  RenameLinksResult,
   VaultChangedPush,
   VaultFileContent,
   VaultFileEntry,
@@ -43,7 +46,6 @@ const dreyApi: DreyApi = {
   minimizeWindow: (): Promise<void> => ipcRenderer.invoke(IPC_CHANNELS.windowMinimize),
   toggleMaximizeWindow: (): Promise<void> => ipcRenderer.invoke(IPC_CHANNELS.windowToggleMaximize),
   closeWindow: (): Promise<void> => ipcRenderer.invoke(IPC_CHANNELS.windowClose),
-  recoverInputFocus: (): Promise<boolean> => ipcRenderer.invoke(IPC_CHANNELS.windowRecoverInput),
   onExitConfirmRequest: (listener: (request: ExitConfirmRequest) => void): (() => void) => {
     // Forward only the payload, never the IpcRendererEvent (ADR-0001).
     const wrapped = (_event: IpcRendererEvent, request: ExitConfirmRequest): void =>
@@ -125,6 +127,10 @@ const dreyApi: DreyApi = {
     toVaultId?: string,
   ): Promise<string> =>
     ipcRenderer.invoke(IPC_CHANNELS.vaultRename, fromRelativePath, toRelativePath, fromVaultId, toVaultId),
+  previewVaultRename: (request: RenameLinksRequest): Promise<RenameLinksPreview> =>
+    ipcRenderer.invoke(IPC_CHANNELS.vaultRenamePreview, request),
+  renameVaultEntryWithLinks: (request: RenameLinksRequest): Promise<RenameLinksResult> =>
+    ipcRenderer.invoke(IPC_CHANNELS.vaultRenameWithLinks, request),
   copyVaultEntry: (
     sourceRelativePath: string,
     destDirRelativePath: string,
@@ -134,10 +140,18 @@ const dreyApi: DreyApi = {
     ipcRenderer.invoke(IPC_CHANNELS.vaultCopy, sourceRelativePath, destDirRelativePath, sourceVaultId, destVaultId),
   duplicateVaultEntry: (sourceRelativePath: string, vaultId?: string): Promise<string> =>
     ipcRenderer.invoke(IPC_CHANNELS.vaultDuplicate, sourceRelativePath, vaultId),
-  deleteVaultEntry: (relativePath: string, vaultId?: string): Promise<void> =>
-    ipcRenderer.invoke(IPC_CHANNELS.vaultDelete, relativePath, vaultId),
-  deleteVaultEntries: (relativePaths: string[], vaultId?: string): Promise<void> =>
-    ipcRenderer.invoke(IPC_CHANNELS.vaultDeleteMany, relativePaths, vaultId),
+  deleteVaultEntry: (
+    relativePath: string,
+    vaultId?: string,
+    opts?: { trash?: boolean },
+  ): Promise<string[]> =>
+    ipcRenderer.invoke(IPC_CHANNELS.vaultDelete, relativePath, vaultId, opts),
+  deleteVaultEntries: (
+    relativePaths: string[],
+    vaultId?: string,
+    opts?: { trash?: boolean },
+  ): Promise<string[]> =>
+    ipcRenderer.invoke(IPC_CHANNELS.vaultDeleteMany, relativePaths, vaultId, opts),
   pickSavePath: (suggestedName: string, vaultId?: string): Promise<string | null> =>
     ipcRenderer.invoke(IPC_CHANNELS.vaultPickSavePath, suggestedName, vaultId),
   exportNotePdf: (request: PdfExportRequest): Promise<string | null> =>

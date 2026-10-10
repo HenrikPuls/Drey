@@ -1,0 +1,62 @@
+@if (pending(); as req) {
+  <div class="backdrop" appOverlayGuard (click)="choose('cancel')"></div>
+  <div class="dialog" role="dialog" aria-modal="true" aria-labelledby="link-update-title">
+    <header>
+      <h2 id="link-update-title">Update links?</h2>
+      <p class="summary">{{ summary() }}</p>
+    </header>
+
+    <div class="preview">
+      @for (file of files(); track file.path) {
+        <section class="file">
+          <div class="file-head">
+            <span class="file-path">{{ file.path }}</span>
+            <span class="file-count">{{ linkCount(file.links) }}</span>
+          </div>
+          @for (line of file.lines; track line.line) {
+            <div class="row del">
+              <span class="ln">{{ line.line }}</span>
+              <span class="sign">−</span>
+              <span class="text">{{ line.before || ' ' }}</span>
+            </div>
+            <div class="row add">
+              <span class="ln"></span>
+              <span class="sign">+</span>
+              <span class="text">{{ line.after || ' ' }}</span>
+            </div>
+          }
+        </section>
+      }
+      @if (req.preview.assets.length > 0) {
+        <section class="file">
+          <div class="file-head">
+            <span class="file-path sans">Attachments that go with the note</span>
+          </div>
+          @for (asset of req.preview.assets; track asset.from) {
+            <div class="row asset">
+              <span class="text">{{ asset.from }} → {{ asset.to }}</span>
+              @if (asset.kind === 'copy') {
+                <span class="file-count">copied</span>
+              }
+            </div>
+          }
+        </section>
+      }
+    </div>
+
+    <footer>
+      <label class="dont-ask">
+        <input
+          type="checkbox"
+          [checked]="dontAskAgain()"
+          (change)="dontAskAgain.set($any($event.target).checked)"
+        />
+        Don’t ask again
+      </label>
+      <div class="spacer"></div>
+      <button type="button" class="ghost" (click)="choose('cancel')">Cancel</button>
+      <button type="button" class="ghost" (click)="choose('rename')">Rename only</button>
+      <button type="button" class="primary" (click)="choose('update')">Update links</button>
+    </footer>
+  </div>
+}

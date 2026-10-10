@@ -28,7 +28,10 @@ export type IconName =
   | 'check'
   | 'plus'
   | 'arrow-up'
+  | 'arrow-left'
+  | 'arrow-right'
   | 'sparkles'
+  | 'message-circle'
   | 'more-horizontal'
   | 'copy'
   | 'corner-down-left'
@@ -104,6 +107,17 @@ const ICONS: Record<IconName, readonly IconShape[]> = {
     { kind: 'path', d: 'm5 12 7-7 7 7' },
     { kind: 'path', d: 'M12 19V5' },
   ],
+  // Lucide "arrow-left" / "arrow-right" -- document-history navigation.
+  'arrow-left': [
+    { kind: 'path', d: 'm12 19-7-7 7-7' },
+    { kind: 'path', d: 'M19 12H5' },
+  ],
+  'arrow-right': [
+    { kind: 'path', d: 'M5 12h14' },
+    { kind: 'path', d: 'm12 5 7 7-7 7' },
+  ],
+  // Lucide "message-circle" -- the Search panel's "Include chats" toggle.
+  'message-circle': [{ kind: 'path', d: 'M7.9 20A9 9 0 1 0 4 16.1L2 22Z' }],
   // Lucide "sparkles" -- the assistant / AI affordance.
   sparkles: [
     {

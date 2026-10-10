@@ -6,6 +6,7 @@ import {
   cosineSimilarity,
   decodeVector,
   encodeVector,
+  isSemanticIndexPath,
   normalizeVaultScope,
   passageText,
   queryText,
@@ -13,6 +14,24 @@ import {
   splitSemanticSections,
 } from './semantic';
 import type { RetrievedSection } from './semantic';
+
+describe('isSemanticIndexPath', () => {
+  it('admits ordinary vault notes', () => {
+    expect(isSemanticIndexPath('daily/2026/09/2026-09-18.md')).toBe(true);
+    expect(isSemanticIndexPath('notes/idea.md')).toBe(true);
+    expect(isSemanticIndexPath('a.md')).toBe(true);
+  });
+
+  it('excludes the chat notes (they embed the literal question text)', () => {
+    expect(isSemanticIndexPath('chats/2026/10/2026-10-09-was-trinke-ich-morgens.md')).toBe(false);
+    expect(isSemanticIndexPath('chats/x.md')).toBe(false);
+  });
+
+  it('is exact-prefix, so sibling names stay indexed', () => {
+    expect(isSemanticIndexPath('chatsarchive/a.md')).toBe(true);
+    expect(isSemanticIndexPath('notes/chats/x.md')).toBe(true);
+  });
+});
 
 describe('normalizeVaultScope', () => {
   it('keeps the two retrieval scopes and maps everything else to off', () => {

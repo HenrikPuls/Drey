@@ -243,6 +243,49 @@ describe('blockDecorations', () => {
   });
 });
 
+describe('tables glued after an absorbed text line', () => {
+  // lezer-markdown absorbs the text line AND the following table into ONE
+  // `Table` node; the clamp ends the first widget, the second half must
+  // render as its own embed.
+  const GLUED = 'mm\n| a | b |\n| - | - |\n| 1 | 2 |\nmm\n| c | d |\n| - | - |\n| 3 | 4 |';
+  const FIRST = '| a | b |\n| - | - |\n| 1 | 2 |';
+  const SECOND = '| c | d |\n| - | - |\n| 3 | 4 |';
+
+  it('renders the second glued table as its own widget beyond the clamp', () => {
+    const all = widgets(blockDecorations(state(GLUED, 0), passThrough));
+    expect(all).toHaveLength(2);
+    expect(GLUED.slice(all[0].from, all[0].to)).toBe(FIRST);
+    expect(GLUED.slice(all[1].from, all[1].to)).toBe(SECOND);
+    const widget = all[1].deco.spec['widget'] as TableWidget;
+    expect(widget.html).toContain('<td>3</td>');
+    // markdown-it's trailing newline would render as a phantom empty line
+    // inside the widget (pre-wrap content) -- trimmed away.
+    expect(widget.html.endsWith('\n')).toBeFalsy();
+  });
+
+  it('reveals only the second table while the selection touches it', () => {
+    const inSecond = GLUED.indexOf('| 3 |') + 2;
+    const blocks = widgets(blockDecorations(state(GLUED, inSecond), passThrough));
+    expect(blocks).toHaveLength(1);
+    expect(GLUED.slice(blocks[0].from, blocks[0].to)).toBe(FIRST);
+    const reveal = widgets(revealDecorations(state(GLUED, inSecond), passThrough));
+    const lineDecos = reveal.filter((d) => typeof d.deco.spec['class'] === 'string');
+    expect(lineDecos).toHaveLength(3);
+    expect(lineDecos[0].from).toBe(GLUED.indexOf('| c |'));
+  });
+
+  it('a caret on the glued text line keeps both tables rendered', () => {
+    const atGlue = GLUED.lastIndexOf('mm');
+    expect(widgets(blockDecorations(state(GLUED, atGlue), passThrough))).toHaveLength(2);
+    expect(widgets(revealDecorations(state(GLUED, atGlue), passThrough))).toHaveLength(0);
+  });
+
+  it('keeps absorbed pipe rows that have no delimiter row raw', () => {
+    const doc = `mm\n${FIRST}\nmm\n| x |\n| y |`;
+    expect(widgets(blockDecorations(state(doc, 0), passThrough))).toHaveLength(1);
+  });
+});
+
 describe('revealDecorations', () => {
   const classesOf = (set: DecorationSet): (string | undefined)[] =>
     widgets(set)

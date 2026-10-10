@@ -4,9 +4,27 @@ import type {
   PluginRendererModule,
 } from '../../../shared/plugin-api/renderer';
 import type { TaskRecord } from '../shared/tasks.js';
-import { resolveTaskLine, scanTasks, setDoneOnLine } from '../shared/tasks.js';
-import { ALL_KINDS, filterVisibleTasks, readPrefs, writePrefs, type TaskScope } from './filter.js';
+import {
+  dueState,
+  glyphOfPriority,
+  resolveTaskLine,
+  scanTasks,
+  setDoneOnLine,
+  setDueOnLine,
+  setPriorityOnLine,
+  todayIso,
+} from '../shared/tasks.js';
+import {
+  ALL_KINDS,
+  ALL_SORTS,
+  filterVisibleTasks,
+  readPrefs,
+  writePrefs,
+  type TaskScope,
+  type TaskSort,
+} from './filter.js';
 import { taskToggleExtension, toggleInFocusedSurface } from './task-toggle.js';
+import { openDuePicker, openPriorityPicker, taskMetaExtension } from './task-meta.js';
 
 function el<K extends keyof HTMLElementTagNameMap>(
   tag: K,
@@ -82,6 +100,7 @@ const plugin: PluginRendererModule = {
       kinds: [...prefs.kinds],
       queryTags: [...prefs.queryTags],
       queryText: prefs.queryText,
+      sort: prefs.sort,
       /** The index list from the plugin main (every vault, vaultId-stamped). */
       vaultTasks: [] as TaskRecord[],
       activePath: null as string | null,
@@ -100,6 +119,7 @@ const plugin: PluginRendererModule = {
         kinds: state.kinds,
         queryTags: state.queryTags,
         queryText: state.queryText,
+        sort: state.sort,
       });
     };
     const notify = (): void => {
@@ -214,18 +234,34 @@ const plugin: PluginRendererModule = {
         notify();
       }
     };
-    const setText = (value: string): void => {
-      state.queryText = value;
-      notify();
-    };
-    const clearFilter = (): void => {
-      state.queryTags = [];
-      state.queryText = '';
-      notify();
-    };
+  const setText = (value: string): void => {
+    state.queryText = value;
+    notify();
+  };
+  const cycleSort = (): void => {
+    const next = ALL_SORTS[(ALL_SORTS.indexOf(state.sort) + 1) % ALL_SORTS.length] ?? 'file';
+    state.sort = next;
+    notify();
+  };
+  const clearFilter = (): void => {
+    state.queryTags = [];
+    state.queryText = '';
+    notify();
+  };
 
-    // -- ticking a task --------------------------------------------------------
-    const toggleTask = async (task: TaskRecord): Promise<void> => {
+    // -- mutating a task line ---------------------------------------------------
+    /**
+     * Resolves `task` against fresh content and applies `mutate` to the
+     * line: an open text tab goes through its live buffer (`setBuffer` +
+     * save, so unsaved edits survive — the old base `EditorService`
+     * behavior), a closed file is read/patched/written in its own vault
+     * and the vault list refreshed. Due/priority changes share the same
+     * routing as the done toggle (req-37).
+     */
+    const applyToTaskLine = async (
+      task: TaskRecord,
+      mutate: (content: string, line: number) => string,
+    ): Promise<void> => {
       // `documents.get` resolves the bare path (active vault first, then a
       // unique open match). The one ambiguous case — the same relative path
       // open from two vaults while the task's vault is not active — falls
@@ -233,24 +269,17 @@ const plugin: PluginRendererModule = {
       // vault explicitly.
       const open = api.documents.get(task.path);
       if (open !== null && open.kind === 'text') {
-        // Through the live buffer, saved like any edit (an unsaved change
-        // in that tab is never lost) -- exactly what the base
-        // `EditorService.setTaskDone` did. The line resolves against the
-        // CURRENT buffer (`resolveTaskLine`): the save pipeline's
-        // frontmatter bump shifts lines, and a row rendered before that
-        // shift would otherwise toggle nothing.
         const line = resolveTaskLine(open.buffer, task);
         if (line === null) {
           return;
         }
-        const next = setDoneOnLine(open.buffer, line, !task.done);
+        const next = mutate(open.buffer, line);
         if (next !== open.buffer) {
           api.documents.setBuffer(task.path, next);
           await api.documents.save(task.path);
         }
         return;
       }
-      let changed = false;
       try {
         const { content } = await api.vault.readFile(task.path, { vaultId: task.vaultId });
         const crlf = content.includes('\r\n');
@@ -259,23 +288,31 @@ const plugin: PluginRendererModule = {
         if (line === null) {
           return;
         }
-        const next = setDoneOnLine(normalized, line, !task.done);
+        const next = mutate(normalized, line);
         if (next !== normalized) {
           await api.vault.writeFile(task.path, crlf ? next.replace(/\n/g, '\r\n') : next, {
             vaultId: task.vaultId,
           });
-          changed = true;
+          await refreshVault();
         }
       } catch {
-        return; // Unreadable -- nothing to toggle.
-      }
-      if (changed) {
-        await refreshVault();
+        return; // Unreadable -- nothing to change.
       }
     };
 
+    const toggleTask = (task: TaskRecord): Promise<void> =>
+      applyToTaskLine(task, (content, line) => setDoneOnLine(content, line, !task.done));
+
+    const changeTaskDue = (task: TaskRecord, due: string | null): Promise<void> =>
+      applyToTaskLine(task, (content, line) => setDueOnLine(content, line, due));
+
+    const changeTaskPriority = (task: TaskRecord, priority: 'highest' | 'high' | 'low' | null): Promise<void> =>
+      applyToTaskLine(task, (content, line) => setPriorityOnLine(content, line, priority));
+
     // -- Mod+Enter toggle + the Selection-menu row -----------------------------
     api.editor.registerExtension('both', () => taskToggleExtension(api.editor.cm));
+    // Due/priority completion on task lines (req-37).
+    api.editor.registerExtension('both', () => taskMetaExtension(api.editor.cm));
     api.ui.registerMenuContributions([
       {
         menu: 'selection',
@@ -357,7 +394,8 @@ const plugin: PluginRendererModule = {
           toggleKind('checkbox'),
         );
         const tagBtn = iconButton('hash', 'Show lines tagged #task', () => toggleKind('tag'));
-        for (const btn of [doneBtn, boxBtn, tagBtn]) {
+        const sortBtn = iconButton('list-ordered', 'Sort: file order', cycleSort);
+        for (const btn of [doneBtn, boxBtn, tagBtn, sortBtn]) {
           btn.setAttribute('aria-pressed', 'false');
         }
 
@@ -379,12 +417,52 @@ const plugin: PluginRendererModule = {
           box.setAttribute('aria-label', task.done ? 'Mark not done' : 'Mark done');
           box.addEventListener('change', () => void toggleTask(task));
 
+          // The meta row (with its badge BUTTONS) sits beside the body
+          // button, not inside it -- a button inside a button is invalid
+          // HTML and the click would bubble into the open-file action.
+          const rows = el('div', 'rows');
           const bodyButton = el('button', 'body') as HTMLButtonElement;
           bodyButton.type = 'button';
           bodyButton.appendChild(el('span', 'text', task.text || '(untitled task)'));
+          bodyButton.addEventListener(
+            'click',
+            () => void api.documents.open(task.path, task.line, { vaultId: task.vaultId }),
+          );
+          rows.appendChild(bodyButton);
           const meta = el('span', 'meta');
           if (task.kind === 'tag') {
             meta.appendChild(el('span', 'kind', '#task'));
+          }
+          if (task.due !== null) {
+            // The badge is a button: a plain click re-opens the date picker
+            // at the badge and writes the change back through the task's
+            // routing (req-37).
+            const due = el('button', `due ${dueState(task.due, todayIso())}`) as HTMLButtonElement;
+            due.type = 'button';
+            due.textContent = `📅 ${task.due}`;
+            due.title = `Due ${task.due} — change`;
+            due.setAttribute('aria-label', `Change due date (${task.due})`);
+            due.addEventListener('click', () => {
+              const rect = due.getBoundingClientRect();
+              openDuePicker({ left: rect.left, top: rect.bottom }, task.due, (value) =>
+                void changeTaskDue(task, value),
+              );
+            });
+            meta.appendChild(due);
+          }
+          if (task.priority !== null) {
+            const prio = el('button', `prio prio-${task.priority}`) as HTMLButtonElement;
+            prio.type = 'button';
+            prio.textContent = glyphOfPriority(task.priority);
+            prio.title = `Priority: ${task.priority} — change`;
+            prio.setAttribute('aria-label', `Change priority (${task.priority})`);
+            prio.addEventListener('click', () => {
+              const rect = prio.getBoundingClientRect();
+              openPriorityPicker({ left: rect.left, top: rect.bottom }, (value) =>
+                void changeTaskPriority(task, value),
+              );
+            });
+            meta.appendChild(prio);
           }
           if (task.heading !== null) {
             meta.appendChild(el('span', 'heading', task.heading));
@@ -392,13 +470,9 @@ const plugin: PluginRendererModule = {
           if (showLoc) {
             meta.appendChild(el('span', 'loc', `:${task.line}`));
           }
-          bodyButton.appendChild(meta);
-          bodyButton.addEventListener(
-            'click',
-            () => void api.documents.open(task.path, task.line, { vaultId: task.vaultId }),
-          );
+          rows.appendChild(meta);
 
-          wrap.append(box, bodyButton);
+          wrap.append(box, rows);
           return wrap;
         };
 
@@ -422,9 +496,11 @@ const plugin: PluginRendererModule = {
             return;
           }
           const list = el('div', 'list');
-          if (state.scope === 'document') {
+          if (state.scope === 'document' || state.sort !== 'file') {
+            // Document scope, and every due/priority sort: a flat list in
+            // the sort order (a grouped view would fight the ordering).
             for (const task of visible) {
-              list.appendChild(taskRow(task, false));
+              list.appendChild(taskRow(task, state.scope !== 'document'));
             }
           } else {
             // Grouped by file; the full path disambiguates same-named
@@ -464,10 +540,15 @@ const plugin: PluginRendererModule = {
             btn.classList.toggle('on', on);
             btn.setAttribute('aria-pressed', String(on));
           }
+          const sortLabel = `Sort: ${state.sort === 'file' ? 'file order' : state.sort}`;
+          sortBtn.title = sortLabel;
+          sortBtn.setAttribute('aria-label', sortLabel);
+          sortBtn.classList.toggle('on', state.sort !== 'file');
+          sortBtn.setAttribute('aria-pressed', String(state.sort !== 'file'));
           renderContent();
         };
 
-        filter.append(fieldIcon, tagField.element, clearButton, doneBtn, boxBtn, tagBtn);
+        filter.append(fieldIcon, tagField.element, clearButton, doneBtn, boxBtn, tagBtn, sortBtn);
         body.append(filter, content);
         render();
         listeners.add(render);

@@ -31,7 +31,6 @@ export const IPC_CHANNELS = {
   windowMinimize: 'window:minimize',
   windowToggleMaximize: 'window:toggle-maximize',
   windowClose: 'window:close',
-  windowRecoverInput: 'window:recover-input',
   exitConfirmRequest: 'exit:confirm-request',
   exitDecision: 'exit:decision',
   exitListenerReady: 'exit:listener-ready',
@@ -66,6 +65,11 @@ export const IPC_CHANNELS = {
   vaultCreateFile: 'vault:create-file',
   vaultCreateDirectory: 'vault:create-directory',
   vaultRename: 'vault:rename-entry',
+  // Milestone 59 (ADR-0059): the rename that keeps links intact -- a
+  // preview of the affected notes / attachments, and the rename that
+  // carries the plan out.
+  vaultRenamePreview: 'vault:rename-preview',
+  vaultRenameWithLinks: 'vault:rename-with-links',
   vaultCopy: 'vault:copy-entry',
   vaultDuplicate: 'vault:duplicate-entry',
   vaultDelete: 'vault:delete',
@@ -318,6 +322,56 @@ export interface VaultFileEntry {
 }
 
 /**
+ * A rename / move whose links should stay intact (milestone 59, ADR-0059).
+ * `buffers` are the source vault's DIRTY open notes (path before the
+ * rename, `\n` content): they are planned against the buffer instead of
+ * the file and come back patched in {@link RenameLinksResult.buffers}
+ * rather than being written -- the next save would otherwise undo the
+ * rewrite.
+ */
+export interface RenameLinksRequest {
+  fromRel: string;
+  toRel: string;
+  fromVaultId: string;
+  toVaultId: string;
+  buffers: Array<{ path: string; content: string }>;
+}
+
+/** One note whose links the rename rewrites. `path` is before the rename. */
+export interface RenameLinkFile {
+  path: string;
+  newPath: string;
+  links: number;
+  before: string;
+  after: string;
+}
+
+/** An attachment that travels with its note (vault-relative paths). */
+export interface RenameAssetMove {
+  kind: 'move' | 'copy';
+  from: string;
+  to: string;
+}
+
+export interface RenameLinksPreview {
+  files: RenameLinkFile[];
+  assets: RenameAssetMove[];
+}
+
+export interface RenameLinksResult {
+  /** The renamed entry's new vault-relative path (in the target vault). */
+  path: string;
+  /** Notes rewritten on disk -- paths AFTER the rename, in the source vault. */
+  written: string[];
+  /** Patched contents for the dirty buffers -- paths AFTER the rename. */
+  buffers: Array<{ path: string; content: string }>;
+  /** The attachments that actually moved / were copied. */
+  assets: RenameAssetMove[];
+  /** What could not be carried out, as user-readable lines. */
+  failed: string[];
+}
+
+/**
  * A single file's contents plus the modification time it had when read.
  * `modifiedMs` is epoch milliseconds (`fs.Stats.mtimeMs`) -- milestone 3
  * only round-trips it (read -> hold -> hand back on write) so the value is
@@ -521,15 +575,6 @@ export interface DreyApi {
   saveDraftNote(request: DraftSaveRequest): Promise<NoteSaveResult>;
 
   /**
-   * Asks main to close any native context-menu popup still popped over the
-   * window and log the attempt (bug-6): a popup whose capture loop never
-   * unwinds swallows every keystroke -- invisible to the renderer, so the
-   * "Recover input focus" command forwards here as the escape hatch.
-   * Resolves to `true` when a popup was actually closed.
-   */
-  recoverInputFocus(): Promise<boolean>;
-
-  /**
    * Fires whenever the window is maximized or restored, so the titlebar's
    * maximize/restore glyph can follow along (main -> renderer push, same
    * shape as `onOpenDailyNote`). Returns an unsubscribe.
@@ -572,7 +617,7 @@ export interface DreyApi {
    * Appends a line to the main process's log file
    * (`<userData>/logs/drey.log`). Best-effort, fire-and-forget -- the
    * renderer mirrors `console.error` / `window.onerror` /
-   * `unhandledrejection` and the input-recovery snapshot here so a field
+   * `unhandledrejection` here so a field problem in the packaged build
    * problem in the packaged build (no DevTools) leaves a trace.
    */
   logMessage(entry: LogEntry): Promise<void>;
@@ -830,6 +875,20 @@ export interface DreyApi {
   ): Promise<string>;
 
   /**
+   * What `renameVaultEntryWithLinks` would change (milestone 59): the notes
+   * whose links need rewriting and the attachments that travel along.
+   * Nothing is touched.
+   */
+  previewVaultRename(request: RenameLinksRequest): Promise<RenameLinksPreview>;
+
+  /**
+   * `renameVaultEntry` plus the link rewrite: the plan is computed fresh
+   * (not taken from the preview), the entry is renamed, the affected notes
+   * are rewritten and the attachments moved.
+   */
+  renameVaultEntryWithLinks(request: RenameLinksRequest): Promise<RenameLinksResult>;
+
+  /**
    * Copies a file or folder (recursively) into `destDirRelativePath`
    * (`''` = vault root). Keeps the source name, or adds a `" copy"` /
    * `" copy N"` suffix on a collision. Refuses copying a folder into its
@@ -853,13 +912,21 @@ export interface DreyApi {
   duplicateVaultEntry(sourceRelativePath: string, vaultId?: string): Promise<string>;
 
   /**
-   * Deletes a file or folder (recursively) inside a vault. Same path rules
-   * as `readVaultFile`; `vaultId` defaults to the active vault; refuses
-   * the vault root. Deleting a `.md` note also removes its assistant
-   * sidecar (`.{name}.chat.json`) if present. A missing target is not an
-   * error. Rejects only on a bad path or a real filesystem failure.
+   * Deletes a file or folder (recursively) inside a vault -- to the OS
+   * recycle bin by default, permanently with `{ trash: false }`
+   * (move-semantics callers). Same path rules as `readVaultFile`;
+   * `vaultId` defaults to the active vault; refuses the vault root.
+   * Deleting a `.md` note also removes its assistant sidecar
+   * (`.{name}.chat.json`) if present. A missing target is not an error.
+   * Rejects only on a bad path or a real filesystem failure. Resolves to
+   * the paths that fell back to a permanent delete (their volume has no
+   * recycle bin) -- empty unless asked otherwise and the bin was missing.
    */
-  deleteVaultEntry(relativePath: string, vaultId?: string): Promise<void>;
+  deleteVaultEntry(
+    relativePath: string,
+    vaultId?: string,
+    opts?: { trash?: boolean },
+  ): Promise<string[]>;
 
   /**
    * Deletes several files / folders (recursively) inside one vault in a
@@ -867,9 +934,15 @@ export interface DreyApi {
    * Same per-path rules as `deleteVaultEntry`; `vaultId` defaults to the
    * active vault; overlapping paths (a folder and a file inside it) are
    * fine because a missing target is not an error. One vault-change
-   * re-index fires for the whole batch, not per path.
+   * re-index fires for the whole batch, not per path. Resolves to the
+   * paths that fell back to a permanent delete (no recycle bin on their
+   * volume).
    */
-  deleteVaultEntries(relativePaths: string[], vaultId?: string): Promise<void>;
+  deleteVaultEntries(
+    relativePaths: string[],
+    vaultId?: string,
+    opts?: { trash?: boolean },
+  ): Promise<string[]>;
 
   /**
    * Opens the native "Save note" dialog rooted at the given vault

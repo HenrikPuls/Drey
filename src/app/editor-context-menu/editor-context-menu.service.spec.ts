@@ -1,5 +1,5 @@
 import { TestBed } from '@angular/core/testing';
-import type { EditorView } from '@codemirror/view';
+import { EditorView } from '@codemirror/view';
 import { EditorContextMenuRegistry } from '../plugin-host';
 import {
   EditorContextMenuService,
@@ -206,5 +206,72 @@ describe('buildMenuTarget', () => {
     document.body.appendChild(plain);
 
     expect(buildMenuTarget(plain, () => null)).toBeNull();
+  });
+});
+
+describe('EditorContextMenuService.resolveView', () => {
+  let svc: EditorContextMenuService;
+
+  beforeEach(() => {
+    svc = TestBed.inject(EditorContextMenuService);
+    svc.start();
+  });
+
+  afterEach(() => {
+    svc.close();
+    document.body.innerHTML = '';
+  });
+
+  function rightClick(target: Element): boolean {
+    const event = new MouseEvent('contextmenu', {
+      bubbles: true,
+      cancelable: true,
+      clientX: 10,
+      clientY: 10,
+    });
+    target.dispatchEvent(event);
+    return event.defaultPrevented;
+  }
+
+  /** A mounted CM view — stands in for e.g. the assistant composer. */
+  function mountComposerView(): { host: HTMLElement; view: EditorView } {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    const view = new EditorView({ parent: host });
+    return { host, view };
+  }
+
+  it('resolves the view of the surface the menu was opened on', () => {
+    const { view } = mountComposerView();
+
+    expect(rightClick(view.contentDOM)).toBe(true);
+
+    expect(svc.resolveView()).toBe(view);
+  });
+
+  it('returns null once the menu is closed', () => {
+    const { view } = mountComposerView();
+    rightClick(view.contentDOM);
+    expect(svc.resolveView()).not.toBeNull();
+
+    svc.close();
+
+    expect(svc.resolveView()).toBeNull();
+  });
+
+  it('returns null for an image target (nothing editable behind it)', () => {
+    const registry = TestBed.inject(EditorContextMenuRegistry);
+    const unregister = registry.register(() => [
+      { label: 'Recognize text', run: () => undefined },
+    ]);
+    const host = document.createElement('div');
+    host.setAttribute('data-drey-image', 'pics/a.png');
+    document.body.appendChild(host);
+
+    rightClick(host);
+
+    expect(svc.menuTarget()?.surface).toBe('image');
+    expect(svc.resolveView()).toBeNull();
+    unregister(); // the registry is a root singleton — don't leak into other tests
   });
 });

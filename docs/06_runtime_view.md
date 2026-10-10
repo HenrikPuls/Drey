@@ -1052,13 +1052,24 @@ sequenceDiagram
     Note over User,Editor: drag a row instead → image-paste.ts TEMPLATE_DT_TYPE branch:<br/>read → strip → substitute → insert at posAtCoords(x,y)
 ```
 
-## 6.20 Files panel: copy / paste / duplicate / rename (ADR-0018 refresh model)
+## 6.20 Files panel: copy / paste / duplicate / rename / delete (ADR-0018 refresh model; delete → recycle bin since milestone 52)
 
 Context-menu rows on the file tree. "Copy" only stashes a `{ path, name }`
 on `VaultService.clipboard`; the fs work happens on "Paste" / "Duplicate" /
 "Rename". Each mutating IPC handler rebuilds the tag index (same reason as
 `vault:delete` — a `.md` file can move in or out of scope), and the
 renderer reloads the tree. A rename also re-points open tabs.
+
+**Delete goes to the OS recycle bin (milestone 52).** After the confirm
+dialog, `vault:delete(-many)` moves the target — and a `.md` note's
+`.{name}.chat.json` sidecar — via `shell.trashItem`
+(`electron/trash-delete.ts`, injected IO). A volume without a recycle bin
+(network share, some removable drives) falls back to the permanent
+`fsp.rm`; the IPC then resolves to the fallback paths and the Files panel
+messages the user. `{ trash: false }` keeps move-semantics callers
+permanent (Save-as out of `.drafts/`), and the cross-vault move's delete
+leg inside `renameEntry` keeps its plain `rm` — the content already lives
+at the target, a bin copy would only litter.
 
 ```mermaid
 sequenceDiagram
@@ -2026,6 +2037,15 @@ Replace touches only occurrences inside the matching sections (the
 search model, applied as a batch); the file-scope variant patches the
 open buffer directly (a normal undoable edit, no confirmation round).
 
+**Tag rename / merge (milestone 53)** rides the same discipline from
+Settings → Tags: `rename-preview`/`rename-apply` walk every `.md` of the
+selected vault(s) (templates folders excluded like the index),
+`renameTagInContent` rewrites the tag tokens the grammar sees (fences
+and code never match; `#old/…` descendants by default; a merge drops
+the duplicate it would create), and apply re-reads + re-patches each
+file right before its announced write — the bundled per-file-diff
+confirmation is the same modal.
+
 ## 6.42 Explorer double-click → tab ([ADR-0054](09_architecture_decisions/0054-opening-files-from-the-os.md))
 
 ```mermaid
@@ -2113,10 +2133,22 @@ sequenceDiagram
     else completed
         Chat-->>Backend: LlmChatResult
         Backend-->>Panel: { kind: 'ok', text, included, total }
-        Panel->>EditorService: setBuffer(digest + truncation note if included < total)
+        Panel->>Panel: buildSearchSummarySources(hits, included, vaultNames)
+        Panel->>EditorService: setBuffer(digest + '## Sources' + truncation note if included < total)
     end
     User->>EditorService: Ctrl+S → Save-as (keeps the digest as a note)
 ```
+
+Since milestone 49 the settled digest (a stopped one too) ends with a
+`## Sources` section built deterministically by the panel — one
+`[[extension-less-path#heading]]` wikilink per covered section, the
+exact `path:line` as plain text beside it (wikilinks have no line
+anchor), and the vault's name in the label when the hits span several
+vaults. The model never writes links itself. The scratch tab is
+vault-less, so its wikilinks resolve through `WikilinkService`'s merged
+cross-vault index (active vault preferred) and open the note in its
+owning vault — an unresolved target is reported, never created
+(ADR-0046's milestone-49 addendum).
 
 Scrolling during generation is stick-to-bottom: each 150 ms flush is an
 external in-place reload (`setContent`), which measures whether the view
@@ -2230,3 +2262,161 @@ sequenceDiagram
 The note is saved by the user like any edit; nothing is appended behind
 their back. With no note open, the calendar's **Today** button (or the
 quick-capture hotkey) opens the daily note first.
+
+## 6.46 The Backlinks panel — focus → query → open at the line (milestone 54, `plugins/backlinks/`)
+
+```mermaid
+sequenceDiagram
+    actor User
+    participant Panel as Backlinks panel (plugin renderer)
+    participant Doc as documents API
+    participant BE as plugin main (BacklinkIndex)
+    participant FS as VaultManager
+
+    Note over BE: boot: one coalesced sweep per vault (list + read every .md,<br/>extract [[targets]] — frontmatter/fences/code skipped)
+    BE-->>Panel: links-updated push
+    User->>Doc: focus a note (tab switch)
+    Doc-->>Panel: active-changed (path + vaultId)
+    Panel->>BE: backlinks {path, vaultId}
+    BE->>BE: buildNoteIndex(current file list)
+    BE->>BE: collectBacklinks: every OTHER file's link where<br/>resolveTargetLink(target, fromPath) === path<br/>(parity twin of the base WikilinkService)
+    BE-->>Panel: rows (path · heading · line · snippet)
+    User->>Panel: click a row
+    Panel->>Doc: open(row.path, row.line, {vaultId})
+```
+
+Freshness rides the hook registries (the tag-index shape): a save
+re-indexes that one file, a scoped vault-change write/delete does the
+same through the announcer, every other round (refresh, renames,
+registry changes) rebuilds the vaults — each mutation pushes
+`links-updated` and the panel re-queries. Resolution happens at QUERY
+time against the current file list, so a rename or a new file reshapes
+the backlinks without re-reading every note's links. Known v1 limits:
+same-vault only, `.md` files only, unsaved buffers don't count.
+
+## 6.47 Back / forward through the document history (milestone 55, `DocHistoryService`)
+
+```mermaid
+sequenceDiagram
+    actor User
+    participant Ed as EditorService / PaneService
+    participant H as DocHistoryService
+    participant TB as Titlebar arrows<br/>(Alt+Left / Alt+Right)
+
+    User->>Ed: open / activate a document<br/>(tree, calendar, hit, tab click, pane focus)
+    Ed-->>H: activePath changed
+    H->>H: effect: not suspended, nav == 0,<br/>not a duplicate -> push (truncate forward branch,<br/>circular drop past HISTORY_LIMIT)
+
+    User->>TB: Go back
+    TB->>H: back() (serialized on the step queue)
+    H->>H: walk pointer down to the next showable entry<br/>(nav guard held across every await)
+    alt document still open
+        H->>Ed: activate(key) -> the pane focuses it
+    else document closed
+        H->>Ed: openFile / openExternalFile<br/>(keepFocused: never a clean-tab replace)
+        Ed-->>H: docFor(key) again -> shown
+    else nothing behind it (scratch / plugin kind / read failed)
+        H->>H: prune the entry, keep walking
+    end
+    Note over H: state written back; the walk's own<br/>activation never records itself
+    Note over Ed: the fresh state restores caret + scroll<br/>through the milestone-50 memory
+
+## 6.48 The assistant creates / deletes a template (milestone 58, SDK 1.14)
+
+```mermaid
+sequenceDiagram
+    actor User
+    participant P as Assistant panel
+    participant CE as ChatEngine (main)
+    participant TT as template-tools.ts
+    participant V as ctx.vault<br/>(writeAnnounced / delete)
+    participant VM as VaultManager + announcer
+
+    User->>P: "Create a meeting template"
+    P->>CE: ask (non-live)
+    CE->>CE: build ask tool set:<br/>template specs + tasks_list spec<br/>(independent of mcp.enabled)
+    CE->>TT: template_list {} (fresh bundle —<br/>current templates.dir in the descriptions)
+    TT->>V: listMarkdownFiles()
+    V-->>TT: flat .md listing
+    TT-->>CE: paths under templates/ (one per line)
+    CE->>TT: template_write {name, content, overwrite:false}
+    TT->>TT: resolveTemplate: normalize, refuse ../absolute,<br/>reserved prompts/, refuse silent overwrite
+    TT->>V: writeAnnounced("templates/meetings/retro.md", body)
+    V->>VM: writeFile (own-write ledger)
+    VM-->>P: vault:changed push (changedPaths)
+    Note over P: Templates panel, slash menu and Mod+T<br/>reload on the same round — no extra wiring
+    TT-->>CE: "Created the template …"
+    CE-->>P: answer turn (tool pair persisted as drey-tool entries)
+
+    User->>P: "Delete the retro template"
+    P->>CE: ask (non-live)
+    CE->>TT: template_delete {name:"meetings/retro"}
+    TT->>V: ctx.vault.delete (NEW SDK 1.14 surface)
+    V->>VM: deleteEntry → OS recycle bin (milestone 52)
+    VM-->>P: vault:changed push (deletedPaths)
+    TT-->>CE: "Deleted … (moved to the recycle bin)"
+```
+
+Guard rails baked into the pure resolver, not the prompt: `daily.md` is
+refused on delete (it seeds new daily notes; overwrite stays allowed),
+`prompts/` is refused everywhere (the composer prompt picker's format),
+and `template_write` without `overwrite: true` fails on an existing
+template instead of replacing it. No confirmation dialog — ADR-0011's
+later-change: structural, low-risk content, and deletes stay
+recoverable through the bin.
+
+## 6.49 Rename a note → links rewritten, attachments follow (milestone 59, [ADR-0059](09_architecture_decisions/0059-link-integrity-on-rename.md))
+
+```mermaid
+sequenceDiagram
+    actor User
+    participant FP as FilesPanel
+    participant LU as LinkUpdateService
+    participant D as LinkUpdateDialog
+    participant LR as LinkRewriter (main)
+    participant PL as planRename (shared)
+    participant VM as VaultManager
+    participant ES as EditorService
+
+    User->>FP: rename "Old.md" → "New.md" (or drag to a folder)
+    FP->>LU: rename(vault, from, vault, to)
+    alt vault.updateLinksOnRename = never
+        LU->>VM: vault:rename-entry
+    else ask / always
+        LU->>LR: vault:rename-preview { from, to, buffers: dirty open notes }
+        LR->>VM: listFiles + read every note (buffer wins over file)
+        LR->>PL: planRename(files, contents, from → to)
+        PL-->>LR: patches (notes to rewrite) + assets (files that travel)
+        LR-->>LU: preview
+        opt nothing affected
+            LU->>VM: vault:rename-entry (no dialog)
+        end
+        opt mode = ask
+            LU->>D: show notes + changed lines + attachments
+            User->>D: Update links / Rename only / Cancel (+ Don't ask again)
+            D-->>LU: answer (persisted as always / never when ticked)
+        end
+        LU->>LR: vault:rename-with-links (same request)
+        LR->>PL: planRename again — fresh, not the preview's
+        LR->>VM: renameEntry(from, to)
+        loop each patch
+            alt note was sent as a dirty buffer
+                LR-->>LU: patched content (not written)
+            else
+                LR->>VM: writeFile(newPath, content, CRLF restored)
+            end
+        end
+        loop each attachment
+            LR->>VM: renameEntry / copyEntry, removeDirIfEmpty
+        end
+        LR-->>LU: { path, written, buffers, assets, failed }
+        LU->>ES: retargetTabs (entry + moved attachments)
+        LU->>ES: updateBuffer (dirty notes), reloadFromVaultChange (clean ones)
+    end
+    LU-->>FP: new path (null = cancelled)
+```
+
+The plan is computed twice on purpose: the preview is what the user
+sees, the apply reads the vault again — a file changed in between
+contributes what it matches then. The index round after the rename is
+the plain rename's (`refresh` + the `rename` vault-change event).

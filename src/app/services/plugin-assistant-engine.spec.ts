@@ -3,8 +3,22 @@ import { ChatEngine } from '../../../plugins/assistant/main/chat-engine';
 import { ChatStore } from '../../../plugins/assistant/main/chat-store';
 import { parseChatNote } from '../../../plugins/assistant/shared/chat-note';
 import { MAX_EXTRA_FILES } from '../../../plugins/assistant/shared/ask';
+import {
+  TASKS_LIST_SPEC,
+  hydrateTaskRecords,
+  matchTasksInAnswer,
+  runTasksListTool,
+  taskArgsCarryScopeRestriction,
+} from '../../../plugins/assistant/main/tasks-tool';
+import {
+  TITLE_SYSTEM,
+  buildDateNote,
+  buildTitleUserMessage,
+  sanitizeChatTitle,
+} from '../../../plugins/assistant/main/ask-prompts';
 import { DEFAULT_APP_CONFIG, normalizeAppConfig, AppConfig } from '../../../shared/app-config';
-import type { LlmChatResult, ChatMessage, LlmCapabilities } from '../../../shared/llm';
+import type { LlmChatResult, ChatMessage, LlmCapabilities, ToolSpec } from '../../../shared/llm';
+import type { SdkTaskRecord } from '../../../shared/plugin-api';
 
 /**
  * Specs for the assistant plugin's engines (`plugins/assistant/main/`).
@@ -131,8 +145,16 @@ interface ChatCall {
 interface ChatHarness {
   engine: ChatEngine;
   calls: ChatCall[];
+  /** The 57e chat-naming calls (background traffic, recorded separately). */
+  titleCalls: ChatCall[];
   files: Map<string, string>;
   deltas: Array<{ taskId: string; text: string }>;
+  /** The tasks_list tool the harness offers (null = none); replaced per test. */
+  tasksTool: {
+    spec: ToolSpec;
+    run(argsJson: string): Promise<string>;
+    query(opts?: { includeDone?: boolean; vaultId?: string }): Promise<readonly SdkTaskRecord[]>;
+  } | null;
   setConfig(patch: Partial<AppConfig['llm']>): void;
   setCapabilities(caps: Partial<LlmCapabilities>): void;
 }
@@ -141,9 +163,10 @@ function chatHarness(
   reply: (call: ChatCall, index: number) => LlmChatResult | Error = () => ({
     text: 'Antwort.',
   }),
-  options: { llm?: boolean; mcp?: boolean } = {},
+  options: { llm?: boolean; mcp?: boolean; titleReply?: string | Error } = {},
 ): ChatHarness {
   const calls: ChatCall[] = [];
+  const titleCalls: ChatCall[] = [];
   const deltas: Array<{ taskId: string; text: string }> = [];
   const files = new Map<string, string>();
   const store = new ChatStore({
@@ -158,12 +181,7 @@ function chatHarness(
       files.set(path, content);
       return 0;
     },
-    list: async () =>
-      [...files.keys()].map((relativePath) => ({
-        name: relativePath,
-        relativePath,
-        type: 'file' as const,
-      })),
+    listMarkdownFiles: async () => [...files.keys()],
   });
 
   const llmConfig: AppConfig['llm'] = {
@@ -184,11 +202,38 @@ function chatHarness(
     imageAttachments: false,
   };
 
-  const engine = new ChatEngine(
+  const harness: ChatHarness = {
+    engine: undefined as never,
+    calls,
+    titleCalls,
+    files,
+    deltas,
+    tasksTool: null,
+    setConfig(patch) {
+      Object.assign(config.llm, patch);
+    },
+    setCapabilities(caps) {
+      Object.assign(capabilities, caps);
+    },
+  };
+
+  harness.engine = new ChatEngine(
     store,
     () => config,
     async (messages, opts) => {
       const call: ChatCall = { messages: [...messages], opts: opts ?? {} };
+      // The 57e naming call is background traffic: it records into its
+      // own list and answers from `options.titleReply` (default a sane
+      // title) — never through the test's reply fn, whose call indexes
+      // and attempt counters describe the MAIN flow.
+      if ((messages[0]?.content ?? '') === TITLE_SYSTEM) {
+        titleCalls.push(call);
+        const titled = options.titleReply ?? 'Benannter Chat';
+        if (titled instanceof Error) {
+          throw titled;
+        }
+        return { text: titled };
+      }
       const index = calls.length;
       calls.push(call);
       if (opts?.onDelta !== undefined) {
@@ -210,22 +255,15 @@ function chatHarness(
       onLiveEdit: () => undefined,
       // The Vault chip is off in every ASK below, so this is never called;
       // it is here to satisfy the port.
-      retrieveContext: async () => [],
+      retrieveContext: async () => ({ enabled: true, minScore: 0.3, hits: [] }),
+      tasksTool: () => harness.tasksTool,
+      // The template tools would change the prompt shape in every ASK
+      // below (SDK 1.14); these tests pin the pre-template prompts.
+      templateTools: () => null,
     },
   );
 
-  return {
-    engine,
-    calls,
-    files,
-    deltas,
-    setConfig(patch) {
-      Object.assign(config.llm, patch);
-    },
-    setCapabilities(caps) {
-      Object.assign(capabilities, caps);
-    },
-  };
+  return harness;
 }
 
 const ASK = {
@@ -407,7 +445,7 @@ describe('assistant plugin chat engine — sessions vs replay', () => {
     const store = new ChatStore({
       read: async (p) => edited.files.get(p)!,
       writeAnnounced: async (p, c) => void edited.files.set(p, c),
-      list: async () => [],
+      listMarkdownFiles: async () => [],
     });
     await store.appendEditOutcome(e1.chatPath, { path: 'a.md', applied: true, after: '# Geändert\n' });
 
@@ -480,7 +518,7 @@ describe('assistant plugin chat engine — edit proposals', () => {
     const store = new ChatStore({
       read: async (p) => h.files.get(p)!,
       writeAnnounced: async (p, c) => void h.files.set(p, c),
-      list: async () => [],
+      listMarkdownFiles: async () => [],
     });
     await store.appendEditOutcome(chatPath, { path: 'a.md', applied: true, after: '# Geändert\n' });
     const updated = parseChatNote(h.files.get(chatPath)!);
@@ -552,5 +590,658 @@ describe('assistant plugin chat engine — document-fence protocol (ADR-0053)', 
     await expect(h.engine.ask(ASK)).rejects.toThrow(/no message content/);
     const path = [...h.files.keys()][0];
     expect(parseChatNote(h.files.get(path)!).turns).toHaveLength(0);
+  });
+});
+
+describe('assistant plugin chat engine — tasks_list tool (SDK 1.11)', () => {
+  const TASK: SdkTaskRecord = {
+    path: 'daily/a.md',
+    vaultId: 'v1',
+    line: 3,
+    text: 'Aufräumen',
+    done: false,
+    kind: 'checkbox',
+    heading: null,
+    tags: [],
+    due: '2026-10-02',
+    priority: 'high',
+  };
+
+  it('attaches the tasks tool to a normal ask when the port provides one', async () => {
+    const h = chatHarness();
+    h.tasksTool = {
+      spec: TASKS_LIST_SPEC,
+      run: async () => `${JSON.stringify(TASK)}`,
+      query: async () => [],
+    };
+
+    await h.engine.ask(ASK);
+
+    const opts = h.calls[0]?.opts as {
+      tools?: ToolSpec[];
+      maxToolRounds?: number;
+      onToolCall?: (name: string, args: string) => Promise<string>;
+      vaultTools?: boolean;
+    };
+    expect(opts.tools?.map((t) => t.name)).toEqual(['tasks_list']);
+    expect(opts.maxToolRounds).toBe(3);
+    expect(opts.vaultTools).toBeUndefined(); // no MCP gate — the tool rides alone
+    expect(await opts.onToolCall?.('tasks_list', '{}')).toContain('Aufräumen');
+    expect(await opts.onToolCall?.('other_tool', '{}')).toContain('Unknown tool');
+    // The system prompt tells the model to prefer the tool for task questions.
+    const system = h.calls[0]?.messages[0] as { role: string; content: string };
+    expect(system.content).toContain('answered ONLY from the tasks_list tool');
+  });
+
+  it('no task provider means no tool and no tasks note', async () => {
+    const h = chatHarness();
+    await h.engine.ask(ASK);
+    const opts = h.calls[0]?.opts as { tools?: unknown };
+    expect(opts.tools).toBeUndefined();
+    const system = h.calls[0]?.messages[0] as { content: string };
+    expect(system.content).not.toContain('answered ONLY from the tasks_list tool');
+    // The wikilink note rides regardless (navigation is prompt-level, SDK 1.11).
+    expect(system.content).toContain('wikilinks');
+  });
+
+  it('a live-edit turn keeps the doc tools — the tasks tool does not join', async () => {
+    const h = chatHarness(() => ({ text: 'Live-Antwort.' }));
+    h.tasksTool = { spec: TASKS_LIST_SPEC, run: async () => '', query: async () => [] };
+    await h.engine.ask({ ...ASK, liveEdit: true, note: { path: 'a.md', body: DOC } });
+    const opts = h.calls[0]?.opts as { tools?: ToolSpec[] };
+    expect(opts.tools?.map((t) => t.name)).toEqual([
+      'doc_apply_diff',
+      'doc_write',
+      'doc_read',
+    ]);
+  });
+
+  it('a tool-carrying turn persists the call/result pair in the drey-tool fence', async () => {
+    const h = chatHarness(() => ({
+      text: 'Du hast eine offene Aufgabe.',
+      toolTrace: [
+        {
+          role: 'assistant',
+          content: null,
+          tool_calls: [
+            { id: 'tk1', type: 'function', function: { name: 'tasks_list', arguments: '{}' } },
+          ],
+        },
+        { role: 'tool', tool_call_id: 'tk1', content: `${JSON.stringify(TASK)}` },
+      ],
+    }));
+    h.tasksTool = {
+      spec: TASKS_LIST_SPEC,
+      run: async () => `${JSON.stringify(TASK)}`,
+      query: async () => [TASK],
+    };
+
+    const { chatPath } = await h.engine.ask(ASK);
+    const view = parseChatNote(h.files.get(chatPath)!);
+    expect(view.turns[1].tool).toEqual([
+      { kind: 'call', id: 'tk1', name: 'tasks_list', arguments: '{}' },
+      {
+        kind: 'result',
+        id: 'tk1',
+        content: `${JSON.stringify(TASK)}`,
+      },
+    ]);
+  });
+});
+
+describe('assistant plugin tasks tool — runner + hydration (SDK 1.11)', () => {
+  const TASK: SdkTaskRecord = {
+    path: 'daily/a.md',
+    vaultId: 'v1',
+    line: 3,
+    text: 'Aufräumen',
+    done: false,
+    kind: 'checkbox',
+    heading: null,
+    tags: [],
+    due: null,
+    priority: null,
+  };
+
+  it('runTasksListTool emits one JSON line per record and a truncation note', async () => {
+    const provider = {
+      query: async () => Array.from({ length: 152 }, (_, i) => ({ ...TASK, line: i + 1 })),
+      setDone: async () => TASK,
+    };
+    const out = await runTasksListTool(provider, '{}');
+    const lines = out.split('\n');
+    expect(lines).toHaveLength(151); // 150 rows + the truncation note
+    expect(JSON.parse(lines[0])).toMatchObject({ text: 'Aufräumen', line: 1 });
+    expect(JSON.parse(lines[150])).toEqual({ truncated: 2 });
+  });
+
+  it('runTasksListTool parses includeDone/vaultId and reports the empty index', async () => {
+    const seen: Array<Record<string, unknown>> = [];
+    const provider = {
+      query: async (opts?: Record<string, unknown>) => {
+        seen.push({ ...(opts ?? {}) });
+        return opts?.['includeDone'] === true ? [TASK] : [];
+      },
+      setDone: async () => TASK,
+    };
+    expect(await runTasksListTool(provider, '{"includeDone":true,"vaultId":"v1"}')).toBe(
+      JSON.stringify(TASK),
+    );
+    // The tool always asks for the importance view (57c) unless the model
+    // overrides it.
+    expect(seen[0]).toEqual({ includeDone: true, vaultId: 'v1', sort: 'importance' });
+    expect(await runTasksListTool(provider, 'not json')).toContain('Could not parse');
+    expect(await runTasksListTool(provider, '{}')).toBe('No tasks found.');
+  });
+
+  it('runTasksListTool passes text/tag/overdue/sort intent args to the provider (57c)', async () => {
+    const seen: Array<Record<string, unknown>> = [];
+    const provider = {
+      query: async (opts?: Record<string, unknown>) => {
+        seen.push({ ...(opts ?? {}) });
+        return [TASK];
+      },
+      setDone: async () => TASK,
+    };
+    await runTasksListTool(
+      provider,
+      '{"text":"Marta","tag":"#blockuniversum","overdue":true,"sort":"priority"}',
+    );
+    expect(seen[0]).toEqual({
+      includeDone: false,
+      text: 'Marta',
+      tag: 'blockuniversum',
+      overdue: true,
+      sort: 'priority',
+    });
+    // Blank/unknown values stay unset; the # is stripped from the tag.
+    await runTasksListTool(provider, '{"text":"   ","tag":"  ","overdue":false,"sort":"nope"}');
+    expect(seen[1]).toEqual({ includeDone: false, sort: 'importance' });
+  });
+
+  it('hydrateTaskRecords re-resolves rows against the live index', () => {
+    const persisted: SdkTaskRecord[] = [
+      TASK,
+      { ...TASK, line: 20, text: 'Verschoben', due: '2026-09-01', done: true },
+    ];
+    const current: SdkTaskRecord[] = [
+      { ...TASK }, // same line
+      // the shifted twin: same text, new line/due/done state
+      { ...TASK, line: 12, text: 'Verschoben', due: '2026-10-31', done: false },
+    ];
+    const hydrated = hydrateTaskRecords(persisted, current);
+    expect(hydrated[0]).toMatchObject({ line: 3, text: 'Aufräumen' });
+    expect(hydrated[1]).toMatchObject({ line: 12, due: '2026-10-31', done: false });
+    // No candidate — the persisted row stands.
+    const ghost = hydrateTaskRecords([{ ...TASK, path: 'gone.md' }], current);
+    expect(ghost[0]?.path).toBe('gone.md');
+  });
+});
+
+describe('assistant plugin tasks tool — answer matching (57b)', () => {
+  /** Real records from the owner's vault (meeting-import convention). */
+  const MARTA: SdkTaskRecord = {
+    path: 'meetings/2026-09-15-stand-notizen.md',
+    vaultId: 'v1',
+    line: 22,
+    text: 'Marta: Notiz "Zeit in der Sprache" anlegen (Stichworte: tense logic, Aspekt, Futurum als Epistemik-Marker)',
+    done: false,
+    kind: 'checkbox',
+    heading: 'Aufgaben',
+    tags: [],
+    due: '2026-09-25',
+    priority: null,
+  };
+  const HENRIK: SdkTaskRecord = {
+    path: 'meetings/2026-09-15-stand-notizen.md',
+    vaultId: 'v1',
+    line: 21,
+    text: 'Henrik: Summarize-Test über den Tag #blockuniversum laufen lassen und Ergebnis im Lesekreis vorstellen',
+    done: false,
+    kind: 'checkbox',
+    heading: 'Aufgaben',
+    tags: ['blockuniversum'],
+    due: '2026-10-02',
+    priority: null,
+  };
+
+  it('the real two-sentence answer matches the tasks it paraphrases', () => {
+    const answer =
+      'Die wichtigsten derzeit offenen Tasks sind diejenigen mit den nächsten ' +
+      'Fälligkeitsdaten: Marta muss bis zum 25.09. eine Notiz zu „Zeit in der Sprache" ' +
+      'anlegen, und Henrik hat am 02.10. einen Summarize-Test über das Thema ' +
+      'Blockuniversum durchzuführen.';
+    const matched = matchTasksInAnswer(answer, [MARTA, HENRIK]);
+    expect(matched.map((t) => t.text.slice(0, 6))).toEqual(['Marta:', 'Henrik']);
+  });
+
+  it('a prose answer about the topic (not tasks) triggers nothing', () => {
+    const answer =
+      'Das Blockuniversum ist eine philosophische Position über die Zeit. ' +
+      'Henrik hat in der Debatte die Relativität der Gleichzeitigkeit erläutert.';
+    expect(matchTasksInAnswer(answer, [HENRIK])).toEqual([]);
+  });
+
+  it('noise rows with too few significant tokens never match', () => {
+    const answer = 'Der Test ist erledigt und war erfolgreich.';
+    expect(matchTasksInAnswer(answer, [{ ...HENRIK, text: 'Test' }])).toEqual([]);
+  });
+
+  it('a mixed-language answer quoting the task title still matches', () => {
+    // Models keep proper titles verbatim even when the surrounding prose
+    // switches language — that is what the matcher anchors to. (A fully
+    // translated PARAPHRASE with zero shared words stays under the
+    // threshold — documented matcher limit.)
+    const answer = 'Marta muss die Notiz "Zeit in der Sprache" anlegen — create it by 25.09.';
+    expect(matchTasksInAnswer(answer, [MARTA]).map((t) => t.line)).toEqual([22]);
+  });
+});
+
+describe('assistant plugin chat engine — post-hoc task block (57b)', () => {
+  const MARTA: SdkTaskRecord = {
+    path: 'meetings/2026-09-15-stand-notizen.md',
+    vaultId: 'v1',
+    line: 22,
+    text: 'Marta: Notiz "Zeit in der Sprache" anlegen (Stichworte: tense logic, Aspekt, Futurum als Epistemik-Marker)',
+    done: false,
+    kind: 'checkbox',
+    heading: 'Aufgaben',
+    tags: [],
+    due: '2026-09-25',
+    priority: null,
+  };
+  const HENRIK: SdkTaskRecord = {
+    path: 'meetings/2026-09-15-stand-notizen.md',
+    vaultId: 'v1',
+    line: 21,
+    text: 'Henrik: Summarize-Test über den Tag #blockuniversum laufen lassen und Ergebnis im Lesekreis vorstellen',
+    done: false,
+    kind: 'checkbox',
+    heading: 'Aufgaben',
+    tags: ['blockuniversum'],
+    due: '2026-10-02',
+    priority: null,
+  };
+
+  function tasksHarness(
+    answer: string,
+    records: readonly SdkTaskRecord[],
+    options: {
+      /** A tasks_list call in the model's trace: its args + result content. */
+      traceTasksCall?: { args: string; result?: string };
+    } = {},
+  ) {
+    const call = options.traceTasksCall;
+    const h = chatHarness(() => ({
+      text: answer,
+      ...(call !== undefined
+        ? {
+            toolTrace: [
+              {
+                role: 'assistant',
+                content: null,
+                tool_calls: [
+                  { id: 'real1', type: 'function', function: { name: 'tasks_list', arguments: call.args } },
+                ],
+              },
+              {
+                role: 'tool',
+                tool_call_id: 'real1',
+                content: call.result ?? records.map((r) => JSON.stringify(r)).join('\n'),
+              },
+            ],
+          }
+        : {}),
+    }));
+    const queryOpts: Array<Record<string, unknown>> = [];
+    h.tasksTool = {
+      spec: TASKS_LIST_SPEC,
+      run: async () => records.map((r) => JSON.stringify(r)).join('\n'),
+      query: async (opts?: Record<string, unknown>) => {
+        queryOpts.push({ ...(opts ?? {}) });
+        return records;
+      },
+    };
+    return { h, queryOpts };
+  }
+
+  it('a task-shaped answer gets its MATCHED subset persisted as a synthetic pair', async () => {
+    const answer =
+      'Die wichtigsten offenen Tasks: Marta muss die Notiz "Zeit in der Sprache" anlegen.';
+    const { h, queryOpts } = tasksHarness(answer, [MARTA, HENRIK]);
+
+    const { chatPath } = await h.engine.ask(ASK);
+    // The post-hoc query asks for the deterministic importance view of
+    // the open set (57c).
+    expect(queryOpts).toEqual([{ includeDone: false, sort: 'importance' }]);
+    const view = parseChatNote(h.files.get(chatPath)!);
+    const tool = view.turns[1].tool;
+    expect(tool).toHaveLength(2);
+    expect(tool[0]).toMatchObject({ kind: 'call', name: 'tasks_list' });
+    expect(tool[1]?.kind).toBe('result');
+    if (tool[1]?.kind !== 'result') {
+      return;
+    }
+    // The block is SCOPED to what the answer discusses (57c): Marta's
+    // task only — not the full index the query returned.
+    const lines = tool[1].content.split('\n');
+    expect(lines).toHaveLength(1);
+    expect(JSON.parse(lines[0])).toMatchObject({ line: 22 });
+  });
+
+  it('an answer covering the whole set keeps the full block', async () => {
+    const answer =
+      'Henrik soll den Summarize-Test über den Tag #blockuniversum laufen lassen und das ' +
+      'Ergebnis im Lesekreis vorstellen; Marta legt die Notiz "Zeit in der Sprache" an ' +
+      '(tense logic, Aspekt, Futurum als Epistemik-Marker) bis zum Stichwort.';
+    const { h } = tasksHarness(answer, [MARTA, HENRIK]);
+    const { chatPath } = await h.engine.ask(ASK);
+    const tool = parseChatNote(h.files.get(chatPath)!).turns[1].tool;
+    expect(tool[1]?.kind).toBe('result');
+    if (tool[1]?.kind !== 'result') {
+      return;
+    }
+    expect(tool[1].content.split('\n')).toHaveLength(2);
+  });
+
+  it('a non-task answer stays fence-free', async () => {
+    const { h } = tasksHarness('Das Blockuniversum ist eine philosophische Position über die Zeit.', [
+      MARTA,
+      HENRIK,
+    ]);
+    const { chatPath } = await h.engine.ask(ASK);
+    expect(parseChatNote(h.files.get(chatPath)!).turns[1].tool).toEqual([]);
+  });
+
+  it('no synthetic pair when the model called the tool itself', async () => {
+    const answer = 'Die wichtigsten offenen Tasks: Marta muss die Notiz "Zeit in der Sprache" anlegen.';
+    const { h } = tasksHarness(answer, [MARTA, HENRIK], {
+      traceTasksCall: { args: '{"text":"Marta"}' },
+    });
+    const { chatPath } = await h.engine.ask(ASK);
+    const tool = parseChatNote(h.files.get(chatPath)!).turns[1].tool;
+    // Exactly the real trace pair (id real1), nothing synthetic appended —
+    // and a RESTRICTED call's result is never touched.
+    expect(tool.map((e) => ('id' in e ? e.id : null))).toEqual(['real1', 'real1']);
+    expect(tool[1]?.kind).toBe('result');
+    if (tool[1]?.kind === 'result') {
+      expect(tool[1].content.split('\n')).toHaveLength(2);
+    }
+  });
+
+  it('an UNRESTRICTED model call is trimmed to the answer-scoped subset (57c)', async () => {
+    // The exact live failure: the model called {} on a "tasks of Henrik"
+    // question and the block listed everything. The refine deterministically
+    // scopes the persisted result to what the answer discusses.
+    const answer =
+      'Die wichtigsten Tasks von Henrik: der Summarize-Test über den Tag #blockuniversum ' +
+      'läuft über den Tag und das Ergebnis wird im Lesekreis vorgestellt.';
+    const { h } = tasksHarness(answer, [MARTA, HENRIK], { traceTasksCall: { args: '{}' } });
+    const { chatPath } = await h.engine.ask(ASK);
+    const tool = parseChatNote(h.files.get(chatPath)!).turns[1].tool;
+    expect(tool.map((e) => ('id' in e ? e.id : null))).toEqual(['real1', 'real1']);
+    expect(tool[1]?.kind).toBe('result');
+    if (tool[1]?.kind !== 'result') {
+      return;
+    }
+    const lines = tool[1].content.split('\n');
+    expect(lines).toHaveLength(1);
+    expect(JSON.parse(lines[0])).toMatchObject({ line: 21 }); // Henrik
+  });
+
+  it('an unrestricted call with a whole-set answer stays untouched', async () => {
+    // Both tasks named with enough of their own words — the answer IS the
+    // whole scope, so the refine must not trim.
+    const answer =
+      'Henrik soll den Summarize-Test über den Tag #blockuniversum laufen lassen und das ' +
+      'Ergebnis im Lesekreis vorstellen; Marta legt die Notiz "Zeit in der Sprache" an — ' +
+      'Stichworte: tense, logic, Aspekt, Futurum als Epistemik-Marker.';
+    const { h } = tasksHarness(answer, [MARTA, HENRIK], { traceTasksCall: { args: '{}' } });
+    const { chatPath } = await h.engine.ask(ASK);
+    const tool = parseChatNote(h.files.get(chatPath)!).turns[1].tool;
+    expect(tool[1]?.kind).toBe('result');
+    if (tool[1]?.kind === 'result') {
+      expect(tool[1].content.split('\n')).toHaveLength(2);
+    }
+  });
+
+  it('an index failure never fails the ask', async () => {
+    const h = chatHarness(() => ({ text: 'Tasks: Marta muss die Notiz "Zeit in der Sprache" anlegen.' }));
+    h.tasksTool = {
+      spec: TASKS_LIST_SPEC,
+      run: async () => '',
+      query: async () => {
+        throw new Error('index gone');
+      },
+    };
+    const { outcome } = await h.engine.ask(ASK);
+    expect(outcome.kind).toBe('answer');
+  });
+
+  it('a live-edit turn never gets the post-hoc pass', async () => {
+    const { h } = tasksHarness('Live angewandt.', [MARTA, HENRIK]);
+    const { chatPath } = await h.engine.ask({ ...ASK, liveEdit: true, note: { path: 'a.md', body: DOC } });
+    const view = parseChatNote(h.files.get(chatPath)!);
+    expect(view.turns[1].tool.every((e) => e.kind !== 'result' || !e.content.includes('"line":22'))).toBe(true);
+  });
+});
+
+describe('assistant plugin — task evaluation fixes (57d)', () => {
+  const ENTROPIE: SdkTaskRecord = {
+    path: 'daily/2026/09/2026-09-18.md',
+    vaultId: 'v1',
+    line: 7,
+    text: 'Entropie-Notiz fertigstellen',
+    done: false,
+    kind: 'checkbox',
+    heading: null,
+    tags: [],
+    due: null,
+    priority: null,
+    completed: null,
+  };
+
+  function traceOf(args: string, result: string): LlmChatResult['toolTrace'] {
+    return [
+      {
+        role: 'assistant',
+        content: null,
+        tool_calls: [{ id: 't1', type: 'function', function: { name: 'tasks_list', arguments: args } }],
+      },
+      { role: 'tool', tool_call_id: 't1', content: result },
+    ];
+  }
+
+  it('a short task matches when the answer carries ALL of its words', () => {
+    // The live miss: three significant words could never reach SHARED_MIN.
+    const answer = 'Als Nächstes solltest du die Entropie-Notiz fertigstellen.';
+    expect(matchTasksInAnswer(answer, [ENTROPIE])).toEqual([ENTROPIE]);
+    // Two of three words is topic talk, not the task.
+    expect(matchTasksInAnswer('Die Entropie-Notiz ist lesenswert.', [ENTROPIE])).toEqual([]);
+  });
+
+  it('runTasksListTool maps status / completedSince onto the done view', async () => {
+    const seen: Array<Record<string, unknown>> = [];
+    const provider = {
+      query: async (opts?: Record<string, unknown>) => {
+        seen.push({ ...(opts ?? {}) });
+        return [ENTROPIE];
+      },
+      setDone: async () => ENTROPIE,
+    };
+    await runTasksListTool(provider, '{"status":"done"}');
+    expect(seen[0]).toEqual({ includeDone: false, status: 'done', sort: 'completed' });
+    // A completion-date restriction implies the done view; a bad date is dropped.
+    await runTasksListTool(provider, '{"completedSince":"2026-09-26"}');
+    expect(seen[1]).toEqual({
+      includeDone: false,
+      status: 'done',
+      completedSince: '2026-09-26',
+      sort: 'completed',
+    });
+    await runTasksListTool(provider, '{"status":"all","completedSince":"neulich","sort":"due"}');
+    expect(seen[2]).toEqual({ includeDone: false, status: 'all', sort: 'due' });
+  });
+
+  it('a done-only call is a scoped view the refine never trims', () => {
+    expect(taskArgsCarryScopeRestriction('{"status":"done"}')).toBe(true);
+    expect(taskArgsCarryScopeRestriction('{"completedSince":"2026-09-26"}')).toBe(true);
+    expect(taskArgsCarryScopeRestriction('{"status":"all"}')).toBe(false);
+    expect(taskArgsCarryScopeRestriction('{"includeDone":true}')).toBe(false);
+  });
+
+  it('the system prompt carries today and puts the task rule after the vault context', async () => {
+    const h = chatHarness();
+    h.tasksTool = { spec: TASKS_LIST_SPEC, run: async () => '', query: async () => [] };
+    await h.engine.ask(ASK);
+    const system = String(h.calls[0]?.messages[0]?.content);
+    expect(system).toMatch(/Today is \d{4}-\d{2}-\d{2} \(\w+day\)\./);
+    expect(system).toContain('"status":"done"');
+    expect(system).toContain('ONLY when the user explicitly asks you to modify');
+  });
+
+  it('buildDateNote names the local date and weekday', () => {
+    expect(buildDateNote(new Date(2026, 9, 10))).toBe('Today is 2026-10-10 (Saturday).');
+  });
+
+  it('a fence that changes nothing is an answer, not a proposal', async () => {
+    const h = chatHarness(() => ({ text: `Nichts zu tun.\n\n\`\`\`\`document\n${DOC}\`\`\`\`` }));
+    const { outcome, chatPath } = await h.engine.ask({ ...ASK, question: 'ja dann mach das' });
+    expect(outcome).toEqual({ kind: 'answer', text: 'Nichts zu tun.' });
+    expect(parseChatNote(h.files.get(chatPath)!).turns[1].text).toBe('Nichts zu tun.');
+  });
+
+  it('a bare no-op fence falls back to a fixed line', async () => {
+    const h = chatHarness(() => ({ text: `\`\`\`\`document\n${DOC}\`\`\`\`` }));
+    const { outcome } = await h.engine.ask(ASK);
+    expect(outcome).toEqual({ kind: 'answer', text: 'No changes were needed.' });
+  });
+
+  it('a fence in a task-lookup turn is an answer — the lookup was the request', async () => {
+    // The live failure: "ja dann mach das" produced a change proposal for
+    // the daily note carrying the looked-up list.
+    const h = chatHarness(() => ({
+      text: 'Hier sind die erledigten Aufgaben.\n\n````document\n# Titel\n\n- [x] Etwas\n````',
+      toolTrace: traceOf('{"status":"done"}', JSON.stringify({ ...ENTROPIE, done: true })),
+    }));
+    h.tasksTool = { spec: TASKS_LIST_SPEC, run: async () => '', query: async () => [] };
+    const { outcome, chatPath } = await h.engine.ask({ ...ASK, question: 'ja dann mach das' });
+    expect(outcome).toEqual({ kind: 'answer', text: 'Hier sind die erledigten Aufgaben.' });
+    const turn = parseChatNote(h.files.get(chatPath)!).turns[1];
+    expect(turn.text).toBe('Hier sind die erledigten Aufgaben.');
+    // The done view stays whole: a restricted call is never refined.
+    expect(turn.tool.map((e) => e.kind)).toEqual(['call', 'result']);
+  });
+
+  it('the post-hoc block falls back to completed tasks for an answer about finished work', async () => {
+    const done = { ...ENTROPIE, done: true, completed: '2026-10-09' };
+    const h = chatHarness(() => ({ text: 'Zuletzt hast du die Entropie-Notiz fertigstellen können.' }));
+    const queries: Array<Record<string, unknown>> = [];
+    h.tasksTool = {
+      spec: TASKS_LIST_SPEC,
+      run: async () => '',
+      query: async (opts?: Record<string, unknown>) => {
+        queries.push({ ...(opts ?? {}) });
+        return opts?.['status'] === 'done' ? [done] : [];
+      },
+    };
+    const { chatPath } = await h.engine.ask({ ...ASK, note: null });
+    expect(queries).toEqual([
+      { includeDone: false, sort: 'importance' },
+      { status: 'done', sort: 'completed' },
+    ]);
+    const tool = parseChatNote(h.files.get(chatPath)!).turns[1].tool;
+    expect(tool[1]?.kind === 'result' && JSON.parse(tool[1].content)).toMatchObject({
+      completed: '2026-10-09',
+    });
+  });
+});
+
+describe('assistant plugin chat engine — model-named chats (57e)', () => {
+  /** Waits for the fire-and-forget naming call to settle on the note. */
+  async function untilTitleLands(h: ReturnType<typeof chatHarness>, chatPath: string): Promise<void> {
+    for (let i = 0; i < 200; i++) {
+      if (parseChatNote(h.files.get(chatPath)!).frontmatter.title !== 'Worum geht es?') {
+        return;
+      }
+      await new Promise((resolve) => setTimeout(resolve, 1));
+    }
+  }
+
+  it('a brand-new chat asks the model for a title and replaces the placeholder', async () => {
+    const h = chatHarness(() => ({ text: 'Antwort.' }), { titleReply: '  "Kaffee am Morgen."\nDanke.' });
+
+    const { chatPath } = await h.engine.ask(ASK);
+    await untilTitleLands(h, chatPath);
+
+    const view = parseChatNote(h.files.get(chatPath)!);
+    expect(view.frontmatter.title).toBe('Kaffee am Morgen');
+    // The naming call: plain — no tools, no vault tools, no stream.
+    const titleCall = h.titleCalls[0];
+    expect(titleCall?.opts['tools']).toBeUndefined();
+    expect(titleCall?.opts['vaultTools']).toBeUndefined();
+    expect(titleCall?.messages[1]?.content).toContain('Worum geht es?');
+    expect(titleCall?.messages[1]?.content).toContain('Antwort.');
+  });
+
+  it('a follow-up ask never renames the chat', async () => {
+    const h = chatHarness(() => ({ text: 'Antwort.' }), { titleReply: 'Ersttitel' });
+    const first = await h.engine.ask(ASK);
+    await untilTitleLands(h, first.chatPath);
+
+    await h.engine.ask({ ...ASK, question: 'Und weiter?', chatPath: first.chatPath });
+    await new Promise((resolve) => setTimeout(resolve, 20));
+
+    expect(h.titleCalls).toHaveLength(1);
+  });
+
+  it('an unusable naming reply keeps the question placeholder', async () => {
+    const h = chatHarness(() => ({ text: 'Antwort.' }), { titleReply: '""' });
+    const { chatPath } = await h.engine.ask(ASK);
+    await new Promise((resolve) => setTimeout(resolve, 20));
+
+    expect(parseChatNote(h.files.get(chatPath)!).frontmatter.title).toBe('Worum geht es?');
+  });
+
+  it('a failing naming call keeps the placeholder and never fails the ask', async () => {
+    const h = chatHarness(
+      () => ({ text: 'Antwort.' }),
+      { titleReply: new Error('model down') },
+    );
+    const { chatPath, outcome } = await h.engine.ask(ASK);
+    await new Promise((resolve) => setTimeout(resolve, 20));
+
+    expect(outcome.kind).toBe('answer');
+    expect(parseChatNote(h.files.get(chatPath)!).frontmatter.title).toBe('Worum geht es?');
+  });
+});
+
+describe('assistant plugin — title sanitising (57e)', () => {
+  it('strips wrapping quotes and a trailing period, keeps the first line only', () => {
+    expect(sanitizeChatTitle('  "Kaffee am Morgen. "\nDanke.')).toBe('Kaffee am Morgen');
+    expect(sanitizeChatTitle('„Blockuniversum und Zeit«')).toBe('Blockuniversum und Zeit');
+  });
+
+  it('caps at 60 chars on a word boundary', () => {
+    const long = 'Ein sehr langer Titel der die Sechzig-Zeichen-Grenze deutlich übersteigt und weiter läuft';
+    const title = sanitizeChatTitle(long);
+    expect(title).not.toBeNull();
+    expect(title!.length).toBeLessThanOrEqual(60);
+    expect(title!.endsWith(' ')).toBe(false);
+  });
+
+  it('null for junk — the placeholder stands', () => {
+    expect(sanitizeChatTitle('""')).toBeNull();
+    expect(sanitizeChatTitle('x')).toBeNull();
+    expect(sanitizeChatTitle(' . ')).toBeNull();
+    expect(sanitizeChatTitle('')).toBeNull();
+  });
+
+  it('buildTitleUserMessage caps the snippets and skips an empty answer', () => {
+    expect(buildTitleUserMessage('Frage', '')).toBe('User: Frage');
+    const long = 'x'.repeat(900);
+    const built = buildTitleUserMessage(long, long);
+    expect(built).not.toContain(long);
+    expect(built).toContain('Assistant:');
   });
 });

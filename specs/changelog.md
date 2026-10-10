@@ -20,6 +20,514 @@ recorded as an explicit decision. The parity checklist lives in
 
 ## Recent milestones
 
+### Milestone 59 — links survive a rename; quick switcher + command palette
+
+**Not yet manually verified by the owner.**
+
+- **59a · Renaming or moving keeps links intact**
+  ([ADR-0059](../docs/09_architecture_decisions/0059-link-integrity-on-rename.md)).
+  A rename / move in the Files panel (inline rename, drag & drop, folders
+  included) now plans what it would break and repairs it: `[[wikilinks]]`
+  to a renamed note follow (anchor, alias and embed `!` kept), a moved
+  note keeps `[[Note]]` while the name is unique and only path-form links
+  change, and references to a renamed attachment follow too. The rule is
+  "what did this reference open before, and does the same text still open
+  it after" — only references whose answer changes are rewritten; code
+  and frontmatter are never touched.
+- **Attachments travel with their note.** When a note changes folder, a
+  file it references relative to itself (`![](attachments/x.png)`,
+  `![[x.png]]`, `[doc](<attachments/a.pdf>)`, `<img src>`) and that no
+  other note uses moves along, link text unchanged; an emptied
+  `attachments/` folder is removed. A shared file stays and the moved
+  note's link is rewritten to a relative path. Across vaults the
+  exclusive file moves and a shared one is copied (wikilinks stay
+  vault-scoped, ADR-0051). Nothing is overwritten.
+- **Ask / always / never** — new `vault.updateLinksOnRename` (Settings →
+  Vault, default *ask*): a dialog lists the affected notes with their
+  changed lines and the attachments that go along — *Update links*,
+  *Rename only*, *Cancel*, "Don't ask again". No dialog when nothing is
+  affected. Dirty open notes are patched in the buffer, not on disk.
+- **Base-owned, deviating from the roadmap wording** ("through the
+  backlinks index"): link integrity must not depend on an optional
+  plugin, and the rewrite reads every file fresh anyway. Grammar +
+  resolver moved to `shared/wikilinks.ts` (one definition for renderer
+  and main); planner `shared/link-rewrite.ts`, executor
+  `electron/link-rewriter.ts`, IPC `vault:rename-preview` /
+  `vault:rename-with-links`, renderer `src/app/link-update/`.
+- **59b · Quick switcher + command palette** (`src/app/palette/`): one
+  overlay. `Ctrl+P` lists the files of every vault, fuzzy-matched on
+  name then path, the documents visited this session first (so
+  `Ctrl+P`, Enter flips back); Enter opens, `Ctrl+Enter` opens beside
+  the current tab, and a query without a match offers "Create note".
+  A leading `>` — or `Ctrl+Shift+P` — lists every registered command
+  with its shortcut (plugin commands included). View menu rows "Go to
+  file…" / "Command palette…".
+- **New commands** so the palette can reach them: `settings.open`
+  (`Ctrl+,` — the File menu printed that hint without a binding
+  behind it), `layout.reset`, `vault.refresh`, `daily.today`,
+  `editor.toggleSource`, `note.exportPdf`.
+- Not covered (ADR-0059): renames made outside the app, links into a
+  note moved to another vault, heading-anchor renames.
+
+### Milestone 58 — the assistant manages the template library (SDK 1.14)
+
+- **The agent can create templates.** Four new chat tools —
+  `template_list`, `template_read`, `template_write`, `template_delete`
+  (`plugins/assistant/main/template-tools.ts`, the `tasks-tool` shape) —
+  work directly on the vault's template library (the configured
+  `templates.dir`, active vault). `template_write` requires an explicit
+  `overwrite` flag (create-only by default), subfolder names become
+  Templates-panel categories, and `{{date}}` / `{{time}}` /
+  `{{datetime}}` / `{{title}}` placeholders are documented to the model.
+  The tools ride every non-live ask, independent of `mcp.enabled`;
+  live-edit turns are untouched.
+- **Guard rails, deterministic**: `..`/absolute path escapes refused,
+  the top-level `prompts/` subfolder reserved (composer prompt picker's
+  format), `daily.md` refused on delete (daily-note seed; overwrite
+  stays allowed). Errors return as tool-result text, never throw.
+- **No confirmation (ADR-0011 later-change):** templates are small
+  structural content outside the tag index. Writes ride
+  `writeAnnounced`, deletes the milestone-52 recycle-bin path — both
+  announced, so the Templates panel, the slash menu and Mod+T update on
+  the same `vault:changed` round with zero changes in the templates
+  plugin.
+- **New base seam** `ctx.vault.delete(path, opts?)` (SDK minor → 14):
+  `VaultManager.deleteEntry` (escape guard, own-write ledger, assistant
+  sidecar) + the announcer's `deletedPaths` push; resolves whether the
+  target landed in the bin.
+
+### Search — "Include chats" toggle
+
+- A speech-bubble button next to the Search panel's scope switch.
+  **Behaviour change:** chat notes (`chats/`) are no longer listed in
+  vault / all-vault search hits unless it is on (off by default,
+  persisted in `localStorage['drey.search']`) — transcripts repeat the
+  questions asked of them and crowded almost every query. Export and
+  Summarize follow the visible hits; "Replace all" passes
+  `excludeChats` to the replace backend so it never rewrites chat notes
+  the list did not show. The document scope is unaffected (an open chat
+  note stays searchable), and so is the index: MCP `vault_search`, the
+  tag vocabulary and tag rename still cover chats. New icon
+  `message-circle`.
+
+### Milestone 57 — the assistant as the task & navigation surface (ADR-0058)
+
+- **Task answers become actionable.** The assistant gained a
+  `tasks_list` tool over a new base seam (SDK 1.11: `ctx.tasks` +
+  `TaskQueryProvider`, single-slot like section search): the tasks plugin
+  registers its index and stays the sole owner of the line grammar; the
+  tool rides every non-live ask (no MCP gate, tool-capable providers
+  only) and answers task questions from real index rows as one JSON line
+  per task. The model never quotes task lines from retrieval snippets
+  any more.
+- **The interactive task block.** A `tasks_list` call/result pair renders
+  in the turn card as a task list instead of raw chips: checkbox, text,
+  priority glyph, due badge (overdue/today colored), row click opens the
+  note at the line. The checkbox completes the task through the
+  provider's `setDone` (announced write, staleness-resolved); the fence
+  rows hydrate their live done/due state from the index at render time.
+- **Clickable wikilinks + rich answers.** New `api.links` SDK surface
+  (base-owned grammar + resolver — no third grammar copy): the panel's
+  turn text now renders a small Markdown subset (paragraphs, lists,
+  bold/italic/code) with `[[wikilinks]]` as buttons; a sync resolve probe
+  styles resolved vs. unresolved, a click follows the link — creating a
+  missing note, editor semantics. The ask prompt invites the model to
+  reference notes as wikilinks from context paths (deviation from the
+  M49 no-mint rule for prose, documented in the ADR; the deterministic
+  Sources digest rule stands).
+- **MCP symmetry:** `tasks_list` joins the vault tool set (read-only,
+  clear degradation without a provider). Drive-by: context-cite rows now
+  open at their cited line. `PLUGIN_API_VERSION` minor → 11.
+- **M57c — deterministic task views, the model demoted to intent:** the
+  live runs confirmed the model is a poor list builder (index order, no
+  importance) but a fine intent reader. The view moved to the data
+  owner: `TaskQueryOptions` gains `sort`/`text`/`tag`/`overdue` (SDK
+  1.12), implemented by the tasks plugin over the SAME comparators and
+  matchers its panel uses (`shared/tasks.ts`) — the Tasks panel, the
+  assistant block and MCP share one view semantics. The `tasks_list`
+  tool takes the intent args; the ask prompt tells the model to express
+  the question's restriction there; its prose stays a brief highlight.
+  `importance` (the assistant's default order) is due-ascending first
+  (overdue leads), priority within the undated rest, path/line last.
+  The post-hoc block stays the unfiltered importance-sorted safety net.
+  The panel renders the filter as head chips and a real empty state for
+  a filtered no-hit result; MCP passes the same args through but keeps
+  the provider's file-order default when `sort` is absent.
+- **M57e — model-named chats + the active chat in the head:** a
+  brand-new chat's title comes from a tiny background naming call
+  (same model, no tools — question + answer snippet; sanitized, capped
+  at 60 chars; failures keep the question placeholder, the ask never
+  waits). ChatStore writes are serialized per note so a late title
+  write cannot revert a meanwhile-landed turn. The panel head shows the
+  active chat's title as a muted label next to the "+" (live from the
+  chat list — the old frame `status()` was stale by design).
+- **M57c — the implicit chat-follow is gone:** the "a bound note opens
+  its newest bound chat" rule silently yanked the panel to the newest
+  match when several chats shared a title, and every day/meeting switch
+  flapped the panel. The only implicit switch left is a focused chat-note
+  tab (opening a chat's Markdown from the vault hydrates the panel);
+  every other focus keeps exactly the current chat, app start still
+  loads the newest conversation once, and `note:` stays as provenance +
+  the picker's "this note" marker only (ADR-0048 later change).
+- **M57c — icon-only assistant head:** the chat-title text left the
+  panel head (stale on a switch, and the picker it opened lists the
+  chats anyway) — the head is now the chat-list button + the "+" new
+  chat icon. The frame-header `status()` (the chat title right of
+  "Assistant") went with it: it recomputed only on shell change
+  detection — late and wrong after a switch — and said nothing the
+  picker doesn't.
+- **M57c live fix — the block is answer-scoped:** the 9B model called
+  `tasks_list` with `{}` on restricted questions, so everything was
+  listed. The intent prompt + tool description now carry few-shot
+  examples (person → `text`, `#tag` → `tag`, overdue → `overdue`), and
+  the engine scopes the persisted result to the answer deterministically:
+  the post-hoc pair carries the matched subset, an unrestricted call's
+  result is trimmed to it (restricted calls, whole-set and zero-match
+  answers untouched).
+- **M57c — daily notes never bind:** switching daily notes yanked the
+  panel to each day's leftover chat. A note under the configured daily
+  root now behaves like a chat-note tab for binding: asks under daily
+  focus leave the chat unbound, focusing a daily note never triggers the
+  bound-chat follow (ADR-0048 later change; the context chip still
+  rides, old daily-bound chats stay picker-reachable).
+- **M57b — the answer-anchored task block:** the model's tool call
+  proved unreliable (one run called `tasks_list`, the next summarized
+  from Vault-chip retrieval with no block), and question keywords were
+  rejected as language-dependent. The trigger now lives in the ANSWER:
+  the engine matches the settled answer against the live task index
+  (normalized word overlap, language-independent — models quote task
+  titles verbatim) and, on a match, persists the FULL open task set as a
+  synthetic `tasks_list` pair after any real tool-trace entries. The
+  interactive block is therefore guaranteed whenever an answer is about
+  tasks; model calls remain welcome and suppress the synthetic pair;
+  follow-ups replay it as the model's own tool result. The prompt asks
+  for a brief highlight instead of a full prose repeat; the paired
+  result chip no longer renders under the block.
+- **M57a follow-ups from the first live test:** the meeting import's
+  text-form metadata (`due: YYYY-MM-DD` / `done: YYYY-MM-DD`) now parses
+  into the record like the emoji tokens (read compat — the write format
+  stays `📅`), so due badges, overdue coloring and due sorting work for
+  the whole existing vault; answer prose linkifies `.md` path mentions
+  deterministically (resolved → clickable, unresolved stays text —
+  robust against models that ignore the wikilink prompt); the ask prompt
+  asks for a one/two-sentence summary after `tasks_list` instead of a
+  prose repeat of the list; turn rendering is defensive (a broken turn
+  becomes an error card instead of a blank thread) and a skipped
+  `tasks_list` result logs its reason to the console.
+- Tests: task provider (query scoping, setDone incl. shifted-line
+  resolution and the tag-kind toggle), engine tool flow (attach, prompt
+  note, fence persistence), MCP `tasks_list`, `api.links` impl via the
+  rich-text renderer (formatting parser, lists, link styling + open
+  calls), scanner text-metadata cases, path-linkify cases. Docs:
+  ADR-0058, AUTHORING (1.11), CLAUDE.md.
+
+- **M57d — done tasks, completion dates, the edit guard:** a beta chat
+  asked "which tasks were completed recently", got an answer quoted from
+  vault context plus "I would have to query with `includeDone: true`",
+  and the follow-up "ja dann mach das" turned into a change proposal for
+  the daily note. Fixes: completing a task now stamps an
+  Obsidian-Tasks-compatible `✅ YYYY-MM-DD` on the line and reopening
+  removes it (panel row, assistant block, `Ctrl+Enter`, Live Preview
+  checkbox click — **a format change**, see `specs/frontmatter-schema.md`
+  and ADR-0033); `TaskQueryOptions` gains `status` / `completedSince` /
+  the `completed` sort (SDK minor → 13) and both `tasks_list` tools take
+  them; the ask prompt gets done-task few-shots, today's date and the
+  task rule after the vault context; the Change form is limited to an
+  explicit edit request and the engine rejects a `document` fence that
+  changes nothing or rides a task-lookup turn; short tasks (two or three
+  significant words) can match an answer, so they get their block.
+  Not done: a file-mtime fallback for tasks completed before this change
+  (the index holds no stat data) — those fall back to the date in the
+  note's file name, else sort last.
+
+### Milestone 56 — the assistant panel keeps its chat
+
+- **Root cause found (56a):** the chat store consumed the **tree**-shaped
+  `ctx.vault.list()` as if flat — top-level filter only, and `chats/`'s
+  top level holds only directories. Picker, chat-follow and path-uniquing
+  were dead since the ADR-0048 milestone (writes always worked; the spec
+  harness fed a flat fake list and masked it). Markdown consumers now use
+  the flat `ctx.vault.listMarkdownFiles()` (same as tags/tasks/backlinks);
+  `chat:attachExternal` flattens the tree locally; the picker re-renders
+  while open, and a failed list reads "Chats could not be listed." rather
+  than "No chats yet".
+- **The panel no longer resets away.** Beta feedback read as "chats are
+  not saved": the chat notes were on disk, but every restart or tab
+  switch to a document without an exact `note:` match came back as an
+  empty fresh chat, so conversations felt gone and the same question
+  produced duplicate chat files. Follow rules revised (ADR-0048 later
+  change): a focused **chat-note tab** opens that chat in the panel; a
+  note without a bound chat and every non-note focus **keep the current
+  chat**; the **first follow at activation continues the newest chat**
+  (startup shows the last conversation, a bound chat still wins on its
+  restored document). Only the picker and "+ New chat" start fresh.
+- **`note:` bindings never point into `chats/`** — asking with a chat
+  tab focused continues that chat (or creates an unbound one) instead of
+  chaining chat → chat; the note chip still attaches it as context.
+- **Visibility hardening:** `listChats` logs skipped (vanished/
+  unreadable) chat files via `ctx.log` instead of thinning the picker
+  silently; a fenceless (corrupted) chat file still lists, with its path
+  as the fallback title.
+- Tests: `plugin-assistant-state.spec.ts` (follow semantics, chat-tab
+  focus, startup fallback, unbound asks with a focused chat) and
+  `plugin-assistant-chat-store.spec.ts` (corrupt-tolerant listing, skip
+  logging).
+
+### Milestone 55 — document history back/forward
+
+- **`DocHistoryService`** (`src/app/services/doc-history.service.ts`,
+  new): one global, session-scoped history of the viewed documents — the
+  VS Code model over any number of panes, browser truncation of the
+  forward branch, a circular buffer of 100, purely in-memory (nothing
+  rides into the session snapshot).
+- **Surfaces:** the titlebar's back/forward arrows (right of the menu
+  bar), View-menu rows and `doc.back` / `doc.forward` (`Alt+Left` /
+  `Alt+Right`).
+- Closed vault/external documents **reopen** (`keepFocused`, never a
+  clean-tab replace); unrestorable entries (scratch tabs, plugin doc
+  kinds) prune lazily. Recording suspends across the startup restore and
+  resuming seeds the landed-on document; caret/scroll restore rides the
+  milestone-50 memory.
+- Docs: `docs/05` §5.30, `docs/06` §6.47.
+
+### Milestone 54 — the Backlinks panel (req-39)
+
+- **`plugins/backlinks/`** (new): a per-vault **outlink index** — every
+  `.md` file's parsed `[[wikilink]]` occurrences — kept fresh through the
+  save-hook and vault-change registries exactly like the tags/tasks
+  indexes (coalesced boot sweep, incremental re-index per save/write,
+  drop per delete, rebuild on renames/registry rounds).
+- **The Backlinks dock panel** follows the focused vault note like
+  Outline: every note whose wikilink resolves TO it, one row per
+  occurrence — file, section heading, the linking line — and a click
+  opens the linking note at the line (vault-aware through the document
+  API). Lands collapsed at the bottom of the left dock; the header shows
+  the count; empty states for notes nobody links to and non-note tabs.
+- **Resolution is the parity twin of the base wikilink service**
+  (`shared/link-index.ts`): path targets (`/` or extension, `.md`
+  appended), bare-name targets by basename, sibling preference and
+  shortest-path tie-break on ambiguity — a link counts as a backlink of
+  exactly the note the editor's Ctrl-click would open. The link grammar
+  (`shared/link-targets.ts`) is a verbatim twin of the base WIKILINK
+  regex (alias, `#anchor`, embeds `![[…]]` count; frontmatter, fences
+  and inline code never yield links). Resolution happens at query time
+  against the current file list, so renames/new files reshape the
+  backlinks without re-reading every note.
+- Known v1 limits: same-vault only (no cross-vault inlinks), `.md` files
+  only (`listMarkdownFiles` — same base the tag index scans), and
+  unsaved buffers don't count (a freshly typed link appears after its
+  save; a note's own links never affect its backlinks anyway).
+- Tests: 12 spec cases (`plugins/backlinks/shared/backlinks.spec.ts` —
+  grammar parity, resolution parity incl. ambiguity, query semantics)
+  and one e2e (`e2e/backlinks.spec.ts`: rows appear, row click opens at
+  the line, empty state).
+
+### Milestone 53 — tag rename / merge (req-38)
+
+- **Settings → Tags gained the tag list with Rename/Merge.** Every
+  vault's vocabulary merged into one filterable list (chip in its
+  resolved color, section count); "Rename…" opens a modal over the
+  same preview/apply discipline the Search panel's vault replace uses:
+  bundled per-file-diff confirmation, TOCTOU re-read + re-patch before
+  every write, CRLF preserved, announced writes. When several vaults
+  carry the tag they are individually selectable (all on by default).
+- **A grammar-faithful rename, not a text replace.**
+  `plugins/tags/shared/rename.ts` walks the same `extractTagOccurrences`
+  the index uses: fenced and inline code, URL fragments and
+  `#oldnet`-style near-names are never touched. Nested `#old/…` tags
+  come along by default (tails keep their spelling, switchable in the
+  modal); renaming INTO the reserved `task` root is rejected.
+- **Merge semantics.** When the target tag already exists, the modal
+  says "Merge", and a duplicate the merge would create on a line
+  (`#old #new` → `#new`) is dropped — pre-existing duplicates stay.
+- Backend: `tag-list` (vaults + per-vault vocabularies),
+  `rename-preview` / `rename-apply` (`TagIndex.vocabularyFor`,
+  `isIndexExcludedPath` now exported and shared with the index itself —
+  templates folders are skipped like the index skips them). Both plugin
+  modals (replace + rename) share styled action buttons now (the
+  confirm dialog's recipe — they were unstyled before).
+- The tag-sprawl risk in the roadmap is addressed (consolidation now
+  possible); near-duplicate *detection* stays out of scope.
+  ADR-0017 gained a "Later change" note; 13 new spec cases in
+  `plugins/tags/shared/rename.spec.ts` plus two e2e specs (rename across
+  the vault, merge dedupe — `e2e/search.spec.ts`).
+
+### Milestone 52 — deletes go to the OS recycle bin
+
+- **Explicit deletes are undoable.** The Files panel's "Delete" (single
+  and multi-select, bug-8) moves the target — and a `.md` note's
+  `.{name}.chat.json` sidecar — to the OS recycle bin via
+  `shell.trashItem`; the confirm dialog now reads "will be moved to the
+  recycle bin" instead of "cannot be undone".
+- **Move semantics stay permanent.** A Save-as out of `.drafts/` deletes
+  the draft original with `{ trash: false }`, and the cross-vault move's
+  delete leg inside `renameEntry` keeps its plain `fsp.rm` — the content
+  already lives at the target, a bin copy would only litter.
+- **Volumes without a recycle bin** (network shares, some removable
+  drives) fall back to the permanent delete instead of failing the delete:
+  `vault:delete` / `vault:delete-many` resolve to the fallback paths and
+  the Files panel messages the user ("could not be moved to the recycle
+  bin and was deleted permanently").
+- `electron/trash-delete.ts` holds the disposition (injected
+  `trashItem`/`rm` IO — `shell` only exists inside a running Electron),
+  covered by `electron/trash-delete.spec.ts`; the out-of-Angular vitest
+  config now also runs `electron/**/*.spec.ts`.
+- Docs: runtime view §6.20 gained the delete flow; docs/05's IPC table
+  and VaultManager block updated.
+
+### Milestone 51 — task due dates + priorities (req-37)
+
+- **Task lines carry inline metadata, Obsidian-Tasks compatible.** A due
+  date (`📅 2026-10-09`, ISO) and a priority (`🔺` highest, `⏫` high,
+  `🔽` low; none = normal) may sit anywhere on a checkbox or `#task` line.
+  The tokens are human-legible annotations, not machine ids (ADR-0033's
+  `#task/id:` rejection stands), and they are parsed + stripped by the
+  shared scanner (`plugins/tasks/shared/tasks.ts`): `TaskRecord` gains
+  `due: string | null` and `priority`, and `text` stays clean — so a
+  metadata edit never disturbs `resolveTaskLine`'s text+kind matching, and
+  a vault stays readable/writable by Obsidian's Tasks plugin. New pure
+  setters `setDueOnLine` / `setPriorityOnLine` (append-or-replace, guarded
+  to task lines, indentation-safe) round-trip through the scan.
+- **The Tasks panel shows both and can sort by them.** Rows carry a due
+  badge (overdue red, today accented, future neutral) and the priority
+  glyph; a new sort cycle in the filter row — file order → due date
+  (ascending, undated last) → priority (highest > high > normal > low,
+  ties by path + line) — persists in `localStorage['drey.tasks']`. The
+  file sort keeps the grouped-by-file view; due/priority sorts show a
+  flat list (grouping would fight the ordering), in every scope.
+- **Editor completion with a date picker.** On a task line (never in
+  frontmatter or a fence), typing `due` / `fällig` offers Today /
+  Tomorrow / In a week / **Pick a date…** — the last opens a
+  caret-anchored popover with a native `<input type="date">` defaulting
+  to today that writes the token over the trigger word — plus "Remove
+  due date" when one exists; `prio` / `priority` offers the three glyph
+  levels and "Normal (remove priority)". The source rides the host's
+  markdown language data (the same seam as tag / wikilink / word
+  completion, so popups merge) as a plugin editor extension
+  (`plugins/tasks/renderer/task-meta.ts`). Completion options ship with
+  `filter: false` — CM's label fuzzy-matcher would otherwise drop the
+  emoji-prefixed labels ("📅 Today" vs "due"); the whole-word trigger is
+  the filter.
+- **Click-to-change (req-37 add-on).** The tokens are decorated as chips
+  in the editor (`cm-task-due` / `cm-task-prio`, overdue/today colored
+  like the panel badges) and a **plain click** on a chip re-opens its
+  picker in place — the date picker with the current date prefilled
+  (Apply replaces the token, a cleared field removes it) or the glyph
+  menu (🔺/⏫/🔽/Normal). The Tasks panel's due/priority badges are
+  buttons with the same pickers; both surfaces share one picker
+  implementation (anchor + `onCommit`), and panel commits go through the
+  shared `applyToTaskLine` routing (open buffer → `setBuffer` + save,
+  closed file → read/patch/write + index refresh) — the same path the
+  done toggle uses. The row meta moved beside (not inside) the body
+  button: a button in a button is invalid HTML and would bubble into the
+  open-file action. Click hit-testing is by the token's screen width
+  (`coordsAtPos` bounds), not the caret position: a click on the token
+  (its right half included) opens the picker, a click beside it — even
+  the trailing whitespace behind a line-ending token — places the caret
+  normally; the date popover opens the native calendar once on mount
+  (one-shot retry on first field interaction), never re-opening by
+  itself after a date was chosen.
+- Docs: `specs/frontmatter-schema.md` records the line format,
+  [ADR-0033](../docs/09_architecture_decisions/0033-tasks-panel-and-index.md)
+  gained a "later change" note.
+
+### Milestone 50 — the caret survives a tab switch
+
+- **Switching back to an open tab restores the cursor — the exact
+  viewport, and focus.** Every fresh editor state built for a tab switch
+  (or a recreated pane) now replays the remembered caret AND the
+  remembered scroll offset instead of landing at the top, and entering a
+  tab puts the caret INTO the document: typing works immediately,
+  without a click into the editor first (a pane's first load — app
+  start, session restore — keeps the old no-focus behavior). The exact
+  flow the milestone-49 Sources links exposed: follow a link, switch
+  away, come back, and the document sits where you left it, ready to
+  type.
+- **The memory outlives the tab.** Caret and scroll offset are stored
+  per doc key for the whole app session — deliberately decoupled from
+  the doc records, because a *clean* tab is REPLACED when another file
+  opens (milestone 32): reopening such a tab (file tree, Files panel,
+  another link) restores its viewport too. Strictly in-memory (nothing
+  rides into the session snapshot, a restart starts without carets),
+  bounded FIFO past 200 doc keys.
+- **The restore applies whenever a memory exists — never gated on the
+  caret's offset.** A caret that never left offset 0 (open a document,
+  only scroll) used to skip the restore entirely: the `anchor > 0` gate
+  confused "no memory" with "memory with head 0", and `loadDocument`'s
+  show-the-top reset made it worse. The gate is now "memory exists",
+  and the top-reset is skipped (`keepScroll`) whenever a viewport is
+  about to be restored — which also fixes the replace/reopen cycle
+  (a fresh-opened, never-clicked clean tab replaced by another file
+  reopens on its remembered scroll position).
+- **Saving keeps the viewport too.** Every save of a frontmattered note
+  rewrites the fence (the `updated:` bump) — the renderer adopts the new
+  text and reloads the SAME tab in place, and that full replace discards
+  CodeMirror's height map: holding the numeric scroll offset alone let
+  the browser clamp the scroller (block widgets collapse the height
+  estimates) and the view landed at the top. The in-place reload now
+  captures the viewport before the swap and replays it through the same
+  restore chain a tab switch uses — unless the view is pinned to the
+  bottom, where stick-to-bottom stays the destination (the streamed
+  search summary keeps following the tail; the same goes for
+  non-pinned live-edit pushes, which now hold the position cleanly
+  instead of drifting).
+- **The scroll restore re-asserts the stored offset.** Two production
+  findings shaped it (both invisible in jsdom, both pinned by the new
+  Playwright spec `caret-scroll-restore` against the real Electron
+  app): focusing the freshly swapped editor makes the BROWSER scroll
+  the caret into view — possibly after the restore's first frame — and
+  a fresh editor state starts with every block height ESTIMATED
+  (CodeMirror's `HeightMap` begins empty), so a raw pixel offset alone
+  lands a few lines off in content space. The chain therefore applies
+  the raw offset, then RE-ASSERTS it one frame later (the stored value
+  is the last word, never a scroll-to-caret), with a strictly gated
+  caret-anchored correction on top (capture records the caret's
+  viewport-relative position when rendered; the correction only runs
+  when the caret is inside `visibleRanges` and the delta is
+  sub-viewport — every failure degrades to the raw offset).
+- **Explicit jumps still win.** An `openFileAt` reveal (a wikilink's
+  heading line, a search hit, a tasks row) runs after the restore,
+  CANCELS the scroll restore and moves the caret to its target; a stale
+  caret past a shrunken buffer is clamped to the document length. Undo
+  history still resets per tab switch (ADR-0003 unchanged);
+  multi-cursor selections collapse to the main caret
+  (ADR-0037 later-change note).
+
+### Milestone 49 — search summary: Sources links (wikilinks from the digest)
+
+- **The digest ends in a `## Sources` list.** After the model's reply
+  settles (or the user stops it), the Search panel appends one line per
+  section the prompt actually covered — same order, same whole-section
+  budget cut as the material — each carrying a `[[wikilink]]` to that
+  section plus the exact `path:line` as plain text (wikilinks have no
+  line anchor). Deterministic by design: the model never mints links —
+  anchors must match a real heading, and heading-less sections cannot be
+  anchored at all. When the hits span several vaults, the label carries
+  the vault's name as a prefix.
+- **Wikilinks work from vault-less scratch tabs.** A `[[link]]` in the
+  `search-summary.md` scratch tab (no vault of its own) previously
+  resolved against an empty index — Ctrl-click fell through to "create
+  note in the active vault". Vault-less documents now resolve through a
+  merged index over every registered vault (the active vault wins path
+  collisions and basename ambiguities), open the target in its OWNING
+  vault, and never create notes — an unresolved link is reported, like
+  the entry drawer's no-mint rule (ADR-0046 addendum). Known limit: the
+  link syntax cannot name a vault, so the same relative path in two
+  vaults lands in the active one; the label's vault name is the only
+  disambiguator.
+
+### Fix — editor: a table-only document can be left again
+
+- **ArrowDown opens the line below a document-ending table.** When the
+  table was the note's last block, every caret position sat inside its
+  revealed raw source and Enter only ever added rows — the view could not
+  be left to type a following paragraph without switching to source mode
+  (the extent's end IS the document end, so no position "behind" the table
+  existed). ArrowDown on the last real row now appends one blank line and
+  parks the caret there; the widget snaps shut. ArrowUp mirrors it when
+  the table starts the document at line 1. Everywhere else the arrows keep
+  their normal motion, and Enter keeps growing the table.
+
 ### Milestone 48 — Full screen (F11)
 
 - **F11 toggles OS fullscreen.** The new `window.toggleFullScreen` command
@@ -90,7 +598,7 @@ manually verified by the owner.**
 ### Milestone 45 — Autotag re-homed into the editor's `⋯` menu (req-36)
 
 The `suggestTags` backend orphaned by the drawer's removal (ADR-0057) has
-a new trigger. **Not yet manually verified by the owner.**
+a new trigger.
 
 - **`⋯` → "Suggest tags"** — sends the **section under the caret** (the
   same heading-delimited unit the tag search reports on; fences hide `#`

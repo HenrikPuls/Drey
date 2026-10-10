@@ -601,7 +601,17 @@ export interface VaultConfig {
    * -- manual refresh stays the norm (ADR-0018).
    */
   watch: boolean;
+  /**
+   * What a rename / move in the Files panel does about the links and
+   * attachments it would break (milestone 59, ADR-0059): `'ask'` shows the
+   * affected notes first, `'always'` rewrites without asking, `'never'`
+   * only renames.
+   */
+  updateLinksOnRename: UpdateLinksMode;
 }
+
+export type UpdateLinksMode = 'ask' | 'always' | 'never';
+export const UPDATE_LINKS_MODES: readonly UpdateLinksMode[] = ['ask', 'always', 'never'];
 
 export interface AppConfig {
   /** Bumped only on a breaking shape change; `normalizeAppConfig` migrates. */

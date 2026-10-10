@@ -46,7 +46,7 @@ running the previous build (a changed renderer module 404s). Verify with
 
 - `apiVersion` is a **major gate**: a manifest whose major differs from
   `PLUGIN_API_VERSION.major` (`shared/plugin-api/versions.ts`, currently
-  `{ major: 1, minor: 10 }`) is never imported — the plugin shows up in
+  `{ major: 1, minor: 11 }`) is never imported — the plugin shows up in
   Settings → Panels & plugins as incompatible. Minor bumps are additive;
   1.9 added `commands.run(id, payload?)`, `ui.createTagField` (the shared
   tag chip field — prefer it over a hand-rolled chip row), the main-side
@@ -57,7 +57,17 @@ running the previous build (a changed renderer module 404s). Verify with
   `aria-label`) and the `freeText` mode of `ui.createTagField` (one input
   for a text query and `#tag` chips, plus `setText`);
   `ui.registerComposerContribution` is a deprecated no-op since the
-  "Add entry" drawer was removed (ADR-0057).
+  "Add entry" drawer was removed (ADR-0057). 1.11 added the task-index
+  seam (`ctx.tasks.registerTaskQuery` / `queryProvider` — the `TaskQueryProvider`
+  contract the assistant's `tasks_list` tool and MCP `tasks_list` read)
+  and `api.links` (`parseInline` / `resolve` / `open` — base-owned
+  wikilink grammar + navigation for plugin-rendered text). 1.12 gave
+  `TaskQueryOptions` the deterministic view fields (`sort` incl.
+  `importance`, `text`, `tag`, `overdue`) — the provider filters and
+  orders, consumers never re-sort. 1.13 added the completion view:
+  `SdkTaskRecord.completed` (optional — records persisted earlier lack
+  it), `TaskQueryOptions.status` (`open` | `done` | `all`, wins over
+  `includeDone`), `completedSince` and the `completed` sort.
 - **Shared chrome classes.** Panel controls use the shell's global
   `.icon-btn` (24px icon button, `.on` / `aria-pressed` = accent tint,
   `.glyph` for a short text glyph) and `.seg` (segmented switch of icon
@@ -100,10 +110,15 @@ Styling rules, in order of enforcement:
    `0.8–0.88rem` body — see `src/app/settings/settings-forms.css` for the
    scale) so the app-wide type-size setting applies to your UI too.
 4. **No native dialogs.** `window.alert()` / `confirm()` break Windows
-   keyboard focus after dismissal (electron#41602). Use
-   `api.ui.showMessage(message, title?)` for acknowledgements — the app's
-   own OK-only dialog, queuing like the native calls did — and
-   `api.ui.showModal` for anything interactive.
+    keyboard focus after dismissal (electron#41602). Use
+    `api.ui.showMessage(message, title?)` for acknowledgements — the app's
+    own OK-only dialog, queuing like the native calls did — and
+    `api.ui.showModal` for anything interactive. A `showModal` overlay comes
+    with base chrome (`src/styles.css`, `.plugin-modal-backdrop` /
+    `.plugin-modal`): a dimmed backdrop and a padded raised box. Style only
+    your content; add a host class (`mount.classList.add('my-host')`) and a
+    compound rule `.plugin-modal.my-host` when you need a fixed width or
+    flush edges (`padding: 0`).
 
 ## Settings pages
 

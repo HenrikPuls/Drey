@@ -1,10 +1,14 @@
 import type { MainPluginContext, MainPluginModule } from '../../../shared/plugin-api';
 import { TaskIndex } from './task-index';
+import { createTaskQueryProvider } from './task-provider';
 
 /**
  * The Tasks plugin's main entry (ADR-0033, converted in ADR-0044 stage 6,
  * per-vault since milestone 34): owns one task index per registered vault
  * and keeps them current through the save-hook and vault-change registries.
+ * Since SDK 1.11 it also registers the base `TaskQueryProvider` — the
+ * assistant's `tasks_list` tool and MCP `tasks_list` read (and complete)
+ * through it; the grammar stays plugin-local.
  */
 const plugin: MainPluginModule = {
   async activate(ctx: MainPluginContext) {
@@ -18,6 +22,17 @@ const plugin: MainPluginModule = {
     const announce = (): void => {
       ctx.ipc.emit('index-updated', { tasks: index.all().length });
     };
+
+    ctx.tasks.registerTaskQuery(
+      createTaskQueryProvider({
+        read: (path, vaultId) => ctx.vault.read(path, { vaultId }),
+        writeAnnounced: (path, content, vaultId) =>
+          ctx.vault.writeAnnounced(path, content, { vaultId }).then(() => undefined),
+        all: () => index.all(),
+        reindex: (vaultId, path, content) => index.reindexFile(vaultId, path, content),
+        announce,
+      }),
+    );
 
     // note:save -> incremental re-index of that vault's map (the
     // `templates/` exclusion lives in the index). Fires for EVERY vault —

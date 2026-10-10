@@ -585,6 +585,8 @@ if (!app.requestSingleInstanceLock()) {
       // plugin registered (the Tags plugin). The closure reads the module
       // variable lazily, so construction order stays free.
       () => pluginHost?.getSectionSearchProvider() ?? null,
+      // The task-index seam (SDK 1.11): reads the tasks plugin's provider.
+      () => pluginHost?.getTaskQueryProvider() ?? null,
       () => appConfig.get(),
       (request) => mcpWriteBridge.requestConfirmation(request),
       // An MCP write bypasses note:save -- run the same external-change

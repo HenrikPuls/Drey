@@ -1,0 +1,87 @@
+/*
+ * Backlinks plugin styles (ADR-0044: plugin CSS is global — every rule is
+ * scoped under the plugin's own root class `.backlinks-panel`).
+ */
+
+.backlinks-panel {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  padding: 8px 8px 10px;
+}
+
+.backlinks-panel .list {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+
+.backlinks-panel .empty {
+  flex: none;
+  margin: 6px 4px;
+  font-size: 11.5px;
+  color: var(--text-6);
+}
+
+.backlinks-panel .row {
+  flex: none;
+  display: grid;
+  grid-template-columns: minmax(0, auto) minmax(0, 1fr);
+  grid-template-areas:
+    'file heading'
+    'snippet snippet';
+  align-items: baseline;
+  column-gap: 8px;
+  padding: 4px 6px;
+  border: 0;
+  border-radius: var(--radius);
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+}
+
+.backlinks-panel .row:hover {
+  background: var(--hover-bg);
+}
+
+.backlinks-panel .row .file {
+  grid-area: file;
+  font-family: var(--font-sans);
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-2);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.backlinks-panel .row:hover .file {
+  color: var(--text-primary);
+}
+
+.backlinks-panel .row .heading {
+  grid-area: heading;
+  font-family: var(--font-sans);
+  font-size: 11px;
+  color: var(--text-6);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.backlinks-panel .row .snippet {
+  grid-area: snippet;
+  margin-top: 1px;
+  font-family: var(--font-sans);
+  font-size: 11px;
+  line-height: 1.4;
+  color: var(--text-4);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}

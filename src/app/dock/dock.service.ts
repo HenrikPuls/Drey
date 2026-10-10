@@ -554,8 +554,8 @@ export class DockService {
     this.dropIndex.set(null);
     // Shared with the tab drag (ADR-0039): a full-viewport overlay that
     // owns the cursor and blocks hover/selection underneath, plus the
-    // `.dock-drag-ghost` chip and the `data-drey-gesture` watchdog marker.
-    startDragChrome({ gesture: 'dock', ghostClass: 'dock-drag-ghost', ghostHtml: press.title });
+    // `.dock-drag-ghost` chip.
+    startDragChrome({ ghostClass: 'dock-drag-ghost', ghostHtml: press.title });
     window.addEventListener('mousemove', this.onDragMove);
     window.addEventListener('mouseup', this.onDragEnd);
     this.onDragMove(event);
@@ -811,13 +811,6 @@ export class DockService {
     }
     document.body.style.cursor = cursor ?? '';
     document.body.style.userSelect = cursor ? 'none' : '';
-    // A marker the input-recovery watchdog reads: `user-select:none` on
-    // <body> is only legitimate while this is set.
-    if (cursor) {
-      document.body.setAttribute('data-drey-gesture', 'dock');
-    } else {
-      document.body.removeAttribute('data-drey-gesture');
-    }
   }
 
   private patch(fn: (s: DockState) => DockState): void {

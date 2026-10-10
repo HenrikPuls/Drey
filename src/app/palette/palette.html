@@ -1,0 +1,50 @@
+@if (palette.open()) {
+  <div class="backdrop" appOverlayGuard (mousedown)="palette.close()"></div>
+  <div class="palette" role="dialog" aria-label="Go to file or run a command">
+    <input
+      #field
+      type="text"
+      role="combobox"
+      aria-label="File name, or > and a command"
+      aria-expanded="true"
+      aria-controls="palette-list"
+      [attr.aria-activedescendant]="items().length > 0 ? 'palette-item-' + active() : null"
+      autocomplete="off"
+      spellcheck="false"
+      [value]="palette.query()"
+      (input)="onInput($any($event.target).value)"
+      (keydown)="onKeydown($event)"
+    />
+    <div #list class="list" id="palette-list" role="listbox">
+      @for (item of items(); track item.id; let i = $index) {
+        <div
+          class="item"
+          role="option"
+          [id]="'palette-item-' + i"
+          [class.active]="i === active()"
+          [attr.aria-selected]="i === active()"
+          (mousemove)="active.set(i)"
+          (mousedown)="$event.preventDefault()"
+          (click)="run(item, $event.ctrlKey || $event.metaKey)"
+        >
+          <span class="label">{{ item.label }}</span>
+          <span class="detail">{{ item.detail }}</span>
+          @if (item.hint) {
+            <span class="hint">{{ item.hint }}</span>
+          }
+        </div>
+      } @empty {
+        <div class="empty">
+          {{ palette.mode() === 'commands' ? 'No matching command' : 'No matching file' }}
+        </div>
+      }
+    </div>
+    <footer>
+      @if (palette.mode() === 'commands') {
+        Enter runs the command
+      } @else {
+        Enter opens · Ctrl Enter opens beside the current tab · &gt; lists commands
+      }
+    </footer>
+  </div>
+}

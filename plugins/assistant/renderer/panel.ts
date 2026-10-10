@@ -21,7 +21,9 @@ import type { Extension } from '@codemirror/state';
 import type { Completion, CompletionContext, CompletionResult } from '@codemirror/autocomplete';
 import type { EditorView } from '@codemirror/view';
 import type { DreyPluginApi } from '../../../shared/plugin-api/renderer';
+import type { SdkTaskRecord } from '../../../shared/plugin-api/renderer';
 import type { ChatNoteTurn, ChatToolEntry } from '../shared/chat-note.js';
+import { ipcErrorMessage } from '../shared/format.js';
 import {
   STAGE_IMAGE_EXTENSIONS,
   extensionOf,
@@ -33,6 +35,7 @@ import type { AssistantState } from './state.js';
 import type { RunningTasks } from './running-tasks.js';
 import { createVaultFileCache, type VaultFileCache } from './vault-files.js';
 import { PROMPTS_DIR, promptEntriesFrom, type PromptEntry } from './prompts.js';
+import { renderRichBody } from './rich-text.js';
 
 function el<K extends keyof HTMLElementTagNameMap>(
   tag: K,
@@ -58,6 +61,7 @@ type IconName =
   | 'wrench'
   | 'pencil'
   | 'plus'
+  | 'list'
   | 'search';
 
 /** The Lucide glyphs the panel uses (same paths as `src/app/icons/icon.ts`). */
@@ -75,6 +79,7 @@ const ICON_PATHS: Record<IconName, readonly string[]> = {
     'M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z',
   ],
   pencil: ['M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z'],
+  list: ['M8 6h13', 'M8 12h13', 'M8 18h13', 'M3 6h.01', 'M3 12h.01', 'M3 18h.01'],
   search: ['m21 21-4.34-4.34', 'M11 3a8 8 0 1 0 0 16 8 8 0 0 0 0-16z'],
 };
 
@@ -139,10 +144,17 @@ export function mountPanel(
   body.classList.add('assistant-panel');
 
   // -- head: the chat selector -----------------------------------------------
-  const chatTitleButton = el('button', 'chat-title') as HTMLButtonElement;
-  chatTitleButton.type = 'button';
-  chatTitleButton.title = 'Switch chat';
-  chatTitleButton.addEventListener('click', openChatPicker);
+  // Icon-only controls (ADR-0057) + the active chat's title as a muted
+  // label (57e): it reads from the live chat list (and the loaded view as
+  // a fallback), so it is never stale — the model-named title replaces
+  // the question placeholder through the change round.
+  const chatLabel = el('span', 'chat-label');
+  const chatSwitchButton = el('button', 'chat-switch') as HTMLButtonElement;
+  chatSwitchButton.type = 'button';
+  chatSwitchButton.title = 'Switch chat';
+  chatSwitchButton.setAttribute('aria-label', 'Switch chat');
+  chatSwitchButton.appendChild(icon('list', 13));
+  chatSwitchButton.addEventListener('click', openChatPicker);
   const chatNewButton = el('button', 'chat-new') as HTMLButtonElement;
   chatNewButton.type = 'button';
   chatNewButton.title = 'Start a new chat';
@@ -152,7 +164,7 @@ export function mountPanel(
 
   const head = el('header', 'assistant-head');
   const chatHead = el('div', 'chat-head');
-  chatHead.append(chatTitleButton, chatNewButton);
+  chatHead.append(chatLabel, chatSwitchButton, chatNewButton);
   head.append(chatHead);
   body.appendChild(head);
 
@@ -164,6 +176,204 @@ export function mountPanel(
   let copiedTurnIndex: number | null = null;
   /** Expanded tool-chip bodies, keyed `${turnIndex}:${i}` (session state). */
   const expandedChips = new Set<string>();
+
+  /** The `tasks_list` tool whose persisted result renders as a task block. */
+  const TASKS_LIST_TOOL = 'tasks_list';
+
+  /** Parses one `tasks_list` tool result: JSON lines of records (+ a truncation note). */
+  const parseTasksResult = (
+    content: string,
+  ): { records: SdkTaskRecord[]; truncated: number } => {
+    const records: SdkTaskRecord[] = [];
+    let truncated = 0;
+    for (const line of content.split('\n')) {
+      const trimmed = line.trim();
+      if (trimmed === '') {
+        continue;
+      }
+      try {
+        const parsed: unknown = JSON.parse(trimmed);
+        if (parsed !== null && typeof parsed === 'object' && !Array.isArray(parsed)) {
+          const record = parsed as Record<string, unknown>;
+          if (typeof record['text'] === 'string' && typeof record['path'] === 'string') {
+            records.push(parsed as SdkTaskRecord);
+          } else if (typeof record['truncated'] === 'number') {
+            truncated = record['truncated'];
+          }
+        }
+      } catch {
+        // A stray line stays unparsed — the rows carry real data only.
+      }
+    }
+    return { records, truncated };
+  };
+
+  /**
+   * The filter chips one `tasks_list` call's arguments describe (57c):
+   * `#tag`, quoted text terms, overdue, completed / done-included — rendered in the
+   * block head so a filtered view explains itself. Unparseable args
+   * (the `{"posthoc":true}` sentinel among them) yield no chips.
+   */
+  const taskFilterLabelParts = (argsJson: string): string[] => {
+    try {
+      const parsed: unknown = JSON.parse(argsJson || '{}');
+      if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) {
+        return [];
+      }
+      const args = parsed as Record<string, unknown>;
+      const parts: string[] = [];
+      if (typeof args['tag'] === 'string' && args['tag'].trim() !== '') {
+        parts.push(`#${args['tag'].trim().replace(/^#/, '')}`);
+      }
+      if (typeof args['text'] === 'string' && args['text'].trim() !== '') {
+        parts.push(`"${args['text'].trim()}"`);
+      }
+      if (args['overdue'] === true) {
+        parts.push('overdue');
+      }
+      const since = args['completedSince'];
+      const hasSince = typeof since === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(since);
+      if (args['status'] === 'done' || hasSince) {
+        parts.push(hasSince ? `completed since ${since as string}` : 'completed');
+      } else if (args['includeDone'] === true || args['status'] === 'all') {
+        parts.push('done included');
+      }
+      return parts;
+    } catch {
+      return [];
+    }
+  };
+
+  /**
+   * The interactive task block replacing the `tasks_list` chip pair
+   * (SDK 1.11): rows with checkbox / text / priority / due badge, a click
+   * on the row opens the note at the line, the checkbox completes the
+   * task through the task provider (the tasks plugin owns the line
+   * grammar). The fence rows are a snapshot — the LIVE done/due state
+   * hydrates from the provider right after mount. Rows arrive in the
+   * provider's deterministic view order (importance by default); the
+   * block never re-sorts.
+   */
+  const taskListNode = (
+    initial: readonly SdkTaskRecord[],
+    truncated: number,
+    filterParts: readonly string[] = [],
+  ): HTMLElement => {
+    const box = el('div', 'task-block');
+    let records = [...initial];
+
+    const head = el('div', 'task-block-head');
+    head.appendChild(icon('check', 11));
+    head.appendChild(
+      el('span', undefined, `Tasks · ${records.length}${truncated > 0 ? ` (+${truncated} more)` : ''}`),
+    );
+    if (filterParts.length > 0) {
+      head.appendChild(el('span', 'task-block-filter', filterParts.join(' · ')));
+    }
+    box.appendChild(head);
+
+    const rowsBox = el('div', 'task-block-rows');
+    box.appendChild(rowsBox);
+    const errorLine = el('div', 'task-block-error');
+    errorLine.hidden = true;
+    box.appendChild(errorLine);
+
+    const dueBadge = (task: SdkTaskRecord): HTMLElement | null => {
+      if (task.due === null) {
+        return null;
+      }
+      const today = new Date();
+      const pad = (v: number): string => String(v).padStart(2, '0');
+      const todayStr = `${today.getFullYear()}-${pad(today.getMonth() + 1)}-${pad(today.getDate())}`;
+      const overdue = !task.done && task.due < todayStr;
+      const soon = !task.done && task.due === todayStr;
+      return el('span', `task-due${overdue ? ' overdue' : soon ? ' today' : ''}`, task.due);
+    };
+
+    const renderRows = (): void => {
+      rowsBox.replaceChildren();
+      for (const [index, task] of records.entries()) {
+        const row = el('div', 'task-row' + (task.done ? ' done' : ''));
+
+        const check = el('button', 'task-check' + (task.done ? ' checked' : '')) as HTMLButtonElement;
+        check.type = 'button';
+        check.appendChild(icon('check', 10));
+        check.title = task.done ? 'Re-open this task' : 'Complete this task';
+        check.setAttribute('aria-label', check.title);
+        check.addEventListener('click', (event) => {
+          event.stopPropagation();
+          void (async () => {
+            check.disabled = true;
+            try {
+              const updated = (await api.backend.invoke('tasks:setDone', {
+                task,
+                done: !task.done,
+              })) as SdkTaskRecord;
+              records[index] = updated;
+              renderRows();
+            } catch (err) {
+              errorLine.textContent = `Could not update the task: ${ipcErrorMessage(err)}`;
+              errorLine.hidden = false;
+              check.disabled = false;
+            }
+          })();
+        });
+        row.appendChild(check);
+
+        const open = el('button', 'task-open') as HTMLButtonElement;
+        open.type = 'button';
+        open.appendChild(el('span', 'task-text', task.text));
+        if (task.priority === 'highest') {
+          open.appendChild(el('span', 'task-prio', '🔺'));
+        } else if (task.priority === 'high') {
+          open.appendChild(el('span', 'task-prio', '⏫'));
+        } else if (task.priority === 'low') {
+          open.appendChild(el('span', 'task-prio', '🔽'));
+        }
+        // A completed task shows WHEN it was completed (57d); its due
+        // date no longer matters.
+        if (task.done && typeof task.completed === 'string') {
+          const completed = el('span', 'task-due', `✅ ${task.completed}`);
+          completed.title = `Completed ${task.completed}`;
+          open.appendChild(completed);
+        } else {
+          const due = dueBadge(task);
+          if (due !== null) {
+            open.appendChild(due);
+          }
+        }
+        open.title = `${task.path}:${task.line}${task.heading !== null ? ` — ${task.heading}` : ''}`;
+        open.addEventListener('click', () => {
+          void api.documents.open(task.path, task.line, { vaultId: task.vaultId });
+        });
+        row.appendChild(open);
+        rowsBox.appendChild(row);
+      }
+      if (records.length === 0) {
+        rowsBox.appendChild(el('div', 'task-block-empty', 'No tasks in this result.'));
+      }
+    };
+    renderRows();
+
+    // The fence is a snapshot; the live index is the truth (same
+    // fresh-hydration rule as the vault context). Same length expected —
+    // anything else keeps the persisted rows visible.
+    void (async () => {
+      try {
+        const current = (await api.backend.invoke('tasks:hydrate', {
+          records,
+        })) as SdkTaskRecord[];
+        if (Array.isArray(current) && current.length === records.length) {
+          records = current;
+          renderRows();
+        }
+      } catch {
+        // The persisted rows stand.
+      }
+    })();
+
+    return box;
+  };
 
   /** One persisted `drey-tool` entry as a collapsible chip. */
   const toolChipNode = (entry: ChatToolEntry, key: string): HTMLElement => {
@@ -221,25 +431,92 @@ export function mountPanel(
     article.appendChild(label);
 
     for (let i = 0; i < turn.tool.length; i++) {
-      article.appendChild(toolChipNode(turn.tool[i], `${index}:${i}`));
+      const entry = turn.tool[i];
+      // A `tasks_list` call + result renders as the interactive task
+      // block instead of two chips (the paired result chip is skipped
+      // with the call); an unparseable result falls back to the plain
+      // chips (raw data over a broken widget).
+      if (entry.kind === 'call' && entry.name === TASKS_LIST_TOOL) {
+        const resultIndex = turn.tool.findIndex(
+          (e) => e.kind === 'result' && e.id === entry.id,
+        );
+        const result = resultIndex >= 0 ? turn.tool[resultIndex] : undefined;
+        if (result !== undefined && result.kind === 'result') {
+          const { records, truncated } = parseTasksResult(result.content);
+          // A filtered query can legitimately match nothing — the
+          // provider's exact empty marker renders as an empty block
+          // (with its filter chips) instead of falling back to chips.
+          if (
+            records.length > 0 ||
+            truncated > 0 ||
+            result.content.trim() === 'No tasks found.'
+          ) {
+            article.appendChild(
+              taskListNode(
+                records,
+                truncated,
+                // Persisted call arguments are a string or an object
+                // (readable-written fences) — both parse.
+                taskFilterLabelParts(
+                  typeof entry.arguments === 'string'
+                    ? entry.arguments
+                    : JSON.stringify(entry.arguments ?? {}),
+                ),
+              ),
+            );
+            if (resultIndex > i) {
+              i = resultIndex; // resume after the paired result
+            }
+            continue;
+          }
+          // The pair exists but parsed to nothing — surface WHY in the
+          // console instead of silently degrading to raw chips.
+          console.warn(
+            `[assistant] tasks_list result did not parse to records (first 120 chars): ${result.content.slice(0, 120)}`,
+          );
+        }
+      }
+      article.appendChild(toolChipNode(entry, `${index}:${i}`));
     }
 
     // Retrieved-vault citations (ADR-0055): one collapsible chip listing
-    // what this turn consulted; a click opens the source file.
-    if (turn.context.length > 0) {
+    // what this turn consulted; a click opens the source file. A chip-on
+    // turn with NO hits still gets a chip — the persisted contextStatus
+    // says why (floor / disabled / failed) instead of silent nothing.
+    if (turn.context.length > 0 || turn.contextStatus !== null) {
       const key = `${index}:ctx`;
       const expanded = expandedChips.has(key);
       const chip = el('div', 'tool-chip context-chip' + (expanded ? ' open' : ''));
       const summary = el('button', 'tool-chip-summary') as HTMLButtonElement;
       summary.type = 'button';
       summary.appendChild(icon('search', 10));
-      summary.appendChild(
-        el(
-          'span',
-          undefined,
-          `vault context · ${turn.context.length} section${turn.context.length === 1 ? '' : 's'}`,
-        ),
-      );
+      const status = turn.contextStatus;
+      if (status === null) {
+        summary.appendChild(
+          el(
+            'span',
+            undefined,
+            `vault context · ${turn.context.length} section${turn.context.length === 1 ? '' : 's'}`,
+          ),
+        );
+      } else if (status.kind === 'empty') {
+        chip.classList.add('muted');
+        summary.appendChild(
+          el(
+            'span',
+            undefined,
+            `vault context · no sections above the score floor (${status.floor.toFixed(2)})`,
+          ),
+        );
+      } else if (status.kind === 'disabled') {
+        chip.classList.add('muted');
+        summary.appendChild(
+          el('span', undefined, 'vault context · retrieval is off in Settings → Assistant retrieval'),
+        );
+      } else {
+        chip.classList.add('muted');
+        summary.appendChild(el('span', undefined, `vault context failed · ${firstLine(status.message)}`));
+      }
       summary.addEventListener('click', () => {
         if (expanded) {
           expandedChips.delete(key);
@@ -251,15 +528,31 @@ export function mountPanel(
       chip.appendChild(summary);
       if (expanded) {
         const list = el('div', 'tool-chip-body context-list');
-        for (const cite of turn.context) {
-          const row = el('button', 'context-cite') as HTMLButtonElement;
-          row.type = 'button';
-          row.textContent = `${baseName(cite.path)} — ${cite.heading}`;
-          row.title = `${cite.path} (line ${cite.line}) — click to open`;
-          row.addEventListener('click', () => {
-            void api.documents.open(cite.path);
-          });
-          list.appendChild(row);
+        if (status === null) {
+          for (const cite of turn.context) {
+            const row = el('button', 'context-cite') as HTMLButtonElement;
+            row.type = 'button';
+            row.textContent = `${baseName(cite.path)} — ${cite.heading}`;
+            row.title = `${cite.path} (line ${cite.line}) — click to open`;
+            row.addEventListener('click', () => {
+              void api.documents.open(cite.path, cite.line > 0 ? cite.line : undefined);
+            });
+            list.appendChild(row);
+          }
+        } else if (status.kind === 'empty') {
+          const hint = el('div', 'context-hint');
+          hint.textContent =
+            'Nothing matched above the similarity cutoff. Raise k or lower the minimum score under Settings → Assistant retrieval.';
+          list.appendChild(hint);
+        } else if (status.kind === 'disabled') {
+          const hint = el('div', 'context-hint');
+          hint.textContent =
+            'The Vault chip was on, but semantic retrieval is turned off. Enable it under Settings → Assistant retrieval (the first build downloads the embedding model once).';
+          list.appendChild(hint);
+        } else {
+          const hint = el('div', 'context-hint');
+          hint.textContent = status.message;
+          list.appendChild(hint);
         }
         chip.appendChild(list);
       }
@@ -269,7 +562,7 @@ export function mountPanel(
     if (turn.text !== '') {
       const hasEditChip = turn.tool.some((entry) => entry.kind === 'edit');
       if (!(hasEditChip && turn.text.startsWith('[Proposed a change to'))) {
-        article.appendChild(el('p', 'card-body', turn.text));
+        article.appendChild(renderRichBody(api, turn.text));
       }
     }
 
@@ -388,7 +681,17 @@ export function mountPanel(
       thread.appendChild(el('p', 'empty', emptyStateText()));
     }
     for (let index = 0; index < turns.length; index++) {
-      thread.appendChild(turnNode(turns[index], index));
+      try {
+        thread.appendChild(turnNode(turns[index], index));
+      } catch (error) {
+        // One broken turn must never blank the thread (the render wipes
+        // first): an error card stands in, the console names the cause.
+        console.warn(`[assistant] turn ${index} failed to render:`, error);
+        const card = el('article', 'card a');
+        card.appendChild(el('div', 'card-label', 'ASSISTANT'));
+        card.appendChild(el('p', 'notice', 'This turn could not be rendered.'));
+        thread.appendChild(card);
+      }
     }
 
     // The streamed partial answer: one card that grows while the model
@@ -398,7 +701,13 @@ export function mountPanel(
     if (streaming !== null) {
       const partial = el('article', 'card a streaming');
       partial.appendChild(el('div', 'card-label', 'ASSISTANT'));
-      partial.appendChild(el('p', 'card-body', streaming.text === '' ? '…' : streaming.text));
+      const bodyText = streaming.text === '' ? '…' : streaming.text;
+      try {
+        partial.appendChild(renderRichBody(api, bodyText));
+      } catch (error) {
+        console.warn('[assistant] streaming render fell back to plain text:', error);
+        partial.appendChild(el('p', 'card-body', bodyText));
+      }
       thread.appendChild(partial);
     }
 
@@ -604,6 +913,13 @@ export function mountPanel(
 
   function openChatPicker(): void {
     let close: () => void = () => undefined;
+    let unsubscribe: (() => void) | null = null;
+
+    const closePicker = (): void => {
+      unsubscribe?.();
+      unsubscribe = null;
+      close();
+    };
 
     const box = el('div', 'assistant-picker');
     const headLabel = el('div', 'assistant-picker-head', 'Chats');
@@ -614,11 +930,16 @@ export function mountPanel(
     const newRow = el('div', 'assistant-picker-row new-chat', 'New chat');
     newRow.addEventListener('click', () => {
       state.newChat();
-      close();
+      closePicker();
     });
     listBox.appendChild(newRow);
 
     const renderList = (): void => {
+      // Rebuild everything below the "New chat" row: this also runs when
+      // the (async) list lands or changes while the picker sits open.
+      for (const row of listBox.querySelectorAll('.assistant-picker-row:not(.new-chat), .assistant-picker-empty')) {
+        row.remove();
+      }
       for (const chat of state.chats()) {
         const rowEl = el(
           'div',
@@ -631,13 +952,19 @@ export function mountPanel(
         rowEl.title = chat.path;
         rowEl.addEventListener('click', () => {
           void state.openChat(chat.path);
-          close();
+          closePicker();
         });
         listBox.appendChild(rowEl);
       }
       if (state.chats().length === 0) {
         listBox.appendChild(
-          el('div', 'assistant-picker-empty', 'No chats yet — the first question creates one.'),
+          el(
+            'div',
+            'assistant-picker-empty',
+            state.chatsFailed()
+              ? 'Chats could not be listed.'
+              : 'No chats yet — the first question creates one.',
+          ),
         );
       }
     };
@@ -647,7 +974,7 @@ export function mountPanel(
     box.addEventListener('keydown', (event) => {
       if (event.key === 'Escape') {
         event.preventDefault();
-        close();
+        closePicker();
       }
     });
 
@@ -655,6 +982,7 @@ export function mountPanel(
       mount.classList.add('assistant-picker-host');
       mount.appendChild(box);
     });
+    unsubscribe = state.subscribe(renderList);
     void state.invalidateChats();
   }
 
@@ -1253,6 +1581,10 @@ export function mountPanel(
       state: cm.state.EditorState.create({
         doc: '',
         extensions: [
+          // The composer sits on a dark surface: mark the view dark so CM's
+          // base theme switches the native caret from black ("&light") to
+          // white ("&dark") -- otherwise the caret is invisible.
+          EditorView.theme({}, { dark: true }),
           EditorView.lineWrapping,
           cm.view.placeholder('Ask anything …'),
           cm.view.keymap.of(cm.autocomplete.completionKeymap),
@@ -1294,10 +1626,18 @@ export function mountPanel(
 
   // -- render loop -----------------------------------------------------------
   const render = (): void => {
+    // The active chat's title: the live list wins (fresh after every
+    // change round), the loaded view's frontmatter is the fallback for
+    // a just-created chat the list has not re-read yet.
+    const activePath = state.activeChatPath();
     const chatTitle =
-      state.chats().find((chat) => chat.path === state.activeChatPath())?.title ?? null;
-    chatTitleButton.textContent = chatTitle ?? 'New chat';
-    chatTitleButton.classList.toggle('fresh', chatTitle === null);
+      activePath === null
+        ? null
+        : (state.chats().find((chat) => chat.path === activePath)?.title ??
+          state.view()?.frontmatter.title ??
+          null);
+    chatLabel.textContent = chatTitle ?? 'New chat';
+    chatLabel.title = chatTitle ?? 'New chat';
 
     sendButton.disabled = state.asking();
     renderChips();

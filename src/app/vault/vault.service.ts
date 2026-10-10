@@ -1,5 +1,12 @@
 import { Injectable, computed, signal } from '@angular/core';
-import { VaultFileEntry, VaultRegistration, VaultStatus } from '../../../shared/ipc-api';
+import {
+  RenameLinksPreview,
+  RenameLinksRequest,
+  RenameLinksResult,
+  VaultFileEntry,
+  VaultRegistration,
+  VaultStatus,
+} from '../../../shared/ipc-api';
 
 /**
  * Thin wrapper around `window.dreyApi`'s vault methods, exposed as signals
@@ -250,6 +257,31 @@ export class VaultService {
     return next;
   }
 
+  /** What a link-keeping rename would change (milestone 59). Touches nothing. */
+  async previewRename(request: RenameLinksRequest): Promise<RenameLinksPreview> {
+    if (typeof window === 'undefined' || !window.dreyApi?.previewVaultRename) {
+      return { files: [], assets: [] };
+    }
+    return window.dreyApi.previewVaultRename(request);
+  }
+
+  /**
+   * {@link renameEntry} plus the link rewrite and the attachment moves
+   * (milestone 59, ADR-0059); reloads the touched trees.
+   */
+  async renameWithLinks(request: RenameLinksRequest): Promise<RenameLinksResult> {
+    if (typeof window === 'undefined' || !window.dreyApi?.renameVaultEntryWithLinks) {
+      throw new Error('Renaming needs the desktop app.');
+    }
+    const result = await window.dreyApi.renameVaultEntryWithLinks(request);
+    if (request.fromVaultId === request.toVaultId) {
+      await this.loadTree(request.fromVaultId);
+    } else {
+      await Promise.all([this.loadTree(request.fromVaultId), this.loadTree(request.toVaultId)]);
+    }
+    return result;
+  }
+
   /** Copies an entry into `destDirRelativePath` (`''` = vault root) and reloads. */
   async copyEntry(
     sourceRelativePath: string,
@@ -301,24 +333,36 @@ export class VaultService {
   /**
    * Deletes a file or folder and reloads the tree. Like `createEntry`,
    * errors propagate to the caller (the sidebar shows a one-off `alert`)
-   * rather than blanking the whole list.
+   * rather than blanking the whole list. Deletes go to the OS recycle bin
+   * unless `{ trash: false }` is passed (move-semantics callers).
    */
-  async deleteEntry(relativePath: string, vaultId: string): Promise<void> {
-    await this.deleteEntries([relativePath], vaultId);
+  async deleteEntry(
+    relativePath: string,
+    vaultId: string,
+    opts?: { trash?: boolean },
+  ): Promise<void> {
+    await this.deleteEntries([relativePath], vaultId, opts);
   }
 
   /**
    * Deletes several files / folders in one round trip and reloads the tree
    * once (the Files panel's multi-select delete, bug-8). The main process
    * fires a single vault-change re-index for the whole batch; per-path
-   * errors propagate to the caller like `deleteEntry`.
+   * errors propagate to the caller like `deleteEntry`. Resolves to the
+   * paths that could not be moved to the recycle bin and were deleted
+   * permanently instead (no bin on their volume).
    */
-  async deleteEntries(relativePaths: string[], vaultId: string): Promise<void> {
+  async deleteEntries(
+    relativePaths: string[],
+    vaultId: string,
+    opts?: { trash?: boolean },
+  ): Promise<string[]> {
     if (typeof window === 'undefined' || !window.dreyApi?.deleteVaultEntries) {
-      return;
+      return [];
     }
-    await window.dreyApi.deleteVaultEntries(relativePaths, vaultId);
+    const notTrashed = await window.dreyApi.deleteVaultEntries(relativePaths, vaultId, opts);
     await this.loadTree(vaultId);
+    return notTrashed;
   }
 
   /**

@@ -91,6 +91,13 @@ with a plain `import()`), `renderer/` (ES2022 modules + CSS) and `shared/`
 `scripts/build-plugins.mjs`. The `files` globs carry the `.js`/`.json`
 entries plus an explicit `dist-electron/plugins/**/*.css`.
 
+**Exception: the `sample` plugin is not shipped.** It is the executable
+authoring reference (`plugins/AUTHORING.md`) and a dev/e2e fixture — it is
+still built into `dist-electron/plugins/sample/` so `npm run dev` and the
+e2e suite see it, but a `files` negation
+(`!dist-electron/plugins/sample/**`) keeps it out of the installer and
+portable exe. `verify:pack` asserts the absence.
+
 - **Serving**: the privileged **`plugin://<id>/<path>`** scheme resolves
   against the plugin's `renderer/` folder (the main process asks the
   plugin host which root belongs to an id). It is served through the same
@@ -106,11 +113,12 @@ entries plus an explicit `dist-electron/plugins/**/*.css`.
   reads the manifests through the asar-patched `fs`, the CommonJS mains
   load with a plain `import(pathToFileURL(...))` (Electron ≥ 28's ESM
   loader is asar-aware; verified on Electron 44), and `plugin://` serves
-  renderer modules + CSS. `node scripts/verify-pack.mjs` (`npm run
-  verify:pack`, run after `pack:dir`) checks the asar contents and boots
-  the packed exe from a throwaway profile with every built-in enabled,
-  asserting all plugins `active`, a `plugin://` renderer executing (the
-  sample plugin's File-menu row) and `plugin:invoke` roundtrips, plus
+  renderer modules + CSS.   `node scripts/verify-pack.mjs` (`npm run
+  verify:pack`, run after `pack:dir`) checks the asar contents (shipped
+  plugins present, `sample` absent) and boots the packed exe from a
+  throwaway profile with every built-in enabled, asserting all plugins
+  `active`, a `plugin://` renderer executing (the assistant panel mounted)
+  and `plugin:invoke` roundtrips (tags `palette`, tasks `list`), plus
   startup timings.
 - **User-installed plugins** are *not* packaged: discovery also scans
   `%APPDATA%\drey\plugins\<id>\` (beside `app-config.json`, ADR-0010) and

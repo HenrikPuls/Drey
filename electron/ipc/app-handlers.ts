@@ -1,8 +1,6 @@
 import { app, BrowserWindow, ipcMain, shell } from 'electron';
 import { AppInfo, EditCommand, IPC_CHANNELS } from '../../shared/ipc-api';
 import { logFromRenderer, logLine } from '../logger';
-import { closeTrackedPopups } from '../menu';
-import { refocusRenderer } from '../focus';
 
 /**
  * App-shell IPC: version info, the frameless-titlebar window controls
@@ -32,20 +30,6 @@ export function registerAppHandlers(getMainWindow: () => BrowserWindow | null): 
     }
   });
   ipcMain.handle(IPC_CHANNELS.windowClose, (): void => getMainWindow()?.close());
-  // "Recover input focus" (View menu / Mod+Alt+Shift+R), main-side half:
-  // close a native context-menu popup whose capture loop never unwound
-  // (bug-6), and hand keyboard focus back to the webContents -- the state a
-  // dismissed native dialog leaves behind (electron#41602), which the
-  // renderer cannot clear on its own.
-  ipcMain.handle(IPC_CHANNELS.windowRecoverInput, (): boolean => {
-    const win = getMainWindow();
-    if (!win) {
-      return false;
-    }
-    const closed = closeTrackedPopups(win, 'recover input focus');
-    refocusRenderer(win);
-    return closed;
-  });
   ipcMain.handle(
     IPC_CHANNELS.windowIsMaximized,
     (): boolean => getMainWindow()?.isMaximized() ?? false,

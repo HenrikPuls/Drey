@@ -104,6 +104,12 @@ const plugin: PluginRendererModule = {
       setEditLock: (path, locked) => {
         api.documents.setEditLock(path, locked);
       },
+      // The live daily root (chat decoupling, 57c); the normalized config
+      // always carries the default when the field is absent.
+      dailyDir: async () => {
+        const config = await api.appConfig.get();
+        return config.daily.dir;
+      },
     };
 
     const state = createAssistantState(ports, tasks);
@@ -122,9 +128,10 @@ const plugin: PluginRendererModule = {
       }
     });
 
-    // -- active-document tracking (chips) + chat binding (req: the panel
-    // follows the open note — a tab switch opens that document's newest
-    // chat, a non-note focus resets to a fresh unbound chat) --------------
+    // -- active-document tracking (chips) + the chat-note hydration rule:
+    // the ONLY implicit switch is a focused chat-note tab (its Markdown
+    // hydrates the panel); every other focus keeps the current chat, and
+    // the very first follow loads the newest conversation (app start) ------
     /** The last doc key followActiveDoc was called with; undefined = never. */
     let lastFollowKey: string | null | undefined = undefined;
     const trackActive = (): void => {
@@ -250,14 +257,9 @@ const plugin: PluginRendererModule = {
       defaultOpen: true,
       defaultFlex: 100,
       flush: true,
-      status: () => {
-        const active = state.activeChatPath();
-        if (active !== null) {
-          const chat = state.chats().find((entry) => entry.path === active);
-          return chat?.title ?? null;
-        }
-        return 'New chat';
-      },
+      // Deliberately NO `status()` (frame-header value): the chat title it
+      // showed recomputed only on shell change detection — stale and wrong
+      // after a switch — and said nothing the picker below doesn't.
       mount: (body) => {
         panel = mountPanel(body, api, state, tasks);
         return () => {

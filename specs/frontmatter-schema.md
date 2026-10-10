@@ -43,6 +43,28 @@ updated: '2026-09-05T14:32:00'
   tokens — the Tasks panel writes checkbox state back by re-resolving
   the line against fresh content at tick time and skipping ambiguous
   duplicates (never guessing a twin).
+- **Task metadata** (req-37, Obsidian-Tasks compatible): a due date
+  `📅 YYYY-MM-DD` and a priority glyph (`🔺` highest, `⏫` high,
+  `🔽` low; absent = normal) may sit anywhere on a task line,
+  whitespace-delimited. Both are parsed into the task record and kept
+  out of the task text; malformed dates are ordinary content. The
+  emojis stay human-legible annotations — unlike the rejected
+  `#task/id:` scheme, they carry no opaque ids, and notes remain fully
+  interoperable with Obsidian's Tasks plugin. Grammar:
+  `plugins/tasks/shared/tasks.ts`.
+- **Completion date** (milestone 57d, Obsidian-Tasks compatible): a
+  completed task line carries `✅ YYYY-MM-DD`. Unlike the due date it is
+  **written by the app**: every done toggle (Tasks panel row, the
+  assistant's task block, the editor's `Ctrl+Enter` and Live Preview
+  checkbox click) stamps today's date at the line's end — before a
+  trailing `#task/done` — and reopening removes it. The token is parsed
+  into the task record (`completed`) and kept out of the task text; it
+  never marks a task done on its own (the box / `#task/done` decides). A
+  box ticked by typing `[x]` by hand gets no date. Tasks completed
+  before 57d carry none either: the "completed" view then falls back to
+  the first `YYYY-MM-DD` in the note's file name (daily and dated
+  meeting notes) and lists tasks with neither last. The meeting import's
+  text form `done: YYYY-MM-DD` feeds the same field (read-only).
 
 ## Daily notes — `<dir>/<year>/<month>/YYYY-MM-DD.md`
 

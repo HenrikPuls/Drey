@@ -200,7 +200,7 @@ export const livePreviewTheme = EditorView.theme(
     },
 
     '.lp-table': {
-      padding: '4px 0',
+      padding: '2px 0',
       cursor: 'default',
     },
     '.lp-table table, .lp-html table': {

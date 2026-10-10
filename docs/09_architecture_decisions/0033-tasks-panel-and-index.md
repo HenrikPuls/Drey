@@ -118,6 +118,56 @@ unsaved-buffer fold keys on `(vaultId, path)` so the same relative path
 in two vaults cannot clobber rows. This closed the last item of
 milestone 28's announced M-B follow-up.
 
+## Later change — inline metadata: due date + priority (req-37, milestone 51)
+
+Task lines can now carry an **Obsidian-Tasks-compatible due date**
+(`📅 YYYY-MM-DD`) and **priority glyph** (`🔺` highest, `⏫` high, `🔽`
+low; absent = normal) anywhere on the line. This is deliberately not a
+`#task/id:`-style machine token: the emojis are human-legible
+annotations with an established ecosystem meaning, the vault stays
+readable/writable by Obsidian's Tasks plugin, and the scanner
+(`plugins/tasks/shared/tasks.ts`) strips them from the task text — so
+the text+kind matching of `resolveTaskLine` is unaffected by metadata
+edits (the hazard the id scheme tried to fix never even arises). The
+scanner exposes `due` / `priority` on `TaskRecord`, pure
+`setDueOnLine` / `setPriorityOnLine` setters write the tokens back
+(append-or-replace, guarded to task lines), the panel sorts by both
+and shows badges, and a plugin completion source with a native
+date-picker popover authors them in the editor. See
+`specs/frontmatter-schema.md` for the line format.
+
+## Later change — the completion date (milestone 57d)
+
+"Which tasks were completed recently" was unanswerable: a done task
+carried no date (`[x]` has none, and the meeting import's `done:` date
+was parsed but discarded). Task lines now carry Obsidian Tasks' done
+date `✅ YYYY-MM-DD`, exposed as `TaskRecord.completed`.
+
+This is the first task token the app **writes on its own** — due and
+priority are only ever written through an explicit picker. The
+trade-off was accepted deliberately (owner decision): an exact
+completion date needs a write at the moment of completion, and the
+alternative (approximating by the note's date or mtime) reports a task
+ticked today in an old note as old. Same reasoning as the due/priority
+tokens otherwise — a human-legible, ecosystem-compatible annotation,
+stripped from the task text so `resolveTaskLine` is unaffected.
+
+- `setDoneOnLine` stamps `✅ today` on completion and removes it on
+  reopen; a line already in the requested state is left untouched, so a
+  legacy done task never gains a date it did not earn.
+- The editor's own toggles (`Ctrl+Enter`, the base Live Preview checkbox
+  click) flip the box directly; a tasks-plugin transaction filter keyed
+  on their `input.toggleTask` user event appends the same stamp to the
+  same transaction (one undo step). The base editor stays grammar-free.
+  A `[x]` typed by hand gets no date.
+- Legacy fallback, read-only: `completionKey` falls back to the first
+  `YYYY-MM-DD` in the note's file name. File mtime was considered and
+  dropped — the index holds no stat data, and any unrelated save would
+  make every old task in the note "recent".
+- The provider gained the matching view (SDK 1.13): `status`
+  (`open` | `done` | `all`), `completedSince` and the `completed` sort
+  (newest first, undated last). See ADR-0058's 57d note.
+
 ## Considered and rejected — stable `#task/id:` addressing (req-35, milestone 44)
 
 The roadmap's "Task Center" item named a real hazard: a panel tick

@@ -43,6 +43,8 @@ import {
   TemplatesConfig,
   THEME_ACCENT,
   UiScale,
+  UPDATE_LINKS_MODES,
+  UpdateLinksMode,
   VaultConfig,
   WidgetsConfig,
   PluginsConfig,
@@ -338,7 +340,13 @@ function normalizeSnippets(raw: unknown): SnippetConfig[] {
 
 function normalizeVault(raw: unknown): VaultConfig {
   const source = (raw ?? {}) as Record<string, unknown>;
-  return { watch: bool(source['watch'], DEFAULT_VAULT_CONFIG.watch) };
+  const mode = source['updateLinksOnRename'];
+  return {
+    watch: bool(source['watch'], DEFAULT_VAULT_CONFIG.watch),
+    updateLinksOnRename: UPDATE_LINKS_MODES.includes(mode as UpdateLinksMode)
+      ? (mode as UpdateLinksMode)
+      : DEFAULT_VAULT_CONFIG.updateLinksOnRename,
+  };
 }
 
 function normalizeEditor(raw: unknown): EditorConfig {

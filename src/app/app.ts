@@ -3,6 +3,8 @@ import { formatDate } from '../../shared/timestamp';
 import { ImageLightbox } from './image-viewer';
 import { ConfirmationDialog } from './confirmation-dialog/confirmation-dialog';
 import { ConfirmDialog } from './confirm-dialog/confirm-dialog';
+import { LinkUpdateDialog } from './link-update';
+import { Palette, PaletteService } from './palette';
 import { ExitConfirmDialog } from './exit-confirm-dialog/exit-confirm-dialog';
 import { ExternalOpenService } from './external-open';
 import { SessionService } from './session';
@@ -12,8 +14,8 @@ import { DailyNoteService } from './vault';
 import { EditorService } from './services/editor.service';
 import { ExitConfirmService } from './services/exit-confirm.service';
 import { DropGuardService } from './services/drop-guard.service';
+import { DocHistoryService } from './services/doc-history.service';
 import { EditorZoomService } from './services/editor-zoom.service';
-import { InputRecoveryService } from './services/input-recovery.service';
 import { LogService } from './services/log.service';
 import { McpBridgeService } from './services/mcp-bridge.service';
 import { PaneLayout, PaneService } from './panes';
@@ -50,6 +52,8 @@ import { EditorContextMenuRegistry } from './plugin-host';
     PaneLayout,
     Settings,
     ConfirmationDialog,
+    LinkUpdateDialog,
+    Palette,
     ConfirmDialog,
     ExitConfirmDialog,
     ImageLightbox,
@@ -90,6 +94,14 @@ export class App {
   }
 
   constructor() {
+    // Document history (back/forward, Alt+Arrow): recording starts
+    // SUSPENDED -- the startup flows below mass-open tabs (session
+    // restore, OS-collected files, the daily-note fallback) and none of
+    // that churn is navigation. Resumed with a seed of whatever document
+    // the user actually landed on.
+    const history = inject(DocHistoryService);
+    history.suspend();
+
     // Subscribe to the quick-capture hotkey for the app's lifetime.
     inject(DailyNoteService).start();
     // Files the OS hands to Drey (Explorer "Open with", ADR-0054): later
@@ -102,9 +114,6 @@ export class App {
     inject(EditorZoomService);
     // Mirror uncaught renderer errors + rejections into the log file (ADR-0032).
     inject(LogService).install();
-    // Manual "unstick the keyboard" escape hatch + watchdog (ADR-0032).
-    const recovery = inject(InputRecoveryService);
-    recovery.startWatchdog();
 
     // Install the window-level drag/drop navigation guard (ADR-0027).
     inject(DropGuardService);
@@ -151,7 +160,7 @@ export class App {
       // No active vault: nothing to restore, but a file the OS handed to Drey
       // still opens (as an external tab, ADR-0054).
       if (loaded && this.vault.registryLoaded() && !vaultPath) {
-        void externalOpen.onStartupSettled();
+        void externalOpen.onStartupSettled().then(() => history.resume());
       }
       if (this.dailyNoteStartupDone || !vaultPath || !loaded) {
         return;
@@ -166,6 +175,7 @@ export class App {
         if (!restored && openedFromOs === 0 && this.settings.dailyOpenOnStartup()) {
           void this.editor.openDailyNote(formatDate(new Date()));
         }
+        history.resume();
       })();
     });
 
@@ -201,6 +211,24 @@ export class App {
       label: 'Toggle line numbers',
       keybinding: 'Mod+G',
       run: () => this.editor.toggleLineNumbers(),
+    });
+
+    // Back / forward through the session's document history (the titlebar
+    // arrows, View menu). `ArrowLeft`/`ArrowRight` spell out the
+    // `KeyboardEvent.key` ("arrowleft" after lower-casing); this shadows
+    // CodeMirror's Alt+Arrow subword steps, accepted for the browser-standard
+    // chord.
+    keys.register({
+      id: 'doc.back',
+      label: 'Go back',
+      keybinding: 'Alt+ArrowLeft',
+      run: () => void history.back(),
+    });
+    keys.register({
+      id: 'doc.forward',
+      label: 'Go forward',
+      keybinding: 'Alt+ArrowRight',
+      run: () => void history.forward(),
     });
 
     // Split-view panes (ADR-0037). The layout mechanics already exist
@@ -263,11 +291,71 @@ export class App {
       run: () => windowChrome.toggleFullScreen(),
     });
 
+    // The quick switcher / command palette (milestone 59): one overlay,
+    // opened on its file list or -- with a leading `>` -- its command list.
+    const palette = inject(PaletteService);
     keys.register({
-      id: 'input.recover',
-      label: 'Recover input focus',
-      keybinding: 'Mod+Alt+Shift+R',
-      run: () => recovery.recover('manual'),
+      id: 'palette.files',
+      label: 'Go to file…',
+      keybinding: 'Mod+P',
+      run: () => palette.show('files'),
     });
+    keys.register({
+      id: 'palette.commands',
+      label: 'Command palette…',
+      keybinding: 'Mod+Shift+P',
+      run: () => palette.show('commands'),
+    });
+
+    // Actions that so far lived only in a menu row or a button -- registered
+    // as commands so the palette can list them.
+    keys.register({
+      id: 'settings.open',
+      label: 'Open settings',
+      keybinding: 'Mod+,',
+      run: () => {
+        // Re-opening would re-seed the draft and drop unsaved changes.
+        if (!this.settings.screenOpen()) {
+          this.settings.openScreen();
+        }
+      },
+    });
+    keys.register({
+      id: 'layout.reset',
+      label: 'Reset layout',
+      run: () => {
+        this.dock.reset();
+        this.panes.resetRegions();
+      },
+    });
+    keys.register({
+      id: 'vault.refresh',
+      label: 'Refresh vault',
+      run: () => void this.vault.refresh(),
+    });
+    keys.register({
+      id: 'daily.today',
+      label: 'Open today’s daily note',
+      run: () => void this.editor.openDailyNote(formatDate(new Date())),
+    });
+    keys.register({
+      id: 'editor.toggleSource',
+      label: 'Toggle source mode',
+      run: () => {
+        if (this.editor.activeKind() === 'text' && this.editor.isMarkdown(this.editor.activePath())) {
+          this.editor.setViewMode(this.editor.viewMode() === 'source' ? 'live' : 'source');
+        }
+      },
+    });
+    keys.register({
+      id: 'note.exportPdf',
+      label: 'Export as PDF…',
+      run: () => {
+        if (this.editor.activeKind() === 'text' && this.editor.isMarkdown(this.editor.activePath())) {
+          void this.editor.exportPdf();
+        }
+      },
+    });
+
   }
 }

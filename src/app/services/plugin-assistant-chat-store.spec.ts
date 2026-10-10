@@ -21,12 +21,8 @@ function fakeVault(initial: Record<string, string> = {}) {
         written.push(path);
         return 0;
       },
-      list: async () =>
-        [...files.keys()].map((relativePath) => ({
-          name: relativePath,
-          relativePath,
-          type: 'file' as const,
-        })),
+      listMarkdownFiles: async () =>
+        [...files.keys()].filter((p) => p.toLowerCase().endsWith('.md')),
     },
   };
 }
@@ -112,6 +108,7 @@ describe('ChatStore — append / truncate / outcomes', () => {
     attachments: [{ kind: 'note' as const, path: 'daily/a.md' }],
     tool: [],
     context: [],
+    contextStatus: null,
     start: 0,
   };
 
@@ -131,6 +128,49 @@ describe('ChatStore — append / truncate / outcomes', () => {
     expect(vault.files.get(path)).toContain('my-note: keep me');
   });
 
+  it('setTitle rewrites the quoted title, bumps updated, keeps turns and user keys (57e)', async () => {
+    const { vault, store, path } = await storeWithNote();
+    vault.files.set(
+      path,
+      vault.files.get(path)!.replace('---\n', '---\nmy-note: keep me\n'),
+    );
+    await store.appendTurn(path, userTurn);
+    await store.appendTurn(path, { ...userTurn, role: 'assistant', text: 'Answer.' });
+
+    await store.setTitle(path, 'Rigg-Aufteilung im Vergleich', new Date(2026, 8, 13, 16, 0, 0));
+
+    const view = parseChatNote(vault.files.get(path)!);
+    expect(view.frontmatter.title).toBe('Rigg-Aufteilung im Vergleich');
+    expect(view.frontmatter.updated).toBe('2026-09-13T16:00:00');
+    expect(view.turns).toHaveLength(2);
+    expect(vault.files.get(path)).toContain('my-note: keep me');
+    expect(vault.files.get(path)).toContain('title: "Rigg-Aufteilung im Vergleich"');
+    // The write is announced, so the change round refreshes the picker.
+    expect(vault.written).toContain(path);
+  });
+
+  it('serialises concurrent writes — a late title write cannot revert a turn (57e)', async () => {
+    const { vault, store, path } = await storeWithNote();
+    await store.appendTurn(path, userTurn);
+
+    // Both in flight at once: whichever queues first, the other re-reads
+    // the post-write raw — the final file carries BOTH effects.
+    await Promise.all([
+      store.appendTurn(path, {
+        ...userTurn,
+        role: 'assistant',
+        text: 'Answer.',
+        attachments: [],
+      }),
+      store.setTitle(path, 'Neuer Titel'),
+    ]);
+
+    const view = parseChatNote(vault.files.get(path)!);
+    expect(view.frontmatter.title).toBe('Neuer Titel');
+    expect(view.turns).toHaveLength(2);
+    expect(view.turns[1]?.text).toBe('Answer.');
+  });
+
   it('appendEditOutcome lands in the last assistant turn and bumps updated', async () => {
     const { vault, store, path } = await storeWithNote();
     await store.appendTurn(path, userTurn);
@@ -144,6 +184,7 @@ describe('ChatStore — append / truncate / outcomes', () => {
         attachments: [],
         tool: [],
         context: [],
+        contextStatus: null,
         start: 0,
       },
       { session: 'sess-1' },
@@ -173,6 +214,7 @@ describe('ChatStore — append / truncate / outcomes', () => {
         attachments: [],
         tool: [],
         context: [],
+        contextStatus: null,
         start: 0,
       },
       { session: 'sess-1' },
@@ -201,5 +243,40 @@ describe('ChatStore — listChats', () => {
     const chats = await store.listChats();
     expect(chats.map((c) => c.title)).toEqual(['Newer', 'Older']);
     expect(chats[0].path).toBe('chats/2026/09/2026-09-13-b.md');
+  });
+
+  it('tolerates a fenceless (corrupted) chat file: lists it with the path as title', async () => {
+    const vault = fakeVault({
+      'chats/2026/09/broken.md':
+        'frage"---\nkind: chat\ntitle: "x"\n---\n\n## User\n\nalt\n',
+      'chats/2026/09/good.md': "---\nkind: chat\ntitle: 'Good'\nupdated: '2026-09-13T09:00:00'\n---\n",
+    });
+    const store = new ChatStore(vault.ports);
+    const chats = await store.listChats();
+    // No fence at the start → empty frontmatter degrades, the file still lists.
+    expect(chats.map((c) => c.title)).toEqual(['Good', 'chats/2026/09/broken.md']);
+    expect(chats[1].updated).toBeNull();
+  });
+
+  it('logs chat files it must skip (vanished between listing and read)', async () => {
+    const vault = fakeVault({
+      'chats/2026/09/good.md': "---\nkind: chat\ntitle: 'Good'\nupdated: '2026-09-13T09:00:00'\n---\n",
+    });
+    const logs: Array<{ message: string; level?: string }> = [];
+    const store = new ChatStore({
+      ...vault.ports,
+      listMarkdownFiles: async () => [
+        ...(await vault.ports.listMarkdownFiles()),
+        'chats/2026/09/gone.md',
+      ],
+      log: (message, level) => {
+        logs.push({ message, level });
+      },
+    });
+    const chats = await store.listChats();
+    expect(chats.map((c) => c.title)).toEqual(['Good']);
+    expect(logs).toHaveLength(1);
+    expect(logs[0].level).toBe('warn');
+    expect(logs[0].message).toContain('chats/2026/09/gone.md');
   });
 });

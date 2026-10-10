@@ -109,6 +109,21 @@ export interface OpenDoc {
   external?: boolean;
 }
 
+/**
+ * The remembered viewport of a document (milestone 50): caret (CodeMirror
+ * head offset) plus the scroller's raw offset, replayed into every fresh
+ * state for that doc key during the app session. `caretRel` -- the caret's
+ * offset from the viewport top at capture, when it was rendered -- is what
+ * makes the restore EXACT: a fresh state's height map is entirely
+ * estimated, so the raw offset alone lands a few lines off; the restore
+ * measures the caret's rendered position and corrects by the delta.
+ */
+export interface CaretMemory {
+  head: number;
+  scrollTop: number;
+  caretRel?: number;
+}
+
 function baseName(relativePath: string): string {
   const parts = relativePath.split('/');
   return parts[parts.length - 1] || relativePath;
@@ -883,6 +898,50 @@ export class EditorService {
   }
 
   /**
+   * Caret memory (milestone 50): the last known caret (CodeMirror head
+   * offset) AND scroll offset per doc key, kept for the WHOLE APP SESSION
+   * -- deliberately decoupled from the doc records, because a clean tab
+   * is REPLACED when another file opens (milestone 32) and the memory
+   * must survive that close/reopen cycle too. Purely in-memory: nothing
+   * rides into the session snapshot, and a restart starts empty.
+   * Bounded FIFO past {@link CARET_MEMORY_LIMIT}.
+   */
+  private readonly carets = new Map<string, CaretMemory>();
+
+  /** Oldest entries fall off the caret memory past this many doc keys. */
+  static readonly CARET_MEMORY_LIMIT = 200;
+
+  /**
+   * Called by a pane's editor when it leaves a document (tab switch, pane
+   * close): remember its viewport so the next fresh state for that doc key
+   * lands on the SAME view instead of the top (milestone 50). Needs no
+   * open doc -- the memory is what outlives the tab.
+   */
+  recordCaret(key: string, memory: CaretMemory): void {
+    const prior = this.carets.get(key);
+    if (
+      prior !== undefined &&
+      prior.head === memory.head &&
+      prior.scrollTop === memory.scrollTop &&
+      prior.caretRel === memory.caretRel
+    ) {
+      return;
+    }
+    if (this.carets.size >= EditorService.CARET_MEMORY_LIMIT && prior === undefined) {
+      const oldest = this.carets.keys().next().value;
+      if (oldest !== undefined) {
+        this.carets.delete(oldest);
+      }
+    }
+    this.carets.set(key, memory);
+  }
+
+  /** The remembered viewport for `key`, or undefined when none was recorded. */
+  caretFor(key: string): CaretMemory | undefined {
+    return this.carets.get(key);
+  }
+
+  /**
    * Auto-save for app-owned files (ADR-0048): edits to a chat note or a
    * committed draft persist themselves after a short idle — the user never
    * saves them by hand and they never trip the exit prompt or an assistant
@@ -1177,10 +1236,12 @@ export class EditorService {
       this.setPinned(savedKey, true);
     }
     // Moving a file out of `.drafts/` (bug-5's exit auto-saves) deletes the
-    // draft original -- move semantics, so drafts don't linger in two places.
+    // draft original -- move semantics, so drafts don't linger in two
+    // places, and permanent (a recycle-bin copy would pile up on every
+    // save-as; the content lives at the target).
     if (doc.vaultId !== null && doc.path.startsWith('.drafts/') && doc.path !== target) {
       try {
-        await this.vault.deleteEntry(doc.path, doc.vaultId);
+        await this.vault.deleteEntry(doc.path, doc.vaultId, { trash: false });
       } catch {
         // The original staying behind is annoying, not fatal.
       }

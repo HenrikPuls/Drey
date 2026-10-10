@@ -306,7 +306,7 @@ describe('FilesPanel multi-select (bug-8)', () => {
       listVaultFiles: () => Promise.resolve(tree()),
       deleteVaultEntries: (paths: string[], vaultId?: string) => {
         deleted.push({ vaultId, paths });
-        return Promise.resolve();
+        return Promise.resolve([]);
       },
     }) as DreyApi;
     await TestBed.configureTestingModule({ imports: [FilesPanel] }).compileComponents();

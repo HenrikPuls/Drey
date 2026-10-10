@@ -13,6 +13,7 @@ import { NgTemplateOutlet } from '@angular/common';
 import { EditorService, docKey } from '../../services/editor.service';
 import { ConfirmDialogService } from '../../services/confirm-dialog.service';
 import { VaultService } from '../../vault';
+import { LinkUpdateService } from '../../link-update';
 import { VaultFileEntry, VaultStatus } from '../../../../shared/ipc-api';
 import { Icon } from '../../icons/icon';
 import { PanelHeaderActions } from '../panel-header-actions';
@@ -86,6 +87,7 @@ export class FilesPanel {
   protected readonly vault = inject(VaultService);
   protected readonly editor = inject(EditorService);
   private readonly dialogs = inject(ConfirmDialogService);
+  private readonly linkUpdate = inject(LinkUpdateService);
   private readonly host = inject<ElementRef<HTMLElement>>(ElementRef).nativeElement;
 
   /**
@@ -940,8 +942,10 @@ export class FilesPanel {
     const name = fromRel.slice(fromRel.lastIndexOf('/') + 1);
     const toRel = destDir ? `${destDir}/${name}` : name;
     try {
-      await this.vault.renameEntry(fromRel, toRel, fromVaultId, toVaultId);
-      this.editor.retargetTabs(docKey(fromVaultId, fromRel), docKey(toVaultId, toRel));
+      // Links and attachments follow the move (milestone 59); null = cancelled.
+      if ((await this.linkUpdate.rename(fromVaultId, fromRel, toVaultId, toRel)) === null) {
+        return;
+      }
       const clip = this.vault.clipboard();
       if (clip && clip.vaultId === fromVaultId && clip.path === fromRel) {
         this.vault.clipboard.set({ vaultId: toVaultId, path: toRel, name });
@@ -1117,11 +1121,15 @@ export class FilesPanel {
     const parent = parentDir(entry.relativePath);
     const toPath = parent ? `${parent}/${nextName}` : nextName;
     try {
-      await this.vault.renameEntry(entry.relativePath, toPath, pending.vaultId);
-      this.editor.retargetTabs(
-        docKey(pending.vaultId, entry.relativePath),
-        docKey(pending.vaultId, toPath),
+      const renamed = await this.linkUpdate.rename(
+        pending.vaultId,
+        entry.relativePath,
+        pending.vaultId,
+        toPath,
       );
+      if (renamed === null) {
+        return;
+      }
       const clip = this.vault.clipboard();
       if (clip && clip.vaultId === pending.vaultId && clip.path === entry.relativePath) {
         this.vault.clipboard.set({ vaultId: clip.vaultId, path: toPath, name: nextName });
@@ -1190,7 +1198,7 @@ export class FilesPanel {
     const names = targets.map((t) => `"${t.entry.relativePath}"`).join(', ');
     const deleteConfirmed = await this.dialogs.confirm({
       title: `Delete ${what}`,
-      message: `${names} will be deleted. This cannot be undone.`,
+      message: `${names} will be moved to the recycle bin.`,
       confirmLabel: 'Delete',
       danger: true,
     });
@@ -1216,8 +1224,20 @@ export class FilesPanel {
         list.push(target.entry.relativePath);
         byVault.set(target.vaultId, list);
       }
+      const notTrashed: string[] = [];
       for (const [vaultId, paths] of byVault) {
-        await this.vault.deleteEntries(paths, vaultId);
+        notTrashed.push(...(await this.vault.deleteEntries(paths, vaultId)));
+      }
+      if (notTrashed.length > 0) {
+        // The volume has no recycle bin (network share, some removable
+        // drives): the delete stood, but permanently -- say so.
+        await this.dialogs.message({
+          title: 'Deleted permanently',
+          message:
+            notTrashed.length === 1
+              ? `"${notTrashed[0]}" could not be moved to the recycle bin and was deleted permanently.`
+              : `${notTrashed.length} items could not be moved to the recycle bin and were deleted permanently.`,
+        });
       }
     } catch (err) {
       this.showError(err);

@@ -59,7 +59,10 @@ export const SNIPPET_DEFAULTS: SnippetConfig[] = [
 
 export const DEFAULT_TEMPLATES_CONFIG: TemplatesConfig = { dir: 'templates', snippets: SNIPPET_DEFAULTS };
 
-export const DEFAULT_VAULT_CONFIG: VaultConfig = { watch: false };
+export const DEFAULT_VAULT_CONFIG: VaultConfig = {
+  watch: false,
+  updateLinksOnRename: 'ask',
+};
 
 export const DEFAULT_APPEARANCE: AppearanceConfig = {
   uiScale: 'default',

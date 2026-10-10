@@ -125,6 +125,45 @@ export function realTableExtent(table: SyntaxNode): SyntaxNode | null {
 }
 
 /**
+ * A run of delimiter-carrying rows the parser absorbed into `table` AFTER
+ * its real extent (`extentTo` = `realTableExtent(table).to`) -- a second
+ * table glued in after a plain text line parses as rows of the SAME
+ * `Table` node. Returns the run's header row, delimiter row and last row
+ * when `pos` sits on one of the run's lines, else `null` (a pipe-less
+ * absorbed line or no run). Shared by the widget split (`scanEmbeds`), the
+ * table-Enter handler and the deletion grace.
+ */
+export function absorbedTableRunAt(
+  table: SyntaxNode,
+  extentTo: number,
+  pos: number,
+): { from: SyntaxNode; delim: SyntaxNode; to: SyntaxNode } | null {
+  let run: SyntaxNode[] = [];
+  const flush = (): { from: SyntaxNode; delim: SyntaxNode; to: SyntaxNode } | null => {
+    const hit =
+      run.length >= 2 && run[0].from <= pos && pos <= run[run.length - 1].to
+        ? { from: run[0], delim: run[1], to: run[run.length - 1] }
+        : null;
+    run = [];
+    return hit;
+  };
+  for (const row of table.getChildren('TableRow')) {
+    if (row.to <= extentTo) {
+      continue;
+    }
+    if (row.getChild('TableDelimiter') !== null) {
+      run.push(row);
+    } else {
+      const hit = flush();
+      if (hit) {
+        return hit;
+      }
+    }
+  }
+  return flush();
+}
+
+/**
  * Walks the tree once and collects every rendered embed (tables, `mermaid`
  * fences, images, merged HTML regions), past the frontmatter. Whether an
  * embed is currently revealed is decided later, in `buildBlockState`.
@@ -156,26 +195,72 @@ function scanEmbeds(state: EditorState, config: LivePreviewConfig): Embed[] {
           // into the raw source. Row growth is the table-Enter handler's
           // job (`table-enter.ts`), so the caret never has to sit on a
           // glued line to extend the table.
-          const extent = realTableExtent(node.node);
-          if (extent) {
-            // Block decorations must cover whole lines.
-            const from = doc.lineAt(node.from).from;
-            const rowTo = doc.lineAt(extent.to).to;
-            const source = state.sliceDoc(from, rowTo);
-            embeds.push({
-              kind: 'table',
-              from: node.from,
-              to: rowTo,
-              lineFrom: from,
-              lineTo: rowTo,
-              atom: () =>
-                Decoration.replace({
-                  widget: new TableWidget(tableMd.render(source), source),
-                  block: true,
-                }).range(from, rowTo),
-              preview: null,
-            });
-          }
+            const extent = realTableExtent(node.node);
+            if (extent) {
+              // Block decorations must cover whole lines.
+              const from = doc.lineAt(node.from).from;
+              const rowTo = doc.lineAt(extent.to).to;
+              const source = state.sliceDoc(from, rowTo);
+              // Trimmed: markdown-it ends its output with a newline, which
+              // would render as a phantom empty line inside the widget (the
+              // editor content is `pre-wrap`) and pad every table.
+              const html = tableMd.render(source).trim();
+              embeds.push({
+                kind: 'table',
+                from: node.from,
+                to: rowTo,
+                lineFrom: from,
+                lineTo: rowTo,
+                atom: () =>
+                  Decoration.replace({
+                    widget: new TableWidget(html, source),
+                    block: true,
+                  }).range(from, rowTo),
+                preview: null,
+              });
+              // The parser absorbs EVERY following line into the `Table`
+              // node until a blank line -- a second table glued in after a
+              // plain text line arrives as further delimiter-carrying rows
+              // of the same node, beyond the clamp, and would never render.
+              // Each such run becomes its own table embed; runs without a
+              // delimiter row (arbitrary absorbed pipe lines) stay raw.
+              let run: SyntaxNode[] = [];
+              const flush = (): void => {
+                if (run.length >= 2) {
+                  const runFrom = doc.lineAt(run[0].from).from;
+                  const runTo = doc.lineAt(run[run.length - 1].to).to;
+                  const runSource = state.sliceDoc(runFrom, runTo);
+                  const runHtml = tableMd.render(runSource).trim();
+                  if (runHtml.includes('<table')) {
+                    embeds.push({
+                      kind: 'table',
+                      from: run[0].from,
+                      to: runTo,
+                      lineFrom: runFrom,
+                      lineTo: runTo,
+                      atom: () =>
+                        Decoration.replace({
+                          widget: new TableWidget(runHtml, runSource),
+                          block: true,
+                        }).range(runFrom, runTo),
+                      preview: null,
+                    });
+                  }
+                }
+                run = [];
+              };
+              for (const row of node.node.getChildren('TableRow')) {
+                if (row.to <= extent.to) {
+                  continue;
+                }
+                if (row.getChild('TableDelimiter') !== null) {
+                  run.push(row);
+                } else {
+                  flush();
+                }
+              }
+              flush();
+            }
         }
         return false;
       }
@@ -291,11 +376,12 @@ function scanEmbeds(state: EditorState, config: LivePreviewConfig): Embed[] {
 
     const source = state.sliceDoc(regionFrom, regionTo);
     // HTML-embedded `<img>` keeps the primary (note-relative) candidate —
-    // the candidate walk is the Markdown image widget's concern.
+    // the candidate walk is the Markdown image widget's concern. Trimmed
+    // like the table render: no phantom trailing-newline line in the widget.
     const html = sanitizeHtml(htmlMd.render(source), {
       resolveImage: (url) => config.resolveImage(url)[0] ?? null,
-    });
-    if (!html.trim()) {
+    }).trim();
+    if (!html) {
       continue; // e.g. a stray closing tag -- not an embed, leave it raw
     }
     const from = doc.lineAt(regionFrom).from;
@@ -468,9 +554,20 @@ export function deletionSticky(state: EditorState): { from: number; to: number }
     while (node !== null && node.name !== 'Table') {
       node = node.parent;
     }
-    const extent = node === null ? null : realTableExtent(node);
-    if (node !== null && extent !== null) {
+    if (node === null) {
+      continue;
+    }
+    const extent = realTableExtent(node);
+    if (extent === null) {
+      continue;
+    }
+    if (pos <= extent.to) {
       return { from: node.from, to: extent.to };
+    }
+    // A glued-in second table (absorbed rows) holds itself open.
+    const run = absorbedTableRunAt(node, extent.to, pos);
+    if (run !== null) {
+      return { from: run.from.from, to: run.to.to };
     }
   }
   return null;
@@ -712,9 +809,6 @@ function startImageResize(view: EditorView, grip: HTMLElement, event: PointerEve
   const prevSelect = document.body.style.userSelect;
   document.body.style.cursor = 'nwse-resize';
   document.body.style.userSelect = 'none';
-  // The input-recovery watchdog reads this marker: `user-select:none` on
-  // <body> is only legitimate while a gesture flag is set (ADR-0032).
-  document.body.setAttribute('data-drey-gesture', 'image-resize');
 
   let liveWidth = clampEmbedWidth(startWidth);
   let ended = false;
@@ -735,7 +829,6 @@ function startImageResize(view: EditorView, grip: HTMLElement, event: PointerEve
     window.removeEventListener('blur', end);
     document.body.style.cursor = prevCursor;
     document.body.style.userSelect = prevSelect;
-    document.body.removeAttribute('data-drey-gesture');
 
     if (parseImageEmbed(startAlt).width !== liveWidth) {
       view.dispatch({

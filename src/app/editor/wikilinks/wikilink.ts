@@ -4,6 +4,8 @@ import { EditorState, Extension, Range } from '@codemirror/state';
 import { Decoration, DecorationSet, EditorView, ViewPlugin, ViewUpdate } from '@codemirror/view';
 import { frontmatterEnd } from '../markdown-frontmatter';
 import { inCompletableText, insideCode, markdownContextAt } from '../markdown-context';
+import { extractWikilinks } from '../../../../shared/wikilinks';
+import type { WikilinkOccurrence } from '../../../../shared/wikilinks';
 
 /**
  * Obsidian-style `[[wikilinks]]` (req-20), built the same way as the `#tag`
@@ -23,58 +25,8 @@ import { inCompletableText, insideCode, markdownContextAt } from '../markdown-co
  * ADR-0009 conceal layer picks it up from `extractWikilinks`).
  */
 
-export interface WikilinkOccurrence {
-  /** Position of the opening `[` within the scanned text. */
-  index: number;
-  /** Length of the whole `[[...]]` span. */
-  length: number;
-  /** Target (path or note name), trimmed; `''` for a same-file `[[#heading]]`. */
-  target: string;
-  /** `#heading` anchor, trimmed, without the `#`. */
-  anchor: string | null;
-  /** Display alias after `|`, trimmed. */
-  alias: string | null;
-  /** End of `target[#anchor]`, relative to `index` -- a `|` or the `]]` follows. */
-  contentEnd: number;
-  /** Start of the alias text, relative to `index` (only when `alias`). */
-  aliasStart: number;
-}
-
-const WIKILINK = /\[\[([^\[\]#|\n]*)(?:#([^\[\]|\n]+))?(?:\|([^\[\]\n]+))?\]\]/g;
-
-/**
- * Every wikilink in `text`. Brackets inside the target are rejected by the
- * character classes (no nested `[`/`]`); `#` ends the target and starts the
- * anchor; `|` ends target/anchor and starts the alias. Occurrences with an
- * empty target *and* no anchor (`[[]]`, `[[|x]]`) are skipped.
- */
-export function extractWikilinks(text: string): WikilinkOccurrence[] {
-  const out: WikilinkOccurrence[] = [];
-  for (const match of text.matchAll(WIKILINK)) {
-    const target = (match[1] ?? '').trim();
-    const anchor = match[2] !== undefined ? match[2].trim() : null;
-    const alias = match[3] !== undefined ? match[3].trim() : null;
-    if (target === '' && anchor === null) {
-      continue;
-    }
-    const index = match.index;
-    // match[0] is `[[<raw target>][#<raw anchor>][|<raw alias>]]`; the raw
-    // (untrimmed) target spans to the first `#` / `|` / `]]`.
-    const rawTargetEnd = 2 + match[1].length;
-    const contentEnd =
-      anchor !== null ? rawTargetEnd + 1 + match[2].length : rawTargetEnd;
-    out.push({
-      index,
-      length: match[0].length,
-      target,
-      anchor,
-      alias,
-      contentEnd,
-      aliasStart: contentEnd + 1,
-    });
-  }
-  return out;
-}
+export { extractWikilinks };
+export type { WikilinkOccurrence };
 
 const markCache = new Map<string, Decoration>();
 function wikilinkMark(resolved: boolean, attrs: Record<string, string>): Decoration {

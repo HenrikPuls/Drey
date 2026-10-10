@@ -158,3 +158,98 @@ persisted with full fidelity and replayed in full.
   prompt body; missing description = `""`, missing title = file name).
   Picking replaces the composer's text — the user reviews and sends it as
   a normal question; no placeholder substitution.
+
+## Later change — the panel keeps its chat (milestone 56)
+
+Beta feedback read as "chats are not saved": the notes were on disk, but
+after a restart — or any tab switch to a document without an exact
+`note:` match — the panel always came back as an empty fresh chat, so the
+conversation felt gone and the same question was asked into new chat
+notes again and again. Revisions, all renderer/grammar level — the
+storage format is untouched:
+
+- **A focused chat-note tab opens that chat in the panel** (the tab is
+  the note's view; the panel now agrees with it). A chat note can no
+  longer become a *binding*: `ask()` never mints a `note:` doc key from a
+  `chats/` path — asking with a chat tab focused continues the panel's
+  active chat, and a fresh one stays unbound, instead of chaining
+  chat → chat (observed in the wild: a chat note bound to another chat
+  note). The note chip still attaches the focused chat as context.
+- **An unbound focus keeps the current chat.** Switching to a note with
+  no bound chat, or to a non-note surface (scratch/external/image), no
+  longer resets the panel to a fresh chat; only the picker and
+  "+ New chat" do.
+- **The first follow at activation continues the newest chat** (by
+  `updated:`), so a restarted app shows the last conversation instead of
+  an empty panel — with a bound chat still winning on the restored
+  document. Only that one auto-open happens; an explicit new chat
+  survives every later switch.
+- `listChats` logs the chat files it must skip (vanished/unreadable
+  between listing and read) through `ctx.log` instead of thinning the
+  picker silently; a fenceless (corrupted) chat file still lists, with
+  its path as the fallback title.
+- **Root cause of "the chats are not saved" (found in 56a):** the chat
+  store consumed `ctx.vault.list()`'s **tree** result as if it were
+  flat — filtering top-level entries only, and under `chats/` the
+  top level holds only directories. The picker was therefore empty and
+  `followActiveDoc` never found a bound chat **since the ADR-0048
+  milestone** (the spec harness fed a flat fake list, masking it), while
+  every write worked. All markdown consumers now use the flat
+  `ctx.vault.listMarkdownFiles()` (the same port the tags/tasks/backlinks
+  plugins scan); `freePath`'s sibling uniquing is fixed by the same
+  change, and `chat:attachExternal` flattens the tree locally (it must
+  see non-`.md` staged files too). The picker also re-renders while open
+  (the list once rendered once, before async data could land) and a
+  failed list says "Chats could not be listed." instead of reading as
+  "No chats yet".
+- **Daily notes never bind (57c).** The binding assumed every user note
+  is a topic — but days flip constantly, so switching daily notes yanked
+  the panel to each day's leftover chat. A note under the configured
+  daily root (`daily.dir`, read live from app config) now behaves like a
+  chat-note tab for binding purposes: an ask under daily focus leaves the
+  chat unbound, and focusing a daily note never triggers the bound-chat
+  follow — the panel keeps the current conversation. The note chip still
+  rides as context, old daily-bound chats stay picker-reachable (their
+  `note:` is simply never matched again; no migration), and a topic note
+  that merely shares the prefix (`daily-themen/…`) still binds.
+- **The implicit follow is gone entirely (57c).** The daily exclusion
+  only silenced the loudest case: meetings bind as ordinary notes, and
+  with several same-titled chats the "a bound note opens its newest bound
+  chat" rule silently yanked the panel to the newest match — rarely the
+  conversation the user was actually in, and every day/meeting switch
+  flapped the panel. The follow is now purely explicit: the ONLY
+  implicit switch left is a focused **chat-note tab** (opening a chat's
+  Markdown from the vault hydrates the panel with it); every other
+  focus — daily, meeting, topic note, non-document — keeps EXACTLY the
+  current chat, and the very first follow (app start) still loads the
+  newest conversation once. `note:` stays on the frontmatter as
+  provenance and drives only the picker's "this note" marker; it no
+  longer steers anything. A chat changes through the picker, "New chat",
+  or a chat-note tab — nothing else.
+- **Model-named chats (57e).** The creation title — the first question's
+  first line — was a placeholder: often a long unpunctuated sentence.
+  After a brand-new chat's first turn settles, the engine fires a tiny
+  background naming call (same model, plain messages, no tools/history —
+  question plus a short answer snippet) and rewrites `title:` through a
+  sanitized reply (first line, wrapping quotes and a trailing period
+  dropped, capped at 60 chars). Best-effort: an unusable or failing
+  reply keeps the placeholder; the ask itself never waits on it.
+  ChatStore writes are now **serialized per note** — a late title write
+  re-reads the current raw instead of reverting a turn that landed in
+  between. The panel head shows the active chat's title as a muted
+  label next to the "+" (live from the chat list, the loaded view as
+  the fallback) — never stale, since it re-renders on every change
+  round instead of the frame header's shell-detection schedule (the
+  frame `status()` was removed for exactly that staleness).
+
+## Later change — chats are opt-in in the Search panel
+
+Chat notes stay indexed like `daily/` (this ADR's decision stands: MCP
+`vault_search`, the tag vocabulary and tag rename cover them). The
+Search panel, however, lists them only on request: a transcript repeats
+the questions asked of it, so chat hits crowded almost every query. The
+panel's "Include chats" toggle (off by default) filters `chats/` hits in
+the vault / all-vault scopes and keeps "Replace all" off chat notes the
+list did not show; the document scope searches an open chat note as it
+is. A view option of the panel, not an index rule — the same stance as
+ADR-0055's exclusion of chats from semantic retrieval, one layer up.

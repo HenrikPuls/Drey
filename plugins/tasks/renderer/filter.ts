@@ -4,10 +4,16 @@
  * `plugins/**` — its spec lives under `src/app/services/`).
  */
 import type { TaskKind, TaskRecord } from '../shared/tasks.js';
+import { sortTaskRecords } from '../shared/tasks.js';
 import { tagSetMatches } from '../shared/support.js';
 
 /** Which set of task lines the panel shows. */
 export type TaskScope = 'document' | 'vault' | 'all';
+
+/** The list order: file/document order, due date ascending, or priority. */
+export type TaskSort = 'file' | 'due' | 'priority';
+
+export const ALL_SORTS: readonly TaskSort[] = ['file', 'due', 'priority'];
 
 export const ALL_KINDS: readonly TaskKind[] = ['checkbox', 'tag'];
 
@@ -21,6 +27,8 @@ export interface TaskPrefs {
   queryTags: string[];
   /** Free text; whitespace-split into terms that must all appear. */
   queryText: string;
+  /** The list order (req-37). */
+  sort: TaskSort;
 }
 
 export function normalizeTag(raw: string): string {
@@ -35,6 +43,7 @@ export function readPrefs(): TaskPrefs {
     kinds: [...ALL_KINDS],
     queryTags: [],
     queryText: '',
+    sort: 'file',
   };
   try {
     const raw = JSON.parse(localStorage.getItem(PREFS_KEY) ?? '{}') as Partial<TaskPrefs>;
@@ -51,6 +60,7 @@ export function readPrefs(): TaskPrefs {
       kinds: kinds.length > 0 ? kinds : base.kinds,
       queryTags,
       queryText: typeof raw.queryText === 'string' ? raw.queryText : base.queryText,
+      sort: raw.sort === 'due' || raw.sort === 'priority' ? raw.sort : 'file',
     };
   } catch {
     return base;
@@ -72,11 +82,15 @@ export interface TaskFilter {
   readonly hideDone: boolean;
   readonly queryTags: readonly string[];
   readonly queryText: string;
+  /** The list order (req-37). */
+  readonly sort: TaskSort;
 }
 
 /**
- * Kind / done / tag+text filtering and the canonical sort (file order then
- * document order). Same semantics as before the conversion.
+ * Kind / done / tag+text filtering and the list order (req-37). The
+ * order comparators are the SHARED view helpers (`shared/tasks.ts`, 57c)
+ * — the provider answers assistant/MCP queries with exactly this
+ * ordering, so both surfaces always agree.
  */
 export function filterVisibleTasks(tasks: readonly TaskRecord[], filter: TaskFilter): TaskRecord[] {
   let list = tasks.filter((t) => filter.kinds.includes(t.kind));
@@ -98,5 +112,5 @@ export function filterVisibleTasks(tasks: readonly TaskRecord[], filter: TaskFil
       return terms.every((term) => hay.includes(term));
     });
   }
-  return [...list].sort((a, b) => a.path.localeCompare(b.path) || a.line - b.line);
+  return sortTaskRecords(list, filter.sort);
 }

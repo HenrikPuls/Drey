@@ -3,11 +3,15 @@ import {
   IPC_CHANNELS,
   NoteSaveRequest,
   NoteSaveResult,
+  RenameLinksPreview,
+  RenameLinksRequest,
+  RenameLinksResult,
   VaultFileContent,
   VaultFileEntry,
   VaultRegistration,
 } from '../../shared/ipc-api';
 import { DailyNoteManager } from '../daily-note';
+import { LinkRewriter } from '../link-rewriter';
 import { NoteManager } from '../note-manager';
 import { PluginHost } from '../plugin-host';
 import { VaultManager } from '../vault-manager';
@@ -152,24 +156,42 @@ export function registerVaultHandlers({
   );
   ipcMain.handle(
     IPC_CHANNELS.vaultDelete,
-    async (_event, relativePath: string, vaultId?: string): Promise<void> => {
+    async (
+      _event,
+      relativePath: string,
+      vaultId?: string,
+      opts?: { trash?: boolean },
+    ): Promise<string[]> => {
       const resolvedVaultId = vaultManager.resolveVaultId(vaultId);
-      await vaultManager.deleteEntry(relativePath, resolvedVaultId);
+      const result = await vaultManager.deleteEntry(relativePath, resolvedVaultId, opts);
       // No file watcher -- the tag / task indexes would otherwise still list
       // entries from the deleted file until the next full rebuild.
       await rebuildIndexes();
+      return opts?.trash === false || result.trashed ? [] : [relativePath];
     },
   );
   // Multi-select delete (bug-8): one round trip, one re-index for the whole
   // batch. Missing targets are not errors, so overlapping paths (a folder
-  // and a file inside it) just work.
+  // and a file inside it) just work. Resolves to the paths that fell back
+  // to a permanent delete (no recycle bin on their volume) -- empty when
+  // everything was trashed or `trash: false` was asked for anyway.
   ipcMain.handle(
     IPC_CHANNELS.vaultDeleteMany,
-    async (_event, relativePaths: string[], vaultId?: string): Promise<void> => {
+    async (
+      _event,
+      relativePaths: string[],
+      vaultId?: string,
+      opts?: { trash?: boolean },
+    ): Promise<string[]> => {
+      const notTrashed: string[] = [];
       for (const relativePath of relativePaths) {
-        await vaultManager.deleteEntry(relativePath, vaultId);
+        const result = await vaultManager.deleteEntry(relativePath, vaultId, opts);
+        if (opts?.trash !== false && !result.trashed) {
+          notTrashed.push(relativePath);
+        }
       }
       await rebuildIndexes();
+      return notTrashed;
     },
   );
   // Rename / copy / duplicate can move `.md` content in or out of the
@@ -194,6 +216,38 @@ export function registerVaultHandlers({
         fullVaultRefresh();
       }
       return next;
+    },
+  );
+  // The rename that keeps links intact (milestone 59, ADR-0059). The index
+  // round is the plain rename's; the renderer re-reads the rewritten notes'
+  // clean tabs itself, AFTER it has re-keyed them to the new paths.
+  const linkRewriter = new LinkRewriter(vaultManager);
+  const resolveRenameRequest = (request: RenameLinksRequest): RenameLinksRequest => {
+    const fromVaultId = vaultManager.resolveVaultId(request.fromVaultId);
+    return {
+      ...request,
+      fromVaultId,
+      toVaultId: vaultManager.resolveVaultId(request.toVaultId ?? fromVaultId),
+      buffers: Array.isArray(request.buffers) ? request.buffers : [],
+    };
+  };
+  ipcMain.handle(
+    IPC_CHANNELS.vaultRenamePreview,
+    (_event, request: RenameLinksRequest): Promise<RenameLinksPreview> =>
+      linkRewriter.preview(resolveRenameRequest(request)),
+  );
+  ipcMain.handle(
+    IPC_CHANNELS.vaultRenameWithLinks,
+    async (_event, request: RenameLinksRequest): Promise<RenameLinksResult> => {
+      const resolved = resolveRenameRequest(request);
+      const result = await linkRewriter.apply(resolved);
+      if (resolved.fromVaultId === resolved.toVaultId) {
+        await rebuildIndexes();
+        pluginHost.emitVaultChange({ kind: 'rename', path: result.path, vaultId: resolved.toVaultId });
+      } else {
+        fullVaultRefresh();
+      }
+      return result;
     },
   );
   ipcMain.handle(

@@ -1,5 +1,7 @@
 import { Injectable, computed, inject } from '@angular/core';
 import { VaultFileEntry } from '../../../../shared/ipc-api';
+import { NOTE_FILE, buildNoteIndex, resolveNoteTarget } from '../../../../shared/wikilinks';
+import type { NoteIndex } from '../../../../shared/wikilinks';
 import { EditorService, docKey } from '../../services/editor.service';
 import { VaultService } from '../../vault';
 import type { WikilinkCandidate } from './wikilink';
@@ -16,8 +18,12 @@ import type { WikilinkCandidate } from './wikilink';
  * scoped to the linking note's own vault: a `[[link]]` in a vault-B note
  * resolves inside vault B, and a missing target is created there too (a
  * note created in another vault would leave the link permanently
- * unresolved). Vault-less callers (the entry drawer) resolve against the
- * ACTIVE vault.
+ * unresolved). Vault-less documents (scratch tabs like the search summary)
+ * resolve through a MERGED index over all registered vaults -- the active
+ * vault wins path collisions and basename ambiguities -- and never mint
+ * files: there is no vault a created note would deterministically belong
+ * to. Opening from the merged index targets the OWNING vault, which
+ * `vaultOf` remembers per path.
  *
  * Resolution (Obsidian-style): a target containing `/` or an extension is a
  * vault-relative path (`.md` appended when bare); anything else is a note
@@ -27,15 +33,12 @@ import type { WikilinkCandidate } from './wikilink';
  * (`[[#heading]]`) means the linking note itself.
  */
 
-const MARKDOWN_FILE = /\.(md|markdown|mdx)$/i;
+const MARKDOWN_FILE = NOTE_FILE;
 
-interface NoteIndex {
-  /** lowercase full path -> real path */
-  byPath: Map<string, string>;
-  /** lowercase basename (no extension) -> real paths */
-  byName: Map<string, string[]>;
-  /** real paths, sorted */
-  all: string[];
+/** A merged index additionally remembers which vault each path lives in. */
+interface MergedIndex extends NoteIndex {
+  /** real path -> vault id */
+  vaultOf: Map<string, string>;
 }
 
 const EMPTY_INDEX: NoteIndex = { byPath: new Map(), byName: new Map(), all: [] };
@@ -61,62 +64,74 @@ export class WikilinkService {
       };
       walk(tree);
 
-      paths.sort((a, b) => a.localeCompare(b));
-      const byPath = new Map<string, string>();
-      const byName = new Map<string, string[]>();
-      for (const path of paths) {
-        byPath.set(path.toLowerCase(), path);
-        const file = path.slice(path.lastIndexOf('/') + 1);
-        const base = file.replace(/\.[^.]+$/, '').toLowerCase();
-        const list = byName.get(base);
-        if (list) {
-          list.push(path);
-        } else {
-          byName.set(base, [path]);
-        }
-      }
-      out[vaultId] = { byPath, byName, all: paths };
+      out[vaultId] = buildNoteIndex(paths);
     }
     return out;
   });
 
   private indexFor(vaultId: string | null): NoteIndex {
-    return (vaultId !== null && this.indexes()[vaultId]) || EMPTY_INDEX;
+    if (vaultId === null) {
+      return this.mergedIndex();
+    }
+    return this.indexes()[vaultId] ?? EMPTY_INDEX;
   }
 
   /**
+   * The union of every registered vault's index, for VAULT-LESS documents
+   * (scratch tabs like the search summary). The active vault is merged
+   * first, so it wins both path collisions and basename ambiguity -- one
+   * deterministic target per link. `vaultOf` records where each path
+   * actually lives, because opening must target the owning vault, not the
+   * active one.
+   */
+  private readonly mergedIndex = computed<MergedIndex>(() => {
+    const perVault = this.indexes();
+    const active = this.vault.activeVaultId();
+    const order: string[] = [];
+    if (active !== null && perVault[active] !== undefined) {
+      order.push(active);
+    }
+    for (const vaultId of Object.keys(perVault)) {
+      if (vaultId !== active) {
+        order.push(vaultId);
+      }
+    }
+    const byPath = new Map<string, string>();
+    const names = new Map<string, Set<string>>();
+    const vaultOf = new Map<string, string>();
+    for (const vaultId of order) {
+      const index = perVault[vaultId];
+      for (const [key, path] of index.byPath) {
+        if (!byPath.has(key)) {
+          byPath.set(key, path);
+          vaultOf.set(path, vaultId);
+        }
+      }
+      for (const [key, paths] of index.byName) {
+        let list = names.get(key);
+        if (list === undefined) {
+          list = new Set<string>();
+          names.set(key, list);
+        }
+        for (const path of paths) {
+          list.add(path);
+        }
+      }
+    }
+    const all = [...byPath.values()].sort((a, b) => a.localeCompare(b));
+    const byName = new Map<string, string[]>(
+      [...names].map(([key, paths]) => [key, [...paths]] as const),
+    );
+    return { byPath, byName, all, vaultOf };
+  });
+
+  /**
    * Resolves a link target to a vault-relative path (inside `fromVaultId` --
-   * the linking note's vault, or the ACTIVE vault when null), or null when
-   * unknown.
+   * the linking note's vault, or the merged cross-vault index when null),
+   * or null when unknown.
    */
   resolve(rawTarget: string, fromVaultId: string | null, fromPath: string | null): string | null {
-    const target = rawTarget.trim();
-    if (target === '') {
-      // `[[#heading]]` -- the linking note itself.
-      return fromPath;
-    }
-    const { byPath, byName } = this.indexFor(fromVaultId);
-    if (target.includes('/') || /\.[^/]+$/.test(target)) {
-      const key = (/\.[^/]+$/.test(target) ? target : `${target}.md`).toLowerCase();
-      return byPath.get(key) ?? null;
-    }
-    const hits = byName.get(target.toLowerCase());
-    if (!hits || hits.length === 0) {
-      return null;
-    }
-    if (hits.length === 1) {
-      return hits[0];
-    }
-    // Ambiguous basename: prefer a sibling of the linking note, then the
-    // shortest path (both deterministic -- `all` is pre-sorted for the
-    // locale-compare tie-break).
-    const fromDir =
-      fromPath && fromPath.includes('/') ? fromPath.slice(0, fromPath.lastIndexOf('/')) : '';
-    const sibling = hits.find((p) => parentDir(p) === fromDir);
-    if (sibling) {
-      return sibling;
-    }
-    return [...hits].sort((a, b) => a.length - b.length || a.localeCompare(b))[0];
+    return resolveNoteTarget(rawTarget, fromPath, this.indexFor(fromVaultId));
   }
 
   /** The flattened note list of `vaultId`'s vault for the `[[` completion popup. */
@@ -137,7 +152,9 @@ export class WikilinkService {
    * when given), or -- when nothing resolves -- create the note (`.md`
    * appended; parents auto-created by `VaultManager.createFile`) in the
    * LINKING NOTE'S vault and open it. An "already exists" race (the file
-   * appeared between resolve and create) just opens it.
+   * appeared between resolve and create) just opens it. Vault-less
+   * documents (scratch tabs) never create: the merged index decides where
+   * an existing note opens, and an unknown target is reported, not minted.
    */
   async open(
     target: string,
@@ -145,12 +162,40 @@ export class WikilinkService {
     fromVaultId: string | null,
     fromPath: string | null,
   ): Promise<void> {
-    const resolved = this.resolve(target, fromVaultId, fromPath);
-    if (resolved !== null) {
-      await this.openAt(resolved, anchor, fromVaultId);
+    const located = this.locate(target, fromVaultId, fromPath);
+    if (located !== null) {
+      await this.openAt(located.path, anchor, located.vaultId);
+      return;
+    }
+    if (fromVaultId === null) {
+      if (target.trim() !== '') {
+        this.editor.error.set(`Cannot follow [[${target}]] — no note matches.`);
+      }
       return;
     }
     await this.createAndOpen(target, fromVaultId);
+  }
+
+  /**
+   * Resolves a link target to WHERE it lives -- the owning vault's id plus
+   * the vault-relative path -- or null when unknown. Vault-scoped documents
+   * resolve inside their own vault (ADR-0051); vault-less ones go through
+   * the merged index and look their path's owning vault up in `vaultOf`.
+   */
+  private locate(
+    rawTarget: string,
+    fromVaultId: string | null,
+    fromPath: string | null,
+  ): { vaultId: string; path: string } | null {
+    const resolved = this.resolve(rawTarget, fromVaultId, fromPath);
+    if (resolved === null) {
+      return null;
+    }
+    if (fromVaultId !== null) {
+      return { vaultId: fromVaultId, path: resolved };
+    }
+    const vaultId = this.mergedIndex().vaultOf.get(resolved);
+    return vaultId === undefined ? null : { vaultId, path: resolved };
   }
 
   /** The entry-drawer flow: follow existing references only -- the drawer
@@ -224,8 +269,4 @@ export class WikilinkService {
     }
     await this.editor.openFile(path, resolvedVaultId);
   }
-}
-
-function parentDir(path: string): string {
-  return path.includes('/') ? path.slice(0, path.lastIndexOf('/')) : '';
 }

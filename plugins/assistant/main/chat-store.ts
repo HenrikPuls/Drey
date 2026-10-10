@@ -30,7 +30,20 @@ import {
 export interface ChatStorePorts {
   read(path: string): Promise<string>;
   writeAnnounced(path: string, content: string): Promise<unknown>;
-  list(): Promise<readonly { name: string; relativePath: string; type: 'file' | 'directory' }[]>;
+  /**
+   * Flat, forward-slash, `.md`-only vault paths (`ctx.vault.listMarkdownFiles`,
+   * the same flat listing the tags/tasks/backlinks plugins scan) — chat
+   * notes are always `.md`, and this is what every consumer here needs:
+   * `ctx.vault.list()`'s nested tree was once filtered top-level-only,
+   * silently emptying the picker (bug: `children` ignored).
+   */
+  listMarkdownFiles(): Promise<readonly string[]>;
+  /**
+   * Optional sink for chat files that drop from the picker (vanished or
+   * unreadable between listing and read) — the field log makes the drop
+   * visible instead of silently thinning the list.
+   */
+  log?(message: string, level?: 'info' | 'warn' | 'error'): void;
 }
 
 /** Frontmatter fields a chat turn append may bump. */
@@ -38,6 +51,8 @@ export interface ChatNotePatch {
   updated?: string;
   model?: string;
   session?: string | null;
+  /** Rewrites the title (the model-named chat, 57e). */
+  title?: string;
 }
 
 export class ChatNoteMissingError extends Error {
@@ -48,7 +63,22 @@ export class ChatNoteMissingError extends Error {
 }
 
 export class ChatStore {
+  /** Per-note write serialization (57e): a late title write must never revert a turn that landed meanwhile. */
+  private readonly queues = new Map<string, Promise<unknown>>();
+
   constructor(private readonly ports: ChatStorePorts) {}
+
+  private enqueue<T>(path: string, op: () => Promise<T>): Promise<T> {
+    const prev = this.queues.get(path) ?? Promise.resolve();
+    const next = prev.catch(() => undefined).then(op);
+    this.queues.set(path, next);
+    void next.finally(() => {
+      if (this.queues.get(path) === next) {
+        this.queues.delete(path);
+      }
+    });
+    return next;
+  }
 
   /**
    * The path for a new chat: date + slug of the first question, uniqued
@@ -103,9 +133,14 @@ export class ChatStore {
     patch: ChatNotePatch = {},
     now: Date = new Date(),
   ): Promise<void> {
-    const raw = await this.requireRaw(path);
-    const next = appendTurnText(raw, turn);
-    await this.ports.writeAnnounced(path, this.patchFrontmatter(next, { ...patch, updated: toTimestamp(now) }));
+    await this.enqueue(path, async () => {
+      const raw = await this.requireRaw(path);
+      const next = appendTurnText(raw, turn);
+      await this.ports.writeAnnounced(
+        path,
+        this.patchFrontmatter(next, { ...patch, updated: toTimestamp(now) }),
+      );
+    });
   }
 
   /**
@@ -117,12 +152,14 @@ export class ChatStore {
     outcome: { path: string; applied: boolean; after?: string },
     now: Date = new Date(),
   ): Promise<void> {
-    const raw = await this.requireRaw(path);
-    const next = appendEditOutcomeText(raw, outcome);
-    await this.ports.writeAnnounced(
-      path,
-      this.patchFrontmatter(next, { updated: toTimestamp(now) }),
-    );
+    await this.enqueue(path, async () => {
+      const raw = await this.requireRaw(path);
+      const next = appendEditOutcomeText(raw, outcome);
+      await this.ports.writeAnnounced(
+        path,
+        this.patchFrontmatter(next, { updated: toTimestamp(now) }),
+      );
+    });
   }
 
   /**
@@ -131,12 +168,29 @@ export class ChatStore {
    * provider-side session, so the next turn must full-replay.
    */
   async truncateFrom(path: string, turnIndex: number, now: Date = new Date()): Promise<void> {
-    const raw = await this.requireRaw(path);
-    const next = truncateFromText(raw, turnIndex);
-    await this.ports.writeAnnounced(
-      path,
-      this.patchFrontmatter(next, { updated: toTimestamp(now), session: null }),
-    );
+    await this.enqueue(path, async () => {
+      const raw = await this.requireRaw(path);
+      const next = truncateFromText(raw, turnIndex);
+      await this.ports.writeAnnounced(
+        path,
+        this.patchFrontmatter(next, { updated: toTimestamp(now), session: null }),
+      );
+    });
+  }
+
+  /**
+   * Renames the chat (the model-written title, 57e) and bumps `updated:`
+   * so the picker re-sorts. Announced — the change round refreshes the
+   * picker list and the panel's head label.
+   */
+  async setTitle(path: string, title: string, now: Date = new Date()): Promise<void> {
+    await this.enqueue(path, async () => {
+      const raw = await this.requireRaw(path);
+      await this.ports.writeAnnounced(
+        path,
+        this.patchFrontmatter(raw, { title, updated: toTimestamp(now) }),
+      );
+    });
   }
 
   /**
@@ -145,10 +199,9 @@ export class ChatStore {
    * few, and the read is cheap frontmatter-only work.
    */
   async listChats(cap = 50): Promise<ChatSummary[]> {
-    const entries = await this.ports.list();
-    const paths = entries
-      .filter((e) => e.type === 'file' && e.relativePath.startsWith(`${CHATS_DIR}/`))
-      .map((e) => e.relativePath);
+    const paths = (await this.ports.listMarkdownFiles()).filter((p) =>
+      p.startsWith(`${CHATS_DIR}/`),
+    );
     const summaries: ChatSummary[] = [];
     for (const path of paths) {
       try {
@@ -159,8 +212,13 @@ export class ChatStore {
           updated: view.frontmatter.updated,
           note: view.frontmatter.note,
         });
-      } catch {
-        // A vanished or unreadable file just drops from the picker.
+      } catch (err) {
+        // A vanished or unreadable file just drops from the picker — but
+        // the drop lands in the field log instead of staying silent.
+        this.ports.log?.(
+          `chat:list skips ${path}: ${err instanceof Error ? err.message : String(err)}`,
+          'warn',
+        );
       }
     }
     summaries.sort((a, b) => (b.updated ?? '').localeCompare(a.updated ?? ''));
@@ -178,10 +236,7 @@ export class ChatStore {
   }
 
   private async freePath(dateStr: string, firstQuestion: string): Promise<string> {
-    const entries = await this.ports.list();
-    const existing = new Set(
-      entries.filter((e) => e.type === 'file').map((e) => e.relativePath),
-    );
+    const existing = new Set(await this.ports.listMarkdownFiles());
     const base = chatNotePathFor(dateStr, slugifyChatTitle(firstQuestion));
     return uniqueChatPath(base, existing);
   }
@@ -202,6 +257,10 @@ export class ChatStore {
     }
     if (patch.updated !== undefined) {
       setScalar(doc, 'updated', patch.updated, true);
+    }
+    if (patch.title !== undefined) {
+      // Quoted like at creation — titles carry spaces, colons, quotes.
+      setScalar(doc, 'title', patch.title, true);
     }
     if (patch.model !== undefined) {
       setScalar(doc, 'model', patch.model, false);

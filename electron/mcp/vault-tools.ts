@@ -20,7 +20,9 @@ import type { ToolSpec } from '../../shared/llm';
 import type {
   SectionSearchProvider,
   SectionSearchScope,
+  SdkTaskRecord,
   TagSearchHit,
+  TaskQueryProvider,
 } from '../../shared/plugin-api';
 import type { VaultManager } from '../vault-manager';
 
@@ -124,10 +126,60 @@ export const VAULT_TOOL_DEFS: readonly McpToolDef[] = [
       required: ['path', 'content'],
     },
   },
+  {
+    name: 'tasks_list',
+    description:
+      "List the user's tasks from the app's task index (checkbox and #task lines, with " +
+      'due dates and priorities). One JSON object per line: path, vaultId, line, text, ' +
+      'done, kind, heading, tags, due, priority, completed. Use it for any question ' +
+      'about tasks, to-dos or deadlines — answer from this result instead of quoting ' +
+      'task lines from other searches.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        includeDone: { type: 'boolean', description: 'Include completed tasks. Default false.' },
+        status: {
+          type: 'string',
+          enum: ['open', 'done', 'all'],
+          description:
+            'Open tasks, completed tasks, or both. Default "open". "done" lists newest completion first.',
+        },
+        completedSince: {
+          type: 'string',
+          description:
+            'Only tasks completed on or after this date (YYYY-MM-DD). Implies status "done".',
+        },
+        vault: {
+          type: 'string',
+          description: 'Vault id to restrict to. Default: all registered vaults.',
+        },
+        text: {
+          type: 'string',
+          description: "Filter terms ALL of which must appear in a task's text or heading.",
+        },
+        tag: {
+          type: 'string',
+          description: 'Only tasks whose section carries this tag (subtags included).',
+        },
+        overdue: {
+          type: 'boolean',
+          description: 'Only tasks whose due date is before today. Default false.',
+        },
+        sort: {
+          type: 'string',
+          enum: ['importance', 'due', 'priority', 'file', 'completed'],
+          description:
+            'List order. Default "file": path + line. "importance" = due ascending, then priority. "completed" = completion date, newest first.',
+        },
+      },
+    },
+  },
 ];
 
 const DEFAULT_MAX_RESULTS = 40;
 const HARD_MAX_RESULTS = 200;
+/** `tasks_list` row cap (JSON lines to the model; the panel renders fewer). */
+const TASKS_MAX_RESULTS = 200;
 /** Whole-vault regex scan guards -- a single-user local tool, but still bounded. */
 const SCAN_MAX_FILES = 2000;
 const SCAN_MAX_BYTES_PER_FILE = 512 * 1024;
@@ -191,6 +243,11 @@ export class VaultTools {
      * clear error instead of crashing.
      */
     private readonly getSearchProvider: () => SectionSearchProvider | null,
+    /**
+     * The task-index seam (SDK 1.11): `tasks_list` reads whichever
+     * provider the tasks plugin registered. `null` degrades the tool.
+     */
+    private readonly getTaskProvider: () => TaskQueryProvider | null,
     private readonly getConfig: () => AppConfig,
     private readonly confirmWrite: ConfirmWrite,
     /** Called with the written path (and its vault id, ADR-0051) after a
@@ -227,12 +284,76 @@ export class VaultTools {
           return await this.read(args);
         case 'vault_write':
           return await this.write(args);
+        case 'tasks_list':
+          return await this.tasksList(args);
         default:
           return textResult(`Unknown tool: ${name}`, true);
       }
     } catch (err) {
       return textResult(err instanceof Error ? err.message : String(err), true);
     }
+  }
+
+  /** One JSON object per line — the same shape the assistant's own
+   * `tasks_list` tool emits, so consumers parse one format. */
+  private async tasksList(args: Record<string, unknown>): Promise<McpToolResult> {
+    const provider = this.getTaskProvider();
+    if (provider === null) {
+      return textResult(
+        'Tasks are unavailable: no plugin providing the task index is enabled.',
+        true,
+      );
+    }
+    const vaultArg = args['vault'];
+    const textArg = typeof args['text'] === 'string' && args['text'].trim() !== '' ? args['text'].trim() : undefined;
+    // The leading `#` is accepted (and stripped) like the assistant's own
+    // tasks_list tool — one call convention for the same provider.
+    const tagArg =
+      typeof args['tag'] === 'string' && args['tag'].trim().replace(/^#/, '') !== ''
+        ? args['tag'].trim().replace(/^#/, '')
+        : undefined;
+    const sortArg = args['sort'];
+    const sinceArg =
+      typeof args['completedSince'] === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(args['completedSince'])
+        ? args['completedSince']
+        : undefined;
+    const statusArg = args['status'];
+    // A completion-date restriction only makes sense over completed tasks.
+    const status =
+      sinceArg !== undefined
+        ? 'done'
+        : statusArg === 'open' || statusArg === 'done' || statusArg === 'all'
+          ? statusArg
+          : undefined;
+    const records = await provider.query({
+      includeDone: args['includeDone'] === true,
+      ...(status !== undefined ? { status } : {}),
+      ...(sinceArg !== undefined ? { completedSince: sinceArg } : {}),
+      ...(typeof vaultArg === 'string' && vaultArg !== '' && vaultArg !== 'all'
+        ? { vaultId: vaultArg }
+        : {}),
+      ...(textArg !== undefined ? { text: textArg } : {}),
+      ...(tagArg !== undefined ? { tag: tagArg } : {}),
+      ...(args['overdue'] === true ? { overdue: true } : {}),
+      ...(sortArg === 'importance' ||
+      sortArg === 'due' ||
+      sortArg === 'priority' ||
+      sortArg === 'file' ||
+      sortArg === 'completed'
+        ? { sort: sortArg }
+        : status === 'done'
+          ? { sort: 'completed' as const }
+          : {}),
+    });
+    if (records.length === 0) {
+      return textResult('No tasks found.');
+    }
+    const shown = records.slice(0, TASKS_MAX_RESULTS);
+    const lines = shown.map((task) => JSON.stringify(task));
+    if (records.length > shown.length) {
+      lines.push(`{"truncated": ${records.length - shown.length}}`);
+    }
+    return textResult(lines.join('\n'));
   }
 
   private async search(args: Record<string, unknown>): Promise<McpToolResult> {

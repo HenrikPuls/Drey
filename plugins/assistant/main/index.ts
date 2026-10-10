@@ -5,8 +5,14 @@ import type {
   MainPluginModule,
   NoteSavedEvent,
   SaveHookResult,
+  SdkTaskRecord,
 } from '../../../shared/plugin-api';
 import { parseAskPayload } from '../shared/ask.js';
+import {
+  TASKS_LIST_SPEC,
+  hydrateTaskRecords,
+  runTasksListTool,
+} from './tasks-tool.js';
 import {
   extensionOf,
   externalFileKind,
@@ -16,6 +22,7 @@ import {
 import { ActionEngine, type ChatFn } from './action-engine';
 import { ChatEngine } from './chat-engine';
 import { ChatStore } from './chat-store';
+import { createTemplateTools } from './template-tools';
 import { createSemanticService, type SemanticService } from './semantic/service';
 import { readFile } from 'node:fs/promises';
 import { dialog, app } from 'electron';
@@ -24,6 +31,30 @@ import * as path from 'node:path';
 /** `…/app.asar/…` → `…/app.asar.unpacked/…` (worker + glue must be real files). */
 function unpackedPath(p: string): string {
   return p.replace(/app\.asar([\\/])/, 'app.asar.unpacked$1');
+}
+
+/**
+ * Flattens the tree-shaped `ctx.vault.list()` result into vault-relative
+ * file paths (`children` recursed). `ctx.vault.list()` is the ONLY port
+ * carrying non-`.md` files, so the staging-uniquing needs this walk —
+ * everything markdown-shaped goes through `listMarkdownFiles()` (flat).
+ */
+function flattenFileTree(
+  entries: readonly {
+    relativePath: string;
+    type: 'file' | 'directory';
+    children?: readonly unknown[];
+  }[],
+): string[] {
+  const out: string[] = [];
+  for (const entry of entries) {
+    if (entry.type === 'file') {
+      out.push(entry.relativePath);
+      continue;
+    }
+    out.push(...flattenFileTree((entry.children ?? []) as typeof entries));
+  }
+  return out;
 }
 
 /** Module-level so `deactivate` can stop the worker + flush the indexes. */
@@ -52,7 +83,8 @@ const plugin: MainPluginModule = {
     const chatStore = new ChatStore({
       read: (path) => ctx.vault.read(path),
       writeAnnounced: (path, content) => ctx.vault.writeAnnounced(path, content),
-      list: () => ctx.vault.list(),
+      listMarkdownFiles: () => ctx.vault.listMarkdownFiles(),
+      log: (message, level) => ctx.log(message, level),
     });
 
     // -- semantic vault retrieval (ADR-0055) --------------------------------
@@ -123,8 +155,65 @@ const plugin: MainPluginModule = {
         onDelta: (taskId, text) => ctx.ipc.emit('chat:delta', { taskId, text }),
         onLiveEdit: (path, content) => ctx.ipc.emit('chat:liveEdit', { path, content }),
         retrieveContext: (question, scope) => semantic.retrieve(question, scope),
+        tasksTool: () => {
+          // Live at call time: the tasks plugin can (de)activate between
+          // asks only via an app restart, but the getter keeps the engine
+          // decoupled from the registration order.
+          const provider = ctx.tasks.queryProvider();
+          if (provider === null) {
+            return null;
+          }
+          return {
+            spec: TASKS_LIST_SPEC,
+            run: (argsJson) => runTasksListTool(provider, argsJson),
+            query: (opts) => provider.query(opts),
+          };
+        },
+        // Live at call time too: the folder is user-configurable
+        // (Settings → Templates), and a fresh bundle carries its current
+        // name in the tool descriptions.
+        templateTools: () =>
+          createTemplateTools({
+            templatesDir: () => ctx.appConfig.get().templates?.dir,
+            listMarkdownFiles: () => ctx.vault.listMarkdownFiles(),
+            read: (path) => ctx.vault.read(path),
+            writeAnnounced: (path, content) => ctx.vault.writeAnnounced(path, content),
+            remove: async (path) => ctx.vault.delete(path),
+          }),
       },
     );
+
+    // -- the panel's task block (SDK 1.11) -----------------------------------
+    // Fence rows carry identity; the LIVE done/due state hydrates from the
+    // task provider at render time (ADR-0055's fresh-hydration rule). The
+    // checkbox toggle goes through the provider's setDone — the tasks
+    // plugin owns the line grammar, the assistant never edits task lines
+    // itself.
+    ctx.ipc.handle('tasks:hydrate', (payload) => {
+      const { records } = (payload ?? {}) as { records?: unknown };
+      if (!Array.isArray(records)) {
+        throw new Error('malformed tasks:hydrate payload');
+      }
+      const provider = ctx.tasks.queryProvider();
+      if (provider === null) {
+        return records as readonly SdkTaskRecord[];
+      }
+      return provider
+        .query({ includeDone: true })
+        .then((current) => hydrateTaskRecords(records as readonly SdkTaskRecord[], current));
+    });
+
+    ctx.ipc.handle('tasks:setDone', (payload) => {
+      const { task, done } = (payload ?? {}) as { task?: unknown; done?: unknown };
+      if (typeof task !== 'object' || task === null || typeof done !== 'boolean') {
+        throw new Error('malformed tasks:setDone payload');
+      }
+      const provider = ctx.tasks.queryProvider();
+      if (provider === null) {
+        throw new Error('The task index is not available.');
+      }
+      return provider.setDone(task as SdkTaskRecord, done);
+    });
 
     // -- the on-save Actions save hook -------------------------------------
     ctx.save.onNoteSaved(async (event) => runOnSaveActions(ctx, engine, event));
@@ -289,11 +378,7 @@ async function stageExternalFiles(
   }
 
   const targetDir = stagedAttachmentsDir(referenceNote);
-  const existing = new Set(
-    (await ctx.vault.list())
-      .filter((entry) => entry.type === 'file')
-      .map((entry) => entry.relativePath),
-  );
+  const existing = new Set(flattenFileTree(await ctx.vault.list()));
   const staged: StagedFile[] = [];
   const skipped: string[] = [];
   for (const absolute of result.filePaths) {

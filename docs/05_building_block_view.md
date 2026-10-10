@@ -96,10 +96,12 @@ against: `manifest.ts` (`PluginManifest` + `validateManifest`),
 major mismatch ⇒ `incompatible`). Exempt from module-boundary lint, like
 `shared/ipc-api.ts`.
 
-**Plugins** (`plugins/<id>/`, nine shipped): `sample` (exercises every
+**Plugins** (`plugins/<id>/`, ten shipped): `sample` (exercises every
 surface), `templates`, `meeting`, `tags`, `tasks`, `assistant`
 (Assistant + Actions), `browser`, `ocr` (vision-LLM OCR, ADR-0050),
-`outline` (the open note's heading tree, renderer-only). Each
+`outline` (the open note's heading tree, renderer-only), `backlinks`
+(the "what links here" panel over a per-vault outlink index,
+milestone 54). Each
 is a full stack: `plugin.json` +
 `main/` (CommonJS, Node access — `electron/` and app-`shared/` CJS
 allowed) + `renderer/` (browser-context ES modules + CSS, served over
@@ -128,7 +130,7 @@ graph TB
         MCP["mcp/: VaultTools (vault_search via\nregistered SectionSearchProvider)"]
     end
     subgraph Plugins["plugins/<id>/  (dist-electron/plugins/<id>/)"]
-        P1["templates · meeting · tags ·\ntasks · assistant · browser · ocr ·\noutline · sample"]
+        P1["templates · meeting · tags ·\ntasks · assistant · browser · ocr ·\noutline · backlinks · sample"]
         P2["each: plugin.json + main/ (CJS,\nNode ok) + renderer/ (ESM + CSS over\nplugin://, plain DOM) + shared/"]
     end
     SDK["shared/plugin-api/\nmanifest · DreyPluginApi ·\nMainPluginContext · PLUGIN_API_VERSION"]
@@ -285,7 +287,7 @@ graph TB
         IpcHandlers["ipcMain.handle(...)"]
         Protocol["app:// protocol handler\n(serves the built renderer)"]
         Hotkey["globalShortcut (Ctrl+Alt+N)\n+ single-instance lock\n-> openTodayDailyNote()"]
-        VaultManager["VaultManager (electron/vault-manager.ts)\nmulti-vault registry (ADR-0051) + active vault +\nper-vault directory listing + file read/write/create +\ndir create + rename/copy/duplicate (sidecar-aware,\ncross-vault = copy+delete) + binary asset write\n(attachments/) + listAllMarkdownFiles\n(path-guarded per vault)"]
+        VaultManager["VaultManager (electron/vault-manager.ts)\nmulti-vault registry (ADR-0051) + active vault +\nper-vault directory listing + file read/write/create +\ndir create + rename/copy/duplicate (sidecar-aware,\ncross-vault = copy+delete) + delete → OS recycle bin\n(milestone 52, trash-delete.ts, permanent fallback) +\nbinary asset write (attachments/) +\nlistAllMarkdownFiles (path-guarded per vault)"]
         DailyNoteManager["DailyNoteManager (electron/daily-note.ts)\nensureTodayNote(): create <daily.dir>/ note from\ntemplates/daily.md, scaffold template;\nnoteContentFor(date): substituted template, no write"]
         TagIndex["TagIndex (electron/tag-index.ts)\nin-memory tag vocabulary + master metadata;\nrebuild() scans all .md frontmatter\n(skips daily/ + templates/); tag:list / tag:registry"]
         NoteManager["NoteManager (electron/note-manager.ts)\nnote:save pipeline: merge inline #tags -> frontmatter,\nbump updated:, (6b) route entries to master docs"]
@@ -530,8 +532,7 @@ src/                Angular renderer (standalone components, esbuild via Angular
                          (DockService header drag, TabDragService): a module-level
                          .drag-overlay that captures the pointer (no hover/selection
                          leak underneath, owns the cursor grabbing<->no-drop), the ghost
-                         chip, and the <body> user-select / data-drey-gesture flags
-                         (InputRecoveryService watchdog contract, ADR-0032).
+                         chip, and the <body> user-select flags.
                          startDragChrome / moveDragChrome / setDragCursor /
                          hitTestUnderPointer / endDragChrome.
     panes/             (ADR-0037, ADR-0038) PaneService: the split-view layout -- an arbitrary
@@ -828,8 +829,8 @@ env.ps1             Puts .tools/node on PATH for the current shell session
 | `vault:save-asset-from-url`          | ADR-0028. Downloads a web image dragged from a browser: main-process `fetch` (http(s) only, redirects + final-protocol re-check, 15 s timeout, 25 MB cap, image content-type / extension), then `saveAsset`. Rejects with a user-facing message.                                                                                                                                                                                                                                 |
 | `vault:create-file`                  | Creates an empty vault-relative file (missing parent folders included, `wx` flag); rejects if anything already exists there, the path escapes the vault, or no vault is active; resolves to the created path. Backs the file-tree right-click "New file".                                                                                                                                                                                                                     |
 | `vault:create-directory`             | Creates a vault-relative directory; same guards/rejections as `vault:create-file`. Backs "New folder".                                                                                                                                                                                                                                                                                                                                                                        |
-| `vault:delete`                       | Deletes one vault-relative file or folder (`fs.rm` recursive) plus its `.{name}.chat.json` sidecar; same path guard. Backs the file-tree "Delete". The renderer closes any open tab(s) under it first and refreshes the tag index after.                                                                                                                                                                                                                                      |
-| `vault:delete-many`                  | Bug-8: the Files panel's multi-select delete. Same per-path rules as `vault:delete`, one round trip, **one** vault-change re-index for the whole batch. Overlapping paths are fine (a missing target is not an error).                                                                                                                                                                                                                                                         |
+| `vault:delete`                       | Deletes one vault-relative file or folder — to the OS recycle bin by default (`shell.trashItem`, milestone 52; permanent `fsp.rm` fallback on volumes without a bin, `{ trash: false }` for move-semantics callers) — plus its `.{name}.chat.json` sidecar; same path guard. Resolves to the paths that fell back to a permanent delete. Backs the file-tree "Delete". The renderer closes any open tab(s) under it first and refreshes the tag index after.                                                                                                                                                                                                               |
+| `vault:delete-many`                  | Bug-8: the Files panel's multi-select delete. Same per-path rules as `vault:delete`, one round trip, **one** vault-change re-index for the whole batch. Overlapping paths are fine (a missing target is not an error). Resolves to the fallback (permanent-delete) paths; the panel messages the user when non-empty.                                                                                                                                                                                                                                                                                          |
 | `vault:pick-save-path`               | Native save dialog rooted at the vault; forces a `.md` extension and **rejects a target outside the vault**. Returns the vault-relative path, or `null` on cancel. Backs `EditorService.saveAs()` / the first save of an export scratch tab.                                                                                                                                                                                                                                  |
 | `daily:build-content`                | Returns the substituted `templates/daily.md` for a given `YYYY-MM-DD`, **without** creating the file or scaffolding the template. Backs the calendar's "open a draft for a day with no note yet". Rejects if no vault is active or the date is malformed.                                                                                                                                                                                                                     |
 | `daily:open`                         | `webContents.send` / `ipcRenderer.on` — **main → renderer** push, fired by the quick-capture hotkey after `DailyNoteManager.ensureTodayNote()`. Payload: the vault-relative path of today's daily note. Preload exposes it as `onOpenDailyNote(listener)` returning an unsubscribe.                                                                                                                                                                                           |
@@ -848,7 +849,6 @@ env.ps1             Puts .tools/node on PATH for the current shell session
 | `llm:debug-entry`                    | `webContents.send` — **main → renderer** push, one per completed LLM request, so the debug panel updates live. Preload exposes it as `onLlmDebugEntry(listener)` returning an unsubscribe, same rule as `daily:open`.                                                                                                                                                                                                                                                         |
 | `action:run`                         | Run one Action (by trigger id) against `ActionContext` (`{ path, body, selection? }` — the active document). Returns `ActionOutcome`: an `'edit'` (`before`/`after` for the confirmation flow), a `'noop'` (ran, nothing to change), or an `'error'`.                                                                                                                                                                                                                         |
 | `chat:ask`                           | Chat Ask mode: `ActionContext` + question → `AskOutcome`, either `{ kind: 'answer', text }` (read-only) or `{ kind: 'edit', before, after, previewStyle, summary }` (routed through the same confirmation flow).                                                                                                                                                                                                                                                              |
-| `window:recover-input`               | Bug-6: the renderer's "Recover input focus" reaching main — closes a native context-menu popup whose capture loop never unwound (tracked in `electron/menu.ts`, also closed on window blur/minimize), logging the attempt. Resolves to whether a popup was actually closed.                                                                                                                                                                                                    |
 | `exit:confirm-request` / `exit:decision` | Bug-5: the save-before-exit bridge. Main intercepts `BrowserWindow 'close'`, pushes `{ id }` (main → renderer), and the renderer's `ExitConfirmService` answers `'save' \| 'discard' \| 'cancel'` (clean state answers `'discard'` with no dialog). No timeout by design (see `ExitBridge`); requests are readiness-gated (`exit:listener-ready`) so a close racing app bootstrap cannot lose the request.                                                                                                                                                                                  |
 | `draft:save`                         | Bug-5: commits an untitled buffer into the hidden `<vault>/.drafts/` as the next `unnamed-N.md` through the `note:save` pipeline with `runOnSaveActions: false`; the tab is re-keyed to the returned path. No Save-As dialog on exit (the Notepad++ model).                                                                                                                                                                                                                  |
 
@@ -1686,7 +1686,7 @@ vocabulary, taskId)` → the `autotag` built-in template
   `register({ id, label, keybinding, run })` is called from `App`
   alongside the other app-lifetime wiring: `search.open`, `note.new/save/
   saveAs/saveAll`, `editor.toggleLineNumbers`, `template.insert`,
-  `input.recover`, and the split-view pane commands (ADR-0037) —
+  and the split-view pane commands (ADR-0037) —
   `pane.splitRight` (`Ctrl+Alt+Enter`), `pane.splitDown`
   (`Ctrl+Alt+Shift+Enter`) → `PaneService.splitPane(focusedId, dir,
   activePath)`, `pane.focusNext` (`F6`) / `pane.focusPrev` (`Shift+F6`) →
@@ -1932,7 +1932,7 @@ src/app/templates/
   `excludedPrefixes()` = `['templates/', '<configured>/']`. `config:set`
   rebuilds the index when `templates.dir` changed.
 
-## 5.19 Field logging + input recovery (ADR-0032)
+## 5.19 Field logging (ADR-0032)
 
 - `electron/logger.ts` — append-only `<userData>/logs/drey.log` (rotate at
   ~1 MB). Fed by main `process` `uncaughtException`/`unhandledRejection`,
@@ -1942,20 +1942,13 @@ src/app/templates/
   `console.error/warn` + `window.onerror` + `unhandledrejection`;
   `LoggingErrorHandler` is registered as Angular's `ErrorHandler`
   (`app.config.ts`).
-- `src/app/services/input-recovery.service.ts` — `InputRecoveryService`:
-  `recover(reason)` (View → *Recover input focus* / `Ctrl+Alt+Shift+R`,
-  command id `input.recover`) dispatches a document Escape, clears
-  `document.body` `user-select`/`cursor` + orphan `.ctx-backdrop`, refocuses
-  the editor; a 4 s `startWatchdog()` auto-recovers unambiguous leftovers.
-  `DockService` / `ImageViewer` gestures now set a `data-drey-gesture` body
-  attribute (so a legit `user-select:none` is distinguishable) and end on
-  `window` `blur` — as of bug-6 the pane splitter and the Live-Preview
-  image-resize gestures do too. `recover()` also reaches main over
-  `window:recover-input` to force-close a native context-menu popup whose
-  capture loop never unwound (`electron/menu.ts` tracks them per window,
-  closes them on window blur/minimize, and logs every open/force-close to
-  `drey.log`) — the leading suspect for the packaged build's stuck-input
-  state, which the renderer can neither see nor fix.
+
+(The ADR's second half — the `InputRecoveryService` watchdog and the
+"Recover input focus" command incl. the `window:recover-input` IPC — was
+removed again once the stuck-input culprits were fixed at the source:
+native dialogs refocus via `electron/focus.ts`, native context-menu popups
+are closed on window blur/minimize, and every renderer dialog is an in-app
+surface. See the later-change note on ADR-0032.)
 
 ### Startup daily note (ADR-0002 flow, opened automatically)
 
@@ -2478,3 +2471,112 @@ library — Chromium's built-in (PDFium) viewer, enabled by
   `PanelHeaderActionsStore` (`frameId` input); the descriptor's
   `headerReplacesTitle` makes `PanelFrame` show that row instead of the
   title while expanded.
+
+## 5.30 Document history — back/forward over the session's viewed documents (milestone 55)
+
+`DocHistoryService` (`src/app/services/doc-history.service.ts`) is a
+base-owned, purely in-memory navigation history — the editor analogue of
+a browser's back/forward, but ONE global pointer-based list of tab keys
+however many panes are split (the VS Code model). Nothing rides into the
+session snapshot (ADR-0043); a restart starts empty, like the caret
+memory (milestone 50).
+
+- **Recording** is a single `effect` over `EditorService.activePath()`:
+  every activation pushes — Files tree, calendar, search hit, wikilink,
+  tab click, pane focus flip. Consecutive duplicates collapse; a NEW
+  activation truncates the forward branch, exactly like a browser.
+  Bounded circularly at `HISTORY_LIMIT` (100): past the limit the oldest
+  entry falls off.
+- **Guards**: `suspend()`/`resume()` around App startup (session restore,
+  OS-collected files, the daily-note fallback are not navigation —
+  `resume()` seeds the doc the user landed on as the base entry), and a
+  `nav` counter spanning each `back()`/`forward()` walk so the
+  navigation's own activation never records itself. Steps serialize on a
+  promise queue; rapid clicks step one at a time.
+- **Closed documents reopen** on traversal: `vaultId::path` keys via a
+  vault-scoped `openFile(…, { keepFocused: true })` (a history step is a
+  view switch, never a clean-tab replace), `external://…` keys via
+  `openExternalFile`. Keys with nothing behind them — scratch tabs,
+  registered plugin doc kinds — are pruned and stepped over (the same
+  lazy prune absorbs a stale key after a rename: `retargetTabs` re-points
+  panes, not history entries).
+- **Surfaces**: two titlebar icon buttons right of the menu bar (`←`
+  `→`, disabled-bound `canBack`/`canForward`), View-menu rows, and the
+  `doc.back` / `doc.forward` commands (`Alt+ArrowLeft` /
+  `Alt+ArrowRight`; deliberately shadows CodeMirror's Alt+Arrow subword
+  steps for the browser-standard chord). Landing on a document restores
+  its caret/scroll through the existing milestone-50 memory — no
+  extra wiring.
+
+## 5.31 The assistant manages the template library (milestone 58, SDK 1.14)
+
+Four chat tools — `template_list`, `template_read`, `template_write`,
+`template_delete` — let the ask flow's model work directly on the vault's
+template library (the configured `templates.dir`, default `templates/`,
+active vault): `main/template-tools.ts` in `plugins/assistant/`, built
+after the `tasks-tool` shape. The tools ride **every non-live ask** —
+independent of `mcp.enabled` (the `vault_*` set stays gated; MCP clients
+keep plain `vault_write`).
+
+- **No confirmation** (ADR-0011 later-change): template files are small
+  structural content outside the tag index, never the user's notes. A
+  write still refuses to overwrite unless the model passes the explicit
+  `overwrite: true`; a delete goes through the milestone-52 recycle-bin
+  path. Both ride the announced round, so the Templates panel, the slash
+  menu and Mod+T pick the change up on the same `vault:changed` push —
+  zero changes in the templates plugin.
+- **New base seam** — `ctx.vault.delete(path, opts?)` (the SDK's first
+  delete): `VaultManager.deleteEntry` (vault-escape guard, own-write
+  ledger, sidecar travels) + the announcer's `deletedPaths` push;
+  resolves whether the target landed in the bin.
+  `PLUGIN_API_VERSION` minor → 14.
+- **Guards, pure and spec'd** (`resolveTemplate` /
+  `templatePathsInDir`): names normalize to paths under the folder
+  (subfolders become Templates-panel categories, `.md` appended),
+  `..`/absolute escapes are refused, the top-level `prompts/` subfolder
+  is reserved for the composer prompt picker's own format, and
+  `daily.md` — the daily-note seed — can be overwritten but never
+  deleted. Handlers never throw; errors return as text (the live-edit
+  rule).
+- **Wiring**: the engine merges the template specs with the
+  `tasks_list` spec in one ask-branch tool set (`maxToolRounds` 5 when
+  templates ride, else the tasks cap 3) and dispatches by name; the
+  bundle is built fresh per ask so a renamed `templates.dir` reaches
+  the tool descriptions immediately, and `ASK_TEMPLATES_NOTE` tells the
+  model to list before creating (no duplicates) and that a write
+  applies immediately.
+- Live-edit turns never see the tools (the note is the target there),
+  and the tool calls surface as ordinary `drey-tool` chips in the turn
+  card.
+
+## 5.32 Link integrity on rename + quick switcher / command palette (milestone 59, ADR-0059)
+
+**Link rewrite — three layers, base-owned.**
+
+| Block | Where | Responsibility |
+| --- | --- | --- |
+| Wikilink grammar + resolver | `shared/wikilinks.ts` | `extractWikilinks`, `buildNoteIndex`, `resolveNoteTarget` — ONE definition for the renderer (`WikilinkService`, editor decorations) and main. The backlinks plugin keeps its parity-tested twin. |
+| Planner | `shared/link-rewrite.ts` | `planRename` — pure: file list + note contents + one `from → to` in, `{ patches, assets }` out. Rule: a reference is rewritten only when what it opened before differs from what the unchanged text opens after. Attachments referenced relative to a moved note and used by nothing outside the move travel with it. |
+| Executor | `electron/link-rewriter.ts` | `LinkRewriter.preview` / `.apply`: one fresh scan of the source vault (dirty buffers substituted for their files), `VaultManager.renameEntry`, then the writes (CRLF kept) and attachment moves / copies; `removeDirIfEmpty` tidies an emptied `attachments/`. |
+| Orchestration | `src/app/link-update/` | `LinkUpdateService.rename` — the Files panel's single entry for rename and move: reads `vault.updateLinksOnRename`, previews, asks through `LinkUpdateDialog` (per-note changed lines, attachments, three answers + "Don't ask again"), then re-keys tabs, patches dirty buffers and re-reads clean ones. |
+
+IPC: `vault:rename-preview` and `vault:rename-with-links`
+(`RenameLinksRequest` → `RenameLinksPreview` / `RenameLinksResult`);
+the plain `vault:rename-entry` remains for "Rename only" and the
+`never` mode. Config: `VaultConfig.updateLinksOnRename`
+(`ask | always | never`).
+
+There is deliberately no index behind this: the rewrite must read every
+affected file at apply time anyway, so a standing index would only add a
+second source of truth.
+
+**Palette — `src/app/palette/`.** `PaletteService` holds the state
+and both lists: files (every registered vault's tree, session-visited
+documents first via `DocHistoryService.recentKeys()`) and commands
+(`KeybindingService.all()`, shortcuts printed by `formatChord`).
+`fuzzy.ts` is the matcher — a scored subsequence match, no dependency.
+`Palette` is the overlay view; focus stays in its field. Commands
+`palette.files` (`Mod+P`) and `palette.commands` (`Mod+Shift+P`)
+are registered in `App`, next to the commands added so the palette can
+reach them (`settings.open`, `layout.reset`, `vault.refresh`,
+`daily.today`, `editor.toggleSource`, `note.exportPdf`).

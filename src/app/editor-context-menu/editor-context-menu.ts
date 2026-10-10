@@ -7,8 +7,9 @@ import { EditorContextMenuService } from './editor-context-menu.service';
 
 /**
  * The editor's right-click menu (ADR-0030), rendered at App level: standard
- * clipboard rows (routed through `MenuService.execEdit`, so they behave
- * exactly like the titlebar Edit menu), then plugin-contributed rows
+ * clipboard rows -- routed through `MenuService.execEdit` with the view of
+ * the clicked surface, so they act right there (like Ctrl+V would) instead
+ * of on the last-focused pane editor -- then plugin-contributed rows
  * (ADR-0044) — the template recents that used to live here are the
  * Templates plugin's context-menu contribution now.
  */
@@ -41,25 +42,31 @@ export class EditorContextMenu {
 
   // Close the menu (and its full-screen backdrop) FIRST, then run the
   // action -- if the action throws, the backdrop must not be left covering
-  // the app with a dead click handler.
+  // the app with a dead click handler. The clipboard rows resolve the view
+  // of the clicked surface BEFORE closing (close() drops the target), so
+  // they land on the right-clicked editor, not the last-focused pane.
   protected cut(): void {
+    const view = this.svc.resolveView();
     this.svc.close();
-    this.menu.execEdit('cut');
+    this.menu.execEdit('cut', view);
   }
 
   protected copy(): void {
+    const view = this.svc.resolveView();
     this.svc.close();
-    this.menu.execEdit('copy');
+    this.menu.execEdit('copy', view);
   }
 
   protected paste(): void {
+    const view = this.svc.resolveView();
     this.svc.close();
-    this.menu.execEdit('paste');
+    this.menu.execEdit('paste', view);
   }
 
   protected selectAll(): void {
+    const view = this.svc.resolveView();
     this.svc.close();
-    this.menu.execEdit('selectAll');
+    this.menu.execEdit('selectAll', view);
   }
 
   protected runBaseItem(index: number): void {

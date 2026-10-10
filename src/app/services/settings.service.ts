@@ -17,6 +17,7 @@ import {
   SpellcheckConfig,
   TemplatesConfig,
   UiScale,
+  UpdateLinksMode,
   VaultConfig,
   activeEntryPattern,
   clampEditorFontScale,
@@ -501,6 +502,34 @@ export class SettingsService {
       if (draftTrigger) {
         draftTrigger.confirm = confirm;
       }
+    });
+
+    if (!this.api) {
+      return;
+    }
+    try {
+      this._config.set(normalizeAppConfig(await this.api.setConfig(next)));
+    } catch (err) {
+      this.saveError.set(err instanceof Error ? err.message : String(err));
+      void this.load();
+    }
+  }
+
+  /**
+   * The rename dialog's "Don't ask again" (milestone 59): persists the
+   * link-update mode immediately, outside the Settings draft -- same shape
+   * as the confirmation dialog's per-trigger switch above.
+   */
+  async setUpdateLinksOnRename(mode: UpdateLinksMode): Promise<void> {
+    const config = this._config();
+    if (!config || config.vault.updateLinksOnRename === mode) {
+      return;
+    }
+    const next = structuredClone(config);
+    next.vault.updateLinksOnRename = mode;
+    this._config.set(next);
+    this.mutate((draft) => {
+      draft.vault.updateLinksOnRename = mode;
     });
 
     if (!this.api) {

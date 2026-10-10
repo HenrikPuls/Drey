@@ -1,9 +1,11 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
+import { By } from '@angular/platform-browser';
 import { vi } from 'vitest';
 import { Editor } from './editor';
 import { EditorService } from '../services/editor.service';
 import { KeybindingService } from '../keybindings';
 import { WikilinkService } from './wikilinks';
+import { MarkdownSurface } from './markdown-surface/markdown-surface';
 import { DreyApi, NoteSaveRequest } from '../../../shared/ipc-api';
 
 const RICH = [
@@ -29,6 +31,25 @@ const WIKI = 'See [[Plan]] and [[daily/todo|the list]] now.\n';
 describe('Editor', () => {
   let fixture: ComponentFixture<Editor>;
   let editor: EditorService;
+
+  beforeAll(() => {
+    // The caret memory (milestone 50) measures caret positions on leave,
+    // and the scroll restore awaits real animation frames -- both make
+    // CodeMirror measure / ask for Range layout APIs, which jsdom lacks.
+    // Hand them one plausible 10x16 rect so measurements stay sane.
+    const rect = {
+      x: 0,
+      y: 0,
+      top: 0,
+      left: 0,
+      right: 10,
+      bottom: 16,
+      width: 10,
+      height: 16,
+      toJSON: () => ({}),
+    } as DOMRect;
+    Range.prototype.getClientRects = () => [rect] as unknown as DOMRectList;
+  });
 
   beforeEach(async () => {
     const fakeApi: Partial<DreyApi> = {
@@ -343,6 +364,275 @@ describe('Editor', () => {
       await fresh.whenStable();
       fresh.detectChanges();
       expect(fresh.nativeElement.querySelector('app-markdown-toolbar')).toBeTruthy();
+    });
+  });
+
+  describe('caret memory (milestone 50)', () => {
+    const surfaceView = (fx: ComponentFixture<Editor>) => {
+      const surface = fx.debugElement.query(By.directive(MarkdownSurface))
+        .componentInstance as MarkdownSurface;
+      return surface.view!;
+    };
+    const settle = async (): Promise<void> => {
+      fixture.detectChanges();
+      await fixture.whenStable();
+      fixture.detectChanges();
+    };
+    /** note.md is shown and clean; dirty it so the next open opens ALONGSIDE (ADR-0003). */
+    const dirtyNote = (): void => {
+      editor.updateBuffer('note.md', '# Title\n\nsome **bold** text with a caret');
+    };
+
+    it('restores the caret when switching away and back to an open tab', async () => {
+      const view = surfaceView(fixture);
+      view.dispatch({ selection: { anchor: 10 } });
+      dirtyNote();
+      await editor.openFile('rich.md');
+      await settle();
+      expect(editor.activePath()).toBe('rich.md');
+
+      await editor.openFile('note.md'); // already open -- activates the tab
+      await settle();
+
+      expect(view.state.selection.main.head).toBe(10);
+    });
+
+    it('an explicit reveal (a link / search hit line) still wins over the caret', async () => {
+      const view = surfaceView(fixture);
+      view.dispatch({ selection: { anchor: 10 } });
+      dirtyNote();
+      await editor.openFile('rich.md');
+      await settle();
+
+      await editor.openFileAt('note.md', 2);
+      await settle();
+
+      expect(view.state.selection.main.head).toBe(view.state.doc.line(2).from);
+    });
+
+    it('clamps a stale caret (the buffer shrank) to the document length', async () => {
+      dirtyNote();
+      await editor.openFile('rich.md');
+      await settle();
+      editor.recordCaret('note.md', { head: 9999, scrollTop: 0 });
+
+      await editor.openFile('note.md');
+      await settle();
+
+      const view = surfaceView(fixture);
+      expect(view.state.selection.main.head).toBe(view.state.doc.length);
+    });
+
+    /** jsdom has no layout: fixed metrics so the restore's clamp is testable. */
+    function mockScroller(view: { scrollDOM: HTMLElement }): HTMLElement {
+      const scroller = view.scrollDOM;
+      Object.defineProperty(scroller, 'scrollHeight', { value: 2000, configurable: true });
+      Object.defineProperty(scroller, 'clientHeight', { value: 400, configurable: true });
+      return scroller;
+    }
+
+    const nextFrame = (): Promise<void> =>
+      new Promise((resolve) => requestAnimationFrame(() => resolve()));
+
+    it('restores the exact scroll offset, not just a visible caret', async () => {
+      const view = surfaceView(fixture);
+      const scroller = mockScroller(view);
+      view.dispatch({ selection: { anchor: 10 } });
+      scroller.scrollTop = 400;
+      dirtyNote();
+      await editor.openFile('rich.md');
+      await settle();
+      expect(scroller.scrollTop).toBe(0); // the fresh load showed the top
+
+      await editor.openFile('note.md');
+      await settle();
+      await nextFrame();
+      await nextFrame();
+
+      expect(scroller.scrollTop).toBe(400);
+      expect(view.state.selection.main.head).toBe(10);
+    });
+
+    it('restores the scroll even when the caret never left offset 0', async () => {
+      const view = surfaceView(fixture);
+      const scroller = mockScroller(view);
+      expect(view.state.selection.main.head).toBe(0); // caret untouched
+      scroller.scrollTop = 400; // scroll-only browsing
+      dirtyNote();
+      await editor.openFile('rich.md');
+      await settle();
+
+      await editor.openFile('note.md');
+      await settle();
+      await nextFrame();
+      await nextFrame();
+
+      expect(scroller.scrollTop).toBe(400);
+      expect(view.state.selection.main.head).toBe(0);
+    });
+
+    it('rolls back the browser’s scroll-to-caret after the raw restore', async () => {
+      const view = surfaceView(fixture);
+      const scroller = mockScroller(view);
+      view.dispatch({ selection: { anchor: 10 } });
+      scroller.scrollTop = 400;
+      dirtyNote();
+      await editor.openFile('rich.md');
+      await settle();
+
+      await editor.openFile('note.md');
+      await settle();
+      await nextFrame(); // frame 1: the raw restore lands
+      // The focused editor makes the browser scroll the caret into view --
+      // AFTER frame 1, exactly the production interference.
+      scroller.scrollTop = 26;
+      await nextFrame(); // frame 2: the re-assert must win
+
+      expect(scroller.scrollTop).toBe(400);
+      expect(view.state.selection.main.head).toBe(10);
+    });
+
+    it('corrects the raw offset against the caret’s rendered position (estimates cancel out)', async () => {
+      const view = surfaceView(fixture);
+      const scroller = mockScroller(view);
+      // Capture: the caret sat 100px into the viewport. Restore: the raw
+      // offset leaves it at 70px -- the correction must scroll by the
+      // delta (400 -> 370), not keep the raw 400. This is the mechanism
+      // that absorbs CodeMirror's fresh-state height ESTIMATES.
+      const coords = vi
+        .spyOn(view, 'coordsAtPos')
+        .mockReturnValueOnce({ top: 100, bottom: 116, left: 0, right: 10 })
+        .mockReturnValue({ top: 70, bottom: 86, left: 0, right: 10 });
+      view.dispatch({ selection: { anchor: 10 } });
+      scroller.scrollTop = 400;
+      dirtyNote();
+      await editor.openFile('rich.md');
+      await settle();
+
+      await editor.openFile('note.md');
+      await settle();
+      await nextFrame();
+      await nextFrame();
+
+      expect(scroller.scrollTop).toBe(370);
+      expect(view.state.selection.main.head).toBe(10);
+      coords.mockRestore();
+    });
+
+    it('a reveal cancels the scroll restore -- the target line wins', async () => {
+      const view = surfaceView(fixture);
+      const scroller = mockScroller(view);
+      view.dispatch({ selection: { anchor: 10 } });
+      scroller.scrollTop = 400;
+      dirtyNote();
+      await editor.openFile('rich.md');
+      await settle();
+
+      await editor.openFileAt('note.md', 2);
+      await settle();
+      await nextFrame();
+
+      // The remembered offset never lands: the reveal is the whole jump.
+      expect(scroller.scrollTop).not.toBe(400);
+      expect(view.state.selection.main.head).toBe(view.state.doc.line(2).from);
+    });
+
+    it('keeps the caret for a CLEAN tab that was replaced and reopened', async () => {
+      const view = surfaceView(fixture);
+      view.dispatch({ selection: { anchor: 10 } });
+      // note.md stays clean -- rich.md REPLACES its tab instead of opening
+      // alongside (milestone 32). The caret memory must outlive that.
+      await editor.openFile('rich.md');
+      await settle();
+      expect(editor.docFor('note.md')).toBeNull();
+
+      await editor.openFile('note.md'); // fresh open -- caret from the session memory
+      await settle();
+
+      expect(view.state.selection.main.head).toBe(10);
+    });
+
+    it('focuses the editor when switching back, so typing lands in the document', async () => {
+      const view = surfaceView(fixture);
+      view.dispatch({ selection: { anchor: 10 } });
+      dirtyNote();
+      await editor.openFile('rich.md');
+      await settle();
+
+      await editor.openFile('note.md'); // activates the tab -- no click into the editor
+      await settle();
+
+      const cmEl = cm();
+      expect(cmEl.contains(document.activeElement)).toBe(true);
+      expect(view.state.selection.main.head).toBe(10);
+    });
+
+    it('records the caret when the pane is destroyed, so a remount restores it', async () => {
+      const view = surfaceView(fixture);
+      view.dispatch({ selection: { anchor: 12 } });
+      fixture.destroy();
+
+      const second = TestBed.createComponent(Editor);
+      second.componentRef.setInput('paneId', 'p1');
+      await second.whenStable();
+      second.detectChanges();
+
+      expect(surfaceView(second).state.selection.main.head).toBe(12);
+    });
+
+    it('an in-place save reload (the frontmatter bump) keeps the viewport', async () => {
+      const view = surfaceView(fixture);
+      const scroller = mockScroller(view);
+      view.dispatch({ selection: { anchor: 10 } });
+      scroller.scrollTop = 400;
+      // The save pipeline rewrites the body (every save of a frontmattered
+      // note bumps `updated:`) -- the renderer adopts the bump, and the
+      // effect reloads the SAME tab in place. The full replace must not
+      // cost the user their viewport.
+      window.dreyApi = {
+        ...window.dreyApi,
+        saveNote: (request: NoteSaveRequest) =>
+          Promise.resolve({
+            path: request.path,
+            content: `---\nupdated: 2026-10-09T16:00:00\n---\n${request.body}`,
+            modifiedMs: 3,
+          }),
+      } as DreyApi;
+      editor.updateBuffer('note.md', '# Title\n\nsome **bold** text with a caret');
+      await editor.save();
+      await settle();
+      await nextFrame();
+      await nextFrame();
+
+      expect(view.state.doc.toString()).toContain('updated: 2026-10-09'); // the bump landed
+      expect(view.state.selection.main.head).toBe(10);
+      expect(scroller.scrollTop).toBe(400);
+    });
+
+    it('a pinned-bottom save keeps following the tail instead of restoring', async () => {
+      const view = surfaceView(fixture);
+      const scroller = mockScroller(view); // 2000 tall, 400 visible -> bottom is 1600
+      view.dispatch({ selection: { anchor: 10 } });
+      scroller.scrollTop = 1600; // pinned at the bottom
+      window.dreyApi = {
+        ...window.dreyApi,
+        saveNote: (request: NoteSaveRequest) =>
+          Promise.resolve({
+            path: request.path,
+            content: `---\nupdated: 2026-10-09T16:00:00\n---\n${request.body}`,
+            modifiedMs: 3,
+          }),
+      } as DreyApi;
+      editor.updateBuffer('note.md', '# Title\n\nsome **bold** text with a caret');
+      await editor.save();
+      await settle();
+      await nextFrame();
+      await nextFrame();
+
+      // Stick-to-bottom is the right destination here -- the restore chain
+      // must stay out of the way (the streamed search summary rides this).
+      expect(scroller.scrollTop).toBe(scroller.scrollHeight);
+      expect(view.state.selection.main.head).toBe(10);
     });
   });
 

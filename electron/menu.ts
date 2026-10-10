@@ -121,8 +121,8 @@ export function attachContextMenu(window: BrowserWindow): void {
  * capture loop never unwinds is invisible but swallows all keyboard input --
  * the leading suspect for the packaged build's stuck-input state (bug-6),
  * which the renderer can neither see nor fix. Tracking them here gives main
- * an escape hatch: `closePopup` on blur / on the renderer's "recover input"
- * command, and a log trace a field occurrence finally leaves behind.
+ * an escape hatch: `closePopup` on blur / minimize, and a log trace a field
+ * occurrence finally leaves behind.
  */
 const trackedPopups = new Map<BrowserWindow, Menu>();
 
@@ -141,8 +141,9 @@ function popupTracked(window: BrowserWindow, menu: Menu): void {
 
 /**
  * Closes any context menu still popped over `window` (no-op when none).
- * Returns `true` when one was actually closed -- the recover-input handler
- * logs that, so a stuck-input session shows whether this was the culprit.
+ * Called on window blur / minimize (bug-6 hardening): a native popup whose
+ * capture loop never unwinds is invisible but swallows all keyboard input,
+ * and losing window focus is the moment it has no reason to stay open.
  */
 export function closeTrackedPopups(window: BrowserWindow, reason: string): boolean {
   const menu = trackedPopups.get(window);

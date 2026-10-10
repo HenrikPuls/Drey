@@ -79,6 +79,20 @@ rendered as a collapsible chip); older turns replay it as a single
 `[Vault context used …]` line. Live-edit turns ignore the scope (the
 document plus the tool loop is context enough).
 
+**Later change (still milestone 41): chat notes are excluded from the
+semantic index.** `chats/` notes embed the literal question text of past
+conversations, so they near-perfectly match any repeated question and
+displace the note that actually answers it — observed immediately in
+practice (four chat turns outranked the "Kaffee trinken" daily note).
+`isSemanticIndexPath` (shared/semantic.ts) excludes them at build time
+and, as a defence for indexes built before the rule, again at query
+time; a rebuild purges the stored chat sections. The tags/search index
+still covers chats (ADR-0048) — only similarity retrieval treats the
+transcript as noise, not knowledge. The same change made a no-hits
+retrieval VISIBLE: the persisted `drey-context` fence can carry a
+`{"status":…}` line (`empty` with the configured floor / `disabled` /
+`error`), rendered as a muted chip, so "nothing came back" now says why.
+
 ## Consequences
 
 - The assistant reaches the whole vault with ~1–2k tokens of context,
