@@ -1085,6 +1085,21 @@ export class FilesPanel {
     }
   }
 
+  /**
+   * Row menu: opens the file pinned ("Open in new tab") -- a pinned tab is
+   * never the tab the next plain open replaces, so it stays; already open,
+   * it is revealed and pinned.
+   */
+  protected onOpenInNewTab(): void {
+    const menu = this.menu();
+    const entry = menu?.entry;
+    this.closeMenus();
+    if (!menu || !entry || entry.type !== 'file') {
+      return;
+    }
+    void this.editor.openFile(entry.relativePath, menu.vaultId, { pinned: true });
+  }
+
   protected startRename(): void {
     const menu = this.menu();
     const entry = menu?.entry;

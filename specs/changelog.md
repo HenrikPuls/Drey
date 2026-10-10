@@ -20,6 +20,17 @@ recorded as an explicit decision. The parity checklist lives in
 
 ## Recent milestones
 
+### Files panel — "Open in new tab" pins the tab
+
+- **The row context menu gained "Open in new tab"** (files only). It
+  opens the file and pins it in the same step (`openFile`'s new
+  `pinned` option, all three open paths: text, image, PDF) — a pinned
+  tab is never the tab the next plain file-open replaces, so a
+  reference note you right-clicked open *stays*. On an already-open
+  file the row reveals it and pins it. The pin is the tab bar's own
+  (milestone 35): shown as the pin glyph, removable via "Unpin tab",
+  and it rides the session snapshot across restarts.
+
 ### Milestone 63 — MCP client, web fetch, assistant tool groups (Req-31)
 
 **Not yet manually verified by the owner.**

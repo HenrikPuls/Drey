@@ -608,6 +608,10 @@ export class EditorService {
    * session restore fires all of its reads in parallel) — the content is
    * used as-is instead of a second read. The raw (CRLF-intact) content,
    * exactly as `readVaultFile` would return it.
+   *
+   * `pinned`: the new tab is pinned right away (the Files tree's
+   * "Open in new tab") -- never the tab another open replaces, and the pin
+   * rides the session snapshot. An already-open tab is revealed and pinned.
    */
   async openFile(
     relativePath: string,
@@ -615,25 +619,32 @@ export class EditorService {
     opts: {
       keepFocused?: boolean;
       prefetched?: { content: string; modifiedMs: number };
+      pinned?: boolean;
     } = {},
   ): Promise<void> {
     if (!this.api) {
       return;
     }
     const victim = opts.keepFocused === true ? null : this.replacedTabCandidate();
+    const pin = opts.pinned === true ? { pinned: true } : {};
     const resolvedVault = vaultId ?? this.vault.activeVaultId();
     const key = docKey(resolvedVault, relativePath);
     if (this.docs().some((d) => d.key === key)) {
       // Already open -- reveal it (focus + activate whichever pane has it;
-      // a document lives in one pane at a time, see `PaneService`).
+      // a document lives in one pane at a time, see `PaneService`). A pin
+      // request still applies ("Open in new tab" on an already-open file
+      // means reveal + pin -- the "keep this one" intent lands either way).
       this.panes.open(key);
+      if (opts.pinned === true) {
+        this.setPinned(key, true);
+      }
       return;
     }
 
     // An image file opens as a viewer tab -- never read as text (that used
     // to open a mojibake buffer that Ctrl+S would write back).
     if (imageExtension(relativePath)) {
-      this.addDoc(this.makeImageDoc(relativePath, resolvedVault));
+      this.addDoc({ ...this.makeImageDoc(relativePath, resolvedVault), ...pin });
       this.closeReplacedTab(victim);
       return;
     }
@@ -641,7 +652,7 @@ export class EditorService {
     // Same for a PDF (ADR-0052): the built-in (PDFium) viewer tab, never a
     // text buffer.
     if (pdfExtension(relativePath)) {
-      this.addDoc(this.makePdfDoc(relativePath, resolvedVault));
+      this.addDoc({ ...this.makePdfDoc(relativePath, resolvedVault), ...pin });
       this.closeReplacedTab(victim);
       return;
     }
@@ -652,7 +663,10 @@ export class EditorService {
       const { content, modifiedMs } =
         opts.prefetched ??
         (await this.api.readVaultFile(relativePath, resolvedVault ?? undefined));
-      this.addDoc(this.makeDoc(relativePath, resolvedVault, content, modifiedMs, true));
+      this.addDoc({
+        ...this.makeDoc(relativePath, resolvedVault, content, modifiedMs, true),
+        ...pin,
+      });
       this.closeReplacedTab(victim);
     } catch (err) {
       this.error.set(err instanceof Error ? err.message : String(err));

@@ -738,3 +738,70 @@ describe('FilesPanel collapsed-by-default (milestone 31)', () => {
     expect(rows().length).toBe(3); // back to the resting default
   });
 });
+
+describe('FilesPanel "Open in new tab" (row menu)', () => {
+  let fixture: ComponentFixture<FilesPanel>;
+
+  beforeAll(() => {
+    Element.prototype.scrollIntoView = vi.fn();
+  });
+
+  beforeEach(async () => {
+    window.dreyApi = registryApi({ listVaultFiles: () => Promise.resolve(tree()) }) as DreyApi;
+    await TestBed.configureTestingModule({ imports: [FilesPanel] }).compileComponents();
+    fixture = TestBed.createComponent(FilesPanel);
+    document.body.appendChild(fixture.nativeElement);
+  });
+
+  afterEach(() => {
+    fixture.nativeElement.remove();
+    delete (window as { dreyApi?: unknown }).dreyApi;
+  });
+
+  function rows(): NodeListOf<HTMLElement> {
+    return fixture.nativeElement.querySelectorAll('.node');
+  }
+
+  function menuButton(label: string): HTMLButtonElement | null {
+    return (
+      ([...fixture.nativeElement.querySelectorAll('.ctx-menu button')].find(
+        (b) => b.textContent?.trim() === label,
+      ) as HTMLButtonElement | undefined) ?? null
+    );
+  }
+
+  async function renderTree(): Promise<void> {
+    await vi.waitFor(() => {
+      fixture.detectChanges();
+      expect(rows().length).toBe(3); // vault · a.md · notes (folders start collapsed)
+    });
+  }
+
+  function openMenuOn(row: HTMLElement): void {
+    row.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true }));
+    fixture.detectChanges();
+  }
+
+  it('offers "Open in new tab" on a file row and opens it pinned', async () => {
+    await renderTree();
+    const editor = TestBed.inject(EditorService);
+    const openFile = vi.spyOn(editor, 'openFile').mockResolvedValue(undefined);
+
+    openMenuOn(rows()[1]); // a.md
+    const item = menuButton('Open in new tab');
+    expect(item).not.toBeNull();
+
+    item!.click();
+    fixture.detectChanges();
+
+    expect(openFile).toHaveBeenCalledWith('a.md', V, { pinned: true });
+  });
+
+  it('offers no "Open in new tab" on a folder row', async () => {
+    await renderTree();
+    vi.spyOn(TestBed.inject(EditorService), 'openFile').mockResolvedValue(undefined);
+
+    openMenuOn(rows()[2]); // notes/
+    expect(menuButton('Open in new tab')).toBeNull();
+  });
+});
