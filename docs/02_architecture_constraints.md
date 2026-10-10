@@ -8,8 +8,8 @@ these apply to every phase and are not up for reconsideration per-feature.
 | Electron main/renderer split, no Node integration in the renderer | Security boundary; all filesystem/LLM access goes through a typed `contextBridge` IPC surface. |
 | No server/backend process | A vault is just a folder on disk (can live on OneDrive); direct file access, no client-server split. |
 | Storage is plain Markdown + YAML frontmatter | No proprietary format, no database as source of truth. See [`specs/frontmatter-schema.md`](../specs/frontmatter-schema.md). |
-| Folder structure not hardcoded | Folders emerge dynamically per tag; the LLM proposes new folders, confirmed via the inbox. |
-| Local LLM via LM Studio only, no hardcoded model id | No cloud calls; must not assume a specific model is loaded. |
+| Folder structure is the user's own | The app imposes only `templates/`, the daily-notes root, `chats/` and the hidden `.drafts/`; topics are free inline `#tag` labels, never directories (ADR-0017). |
+| Local LLM by default, no hardcoded model id | The default is a local OpenAI-compatible endpoint (LM Studio default). Cloud and CLI providers are documented, opt-in exceptions, each off by default (ADR-0047); must not assume a specific model is loaded. |
 | TypeScript strict mode, typed IPC interfaces | See "Coding & Style Conventions" in `CLAUDE.md`. |
 
 ## Technology constraints

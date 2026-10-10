@@ -8,13 +8,13 @@ ADRs under [09_architecture_decisions/](09_architecture_decisions/).
 | Goal | Strategy |
 |---|---|
 | No proprietary lock-in, future-proof storage | Plain Markdown + YAML frontmatter as the sole source of truth (no database). |
-| Fast, low-friction capture | Tag-first routing: a known `#tag` deterministically routes a note with no LLM call. The LLM is only a fallback for untagged input. |
-| Privacy, no ongoing cost | Local LLM via LM Studio, no cloud calls, no fixed/hardcoded model. |
+| Fast, low-friction capture | Capture is typing into the note: the slash menu's Entry block plus free inline `#tag` labels. No LLM call sits in the capture path; the LLM only *suggests* tags on request. |
+| Privacy, no ongoing cost | Local OpenAI-compatible LLM by default (LM Studio default), no fixed/hardcoded model. Cloud and CLI providers are opt-in exceptions, each off by default (ADR-0047). |
 | Security boundary between UI and system access | Electron main/renderer split; renderer has no Node integration, all filesystem/LLM access goes through a typed `contextBridge` IPC surface. |
-| Folder structure that scales with actual use instead of upfront design | Folders are not hardcoded — they emerge per tag; the LLM proposes new folders, confirmed via the inbox review queue (no blocking popups). |
+| Structure that scales with actual use instead of upfront design | The folder structure is the user's own; topics are free inline `#tag` labels over a per-vault section index, never directories (ADR-0017). |
 | Responsiveness under load | Interactive requests (capture, chat) always take priority over background jobs (batch tag suggestion, summaries, future re-indexing). |
 
-Build order follows the milestones in `CLAUDE.md` ("Build Order"): shell
-and scaffold first, then vault access, editor, capture, tagging/routing,
-classification, inbox, search, summaries — each a working, demoable slice
-rather than one big-bang implementation.
+The build proceeded in milestones — each a working, demoable slice rather
+than one big-bang implementation. The log lives in
+[milestones-done.md](milestones-done.md) (1–27) and
+[`specs/changelog.md`](../specs/changelog.md) (22 onward).

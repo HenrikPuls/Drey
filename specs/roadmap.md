@@ -18,7 +18,7 @@ An AI-powered knowledge hub for note-taking and task automation.
   tags (`#project/frontend`) are a label hierarchy — a naming convention,
   still not folders (ADR-0017).
 - Classification/synthesis via a **local** OpenAI-compatible API, no
-  fixed model (Unsloth Desktop default; llama.cpp/vLLM/Ollama/LM Studio
+  fixed model (LM Studio default; Unsloth Desktop/llama.cpp/vLLM/Ollama
   also work). Cloud calls are **documented, opt-in exceptions, each off
   by default** (ADR-0047): `copilot-web` (Req-3/req-15, ADR-0040), the
   hosted presets (`openrouter`, `anthropic`, `zai-glm`), and Claude
@@ -29,8 +29,8 @@ An AI-powered knowledge hub for note-taking and task automation.
 ## Tech Stack
 
 Electron + Angular/TypeScript, CodeMirror 6 (editor), transformers.js
-(embeddings, Phase 2), sqlite-vec (vector search, Phase 2),
-OpenAI-API-compatible backend (LLM backend), Electron Builder (packaging).
+(embeddings, WASM-only; brute-force cosine over a JSON index per vault,
+ADR-0055 — no sqlite-vec), OpenAI-API-compatible backend (LLM backend), Electron Builder (packaging).
 No file watcher by default — vault is re-read on demand; opt-in chokidar
 watcher for external changes (ADR-0045).
 
@@ -49,12 +49,39 @@ milestone 44, then **reverted before release** — see the closed item
 below and changelog.md); req-36 to the Autotag re-homing (shipped).
 Check changelog.md for anything higher before assigning req-37+.
 
-1. **Semantic Search, remaining slices** — the core shipped as milestone
-   41 / ADR-0055 (the assistant's Vault chip: top-k section retrieval via
-   transformers.js WASM + a JSON index per vault; sqlite-vec was dropped —
-   see the ADR for why). Remaining ideas, none committed: a semantic MCP
-   `vault_search` mode (needs a plural base registry seam), and pause /
-   resume of large rebuilds on interactive use.
+Order set on 2026-10-10 after the milestone 33–58 verification round.
+
+1. **Wikilink update on rename/move** — renaming or moving a note leaves
+   every `[[wikilink]]` to it dangling (`VaultManager.renameEntry` only
+   renames the file). Rewrite the links through the backlinks index and
+   the milestone-53 replace discipline (bundled per-file-diff
+   confirmation). Together with a **quick switcher / command palette**
+   over the already-labelled `KeybindingService` commands and the file
+   list.
+2. **Conflict dialog for external changes + local snapshots** — a dirty
+   tab still wins silently over an external change (see "Open Risks");
+   on a synced vault that loses data. Keep-mine / take-external over the
+   ADR-0011 diff, plus a simple local version history as the safety net
+   for unconfirmed writes (live edit, template tools, MCP YOLO, replace
+   all).
+3. **Req-31 — MCP client** (connect Drey to external MCP servers), built
+   on the Req-29 provider interface. The vehicle for **web search in the
+   assistant** (any search MCP server) and later Jira (Req-17); add a
+   small built-in `web_fetch`. Opt-in, off by default (another ADR-0047
+   exception). Unify the assistant's tool gating in the same step: today
+   the chat's `vault_*` tools hang on `mcp.enabled` (the outward server
+   switch) while `tasks_list` / `template_*` do not, and `vault_write`
+   confirms while `template_write` does not.
+4. **req-19 — draw.io**, then the **Req-2 Office remainder** (both in the
+   backlog below).
+
+Not ordered: **Semantic Search, remaining slices** — the core shipped as
+milestone 41 / ADR-0055 (the assistant's Vault chip: top-k section
+retrieval via transformers.js WASM + a JSON index per vault; sqlite-vec
+was dropped — see the ADR for why). Remaining ideas, none committed:
+semantic hits in the Search panel, a semantic MCP `vault_search` mode
+(needs a plural base registry seam), and pause / resume of large rebuilds
+on interactive use.
 
 ### Closed (won't do)
 
@@ -86,6 +113,18 @@ Check changelog.md for anything higher before assigning req-37+.
 - **req-19** — draw.io view/edit integration.
 - **req-27** — review internal prompts (partial: ask protocol reworked in
   milestone 31, ADR-0053).
+- **Math (KaTeX) and callouts in Live Preview** — neither renders today
+  (Mermaid does). PDF-export parity applies (changelog standing rule).
+- **Due-date reminders** — the `📅` date is parsed and sortable, but
+  nothing notifies.
+- **Web clipper** — save the browser tab's page as a Markdown note.
+- **Auto-update + code signing** — the installer is unsigned and there is
+  no update channel (`docs/11`).
+- **API keys out of plain text** — hosted-preset keys sit unencrypted in
+  `app-config.json` (`docs/11`, technical debt).
+- **Shared note parse for the per-vault indexes** — tags, tasks,
+  backlinks and the semantic index each scan every `.md` on their own;
+  only worth it once a large vault makes refresh slow.
 
 ### Known-defect remainder
 
@@ -116,8 +155,6 @@ Check changelog.md for anything higher before assigning req-37+.
 - **req-10** — iPad/iPhone access via Tailscale.
 - **req-11** — audio recording in interview mode (local Whisper; Win+H
   as likely first step).
-- **Req-31** — MCP client (connect Drey to external MCP servers).
-  Builds on the Req-29 interface once that exists.
 - **Job Queue (generic, multi-consumer)** — background processes with
   status/progress, crash persistence, auto-pause on interactive use,
   meant to cover both re-indexing and export. No second consumer exists
