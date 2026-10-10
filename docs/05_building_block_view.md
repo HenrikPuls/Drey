@@ -2508,7 +2508,11 @@ memory (milestone 50).
   `→`, disabled-bound `canBack`/`canForward`), View-menu rows, and the
   `doc.back` / `doc.forward` commands (`Alt+ArrowLeft` /
   `Alt+ArrowRight`; deliberately shadows CodeMirror's Alt+Arrow subword
-  steps for the browser-standard chord). Landing on a document restores
+  steps for the browser-standard chord) plus the **mouse side buttons**
+  (`Command.mouseButton` 3/4 on the same two ids — a capture-phase
+  `mouseup` listener in `KeybindingService`, window-wide, the event
+  swallowed so Chromium's own back/forward default action never fires;
+  VS Code-style). Landing on a document restores
   its caret/scroll through the existing milestone-50 memory — no
   extra wiring.
 

@@ -1,4 +1,5 @@
-import { Injectable, signal } from '@angular/core';
+import { Injectable, inject, signal } from '@angular/core';
+import { Title } from '@angular/platform-browser';
 import { AppInfo } from '../../../shared/ipc-api';
 
 /** One production dependency, as written to `src/assets/licenses.json` by
@@ -25,6 +26,14 @@ export interface BuildInfo {
   buildNumber: number;
   /** Short commit SHA, with a trailing `+` when the working tree was dirty. */
   commit: string;
+  /**
+   * Git branch at build time; `worktree/<name>` in a linked worktree, so it
+   * identifies the checkout an instance was built from. Optional: the
+   * field postdates older stamped files.
+   */
+  branch?: string;
+  /** Absolute path of the checkout the build ran in. */
+  checkoutPath?: string;
   /** ISO timestamp of the build. */
   builtAt: string;
 }
@@ -35,11 +44,15 @@ export interface BuildInfo {
  * - the bundled `assets/licenses.json` (generated at build time from the
  *   production dependency tree, not something the main process serves).
  *
+ * Also stamps the native window title once at boot from the build info
+ * (see {@link applyWindowTitle}).
+ *
  * All logic lives here, not in the pane component (CLAUDE.md, "no business
  * logic inside components").
  */
 @Injectable({ providedIn: 'root' })
 export class AboutService {
+  private readonly title = inject(Title);
   readonly appInfo = signal<AppInfo | null>(null);
   /** `null` until read; stays `null` when the file is absent (e.g. a dev run
    *  that never ran `npm run stamp:build`). */
@@ -84,6 +97,25 @@ export class AboutService {
       this.buildInfo.set((await response.json()) as BuildInfo);
     } catch {
       // leave buildInfo null
+    }
+  }
+
+  /**
+   * Sets the native window title to `Drey — {branch}` once (plain `Drey`
+   * when the branch is unknown): the taskbar / Alt-Tab identity of a
+   * running instance, telling apart concurrent builds from different
+   * checkouts/worktrees. The custom titlebar draws its own chrome and never
+   * shows it. Called once from the `App` bootstrap; idempotent.
+   */
+  async applyWindowTitle(): Promise<void> {
+    if (!this.buildInfoFetched) {
+      await this.loadBuildInfo();
+    }
+    const branch = this.buildInfo()?.branch;
+    if (branch && branch !== 'unknown' && branch !== 'HEAD') {
+      this.title.setTitle(`Drey — ${branch.replace(/^worktree\//, '')}`);
+    } else {
+      this.title.setTitle('Drey');
     }
   }
 

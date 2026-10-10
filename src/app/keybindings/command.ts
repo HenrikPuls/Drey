@@ -12,6 +12,14 @@ export interface Command {
   label: string;
   keybinding?: string;
   /**
+   * A mouse button bound to this command (`MouseEvent.button`): `3` is
+   * the back / XButton1 side button, `4` the forward / XButton2 side
+   * button (VS Code-style history navigation). Triggered window-wide on
+   * `mouseup`; the event is swallowed so Chromium's own back/forward
+   * default action never fires.
+   */
+  mouseButton?: number;
+  /**
    * `payload` carries optional context from the invoker (SDK 1.9: a tag
    * pill click runs `search.open` with `{ tag }`); keyboard invocations
    * pass none.

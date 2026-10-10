@@ -536,10 +536,14 @@ function createMainWindow(
   return window;
 }
 
-// A second launch can't register the already-taken global shortcut and
-// would leave the user with a dead hotkey and no visible error. Refuse
-// it; focus the running window instead.
-if (!app.requestSingleInstanceLock()) {
+// A second launch would leave the user with a dead quick-capture hotkey
+// (the registration below degrades to a warning) and no window. Refuse
+// it; focus the running window instead. `DREY_MULTI_INSTANCE=1` (set by
+// `dev.ps1 -Multi`) is the dev escape hatch: parallel checkouts run side
+// by side sharing this userData's settings -- the lock holder keeps the
+// hotkey and the Explorer file-open pushes.
+const allowMultiInstance = process.env['DREY_MULTI_INSTANCE'] === '1';
+if (!app.requestSingleInstanceLock() && !allowMultiInstance) {
   app.quit();
 } else {
   installMainProcessLogging();

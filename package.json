@@ -26,6 +26,7 @@
     "pack:dir": "npm run clean && npm run fetch:drawio && npm run build && node node_modules/electron-builder/cli.js --win --dir",
     "pack": "npm run clean && npm run fetch:drawio && npm run build && node node_modules/electron-builder/cli.js --win",
     "electron": "node scripts/run-electron.js",
+    "app": "npm run build && npm run electron",
     "e2e": "npm run build && playwright test",
     "e2e:run": "playwright test",
     "e2e:ui": "playwright test --ui",

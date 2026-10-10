@@ -40,6 +40,17 @@ toolchain is removable by deleting `.tools/`). Never assume a bare `node`,
 `npm`, `npx`, `ng`, `tsc` or `vitest` command works.
 
 - PowerShell, per session, from the repo root: `. .\env.ps1`
+- Any checkout or worktree, one command: `.\dev.ps1` — bootstraps
+  `.tools/` (junction into the source checkout's vendored Node) and
+  `node_modules/` (`npm ci`) when missing, then runs `npm run dev`;
+  `.\dev.ps1 -Built` runs `npm run app` instead — always a fresh
+  production build, then the packaged-style app from `dist/` (no dev
+  server, no port 4200, no DevTools); `.\dev.ps1 -Multi` (combinable)
+  opts out of the single-instance lock (`DREY_MULTI_INSTANCE=1`, see
+  the lock in `electron/main.ts`) so parallel checkouts run side by
+  side for checking several agent outputs — they share one userData /
+  one set of settings (config/session = last writer wins); the lock
+  holder keeps the quick-capture hotkey
 - Bash: `export PATH="$PWD/.tools/node:$PATH"`, then invoke tools **by
   script path**, not by bin-shim name:
   - Typecheck main + shared: `node node_modules/typescript/bin/tsc -p electron/tsconfig.json --noEmit`
@@ -471,14 +482,21 @@ Renderer (Angular):
   Settings → "Assistant retrieval" (enabled, model id, k, score floor,
   per-vault status + rebuild). Independent of `mcp.enabled`; ignored for
   live-edit turns.
-- `KeybindingService` (`src/app/keybindings/`) — one capture-phase
-  `keydown` listener mapping chord strings onto `Command`s; features
-  register from `App`. Commands: `search.open` (`Mod+Shift+F`),
+- `KeybindingService` (`src/app/keybindings/`) — a capture-phase
+  `keydown` listener mapping chord strings onto `Command`s, plus a
+  capture-phase `mouseup` listener for `Command.mouseButton`
+  (3 = XButton1/back, 4 = XButton2/forward, window-wide; the `mouseup`
+  is swallowed so Chromium's own history default action never fires,
+  and the matching `mousedown` is swallowed with
+  `preventDefault` + `stopPropagation` so CodeMirror's caret placement
+  never sees the press);
+  features register from `App`. Commands: `search.open` (`Mod+Shift+F`),
   `note.new` (`Mod+N`), `note.save` (`Mod+S`), `note.saveAs`
   (`Mod+Shift+S`), `note.saveAll` (`Mod+Alt+S`),
   `editor.toggleLineNumbers` (`Mod+G`), `doc.back` (`Alt+Left`) /
   `doc.forward` (`Alt+Right`, the session document history over
-  `DocHistoryService`), `window.toggleFullScreen` (`F11`,
+  `DocHistoryService`; both also bound to the mouse side buttons,
+  VS Code-style), `window.toggleFullScreen` (`F11`,
   OS fullscreen via `window:toggle-fullscreen`; the native menu's
   `togglefullscreen` role is deliberately absent — its F11 accelerator
   would swallow the key) — the titlebar menu invokes the

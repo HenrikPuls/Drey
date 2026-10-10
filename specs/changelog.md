@@ -20,6 +20,53 @@ recorded as an explicit decision. The parity checklist lives in
 
 ## Recent milestones
 
+### Dev escape hatch: parallel instances share one userData
+
+- **`DREY_MULTI_INSTANCE=1` opts an instance out of the
+  single-instance lock** (`electron/main.ts`): parallel checkouts —
+  e.g. checking several agent worktree outputs at once — now run side
+  by side. They deliberately share the one userData (one set of
+  settings, one vault registry; app config and the session snapshot
+  are last-writer-wins), while the lock holder alone keeps the
+  quick-capture hotkey and the Explorer file-open pushes; a
+  hotkey-less second instance logs the usual registration warning.
+  `dev.ps1 -Multi` (combinable with `-Built`) exports the variable —
+  accidental double launches without it still focus the running
+  instance as before.
+
+### Build origin: branch + checkout in the About pane and the window title
+
+- **The app can tell which checkout/worktree it was built from.**
+  `scripts/stamp-build.mjs` now also records `branch`
+  (`git rev-parse --abbrev-ref HEAD` — `worktree/<name>` in a linked
+  worktree) and `checkoutPath` into `src/assets/build-info.json`, with
+  the usual `unknown` fallback when git is unavailable. The About pane
+  shows both as new fact rows, and `AboutService.applyWindowTitle()`
+  (called once from the `App` bootstrap) suffixes the native window
+  title — `Drey — silver-forest-0d1f` — so the taskbar / Alt-Tab tell
+  apart concurrent dev instances from different worktrees. The custom
+  titlebar never shows it; `BuildInfo.branch`/`checkoutPath` are
+  optional so older stamped files keep parsing.
+
+### Mouse side buttons navigate the document history
+
+- **The mouse back/forward side buttons (XButton1/2) now step through
+  the session's document history** (milestone 55's `DocHistoryService`),
+  VS Code-style: `Command` gained an optional `mouseButton`
+  (`MouseEvent.button`), and `KeybindingService` matches it with a
+  second capture-phase `mouseup` listener next to its `keydown` one —
+  `doc.back` is bound to button 3, `doc.forward` to button 4,
+  window-wide (editor, docks, palette). The `mouseup` is swallowed
+  (`preventDefault`) so Chromium's own back/forward default action
+  never fires; `mouseup` rather than `mousedown` so a press in the
+  middle of a drag never triggers mid-gesture. The matching `mousedown`
+  is swallowed too (`preventDefault` + `stopPropagation`, no command):
+  CodeMirror places the caret in its own mousedown listener — a regular
+  listener, not a default action — so only stopping the propagation in
+  the capture phase keeps the press away from the editor DOM and the
+  caret in place. Always on, no setting —
+  parity with the `Alt+ArrowLeft` / `Alt+ArrowRight` chords, which
+  stay unchanged.
 ### Milestone 65 — Git vaults: file status and a Source control panel (req-40)
 
 **Not yet manually verified by the owner.**
