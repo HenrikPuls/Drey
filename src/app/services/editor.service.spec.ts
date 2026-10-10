@@ -335,6 +335,38 @@ describe('EditorService', () => {
     });
 
     describe('pinned tabs', () => {
+      it('open pinned straight from openFile via the pinned option', async () => {
+        await service.openFile('a.md', undefined, { pinned: true });
+        await service.openFile('b.md'); // a plain open must not replace the pin
+
+        expect(service.docFor('a.md')?.pinned).toBe(true);
+        expect(service.openDocs().map((d) => d.path)).toEqual(['a.md', 'b.md']);
+        expect(service.openPath()).toBe('b.md');
+      });
+
+      it('pin an already-open unpinned tab when reopened with the pinned option', async () => {
+        await service.openFile('a.md');
+        expect(service.docFor('a.md')?.pinned).toBeUndefined();
+        await service.openFile('a.md', undefined, { pinned: true });
+
+        expect(service.openDocs().map((d) => d.path)).toEqual(['a.md']); // revealed, not duplicated
+        expect(service.docFor('a.md')?.pinned).toBe(true);
+      });
+
+      it('open image / pdf viewer tabs pinned via the pinned option', async () => {
+        await service.openFile('x.png', undefined, { pinned: true });
+        await service.openFile('docs/spec.pdf', undefined, { pinned: true });
+        await service.openFile('note.md'); // a plain open replaces nothing
+
+        expect(service.docFor('x.png')?.pinned).toBe(true);
+        expect(service.docFor('docs/spec.pdf')?.pinned).toBe(true);
+        expect(service.openDocs().map((d) => d.path)).toEqual([
+          'x.png',
+          'docs/spec.pdf',
+          'note.md',
+        ]);
+      });
+
       it('are not replaced: the next file opens in a new tab beside them', async () => {
         await service.openFile('a.md');
         service.togglePin('a.md');

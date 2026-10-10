@@ -57,6 +57,9 @@
       <div class="ctx-sep"></div>
     }
     @if (m.entry) {
+      @if (m.entry.type === 'file') {
+        <button type="button" (click)="onOpenInNewTab()">Open in new tab</button>
+      }
       <button type="button" (click)="onCopy()">Copy</button>
     }
     @if (vault.clipboard(); as clip) {
