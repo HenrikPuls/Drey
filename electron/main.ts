@@ -200,6 +200,16 @@ function registerPluginProtocol(): void {
     '.svg': 'image/svg+xml',
     '.png': 'image/png',
     '.woff2': 'font/woff2',
+    // What the diagrams plugin's bundled web app serves besides the above
+    // (ADR-0064); Windows' file:// MIME guessing is registry-dependent.
+    '.gif': 'image/gif',
+    '.jpg': 'image/jpeg',
+    '.ico': 'image/x-icon',
+    '.xml': 'application/xml; charset=utf-8',
+    '.txt': 'text/plain; charset=utf-8',
+    '.woff': 'font/woff',
+    '.ttf': 'font/ttf',
+    '.wasm': 'application/wasm',
   };
   protocol.handle('plugin', async (request) => {
     let url: URL;
@@ -800,6 +810,7 @@ if (!app.requestSingleInstanceLock()) {
       syncMcpHttp: () => syncMcpHttpTransport(mcpHttp, appConfig),
       syncVaultWatcher: () => vaultWatcher.syncFromConfig(),
       fullVaultRefresh: () => vaultAnnouncer.announceFullRefresh(),
+      announceVaultChange: (changes) => vaultAnnouncer.announceExternal(changes),
       pluginHost,
     });
     // The File/Edit/Selection/View menus are drawn by the renderer titlebar

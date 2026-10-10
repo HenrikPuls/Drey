@@ -53,7 +53,7 @@ if (!fs.existsSync(exePath)) {
 
 const asarLib = require('@electron/asar');
 const asarPath = path.join(path.dirname(exePath), 'resources', 'app.asar');
-const BUILTIN_IDS = ['assistant', 'browser', 'meeting', 'tags', 'tasks', 'templates'];
+const BUILTIN_IDS = ['assistant', 'browser', 'drawio', 'meeting', 'tags', 'tasks', 'templates'];
 // Built but never shipped: the executable authoring reference stays out of
 // the package (electron-builder.yml files negation).
 const NOT_SHIPPED_IDS = ['sample'];
@@ -61,6 +61,14 @@ const NOT_SHIPPED_IDS = ['sample'];
 if (fs.existsSync(asarPath)) {
   const listed = /** @type {string[]} */ (asarLib.listPackage(asarPath)).map((p) =>
     p.replaceAll('\\', '/').replace(/^\//, ''),
+  );
+  // The diagrams plugin's draw.io web app (ADR-0064): every file type, not
+  // only the .js / .json / .css the general globs carry.
+  check(
+    'asar: draw.io web app (html + stencil xml + licence)',
+    listed.includes('dist-electron/plugins/drawio/webapp/index.html') &&
+      listed.some((p) => p.startsWith('dist-electron/plugins/drawio/webapp/') && p.endsWith('.xml')) &&
+      listed.includes('dist-electron/plugins/drawio/webapp/LICENSE'),
   );
   for (const id of BUILTIN_IDS) {
     const manifestRel = `dist-electron/plugins/${id}/plugin.json`;
@@ -144,6 +152,17 @@ try {
       p === undefined ? 'missing' : `status=${p.status} builtin=${String(p.builtin)}`,
     );
   }
+
+  // The draw.io web app is served out of the asar with an HTML type.
+  const editorPage = await page.evaluate(async () => {
+    const response = await fetch('plugin://drawio/webapp/index.html');
+    return { ok: response.ok, type: response.headers.get('content-type') ?? '' };
+  });
+  check(
+    'boot: plugin://drawio/webapp/index.html served as HTML',
+    editorPage.ok && editorPage.type.startsWith('text/html'),
+    JSON.stringify(editorPage),
+  );
 
   // -- 3. the renderer modules executed over plugin:// (the assistant
   //       plugin's panel body is mounted in the right dock, expanded by

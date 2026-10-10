@@ -64,6 +64,8 @@ export const IPC_CHANNELS = {
   vaultListFiles: 'vault:list-files',
   vaultReadFile: 'vault:read-file',
   vaultWriteFile: 'vault:write-file',
+  vaultWriteBinary: 'vault:write-binary',
+  vaultReadBinary: 'vault:read-binary',
   vaultSaveAsset: 'vault:save-asset',
   vaultSaveAssetFromUrl: 'vault:save-asset-from-url',
   vaultCreateFile: 'vault:create-file',
@@ -908,8 +910,34 @@ export interface DreyApi {
    * `relativePath` rules and rejection conditions as `readVaultFile`;
    * `vaultId` defaults to the active vault. Resolves to the file's new
    * `modifiedMs` after the write.
+   *
+   * `opts.announce` (milestone 64) also runs the change round for this one
+   * path -- the `vault:changed` push, so the file tree shows a new file
+   * and pictures of the file reload. Off by default: most callers write a
+   * file they are about to refresh themselves.
    */
-  writeVaultFile(relativePath: string, content: string, vaultId?: string): Promise<number>;
+  writeVaultFile(
+    relativePath: string,
+    content: string,
+    vaultId?: string,
+    opts?: { announce?: boolean },
+  ): Promise<number>;
+
+  /** The raw bytes of one vault file (milestone 64); path rules as `readVaultFile`. */
+  readVaultBinary(relativePath: string, vaultId?: string): Promise<Uint8Array>;
+
+  /**
+   * Overwrites (or creates) one binary file at an exact vault-relative
+   * path (milestone 64) -- unlike `saveVaultAsset`, the caller names the
+   * file. Same path rules as `writeVaultFile`, including `opts.announce`.
+   * Resolves to the file's new `modifiedMs`.
+   */
+  writeVaultBinary(
+    relativePath: string,
+    bytes: Uint8Array,
+    vaultId?: string,
+    opts?: { announce?: boolean },
+  ): Promise<number>;
 
   /**
    * Saves a binary asset -- a pasted or dropped image -- into an

@@ -14,11 +14,49 @@ import { resolveAssetRef, normalizeRelative } from '../../../shared/asset-refs';
 
 export { normalizeRelative };
 
+/**
+ * How often each asset was reported changed this session (milestone 64).
+ * An `<img>` never refetches an unchanged URL, so a picture rewritten on
+ * disk -- a diagram saved by its editor tab -- gets `?v=<n>` appended; the
+ * serving handler ignores the query.
+ */
+const assetRevisions = new Map<string, number>();
+
 function toAssetUrl(relative: string, vaultId: string | null): string {
   const encoded = relative.split('/').map(encodeURIComponent).join('/');
-  return vaultId !== null && vaultId !== ''
-    ? `drey-asset://${vaultId}/asset/${encoded}`
-    : `drey-asset://asset/${encoded}`;
+  const url =
+    vaultId !== null && vaultId !== ''
+      ? `drey-asset://${vaultId}/asset/${encoded}`
+      : `drey-asset://asset/${encoded}`;
+  const revision = assetRevisions.get(relative);
+  return revision === undefined ? url : `${url}?v=${revision}`;
+}
+
+/**
+ * Vault files changed on disk (`vault:changed` push): every picture of
+ * them -- already on screen or rendered later -- loads the new content.
+ * `root` is where shown pictures are looked up (the document).
+ */
+export function refreshChangedAssets(
+  vaultId: string | undefined,
+  paths: readonly string[],
+  root: ParentNode,
+): void {
+  const changed = new Set(paths);
+  for (const path of changed) {
+    assetRevisions.set(path, (assetRevisions.get(path) ?? 0) + 1);
+  }
+  for (const image of Array.from(root.querySelectorAll('img'))) {
+    const src = image.getAttribute('src') ?? '';
+    const ref = assetUrlToVaultPath(src);
+    if (ref === null || !changed.has(ref.path)) {
+      continue;
+    }
+    if (vaultId !== undefined && ref.vaultId !== null && ref.vaultId !== vaultId) {
+      continue;
+    }
+    image.setAttribute('src', `${src.split('?')[0]}?v=${assetRevisions.get(ref.path)}`);
+  }
 }
 
 /**

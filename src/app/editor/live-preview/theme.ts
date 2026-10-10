@@ -100,6 +100,14 @@ export const livePreviewTheme = EditorView.theme(
       borderRadius: 'var(--radius-xs)',
       verticalAlign: 'text-bottom',
     },
+    // An all-but-invisible picture: a box big enough for the hover buttons,
+    // outlined so there is something to aim at. The picture is not scaled.
+    '.lp-image-tiny': {
+      minWidth: '72px',
+      minHeight: '32px',
+      outline: '1px dashed var(--border-strong)',
+      borderRadius: 'var(--radius-xs)',
+    },
     '.lp-image-missing': {
       color: 'var(--text-faint)',
       fontStyle: 'italic',

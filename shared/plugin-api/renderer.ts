@@ -61,6 +61,7 @@ export type {
   EditorContextMenuTarget,
   EditorExtensionSlot,
   EditorSurfaceContext,
+  FileOpenerContrib,
   MenuContribution,
   OpenDocumentInfo,
   PluginChatOptions,
@@ -73,4 +74,5 @@ export type {
   PluginStatusContext,
   PluginWidgetContrib,
   RewriteRequest,
+  ToolbarButtonContrib,
 } from './plugin-api';

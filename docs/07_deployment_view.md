@@ -149,6 +149,21 @@ portable exe. `verify:pack` asserts the absence.
   they entered (`npx …`, `uvx …`, an executable): the runtime it needs
   must be installed on the machine, Drey bundles none.
 
+- **The draw.io web app** (milestone 64, [ADR-0064](09_architecture_decisions/0064-drawio-diagrams.md)) is the one
+  part of the package that comes from neither git nor npm.
+  `npm run fetch:drawio` (`scripts/fetch-drawio.mjs`) downloads the
+  release pinned in `plugins/drawio/drawio-version.json`, checks its
+  SHA-256 and unpacks a trimmed copy (about 2800 files, 55 MB) plus the
+  licence text into `plugins/drawio/vendor/webapp/` (gitignored);
+  `build:plugins` copies it to `dist-electron/plugins/drawio/webapp/`,
+  and the `files` list carries that folder whole
+  (`dist-electron/plugins/drawio/webapp/**` — the general globs take only
+  `.js` / `.json` / `.css`). `npm run pack` / `pack:dir` run the fetch
+  first, so the build machine needs network access to GitHub once per
+  draw.io version. It is served from inside the asar over `plugin://`.
+  `npm run dev` and the unit tests do not need it; the diagram e2e tests
+  skip without it.
+
 No native modules anywhere (`nspell` and `yaml` are pure JS), so there is
 **no `node-gyp` / electron-rebuild step**.
 

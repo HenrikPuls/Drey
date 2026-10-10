@@ -14,6 +14,7 @@ import { DailyNoteManager } from '../daily-note';
 import { LinkRewriter } from '../link-rewriter';
 import { NoteManager } from '../note-manager';
 import { PluginHost } from '../plugin-host';
+import { ExternalVaultChanges } from '../vault-change-announcer';
 import { VaultManager } from '../vault-manager';
 
 export interface VaultHandlerDeps {
@@ -25,6 +26,8 @@ export interface VaultHandlerDeps {
   syncVaultWatcher: () => Promise<void>;
   /** One full external-change round: index rebuild + `vault:changed` push. */
   fullVaultRefresh: () => void;
+  /** The change round for named paths of one vault (plugins + renderer push). */
+  announceVaultChange: (changes: ExternalVaultChanges) => void;
 }
 
 /**
@@ -47,6 +50,7 @@ export function registerVaultHandlers({
   pluginHost,
   syncVaultWatcher,
   fullVaultRefresh,
+  announceVaultChange,
 }: VaultHandlerDeps): void {
   const rebuildIndexes = async (): Promise<void> => {
     // Plugins re-read whatever they cache on any index-affecting change.
@@ -125,13 +129,55 @@ export function registerVaultHandlers({
   );
   ipcMain.handle(
     IPC_CHANNELS.vaultWriteFile,
-    async (_event, relativePath: string, content: string, vaultId?: string): Promise<number> => {
+    async (
+      _event,
+      relativePath: string,
+      content: string,
+      vaultId?: string,
+      opts?: { announce?: boolean },
+    ): Promise<number> => {
       const resolvedVaultId = vaultManager.resolveVaultId(vaultId);
       const modifiedMs = await vaultManager.writeFile(relativePath, content, resolvedVaultId, {
         origin: 'app',
       });
+      if (opts?.announce === true) {
+        // The caller asked for the whole round (milestone 64): plugins AND
+        // the renderer push, so the tree and open views follow the write.
+        announceVaultChange({
+          vaultId: resolvedVaultId,
+          changedPaths: [relativePath],
+          deletedPaths: [],
+        });
+        return modifiedMs;
+      }
       // A raw write bypasses the note:save pipeline — tell plugins directly.
       pluginHost.emitVaultChange({ kind: 'write', path: relativePath, vaultId: resolvedVaultId });
+      return modifiedMs;
+    },
+  );
+  ipcMain.handle(
+    IPC_CHANNELS.vaultReadBinary,
+    (_event, relativePath: string, vaultId?: string): Promise<Uint8Array> =>
+      vaultManager.readBinaryFile(relativePath, vaultId),
+  );
+  ipcMain.handle(
+    IPC_CHANNELS.vaultWriteBinary,
+    async (
+      _event,
+      relativePath: string,
+      bytes: Uint8Array,
+      vaultId?: string,
+      opts?: { announce?: boolean },
+    ): Promise<number> => {
+      const resolvedVaultId = vaultManager.resolveVaultId(vaultId);
+      const modifiedMs = await vaultManager.writeBinaryFile(relativePath, bytes, resolvedVaultId);
+      if (opts?.announce === true) {
+        announceVaultChange({
+          vaultId: resolvedVaultId,
+          changedPaths: [relativePath],
+          deletedPaths: [],
+        });
+      }
       return modifiedMs;
     },
   );

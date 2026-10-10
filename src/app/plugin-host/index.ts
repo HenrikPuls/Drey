@@ -22,6 +22,7 @@ export { DropDecoderRegistry } from './drop-decoder-registry.service';
 export {
   MenuContributionsService,
   EditorContextMenuRegistry,
+  ToolbarContributionsService,
   type ContributableMenu,
 } from './menu-contributions.service';
 export { HOST_CODEMIRROR } from './runtime-exports';

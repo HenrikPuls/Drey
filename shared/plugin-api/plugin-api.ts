@@ -161,6 +161,22 @@ export interface PluginDocKindContrib {
   onFocused?(path: string, focused: boolean): void;
 }
 
+/**
+ * Takes over the opening of vault files by name suffix (SDK 1.16,
+ * ADR-0064), ahead of the base text / image / PDF routing. `open` is
+ * expected to add a tab of the plugin's own doc kind
+ * (`documents.addDoc`); when it throws, the base routing applies.
+ */
+export interface FileOpenerContrib {
+  /**
+   * Lower-case name suffixes including the dot (`.drawio`, `.drawio.svg`).
+   * The longest matching suffix across all openers wins.
+   */
+  readonly extensions: readonly string[];
+  /** `vaultId` is the file's vault (ADR-0051), null when none is known. */
+  open(path: string, vaultId: string | null): void;
+}
+
 /** One menu row. Either run a registered command or pass a closure. */
 export interface MenuContribution {
   /**
@@ -172,6 +188,19 @@ export interface MenuContribution {
   readonly menu: 'file' | 'edit' | 'selection' | 'view' | 'editor-more';
   readonly label: string;
   readonly hint?: string;
+  readonly commandId?: string;
+  run?(): void;
+}
+
+/**
+ * One icon button in the editor's formatting bar (SDK 1.16), shown after
+ * the built-in buttons. Either run a registered command or pass a closure.
+ */
+export interface ToolbarButtonContrib {
+  /** An icon name from the host's vendored set (as for `ui.icon`). */
+  readonly icon: string;
+  /** Tooltip and accessible name -- the bar is icon-only. */
+  readonly title: string;
   readonly commandId?: string;
   run?(): void;
 }
@@ -375,6 +404,11 @@ export interface DreyPluginApi {
      */
     addDoc(kind: string, key: string, name: string): void;
     /**
+     * Open vault files with one of these name suffixes through this plugin
+     * instead of the base routing (SDK 1.16) — see `FileOpenerContrib`.
+     */
+    registerFileOpener(opener: FileOpenerContrib): Unsubscribe;
+    /**
      * Rename a contributed doc's tab label (e.g. the browser tab following
      * the page title). No-op for text docs.
      */
@@ -400,7 +434,28 @@ export interface DreyPluginApi {
     /** Every registered vault with its live status (ADR-0051). */
     listVaults(): Promise<readonly VaultStatus[]>;
     readFile(path: string, opts?: VaultOpOptions): Promise<{ content: string; modifiedMs: number }>;
-    writeFile(path: string, content: string, opts?: VaultOpOptions): Promise<number>;
+    /**
+     * `opts.announce` (SDK 1.16) also runs the change round for the path:
+     * the file tree shows a new file and pictures of the file reload.
+     */
+    writeFile(
+      path: string,
+      content: string,
+      opts?: VaultOpOptions & { readonly announce?: boolean },
+    ): Promise<number>;
+    /** The raw bytes of a vault file (SDK 1.16). */
+    readBinary(path: string, opts?: VaultOpOptions): Promise<Uint8Array>;
+    /**
+     * Overwrite (or create) a binary file at an exact vault-relative path
+     * (SDK 1.16) -- for a file the plugin owns and saves in place;
+     * `saveAsset` is for staging new attachments. `announce` as in
+     * `writeFile`.
+     */
+    writeBinary(
+      path: string,
+      bytes: Uint8Array,
+      opts?: VaultOpOptions & { readonly announce?: boolean },
+    ): Promise<number>;
     /**
      * Stage binary bytes as a vault asset (ADR-0024): saved under
      * `attachments/` beside `noteRelPath`, hash-named, collisions
@@ -474,6 +529,12 @@ export interface DreyPluginApi {
       factory: (context: EditorSurfaceContext) => unknown,
     ): Unsubscribe;
     registerDropDecoder(decoder: DropDecoderContrib): Unsubscribe;
+    /**
+     * Buttons appended to the formatting bar of every document editor
+     * (SDK 1.16). They act on the focused document, like the built-in
+     * ones (`documents.insertAtCursor`).
+     */
+    registerToolbarButtons(buttons: readonly ToolbarButtonContrib[]): Unsubscribe;
     /**
      * Items appended to the editor context menu, re-evaluated per open.
      * The callback receives the click target (embedded image vs image tab

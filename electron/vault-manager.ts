@@ -416,6 +416,27 @@ export class VaultManager {
     return stat.mtimeMs;
   }
 
+  /** The raw bytes of one vault file (milestone 64: a `.drawio.png` diagram). */
+  async readBinaryFile(relativePath: string, vaultId?: string): Promise<Uint8Array> {
+    const resolvedVault = this.registrationFor(vaultId);
+    return fsp.readFile(this.resolveInVault(relativePath, resolvedVault.id));
+  }
+
+  /**
+   * Overwrites (or creates) one binary file at an exact vault-relative
+   * path (milestone 64: a `.drawio.png` diagram saved in place). Unlike
+   * `saveAsset` the caller names the file. No history -- that is for notes.
+   */
+  async writeBinaryFile(relativePath: string, bytes: Uint8Array, vaultId?: string): Promise<number> {
+    const resolvedVault = this.registrationFor(vaultId);
+    const filePath = this.resolveInVault(relativePath, resolvedVault.id);
+    await fsp.mkdir(path.dirname(filePath), { recursive: true });
+    await fsp.writeFile(filePath, bytes);
+    const stat = await fsp.stat(filePath);
+    this.ownWrites?.recordWrite(resolvedVault.id, relativePath, stat.mtimeMs);
+    return stat.mtimeMs;
+  }
+
   /**
    * Writes a binary asset (a pasted / dropped image) into an `attachments/`
    * folder beside the note that will reference it, and returns the path to
