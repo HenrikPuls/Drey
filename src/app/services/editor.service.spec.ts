@@ -1000,6 +1000,41 @@ describe('EditorService', () => {
     });
   });
 
+  describe('documents that open in their own program (ADR-0066)', () => {
+    it('hands an Office file to the OS instead of opening a tab', async () => {
+      const opened: string[] = [];
+      let reads = 0;
+      const api = window.dreyApi as unknown as {
+        readVaultFile: unknown;
+        openVaultFileExternally: unknown;
+      };
+      api.readVaultFile = () => {
+        reads++;
+        return Promise.resolve({ content: 'PK', modifiedMs: 1 });
+      };
+      api.openVaultFileExternally = (path: string) => {
+        opened.push(path);
+        return Promise.resolve();
+      };
+      const before = service.openDocs().map((d) => d.path);
+
+      await service.openFile('docs/Report.DOCX');
+
+      expect(opened).toEqual(['docs/Report.DOCX']);
+      expect(reads).toBe(0);
+      expect(service.openDocs().map((d) => d.path)).toEqual(before);
+    });
+
+    it('shows the reason when the OS cannot open it', async () => {
+      (window.dreyApi as unknown as { openVaultFileExternally: unknown }).openVaultFileExternally =
+        () => Promise.reject(new Error('File not found: x.xlsx'));
+
+      await service.openFile('x.xlsx');
+
+      expect(service.error()).toBe('File not found: x.xlsx');
+    });
+  });
+
   describe('pdf tabs (kind: pdf, ADR-0052)', () => {
     it('opens a pdf without reading it as text and never dirty', async () => {
       let reads = 0;

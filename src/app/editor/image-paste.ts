@@ -1,6 +1,7 @@
 import { Extension } from '@codemirror/state';
 import { EditorView } from '@codemirror/view';
 import { imageExtension, pdfExtension } from '../../../shared/asset-name';
+import { externalDocumentExtension, localFileHref } from '../../../shared/external-document';
 import { noteRelativeLink } from '../../../shared/note-link';
 import { textExtension } from '../../../shared/text-extension';
 
@@ -18,7 +19,11 @@ import { textExtension } from '../../../shared/text-extension';
  *   Files panel open it as a PDF tab;
  * - a **vault file** dragged from the Files panel
  *   (`application/x-drey-vault-path`) -> an image or PDF is linked in
- *   place (no copy), a text file's contents are inserted raw;
+ *   place (no copy), a text file's contents are inserted raw, an Office
+ *   document is linked in place (ADR-0066);
+ * - an **Office document** from the OS (ADR-0066): a plain drop stages it
+ *   into `attachments/` like any other leftover file; an `Alt`-drop
+ *   copies nothing and links the file where it lives (`file:` link);
  * - a **web image** dragged from a browser -> downloaded via `saveFromUrl`
  *   and inserted with a visible `[Source](<url>)` line beneath it.
  *
@@ -56,6 +61,12 @@ export interface ImagePasteConfig {
    */
   dropClaimed?: (data: DataTransfer) => boolean;
   decodeDropped?: (data: DataTransfer) => Promise<string>;
+  /**
+   * The absolute path of a dropped OS file, `''` when it has none. Enables
+   * the `Alt`-drop that links a document where it lives instead of
+   * copying it into `attachments/` (ADR-0066).
+   */
+  pathForFile?: (file: File) => string;
   /** Shown to the user when a save / read fails, or a file is too large. */
   onError?: (message: string) => void;
 }
@@ -337,6 +348,44 @@ async function insertAttachedFile(
   }, config);
 }
 
+/** `[label](target)`, the target in `<...>` when it holds a space or a parenthesis. */
+function plainLink(label: string, target: string): string {
+  const safeLabel = label.replace(/[[\]]/g, '\\$&');
+  return /[ ()]/.test(target) ? `[${safeLabel}](<${target}>)` : `[${safeLabel}](${target})`;
+}
+
+/** Inserts `text` inline at the caret and parks the caret behind it. */
+function insertInline(view: EditorView, text: string): void {
+  const at = view.state.selection.main.from;
+  view.dispatch({ changes: { from: at, insert: text }, selection: { anchor: at + text.length } });
+}
+
+/**
+ * The documents of an `Alt`-drop that can be linked where they live
+ * (ADR-0066): files on the document allowlist with a local absolute path.
+ * Empty when the drop carries anything else -- the normal cascade then
+ * handles all of it.
+ */
+function linkableDocuments(
+  data: DataTransfer | null,
+  config: ImagePasteConfig,
+): { name: string; href: string }[] {
+  const pathFor = config.pathForFile;
+  const files = Array.from(data?.files ?? []);
+  if (!pathFor || files.length === 0) {
+    return [];
+  }
+  const out: { name: string; href: string }[] = [];
+  for (const file of files) {
+    const href = externalDocumentExtension(file.name) ? localFileHref(pathFor(file)) : null;
+    if (href === null) {
+      return [];
+    }
+    out.push({ name: file.name, href });
+  }
+  return out;
+}
+
 /**
  * A vault image or PDF dragged from the Files panel: link it in place, no
  * copy. Synchronous. `alt` stays empty for images and carries the file
@@ -494,6 +543,20 @@ export function imagePaste(config: ImagePasteConfig): Extension {
         return true;
       }
 
+      // `Alt`-drop of Office documents (ADR-0066): nothing is copied, each
+      // is linked where it lives. A plain drop falls through to the
+      // leftovers branch below and is staged into attachments/.
+      const linked = event.altKey ? linkableDocuments(data, config) : [];
+      if (linked.length) {
+        event.preventDefault();
+        const dropAt =
+          view.posAtCoords({ x: event.clientX, y: event.clientY }) ??
+          view.state.selection.main.from;
+        view.dispatch({ selection: { anchor: dropAt } });
+        insertInline(view, linked.map((doc) => plainLink(doc.name, doc.href)).join(' '));
+        return true;
+      }
+
       const files = imageFiles(data);
       // PDFs only when no image won the drop (ADR-0052; same precedence
       // the text branch below follows).
@@ -560,6 +623,16 @@ export function imagePaste(config: ImagePasteConfig): Extension {
             .catch((error: unknown) =>
               config.onError?.(error instanceof Error ? error.message : String(error)),
             );
+        } else if (externalDocumentExtension(vaultDrop.path)) {
+          // An Office document already in the vault: a plain link, no
+          // copy; a click opens it in its own program (ADR-0066).
+          insertInline(
+            view,
+            plainLink(
+              vaultDrop.path.split('/').pop() ?? '',
+              noteRelativeLink(config.notePath?.() ?? '', vaultDrop.path),
+            ),
+          );
         }
       } else if (url) {
         void insertFromUrl(view, url, config);

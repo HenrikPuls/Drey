@@ -195,6 +195,16 @@ toolchain is removable by deleting `.tools/`). Never assume a bare `node`,
   binary read / write, `announce` on vault writes, and plugin buttons in
   the formatting bar (`ToolbarContributionsService`); a changed picture
   now reloads in open notes (`refreshChangedAssets`).
+- **Office documents open in their own program** (milestone 66,
+  [ADR-0066](docs/09_architecture_decisions/0066-office-documents-open-in-their-own-program.md)):
+  Drey renders no Word / Excel / PowerPoint. A vault file whose
+  extension is on the document allowlist (`shared/external-document.ts`)
+  never opens as a tab — `EditorService.openFile` hands it to the OS
+  (`shell.openPath`, allowlist re-checked in main). A note link may also
+  be a local `file:` URL to a document outside the vault; nothing else
+  reaches `file:`, and never a network share. Dropping an Office file
+  copies it into `attachments/` and links it; **Alt-drop** links the
+  original instead.
 - **Git vaults** (milestone 65,
   [ADR-0065](docs/09_architecture_decisions/0065-git-vaults-source-control-plugin.md)):
   a vault can be a Git repository (its root or a folder inside it). The
@@ -830,7 +840,7 @@ packaging verified — see `docs/07_deployment_view.md`).
 closed 2026-10-10). This file does not restate them — the per-milestone
 record is:
 
-- [specs/changelog.md](specs/changelog.md) — milestones 22–65, newest
+- [specs/changelog.md](specs/changelog.md) — milestones 22–66, newest
   first, plus requirements and fixes
 - [docs/milestones-done.md](docs/milestones-done.md) — the archived
   build log, milestones 1–27
@@ -846,12 +856,11 @@ Open work and its order live in [specs/roadmap.md](specs/roadmap.md)
 ("Next milestones") — that list is binding; keep this summary in step
 with it.
 
-- **Last completed:** milestone 65 — Git vaults: file status in the
-  Files panel and the Source control panel (ADR-0065, req-40).
-  Milestones 59–65 are code-complete, owner verification pending.
-- **Next, in order:**
-  1. the Office remainder of Req-2 (needs a rendering strategy
-     discussion first)
+- **Last completed:** milestone 66 — Office documents open in their own
+  program (ADR-0066, the remainder of Req-2).
+  Milestones 59–66 are code-complete, owner verification pending.
+- **Next, in order:** nothing ordered — the owner picks from the backlog
+  in `specs/roadmap.md`.
 
 A milestone that is code-complete but not yet verified by the owner is
 marked "**Not yet manually verified by the owner**" in its changelog

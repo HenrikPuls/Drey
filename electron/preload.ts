@@ -1,4 +1,4 @@
-import { contextBridge, ipcRenderer, IpcRendererEvent } from 'electron';
+import { contextBridge, ipcRenderer, IpcRendererEvent, webUtils } from 'electron';
 import {
   AppConfig,
   CustomDictionary,
@@ -85,6 +85,9 @@ const dreyApi: DreyApi = {
     ipcRenderer.invoke(IPC_CHANNELS.uiSetZoom, factor),
   openExternal: (url: string): Promise<void> =>
     ipcRenderer.invoke(IPC_CHANNELS.openExternal, url),
+  openLocalDocument: (href: string): Promise<void> =>
+    ipcRenderer.invoke(IPC_CHANNELS.openLocalDocument, href),
+  pathForFile: (file: File): string => webUtils.getPathForFile(file),
   logMessage: (entry: LogEntry): Promise<void> =>
     ipcRenderer.invoke(IPC_CHANNELS.appLog, entry),
   // Startup splash (milestone 62): plain sends, no reply is needed.
@@ -111,6 +114,8 @@ const dreyApi: DreyApi = {
     ipcRenderer.invoke(IPC_CHANNELS.vaultRevealPath, relativePath, vaultId),
   openVaultFolderInTerminal: (dirRelativePath: string, vaultId: string): Promise<void> =>
     ipcRenderer.invoke(IPC_CHANNELS.vaultOpenInTerminal, dirRelativePath, vaultId),
+  openVaultFileExternally: (relativePath: string, vaultId?: string): Promise<void> =>
+    ipcRenderer.invoke(IPC_CHANNELS.vaultOpenExternally, relativePath, vaultId),
   listVaultFiles: (vaultId?: string): Promise<VaultFileEntry[]> =>
     ipcRenderer.invoke(IPC_CHANNELS.vaultListFiles, vaultId),
   readVaultFile: (relativePath: string, vaultId?: string): Promise<VaultFileContent> =>

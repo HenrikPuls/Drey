@@ -2675,3 +2675,13 @@ main-side plugin writes.
 | Diff dialog | `src/app/diff-view/diff-dialog.ts` + `diff-dialog.service.ts` | `api.ui.showDiff` (SDK 1.17): the shared `DiffView` as a read-only dialog, one comparison at a time. |
 | Change announcement | `electron/plugin-host/plugin-host.ts` + `vault-change-announcer.ts` | `ctx.vault.announceChanges` (SDK 1.17): with paths → `announceExternal` (index events for the `.md` paths, every path in the renderer push via `otherPaths`, so a clean tab of any file kind reloads); without → `announceFullRefresh(vaultId)`. |
 | Frontmatter rule | `shared/frontmatter.ts` (`touchUpdated`) + `electron/note-manager.ts` | A save sets `updated:` only where the key exists and adds nothing. Replaces `bumpUpdated` (which also filled `created:`). |
+
+## 5.39 Office documents open in their own program (milestone 66, [ADR-0066](09_architecture_decisions/0066-office-documents-open-in-their-own-program.md))
+
+| Block | Where | Responsibility |
+| --- | --- | --- |
+| Document allowlist | `shared/external-document.ts` | Pure: `externalDocumentExtension` (Office, OpenDocument, RTF, Visio / Project / Publisher / OneNote / Loop, `.msg` / `.eml`) and `localFileHref` (absolute local path → encoded `file:` link, a network share refused). |
+| Open routing | `src/app/services/editor.service.ts` (`openFile`) | After the plugin file openers and before image / PDF / text: a file on the allowlist is handed to `openVaultFileExternally` — no tab, no clean-tab replace; a failure lands in `error`. |
+| Link click | `src/app/editor/editor.ts` (`activateLink`) | A `file:` target goes to `openLocalDocument`; vault-relative targets reach the routing above through `openFile`. |
+| Drop cascade | `src/app/editor/image-paste.ts` | Alt-drop of local documents inserts `file:` links and copies nothing (`pathForFile` → `webUtils.getPathForFile`); a plain drop is the milestone-31 staging into `attachments/`; a vault document dragged from the Files panel is linked in place. |
+| Main guard | `electron/open-document.ts` | `openDocumentInDefaultProgram` (allowlist + existence, then `shell.openPath`) and `localPathFromFileHref` (local `file:` URLs only). Reached by `vault:open-externally` (`VaultManager.openExternally`, path resolved inside the vault) and `app:open-local-document`. |

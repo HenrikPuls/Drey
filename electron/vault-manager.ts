@@ -18,6 +18,7 @@ import { NOTE_FILE } from '../shared/wikilinks';
 import type { NoteHistoryStore } from './history/note-history-store';
 import { OwnWriteLedger } from './own-write-ledger';
 import { refocusRenderer } from './focus';
+import { openDocumentInDefaultProgram } from './open-document';
 
 /**
  * `vault-config.json` v2 (ADR-0051): every registered vault plus which one
@@ -263,6 +264,15 @@ export class VaultManager {
    */
   revealPath(relativePath: string, vaultId?: string): void {
     shell.showItemInFolder(this.resolveInVault(relativePath, vaultId));
+  }
+
+  /**
+   * Opens a vault file in the program the OS associates with it
+   * (ADR-0066) -- only document types on the allowlist, and only a path
+   * resolving inside a registered vault.
+   */
+  async openExternally(relativePath: string, vaultId?: string): Promise<void> {
+    await openDocumentInDefaultProgram(this.resolveInVault(relativePath, vaultId));
   }
 
   /**

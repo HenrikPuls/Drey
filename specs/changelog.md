@@ -67,6 +67,33 @@ recorded as an explicit decision. The parity checklist lives in
   caret in place. Always on, no setting —
   parity with the `Alt+ArrowLeft` / `Alt+ArrowRight` chords, which
   stay unchanged.
+### Milestone 66 — Office documents open in their own program (Req-2 remainder)
+
+**Not yet manually verified by the owner.**
+
+([ADR-0066](../docs/09_architecture_decisions/0066-office-documents-open-in-their-own-program.md))
+
+Req-2 asked for Office documents rendered inline. After the rendering
+strategy discussion the owner decided against rendering: the files open
+in the program the OS associates with them.
+
+- **Word, Excel, PowerPoint and similar files open in their own
+  program.** Click one in the Files panel, pick it in the quick switcher
+  or Ctrl-click a link to it in a note — the OS opens it. Before, such a
+  file opened in Drey as an unreadable text tab. The list of types is
+  fixed (`shared/external-document.ts`): Office in all its forms,
+  OpenDocument, RTF, Visio, Project, Publisher, OneNote, Loop, `.msg` /
+  `.eml`. Executables, scripts and shortcuts are never opened this way.
+- **Drop an Office file on a note** — as before, it is copied into the
+  note's `attachments/` and linked. New: hold **Alt** while dropping and
+  nothing is copied; the note gets a link to the file where it lives
+  (`file:///C:/…`). Such a link works only on this machine and breaks
+  when the file moves.
+- **Drag an Office file from the Files panel onto a note** to link it
+  in place (before, nothing happened).
+- A link to a file on a network share (`file://server/…`) is refused,
+  with a message.
+
 ### Milestone 65 — Git vaults: file status and a Source control panel (req-40)
 
 **Not yet manually verified by the owner.**

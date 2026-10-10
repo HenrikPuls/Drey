@@ -198,6 +198,11 @@ export class VaultService {
     await window.dreyApi.revealVaultPath(relativePath, vaultId);
   }
 
+  /** Opens a vault document in its default program (ADR-0066). */
+  async openExternally(relativePath: string, vaultId: string | null): Promise<void> {
+    await window.dreyApi.openVaultFileExternally(relativePath, vaultId ?? undefined);
+  }
+
   /** Opens the OS terminal in a vault-relative folder. */
   async openInTerminal(dirRelativePath: string, vaultId: string): Promise<void> {
     await window.dreyApi.openVaultFolderInTerminal(dirRelativePath, vaultId);

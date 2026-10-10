@@ -1,6 +1,7 @@
 import { app, BrowserWindow, ipcMain, shell } from 'electron';
 import { AppInfo, EditCommand, IPC_CHANNELS } from '../../shared/ipc-api';
 import { logFromRenderer, logLine } from '../logger';
+import { localPathFromFileHref, openDocumentInDefaultProgram } from '../open-document';
 
 /**
  * App-shell IPC: version info, the frameless-titlebar window controls
@@ -83,6 +84,17 @@ export function registerAppHandlers(getMainWindow: () => BrowserWindow | null): 
     if (typeof url === 'string' && /^(https?:|mailto:)/i.test(url.trim())) {
       void shell.openExternal(url.trim());
     }
+  });
+
+  // Ctrl/Cmd-click on a `file:` link (ADR-0066): the one exception to the
+  // guard above, and a narrow one -- a document on this machine, by
+  // extension allowlist, opened in its own program. Never an executable,
+  // never a network share.
+  ipcMain.handle(IPC_CHANNELS.openLocalDocument, async (_event, href: unknown): Promise<void> => {
+    if (typeof href !== 'string') {
+      throw new Error('This link is not a file link.');
+    }
+    await openDocumentInDefaultProgram(localPathFromFileHref(href));
   });
 
   // Renderer -> log file (`<userData>/logs/drey.log`). The packaged build

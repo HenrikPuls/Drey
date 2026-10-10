@@ -57,11 +57,17 @@ history as milestone 60. The 2026-10-10 startup work followed: analysis
 + speed as milestone 61, the splash window as milestone 62. Then Req-31,
 the MCP client with the assistant's tool groups, as milestone 63,
 req-19, draw.io diagrams, as milestone 64, and — on an owner request
-outside the list — Git vaults (req-40) as milestone 65.)
+outside the list — Git vaults (req-40) as milestone 65. Its last item,
+the Req-2 Office remainder, shipped as milestone 66 — not as rendering:
+Office documents open in their own program, ADR-0066.)
 
-1. The **Req-2 Office remainder** (in the backlog below). The file-opener
-   seam of milestone 64 (a plugin opens files by name suffix) is the
-   intended way in.
+Nothing is ordered at the moment; the next item is the owner's pick from
+the backlog below.
+
+Follow-ups of milestone 66 (ADR-0066), none committed: rendering Office
+documents in a tab (a plugin on the milestone-64 file-opener seam),
+"Open in default program" for other file types in the Files panel's
+context menu, a setting for the default drop behaviour (copy or link).
 
 Follow-ups of milestone 64 (ADR-0064), none committed: a dirty state /
 manual save for plugin tabs, "New diagram" in the Files panel's context
@@ -101,10 +107,6 @@ on interactive use.
 
 ### Feature requests (backlog, unordered)
 
-- **Req-2 (remainder)** — render Office documents inline (Word, Excel,
-  PowerPoint, Loop). PDF slice shipped (milestone 30, ADR-0052: drag-in
-  → `attachments/` → built-in viewer); PDF export also shipped (req-16).
-  Office formats remain unrendered. (Effort TBD.)
 - **Req-6** — further CodeMirror 6 themes on demand (bundled set + `@uiw`
   themes ship since milestone 16).
 - **Req-18** — flow descriptions / agentic workflow automation

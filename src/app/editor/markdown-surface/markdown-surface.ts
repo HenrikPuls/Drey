@@ -794,6 +794,9 @@ export class MarkdownSurface implements AfterViewInit, OnDestroy {
       // (the .ics/.msg meeting decoder is the Meeting plugin's).
       dropClaimed: (data) => this.dropDecoders.claims(data),
       decodeDropped: async (data) => (await this.dropDecoders.decode(data)) ?? '',
+      // `Alt`-drop links a document where it lives (ADR-0066).
+      pathForFile: (file) =>
+        typeof window.dreyApi?.pathForFile === 'function' ? window.dreyApi.pathForFile(file) : '',
       onError: (message) => this.editor.error.set(message),
     };
   }

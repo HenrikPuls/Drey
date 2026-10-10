@@ -121,13 +121,23 @@ export class Editor implements AfterViewInit, OnDestroy {
 
   /**
    * Passed to the surface: a `Ctrl`/`Cmd`-click on a Markdown link. Web /
-   * mail targets open in the OS default handler; a vault-relative path
-   * opens as a tab. An arrow function so it keeps `this`.
+   * mail targets open in the OS default handler; a `file:` link opens the
+   * document in its own program; a vault-relative path opens as a tab
+   * (or, for a document type, in its own program too). An arrow function
+   * so it keeps `this`.
    */
   protected readonly activateLink = (href: string): void => {
     const raw = href.trim();
     if (/^(https?:|mailto:)/i.test(raw)) {
       void window.dreyApi.openExternal(raw);
+      return;
+    }
+    if (/^file:/i.test(raw)) {
+      // A document linked where it lives, outside the vault (ADR-0066):
+      // main opens it in its own program, or says why not.
+      window.dreyApi.openLocalDocument(raw).catch((err: unknown) =>
+        this.editor.error.set(err instanceof Error ? err.message : String(err)),
+      );
       return;
     }
     if (/^[a-z][a-z0-9+.-]*:/i.test(raw) || raw.startsWith('//')) {

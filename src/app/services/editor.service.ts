@@ -1,5 +1,6 @@
 import { Injectable, computed, inject, signal } from '@angular/core';
 import { imageExtension, pdfExtension } from '../../../shared/asset-name';
+import { externalDocumentExtension } from '../../../shared/external-document';
 import { dailyPathFor } from '../../../shared/daily';
 import { externalDocKey } from '../../../shared/external-open';
 import { ActionOutcome, NoteSaveRequest } from '../../../shared/ipc-api';
@@ -652,6 +653,17 @@ export class EditorService {
     // otherwise be an image.
     if (this.fileOpeners.open(relativePath, resolvedVault)) {
       this.closeReplacedTab(victim);
+      return;
+    }
+
+    // An Office document (or another type on the allowlist) opens in its
+    // own program, not in a tab (ADR-0066) -- so no tab is replaced either.
+    if (externalDocumentExtension(relativePath)) {
+      try {
+        await this.api.openVaultFileExternally(relativePath, resolvedVault ?? undefined);
+      } catch (err) {
+        this.error.set(err instanceof Error ? err.message : String(err));
+      }
       return;
     }
 

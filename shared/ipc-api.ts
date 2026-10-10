@@ -42,6 +42,7 @@ export const IPC_CHANNELS = {
   editExec: 'edit:exec',
   uiSetZoom: 'ui:set-zoom',
   openExternal: 'app:open-external',
+  openLocalDocument: 'app:open-local-document',
   appLog: 'app:log',
   // Startup splash (milestone 62): renderer stage reports + the one-shot
   // "workspace ready" that triggers the hidden-until-ready handover.
@@ -60,6 +61,7 @@ export const IPC_CHANNELS = {
   vaultRevealFolder: 'vault:reveal-folder',
   vaultRevealPath: 'vault:reveal-path',
   vaultOpenInTerminal: 'vault:open-in-terminal',
+  vaultOpenExternally: 'vault:open-externally',
   vaultGetActiveId: 'vault:get-active-id',
   vaultListFiles: 'vault:list-files',
   vaultReadFile: 'vault:read-file',
@@ -704,6 +706,22 @@ export interface DreyApi {
   openExternal(url: string): Promise<void>;
 
   /**
+   * Opens the document a `file:` link in a note points at in its default
+   * program (ADR-0066). Main honours only a path on this machine whose
+   * extension is on the document allowlist (`shared/external-document.ts`);
+   * rejects with a user message otherwise, or when the file is missing.
+   */
+  openLocalDocument(href: string): Promise<void>;
+
+  /**
+   * The absolute path of a file the user dropped or picked (Electron's
+   * `webUtils.getPathForFile`); `''` for a `File` that has none (pasted
+   * bytes). Renderer-only knowledge of where a dropped document lives --
+   * backs the "link instead of copy" drop (ADR-0066).
+   */
+  pathForFile(file: File): string;
+
+  /**
    * Appends a line to the main process's log file
    * (`<userData>/logs/drey.log`). Best-effort, fire-and-forget -- the
    * renderer mirrors `console.error` / `window.onerror` /
@@ -878,6 +896,14 @@ export interface DreyApi {
    * folder. Throws when no terminal can be launched (Linux best effort).
    */
   openVaultFolderInTerminal(dirRelativePath: string, vaultId: string): Promise<void>;
+
+  /**
+   * Opens a vault file in the program the OS associates with it
+   * (ADR-0066) -- Office documents and the like, which Drey has no viewer
+   * for. Rejects when the extension is not on the document allowlist, the
+   * file is missing, or the OS has no program for it.
+   */
+  openVaultFileExternally(relativePath: string, vaultId?: string): Promise<void>;
 
   /**
    * Recursively lists a vault's contents. `vaultId` defaults to the active

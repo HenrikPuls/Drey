@@ -40,8 +40,9 @@ function firePaste(view: EditorView, data: DataTransfer): void {
   view.contentDOM.dispatchEvent(event);
 }
 
-function fireDrop(view: EditorView, data: DataTransfer): Event {
+function fireDrop(view: EditorView, data: DataTransfer, altKey = false): Event {
   const event = new Event('drop', { bubbles: true, cancelable: true });
+  Object.defineProperty(event, 'altKey', { value: altKey });
   Object.defineProperty(event, 'dataTransfer', { value: data });
   Object.defineProperty(event, 'clientX', { value: 0 });
   Object.defineProperty(event, 'clientY', { value: 0 });
@@ -512,6 +513,74 @@ describe('imagePaste', () => {
       expect(errors).toEqual(['The invite has no event in it.']);
       expect(view.state.doc.toString()).toBe('# note\n');
     });
+
+  describe('Office documents (ADR-0066)', () => {
+    it('Alt-drop links the document where it lives and copies nothing', async () => {
+      let saved = false;
+      view = mount('see ', {
+        save: async () => 'x',
+        saveNamed: async () => {
+          saved = true;
+          return 'attachments/report.docx';
+        },
+        notePath: () => 'foo.md',
+        pathForFile: () => 'C:\\Docs\\My report (v2).docx',
+      });
+      view.dispatch({ selection: { anchor: view.state.doc.length } });
+      const event = fireDrop(view, transfer([fakeFile('', 'My report (v2).docx')]), true);
+      await settle();
+      expect(event.defaultPrevented).toBe(true);
+      expect(saved).toBe(false);
+      expect(view.state.doc.toString()).toContain(
+        '[My report (v2).docx](file:///C:/Docs/My%20report%20%28v2%29.docx)',
+      );
+    });
+
+    it('Alt-drop of a non-document file falls back to the normal staging', async () => {
+      let savedName = '';
+      view = mount('# note\n', {
+        save: async () => 'x',
+        saveNamed: async (_bytes, fileName) => {
+          savedName = fileName;
+          return 'attachments/tool.zip';
+        },
+        notePath: () => 'foo.md',
+        pathForFile: () => 'C:\\Docs\\tool.zip',
+      });
+      fireDrop(view, transfer([fakeFile('', 'tool.zip')]), true);
+      await settle();
+      expect(savedName).toBe('tool.zip');
+      expect(view.state.doc.toString()).toContain('[tool.zip](attachments/tool.zip)');
+    });
+
+    it('Alt-drop without a local path stages the document as usual', async () => {
+      view = mount('# note\n', {
+        save: async () => 'x',
+        saveNamed: async () => 'attachments/report.docx',
+        notePath: () => 'foo.md',
+        pathForFile: () => '',
+      });
+      fireDrop(view, transfer([fakeFile('', 'report.docx')]), true);
+      await settle();
+      expect(view.state.doc.toString()).toContain('[report.docx](attachments/report.docx)');
+    });
+
+    it('links a vault document dragged from the Files panel in place', async () => {
+      let saved = false;
+      view = mount('see ', {
+        save: async () => {
+          saved = true;
+          return 'x';
+        },
+        notePath: () => 'projects/foo.md',
+      });
+      view.dispatch({ selection: { anchor: view.state.doc.length } });
+      fireDrop(view, transfer([], { 'application/x-drey-vault-path': 'v1::docs/Plan 2026.xlsx' }));
+      await settle();
+      expect(saved).toBe(false);
+      expect(view.state.doc.toString()).toContain('[Plan 2026.xlsx](<../docs/Plan 2026.xlsx>)');
+    });
+  });
 
   describe('generic OS file staging (milestone 31)', () => {
     it('stages a leftover file name-preserving and inserts a Markdown link', async () => {
