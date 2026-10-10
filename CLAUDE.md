@@ -763,9 +763,11 @@ Open work and its order live in [specs/roadmap.md](specs/roadmap.md)
 ("Next milestones") — that list is binding; keep this summary in step
 with it.
 
-- **Last completed:** milestone 60 — save conflicts are asked + local
-  note history (ADR-0060). Milestones 59 and 60 are code-complete, owner
-  verification pending.
+- **Last completed:** milestone 62 — splash window with logo + progress
+  (ADR-0062: separate frameless splash fed by main + renderer stages,
+  main window hidden until the renderer reports ready, fail-open
+  timers). Milestones 59–62 are code-complete, owner verification
+  pending.
 - **Next, in order:**
   1. MCP client (Req-31) with unified assistant tool gating — the vehicle
      for web search in the assistant

@@ -43,6 +43,10 @@ export const IPC_CHANNELS = {
   uiSetZoom: 'ui:set-zoom',
   openExternal: 'app:open-external',
   appLog: 'app:log',
+  // Startup splash (milestone 62): renderer stage reports + the one-shot
+  // "workspace ready" that triggers the hidden-until-ready handover.
+  startupProgress: 'startup:progress',
+  startupReady: 'startup:ready',
   vaultGetActive: 'vault:get-active',
   // Multi-vault registry (ADR-0051): the vaults the app knows about, one
   // native-picker add, registry-only remove, display-name rename, explicit
@@ -275,6 +279,16 @@ export interface LogEntry {
   message: string;
   /** Optional structured payload (a stack, a state snapshot); JSON-stringified. */
   context?: unknown;
+}
+
+/**
+ * One startup progress stage (milestone 62): `pct` is 0–100 on the
+ * stage-weighted scale main and the renderer share (main: settings →
+ * plugins → interface; renderer: workspace → session → ready).
+ */
+export interface StartupProgressReport {
+  label: string;
+  pct: number;
 }
 
 /**
@@ -666,6 +680,19 @@ export interface DreyApi {
    * problem in the packaged build (no DevTools) leaves a trace.
    */
   logMessage(entry: LogEntry): Promise<void>;
+
+  /**
+   * Startup progress (milestone 62): fire-and-forget stage reports the
+   * renderer feeds to main while the splash window is up — main forwards
+   * them to the splash's bar + activity line. Silently ignored after the
+   * handover.
+   */
+  reportStartupProgress(report: StartupProgressReport): void;
+  /**
+   * The workspace is ready: main shows the (until now hidden) main window
+   * and closes the splash — the ADR-0062 handover. One-shot per boot.
+   */
+  reportStartupReady(): void;
 
   /** The full app config (`shared/app-config.ts`), always normalised/complete. */
   getConfig(): Promise<AppConfig>;

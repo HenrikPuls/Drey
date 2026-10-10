@@ -603,8 +603,20 @@ export class EditorService {
    * flows pass `keepFocused: true`: the session restore reopens the whole
    * saved tab set, `saveAs` swaps the tab itself, and the Files panel's
    * multi-select open replaces only on its first call.
+   *
+   * `prefetched` (milestone 61): a file read already in flight (the
+   * session restore fires all of its reads in parallel) — the content is
+   * used as-is instead of a second read. The raw (CRLF-intact) content,
+   * exactly as `readVaultFile` would return it.
    */
-  async openFile(relativePath: string, vaultId?: string, opts: { keepFocused?: boolean } = {}): Promise<void> {
+  async openFile(
+    relativePath: string,
+    vaultId?: string,
+    opts: {
+      keepFocused?: boolean;
+      prefetched?: { content: string; modifiedMs: number };
+    } = {},
+  ): Promise<void> {
     if (!this.api) {
       return;
     }
@@ -637,7 +649,9 @@ export class EditorService {
     this.isLoading.set(true);
     this.error.set(null);
     try {
-      const { content, modifiedMs } = await this.api.readVaultFile(relativePath, resolvedVault ?? undefined);
+      const { content, modifiedMs } =
+        opts.prefetched ??
+        (await this.api.readVaultFile(relativePath, resolvedVault ?? undefined));
       this.addDoc(this.makeDoc(relativePath, resolvedVault, content, modifiedMs, true));
       this.closeReplacedTab(victim);
     } catch (err) {

@@ -82,6 +82,7 @@ export class PluginHostService {
     if (this.loaded()) {
       return;
     }
+    const started = performance.now();
     let descriptors: PluginDescriptorForRenderer[];
     try {
       descriptors = await window.dreyApi.listPlugins();
@@ -92,14 +93,44 @@ export class PluginHostService {
     }
     this.plugins.set(descriptors);
 
-    for (const descriptor of descriptors) {
-      if (descriptor.status !== 'active' || descriptor.rendererUrl === undefined) {
-        continue;
-      }
-      await this.activate(descriptor);
+    // Milestone 61: every `plugin://` module graph is FETCHED in parallel
+    // — each import used to be a serial protocol round trip through the
+    // main process, and ten of them gated Angular's first paint.
+    // Activation itself stays sequential in descriptor order: widget,
+    // settings-page and menu registrations must land deterministically.
+    const loadable = descriptors.filter(
+      (d) => d.status === 'active' && d.rendererUrl !== undefined,
+    );
+    const fetched = await Promise.all(
+      loadable.map((descriptor) =>
+        this.loader
+          .load(descriptor.rendererUrl!)
+          .then(
+            (imported): { descriptor: PluginDescriptorForRenderer; imported?: unknown } => ({
+              descriptor,
+              imported,
+            }),
+          )
+          .catch(
+            (error): { descriptor: PluginDescriptorForRenderer; loadError?: unknown } => ({
+              descriptor,
+              loadError: error,
+            }),
+          ),
+      ),
+    );
+    const byId = new Map(fetched.map((entry) => [entry.descriptor.id, entry]));
+    for (const descriptor of loadable) {
+      await this.activate(descriptor, byId.get(descriptor.id)!);
       this.injectStyles(descriptor);
     }
     this.loaded.set(true);
+    this.log.record(
+      'info',
+      `[startup] renderer: ${loadable.length} plugin modules loaded+activated in ${Math.round(
+        performance.now() - started,
+      )}ms (${Math.round(performance.now())}ms since navigation start)`,
+    );
   }
 
   /** Renderer-side teardown (unsubscribes + module deactivate). Restart-to-apply covers main. */
@@ -121,14 +152,22 @@ export class PluginHostService {
 
   // -- activation ----------------------------------------------------------
 
-  private async activate(descriptor: PluginDescriptorForRenderer): Promise<void> {
+  /**
+   * Activates one plugin from an already-fetched module (milestone 61
+   * prefetch) — `fetched.imported` is the module namespace, or
+   * `fetched.loadError` carries the failed import for the quarantine path.
+   */
+  private async activate(
+    descriptor: PluginDescriptorForRenderer,
+    fetched: { imported?: unknown; loadError?: unknown },
+  ): Promise<void> {
     const plugin: ActivatedRendererPlugin = {
       descriptor,
       module: null,
       disposables: [],
       documentListeners: new Set(),
-      backendListeners: new Map(),
-      visibilityListeners: new Set(),
+      backendListeners: new Map<string, Set<(data: unknown) => void>>(),
+      visibilityListeners: new Set<(hidden: boolean) => void>(),
     };
     this.activated.set(descriptor.id, plugin);
 
@@ -151,8 +190,10 @@ export class PluginHostService {
     plugin.disposables.push(...disposables);
 
     try {
-      const imported = await this.loader.load(descriptor.rendererUrl!);
-      const module = moduleDefault(imported) as Partial<PluginRendererModule> | null;
+      if (fetched.loadError !== undefined) {
+        throw fetched.loadError;
+      }
+      const module = moduleDefault(fetched.imported) as Partial<PluginRendererModule> | null;
       if (module === null || typeof module !== 'object' || typeof module.activate !== 'function') {
         throw new Error('renderer entry has no default-exported activate()');
       }

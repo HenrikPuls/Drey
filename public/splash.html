@@ -1,0 +1,98 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>drey</title>
+    <style>
+      /*
+        The startup splash (milestone 62, ADR-0062): shown before anything
+        heavy runs, closed at the hidden-until-ready handover. Deliberately
+        dependency-free — inline CSS + a few lines of JS over the splash
+        preload's `onProgress` — so it paints the moment the window loads,
+        long before the renderer bundle would. Token values are copied from
+        src/styles.css (the splash cannot import it; keep in step when the
+        palette changes).
+      */
+      html,
+      body {
+        margin: 0;
+        height: 100%;
+        background: #1b1a19;
+        color: #e6e3dd;
+        font-family: ui-sans-serif, system-ui, -apple-system, 'Segoe UI', 'Helvetica Neue', sans-serif;
+        -webkit-font-smoothing: antialiased;
+        user-select: none;
+        cursor: default;
+        overflow: hidden;
+      }
+      .stage {
+        height: 100%;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 14px;
+      }
+      .mark {
+        width: 72px;
+        height: 72px;
+      }
+      .wordmark {
+        font-size: 22px;
+        letter-spacing: 0.02em;
+        color: #f2efe9;
+      }
+      .version {
+        font-family: ui-monospace, 'Cascadia Code', 'Consolas', monospace;
+        font-size: 11px;
+        color: #6d6862;
+        min-height: 14px; /* reserves the line before main sends the value */
+      }
+      .track {
+        width: 216px;
+        height: 3px;
+        border-radius: 2px;
+        background: #262423;
+        margin-top: 10px;
+        overflow: hidden;
+      }
+      .fill {
+        height: 100%;
+        width: 3%;
+        border-radius: 2px;
+        background: #c96442;
+        transition: width 220ms ease-out;
+      }
+      .activity {
+        font-size: 12.5px;
+        color: #8b867f;
+        min-height: 16px; /* no layout jump while the label changes */
+      }
+    </style>
+  </head>
+  <body>
+    <div class="stage" aria-label="drey is starting">
+      <img class="mark" src="icon.png" alt="" draggable="false" />
+      <div class="wordmark">drey</div>
+      <div class="version" id="version"></div>
+      <div class="track"><div class="fill" id="fill"></div></div>
+      <div class="activity" id="activity">Starting…</div>
+    </div>
+    <script>
+      const fill = document.getElementById('fill');
+      const activity = document.getElementById('activity');
+      const version = document.getElementById('version');
+      window.splashApi?.onProgress?.((p) => {
+        if (typeof p?.pct === 'number') {
+          fill.style.width = `${Math.max(0, Math.min(100, p.pct))}%`;
+        }
+        if (typeof p?.label === 'string' && p.label !== '') {
+          activity.textContent = p.label;
+        }
+        if (typeof p?.version === 'string' && p.version !== '') {
+          version.textContent = p.version;
+        }
+      });
+    </script>
+  </body>
+</html>

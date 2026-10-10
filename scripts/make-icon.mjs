@@ -33,6 +33,9 @@ const PUBLIC_PNG = path.join(root, 'public', 'icon.png');
 
 const TRANSPARENT = { r: 0, g: 0, b: 0, alpha: 0 };
 const ICO_SIZES = [256, 128, 64, 48, 32, 16];
+// The renderer favicon is fetched on every window load — 16/32/48 keep it
+// a few KB instead of the full multi-size exe icon (milestone 61).
+const FAVICON_SIZES = [48, 32, 16];
 const CANVAS = 1024; // working square before the final resizes
 // Tiny breathing room only so the trim's anti-aliased edge is not clipped;
 // the OS shells add the real padding around a taskbar / dock icon.
@@ -63,7 +66,10 @@ const frame = (size) =>
 const frames = await Promise.all(ICO_SIZES.map(frame));
 const ico = await pngToIco(frames);
 await writeFile(ICO, ico);
-await writeFile(FAVICON, ico);
+
+const faviconFrames = await Promise.all(FAVICON_SIZES.map(frame));
+await writeFile(FAVICON, await pngToIco(faviconFrames));
+
 await writeFile(PNG, await frame(512));
 await writeFile(PUBLIC_PNG, await frame(512));
 

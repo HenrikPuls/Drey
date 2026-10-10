@@ -13,9 +13,16 @@ import type { IpcHandlerDeps } from './index';
 export function registerPluginHandlers(deps: IpcHandlerDeps): void {
   const host: PluginHost = deps.pluginHost;
 
-  ipcMain.handle(IPC_CHANNELS.pluginList, () => host.listForRenderer());
+  // Both handlers await activation (milestone 61): with the window
+  // created before plugin activation finishes, the renderer can reach
+  // these while the host is still filling — the gate serves the
+  // post-activation view instead of an empty/half-registered one.
+  ipcMain.handle(IPC_CHANNELS.pluginList, async () => {
+    await host.activationDone();
+    return host.listForRenderer();
+  });
 
-  ipcMain.handle(IPC_CHANNELS.pluginInvoke, (event, payload: PluginIpcInvokePayload) => {
+  ipcMain.handle(IPC_CHANNELS.pluginInvoke, async (event, payload: PluginIpcInvokePayload) => {
     // Defensive shape check: the payload comes from the contextBridge, but
     // never trust the wire — a malformed request is a rejection, not a crash.
     if (
@@ -26,6 +33,7 @@ export function registerPluginHandlers(deps: IpcHandlerDeps): void {
     ) {
       throw new Error('malformed plugin:invoke payload');
     }
+    await host.activationDone();
     return host.handleInvoke(payload, event.sender);
   });
 }

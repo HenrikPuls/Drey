@@ -157,13 +157,17 @@ export class SessionService {
 
       this.restoring = true;
       const restoredKeys = new Set<string>();
-      for (const tab of tabs) {
-        // A tab whose vault vanished (deregistered since) closes silently,
-        // exactly like an unregistered doc kind.
-        if (tab.vaultId !== null && !this.vault.vaults().some((v) => v.id === tab.vaultId)) {
-          continue;
-        }
-        if (await this.restoreTab(tab)) {
+      // Milestone 61: every tab's IPC read goes out in parallel first —
+      // the loop below used to be one serial `readVaultFile` /
+      // `readSessionBackup` round trip per tab, a visible tail with many
+      // tabs. Tabs still OPEN (and doc kinds still restore) sequentially:
+      // `openFile`'s replacement logic and the pane layout expect order.
+      const validTabs = tabs.filter(
+        (tab) => tab.vaultId === null || this.vault.vaults().some((v) => v.id === tab.vaultId),
+      );
+      const prefetched = await Promise.all(validTabs.map((tab) => this.prefetchTab(tab)));
+      for (const [index, tab] of validTabs.entries()) {
+        if (await this.restoreTab(tab, prefetched[index]!)) {
           const key = docKey(tab.vaultId, tab.path);
           restoredKeys.add(key);
           if ('pinned' in tab && tab.pinned === true) {
@@ -172,6 +176,12 @@ export class SessionService {
         }
       }
       restoredAny = this.panes.restore(layout, (p) => restoredKeys.has(p));
+      this.log.record(
+        'info',
+        `[startup] renderer: session restored (${restoredKeys.size} tabs) in ${Math.round(
+          performance.now(),
+        )}ms since navigation start`,
+      );
     } catch {
       // A corrupt session file must never block startup.
     } finally {
@@ -182,7 +192,35 @@ export class SessionService {
     return restoredAny;
   }
 
-  private async restoreTab(tab: SessionTab): Promise<boolean> {
+  /** One tab's parallel-read result: the backup and/or file content, if any. */
+  private async prefetchTab(tab: SessionTab): Promise<{
+    backup: string | null;
+    file: { content: string; modifiedMs: number } | null;
+  }> {
+    // Only the base text kind reads anything (the same `data`-member
+    // discrimination `restoreTab` uses); doc kinds carry their payload.
+    if (tab.kind !== 'text' || 'data' in tab) {
+      return { backup: null, file: null };
+    }
+    const backup = tab.backupId
+      ? (await this.api?.readSessionBackup(tab.backupId).catch(() => null)) ?? null
+      : null;
+    const file =
+      tab.onDisk && this.api
+        ? await this.api
+            .readVaultFile(tab.path, tab.vaultId ?? undefined)
+            .then(
+              (f) => ({ content: f.content, modifiedMs: f.modifiedMs }),
+              () => null,
+            )
+        : null;
+    return { backup, file };
+  }
+
+  private async restoreTab(
+    tab: SessionTab,
+    pre: { backup: string | null; file: { content: string; modifiedMs: number } | null },
+  ): Promise<boolean> {
     const key = docKey(tab.vaultId, tab.path);
     if (tab.kind === 'image' || tab.kind === 'pdf') {
       // `keepFocused`: restore reopens the WHOLE saved tab set -- the clean-
@@ -214,10 +252,16 @@ export class SessionService {
     // text (the `data`-carrying member is the doc-kind one; the `in` check
     // discriminates what the string-typed `kind` cannot)
     if (!('data' in tab)) {
-      const backup = tab.backupId ? await this.api?.readSessionBackup(tab.backupId) : null;
+      const backup = pre.backup;
 
       if (tab.onDisk) {
-        await this.editor.openFile(tab.path, tab.vaultId ?? undefined, { keepFocused: true });
+        // `prefetched`: the parallel read from `restore()` — a null (failed
+        // read) falls back to `openFile`'s own read so the error path and
+        // its UX stay exactly the sequential-era behaviour.
+        await this.editor.openFile(tab.path, tab.vaultId ?? undefined, {
+          keepFocused: true,
+          ...(pre.file !== null ? { prefetched: pre.file } : {}),
+        });
         const open = this.editor.openDocs().some((d) => d.key === key);
         if (open && backup != null) {
           // Re-apply the unsaved edits over the freshly-read disk content.

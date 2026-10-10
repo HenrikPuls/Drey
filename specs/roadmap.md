@@ -52,7 +52,8 @@ Check changelog.md for anything higher before assigning req-37+.
 Order set on 2026-10-10 after the milestone 33–58 verification round.
 (Its first two items shipped: link update on rename + quick switcher /
 command palette as milestone 59, the conflict dialog + local note
-history as milestone 60.)
+history as milestone 60. The 2026-10-10 startup work followed: analysis
++ speed as milestone 61, the splash window as milestone 62.)
 
 1. **Req-31 — MCP client** (connect Drey to external MCP servers), built
    on the Req-29 provider interface. The vehicle for **web search in the

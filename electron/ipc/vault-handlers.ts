@@ -105,8 +105,13 @@ export function registerVaultHandlers({
   // --- Filesystem ops -----------------------------------------------------
   // The manual refresh (Files panel button / ADR-0045): one full round in
   // main -- index rebuild plus the renderer push -- instead of the old
-  // tree-only pull that left the tag/task indexes stale.
+  // tree-only pull that left the tag/task indexes stale. Awaits plugin
+  // activation first (milestone 61): the renderer fires this from its
+  // VaultService constructor while main may still be activating plugins;
+  // without the gate the round would land on unregistered vault hooks and
+  // the boot would come up with empty indexes.
   ipcMain.handle(IPC_CHANNELS.vaultRefresh, async (): Promise<void> => {
+    await pluginHost.activationDone();
     fullVaultRefresh();
   });
   ipcMain.handle(

@@ -176,7 +176,10 @@ export const test = base.extend<DreyFixtures>({
     // what that button promises. For a clean exit the click finds nothing
     // and times out into the void.
     const closing = app.close().catch(() => undefined);
-    const win = app.windows()[0];
+    // The MAIN window's page (milestone 62: the splash window also exists
+    // at teardown time in principle, and first/windows()[0] must not grab
+    // it).
+    const win = app.windows().find((w) => w.url().startsWith('app://'));
     await win
       ?.locator('app-exit-confirm-dialog .dialog button', { hasText: 'Exit without saving' })
       .click({ timeout: 5_000 })
@@ -187,13 +190,37 @@ export const test = base.extend<DreyFixtures>({
   },
 
   page: async ({ electronApp }, use) => {
-    // Generous on purpose: a cold Electron boot on a loaded CI runner can
-    // blow past Playwright's 30s default before the window event fires
-    // (CI 2026-10-08: four suite failures, all this timeout, zero real
-    // assertion failures). The window either appears or the whole run is
-    // broken either way -- 2 minutes only ever changes the verdict.
-    const page = await electronApp.firstWindow({ timeout: 120_000 });
+    // Milestone 62: the splash window is created FIRST, so the main
+    // window is no longer `firstWindow()` — pick the one that loads the
+    // app itself (production `app://`; e2e always forces that URL).
+    const isMainWindow = (candidate: Page): boolean => candidate.url().startsWith('app://');
+    const deadline = Date.now() + 120_000;
+    let page = electronApp.windows().find(isMainWindow) ?? null;
+    while (page === null && Date.now() < deadline) {
+      await electronApp
+        .waitForEvent('window', { predicate: isMainWindow, timeout: 2_000 })
+        .catch(() => undefined);
+      page = electronApp.windows().find(isMainWindow) ?? null;
+    }
+    if (page === null) {
+      throw new Error('the main app:// window never appeared');
+    }
     await page.waitForLoadState('domcontentloaded');
+    // The hidden-until-ready handover (ADR-0062): wait for the window to
+    // be shown and focused (or fall through on timeout — the fail-opens
+    // guarantee it eventually). Hidden windows render
+    // (paintWhenInitiallyHidden), so these are purely the shown-gates;
+    // input dispatched in the gap between the visibility flip and the OS
+    // window being mapped gets dropped, which the focus wait + settle
+    // absorbs.
+    await page
+      .waitForFunction(
+        () => document.visibilityState === 'visible' && document.hasFocus(),
+        undefined,
+        { timeout: 30_000 },
+      )
+      .catch(() => undefined);
+    await page.waitForTimeout(150);
     await use(page);
   },
 });

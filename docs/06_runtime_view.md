@@ -2474,3 +2474,73 @@ buffer and re-bases the tab so the next save goes through.
 "File historyâ€¦" reads the other way: `history:list` â†’ pick a version â†’
 `history:read` â†’ diff against the buffer â†’ **Restore** replaces the
 buffer (one undo step); the save that follows records what it replaces.
+
+
+## 6.51 Startup (milestone 61, [ADR-0061](09_architecture_decisions/0061-window-first-startup.md))
+
+```mermaid
+sequenceDiagram
+    participant M as Main (main.ts)
+    participant PH as PluginHost (main)
+    participant W as Main window
+    participant R as Renderer (Angular)
+    participant VS as VaultService
+
+    Note over M: [startup] marks land in drey.log the whole way
+    M->>M: whenReady -> cheap services, protocols, IPC handlers
+    M->>PH: discoverAndActivate() -- completion promise assigned NOW
+    M->>W: createMainWindow + loadURL(app://...)
+    Note over PH: imports + activate() run<br/>while the renderer parses
+    W->>R: app:// bundle (parse ~0.5 s)
+    PH-->>M: activation finished (+per-plugin ms logged)
+    R->>PH: plugins:list -- awaits activationDone()
+    PH-->>R: descriptors
+    R->>R: prefetch ALL plugin:// modules (Promise.all),<br/>then activate sequentially
+    Note over R: plugins loaded+activated (~70 ms)
+    R->>VS: constructor fires vault:refresh
+    VS->>M: vault:refresh -- awaits activationDone()
+    M-->>VS: announcer round: plugin indexes rebuild (background)<br/>+ vault:changed push (tree)
+    R->>R: first paint (shell painted)
+    Note over R: session restore: all reads in parallel,<br/>applied in order, then panes.restore
+```
+
+The gated handlers (`plugins:list`, `plugin:invoke`, `search:vocabulary`
+/ `tags:suggest`, `vault:refresh`) are what make the overlap safe: the
+renderer boots against a host that is either already activated or
+completes activation before the answer. There is exactly one boot index
+round (the renderer's; main's own emission was removed), and
+`onMainWindowCreated` replays the existing window to plugins that
+activate after it exists.
+
+
+## 6.52 Startup splash + handover (milestone 62, [ADR-0062](09_architecture_decisions/0062-splash-window.md))
+
+```mermaid
+sequenceDiagram
+    participant M as Main (main.ts)
+    participant S as Splash window
+    participant R as Renderer (Angular)
+
+    M->>S: create + show (frameless, skipTaskbar)
+    S->>S: paints instantly (inline page, no bundle)
+    M->>S: Starting… 3 % · version
+    M->>S: Loading settings 10 %
+    loop each main-side plugin
+        M->>S: Loading plugin {name} 15–60 %
+    end
+    M->>R: createMainWindow (show: false) + loadURL
+    M->>S: Starting the interface 68 %
+    Note over R: boots hidden — renders anyway<br/>(paintWhenInitiallyHidden)
+    R->>M: startup:progress "Preparing workspace" 85 %
+    R->>M: startup:progress "Restoring session…" 92 %
+    R->>M: startup:ready
+    M->>R: show() — then splash.close() ~120 ms later
+    Note over M: fail-opens reach the same handover:<br/>30 s absolute, 15 s after page load,<br/>render-process-gone, window closed, quit
+```
+
+The splash's progress feed is one shared scale: main owns the pre-render
+stages (its per-plugin steps ride the `onPluginActivated` host hook with
+index/total), the renderer owns everything after `did-finish-load`
+(fire-and-forget `startup:progress` sends; `startup:ready` triggers the
+handover). `SplashController` latches the latest payload and replays it
+once the splash page listens.

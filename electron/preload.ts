@@ -25,6 +25,7 @@ import {
   PluginIpcEventPayload,
   SpellCheckResult,
   SpellLanguage,
+  StartupProgressReport,
   TagVocabularyPayload,
   NoteHistoryEntry,
   RenameLinksPreview,
@@ -84,6 +85,13 @@ const dreyApi: DreyApi = {
     ipcRenderer.invoke(IPC_CHANNELS.openExternal, url),
   logMessage: (entry: LogEntry): Promise<void> =>
     ipcRenderer.invoke(IPC_CHANNELS.appLog, entry),
+  // Startup splash (milestone 62): plain sends, no reply is needed.
+  reportStartupProgress: (report: StartupProgressReport): void => {
+    ipcRenderer.send(IPC_CHANNELS.startupProgress, report);
+  },
+  reportStartupReady: (): void => {
+    ipcRenderer.send(IPC_CHANNELS.startupReady);
+  },
   getActiveVault: () => ipcRenderer.invoke(IPC_CHANNELS.vaultGetActive),
   // Vault registry (ADR-0051).
   listVaults: (): Promise<VaultStatus[]> => ipcRenderer.invoke(IPC_CHANNELS.vaultList),

@@ -22,10 +22,13 @@ export interface QueryHandlerDeps {
 export function registerQueryHandlers({ tagSuggester, pluginHost }: QueryHandlerDeps): void {
   ipcMain.handle(
     IPC_CHANNELS.tagSuggest,
-    (_event, entryText: string, taskId?: string): Promise<string[]> => {
+    async (_event, entryText: string, taskId?: string): Promise<string[]> => {
+      // Await activation (milestone 61): the provider registers during
+      // the tags plugin's activate(), which now races the renderer boot.
+      await pluginHost.activationDone();
       const provider = pluginHost.getSectionSearchProvider();
       if (provider === null) {
-        return Promise.reject(new Error('Tag suggestions need the Tags plugin to be enabled.'));
+        throw new Error('Tag suggestions need the Tags plugin to be enabled.');
       }
       return tagSuggester.suggest(
         entryText,
@@ -37,7 +40,10 @@ export function registerQueryHandlers({ tagSuggester, pluginHost }: QueryHandler
 
   // Degenerates to empty arrays with no provider registered (tags plugin
   // disabled/failed): completion and prefix colors degrade, nothing throws.
-  ipcMain.handle(IPC_CHANNELS.searchVocabulary, () => {
+  ipcMain.handle(IPC_CHANNELS.searchVocabulary, async () => {
+    // Same activation gate — a boot-time pull must not read a provider
+    // the tags plugin hasn't registered yet (milestone 61).
+    await pluginHost.activationDone();
     const provider = pluginHost.getSectionSearchProvider();
     if (provider === null) {
       return { entries: [], prefixes: [] };
