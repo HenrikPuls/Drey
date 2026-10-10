@@ -50,10 +50,10 @@ test.describe('Assistant plugin', () => {
 
     const panel = page.locator('app-panel-frame', { has: page.locator('.assistant-panel') });
     await expect(panel.locator('.head .title')).toHaveText('Assistant');
-    // The panel's own chat head names the conversation (chat-first since
-    // ADR-0048; the frame-header status was deliberately dropped, see the
-    // widget registration) -- for a fresh vault with no chats yet, the
-    // composer's new-chat placeholder.
+    // The head's chat label names the conversation (chat-first since
+    // ADR-0048; the frame-header status() went away in milestone 57 -- it
+    // recomputed only on shell change detection and went stale after a
+    // switch) -- for a fresh vault with no chats yet: "New chat".
     await expect(panel.locator('.assistant-head .chat-label')).toHaveText('New chat');
     // LLM features are off in the e2e profile: the panel says so quietly.
     await expect(panel.locator('.assistant-thread .empty')).toHaveText(
