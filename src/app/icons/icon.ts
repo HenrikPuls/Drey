@@ -28,6 +28,8 @@ export type IconName =
   | 'check'
   | 'plus'
   | 'arrow-up'
+  | 'arrow-down'
+  | 'git-branch'
   | 'arrow-left'
   | 'arrow-right'
   | 'sparkles'
@@ -107,6 +109,17 @@ const ICONS: Record<IconName, readonly IconShape[]> = {
   'arrow-up': [
     { kind: 'path', d: 'm5 12 7-7 7 7' },
     { kind: 'path', d: 'M12 19V5' },
+  ],
+  // Lucide "arrow-down" / "git-branch" -- the Source control panel (pull, branch).
+  'arrow-down': [
+    { kind: 'path', d: 'M12 5v14' },
+    { kind: 'path', d: 'm19 12-7 7-7-7' },
+  ],
+  'git-branch': [
+    { kind: 'path', d: 'M6 3v12' },
+    { kind: 'circle', cx: 18, cy: 6, r: 3 },
+    { kind: 'circle', cx: 6, cy: 18, r: 3 },
+    { kind: 'path', d: 'M18 9a9 9 0 0 1-9 9' },
   ],
   // Lucide "arrow-left" / "arrow-right" -- document-history navigation.
   'arrow-left': [

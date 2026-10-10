@@ -1,0 +1,23 @@
+@if (diff.request(); as request) {
+  <div class="backdrop" appOverlayGuard (click)="close()"></div>
+  <div class="dialog" role="dialog" aria-modal="true" aria-labelledby="diff-dialog-title">
+    <header>
+      <h2 id="diff-dialog-title">{{ request.title }}</h2>
+      <p class="summary">{{ request.path }}</p>
+    </header>
+
+    <div class="body">
+      <app-diff-view
+        [before]="request.before"
+        [after]="request.after"
+        mode="split"
+        [beforeLabel]="request.beforeLabel ?? 'Before'"
+        [afterLabel]="request.afterLabel ?? 'After'"
+      />
+    </div>
+
+    <footer>
+      <button type="button" class="ghost" (click)="close()">Close</button>
+    </footer>
+  </div>
+}

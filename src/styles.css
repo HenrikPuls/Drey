@@ -133,6 +133,14 @@
 
   /* ---- Misc ---- */
   --spell-error: #c05a5a;
+
+  /* ---- File status (Files-panel decorations, SDK 1.17) ---- Mid-tones
+     that hold on dark and light seeds alike. */
+  --status-modified: #c9a25a;
+  --status-added: #7d9f6e;
+  --status-untracked: #6fa58f;
+  --status-deleted: #c0706a;
+  --status-conflict: #c05a5a;
 }
 
 /* ---- Derived shell palette for a published theme ----

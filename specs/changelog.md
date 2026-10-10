@@ -20,6 +20,61 @@ recorded as an explicit decision. The parity checklist lives in
 
 ## Recent milestones
 
+### Milestone 65 — Git vaults: file status and a Source control panel (req-40)
+
+**Not yet manually verified by the owner.**
+
+([ADR-0065](../docs/09_architecture_decisions/0065-git-vaults-source-control-plugin.md))
+
+- **A vault can be a Git repository.** Add a checked-out repository — or
+  a folder inside one, such as its `docs/` — with "Add vault". Nothing
+  else to set up; Drey uses the installed `git`, so your credential
+  manager, SSH keys and `.gitconfig` apply. Settings → **Git** takes a
+  path when git is not on PATH.
+- **The Files panel shows each file's status.** Changed, added and new
+  files are coloured and carry a badge (`M`, `A`, `U`, `R`, `!` for a
+  merge conflict); a folder takes the colour of what changed inside it.
+  A deleted file has no row — its folder is marked and the file is
+  listed in the panel.
+- **New dock panel "Source control"** (left, collapsed by default): the
+  branch with ahead / behind, a commit message field, and the lists
+  *Staged changes* and *Changes*. Stage and unstage single files or all,
+  commit (`Ctrl+Enter`), Fetch · Pull · Push · Refresh in the header. A
+  first push of a new branch publishes it. Fetch, pull and push can be
+  cancelled.
+- **Branches.** The branch button opens a picker: filter, switch to a
+  local or remote branch, or type a new name to create one. Open tabs
+  of files the switch changed reload.
+- **Compare.** Clicking a changed file shows it against the last commit
+  (staged files: last commit ↔ staged) in the diff view the file history
+  uses.
+- **Discard changes** per file, after a question. A file that is not in
+  the repository yet goes to the recycle bin.
+- **History.** The last 50 commits of the branch, read-only.
+- **Asked first:** a commit while tabs of the vault are unsaved (commit
+  anyway / save all and commit); a commit that would include staged
+  files outside the vault folder. Switching the branch and pulling are
+  refused while the vault has unsaved tabs.
+- **Changed — frontmatter on save:** a save now updates `updated:` only
+  in a note that already has it and never adds a field (it used to add
+  `updated:` and a missing `created:` to every note with a frontmatter
+  block). Pages of another tool — mkdocs, Obsidian — are saved as they
+  are. New daily and chat notes still get their dates when created.
+- Plugin SDK 1.17: `api.ui.setFileDecorations`, `api.ui.showDiff`,
+  `ctx.vault.announceChanges`.
+- Not in this version: clone, stash, merge / rebase surfaces, staging
+  parts of a file, amend. `chats/`, `.drafts/` and daily notes are
+  created in the active vault only — keep a documentation repository
+  from being the active vault.
+- Checked by: parser spec (`plugin-git-status.spec.ts`), decoration
+  service and Files-panel specs, note-manager / frontmatter specs, and
+  a run of the built plugin against real temporary repositories (status
+  in a root and a subfolder vault, stage / unstage, discard, commit,
+  push, branch create / switch, fetch, pull), and `e2e/git.spec.ts` in
+  the built app (status in panel and tree, compare, stage all, commit,
+  history, create a branch). Push / pull against a real remote and the
+  branch switch with open tabs were not driven through the UI.
+
 ### Files panel — "Open in new tab" pins the tab
 
 - **The row context menu gained "Open in new tab"** (files only). It

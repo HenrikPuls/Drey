@@ -1,28 +1,22 @@
 /**
  * The `note:save` pipeline. For a `.md` document it replaces a raw
  * `writeVaultFile` with:
- *  - a `updated:` bump (and `created:` fill) when the file has a
- *    frontmatter fence -- otherwise the bytes are written verbatim;
+ *  - a `updated:` bump when the note's frontmatter already has that key
+ *    -- otherwise the bytes are written verbatim (nothing is ever added);
  *  - the plugin save hooks (`docs/09_architecture_decisions/0044-*.md`),
  *    which return optional content rewrites + pending confirmations.
  *
  * No `#tag` -> frontmatter merge and no routing any more -- tags are free
  * inline labels the tag search reads from the body directly (see the plan,
- * "Tag-Index + Tag-Suche"). Every decision (`splitFrontmatter`,
- * `readFrontmatter`, `bumpUpdated`, `writeFrontmatter`) is a pure
- * `shared/frontmatter` function; this class only sequences filesystem calls
+ * "Tag-Index + Tag-Suche"). The frontmatter decision (`touchUpdated`) is a
+ * pure `shared/frontmatter` function; this class only sequences filesystem calls
  * and knows nothing about indexes or Actions -- those are hooks now
  * (registered by the base adapters until their plugins exist).
  */
 import type { NoteSavedEvent, SaveHookResult, Unsubscribe } from '../shared/plugin-api';
 import type { VaultManager } from './vault-manager';
-import { Frontmatter, NoteSaveRequest, NoteSaveResult } from '../shared/ipc-api';
-import {
-  bumpUpdated,
-  readFrontmatter,
-  splitFrontmatter,
-  writeFrontmatter,
-} from '../shared/frontmatter';
+import { NoteSaveRequest, NoteSaveResult } from '../shared/ipc-api';
+import { touchUpdated } from '../shared/frontmatter';
 
 /**
  * The save-hook seam (ADR-0044 rule 4): what the pipeline offers, and what
@@ -67,20 +61,9 @@ export class NoteManager {
       }
     }
 
-    const split = splitFrontmatter(body);
-
-    // No frontmatter fence: write the bytes verbatim (adding one unasked
-    // would be surprising). With a fence: bump `updated:`, fill `created:`.
-    let written = body;
-    if (split.hadFence) {
-      const frontmatter = readFrontmatter(body);
-      const { updated, created } = bumpUpdated(frontmatter);
-      const patch: Partial<Frontmatter> = { updated };
-      if (!frontmatter?.created) {
-        patch.created = created;
-      }
-      written = writeFrontmatter(body, patch);
-    }
+    // `updated:` is bumped only where the note already has it; nothing is
+    // ever added, and a note without the key is written verbatim.
+    const written = touchUpdated(body);
 
     const origin = request.origin ?? 'save';
     const modifiedMs = await this.vault.writeFile(relPath, toDisk(written), vaultId, {

@@ -369,3 +369,41 @@
   background: color-mix(in srgb, var(--accent) 14%, transparent);
   box-shadow: inset 2px 0 0 var(--accent);
 }
+
+/* ---- row decorations (SDK 1.17: the git status) ----
+   The tone colours the name; a file also carries the badge at the right
+   edge. A folder shows only the tone of what changed inside it. */
+.node[data-status='modified'] {
+  --status: var(--status-modified);
+}
+
+.node[data-status='added'] {
+  --status: var(--status-added);
+}
+
+.node[data-status='untracked'] {
+  --status: var(--status-untracked);
+}
+
+.node[data-status='deleted'] {
+  --status: var(--status-deleted);
+}
+
+.node[data-status='conflict'] {
+  --status: var(--status-conflict);
+}
+
+.node[data-status] .node-name,
+.node[data-status]:hover .node-name {
+  color: var(--status);
+}
+
+.status-badge {
+  flex: none;
+  margin-left: auto;
+  min-width: 12px;
+  text-align: center;
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  color: var(--status);
+}

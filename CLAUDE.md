@@ -184,6 +184,17 @@ toolchain is removable by deleting `.tools/`). Never assume a bare `node`,
   binary read / write, `announce` on vault writes, and plugin buttons in
   the formatting bar (`ToolbarContributionsService`); a changed picture
   now reloads in open notes (`refreshChangedAssets`).
+- **Git vaults** (milestone 65,
+  [ADR-0065](docs/09_architecture_decisions/0065-git-vaults-source-control-plugin.md)):
+  a vault can be a Git repository (its root or a folder inside it). The
+  `git` plugin runs the **installed git** (`execFile`, no shell, one
+  queue per repository, no timeout but cancellable) — never a JS or
+  native reimplementation. File status reaches the Files panel through
+  a base-owned decoration seam (`api.ui.setFileDecorations` →
+  `FileDecorationService`; the base knows no Git); a plugin that
+  rewrote the working tree calls `ctx.vault.announceChanges`. A save
+  sets `updated:` only where the note already has it and **never adds
+  frontmatter** (`touchUpdated`), in every vault.
 - **Runtime plugin system**
   ([ADR-0044](docs/09_architecture_decisions/0044-runtime-plugin-system.md)):
   a **base application** (shell, editor + panes, vault/note IO, session
@@ -193,7 +204,8 @@ toolchain is removable by deleting `.tools/`). Never assume a bare `node`,
   (Assistant + Actions), browser, `ocr` (vision-LLM OCR, ADR-0050),
   `outline` (the open note's heading tree, renderer-only), `backlinks`
   (the "what links here" panel, milestone 54), `drawio` (the diagram
-  editor tab, milestone 64), `sample`. Each is `plugin.json` +
+  editor tab, milestone 64), `git` (Git vaults, milestone 65),
+  `sample`. Each is `plugin.json` +
   `main/` (CommonJS, Node) + `renderer/` (browser-context ESM + CSS over
   `plugin://`, **plain DOM**) + `shared/` types, built by
   `scripts/build-plugins.mjs` into `dist-electron/plugins/<id>/`.
@@ -391,6 +403,17 @@ Renderer (Angular):
   `documents.setBuffer` + save (closed files through
   `vault.writeFile { vaultId }`); a row click opens the file at the line,
   in its vault
+- Source control panel — `plugins/git/` (DOM dock widget, ADR-0065):
+  the repository of the focused document's vault — branch button (→
+  branch picker: switch, track a remote branch, create), commit message
+  + commit, *Merge conflicts* / *Staged changes* / *Changes* lists (row
+  click compares through `api.ui.showDiff`; stage / unstage / discard /
+  open), a collapsible *History*, header icons Fetch · Pull · Push ·
+  Refresh. The main entry (`GitRunner` + the pure parsers in
+  `shared/status.ts`) keeps one `VaultGitState` per vault, pushed as
+  `status-updated`; the renderer turns it into Files-panel decorations.
+  Asks before a commit with unsaved tabs; refuses checkout / pull while
+  the vault has unsaved tabs. Settings → "Git" (`gitPath`)
 - Assistant panel — `plugins/assistant/` (DOM dock widget; conversations
   since ADR-0048): **chat-first** — a chat
   picker + new chat in the head, turn cards rendered from the active
@@ -630,17 +653,18 @@ be called out explicitly (see Working Style below), not introduced silently.
   being the editor area above a **bottom dock** band — then a **28px
   status bar** (word/char count · context hint · Settings entry).
   - **Docks**: three (`left`, `right`, `bottom`), each an ordered list of
-    the nine panels — **Calendar, Files, Templates, Search, Tasks, Open
-    windows, Outline, Backlinks, Assistant** (the core ones registered by
-    the base; Templates/Search/Tasks/Assistant/Outline/Backlinks are
-    provided by plugins, ADR-0044). A
+    the ten panels — **Calendar, Files, Templates, Search, Tasks, Open
+    windows, Outline, Backlinks, Source control, Assistant** (the core
+    ones registered by the base; Templates/Search/Tasks/Assistant/
+    Outline/Backlinks/Source control are provided by plugins, ADR-0044). A
     panel is dragged between docks by its header, resized against its
     neighbour by a splitter, and collapsed to its 32px header. Every
     panel header is built the same way (sentence-case title + optional
     status value + the panel's icon controls + drag grip). Default:
-    Calendar/Files/Templates/Search/Tasks/Open windows/Outline/Backlinks left,
-    Assistant right, nothing in the bottom band, Templates + Search +
-    Tasks + Outline + Backlinks collapsed. Calendar takes its content height, not a
+    Calendar/Files/Templates/Search/Tasks/Open windows/Outline/Backlinks/
+    Source control left, Assistant right, nothing in the bottom band,
+    Templates + Search + Tasks + Outline + Backlinks + Source control
+    collapsed. Calendar takes its content height, not a
     flex share; expanded, its header is the **month/year dropdown**
     itself (no "Calendar" title) with **Today** (opens today's daily
     note) and the month arrows.
@@ -788,7 +812,7 @@ packaging verified — see `docs/07_deployment_view.md`).
 closed 2026-10-10). This file does not restate them — the per-milestone
 record is:
 
-- [specs/changelog.md](specs/changelog.md) — milestones 22–60, newest
+- [specs/changelog.md](specs/changelog.md) — milestones 22–65, newest
   first, plus requirements and fixes
 - [docs/milestones-done.md](docs/milestones-done.md) — the archived
   build log, milestones 1–27
@@ -804,9 +828,9 @@ Open work and its order live in [specs/roadmap.md](specs/roadmap.md)
 ("Next milestones") — that list is binding; keep this summary in step
 with it.
 
-- **Last completed:** milestone 64 — draw.io diagrams (ADR-0064,
-  req-19). Milestones 59–64 are code-complete, owner verification
-  pending.
+- **Last completed:** milestone 65 — Git vaults: file status in the
+  Files panel and the Source control panel (ADR-0065, req-40).
+  Milestones 59–65 are code-complete, owner verification pending.
 - **Next, in order:**
   1. the Office remainder of Req-2 (needs a rendering strategy
      discussion first)

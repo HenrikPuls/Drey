@@ -98,3 +98,10 @@ symlinked). The master-document History section
   stale on an external edit until the next rebuild / reopen (`docs/11`).
 - `yaml` is a new dependency — main-process only, verified absent from the
   renderer bundle.
+
+## Later change (milestone 65, ADR-0065)
+
+Step 3 no longer adds anything: `touchUpdated` sets `updated:` only in a
+note that already has the key, and a missing `created:` is not filled
+in. A note whose frontmatter belongs to another tool is written back as
+it is. `bumpUpdated` is gone.

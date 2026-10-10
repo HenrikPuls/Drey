@@ -12,6 +12,7 @@ import {
 import { NgTemplateOutlet } from '@angular/common';
 import { EditorService, docKey } from '../../services/editor.service';
 import { ConfirmDialogService } from '../../services/confirm-dialog.service';
+import { FileDecorationService, RowDecoration } from '../../services/file-decoration.service';
 import { VaultService } from '../../vault';
 import { LinkUpdateService } from '../../link-update';
 import { VaultFileEntry, VaultStatus } from '../../../../shared/ipc-api';
@@ -88,6 +89,7 @@ export class FilesPanel {
   protected readonly editor = inject(EditorService);
   private readonly dialogs = inject(ConfirmDialogService);
   private readonly linkUpdate = inject(LinkUpdateService);
+  private readonly decorations = inject(FileDecorationService);
   private readonly host = inject<ElementRef<HTMLElement>>(ElementRef).nativeElement;
 
   /**
@@ -512,6 +514,18 @@ export class FilesPanel {
       return `${trimmed}\\${relativePath.replace(/\//g, '\\')}`;
     }
     return `${trimmed}/${relativePath}`;
+  }
+
+  /** The row's plugin-contributed decoration (SDK 1.17 -- the git status), or `null`. */
+  protected decorationOf(vaultId: string, relativePath: string): RowDecoration | null {
+    return this.decorations.decorationFor(vaultId, relativePath);
+  }
+
+  /** The row tooltip: the absolute path, plus what the decoration says. */
+  protected titleOf(vaultId: string, relativePath: string): string {
+    const path = this.absPathOf(vaultId, relativePath);
+    const tooltip = this.decorationOf(vaultId, relativePath)?.tooltip;
+    return tooltip ? `${path} — ${tooltip}` : path;
   }
 
   private selectAt(nodes: VisibleNode[], i: number, mod?: { shiftKey: boolean; ctrlKey: boolean }): void {

@@ -27,6 +27,8 @@ import { TagVocabularyService } from '../tags/tag-vocabulary.service';
 import { EditTargetService } from '../services/edit-target.service';
 import { EditorService } from '../services/editor.service';
 import { ConfirmDialogService } from '../services/confirm-dialog.service';
+import { FileDecorationService } from '../services/file-decoration.service';
+import { DiffDialogService } from '../diff-view';
 import { LogService } from '../services/log.service';
 import { OverlayGuardService } from '../services/overlay-guard.service';
 import { SettingsService } from '../services/settings.service';
@@ -82,6 +84,8 @@ export class PluginApiFactory {
   private readonly contextMenuItems = inject(EditorContextMenuRegistry);
   private readonly toolbarButtons = inject(ToolbarContributionsService);
   private readonly log = inject(LogService);
+  private readonly decorations = inject(FileDecorationService);
+  private readonly diffDialog = inject(DiffDialogService);
   /**
    * Resolved LAZILY inside `createTagField`: `TagVocabularyService` needs
    * `PluginHostService` (the `search:changed` tick), which needs this
@@ -117,6 +121,8 @@ export class PluginApiFactory {
       return unsubscribe as Unsubscribe;
     };
     const pluginId = plugin.id;
+    // A deactivated or quarantined plugin leaves no decorations behind.
+    disposables.push(() => this.decorations.clear(pluginId));
     const invokeBackend = (method: string, payload?: unknown): Promise<unknown> =>
       window.dreyApi.invokePlugin(pluginId, method, payload).catch((error: unknown) => {
         // Electron wraps a handler throw into "Error invoking remote method
@@ -348,6 +354,9 @@ export class PluginApiFactory {
           return field;
         },
         icon: (name, size) => createIconElement(name, size),
+        setFileDecorations: (vaultId, decorations) =>
+          this.decorations.set(pluginId, vaultId, decorations),
+        showDiff: (request) => this.diffDialog.show(request),
       },
       editor: {
         cm: HOST_CODEMIRROR,

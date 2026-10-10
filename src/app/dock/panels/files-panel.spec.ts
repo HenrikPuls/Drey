@@ -2,6 +2,7 @@ import { TestBed, ComponentFixture } from '@angular/core/testing';
 import { DreyApi, VaultFileEntry, VaultStatus } from '../../../../shared/ipc-api';
 import { EditorService } from '../../services/editor.service';
 import { ConfirmDialogService } from '../../services/confirm-dialog.service';
+import { FileDecorationService } from '../../services/file-decoration.service';
 import { VaultService } from '../../vault';
 import { FilesPanel } from './files-panel';
 
@@ -166,6 +167,25 @@ describe('FilesPanel row tooltips (req: full path on hover)', () => {
 
     expect(rows[1].getAttribute('title')).toBe('E:\\notes\\a.md');
     expect(rows[3].getAttribute('title')).toBe('E:\\notes\\notes\\b.md');
+  });
+
+  it('shows a plugin decoration: tone on file and folder, badge and tooltip on the file (SDK 1.17)', async () => {
+    setup('C:/vault');
+    const rows = await render();
+
+    TestBed.inject(FileDecorationService).set('git', V, [
+      { path: 'notes/b.md', badge: 'M', tone: 'modified', tooltip: 'Modified' },
+    ]);
+    fixture.detectChanges();
+
+    expect(rows[3].dataset['status']).toBe('modified');
+    expect(rows[3].querySelector('.status-badge')?.textContent).toBe('M');
+    expect(rows[3].getAttribute('title')).toBe('C:/vault/notes/b.md — Modified');
+    // The folder inherits the tone, without a badge of its own.
+    expect(rows[2].dataset['status']).toBe('modified');
+    expect(rows[2].querySelector('.status-badge')).toBeNull();
+    expect(rows[1].dataset['status']).toBeUndefined();
+    expect(rows[1].querySelector('.status-badge')).toBeNull();
   });
 });
 

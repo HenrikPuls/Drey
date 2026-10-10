@@ -12,6 +12,12 @@ export interface ExternalVaultChanges {
   readonly changedPaths: readonly string[];
   /** Vault-relative `.md` paths that no longer exist. */
   readonly deletedPaths: readonly string[];
+  /**
+   * Other vault-relative paths that changed or vanished (non-Markdown
+   * files): they ride the renderer push so an open tab of one reloads,
+   * but raise no index event.
+   */
+  readonly otherPaths?: readonly string[];
 }
 
 /**
@@ -69,7 +75,7 @@ export class VaultChangeAnnouncer {
       host?.emitVaultChange({ kind: 'delete', path, vaultId: changes.vaultId });
     }
 
-    const paths = [...changes.changedPaths, ...changes.deletedPaths];
+    const paths = [...changes.changedPaths, ...changes.deletedPaths, ...(changes.otherPaths ?? [])];
     const scoped: VaultChangedPush = { vaultId: changes.vaultId };
     this.push(paths.length > 0 && paths.length <= PUSH_PATHS_CAP ? { ...scoped, paths } : scoped);
   }
