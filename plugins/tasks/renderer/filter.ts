@@ -4,6 +4,7 @@
  * `plugins/**` — its spec lives under `src/app/services/`).
  */
 import type { TaskKind, TaskRecord } from '../shared/tasks.js';
+import { sortTaskRecords } from '../shared/tasks.js';
 import { tagSetMatches } from '../shared/support.js';
 
 /** Which set of task lines the panel shows. */
@@ -86,11 +87,10 @@ export interface TaskFilter {
 }
 
 /**
- * Kind / done / tag+text filtering and the list order (req-37): `file`
- * keeps the canonical file-then-document order; `due` sorts by due date
- * ascending (ISO orders lexicographically) with undated tasks last;
- * `priority` sorts highest > high > normal > low. Ties fall back to
- * path + line in every mode.
+ * Kind / done / tag+text filtering and the list order (req-37). The
+ * order comparators are the SHARED view helpers (`shared/tasks.ts`, 57c)
+ * — the provider answers assistant/MCP queries with exactly this
+ * ordering, so both surfaces always agree.
  */
 export function filterVisibleTasks(tasks: readonly TaskRecord[], filter: TaskFilter): TaskRecord[] {
   let list = tasks.filter((t) => filter.kinds.includes(t.kind));
@@ -112,35 +112,5 @@ export function filterVisibleTasks(tasks: readonly TaskRecord[], filter: TaskFil
       return terms.every((term) => hay.includes(term));
     });
   }
-  const byLocation = (a: TaskRecord, b: TaskRecord): number =>
-    a.path.localeCompare(b.path) || a.line - b.line;
-  const sort = filter.sort;
-  const sorted = [...list];
-  if (sort === 'due') {
-    sorted.sort((a, b) => {
-      if (a.due === b.due) {
-        return byLocation(a, b);
-      }
-      return a.due !== null && (b.due === null || a.due < b.due) ? -1 : 1;
-    });
-  } else if (sort === 'priority') {
-    sorted.sort((a, b) => priorityRank(a) - priorityRank(b) || byLocation(a, b));
-  } else {
-    sorted.sort(byLocation);
-  }
-  return sorted;
-}
-
-/** The sort rank of a record's priority: highest, high, normal, low. */
-function priorityRank(task: TaskRecord): number {
-  switch (task.priority) {
-    case 'highest':
-      return 0;
-    case 'high':
-      return 1;
-    case null:
-      return 2;
-    case 'low':
-      return 3;
-  }
+  return sortTaskRecords(list, filter.sort);
 }

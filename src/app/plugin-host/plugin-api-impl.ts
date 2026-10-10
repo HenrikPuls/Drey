@@ -2,6 +2,7 @@ import { Injectable, Injector, inject } from '@angular/core';
 import type {
   DocumentChangeEvent,
   DreyPluginApi,
+  InlineSegment,
   MenuContribution,
   PluginCommand,
   PluginDescriptorForRenderer,
@@ -29,6 +30,9 @@ import { ConfirmDialogService } from '../services/confirm-dialog.service';
 import { LogService } from '../services/log.service';
 import { OverlayGuardService } from '../services/overlay-guard.service';
 import { SettingsService } from '../services/settings.service';
+import { VaultService } from '../vault/vault.service';
+import { WikilinkService } from '../editor/wikilinks/wikilink.service';
+import { extractWikilinks } from '../editor/wikilinks/wikilink';
 import { HOST_CODEMIRROR } from './runtime-exports';
 import { EditorExtensionRegistry } from './editor-extension-registry.service';
 import { DropDecoderRegistry } from './drop-decoder-registry.service';
@@ -344,6 +348,49 @@ export class PluginApiFactory {
             query,
             ...(scope !== undefined ? { scope } : {}),
           }) as Promise<readonly TagSearchHit[]>,
+      },
+      links: {
+        // Base-owned grammar + resolver (SDK 1.11): plugins render
+        // wikilinks without carrying a copy of either. The services are
+        // resolved lazily — WikilinkService → VaultService/EditorService
+        // sits outside this factory's constructor closure (same pattern
+        // as createTagField).
+        parseInline: (text) => {
+          const segments: InlineSegment[] = [];
+          let cursor = 0;
+          for (const link of extractWikilinks(text)) {
+            if (link.index > cursor) {
+              segments.push({ kind: 'text', text: text.slice(cursor, link.index) });
+            }
+            segments.push({
+              kind: 'wikilink',
+              target: link.target,
+              anchor: link.anchor,
+              alias: link.alias,
+            });
+            cursor = link.index + link.length;
+          }
+          if (cursor < text.length) {
+            segments.push({ kind: 'text', text: text.slice(cursor) });
+          }
+          return segments;
+        },
+        resolve: (target, fromVaultId) => {
+          const links = this.appInjector.get(WikilinkService);
+          const from = fromVaultId ?? this.appInjector.get(VaultService).activeVaultId();
+          if (from === null) {
+            return null;
+          }
+          const path = links.resolve(target, from, null);
+          return path === null ? null : { vaultId: from, path };
+        },
+        open: (target, anchor, fromVaultId) => {
+          const links = this.appInjector.get(WikilinkService);
+          // Editor semantics (SDK 1.11): unresolved → create-and-open in
+          // the context vault. `fromPath` stays null — a chat has no
+          // linking note, so sibling preference cannot apply.
+          return links.open(target, anchor ?? null, fromVaultId ?? this.appInjector.get(VaultService).activeVaultId(), null);
+        },
       },
       settings: {
         get: async <T>(key: string) => (await invokeBackend('drey.config.get', { key })) as

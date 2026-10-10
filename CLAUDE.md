@@ -356,14 +356,15 @@ Renderer (Angular):
   raise the exit prompt — only the user's own notes do. (The old
   auto-summary sidecar feature was removed entirely — ADR-0012
   superseded; pre-existing `.{name}.chat.json` files stay on disk,
-  unread.) **Chats are bound to the active document**: a chat note's
-  `note:` frontmatter holds the doc key it was started under (never a
-  `chats/` path — a focused chat tab binds nothing and instead opens
-  that chat in the panel), the panel follows tab switches (a bound note
-  opens its newest chat; an unbound note or non-note focus keeps the
-  current chat; at startup the newest chat loads), and the picker /
-  new-chat button still allow manual chats — honoured until the next
-  document switch. A "Prompts" picker in
+  unread.) **Chat switching is explicit** (ADR-0048 later change): a
+  chat note's `note:` frontmatter records the doc key the chat was
+  started under (provenance + the picker's "this note" marker only — it
+  steers nothing), and the ONLY implicit panel switch is a focused
+  **chat-note tab** (opening a chat's Markdown from the vault hydrates
+  the panel with it). Every other focus — daily, meeting, topic note,
+  non-document — keeps exactly the current chat; at startup the newest
+  chat loads once. A chat otherwise changes through the picker or
+  "New chat". A "Prompts" picker in
   the composer inserts a prompt from `templates/prompts/*.md`
   (`# Titel` / `> Beschreibung` / body) into the composer for editing.
   Manual
@@ -578,14 +579,16 @@ be called out explicitly (see Working Style below), not introduced silently.
     the editor (Live Preview ⇄ source via the `⋯` menu — no toggle
     buttons; see ADR-0008/0009), then the **bottom dock** band (empty by
     default). Capture is the `/` menu's **Entry** block.
-  - **Assistant panel**: chat-first head (chat-title picker + a "+"
-    icon for a new chat), turn cards with collapsible tool chips, a
+  - **Assistant panel**: chat-first head (icon-only: a chat-list button
+    opening the chat picker + a "+" icon for a new chat — no chat-title
+    text, it was stale on a switch), turn cards with collapsible tool
+    chips, a
     streamed partial answer while generating (the transcript follows the
     stream; scrolling up unpins), and the
     composer (context chips incl. images, auto-grow, and an icon tool
     row: Attach · Live edit · Vault context · Prompts · model picker).
-    The panel follows the focused document (each note's newest chat; a
-    non-note focus shows a fresh chat). No bottom chat bar.
+    The panel keeps its chat across focus switches (only a focused
+    chat-note tab or a picker/new-chat action changes it). No bottom chat bar.
   - **Settings**: a full-surface overlay opened from the status-bar entry
     — master-detail (category list on the left, detail pane on the
     right), core categories in alphabetical order (
@@ -694,6 +697,43 @@ can dock into the three docks (milestone 20,
 [ADR-0038](docs/09_architecture_decisions/0038-editor-panes-in-docks.md)).
 The milestone log lives in
 [docs/milestones-done.md](docs/milestones-done.md).
+
+**Just code-complete: milestone 57 — the assistant as the task &
+navigation surface** ([ADR-0058](docs/09_architecture_decisions/0058-assistant-task-and-navigation-surface.md)):
+new base seams (SDK minors 1.11 – 1.13) — `ctx.tasks` + `TaskQueryProvider` (the
+tasks plugin registers its index, sole grammar owner; MCP `tasks_list`
+reads it read-only) and `api.links` (base-owned wikilink parse/resolve/
+open for plugin-rendered text). The assistant's `tasks_list` tool (every
+non-live ask, no MCP gate) answers task questions from index rows; the
+panel renders the persisted result as an interactive task block
+(checkbox → provider `setDone`, due/prio badges, row click opens at the
+line, live hydration at render time). **Deterministic views (57c, SDK
+1.12):** the provider sorts and filters (`sort` incl. the due-dominant
+`importance`, `text`, `tag`, `overdue`) over the same comparators the
+Tasks panel uses; the model is demoted to intent (tool args, few-shot
+prompted) + framing prose, with the answer-scoped post-hoc block (57b,
+the answer-matched synthetic pair — and an unrestricted model call's
+result is trimmed to the answer's subset) as the safety net. Chat cards render a small Markdown
+subset with clickable `[[wikilinks]]` (resolve probe styles them;
+unresolved links create on click, editor semantics) and the ask prompt
+invites model-written links from context paths. **Daily notes never
+bind (57c):** asks under daily focus leave the chat unbound, and the
+implicit follow is gone entirely — only a focused chat-note tab switches
+the panel, everything else keeps the current chat (ADR-0048 later
+change). **Done tasks + completion dates + the edit guard (57d, SDK
+1.13):** completing a task stamps an Obsidian-Tasks-compatible
+`✅ YYYY-MM-DD` on the line (reopening removes it — every toggle
+surface, the editor's via a tasks-plugin transaction filter on
+`input.toggleTask`; `TaskRecord.completed`, legacy fallback = the date
+in the note's file name); `TaskQueryOptions` gains `status`
+(`open` | `done` | `all`), `completedSince` and the `completed` sort,
+which both `tasks_list` tools accept; the ask prompt carries today's
+date, done-task few-shots and the task rule AFTER the vault context;
+and a `document` fence is only an edit proposal when it changes the
+document and the turn made no `tasks_list` call (a "yes, do that"
+follow-up no longer rewrites the focused note). Short tasks (2–3
+significant words) can match an answer. **Not yet manually verified by
+the owner.**
 
 **Just code-complete: milestone 56 — the assistant panel keeps its chat**:
 beta feedback read as "chats are not saved" (the notes were on disk; the
@@ -900,7 +940,8 @@ milestones") until owner-verified.
   (search-summary Sources links), 50 (caret survives a tab switch),
   51 (task due dates + priorities), 52 (recycle-bin deletes),
   53 (tag rename / merge), 54 (Backlinks panel), 55 (document
-  history back/forward) and 56 (assistant panel keeps its chat) — see
+  history back/forward), 56 (assistant panel keeps its chat) and 57
+  (assistant task & navigation surface) — see
   "Current State" above. (Milestone 44, the Task Center's `#task/id:`
   addressing, was reverted before release — ADR-0033 "considered and
   rejected"; the surviving piece is the ambiguity skip in

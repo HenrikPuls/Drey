@@ -64,6 +64,7 @@ package, a minor naming convention).
 | [0055](09_architecture_decisions/0055-semantic-vault-retrieval.md)                 | Semantic vault retrieval: the assistant's Vault chip retrieves top-k note sections (transformers.js WASM in a worker, JSON index per vault, system-prompt injection — sqlite-vec dropped) | Accepted |
 | [0056](09_architecture_decisions/0056-spellcheck-language-autodetect.md)           | Spellcheck language auto-detect: `franc-min` detects each paragraph's language, words are checked per language group; fallback = configured dictionary; plus verdict memo + dictionary-eviction fixes | Accepted |
 | [0057](09_architecture_decisions/0057-ui-refinement-icon-chrome-anthrazit-and-slash-capture.md) | UI refinement: sentence-case sans chrome with one shared icon button / segmented switch, the Anthrazit theme next to Drey, one text-and-tag query field, capture through the `/` menu (built-in Entry + templates with preview) replacing the "Add entry" drawer, formatting buttons in the meta bar, in-place file create/rename | Accepted |
+| [0058](09_architecture_decisions/0058-assistant-task-and-navigation-surface.md)    | The assistant as the task & navigation surface: a base `TaskQueryProvider` seam (tasks plugin owns the grammar) + the assistant's `tasks_list` tool rendered as an interactive task block, and `api.links` — base-owned wikilink parse/resolve/open for rich, clickable chat answers | Accepted |
 
 Decisions not yet written up (relevant spec already fixes them, but the
 ADR is deferred to the milestone that actually implements them, per

@@ -1,7 +1,7 @@
 import { McpServer } from '../../../electron/mcp/server';
 import { VaultTools } from '../../../electron/mcp/vault-tools';
 import type { AppConfig } from '../../../shared/app-config';
-import type { SectionSearchProvider } from '../../../shared/plugin-api';
+import type { SectionSearchProvider, SdkTaskRecord } from '../../../shared/plugin-api';
 import type { VaultManager } from '../../../electron/vault-manager';
 
 /**
@@ -106,6 +106,7 @@ describe('VaultTools', () => {
     const tools = new VaultTools(
       fakeVault({}),
       () => fakeProvider(),
+      () => null,
       () => config(),
       async () => true,
     );
@@ -118,6 +119,7 @@ describe('VaultTools', () => {
     const tools = new VaultTools(
       fakeVault({ 'a.md': 'alpha\nBETA\n', 'b.md': 'gamma\n' }),
       () => fakeProvider(),
+      () => null,
       () => config(),
       async () => true,
     );
@@ -130,6 +132,7 @@ describe('VaultTools', () => {
     const tools = new VaultTools(
       fakeVault({ 'a.md': 'hi' }),
       () => fakeProvider(),
+      () => null,
       () => config(),
       async () => true,
     );
@@ -143,6 +146,7 @@ describe('VaultTools', () => {
     const tools = new VaultTools(
       fakeVault(files),
       () => fakeProvider(),
+      () => null,
       () => config(),
       async () => {
         asked++;
@@ -159,6 +163,7 @@ describe('VaultTools', () => {
     const tools = new VaultTools(
       fakeVault(files),
       () => fakeProvider(),
+      () => null,
       () => config(),
       async () => false,
     );
@@ -173,6 +178,7 @@ describe('VaultTools', () => {
     const tools = new VaultTools(
       fakeVault(files),
       () => fakeProvider(),
+      () => null,
       () => config({ yolo: true }),
       async () => {
         asked++;
@@ -188,6 +194,7 @@ describe('VaultTools', () => {
     const tools = new VaultTools(
       fakeVault({}),
       () => null,
+      () => null,
       () => config(),
       async () => true,
     );
@@ -201,6 +208,7 @@ describe('VaultTools', () => {
     const tools = new VaultTools(
       vault,
       () => fakeProvider(),
+      () => null,
       () => config(),
       async () => true,
     );
@@ -217,7 +225,7 @@ describe('VaultTools', () => {
   it('vault_write targets a named vault and labels confirmation + result', async () => {
     const vault = fakeVault({ 'note.md': 'x' });
     const confirms: Array<Record<string, unknown>> = [];
-    const tools = new VaultTools(vault, () => fakeProvider(), () => config(), async (req) => {
+    const tools = new VaultTools(vault, () => fakeProvider(), () => null, () => config(), async (req) => {
       confirms.push({ ...req });
       return true;
     });
@@ -233,6 +241,7 @@ describe('VaultTools', () => {
     const tools = new VaultTools(
       fakeVault({}),
       () => fakeProvider([hit]),
+      () => null,
       () => config(),
       async () => true,
     );
@@ -242,5 +251,114 @@ describe('VaultTools', () => {
 
     const scoped = await tools.call('vault_search', { tags: ['x'], vault: 'all' });
     expect(scoped.content[0].text).toContain('v9:a.md:3');
+  });
+
+  it('degrades tasks_list with a clear error when no task provider is registered', async () => {
+    const tools = new VaultTools(
+      fakeVault({}),
+      () => fakeProvider(),
+      () => null,
+      () => config(),
+      async () => true,
+    );
+    const res = await tools.call('tasks_list', {});
+    expect(res.isError).toBe(true);
+    expect(res.content[0].text).toContain('no plugin providing the task index');
+  });
+
+  it('tasks_list returns one JSON record per line, honoring includeDone and vault', async () => {
+    const task = (over: Partial<SdkTaskRecord>): SdkTaskRecord => ({
+      path: 'daily/a.md',
+      vaultId: 'vtest',
+      line: 3,
+      text: 'Aufräumen',
+      done: false,
+      kind: 'checkbox',
+      heading: null,
+      tags: [],
+      due: null,
+      priority: null,
+      ...over,
+    });
+    const records = [task({}), task({ done: true, line: 5 }), task({ vaultId: 'v2', line: 7 })];
+    const provider = {
+      query: async (opts?: { includeDone?: boolean; vaultId?: string }) =>
+        records.filter(
+          (r) =>
+            (opts?.includeDone === true || !r.done) &&
+            (opts?.vaultId === undefined || r.vaultId === opts.vaultId),
+        ),
+      setDone: async (t: SdkTaskRecord) => t,
+    };
+    const tools = new VaultTools(
+      fakeVault({}),
+      () => fakeProvider(),
+      () => provider,
+      () => config(),
+      async () => true,
+    );
+
+    const open = await tools.call('tasks_list', {});
+    expect(open.isError).toBeUndefined();
+    const openLines = open.content[0].text.split('\n');
+    expect(openLines).toHaveLength(2); // the vtest + the v2 open task
+    expect(JSON.parse(openLines[0])).toMatchObject({ line: 3 });
+
+    const all = await tools.call('tasks_list', { includeDone: true });
+    expect(all.content[0].text.split('\n')).toHaveLength(3);
+
+    const scoped = await tools.call('tasks_list', { vault: 'v2' });
+    expect(JSON.parse(scoped.content[0].text)).toMatchObject({ vaultId: 'v2', line: 7 });
+  });
+
+  it('tasks_list passes text/tag/overdue/sort intent args to the provider (57c)', async () => {
+    const seen: Array<Record<string, unknown>> = [];
+    const provider = {
+      query: async (opts?: Record<string, unknown>) => {
+        seen.push({ ...(opts ?? {}) });
+        return [];
+      },
+      setDone: async (t: SdkTaskRecord) => t,
+    };
+    const tools = new VaultTools(
+      fakeVault({}),
+      () => fakeProvider(),
+      () => provider,
+      () => config(),
+      async () => true,
+    );
+
+    const res = await tools.call('tasks_list', {
+      text: 'Marta',
+      tag: '#blockuniversum',
+      overdue: true,
+      sort: 'importance',
+    });
+    expect(res.content[0].text).toBe('No tasks found.');
+    expect(seen[0]).toEqual({
+      includeDone: false,
+      text: 'Marta',
+      tag: 'blockuniversum',
+      overdue: true,
+      sort: 'importance',
+    });
+    // No sort argument: the provider's file-order default (the MCP tool
+    // does not silently re-order an external client's view).
+    await tools.call('tasks_list', {});
+    expect(seen[1]).toEqual({ includeDone: false });
+
+    // The done view (57d): status passes through and lists newest
+    // completion first; a completion-date restriction implies it.
+    await tools.call('tasks_list', { status: 'done' });
+    expect(seen[2]).toEqual({ includeDone: false, status: 'done', sort: 'completed' });
+    await tools.call('tasks_list', { completedSince: '2026-09-26', sort: 'file' });
+    expect(seen[3]).toEqual({
+      includeDone: false,
+      status: 'done',
+      completedSince: '2026-09-26',
+      sort: 'file',
+    });
+    await tools.call('tasks_list', { status: 'nope', completedSince: 'recently' });
+    expect(seen[4]).toEqual({ includeDone: false });
   });
 });

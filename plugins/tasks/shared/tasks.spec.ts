@@ -176,6 +176,8 @@ describe('metadata does not disturb the toggle resolution', () => {
   });
 
   it('the box flip keeps the tokens in place', () => {
-    expect(setDoneOnLine('- [ ] a 📅 2026-10-09', 1, true)).toBe('- [x] a 📅 2026-10-09');
+    expect(setDoneOnLine('- [ ] a 📅 2026-10-09', 1, true, '2026-10-10')).toBe(
+      '- [x] a 📅 2026-10-09 ✅ 2026-10-10',
+    );
   });
 });

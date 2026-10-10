@@ -22,9 +22,10 @@ import {
   type NoteSavedEvent,
   type SaveHook,
   type SaveHookResult,
-  type SectionSearchProvider,
-  type SectionSearchScope,
-  type TextMatchOptions,
+   type SectionSearchProvider,
+   type SectionSearchScope,
+   type TaskQueryProvider,
+   type TextMatchOptions,
   type Unsubscribe,
   type VaultChangeEvent,
   type LlmModelListing,
@@ -100,6 +101,7 @@ export class PluginHost {
   private readonly vaultChangeCallbacks: Array<(event: VaultChangeEvent) => void> = [];
   private readonly saveHooks: Array<SaveHook> = [];
   private searchProvider: SectionSearchProvider | null = null;
+  private taskProvider: TaskQueryProvider | null = null;
 
   /**
    * Public registration facades — what `MainPluginContext` exposes to a
@@ -112,6 +114,8 @@ export class PluginHost {
     registerSectionSearch(provider: SectionSearchProvider): Unsubscribe;
     notifyChanged(): void;
   };
+
+  readonly tasks: { registerTaskQuery(provider: TaskQueryProvider): Unsubscribe };
 
   constructor(private readonly deps: PluginHostDeps) {
     this.configStore = new PluginConfigStore(deps.userRoot);
@@ -134,6 +138,16 @@ export class PluginHost {
         };
       },
       notifyChanged: () => this.emitSearchChanged(),
+    };
+    this.tasks = {
+      registerTaskQuery: (provider) => {
+        this.taskProvider = provider;
+        return () => {
+          if (this.taskProvider === provider) {
+            this.taskProvider = null;
+          }
+        };
+      },
     };
   }
 
@@ -408,6 +422,11 @@ export class PluginHost {
     return this.searchProvider;
   }
 
+  /** What the assistant's `tasks_list` tool and MCP `tasks_list` read; null = degrade. */
+  getTaskQueryProvider(): TaskQueryProvider | null {
+    return this.taskProvider;
+  }
+
   async runWillQuitHooks(): Promise<void> {
     for (const plugin of this.activated.values()) {
       for (const cb of plugin.willQuitCallbacks) {
@@ -539,6 +558,10 @@ export class PluginHost {
       search: {
         registerSectionSearch: (provider) => track(this.search.registerSectionSearch(provider)),
         notifyChanged: () => this.search.notifyChanged(),
+      },
+      tasks: {
+        registerTaskQuery: (provider) => track(this.tasks.registerTaskQuery(provider)),
+        queryProvider: () => this.taskProvider,
       },
       llm: {
         enabled: () => appConfig.get().llm.enabled,

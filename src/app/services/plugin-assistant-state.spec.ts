@@ -51,6 +51,8 @@ interface Harness {
   askGate: Promise<void> | null;
   /** When set, the listChats port rejects (picker failure state). */
   failListChats: boolean;
+  /** The daily root the dailyDir port reports (`daily` unless overridden). */
+  dailyDirValue: string;
 }
 
 function viewOf(text: string): ChatNoteView {
@@ -102,6 +104,7 @@ function setup(options: { llm?: boolean } = {}): Harness {
     nextOutcome: { kind: 'answer', text: 'Antwort.' },
     askGate: null,
     failListChats: false,
+    dailyDirValue: 'daily',
     state: undefined as never,
     tasks: undefined as never,
   };
@@ -181,6 +184,7 @@ function setup(options: { llm?: boolean } = {}): Harness {
     setEditLock: (path, locked) => {
       lockOps.push({ path, locked });
     },
+    dailyDir: async () => h.dailyDirValue,
   };
 
   h.tasks = tasks;
@@ -427,15 +431,29 @@ describe('assistant plugin state — following the active document (chat binding
     ];
   }
 
-  it('opens the newest chat bound to the active document', async () => {
+  it('a bound note no longer switches the panel (implicit follow is gone)', async () => {
     const h = setup();
     h.chatNotes.set(...boundChat('old', '2026-09-13T10:00:00', 'v1::a.md'));
     h.chatNotes.set(...boundChat('new', '2026-09-13T12:00:00', 'v1::a.md'));
-    h.chatNotes.set(...boundChat('other', '2026-09-13T13:00:00', 'v1::b.md'));
+    // The user is in a conversation; opening its bound note must NOT yank
+    // the panel to the newest bound chat (the duplicate-title bug).
+    h.chatNotes.set(...boundChat('mine', '2026-09-13T09:00:00', null));
+    await h.state.openChat('chats/2026/09/mine.md');
 
     await h.state.followActiveDoc('v1::a.md');
 
-    expect(h.state.activeChatPath()).toBe('chats/2026/09/new.md');
+    expect(h.state.activeChatPath()).toBe('chats/2026/09/mine.md');
+  });
+
+  it('opening a meeting note keeps the current chat', async () => {
+    const h = setup();
+    h.chatNotes.set(...boundChat('meeting-chat', '2026-09-13T10:00:00', 'v1::meetings/stand.md'));
+    h.chatNotes.set(...boundChat('mine', '2026-09-13T09:00:00', null));
+    await h.state.openChat('chats/2026/09/mine.md');
+
+    await h.state.followActiveDoc('v1::meetings/stand.md');
+
+    expect(h.state.activeChatPath()).toBe('chats/2026/09/mine.md');
   });
 
   it('keeps the current chat when no chat is bound to the document', async () => {
@@ -541,8 +559,9 @@ describe('assistant plugin state — following the active document (chat binding
     const second = h.state.followActiveDoc('v1::b.md');
     await Promise.all([first, second]);
 
-    // The b-follow found no bound chat and, being the first completed
-    // follow, falls back to the newest chat; the slower a-follow never lands.
+    // Neither a.md nor b.md is a chat note, so no follow opens anything;
+    // only the first completed follow's activation fallback (the newest
+    // chat) lands — the superseded one never does.
     expect(h.state.activeChatPath()).toBe('chats/2026/09/a-chat.md');
   });
 
@@ -783,8 +802,8 @@ describe('assistant plugin state — document-follow catch-up', () => {
     const aChat = h.state.activeChatPath();
     expect(aChat).not.toBeNull();
 
-    // A second generation starts; mid-flight the user switches to b.md,
-    // which already has its own bound chat.
+    // A second generation starts; mid-flight the user opens a chat note's
+    // Markdown from the vault (the one implicit switch left).
     h.askGate = new Promise<void>((resolve) => {
       release = resolve;
     });
@@ -794,8 +813,7 @@ describe('assistant plugin state — document-follow catch-up', () => {
       'chats/2026/09/b-chat.md',
       "---\nkind: chat\nnote: 'v1::b.md'\ntitle: b chat\n---\n",
     );
-    h.setActive('b.md');
-    await h.state.followActiveDoc('v1::b.md'); // deferred while asking
+    await h.state.followActiveDoc('v1::chats/2026/09/b-chat.md'); // deferred while asking
     expect(h.state.activeChatPath()).toBe(aChat); // the run keeps its chat
 
     release();
@@ -804,5 +822,90 @@ describe('assistant plugin state — document-follow catch-up', () => {
     await new Promise((resolve) => setTimeout(resolve, 0));
 
     expect(h.state.activeChatPath()).toBe('chats/2026/09/b-chat.md');
+  });
+});
+
+describe('assistant plugin state — daily-note decoupling (57c)', () => {
+  it('a chat started under daily-note focus binds nothing (but keeps the context chip)', async () => {
+    const h = setup();
+    h.setActive('daily/2026/10/2026-10-10.md', '# Freitag\n');
+    await h.state.openNote('daily/2026/10/2026-10-10.md');
+
+    const sent = await h.state.ask('was steht heute an?');
+
+    expect(sent).toBe(true);
+    expect(h.asks[0]?.noteKey).toBeNull();
+    // The note still rides as context — the decoupling is binding-only.
+    expect(h.asks[0]?.note).toEqual({ path: 'daily/2026/10/2026-10-10.md', body: '# Freitag\n' });
+  });
+
+  it('a custom daily root binds nothing too', async () => {
+    const h = setup();
+    h.dailyDirValue = 'Journal';
+    h.setActive('Journal/2026-10-10.md');
+    await h.state.openNote('Journal/2026-10-10.md');
+
+    await h.state.ask('was heute?');
+
+    expect(h.asks[0]?.noteKey).toBeNull();
+  });
+
+  it('a topic note merely sharing the prefix still binds (real daily paths only)', async () => {
+    const h = setup();
+    h.setActive('daily-themen/sammlung.md');
+    await h.state.openNote('daily-themen/sammlung.md');
+
+    await h.state.ask('frage');
+
+    expect(h.asks[0]?.noteKey).toBe('v1::daily-themen/sammlung.md');
+  });
+
+  it('focusing another daily note keeps the current chat (no bound-chat switch)', async () => {
+    const h = setup();
+    // A chat bound to a daily note — the pre-57c shape the user's vault has.
+    h.chatNotes.set(
+      'chats/2026/10/tageschat.md',
+      '---\nkind: chat\ntitle: tageschat\nupdated: 2026-10-10T08:00:00\nnote: v1::daily/2026/10/2026-10-10.md\n---\n\n## User\n\nalt\n',
+    );
+    h.chatNotes.set(
+      'chats/2026/10/topic.md',
+      '---\nkind: chat\ntitle: topic\nupdated: 2026-10-09T08:00:00\nnote: v1::a.md\n---\n\n## User\n\nalt\n',
+    );
+    await h.state.openChat('chats/2026/10/topic.md');
+
+    await h.state.followActiveDoc('v1::daily/2026/10/2026-10-11.md');
+
+    // The daily-bound chat is NOT opened; the panel keeps the topic chat.
+    expect(h.state.activeChatPath()).toBe('chats/2026/10/topic.md');
+  });
+
+  it('focusing a daily note keeps the chat even when it is bound to that very day', async () => {
+    const h = setup();
+    h.chatNotes.set(
+      'chats/2026/10/tageschat.md',
+      '---\nkind: chat\ntitle: tageschat\nupdated: 2026-10-10T08:00:00\nnote: v1::daily/2026/10/2026-10-10.md\n---\n\n## User\n\nalt\n',
+    );
+    await h.state.openChat('chats/2026/10/tageschat.md');
+
+    await h.state.followActiveDoc('v1::daily/2026/10/2026-10-10.md');
+
+    expect(h.state.activeChatPath()).toBe('chats/2026/10/tageschat.md');
+  });
+
+  it('no note at all switches the panel anymore (daily was only the loudest case)', async () => {
+    const h = setup();
+    h.chatNotes.set(
+      'chats/2026/10/topic.md',
+      '---\nkind: chat\ntitle: topic\nupdated: 2026-10-09T08:00:00\nnote: v1::a.md\n---\n\n## User\n\nalt\n',
+    );
+    await h.state.openChat('chats/2026/10/topic.md');
+
+    // A topic note bound to that very chat, a meeting, a daily note —
+    // none of them moves the panel.
+    await h.state.followActiveDoc('v1::a.md');
+    await h.state.followActiveDoc('v1::meetings/stand.md');
+    await h.state.followActiveDoc('v1::daily/2026/10/2026-10-10.md');
+
+    expect(h.state.activeChatPath()).toBe('chats/2026/10/topic.md');
   });
 });

@@ -87,6 +87,99 @@ export interface SectionSearchProvider {
 
 export type VaultChangeEventKind = 'refresh' | 'write' | 'delete' | 'rename';
 
+/**
+ * One task line, as the base's task surfaces (the assistant's `tasks_list`
+ * tool, MCP `tasks_list`) see it — SDK 1.11. A structural twin of the
+ * tasks plugin's internal record; the tasks plugin owns the grammar and
+ * satisfies this shape.
+ */
+export interface SdkTaskRecord {
+  /** Vault-relative path of the note. */
+  readonly path: string;
+  /** Owning vault id (ADR-0051). */
+  readonly vaultId: string;
+  /** 1-based line the task sits on. */
+  readonly line: number;
+  /** The task text: list marker, checkbox, `#task*` markers and metadata stripped. */
+  readonly text: string;
+  readonly done: boolean;
+  readonly kind: 'checkbox' | 'tag';
+  /** Nearest heading above the task, or `null` before the first one. */
+  readonly heading: string | null;
+  /** Distinct inline `#tags` of the task's heading section, lower-cased. */
+  readonly tags: readonly string[];
+  /** Due date as written (`YYYY-MM-DD`), or `null`. */
+  readonly due: string | null;
+  /** The line's priority glyph, or `null` (= normal). */
+  readonly priority: 'highest' | 'high' | 'low' | null;
+  /**
+   * Completion date as written (`YYYY-MM-DD`), or `null` (SDK 1.13).
+   * Absent on records persisted before 1.13.
+   */
+  readonly completed?: string | null;
+}
+
+/**
+ * The deterministic list orders a `TaskQueryProvider` offers (SDK 1.12;
+ * `completed` since 1.13).
+ */
+export type TaskQuerySort = 'file' | 'due' | 'priority' | 'importance' | 'completed';
+
+/** Which tasks a query returns by done state (SDK 1.13). */
+export type TaskQueryStatus = 'open' | 'done' | 'all';
+
+/** Options for `TaskQueryProvider.query`; omitted fields mean "no restriction". */
+export interface TaskQueryOptions {
+  /** Only this vault's tasks (ADR-0051); omitted = every registered vault. */
+  readonly vaultId?: string;
+  /** Include completed tasks; default `false` (open tasks only). */
+  readonly includeDone?: boolean;
+  /**
+   * Open tasks, completed tasks, or both (SDK 1.13). Wins over
+   * `includeDone` when set; omitted = `includeDone`'s answer.
+   */
+  readonly status?: TaskQueryStatus;
+  /**
+   * Only tasks completed on or after this `YYYY-MM-DD` (SDK 1.13). The
+   * date is the line's completion date, else the date in the note's file
+   * name; a task with neither never matches.
+   */
+  readonly completedSince?: string;
+  /**
+   * The list order, applied by the provider (the data owner). `file` =
+   * path + line; `due` = due date ascending, undated last; `priority` =
+   * highest > high > normal > low; `importance` (the assistant block's
+   * default) = due asc → priority → path/line; `completed` = completion
+   * date newest first, undated last. Ties always fall back to
+   * path + line. Default `file`.
+   */
+  readonly sort?: TaskQuerySort;
+  /** Whitespace-split terms every task's text + heading must contain (AND). */
+  readonly text?: string;
+  /** One tag the task's section must carry — exact or namespace ancestor. */
+  readonly tag?: string;
+  /** Only tasks whose due date is before today (overdue). */
+  readonly overdue?: boolean;
+}
+
+/**
+ * What a plugin registers so base surfaces (the assistant's `tasks_list`
+ * tool, MCP `tasks_list`) can query — and complete — tasks. SDK 1.11,
+ * query filters/order since 1.12. The tasks plugin is the data owner:
+ * the grammar (scanner, line resolution, the done toggle) lives there,
+ * never in a consumer.
+ */
+export interface TaskQueryProvider {
+  query(opts?: TaskQueryOptions): Promise<readonly SdkTaskRecord[]>;
+  /**
+   * Completes (or re-opens) one task line. The recorded `line` may be
+   * stale — the provider re-resolves it against the current file content
+   * and throws when the task cannot be located unambiguously. Returns the
+   * updated record.
+   */
+  setDone(task: SdkTaskRecord, done: boolean): Promise<SdkTaskRecord>;
+}
+
 export interface VaultChangeEvent {
   readonly kind: VaultChangeEventKind;
   /** Vault-relative path, when the kind is specific to one (`write`/`delete`/`rename`). */
@@ -241,6 +334,18 @@ export interface MainPluginContext {
      * registers or unregisters.
      */
     notifyChanged(): void;
+  };
+
+  /**
+   * The task-index seam (SDK 1.11): one plugin owns the task grammar and
+   * registers the provider here; base surfaces (the assistant's
+   * `tasks_list` tool, MCP `tasks_list`) read through `queryProvider()`.
+   * `null` = no task provider registered (the tools degrade or stay
+   * unattached).
+   */
+  readonly tasks: {
+    registerTaskQuery(provider: TaskQueryProvider): Unsubscribe;
+    queryProvider(): TaskQueryProvider | null;
   };
 
   /**

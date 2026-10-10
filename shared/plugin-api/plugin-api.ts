@@ -301,6 +301,25 @@ export interface TagFieldHandle {
   dispose(): void;
 }
 
+/** One plain-text run of a parsed inline string (`links.parseInline`, SDK 1.11). */
+export interface InlineTextSegment {
+  readonly kind: 'text';
+  readonly text: string;
+}
+
+/** One `[[target#anchor|alias]]` occurrence (`links.parseInline`, SDK 1.11). */
+export interface InlineLinkSegment {
+  readonly kind: 'wikilink';
+  /** Link target (path or note name), trimmed; `''` for a same-file `[[#anchor]]`. */
+  readonly target: string;
+  /** `#heading` anchor without the `#`, or `null`. */
+  readonly anchor: string | null;
+  /** Display alias after `|`, or `null`. */
+  readonly alias: string | null;
+}
+
+export type InlineSegment = InlineTextSegment | InlineLinkSegment;
+
 /** Options for the LLM chat facade. `taskId` enables `llm.cancelTask(taskId)`. */
 export interface PluginChatOptions {
   readonly temperature?: number;
@@ -470,6 +489,34 @@ export interface DreyPluginApi {
     vocabulary(): Promise<readonly TagEntry[]>;
     /** `scope` defaults to the active vault; `{ kind: 'all' }` spans every vault. */
     searchSections(query: TagSearchQuery, scope?: SectionSearchScope): Promise<readonly TagSearchHit[]>;
+  };
+
+  /**
+   * Wikilink parsing + navigation (SDK 1.11) — the base owns the grammar
+   * and the resolver; plugins render links without carrying a copy of
+   * either. `open` follows editor semantics: an unresolved target CREATES
+   * the note (in `fromVaultId`'s vault, default the active vault).
+   */
+  readonly links: {
+    /**
+     * Splits text into plain-text runs and `[[target#anchor|alias]]`
+     * occurrences (order preserved; malformed/empty links stay text).
+     */
+    parseInline(text: string): readonly InlineSegment[];
+    /**
+     * Sync render probe: where the target lives (`fromVaultId` default:
+     * the active vault; sibling preference applies), or `null` when
+     * unresolved. Does not open or create anything.
+     */
+    resolve(
+      target: string,
+      fromVaultId?: string,
+    ): { readonly vaultId: string; readonly path: string } | null;
+    /**
+     * The full editor flow: open the resolved note (at the `#heading`
+     * anchor's line when given), or CREATE the missing note and open it.
+     */
+    open(target: string, anchor?: string | null, fromVaultId?: string): Promise<void>;
   };
 
   /** The plugin's own config (`<userData>/plugins/<id>/config.json`). Saves immediately. */

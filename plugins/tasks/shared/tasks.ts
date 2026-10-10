@@ -25,9 +25,21 @@
  * -- and a vault stays readable/writable by Obsidian's Tasks plugin. The
  * tokens are human-legible annotations, not machine ids (ADR-0033's
  * rejection of `#task/id:` stands).
+ *
+ * Read compat (57a): the meeting import's text form — a `due:` /
+ * `done:` word before an ISO date — carries the same metadata and is
+ * parsed + stripped the same way (`done:` marks the task done). It is
+ * never written back: the setters stay `📅`-shaped, so a line edited by
+ * the pickers gains the emoji form while its text prefix goes away.
+ *
+ * Completion date (57d): Obsidian Tasks' done date `✅ YYYY-MM-DD` is
+ * parsed into `completed` and stripped from `text` like the other tokens
+ * (the text-form `done:` date feeds the same field). It is WRITTEN by the
+ * done toggle (`setDoneOnLine`) and removed on reopen — the date alone
+ * never marks a task done; the box / `#task/done` decides.
  */
 
-import { extractInlineTags, splitSections } from './support.js';
+import { extractInlineTags, splitSections, tagSetMatches } from './support.js';
 
 export type TaskKind = 'checkbox' | 'tag';
 
@@ -62,6 +74,11 @@ export interface TaskRecord {
   due: string | null;
   /** The line's priority glyph, or `null` (= normal, no glyph). */
   priority: TaskPriority | null;
+  /**
+   * Completion date as written (`✅ YYYY-MM-DD` or the text-form `done:`
+   * date), or `null`. Absent on records persisted before SDK 1.13.
+   */
+  completed?: string | null;
 }
 
 const FENCE = /^[ \t]*(```|~~~)/;
@@ -84,6 +101,21 @@ const TASK_DONE = /(^|\s)#task\/done(?=\s|$)/u;
  */
 const DUE_TOKEN = /(^|\s)📅[ \t]+\d{4}-\d{2}-\d{2}(?:[ \t]+(?=\S)|[ \t]*(?=$))/gu;
 const DUE_ONE = /(^|\s)📅[ \t]+(\d{4}-\d{2}-\d{2})(?=\s|$)/u;
+/**
+ * The meeting-import text form (read compat): a `due: YYYY-MM-DD` /
+ * `done: YYYY-MM-DD` word carries the same metadata as the emoji tokens.
+ * Parsed into the record and stripped from `text`, but never WRITTEN —
+ * the setters stay `📅`-shaped (Obsidian-Tasks compatibility, req-37).
+ * `#task/done` (no colon) is the unrelated completion marker and does not
+ * match these patterns.
+ */
+const DUE_TEXT_ONE = /(^|\s)due:[ \t]*(\d{4}-\d{2}-\d{2})(?=\s|$)/u;
+const DUE_TEXT_TOKEN = /(^|\s)due:[ \t]*\d{4}-\d{2}-\d{2}(?:[ \t]+(?=\S)|[ \t]*(?=$))/gu;
+const DONE_TEXT_ONE = /(^|\s)done:[ \t]*(\d{4}-\d{2}-\d{2})(?=\s|$)/u;
+const DONE_TEXT_TOKEN = /(^|\s)done:[ \t]*\d{4}-\d{2}-\d{2}(?:[ \t]+(?=\S)|[ \t]*(?=$))/gu;
+/** The Obsidian-Tasks done date `✅ YYYY-MM-DD` (an emoji variation selector is tolerated). */
+const DONE_DATE_ONE = /(^|\s)✅️?[ \t]+(\d{4}-\d{2}-\d{2})(?=\s|$)/u;
+const DONE_DATE_TOKEN = /(^|\s)✅️?[ \t]+\d{4}-\d{2}-\d{2}(?:[ \t]+(?=\S)|[ \t]*(?=$))/gu;
 const PRIORITY_TOKEN = /(^|\s)([🔺⏫🔽])(?:[ \t]+(?=\S)|[ \t]*(?=$))/gu;
 const PRIORITY_ONE = /(^|\s)([🔺⏫🔽])(?=\s|$)/u;
 const PRIORITY_OF: Readonly<Record<string, TaskPriority>> = {
@@ -183,20 +215,36 @@ export function taskLineTokens(line: string): TaskTokenSpan[] {
 
 /**
  * Splits the metadata tokens off a task line's text: the first `📅` date
- * becomes `due`, the first priority glyph becomes `priority`, and every
- * such token is removed from the returned text (gap collapsed, the same
- * normalization `stripTaskMarkers` applies).
+ * (or the text-form `due:` date) becomes `due`, the first priority glyph
+ * becomes `priority`, a text-form `done:` date marks the task done, and
+ * every such token is removed from the returned text (gap collapsed, the
+ * same normalization `stripTaskMarkers` applies).
  */
 function splitTaskMeta(text: string): {
   text: string;
   due: string | null;
   priority: TaskPriority | null;
+  done: boolean;
+  completed: string | null;
 } {
-  const due = DUE_ONE.exec(text)?.[2] ?? null;
+  const due = DUE_ONE.exec(text)?.[2] ?? DUE_TEXT_ONE.exec(text)?.[2] ?? null;
   const glyph = PRIORITY_ONE.exec(text)?.[2] ?? null;
+  const doneText = DONE_TEXT_ONE.exec(text);
   // The strip patterns eat one trailing separator, so nothing doubles up.
-  const stripped = text.replace(DUE_TOKEN, '$1').replace(PRIORITY_TOKEN, '$1').trim();
-  return { text: stripped, due, priority: glyph === null ? null : (PRIORITY_OF[glyph] ?? null) };
+  const stripped = text
+    .replace(DUE_TOKEN, '$1')
+    .replace(DUE_TEXT_TOKEN, '$1')
+    .replace(DONE_TEXT_TOKEN, '$1')
+    .replace(DONE_DATE_TOKEN, '$1')
+    .replace(PRIORITY_TOKEN, '$1')
+    .trim();
+  return {
+    text: stripped,
+    due,
+    priority: glyph === null ? null : (PRIORITY_OF[glyph] ?? null),
+    done: doneText !== null,
+    completed: DONE_DATE_ONE.exec(text)?.[2] ?? doneText?.[2] ?? null,
+  };
 }
 
 /** Strips a leading list bullet (`- `, `* `, `+ `) and surrounding whitespace. */
@@ -263,12 +311,13 @@ export function scanTasks(path: string, content: string, vaultId = ''): TaskReco
         vaultId,
         line: i + 1,
         text: meta.text,
-        done: box[2].toLowerCase() === 'x',
+        done: box[2].toLowerCase() === 'x' || meta.done,
         kind: 'checkbox',
         heading,
         tags: tagsForLine(i + 1),
         due: meta.due,
         priority: meta.priority,
+        completed: meta.completed,
       });
       continue;
     }
@@ -280,12 +329,13 @@ export function scanTasks(path: string, content: string, vaultId = ''): TaskReco
         vaultId,
         line: i + 1,
         text: meta.text,
-        done: TASK_DONE.test(raw),
+        done: TASK_DONE.test(raw) || meta.done,
         kind: 'tag',
         heading,
         tags: tagsForLine(i + 1),
         due: meta.due,
         priority: meta.priority,
+        completed: meta.completed,
       });
     }
   }
@@ -296,41 +346,102 @@ export function scanTasks(path: string, content: string, vaultId = ''): TaskReco
 /**
  * Returns `content` with the done-state of the task on 1-based `line`
  * forced to `done`. A checkbox line flips `[ ]` ⇄ `[x]`; a `#task` line
- * without a checkbox gains or loses a trailing ` #task/done`. If the line
- * is out of range or does not parse as a task, `content` is returned
- * unchanged.
+ * without a checkbox gains or loses a trailing ` #task/done`. Completing
+ * also stamps the completion date `✅ today`; reopening removes it (57d).
+ * If the line is out of range or does not parse as a task, `content` is
+ * returned unchanged.
  */
-export function setDoneOnLine(content: string, line: number, done: boolean): string {
+export function setDoneOnLine(
+  content: string,
+  line: number,
+  done: boolean,
+  today = todayIso(),
+): string {
   const lines = content.split('\n');
   const i = line - 1;
   if (i < 0 || i >= lines.length) {
     return content;
   }
+  const next = setDoneOnLineText(lines[i], done, today);
+  if (next === lines[i]) {
+    return content;
+  }
+  lines[i] = next;
+  return lines.join('\n');
+}
 
-  const original = lines[i];
-
-  const box = CHECKBOX.exec(original);
+/**
+ * The single-line form of {@link setDoneOnLine}: `line` with its done
+ * state forced to `done`. A line already in that state (or no task line)
+ * comes back unchanged — a legacy done task never gains a date it did not
+ * earn today.
+ */
+export function setDoneOnLineText(line: string, done: boolean, today = todayIso()): string {
+  const box = CHECKBOX.exec(line);
   if (box) {
-    const next = `${box[1]}${done ? 'x' : ' '}${box[3]}`;
-    if (next === original) {
-      return content;
+    if ((box[2].toLowerCase() === 'x') === done) {
+      return line;
     }
-    lines[i] = next;
-    return lines.join('\n');
+    return withCompletionDate(`${box[1]}${done ? 'x' : ' '}${box[3]}`, done ? today : null);
   }
 
-  if (TASK_MARKER.test(original)) {
-    const has = TASK_DONE.test(original);
-    if (done === has) {
-      return content;
+  if (TASK_MARKER.test(line)) {
+    if (TASK_DONE.test(line) === done) {
+      return line;
     }
-    lines[i] = done
-      ? `${original.replace(/[ \t]+$/, '')} #task/done`
-      : original.replace(TASK_DONE, '$1').replace(/[ \t]+$/, '');
-    return lines.join('\n');
+    const bare = withCompletionDate(
+      line.replace(TASK_DONE, '$1').replace(/[ \t]+$/, ''),
+      done ? today : null,
+    );
+    // The date sits before the marker, so `#task/done` stays line-final.
+    return done ? `${bare} #task/done` : bare;
   }
 
-  return content;
+  return line;
+}
+
+/**
+ * Brings the completion date of a task line in sync with its CURRENT done
+ * state (the box / `#task/done` was flipped by someone else — the editor's
+ * toggle commands): a done line without a date gains `✅ today`, an open
+ * line loses its date. Any other line comes back unchanged.
+ */
+export function syncCompletionDateOnLineText(line: string, today = todayIso()): string {
+  const box = CHECKBOX.exec(line);
+  if (box) {
+    const done = box[2].toLowerCase() === 'x';
+    if (done && DONE_DATE_ONE.test(line)) {
+      return line;
+    }
+    return withCompletionDate(line, done ? today : null);
+  }
+  return line;
+}
+
+/** `line` with its `✅` date replaced by `date`, or removed (`null`). */
+function withCompletionDate(line: string, date: string | null): string {
+  if (date === null && line.search(DONE_DATE_TOKEN) === -1) {
+    return line;
+  }
+  const bare = line.replace(DONE_DATE_TOKEN, '$1').replace(/[ \t]+$/, '');
+  return date === null ? bare : `${bare} ✅ ${date}`;
+}
+
+/**
+ * When a task counts as completed, for the `completed` view: the date
+ * written on the line, else the first `YYYY-MM-DD` in the note's file
+ * name (a daily or dated meeting note — the legacy approximation for
+ * tasks ticked before 57d), else `null`. Read-only; never written back.
+ */
+export function completionKey(task: {
+  readonly path: string;
+  readonly completed?: string | null;
+}): string | null {
+  if (task.completed !== undefined && task.completed !== null) {
+    return task.completed;
+  }
+  const name = task.path.slice(task.path.lastIndexOf('/') + 1);
+  return /\d{4}-\d{2}-\d{2}/.exec(name)?.[0] ?? null;
 }
 
 /**
@@ -433,4 +544,146 @@ export function resolveTaskLine(content: string, task: TaskRecord): number | nul
     found = candidate;
   }
   return found !== null && !ambiguous ? found.line : null;
+}
+
+/* ------------------------------------------------------------------ *
+ * Deterministic task views (57c): the comparators and filter matching
+ * the panel and the TaskQueryProvider share — one implementation, so
+ * the assistant block and the Tasks panel always agree on order and
+ * filtering semantics.
+ * ------------------------------------------------------------------ */
+
+/** The subset of a record the view comparators need. */
+export interface TaskViewRecord {
+  readonly path: string;
+  readonly line: number;
+  readonly due: string | null;
+  readonly priority: TaskPriority | null;
+  readonly completed?: string | null;
+}
+
+/**
+ * The list orders: file order, due asc, priority, the due-dominant
+ * composite, or completion date newest first.
+ */
+export type TaskViewSort = 'file' | 'due' | 'priority' | 'importance' | 'completed';
+
+/** Canonical location tie-break in every sort: path, then line. */
+export function byLocation(a: TaskViewRecord, b: TaskViewRecord): number {
+  return a.path.localeCompare(b.path) || a.line - b.line;
+}
+
+/** The sort rank of a priority: highest, high, normal, low. */
+export function priorityRank(task: TaskViewRecord): number {
+  switch (task.priority) {
+    case 'highest':
+      return 0;
+    case 'high':
+      return 1;
+    case null:
+      return 2;
+    case 'low':
+      return 3;
+  }
+}
+
+/** Due ascending (ISO orders lexicographically), undated last, ties by location. */
+export function byDue(a: TaskViewRecord, b: TaskViewRecord): number {
+  if (a.due === b.due) {
+    return byLocation(a, b);
+  }
+  return a.due !== null && (b.due === null || a.due < b.due) ? -1 : 1;
+}
+
+/** The full comparator for one view sort (ties always fall back to location). */
+export function compareTasks(a: TaskViewRecord, b: TaskViewRecord, sort: TaskViewSort): number {
+  switch (sort) {
+    case 'due':
+      return byDue(a, b);
+    case 'priority':
+      return priorityRank(a) - priorityRank(b) || byLocation(a, b);
+    case 'importance':
+      // Due first — dated before undated, then ascending (overdue
+      // naturally leads) — then priority decides WITHIN the undated
+      // group too, then the canonical location order. (Plain `byDue`
+      // would break due ties by location before priority could speak.)
+      if (a.due !== b.due) {
+        if (a.due === null) {
+          return 1;
+        }
+        if (b.due === null) {
+          return -1;
+        }
+        return a.due < b.due ? -1 : 1;
+      }
+      return priorityRank(a) - priorityRank(b) || byLocation(a, b);
+    case 'completed': {
+      // Newest completion first, undated last (57d).
+      const ka = completionKey(a);
+      const kb = completionKey(b);
+      if (ka === kb) {
+        return byLocation(a, b);
+      }
+      return ka !== null && (kb === null || ka > kb) ? -1 : 1;
+    }
+    case 'file':
+      return byLocation(a, b);
+  }
+}
+
+/** Sorts a copy; the input list is never mutated. */
+export function sortTaskRecords<T extends TaskViewRecord>(list: readonly T[], sort: TaskViewSort): T[] {
+  return [...list].sort((a, b) => compareTasks(a, b, sort));
+}
+
+/** The text/tag/overdue restrictions a task query may carry (SDK 1.12 subset). */
+export interface TaskViewFilter {
+  /** Whitespace-split terms that must all appear in the task text + heading. */
+  readonly text?: string;
+  /** One tag the task's section must carry — exact or namespace ancestor. */
+  readonly tag?: string;
+  /** Only tasks with a due date before `today`. */
+  readonly overdue?: boolean;
+  /** Only tasks completed on or after this `YYYY-MM-DD` (see `completionKey`). */
+  readonly completedSince?: string;
+}
+
+/**
+ * Whether one record satisfies the text/tag/overdue restrictions. The
+ * same semantics as the panel's free-text/tag fields (AND terms,
+ * namespace-aware tag match) — extracted here so the provider answers
+ * assistant/MCP queries with exactly what the Tasks panel would show.
+ */
+export function taskMatchesFilter(
+  task: Pick<TaskRecord, 'text' | 'heading' | 'tags' | 'due'> &
+    Partial<Pick<TaskRecord, 'path' | 'completed'>>,
+  filter: TaskViewFilter,
+  today: string,
+): boolean {
+  if (filter.overdue === true && !(task.due !== null && task.due < today)) {
+    return false;
+  }
+  if (filter.completedSince !== undefined) {
+    const key = completionKey({ path: task.path ?? '', completed: task.completed });
+    if (key === null || key < filter.completedSince) {
+      return false;
+    }
+  }
+  if (filter.tag !== undefined) {
+    const wanted = filter.tag.trim().replace(/^#/, '').toLowerCase();
+    if (wanted === '' || !tagSetMatches(new Set(task.tags), wanted)) {
+      return false;
+    }
+  }
+  if (filter.text !== undefined) {
+    const terms = filter.text
+      .toLowerCase()
+      .split(/\s+/)
+      .filter((t) => t !== '');
+    const hay = `${task.text}\n${task.heading ?? ''}`.toLowerCase();
+    if (!terms.every((term) => hay.includes(term))) {
+      return false;
+    }
+  }
+  return true;
 }

@@ -202,3 +202,27 @@ storage format is untouched:
   (the list once rendered once, before async data could land) and a
   failed list says "Chats could not be listed." instead of reading as
   "No chats yet".
+- **Daily notes never bind (57c).** The binding assumed every user note
+  is a topic — but days flip constantly, so switching daily notes yanked
+  the panel to each day's leftover chat. A note under the configured
+  daily root (`daily.dir`, read live from app config) now behaves like a
+  chat-note tab for binding purposes: an ask under daily focus leaves the
+  chat unbound, and focusing a daily note never triggers the bound-chat
+  follow — the panel keeps the current conversation. The note chip still
+  rides as context, old daily-bound chats stay picker-reachable (their
+  `note:` is simply never matched again; no migration), and a topic note
+  that merely shares the prefix (`daily-themen/…`) still binds.
+- **The implicit follow is gone entirely (57c).** The daily exclusion
+  only silenced the loudest case: meetings bind as ordinary notes, and
+  with several same-titled chats the "a bound note opens its newest bound
+  chat" rule silently yanked the panel to the newest match — rarely the
+  conversation the user was actually in, and every day/meeting switch
+  flapped the panel. The follow is now purely explicit: the ONLY
+  implicit switch left is a focused **chat-note tab** (opening a chat's
+  Markdown from the vault hydrates the panel with it); every other
+  focus — daily, meeting, topic note, non-document — keeps EXACTLY the
+  current chat, and the very first follow (app start) still loads the
+  newest conversation once. `note:` stays on the frontmatter as
+  provenance and drives only the picker's "this note" marker; it no
+  longer steers anything. A chat changes through the picker, "New chat",
+  or a chat-note tab — nothing else.

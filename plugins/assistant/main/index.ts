@@ -5,8 +5,14 @@ import type {
   MainPluginModule,
   NoteSavedEvent,
   SaveHookResult,
+  SdkTaskRecord,
 } from '../../../shared/plugin-api';
 import { parseAskPayload } from '../shared/ask.js';
+import {
+  TASKS_LIST_SPEC,
+  hydrateTaskRecords,
+  runTasksListTool,
+} from './tasks-tool.js';
 import {
   extensionOf,
   externalFileKind,
@@ -148,8 +154,54 @@ const plugin: MainPluginModule = {
         onDelta: (taskId, text) => ctx.ipc.emit('chat:delta', { taskId, text }),
         onLiveEdit: (path, content) => ctx.ipc.emit('chat:liveEdit', { path, content }),
         retrieveContext: (question, scope) => semantic.retrieve(question, scope),
+        tasksTool: () => {
+          // Live at call time: the tasks plugin can (de)activate between
+          // asks only via an app restart, but the getter keeps the engine
+          // decoupled from the registration order.
+          const provider = ctx.tasks.queryProvider();
+          if (provider === null) {
+            return null;
+          }
+          return {
+            spec: TASKS_LIST_SPEC,
+            run: (argsJson) => runTasksListTool(provider, argsJson),
+            query: (opts) => provider.query(opts),
+          };
+        },
       },
     );
+
+    // -- the panel's task block (SDK 1.11) -----------------------------------
+    // Fence rows carry identity; the LIVE done/due state hydrates from the
+    // task provider at render time (ADR-0055's fresh-hydration rule). The
+    // checkbox toggle goes through the provider's setDone — the tasks
+    // plugin owns the line grammar, the assistant never edits task lines
+    // itself.
+    ctx.ipc.handle('tasks:hydrate', (payload) => {
+      const { records } = (payload ?? {}) as { records?: unknown };
+      if (!Array.isArray(records)) {
+        throw new Error('malformed tasks:hydrate payload');
+      }
+      const provider = ctx.tasks.queryProvider();
+      if (provider === null) {
+        return records as readonly SdkTaskRecord[];
+      }
+      return provider
+        .query({ includeDone: true })
+        .then((current) => hydrateTaskRecords(records as readonly SdkTaskRecord[], current));
+    });
+
+    ctx.ipc.handle('tasks:setDone', (payload) => {
+      const { task, done } = (payload ?? {}) as { task?: unknown; done?: unknown };
+      if (typeof task !== 'object' || task === null || typeof done !== 'boolean') {
+        throw new Error('malformed tasks:setDone payload');
+      }
+      const provider = ctx.tasks.queryProvider();
+      if (provider === null) {
+        throw new Error('The task index is not available.');
+      }
+      return provider.setDone(task as SdkTaskRecord, done);
+    });
 
     // -- the on-save Actions save hook -------------------------------------
     ctx.save.onNoteSaved(async (event) => runOnSaveActions(ctx, engine, event));

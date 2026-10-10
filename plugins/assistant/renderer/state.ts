@@ -13,7 +13,12 @@ import type { ActionOutcome } from '../../../shared/plugin-api';
 import type { AskRequest, AssistantOutcome } from '../shared/ask';
 import { MAX_EXTRA_FILES, MAX_IMAGES, truncateFileBody } from '../shared/ask.js';
 import { normalizeVaultScope, type VaultScope } from '../shared/semantic.js';
-import { isChatNotePath, type ChatNoteView, type ChatSummary } from '../shared/chat-note.js';
+import {
+  isChatNotePath,
+  isDailyNotePath,
+  type ChatNoteView,
+  type ChatSummary,
+} from '../shared/chat-note.js';
 import { ipcErrorMessage } from '../shared/format.js';
 import { type RunningTasks } from './running-tasks.js';
 
@@ -124,6 +129,12 @@ export interface AssistantPorts {
    * (ADR-0049). Released by this state in the ask's `finally`.
    */
   setEditLock(path: string, locked: boolean): void;
+  /**
+   * The configured daily-notes root (AppConfig `daily.dir`, live) — the
+   * decoupling anchor: a daily note never binds a chat and never pulls
+   * one on focus (57c).
+   */
+  dailyDir(): Promise<string>;
 }
 
 /**
@@ -540,8 +551,10 @@ export function createAssistantState(ports: AssistantPorts, tasks: RunningTasks)
       const activation = firstFollow;
       firstFollow = false;
 
-      // Focusing a chat note's own tab loads THAT chat into the panel —
-      // the tab is the note's view, the panel should agree with it.
+      // The ONE implicit switch left (ADR-0048 later change): focusing a
+      // chat note's own tab — or opening its Markdown from the vault —
+      // hydrates the panel with THAT chat. The tab is the note's view,
+      // the panel should agree with it.
       if (noteKey !== null) {
         const chatPath = docKeyPath(noteKey);
         if (chatPath !== null && isChatNotePath(chatPath)) {
@@ -553,21 +566,15 @@ export function createAssistantState(ports: AssistantPorts, tasks: RunningTasks)
         }
       }
 
-      // A document with a bound chat opens its newest one.
-      const bound = noteKey === null
-        ? undefined
-        : chats.find((chat) => chat.note === noteKey); // listChats: newest first
-      if (bound !== undefined) {
-        if (bound.path !== activeChat) {
-          await this.openChat(bound.path);
-        }
-        return;
-      }
-
-      // Anything else — an unbound note or a non-note focus — keeps the
-      // current chat (a tab switch no longer wipes the panel; ADR-0048
-      // later change). Only the very first follow continues the newest
-      // conversation instead of showing an empty panel.
+      // Anything else — a daily note, a meeting, a topic note, a
+      // non-document focus — keeps EXACTLY the current chat. The old
+      // "a bound note opens its newest bound chat" rule is gone: with
+      // several same-titled chats it silently yanked the panel to the
+      // newest bound one (rarely the conversation the user was in), and
+      // day/meeting switches flapped the panel. A chat changes now only
+      // through the picker, "New chat", or a chat-note tab. Only the very
+      // first follow (app start) continues the newest conversation
+      // instead of showing an empty panel.
       if (activation && activeChat === null && chats.length > 0) {
         await this.openChat(chats[0].path);
       }
@@ -655,8 +662,16 @@ export function createAssistantState(ports: AssistantPorts, tasks: RunningTasks)
         // asking with a chat tab focused continues THAT chat (it is the
         // panel's active chat), and a fresh one stays unbound instead of
         // chaining chat → chat. The note chip still rides as context.
+        // A daily note binds nothing either (57c decoupling): days flip
+        // constantly — a conversation is not "about" a day the way it is
+        // about a topic note, so chats started under daily focus stay
+        // unbound (picker-reachable, never auto-opened).
+        const dailyDir = await ports.dailyDir();
         const noteKey =
-          active !== null && active.vaultId !== null && !isChatNotePath(active.path)
+          active !== null &&
+          active.vaultId !== null &&
+          !isChatNotePath(active.path) &&
+          !isDailyNotePath(active.path, dailyDir)
             ? `${active.vaultId}::${active.path}`
             : null;
         let note: AskRequest['note'] = null;

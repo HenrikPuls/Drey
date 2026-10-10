@@ -20,6 +20,128 @@ recorded as an explicit decision. The parity checklist lives in
 
 ## Recent milestones
 
+### Milestone 57 — the assistant as the task & navigation surface (ADR-0058)
+
+- **Task answers become actionable.** The assistant gained a
+  `tasks_list` tool over a new base seam (SDK 1.11: `ctx.tasks` +
+  `TaskQueryProvider`, single-slot like section search): the tasks plugin
+  registers its index and stays the sole owner of the line grammar; the
+  tool rides every non-live ask (no MCP gate, tool-capable providers
+  only) and answers task questions from real index rows as one JSON line
+  per task. The model never quotes task lines from retrieval snippets
+  any more.
+- **The interactive task block.** A `tasks_list` call/result pair renders
+  in the turn card as a task list instead of raw chips: checkbox, text,
+  priority glyph, due badge (overdue/today colored), row click opens the
+  note at the line. The checkbox completes the task through the
+  provider's `setDone` (announced write, staleness-resolved); the fence
+  rows hydrate their live done/due state from the index at render time.
+- **Clickable wikilinks + rich answers.** New `api.links` SDK surface
+  (base-owned grammar + resolver — no third grammar copy): the panel's
+  turn text now renders a small Markdown subset (paragraphs, lists,
+  bold/italic/code) with `[[wikilinks]]` as buttons; a sync resolve probe
+  styles resolved vs. unresolved, a click follows the link — creating a
+  missing note, editor semantics. The ask prompt invites the model to
+  reference notes as wikilinks from context paths (deviation from the
+  M49 no-mint rule for prose, documented in the ADR; the deterministic
+  Sources digest rule stands).
+- **MCP symmetry:** `tasks_list` joins the vault tool set (read-only,
+  clear degradation without a provider). Drive-by: context-cite rows now
+  open at their cited line. `PLUGIN_API_VERSION` minor → 11.
+- **M57c — deterministic task views, the model demoted to intent:** the
+  live runs confirmed the model is a poor list builder (index order, no
+  importance) but a fine intent reader. The view moved to the data
+  owner: `TaskQueryOptions` gains `sort`/`text`/`tag`/`overdue` (SDK
+  1.12), implemented by the tasks plugin over the SAME comparators and
+  matchers its panel uses (`shared/tasks.ts`) — the Tasks panel, the
+  assistant block and MCP share one view semantics. The `tasks_list`
+  tool takes the intent args; the ask prompt tells the model to express
+  the question's restriction there; its prose stays a brief highlight.
+  `importance` (the assistant's default order) is due-ascending first
+  (overdue leads), priority within the undated rest, path/line last.
+  The post-hoc block stays the unfiltered importance-sorted safety net.
+  The panel renders the filter as head chips and a real empty state for
+  a filtered no-hit result; MCP passes the same args through but keeps
+  the provider's file-order default when `sort` is absent.
+- **M57c — the implicit chat-follow is gone:** the "a bound note opens
+  its newest bound chat" rule silently yanked the panel to the newest
+  match when several chats shared a title, and every day/meeting switch
+  flapped the panel. The only implicit switch left is a focused chat-note
+  tab (opening a chat's Markdown from the vault hydrates the panel);
+  every other focus keeps exactly the current chat, app start still
+  loads the newest conversation once, and `note:` stays as provenance +
+  the picker's "this note" marker only (ADR-0048 later change).
+- **M57c — icon-only assistant head:** the chat-title text left the
+  panel head (stale on a switch, and the picker it opened lists the
+  chats anyway) — the head is now the chat-list button + the "+" new
+  chat icon. The frame-header `status()` (the chat title right of
+  "Assistant") went with it: it recomputed only on shell change
+  detection — late and wrong after a switch — and said nothing the
+  picker doesn't.
+- **M57c live fix — the block is answer-scoped:** the 9B model called
+  `tasks_list` with `{}` on restricted questions, so everything was
+  listed. The intent prompt + tool description now carry few-shot
+  examples (person → `text`, `#tag` → `tag`, overdue → `overdue`), and
+  the engine scopes the persisted result to the answer deterministically:
+  the post-hoc pair carries the matched subset, an unrestricted call's
+  result is trimmed to it (restricted calls, whole-set and zero-match
+  answers untouched).
+- **M57c — daily notes never bind:** switching daily notes yanked the
+  panel to each day's leftover chat. A note under the configured daily
+  root now behaves like a chat-note tab for binding: asks under daily
+  focus leave the chat unbound, focusing a daily note never triggers the
+  bound-chat follow (ADR-0048 later change; the context chip still
+  rides, old daily-bound chats stay picker-reachable).
+- **M57b — the answer-anchored task block:** the model's tool call
+  proved unreliable (one run called `tasks_list`, the next summarized
+  from Vault-chip retrieval with no block), and question keywords were
+  rejected as language-dependent. The trigger now lives in the ANSWER:
+  the engine matches the settled answer against the live task index
+  (normalized word overlap, language-independent — models quote task
+  titles verbatim) and, on a match, persists the FULL open task set as a
+  synthetic `tasks_list` pair after any real tool-trace entries. The
+  interactive block is therefore guaranteed whenever an answer is about
+  tasks; model calls remain welcome and suppress the synthetic pair;
+  follow-ups replay it as the model's own tool result. The prompt asks
+  for a brief highlight instead of a full prose repeat; the paired
+  result chip no longer renders under the block.
+- **M57a follow-ups from the first live test:** the meeting import's
+  text-form metadata (`due: YYYY-MM-DD` / `done: YYYY-MM-DD`) now parses
+  into the record like the emoji tokens (read compat — the write format
+  stays `📅`), so due badges, overdue coloring and due sorting work for
+  the whole existing vault; answer prose linkifies `.md` path mentions
+  deterministically (resolved → clickable, unresolved stays text —
+  robust against models that ignore the wikilink prompt); the ask prompt
+  asks for a one/two-sentence summary after `tasks_list` instead of a
+  prose repeat of the list; turn rendering is defensive (a broken turn
+  becomes an error card instead of a blank thread) and a skipped
+  `tasks_list` result logs its reason to the console.
+- Tests: task provider (query scoping, setDone incl. shifted-line
+  resolution and the tag-kind toggle), engine tool flow (attach, prompt
+  note, fence persistence), MCP `tasks_list`, `api.links` impl via the
+  rich-text renderer (formatting parser, lists, link styling + open
+  calls), scanner text-metadata cases, path-linkify cases. Docs:
+  ADR-0058, AUTHORING (1.11), CLAUDE.md.
+
+- **M57d — done tasks, completion dates, the edit guard:** a beta chat
+  asked "which tasks were completed recently", got an answer quoted from
+  vault context plus "I would have to query with `includeDone: true`",
+  and the follow-up "ja dann mach das" turned into a change proposal for
+  the daily note. Fixes: completing a task now stamps an
+  Obsidian-Tasks-compatible `✅ YYYY-MM-DD` on the line and reopening
+  removes it (panel row, assistant block, `Ctrl+Enter`, Live Preview
+  checkbox click — **a format change**, see `specs/frontmatter-schema.md`
+  and ADR-0033); `TaskQueryOptions` gains `status` / `completedSince` /
+  the `completed` sort (SDK minor → 13) and both `tasks_list` tools take
+  them; the ask prompt gets done-task few-shots, today's date and the
+  task rule after the vault context; the Change form is limited to an
+  explicit edit request and the engine rejects a `document` fence that
+  changes nothing or rides a task-lookup turn; short tasks (two or three
+  significant words) can match an answer, so they get their block.
+  Not done: a file-mtime fallback for tasks completed before this change
+  (the index holds no stat data) — those fall back to the date in the
+  note's file name, else sort last.
+
 ### Milestone 56 — the assistant panel keeps its chat
 
 - **Root cause found (56a):** the chat store consumed the **tree**-shaped

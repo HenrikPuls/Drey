@@ -30,6 +30,24 @@ export function isChatNotePath(path: string): boolean {
   return path === CHATS_DIR || path.startsWith(`${CHATS_DIR}/`);
 }
 
+/** The default daily root, matching `AppConfig.daily.dir`'s fallback. */
+export const DEFAULT_DAILY_DIR = 'daily';
+
+/**
+ * Whether a vault-relative path sits in the configured daily-notes root
+ * (57c decoupling): daily notes never bind a chat and never pull one on
+ * focus — a day switch keeps the panel's current conversation. The dir
+ * comes from the live app config; it is normalised here so a hand-edited
+ * value with a trailing slash or backslashes still matches.
+ */
+export function isDailyNotePath(path: string, dailyDir: string): boolean {
+  const dir = dailyDir.replaceAll('\\', '/').replace(/\/+$/, '');
+  if (dir === '' || dir === '.') {
+    return false;
+  }
+  return path === dir || path.startsWith(`${dir}/`);
+}
+
 /** The fence tag around persisted tool calls/results/edit outcomes. */
 export const TOOL_FENCE_TAG = 'drey-tool';
 

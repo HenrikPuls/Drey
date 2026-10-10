@@ -16,6 +16,7 @@
 import type { ChatAttachment, ChatMessage, LlmChatResult, ToolSpec } from '../../../shared/llm';
 import { pickPreviewStyle } from '../../../shared/text-diff';
 import { formatDateTime } from '../../../shared/timestamp';
+import type { SdkTaskRecord } from '../../../shared/plugin-api';
 import type { AppConfig } from '../../../shared/app-config';
 import type { LlmCapabilities } from '../../../shared/llm';
 import type { AskRequest, AssistantOutcome } from '../shared/ask';
@@ -24,6 +25,7 @@ import {
   ChatContextStatus,
   ChatNoteAttachment,
   ChatNoteTurn,
+  ChatToolEntry,
   EDIT_PROPOSAL_MARKER,
   toolEntriesFromTrace,
 } from '../shared/chat-note.js';
@@ -38,12 +40,20 @@ import {
 import { ChatStore } from './chat-store';
 import {
   ASK_ANSWER_SYSTEM,
+  ASK_LINKS_NOTE,
   ASK_SYSTEM,
+  ASK_TASKS_NOTE,
   ASK_TOOLS_NOTE,
   buildAskUserMessage,
+  buildDateNote,
   buildToolsNote,
   editCatchUpLine,
 } from './ask-prompts';
+import {
+  TASKS_LIST_TOOL_NAME,
+  matchTasksInAnswer,
+  refineTasksEntries,
+} from './tasks-tool.js';
 import {
   LIVE_EDIT_SYSTEM,
   LIVE_EDIT_TOOLS_NOTE,
@@ -95,6 +105,23 @@ export interface ChatEnginePorts {
     question: string,
     scope: 'vault' | 'all',
   ): Promise<RetrievalOutcome>;
+  /**
+   * The `tasks_list` tool for NON-live asks (SDK 1.11): the spec rides the
+   * call's tool set and `run` executes one call against the base task
+   * index; `query` reads the index directly (the post-hoc block). `null` =
+   * no task provider registered — the tool stays unattached and the
+   * prompts don't mention it.
+   */
+  tasksTool(): {
+    spec: ToolSpec;
+    run(argsJson: string): Promise<string>;
+    query(opts?: {
+      includeDone?: boolean;
+      status?: 'open' | 'done' | 'all';
+      vaultId?: string;
+      sort?: 'file' | 'due' | 'priority' | 'importance' | 'completed';
+    }): Promise<readonly SdkTaskRecord[]>;
+  } | null;
 }
 
 export interface ChatAskResult {
@@ -113,6 +140,25 @@ const IMAGE_MEDIA_TYPES: Record<string, string> = {
   webp: 'image/webp',
   gif: 'image/gif',
 };
+
+/** A reply's text with every fenced block dropped (the edit guard's answer). */
+function proseOutsideFences(reply: string): string {
+  const kept: string[] = [];
+  let fence: number | null = null;
+  for (const line of reply.replace(/\r\n/g, '\n').split('\n')) {
+    const ticks = /^(`{3,})/.exec(line)?.[1].length ?? 0;
+    if (fence === null) {
+      if (ticks > 0) {
+        fence = ticks;
+      } else {
+        kept.push(line);
+      }
+    } else if (ticks >= fence && /^`+\s*$/.test(line)) {
+      fence = null;
+    }
+  }
+  return kept.join('\n').trim();
+}
 
 export class ChatEngine {
   constructor(
@@ -225,8 +271,23 @@ export class ChatEngine {
     const toolsNote = toolsOn
       ? buildToolsNote(live ? LIVE_EDIT_TOOLS_NOTE : ASK_TOOLS_NOTE, await this.ports.listVaults())
       : null;
+    // The tasks tool rides every non-live ask when a task provider exists
+    // (SDK 1.11) — independent of the MCP switch; the note tells the model
+    // to prefer it over quoting task lines from retrieved context.
+    const tasksTool = live ? null : this.ports.tasksTool();
+    const tasksNote = tasksTool !== null ? ASK_TASKS_NOTE : null;
     const contextBlock = contextHits.length > 0 ? buildVaultContextBlock(contextHits) : null;
-    const systemContent = [system, toolsNote, contextBlock]
+    // Order matters (57d): the retrieved context sits BEFORE the task note,
+    // so "answer tasks only from the tool" is the later instruction and
+    // overrides the task lines that context happens to carry.
+    const systemContent = [
+      system,
+      toolsNote,
+      contextBlock,
+      tasksNote,
+      ASK_LINKS_NOTE,
+      buildDateNote(new Date()),
+    ]
       .filter((part): part is string => part !== null && part !== '')
       .join('\n\n');
     const baseMessages: ChatMessage[] = [{ role: 'system', content: systemContent }];
@@ -268,7 +329,18 @@ export class ChatEngine {
                 return run.text;
               }),
           }
-        : {}),
+        : tasksTool !== null
+          ? {
+              // One lookup + the answer: a small cap keeps a loop-happy
+              // model from re-listing tasks for rounds on end.
+              tools: [tasksTool.spec],
+              maxToolRounds: 3,
+              onToolCall: (name: string, argsJson: string) =>
+                name === tasksTool.spec.name
+                  ? tasksTool.run(argsJson)
+                  : Promise.resolve(`Unknown tool: ${name}`),
+            }
+          : {}),
       ...(useSession && view.frontmatter.session !== null
         ? { sessionRef: view.frontmatter.session }
         : {}),
@@ -311,6 +383,12 @@ export class ChatEngine {
       throw new Error('The model returned no message content.');
     }
 
+    const modelCalledTasks = (result.toolTrace ?? []).some(
+      (message) =>
+        message.role === 'assistant' &&
+        message.tool_calls?.some((call) => call.function.name === TASKS_LIST_TOOL_NAME),
+    );
+
     // 5 · The reply: a live turn's changes are already applied — the
     // model's text is the summary (the providers deliver an empty text
     // when the round cap hit mid-loop, so a fallback names what happened).
@@ -334,9 +412,19 @@ export class ChatEngine {
       // any reply without a usable fence — a prose decline, a truncated
       // document) degrades to a plain answer instead of a raw-JSON card.
       const fence = extractDocumentFence(result.text);
-      if (request.note !== null && fence !== null) {
+      const after = fence !== null ? normalizeDoc(fence.document) : null;
+      // The edit guard (57d): a fence is only a change proposal when it
+      // actually changes the document AND the turn was not a task lookup —
+      // a model that answers "yes, do that" by wrapping the looked-up list
+      // (or the untouched note) in a document fence asked a question, it
+      // did not order an edit. The prose around the fence is the answer.
+      if (
+        request.note !== null &&
+        after !== null &&
+        after !== normalizeDoc(request.note.body) &&
+        !modelCalledTasks
+      ) {
         const body = request.note.body;
-        const after = normalizeDoc(fence.document);
         outcome = {
           kind: 'edit',
           before: body,
@@ -344,8 +432,64 @@ export class ChatEngine {
           previewStyle: pickPreviewStyle(body, after),
           summary: request.question.trim(),
         };
+      } else if (request.note !== null && after !== null) {
+        outcome = {
+          kind: 'answer',
+          text:
+            proseOutsideFences(result.text) ||
+            (modelCalledTasks ? 'Here are the tasks.' : 'No changes were needed.'),
+        };
       } else {
         outcome = { kind: 'answer', text: result.text.trim() };
+      }
+    }
+    // What the user reads — the task matching below anchors to it, never
+    // to a rejected fence's document text.
+    const answerText = outcome.kind === 'edit' ? result.text : outcome.text;
+
+    // 5b · The post-hoc task block (57b/57c): when the answer talks about
+    // tasks — matched against the live index by word overlap, no question
+    // keywords, no model discretion — the engine attaches a synthetic
+    // `tasks_list` pair carrying the MATCHED subset (importance order).
+    // The block is therefore scoped to what the answer discusses: a
+    // "tasks of Henrik" question yields Henrik's tasks even when the
+    // model never called the tool. A model call is refined the same way
+    // (see refineTasksEntries): an unfiltered call's result is trimmed to
+    // the answer's subset. Best-effort overall: an index failure never
+    // fails the ask.
+    const posthocEntries: ChatToolEntry[] = [];
+    let toolEntries = toolEntriesFromTrace(result.toolTrace);
+    if (tasksTool !== null && answerText.trim() !== '') {
+      toolEntries = refineTasksEntries(toolEntries, answerText);
+      if (!modelCalledTasks) {
+        try {
+          // Open tasks first; an answer about finished work (57d) falls
+          // back to the completed ones, newest first — never a mixed list.
+          const open = await tasksTool.query({ includeDone: false, sort: 'importance' });
+          let matched = matchTasksInAnswer(answerText, open);
+          if (matched.length === 0) {
+            const done = await tasksTool.query({ status: 'done', sort: 'completed' });
+            matched = matchTasksInAnswer(answerText, done);
+          }
+          if (matched.length > 0) {
+            const id = `tasks-posthoc-${startedAt}`;
+            posthocEntries.push(
+              {
+                kind: 'call',
+                id,
+                name: TASKS_LIST_TOOL_NAME,
+                arguments: '{"posthoc":true}',
+              },
+              {
+                kind: 'result',
+                id,
+                content: matched.map((task) => JSON.stringify(task)).join('\n'),
+              },
+            );
+          }
+        } catch {
+          // Best-effort: the answer stands without the block.
+        }
       }
     }
 
@@ -365,7 +509,7 @@ export class ChatEngine {
             ? `${EDIT_PROPOSAL_MARKER} \`${request.note.path}\`]`
             : '',
       attachments: [],
-      tool: toolEntriesFromTrace(result.toolTrace),
+      tool: [...toolEntries, ...posthocEntries],
       context: contextCitations(contextHits) as ContextCite[],
       contextStatus,
       start: 0,
