@@ -24,7 +24,7 @@ sequenceDiagram
     VaultService->>Preload: getActiveVault()
     Preload->>Main: invoke('vault:get-active')
     Main->>VaultManager: getActiveVaultPath()
-    VaultManager-->>Main: path | null (from in-memory state,\nseeded from vault-config.json at startup)
+    VaultManager-->>Main: path | null (from in-memory state,<br/>seeded from vault-config.json at startup)
     Main-->>Preload: path | null
     Preload-->>VaultService: path | null
     alt a vault was already active
@@ -96,7 +96,7 @@ sequenceDiagram
 
     User->>Sidebar: click a file entry
     Sidebar->>EditorService: openFile(relativePath)
-    EditorService->>EditorService: victim = focused pane's active tab,\nif clean (dirty / plugin kind -> none)
+    EditorService->>EditorService: victim = focused pane's active tab,<br/>if clean (dirty / plugin kind -> none)
     alt file already open
         EditorService->>EditorService: reveal: focus + activate that pane (nothing closes)
     else new file
@@ -109,8 +109,8 @@ sequenceDiagram
         VaultManager-->>Main: { content, modifiedMs }
         Main-->>Preload: { content, modifiedMs }
         Preload-->>EditorService: { content, modifiedMs }
-        EditorService->>EditorService: open tab; clean victim closes\n(victim turned dirty mid-read -> stays)
-        EditorService->>EditorService: savedContent = bufferContent = content,\nopenPath = relativePath, viewMode = readDefaultMode() (preview by default)
+        EditorService->>EditorService: open tab, clean victim closes<br/>(victim turned dirty mid-read -> stays)
+        EditorService->>EditorService: savedContent = bufferContent = content,<br/>openPath = relativePath, viewMode = readDefaultMode() (preview by default)
     end
     Note over Editor: effect() sees the pane's shown document change
     Editor->>Editor: dispatch full-doc replace into EditorView
@@ -218,7 +218,7 @@ sequenceDiagram
     participant EditorService
     participant CM as CodeMirror 6 view
 
-    Note over Preview: viewMode = 'preview' -- markdown-it output,\nevery top-level block carries data-line (token.map, 0-based in the\nfrontmatter-stripped text)
+    Note over Preview: viewMode = 'preview' -- markdown-it output,<br/>every top-level block carries data-line (token.map, 0-based in the<br/>frontmatter-stripped text)
     User->>Preview: click inside a block
     Preview->>Editor: (click) -> onPreviewClick(event)
     Editor->>Editor: event.target.closest('[data-line]') -> dataLine
@@ -306,7 +306,7 @@ sequenceDiagram
         Note over NoteManager: daily/ + templates/ -> keep tags, still bump updated
         NoteManager->>Pure: bumpUpdated(fm)  ->  { updated: now, created }
         NoteManager->>Pure: writeFrontmatter(body, { tags, updated, created })
-        Note over Pure: yaml parseDocument -> mutate only those keys,\ncomments + styles preserved, dates double-quoted
+        Note over Pure: yaml parseDocument -> mutate only those keys,<br/>comments + styles preserved, dates double-quoted
         NoteManager->>VaultManager: writeFile(path, newText with EOL)
         VaultManager->>FS: writeFile + stat
 
@@ -332,7 +332,7 @@ sequenceDiagram
     Main-->>Preload: NoteSaveResult
     Preload-->>EditorService: NoteSaveResult
     EditorService->>EditorService: savedContent = bufferContent = result.content -> isDirty = false
-    Note over Editor: effect sees savedContent change -> loadActiveDoc()\nreloads CM text, caret kept (same-file guard)
+    Note over Editor: effect sees savedContent change -> loadActiveDoc()<br/>reloads CM text, caret kept (same-file guard)
     opt result.tags non-empty
         EditorService->>TagService: refresh()  (re-reads tag:list for autocomplete)
     end
@@ -618,10 +618,10 @@ sequenceDiagram
         Ext->>Ext: publish([]) -- underlines cleared
     else
         Ext->>Words: collectWords(text)  (whole doc, or the visible ranges past 60 kB)
-        Note over Words: masks frontmatter, code, #tags, [[links]], URLs,\nsplits hyphenated compounds, skips acronyms
+        Note over Words: masks frontmatter, code, #tags, [[links]], URLs,<br/>splits hyphenated compounds, skips acronyms
         Words-->>Ext: WordSpan[]
         Ext->>Detect: paragraphRanges(text) -> blockLanguage(block) per block
-        Note over Detect: franc-min per block (>= 6 words), cached by block text;\nfallback = configured language for short blocks / und / no dictionary
+        Note over Detect: franc-min per block (>= 6 words), cached by block text,<br/>fallback = configured language for short blocks / und / no dictionary
         Ext->>Ext: group spans by block language
         loop per language group
             Ext->>Service: check(distinctWords(group), language)
@@ -629,7 +629,7 @@ sequenceDiagram
             opt unknown words remain
                 Service->>Preload: checkSpelling(words, language)
                 Preload->>Spell: check(words, language)
-                Note over Spell: nspell.correct() through the per-dictionary\nverdict memo — suggest() stays out of the bulk check
+                Note over Spell: nspell.correct() through the per-dictionary<br/>verdict memo — suggest() stays out of the bulk check
                 Spell-->>Service: { language, misspelled[] }
                 Service->>Service: cache verdicts (only if language still matches)
             end
@@ -692,7 +692,7 @@ sequenceDiagram
     NoteManager->>VaultManager: writeFile(path, text with EOL)
     VaultManager->>FS: writeFile + stat
     NoteManager->>TagIndex: reindexFile(path, text)
-    Note over TagIndex: splitSections + extractTagOccurrences ->\nreplace this file's SectionRecord[] + vocabulary counts
+    Note over TagIndex: splitSections + extractTagOccurrences -><br/>replace this file's SectionRecord[] + vocabulary counts
     NoteManager->>NoteManager: runOnSaveActions(text)  (§6.6)
     NoteManager-->>EditorService: NoteSaveResult { path, content, modifiedMs, pendingActions? }
     EditorService->>EditorService: savedContent = bufferContent = content -> isDirty = false
@@ -832,11 +832,11 @@ sequenceDiagram
             Dock->>Dock: dropDock = X in a dock box (±12px) else window midline
             Dock->>Dock: dropIndex = first panel whose Y-midpoint is below the pointer
             Dock-->>Cmp: dragging / dropDock / dropIndex signals
-            Cmp-->>User: 2px accent drop-line + dark wash over the target dock,\ndragged panel opacity .4, title chip follows the cursor
+            Cmp-->>User: 2px accent drop-line + dark wash over the target dock,<br/>dragged panel opacity .4, title chip follows the cursor
         end
         User->>Win: mouseup
         Win->>Dock: onDragEnd()
-        Dock->>Dock: move(id, dropDock, dropIndex) — remove from both docks,\nsplice into target at the pre-removal slot
+        Dock->>Dock: move(id, dropDock, dropIndex) — remove from both docks,<br/>splice into target at the pre-removal slot
         Dock->>LS: persist { dock, flexes, open, leftW, rightW }
         Dock->>Dock: clear transient state, unmount ghost, body cursor=''
     end
@@ -1333,8 +1333,8 @@ sequenceDiagram
     Main->>Disc: discover(roots, pluginsConfig)
     Note over Disc: roots: dist-electron/plugins/<id> (built-ins),<br/><userData>/plugins/*, DREY_EXTRA_PLUGIN_DIR
     Disc->>Disc: read plugin.json -> validateManifest<br/>(id ^[a-z][a-z0-9-]{1,63}$, apiVersion)
-    Note over Disc: invalid manifest -> skip + log;<br/>built-in wins an id collision
-    Disc->>Disc: disabled id -> status 'disabled';<br/>apiVersion major mismatch -> 'incompatible'
+    Note over Disc: invalid manifest -> skip + log,<br/>built-in wins an id collision
+    Disc->>Disc: disabled id -> status 'disabled',<br/>apiVersion major mismatch -> 'incompatible'
     Disc-->>Main: DiscoveredPlugin[]
     loop each active plugin with a main entry
         Main->>HostM: activate(plugin)
@@ -1464,7 +1464,7 @@ sequenceDiagram
     end
     HK-->>NM: SaveHookResult[]
     NM-->>Ed: NoteSaveResult { content, modifiedMs, pendingActions? }
-    Ed->>Ed: adopt returned content; queue pendingActions
+    Ed->>Ed: adopt returned content, queue pendingActions
     Ed->>HR: emitDocumentEvent('pending-actions')
     HR->>HR: handlePluginEvent -> drains into the owner plugin
     Note over AP,Ed: each pending Action -> documents.requestRewrite -><br/>ConfirmationDialog -> applyRewrite -> save(applyingAction)
@@ -1548,7 +1548,7 @@ sequenceDiagram
     Main->>Main: exitApproved? no -> event.preventDefault()
     Main->>EB: requestDecision()
     alt renderer not ready yet (close raced bootstrap)
-        Note over EB: request held; delivered on exit:listener-ready
+        Note over EB: request held, delivered on exit:listener-ready
     end
     EB->>XC: exit:confirm-request { id }
     alt no dirty text documents
@@ -1557,7 +1557,7 @@ sequenceDiagram
         XC->>User: dialog (Save all / Exit without saving / Cancel)
         alt Save all
             XC->>Ed: saveAll({ drafts: true, runOnSaveActions: false })
-            Note over Ed: real files via note:save;<br/>scratch tabs via draft:save -> .drafts/unnamed-N.md
+            Note over Ed: real files via note:save,<br/>scratch tabs via draft:save -> .drafts/unnamed-N.md
             alt still dirty afterwards (a save failed)
                 XC->>EB: 'cancel' -- the app stays open
             else clean
@@ -1575,8 +1575,8 @@ sequenceDiagram
     alt cancel
         Main->>User: window stays open (quitIntent reset)
     else save / discard
-        Main->>Main: exitApproved = true; window.close()
-        Note over Main: non-darwin quits via window-all-closed;<br/>darwin finishes an app-level quit via quitIntent
+        Main->>Main: exitApproved = true, window.close()
+        Note over Main: non-darwin quits via window-all-closed,<br/>darwin finishes an app-level quit via quitIntent
     end
 ```
 
@@ -1606,13 +1606,13 @@ sequenceDiagram
     alt own echo (mtime match / structural TTL)
         L-->>CW: drop
     else external
-        CW->>CW: accumulate; (re)arm 300 ms debounce
+        CW->>CW: accumulate, (re)arm 300 ms debounce
     end
     Note over CW: on debounce fire: one round per burst
     CW->>A: announceExternal({ changedPaths, deletedPaths })
     A->>P: emitVaultChange({ kind:'write'|'delete', path }) per .md
     A->>R: push vault:changed { paths }
-    R->>R: VaultService reloads file tree; panels re-pull
+    R->>R: VaultService reloads file tree, panels re-pull
     R->>R: EditorService re-reads clean tabs in paths<br/>(read failure -> existsOnDisk=false, draft semantics)
 ```
 
@@ -1684,7 +1684,7 @@ sequenceDiagram
 
     U->>U: later, quits and relaunches
     S->>P: restore(layout, keepPath)
-    note over P: layout.dock.right = {paneId, height}; an entry whose<br/>tabs no longer resolve drops the region
+    note over P: layout.dock.right = {paneId, height} — an entry whose<br/>tabs no longer resolve drops the region
     P-->>D: band re-rendered with its tabs and band height
 ```
 
@@ -1758,7 +1758,7 @@ sequenceDiagram
     PH->>R: chat(messages, options)
     R->>CC: chat(messages, options)
     CC->>CC: buildArgs: -p --output-format stream-json --verbose<br/>[--include-partial-messages] [--model id] [--resume sessionRef]
-    note over CC: model id + session ref are strict-token validated;<br/>the flattened prompt (shared/llm flattenMessages) rides stdin, never argv
+    note over CC: model id + session ref are strict-token validated,<br/>the flattened prompt (shared/llm flattenMessages) rides stdin, never argv
     CC->>CB: spawn + stdin + line loop
     CB->>CLI: spawn (shell:true on win32, windowsHide)
     CLI-->>CB: {"type":"system","subtype":"init","session_id":"..."}
@@ -1800,7 +1800,7 @@ sequenceDiagram
     P->>ES: setEditLock(path, true) — input blocked, "Assistant is editing…"
     P->>M: ask { question, note (live buffer), liveEdit: true, chatPath }
     M->>M: guard capabilities().tools (visible error when false)
-    M->>M: append user turn; create LiveEditSession(note.body)
+    M->>M: append user turn, create LiveEditSession(note.body)
     M->>PR: chat(messages, tools: doc_* (+ vault set), maxToolRounds: 16)
     loop per mutating tool call
         PR->>M: onToolCall("doc_apply_diff", hunks)
@@ -1840,7 +1840,7 @@ sequenceDiagram
     participant PR as Provider (LlmRouter)
 
     U->>CM: contextmenu (capture)
-    CM->>CM: buildMenuTarget → EditorContextMenuTarget\n(data-drey-doc + findFromDOM/posAtDOM, or data-drey-image)
+    CM->>CM: buildMenuTarget → EditorContextMenuTarget<br/>(data-drey-doc + findFromDOM/posAtDOM, or data-drey-image)
     CM->>R: registry.items(target) — row gated on llm.enabled() && vision cache
     R->>R: resolve image (img src reverse map, else ![…](…) line regex)
     R->>M: backend.invoke('ocr', { imageVaultPath, taskId })
@@ -1917,7 +1917,7 @@ sequenceDiagram
     User->>UI: "Export as PDF…" on a Markdown note
     UI->>ES: exportPdf(key) / exportPdf(path, vaultId)
     ES->>EH: export:note-pdf { path, vaultId?, content? }
-    Note over ES,EH: open docs always send the live buffer (dirty + scratch tabs export WYSIWYG); the Files panel sends none — main reads from disk
+    Note over ES,EH: open docs always send the live buffer (dirty + scratch tabs export WYSIWYG) — the Files panel sends none, main reads from disk
     EH->>PX: exportNoteToPdf(deps, request)
     PX->>VM: readFile (when no content) / resolveAssetPath (images, default folder)
     PX->>PX: shared/pdf-html.ts — frontmatter off, task glyphs, images → file:// URLs, paper CSS
@@ -1925,7 +1925,7 @@ sequenceDiagram
     PX->>User: native save dialog (any folder — NOT vault-restricted)
     User-->>PX: target path (or cancel → null, silent no-op)
     PX->>HW: write temp HTML, loadFile, wait for images (10 s cap)
-    HW->>HW: bootstrap swaps each rendered SVG in for its ```mermaid code block (20 s cap/diagram; parse error → the code block stays)
+    HW->>HW: bootstrap swaps each rendered SVG in for its ```mermaid code block (20 s cap/diagram, parse error → the code block stays)
     HW->>PX: printToPDF({ A4, printBackground, footer "n / m" })
     PX-->>ES: saved absolute path
 ```
@@ -1979,7 +1979,7 @@ sequenceDiagram
     User->>CM: drop a .pdf on the editor
     CM->>VS: saveNamedAsset(bytes, fileName, notePath, vaultId)
     VS->>VM: vault:save-asset (+ preferredName)
-    VM-->>VS: attachments/<original name> (note-relative; -2 on collision)
+    VM-->>VS: attachments/<original name> (note-relative, -2 on collision)
     VS-->>CM: path
     CM->>CM: insert ![file.name](attachments/…) (uploading placeholder swapped)
     Note over LP: selection outside the node → the embed renders
@@ -2022,7 +2022,7 @@ sequenceDiagram
         PH->>TI: index.search(query, scope, active@call time)
         TI-->>SP: hits stamped vaultId (dirty open buffers folded on top)
     end
-    SP-->>User: results grouped per file; click → documents.open(path, line, {vaultId})
+    SP-->>User: results grouped per file, click → documents.open(path, line, {vaultId})
     User->>SP: Replace all (vault/all scope)
     SP->>TI: replace-preview {query, replacement, scope}
     TI-->>SP: per-file ops (fresh patches, line diffs)
@@ -2167,12 +2167,12 @@ buffer, and each send snapshots the current text to
 turn cites and what follow-up replays re-read, so the context survives
 the tab being closed (ADR-0048's paths-not-bodies rule stays intact).
 
-## 6.44 Semantic vault retrieval ? the ask's Vault chip (milestone 41, ADR-0055)
+## 6.44 Semantic vault retrieval — the ask's Vault chip (milestone 41, ADR-0055)
 
-The assistant composer's **Vault chip** cycles `off ? active vault ? all
+The assistant composer's **Vault chip** cycles `off → active vault → all
 vaults` (remembered per app). With it on, the ask carries `vaultScope`
 and the assistant plugin's main side retrieves the top-k note sections
-most similar to the question � embeddings via the plugin's own
+most similar to the question — embeddings via the plugin's own
 transformers.js WASM worker, one JSON index per vault kept fresh by the
 save-hook / vault-change registries, section text hydrated from the
 vault at answer time. Independent of `mcp.enabled`; ignored for
@@ -2183,17 +2183,17 @@ notice.
 sequenceDiagram
     actor User
     participant Panel as Assistant panel (renderer)
-    participant Ask as main 'ask' ? ChatEngine
+    participant Ask as main 'ask' → ChatEngine
     participant Sem as SemanticService (plugin main)
     participant W as embed-worker (WASM, transformers.js)
     participant Vault as ctx.vault
-    participant LLM as ctx.llm.chat ? provider
+    participant LLM as ctx.llm.chat → provider
 
-    User->>Panel: click Vault chip (off ? vault ? all)
+    User->>Panel: click Vault chip (off → vault → all)
     User->>Panel: send question (vaultScope: vault/all)
     Panel->>Ask: invoke('ask', request)
     Ask->>Sem: retrieveContext(question, scope)
-    Sem->>W: embed("query: �")
+    Sem->>W: embed("query: …")
     W-->>Sem: query vector (384 dims)
     Sem->>Sem: cosine top-k over the scoped vault's index (min score floor)
     loop each hit
@@ -2202,22 +2202,21 @@ sequenceDiagram
     end
     Sem-->>Ask: RetrievedSection[] (path, heading, line, score, text)
     Ask->>Ask: system prompt += VAULT CONTEXT block
-    Ask->>LLM: chat(system, replay�, question)
+    Ask->>LLM: chat(system, replay…, question)
     LLM-->>Ask: answer
     Ask-->>Panel: outcome + contextCount (+ contextError?)
-    Note over Ask: chat note turn persists a compact
-    Note over Ask: ```drey-context fence (path/heading/line);
-    Note over Ask: follow-up replays one [Vault context used �] line
+    Note over Ask: chat note turn persists a compact<br/>```drey-context fence (path/heading/line);
+    Note over Ask: follow-up replays one [Vault context used —] line
 ```
 
 Index freshness is the tags-index pattern: a save hook re-embeds the
 saved file (one worker round per batch of sections), a vault-change
 round deletes / re-reads / rebuilds, and enabling the feature (or a
 model change) triggers a background catch-up build with progress in
-Settings ? "Assistant retrieval" (per-vault status + Rebuild). Vectors
+Settings → "Assistant retrieval" (per-vault status + Rebuild). Vectors
 are stamped with the embedding model; a mismatch marks the vault stale
 and search skips it until rebuilt. Retrieved text rides only the current
-call � it is never persisted into the note and never replayed, so a
+call — it is never persisted into the note and never replayed, so a
 follow-up's context stays small (the small-model budget).
 
 ## 6.45 Capture through the `/` menu — Entry block and templates (milestone 43, ADR-0057)
@@ -2318,8 +2317,9 @@ sequenceDiagram
     else nothing behind it (scratch / plugin kind / read failed)
         H->>H: prune the entry, keep walking
     end
-    Note over H: state written back; the walk's own<br/>activation never records itself
+    Note over H: state written back, the walk's own<br/>activation never records itself
     Note over Ed: the fresh state restores caret + scroll<br/>through the milestone-50 memory
+```
 
 ## 6.48 The assistant creates / deletes a template (milestone 58, SDK 1.14)
 

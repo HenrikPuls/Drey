@@ -113,27 +113,27 @@ the same thing to the hosts.
 ```mermaid
 graph TB
     subgraph PR["Base renderer (src/app/)"]
-        Shell["Shell: titlebar / dock+panels /\nstatus bar / settings framework"]
-        Editor["Editor + panes + tab bar\n(CodeMirror 6, Live Preview)"]
-        Registries["Registries: widgets · doc kinds ·\nsettings pages · menu rows · commands ·\neditor extensions · drop decoders ·\ncontext-menu items · composer slot"]
-        HostR["plugin-host (renderer)\nplugin-api-impl = DreyPluginApi;\nactivation + quarantine; event fan-out;\nDOM mount hosts"]
-        Services["Base services: EditorService ·\nVaultService · PaneService ·\nConfirmationDialog · KeybindingService"]
+        Shell["Shell: titlebar / dock+panels /<br/>status bar / settings framework"]
+        Editor["Editor + panes + tab bar<br/>(CodeMirror 6, Live Preview)"]
+        Registries["Registries: widgets · doc kinds ·<br/>settings pages · menu rows · commands ·<br/>editor extensions · drop decoders ·<br/>context-menu items · composer slot"]
+        HostR["plugin-host (renderer)<br/>plugin-api-impl = DreyPluginApi;<br/>activation + quarantine; event fan-out;<br/>DOM mount hosts"]
+        Services["Base services: EditorService ·<br/>VaultService · PaneService ·<br/>ConfirmationDialog · KeybindingService"]
     end
     subgraph Preload["Preload"]
-        Bridge["dreyApi (base channels)\n+ pluginList / pluginInvoke / pluginOnEvent"]
+        Bridge["dreyApi (base channels)<br/>+ pluginList / pluginInvoke / pluginOnEvent"]
     end
     subgraph Main["Base main process (electron/)"]
-        MainTs["main.ts: window + schemes\n(app:// · drey-asset:// · plugin://)"]
-        HostM["plugin-host (main)\ndiscovery · activation · quarantine ·\nplugin:// root resolution · config store"]
-        IO["VaultManager · NoteManager\n(save/vault hook registries) ·\nDailyNote · Session backups"]
-        LLM["llm/: LmStudioClient · debug log ·\ntask registry · tag-suggest"]
-        MCP["mcp/: VaultTools (vault_search via\nregistered SectionSearchProvider)"]
+        MainTs["main.ts: window + schemes<br/>(app:// · drey-asset:// · plugin://)"]
+        HostM["plugin-host (main)<br/>discovery · activation · quarantine ·<br/>plugin:// root resolution · config store"]
+        IO["VaultManager · NoteManager<br/>(save/vault hook registries) ·<br/>DailyNote · Session backups"]
+        LLM["llm/: LmStudioClient · debug log ·<br/>task registry · tag-suggest"]
+        MCP["mcp/: VaultTools (vault_search via<br/>registered SectionSearchProvider)"]
     end
     subgraph Plugins["plugins/<id>/  (dist-electron/plugins/<id>/)"]
-        P1["templates · meeting · tags ·\ntasks · assistant · browser · ocr ·\noutline · backlinks · sample"]
-        P2["each: plugin.json + main/ (CJS,\nNode ok) + renderer/ (ESM + CSS over\nplugin://, plain DOM) + shared/"]
+        P1["templates · meeting · tags ·<br/>tasks · assistant · browser · ocr ·<br/>outline · backlinks · sample"]
+        P2["each: plugin.json + main/ (CJS,<br/>Node ok) + renderer/ (ESM + CSS over<br/>plugin://, plain DOM) + shared/"]
     end
-    SDK["shared/plugin-api/\nmanifest · DreyPluginApi ·\nMainPluginContext · PLUGIN_API_VERSION"]
+    SDK["shared/plugin-api/<br/>manifest · DreyPluginApi ·<br/>MainPluginContext · PLUGIN_API_VERSION"]
 
     Shell --> Registries
     Registries --> HostR
@@ -226,27 +226,27 @@ for the record only.
 ```mermaid
 graph TB
     subgraph Renderer["Renderer process (Angular)"]
-        App["App (src/app/app.ts)\nroot shell -- two-column layout;\ndrag handles -> LayoutService"]
-        Sidebar["Sidebar (src/app/sidebar/)\ncalendar + file tree (+ right-click\nnew file/folder) + open-windows +\nsettings entry"]
-        Calendar["Calendar (src/app/sidebar/calendar/)\nmini-calendar; day click -> openDailyNote"]
-        OpenWindows["OpenWindows (src/app/sidebar/open-windows/)\nmirror of open tabs"]
-        PaneLayout["PaneLayout / PaneLeaf (src/app/panes/, ADR-0037)\nrecursive split-tree layout; one TabBar +\nEditor/ImageTab per leaf pane"]
-        TabBar["TabBar (src/app/tab-bar/)\none pane's own tabs (PaneService); activate / close;\ndrag = TabDragService (ADR-0039, real DnD via src/app/dnd/)"]
-        Editor["Editor (src/app/editor/)\none CodeMirror 6 view per pane, doc swapped per\nthat pane's active tab; Live Preview decorations\nvia Compartment; ⋯ mode menu (ADR-0009)"]
-        EntryDrawer["EntryDrawer (src/app/entry-drawer/)\nTOPIC + chip rows + MarkdownSurface\n(compact, inline spellcheck)"]
-        NoteAssistant["NoteAssistant (src/app/note-assistant/)\nauto-summary switch + card thread + composer"]
-        Icon["Icon (src/app/icons/)\nvendored Lucide path data"]
-        VaultService["VaultService\nsignals: activeVaultPath, fileTree, isLoading, error"]
-        EditorService["EditorService\nopenDocs: OpenDoc[] (registry); activePath = the\nFOCUSED pane's active path (PaneService, ADR-0037)\n+ computed openPath/savedContent/bufferContent/\nviewMode/isDirty; save/saveAs/setViewMode take an\noptional explicit path; openDailyNote, closeTab,\nnewEntryRequest + pure newDailyEntryEdit()"]
-        PaneService["PaneService (src/app/panes/, ADR-0037)\nsplit tree + per-pane { tabs, active }; focusedId"]
-        CalendarService["CalendarService\nviewYear/viewMonth/selectedIso, weeks,\nnoteDates (from VaultService.fileTree)"]
-        EntryDraftService["EntryDraftService\ntopic/text/tags/people/meetings;\nempty-TOPIC confirmation rule"]
-        AssistantService["AssistantService\nper-note sidecar thread + auto-summary rule;\npanel toggle is session state (ADR-0012)"]
-        SpellcheckService["SpellcheckService\nSpellcheckSource for the CM extension;\nper-language verdict cache"]
-        LlmTaskService["LlmTaskService\nin-flight generations: elapsed clock +\nCancel (ADR-0014)"]
-        LayoutService["LayoutService\nsidebarWidth / assistantWidth signals;\nclamp + persist to localStorage"]
-        DailyNoteService["DailyNoteService (src/app/services/)\nonOpenDailyNote -> openFile + requestNewDailyEntry"]
-        TagService["TagService (src/app/services/)\ntags signal (TagEntry[]) from tag:list;\nrefreshed on construct + after a tag-changing save"]
+        App["App (src/app/app.ts)<br/>root shell -- two-column layout;<br/>drag handles -> LayoutService"]
+        Sidebar["Sidebar (src/app/sidebar/)<br/>calendar + file tree (+ right-click<br/>new file/folder) + open-windows +<br/>settings entry"]
+        Calendar["Calendar (src/app/sidebar/calendar/)<br/>mini-calendar; day click -> openDailyNote"]
+        OpenWindows["OpenWindows (src/app/sidebar/open-windows/)<br/>mirror of open tabs"]
+        PaneLayout["PaneLayout / PaneLeaf (src/app/panes/, ADR-0037)<br/>recursive split-tree layout; one TabBar +<br/>Editor/ImageTab per leaf pane"]
+        TabBar["TabBar (src/app/tab-bar/)<br/>one pane's own tabs (PaneService); activate / close;<br/>drag = TabDragService (ADR-0039, real DnD via src/app/dnd/)"]
+        Editor["Editor (src/app/editor/)<br/>one CodeMirror 6 view per pane, doc swapped per<br/>that pane's active tab; Live Preview decorations<br/>via Compartment; ⋯ mode menu (ADR-0009)"]
+        EntryDrawer["EntryDrawer (src/app/entry-drawer/)<br/>TOPIC + chip rows + MarkdownSurface<br/>(compact, inline spellcheck)"]
+        NoteAssistant["NoteAssistant (src/app/note-assistant/)<br/>auto-summary switch + card thread + composer"]
+        Icon["Icon (src/app/icons/)<br/>vendored Lucide path data"]
+        VaultService["VaultService<br/>signals: activeVaultPath, fileTree, isLoading, error"]
+        EditorService["EditorService<br/>openDocs: OpenDoc[] (registry); activePath = the<br/>FOCUSED pane's active path (PaneService, ADR-0037)<br/>+ computed openPath/savedContent/bufferContent/<br/>viewMode/isDirty; save/saveAs/setViewMode take an<br/>optional explicit path; openDailyNote, closeTab,<br/>newEntryRequest + pure newDailyEntryEdit()"]
+        PaneService["PaneService (src/app/panes/, ADR-0037)<br/>split tree + per-pane { tabs, active }; focusedId"]
+        CalendarService["CalendarService<br/>viewYear/viewMonth/selectedIso, weeks,<br/>noteDates (from VaultService.fileTree)"]
+        EntryDraftService["EntryDraftService<br/>topic/text/tags/people/meetings;<br/>empty-TOPIC confirmation rule"]
+        AssistantService["AssistantService<br/>per-note sidecar thread + auto-summary rule;<br/>panel toggle is session state (ADR-0012)"]
+        SpellcheckService["SpellcheckService<br/>SpellcheckSource for the CM extension;<br/>per-language verdict cache"]
+        LlmTaskService["LlmTaskService<br/>in-flight generations: elapsed clock +<br/>Cancel (ADR-0014)"]
+        LayoutService["LayoutService<br/>sidebarWidth / assistantWidth signals;<br/>clamp + persist to localStorage"]
+        DailyNoteService["DailyNoteService (src/app/services/)<br/>onOpenDailyNote -> openFile + requestNewDailyEntry"]
+        TagService["TagService (src/app/services/)<br/>tags signal (TagEntry[]) from tag:list;<br/>refreshed on construct + after a tag-changing save"]
         App --> Sidebar
         App --> PaneLayout
         PaneLayout --> TabBar
@@ -280,17 +280,17 @@ graph TB
     end
 
     subgraph Preload["Preload (electron/preload.ts)"]
-        Bridge["contextBridge.exposeInMainWorld\n('dreyApi', ...)"]
+        Bridge["contextBridge.exposeInMainWorld<br/>('dreyApi', ...)"]
     end
 
     subgraph Main["Main process (electron/main.ts)"]
         IpcHandlers["ipcMain.handle(...)"]
-        Protocol["app:// protocol handler\n(serves the built renderer)"]
-        Hotkey["globalShortcut (Ctrl+Alt+N)\n+ single-instance lock\n-> openTodayDailyNote()"]
-        VaultManager["VaultManager (electron/vault-manager.ts)\nmulti-vault registry (ADR-0051) + active vault +\nper-vault directory listing + file read/write/create +\ndir create + rename/copy/duplicate (sidecar-aware,\ncross-vault = copy+delete) + delete → OS recycle bin\n(milestone 52, trash-delete.ts, permanent fallback) +\nbinary asset write (attachments/) +\nlistAllMarkdownFiles (path-guarded per vault)"]
-        DailyNoteManager["DailyNoteManager (electron/daily-note.ts)\nensureTodayNote(): create <daily.dir>/ note from\ntemplates/daily.md, scaffold template;\nnoteContentFor(date): substituted template, no write"]
-        TagIndex["TagIndex (electron/tag-index.ts)\nin-memory tag vocabulary + master metadata;\nrebuild() scans all .md frontmatter\n(skips daily/ + templates/); tag:list / tag:registry"]
-        NoteManager["NoteManager (electron/note-manager.ts)\nnote:save pipeline: merge inline #tags -> frontmatter,\nbump updated:, (6b) route entries to master docs"]
+        Protocol["app:// protocol handler<br/>(serves the built renderer)"]
+        Hotkey["globalShortcut (Ctrl+Alt+N)<br/>+ single-instance lock<br/>-> openTodayDailyNote()"]
+        VaultManager["VaultManager (electron/vault-manager.ts)<br/>multi-vault registry (ADR-0051) + active vault +<br/>per-vault directory listing + file read/write/create +<br/>dir create + rename/copy/duplicate (sidecar-aware,<br/>cross-vault = copy+delete) + delete → OS recycle bin<br/>(milestone 52, trash-delete.ts, permanent fallback) +<br/>binary asset write (attachments/) +<br/>listAllMarkdownFiles (path-guarded per vault)"]
+        DailyNoteManager["DailyNoteManager (electron/daily-note.ts)<br/>ensureTodayNote(): create <daily.dir>/ note from<br/>templates/daily.md, scaffold template;<br/>noteContentFor(date): substituted template, no write"]
+        TagIndex["TagIndex (electron/tag-index.ts)<br/>in-memory tag vocabulary + master metadata;<br/>rebuild() scans all .md frontmatter<br/>(skips daily/ + templates/); tag:list / tag:registry"]
+        NoteManager["NoteManager (electron/note-manager.ts)<br/>note:save pipeline: merge inline #tags -> frontmatter,<br/>bump updated:, (6b) route entries to master docs"]
         IpcHandlers --> VaultManager
         IpcHandlers --> DailyNoteManager
         IpcHandlers --> NoteManager
@@ -302,12 +302,12 @@ graph TB
         TagIndex --> VaultManager
     end
 
-    ConfigFile[("vault-config.json\n(app.getPath('userData'))")]
-    DailyFiles[("<vault>/<daily.dir>/<y>/<m>/YYYY-MM-DD.md\n<vault>/templates/daily.md")]
+    ConfigFile[("vault-config.json<br/>(app.getPath('userData'))")]
+    DailyFiles[("<vault>/<daily.dir>/<y>/<m>/YYYY-MM-DD.md<br/><vault>/templates/daily.md")]
     VaultManager --> ConfigFile
     DailyNoteManager --> DailyFiles
 
-    Shared["shared/\nipc-api.ts: DreyApi, IPC_CHANNELS, Frontmatter, TagEntry, ...\ntimestamp.ts: formatDate/Time/DateTime\nfrontmatter.ts / inline-tags.ts / tag-registry.ts /\nentries.ts / history.ts: pure tag + YAML-frontmatter\n+ routing logic (milestone 6)"]
+    Shared["shared/<br/>ipc-api.ts: DreyApi, IPC_CHANNELS, Frontmatter, TagEntry, ...<br/>timestamp.ts: formatDate/Time/DateTime<br/>frontmatter.ts / inline-tags.ts / tag-registry.ts /<br/>entries.ts / history.ts: pure tag + YAML-frontmatter<br/>+ routing logic (milestone 6)"]
 
     VaultService -->|"window.dreyApi.*()"| Bridge
     EditorService -->|"window.dreyApi.*()"| Bridge
@@ -1582,19 +1582,19 @@ and a small keybinding registry landed.
 ```mermaid
 graph TB
     subgraph Renderer["Renderer (src/app/)"]
-        Editor["Editor / MarkdownSurface\n#tag autocomplete (tag-complete.ts)\n#tag pills + Ctrl/Cmd-click (tag-pill.ts)"]
-        EntryDrawer["EntryDrawer\nTOPIC + one Tags row + AutotagButton"]
+        Editor["Editor / MarkdownSurface<br/>#tag autocomplete (tag-complete.ts)<br/>#tag pills + Ctrl/Cmd-click (tag-pill.ts)"]
+        EntryDrawer["EntryDrawer<br/>TOPIC + one Tags row + AutotagButton"]
         subgraph tagsMod["src/app/tags/ (barrel)"]
-            SearchPanel["SearchPanel\ncollapsible sidebar section"]
+            SearchPanel["SearchPanel<br/>collapsible sidebar section"]
             AutotagButton["AutotagButton"]
-            TagSearchService["TagSearchService\nqueryTags/queryText/hits,\npanelOpen + focusRequest,\nsearchTag() / openPanel(),\nparked summarise()"]
+            TagSearchService["TagSearchService<br/>queryTags/queryText/hits,<br/>panelOpen + focusRequest,<br/>searchTag() / openPanel(),<br/>parked summarise()"]
         end
-        TagService["TagService\nvocabulary signal (TagEntry[])"]
+        TagService["TagService<br/>vocabulary signal (TagEntry[])"]
         subgraph kbMod["src/app/keybindings/ (barrel)"]
-            KeybindingService["KeybindingService\ncapture-phase keydown ->\nCommand.run; register()"]
+            KeybindingService["KeybindingService<br/>capture-phase keydown -><br/>Command.run; register()"]
         end
-        EditorService["EditorService\nopenFileAt(path,line) + revealRequest,\nopenScratch(path,content) (dirty, askOnSave),\nsaveAs() -> pickSavePath"]
-        App["App\nregisters the 'search.open' command\n(Mod+Shift+F -> TagSearchService.openPanel)"]
+        EditorService["EditorService<br/>openFileAt(path,line) + revealRequest,<br/>openScratch(path,content) (dirty, askOnSave),<br/>saveAs() -> pickSavePath"]
+        App["App<br/>registers the 'search.open' command<br/>(Mod+Shift+F -> TagSearchService.openPanel)"]
         Editor -->|"Ctrl/Cmd-click a pill"| TagSearchService
         SearchPanel --> TagSearchService
         SearchPanel -->|"hit click"| EditorService
@@ -1609,19 +1609,19 @@ graph TB
 
     subgraph Main["Main (electron/)"]
         subgraph tagsMain["electron/tags/ (barrel)"]
-            TagIndex["TagIndex\nvocabulary (tag to count)\ntagged SectionRecord list\nrebuild / reindexFile / removeFile / search"]
+            TagIndex["TagIndex<br/>vocabulary (tag to count)<br/>tagged SectionRecord list<br/>rebuild / reindexFile / removeFile / search"]
         end
         subgraph llmMain["electron/llm/ (barrel)"]
-            ActionRunner["ActionRunner\nsummarize / ask / runGeneric /\nsummariseSearchResults (parked) /\nsuggestTags"]
+            ActionRunner["ActionRunner<br/>summarize / ask / runGeneric /<br/>summariseSearchResults (parked) /<br/>suggestTags"]
         end
-        NoteManager["NoteManager\nnote:save -> bump updated: (fenced only),\nwrite, TagIndex.reindexFile, on-save Actions"]
-        VaultManager["VaultManager\ndeleteEntry() / renameEntry() /\ncopyEntry() / duplicateEntry(), pickSavePath()"]
+        NoteManager["NoteManager<br/>note:save -> bump updated: (fenced only),<br/>write, TagIndex.reindexFile, on-save Actions"]
+        VaultManager["VaultManager<br/>deleteEntry() / renameEntry() /<br/>copyEntry() / duplicateEntry(), pickSavePath()"]
         NoteManager --> TagIndex
     end
 
     subgraph Shared["shared/ (barrels)"]
-        SharedTags["shared/tags/\nsplitSections, extractTagOccurrences,\nrunTagSearch, formatSearchResultsDoc"]
-        SharedLlm["shared/llm/\nactions, llm, classifier, llm-debug"]
+        SharedTags["shared/tags/<br/>splitSections, extractTagOccurrences,<br/>runTagSearch, formatSearchResultsDoc"]
+        SharedLlm["shared/llm/<br/>actions, llm, classifier, llm-debug"]
     end
 
     Bridge2["contextBridge (dreyApi)"]
@@ -1718,24 +1718,24 @@ clipboard signal on `VaultService`).
 ```mermaid
 graph TB
     subgraph Renderer["Renderer (src/app/)"]
-        App["App\ntitlebar / [dock left | main | dock right] / status bar;\nregisters note.new/save/saveAs/saveAll + editor.toggleLineNumbers\n+ pane.split*/focus* (ADR-0037);\ndock-edge resizers -> DockService"]
+        App["App<br/>titlebar / [dock left | main | dock right] / status bar;<br/>registers note.new/save/saveAs/saveAll + editor.toggleLineNumbers<br/>+ pane.split*/focus* (ADR-0037);<br/>dock-edge resizers -> DockService"]
         subgraph tb["src/app/titlebar/ (barrel)"]
-            Titlebar["Titlebar\naccent square + MenuBar + window controls;\n-webkit-app-region drag"]
-            MenuBar["MenuBar + MenuService\nFile/Edit/Selection/View model;\nwired rows -> KeybindingService.run(id)"]
-            WindowChrome["WindowChromeService\nminimize/toggleMaximize/close + maximized signal"]
+            Titlebar["Titlebar<br/>accent square + MenuBar + window controls;<br/>-webkit-app-region drag"]
+            MenuBar["MenuBar + MenuService<br/>File/Edit/Selection/View model;<br/>wired rows -> KeybindingService.run(id)"]
+            WindowChrome["WindowChromeService<br/>minimize/toggleMaximize/close + maximized signal"]
         end
         subgraph dk["src/app/dock/ (barrel)"]
-            DockService["DockService\nDockState (dock/flexes/open/hidden/leftW/rightW/bottomH),\nlocalStorage['drey.dock'];\nbeginHeaderPress (click=collapse / drag=move), shared drag chrome\n(src/app/dnd/, ADR-0039), onDragMove/move, startSplit, startDockResize,\nreset, hide/show/isHidden (View menu), openAndExpand"]
-            Dock["Dock [side]\nrenders widget list; drop-line + splitter;\ndark wash on the drop-target dock; header status values"]
-            PanelFrame["PanelFrame\nidentical 32px low-profile header (title/status/grip, no chevron);\nbody stays mounted + height-animates on collapse;\nregisters host el; header press -> collapse or drag"]
-            WidgetRegistry["widget-registry.ts\nWIDGETS: WidgetDescriptor[] (id/title/component/defaultDock/\ndefaultOpen/defaultFlex/contentHeight/flush/removable/capabilities);\nWIDGET_MAP; ALL_WIDGET_IDS -- single source of truth (ADR-0034)"]
-            Panels["8 panel components\n(CalendarPanel / FilesPanel / TemplatesPanel / SearchPanelHost /\nTasksPanel / WindowsPanel / AssistantPanel / EntryPanel)"]
+            DockService["DockService<br/>DockState (dock/flexes/open/hidden/leftW/rightW/bottomH),<br/>localStorage['drey.dock'];<br/>beginHeaderPress (click=collapse / drag=move), shared drag chrome<br/>(src/app/dnd/, ADR-0039), onDragMove/move, startSplit, startDockResize,<br/>reset, hide/show/isHidden (View menu), openAndExpand"]
+            Dock["Dock [side]<br/>renders widget list; drop-line + splitter;<br/>dark wash on the drop-target dock; header status values"]
+            PanelFrame["PanelFrame<br/>identical 32px low-profile header (title/status/grip, no chevron);<br/>body stays mounted + height-animates on collapse;<br/>registers host el; header press -> collapse or drag"]
+            WidgetRegistry["widget-registry.ts<br/>WIDGETS: WidgetDescriptor[] (id/title/component/defaultDock/<br/>defaultOpen/defaultFlex/contentHeight/flush/removable/capabilities);<br/>WIDGET_MAP; ALL_WIDGET_IDS -- single source of truth (ADR-0034)"]
+            Panels["8 panel components<br/>(CalendarPanel / FilesPanel / TemplatesPanel / SearchPanelHost /<br/>TasksPanel / WindowsPanel / AssistantPanel / EntryPanel)"]
         end
         subgraph wg["src/app/widgets/ (barrel, ADR-0034)"]
-            WidgetContext["WidgetContext\ntyped read-facade: active document (path/name/saved/buffer/dirty/\nselection/openFile), fileTree + activeVaultPath, tags,\nsearchSections(), listTasks(), registerCommand(), onVaultChanged();\nWidgetCapability (descriptive)"]
+            WidgetContext["WidgetContext<br/>typed read-facade: active document (path/name/saved/buffer/dirty/<br/>selection/openFile), fileTree + activeVaultPath, tags,<br/>searchSections(), listTasks(), registerCommand(), onVaultChanged();<br/>WidgetCapability (descriptive)"]
         end
-        StatusBar["StatusBar\nEditorService.wordCount/charCount,\nSettings entry"]
-        EditorService2["EditorService\n+ lineNumbers signal (drey.editor),\nwordCount/charCount, newUntitled(), saveAll()"]
+        StatusBar["StatusBar<br/>EditorService.wordCount/charCount,<br/>Settings entry"]
+        EditorService2["EditorService<br/>+ lineNumbers signal (drey.editor),<br/>wordCount/charCount, newUntitled(), saveAll()"]
         DockService2["(same DockService)"]
         App --> Titlebar
         App --> Dock
@@ -1755,7 +1755,7 @@ graph TB
         WindowChrome -->|"window:* IPC"| Bridge3
     end
     Bridge3["contextBridge (dreyApi)"]
-    Bridge3 -.->|"window:minimize / :toggle-maximize / :close /\n:is-maximized + :maximize-changed push"| MainProc["electron/main.ts\ntitleBarStyle 'hidden' | 'hiddenInset';\nMenu.setApplicationMenu(null) off macOS"]
+    Bridge3 -.->|"window:minimize / :toggle-maximize / :close /<br/>:is-maximized + :maximize-changed push"| MainProc["electron/main.ts<br/>titleBarStyle 'hidden' | 'hiddenInset';<br/>Menu.setApplicationMenu(null) off macOS"]
 ```
 
 - **`DockService`** is the single owner of layout state and of the live
