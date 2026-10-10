@@ -48,6 +48,12 @@ describe('KeybindingService', () => {
     return event;
   }
 
+  function click(button: number): MouseEvent {
+    const event = new MouseEvent('mouseup', { button, bubbles: true, cancelable: true });
+    window.dispatchEvent(event);
+    return event;
+  }
+
   it('runs a registered command on its chord and swallows the event', () => {
     let runs = 0;
     service.register({ id: 't.a', label: 'A', keybinding: 'Mod+Shift+F', run: () => runs++ });
@@ -93,5 +99,80 @@ describe('KeybindingService', () => {
 
   it('run() on an unknown id is a no-op', () => {
     expect(() => service.run('no.such.id', { whatever: true })).not.toThrow();
+  });
+
+  it('runs a command on its bound mouse side button and swallows the event', () => {
+    let runs = 0;
+    service.register({ id: 't.f', label: 'F', mouseButton: 3, run: () => runs++ });
+
+    const event = click(3);
+
+    expect(runs).toBe(1);
+    expect(event.defaultPrevented).toBe(true);
+  });
+
+  it('a mouse-bound command without a keybinding fires on every press', () => {
+    let runs = 0;
+    service.register({ id: 't.g', label: 'G', mouseButton: 4, run: () => runs++ });
+
+    click(4);
+    click(4);
+
+    expect(runs).toBe(2);
+  });
+
+  it('ignores mouse buttons no command is bound to', () => {
+    let runs = 0;
+    service.register({ id: 't.h', label: 'H', mouseButton: 4, run: () => runs++ });
+
+    const left = click(0);
+    const middle = click(1);
+    click(3);
+
+    expect(runs).toBe(0);
+    expect(left.defaultPrevented).toBe(false);
+    expect(middle.defaultPrevented).toBe(false);
+  });
+
+  it('re-registering the same id replaces the mouse binding', () => {
+    const calls: string[] = [];
+    service.register({ id: 't.i', label: 'I', mouseButton: 3, run: () => calls.push('old') });
+    service.register({ id: 't.i', label: 'I', mouseButton: 3, run: () => calls.push('new') });
+
+    click(3);
+
+    expect(calls).toEqual(['new']);
+  });
+
+  it('swallows the mousedown of a bound side button so the caret never moves', () => {
+    let runs = 0;
+    service.register({ id: 't.j', label: 'J', mouseButton: 3, run: () => runs++ });
+
+    // A stand-in for an editor listener (e.g. CodeMirror's caret placement)
+    // on the event's original target path -- it must never see the press.
+    let reachedTarget = false;
+    const probe = () => (reachedTarget = true);
+    document.body.addEventListener('mousedown', probe);
+    const press = new MouseEvent('mousedown', { button: 3, bubbles: true, cancelable: true });
+    document.body.dispatchEvent(press);
+    document.body.removeEventListener('mousedown', probe);
+
+    expect(reachedTarget).toBe(false);
+    expect(press.defaultPrevented).toBe(true);
+    expect(runs).toBe(0); // the command itself still waits for mouseup
+  });
+
+  it('leaves the mousedown of unbound buttons alone', () => {
+    service.register({ id: 't.k', label: 'K', mouseButton: 3, run: () => {} });
+
+    let reachedTarget = false;
+    const probe = () => (reachedTarget = true);
+    document.body.addEventListener('mousedown', probe);
+    const press = new MouseEvent('mousedown', { button: 0, bubbles: true, cancelable: true });
+    document.body.dispatchEvent(press);
+    document.body.removeEventListener('mousedown', probe);
+
+    expect(reachedTarget).toBe(true);
+    expect(press.defaultPrevented).toBe(false);
   });
 });

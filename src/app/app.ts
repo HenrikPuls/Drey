@@ -23,6 +23,7 @@ import { LogService } from './services/log.service';
 import { McpBridgeService } from './services/mcp-bridge.service';
 import { PaneLayout, PaneService } from './panes';
 import { SettingsService } from './services/settings.service';
+import { AboutService } from './services/about.service';
 import { VaultService } from './vault';
 import { KeybindingService } from './keybindings';
 import { Dock, DockService } from './dock';
@@ -119,6 +120,11 @@ export class App {
     // Instantiate at startup so its global Ctrl+wheel guard is installed
     // even before the first document (and its editor) opens (ADR-0015).
     inject(EditorZoomService);
+
+    // Native window title (`Drey — <branch>`): identifies the checkout /
+    // worktree this instance was built from -- read by the taskbar and
+    // Alt-Tab, never shown by the custom titlebar itself.
+    void inject(AboutService).applyWindowTitle();
     // Mirror uncaught renderer errors + rejections into the log file (ADR-0032).
     inject(LogService).install();
 
@@ -233,20 +239,23 @@ export class App {
     });
 
     // Back / forward through the session's document history (the titlebar
-    // arrows, View menu). `ArrowLeft`/`ArrowRight` spell out the
-    // `KeyboardEvent.key` ("arrowleft" after lower-casing); this shadows
-    // CodeMirror's Alt+Arrow subword steps, accepted for the browser-standard
-    // chord.
+    // arrows, View menu, and the mouse side buttons). `ArrowLeft`/`ArrowRight`
+    // spell out the `KeyboardEvent.key` ("arrowleft" after lower-casing);
+    // this shadows CodeMirror's Alt+Arrow subword steps, accepted for the
+    // browser-standard chord. The side buttons (XButton1/2) ride
+    // `mouseButton` — VS Code-style, window-wide.
     keys.register({
       id: 'doc.back',
       label: 'Go back',
       keybinding: 'Alt+ArrowLeft',
+      mouseButton: 3,
       run: () => void history.back(),
     });
     keys.register({
       id: 'doc.forward',
       label: 'Go forward',
       keybinding: 'Alt+ArrowRight',
+      mouseButton: 4,
       run: () => void history.forward(),
     });
 
