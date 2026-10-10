@@ -1,8 +1,0 @@
-{
-  "permissions": {
-    "allow": [
-      "PowerShell($env:PATH = \"C:\\\\Users\\\\puls\\\\.unsloth\\\\node;\" + $env:PATH; npm test -- --watch=false 2>&1 | Select-Object -Last 40)",
-      "PowerShell($env:PATH = \"C:\\\\Users\\\\puls\\\\.unsloth\\\\node;\" + $env:PATH; npx prettier --write \"src/app/editor/editor-theme.ts\" \"src/app/editor/editor.ts\" \"src/app/editor/live-preview.ts\" \"src/app/editor/live-preview.spec.ts\" 2>&1)"
-    ]
-  }
-}

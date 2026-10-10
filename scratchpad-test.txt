@@ -1,7 +1,0 @@
-﻿node.exe : Error: Unknown argument: reporter
-In Zeile:1 Zeichen:1
-+ & "E:\projects\CyberNotes\.tools\node/node.exe" "E:\projects\CyberNot ...
-+ ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-    + CategoryInfo          : NotSpecified: (Error: Unknown argument: reporter:String) [], RemoteException
-    + FullyQualifiedErrorId : NativeCommandError
- 

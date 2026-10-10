@@ -64,6 +64,11 @@ testem.log
 __screenshots__/
 .claude
 
+# Local leftovers: scratch dumps, run logs, Windows shortcuts
+/scratch*
+*.log
+*.lnk
+
 # System files
 .DS_Store
 Thumbs.db
