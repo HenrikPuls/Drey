@@ -91,6 +91,89 @@ toggle's persisted pref).
   1.35 MB warning budget) predates this milestone by ~230 KB; this adds
   ~30 KB (the emoji table). The 2 MB error budget is not near.
 
+### Embedded pictures survive split-pane focus switches
+
+Owner-reported: with the editor split into two panes, a note in a
+subfolder holding embedded draw.io SVG pictures showed "image not found"
+for every embed after switching to the other pane and back; one more
+click into the editor loaded them again. Owner-verified.
+
+- **The cause was resolution through the focused pane.** Live Preview
+  resolved an embed's candidates at decoration-build time through
+  `EditorService.openPath`/`openVaultId` -- the facade over the FOCUSED
+  pane. A rebuild in a background pane (a focus switch recreates the
+  image widgets) resolved the note-relative reference against the other
+  document: for a subfolder note the candidate chain fell back to the
+  vault root and found nothing; for a vault-root note it coincidentally
+  stayed correct -- which is why only some notes broke.
+- **The same window fired on a tab switch's first decorations.** The
+  shown document's identity reached the surface as a template input,
+  one change-detection pass after the content swap, so every embed's
+  first candidate resolved against the PREVIOUS note once and 404ed
+  (invisible -- a later rebuild healed the widget, but the request had
+  already failed).
+- **The identity now travels with the content.**
+  `MarkdownSurface.setDocumentIdentity` (path, vault id, help asset
+  base) is set by `Editor.loadActiveDoc` synchronously before the view
+  gets the text, and embed resolution reads exactly that -- never the
+  focused pane's facade, never a lagging input. Wikilinks keep the
+  `docVaultId` input (completion runs long after the switch).
+- New regression spec: `e2e/image-embed-pane-switch.spec.ts` -- the
+  subfolder repro plus the vault-root contrast case, also asserting no
+  failed `drey-asset://` request anywhere along the flow.
+
+### The assistant answers a scoped ask from the scoped vaults only
+
+Owner-reported: with the docs vault selected in the Vault chip, "what is
+this vault about" was answered from the active vault — the chat notes
+showed the model quoting `tasks_list` results (active-vault tasks) while
+the docs context sat unused in the system prompt. **Not yet manually
+verified by the owner.**
+
+- **The scope no longer depends on retrieval succeeding.** The chat
+  engine resolves the ask's targets from the vault registry
+  (`resolveTargetVaultIds`) and arms `vaultToolsScope` on every chip-on
+  ask — semantic retrieval off, or a retrieval error, can no longer
+  leave the base `vault_search`/`vault_read` tools on their
+  active-vault default (ADR-0069 later change).
+- **Active-vault-only tools are withheld out of scope.** When the chip's
+  selection excludes the active vault, `tasks_list` and the template
+  tools (and their notes, and the post-hoc task block) do not ride the
+  ask; the tools note lists only in-scope vaults and demands explicit
+  vault ids. A new scope note binds "the vault" in the question to the
+  selection, and the tasks note restricts the tool to task questions.
+- **Explore tools survive semantic-off.** With `semantic.enabled` off,
+  `vault_overview`/`vault_find`/`vault_section` degrade to fresh
+  filesystem scans (`plugins/assistant/main/vault-scan.ts`, shared
+  section splitter/locator, token-coverage ranking, 200-file cap)
+  instead of disappearing — a scoped ask keeps in-scope lookups.
+- **Replay attachments try the scoped vaults** when the active-vault
+  read misses, so a chat bound to a non-active vault keeps its
+  attachments on follow-ups.
+- New specs: the engine's scope arming and tool gating
+  (`chat-engine.spec.ts`), the filesystem scan ports
+  (`vault-scan.spec.ts`), the scoped notes (`ask-prompts.spec.ts`).
+
+### A third bespoke theme: Cyberpunk
+
+**Not yet manually verified by the owner.**
+
+- **Settings → Appearance → Theme → Cyberpunk**, listed with Anthrazit
+  and Drey. Violet-black surfaces, a lavender text ramp, violet lines and
+  a neon pink accent; popovers glow instead of casting a shadow. Loosely
+  after the Typora "cyberpunk" theme, not a port of it — no grid overlay,
+  no flicker, no display fonts, and pink / violet lead where that one
+  leads with cyan.
+- **Built like Anthrazit:** exact tokens in a
+  `:root[data-theme='cyberpunk']` block of `src/styles.css`, so the whole
+  shell follows. The editor look is its own highlight style
+  (`src/app/editor/themes/cyberpunk-look.ts`, loaded on demand) over the
+  token-driven Drey surface: pink / violet / cyan headings (h1 and h2
+  with a soft glow), cyan links, a neon code palette. Those colours are
+  fixed — they do not follow the highlight colour, which still re-tints
+  the chrome.
+- Anthrazit stays the default; the splash stays Anthrazit.
+
 ### Fix — the image resize grip and the table keys work before the note is fully parsed
 
 Dragging the corner grip of a picture did nothing when the picture sat

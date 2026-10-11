@@ -701,6 +701,14 @@ Keep it in step whenever a component boundary changes (CLAUDE.md's
   live-edit turns. A custom selection referencing no registered vault
   anymore degrades to a visible `unregistered` context status, never to
   the active vault.
+  The scope holds WITHOUT retrieval too (ADR-0069
+  later change): the engine resolves the ask's targets from the vault
+  registry and arms the host's vaultToolsScope on every chip-on ask, so
+  retrieval-off or a retrieval error cannot re-arm the base read tools'
+  active-vault default; when the selection excludes the active vault, the
+  active-vault-only aux tools (tasks_list, template tools) are withheld
+  with their notes, the tools note lists only in-scope vaults, and a
+  scope note binds the question's "the vault" to the selection.
 
 This is a starting point, not a fixed contract — but any deviation should
 be called out explicitly (see CLAUDE.md's "Working Style"), not
@@ -1202,6 +1210,14 @@ src/                Angular renderer (standalone components, esbuild via Angular
                          = that language's grammar alone (lazy LanguageDescription.load,
                          @codemirror/language-data), source mode forced, none of the
                          Markdown chrome (ADR-0036). Compact composers pass nothing.
+                         Embed resolution (images, PDFs) reads a document identity
+                         (path + vault id + help asset base) the owner pushes with
+                         setDocumentIdentity next to the content load -- never
+                         EditorService.openPath: that facade follows the FOCUSED pane,
+                         so a background pane's rebuilds (a focus switch recreates the
+                         embed widgets) must resolve their own note's embeds, and a
+                         just-switched tab's first decorations need the identity in
+                         the same pass as the content.
       markdown-toolbar.ts  The formatting toolbar (milestone 42, ported from the
                          Lariscus editor): headings/list menus, dedicated
                          task-list + blockquote buttons, bold/italic/strike,
@@ -3172,6 +3188,11 @@ library — Chromium's built-in (PDFium) viewer, enabled by
   or unknown stored id, the state before the config has loaded, first in
   the picker; `DREY_THEME` (`drey`, the un-themed `:root` palette) is the
   optional original look.
+- **Cyberpunk** (`theme-catalog.ts` id `cyberpunk` + the
+  `:root[data-theme='cyberpunk']` block): the third bespoke palette, built
+  the same way. Its editor look, `editor/themes/cyberpunk-look.ts`, is the
+  token-driven Drey surface with its own highlight style (fixed neon
+  heading and code colours), imported on demand by the catalog's `load()`.
 - **Combined query field** (`src/app/tags/`): `TagField`'s `freeText` mode
   over the pure `tag-query.ts` (`splitQuery`, `tagQueryAtCaret`). The
   Search (`plugins/tags/`) and Tasks (`plugins/tasks/`) panels mount it

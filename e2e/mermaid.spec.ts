@@ -49,7 +49,12 @@ test.describe('mermaid diagrams in Live Preview (ADR-0025)', () => {
   test('the hover lens opens the diagram in the image lightbox', async ({ page, vaultDir }) => {
     await openNote(page, vaultDir, 'zoom.md', DIAGRAM);
     const diagram = page.locator('app-editor .cm-content .lp-mermaid');
-    await expect(diagram.locator('svg')).toBeVisible({ timeout: 15000 });
+    // Scoped to the rendered diagram: the widget's corner cluster also
+    // holds icon <svg>s (View source / Open full view), which a small
+    // window keeps mounted (reachable buttons for tiny embeds) and a
+    // bare 'svg' locator then resolves to several -- a strict-mode
+    // violation on the CI runner's 1024x768 screen.
+    await expect(diagram.locator('.lp-mermaid-svg svg')).toBeVisible({ timeout: 15000 });
 
     await diagram.hover();
     await diagram.locator('.lp-mermaid-lens').click({ force: true });

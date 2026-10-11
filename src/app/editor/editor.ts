@@ -620,9 +620,19 @@ export class Editor implements AfterViewInit, OnDestroy {
     if (!view) {
       return;
     }
+    const doc = this.shownDoc();
+    // The embed-resolution identity travels WITH the content, not through a
+    // template input: this effect runs in the same change-detection pass
+    // that flipped the shown tab, and the incoming text's first decorations
+    // must resolve against it (see `MarkdownSurface.setDocumentIdentity`).
+    this.surface().setDocumentIdentity({
+      path: doc?.path ?? null,
+      vaultId: doc?.vaultId ?? null,
+      assetBase: doc?.help?.assetBase ?? null,
+    });
     const path = this.shownPath();
     const current = view.state.doc.toString();
-    const next = this.shownDoc()?.bufferContent ?? '';
+    const next = doc?.bufferContent ?? '';
     // Same file, new text = an in-place reload (the save pipeline rewrote
     // the frontmatter). Keep the caret roughly where it was instead of
     // snapping to the top; a tab switch restores the remembered caret.

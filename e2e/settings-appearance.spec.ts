@@ -79,7 +79,17 @@ test('Appearance: theme picker re-tints the shell and persists', async ({ page }
   await expect(page.locator('app-settings')).toHaveCount(0);
   expect(await dataTheme()).toBe('nord'); // stuck after Save
 
+  // Cyberpunk is a bespoke palette: exact tokens, and its seed pink as accent.
   await openAppearance(page);
+  await page.locator('app-settings-appearance select#app-theme').selectOption('cyberpunk');
+  await expect.poll(dataTheme).toBe('cyberpunk');
+  await expect.poll(() => accentVar(page)).toBe('#ff4fa8');
+  expect(
+    await page.evaluate(() =>
+      getComputedStyle(document.documentElement).getPropertyValue('--bg-editor').trim(),
+    ),
+  ).toBe('#0e0b1a');
+
   await page.locator('app-settings-appearance select#app-theme').selectOption('drey');
   await page.locator('app-settings .actions-bar button.primary').click();
   await expect.poll(dataTheme).toBeNull(); // Drey clears the attribute

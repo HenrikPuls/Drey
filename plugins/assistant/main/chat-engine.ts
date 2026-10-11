@@ -33,6 +33,7 @@ import { buildReplayMessages } from '../shared/chat-replay.js';
 import {
   buildVaultContextBlock,
   contextCitations,
+  resolveTargetVaultIds,
   type ActiveVaultScope,
   type RetrievedSection,
   type RetrievalOutcome,
@@ -41,6 +42,7 @@ import { ChatStore } from './chat-store';
 import {
   ASK_ANSWER_SYSTEM,
   ASK_LINKS_NOTE,
+  ASK_SCOPED_TOOLS_NOTE,
   ASK_SYSTEM,
   ASK_TEMPLATES_NOTE,
   ASK_TASKS_NOTE,
@@ -52,6 +54,7 @@ import {
   buildDateNote,
   buildTitleUserMessage,
   buildToolsNote,
+  buildVaultScopeNote,
   editCatchUpLine,
   sanitizeChatTitle,
   vaultWriteNote,
@@ -94,10 +97,18 @@ export type ChatFn = (
 ) => Promise<LlmChatResult>;
 
 export interface ChatEnginePorts {
-  /** Vault text read for attachment re-hydration; `null` = missing/unreadable. */
-  readVaultText(path: string): Promise<string | null>;
-  /** The registered vaults (id + name) for the tools note (ADR-0051). */
-  listVaults(): Promise<readonly { id: string; name: string }[]>;
+  /**
+   * Vault text read for attachment re-hydration; `null` = missing/unreadable.
+   * The chat note lives in the vault that was active at ask time, but an
+   * attachment may belong to a chip-scoped vault — `fallbackVaultIds` (the
+   * ask's resolved targets) are tried in order when the default read misses.
+   */
+  readVaultText(path: string, fallbackVaultIds?: readonly string[]): Promise<string | null>;
+  /**
+   * The registered vaults (ADR-0051) with their active flag: the tools
+   * note's vault list AND the ask's scope resolution (ADR-0069) read it.
+   */
+  listVaults(): Promise<readonly { id: string; name: string; active: boolean }[]>;
   resolveAssetPath(path: string): string | null;
   readAssetBase64(absPath: string): Promise<string | null>;
   /** Delta forwarding to the panel (the plugin's own `chat:delta` event). */
@@ -121,9 +132,10 @@ export interface ChatEnginePorts {
   ): Promise<RetrievalOutcome>;
   /**
    * The ADR-0069 explore tools for one ask turn (`vault_overview` /
-   * `vault_find` / `vault_section`), closed over the turn's scope. `null`
-   * = semantic retrieval is off — the tools stay unattached and the note
-   * doesn't mention them.
+   * `vault_find` / `vault_section`), closed over the turn's scope. They
+   * ride a chip-on ask whenever the provider runs a tool loop — semantic
+   * retrieval backs them when enabled, otherwise they degrade to fresh
+   * filesystem scans (ADR-0069 later change). `null` = no tools this turn.
    */
   exploreTools(
     scope: ActiveVaultScope,
@@ -279,24 +291,35 @@ export class ChatEngine {
       : answerOnly
         ? ASK_ANSWER_SYSTEM
         : ASK_SYSTEM;
+    // The Vault chip's scope (ADR-0055/0069), resolved from the REGISTRY —
+    // independent of retrieval. This is the enforcement floor: even a
+    // disabled or failed retrieval arms the host filter below, so the base
+    // tools' active-vault default can never leak an out-of-scope vault
+    // into the answer. A live-edit turn ignores the scope entirely (the
+    // document rides in full).
+    const scope = request.vaultScope;
+    const scopeOn = scope !== 'off' && !live;
+    const vaults = await this.ports.listVaults();
+    const activeVault = vaults.find((vault) => vault.active) ?? null;
+    const targets =
+      scope !== 'off' && !live ? resolveTargetVaultIds(vaults, scope, request.vaultIds) : [];
+    const activeInScope = !scopeOn || activeVault === null || targets.includes(activeVault.id);
     // Semantic vault retrieval (ADR-0055): only for a plain ask turn — a
-    // live-edit turn already carries the whole document + tool loop, so
-    // the scope is ignored there. Failure degrades to no context, but the
+    // live-edit turn already carries the whole document + tool loop, so the
+    // scope is ignored there. Failure degrades to no context, but the
     // REASON persists on the turn (contextStatus) so the panel can show
     // why nothing came back instead of staying silent.
     let contextHits: readonly RetrievedSection[] = [];
     let contextStatus: ChatContextStatus | null = null;
     let contextError: string | undefined;
-    let resolvedTargets: readonly string[] | undefined;
-    if (request.vaultScope !== 'off' && !live) {
+    if (scopeOn) {
       try {
         const outcome = await this.ports.retrieveContext(
           request.question,
-          request.vaultScope,
+          scope,
           request.vaultIds,
         );
         contextHits = outcome.hits;
-        resolvedTargets = outcome.targets;
         if (!outcome.enabled) {
           contextStatus = { kind: 'disabled' };
         } else if (outcome.noTargets === true) {
@@ -312,17 +335,22 @@ export class ChatEngine {
     }
     // The agentic half (ADR-0069): with the chip on and a tool-capable
     // provider, the model can scan the scoped vaults itself — even when
-    // the baseline retrieval above came back empty or errored (the tools
-    // degrade to text). Semantic-off yields null and nothing is promised.
-    const explore =
-      request.vaultScope !== 'off' && !live && caps.tools
-        ? this.ports.exploreTools(request.vaultScope, request.vaultIds)
-        : null;
+    // the baseline retrieval above came back empty or errored. When
+    // semantic retrieval is disabled the tools degrade to fresh filesystem
+    // scans (ADR-0069 later change); they never vanish, so a scoped ask
+    // always keeps its in-scope lookups.
+    const explore = scopeOn && caps.tools ? this.ports.exploreTools(scope, request.vaultIds) : null;
+    // When the scope excludes the active vault the host drops
+    // vault_search/vault_read (their default target is the active vault) —
+    // the note must not promise them then.
+    const readToolsDropped = scopeOn && targets.length > 0 && !activeInScope;
+    const toolsBase = live
+      ? LIVE_EDIT_TOOLS_NOTE
+      : readToolsDropped
+        ? ASK_SCOPED_TOOLS_NOTE
+        : ASK_TOOLS_NOTE;
     const toolsNote = toolsOn
-      ? buildToolsNote(
-          `${live ? LIVE_EDIT_TOOLS_NOTE : ASK_TOOLS_NOTE} ${vaultWriteNote(groups.vault.write)}`,
-          await this.ports.listVaults(),
-        )
+      ? buildToolsNote(`${toolsBase} ${vaultWriteNote(groups.vault.write)}`, vaults, scopeOn ? targets : undefined)
       : null;
     // External tools (ADR-0063): web_fetch and the user's MCP servers.
     // Never on a live-edit turn, and only where the provider runs a tool
@@ -334,13 +362,18 @@ export class ChatEngine {
       (groups.webFetch.enabled || groups.servers.some((server) => server.enabled));
     const webNote = externalOn ? ASK_WEB_NOTE : null;
     // The tasks tool rides every non-live ask when a task provider exists
-    // (SDK 1.11) and its group is on; the note tells the model to prefer
-    // it over quoting task lines from retrieved context.
-    const tasksTool = live || !groups.tasks.enabled ? null : this.ports.tasksTool();
+    // (SDK 1.11) and its group is on — and the scope does not exclude the
+    // active vault (its index reads ONLY the active vault, so a scoped ask
+    // must not attach it: its results would masquerade as an answer about
+    // the scoped vaults).
+    const tasksTool =
+      live || !groups.tasks.enabled || !activeInScope ? null : this.ports.tasksTool();
     const tasksNote = tasksTool !== null ? ASK_TASKS_NOTE : null;
     // The template tools ride every non-live ask too (SDK 1.14) while
     // their group is on; whether a write asks first is the group's rule.
-    const templateTools = live || !groups.templates.enabled ? null : this.ports.templateTools();
+    // Same scope rule as the tasks tool: they read the active vault only.
+    const templateTools =
+      live || !groups.templates.enabled || !activeInScope ? null : this.ports.templateTools();
     const templatesNote =
       templateTools !== null
         ? `${ASK_TEMPLATES_NOTE} ${
@@ -351,14 +384,23 @@ export class ChatEngine {
         : null;
     const contextBlock = contextHits.length > 0 ? buildVaultContextBlock(contextHits) : null;
     const exploreNote = explore !== null ? ASK_EXPLORE_NOTE : null;
+    const scopeNote = scopeOn
+      ? buildVaultScopeNote(
+          vaults.filter((vault) => targets.includes(vault.id)),
+          !activeInScope,
+          explore !== null,
+        )
+      : null;
     // Order matters (57d): the retrieved context sits BEFORE the task note,
     // so "answer tasks only from the tool" is the later instruction and
-    // overrides the task lines that context happens to carry. The explore
-    // note follows the context — it tells the model how to go beyond it.
+    // overrides the task lines that context happens to carry. The scope
+    // note follows the context (it binds "the vault" to what was retrieved),
+    // and the explore note tells the model how to go beyond it.
     const systemContent = [
       system,
       toolsNote,
       contextBlock,
+      scopeNote,
       exploreNote,
       tasksNote,
       templatesNote,
@@ -381,7 +423,7 @@ export class ChatEngine {
         return [...baseMessages, questionMessage];
       }
       const replay = await buildReplayMessages(view.turns, (path) =>
-        this.ports.readVaultText(path),
+        this.ports.readVaultText(path, targets),
       );
       return [...baseMessages, ...replay.messages, questionMessage];
     };
@@ -393,7 +435,9 @@ export class ChatEngine {
     const options = (useSession: boolean) => ({
       taskId,
       ...(toolsOn ? { vaultTools: true } : {}),
-      ...(resolvedTargets !== undefined ? { vaultToolsScope: resolvedTargets } : {}),
+      // Armed from the REGISTRY-resolved targets (not the retrieval's), so
+      // the host filter holds even when retrieval is off or failed.
+      ...(targets.length > 0 ? { vaultToolsScope: targets } : {}),
       ...(externalOn ? { externalTools: true } : {}),
       // The doc tools + a higher round cap: a multi-hunk editing turn
       // needs more call/answer rounds than the provider default of 5.
