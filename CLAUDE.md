@@ -72,18 +72,18 @@ toolchain is removable by deleting `.tools/`). Never assume a bare `node`,
     does both; tsc's own `preload.js` leaves `window.dreyApi` undefined)
 - VS Code tasks and debug configs don't inherit `env.ps1`; `.vscode/` works
   around that three ways (see `docs/11`, "Environment gotchas").
-- **`npm run dev` builds `dist-electron/` only once, at startup** (the
-  `dev:electron` leg runs `tsc` *and* `build:plugins` then starts
-  Electron), while `ng serve` hot-reloads the renderer forever. Since
-  `shared/` compiles into both contexts, touching `shared/` or
-  `electron/` leaves the two sides disagreeing about the IPC contract _at
-  runtime_ even though `tsc` is clean — fields the stale main process
-  doesn't know get silently stripped from IPC payloads. The same applies
-  to plugins: touching `plugins/**`, or a `shared/**` file a plugin
-  imports, leaves the running app on the previously built
-  `dist-electron/plugins/<id>/` — the plugin misbehaves until rebuilt. After any
-  such change, rebuild and restart Electron; verify with
-  `grep <new-symbol> dist-electron/plugins/<id> -r` (and
+- **`npm run dev` rebuilds and restarts Electron by itself**
+  (`scripts/dev-electron.mjs`): a change under `electron/`, `shared/` or
+  `plugins/` rebuilds the affected part of `dist-electron/` and asks the
+  running app to quit (the ordinary quit, so unsaved tabs prompt first),
+  then starts it again; `ng serve` keeps hot-reloading the renderer. A
+  failed build restarts nothing. **Every other way of running the app
+  still builds once** — `npm run app`, the VS Code debug configs, a
+  packed build: there, touching `shared/`, `electron/` or `plugins/**`
+  leaves a stale main process that disagrees with the renderer about the
+  IPC contract _at runtime_ even though `tsc` is clean (unknown fields
+  are silently stripped from IPC payloads). Rebuild and restart; verify
+  with `grep <new-symbol> dist-electron/plugins/<id> -r` (and
   `grep <new-field> dist-electron/shared/*.js` for base IPC).
 
 ## Architecture & Design Decisions
