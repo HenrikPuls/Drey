@@ -10,12 +10,14 @@
  * (`docs/09_architecture_decisions/0010-app-settings-storage.md`).
  *
  * All shape/normalisation logic is the pure `normalizeAppConfig`; this
- * class only does fs and holds the in-memory copy.
+ * class only does fs and holds the in-memory copy. Writes are atomic and an
+ * unusable file is set aside rather than overwritten (`safe-file.ts`).
  */
 import { app } from 'electron';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { AppConfig, DEFAULT_APP_CONFIG, normalizeAppConfig } from '../shared/app-config';
+import { atomicWriteFileSync, readJsonObjectGuarded, type UnreadableFile } from './safe-file';
 
 const configFilePath = (): string => path.join(app.getPath('userData'), 'app-config.json');
 
@@ -23,8 +25,17 @@ export class AppConfigStore {
   private config: AppConfig;
   private readonly changeCallbacks: Array<(config: AppConfig) => void> = [];
 
+  /**
+   * Set when `app-config.json` existed but could not be used: the app runs
+   * on defaults and the file was set aside. Main tells the user once.
+   */
+  readonly loadProblem: UnreadableFile | null;
+
   constructor() {
-    this.config = this.readFromDisk();
+    const stored = readJsonObjectGuarded(configFilePath());
+    this.loadProblem = stored.kind === 'unreadable' ? stored.problem : null;
+    // First run or an unusable file -- defaults.
+    this.config = normalizeAppConfig(stored.kind === 'ok' ? stored.value : DEFAULT_APP_CONFIG);
   }
 
   /** The current, always-complete config. */
@@ -66,20 +77,9 @@ export class AppConfigStore {
     return this.config;
   }
 
-  private readFromDisk(): AppConfig {
-    try {
-      const raw = fs.readFileSync(configFilePath(), 'utf-8');
-      return normalizeAppConfig(JSON.parse(raw));
-    } catch {
-      // First run or an unreadable/corrupt file -- defaults, same fallback
-      // stance as VaultManager's readConfig.
-      return normalizeAppConfig(DEFAULT_APP_CONFIG);
-    }
-  }
-
   private writeToDisk(): void {
     const filePath = configFilePath();
     fs.mkdirSync(path.dirname(filePath), { recursive: true });
-    fs.writeFileSync(filePath, JSON.stringify(this.config, null, 2), 'utf-8');
+    atomicWriteFileSync(filePath, JSON.stringify(this.config, null, 2));
   }
 }
