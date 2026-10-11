@@ -100,6 +100,81 @@ test.describe('Assistant plugin', () => {
   });
 });
 
+test.describe('Assistant plugin — composer chips and pickers', () => {
+  test.use({
+    seedVault: {
+      'notiz.md': NOTE,
+      'andere.md': '# Andere\n',
+      'templates/prompts/kurz.md': '# Kurzfassung\n> Drei Sätze\n\nFasse die Notiz in drei Sätzen zusammen.\n',
+    },
+  });
+
+  test('the note chip, the file picker and the prompt picker feed the composer', async ({
+    page,
+  }) => {
+    await openNote(page);
+    const panel = page.locator('.assistant-panel');
+    const picker = page.locator('.assistant-picker');
+    const noteChip = panel.locator('.composer-chips .chip.note');
+
+    // The open note is context by default; its chip can be removed.
+    await expect(noteChip.locator('.chip-name')).toHaveText('notiz.md');
+    await noteChip.locator('.chip-x').click();
+    await expect(noteChip).toHaveCount(0);
+
+    // The file picker lists the vault's notes; another file lands as a chip.
+    await panel.locator('.composer-meta .plus').click();
+    await expect(picker.locator('.assistant-picker-head')).toHaveText('Attach');
+    await picker.locator('.assistant-picker-row', { hasText: 'andere.md' }).click();
+    await expect(picker).toHaveCount(0);
+    await expect(panel.locator('.composer-chips .chip .chip-name')).toHaveText('andere.md');
+
+    // Picking the open note itself brings its own chip back.
+    await panel.locator('.composer-meta .plus').click();
+    await picker.locator('.assistant-picker-row.this-note').click();
+    await expect(noteChip.locator('.chip-name')).toHaveText('notiz.md');
+
+    // A prompt replaces the composer's text.
+    await panel.locator('.composer-meta .prompt-btn').click();
+    await expect(picker.locator('.assistant-picker-head')).toHaveText('Prompts');
+    await picker.locator('.assistant-picker-row', { hasText: 'Kurzfassung' }).click();
+    await expect(picker).toHaveCount(0);
+    await expect(panel.locator('.composer-input .cm-content')).toHaveText(
+      'Fasse die Notiz in drei Sätzen zusammen.',
+    );
+  });
+
+  test('the chat, vault and model pickers open and apply their choice', async ({ page }) => {
+    await openNote(page);
+    const panel = page.locator('.assistant-panel');
+    const picker = page.locator('.assistant-picker');
+
+    await panel.locator('.chat-switch').click();
+    await expect(picker.locator('.assistant-picker-head')).toHaveText('Chats');
+    await expect(picker.locator('.assistant-picker-empty')).toHaveText(
+      'No chats yet — the first question creates one.',
+    );
+    await picker.locator('.assistant-picker-row.new-chat').click();
+    await expect(picker).toHaveCount(0);
+
+    const vaultButton = panel.locator('.composer-meta .vault');
+    await expect(vaultButton).toHaveAttribute('aria-pressed', 'false');
+    await vaultButton.click();
+    await expect(picker.locator('.assistant-picker-head')).toHaveText('Vault context');
+    await picker.locator('.assistant-picker-row', { hasText: 'Active vault' }).click();
+    await expect(picker).toHaveCount(0);
+    await expect(vaultButton).toHaveAttribute('aria-pressed', 'true');
+
+    const modelButton = panel.locator('.composer-meta .model-btn');
+    await modelButton.click();
+    const hand = picker.locator('.assistant-picker-hand input');
+    await hand.fill('e2e-model');
+    await hand.press('Enter');
+    await expect(picker).toHaveCount(0);
+    await expect(modelButton).toHaveText('e2e-model');
+  });
+});
+
 test.describe('Assistant plugin (disabled)', () => {
   test.use({
     seedVault: { 'notiz.md': NOTE },
