@@ -25,7 +25,9 @@ electron-builder ([ADR-0023](09_architecture_decisions/0023-windows-packaging-el
    Angular's `3rdpartylicenses.txt` because it also covers the
    main-process packages `yaml` / `nspell` / `dictionary-*`), then
    `ng build` (→ `dist/drey/browser/`), `tsc -p electron/tsconfig.json`
-   (→ `dist-electron/`) and `build:plugins`
+   (→ `dist-electron/`) followed by `scripts/bundle-preload.mjs` (esbuild
+   writes the main window's preload as ONE file over tsc's output — a
+   sandboxed preload cannot `require` a sibling file) and `build:plugins`
    (`scripts/build-plugins.mjs`, which compiles each plugin's `main/` and
    `renderer/` with its own tsconfig and merges everything into one tree
    per plugin, → `dist-electron/plugins/<id>/`).

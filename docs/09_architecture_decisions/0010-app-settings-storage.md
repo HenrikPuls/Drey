@@ -119,6 +119,10 @@ Deliberate, with the trade-off stated rather than hidden:
 The Settings field is `type="password"`, and the key is never logged — HTTP
 failures report the status and a hint, not the header.
 
+> Superseded on 2026-10-11 — see "Later change — secrets are encrypted on
+> disk" at the end of this file. The revisit condition above was met when
+> hosted LLM presets and external MCP servers arrived.
+
 ### Global vs. per-vault — flagged, decided global for now
 
 The question was raised explicitly. For Phase 1 (single vault) every
@@ -145,3 +149,48 @@ a migration. Not built now: it has no user before Phase 3 multi-vault.
   rewrite helpers were kept out of `shared/actions.ts` in
   `shared/action-apply.ts` (main only) so `yaml` stays out of the
   renderer bundle (ADR-0007).
+
+## Later change — secrets are encrypted on disk (2026-10-11)
+
+The plain-text key was accepted for a token that only reached a local
+server. Since then the same file came to hold real cloud keys (the hosted
+LLM presets, ADR-0047) and the credentials of external MCP servers
+(their environment variables and HTTP headers, ADR-0063). That is the
+"different threat model" this ADR said to revisit for: a backup, a synced
+profile folder or a support upload of `app-config.json` now leaks
+credentials that work from anywhere.
+
+**Decision.** The secret fields — and only those — are encrypted with
+Electron's `safeStorage` (DPAPI on Windows, the keychain on macOS, the
+secret service on Linux) and stored in place as `enc:v1:<base64>`. The
+objections recorded above are answered by how it is done, not dropped:
+
+- *"A separate encrypted blob."* There is none. The value sits in the
+  same field of the same file.
+- *"The config is no longer hand-editable."* Everything but the secret
+  values still is. A secret typed into the file in plain text is read
+  and sealed at that start, so entering a key by hand keeps working.
+- *"`isEncryptionAvailable()` is false on some Linux setups."* Then the
+  value stays plain, as before — including the `basic_text` backend,
+  which encrypts with a fixed password and would only look protected.
+
+`electron/config-secrets.ts` defines which fields are secrets (one walk
+used for sealing and opening); `AppConfigStore` applies it at the file
+boundary. In memory and over `config:get` / `config:set` the config is
+unchanged — the Settings screen shows and edits the key as before.
+
+Considered and not done: a separate secrets file or the OS credential
+manager per key (more moving parts, the settings no longer in one place);
+keeping the key away from the renderer entirely (the Settings field would
+become write-only — a UI change of its own, still open).
+
+Consequences:
+
+- A config file copied to another machine or OS account loses its keys.
+  The app says once at startup which ones, leaves those fields empty and
+  keeps the file as it was beside it
+  (`app-config.json.undecryptable-<timestamp>`).
+- Encryption protects the file at rest, not against a program running as
+  the same user.
+- `AppConfigStore` has a unit test now (`electron/app-config.spec.ts`),
+  with the cipher passed in.

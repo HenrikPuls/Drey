@@ -151,6 +151,21 @@ function setAside(filePath: string, now: Date): string | null {
 }
 
 /**
+ * Copies a file to `<name>.<tag>-<timestamp>` and leaves the original in
+ * place -- for a file that is still usable but about to lose something on
+ * its next write. Returns the copy's path, `null` when it could not be made.
+ */
+export function keepCopy(filePath: string, tag: string, now: Date = new Date()): string | null {
+  const copyPath = `${filePath}.${tag}-${backupStamp(now)}`;
+  try {
+    fs.copyFileSync(filePath, copyPath);
+    return copyPath;
+  } catch {
+    return null;
+  }
+}
+
+/**
  * Reads a JSON file that must hold an object. A missing file is the normal
  * first run; anything else that is not a usable object -- unreadable,
  * empty, cut off, not JSON, an array -- is set aside and reported, so the

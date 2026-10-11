@@ -12,14 +12,45 @@
  * All shape/normalisation logic is the pure `normalizeAppConfig`; this
  * class only does fs and holds the in-memory copy. Writes are atomic and an
  * unusable file is set aside rather than overwritten (`safe-file.ts`).
+ *
+ * Secrets (API key, MCP server env and header values) are encrypted on
+ * disk with the OS user's key and plain in memory (`config-secrets.ts`).
  */
-import { app } from 'electron';
+import { app, safeStorage } from 'electron';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { AppConfig, DEFAULT_APP_CONFIG, normalizeAppConfig } from '../shared/app-config';
-import { atomicWriteFileSync, readJsonObjectGuarded, type UnreadableFile } from './safe-file';
+import { openConfigSecrets, sealConfigSecrets, type SecretCipher } from './config-secrets';
+import {
+  atomicWriteFileSync,
+  keepCopy,
+  readJsonObjectGuarded,
+  type UnreadableFile,
+} from './safe-file';
 
 const configFilePath = (): string => path.join(app.getPath('userData'), 'app-config.json');
+
+/**
+ * `safeStorage` as the secrets cipher. On Linux without a secret service
+ * Electron falls back to a fixed password (`basic_text`), which protects
+ * nothing -- that counts as unavailable, so values stay plain rather than
+ * looking protected.
+ */
+const osCipher: SecretCipher = {
+  isAvailable: () =>
+    safeStorage.isEncryptionAvailable() &&
+    (process.platform !== 'linux' || safeStorage.getSelectedStorageBackend() !== 'basic_text'),
+  encrypt: (plain) => safeStorage.encryptString(plain),
+  decrypt: (sealed) => safeStorage.decryptString(Buffer.from(sealed)),
+};
+
+/** Sealed secrets of `app-config.json` that could not be opened at startup. */
+export interface LostSecrets {
+  /** What was lost, in the user's terms (`LLM API key`, ...). */
+  labels: string[];
+  /** A copy of the file as it was, still holding the sealed values. */
+  backupPath: string | null;
+}
 
 export class AppConfigStore {
   private config: AppConfig;
@@ -31,11 +62,42 @@ export class AppConfigStore {
    */
   readonly loadProblem: UnreadableFile | null;
 
-  constructor() {
-    const stored = readJsonObjectGuarded(configFilePath());
+  /**
+   * Set when the file held encrypted secrets this OS user cannot open
+   * (the file was copied from another machine or account, or the OS store
+   * is not reachable). Those fields are empty; main tells the user once.
+   */
+  readonly lostSecrets: LostSecrets | null;
+
+  /** Must be created after `app` is ready -- `safeStorage` needs that. */
+  constructor(private readonly cipher: SecretCipher = osCipher) {
+    const filePath = configFilePath();
+    const stored = readJsonObjectGuarded(filePath);
     this.loadProblem = stored.kind === 'unreadable' ? stored.problem : null;
     // First run or an unusable file -- defaults.
-    this.config = normalizeAppConfig(stored.kind === 'ok' ? stored.value : DEFAULT_APP_CONFIG);
+    const opened = openConfigSecrets(
+      normalizeAppConfig(stored.kind === 'ok' ? stored.value : DEFAULT_APP_CONFIG),
+      this.cipher,
+    );
+    this.config = opened.config;
+    // The next write drops what could not be opened, so keep the file.
+    this.lostSecrets =
+      opened.lost.length > 0
+        ? { labels: opened.lost, backupPath: keepCopy(filePath, 'undecryptable') }
+        : null;
+    // Write once at startup in two cases: a plain key (from an older
+    // version or typed into the file) gets sealed now; and a file whose
+    // unopenable values are safe in the copy drops them, so the next start
+    // does not report and copy them again.
+    const sealNow = opened.hadPlainSecrets && this.cipher.isAvailable();
+    const dropLost = this.lostSecrets !== null && this.lostSecrets.backupPath !== null;
+    if (sealNow || dropLost) {
+      try {
+        this.writeToDisk();
+      } catch {
+        // Not worth failing the start over; the next save tries again.
+      }
+    }
   }
 
   /** The current, always-complete config. */
@@ -80,6 +142,9 @@ export class AppConfigStore {
   private writeToDisk(): void {
     const filePath = configFilePath();
     fs.mkdirSync(path.dirname(filePath), { recursive: true });
-    atomicWriteFileSync(filePath, JSON.stringify(this.config, null, 2));
+    atomicWriteFileSync(
+      filePath,
+      JSON.stringify(sealConfigSecrets(this.config, this.cipher), null, 2),
+    );
   }
 }

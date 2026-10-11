@@ -20,6 +20,44 @@ recorded as an explicit decision. The parity checklist lives in
 
 ## Recent milestones
 
+### Renderer hardening: sandbox, Content-Security-Policy, encrypted keys
+
+Second package out of the 2026-10-11 architecture review. **Not yet
+manually verified by the owner.**
+
+- **The main window is sandboxed.** `sandbox: true`, open since milestone
+  1. The preload is bundled into one file by `scripts/bundle-preload.mjs`
+  (esbuild, now a declared dev dependency), run by `build:electron` after
+  `tsc`.
+- **The page has a Content-Security-Policy**
+  (`electron/content-security-policy.ts`): scripts only from the app
+  bundle and plugin directories, no inline script, no `eval`, no network
+  connection from the page, frames only from `plugin:` and `drey-asset:`.
+  Sent as a header by the `app://` handler; a dev run adds the same
+  policy to `ng serve`'s page. The production build no longer inlines
+  critical CSS (that put an inline script into `index.html`).
+- **Keys are encrypted in `app-config.json`** — the LLM API key and the
+  environment-variable and header values of external MCP servers, stored
+  as `enc:v1:…` with the OS user's key (Electron `safeStorage`). The rest
+  of the file stays readable and hand-editable; a key typed in plain text
+  is accepted and sealed at that start. A file from another machine or
+  account loses its keys: the app says once which ones and keeps the file
+  as `app-config.json.undecryptable-<timestamp>`. On Linux without a
+  secret service values stay plain.
+- **Fixed on the way: PDF tabs and PDF embeds did not load.** The tab's
+  frame URL was rejected by Angular (`NG0904`), and the embed's probe was
+  blocked because `drey-asset:` was not CORS-enabled. Both were broken on
+  `main` before this package. The tab now marks its `drey-asset:` URL as
+  trusted; `drey-asset:` is CORS-enabled and names the page's origin as
+  the only allowed one.
+- Tests: `e2e/csp.spec.ts` (a clean page load, blocked inline / remote /
+  `eval` script, PDF tab, PDF embed, hostile HTML in a note); the e2e
+  fixture fails any test that leaves a policy violation in the console;
+  unit tests for the policy, the secret sealing and `AppConfigStore`.
+- Docs: ADR-0001 and ADR-0010 later-change sections, `docs/08`
+  ("Renderer hardening", "Secrets in the settings file"), `docs/05`
+  §5.19, `docs/07`, `docs/11`, `plugins/AUTHORING.md`.
+
 ### Data safety: atomic writes, guarded config files, visible main-process errors
 
 First package out of the 2026-10-11 architecture review. **Not yet

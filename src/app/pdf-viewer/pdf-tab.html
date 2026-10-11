@@ -3,8 +3,8 @@
 </div>
 
 <div class="body">
-  @if (url()) {
-    <iframe class="frame" [src]="url()" [title]="path()"></iframe>
+  @if (url(); as frameUrl) {
+    <iframe class="frame" [src]="frameUrl" [title]="path()"></iframe>
   } @else {
     <div class="empty">
       <p>This PDF's path could not be resolved.</p>
