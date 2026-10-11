@@ -99,30 +99,11 @@
   background: currentColor;
 }
 
-/* Collapse / expand: the row track animates between the body's height and
-   0. The body stays mounted so a panel keeps its state across a collapse
-   (draft text, scroll, the assistant thread). */
 .body-wrap {
   flex: 1;
   min-height: 0;
   display: grid;
   grid-template-rows: 1fr;
-  transition: grid-template-rows 140ms ease;
-}
-
-.body-wrap.collapsed {
-  grid-template-rows: 0fr;
-}
-
-.body-wrap .body {
-  /* Skip rendering the body once collapsed -- deferred to the end of the
-     height transition where `allow-discrete` is supported, instant
-     otherwise. */
-  transition: content-visibility 140ms allow-discrete;
-}
-
-.body-wrap.collapsed .body {
-  content-visibility: hidden;
 }
 
 .body {

@@ -4,6 +4,7 @@ import * as path from 'node:path';
 import type { NoteHistoryEntry } from '../../shared/ipc-api';
 import { isAutoSavePath } from '../../shared/structural-folders';
 import { NOTE_FILE } from '../../shared/wikilinks';
+import { atomicWriteFile } from '../safe-file';
 
 /** `vault.history` as the store reads it at every call (config is live). */
 export interface NoteHistoryLimits {
@@ -249,7 +250,7 @@ export class NoteHistoryStore {
 
   private async writeIndex(vaultId: string, index: VaultIndex): Promise<void> {
     await fsp.mkdir(path.join(this.root, vaultId), { recursive: true });
-    await fsp.writeFile(path.join(this.root, vaultId, 'index.json'), JSON.stringify(index), 'utf-8');
+    await atomicWriteFile(path.join(this.root, vaultId, 'index.json'), JSON.stringify(index));
   }
 
   private async readEntries(dir: string): Promise<NoteHistoryEntry[]> {
@@ -258,7 +259,7 @@ export class NoteHistoryStore {
   }
 
   private async writeEntries(dir: string, entries: NoteHistoryEntry[]): Promise<void> {
-    await fsp.writeFile(path.join(dir, 'entries.json'), JSON.stringify(entries), 'utf-8');
+    await atomicWriteFile(path.join(dir, 'entries.json'), JSON.stringify(entries));
   }
 }
 

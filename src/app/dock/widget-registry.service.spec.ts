@@ -31,6 +31,30 @@ describe('WidgetRegistryService', () => {
     expect(registry.widgets().map((w) => w.id)).toEqual(CORE_WIDGETS.map((w) => w.id));
   });
 
+  it('gives every core widget a strip icon', () => {
+    const registry = TestBed.inject(WidgetRegistryService);
+    for (const w of registry.widgets()) {
+      expect(w.icon).toBeDefined();
+    }
+  });
+
+  it('passes a plugin widget icon through, and drops a name the host does not vendor', () => {
+    const registry = TestBed.inject(WidgetRegistryService);
+    const contrib = {
+      title: 'Spec',
+      defaultDock: 'left' as const,
+      defaultOpen: true,
+      defaultFlex: 100,
+      mount: () => () => undefined,
+    };
+    registry.registerPluginWidget({ ...contrib, id: 'known', icon: 'search' });
+    registry.registerPluginWidget({ ...contrib, id: 'unknown', icon: 'no-such-glyph' });
+    registry.registerPluginWidget({ ...contrib, id: 'none' });
+    expect(registry.descriptor('known')?.icon).toBe('search');
+    expect(registry.descriptor('unknown')?.icon).toBeUndefined();
+    expect(registry.descriptor('none')?.icon).toBeUndefined();
+  });
+
   it('refuses a plugin widget id that collides with a core widget', () => {
     const registry = TestBed.inject(WidgetRegistryService);
     expect(() =>

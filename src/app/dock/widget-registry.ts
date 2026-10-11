@@ -1,4 +1,5 @@
 import { Type } from '@angular/core';
+import type { IconName } from '../icons/icon';
 import type { WidgetCapability } from '../widgets';
 import type { DockSide } from './dock.service';
 import { CalendarPanel } from './panels/calendar-panel';
@@ -14,7 +15,7 @@ export type WidgetId = string;
  * needs the registry.
  */
 export interface WidgetStatusContext {
-  /** True while the panel is collapsed to its 32px header. */
+  /** True while the panel is closed -- only its strip icon shows. */
   readonly collapsed: boolean;
 }
 
@@ -32,13 +33,18 @@ export interface WidgetDescriptor {
   /** Header label (sentence case). */
   title: string;
   /**
+   * Its glyph in the dock's icon strip. Unset only for a plugin widget that
+   * names none -- the strip then shows the title's first letter.
+   */
+  icon?: IconName;
+  /**
    * Body component, rendered via `*ngComponentOutlet`. Unset for a
    * plugin-registered widget — `Dock` renders `PluginWidgetHost` for those.
    */
   component?: Type<unknown>;
   /** Where it lives on a fresh layout / after `View → Reset layout`. */
   defaultDock: DockSide;
-  /** Expanded (`true`) or collapsed to its header (`false`) by default. */
+  /** Open (`true`) or closed to its strip icon (`false`) by default. */
   defaultOpen: boolean;
   /** `flex-grow` weight when expanded (ignored for a content-height widget). */
   defaultFlex: number;
@@ -47,13 +53,12 @@ export interface WidgetDescriptor {
   /** Body fills the frame instead of scrolling (was `PanelFrame.flush`). */
   flush?: boolean;
   /**
-   * While expanded, the panel's header content (its
-   * `appPanelHeaderActions` template) takes the whole header row and the
-   * title + status are not shown -- the calendar's month/year dropdown IS
-   * its heading. Collapsed, the title and status show as usual.
+   * The panel's header content (its `appPanelHeaderActions` template) takes
+   * the whole header row and the title + status are not shown -- the
+   * calendar's month/year dropdown IS its heading.
    */
   headerReplacesTitle?: boolean;
-  /** Can be hidden from the View menu / disabled in Settings. */
+  /** Can be disabled in Settings. */
   removable: boolean;
   /** Read surfaces it declares (descriptive; see `WidgetCapability`). */
   capabilities: readonly WidgetCapability[];
@@ -62,7 +67,6 @@ export interface WidgetDescriptor {
   /**
    * Builds the panel's own control row into the shared header (plugin
    * widgets only — core panels use the `[appPanelHeaderActions]` template).
-   * Only rendered while the panel is expanded.
    */
   headerActionsMount?(el: HTMLElement): () => void;
 }
@@ -78,6 +82,7 @@ export const CORE_WIDGETS: readonly WidgetDescriptor[] = [
   {
     id: 'calendar',
     title: 'Calendar',
+    icon: 'calendar',
     component: CalendarPanel,
     defaultDock: 'left',
     defaultOpen: true,
@@ -90,6 +95,7 @@ export const CORE_WIDGETS: readonly WidgetDescriptor[] = [
   {
     id: 'files',
     title: 'Files',
+    icon: 'folder',
     component: FilesPanel,
     defaultDock: 'left',
     defaultOpen: true,
@@ -104,6 +110,7 @@ export const CORE_WIDGETS: readonly WidgetDescriptor[] = [
   {
     id: 'windows',
     title: 'Open windows',
+    icon: 'window',
     component: WindowsPanel,
     defaultDock: 'left',
     defaultOpen: true,

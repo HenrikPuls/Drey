@@ -26,8 +26,8 @@ test.describe('Backlinks panel (plugins/backlinks, milestone 54)', () => {
   test('lists the linking notes of the focused note and opens them at the line', async ({
     page,
   }) => {
-    // The panel lands collapsed at the bottom of the left dock.
-    await page.locator('app-panel-frame .head[aria-label="Expand Backlinks"]').click();
+    // The panel starts closed: only its icon in the left dock's strip.
+    await page.locator('app-dock-strip button[aria-label="Show Backlinks"]').click();
     const panel = page.locator('app-panel-frame', { has: page.locator('.backlinks-panel') });
 
     // Focus the linked note through the Files panel.

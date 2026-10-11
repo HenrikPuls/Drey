@@ -2,8 +2,10 @@ import {
   ChangeDetectionStrategy,
   Component,
   computed,
+  inject,
   input,
 } from '@angular/core';
+import { DomSanitizer, SafeResourceUrl } from '@angular/platform-browser';
 import { resolveVaultImageUrl } from '../editor/vault-image';
 
 /**
@@ -29,7 +31,17 @@ export class PdfTab {
   /** Present for parity with `ImageTab`; the PDF viewer owns its own keys. */
   readonly focused = input(true);
 
-  protected readonly url = computed(
-    () => resolveVaultImageUrl(null, this.path(), this.vaultId()) ?? '',
-  );
+  private readonly sanitizer = inject(DomSanitizer);
+
+  /**
+   * Angular refuses a plain string as a frame URL, so the resolved one is
+   * marked trusted -- but only the vault's own `drey-asset:` scheme, which
+   * main serves from inside a registered vault and nowhere else.
+   */
+  protected readonly url = computed((): SafeResourceUrl | null => {
+    const resolved = resolveVaultImageUrl(null, this.path(), this.vaultId());
+    return resolved !== null && resolved.startsWith('drey-asset:')
+      ? this.sanitizer.bypassSecurityTrustResourceUrl(resolved)
+      : null;
+  });
 }

@@ -19,6 +19,12 @@ import type { NoteHistoryStore } from './history/note-history-store';
 import { OwnWriteLedger } from './own-write-ledger';
 import { refocusRenderer } from './focus';
 import { openDocumentInDefaultProgram } from './open-document';
+import {
+  atomicWriteFile,
+  atomicWriteFileSync,
+  readJsonObjectGuarded,
+  type UnreadableFile,
+} from './safe-file';
 
 /**
  * `vault-config.json` v2 (ADR-0051): every registered vault plus which one
@@ -43,50 +49,56 @@ function mintVaultId(): string {
   return `v${crypto.randomBytes(5).toString('hex')}`;
 }
 
-function readRegistryFile(): VaultRegistryFile {
-  try {
-    const raw = fs.readFileSync(configFilePath(), 'utf-8');
-    const parsed = JSON.parse(raw) as Partial<VaultRegistryFile> & {
-      activeVaultPath?: unknown;
+function readRegistryFile(): { file: VaultRegistryFile; problem: UnreadableFile | null } {
+  const stored = readJsonObjectGuarded(configFilePath());
+  if (stored.kind !== 'ok') {
+    // First run, or an unusable file that was set aside: an empty registry.
+    return {
+      file: { version: 2, vaults: [], activeVaultId: null },
+      problem: stored.kind === 'unreadable' ? stored.problem : null,
     };
-    if (parsed.version === 2 && Array.isArray(parsed.vaults)) {
-      const vaults = parsed.vaults.filter(
-        (v): v is VaultRegistration =>
-          typeof v?.id === 'string' &&
-          typeof v?.name === 'string' &&
-          typeof v?.path === 'string',
-      );
-      const activeVaultId =
-        typeof parsed.activeVaultId === 'string' && vaults.some((v) => v.id === parsed.activeVaultId)
-          ? parsed.activeVaultId
-          : null;
-      return { version: 2, vaults, activeVaultId };
-    }
-    // v1 migration: the single path becomes the one registration. A missing
-    // path (first run) or a corrupt file stays an empty registry -- the same
-    // "no vault" fallback v1 had.
-    const legacy =
-      typeof parsed.activeVaultPath === 'string' && parsed.activeVaultPath !== ''
-        ? parsed.activeVaultPath
+  }
+  return { file: parseRegistry(stored.value), problem: null };
+}
+
+function parseRegistry(stored: Record<string, unknown>): VaultRegistryFile {
+  const parsed = stored as Partial<VaultRegistryFile> & {
+    activeVaultPath?: unknown;
+  };
+  if (parsed.version === 2 && Array.isArray(parsed.vaults)) {
+    const vaults = parsed.vaults.filter(
+      (v): v is VaultRegistration =>
+        typeof v?.id === 'string' &&
+        typeof v?.name === 'string' &&
+        typeof v?.path === 'string',
+    );
+    const activeVaultId =
+      typeof parsed.activeVaultId === 'string' && vaults.some((v) => v.id === parsed.activeVaultId)
+        ? parsed.activeVaultId
         : null;
-    if (legacy === null) {
-      return { version: 2, vaults: [], activeVaultId: null };
-    }
-    const vault: VaultRegistration = {
-      id: mintVaultId(),
-      name: path.basename(legacy),
-      path: legacy,
-    };
-    return { version: 2, vaults: [vault], activeVaultId: vault.id };
-  } catch {
+    return { version: 2, vaults, activeVaultId };
+  }
+  // v1 migration: the single path becomes the one registration. A missing
+  // path stays an empty registry -- the same "no vault" fallback v1 had.
+  const legacy =
+    typeof parsed.activeVaultPath === 'string' && parsed.activeVaultPath !== ''
+      ? parsed.activeVaultPath
+      : null;
+  if (legacy === null) {
     return { version: 2, vaults: [], activeVaultId: null };
   }
+  const vault: VaultRegistration = {
+    id: mintVaultId(),
+    name: path.basename(legacy),
+    path: legacy,
+  };
+  return { version: 2, vaults: [vault], activeVaultId: vault.id };
 }
 
 function writeRegistryFile(registry: VaultRegistryFile): void {
   const filePath = configFilePath();
   fs.mkdirSync(path.dirname(filePath), { recursive: true });
-  fs.writeFileSync(filePath, JSON.stringify(registry, null, 2), 'utf-8');
+  atomicWriteFileSync(filePath, JSON.stringify(registry, null, 2));
 }
 
 /**
@@ -124,10 +136,18 @@ export class VaultManager {
    */
   private readonly history?: NoteHistoryStore;
 
+  /**
+   * Set when `vault-config.json` existed but could not be used: the
+   * registry starts empty and the file was set aside. Main tells the user
+   * once.
+   */
+  readonly loadProblem: UnreadableFile | null;
+
   constructor(ownWrites?: OwnWriteLedger, history?: NoteHistoryStore) {
     this.ownWrites = ownWrites;
     this.history = history;
-    const file = readRegistryFile();
+    const { file, problem } = readRegistryFile();
+    this.loadProblem = problem;
     this.registry = file.vaults;
     this.activeVaultId = file.activeVaultId;
     // Don't trust a stale registration blindly: the folder may have been
@@ -418,9 +438,10 @@ export class VaultManager {
       }
     }
     // Create intermediate folders (e.g. `daily/` on the first save of a
-    // calendar-created draft note) -- `fsp.writeFile` won't on its own.
+    // calendar-created draft note) -- the write won't on its own.
     await fsp.mkdir(path.dirname(filePath), { recursive: true });
-    await fsp.writeFile(filePath, content, 'utf-8');
+    // Atomic: a crash or a sync client mid-write never leaves half a note.
+    await atomicWriteFile(filePath, content);
     const stat = await fsp.stat(filePath);
     this.ownWrites?.recordWrite(resolvedVault.id, relativePath, stat.mtimeMs);
     return stat.mtimeMs;
@@ -441,7 +462,7 @@ export class VaultManager {
     const resolvedVault = this.registrationFor(vaultId);
     const filePath = this.resolveInVault(relativePath, resolvedVault.id);
     await fsp.mkdir(path.dirname(filePath), { recursive: true });
-    await fsp.writeFile(filePath, bytes);
+    await atomicWriteFile(filePath, bytes);
     const stat = await fsp.stat(filePath);
     this.ownWrites?.recordWrite(resolvedVault.id, relativePath, stat.mtimeMs);
     return stat.mtimeMs;

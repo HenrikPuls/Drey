@@ -8,7 +8,7 @@
   width: 312px;
   max-width: 100%;
   margin: 0 auto;
-  padding: 0 12px 12px;
+  padding: 0 12px 8px;
 }
 
 .head {
@@ -19,7 +19,7 @@
 }
 
 /* As the dock panel's header: fill the header row; the gap between the
-   month button and the nav stays the panel's click-to-collapse / drag area. */
+   month button and the nav stays the panel's click-to-hide / drag area. */
 .head.in-frame {
   flex: 1;
   min-width: 0;
@@ -72,7 +72,7 @@
 }
 
 .weekday {
-  height: 18px;
+  height: 16px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -83,11 +83,10 @@
 
 .day {
   position: relative;
-  /* Fixed, compact row height -- the calendar stays as short as the
-     narrowest dock made the square cells (~22px), and never grows taller
-     as the dock widens. Six rows are always rendered, so the whole grid
-     is one constant height in every month and at every width. */
-  height: 22px;
+  /* Fixed, compact row height -- never taller as the dock widens. Six
+     rows are always rendered, so the whole grid is one constant height in
+     every month and at every width. */
+  height: 20px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -135,7 +134,7 @@
 
 .dot {
   position: absolute;
-  bottom: 3px;
+  bottom: 2px;
   left: 50%;
   width: 3px;
   height: 3px;
@@ -148,15 +147,15 @@
   display: grid;
   grid-template-columns: repeat(3, 1fr);
   gap: 2px;
-  /* The weekday row (18px) + six 22px day rows it replaces, so the panel
+  /* The weekday row (16px) + six 20px day rows it replaces, so the panel
      keeps one height whether the day grid or the picker is showing. */
-  min-height: 150px;
+  min-height: 136px;
   align-content: center;
 }
 
 .month-cell {
   position: relative;
-  height: 26px;
+  height: 24px;
   border: 0;
   background: transparent;
   border-radius: var(--radius-sm);

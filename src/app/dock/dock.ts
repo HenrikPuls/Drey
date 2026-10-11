@@ -14,6 +14,7 @@ import { NgComponentOutlet } from '@angular/common';
 import { DockService, DockSide, PanelId } from './dock.service';
 import { PaneService } from '../panes/pane.service';
 import { EditorService } from '../services/editor.service';
+import { DockStrip } from './dock-strip';
 import { PanelFrame } from './panel-frame';
 import { WidgetRegistryService } from './widget-registry.service';
 import { PluginWidgetHost } from '../plugin-host/plugin-widget-host';
@@ -37,11 +38,13 @@ async function loadPaneLeaf(): Promise<Type<unknown> | null> {
 }
 
 /**
- * One dock column (left or right). Renders its ordered panel list, each in
- * a `PanelFrame` whose body is the registered panel component, with a 7px
- * `row-resize` splitter between a panel and its next open neighbour and a
- * 2px accent drop-line at the live drop position during a panel drag.
- * Above the widget list sits the dock's editor band, when `PaneService` has
+ * One dock (left, right or bottom). At the top its `DockStrip` -- one icon
+ * toggle per panel that lives here -- then the ordered panel list, each
+ * open one in a `PanelFrame` whose body is the registered panel component
+ * (a closed one stays mounted, undisplayed), with a 7px `row-resize`
+ * splitter between a panel and its next open neighbour and a 2px accent
+ * drop-line at the live drop position during a panel drag.
+ * Between the strip and the widget list sits the dock's editor band, when `PaneService` has
  * a pane docked here (ADR-0038): a 32px header (title = the pane's active
  * tab name) over that pane's own `PaneLeaf`, with a splitter against the
  * first widget below. Widths come from `DockService`; the outer-edge
@@ -50,7 +53,7 @@ async function loadPaneLeaf(): Promise<Type<unknown> | null> {
 @Component({
   selector: 'app-dock',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [NgComponentOutlet, PanelFrame],
+  imports: [NgComponentOutlet, DockStrip, PanelFrame],
   templateUrl: './dock.html',
   styleUrl: './dock.css',
   host: {
@@ -93,8 +96,20 @@ export class Dock implements OnInit {
       }
       return this.dock.dragActive() ? 140 : null;
     }
-    return this.dock.allCollapsed('bottom') ? null : this.dock.dockHeight();
+    return this.dock.noneOpen('bottom') ? null : this.dock.dockHeight();
   });
+  /**
+   * A side dock unfolded with every panel closed and no editor band: say
+   * what the strip is for instead of showing a blank column. (The bottom
+   * dock shrinks to its strip, so it needs no hint.)
+   */
+  protected readonly showPickHint = computed(
+    () =>
+      this.side() !== 'bottom' &&
+      !this.bandPaneId() &&
+      !this.dock.dragActive() &&
+      this.dock.noneOpen(this.side()),
+  );
   protected readonly isDropTarget = computed(() => this.dock.dropDock() === this.side());
 
   /**
@@ -136,13 +151,13 @@ export class Dock implements OnInit {
   }
 
   protected flexStyle(id: PanelId): string {
-    return this.dock.collapsed(id) || this.dock.contentHeight(id)
+    return this.dock.closed(id) || this.dock.contentHeight(id)
       ? '0 0 auto'
       : `${this.dock.flexOf(id)} 1 0%`;
   }
 
   protected splitTarget(id: PanelId): PanelId | null {
-    if (this.dock.collapsed(id) || this.dock.contentHeight(id)) {
+    if (this.dock.closed(id) || this.dock.contentHeight(id)) {
       return null;
     }
     const next = this.dock.nextOpenId(id);
@@ -165,6 +180,6 @@ export class Dock implements OnInit {
     // vault event the host fanned out) re-renders the headers, so plugin
     // statuses go stale only until the next event they could react to.
     this.registry.statusVersion();
-    return this.registry.descriptor(id)?.status?.({ collapsed: this.dock.collapsed(id) }) ?? null;
+    return this.registry.descriptor(id)?.status?.({ collapsed: this.dock.closed(id) }) ?? null;
   }
 }

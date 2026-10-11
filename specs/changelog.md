@@ -20,6 +20,105 @@ recorded as an explicit decision. The parity checklist lives in
 
 ## Recent milestones
 
+### Renderer hardening: sandbox, Content-Security-Policy, encrypted keys
+
+Second package out of the 2026-10-11 architecture review. **Not yet
+manually verified by the owner.**
+
+- **The main window is sandboxed.** `sandbox: true`, open since milestone
+  1. The preload is bundled into one file by `scripts/bundle-preload.mjs`
+  (esbuild, now a declared dev dependency), run by `build:electron` after
+  `tsc`.
+- **The page has a Content-Security-Policy**
+  (`electron/content-security-policy.ts`): scripts only from the app
+  bundle and plugin directories, no inline script, no `eval`, no network
+  connection from the page, frames only from `plugin:` and `drey-asset:`.
+  Sent as a header by the `app://` handler; a dev run adds the same
+  policy to `ng serve`'s page. The production build no longer inlines
+  critical CSS (that put an inline script into `index.html`).
+- **Keys are encrypted in `app-config.json`** — the LLM API key and the
+  environment-variable and header values of external MCP servers, stored
+  as `enc:v1:…` with the OS user's key (Electron `safeStorage`). The rest
+  of the file stays readable and hand-editable; a key typed in plain text
+  is accepted and sealed at that start. A file from another machine or
+  account loses its keys: the app says once which ones and keeps the file
+  as `app-config.json.undecryptable-<timestamp>`. On Linux without a
+  secret service values stay plain.
+- **Fixed on the way: PDF tabs and PDF embeds did not load.** The tab's
+  frame URL was rejected by Angular (`NG0904`), and the embed's probe was
+  blocked because `drey-asset:` was not CORS-enabled. Both were broken on
+  `main` before this package. The tab now marks its `drey-asset:` URL as
+  trusted; `drey-asset:` is CORS-enabled and names the page's origin as
+  the only allowed one.
+- Tests: `e2e/csp.spec.ts` (a clean page load, blocked inline / remote /
+  `eval` script, PDF tab, PDF embed, hostile HTML in a note); the e2e
+  fixture fails any test that leaves a policy violation in the console;
+  unit tests for the policy, the secret sealing and `AppConfigStore`.
+- Docs: ADR-0001 and ADR-0010 later-change sections, `docs/08`
+  ("Renderer hardening", "Secrets in the settings file"), `docs/05`
+  §5.19, `docs/07`, `docs/11`, `plugins/AUTHORING.md`.
+
+### Data safety: atomic writes, guarded config files, visible main-process errors
+
+First package out of the 2026-10-11 architecture review. **Not yet
+manually verified by the owner.**
+
+- **Notes and settings are replaced atomically.** Every vault write
+  (`VaultManager.writeFile` / `writeBinaryFile`), `app-config.json`,
+  `vault-config.json`, the note history's index files and the session
+  backups now go through `electron/safe-file.ts`: temp file beside the
+  target, flush, rename. A crash or a sync client mid-write no longer
+  leaves a cut-off file. A blocked rename is retried and then falls back
+  to the old in-place write, so no save fails that worked before; a
+  read-only file still reports its error. External tabs keep the
+  in-place write on purpose.
+- **A damaged settings file is kept, not overwritten.** Until now an
+  unreadable `app-config.json` or `vault-config.json` silently became
+  defaults, and the next save wrote those defaults over it — API keys,
+  snippets, action templates, MCP servers or the vault list gone. The
+  file is now moved to `<name>.corrupt-<timestamp>` and a dialog names
+  it after start. A byte-order mark from a hand edit no longer counts
+  as damage.
+- **An uncaught error in the main process is shown.** The log listener
+  had switched off Electron's own dialog; Drey now shows one itself
+  (once per session, *Quit Drey* / *Keep running*).
+- **One path-escape check for `app://` and `plugin://`**
+  (`electron/path-guard.ts`), replacing the `startsWith` test on the
+  `app://` side.
+- Specs: `electron/safe-file.spec.ts`, `electron/path-guard.spec.ts`.
+  Docs: `docs/08` (two new sections), `docs/05` §5.19, `docs/11` (the
+  review's remaining findings are recorded there as debt rows).
+
+### Milestone 69 — a dock icon strip replaces collapsed panel headers (ADR-0019 later change)
+
+**Not yet manually verified by the owner.**
+
+- **Why.** Ten panels, nine in the left dock, each showing its 32px
+  header whether open or collapsed: 288px of headers in the default
+  layout, 192px of it for six panels that showed nothing.
+- **An icon strip per dock.** A 32px row at the top of each dock with one
+  icon toggle per panel of that dock. A panel is open (frame + header) or
+  closed (icon only); several can be open at once, stacked and split as
+  before. The default left dock now spends 128px on chrome. Open panels
+  are marked by a neutral gray fill (`--active-bg`), not the accent.
+- **Collapse-to-header is gone.** A header click closes the panel; the
+  strip icon opens it again. The stored `open` flag keeps its key, so a
+  layout from before the change carries over — what was collapsed is now
+  an icon. The View menu rows toggle the same flag; the separate `hidden`
+  list (ADR-0034) is dropped, a stored one is re-homed once, closed.
+- **Closed panels stay movable and keep their state.** Header and icon
+  share one press gesture (click toggles, drag moves, also onto another
+  dock's strip). A closed panel stays mounted; its status value shows in
+  the icon's tooltip.
+- **Closing a side dock's last open panel folds the dock.** Its titlebar
+  toggle (`Ctrl+B` / `Ctrl+Alt+B`) brings it back with the strip and a
+  one-line hint. The bottom dock shrinks to its strip.
+- **SDK 1.19.** `PluginWidgetContrib.icon` (a vendored glyph name; first
+  letter of the title as the fallback). All bundled plugins name one; one
+  new vendored glyph (`calendar`).
+- Deviates from `handoff/DESIGN.md` (every panel always shows a header) —
+  recorded in ADR-0019.
+
 ### Milestone 68 — semantic search remainder: Search panel + MCP (ADR-0055 later change)
 
 **Not yet manually verified by the owner.**

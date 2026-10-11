@@ -1,5 +1,6 @@
 import { Injectable, Signal, computed, inject, signal } from '@angular/core';
 import { CalendarService } from '../calendar';
+import { isIconName } from '../icons/icon';
 import { EditorService } from '../services/editor.service';
 import type { PluginWidgetContrib, Unsubscribe } from '../../../shared/plugin-api/renderer';
 import { CORE_WIDGETS, type WidgetDescriptor, type WidgetId, type WidgetStatusContext } from './widget-registry';
@@ -55,8 +56,8 @@ export class WidgetRegistryService {
 
     const statusCallbacks: Record<WidgetId, (context: WidgetStatusContext) => string | null> = {
       calendar: ({ collapsed }) =>
-        // The expanded calendar shows the month in its own header row, so
-        // only surface it in the panel header while collapsed.
+        // The open calendar shows the month in its own header row, so only
+        // surface it (in the strip icon's tooltip) while closed.
         collapsed
           ? `${String(calendar.viewMonth() + 1).padStart(2, '0')}/${calendar.viewYear()}`
           : null,
@@ -103,6 +104,7 @@ export class WidgetRegistryService {
       {
         id: contrib.id,
         title: contrib.title,
+        ...(contrib.icon !== undefined && isIconName(contrib.icon) ? { icon: contrib.icon } : {}),
         // `component` stays unset for plugin widgets: `Dock` renders
         // `PluginWidgetHost` for them (keeps this service free of
         // component imports).

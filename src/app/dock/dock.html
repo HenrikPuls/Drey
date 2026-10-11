@@ -2,6 +2,13 @@
   <div class="drop-hint">Drop a panel here</div>
 }
 
+@if (!isEmpty()) {
+  <app-dock-strip [side]="side()" />
+  @if (showPickHint()) {
+    <div class="drop-hint">Pick a panel above</div>
+  }
+}
+
 @if (bandPaneId(); as bpid) {
   <div
     class="editor-band"
@@ -26,7 +33,12 @@
     <div class="drop-line"></div>
   }
 
-  <app-panel-frame [panelId]="id" [status]="statusFor(id)" [style.flex]="flexStyle(id)">
+  <app-panel-frame
+    [panelId]="id"
+    [status]="statusFor(id)"
+    [class.closed]="dock.closed(id)"
+    [style.flex]="flexStyle(id)"
+  >
     <ng-container *ngComponentOutlet="component(id); inputs: componentInputs(id)" />
   </app-panel-frame>
 

@@ -16,18 +16,18 @@ import { PanelHeaderActionsStore } from './panel-header-actions';
 import { WidgetRegistryService } from './widget-registry.service';
 
 /**
- * The chrome every dock panel shares (DESIGN.md principle 3): a 32px
- * low-profile header (the mono-uppercase title + an optional status value +
- * a drag grip), then the panel body (`<ng-content>`).
+ * The chrome every open dock panel shares (DESIGN.md principle 3): a 32px
+ * low-profile header (the title + an optional status value + the panel's
+ * controls + a drag grip), then the panel body (`<ng-content>`).
  *
  * The body scrolls, except for the assistant panel, which fills the frame
- * and scrolls internally (its own header + composer stay put). It stays
- * mounted while collapsed so its state survives; `.body-wrap` animates the
- * height between the two.
+ * and scrolls internally (its own header + composer stay put). A closed
+ * panel keeps its frame mounted but undisplayed (`Dock` sets `.closed`), so
+ * its state survives; it is reopened from the dock's icon strip.
  *
  * `mousedown` on the header opens a press gesture in `DockService`: a click
- * (no movement) toggles collapse, a drag past the threshold moves the panel
- * between docks. Enter / Space on the focused header also toggles.
+ * (no movement) closes the panel, a drag past the threshold moves it
+ * between docks. Enter / Space on the focused header also closes.
  */
 @Component({
   selector: 'app-panel-frame',
@@ -55,15 +55,13 @@ export class PanelFrame implements OnInit {
   protected readonly headerActions = computed(() =>
     this.headerActionsStore.get(this.panelId()),
   );
-  protected readonly collapsed = computed(() => this.dock.collapsed(this.panelId()));
   /**
    * True while the panel's own header content stands in for the title
-   * (`WidgetDescriptor.headerReplacesTitle`, the calendar): expanded, and
-   * the content template has registered.
+   * (`WidgetDescriptor.headerReplacesTitle`, the calendar) -- once the
+   * content template has registered.
    */
   protected readonly titleReplaced = computed(
     () =>
-      !this.collapsed() &&
       this.headerActions() !== null &&
       (this.registry.descriptor(this.panelId())?.headerReplacesTitle ?? false),
   );
@@ -86,11 +84,9 @@ export class PanelFrame implements OnInit {
     inject(DestroyRef).onDestroy(() => this.dock.unregisterPanelEl(this.panelId(), this.el));
     // Mount a plugin widget's header controls once their container exists.
     // Reading the signal-based `viewChild` INSIDE the effect tracks it: the
-    // effect (re-)runs when the panel id changes or the container re-appears
-    // after a collapse/expand cycle (a panel that starts collapsed mounts
-    // its controls on first expand -- the old container, and the controls
-    // mounted into it, go away with the `@if`); `onCleanup` disposes the
-    // previous mount so listeners never pile up.
+    // effect (re-)runs when the panel id changes or the container is
+    // re-created; `onCleanup` disposes the previous mount so listeners
+    // never pile up.
     effect((onCleanup) => {
       const mount = this.headerActionsMount();
       const host = this.pluginActionsView()?.nativeElement ?? null;
@@ -122,7 +118,7 @@ export class PanelFrame implements OnInit {
   }
 
   /**
-   * A press inside the header controls must not start the collapse / drag
+   * A press inside the header controls must not start the hide / drag
    * gesture. A title-replacing row spans the whole header, so there the
    * controls stop their own presses and the gaps between them still reach
    * the header.
@@ -136,7 +132,7 @@ export class PanelFrame implements OnInit {
   protected onHeaderKey(event: KeyboardEvent): void {
     if (event.key === 'Enter' || event.key === ' ') {
       event.preventDefault();
-      this.dock.toggleCollapse(this.panelId());
+      this.dock.toggle(this.panelId());
     }
   }
 }

@@ -1,0 +1,27 @@
+@for (item of items(); track item.id; let i = $index) {
+  @if (dropIndex() === i) {
+    <span class="drop-mark"></span>
+  }
+  <button
+    #btn
+    type="button"
+    class="icon-btn"
+    [class.glyph]="!item.icon"
+    [class.dragging]="dock.dragging() === item.id"
+    [attr.data-widget]="item.id"
+    [attr.aria-pressed]="item.open"
+    [attr.aria-label]="item.label"
+    [title]="item.tip"
+    (mousedown)="dock.beginHeaderPress(item.id, item.title, $event)"
+    (click)="onClick(item.id, $event)"
+  >
+    @if (item.icon; as name) {
+      <app-icon [name]="name" [size]="15" />
+    } @else {
+      {{ item.letter }}
+    }
+  </button>
+}
+@if (dropIndex() === items().length) {
+  <span class="drop-mark"></span>
+}

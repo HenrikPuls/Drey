@@ -1,6 +1,7 @@
 import { app } from 'electron';
 import * as fsp from 'node:fs/promises';
 import * as path from 'node:path';
+import { atomicWriteFile } from '../safe-file';
 
 /**
  * A flat directory of plain-text backups under the OS user-data dir
@@ -30,7 +31,7 @@ export class SessionBackupStore {
       return;
     }
     await fsp.mkdir(this.dir, { recursive: true });
-    await fsp.writeFile(file, content, 'utf8');
+    await atomicWriteFile(file, content);
   }
 
   async read(id: string): Promise<string | null> {

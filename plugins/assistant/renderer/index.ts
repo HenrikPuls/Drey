@@ -266,6 +266,7 @@ const plugin: PluginRendererModule = {
     api.ui.registerWidget({
       id: 'assistant',
       title: 'Assistant',
+      icon: 'sparkles',
       defaultDock: 'right',
       defaultOpen: true,
       defaultFlex: 100,

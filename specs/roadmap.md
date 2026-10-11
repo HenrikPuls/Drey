@@ -97,6 +97,10 @@ shipped as milestone 68 over a new base `SemanticSearchProvider` seam
 considered and dropped (an ask queues behind at most one embed batch,
 never a rebuild — see "Closed" below).
 
+Outside the list, on an owner request: **the dock icon strip** shipped as
+milestone 69 (ADR-0019 later change) — one icon row per dock replaces the
+collapsed panel headers.
+
 ### Closed (won't do)
 
 - **Pause / resume of large semantic rebuilds on interactive use** —

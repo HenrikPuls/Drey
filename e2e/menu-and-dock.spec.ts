@@ -124,21 +124,35 @@ test.describe('Edit menu — history / clipboard act on the focused editor', () 
 });
 
 test.describe('View menu — widget visibility (ADR-0034)', () => {
-  test('deselecting "Open windows" removes the whole panel; reselecting brings it back', async ({
+  test('deselecting "Open windows" closes the panel to its strip icon; reselecting brings it back', async ({
     page,
   }) => {
     const frame = page.locator('app-panel-frame', {
       has: page.locator('.head[aria-label$="Open windows"]'),
     });
-    await expect(frame).toHaveCount(1);
+    await expect(frame).toBeVisible();
 
     await page.locator('app-titlebar .menu-label', { hasText: 'View' }).click();
     await page.locator('app-titlebar .popover .row', { hasText: 'Open windows' }).click();
-    await expect(frame).toHaveCount(0);
+    await expect(frame).toBeHidden();
+    await expect(page.locator('app-dock-strip button[aria-label="Show Open windows"]')).toBeVisible();
 
     await page.locator('app-titlebar .menu-label', { hasText: 'View' }).click();
     await page.locator('app-titlebar .popover .row', { hasText: 'Open windows' }).click();
-    await expect(frame).toHaveCount(1);
+    await expect(frame).toBeVisible();
+  });
+
+  test('a strip icon toggles its panel, and a header click closes it', async ({ page }) => {
+    const frame = page.locator('app-panel-frame', {
+      has: page.locator('.head[aria-label$="Open windows"]'),
+    });
+    await frame.locator('.head').click();
+    await expect(frame).toBeHidden();
+
+    await page.locator('app-dock-strip button[aria-label="Show Open windows"]').click();
+    await expect(frame).toBeVisible();
+    await page.locator('app-dock-strip button[aria-label="Hide Open windows"]').click();
+    await expect(frame).toBeHidden();
   });
 
   test('the "Add entry" panel is gone: no View row, no bottom dock by default', async ({ page }) => {

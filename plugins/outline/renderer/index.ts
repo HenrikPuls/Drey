@@ -197,6 +197,7 @@ const plugin: PluginRendererModule = {
     api.ui.registerWidget({
       id: 'outline',
       title: 'Outline',
+      icon: 'list',
       defaultDock: 'left',
       defaultOpen: false,
       defaultFlex: 220,

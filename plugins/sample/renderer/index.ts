@@ -206,6 +206,7 @@ const plugin: PluginRendererModule = {
     api.ui.registerWidget({
       id: 'sample',
       title: 'Sample',
+      icon: 'layers',
       defaultDock: 'right',
       defaultOpen: true,
       defaultFlex: 140,

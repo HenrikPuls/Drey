@@ -213,3 +213,60 @@ View-menu rows). It is orthogonal to `hidden` (per widget) and `open`
   empty dock, so it stays a drop target.
 - The bottom dock is not part of this — with every panel collapsed it is
   already just its header rows.
+
+## Later change — an icon strip per dock replaces collapse-to-header (milestone 69)
+
+With ten panels — nine of them in the left dock by default — the
+click-to-collapse model stopped scaling: every panel kept its 32px header
+on screen whether it showed anything or not. The default layout spent
+288px of the left dock on headers, 192px of that on six collapsed panels.
+A collapsed panel was, in effect, a 32px-tall text button.
+
+- **Each dock has an icon strip at its top** (`DockStrip`, one 32px row):
+  one toggle per panel that lives in that dock, in dock order. A panel is
+  either **open** (frame + header, as before) or **closed** (its strip
+  icon only). The default left dock now spends 32px + three open headers
+  = 128px on chrome. An open panel's icon carries the neutral
+  `--active-bg` fill with a `--border` edge, not the accent the other pressed icon buttons use:
+  several panels are open at once, and an accent on each made the row the
+  loudest thing on screen.
+- **`open[id]` keeps its storage key and changes meaning** — `false` was
+  "collapsed to the header", it is now "closed to the icon". A stored
+  layout therefore carries over without a migration step: what was
+  collapsed is an icon.
+- **`hidden` is gone.** ADR-0034's View-menu hide pulled a widget out of
+  every dock into a separate list, so it forgot its dock and slot. Closed
+  panels stay in their dock list; the View menu rows toggle the same flag
+  as the icons. A stored `hidden` list is read once: those widgets go
+  back to their default dock, closed.
+- **A header click closes** (it used to collapse); the strip icon is the
+  way back. Both run the same press gesture (`beginHeaderPress`), so a
+  drag from either moves the panel — a closed panel stays movable. Over a
+  strip the drop slot comes from the icons' x-centres, over the stack
+  from the open panels' y-centres.
+- **A closed panel stays mounted** (`display: none` on its frame), for the
+  reason the fold amendment gives: plugin widget DOM, scroll positions
+  and a streaming answer survive. Its header status value moves into the
+  icon's tooltip.
+- **Closing the last open panel of a side dock folds the dock**, instead
+  of leaving a 248px column that holds only a strip. Unfolded by its
+  titlebar toggle with nothing open, it shows the strip and a one-line
+  hint. The bottom dock shrinks to its strip, as it shrank to its headers.
+- **Widgets carry an icon**: `WidgetDescriptor.icon`, and
+  `PluginWidgetContrib.icon` (SDK 1.19, a name from the vendored set). A
+  plugin widget without one shows its title's first letter.
+
+Considered and not chosen:
+
+- **Icons in the titlebar** — costs no row at all, but mixes three docks'
+  panels into one bar and shrinks the window drag region. The owner
+  preferred the per-dock row for its unambiguous "these belong here".
+- **A vertical activity rail** (VS Code) — costs no height but permanent
+  width on both sides, and the bottom dock would need its own answer.
+- **One panel per dock** (VS Code's exclusive view) — maximal room, but
+  Calendar above Files is the default working layout here.
+- **Keeping collapse next to close** — two near-identical states, and
+  empty header rows would remain possible.
+
+This departs from `handoff/DESIGN.md`'s dock spec (every panel always
+shows its header) and from the "click-to-collapse" later change above.

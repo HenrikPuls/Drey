@@ -58,7 +58,10 @@ toolchain is removable by deleting `.tools/`). Never assume a bare `node`,
   - Unit tests: `node node_modules/@angular/cli/bin/ng.js test --watch=false`
     (add `--include "src/.../x.spec.ts"` to scope it)
   - Production renderer build: `node node_modules/@angular/cli/bin/ng.js build --configuration production`
-  - Emit the main process: `node node_modules/typescript/bin/tsc -p electron/tsconfig.json`
+  - Emit the main process: `node node_modules/typescript/bin/tsc -p electron/tsconfig.json`,
+    then `node scripts/bundle-preload.mjs` — the main window is sandboxed
+    and only runs the bundled one-file preload (`npm run build:electron`
+    does both; tsc's own `preload.js` leaves `window.dreyApi` undefined)
 - VS Code tasks and debug configs don't inherit `env.ps1`; `.vscode/` works
   around that three ways (see `docs/11`, "Environment gotchas").
 - **`npm run dev` builds `dist-electron/` only once, at startup** (the
@@ -79,6 +82,12 @@ toolchain is removable by deleting `.tools/`). Never assume a bare `node`,
 
 - Electron main/renderer split. No Node integration in the renderer — all
   filesystem and LLM access goes through a `contextBridge` IPC boundary.
+  The main window is **sandboxed** and its page runs under a
+  **Content-Security-Policy** (`electron/content-security-policy.ts`,
+  ADR-0001 later change): no inline script, no `eval`, no network
+  `fetch` from the renderer, frames only from `plugin:` / `drey-asset:`.
+  A feature that needs more widens the policy explicitly; the e2e
+  fixture fails a test on any violation.
 - No server/backend process. A vault is just a folder on disk (can live on
   OneDrive); the app reads/writes files directly, no client-server split.
 - Editor: CodeMirror 6 in the renderer, extended via Compartments. Plugins
@@ -132,8 +141,10 @@ toolchain is removable by deleting `.tools/`). Never assume a bare `node`,
   same as the removable `copilot-web` scraper (ADR-0040). No hardcoded
   model id — never assume a specific model is loaded, and never assume
   `/v1/models` is reachable (the model id must stay hand-enterable;
-  CLI/web providers advertise no model listing at all). API keys sit in
-  `app-config.json` in plain text (`docs/11`).
+  CLI/web providers advertise no model listing at all). API keys (and
+  the env / header values of external MCP servers) are encrypted in
+  `app-config.json` with the OS user's key — `electron/config-secrets.ts`,
+  ADR-0010 later change; plain in memory and over IPC.
 - **Semantic vault retrieval** (milestone 41,
   [ADR-0055](docs/09_architecture_decisions/0055-semantic-vault-retrieval.md)):
   the assistant's **Vault chip** retrieves the top-k note sections most
@@ -352,11 +363,15 @@ Renderer (Angular):
 
 - `App` composes a **titlebar / [left dock | main column | right dock] /
   status bar** shell directly.
-- `DockService` + `Dock` + `PanelFrame` (`src/app/dock/`) — the dock
-  system: `DockService` holds the whole `LayoutState` (which panel in
-  which dock, order, `flexes`, collapse, `leftW`/`rightW`, `bottomH`;
-  `localStorage['drey.dock']`) and runs the header-drag / splitter /
-  dock-edge-resize gestures. Three docks — `left | right | bottom` (the
+- `DockService` + `Dock` + `DockStrip` + `PanelFrame` (`src/app/dock/`) —
+  the dock system: `DockService` holds the whole `LayoutState` (which
+  panel in which dock, order, `flexes`, open / closed, `leftW`/`rightW`,
+  `bottomH`; `localStorage['drey.dock']`) and runs the header-drag /
+  splitter / dock-edge-resize gestures. `DockStrip` is the icon row at the
+  top of each dock (milestone 69, ADR-0019 later change): one toggle per
+  panel of that dock — a panel is open or closed to its icon, never
+  collapsed to a header; the glyph is `WidgetDescriptor.icon` /
+  `PluginWidgetContrib.icon` (SDK 1.19). Three docks — `left | right | bottom` (the
   bottom one a resizable band under the editor). Panels come from the
   runtime **`WidgetRegistryService`**: core panels via
   `registerCoreWidgets()` — `CalendarPanel`, `FilesPanel` (one section
@@ -711,14 +726,20 @@ be called out explicitly (see Working Style below), not introduced silently.
     ones registered by the base; Templates/Search/Tasks/Assistant/
     Outline/Backlinks/Source control are provided by plugins, ADR-0044). A
     panel is dragged between docks by its header, resized against its
-    neighbour by a splitter, and collapsed to its 32px header. Every
-    panel header is built the same way (sentence-case title + optional
-    status value + the panel's icon controls + drag grip). Default:
+    neighbour by a splitter, and **opened or closed from the dock's icon
+    strip** — a 32px row at the top of each dock with one icon toggle
+    per panel living there (milestone 69, ADR-0019 later change). A
+    closed panel shows only as its icon (no header row; status value in
+    the tooltip); clicking an open panel's header closes it; the icon is
+    draggable like the header. Closing a side dock's last open panel
+    folds the dock. Every panel header is built the same way
+    (sentence-case title + optional status value + the panel's icon
+    controls + drag grip). Default:
     Calendar/Files/Templates/Search/Tasks/Open windows/Outline/Backlinks/
     Source control left, Assistant right, nothing in the bottom band,
     Templates + Search + Tasks + Outline + Backlinks + Source control
-    collapsed. Calendar takes its content height, not a
-    flex share; expanded, its header is the **month/year dropdown**
+    closed. Calendar takes its content height, not a
+    flex share; its header is the **month/year dropdown**
     itself (no "Calendar" title) with **Today** (opens today's daily
     note) and the month arrows.
     Each dock can additionally host one **editor band** above its panels
@@ -865,7 +886,7 @@ packaging verified — see `docs/07_deployment_view.md`).
 closed 2026-10-10). This file does not restate them — the per-milestone
 record is:
 
-- [specs/changelog.md](specs/changelog.md) — milestones 22–68, newest
+- [specs/changelog.md](specs/changelog.md) — milestones 22–69, newest
   first, plus requirements and fixes
 - [docs/milestones-done.md](docs/milestones-done.md) — the archived
   build log, milestones 1–27
@@ -881,15 +902,18 @@ Open work and its order live in [specs/roadmap.md](specs/roadmap.md)
 ("Next milestones") — that list is binding; keep this summary in step
 with it.
 
-- **Last completed:** milestone 68 — semantic search remainder: a base
-  `SemanticSearchProvider` seam (SDK 1.18), semantic mode in the Search
-  panel and a semantic `vault_search` mode (ADR-0055 later change;
-  pause/resume of large rebuilds was considered and dropped). Before it:
-  milestone 67 — the Git plugin's merge, stash, amend and file history.
+- **Last completed:** milestone 69 — the dock icon strip: one icon row
+  per dock replaces the collapsed panel headers (ADR-0019 later change,
+  SDK 1.19 `PluginWidgetContrib.icon`). Before it: milestone 68 —
+  semantic search remainder: a base `SemanticSearchProvider` seam (SDK
+  1.18), semantic mode in the Search panel and a semantic `vault_search`
+  mode (ADR-0055 later change; pause/resume of large rebuilds was
+  considered and dropped), and milestone 67 — the Git plugin's merge,
+  stash, amend and file history.
   Milestones 59–66, the Vault-chip picker, the dev escape hatch and the
   build-origin/mouse-button work are owner-verified; milestone 67, the
-  Anthrazit AA re-tune and milestone 68 are code-complete, verification
-  pending.
+  Anthrazit AA re-tune and milestones 68 and 69 are code-complete,
+  verification pending.
 - **Next, in order:** nothing ordered — the owner picks from the backlog
   in `specs/roadmap.md`.
 

@@ -202,9 +202,8 @@ export interface LlmConfig {
    * that DO require one -- Unsloth Desktop issues `sk-unsloth-…` keys --
    * reject both `GET /models` and `POST /chat/completions` without it.
    *
-   * Stored in plain text in the app config file, like every other desktop
-   * client that talks to a local endpoint; see
-   * `docs/11_risks_and_technical_debt.md`.
+   * Plain here and over IPC; encrypted in the app config file with the OS
+   * user's key (`electron/config-secrets.ts`, ADR-0010 later change).
    */
   apiKey: string | null;
   /**

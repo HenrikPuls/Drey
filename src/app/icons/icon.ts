@@ -49,6 +49,7 @@ export type IconName =
   | 'save'
   | 'pin'
   | 'calendar-check'
+  | 'calendar'
   | 'search'
   | 'file-text'
   | 'layers'
@@ -288,6 +289,13 @@ const ICONS: Record<IconName, readonly IconShape[]> = {
     { kind: 'path', d: 'M5 4h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2z' },
     { kind: 'path', d: 'M3 10h18' },
     { kind: 'path', d: 'm9 16 2 2 4-4' },
+  ],
+  // Lucide "calendar" -- the Calendar panel's icon in the dock strip.
+  calendar: [
+    { kind: 'path', d: 'M8 2v4' },
+    { kind: 'path', d: 'M16 2v4' },
+    { kind: 'path', d: 'M5 4h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2z' },
+    { kind: 'path', d: 'M3 10h18' },
   ],
   search: [
     { kind: 'circle', cx: 11, cy: 11, r: 8 },

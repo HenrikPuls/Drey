@@ -66,11 +66,26 @@ export function logFromRenderer(
   logLine(`[renderer/${level}] ${message}${suffix}`);
 }
 
-/** Wires main-process crash / rejection hooks to the log file. Call once at startup. */
-export function installMainProcessLogging(): void {
+/** The log file's path, for telling the user where the details are. */
+export function logFileLocation(): string | null {
+  return ensurePath();
+}
+
+/**
+ * Wires main-process crash / rejection hooks to the log file. Call once at
+ * startup. Listening for `uncaughtException` replaces Electron's own error
+ * dialog, so `onUncaughtException` is where the caller tells the user --
+ * the process keeps running, in a state nobody checked.
+ */
+export function installMainProcessLogging(onUncaughtException?: (err: Error) => void): void {
   logLine('[main] --- session start ---');
   process.on('uncaughtException', (err) => {
     logLine(`[main/uncaughtException] ${err?.stack ?? String(err)}`);
+    try {
+      onUncaughtException?.(err);
+    } catch (reportError) {
+      logLine(`[main/uncaughtException] reporting failed: ${String(reportError)}`);
+    }
   });
   process.on('unhandledRejection', (reason) => {
     logLine(
