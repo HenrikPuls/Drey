@@ -1,3 +1,6 @@
+/* Same height as the dock icon strip and the panel headers
+   (--panel-head-h): the tab bar and the docks' icon strips sit side by
+   side under the titlebar, so their bottom borders read as one line. */
 :host {
   position: relative;
   display: flex;
@@ -5,7 +8,7 @@
   gap: 1px;
   flex: none;
   min-width: 0;
-  height: var(--bar-h);
+  height: var(--panel-head-h);
   padding: 0 8px;
   background: var(--bg-dock);
   border-bottom: 1px solid var(--border);

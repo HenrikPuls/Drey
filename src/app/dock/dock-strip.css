@@ -1,5 +1,10 @@
-/* One row of panel toggles, as tall as a panel header. A narrow dock wraps
-   it onto a second row rather than clipping icons. */
+/* One row of panel toggles, exactly as tall as a panel header and the
+   tab bar. The arithmetic must land on --panel-head-h with the border:
+   24px icon button + 2 x 3px padding + 1px border-bottom = 31px, and the
+   min-height raises that to 32px -- with 4px padding the content alone
+   would need 32px and the box would render 33px, one pixel taller than
+   the headers and the tab bar next to it. A narrow dock wraps it onto a
+   second row rather than clipping icons. */
 :host {
   display: flex;
   flex: none;
@@ -7,7 +12,7 @@
   align-items: center;
   gap: 2px;
   min-height: var(--panel-head-h);
-  padding: 4px 8px;
+  padding: 3px 8px;
   box-sizing: border-box;
   border-bottom: 1px solid var(--border);
   user-select: none;

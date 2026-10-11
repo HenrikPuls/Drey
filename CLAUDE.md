@@ -771,7 +771,9 @@ be called out explicitly (see Working Style below), not introduced silently.
     (ADR-0051). Dragging a row onto a folder / file row / another vault's
     header row moves it (within or across vaults, req-23; no-drop on a
     same-dir no-op or a folder into itself).
-  - **Centre column**: a 36px tab bar for open documents, a 40px meta bar
+  - **Centre column**: a 32px tab bar for open documents — the dock icon
+    strips' height (`--panel-head-h`), so their bottom borders form one
+    line under the titlebar — a 40px meta bar
     (path · formatting buttons · Unsaved · Lines toggle · Save · `⋯`),
     the editor (Live Preview ⇄ source via the `⋯` menu — no toggle
     buttons; see ADR-0008/0009), then the **bottom dock** band (empty by
