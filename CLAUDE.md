@@ -391,7 +391,8 @@ Renderer (Angular):
   plus the file trees, right-click new/delete, inline create, add /
   rename / remove / set-active vault management in the vault row's
   context menu, and drag & drop of files/folders within or across
-  vaults, req-23),
+  vaults, req-23; the component handles input only — view state is
+  `FilesTreeState`, the file operations are `FileOperationsService`),
   `WindowsPanel`, `SearchPanelHost` — while the templates / search
   / tasks / assistant panels are plugin widgets mounting plain DOM into
   `PluginWidgetHost`. Persisted layout keys on widget ids — plugin
