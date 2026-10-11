@@ -133,3 +133,99 @@ describe('SemanticService.search — the SDK seam (1.18)', () => {
     expect(await service.search(`about ${QUERY_NEAR}`)).toEqual([]);
   });
 });
+
+/** Lets fire-and-forget background rebuilds settle (all fake deps are instant). */
+async function flush(): Promise<void> {
+  for (let i = 0; i < 5; i++) {
+    await new Promise((resolve) => setTimeout(resolve, 0));
+  }
+}
+
+describe('SemanticService — the explore engines (ADR-0069)', () => {
+  it('searchScoped resolves a custom SUBSET (both vaults), not just one', async () => {
+    const files = new Map([
+      ['va', new Map([['a.md', note(['# Near', `NEAR ${QUERY_NEAR} alpha`])]])],
+      ['vb', new Map([['b.md', note(['# Also near', `NEAR ${QUERY_NEAR} beta`])]])],
+    ]);
+    const service = await builtService(files);
+    expect(
+      (await service.searchScoped(`about ${QUERY_NEAR}`, 'custom', ['va', 'vb'])).map(
+        (h) => h.path,
+      ),
+    ).toEqual(['a.md', 'b.md']);
+    const onlyBeta = await service.searchScoped(`about ${QUERY_NEAR}`, 'custom', ['vb']);
+    expect(onlyBeta.map((h) => h.path)).toEqual(['b.md']);
+    expect(onlyBeta[0].vault).toBe('Beta');
+  });
+
+  it('searchScoped stays empty while disabled, like retrieve', async () => {
+    const deps = makeDeps(new Map([['va', new Map([['a.md', note(['# Near', 'NEAR text'])]])]]));
+    deps.getConfig = async <T,>(key: string) =>
+      key === 'semantic.enabled' ? (false as T) : (undefined as T | undefined);
+    const service = new SemanticService(deps);
+    await service.refreshConfig();
+    expect(await service.searchScoped('anything', 'vault', [])).toEqual([]);
+    expect(await service.outline('vault', [])).toEqual([]);
+  });
+
+  it('outline lists indexed headings; a cold vault falls back to file names', async () => {
+    const files = new Map([
+      ['va', new Map([['a.md', note(['# One', 'one body', '# Two', 'two body'])]])],
+      ['vb', new Map([['b.md', note(['# Beta', 'NEAR text'])]])],
+    ]);
+    const service = new SemanticService(makeDeps(files));
+    await service.refreshConfig();
+    await service.rebuildVault('vb'); // va stays cold
+    const rows = await service.outline('all', []);
+    const beta = rows.find((row) => row.vaultId === 'vb');
+    const alpha = rows.find((row) => row.vaultId === 'va');
+    expect(beta).toMatchObject({ path: 'b.md', headings: ['Beta'], vault: 'Beta' });
+    expect(alpha).toMatchObject({ path: 'a.md', headings: [] });
+    // The cold vault's fallback kicked its background rebuild.
+    await flush();
+    const status = await service.status();
+    expect(status.vaults.find((vault) => vault.id === 'va')?.sections).toBe(2);
+  });
+
+  it('readSection picks by heading (case-insensitive), line, or the first section', async () => {
+    const files = new Map([
+      [
+        'va',
+        new Map([['a.md', note(['# Intro', 'hello', '# Deep Dive', 'NEAR details', '# Wrap', 'bye'])]]),
+      ],
+    ]);
+    const service = await builtService(files);
+    expect(await service.readSection('va', 'missing.md', {})).toBeNull();
+    expect(await service.readSection('va', 'empty.md', {})).toBeNull();
+    const byHeading = await service.readSection('va', 'a.md', { heading: 'deep dive' });
+    expect(byHeading).toMatchObject({ heading: 'Deep Dive', line: 5, text: 'NEAR details' });
+    const byLine = await service.readSection('va', 'a.md', { line: 9 });
+    expect(byLine).toMatchObject({ heading: 'Wrap', text: 'bye' });
+    const first = await service.readSection('va', 'a.md', {});
+    expect(first).toMatchObject({ heading: 'Intro', text: 'hello' });
+  });
+
+  it('a retrieval over a cold vault self-heals: empty this round, indexed the next', async () => {
+    const files = new Map([
+      ['va', new Map([['a.md', note(['# Near', `NEAR ${QUERY_NEAR} alpha`])]])],
+    ]);
+    const service = new SemanticService(makeDeps(files));
+    await service.refreshConfig();
+    // No catch-up ran — the index is cold.
+    const first = await service.retrieve(`about ${QUERY_NEAR}`, 'custom', ['va']);
+    expect(first.enabled).toBe(true);
+    expect(first.hits).toEqual([]);
+    expect(first.targets).toEqual(['va']);
+    await flush();
+    const second = await service.retrieve(`about ${QUERY_NEAR}`, 'custom', ['va']);
+    expect(second.hits).toHaveLength(1);
+    expect(second.hits[0]).toMatchObject({ vaultId: 'va', heading: 'Near' });
+  });
+
+  it('resolveTargets mirrors the scope resolver (the explore tools read guard)', async () => {
+    const files = new Map([['va', new Map([['a.md', note(['# Near', 'NEAR text'])]])]]);
+    const service = await builtService(files);
+    expect(await service.resolveTargets('vault', [])).toEqual(['vb']);
+    expect(await service.resolveTargets('custom', ['va', 'ghost'])).toEqual(['va']);
+  });
+});

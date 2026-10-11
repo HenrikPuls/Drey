@@ -10,8 +10,10 @@ import type { AssistantState } from './state.js';
  * registered vault. Toggling rows derives the scope live (none → off,
  * the active one → vault, all → all, any other subset → custom), so a
  * selection can target e.g. a non-active Git vault without making it
- * the default target for new content. Shortcuts apply and close; row
- * toggles keep the picker open for multi-select.
+ * the default target for new content. A check from a shortcut scope
+ * REPLACES the selection (ADR-0069 — no silent carry-over of the
+ * shortcut's vaults). Shortcuts apply and close; row toggles keep the
+ * picker open for multi-select.
  */
 export function openVaultPicker(api: DreyPluginApi, state: AssistantState): void {
   let close: () => void = () => undefined;
@@ -90,9 +92,17 @@ export function openVaultPicker(api: DreyPluginApi, state: AssistantState): void
       rowEl.setAttribute('role', 'checkbox');
       rowEl.setAttribute('aria-checked', String(isChecked));
       rowEl.addEventListener('click', () => {
+        // Replace semantics (ADR-0069): the first CHECK from a shortcut
+        // scope starts a fresh selection with just that vault — the old
+        // behaviour added to the shortcut's set, so an "Active vault" +
+        // one checkbox click silently queried both vaults. Unchecking
+        // still operates on the visible list (an "All vaults" uncheck
+        // degrades to the remaining subset, as before).
         const next = isChecked
           ? checked.filter((id) => id !== vault.id)
-          : [...checked, vault.id];
+          : scope === 'vault' || scope === 'all'
+            ? [vault.id]
+            : [...checked, vault.id];
         const derived = deriveVaultScope(next, vaults);
         state.setVaultScope(derived.scope, derived.vaultIds);
         // renderList rides the state subscription; nothing else to do.

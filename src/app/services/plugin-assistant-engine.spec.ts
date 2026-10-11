@@ -16,6 +16,8 @@ import {
   buildTitleUserMessage,
   sanitizeChatTitle,
 } from '../../../plugins/assistant/main/ask-prompts';
+import type { VaultExploreTools } from '../../../plugins/assistant/main/vault-explore-tools';
+import type { RetrievalOutcome } from '../../../plugins/assistant/shared/semantic';
 import { DEFAULT_APP_CONFIG, normalizeAppConfig, AppConfig } from '../../../shared/app-config';
 import type { LlmChatResult, ChatMessage, LlmCapabilities, ToolSpec } from '../../../shared/llm';
 import type { SdkTaskRecord } from '../../../shared/plugin-api';
@@ -162,6 +164,10 @@ interface ChatHarness {
   /** The live config object the engine reads -- tests flip tool groups on it. */
   config: AppConfig;
   setCapabilities(caps: Partial<LlmCapabilities>): void;
+  /** The retrieval outcome the Vault chip's ask reports (ADR-0055); replaced per test. */
+  retrieval: RetrievalOutcome;
+  /** The explore tools the harness offers (null = semantic off); replaced per test. */
+  exploreTools: VaultExploreTools | null;
 }
 
 function chatHarness(
@@ -219,6 +225,8 @@ function chatHarness(
     files,
     deltas,
     tasksTool: null,
+    retrieval: { enabled: true, minScore: 0.3, hits: [] },
+    exploreTools: null,
     setConfig(patch) {
       Object.assign(config.llm, patch);
     },
@@ -266,7 +274,8 @@ function chatHarness(
       onLiveEdit: () => undefined,
       // The Vault chip is off in every ASK below, so this is never called;
       // it is here to satisfy the port.
-      retrieveContext: async () => ({ enabled: true, minScore: 0.3, hits: [] }),
+      retrieveContext: async () => harness.retrieval,
+      exploreTools: () => harness.exploreTools,
       tasksTool: () => harness.tasksTool,
       // The template tools would change the prompt shape in every ASK
       // below (SDK 1.14); these tests pin the pre-template prompts.
@@ -1296,5 +1305,119 @@ describe('assistant plugin — title sanitising (57e)', () => {
     const built = buildTitleUserMessage(long, long);
     expect(built).not.toContain(long);
     expect(built).toContain('Assistant:');
+  });
+});
+
+// -- the agentic vault half (ADR-0069) --------------------------------------
+
+const EXPLORE_TOOLS: VaultExploreTools = {
+  specs: [
+    { name: 'vault_overview', description: 'd', parameters: { type: 'object', properties: {} } },
+    { name: 'vault_find', description: 'd', parameters: { type: 'object', properties: {} } },
+    { name: 'vault_section', description: 'd', parameters: { type: 'object', properties: {} } },
+  ],
+  names: new Set(['vault_overview', 'vault_find', 'vault_section']),
+  run: async (name) => `ran ${name}`,
+};
+
+function systemOf(call: ChatCall): string {
+  return String(call.messages[0]?.content ?? '');
+}
+
+describe('assistant plugin chat engine — explore tools (ADR-0069)', () => {
+  it('a chip-on ask rides the baseline block AND the explore tools, scope, and cap', async () => {
+    const h = chatHarness();
+    h.retrieval = {
+      enabled: true,
+      minScore: 0.3,
+      hits: [
+        {
+          vaultId: 'v1',
+          vault: 'Notes',
+          path: 'a.md',
+          heading: 'Near',
+          line: 1,
+          score: 0.9,
+          text: 'NEAR text',
+        },
+      ],
+      targets: ['v1'],
+    };
+    h.exploreTools = EXPLORE_TOOLS;
+    await h.engine.ask({ ...ASK, vaultScope: 'custom', vaultIds: ['v1'] });
+
+    const call = h.calls[0];
+    const system = systemOf(call);
+    expect(system).toContain('VAULT CONTEXT');
+    expect(system).toContain('vault exploration tools');
+    const tools = (call.opts['tools'] as ToolSpec[]).map((spec) => spec.name);
+    expect(tools).toEqual(['vault_overview', 'vault_find', 'vault_section']);
+    expect(call.opts['onToolCall']).toBeInstanceOf(Function);
+    expect(call.opts['maxToolRounds']).toBe(6);
+    // The scope pass-through is what makes the host drop out-of-scope
+    // vault_search/vault_read (SDK 1.20).
+    expect(call.opts['vaultToolsScope']).toEqual(['v1']);
+    // Routing: an explore name goes to the tools, not "Unknown tool".
+    const onToolCall = call.opts['onToolCall'] as (name: string, args: string) => Promise<string>;
+    expect(await onToolCall('vault_overview', '{}')).toBe('ran vault_overview');
+  });
+
+  it('a chip-off ask carries neither the tools, the note, nor the scope', async () => {
+    const h = chatHarness();
+    h.exploreTools = EXPLORE_TOOLS;
+    await h.engine.ask(ASK);
+
+    const call = h.calls[0];
+    expect(systemOf(call)).not.toContain('vault exploration tools');
+    expect(call.opts['tools']).toBeUndefined();
+    expect(call.opts['vaultToolsScope']).toBeUndefined();
+    expect(call.opts['onToolCall']).toBeUndefined();
+  });
+
+  it('a provider without tool support keeps the baseline block but no tools', async () => {
+    const h = chatHarness();
+    h.setCapabilities({ tools: false });
+    h.retrieval = {
+      enabled: true,
+      minScore: 0.3,
+      hits: [
+        {
+          vaultId: 'v1',
+          vault: 'Notes',
+          path: 'a.md',
+          heading: 'Near',
+          line: 1,
+          score: 0.9,
+          text: 'NEAR text',
+        },
+      ],
+      targets: ['v1'],
+    };
+    h.exploreTools = EXPLORE_TOOLS;
+    await h.engine.ask({ ...ASK, vaultScope: 'vault' });
+
+    const call = h.calls[0];
+    expect(systemOf(call)).toContain('VAULT CONTEXT');
+    expect(systemOf(call)).not.toContain('vault exploration tools');
+    expect(call.opts['tools']).toBeUndefined();
+    // The scope rides anyway — a harmless no-op for a tools:false provider
+    // (there is no tool set left to filter).
+    expect(call.opts['vaultToolsScope']).toEqual(['v1']);
+  });
+
+  it('a live-edit turn ignores the scope entirely (document + tool loop is context)', async () => {
+    const h = chatHarness();
+    h.retrieval = { enabled: true, minScore: 0.3, hits: [], targets: ['v1'] };
+    h.exploreTools = EXPLORE_TOOLS;
+    await h.engine.ask({
+      ...ASK,
+      note: { path: 'a.md', body: DOC },
+      liveEdit: true,
+      vaultScope: 'vault',
+    });
+
+    const call = h.calls[0];
+    expect(call.opts['vaultToolsScope']).toBeUndefined();
+    expect(systemOf(call)).not.toContain('vault exploration tools');
   });
 });
