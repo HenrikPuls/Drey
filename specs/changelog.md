@@ -20,6 +20,31 @@ recorded as an explicit decision. The parity checklist lives in
 
 ## Recent milestones
 
+### The Search panel is split into model, DOM, replace and summary
+
+Item 10 of the 2026-10-11 architecture review, fourth file. A
+restructuring: nothing the user sees or does changes. **Not yet manually
+verified by the owner.**
+
+- **`plugins/tags/renderer/index.ts` went from 1,040 to 60 lines.** It
+  was one `activate` function. Now, in the same folder:
+  - `search-session.ts` — the model, without DOM: the query, the stored
+    choices (`search-prefs.ts`), the hits and the run.
+  - `search-panel.ts` — the dock widget: header toggles, the field, the
+    replace row, the grouped hits.
+  - `search-replace.ts` — the file-scope buffer patch and the bundled
+    confirmation. "Replace all" and a hit's own replace button were the
+    same preview-and-confirm code twice and now share it.
+  - `search-summary.ts` — the Summarize digest into a scratch tab.
+  - `hit-list.ts` — folding unsaved buffers into the hits and grouping
+    per file, as pure functions; `dom.ts` — the element helpers.
+- **Removed: an unused fetch.** The panel loaded the tag vocabulary on
+  start, on every vault change and on every index update, stored it and
+  never read it. It is gone; the panel still re-renders once the active
+  vault is known, which that fetch did as a side effect.
+- **Tests.** The eight existing e2e search tests run unchanged.
+  `hit-list.spec.ts` adds 11 direct tests.
+
 ### The assistant panel is split into thread, composer and pickers
 
 Item 10 of the 2026-10-11 architecture review, third file. A
