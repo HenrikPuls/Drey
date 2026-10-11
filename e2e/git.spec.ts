@@ -39,9 +39,9 @@ test.describe('Source control panel (plugins/git, milestone 65)', () => {
     fs.writeFileSync(path.join(vaultDir, 'docs', 'new.md'), 'new\n');
     fs.rmSync(path.join(vaultDir, 'docs', 'old.md'));
 
-    // The panel lands collapsed in the left dock; Refresh looks again for
+    // The panel starts closed in the left dock; Refresh looks again for
     // the repository that did not exist when the app started.
-    await page.locator('app-panel-frame .head[aria-label="Expand Source control"]').click();
+    await page.locator('app-dock-strip button[aria-label="Show Source control"]').click();
     const panel = page.locator('app-panel-frame', { has: page.locator('.git-panel') });
     await panel.locator('button[aria-label="Refresh the status"]').click();
 

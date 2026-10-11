@@ -55,6 +55,7 @@ const plugin: PluginRendererModule = {
     api.ui.registerWidget({
       id: 'templates',
       title: 'Templates',
+      icon: 'file-text',
       defaultDock: 'left',
       defaultOpen: false,
       defaultFlex: 200,

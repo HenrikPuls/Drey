@@ -670,6 +670,7 @@ const plugin: PluginRendererModule = {
     api.ui.registerWidget({
       id: 'search',
       title: 'Search',
+      icon: 'search',
       defaultDock: 'left',
       defaultOpen: false,
       defaultFlex: 260,

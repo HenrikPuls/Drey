@@ -39,13 +39,13 @@ test.use({
 });
 
 async function openSearchPanel(page: Page): Promise<void> {
-  // The plugin's panel needs vertical room -- collapse the content-height
-  // Calendar first so the expanded panel's hit rows stay inside its scroll
+  // The plugin's panel needs vertical room -- close the content-height
+  // Calendar first so the opened panel's hit rows stay inside its scroll
   // clip at short windows (see tasks.spec openTasksPanel).
-  await page.locator('app-panel-frame .head[aria-label="Collapse Calendar"]').click();
+  await page.locator('app-panel-frame .head[aria-label="Hide Calendar"]').click();
   // The chord needs the plugin's renderer module activated (it registers
-  // the `search.open` command) — wait for the widget frame to exist first.
-  await expect(page.locator('app-panel-frame .head[aria-label="Expand Search"]')).toBeVisible();
+  // the `search.open` command) — wait for the widget's strip icon first.
+  await expect(page.locator('app-dock-strip button[aria-label="Show Search"]')).toBeVisible();
   await page.keyboard.press('Control+Shift+f');
   await expect(page.locator('app-panel-frame .tag-search')).toBeVisible();
 }

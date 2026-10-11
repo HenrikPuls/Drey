@@ -53,6 +53,13 @@ app-panel-frame {
   min-height: 0;
 }
 
+/* A closed panel shows only as its strip icon. It stays mounted, so it
+   keeps its state (draft text, scroll, the assistant thread) until it is
+   opened again. */
+app-panel-frame.closed {
+  display: none;
+}
+
 /* 2px accent bar at the live drop position during a panel drag -- kept
    above the drop-target wash. */
 .drop-line {
@@ -82,7 +89,7 @@ app-panel-frame {
    One pane living in the dock, above the widget stack: a 32px header
    (title = the pane's active tab name) over that pane's own PaneLeaf.
    Same chrome as the widget panel headers (panel-frame.css), minus the
-   collapse behaviour and the uppercase -- a document name, not a label.
+   click-to-hide and the uppercase -- a document name, not a label.
    With no widget below, the band flexes to fill the dock; the stored px
    height applies again once a widget arrives. */
 .editor-band {

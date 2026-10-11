@@ -35,7 +35,7 @@
       </main>
 
       @if (dock.hasBottom() || dock.dragActive()) {
-        @if (dock.hasBottom() && !dock.allCollapsed('bottom')) {
+        @if (dock.hasBottom() && !dock.noneOpen('bottom')) {
           <div
             class="divider divider-y"
             role="separator"

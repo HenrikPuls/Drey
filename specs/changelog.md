@@ -20,6 +20,35 @@ recorded as an explicit decision. The parity checklist lives in
 
 ## Recent milestones
 
+### Milestone 69 — a dock icon strip replaces collapsed panel headers (ADR-0019 later change)
+
+**Not yet manually verified by the owner.**
+
+- **Why.** Ten panels, nine in the left dock, each showing its 32px
+  header whether open or collapsed: 288px of headers in the default
+  layout, 192px of it for six panels that showed nothing.
+- **An icon strip per dock.** A 32px row at the top of each dock with one
+  icon toggle per panel of that dock. A panel is open (frame + header) or
+  closed (icon only); several can be open at once, stacked and split as
+  before. The default left dock now spends 128px on chrome.
+- **Collapse-to-header is gone.** A header click closes the panel; the
+  strip icon opens it again. The stored `open` flag keeps its key, so a
+  layout from before the change carries over — what was collapsed is now
+  an icon. The View menu rows toggle the same flag; the separate `hidden`
+  list (ADR-0034) is dropped, a stored one is re-homed once, closed.
+- **Closed panels stay movable and keep their state.** Header and icon
+  share one press gesture (click toggles, drag moves, also onto another
+  dock's strip). A closed panel stays mounted; its status value shows in
+  the icon's tooltip.
+- **Closing a side dock's last open panel folds the dock.** Its titlebar
+  toggle (`Ctrl+B` / `Ctrl+Alt+B`) brings it back with the strip and a
+  one-line hint. The bottom dock shrinks to its strip.
+- **SDK 1.19.** `PluginWidgetContrib.icon` (a vendored glyph name; first
+  letter of the title as the fallback). All bundled plugins name one; one
+  new vendored glyph (`calendar`).
+- Deviates from `handoff/DESIGN.md` (every panel always shows a header) —
+  recorded in ADR-0019.
+
 ### Milestone 68 — semantic search remainder: Search panel + MCP (ADR-0055 later change)
 
 **Not yet manually verified by the owner.**

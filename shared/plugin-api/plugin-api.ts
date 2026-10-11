@@ -100,7 +100,12 @@ export type PluginDockSide = 'left' | 'right' | 'bottom';
 
 /** What a widget's header-status callback may read. */
 export interface PluginStatusContext {
-  /** True while the panel is collapsed to its 32px header. */
+  /**
+   * True while the panel is closed -- only its icon shows in the dock's
+   * strip, where the status value becomes part of the icon's tooltip.
+   * (Until SDK 1.19 a closed panel was "collapsed to its header"; the name
+   * stayed.)
+   */
   readonly collapsed: boolean;
 }
 
@@ -114,6 +119,12 @@ export interface PluginWidgetContrib {
   readonly id: string;
   /** Header label (the shell styles it; sentence case). */
   readonly title: string;
+  /**
+   * The panel's glyph in its dock's icon strip (SDK 1.19) -- a name from the
+   * host's vendored set, the same vocabulary as `ui.icon`. Absent or
+   * unknown, the strip shows the title's first letter.
+   */
+  readonly icon?: string;
   readonly defaultDock: PluginDockSide;
   readonly defaultOpen: boolean;
   readonly defaultFlex: number;
@@ -126,7 +137,7 @@ export interface PluginWidgetContrib {
   /**
    * Builds the panel's own control row into the shared 32px header
    * (right-aligned before the grip, e.g. a refresh button). The element is
-   * styled by the shell; return cleanup. Rendered only while expanded.
+   * styled by the shell; return cleanup.
    */
   headerActions?(el: HTMLElement): () => void;
   /** Build the panel body; return cleanup (called on unregister). */

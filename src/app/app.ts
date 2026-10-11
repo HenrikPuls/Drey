@@ -39,12 +39,12 @@ import { EditorContextMenuRegistry } from './plugin-host';
 /**
  * Root shell (ADR-0019): a custom titlebar with the HTML menu bar, then a
  * row of [left dock | main column | right dock], then a status bar. Panels
- * (calendar, files, search, open windows, assistant) live in the two docks
- * and are dragged/resized/collapsed via `DockService`.
+ * (calendar, files, search, open windows, assistant) live in the docks and
+ * are opened/closed from each dock's icon strip and dragged/resized via
+ * `DockService`.
  *
  * The centre column is a tab bar + editor (once at least one document is
- * open) above the bottom dock (which hosts the "Add entry" panel by
- * default). Quick-capture (`DailyNoteService`) wires the Ctrl+Alt+N hotkey
+ * open) above the bottom dock (empty by default). Quick-capture (`DailyNoteService`) wires the Ctrl+Alt+N hotkey
  * for the app's lifetime. Every pane resize is now a `DockService` edge /
  * splitter gesture -- `App` holds no imperative drag code.
  */

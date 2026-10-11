@@ -174,23 +174,18 @@ export class MenuService {
   }
 
   /**
-   * A View-menu row that shows / hides a whole widget (ADR-0034): the check
-   * mark tracks whether it is present in a dock, and a click pulls it out
-   * of every dock or puts it back at its default slot. (Collapsing to just
-   * the header is the separate header-click gesture.)
+   * A View-menu row that opens / closes a panel (ADR-0034): the check mark
+   * tracks whether it is open, and a click does what its icon in the dock
+   * strip does.
    */
   private widgetRow(id: WidgetId, label: string): MenuItem {
     return {
       kind: 'item',
       label,
-      checked: () => !this.dock.isHidden(id),
+      checked: () => !this.dock.closed(id),
       run: () => {
         this.close();
-        if (this.dock.isHidden(id)) {
-          this.dock.show(id);
-        } else {
-          this.dock.hide(id);
-        }
+        this.dock.toggle(id);
       },
     };
   }

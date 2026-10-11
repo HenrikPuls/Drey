@@ -2,9 +2,8 @@
   class="head"
   role="button"
   tabindex="0"
-  [attr.aria-expanded]="!collapsed()"
-  [attr.aria-label]="(collapsed() ? 'Expand ' : 'Collapse ') + title()"
-  title="Click to collapse · drag to move this panel"
+  [attr.aria-label]="'Hide ' + title()"
+  title="Click to hide · drag to move this panel"
   (mousedown)="onHeaderPress($event)"
   (keydown)="onHeaderKey($event)"
 >
@@ -14,7 +13,7 @@
       <span class="status">{{ s }}</span>
     }
   }
-  @if (!collapsed() && headerActions(); as tpl) {
+  @if (headerActions(); as tpl) {
     <div
       class="head-actions"
       [class.fill]="titleReplaced()"
@@ -24,7 +23,7 @@
       <ng-container [ngTemplateOutlet]="tpl" />
     </div>
   }
-  @if (!collapsed() && headerActionsMount() && !headerActions()) {
+  @if (headerActionsMount() && !headerActions()) {
     <div
       class="head-actions"
       (mousedown)="$event.stopPropagation()"
@@ -36,7 +35,7 @@
   <span class="grip" aria-hidden="true"> <i></i><i></i><i></i><i></i><i></i><i></i> </span>
 </div>
 
-<div class="body-wrap" [class.collapsed]="collapsed()">
+<div class="body-wrap">
   <div class="body" [class.body--flush]="flush()">
     <ng-content />
   </div>

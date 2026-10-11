@@ -161,7 +161,7 @@ fills** — base knows the interfaces, not the features:
 
 | Seam | Renderer API | Main context |
 | --- | --- | --- |
-| Dock panels + status values | `ui.registerWidget` | — |
+| Dock panels + status values + strip icon | `ui.registerWidget` | — |
 | Non-file editor tabs (doc kinds) | `ui.registerDocKind` | — |
 | Settings pages | `ui.registerSettingsPage` | — |
 | Files-panel row decorations (badge + tone per path, folders inherit; SDK 1.17) | `ui.setFileDecorations` | — |
@@ -1713,7 +1713,8 @@ a custom titlebar with an HTML menu bar, a left and a right dock each
 holding an ordered list of panels, the main column between them, and a
 26px status bar. The panels — **Calendar, Files, Search, Open windows,
 Assistant** — are dragged between docks by their header, resized by
-splitters, and collapsed to their 32px header. `Sidebar` is deleted; its
+splitters, and opened / closed from the icon strip at the top of their
+dock (milestone 69 — until then they collapsed to their 32px header). `Sidebar` is deleted; its
 file tree + context menu + inline-create flow moved into `FilesPanel`.
 `FilesPanel`'s context menu now also does copy / paste / duplicate /
 rename (`VaultService.copyEntry` / `duplicateEntry` / `renameEntry`,
@@ -1729,9 +1730,9 @@ graph TB
             WindowChrome["WindowChromeService<br/>minimize/toggleMaximize/close + maximized signal"]
         end
         subgraph dk["src/app/dock/ (barrel)"]
-            DockService["DockService<br/>DockState (dock/flexes/open/hidden/leftW/rightW/bottomH),<br/>localStorage['drey.dock'];<br/>beginHeaderPress (click=collapse / drag=move), shared drag chrome<br/>(src/app/dnd/, ADR-0039), onDragMove/move, startSplit, startDockResize,<br/>reset, hide/show/isHidden (View menu), openAndExpand"]
-            Dock["Dock [side]<br/>renders widget list; drop-line + splitter;<br/>dark wash on the drop-target dock; header status values"]
-            PanelFrame["PanelFrame<br/>identical 32px low-profile header (title/status/grip, no chevron);<br/>body stays mounted + height-animates on collapse;<br/>registers host el; header press -> collapse or drag"]
+            DockService["DockService<br/>DockState (dock/flexes/open/leftW/rightW/bottomH/foldedSides),<br/>localStorage['drey.dock'];<br/>beginHeaderPress (click=toggle / drag=move; header + strip icon), shared drag chrome<br/>(src/app/dnd/, ADR-0039), onDragMove/move, startSplit, startDockResize,<br/>reset, toggle/closed (strip, header, View menu), openAndExpand"]
+            Dock["Dock [side]<br/>DockStrip (one icon toggle per panel) + widget list;<br/>drop-line + splitter;<br/>dark wash on the drop-target dock; header status values"]
+            PanelFrame["PanelFrame<br/>identical 32px low-profile header (title/status/grip, no chevron);<br/>a closed panel's frame stays mounted, undisplayed;<br/>registers host el; header press -> close or drag"]
             WidgetRegistry["widget-registry.ts<br/>WIDGETS: WidgetDescriptor[] (id/title/component/defaultDock/<br/>defaultOpen/defaultFlex/contentHeight/flush/removable/capabilities);<br/>WIDGET_MAP; ALL_WIDGET_IDS -- single source of truth (ADR-0034)"]
             Panels["8 panel components<br/>(CalendarPanel / FilesPanel / TemplatesPanel / SearchPanelHost /<br/>TasksPanel / WindowsPanel / AssistantPanel / EntryPanel)"]
         end
@@ -1769,14 +1770,25 @@ graph TB
   `Map<PanelId, HTMLElement>` / `Map<DockSide, HTMLElement>` the components
   register on init. Drop target = pointer X within a dock's box (±12px) or
   the window midline; drop index = first panel whose vertical midpoint the
-  pointer is above. `nextOpenId` skips collapsed neighbours, so N open
-  panels have N−1 splitters. Persisted (minus the transient drag fields)
+  pointer is above (over a dock's icon strip: the first icon whose
+  horizontal midpoint it is left of). `nextOpenId` skips closed
+  neighbours, so N open panels have N−1 splitters. `toggle(id)` flips
+  `open[id]` — open, or closed to the strip icon — and folds a side dock
+  whose last open panel just closed (unless it holds an editor band). Persisted (minus the transient drag fields)
   to `localStorage['drey.dock']`, merged defensively onto the defaults.
   `foldedSides` + `toggleSide` / `sideFolded` fold a whole side dock away
   (the `Titlebar`'s two toggles; `App` hides the still-mounted `Dock`).
-- **`PanelFrame`** renders the header every panel shares (DESIGN.md
+- **`DockStrip`** (milestone 69, ADR-0019 later change) is the icon row
+  at the top of each dock: one `.icon-btn` toggle per panel in that dock's
+  list, `aria-pressed` while open, the panel's status value in the
+  tooltip. It starts the same press gesture as a panel header, so a click
+  toggles and a drag moves — the only handle a closed panel has. The glyph
+  is `WidgetDescriptor.icon` (plugins: `PluginWidgetContrib.icon`, SDK
+  1.19); without one the title's first letter shows.
+- **`PanelFrame`** renders the header every open panel shares (DESIGN.md
   principle 3). Title + "fills the frame vs. scrolls" (`flush`) come from
-  the widget descriptor; the body stays mounted while collapsed.
+  the widget descriptor; a closed panel's frame stays mounted with
+  `display: none` (set by `Dock`), so its state survives.
 - **Panel header actions (req-7).** A panel's own control row (Tasks scope /
   hide-done / kind toggles, Files/Templates refresh) sits in the shared
   `PanelFrame` header, not as a band under it.
@@ -1788,17 +1800,17 @@ graph TB
   guarded) on destroy; `PanelFrame` renders the one for its id inside
   `.head-actions`, right-aligned before the grip, stopping
   `mousedown`/`keydown` so a control click never starts the header
-  collapse/drag gesture. The leaf module imports nothing from `dock/`
+  close/drag gesture. The leaf module imports nothing from `dock/`
   (no `DockService`, no `widget-registry`), so a panel can depend on it
   without an import cycle back through the registry.
-- **Widget registry + hide/show (ADR-0034).** `dock/widget-registry.ts`
+- **Widget registry + open/close (ADR-0034).** `dock/widget-registry.ts`
   `WIDGETS` is the single source of truth (id, title, component, default
   dock/flex/open, `contentHeight`, `flush`, `removable`, declared
   `capabilities`); `dock.service.ts`, `PanelFrame` and the View menu all
-  read it, so a ninth widget is one array entry. `DockState.hidden` +
-  `DockService.hide/show/isHidden` back the View menu, which now removes a
-  whole widget from the docks (not just collapses it) and generates its
-  rows from `WIDGETS.filter(w => w.removable)`. **`WidgetContext`**
+  read it, so a ninth widget is one array entry. The View menu
+  generates its rows from `WIDGETS.filter(w => w.removable)`; a row
+  toggles the panel exactly like its strip icon (`DockService.toggle` —
+  the separate `hidden` list of ADR-0034 was dropped in milestone 69). **`WidgetContext`**
   (`src/app/widgets/`) is the typed read-facade a widget uses to reach the
   active document, the vault tree and the standard tag/task/search queries;
   the existing panels are ported to it incrementally.

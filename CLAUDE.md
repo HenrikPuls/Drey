@@ -352,11 +352,15 @@ Renderer (Angular):
 
 - `App` composes a **titlebar / [left dock | main column | right dock] /
   status bar** shell directly.
-- `DockService` + `Dock` + `PanelFrame` (`src/app/dock/`) — the dock
-  system: `DockService` holds the whole `LayoutState` (which panel in
-  which dock, order, `flexes`, collapse, `leftW`/`rightW`, `bottomH`;
-  `localStorage['drey.dock']`) and runs the header-drag / splitter /
-  dock-edge-resize gestures. Three docks — `left | right | bottom` (the
+- `DockService` + `Dock` + `DockStrip` + `PanelFrame` (`src/app/dock/`) —
+  the dock system: `DockService` holds the whole `LayoutState` (which
+  panel in which dock, order, `flexes`, open / closed, `leftW`/`rightW`,
+  `bottomH`; `localStorage['drey.dock']`) and runs the header-drag /
+  splitter / dock-edge-resize gestures. `DockStrip` is the icon row at the
+  top of each dock (milestone 69, ADR-0019 later change): one toggle per
+  panel of that dock — a panel is open or closed to its icon, never
+  collapsed to a header; the glyph is `WidgetDescriptor.icon` /
+  `PluginWidgetContrib.icon` (SDK 1.19). Three docks — `left | right | bottom` (the
   bottom one a resizable band under the editor). Panels come from the
   runtime **`WidgetRegistryService`**: core panels via
   `registerCoreWidgets()` — `CalendarPanel`, `FilesPanel` (one section
@@ -711,14 +715,20 @@ be called out explicitly (see Working Style below), not introduced silently.
     ones registered by the base; Templates/Search/Tasks/Assistant/
     Outline/Backlinks/Source control are provided by plugins, ADR-0044). A
     panel is dragged between docks by its header, resized against its
-    neighbour by a splitter, and collapsed to its 32px header. Every
-    panel header is built the same way (sentence-case title + optional
-    status value + the panel's icon controls + drag grip). Default:
+    neighbour by a splitter, and **opened or closed from the dock's icon
+    strip** — a 32px row at the top of each dock with one icon toggle
+    per panel living there (milestone 69, ADR-0019 later change). A
+    closed panel shows only as its icon (no header row; status value in
+    the tooltip); clicking an open panel's header closes it; the icon is
+    draggable like the header. Closing a side dock's last open panel
+    folds the dock. Every panel header is built the same way
+    (sentence-case title + optional status value + the panel's icon
+    controls + drag grip). Default:
     Calendar/Files/Templates/Search/Tasks/Open windows/Outline/Backlinks/
     Source control left, Assistant right, nothing in the bottom band,
     Templates + Search + Tasks + Outline + Backlinks + Source control
-    collapsed. Calendar takes its content height, not a
-    flex share; expanded, its header is the **month/year dropdown**
+    closed. Calendar takes its content height, not a
+    flex share; its header is the **month/year dropdown**
     itself (no "Calendar" title) with **Today** (opens today's daily
     note) and the month arrows.
     Each dock can additionally host one **editor band** above its panels
@@ -865,7 +875,7 @@ packaging verified — see `docs/07_deployment_view.md`).
 closed 2026-10-10). This file does not restate them — the per-milestone
 record is:
 
-- [specs/changelog.md](specs/changelog.md) — milestones 22–68, newest
+- [specs/changelog.md](specs/changelog.md) — milestones 22–69, newest
   first, plus requirements and fixes
 - [docs/milestones-done.md](docs/milestones-done.md) — the archived
   build log, milestones 1–27
@@ -881,15 +891,18 @@ Open work and its order live in [specs/roadmap.md](specs/roadmap.md)
 ("Next milestones") — that list is binding; keep this summary in step
 with it.
 
-- **Last completed:** milestone 68 — semantic search remainder: a base
-  `SemanticSearchProvider` seam (SDK 1.18), semantic mode in the Search
-  panel and a semantic `vault_search` mode (ADR-0055 later change;
-  pause/resume of large rebuilds was considered and dropped). Before it:
-  milestone 67 — the Git plugin's merge, stash, amend and file history.
+- **Last completed:** milestone 69 — the dock icon strip: one icon row
+  per dock replaces the collapsed panel headers (ADR-0019 later change,
+  SDK 1.19 `PluginWidgetContrib.icon`). Before it: milestone 68 —
+  semantic search remainder: a base `SemanticSearchProvider` seam (SDK
+  1.18), semantic mode in the Search panel and a semantic `vault_search`
+  mode (ADR-0055 later change; pause/resume of large rebuilds was
+  considered and dropped), and milestone 67 — the Git plugin's merge,
+  stash, amend and file history.
   Milestones 59–66, the Vault-chip picker, the dev escape hatch and the
   build-origin/mouse-button work are owner-verified; milestone 67, the
-  Anthrazit AA re-tune and milestone 68 are code-complete, verification
-  pending.
+  Anthrazit AA re-tune and milestones 68 and 69 are code-complete,
+  verification pending.
 - **Next, in order:** nothing ordered — the owner picks from the backlog
   in `specs/roadmap.md`.
 

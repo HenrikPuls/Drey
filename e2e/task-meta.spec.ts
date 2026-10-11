@@ -128,8 +128,8 @@ test.describe('task metadata click-to-change', () => {
   }) => {
     await page.locator('app-dock[side="left"] .node.file', { hasText: 'meta-tokens.md' }).click();
     await expect(page.locator('app-editor .cm-content')).toBeVisible();
-    await page.locator('app-panel-frame .head[aria-label="Collapse Calendar"]').click();
-    await page.locator('app-panel-frame .head[aria-label="Expand Tasks"]').click();
+    await page.locator('app-panel-frame .head[aria-label="Hide Calendar"]').click();
+    await page.locator('app-dock-strip button[aria-label="Show Tasks"]').click();
     const panel = page.locator('app-panel-frame', { has: page.locator('.tasks-panel') });
     const row = panel.locator('.task', { hasText: 'water the orchids' });
     await expect(row).toBeVisible();

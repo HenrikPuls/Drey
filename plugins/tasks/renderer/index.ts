@@ -328,6 +328,7 @@ const plugin: PluginRendererModule = {
     api.ui.registerWidget({
       id: 'tasks',
       title: 'Tasks',
+      icon: 'check-square',
       defaultDock: 'left',
       defaultOpen: false,
       defaultFlex: 220,

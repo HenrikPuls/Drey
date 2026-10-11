@@ -22,8 +22,7 @@ describe('DockService', () => {
     expect(dock.rightIds()).toEqual(idsOn('right'));
     expect(dock.bottomIds()).toEqual(idsOn('bottom'));
     for (const w of CORE_WIDGETS) {
-      expect(dock.collapsed(w.id)).toBe(!w.defaultOpen);
-      expect(dock.isHidden(w.id)).toBe(false);
+      expect(dock.closed(w.id)).toBe(!w.defaultOpen);
     }
     expect(dock.dockWidth('left')).toBe(248);
     expect(dock.dockWidth('right')).toBe(340);
@@ -183,29 +182,140 @@ describe('DockService', () => {
     });
   });
 
-  it('treats a header press with no movement as a collapse toggle', () => {
+  it('treats a header press with no movement as a toggle', () => {
     const dock = make();
-    expect(dock.collapsed('calendar')).toBe(false);
+    expect(dock.closed('calendar')).toBe(false);
     dock.beginHeaderPress('calendar', 'Calendar', new MouseEvent('mousedown', { button: 0 }));
     window.dispatchEvent(new MouseEvent('mouseup'));
-    expect(dock.collapsed('calendar')).toBe(true);
+    expect(dock.closed('calendar')).toBe(true);
     expect(dock.dragActive()).toBe(false);
   });
 
-  it('toggles collapse', () => {
-    const dock = make();
-    dock.toggleCollapse('calendar');
-    expect(dock.collapsed('calendar')).toBe(true);
-    dock.toggleCollapse('calendar');
-    expect(dock.collapsed('calendar')).toBe(false);
+  describe('toggle (strip icon / header click / View menu)', () => {
+    it('closes and reopens a panel, which keeps its dock slot', () => {
+      const dock = make();
+      dock.toggle('files');
+      expect(dock.closed('files')).toBe(true);
+      expect(dock.leftIds()).toEqual(['calendar', 'files', 'windows']);
+      dock.toggle('files');
+      expect(dock.closed('files')).toBe(false);
+    });
+
+    it('closing the last open panel of a side dock folds the dock away', () => {
+      const dock = make();
+      dock.toggle('calendar');
+      dock.toggle('files');
+      expect(dock.sideFolded('left')).toBe(false);
+      dock.toggle('windows');
+      expect(dock.noneOpen('left')).toBe(true);
+      expect(dock.sideFolded('left')).toBe(true);
+    });
+
+    it('opening a panel unfolds its dock', () => {
+      const dock = make();
+      for (const id of ['calendar', 'files', 'windows']) {
+        dock.toggle(id);
+      }
+      dock.toggle('files');
+      expect(dock.sideFolded('left')).toBe(false);
+      expect(dock.closed('files')).toBe(false);
+    });
+
+    it('a side dock holding an editor band stays when its last panel closes', () => {
+      const dock = make();
+      const panes = TestBed.inject(PaneService);
+      panes.open('a.md');
+      panes.detachToDock('p1', 'left');
+      for (const id of ['calendar', 'files', 'windows']) {
+        dock.toggle(id);
+      }
+      expect(dock.sideFolded('left')).toBe(false);
+    });
+
+    it('the bottom dock never folds -- it just reports nothing open', () => {
+      const dock = make();
+      dock.move('windows', 'bottom', 0);
+      dock.toggle('windows');
+      expect(dock.noneOpen('bottom')).toBe(true);
+      expect(dock.sideFolded('bottom')).toBe(false);
+    });
+
+    it('a closed panel can be moved to another dock and stays closed', () => {
+      const dock = make();
+      dock.toggle('windows');
+      dock.move('windows', 'right', 0);
+      expect(dock.rightIds()).toEqual(['windows']);
+      expect(dock.closed('windows')).toBe(true);
+    });
+
+    it('round-trips the open state through persistence', () => {
+      const first = make();
+      first.toggle('files');
+
+      TestBed.resetTestingModule();
+      TestBed.configureTestingModule({});
+      const second = TestBed.inject(DockService);
+      expect(second.closed('files')).toBe(true);
+      expect(second.leftIds()).toEqual(['calendar', 'files', 'windows']);
+    });
   });
 
-  it('nextOpenId skips collapsed neighbours and stops at the end', () => {
+  describe('a panel drag over the icon strip', () => {
+    function rectEl(left: number, top: number, width: number, height: number): HTMLElement {
+      const el = document.createElement('div');
+      Object.defineProperty(el, 'getBoundingClientRect', {
+        value: () => ({ left, top, width, height, right: left + width, bottom: top + height }),
+      });
+      return el;
+    }
+
+    it('takes the drop slot from the icons under the pointer', () => {
+      const dock = make();
+      dock.registerDockEl('left', rectEl(0, 0, 248, 800));
+      dock.registerStripEl('calendar', rectEl(8, 4, 24, 24));
+      dock.registerStripEl('files', rectEl(34, 4, 24, 24));
+      dock.registerStripEl('windows', rectEl(60, 4, 24, 24));
+
+      dock.beginHeaderPress('windows', 'Open windows', new MouseEvent('mousedown', { button: 0 }));
+      // Left half of the `files` icon: the slot before it.
+      window.dispatchEvent(new MouseEvent('mousemove', { clientX: 40, clientY: 16 }));
+      expect(dock.dropDock()).toBe('left');
+      expect(dock.dropIndex()).toBe(1);
+      // Past the last icon: the end of the row.
+      window.dispatchEvent(new MouseEvent('mousemove', { clientX: 200, clientY: 16 }));
+      expect(dock.dropIndex()).toBe(3);
+      // Below the strip the panel stack decides; with no open panel box
+      // registered that is the end of the list.
+      window.dispatchEvent(new MouseEvent('mousemove', { clientX: 40, clientY: 300 }));
+      expect(dock.dropIndex()).toBe(3);
+
+      window.dispatchEvent(new MouseEvent('mousemove', { clientX: 10, clientY: 16 }));
+      window.dispatchEvent(new MouseEvent('mouseup'));
+      expect(dock.leftIds()).toEqual(['windows', 'calendar', 'files']);
+    });
+
+    it('skips a closed panel (no box) when the stack decides the slot', () => {
+      const dock = make();
+      dock.registerDockEl('left', rectEl(0, 0, 248, 800));
+      dock.registerPanelEl('calendar', rectEl(0, 0, 0, 0)); // closed: display none
+      dock.registerPanelEl('files', rectEl(0, 100, 248, 200));
+      dock.registerPanelEl('windows', rectEl(0, 300, 248, 200));
+
+      dock.beginHeaderPress('windows', 'Open windows', new MouseEvent('mousedown', { button: 0 }));
+      window.dispatchEvent(new MouseEvent('mousemove', { clientX: 40, clientY: 120 }));
+      expect(dock.dropIndex()).toBe(1); // before `files`, not before the boxless `calendar`
+      window.dispatchEvent(new MouseEvent('mouseup'));
+    });
+  });
+
+  it('nextOpenId skips closed neighbours and stops at the end', () => {
     const dock = make();
-    // left: [calendar, files, windows]; entry sits collapsed in the bottom dock.
+    // left: [calendar, files, windows]
     expect(dock.nextOpenId('calendar')).toBe('files');
     expect(dock.nextOpenId('files')).toBe('windows');
     expect(dock.nextOpenId('windows')).toBeNull(); // last open panel
+    dock.toggle('files');
+    expect(dock.nextOpenId('calendar')).toBe('windows');
   });
 
   it('moves a panel across docks at the requested slot', () => {
@@ -234,20 +344,20 @@ describe('DockService', () => {
     expect(dock.dockWidth('left')).toBe(560);
   });
 
-  it('openAndExpand expands a collapsed docked panel', () => {
+  it('openAndExpand opens a closed docked panel', () => {
     const dock = make();
     dock.move('windows', 'bottom', 0);
-    dock.toggleCollapse('windows');
-    expect(dock.collapsed('windows')).toBe(true);
+    dock.toggle('windows');
+    expect(dock.closed('windows')).toBe(true);
     dock.openAndExpand('windows');
-    expect(dock.collapsed('windows')).toBe(false);
+    expect(dock.closed('windows')).toBe(false);
     expect(dock.sideOf('windows')).toBe('bottom');
   });
 
   it('reset restores every default', () => {
     const dock = make();
     dock.move('calendar', 'right', 0);
-    dock.toggleCollapse('files');
+    dock.toggle('files');
     dock.setDockWidth('left', 500);
     dock.reset();
     expect(dock.leftIds()).toEqual([
@@ -255,7 +365,7 @@ describe('DockService', () => {
       'files',
       'windows',
     ]);
-    expect(dock.collapsed('files')).toBe(false);
+    expect(dock.closed('files')).toBe(false);
     expect(dock.dockWidth('left')).toBe(248);
   });
 
@@ -297,72 +407,37 @@ describe('DockService', () => {
     expect(dock.rightIds()).toEqual([]);
   });
 
-  describe('hide / show (View menu visibility)', () => {
-    it('hide() removes a widget from every dock and marks it hidden', () => {
+  describe('a layout stored before the icon strip', () => {
+    it('keeps a collapsed panel in its slot, closed', () => {
+      localStorage.setItem(
+        'drey.dock',
+        JSON.stringify({
+          dock: { left: ['calendar', 'files', 'windows'], right: [], bottom: [] },
+          open: { calendar: true, files: false, windows: true },
+          hidden: [],
+        }),
+      );
       const dock = make();
-      dock.hide('files');
-      expect(dock.isHidden('files')).toBe(true);
-      expect(dock.leftIds()).toEqual(['calendar', 'windows']);
-      expect(dock.sideOf('files')).toBeNull();
-    });
-
-    it('show() puts it back at its default slot, expanded', () => {
-      const dock = make();
-      dock.hide('files');
-      dock.show('files');
-      expect(dock.isHidden('files')).toBe(false);
-      // back between calendar and windows, per the registry order
       expect(dock.leftIds()).toEqual(['calendar', 'files', 'windows']);
-      expect(dock.collapsed('files')).toBe(false);
+      expect(dock.closed('files')).toBe(true);
+      expect(dock.closed('windows')).toBe(false);
     });
 
-    it('hides a bottom-dock widget and restores it to its default dock', () => {
+    it('re-homes a View-menu-hidden widget to its default dock, closed', () => {
+      localStorage.setItem(
+        'drey.dock',
+        JSON.stringify({
+          dock: { left: ['calendar', 'windows'], right: [], bottom: [] },
+          open: { calendar: true, files: true, windows: true },
+          hidden: ['files'],
+        }),
+      );
       const dock = make();
-      dock.move('windows', 'bottom', 0);
-      dock.hide('windows');
-      expect(dock.bottomIds()).toEqual([]);
-      expect(dock.isHidden('windows')).toBe(true);
-      dock.show('windows');
-      expect(dock.isHidden('windows')).toBe(false);
-      expect(dock.sideOf('windows')).toBe('left');
-    });
-
-    it('round-trips the hidden set through persistence', () => {
-      const first = make();
-      first.hide('files');
-      first.hide('windows');
-
-      TestBed.resetTestingModule();
-      TestBed.configureTestingModule({});
-      const second = TestBed.inject(DockService);
-      expect(second.isHidden('files')).toBe(true);
-      expect(second.isHidden('windows')).toBe(true);
-      expect(second.leftIds()).toEqual(['calendar']);
-    });
-
-    it('openAndExpand() un-hides a hidden widget', () => {
-      const dock = make();
-      dock.hide('files');
-      dock.openAndExpand('files');
-      expect(dock.isHidden('files')).toBe(false);
-      expect(dock.collapsed('files')).toBe(false);
-      expect(dock.sideOf('files')).toBe('left');
-    });
-
-    it('reset() clears the hidden set', () => {
-      const dock = make();
-      dock.hide('windows');
-      dock.reset();
-      expect(dock.isHidden('windows')).toBe(false);
-      expect(dock.leftIds()).toContain('windows');
-    });
-
-    it('dragging a hidden widget back into a dock un-hides it', () => {
-      const dock = make();
-      dock.hide('windows');
-      dock.move('windows', 'right', 0);
-      expect(dock.isHidden('windows')).toBe(false);
-      expect(dock.rightIds()).toEqual(['windows']);
+      expect(dock.leftIds()).toEqual(['calendar', 'files', 'windows']);
+      expect(dock.closed('files')).toBe(true);
+      // The old list is not written back.
+      dock.toggle('files');
+      expect(JSON.parse(localStorage.getItem('drey.dock')!).hidden).toBeUndefined();
     });
   });
 
@@ -375,12 +450,10 @@ describe('DockService', () => {
       expect(dock.sideOf('windows')).toBeNull();
     });
 
-    it('also drops a disabled widget from the hidden set', () => {
+    it('also drops a disabled widget that was closed', () => {
       const dock = make();
-      dock.hide('files');
-      expect(dock.isHidden('files')).toBe(true);
+      dock.toggle('files');
       dock.reconcileEnabled(new Set(['files']));
-      expect(dock.isHidden('files')).toBe(false);
       expect(dock.sideOf('files')).toBeNull();
     });
 

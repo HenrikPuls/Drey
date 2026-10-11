@@ -103,6 +103,7 @@ const plugin: PluginRendererModule = {
     api.ui.registerWidget({
       id: 'backlinks',
       title: 'Backlinks',
+      icon: 'link',
       defaultDock: 'left',
       defaultOpen: false,
       defaultFlex: 200,

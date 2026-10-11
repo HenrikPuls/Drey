@@ -971,6 +971,7 @@ const plugin: PluginRendererModule = {
     api.ui.registerWidget({
       id: 'git',
       title: 'Source control',
+      icon: 'git-branch',
       defaultDock: 'left',
       defaultOpen: false,
       defaultFlex: 260,

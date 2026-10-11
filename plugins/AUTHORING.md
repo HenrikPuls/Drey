@@ -247,3 +247,17 @@ the mixed case, the templates page for the pure-field case.
   (`plugins/assistant/`, ADR-0055) is the reference implementation;
   the tags plugin's Search panel and MCP `vault_search` mode `semantic`
   are the reference consumers.
+
+## SDK 1.19 — a strip icon for your panel
+
+- A dock panel is either open or closed to an icon in the strip at the
+  top of its dock (ADR-0019 later change) — the 32px collapsed header is
+  gone. Give `api.ui.registerWidget` an `icon`: a name from the host's
+  vendored set, the same vocabulary `api.ui.icon(name)` draws from.
+  Without one (or with a name the host does not know) the strip shows the
+  first letter of your `title`.
+- `status()` still receives `{ collapsed }`; `true` now means "closed".
+  The value shows in the panel header while open and in the strip icon's
+  tooltip while closed — keep it short.
+- `defaultOpen: false` means the panel starts as an icon only.
+  `api.ui.revealWidget(id)` opens it.

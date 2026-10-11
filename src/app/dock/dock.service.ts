@@ -42,17 +42,19 @@ interface DockState {
   dock: Record<DockSide, WidgetId[]>;
   /** `flex-grow` weight per open panel. */
   flexes: Record<WidgetId, number>;
-  /** `true` = expanded, `false` = collapsed to its header. */
+  /**
+   * `true` = shown in its dock, `false` = closed: only its icon in the
+   * dock's strip (ADR-0019 later change -- this used to mean "collapsed to
+   * its header", so a stored layout carries over unchanged).
+   */
   open: Record<WidgetId, boolean>;
-  /** Widgets removed from every dock via the View menu (still enabled, no header shown). */
-  hidden: WidgetId[];
   leftW: number;
   rightW: number;
   /** Height of the bottom dock band. */
   bottomH: number;
   /**
    * Side docks folded away as a whole (the titlebar toggles). Panels keep
-   * their slots, flexes and collapse state underneath.
+   * their slots, flexes and open state underneath.
    */
   foldedSides: SideDock[];
 }
@@ -70,8 +72,8 @@ function sameList(a: readonly WidgetId[], b: readonly WidgetId[]): boolean {
 
 /**
  * Owns the dock layout: which widget sits in which dock and in what order,
- * each one's height weight and collapse state, which are hidden, and the
- * two dock widths. Persisted synchronously to `localStorage` (per-machine
+ * each one's height weight and whether it is open or closed to its strip
+ * icon, and the two dock widths. Persisted synchronously to `localStorage` (per-machine
  * window chrome, not note data -- same reasoning as `LayoutService`), read
  * back before first paint so the layout doesn't jump.
  *
@@ -108,6 +110,8 @@ export class DockService {
 
   /** Host elements, registered by the components, for hit-testing during a drag. */
   private readonly panelEls = new Map<WidgetId, HTMLElement>();
+  /** The strip buttons, for the drop slot while the pointer is over a dock's strip. */
+  private readonly stripEls = new Map<WidgetId, HTMLElement>();
   private readonly dockEls = new Map<DockSide, HTMLElement>();
 
   constructor() {
@@ -148,8 +152,8 @@ export class DockService {
 
     // The registry is runtime (ADR-0044): a plugin widget could register
     // after this service was first injected. Whatever the construction
-    // order, converge: every registered widget gets a dock slot (or keeps
-    // its hidden one) and default flex/open values.
+    // order, converge: every registered widget gets a dock slot and
+    // default flex/open values.
     effect(() => {
       const widgets = this.registry.widgets();
       const disabled = this.settings.widgetsDisabled();
@@ -175,8 +179,7 @@ export class DockService {
       let changed = false;
       for (const w of widgets) {
         const placed =
-          dock.left.includes(w.id) || dock.right.includes(w.id) || dock.bottom.includes(w.id) ||
-          s.hidden.includes(w.id);
+          dock.left.includes(w.id) || dock.right.includes(w.id) || dock.bottom.includes(w.id);
         if (flexes[w.id] === undefined) {
           flexes[w.id] = w.defaultFlex;
           changed = true;
@@ -209,13 +212,9 @@ export class DockService {
     return DOCK_SIDES.find((side) => dock[side].includes(id)) ?? null;
   }
 
-  collapsed(id: WidgetId): boolean {
+  /** True while a panel is closed: present in its dock's icon strip only. */
+  closed(id: WidgetId): boolean {
     return !this.state().open[id];
-  }
-
-  /** True while a widget is hidden from every dock (View menu deselect). */
-  isHidden(id: WidgetId): boolean {
-    return this.state().hidden.includes(id);
   }
 
   /** True for a panel sized to its content rather than a `flex-grow` share. */
@@ -224,11 +223,11 @@ export class DockService {
   }
 
   /**
-   * True when a dock has no expanded panel -- every panel is collapsed to
-   * its header, or the dock is empty. The bottom dock then shrinks to its
-   * stacked headers and its resize splitter is hidden (nothing to size).
+   * True when a dock shows no panel -- every one is closed, or the dock is
+   * empty. The bottom dock then shrinks to its icon strip and its resize
+   * splitter is hidden (nothing to size).
    */
-  allCollapsed(side: DockSide): boolean {
+  noneOpen(side: DockSide): boolean {
     const ids = this.state().dock[side];
     return ids.every((id) => !this.state().open[id]);
   }
@@ -275,66 +274,44 @@ export class DockService {
     return folded.filter((side) => !dock[side].includes(id));
   }
 
-  toggleCollapse(id: WidgetId): void {
-    this.patch((s) => ({ ...s, open: { ...s.open, [id]: !s.open[id] } }));
-  }
-
   /**
-   * View menu deselect: pull `id` out of every dock into `hidden` (no
-   * header shown). Its flex / collapse state is kept for when it returns.
+   * The strip icon / header click / View menu row: open a closed panel or
+   * close an open one. Opening unfolds the panel's side dock; closing the
+   * last open panel of a side dock folds that dock away rather than leaving
+   * an empty column (a dock holding an editor band stays).
    */
-  hide(id: WidgetId): void {
+  toggle(id: WidgetId): void {
     this.patch((s) => {
-      if (s.hidden.includes(id)) {
-        return s;
+      const open = { ...s.open, [id]: !s.open[id] };
+      const side = DOCK_SIDES.find((d) => s.dock[d].includes(id));
+      let foldedSides = s.foldedSides;
+      if (side === 'left' || side === 'right') {
+        if (open[id]) {
+          foldedSides = foldedSides.filter((x) => x !== side);
+        } else if (
+          !foldedSides.includes(side) &&
+          !s.dock[side].some((x) => open[x]) &&
+          !this.panes.dockPane(side)
+        ) {
+          foldedSides = [...foldedSides, side];
+        }
       }
-      return {
-        ...s,
-        dock: {
-          left: s.dock.left.filter((x) => x !== id),
-          right: s.dock.right.filter((x) => x !== id),
-          bottom: s.dock.bottom.filter((x) => x !== id),
-        },
-        hidden: [...s.hidden, id],
-      };
+      return { ...s, open, foldedSides };
     });
   }
 
-  /**
-   * View menu re-select: put `id` back into its descriptor's default dock,
-   * at the slot that keeps the registry order, expanded.
-   */
-  show(id: WidgetId): void {
-    this.patch((s) => {
-      if (!s.hidden.includes(id)) {
-        return s;
-      }
-      const dock = this.withInserted(s.dock, id);
-      return {
-        ...s,
-        dock,
-        hidden: s.hidden.filter((x) => x !== id),
-        open: { ...s.open, [id]: true },
-        foldedSides: this.unfoldedFor(dock, s.foldedSides, id),
-      };
-    });
-  }
-
-  /** Expand a panel and make sure it is docked (also un-hides it). */
+  /** Open a panel and make sure it is docked and its dock unfolded. */
   openAndExpand(id: WidgetId): void {
     this.patch((s) => {
-      const hidden = s.hidden.filter((x) => x !== id);
-      const wasHidden = hidden.length !== s.hidden.length;
       const docked = DOCK_SIDES.some((side) => s.dock[side].includes(id));
       const dock = docked ? s.dock : this.withInserted(s.dock, id);
       const foldedSides = this.unfoldedFor(dock, s.foldedSides, id);
-      if (!wasHidden && s.open[id] && docked && foldedSides.length === s.foldedSides.length) {
+      if (s.open[id] && docked && foldedSides.length === s.foldedSides.length) {
         return s;
       }
       return {
         ...s,
         dock,
-        hidden,
         open: { ...s.open, [id]: true },
         foldedSides,
       };
@@ -366,7 +343,6 @@ export class DockService {
       dock,
       flexes,
       open,
-      hidden: [],
       leftW: DEFAULT_LEFT_W,
       rightW: DEFAULT_RIGHT_W,
       bottomH: DEFAULT_BOTTOM_H,
@@ -377,7 +353,7 @@ export class DockService {
   /**
    * Where `id` slots into `current` (a live dock list) to keep the registry's
    * default order among the widgets already present -- used when a widget is
-   * un-hidden or re-homed.
+   * re-homed.
    */
   private orderedInsertIndex(side: DockSide, id: WidgetId, current: readonly WidgetId[]): number {
     const order = this.registry
@@ -410,9 +386,8 @@ export class DockService {
   }
 
   /**
-   * Settings -> Widgets: drop every disabled widget from the docks and from
-   * `hidden`, and re-home any widget that has been re-enabled and is now
-   * nowhere. Driven by an effect on `SettingsService.widgetsDisabled`
+   * Settings -> Widgets: drop every disabled widget from the docks, and
+   * re-home any widget that has been re-enabled and is now nowhere. Driven by an effect on `SettingsService.widgetsDisabled`
    * (persisted config -> fires on Save / on load); exposed for tests.
    */
   reconcileEnabled(disabled: ReadonlySet<string>): void {
@@ -422,8 +397,7 @@ export class DockService {
       right: s.dock.right.filter((id) => !disabled.has(id)),
       bottom: s.dock.bottom.filter((id) => !disabled.has(id)),
     };
-    const hidden = s.hidden.filter((id) => !disabled.has(id));
-    const placed = new Set<WidgetId>([...lists.left, ...lists.right, ...lists.bottom, ...hidden]);
+    const placed = new Set<WidgetId>([...lists.left, ...lists.right, ...lists.bottom]);
     for (const w of this.registry.widgets()) {
       if (!disabled.has(w.id) && !placed.has(w.id)) {
         lists[w.defaultDock].splice(
@@ -436,10 +410,9 @@ export class DockService {
     const same =
       sameList(lists.left, s.dock.left) &&
       sameList(lists.right, s.dock.right) &&
-      sameList(lists.bottom, s.dock.bottom) &&
-      sameList(hidden, s.hidden);
+      sameList(lists.bottom, s.dock.bottom);
     if (!same) {
-      this.patch((cur) => ({ ...cur, dock: lists, hidden }));
+      this.patch((cur) => ({ ...cur, dock: lists }));
     }
   }
 
@@ -458,7 +431,7 @@ export class DockService {
     return null;
   }
 
-  // ---- element registration (called from Dock / PanelFrame) ----
+  // ---- element registration (called from Dock / DockStrip / PanelFrame) ----
 
   registerPanelEl(id: WidgetId, el: HTMLElement): void {
     this.panelEls.set(id, el);
@@ -467,6 +440,16 @@ export class DockService {
   unregisterPanelEl(id: WidgetId, el: HTMLElement): void {
     if (this.panelEls.get(id) === el) {
       this.panelEls.delete(id);
+    }
+  }
+
+  registerStripEl(id: WidgetId, el: HTMLElement): void {
+    this.stripEls.set(id, el);
+  }
+
+  unregisterStripEl(id: WidgetId, el: HTMLElement): void {
+    if (this.stripEls.get(id) === el) {
+      this.stripEls.delete(id);
     }
   }
 
@@ -480,7 +463,7 @@ export class DockService {
     }
   }
 
-  // ---- panel header press: a click toggles collapse, a drag moves ----
+  // ---- panel header / strip icon press: a click toggles, a drag moves ----
 
   /** In-flight header press, before it is promoted to a real drag. */
   private headerPress: {
@@ -489,24 +472,24 @@ export class DockService {
     startX: number;
     startY: number;
     promoted: boolean;
-    /** Editor drags focus their pane on a plain click; widget drags collapse. */
+    /** Editor drags focus their pane on a plain click; widget presses toggle. */
     click: (payload: DockDragPayload) => void;
   } | null = null;
   private static readonly DRAG_THRESHOLD_PX = 4;
 
   /**
-   * Mousedown on a panel header. A release before the pointer moves
-   * `DRAG_THRESHOLD_PX` is treated as a click -> toggle collapse; moving
-   * past it promotes the gesture to a panel drag between docks.
+   * Mousedown on a panel header or on its strip icon. A release before the
+   * pointer moves `DRAG_THRESHOLD_PX` is treated as a click -> `toggle`;
+   * moving past it promotes the gesture to a panel drag between docks.
    */
   beginHeaderPress(id: WidgetId, title: string, event: MouseEvent): void {
-    this.beginPress(id, title, event, () => this.toggleCollapse(id));
+    this.beginPress(id, title, event, () => this.toggle(id));
   }
 
   /**
    * Mousedown on the editor band's header (ADR-0038). Same press-then-
-   * promote recipe; a plain click just focuses the pane (there is no
-   * collapse), a drag moves the whole editor group to another dock or back
+   * promote recipe; a plain click just focuses the pane (a band does not
+   * close), a drag moves the whole editor group to another dock or back
    * to the centre.
    */
   beginEditorBandPress(paneId: string, title: string, event: MouseEvent): void {
@@ -606,14 +589,7 @@ export class DockService {
     }
 
     const ids = this.state().dock[target];
-    let index = ids.length;
-    for (let i = 0; i < ids.length; i++) {
-      const rect = this.panelEls.get(ids[i])?.getBoundingClientRect();
-      if (rect && event.clientY < rect.top + rect.height / 2) {
-        index = i;
-        break;
-      }
-    }
+    const index = this.stripSlot(ids, event) ?? this.stackSlot(ids, event);
 
     if (this.dropDock() !== target) {
       this.dropDock.set(target);
@@ -622,6 +598,37 @@ export class DockService {
       this.dropIndex.set(index);
     }
   };
+
+  /**
+   * The drop slot while the pointer is over the dock's icon strip: by the
+   * x-centres of the icons in the row under the pointer (a narrow dock
+   * wraps its strip). Null when the pointer is not over the strip.
+   */
+  private stripSlot(ids: readonly WidgetId[], event: MouseEvent): number | null {
+    let last = -1;
+    for (let i = 0; i < ids.length; i++) {
+      const rect = this.stripEls.get(ids[i])?.getBoundingClientRect();
+      if (!rect || rect.height === 0 || event.clientY < rect.top || event.clientY > rect.bottom) {
+        continue;
+      }
+      if (event.clientX < rect.left + rect.width / 2) {
+        return i;
+      }
+      last = i;
+    }
+    return last === -1 ? null : last + 1;
+  }
+
+  /** The drop slot over the panel stack: by the open panels' y-centres (a closed one has no box). */
+  private stackSlot(ids: readonly WidgetId[], event: MouseEvent): number {
+    for (let i = 0; i < ids.length; i++) {
+      const rect = this.panelEls.get(ids[i])?.getBoundingClientRect();
+      if (rect && rect.height > 0 && event.clientY < rect.top + rect.height / 2) {
+        return i;
+      }
+    }
+    return ids.length;
+  }
 
   /**
    * The editor band's drag (ADR-0038): the centre column is a target --
@@ -705,7 +712,6 @@ export class DockService {
       return {
         ...s,
         dock: lists,
-        hidden: s.hidden.filter((x) => x !== id),
         // A drop into a folded dock (shown for the drag) keeps it open.
         foldedSides: s.foldedSides.filter((x) => x !== dock),
       };
@@ -820,10 +826,10 @@ export class DockService {
 
   private persist(): void {
     try {
-      const { dock, flexes, open, hidden, leftW, rightW, bottomH, foldedSides } = this.state();
+      const { dock, flexes, open, leftW, rightW, bottomH, foldedSides } = this.state();
       localStorage.setItem(
         DockService.KEY,
-        JSON.stringify({ dock, flexes, open, hidden, leftW, rightW, bottomH, foldedSides }),
+        JSON.stringify({ dock, flexes, open, leftW, rightW, bottomH, foldedSides }),
       );
     } catch {
       // Private-mode / storage-disabled: a non-persisted session is fine.
@@ -858,9 +864,12 @@ export class DockService {
     const left = clean(saved.dock?.left);
     const right = clean(saved.dock?.right);
     const bottom = clean(saved.dock?.bottom);
-    const hidden = clean(saved.hidden);
+    // A layout stored before the icon strip kept the widgets deselected in
+    // the View menu in a list of their own, outside every dock: they come
+    // back to their default dock, closed.
+    const legacyOff = new Set(clean((saved as { hidden?: unknown }).hidden));
     const lists: Record<DockSide, WidgetId[]> = { left, right, bottom };
-    const placed = new Set<WidgetId>([...left, ...right, ...bottom, ...hidden]);
+    const placed = new Set<WidgetId>([...left, ...right, ...bottom]);
     // Any widget missing from the stored blob (e.g. one added by an app
     // update) goes back to its descriptor's default dock, in order.
     for (const w of this.registry.widgets()) {
@@ -880,10 +889,10 @@ export class DockService {
       open: Object.fromEntries(
         this.registry.allWidgetIds().map((id) => [
           id,
-          typeof saved.open?.[id] === 'boolean' ? saved.open[id] : base.open[id],
+          !legacyOff.has(id) &&
+            (typeof saved.open?.[id] === 'boolean' ? saved.open[id] : base.open[id]),
         ]),
       ) as Record<WidgetId, boolean>,
-      hidden,
       leftW: Math.max(WIDTH.min, Math.min(WIDTH.max, num(saved.leftW, base.leftW))),
       rightW: Math.max(WIDTH.min, Math.min(WIDTH.max, num(saved.rightW, base.rightW))),
       bottomH: Math.max(HEIGHT.min, Math.min(HEIGHT.max, num(saved.bottomH, base.bottomH))),
