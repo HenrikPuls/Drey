@@ -16,22 +16,11 @@
  * chat note carries, and `plugins/meeting/main/slug.ts` (copied, not
  * imported — cross-plugin imports are banned).
  */
+import { DEFAULT_DAILY_DIR } from '../../../shared/daily.js';
 import type { ChatMessage } from '../../../shared/llm';
+import { CHATS_DIR, isChatNotePath } from '../../../shared/structural-folders.js';
 
-/** Where conversations live, nested per year/month like `daily/`. */
-export const CHATS_DIR = 'chats';
-
-/**
- * Whether a vault-relative path is a chat note (the `chats/` auto-save
- * area). The renderer-safe twin of the app's `isAutoSavePath` chats half —
- * plugin modules cannot runtime-import app `shared/`.
- */
-export function isChatNotePath(path: string): boolean {
-  return path === CHATS_DIR || path.startsWith(`${CHATS_DIR}/`);
-}
-
-/** The default daily root, matching `AppConfig.daily.dir`'s fallback. */
-export const DEFAULT_DAILY_DIR = 'daily';
+export { CHATS_DIR, DEFAULT_DAILY_DIR, isChatNotePath };
 
 /**
  * Whether a vault-relative path sits in the configured daily-notes root

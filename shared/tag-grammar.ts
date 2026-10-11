@@ -1,6 +1,7 @@
 /**
- * The canonical inline `#tag` grammar, shared by base-side consumers (the
- * editor tag features, the entry drawer's draft service).
+ * The inline `#tag` grammar, the one definition for the base (the editor
+ * tag features) and the plugins (the tags plugin's index, search and
+ * rename).
  *
  * `#task` stays a structural marker (task lines), never a tag;
  * `#important` used to be one too but no longer carries special meaning, so
@@ -11,12 +12,6 @@
  * Tags can be nested with `/`, e.g. `#project/frontend` -- these are label
  * hierarchies, not folders (ADR-0017); a tag search for `#project` also
  * returns the `#project/*` sections (see `plugins/tags/shared/search.ts`).
- *
- * TWIN ALERT: `plugins/tags/shared/tags.ts` is a verbatim twin of this
- * file. Plugin *renderers* load over `plugin://`, which cannot reach files
- * outside the plugin root, so the tags plugin keeps its own copy. A parity
- * spec (`tag-grammar-parity.spec.ts`) runs the same assertions over both;
- * if you change one, change the other in the same commit.
  */
 
 const RESERVED = new Set(['task']);
@@ -79,7 +74,7 @@ export function extractTagOccurrences(body: string): Array<{ tag: string; index:
 }
 
 /** Replaces fenced blocks and inline code with same-length blanks so offsets survive. */
-function blankCode(text: string): string {
+export function blankCode(text: string): string {
   return text
     .replace(/```[\s\S]*?```/g, (m) => ' '.repeat(m.length))
     .replace(/~~~[\s\S]*?~~~/g, (m) => ' '.repeat(m.length))

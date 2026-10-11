@@ -1,12 +1,17 @@
 import type { DreyPluginApi } from '../../../shared/plugin-api/renderer';
-import { TAG_NAME_SOURCE } from '../shared/tags.js';
+import {
+  TAG_AUTO_PALETTE,
+  normalizeTagPrefix,
+  resolveTagStyle,
+  tagChipColors,
+} from '../../../shared/tag-style.js';
 import { normalizeTagName } from '../shared/rename.js';
 
 /**
  * Settings → Tags: the tag prefix colors (milestone 33) and the tag list
  * with rename / merge (milestone 53). The list merges every vault's
- * vocabulary (from the plugin backend — the renderer cannot import shared
- * values over plugin://); "Rename…" opens a modal over the same
+ * vocabulary (from the plugin backend); the colors come from the same
+ * `shared/tag-style.ts` every other tag surface uses. "Rename…" opens a modal over the same
  * preview/apply backend the Search panel's vault replace uses (TOCTOU
  * re-read before every write, one bundled per-file-diff confirmation,
  * nested `#tag/…` descendants along by default, duplicates a merge would
@@ -38,44 +43,6 @@ interface RenameOp {
   diff: Array<{ type: 'add' | 'del' | 'context'; text: string }>;
 }
 
-const PREFIX_SOURCE = new RegExp(`^${TAG_NAME_SOURCE}(?:/${TAG_NAME_SOURCE})*$`, 'u');
-
-/** Mirrors the base-side `normalizeTagPrefix` (local twin — plugin://). */
-function normalizePrefix(raw: string): string | null {
-  const cleaned = raw.trim().toLowerCase().replace(/^#/, '').replace(/\/+$/, '');
-  if (cleaned === '' || !PREFIX_SOURCE.test(cleaned)) {
-    return null;
-  }
-  return cleaned;
-}
-
-/** Mirrors the base-side `tagChipColors` (local twin — plugin://). */
-function chipColors(color: string): { fg: string; bg: string } {
-  return {
-    fg: `color-mix(in srgb, ${color} 58%, #f2efe9)`,
-    bg: `color-mix(in srgb, ${color} 15%, transparent)`,
-  };
-}
-
-/** Mirrors the base-side `resolveTagStyle` auto branch (local twin). */
-function autoColor(tag: string, palette: readonly string[]): string {
-  let h = 5381;
-  for (const ch of tag.split('/', 1)[0] || tag) {
-    h = (h * 33 + ch.charCodeAt(0)) >>> 0;
-  }
-  return palette[h % palette.length] ?? '#c96442';
-}
-
-function resolveColor(tag: string, prefixes: readonly PrefixRow[], palette: readonly string[]): string {
-  let best: PrefixRow | null = null;
-  for (const p of prefixes) {
-    if ((tag === p.prefix || tag.startsWith(`${p.prefix}/`)) && (best === null || p.prefix.length > best.prefix.length)) {
-      best = p;
-    }
-  }
-  return best !== null ? best.color : autoColor(tag, palette);
-}
-
 export function registerTagsSettingsPage(api: DreyPluginApi): void {
   void api.ui.registerSettingsPage({
     id: 'tags',
@@ -83,7 +50,7 @@ export function registerTagsSettingsPage(api: DreyPluginApi): void {
     hint: 'Tag colors, rename and merge',
     mount(body: HTMLElement): () => void {
       body.classList.add('tags-settings');
-      let palette: string[] = [];
+      const palette = TAG_AUTO_PALETTE;
       let rows: PrefixRow[] = [];
       const disposers: Array<() => void> = [];
 
@@ -104,7 +71,7 @@ export function registerTagsSettingsPage(api: DreyPluginApi): void {
 
       const chip = (tag: string, color: string): HTMLElement => {
         const node = el('span', 'tags-settings-chip', `#${tag}`);
-        const { fg, bg } = chipColors(color);
+        const { fg, bg } = tagChipColors(color);
         node.style.color = fg;
         node.style.backgroundColor = bg;
         return node;
@@ -116,7 +83,7 @@ export function registerTagsSettingsPage(api: DreyPluginApi): void {
         const visible = tagRows.filter((row) => needle === '' || row.tag.includes(needle));
         for (const row of visible) {
           const line = el('div', 'tags-settings-tag-row');
-          line.appendChild(chip(row.tag, resolveColor(row.tag, rows, palette)));
+          line.appendChild(chip(row.tag, resolveTagStyle(row.tag, rows).color));
           const name = el('span', 'name mono', row.tag.replace(/^#/, ''));
           line.appendChild(name);
           const badge = el('span', 'badge', `${row.count}`);
@@ -413,7 +380,7 @@ export function registerTagsSettingsPage(api: DreyPluginApi): void {
           prefixInput.placeholder = 'prefix';
           prefixInput.setAttribute('aria-label', 'Tag prefix');
           const commitPrefix = (): boolean => {
-            const normalized = normalizePrefix(prefixInput.value);
+            const normalized = normalizeTagPrefix(prefixInput.value);
             if (normalized === null || rows.some((r) => r !== row && r.prefix === normalized)) {
               prefixInput.classList.add('invalid');
               return false;
@@ -527,10 +494,8 @@ export function registerTagsSettingsPage(api: DreyPluginApi): void {
                 typeof r?.prefix === 'string' && typeof r?.color === 'string',
             );
           }
-          const p = (await api.backend.invoke('palette', {})) as { auto?: string[] };
-          palette = Array.isArray(p?.auto) ? p.auto : [];
         } catch {
-          palette = [];
+          rows = [];
         }
         render();
         void loadTags();

@@ -4,34 +4,12 @@ import type {
   CompletionResult,
 } from '@codemirror/autocomplete';
 import type { DreyPluginApi } from '../../../shared/plugin-api/renderer';
+import { SNIPPET_DEFAULTS } from '../../../shared/config/defaults';
 import type { SnippetConfig } from '../../../shared/config/schema';
 import { BLOCKED_NODES, inFrontmatter, previewCard } from './slash.js';
 
-/**
- * TWIN ALERT: this list is a verbatim twin of `SNIPPET_DEFAULTS` in
- * `shared/config/defaults.ts` — the seed the app config normalizer applies
- * to a missing key. Plugin renderers cannot value-import base `shared/`
- * (the module would resolve outside `plugin://<id>/` and the plugin
- * quarantines), so the restore button keeps its own copy. A parity spec
- * (`snippets.spec.ts`) asserts both lists stay equal; change them together.
- */
-export const SNIPPET_DEFAULTS: SnippetConfig[] = [
-  {
-    trigger: 'tbl',
-    label: 'Table',
-    template: '| ${1:Column} | ${2:Column} | ${3:Column} |\n| --- | --- | --- |\n| ${4:} | ${5:} | ${6:} |',
-  },
-  {
-    trigger: 'code',
-    label: 'Code block',
-    template: '```${1:ts}\n$0\n```',
-  },
-  {
-    trigger: 'task',
-    label: 'Checklist',
-    template: '- [ ] ${1:First}\n- [ ] ${2:Second}\n- [ ] ${3:Third}',
-  },
-];
+/** The built-in snippets: the seed of a missing config key, and what the restore button brings back. */
+export { SNIPPET_DEFAULTS };
 
 /**
  * Editor snippet completion (milestone 46): typing a trigger word — `tbl`,

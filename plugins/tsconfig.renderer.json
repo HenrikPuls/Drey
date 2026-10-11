@@ -4,7 +4,7 @@
     "module": "ES2022",
     "moduleResolution": "bundler",
     "lib": ["ES2022", "DOM", "DOM.Iterable"],
-    "outDir": "../dist-plugins",
+    "noEmit": true,
     "rootDir": "..",
     "strict": true,
     "esModuleInterop": true,
@@ -14,7 +14,7 @@
     "noFallthroughCasesInSwitch": true,
     "types": []
   },
-  "//": "Plugin renderer entries compile to plain ES modules under dist-plugins/<id>/renderer/, served file-per-file over plugin:// (ADR-0044). They must contain NO bare-specifier runtime imports: type-only imports are erased, and anything the plugin needs from the host comes through api.* (CodeMirror instances via api.editor.cm from stage 2). shared/ is included so the renderers' '../shared/…' imports typecheck — and its ESM emission is load-bearing, not dead weight: the merge in scripts/build-plugins.mjs copies it to dist-electron/plugins/<id>/shared/, from where the renderer loads it at runtime over plugin:// and the plugin main sides require() the same files as ESM.",
+  "//": "Typecheck only (noEmit): scripts/build-plugins.mjs bundles each plugin's renderer/index.ts into one ES module with esbuild (ADR-0044, later change). Runtime imports may reach the plugin's own folder and the repo's shared/, nothing else -- the bundle step fails on a package import; types of packages come in as import type.",
   "include": ["./**/renderer/**/*.ts", "./**/shared/**/*.ts", "../shared/**/*.ts"],
   "exclude": ["../shared/**/*.spec.ts", "./**/renderer/**/*.spec.ts", "./**/shared/**/*.spec.ts"]
 }

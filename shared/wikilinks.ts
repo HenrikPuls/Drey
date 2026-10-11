@@ -2,9 +2,8 @@
  * The `[[wikilink]]` grammar and Obsidian-style resolution (ADR-0046), in
  * `shared/` since milestone 59 so the renderer (`WikilinkService`, the
  * editor decorations) and the main process (the rename link rewrite,
- * `shared/link-rewrite.ts`) agree on ONE definition of what a link is and
- * which note it opens. The backlinks plugin keeps its parity-tested twin
- * (plugin code cannot import base modules).
+ * `shared/link-rewrite.ts`) and the backlinks plugin agree on ONE
+ * definition of what a link is and which note it opens.
  */
 
 export interface WikilinkOccurrence {

@@ -2326,7 +2326,7 @@ sequenceDiagram
     Doc-->>Panel: active-changed (path + vaultId)
     Panel->>BE: backlinks {path, vaultId}
     BE->>BE: buildNoteIndex(current file list)
-    BE->>BE: collectBacklinks: every OTHER file's link where<br/>resolveTargetLink(target, fromPath) === path<br/>(parity twin of the base WikilinkService)
+    BE->>BE: collectBacklinks: every OTHER file's link where<br/>resolveNoteTarget(target, fromPath) === path<br/>(shared/wikilinks.ts, the editor's own resolution)
     BE-->>Panel: rows (path · heading · line · snippet)
     User->>Panel: click a row
     Panel->>Doc: open(row.path, row.line, {vaultId})

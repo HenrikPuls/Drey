@@ -2,7 +2,7 @@
  * The git plugin's pure half: the shapes both sides share, the parsers for
  * what `git` prints, and the mapping between repository paths and vault
  * paths. No Node, no DOM -- the main entry runs git and feeds these, the
- * renderer imports the same file over `plugin://`.
+ * renderer bundles the same file.
  *
  * A vault is the repository root OR a folder inside it (a `docs/` folder
  * of a code repository): `prefix` is that folder's path inside the

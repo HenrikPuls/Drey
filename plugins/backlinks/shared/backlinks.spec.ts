@@ -1,9 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import { extractLinkTargets } from './link-targets.js';
-import { buildNoteIndex, collectBacklinks, resolveTargetLink } from './link-index.js';
+import { buildNoteIndex, resolveNoteTarget } from '../../../shared/wikilinks.js';
+import { collectBacklinks } from './link-index.js';
 
 describe('extractLinkTargets', () => {
-  it('parses target, anchor and skips aliases (twin of the base grammar)', () => {
+  it('parses target, anchor and skips aliases', () => {
     const links = extractLinkTargets('See [[Plan]] and [[docs/note.md#Goals|the goals]].');
     expect(links.map((l) => ({ target: l.target, anchor: l.anchor }))).toEqual([
       { target: 'Plan', anchor: null },
@@ -52,29 +53,29 @@ describe('extractLinkTargets', () => {
   });
 });
 
-describe('resolveTargetLink (parity twin of WikilinkService.resolve)', () => {
+describe('resolveNoteTarget', () => {
   const index = buildNoteIndex(['Daily/2026-10-09.md', 'Projects/Plan.md', 'Notes/Plan.md', 'a.md']);
 
   it('treats bare names as basenames and appends .md', () => {
-    expect(resolveTargetLink('plan', 'a.md', index)).toBe('Notes/Plan.md');
-    expect(resolveTargetLink('2026-10-09', null, index)).toBe('Daily/2026-10-09.md');
+    expect(resolveNoteTarget('plan', 'a.md', index)).toBe('Notes/Plan.md');
+    expect(resolveNoteTarget('2026-10-09', null, index)).toBe('Daily/2026-10-09.md');
   });
 
   it('treats slash/extension targets as paths, case-insensitively', () => {
-    expect(resolveTargetLink('projects/plan', 'a.md', index)).toBe('Projects/Plan.md');
-    expect(resolveTargetLink('Projects/Plan.md', 'a.md', index)).toBe('Projects/Plan.md');
-    expect(resolveTargetLink('Projects/Plan.markdown', 'a.md', index)).toBeNull();
+    expect(resolveNoteTarget('projects/plan', 'a.md', index)).toBe('Projects/Plan.md');
+    expect(resolveNoteTarget('Projects/Plan.md', 'a.md', index)).toBe('Projects/Plan.md');
+    expect(resolveNoteTarget('Projects/Plan.markdown', 'a.md', index)).toBeNull();
   });
 
   it('prefers a sibling on basename ambiguity, else the shortest path', () => {
-    expect(resolveTargetLink('plan', 'Notes/x.md', index)).toBe('Notes/Plan.md');
-    expect(resolveTargetLink('plan', null, index)).toBe('Notes/Plan.md');
+    expect(resolveNoteTarget('plan', 'Notes/x.md', index)).toBe('Notes/Plan.md');
+    expect(resolveNoteTarget('plan', null, index)).toBe('Notes/Plan.md');
     const flat = buildNoteIndex(['aa/plan.md', 'a/plan.md']);
-    expect(resolveTargetLink('plan', null, flat)).toBe('a/plan.md');
+    expect(resolveNoteTarget('plan', null, flat)).toBe('a/plan.md');
   });
 
   it('resolves an empty target to the linking note itself', () => {
-    expect(resolveTargetLink('', 'a.md', index)).toBe('a.md');
+    expect(resolveNoteTarget('', 'a.md', index)).toBe('a.md');
   });
 });
 

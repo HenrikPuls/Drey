@@ -15,7 +15,7 @@
  *  3. plugin:// serves renderer modules out of the asar -- proven by the
  *     assistant plugin's renderer having executed (its panel is mounted);
  *  4. a `plugin:invoke` roundtrip reaches a plugin main inside the asar
- *     (the tags plugin's `palette`, the tasks plugin's `list`);
+ *     (the tags plugin's `tag-list`, the tasks plugin's `list`);
  *  5. startup timings: window DOM ready + the plugin DOM marker.
  *
  * Exits 0 when every check passes, 1 otherwise.
@@ -188,7 +188,7 @@ try {
   check('plugin:// renderer executed (assistant panel mounted)', true);
 
   // -- 4. plugin:invoke roundtrips into asar-loaded mains
-  await checkInvoke('tags', 'palette', null);
+  await checkInvoke('tags', 'tag-list', null);
   await checkInvoke('tasks', 'list', null);
 
   console.log(`timing: window DOM ready ${tDom} ms; plugins fully up (menu marker) ${tMarker} ms`);

@@ -21,6 +21,10 @@ executable authoring reference, `plugins/AUTHORING.md`), but excluded from
 the installer / portable exe by a `files` negation in
 `electron-builder.yml` (see [docs/07](../07_deployment_view.md)).
 
+Later change (2026-10-11): the renderer side of the built-in plugins is
+bundled with esbuild, which reverses "No bundler" below — see the section
+at the end.
+
 ## Context
 
 ADR-0016 deliberately stopped short of a plugin runtime: feature modules
@@ -243,3 +247,61 @@ the stage that needed it:
   → editor/save/vault/search seams (pure refactor) → templates → meeting
   → tags → tasks → assistant+actions → browser (base doc-kind
   genericization first, shippable alone) → cleanup/docs → packaging.
+
+## Later change — plugin renderers are bundled (2026-10-11)
+
+"No bundler" under *Loading*, and "Bundling plugins" under *What was
+rejected*, no longer hold for the renderer side of the built-in plugins.
+
+**Why.** `plugin://` serves nothing outside a plugin's own directory, and
+the renderer was emitted file by file, so a renderer could use a function
+from the app's `shared/` only by keeping a copy of it. By the 2026-10-11
+architecture review there were copies of the tag grammar, the wikilink
+grammar and its resolution, the section splitter, the code-blanking
+helper, the tag colour rules, the snippet defaults, the chat-folder
+predicate, `resolveActions` and several formatters. Three were held in
+step by a parity spec; the rest by a comment. One had already drifted
+(the tag colour hash treated characters outside the Basic Multilingual
+Plane differently in the Settings preview than everywhere else).
+
+**What changed.** `scripts/build-plugins.mjs` bundles each plugin's
+`renderer/index.ts` into ONE ES module with esbuild — the tool that
+already writes the preload (ADR-0001, later change), so no second
+toolchain was added. `tsc` stays the typecheck for the renderer
+(`plugins/tsconfig.renderer.json`, `noEmit`) and still emits the main
+side. A plugin renderer may now import values from its own folder and
+from the repo's `shared/`; the copies are gone.
+
+**Rule 1 is kept by the build instead of by the browser.** The reason
+bundling was rejected — a bundler inlines a second `@codemirror/*`
+without complaint, and the editor then breaks silently — is answered by a
+resolve guard in the build script: any runtime import that is not a
+relative path into the plugin's own folder or into `shared/` fails the
+build with the importing file named. That is earlier and louder than the
+bare-specifier error at load time it replaces. Type-only imports are
+unaffected. A `shared/` module that itself needs a package
+(`shared/frontmatter.ts` and `yaml`) is refused the same way, so it stays
+main-side.
+
+**What did not change.**
+
+- How a plugin is loaded: the manifest's `renderer` entry, one dynamic
+  `import()` of `plugin://<id>/renderer/index.js`, CSS by `<link>`. A
+  user-installed plugin is whatever JavaScript its author ships, one file
+  or many, exactly as before; built-ins get no privileged path (rule 2).
+- The main side: CommonJS from `tsc`, file per file. A plugin's `shared/`
+  folder is now emitted once (CommonJS, for `main/`) instead of once per
+  module system, so the `package.json` module-type markers the build used
+  to write into every plugin directory are gone.
+- Imports between plugins stay forbidden; what two plugins both need
+  belongs in `shared/` (the section splitter moved into
+  `shared/note-sections.ts` for that reason).
+
+**Consequences.** A stack trace in a plugin renderer points into the
+bundle; a source map is written next to it for development and left out
+of the packaged app. The "rebuild and restart after touching
+`plugins/**`" rule now also covers `shared/**` files a plugin renderer
+imports — they are part of its bundle. Copies that remain are of code
+outside `shared/` (the templates plugin's frontmatter strip from `src/`,
+the tags plugin's `isAbortError` from `electron/`) and are named in
+`docs/11`.
