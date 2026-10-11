@@ -20,6 +20,25 @@ recorded as an explicit decision. The parity checklist lives in
 
 ## Recent milestones
 
+### The IPC contract is split by topic behind its barrel
+
+Item 10 of the 2026-10-11 architecture review, sixth and last file. A
+restructuring: nothing the user sees or does changes, and no importer
+changed. **Not yet manually verified by the owner.**
+
+- **`shared/ipc-api.ts` went from 1,363 to 65 lines.** It is now the
+  barrel over `shared/ipc/`: `channels.ts` (`IPC_CHANNELS`), `app.ts`,
+  `vault.ts`, `notes.ts`, `llm.ts`, `tags.ts`, `spelling.ts`, `mcp.ts`
+  and `plugins.ts`. Each topic file holds its payload types and its slice
+  of the bridge (`AppIpc`, `VaultIpc`, ...); `DreyApi` is their sum. The
+  same shape as `shared/app-config.ts` over `shared/config/`.
+- **The text was moved, not retyped**: a script cut the old file by line
+  ranges and checked that every line landed exactly once. The exported
+  surface (51 exports, every `DreyApi` member with its signature) was
+  printed from the TypeScript checker before and after and is identical.
+- One comment moved to where it belongs: the "Session history" note now
+  sits above the session-backup methods, not above the note history.
+
 ### The Source control panel is split into state, commands, widget and dialogs
 
 Item 10 of the 2026-10-11 architecture review, fifth file. A
