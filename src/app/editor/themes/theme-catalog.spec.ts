@@ -26,6 +26,12 @@ describe('theme catalog', () => {
     expect(resolveTheme('does-not-exist').id).toBe(ANTHRAZIT_THEME);
   });
 
+  it('lists Cyberpunk as the third bespoke theme, with its own editor look', async () => {
+    expect(THEME_CATALOG[2].id).toBe('cyberpunk');
+    expect(THEME_CATALOG[2].group).toBe('Drey');
+    await expect(resolveTheme('cyberpunk').load()).resolves.toBeDefined();
+  });
+
   it('resolves the Drey extension synchronously via load()', async () => {
     await expect(resolveTheme(DREY_THEME).load()).resolves.toBeDefined();
   });

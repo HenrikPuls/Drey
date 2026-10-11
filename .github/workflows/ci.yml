@@ -120,7 +120,14 @@ jobs:
         run: npm run build
 
       - name: E2E (Playwright drives the built Electron app)
-        run: npm run e2e:run
+        env:
+          # ADR-0068: the sample plugin is an e2e fixture, NOT part of the
+          # plain `npm run build` above -- rebuild the plugin output with it
+          # before playwright starts (what `npm run e2e` does locally, minus
+          # the redundant renderer rebuild). Packaging never ships it:
+          # electron-builder.yml excludes it, verify:pack asserts absence.
+          DREY_BUILD_SAMPLE_PLUGINS: 1
+        run: npm run build:plugins && npm run e2e:run
 
       - name: Report display size (e2e layout debugging)
         if: always()
@@ -142,6 +149,8 @@ jobs:
       # pack = clean + build + electron-builder --win; the clean build above
       # is the same tree the e2e suite just passed on, so invoke
       # electron-builder directly (by script path, per repo convention).
+      # (The e2e step also dropped the sample plugin into dist-electron/ --
+      # the !dist-electron/plugins/sample/** rule keeps it out of the exes.)
       # --publish never: releases are attached by the softprops step below,
       # not by electron-builder's implicit CI publishing.
       - name: Package (NSIS setup + portable exe)

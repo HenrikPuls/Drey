@@ -417,8 +417,9 @@ introduced silently.
   meta-bar path and line numbers); panel controls are **icon-only** with a
   `title` + `aria-label`, drawn with the global `.icon-btn` / `.seg`
   classes (plugins get glyphs via `api.ui.icon`); panel fields carry no
-  placeholder text. Two bespoke themes ship — **Drey** (terracotta) and
-  **Anthrazit** (neutral charcoal gray, blue accent, AA contrast — ADR-0057 later change; the fresh-install default).
+  placeholder text. Three bespoke themes ship — **Drey** (terracotta),
+  **Anthrazit** (neutral charcoal gray, blue accent, AA contrast — ADR-0057 later change; the fresh-install default)
+  and **Cyberpunk** (violet-black, neon pink and violet).
 - Overall layout ([ADR-0019](docs/09_architecture_decisions/0019-movable-dock-panels-and-layout-state.md)):
   a frameless window with a **custom titlebar** (accent square, the two
   dock toggles, the HTML File/Edit/Selection/View menu bar, back/forward

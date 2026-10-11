@@ -104,9 +104,25 @@ const ANTHRAZIT: ThemeCatalogEntry = {
   load: () => Promise.resolve(dreyEditorLook),
 };
 
+/**
+ * Cyberpunk — the third bespoke palette: violet-black surfaces, neon pink
+ * accent, violet lines. `styles.css` carries its exact tokens in a
+ * `:root[data-theme='cyberpunk']` block (like Anthrazit); the editor look
+ * is its own highlight style over the token-driven Drey surface, loaded on
+ * demand.
+ */
+const CYBERPUNK: ThemeCatalogEntry = {
+  id: 'cyberpunk',
+  label: 'Cyberpunk',
+  group: 'Drey',
+  seed: { bg: '#0e0b1a', fg: '#efeaff', accent: '#ff4fa8', dark: true },
+  load: () => import('./cyberpunk-look').then((m) => m.cyberpunkEditorLook),
+};
+
 export const THEME_CATALOG: readonly ThemeCatalogEntry[] = [
   ANTHRAZIT,
   DREY,
+  CYBERPUNK,
   published('vscode-dark', 'VS Code Dark', 'Dark', 'vscodeDark', { bg: '#1e1e1e', fg: '#d4d4d4', accent: '#569cd6' }),
   published('vscode-light', 'VS Code Light', 'Light', 'vscodeLight', { bg: '#ffffff', fg: '#383a42', accent: '#0067c0' }),
   published('github-dark', 'GitHub Dark', 'Dark', 'githubDark', { bg: '#0d1117', fg: '#c9d1d9', accent: '#58a6ff' }),

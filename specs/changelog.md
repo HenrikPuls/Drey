@@ -83,6 +83,48 @@ verified by the owner.**
   (`chat-engine.spec.ts`), the filesystem scan ports
   (`vault-scan.spec.ts`), the scoped notes (`ask-prompts.spec.ts`).
 
+### A third bespoke theme: Cyberpunk
+
+**Not yet manually verified by the owner.**
+
+- **Settings → Appearance → Theme → Cyberpunk**, listed with Anthrazit
+  and Drey. Violet-black surfaces, a lavender text ramp, violet lines and
+  a neon pink accent; popovers glow instead of casting a shadow. Loosely
+  after the Typora "cyberpunk" theme, not a port of it — no grid overlay,
+  no flicker, no display fonts, and pink / violet lead where that one
+  leads with cyan.
+- **Built like Anthrazit:** exact tokens in a
+  `:root[data-theme='cyberpunk']` block of `src/styles.css`, so the whole
+  shell follows. The editor look is its own highlight style
+  (`src/app/editor/themes/cyberpunk-look.ts`, loaded on demand) over the
+  token-driven Drey surface: pink / violet / cyan headings (h1 and h2
+  with a soft glow), cyan links, a neon code palette. Those colours are
+  fixed — they do not follow the highlight colour, which still re-tints
+  the chrome.
+- Anthrazit stays the default; the splash stays Anthrazit.
+
+### Fix — the image resize grip and the table keys work before the note is fully parsed
+
+Dragging the corner grip of a picture did nothing when the picture sat
+beyond what the editor had parsed so far: a freshly opened note is
+parsed up to its first 3,000 characters at once and the rest in the
+background, and the grip looked the picture up in that unfinished tree
+while the picture itself was drawn from a complete one. The drag ended
+without a change and without a message. The table keys had the same
+flaw: Enter in such a table added a plain line instead of a row, and
+the arrow keys did not step into or out of it. Both now read the same
+complete tree as the drawing code (`completeSyntaxTree` in
+`block-render.ts`). **Not yet manually verified by the owner.**
+
+- Found through a test that failed now and then: on a loaded machine
+  even a three-line note can miss the up-front parse budget. A new test
+  reproduces it with a picture behind 4,000 characters of text, a
+  second one with a table there.
+- The same test run exposed a second unreliable test, fixed without a
+  change to the app: the checkbox-click test in `editor.spec.ts` waited
+  a fixed 10 ms for a save that arrives through a timer; it now waits
+  for the save.
+
 ### The IPC contract is split by topic behind its barrel
 
 Item 10 of the 2026-10-11 architecture review, sixth and last file. A
