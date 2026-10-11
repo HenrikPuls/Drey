@@ -6,7 +6,7 @@ import { test, expect, type Page, type ElectronApplication } from './fixtures/dr
 
 /**
  * NOT a regression suite: this drives the built app through the same
- * fixtures to capture the screenshots embedded in docs/manual.md (the
+ * fixtures to capture the screenshots embedded in docs/manual/manual.md (the
  * user manual). Opt-in only, so CI and the normal e2e run skip it:
  *
  *   . .\env.ps1
@@ -21,7 +21,7 @@ import { test, expect, type Page, type ElectronApplication } from './fixtures/dr
  */
 
 const RUN = !!process.env['DREY_MANUAL_SHOTS'];
-test.skip(!RUN, 'set DREY_MANUAL_SHOTS=1 — screenshot capture for docs/manual.md');
+test.skip(!RUN, 'set DREY_MANUAL_SHOTS=1 — screenshot capture for docs/manual/manual.md');
 
 const OUT = path.resolve(__dirname, '..', 'docs', 'manual', 'img');
 if (RUN) {
@@ -58,20 +58,27 @@ async function prep(app: ElectronApplication, page: Page): Promise<void> {
     .toBe('anthrazit');
 }
 
-/** Only the given left-dock panel is expanded; Calendar+Files fold away. */
+/**
+ * Only the given left-dock panel is open; Calendar+Files fold away.
+ * Milestone 69: a closed panel lives on only as its icon in the dock's
+ * strip (`Show X`), an open one is `Hide X` with `aria-pressed` -- the
+ * collapsed panel headers of ADR-0019 are gone.
+ */
 async function soloPanel(page: Page, title: string): Promise<void> {
+  const strip = page.locator('app-dock[side="left"] app-dock-strip');
   for (const other of ['Calendar', 'Files']) {
-    const head = page.locator(`app-panel-frame .head[aria-label="Collapse ${other}"]`);
-    if (await head.count()) {
-      await head.click();
+    const hide = strip.locator(`button[aria-label="Hide ${other}"]`);
+    if ((await hide.count()) && (await hide.getAttribute('aria-pressed')) === 'true') {
+      await hide.click();
     }
   }
-  // The panel may already be expanded (the git plugin expands itself when
-  // it picks up a repository) -- only click when the expand head exists.
-  const expand = page.locator(`app-panel-frame .head[aria-label="Expand ${title}"]`);
-  if (await expand.count()) {
-    await expand.click();
+  // The panel may already be open (the git plugin expands itself when it
+  // picks up a repository) -- only click when its Show button exists.
+  const show = strip.locator(`button[aria-label="Show ${title}"]`);
+  if (await show.count()) {
+    await show.click();
   }
+  await page.waitForTimeout(150);
 }
 
 /** Opens the folder's tree node only when actually collapsed (clicks toggle). */
@@ -91,7 +98,9 @@ async function openFile(
   relPath: string,
   opts: { folders?: string[] } = {},
 ): Promise<void> {
-  const expandFiles = page.locator('app-panel-frame .head[aria-label="Expand Files"]');
+  const expandFiles = page.locator(
+    'app-dock[side="left"] app-dock-strip button[aria-label="Show Files"]',
+  );
   if (await expandFiles.count()) {
     await expandFiles.click();
   }

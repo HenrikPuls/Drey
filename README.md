@@ -4,7 +4,7 @@ Local, topic-based note-taking app (Electron + Angular). See
 [`CLAUDE.md`](CLAUDE.md) for the full project context and
 [`specs/`](specs/) for the binding concept/schema/classifier
 specifications. Architecture documentation lives in [`docs/`](docs/)
-(arc42); the end-user manual is [`docs/manual.md`](docs/manual.md)
+(arc42); the end-user manual is [`docs/manual/manual.md`](docs/manual/manual.md)
 (with screenshots).
 
 ## Prerequisites

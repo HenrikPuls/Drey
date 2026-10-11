@@ -30,9 +30,10 @@ Nothing leaves it unless you explicitly switch on a hosted AI provider.
 16. [Quick switcher and command palette](#16-quick-switcher-and-command-palette)
 17. [Version history and save conflicts](#17-version-history-and-save-conflicts)
 18. [Settings reference](#18-settings-reference)
-19. [Keyboard shortcuts](#19-keyboard-shortcuts)
-20. [Where your data lives](#20-where-your-data-lives)
-21. [Troubleshooting](#21-troubleshooting)
+19. [Getting help](#19-getting-help)
+20. [Keyboard shortcuts](#20-keyboard-shortcuts)
+21. [Where your data lives](#21-where-your-data-lives)
+22. [Troubleshooting](#22-troubleshooting)
 
 ---
 
@@ -76,7 +77,7 @@ The app imposes only a few conventional folders inside a vault:
 
 ## 2. The window at a glance
 
-![The Drey main window](manual/img/window-overview.png)
+![The Drey main window](img/window-overview.png)
 
 The frameless window is built from:
 
@@ -100,7 +101,7 @@ like a browser, across all open panes. `Alt+Left` / `Alt+Right` do the
 same, and the mouse side buttons (XButton1/2) are bound VS Code-style.
 Stepping back to a closed note reopens it.
 
-![The View menu](manual/img/titlebar-view-menu.png)
+![The View menu](img/titlebar-view-menu.png)
 
 The **View** menu toggles every panel, the docks, full screen (`F11`)
 and *Reset layout*, which restores the default dock arrangement and
@@ -110,7 +111,7 @@ undocks docked editor panes.
 
 ## 3. Vaults and files
 
-![The Files panel](manual/img/panel-files.png)
+![The Files panel](img/panel-files.png)
 
 The **Files panel** shows one section per registered vault: a header row
 with the vault's name (the dot marks the active vault) and that vault's
@@ -129,7 +130,7 @@ file tree.
   can automatically rewrite wikilinks that pointed at the old path
   (see [Settings → Vault](#settings-vault)).
 
-![A folder's context menu](manual/img/panel-files-context-menu.png)
+![A folder's context menu](img/panel-files-context-menu.png)
 
 ### Files from outside
 
@@ -166,13 +167,13 @@ menu:
 - **View** — read-only rendering; plain clicks follow links.
 - **Source** — raw Markdown.
 
-![The ⋯ menu](manual/img/editor-more-menu.png)
+![The ⋯ menu](img/editor-more-menu.png)
 
 The `⋯` menu also holds *Formatting toolbar*, *Lines* (line numbers),
 *Suggest tags* (AI), *File history…*, *Export as PDF…*, *Save as…* and
 any manual Assistant Actions you have configured.
 
-![Source mode](manual/img/editor-source.png)
+![Source mode](img/editor-source.png)
 
 ### The slash menu and capture
 
@@ -185,7 +186,7 @@ Typing `/` on an empty line opens the **slash menu**:
   each with a preview card.
 - **Formatting** — headings, lists, quotes, tables, code blocks.
 
-![The slash menu](manual/img/slash-menu.png)
+![The slash menu](img/slash-menu.png)
 
 ### Snippets
 
@@ -194,7 +195,7 @@ multi-line block with `${1:placeholder}` tabstops: accept with `Enter`,
 then jump between placeholders with `Tab`. The library is yours to edit
 in Settings → *Templates*.
 
-![A snippet trigger](manual/img/snippet-menu.png)
+![A snippet trigger](img/snippet-menu.png)
 
 ### Tags and wikilinks
 
@@ -239,7 +240,7 @@ Every save keeps the overwritten text as a restorable version
 
 ## 5. Daily notes and quick capture
 
-![Calendar and today's daily note](manual/img/panel-calendar.png)
+![Calendar and today's daily note](img/panel-calendar.png)
 
 - The **Calendar panel**'s header is the month/year picker itself, with
   a **Today** button (opens today's daily note) and month arrows. Days
@@ -272,7 +273,7 @@ A task is any `- [ ]` checklist line — or a plain text line carrying
 - [ ] Clarify image rights with the editor 📅 2026-10-14 ⏫
 ```
 
-![The Tasks panel](manual/img/panel-tasks.png)
+![The Tasks panel](img/panel-tasks.png)
 
 The **Tasks panel** lists tasks from
 
@@ -301,7 +302,7 @@ list). The **Tags plugin** keeps a per-vault index of every
 heading-delimited section — tagged or not — so full-text search reaches
 unindexed-looking notes too.
 
-![The Search panel](manual/img/panel-search.png)
+![The Search panel](img/panel-search.png)
 
 The **Search panel** (open with `Ctrl+Shift+F`) has:
 
@@ -328,7 +329,7 @@ The replace row patches the **open buffer** in document scope (an
 unsaved edit, like typing). Vault-wide replace first shows **one bundled
 confirmation** listing every affected file with its diff:
 
-![The replace-all confirmation](manual/img/dialog-confirm-replace.png)
+![The replace-all confirmation](img/dialog-confirm-replace.png)
 
 ### Export and Summarize
 
@@ -348,7 +349,7 @@ default. `#task` is reserved and never suggested for renaming.
 
 ## 8. Templates, snippets and prompts
 
-![The Templates panel](manual/img/panel-templates.png)
+![The Templates panel](img/panel-templates.png)
 
 - **Note templates** are Markdown files in `templates/`. They appear in
   the Templates panel, in the slash menu (with preview cards) and in
@@ -364,7 +365,7 @@ default. `#task` is reserved and never suggested for renaming.
 
 ## 9. The Assistant
 
-![A chat in the Assistant panel](manual/img/assistant-chat.png)
+![A chat in the Assistant panel](img/assistant-chat.png)
 
 The **Assistant panel** is chat-first:
 
@@ -384,7 +385,7 @@ The **Assistant panel** is chat-first:
   The tool row: **Attach** · **Live edit** · **Vault context** ·
   **Prompts** · **model picker**.
 
-![The chat picker](manual/img/assistant-chat-picker.png)
+![The chat picker](img/assistant-chat-picker.png)
 
 ### Context chips
 
@@ -429,7 +430,7 @@ only ever suggests; `#task` stays reserved.
 
 ## 10. AI providers (LLM)
 
-![The LLM settings](manual/img/settings-llm.png)
+![The LLM settings](img/settings-llm.png)
 
 Drey is local-first: the default provider is any **OpenAI-compatible
 endpoint** on your machine — LM Studio (the documented default,
@@ -454,7 +455,7 @@ user data directory (like every desktop client of a local endpoint).
 
 ## 11. Assistant tools and MCP
 
-![Assistant tools settings](manual/img/settings-assistant-tools.png)
+![Assistant tools settings](img/settings-assistant-tools.png)
 
 ### What the assistant may call
 
@@ -473,7 +474,7 @@ a tool like the rest.
 
 ### Drey as an MCP *server*
 
-![MCP server settings](manual/img/settings-mcp.png)
+![MCP server settings](img/settings-mcp.png)
 
 Settings → **MCP** exposes the vault *to other programs*: the same
 opt-in discipline, off by default.
@@ -489,7 +490,7 @@ opt-in discipline, off by default.
 
 ## 12. Git source control
 
-![The Source control panel](manual/img/panel-git.png)
+![The Source control panel](img/panel-git.png)
 
 A vault can be a Git repository (its root or a folder inside one). The
 **git plugin** runs your installed `git` — no bundled reimplementation.
@@ -509,19 +510,19 @@ The panel shows the repository of the focused document's vault:
 - A merge shows a banner with an abort button; the conflict surface is
   keep mine / keep theirs / mark resolved.
 
-![Git decorations in the Files panel](manual/img/git-files-badges.png)
+![Git decorations in the Files panel](img/git-files-badges.png)
 
 Changed files carry status badges (`M` modified, `U` untracked) and
 tones in the Files panel. The `git.path` is configurable in Settings →
 *Git*.
 
-![The diff dialog](manual/img/dialog-diff.png)
+![The diff dialog](img/dialog-diff.png)
 
 ---
 
 ## 13. Diagrams (draw.io)
 
-![A diagram embedded in a note](manual/img/editor-drawio-embed.png)
+![A diagram embedded in a note](img/editor-drawio-embed.png)
 
 Drey bundles **draw.io** offline — nothing is sent anywhere.
 
@@ -534,7 +535,7 @@ Drey bundles **draw.io** offline — nothing is sent anywhere.
   nothing extra. Which format a new diagram gets is set in Settings →
   *Diagrams* (SVG by default).
 
-![The draw.io editor tab](manual/img/tab-drawio.png)
+![The draw.io editor tab](img/tab-drawio.png)
 
 Opening a diagram file opens draw.io in its own tab — **auto-saving**,
 no manual `Ctrl+S`. A changed picture reloads in open notes
@@ -560,7 +561,7 @@ automatically.
 
 ## 15. Panes, tabs and layout
 
-![Two panes side by side](manual/img/panes-split.png)
+![Two panes side by side](img/panes-split.png)
 
 - **Split the editor**: a tab's context menu (*Split right / Split
   down*), or `Ctrl+Alt+Enter` / `Ctrl+Alt+Shift+Enter`. `F6` /
@@ -580,29 +581,29 @@ automatically.
   across restarts.
 - **Open windows** panel lists every open document across panes:
 
-![The Open windows panel](manual/img/panel-windows.png)
+![The Open windows panel](img/panel-windows.png)
 
 Other panels: **Outline** shows the open note's heading tree (click to
 jump, fold levels) …
 
-![The Outline panel](manual/img/panel-outline.png)
+![The Outline panel](img/panel-outline.png)
 
 … and **Backlinks** lists every note that links to the open one, grouped
 by file and section.
 
-![The Backlinks panel](manual/img/panel-backlinks.png)
+![The Backlinks panel](img/panel-backlinks.png)
 
 ---
 
 ## 16. Quick switcher and command palette
 
-![The file palette](manual/img/palette-files.png)
+![The file palette](img/palette-files.png)
 
 `Ctrl+P` opens the **quick switcher**: fuzzy-search every file of every
 vault, session-visited documents first, `Ctrl+Enter` opens beside the
 current tab, and a no-match query offers *Create note*.
 
-![The command palette](manual/img/palette-commands.png)
+![The command palette](img/palette-commands.png)
 
 `Ctrl+Shift+P` opens the **command palette** — every registered command
 with its shortcut (same actions as the menus, plus *Reset layout*,
@@ -621,7 +622,7 @@ history store (never in the vault; bounded in Settings → *Vault*).
 palette) lists versions with a diff against your current buffer;
 **Restore** loads a version into the editor — saving keeps it.
 
-![The file history dialog](manual/img/dialog-history.png)
+![The file history dialog](img/dialog-history.png)
 
 ### Save conflicts
 
@@ -630,7 +631,7 @@ refuses to overwrite: the **merge view** opens — *on disk | result |
 mine* — with per-block checkboxes and an editable result column. The
 meta bar's "Changed on disk" button opens the same view early.
 
-![The conflict merge view](manual/img/dialog-conflict.png)
+![The conflict merge view](img/dialog-conflict.png)
 
 ### Further safety nets
 
@@ -673,7 +674,7 @@ live preview.
 
 ### Settings: Appearance {#settings-appearance}
 
-![Appearance settings](manual/img/settings-appearance.png)
+![Appearance settings](img/settings-appearance.png)
 
 Two bespoke themes ship — **Drey** (terracotta) and **Anthrazit**
 (neutral charcoal, blue accent, AA contrast; the default) — plus a
@@ -705,7 +706,7 @@ See [Assistant tools and MCP](#11-assistant-tools-and-mcp).
 
 ### Settings: Panels & plugins {#settings-panels-plugins}
 
-![Panels & plugins settings](manual/img/settings-panels-plugins.png)
+![Panels & plugins settings](img/settings-panels-plugins.png)
 
 One switch per dock panel and per discovered plugin (`plugins.disabled`
 applies on restart), plus each plugin's live status. Third-party
@@ -718,7 +719,7 @@ and the personal word list.
 
 ### Settings: Vault {#settings-vault}
 
-![Vault settings](manual/img/settings-vault.png)
+![Vault settings](img/settings-vault.png)
 
 - **Watch for external changes** (off by default) — the opt-in file
   watcher; with it off, use Refresh.
@@ -728,25 +729,46 @@ and the personal word list.
 
 ### Plugin-contributed pages
 
-![Actions settings](manual/img/settings-actions.png)
-![Assistant retrieval settings](manual/img/settings-assistant-retrieval.png)
-![Diagrams settings](manual/img/settings-diagrams.png)
-![Git settings](manual/img/settings-git.png)
-![Tags settings](manual/img/settings-tags.png)
-![Templates settings](manual/img/settings-templates.png)
-![Daily notes settings](manual/img/settings-daily-notes.png)
-![Entry format settings](manual/img/settings-entry-format.png)
-![Spelling settings](manual/img/settings-spelling.png)
-![About](manual/img/settings-about.png)
+![Actions settings](img/settings-actions.png)
+![Assistant retrieval settings](img/settings-assistant-retrieval.png)
+![Diagrams settings](img/settings-diagrams.png)
+![Git settings](img/settings-git.png)
+![Tags settings](img/settings-tags.png)
+![Templates settings](img/settings-templates.png)
+![Daily notes settings](img/settings-daily-notes.png)
+![Entry format settings](img/settings-entry-format.png)
+![Spelling settings](img/settings-spelling.png)
+![About](img/settings-about.png)
 
 ---
 
-## 19. Keyboard shortcuts
+## 19. Getting help
+
+The **Help** menu in the title bar has everything:
+
+- **User manual** (`F1`) — this manual, opened inside the app as a
+  read-only pinned tab. Screenshots included; it scrolls and follows
+  links like any document.
+- **Keyboard shortcuts** — a generated list of every command this build
+  knows, base and plugins alike, with its current shortcut. It always
+  matches the command palette, because it is built from the same
+  registry at the moment you open it.
+- **About Drey** — version, build number and licence information (the
+  same page as Settings → *About*).
+
+Help documents are normal tabs in every other respect: they can be
+dragged to another pane, and closing one loses nothing — the Help menu
+brings them back.
+
+---
+
+## 20. Keyboard shortcuts
 
 `Ctrl` is `Cmd` on macOS. `Mod` below means exactly that.
 
 | Shortcut | Action |
 | --- | --- |
+| `F1` | This manual |
 | `Ctrl+Alt+N` | Quick capture into today's daily note (global, while Drey runs) |
 | `Mod+N` | New note |
 | `Mod+S` / `Mod+Shift+S` / `Mod+Alt+S` | Save / Save as… / Save all |
@@ -764,11 +786,13 @@ and the personal word list.
 | `/` on an empty line | Slash menu (Entry, templates, formatting) |
 | `Esc` | Close menus, dialogs, drag operations |
 
-The command palette lists every command with its current shortcut.
+The command palette lists every command with its current shortcut — and
+so does Help → **Keyboard shortcuts**, as a document you can keep open
+beside your notes.
 
 ---
 
-## 20. Where your data lives
+## 21. Where your data lives
 
 | Data | Location |
 | --- | --- |
@@ -785,7 +809,7 @@ history store is deliberately outside it).
 
 ---
 
-## 21. Troubleshooting
+## 22. Troubleshooting
 
 - **"LLM features are off"** — the master switch in Settings → LLM is
   off, or no model is selected. The request log on the same page shows
