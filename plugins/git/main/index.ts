@@ -1,15 +1,23 @@
+import { access, readFile, stat } from 'node:fs/promises';
+import { join } from 'node:path';
 import type { MainPluginContext, MainPluginModule } from '../../../shared/plugin-api';
 import {
   BRANCH_FORMAT,
   LOG_FORMAT,
+  STASH_FORMAT,
+  isCommitId,
   isPlausibleBranchName,
+  mergeSourceFromMessage,
   parseBranches,
   parseLog,
   parseNameStatus,
+  parseStashList,
   parseStatus,
   toRepoPath,
   type GitBranch,
   type GitLogEntry,
+  type GitOperation,
+  type GitStash,
   type VaultGitState,
 } from '../shared/status';
 import { GitError, GitRunner } from './git-runner';
@@ -35,12 +43,15 @@ interface Repo {
   readonly prefix: string;
   /** Absolute vault folder -- the cwd of every vault-scoped command. */
   readonly cwd: string;
+  /** Absolute git directory (`.git`, or the worktree's own) -- where `MERGE_HEAD` lives. */
+  readonly gitDir: string;
 }
 
 type Located = { kind: 'repo'; repo: Repo } | { kind: 'none'; detail?: string } | { kind: 'no-git' };
 
 const REFRESH_DEBOUNCE_MS = 250;
 const LOG_LIMIT = 50;
+const FILE_LOG_LIMIT = 100;
 
 function vaultIdOf(payload: unknown): string {
   const id = (payload as { vaultId?: unknown } | null)?.vaultId;
@@ -48,6 +59,19 @@ function vaultIdOf(payload: unknown): string {
     throw new Error('No vault given.');
   }
   return id;
+}
+
+function stringOf(payload: unknown, key: string): string {
+  const value = (payload as Record<string, unknown> | null)?.[key];
+  return typeof value === 'string' ? value : '';
+}
+
+function stashRef(payload: unknown): string {
+  const index = (payload as { index?: unknown } | null)?.index;
+  if (typeof index !== 'number' || !Number.isInteger(index) || index < 0) {
+    throw new Error('No stash given.');
+  }
+  return `stash@{${index}}`;
 }
 
 function pathsOf(payload: unknown): string[] {
@@ -75,11 +99,13 @@ const plugin: MainPluginModule = {
         result = { kind: 'none' };
       } else {
         try {
-          const out = await git.run(vault.path, ['rev-parse', '--show-toplevel', '--show-prefix'], {
-            readOnly: true,
-          });
-          const [root = '', prefix = ''] = out.split(/\r?\n/);
-          result = { kind: 'repo', repo: { root, prefix, cwd: vault.path } };
+          const out = await git.run(
+            vault.path,
+            ['rev-parse', '--show-toplevel', '--show-prefix', '--absolute-git-dir'],
+            { readOnly: true },
+          );
+          const [root = '', prefix = '', gitDir = ''] = out.split(/\r?\n/);
+          result = { kind: 'repo', repo: { root, prefix, cwd: vault.path, gitDir } };
         } catch (error) {
           if (error instanceof GitError && error.kind === 'not-found') {
             result = { kind: 'no-git' };
@@ -107,6 +133,34 @@ const plugin: MainPluginModule = {
       return found.repo;
     };
 
+    /** The merge in progress (`MERGE_HEAD` exists), with what is merged in. */
+    const readOperation = async (repo: Repo): Promise<GitOperation | null> => {
+      try {
+        await access(join(repo.gitDir, 'MERGE_HEAD'));
+      } catch {
+        return null;
+      }
+      const message = await readFile(join(repo.gitDir, 'MERGE_MSG'), 'utf8').catch(() => '');
+      return { kind: 'merge', source: mergeSourceFromMessage(message) };
+    };
+
+    const readFetchedAt = async (repo: Repo): Promise<string | null> => {
+      try {
+        return (await stat(join(repo.gitDir, 'FETCH_HEAD'))).mtime.toISOString();
+      } catch {
+        return null;
+      }
+    };
+
+    const countStashes = async (repo: Repo): Promise<number> => {
+      try {
+        const out = await git.run(repo.root, ['stash', 'list', '--format=%gd'], { readOnly: true });
+        return out.split(/\r?\n/).filter((l) => l !== '').length;
+      } catch {
+        return 0;
+      }
+    };
+
     const computeState = async (vaultId: string): Promise<VaultGitState> => {
       const found = await locate(vaultId);
       if (found.kind === 'no-git') {
@@ -129,7 +183,22 @@ const plugin: MainPluginModule = {
         const total = all.split('\0').filter((p) => p !== '').length;
         stagedOutside = Math.max(0, total - status.staged.length);
       }
-      return { vaultId, state: 'ok', root: repo.root, prefix: repo.prefix, status, stagedOutside };
+      const [operation, fetchedAt, stashCount] = await Promise.all([
+        readOperation(repo),
+        readFetchedAt(repo),
+        countStashes(repo),
+      ]);
+      return {
+        vaultId,
+        state: 'ok',
+        root: repo.root,
+        prefix: repo.prefix,
+        status,
+        stagedOutside,
+        operation,
+        fetchedAt,
+        stashCount,
+      };
     };
 
     /** Recomputes every vault's (or one vault's) state and pushes the full list. */
@@ -273,8 +342,30 @@ const plugin: MainPluginModule = {
       return parseBranches(out);
     });
 
+    /** Commits HEAD has that no remote has: what a push would send. */
+    const unpushedIds = async (repo: Repo, upstream: string | null): Promise<Set<string>> => {
+      try {
+        let args: string[];
+        if (upstream !== null) {
+          args = ['rev-list', `${upstream}..HEAD`];
+        } else {
+          // Never published: everything counts, but only if there is a remote at all.
+          const remotes = await git.run(repo.root, ['remote'], { readOnly: true });
+          if (remotes.trim() === '') {
+            return new Set();
+          }
+          args = ['rev-list', 'HEAD', '--not', '--remotes'];
+        }
+        const out = await git.run(repo.root, args, { readOnly: true });
+        return new Set(out.split(/\r?\n/).filter((l) => l !== ''));
+      } catch {
+        return new Set();
+      }
+    };
+
     ctx.ipc.handle('log', async (payload): Promise<GitLogEntry[]> => {
-      const repo = await repoOf(vaultIdOf(payload));
+      const vaultId = vaultIdOf(payload);
+      const repo = await repoOf(vaultId);
       if ((await headOf(repo)) === '') {
         return []; // a repository without commits has no log
       }
@@ -283,7 +374,53 @@ const plugin: MainPluginModule = {
         ['log', '-n', String(LOG_LIMIT), `--pretty=format:${LOG_FORMAT}`],
         { readOnly: true },
       );
+      const known = states.get(vaultId);
+      const unpushed = await unpushedIds(repo, known?.state === 'ok' ? known.status.upstream : null);
+      return parseLog(out).map((entry) =>
+        entry.id !== undefined && unpushed.has(entry.id) ? { ...entry, unpushed: true } : entry,
+      );
+    });
+
+    /** The commits that changed one file, newest first (renames end the list). */
+    ctx.ipc.handle('fileLog', async (payload): Promise<GitLogEntry[]> => {
+      const repo = await repoOf(vaultIdOf(payload));
+      const path = stringOf(payload, 'path');
+      if (path === '') {
+        throw new Error('No file given.');
+      }
+      if ((await headOf(repo)) === '') {
+        return [];
+      }
+      const out = await git.run(
+        repo.root,
+        ['log', '-n', String(FILE_LOG_LIMIT), `--pretty=format:${LOG_FORMAT}`, '--', toRepoPath(path, repo.prefix)],
+        { readOnly: true },
+      );
       return parseLog(out);
+    });
+
+    /** What one commit did to one file, as git's unified diff (the panel parses it). */
+    ctx.ipc.handle('filePatch', async (payload): Promise<string> => {
+      const repo = await repoOf(vaultIdOf(payload));
+      const path = stringOf(payload, 'path');
+      const hash = stringOf(payload, 'hash');
+      if (path === '' || !isCommitId(hash)) {
+        throw new Error('No file or commit given.');
+      }
+      return git.run(
+        repo.root,
+        ['show', '--format=', '--no-color', '--no-ext-diff', '--unified=3', hash, '--', toRepoPath(path, repo.prefix)],
+        { readOnly: true },
+      );
+    });
+
+    /** The message of the last commit -- what "Amend" starts from. */
+    ctx.ipc.handle('headMessage', async (payload): Promise<string> => {
+      const repo = await repoOf(vaultIdOf(payload));
+      if ((await headOf(repo)) === '') {
+        return '';
+      }
+      return (await git.run(repo.root, ['log', '-1', '--format=%B'], { readOnly: true })).trim();
     });
 
     /**
@@ -303,7 +440,10 @@ const plugin: MainPluginModule = {
         content = await ctx.vault.read(path, { vaultId }).catch(() => null);
       } else {
         const repo = await repoOf(vaultId);
-        const spec = `${request.rev === 'head' ? 'HEAD' : ''}:${toRepoPath(path, repo.prefix)}`;
+        const rev = request.rev;
+        // 'head' = the last commit, a hex id = that commit, anything else = the index.
+        const treeish = rev === 'head' ? 'HEAD' : typeof rev === 'string' && isCommitId(rev) ? rev : '';
+        const spec = `${treeish}:${toRepoPath(path, repo.prefix)}`;
         content = await git.run(repo.root, ['show', spec], { readOnly: true }).catch(() => null);
       }
       if (content !== null && content.includes('\0')) {
@@ -361,14 +501,54 @@ const plugin: MainPluginModule = {
       return refreshNow(vaultId);
     });
 
+    /**
+     * `commit`: the staged changes with `message`. During a merge an empty
+     * message keeps git's own (`MERGE_MSG`); `amend` rewrites the last
+     * commit (an empty message keeps its text); `push` sends the branch
+     * right after. A commit whose push failed stays created -- the error
+     * says so.
+     */
     ctx.ipc.handle('commit', async (payload) => {
       const vaultId = vaultIdOf(payload);
       const repo = await repoOf(vaultId);
-      const message = (payload as { message?: unknown }).message;
-      if (typeof message !== 'string' || message.trim() === '') {
-        throw new Error('Enter a commit message.');
+      const request = payload as { message?: unknown; amend?: unknown; push?: unknown };
+      const message = typeof request.message === 'string' ? request.message : '';
+      const amend = request.amend === true;
+      const state = await computeState(vaultId);
+      if (state.state !== 'ok') {
+        throw new Error('This vault is not a Git repository.');
       }
-      await git.run(repo.root, ['commit', '-F', '-'], { input: message });
+      const merging = state.operation !== null;
+      if (merging && state.status.conflicts.length > 0) {
+        throw new Error('Resolve all merge conflicts before completing the merge.');
+      }
+      if (merging && amend) {
+        throw new Error('A merge in progress cannot be amended. Complete or abort it first.');
+      }
+      if (amend && state.status.upstream !== null && state.status.ahead === 0) {
+        throw new Error(
+          `The last commit is already on ${state.status.upstream}. Amending it would rewrite published history, and Drey never force-pushes.`,
+        );
+      }
+      const args = ['commit', ...(amend ? ['--amend'] : [])];
+      if (message.trim() === '') {
+        if (!merging && !amend) {
+          throw new Error('Enter a commit message.');
+        }
+        await git.run(repo.root, [...args, '--no-edit']);
+      } else {
+        await git.run(repo.root, [...args, '-F', '-'], { input: message });
+      }
+      if (request.push === true) {
+        try {
+          const pushArgs = await pushArguments(vaultId, repo);
+          await cancellable(vaultId, (signal) => git.run(repo.root, pushArgs, { signal }));
+        } catch (error) {
+          await refreshNow(vaultId).catch(() => undefined);
+          const reason = error instanceof Error ? error.message : String(error);
+          throw new Error(`The commit was created, but pushing it failed: ${reason}`);
+        }
+      }
       return refreshNow(vaultId);
     });
 
@@ -426,29 +606,153 @@ const plugin: MainPluginModule = {
       return refreshNow(vaultId);
     });
 
-    ctx.ipc.handle('push', async (payload) => {
-      const vaultId = vaultIdOf(payload);
-      const repo = await repoOf(vaultId);
+    /** The `git push` arguments for the vault's branch (a new branch is published with `-u`). */
+    const pushArguments = async (vaultId: string, repo: Repo): Promise<string[]> => {
       const state = await computeState(vaultId);
       if (state.state !== 'ok') {
         throw new Error('This vault is not a Git repository.');
       }
       const { branch, upstream } = state.status;
-      let args: string[] = ['push'];
-      if (upstream === null) {
-        if (branch === null) {
-          throw new Error('HEAD is detached: switch to a branch before pushing.');
-        }
-        const remotes = (await git.run(repo.root, ['remote'], { readOnly: true }))
-          .split(/\r?\n/)
-          .filter((r) => r !== '');
-        if (remotes.length === 0) {
-          throw new Error('This repository has no remote to push to.');
-        }
-        // First push of a new branch: publish it and remember the upstream.
-        args = ['push', '-u', remotes.includes('origin') ? 'origin' : remotes[0], branch];
+      if (upstream !== null) {
+        return ['push'];
       }
+      if (branch === null) {
+        throw new Error('HEAD is detached: switch to a branch before pushing.');
+      }
+      const remotes = (await git.run(repo.root, ['remote'], { readOnly: true }))
+        .split(/\r?\n/)
+        .filter((r) => r !== '');
+      if (remotes.length === 0) {
+        throw new Error('This repository has no remote to push to.');
+      }
+      return ['push', '-u', remotes.includes('origin') ? 'origin' : remotes[0], branch];
+    };
+
+    ctx.ipc.handle('push', async (payload) => {
+      const vaultId = vaultIdOf(payload);
+      const repo = await repoOf(vaultId);
+      const args = await pushArguments(vaultId, repo);
       await cancellable(vaultId, (signal) => git.run(repo.root, args, { signal }));
+      return refreshNow(vaultId);
+    });
+
+    // -- merge (ADR-0065 later change) ---------------------------------------
+
+    /** True while the repository has a merge in progress. */
+    const mergeInProgress = async (repo: Repo): Promise<boolean> => (await readOperation(repo)) !== null;
+
+    /**
+     * Merges `name` into the current branch. A merge that stops on
+     * conflicts is not a failure here: the panel shows the merge state and
+     * the conflicted files, which are resolved and staged, then the merge
+     * is completed with a commit.
+     */
+    ctx.ipc.handle('merge', async (payload) => {
+      const vaultId = vaultIdOf(payload);
+      const repo = await repoOf(vaultId);
+      const name = stringOf(payload, 'name');
+      if (!isPlausibleBranchName(name)) {
+        throw new Error(`Not a valid branch name: ${name}`);
+      }
+      const before = await headOf(repo);
+      try {
+        await git.run(repo.root, ['merge', '--no-edit', name]);
+      } catch (error) {
+        if (!(await mergeInProgress(repo))) {
+          throw error;
+        }
+        // Stopped on conflicts: git has written the markers into the files.
+        ctx.vault.announceChanges({ vaultId });
+        return refreshNow(vaultId);
+      }
+      await announceBetween(vaultId, repo, before, await headOf(repo));
+      return refreshNow(vaultId);
+    });
+
+    ctx.ipc.handle('mergeAbort', async (payload) => {
+      const vaultId = vaultIdOf(payload);
+      const repo = await repoOf(vaultId);
+      await git.run(repo.root, ['merge', '--abort']);
+      ctx.vault.announceChanges({ vaultId });
+      return refreshNow(vaultId);
+    });
+
+    /**
+     * Settles one conflicted file with the current branch's version
+     * (`ours`) or the incoming one (`theirs`) and stages it. When that side
+     * deleted the file, the file is removed instead.
+     */
+    ctx.ipc.handle('resolve', async (payload) => {
+      const vaultId = vaultIdOf(payload);
+      const repo = await repoOf(vaultId);
+      const path = stringOf(payload, 'path');
+      const side = stringOf(payload, 'side');
+      if (path === '' || (side !== 'ours' && side !== 'theirs')) {
+        throw new Error('No file or side given.');
+      }
+      let present = true;
+      try {
+        await git.run(repo.cwd, ['checkout', `--${side}`, '--', path], {}, repo.root);
+      } catch {
+        present = false;
+      }
+      if (present) {
+        await git.run(repo.cwd, ['add', '--', path], {}, repo.root);
+        ctx.vault.announceChanges({ vaultId, changedPaths: [path] });
+      } else {
+        await git.run(repo.cwd, ['rm', '-f', '--quiet', '--', path], {}, repo.root);
+        ctx.vault.announceChanges({ vaultId, deletedPaths: [path] });
+      }
+      return refreshNow(vaultId);
+    });
+
+    // -- stash ---------------------------------------------------------------
+
+    ctx.ipc.handle('stashList', async (payload): Promise<GitStash[]> => {
+      const repo = await repoOf(vaultIdOf(payload));
+      const out = await git.run(repo.root, ['stash', 'list', `--format=${STASH_FORMAT}`], { readOnly: true });
+      return parseStashList(out);
+    });
+
+    /** Puts the vault's changes (untracked files included) away and restores a clean tree. */
+    ctx.ipc.handle('stashPush', async (payload) => {
+      const vaultId = vaultIdOf(payload);
+      const repo = await repoOf(vaultId);
+      const note = stringOf(payload, 'message').trim();
+      const state = await computeState(vaultId);
+      if (state.state !== 'ok' || state.status.staged.length + state.status.unstaged.length === 0) {
+        throw new Error('There is nothing to stash.');
+      }
+      await git.run(
+        repo.cwd,
+        ['stash', 'push', '--include-untracked', ...(note === '' ? [] : ['-m', note]), '--', '.'],
+        {},
+        repo.root,
+      );
+      ctx.vault.announceChanges({ vaultId });
+      return refreshNow(vaultId);
+    });
+
+    /** Applies a stash and drops it (git keeps it when applying conflicts). */
+    ctx.ipc.handle('stashPop', async (payload) => {
+      const vaultId = vaultIdOf(payload);
+      const repo = await repoOf(vaultId);
+      const ref = stashRef(payload);
+      try {
+        await git.run(repo.root, ['stash', 'pop', ref]);
+      } catch (error) {
+        ctx.vault.announceChanges({ vaultId });
+        await refreshNow(vaultId).catch(() => undefined);
+        throw error;
+      }
+      ctx.vault.announceChanges({ vaultId });
+      return refreshNow(vaultId);
+    });
+
+    ctx.ipc.handle('stashDrop', async (payload) => {
+      const vaultId = vaultIdOf(payload);
+      const repo = await repoOf(vaultId);
+      await git.run(repo.root, ['stash', 'drop', stashRef(payload)]);
       return refreshNow(vaultId);
     });
 

@@ -105,7 +105,8 @@ the template that creates them (daily notes, chat notes), as before.
   of those — the same staleness the tree itself has (ADR-0018).
 - An SSH key with a passphrase and no agent cannot prompt and fails;
   the message is git's.
-- Not in this version: clone, stash, merge / rebase surfaces (a conflict
+- Not in this version (stash, merge, amend and commit-and-push followed in
+  milestone 67, see the later change below): clone, rebase surfaces (a conflict
   shows as a status; it is resolved in the editor and staged), staging
   parts of a file, amending. Dotfiles (`.gitignore`, `.github/`) stay
   hidden in the tree, as everywhere.
@@ -115,3 +116,85 @@ the template that creates them (daily notes, chat notes), as before.
 - The parsers have a unit spec; the process layer is covered by
   `e2e/git.spec.ts` against the real git (skipped where git is not
   installed), not by the unit suite.
+
+
+## Later change — merge, stash, amend, commit and push, file history (milestone 67)
+
+The first version excluded stash, merge surfaces and amending. The owner
+asked for the whole set in one go ("zusammen"), so milestone 67 adds it
+inside the same plugin — still the installed git, still no new runtime
+dependency. What changed, and the trade-off behind each piece:
+
+**1 · Sync information and the "not pushed" marker.**
+`VaultGitState` gains `fetchedAt` (mtime of `FETCH_HEAD`), `stashCount`
+and `operation`. The branch button's tooltip names the upstream, how many
+commits are not pushed / to pull and when the last fetch ran; the Pull and
+Push icons carry the counts in their titles. History rows get `unpushed`
+(`rev-list <upstream>..HEAD`; without an upstream every commit counts, but
+only when a remote exists — a purely local repository shows no markers).
+
+**2 · Commit and push.**
+`commit` takes `push: true`. A second icon (`Ctrl+Shift+Enter`) runs
+commit and push as one cancellable command. If the push fails the commit
+stays; the error says "The commit was created, but pushing it failed",
+because rolling a commit back would be the more surprising behaviour.
+
+**3 · Git history of a file.**
+`fileLog` (commits that touched the path, no `--follow`, so a rename ends
+the list) and `filePatch` (`git show --format= -p <commit> -- <path>`,
+parsed by `parsePatch`). The dialog is reached from the editor context
+menu ("Git history…") and the command `git.fileHistory`; the plugin API
+has no hook into the tab or Files-panel context menu, and adding one was
+not worth a base change. "Restore this version" puts the commit's content
+into the editor buffer (one undo step, saved by the user), like the note
+history (ADR-0060). It is named **Git history** because "File history…"
+is the local note history.
+
+**4 · Merge.**
+*Merge a branch…* (the panel's "more" menu or `git.merge`) runs
+`git merge --no-edit <branch>`. A merge that stops on conflicts is not an
+error: main detects `MERGE_HEAD`, the state carries
+`operation: { kind: 'merge', source }`, and the panel shows a banner
+("Merging <branch> · n conflicts left") with an abort icon. Each
+conflicted file has *Keep mine* / *Keep theirs* (`checkout --ours|--theirs`
+then `add`; when that side deleted the file, `rm`), *Mark as resolved*
+(stage, as before) and *Open file* for hand editing. The commit icon is
+disabled while conflicts remain; with none left, an empty message
+completes the merge with git's own (`commit --no-edit`). Branch switching,
+stash and amend are disabled during a merge. A conflicting `git pull`
+lands in the same state. Rebase and cherry-pick stay out: their "ours" /
+"theirs" are reversed and a second in-progress state would double the
+surface for little use in a documentation repository.
+
+**5 · Stash.**
+*Stash changes* runs `stash push --include-untracked -- .` from the vault
+folder, so only the vault's files are put away; *Stashes…* lists them and
+applies (`stash pop`, which keeps the stash when applying conflicts —
+git's behaviour) or deletes one. Both ask first because files change on
+disk; stash, pop and abort are refused while tabs are unsaved, like
+checkout and pull.
+
+**6 · Amend.**
+*Amend the last commit* switches the commit box to amend mode (the last
+message is loaded when the box is empty). It is refused when the commit is
+already on the upstream: amending it would need a force-push, which Drey
+never issues. With no upstream, or commits not pushed, amend is allowed.
+`commit --amend --no-edit` runs when the message is left empty.
+
+**Still out:** clone, rebase / cherry-pick, partial (hunk) staging,
+force-push, a graph view, committing to a different author.
+
+**Consequences.**
+- The icon set (`src/app/icons/icon.ts`) gains `git-merge`, `archive`,
+  `history`, `upload`, `triangle-alert`; the manifest declares the
+  `editor` permission (context-menu row).
+- Each status round now also reads `stash list` (one more git process)
+  and two file stats; `status` stays vault-scoped.
+- The process layer is covered by `e2e/git.spec.ts` and by a manual
+  check against a scratch repository (merge with a modify/delete
+  conflict, ours/theirs, stash push / pop, amend, file patch); the new
+  parsers (`parseStashList`, `parsePatch`, `mergeSourceFromMessage`,
+  `isCommitId`) have unit specs.
+- The status colours are overridden for the Anthrazit theme only (see
+  ADR-0057, later change); Drey and the published themes keep the shared
+  mid-tones.

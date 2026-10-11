@@ -460,3 +460,189 @@ button.git-history:hover {
   font-size: 0.72rem;
   color: var(--text-6);
 }
+
+
+/* ---- Stage A / B (ADR-0065 later change): banners, unpushed marker,
+        stashes, the Git history dialog ---- */
+
+.git-banner[hidden] {
+  display: none;
+}
+
+.git-merge,
+.git-amend {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 4px 4px 8px;
+  border: 1px solid color-mix(in srgb, var(--status-conflict) 45%, transparent);
+  border-radius: var(--radius-xs);
+  background: color-mix(in srgb, var(--status-conflict) 12%, transparent);
+}
+
+.git-amend {
+  border-color: color-mix(in srgb, var(--accent) 45%, transparent);
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+}
+
+.git-merge .text,
+.git-amend .text {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  font-size: 0.8rem;
+  color: var(--text-3);
+}
+
+.git-merge .text .sub,
+.git-amend .text .sub {
+  font-size: 0.76rem;
+  color: var(--text-6);
+}
+
+.git-merge svg.alert {
+  color: var(--status-conflict);
+}
+
+.git-commit .meta .unpushed {
+  color: var(--accent-text, var(--accent));
+}
+
+.git-stash-list {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  max-height: 50vh;
+  overflow-y: auto;
+}
+
+.git-stash {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 4px 4px 4px 8px;
+  border-radius: var(--radius-xs);
+}
+
+.git-stash:hover {
+  background: var(--hover-bg);
+}
+
+.git-stash .text {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.git-stash .subject,
+.git-stash .meta {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.git-stash .subject {
+  font-size: 0.84rem;
+  color: var(--text-2);
+}
+
+.git-stash .meta {
+  font-size: 0.76rem;
+  color: var(--text-6);
+}
+
+.plugin-modal.git-dialog.wide {
+  width: 700px;
+  max-width: calc(100vw - 48px);
+}
+
+.git-dialog-sub {
+  margin: 0 0 12px;
+  font-size: 0.8rem;
+  color: var(--text-6);
+}
+
+.git-history-body {
+  display: flex;
+  gap: 12px;
+  height: 352px;
+}
+
+.git-history-list {
+  flex: none;
+  width: 236px;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  overflow-y: auto;
+  padding-right: 8px;
+  border-right: 1px solid var(--border);
+}
+
+.git-history-list .git-commit {
+  cursor: pointer;
+}
+
+.git-history-list .git-commit:hover,
+.git-history-list .git-commit.on {
+  background: var(--hover-bg-strong);
+}
+
+.git-history-list .git-commit.on {
+  box-shadow: inset 2px 0 0 var(--accent);
+}
+
+.git-history-detail {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.git-history-detail .head .subject {
+  font-size: 0.84rem;
+  font-weight: 600;
+  color: var(--text-heading);
+}
+
+.git-history-detail .head .meta {
+  font-size: 0.78rem;
+  color: var(--text-6);
+}
+
+.git-diff {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  background: var(--bg-editor);
+  border: 1px solid var(--field-border);
+  border-radius: var(--radius-xs);
+  font-family: var(--font-mono);
+  font-size: 0.78rem;
+  line-height: 1.6;
+}
+
+.git-diff div {
+  padding: 0 10px;
+  white-space: pre;
+  color: var(--text-3);
+}
+
+.git-diff .hunk {
+  color: var(--text-6);
+  background: var(--hover-bg);
+}
+
+.git-diff .add {
+  background: color-mix(in srgb, var(--status-added) 18%, transparent);
+  color: var(--text-primary);
+}
+
+.git-diff .del {
+  background: color-mix(in srgb, var(--status-deleted) 18%, transparent);
+  color: var(--text-primary);
+}

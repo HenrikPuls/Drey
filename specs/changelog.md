@@ -20,6 +20,43 @@ recorded as an explicit decision. The parity checklist lives in
 
 ## Recent milestones
 
+### Git: merge, stash, amend, commit and push, file history (milestone 67)
+
+- **Merge with a conflict surface.** *More → Merge a branch…* (or
+  `git.merge`) merges into the current branch. When it stops on
+  conflicts the panel shows a banner ("Merging <branch> · n conflicts
+  left", abort icon); each conflicted file has *Keep mine*, *Keep
+  theirs*, *Mark as resolved* and *Open file*. The commit icon is
+  disabled until none is left, then an empty message completes the merge
+  with git's own. A conflicting `git pull` ends in the same state.
+- **Commit and push** as a second icon (`Ctrl+Shift+Enter`, command
+  `git.commitAndPush`); a failed push keeps the commit and says so.
+- **Not pushed.** History rows of commits missing on the upstream carry
+  "↑ not pushed"; the Pull / Push icons and the branch tooltip show the
+  counts and the time of the last fetch.
+- **Git history** of the open file: editor context menu "Git history…"
+  and `git.fileHistory` open a dialog (commits left, diff right,
+  *Restore this version* puts it into the editor buffer).
+- **Stash** (vault files incl. untracked; list, apply, delete) and
+  **amend** (refused when the commit is already published — no
+  force-push).
+- Deviation from ADR-0065 (which excluded stash, merge surfaces and
+  amend): recorded as its "Later change"; docs/05 §5.38, docs/06 §6.56
+  and the roadmap follow-ups are updated. Five icons were added to the
+  vendored set. **Not yet manually verified by the owner**; the unit
+  specs (parsers) ran, the Electron e2e did not.
+
+### Anthrazit: neutral gray palette with AA contrast
+
+- **Less brown, more readable.** The Anthrazit theme moves from the warm
+  brownish charcoal to a neutral gray (dock `#222326`, editor `#18191b`,
+  fields `#2c2d31`) and every text step, the file-status colors and the
+  control borders now meet WCAG AA (4.5:1 text, 3:1 borders). Only the
+  `:root[data-theme='anthrazit']` block and the theme seed changed — other
+  themes (Drey, published ones) are untouched. Rationale and values:
+  ADR-0057 "Later change". **Not yet manually verified by the owner**
+  (check field borders for visual weight).
+
 ### Assistant Vault chip: pick any subset of vaults
 
 - **The Vault chip is a picker now, not a cycle.** Clicking it opens the

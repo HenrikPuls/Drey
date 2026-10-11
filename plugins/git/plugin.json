@@ -8,5 +8,5 @@
   "main": "main/index.js",
   "renderer": "renderer/index.js",
   "css": ["renderer/git.css"],
-  "permissions": ["documents", "vault", "commands", "settings", "main-process"]
+  "permissions": ["documents", "vault", "editor", "commands", "settings", "main-process"]
 }

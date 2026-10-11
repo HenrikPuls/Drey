@@ -215,7 +215,12 @@ toolchain is removable by deleting `.tools/`). Never assume a bare `node`,
   `FileDecorationService`; the base knows no Git); a plugin that
   rewrote the working tree calls `ctx.vault.announceChanges`. A save
   sets `updated:` only where the note already has it and **never adds
-  frontmatter** (`touchUpdated`), in every vault.
+  frontmatter** (`touchUpdated`), in every vault. Milestone 67 (ADR-0065
+  later change) adds merge with a conflict surface (keep mine / keep
+  theirs / mark resolved, abort), stash, amend (never of a pushed
+  commit — Drey does not force-push), commit and push, the "not pushed"
+  history marker and a per-file *Git history* dialog; rebase, clone and
+  hunk staging stay out.
 - **Runtime plugin system**
   ([ADR-0044](docs/09_architecture_decisions/0044-runtime-plugin-system.md)):
   a **base application** (shell, editor + panes, vault/note IO, session
@@ -429,8 +434,11 @@ Renderer (Angular):
   branch picker: switch, track a remote branch, create), commit message
   + commit, *Merge conflicts* / *Staged changes* / *Changes* lists (row
   click compares through `api.ui.showDiff`; stage / unstage / discard /
-  open), a collapsible *History*, header icons Fetch · Pull · Push ·
-  Refresh. The main entry (`GitRunner` + the pure parsers in
+  open), a collapsible *History* (commits not on the upstream carry
+  "↑ not pushed"), header icons Fetch · Pull · Push · More (merge a
+  branch, stash, stashes, amend, file history) · Refresh; a merge shows
+  a banner with an abort icon, the commit box has *Commit* and *Commit
+  and push* (`Ctrl+Shift+Enter`). The main entry (`GitRunner` + the pure parsers in
   `shared/status.ts`) keeps one `VaultGitState` per vault, pushed as
   `status-updated`; the renderer turns it into Files-panel decorations.
   Asks before a commit with unsaved tabs; refuses checkout / pull while
@@ -678,7 +686,7 @@ be called out explicitly (see Working Style below), not introduced silently.
   `title` + `aria-label`, drawn with the global `.icon-btn` / `.seg`
   classes (plugins get glyphs via `api.ui.icon`); panel fields carry no
   placeholder text. Two bespoke themes ship — **Drey** (terracotta) and
-  **Anthrazit** (warm charcoal, blue accent; the fresh-install default).
+  **Anthrazit** (neutral charcoal gray, blue accent, AA contrast — ADR-0057 later change; the fresh-install default).
 - Overall layout ([ADR-0019](docs/09_architecture_decisions/0019-movable-dock-panels-and-layout-state.md)):
   a frameless window with a **custom titlebar** (accent square + the
   left dock toggle + an HTML File/Edit/Selection/View menu bar + the right
@@ -847,7 +855,7 @@ packaging verified — see `docs/07_deployment_view.md`).
 closed 2026-10-10). This file does not restate them — the per-milestone
 record is:
 
-- [specs/changelog.md](specs/changelog.md) — milestones 22–66, newest
+- [specs/changelog.md](specs/changelog.md) — milestones 22–67, newest
   first, plus requirements and fixes
 - [docs/milestones-done.md](docs/milestones-done.md) — the archived
   build log, milestones 1–27
@@ -863,9 +871,11 @@ Open work and its order live in [specs/roadmap.md](specs/roadmap.md)
 ("Next milestones") — that list is binding; keep this summary in step
 with it.
 
-- **Last completed:** milestone 66 — Office documents open in their own
-  program (ADR-0066, the remainder of Req-2).
-  Milestones 59–66 are code-complete, owner verification pending.
+- **Last completed:** milestone 67 — the Git plugin gains merge with
+  conflict handling, stash, amend, commit and push, the "not pushed"
+  marker and a per-file Git history (ADR-0065 later change). Before it:
+  milestone 66 — Office documents open in their own program (ADR-0066).
+  Milestones 59–67 are code-complete, owner verification pending.
 - **Next, in order:** nothing ordered — the owner picks from the backlog
   in `specs/roadmap.md`.
 

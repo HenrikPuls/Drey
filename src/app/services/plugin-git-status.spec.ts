@@ -1,10 +1,14 @@
 import {
   changeCount,
   decorationsFor,
+  isCommitId,
   isPlausibleBranchName,
+  mergeSourceFromMessage,
   parseBranches,
   parseLog,
   parseNameStatus,
+  parsePatch,
+  parseStashList,
   parseStatus,
   toRepoPath,
   toVaultPath,
@@ -178,6 +182,91 @@ describe('parseLog', () => {
       { hash: 'b2c3d4e', author: 'Grace Hopper', date: '2026-10-08T17:00:00+02:00', subject: 'Initial commit' },
     ]);
     expect(parseLog('')).toEqual([]);
+  });
+
+  it('carries the full commit id when the log was asked for it', () => {
+    const out = `a1b2c3d\x1fAda\x1f2026-10-09T08:15:00+02:00\x1fFix\x1f${A}\x1e`;
+    expect(parseLog(out)).toEqual([
+      { hash: 'a1b2c3d', author: 'Ada', date: '2026-10-09T08:15:00+02:00', subject: 'Fix', id: A },
+    ]);
+  });
+});
+
+describe('parseStashList', () => {
+  it('numbers the stashes in git order and keeps the description whole', () => {
+    const out =
+      'On main: before the merge | draft\x1f2026-10-10T21:00:00+02:00\x1e\n' +
+      'WIP on feature/x: 1c7ad90 docs: initial\x1f2026-10-01T09:30:00+02:00\x1e';
+    expect(parseStashList(out)).toEqual([
+      { index: 0, message: 'On main: before the merge | draft', date: '2026-10-10T21:00:00+02:00' },
+      { index: 1, message: 'WIP on feature/x: 1c7ad90 docs: initial', date: '2026-10-01T09:30:00+02:00' },
+    ]);
+    expect(parseStashList('')).toEqual([]);
+  });
+});
+
+describe('mergeSourceFromMessage', () => {
+  it('reads the merged branch from git\'s merge message', () => {
+    expect(mergeSourceFromMessage("Merge branch 'feature/adr-0067'\n\n# Conflicts:\n")).toBe('feature/adr-0067');
+    expect(mergeSourceFromMessage("Merge remote-tracking branch 'origin/main'")).toBe('origin/main');
+    expect(mergeSourceFromMessage("Merge tag 'v1.2'")).toBe('v1.2');
+  });
+
+  it('returns null for a message it does not know', () => {
+    expect(mergeSourceFromMessage('')).toBeNull();
+    expect(mergeSourceFromMessage('Fix the build')).toBeNull();
+  });
+});
+
+describe('parsePatch', () => {
+  const patch = [
+    'diff --git a/docs/risks.md b/docs/risks.md',
+    'index 1c7ad90..3fa91c2 100644',
+    '--- a/docs/risks.md',
+    '+++ b/docs/risks.md',
+    '@@ -3,4 +3,5 @@ 11.2 Technical debt',
+    ' | ID | Item |',
+    '-| TD-03 | Instance lock |',
+    '+| TD-03 | Instance lock (dev) |',
+    '+| TD-04 | Remote display spike |',
+    '\\ No newline at end of file',
+    ' | TD-05 | Terminology |',
+    '',
+  ].join('\n');
+
+  it('drops the file header and sorts lines into hunk, add, del and context', () => {
+    expect(parsePatch(patch)).toEqual([
+      { kind: 'hunk', text: '@@ -3,4 +3,5 @@ 11.2 Technical debt' },
+      { kind: 'context', text: '| ID | Item |' },
+      { kind: 'del', text: '| TD-03 | Instance lock |' },
+      { kind: 'add', text: '| TD-03 | Instance lock (dev) |' },
+      { kind: 'add', text: '| TD-04 | Remote display spike |' },
+      { kind: 'context', text: '| TD-05 | Terminology |' },
+    ]);
+  });
+
+  it('does not take a "---" content line of a hunk for a header', () => {
+    const out = '@@ -1,2 +1,1 @@\n----\n kept\n';
+    expect(parsePatch(out)).toEqual([
+      { kind: 'hunk', text: '@@ -1,2 +1,1 @@' },
+      { kind: 'del', text: '---' },
+      { kind: 'context', text: 'kept' },
+    ]);
+  });
+
+  it('yields nothing for a binary file or an empty patch', () => {
+    expect(parsePatch('')).toEqual([]);
+    expect(parsePatch('diff --git a/x.png b/x.png\nBinary files a/x.png and b/x.png differ\n')).toEqual([]);
+  });
+});
+
+describe('isCommitId', () => {
+  it('accepts short and full hexadecimal ids and nothing git could read as an option', () => {
+    expect(isCommitId('3fa91c2')).toBe(true);
+    expect(isCommitId(A)).toBe(true);
+    for (const bad of ['', 'abc', '--all', 'HEAD', 'main', 'abcd; rm', `${A}0`]) {
+      expect(isCommitId(bad)).toBe(false);
+    }
   });
 });
 

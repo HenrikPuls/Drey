@@ -2712,3 +2712,82 @@ vault) before the error is shown. A row click compares through
 `fileAt` — last commit ↔ staged for a staged row, staged ↔ working copy
 (the open tab's text, when there is one) for a changed row — in
 `api.ui.showDiff`.
+
+
+## 6.56 Git: merge with conflicts → settle → complete; commit and push; file history (milestone 67, [ADR-0065 later change](09_architecture_decisions/0065-git-vaults-source-control-plugin.md))
+
+```mermaid
+sequenceDiagram
+    participant User
+    participant Panel as Source control panel
+    participant Git as git plugin (main)
+    participant CLI as git (process)
+    participant Host as plugin host (main)
+
+    User->>Panel: More → Merge a branch… → pick feature/x
+    Panel->>User: Merge "feature/x" into "main"?
+    Panel->>Git: merge { vaultId, name }
+    Git->>CLI: merge --no-edit feature/x
+    CLI-->>Git: exit 1 (CONFLICT …)
+    Git->>CLI: MERGE_HEAD exists? (fs access)
+    Git->>Host: announceChanges({ vaultId })  — markers are on disk
+    Git-->>Panel: states (operation = merge, conflicts = 2)
+    Panel->>Panel: banner "Merging feature/x · 2 conflicts left", commit icon disabled
+
+    User->>Panel: Keep theirs on a.md
+    Panel->>User: confirm (a.md takes the incoming version)
+    Panel->>Git: resolve { path: a.md, side: theirs }
+    Git->>CLI: checkout --theirs -- a.md
+    alt that side deleted the file
+        Git->>CLI: rm -f --quiet -- a.md
+    else
+        Git->>CLI: add -- a.md
+    end
+    Git->>Host: announceChanges({ changedPaths | deletedPaths })
+    Git-->>Panel: states (1 conflict left)
+
+    Note over User,Panel: the second file is settled by hand in the editor, then Mark as resolved (stage)
+    User->>Panel: Complete the merge (empty message)
+    Panel->>Git: commit { message: '' }
+    Git->>CLI: commit --no-edit  (git's MERGE_MSG)
+    Git-->>Panel: states (operation = null)
+```
+
+Abort (`merge --abort`) asks first and announces the whole vault. While
+the merge is open the branch switch, stash and amend are disabled; a
+`git pull` that stops on conflicts lands in the same state.
+
+```mermaid
+sequenceDiagram
+    participant User
+    participant Panel as Source control panel
+    participant Git as git plugin (main)
+    participant CLI as git (process)
+
+    User->>Panel: Commit and push (Ctrl+Shift+Enter)
+    Panel->>Git: commit { message, amend, push: true }
+    Git->>CLI: commit -F -   (or --amend / --no-edit)
+    alt push fails
+        Git->>CLI: push [-u origin branch]
+        CLI-->>Git: rejected
+        Git-->>Panel: error "The commit was created, but pushing it failed: …"
+    else
+        Git->>CLI: push [-u origin branch]
+        Git-->>Panel: states (ahead = 0)
+    end
+
+    User->>Panel: Git history… (editor menu, command)
+    Panel->>Git: fileLog { path }
+    Git->>CLI: log -n 100 --pretty=… -- <repo path>
+    Panel->>Git: filePatch { path, hash }
+    Git->>CLI: show --format= -p <hash> -- <repo path>
+    Git-->>Panel: unified diff → parsePatch → lines
+    User->>Panel: Restore this version
+    Panel->>Git: fileAt { path, rev: hash }
+    Git-->>Panel: content
+    Panel->>Panel: documents.open + documents.setBuffer (unsaved until saved)
+```
+
+Amend is refused when the last commit is already on the upstream (it
+would need a force-push); the history rows get their "↑ not pushed"
+marker from `rev-list <upstream>..HEAD`.

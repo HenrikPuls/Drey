@@ -59,7 +59,9 @@ the MCP client with the assistant's tool groups, as milestone 63,
 req-19, draw.io diagrams, as milestone 64, and — on an owner request
 outside the list — Git vaults (req-40) as milestone 65. Its last item,
 the Req-2 Office remainder, shipped as milestone 66 — not as rendering:
-Office documents open in their own program, ADR-0066.)
+Office documents open in their own program, ADR-0066. On a further owner
+request the Git plugin followed with milestone 67: merge, stash, amend,
+commit and push, file history.)
 
 Nothing is ordered at the moment; the next item is the owner's pick from
 the backlog below.
@@ -80,9 +82,10 @@ configured servers to the Claude Code CLI provider, MCP resources /
 prompts.
 
 Follow-ups of milestone 65 (ADR-0065), none committed: clone a
-repository as a new vault, stash, a merge / rebase surface, staging
-parts of a file, amend, showing dotfiles such as `.gitignore` in the
-tree.
+repository as a new vault, a rebase / cherry-pick surface, staging
+parts of a file, showing dotfiles such as `.gitignore` in the tree.
+(Stash, merge with a conflict surface, amend, commit and push and the
+per-file Git history shipped as milestone 67.)
 
 Not ordered: **Semantic Search, remaining slices** — the core shipped as
 milestone 41 / ADR-0055 (the assistant's Vault chip: top-k section

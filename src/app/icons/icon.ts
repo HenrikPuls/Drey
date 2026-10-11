@@ -75,7 +75,12 @@ export type IconName =
   | 'panel-right'
   | 'code'
   | 'shapes'
-  | 'trash';
+  | 'trash'
+  | 'git-merge'
+  | 'archive'
+  | 'history'
+  | 'upload'
+  | 'triangle-alert';
 
 const ICONS: Record<IconName, readonly IconShape[]> = {
   'chevron-right': [{ kind: 'path', d: 'm9 18 6-6-6-6' }],
@@ -165,6 +170,36 @@ const ICONS: Record<IconName, readonly IconShape[]> = {
   'rotate-ccw': [
     { kind: 'path', d: 'M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8' },
     { kind: 'path', d: 'M3 3v5h5' },
+  ],
+  // Lucide "git-merge" -- the Source control panel's merge actions.
+  'git-merge': [
+    { kind: 'circle', cx: 18, cy: 18, r: 3 },
+    { kind: 'circle', cx: 6, cy: 6, r: 3 },
+    { kind: 'path', d: 'M6 21V9a9 9 0 0 0 9 9' },
+  ],
+  // Lucide "archive" -- stash.
+  archive: [
+    { kind: 'path', d: 'M2 4a1 1 0 0 1 1-1h18a1 1 0 0 1 1 1v3a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1z' },
+    { kind: 'path', d: 'M4 8v11a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8' },
+    { kind: 'path', d: 'M10 12h4' },
+  ],
+  // Lucide "history" -- the Git history dialog.
+  history: [
+    { kind: 'path', d: 'M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8' },
+    { kind: 'path', d: 'M3 3v5h5' },
+    { kind: 'path', d: 'M12 7v5l4 2' },
+  ],
+  // Lucide "upload" -- "commit and push".
+  upload: [
+    { kind: 'path', d: 'M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4' },
+    { kind: 'path', d: 'm17 8-5-5-5 5' },
+    { kind: 'path', d: 'M12 3v12' },
+  ],
+  // Lucide "triangle-alert" -- a merge in progress.
+  'triangle-alert': [
+    { kind: 'path', d: 'M12 3 2 20h20z' },
+    { kind: 'path', d: 'M12 10v4' },
+    { kind: 'path', d: 'M12 17.5v.5' },
   ],
   // Lucide "refresh-cw" -- the "re-read the vault" button.
   'refresh-cw': [

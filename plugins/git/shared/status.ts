@@ -34,6 +34,16 @@ export interface GitStatus {
   readonly conflicts: readonly GitChange[];
 }
 
+/**
+ * A multi-step operation git is in the middle of. Only a merge is
+ * supported (ADR-0065 later change); `source` is what is being merged in
+ * (`feature/x`), `null` when the message cannot be read.
+ */
+export interface GitOperation {
+  readonly kind: 'merge';
+  readonly source: string | null;
+}
+
 /** What the panel knows about one vault. */
 export type VaultGitState =
   | { readonly vaultId: string; readonly state: 'no-git' }
@@ -47,6 +57,12 @@ export type VaultGitState =
       readonly status: GitStatus;
       /** Staged changes outside the vault folder -- a commit takes them along. */
       readonly stagedOutside: number;
+      /** The merge in progress, or `null`. */
+      readonly operation: GitOperation | null;
+      /** ISO time of the last fetch / pull (`FETCH_HEAD`), `null` if never. */
+      readonly fetchedAt: string | null;
+      /** Number of stashes in the repository. */
+      readonly stashCount: number;
     };
 
 export interface GitBranch {
@@ -62,6 +78,26 @@ export interface GitLogEntry {
   /** ISO 8601 author date. */
   readonly date: string;
   readonly subject: string;
+  /** Full commit id; absent when the log was read without it. */
+  readonly id?: string;
+  /** True for a commit that is not on the upstream yet (set by main). */
+  readonly unpushed?: boolean;
+}
+
+/** One entry of `git stash list`. */
+export interface GitStash {
+  /** Position in the list; `stash@{index}`. */
+  readonly index: number;
+  /** git's own description (`On main: my note`, `WIP on main: abc subject`). */
+  readonly message: string;
+  /** ISO 8601 date the stash was made. */
+  readonly date: string;
+}
+
+/** One line of a unified diff, headers already dropped. */
+export interface PatchLine {
+  readonly kind: 'hunk' | 'add' | 'del' | 'context';
+  readonly text: string;
 }
 
 /** The decoration one change draws in the Files panel. */
@@ -258,14 +294,14 @@ const FIELD = '\x1f';
 const RECORD = '\x1e';
 
 /** `git log --pretty=format:` argument matching {@link parseLog}. */
-export const LOG_FORMAT = '%h%x1f%an%x1f%aI%x1f%s%x1e';
+export const LOG_FORMAT = '%h%x1f%an%x1f%aI%x1f%s%x1f%H%x1e';
 
 export function parseLog(output: string): GitLogEntry[] {
   const entries: GitLogEntry[] = [];
   for (const record of output.split(RECORD)) {
-    const [hash, author, date, subject] = record.replace(/^\s+/, '').split(FIELD);
+    const [hash, author, date, subject, id] = record.replace(/^\s+/, '').split(FIELD);
     if (hash && author !== undefined && date !== undefined && subject !== undefined) {
-      entries.push({ hash, author, date, subject });
+      entries.push({ hash, author, date, subject, ...(id ? { id } : {}) });
     }
   }
   return entries;
@@ -315,6 +351,60 @@ export function parseNameStatus(output: string): { changed: string[]; deleted: s
     }
   }
   return { changed, deleted };
+}
+
+/** `git stash list --format=` argument matching {@link parseStashList}. */
+export const STASH_FORMAT = '%gs%x1f%aI%x1e';
+
+/** The stash list, newest first (index 0 is `stash@{0}`). */
+export function parseStashList(output: string): GitStash[] {
+  const stashes: GitStash[] = [];
+  for (const record of output.split(RECORD)) {
+    const [message, date] = record.replace(/^\s+/, '').split(FIELD);
+    if (message && date !== undefined) {
+      stashes.push({ index: stashes.length, message, date });
+    }
+  }
+  return stashes;
+}
+
+/**
+ * Reads what a merge brings in from git's `MERGE_MSG` (`Merge branch
+ * 'feature/x'`, `Merge remote-tracking branch 'origin/x'`, `Merge tag 'v1'`).
+ */
+export function mergeSourceFromMessage(message: string): string | null {
+  const match = /^Merge (?:remote-tracking )?(?:branch|tag|commit) '([^']+)'/.exec(message.trimStart());
+  return match ? match[1] : null;
+}
+
+/**
+ * Turns `git show --format= -p` output for ONE file into diff lines: the
+ * `diff --git` / `index` / `---` / `+++` header is dropped, `\ No newline`
+ * markers too. A binary file yields no lines.
+ */
+export function parsePatch(output: string): PatchLine[] {
+  const lines: PatchLine[] = [];
+  let inHunk = false;
+  for (const raw of output.replace(/\r\n/g, '\n').split('\n')) {
+    if (raw.startsWith('@@')) {
+      inHunk = true;
+      lines.push({ kind: 'hunk', text: raw });
+    } else if (!inHunk || raw.startsWith('\\')) {
+      continue;
+    } else if (raw.startsWith('+')) {
+      lines.push({ kind: 'add', text: raw.slice(1) });
+    } else if (raw.startsWith('-')) {
+      lines.push({ kind: 'del', text: raw.slice(1) });
+    } else if (raw.startsWith(' ')) {
+      lines.push({ kind: 'context', text: raw.slice(1) });
+    }
+  }
+  return lines;
+}
+
+/** A commit id as the panel sends it: hexadecimal, 4 to 40 characters. */
+export function isCommitId(value: string): boolean {
+  return /^[0-9a-f]{4,40}$/i.test(value);
 }
 
 /** A branch name git would accept and that cannot be read as an option. */
