@@ -20,6 +20,37 @@ recorded as an explicit decision. The parity checklist lives in
 
 ## Recent milestones
 
+### Embedded pictures survive split-pane focus switches
+
+Owner-reported: with the editor split into two panes, a note in a
+subfolder holding embedded draw.io SVG pictures showed "image not found"
+for every embed after switching to the other pane and back; one more
+click into the editor loaded them again. Owner-verified.
+
+- **The cause was resolution through the focused pane.** Live Preview
+  resolved an embed's candidates at decoration-build time through
+  `EditorService.openPath`/`openVaultId` -- the facade over the FOCUSED
+  pane. A rebuild in a background pane (a focus switch recreates the
+  image widgets) resolved the note-relative reference against the other
+  document: for a subfolder note the candidate chain fell back to the
+  vault root and found nothing; for a vault-root note it coincidentally
+  stayed correct -- which is why only some notes broke.
+- **The same window fired on a tab switch's first decorations.** The
+  shown document's identity reached the surface as a template input,
+  one change-detection pass after the content swap, so every embed's
+  first candidate resolved against the PREVIOUS note once and 404ed
+  (invisible -- a later rebuild healed the widget, but the request had
+  already failed).
+- **The identity now travels with the content.**
+  `MarkdownSurface.setDocumentIdentity` (path, vault id, help asset
+  base) is set by `Editor.loadActiveDoc` synchronously before the view
+  gets the text, and embed resolution reads exactly that -- never the
+  focused pane's facade, never a lagging input. Wikilinks keep the
+  `docVaultId` input (completion runs long after the switch).
+- New regression spec: `e2e/image-embed-pane-switch.spec.ts` -- the
+  subfolder repro plus the vault-root contrast case, also asserting no
+  failed `drey-asset://` request anywhere along the flow.
+
 ### The assistant answers a scoped ask from the scoped vaults only
 
 Owner-reported: with the docs vault selected in the Vault chip, "what is

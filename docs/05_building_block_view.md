@@ -1199,6 +1199,14 @@ src/                Angular renderer (standalone components, esbuild via Angular
                          = that language's grammar alone (lazy LanguageDescription.load,
                          @codemirror/language-data), source mode forced, none of the
                          Markdown chrome (ADR-0036). Compact composers pass nothing.
+                         Embed resolution (images, PDFs) reads a document identity
+                         (path + vault id + help asset base) the owner pushes with
+                         setDocumentIdentity next to the content load -- never
+                         EditorService.openPath: that facade follows the FOCUSED pane,
+                         so a background pane's rebuilds (a focus switch recreates the
+                         embed widgets) must resolve their own note's embeds, and a
+                         just-switched tab's first decorations need the identity in
+                         the same pass as the content.
       markdown-toolbar.ts  The formatting toolbar (milestone 42, ported from the
                          Lariscus editor): headings/list menus, dedicated
                          task-list + blockquote buttons, bold/italic/strike,

@@ -56,6 +56,18 @@ import { EditorExtensionRegistry, DropDecoderRegistry } from '../../plugin-host'
 const STICK_TO_BOTTOM_PX = 32;
 
 /**
+ * The document identity an embed-bearing surface resolves against: the
+ * vault-relative path and vault id of the shown note, or a help document's
+ * bundled asset base (ADR-0070). All three `null` for a surface that shows
+ * no vault document (the compact composers).
+ */
+export interface DocIdentity {
+  readonly path: string | null;
+  readonly vaultId: string | null;
+  readonly assetBase: string | null;
+}
+
+/**
  * The one reusable CodeMirror Markdown surface: the full-page editor and the
  * entry drawer's body field are the *same* component, so Live Preview
  * behaves identically in both (ADR-0009). Owns the `EditorView`, the
@@ -72,8 +84,10 @@ const STICK_TO_BOTTOM_PX = 32;
  *
  * Document state stays with the *owner*: the component emits `docChanged`
  * and exposes `view` / `setContent` -- it never talks to `EditorService`
- * buffers itself (images resolve against the active document's path, which
- * is where both use sites want them to land).
+ * buffers itself (a pasted image saves beside the focused document's path,
+ * which is where a paste can only land anyway; rendered embeds resolve
+ * against this surface's own document identity, so a background pane in a
+ * split view resolves its own note, not the focused one).
  */
 @Component({
   selector: 'app-markdown-surface',
@@ -215,6 +229,25 @@ export class MarkdownSurface implements AfterViewInit, OnDestroy {
   private currentLangKey = 'markdown';
   /** Last frontmatter fold state the owner asked for; re-asserted after a code -> Markdown swap. */
   private desiredFrontmatterExpanded = false;
+
+  /**
+   * What document the view currently shows, for embed resolution (the
+   * vault-relative path, its vault id, a help document's asset base). Set
+   * synchronously by the owner next to the content it loads
+   * ({@link setDocumentIdentity}) -- deliberately not an input: the owner's
+   * load effect runs in the same change-detection pass that flips the shown
+   * tab, so an input still held the PREVIOUS document while the new
+   * content's first decorations built (every embed's first candidate 404ed
+   * until a later rebuild healed the widget). It also must never be
+   * `EditorService.openPath` -- that facade follows the FOCUSED pane, so a
+   * rebuild in a background pane (a focus switch recreates the embed
+   * widgets) would resolve its note-relative embeds against the wrong note.
+   */
+  private readonly shownDocIdentity = signal<DocIdentity>({
+    path: null,
+    vaultId: null,
+    assetBase: null,
+  });
 
   /**
    * Mirror of the fold extension's `StateField<boolean>` (see
@@ -742,6 +775,16 @@ export class MarkdownSurface implements AfterViewInit, OnDestroy {
   }
 
   /**
+   * Points embed resolution at the document the owner is about to show.
+   * MUST reach the surface before the content does (`loadDocument` /
+   * `setContent`): the incoming text's first decoration build reads it
+   * synchronously.
+   */
+  setDocumentIdentity(identity: DocIdentity): void {
+    this.shownDocIdentity.set(identity);
+  }
+
+  /**
    * Expand or fold the frontmatter (only meaningful with `foldFrontmatter`).
    * The owner calls this on tab switch to replay the tab's remembered state;
    * the pill and chevron flip it from inside CodeMirror.
@@ -806,11 +849,11 @@ export class MarkdownSurface implements AfterViewInit, OnDestroy {
       resolveImage: (url: string) => {
         // An in-app help document (ADR-0070) resolves against its bundled
         // asset base, not the vault.
-        const assetBase = this.editor.openAssetBase();
-        if (assetBase !== null) {
-          return resolveHelpImageCandidates(assetBase, url);
+        const identity = this.shownDocIdentity();
+        if (identity.assetBase !== null) {
+          return resolveHelpImageCandidates(identity.assetBase, url);
         }
-        return resolveVaultImageCandidates(this.editor.openPath(), url, this.editor.openVaultId());
+        return resolveVaultImageCandidates(identity.path, url, identity.vaultId);
       },
       onOpenImage: (src: string) => this.lightbox.open(src),
       onZoomDiagram: (dataUrl: string) => this.lightbox.open(dataUrl),
