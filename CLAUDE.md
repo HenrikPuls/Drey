@@ -87,7 +87,7 @@ toolchain is removable by deleting `.tools/`). Never assume a bare `node`,
   IPC contract _at runtime_ even though `tsc` is clean (unknown fields
   are silently stripped from IPC payloads). Rebuild and restart; verify
   with `grep <new-symbol> dist-electron/plugins/<id> -r` (and
-  `grep <new-field> dist-electron/shared/*.js` for base IPC).
+  `grep <new-field> dist-electron/shared -r` for base IPC).
 
 ## Architecture & Design Decisions
 
@@ -366,7 +366,9 @@ Cross-layer:
 
 - `shared/plugin-api/` — the frozen, versioned plugin SDK (manifest,
   `DreyPluginApi`, `MainPluginContext`, `PLUGIN_API_VERSION`)
-- `shared/ipc-api.ts` — the base IPC contract; the rest of `shared/` is
+- `shared/ipc-api.ts` — the base IPC contract: a barrel over
+  `shared/ipc/` (one file per topic — a new channel goes there, importers
+  keep using `shared/ipc-api`); the rest of `shared/` is
   pure, testable logic both sides share (frontmatter, tags, tasks,
   wikilinks, link-rewrite, app-config, …)
 

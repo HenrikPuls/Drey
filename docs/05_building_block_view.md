@@ -100,6 +100,21 @@ against: `manifest.ts` (`PluginManifest` + `validateManifest`),
 major mismatch ⇒ `incompatible`). Exempt from module-boundary lint, like
 `shared/ipc-api.ts`.
 
+**The base IPC contract** (`shared/ipc-api.ts` + `shared/ipc/`). The
+file every importer points at is a barrel; the definitions live in
+`shared/ipc/`, one file per topic, each with its payload types and its
+slice of the bridge: `channels.ts` (`IPC_CHANNELS`, the one runtime
+value), `app.ts` (`AppIpc`: window, exit prompt, Edit menu, logging,
+startup, config), `vault.ts` (`VaultIpc`: registry, file tree, file IO,
+link-keeping renames, the change push), `notes.ts` (`NotesIpc`: save +
+conflict, drafts, daily notes, PDF export, external files, note
+history, session backups), `llm.ts` (`LlmIpc`), `tags.ts` (`TagsIpc`),
+`spelling.ts` (`SpellingIpc`), `mcp.ts` (`McpIpc`: the vault server and
+the external tool servers) and `plugins.ts` (`PluginsIpc`). `DreyApi`
+is the sum of the slices. A new channel goes into its topic file;
+importers keep using `shared/ipc-api` (the same shape as
+`shared/app-config.ts` over `shared/config/`).
+
 **Plugins** (`plugins/<id>/`, twelve shipped — `drawio`, the diagram
 editor tab of milestone 64, is described in §5.37): `templates`,
 `meeting`, `tags`, `tasks`, `assistant` (Assistant + Actions), `browser`,
@@ -1321,7 +1336,8 @@ public/
 
 shared/             Code compiled into BOTH electron/ and src/ (two separate
                      tsconfig contexts -- see docs/09_architecture_decisions/0001-*.md).
-  ipc-api.ts         Interfaces + channel names crossing the IPC boundary
+  ipc-api.ts         Interfaces + channel names crossing the IPC boundary --
+                      since 2026-10-11 the barrel over ipc/ (one file per topic)
                       (incl. Frontmatter / TagEntry ({ tag, count }) / TagSearch* /
                       NoteSave* / LlmConnectionTest; re-exports AppConfig + Action*
                       + the shared/llm barrel types)
