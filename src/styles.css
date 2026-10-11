@@ -199,40 +199,48 @@
 :root[data-theme='anthrazit'] {
   color-scheme: dark;
 
-  --bg-dock: #262220;
-  --bg-editor: #1e1b17;
-  --bg-input: #2e2a26;
-  --bg-search: #1e1b17;
-  --bg-bar: #262220;
-  --bg-sidebar: #262220;
-  --bg-main: #1e1b17;
+  --bg-dock: #222326;
+  --bg-editor: #18191b;
+  --bg-input: #2c2d31;
+  --bg-search: #18191b;
+  --bg-bar: #222326;
+  --bg-sidebar: #222326;
+  --bg-main: #18191b;
 
-  --text-heading: #f3efe9;
-  --text-primary: #f3efe9;
-  --text-2: #e2ddd5;
-  --text-3: #c9c3b9;
-  --text-4: #ada69c;
-  --text-5: #ada69c;
-  --text-6: #8f887f;
-  --text-7: #7a746c;
-  --text-faint: #5f5a53;
-  --gutter: #5f5a53;
-  --placeholder: #8f887f;
-  --calendar-muted: #5f5a53;
+  --text-heading: #f4f5f6;
+  --text-primary: #f4f5f6;
+  --text-2: #e0e2e5;
+  --text-3: #c8cbcf;
+  --text-4: #b3b7bc;
+  --text-5: #b3b7bc;
+  --text-6: #a2a6ac;
+  --text-7: #979ca2;
+  --text-faint: #767b82;
+  --gutter: #767b82;
+  --placeholder: #979ca2;
+  --calendar-muted: #686d73;
 
-  --border: #3a3530;
-  --border-strong: #4d4740;
-  --field-border: #3a3530;
-  --popover-border: #4d4740;
-  --hover-bg: #2e2a26;
-  --hover-bg-strong: #3a3530;
-  --hover-bg-loud: #4d4740;
-  --active-bg: #2e2a26;
-  --focus-bg: rgba(243, 239, 233, 0.03);
+  --border: #3b3d42;
+  --border-strong: #52555b;
+  --field-border: #747980;
+  --popover-border: #52555b;
+  --hover-bg: #2c2d31;
+  --hover-bg-strong: #37393e;
+  --hover-bg-loud: #43454b;
+  --active-bg: #2c2d31;
+  --focus-bg: rgba(244, 245, 246, 0.03);
 
-  --accent-contrast: #2a2622;
-  --on-accent: #2a2622;
+  --accent-contrast: #101113;
+  --on-accent: #101113;
   --popover-shadow: none;
+
+  /* File status: lightened so every state clears 4.5:1 on dock, editor and
+     field surfaces (the shared mid-tones above fail AA on dark). */
+  --status-modified: #e0bb6e;
+  --status-added: #93c47f;
+  --status-untracked: #82c4ab;
+  --status-deleted: #ee8f89;
+  --status-conflict: #f08080;
 }
 
 html,

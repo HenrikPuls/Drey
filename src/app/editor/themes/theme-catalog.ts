@@ -87,7 +87,7 @@ const DREY: ThemeCatalogEntry = {
 };
 
 /**
- * Anthrazit (milestone 43): warm charcoal surfaces with a blue accent. Like
+ * Anthrazit (milestone 43): neutral charcoal-gray surfaces with a blue accent. Like
  * Drey it is a bespoke palette -- `styles.css` carries a
  * `:root[data-theme='anthrazit']` block that overrides the derived tokens
  * with exact values -- and it reuses the token-driven Drey editor look, so
@@ -97,7 +97,7 @@ const ANTHRAZIT: ThemeCatalogEntry = {
   id: ANTHRAZIT_THEME,
   label: 'Anthrazit',
   group: 'Drey',
-  seed: { bg: '#1e1b17', fg: '#f3efe9', accent: '#8ecbef', dark: true },
+  seed: { bg: '#18191b', fg: '#f4f5f6', accent: '#8ecbef', dark: true },
   load: () => Promise.resolve(dreyEditorLook),
 };
 

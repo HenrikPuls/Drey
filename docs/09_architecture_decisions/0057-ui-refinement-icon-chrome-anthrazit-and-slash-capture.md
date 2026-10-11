@@ -59,9 +59,9 @@ Refinement" canvas, built on the Anthrazit design system):
 `anthrazit` joins the catalog next to `drey` (group "Drey"). Unlike the
 published themes it is not derived from two seed colours: a
 `:root[data-theme='anthrazit']` block after the derived block replaces
-every token with the exact value (surfaces `#1e1b17 / #262220 / #2e2a26`,
-lines `#3a3530 / #4d4740`, ink `#f3efe9 / #ada69c`, accent `#8ecbef`,
-no shadows). It reuses the token-driven Drey editor look.
+every token with the exact value (surfaces `#18191b / #222326 / #2c2d31`,
+lines `#3b3d42 / #52555b`, control borders `#747980`, ink `#f4f5f6 / #b3b7bc`,
+accent `#8ecbef`, no shadows; neutral gray since the later change below). It reuses the token-driven Drey editor look.
 
 The owner chose **a separate theme over replacing Drey's palette**: the
 terracotta look stays available unchanged. A **fresh install** starts on
@@ -120,6 +120,28 @@ to the `PanelFrame` through the header-actions store), and the gaps in
 that row stay the click-to-collapse / drag area. Collapsed, the header
 shows "Calendar" and the month as before. The row gains a **Today** icon
 button that jumps to the current month and opens today's daily note.
+
+## Later change — neutral gray palette and AA contrast (Anthrazit)
+
+The first Anthrazit palette was warm (brownish hue, `#1e1b17 / #262220`) and
+failed WCAG 2.2 AA in places: `--text-7` 3.4:1, `--status-conflict` 3.6:1,
+`--status-deleted` 4.3:1, and field borders / dividers at 1.3:1 against the
+dock. The owner asked for a neutral gray with readable contrast, so the
+`:root[data-theme='anthrazit']` block (and the theme seed in
+`theme-catalog.ts`) now carries:
+
+- surfaces `#222326` (dock/bars), `#18191b` (editor), `#2c2d31` (fields,
+  hover); text ramp `#f4f5f6 / #e0e2e5 / #c8cbcf / #b3b7bc / #a2a6ac /
+  #979ca2`, every step at least 4.5:1 on dock, editor and field surfaces
+  (`--text-7` is 4.2:1 on `--hover-bg-strong` only while hovered);
+- dividers `#3b3d42` and `#52555b` stay decorative; **control borders**
+  (`--field-border`) are `#747980`, at least 3:1 (WCAG 1.4.11);
+- line numbers / faint text `#767b82` (3.7:1+), outside-month calendar days
+  `#686d73` (disabled-like, exempt);
+- file-status colors overridden for this theme only (`#e0bb6e`, `#93c47f`,
+  `#82c4ab`, `#ee8f89`, `#f08080`), all at least 4.5:1; the shared mid-tones
+  stay for Drey and the published themes;
+- text on accent `#101113` (10.7:1 on `#8ecbef`).
 
 ## Consequences
 
