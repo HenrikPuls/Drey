@@ -255,6 +255,17 @@ export interface MainChatOptions {
    */
   readonly vaultTools?: boolean;
   /**
+   * Restricts this ONE call's vault READ tools (SDK 1.20, ADR-0069): the
+   * resolved target vault ids of the caller's scope (the assistant's Vault
+   * chip). `vault_search` and `vault_read` default to the ACTIVE vault, so
+   * when the scope excludes it the host drops both from the merged tool
+   * set — the caller is expected to supply scope-safe plugin tools
+   * instead. When the scope includes the active vault (or the option is
+   * absent) nothing is filtered — the pre-1.20 behaviour. `vault_write` is
+   * never filtered.
+   */
+  readonly vaultToolsScope?: readonly string[];
+  /**
    * Opts this ONE call into the EXTERNAL tool set (SDK 1.15, ADR-0063):
    * the built-in `web_fetch` and the tools of the user's MCP servers
    * (`mcp__<serverId>__<tool>`), as far as `tools` config enables them.

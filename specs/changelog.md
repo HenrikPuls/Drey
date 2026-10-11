@@ -39,6 +39,46 @@ recorded as an explicit decision. The parity checklist lives in
   fixed — they do not follow the highlight colour, which still re-tints
   the chrome.
 - Anthrazit stays the default; the splash stays Anthrazit.
+### Fix — the image resize grip and the table keys work before the note is fully parsed
+
+Dragging the corner grip of a picture did nothing when the picture sat
+beyond what the editor had parsed so far: a freshly opened note is
+parsed up to its first 3,000 characters at once and the rest in the
+background, and the grip looked the picture up in that unfinished tree
+while the picture itself was drawn from a complete one. The drag ended
+without a change and without a message. The table keys had the same
+flaw: Enter in such a table added a plain line instead of a row, and
+the arrow keys did not step into or out of it. Both now read the same
+complete tree as the drawing code (`completeSyntaxTree` in
+`block-render.ts`). **Not yet manually verified by the owner.**
+
+- Found through a test that failed now and then: on a loaded machine
+  even a three-line note can miss the up-front parse budget. A new test
+  reproduces it with a picture behind 4,000 characters of text, a
+  second one with a table there.
+- The same test run exposed a second unreliable test, fixed without a
+  change to the app: the checkbox-click test in `editor.spec.ts` waited
+  a fixed 10 ms for a save that arrives through a timer; it now waits
+  for the save.
+
+### The IPC contract is split by topic behind its barrel
+
+Item 10 of the 2026-10-11 architecture review, sixth and last file. A
+restructuring: nothing the user sees or does changes, and no importer
+changed. **Not yet manually verified by the owner.**
+
+- **`shared/ipc-api.ts` went from 1,363 to 65 lines.** It is now the
+  barrel over `shared/ipc/`: `channels.ts` (`IPC_CHANNELS`), `app.ts`,
+  `vault.ts`, `notes.ts`, `llm.ts`, `tags.ts`, `spelling.ts`, `mcp.ts`
+  and `plugins.ts`. Each topic file holds its payload types and its slice
+  of the bridge (`AppIpc`, `VaultIpc`, ...); `DreyApi` is their sum. The
+  same shape as `shared/app-config.ts` over `shared/config/`.
+- **The text was moved, not retyped**: a script cut the old file by line
+  ranges and checked that every line landed exactly once. The exported
+  surface (51 exports, every `DreyApi` member with its signature) was
+  printed from the TypeScript checker before and after and is identical.
+- One comment moved to where it belongs: the "Session history" note now
+  sits above the session-backup methods, not above the note history.
 
 ### Anthrazit is the default everywhere; the splash shows the logo as a wordmark
 

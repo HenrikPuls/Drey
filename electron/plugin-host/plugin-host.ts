@@ -123,6 +123,27 @@ export interface PluginHostDeps {
   readonly log: (message: string, level?: 'info' | 'warn' | 'error') => void;
 }
 
+/**
+ * The ADR-0069 read-scope rule (pure, spec-covered): `vault_search` and
+ * `vault_read` default to the ACTIVE vault, so a call whose declared scope
+ * excludes it must not carry them — they would leak out-of-scope content.
+ * Everything else passes; an absent scope or no active vault means the
+ * pre-1.20 behaviour.
+ */
+export function vaultReadToolAllowed(
+  name: string,
+  scope: readonly string[] | undefined,
+  activeVaultId: string | null,
+): boolean {
+  if (name !== 'vault_search' && name !== 'vault_read') {
+    return true;
+  }
+  if (scope === undefined) {
+    return true;
+  }
+  return activeVaultId !== null && scope.includes(activeVaultId);
+}
+
 export class PluginHost {
   private readonly discovered = new Map<string, DiscoveredPlugin>();
   private readonly activated = new Map<string, ActivatedPlugin>();
@@ -764,12 +785,25 @@ export class PluginHost {
                 const groups = appConfig.get().tools;
                 // tasks_list also sits in the vault set (for MCP clients);
                 // towards the assistant it follows its own group switch.
+                // ADR-0069: when the call carries a vault read scope that
+                // excludes the active vault, `vault_search`/`vault_read`
+                // drop out — they default to the active vault and would
+                // leak out-of-scope content; the caller supplies scope-safe
+                // plugin tools instead. `vault_write` is never filtered.
+                const readScope = options?.vaultToolsScope;
+                const readScopeAllows = (name: string): boolean =>
+                  vaultReadToolAllowed(
+                    name,
+                    readScope,
+                    this.deps.vaultManager.getActiveVaultId(),
+                  );
                 const vaultSpecs =
                   options?.vaultTools === true && this.deps.vaultTools !== undefined
                     ? this.deps.vaultTools
                         .toolSpecs()
                         .filter((spec) => !pluginNames.has(spec.name))
                         .filter((spec) => groups.tasks.enabled || spec.name !== 'tasks_list')
+                        .filter((spec) => readScopeAllows(spec.name))
                     : [];
                 const taken = new Set([...pluginNames, ...vaultSpecs.map((spec) => spec.name)]);
                 const toolbox = this.deps.assistantToolbox;

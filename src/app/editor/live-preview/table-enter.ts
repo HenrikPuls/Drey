@@ -1,9 +1,8 @@
 import { completionStatus } from '@codemirror/autocomplete';
-import { syntaxTree } from '@codemirror/language';
 import { EditorState, Extension, Prec } from '@codemirror/state';
 import { EditorView, keymap } from '@codemirror/view';
 import type { SyntaxNode } from '@lezer/common';
-import { absorbedTableRunAt, realTableExtent } from './block-render';
+import { absorbedTableRunAt, completeSyntaxTree, realTableExtent } from './block-render';
 
 /**
  * Enter on a revealed table's raw source inserts a formatted row
@@ -69,7 +68,7 @@ function tableExtentAt(
   state: EditorState,
   pos: number,
 ): { node: SyntaxNode; extent: SyntaxNode } | null {
-  let node: SyntaxNode | null = syntaxTree(state).resolveInner(pos, -1);
+  let node: SyntaxNode | null = completeSyntaxTree(state).resolveInner(pos, -1);
   while (node !== null && node.name !== 'Table') {
     node = node.parent;
   }
@@ -236,7 +235,7 @@ function tableSpanLineAt(
   // line's `from`), which sit exactly on a node boundary; `-1` would count
   // the boundary as the END of the previous node (the blank line above the
   // table resolves to the Document) and miss the table.
-  let node: SyntaxNode | null = syntaxTree(state).resolveInner(pos, 1);
+  let node: SyntaxNode | null = completeSyntaxTree(state).resolveInner(pos, 1);
   while (node !== null && node.name !== 'Table') {
     node = node.parent;
   }

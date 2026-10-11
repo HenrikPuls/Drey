@@ -101,7 +101,13 @@ hits in the Search panel and a semantic MCP `vault_search` mode —
 shipped as milestone 68 over a new base `SemanticSearchProvider` seam
 (ADR-0055 later change); pause / resume of large rebuilds was
 considered and dropped (an ask queues behind at most one embed batch,
-never a rebuild — see "Closed" below).
+never a rebuild — see "Closed" below). On an owner request (the fixed
+top-4 context and the scope leaks were not enough for good answers),
+milestone 71 made the chip-on ask hybrid-agentic (ADR-0069): scope-safe
+explore tools (`vault_overview`/`vault_find`/`vault_section`) beside
+the baseline block, host-side enforcement of the chip's scope on
+`vault_search`/`vault_read` (SDK 1.20), cold-index self-healing, and
+picker replace semantics.
 
 Outside the list, on an owner request: **the dock icon strip** shipped as
 milestone 69 (ADR-0019 later change) — one icon row per dock replaces the

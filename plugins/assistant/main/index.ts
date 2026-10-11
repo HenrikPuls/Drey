@@ -25,6 +25,7 @@ import { ChatEngine } from './chat-engine';
 import { ChatStore } from './chat-store';
 import { createTemplateTools } from './template-tools';
 import { createSemanticService, type SemanticService } from './semantic/service';
+import { createVaultExploreTools } from './vault-explore-tools';
 import { readFile } from 'node:fs/promises';
 import { dialog, app } from 'electron';
 import * as path from 'node:path';
@@ -146,6 +147,9 @@ const plugin: MainPluginModule = {
         ctx.llm.chat(messages, {
           taskId: options?.taskId,
           ...(options?.vaultTools !== undefined ? { vaultTools: options.vaultTools } : {}),
+          ...(options?.vaultToolsScope !== undefined
+            ? { vaultToolsScope: options.vaultToolsScope }
+            : {}),
           ...(options?.externalTools !== undefined
             ? { externalTools: options.externalTools }
             : {}),
@@ -183,6 +187,24 @@ const plugin: MainPluginModule = {
         onLiveEdit: (path, content) => ctx.ipc.emit('chat:liveEdit', { path, content }),
         retrieveContext: (question, scope, vaultIds) =>
           semantic.retrieve(question, scope, vaultIds),
+        // The explore tools (ADR-0069) are live per ask: built only while
+        // semantic retrieval is enabled, closed over the turn's scope.
+        exploreTools: (scope, vaultIds) =>
+          semantic.isEnabled
+            ? createVaultExploreTools(
+                {
+                  resolveTargets: (innerScope, innerIds) =>
+                    semantic.resolveTargets(innerScope, innerIds),
+                  searchScoped: (question, innerScope, innerIds, limit) =>
+                    semantic.searchScoped(question, innerScope, innerIds, limit),
+                  outline: (innerScope, innerIds) => semantic.outline(innerScope, innerIds),
+                  readSection: (vaultId, filePath, target) =>
+                    semantic.readSection(vaultId, filePath, target),
+                },
+                scope,
+                vaultIds,
+              )
+            : null,
         tasksTool: () => {
           // Live at call time: the tasks plugin can (de)activate between
           // asks only via an app restart, but the getter keeps the engine

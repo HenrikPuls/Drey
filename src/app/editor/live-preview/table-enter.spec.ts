@@ -52,6 +52,15 @@ describe('table row Enter', () => {
     expect(view.state.selection.main.anchor).toBe(`${TABLE}\n| `.length);
   });
 
+  it('Enter grows a table the initial parse has not reached yet', () => {
+    // A new state parses only its first 3000 characters up front; the rest
+    // follows in the background. The key must not depend on that.
+    const doc = `${'word '.repeat(800)}\n\n${TABLE}`;
+    view = makeView(doc, doc.length);
+    pressEnter(view);
+    expect(view.state.doc.toString()).toBe(`${doc}\n|  |  |`);
+  });
+
   it('Enter on the header or delimiter row starts the first body row', () => {
     view = makeView(TABLE, 2);
     expect(insertTableRow(view)).toBe(true);
