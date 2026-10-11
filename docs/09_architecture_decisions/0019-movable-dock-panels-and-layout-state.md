@@ -270,3 +270,8 @@ Considered and not chosen:
 
 This departs from `handoff/DESIGN.md`'s dock spec (every panel always
 shows its header) and from the "click-to-collapse" later change above.
+
+The tab bar and the strips sit side by side under the titlebar; since the
+strip shipped, the tab bar uses the same 32px `--panel-head-h` so their
+bottom borders read as one line (ADR-0057 later change) — the "titlebar
+and tab bar 36px" grid note above is historical.

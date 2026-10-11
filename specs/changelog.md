@@ -48,6 +48,20 @@ verified by the owner.**
   aborting a merge, *Keep mine*, deleting a stash, *Restore this
   version*, the repository select with several repositories.
 
+### Fix — the tab bar and the dock icon strips form one line
+
+The centre column's tab bar was 36px (`--bar-h`) while the docks' icon
+strips sit on the 32px panel-header height (`--panel-head-h`) — side by
+side under the titlebar, their bottom borders stepped by 4px. The tab bar
+now shares `--panel-head-h`: the borders read as one continuous line.
+Tabs keep their 28px row height with 3px headroom instead of 7px; the
+titlebar, the image/PDF meta rows, the browser toolbar and the assistant
+head stay on `--bar-h` (none of them touches the window's top line).
+The strip itself was in on it: 24px icons + 2 × 4px padding + border
+over a 32px *min*-height rendered it 33px — a pixel taller even than the
+panel headers below it. Its vertical padding is now 3px, so the box is
+exactly 32px. (ADR-0057 later change.)
+
 ### The Search panel is split into model, DOM, replace and summary
 
 Item 10 of the 2026-10-11 architecture review, fourth file. A

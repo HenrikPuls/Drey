@@ -143,6 +143,18 @@ dock. The owner asked for a neutral gray with readable contrast, so the
   stay for Drey and the published themes;
 - text on accent `#101113` (10.7:1 on `#8ecbef`).
 
+## Later change — the tab bar sits on the panel-header height
+
+The grid above put titlebar and tab bar on 36px and the panel headers on
+32px. Once the docks grew their icon strips (ADR-0019 later change,
+milestone 69), the tab bar and the strips sat side by side under the
+titlebar at different heights — their bottom borders stepped by 4px
+instead of reading as one line. The tab bar now uses `--panel-head-h`
+(32px) as well: tabs keep their 28px row height with 3px headroom (they
+had 7px), and the borders line up. The titlebar keeps 36px; the image/PDF
+meta rows, the browser toolbar and the assistant head stay on `--bar-h` —
+none of them touches the window's top line.
+
 ## Consequences
 
 - **Autotag has no surface.** Its only button lived in the drawer. The
