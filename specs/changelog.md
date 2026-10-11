@@ -82,6 +82,48 @@ its storage. **Not yet manually verified by the owner.**
   a panel with no capabilities no longer shows an empty "Uses:"; buttons,
   links, categories and swatches show keyboard focus.
 
+### The Source control panel is split into state, commands, widget and dialogs
+
+Item 10 of the 2026-10-11 architecture review, fifth file. A
+restructuring: nothing the user sees or does changes. **Not yet manually
+verified by the owner.**
+
+- **`plugins/git/renderer/index.ts` went from 1,370 to 79 lines.** It
+  was one `activate` function. Now, in the same folder:
+  `repo-session.ts` (the state without DOM: what main reported per
+  vault, the shown repository, the command in flight, the message
+  drafts), `repo-commands.ts` (commit, merge, abort, resolve, amend,
+  stash, fetch / pull / push, discard, compare — each with its checks
+  and questions), `panel.ts` (the dock widget), the modals
+  `picker-branch.ts`, `menu-actions.ts`, `dialog-stashes.ts`,
+  `dialog-file-history.ts` and `dialogs.ts`, `settings-page.ts`, and
+  `dom.ts`.
+- **The decisions and the wording are pure functions now**
+  (`repo-model.ts`): which repository the panel shows, the button
+  labels and tooltips, the rows the branch picker offers.
+  `repo-model.spec.ts` covers them with 22 tests.
+- **A second e2e test** drives what had none: a merge that stops on a
+  conflict, *Keep theirs*, completing the merge, amend, stash and apply,
+  and the *Git history* dialog. It was written first and passed against
+  the old file.
+- Not covered by a test: fetch / pull / push (they need a remote),
+  aborting a merge, *Keep mine*, deleting a stash, *Restore this
+  version*, the repository select with several repositories.
+
+### Fix — the tab bar and the dock icon strips form one line
+
+The centre column's tab bar was 36px (`--bar-h`) while the docks' icon
+strips sit on the 32px panel-header height (`--panel-head-h`) — side by
+side under the titlebar, their bottom borders stepped by 4px. The tab bar
+now shares `--panel-head-h`: the borders read as one continuous line.
+Tabs keep their 28px row height with 3px headroom instead of 7px; the
+titlebar, the image/PDF meta rows, the browser toolbar and the assistant
+head stay on `--bar-h` (none of them touches the window's top line).
+The strip itself was in on it: 24px icons + 2 × 4px padding + border
+over a 32px *min*-height rendered it 33px — a pixel taller even than the
+panel headers below it. Its vertical padding is now 3px, so the box is
+exactly 32px. (ADR-0057 later change.)
+
 ### The Search panel is split into model, DOM, replace and summary
 
 Item 10 of the 2026-10-11 architecture review, fourth file. A

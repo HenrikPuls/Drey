@@ -95,8 +95,11 @@
 
   /* ---- Line grid (DESIGN.md principle 2: no in-between sizes) ---- */
   --row-h: 28px; /* every list row */
-  --bar-h: 36px; /* titlebar + tab bar */
+  --bar-h: 36px; /* titlebar only -- every other bar sits lower */
   --meta-h: 40px; /* editor meta bar (path + formatting + save) */
+  /* Panel headers + dock icon strip + tab bar: the tab bar and the docks'
+     icon strips sit side by side under the titlebar, so they share this
+     height and their bottom borders read as one line. */
   --panel-head-h: 32px;
   --status-h: 28px; /* status bar */
   --field-h: 32px; /* text inputs */

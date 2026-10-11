@@ -453,7 +453,9 @@ introduced silently.
     context menu (Set active / Rename / Add vault / Open in File
     Explorer / Remove); drag & drop of files/folders within and across
     vaults (req-23).
-  - **Centre column**: a 36px tab bar for open documents, a 40px meta bar
+  - **Centre column**: a 32px tab bar for open documents — the dock icon
+    strips' height (`--panel-head-h`), so their bottom borders form one
+    line under the titlebar — a 40px meta bar
     (path · formatting buttons · Unsaved · Lines toggle · Save · `⋯`),
     the editor (Live Preview ⇄ source via the `⋯` menu — no toggle
     buttons; ADR-0008/0009), then the bottom dock band. Capture is the
