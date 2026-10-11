@@ -9,8 +9,9 @@
  */
 import { extractLinkTargets } from '../shared/link-targets';
 import type { LinkOccurrence } from '../shared/link-targets';
-import { buildNoteIndex, collectBacklinks } from '../shared/link-index';
-import type { BacklinkRow, NoteIndex } from '../shared/link-index';
+import { buildNoteIndex, type NoteIndex } from '../../../shared/wikilinks';
+import { collectBacklinks } from '../shared/link-index';
+import type { BacklinkRow } from '../shared/link-index';
 
 /** One vault's outlinks: the file list plus each file's occurrences. */
 class VaultLinks {

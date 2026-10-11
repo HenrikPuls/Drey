@@ -23,7 +23,7 @@ import type { EditorView } from '@codemirror/view';
 import type { DreyPluginApi } from '../../../shared/plugin-api/renderer';
 import type { SdkTaskRecord } from '../../../shared/plugin-api/renderer';
 import type { ChatNoteTurn, ChatToolEntry } from '../shared/chat-note.js';
-import { ipcErrorMessage } from '../shared/format.js';
+import { ipcErrorMessage } from '../../../shared/ipc-error';
 import {
   STAGE_IMAGE_EXTENSIONS,
   extensionOf,

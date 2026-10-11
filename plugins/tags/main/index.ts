@@ -7,7 +7,7 @@ import type {
 } from '../../../shared/plugin-api';
 import { SEARCH_SUMMARY_PROMPT } from '../../../shared/config/schema';
 import type { ChatMessage } from '../../../shared/llm';
-import { TAG_AUTO_PALETTE, normalizeTagPrefix } from '../../../shared/tag-style';
+import { normalizeTagPrefix } from '../../../shared/tag-style';
 import type { TagPrefixStyle } from '../../../shared/tag-style';
 import { diffStats, lineDiff } from '../../../shared/text-diff';
 import type { DiffRow } from '../../../shared/text-diff';
@@ -159,10 +159,6 @@ const plugin: MainPluginModule = {
     ctx.search.registerSectionSearch(provider);
 
     // -- Plugin backend (panel + settings page) ------------------------------
-
-    // The settings page's swatch strip (the renderer cannot import shared
-    // values over plugin://).
-    ctx.ipc.handle('palette', () => ({ auto: TAG_AUTO_PALETTE }));
 
     // Config writes go through the write-through store; the page pokes this
     // afterwards: re-read the rows, then push so pills/chips recolor

@@ -20,6 +20,42 @@ recorded as an explicit decision. The parity checklist lives in
 
 ## Recent milestones
 
+### Plugin renderers are bundled; the copied helpers are gone (ADR-0044 later change)
+
+Item 11 of the 2026-10-11 architecture review. No change to what the app
+does, apart from the one fix below. **Not yet manually verified by the
+owner.**
+
+- **One file per plugin renderer.** `scripts/build-plugins.mjs` bundles
+  each plugin's `renderer/index.ts` with esbuild (the tool that already
+  writes the preload); `tsc` typechecks the renderer and still emits the
+  main side. A plugin renderer can therefore import the repo's `shared/`
+  at runtime, which `plugin://` alone never allowed.
+- **The build refuses what must not be bundled.** Any runtime import that
+  is not the plugin's own folder or `shared/` fails the build and names
+  the file — a package such as `@codemirror/*` (ADR-0044 rule 1), `src/`,
+  `electron/`, another plugin.
+- **Copies removed.** The plugins now use the base definition of: the tag
+  grammar, the wikilink grammar and its resolution, the section splitter
+  (now `splitSections` in `shared/note-sections.ts`), the code-blanking
+  helper, the tag colour rules and palette, the snippet defaults, the
+  `chats/` and auto-save path rules, the default daily folder,
+  `resolveActions`, the IPC error text, the placeholder substitution and
+  the date / time formatters. The three parity tests that held copies in
+  step are gone with them, and so is the tags plugin's `palette` backend
+  call, which existed only to carry a constant across.
+- **Fix:** Settings → Tags coloured a tag whose first segment contains a
+  character outside the Basic Multilingual Plane differently from the
+  editor and the panels; the copy of the colour hash had drifted.
+- **Simpler output tree.** A plugin's `shared/` is emitted once, as
+  CommonJS for its `main/`; the `package.json` module-type markers the
+  build wrote into every plugin directory are no longer needed.
+- **Still copied** (code outside `shared/`, see `docs/11`): the templates
+  plugin's frontmatter strip, the tags plugin's `isAbortError`, and two
+  small duplicates between the assistant plugin's own main and renderer.
+- **Docs:** ADR-0044 later change, `plugins/AUTHORING.md` (what a
+  renderer may import), `docs/05`, `06`, `07`, `11`, `CLAUDE.md`.
+
 ### Main-process tests and typed linting
 
 Third package out of the 2026-10-11 architecture review. No change to

@@ -1,16 +1,14 @@
 /**
- * Heading-delimited note sections for base-side consumers, currently the
- * editor's "Suggest tags" row: the LLM sees one section (the same unit the
- * tags plugin's search reports on) and the suggested tags are appended
- * into it.
+ * Heading-delimited note sections, the one definition for the base and the
+ * plugins: a section runs from one ATX heading to the next heading of any
+ * level; content before the first heading is one implicit section; fences
+ * hide `#` runs.
  *
- * The section semantics mirror `plugins/tags/shared/sections.ts` (a section
- * runs from one ATX heading to the next heading of any level; content
- * before the first heading is one implicit section; fences hide `#` runs).
- * This is a deliberate base-side twin, not an import: plugin modules are
- * outside the base import graph (ADR-0044 barrel rule), and the renderer
- * needs only this slice of the behaviour. TWIN ALERT: if you change the
- * boundary rules here, check the tags plugin's splitter for drift.
+ * `splitSections` is the unit the tags plugin's index and search report on
+ * (`#sailing` AND `#kauf` means both tags appear in the same `Section`)
+ * and what gives a backlink row its heading. `sectionAtLine` /
+ * `appendTagsToSection` serve the editor's "Suggest tags" row: the LLM
+ * sees one section and the suggested tags are appended into it.
  */
 
 import { extractInlineTags } from './tag-grammar';
@@ -24,11 +22,66 @@ export interface NoteSection {
   text: string;
 }
 
+export interface Section {
+  /** Heading text without the leading `#`s, or `''` for the pre-heading part. */
+  heading: string;
+  /** 1–6 for a real heading, 0 for the implicit pre-heading section. */
+  level: number;
+  /** 1-based line the section starts on (the heading line, or line 1). */
+  line: number;
+  /** The section's text, heading line excluded, outer blank lines trimmed. */
+  text: string;
+}
+
 const HEADING = /^(#{1,6})[ \t]+(.+?)[ \t]*#*[ \t]*$/;
 const FENCE = /^[ \t]*(```|~~~)/;
 const TABLE_ROW = /^\s*\|/;
 const BLOCKQUOTE = /^\s*>/;
 const HTML_BLOCK = /^<[a-zA-Z!/]/;
+
+/** Every section of `body`, in document order. */
+export function splitSections(body: string): Section[] {
+  const lines = body.split('\n');
+  const sections: Section[] = [];
+  let heading = '';
+  let level = 0;
+  let startLine = 1;
+  let buf: string[] = [];
+  let inFence = false;
+
+  const flush = (): void => {
+    const text = buf.join('\n').replace(/^\s+|\s+$/g, '');
+    // Drop an empty pre-heading section; keep every real heading section
+    // even when its body is blank.
+    if (level === 0 && text === '') {
+      return;
+    }
+    sections.push({ heading, level, line: startLine, text });
+  };
+
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    if (FENCE.test(line)) {
+      inFence = !inFence;
+      buf.push(line);
+      continue;
+    }
+    const m = inFence ? null : HEADING.exec(line);
+    if (m) {
+      flush();
+      heading = m[2];
+      level = m[1].length;
+      startLine = i + 1;
+      buf = [];
+    } else {
+      buf.push(line);
+    }
+  }
+  flush();
+
+  return sections;
+}
+
 /**
  * The 1-based line of the closing `---` of a YAML frontmatter block, or
  * `0` when the content has none. A block only counts when it starts on

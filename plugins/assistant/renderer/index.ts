@@ -7,7 +7,7 @@ import type {
 import type { AppConfig } from '../../../shared/app-config';
 import type { AssistantOutcome } from '../shared/ask';
 import type { ChatNoteView, ChatSummary } from '../shared/chat-note';
-import { resolveActions } from '../shared/resolve-actions.js';
+import { resolveActions } from '../../../shared/llm/actions';
 import { mountPanel, type PanelHandle } from './panel.js';
 import { createRunningTasks } from './running-tasks.js';
 import { createAssistantState, type AssistantPorts } from './state.js';

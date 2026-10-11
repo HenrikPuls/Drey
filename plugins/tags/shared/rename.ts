@@ -1,6 +1,4 @@
-// Sibling specifiers need the explicit `.js`: emitted as CJS (main) and
-// served over plugin:// (ESM) — see search.ts.
-import { TAG_NAME_SOURCE, extractTagOccurrences } from './tags.js';
+import { TAG_NAME_SOURCE, extractTagOccurrences } from '../../../shared/tag-grammar.js';
 
 /**
  * Tag rename / merge (milestone 53): rewrites every inline tag token the

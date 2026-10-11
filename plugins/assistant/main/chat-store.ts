@@ -1,7 +1,7 @@
 /**
  * Vault IO for chat notes (ADR-0048): create, append, truncate, list.
- * Main-side only — it owns the `yaml`-based frontmatter patching (plugin
- * renderers cannot runtime-import app `shared/`, and the patch must
+ * Main-side only — it owns the `yaml`-based frontmatter patching (a
+ * plugin renderer takes no package at runtime, and the patch must
  * preserve every user-added key, so it mirrors `shared/frontmatter.ts`'s
  * targeted-node-mutation approach on the few chat fields).
  *

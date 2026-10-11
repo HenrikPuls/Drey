@@ -2616,7 +2616,7 @@ keep plain `vault_write`).
 
 | Block | Where | Responsibility |
 | --- | --- | --- |
-| Wikilink grammar + resolver | `shared/wikilinks.ts` | `extractWikilinks`, `buildNoteIndex`, `resolveNoteTarget` — ONE definition for the renderer (`WikilinkService`, editor decorations) and main. The backlinks plugin keeps its parity-tested twin. |
+| Wikilink grammar + resolver | `shared/wikilinks.ts` | `extractWikilinks`, `buildNoteIndex`, `resolveNoteTarget` — ONE definition for the renderer (`WikilinkService`, editor decorations), main and the backlinks plugin (which imports it since plugin renderers are bundled, ADR-0044 later change). |
 | Planner | `shared/link-rewrite.ts` | `planRename` — pure: file list + note contents + one `from → to` in, `{ patches, assets }` out. Rule: a reference is rewritten only when what it opened before differs from what the unchanged text opens after. Attachments referenced relative to a moved note and used by nothing outside the move travel with it. |
 | Executor | `electron/link-rewriter.ts` | `LinkRewriter.preview` / `.apply`: one fresh scan of the source vault (dirty buffers substituted for their files), `VaultManager.renameEntry`, then the writes (CRLF kept) and attachment moves / copies; `removeDirIfEmpty` tidies an emptied `attachments/`. |
 | Orchestration | `src/app/link-update/` | `LinkUpdateService.rename` — the Files panel's single entry for rename and move: reads `vault.updateLinksOnRename`, previews, asks through `LinkUpdateDialog` (per-note changed lines, attachments, three answers + "Don't ask again"), then re-keys tabs, patches dirty buffers and re-reads clean ones. |

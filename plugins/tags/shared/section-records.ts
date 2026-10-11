@@ -11,11 +11,8 @@
  * search uses it on the live buffer of an open tab, so an unsaved edit is
  * searched exactly as it will be once saved.
  */
-// Sibling specifiers need the explicit `.js`: this file is emitted BOTH as
-// CJS (main, where Node16 maps .js -> .ts) and as ESM served over plugin://
-// (where the browser resolves the specifier verbatim — extensionless 404s).
-import { extractInlineTags } from './tags.js';
-import { splitSections } from './sections.js';
+import { extractInlineTags } from '../../../shared/tag-grammar.js';
+import { splitSections } from '../../../shared/note-sections.js';
 import type { SearchableSection } from './search.js';
 
 export function sectionRecordsFor(path: string, content: string): SearchableSection[] {

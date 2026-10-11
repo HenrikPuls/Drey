@@ -79,9 +79,9 @@ toolchain is removable by deleting `.tools/`). Never assume a bare `node`,
   `electron/` leaves the two sides disagreeing about the IPC contract _at
   runtime_ even though `tsc` is clean — fields the stale main process
   doesn't know get silently stripped from IPC payloads. The same applies
-  to plugins: touching `plugins/**` or `shared/plugin-api/**` leaves the
-  running app on the previously built `dist-electron/plugins/<id>/` — a
-  changed renderer module 404s or misbehaves until rebuilt. After any
+  to plugins: touching `plugins/**`, or a `shared/**` file a plugin
+  imports, leaves the running app on the previously built
+  `dist-electron/plugins/<id>/` — the plugin misbehaves until rebuilt. After any
   such change, rebuild and restart Electron; verify with
   `grep <new-symbol> dist-electron/plugins/<id> -r` (and
   `grep <new-field> dist-electron/shared/*.js` for base IPC).
@@ -257,7 +257,11 @@ toolchain is removable by deleting `.tools/`). Never assume a bare `node`,
   `sample`. Each is `plugin.json` +
   `main/` (CommonJS, Node) + `renderer/` (browser-context ESM + CSS over
   `plugin://`, **plain DOM**) + `shared/` types, built by
-  `scripts/build-plugins.mjs` into `dist-electron/plugins/<id>/`.
+  `scripts/build-plugins.mjs` into `dist-electron/plugins/<id>/`. The
+  renderer is **bundled** into one file (esbuild; ADR-0044 later change):
+  it may import its own folder and the repo's `shared/` at runtime —
+  never a package, `src/` or `electron/`; the build fails on those. Use
+  the `shared/` function, do not copy it into the plugin.
   Discovery: built-in root + `<userData>/plugins/<id>/` +
   `DREY_EXTRA_PLUGIN_DIR` (dev). Every extension point is a base-owned
   registry — dock panels, doc kinds, Settings pages, menu rows, commands,
@@ -574,7 +578,7 @@ Renderer (Angular):
   used only by a moved note travel with it), the dialog asks per
   `vault.updateLinksOnRename` (`ask | always | never`), dirty tabs are
   patched in the buffer. Wikilink grammar + resolver live in
-  `shared/wikilinks.ts` (the backlinks plugin keeps its twin)
+  `shared/wikilinks.ts` (the backlinks plugin imports it)
 - `ConflictService` + `ConflictDialog` (`src/app/conflict/`) and
   `HistoryService` + `HistoryDialog` (`src/app/history/`), milestone 60
   (ADR-0060) — the save-conflict merge view over the pure
