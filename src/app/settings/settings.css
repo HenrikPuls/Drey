@@ -27,7 +27,11 @@
 .categories {
   display: flex;
   flex-direction: column;
-  padding: 8px;
+  /* No top padding: it would sit above the sticky head's containing
+     block (the nav's content box), so the head could not pin flush with
+     the scrollport top and scrolled rows leaked through the gap. The 8px
+     live in the head's padding instead. */
+  padding: 0 8px 8px;
   gap: 2px;
   min-height: 0;
   overflow-y: auto;
@@ -41,10 +45,11 @@
   z-index: 1;
   display: flex;
   align-items: center;
-  /* Stretch to the nav's edges so scrolled rows pass under an opaque head:
-     -8px margins undo the nav padding, the padding adds it back visually. */
-  margin: -8px -8px 0;
-  padding: 14px 14px 10px;
+  /* Stretch to the nav's side edges so scrolled rows pass under an opaque
+     head: the -8px margins undo the nav's side padding, its own padding
+     adds it back visually. */
+  margin: 0 -8px;
+  padding: 22px 14px 10px;
   background: var(--bg-sidebar);
 }
 

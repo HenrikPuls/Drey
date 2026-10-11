@@ -20,6 +20,18 @@ recorded as an explicit decision. The parity checklist lives in
 
 ## Recent milestones
 
+### Fix — settings: scrolled categories no longer show above the headline
+
+- **The sticky headline pins flush again.** The category nav scrolled
+  with `padding: 8px`, and a sticky element is never shifted outside its
+  containing block — the nav's *content box*, which starts 8px below the
+  scrollport top. The `top: 0` pin was therefore clamped at that edge,
+  and scrolled category rows stayed visible in the strip between the
+  window border and the "Settings" headline. The nav's top padding moved
+  into the head's own padding (22px), so the pinned head now covers the
+  full top edge with its opaque background; the layout at rest is
+  unchanged.
+
 ### Main-process tests and typed linting
 
 Third package out of the 2026-10-11 architecture review. No change to
