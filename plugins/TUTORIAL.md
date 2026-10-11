@@ -230,11 +230,16 @@ anyway — see ADR-0068):
 
 Standalone note: you do not need Drey's build script to produce this
 layout, but you must replicate its two rules — the `main/` side is
-CommonJS, the `renderer/` side is an ES module — and mark them with
-`package.json` type files in the package (`{"type":"commonjs"}` in
-`main/`, `{"type":"module"}` at the root), exactly as the build script
-does. Authoring inside a checkout is the well-trodden path: you get the
-type checking against the real SDK for free.
+CommonJS, the `renderer/` bundle is an ES module. Ship **no**
+`package.json` in the package: the browser loads the renderer through
+`plugin://` and ignores `package.json` entirely, while on the main side
+a marker is at best redundant — and a `{"type":"module"}` at the root
+actively poisons the plugin, because Node then parses the CommonJS
+`main/` (and `shared/`) output as ESM and it fails to load ("exports is
+not defined in ES module scope"). Older revisions of this tutorial
+recommended markers; the installer now drops them on install. Authoring
+inside a checkout is the well-trodden path: you get the type checking
+against the real SDK for free.
 
 ## Step 6 — install, upgrade, remove
 
