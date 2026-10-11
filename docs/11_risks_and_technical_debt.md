@@ -3,7 +3,7 @@
 Rows about the removed tag-routing / master-document mechanism (ADR-0006,
 superseded by [ADR-0017](09_architecture_decisions/0017-tags-as-labels-and-section-index.md))
 and rows that were already marked resolved were dropped on 2026-10-10;
-they remain in the git history.
+they remain in the git history. 
 
 Carried over from `specs/roadmap.md` ("Open Risks / Undecided Details"),
 tracked here so they stay visible as the app is built:
