@@ -30,7 +30,8 @@ recorded as an explicit decision. The parity checklist lives in
 - **An icon strip per dock.** A 32px row at the top of each dock with one
   icon toggle per panel of that dock. A panel is open (frame + header) or
   closed (icon only); several can be open at once, stacked and split as
-  before. The default left dock now spends 128px on chrome.
+  before. The default left dock now spends 128px on chrome. Open panels
+  are marked by a neutral gray fill (`--active-bg`), not the accent.
 - **Collapse-to-header is gone.** A header click closes the panel; the
   strip icon opens it again. The stored `open` flag keeps its key, so a
   layout from before the change carries over — what was collapsed is now

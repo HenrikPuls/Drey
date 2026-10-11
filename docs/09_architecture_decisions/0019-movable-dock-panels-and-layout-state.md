@@ -226,7 +226,10 @@ A collapsed panel was, in effect, a 32px-tall text button.
   one toggle per panel that lives in that dock, in dock order. A panel is
   either **open** (frame + header, as before) or **closed** (its strip
   icon only). The default left dock now spends 32px + three open headers
-  = 128px on chrome.
+  = 128px on chrome. An open panel's icon carries the neutral
+  `--active-bg` fill with a `--border` edge, not the accent the other pressed icon buttons use:
+  several panels are open at once, and an accent on each made the row the
+  loudest thing on screen.
 - **`open[id]` keeps its storage key and changes meaning** — `false` was
   "collapsed to the header", it is now "closed to the icon". A stored
   layout therefore carries over without a migration step: what was

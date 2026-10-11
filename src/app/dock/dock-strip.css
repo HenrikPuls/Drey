@@ -13,6 +13,21 @@
   user-select: none;
 }
 
+/* Open panels: a quiet neutral fill instead of the accent -- several are
+   open at once, so the accent would light up the whole row. Closed ones
+   sit a step dimmer than an ordinary icon button. */
+.icon-btn[aria-pressed='true'] {
+  background: var(--active-bg);
+  /* The theme's own line colour as an edge: on themes whose text steps
+     sit close together (Anthrazit) the fill alone reads too faintly. */
+  box-shadow: inset 0 0 0 1px var(--border);
+  color: var(--text-primary);
+}
+
+.icon-btn[aria-pressed='false']:not(:hover) {
+  color: var(--text-5);
+}
+
 .icon-btn.dragging {
   opacity: 0.4;
 }
