@@ -20,6 +20,34 @@ recorded as an explicit decision. The parity checklist lives in
 
 ## Recent milestones
 
+### Assistant Vault chip: pick any subset of vaults
+
+- **The Vault chip is a picker now, not a cycle.** Clicking it opens the
+  composer's usual picker (`api.ui.showModal`) with three shortcut rows
+  — *Off*, *Active vault*, *All vaults* — and one checkbox row per
+  registered vault. Checking a subset (e.g. a non-active Git vault)
+  sends `vaultScope: 'custom'` + the selected `vaultIds`, so questions
+  can run against that vault without activating it (activating would
+  also retarget daily notes, capture and chats, ADR-0051). Every
+  registered vault is indexed and kept fresh regardless of scope, so
+  the selection is purely an ask-time filter. The derivation is
+  canonical (`deriveVaultScope`): none → off, exactly the active vault
+  → vault, every registered vault → all (a static list would not
+  auto-include a later-added vault), anything else → custom.
+- **Robust against stale selections.** The custom selection persists
+  beside the scope (`drey.assistant.vaultScopeVaults`); registry rounds
+  prune ids of removed vaults (a rename keeps its id) and an emptied
+  selection degrades to off visibly. At ask time main intersects the
+  selection with the registry (`resolveTargetVaultIds`) — a custom
+  scope resolving to nothing persists a new `unregistered` context
+  status ("the selected vaults are no longer registered"), never a
+  silent fallback to the active vault.
+- **Citations name the vault.** `RetrievedSection`, the `drey-context`
+  fence entries and the system-prompt block carry the vault's display
+  name (`vault · path:line`), so equal paths across vaults stay
+  distinguishable; the fence field is optional and tolerantly parsed,
+  so older chat notes keep reading.
+
 ### Dev escape hatch: parallel instances share one userData
 
 - **`DREY_MULTI_INSTANCE=1` opts an instance out of the

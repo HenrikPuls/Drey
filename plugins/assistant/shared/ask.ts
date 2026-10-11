@@ -57,11 +57,17 @@ export interface AskRequest {
   noteKey: string | null;
   /**
    * Semantic vault retrieval for THIS turn (ADR-0055): `off` (chip dark),
-   * `vault` (active vault) or `all` (every registered vault). The main
-   * side retrieves the top-k sections and injects them into the system
-   * prompt; a live-edit turn ignores the scope.
+   * `vault` (active vault), `all` (every registered vault) or `custom`
+   * (the picker's explicit subset — `vaultIds`). The main side retrieves
+   * the top-k sections and injects them into the system prompt; a
+   * live-edit turn ignores the scope.
    */
   vaultScope: VaultScope;
+  /**
+   * The `custom` selection's vault ids (registry-filtered main-side; ids
+   * of removed vaults drop out there). Empty for every other scope.
+   */
+  vaultIds: string[];
 }
 
 /**
@@ -113,7 +119,7 @@ export function parseAskPayload(payload: unknown): {
   taskId?: string;
 } {
   const shape = (payload ?? {}) as Record<string, unknown>;
-  const { question, note, extraFiles, images, chatPath, liveEdit, noteKey, vaultScope, taskId } = shape;
+  const { question, note, extraFiles, images, chatPath, liveEdit, noteKey, vaultScope, vaultIds, taskId } = shape;
   if (typeof question !== 'string') {
     throw new Error('malformed ask payload');
   }
@@ -138,6 +144,9 @@ export function parseAskPayload(payload: unknown): {
   if (noteKey !== undefined && noteKey !== null && typeof noteKey !== 'string') {
     throw new Error('malformed ask payload: noteKey must be a doc key or null');
   }
+  if (vaultIds !== undefined && !isVaultIdList(vaultIds)) {
+    throw new Error('malformed ask payload: vaultIds must be an array of vault ids');
+  }
   return {
     request: {
       question,
@@ -148,9 +157,18 @@ export function parseAskPayload(payload: unknown): {
       liveEdit,
       noteKey: noteKey === undefined ? null : (noteKey as string | null),
       vaultScope: normalizeVaultScope(vaultScope),
+      vaultIds: vaultIds === undefined ? [] : (vaultIds as string[]),
     },
     ...(typeof taskId === 'string' ? { taskId } : {}),
   };
+}
+
+/** A custom selection is a plain string array (absent is fine — not every scope carries one). */
+function isVaultIdList(value: unknown): value is string[] {
+  return (
+    Array.isArray(value) &&
+    value.every((id): id is string => typeof id === 'string' && id.trim() !== '')
+  );
 }
 
 function isAskFile(value: unknown): value is AskFile {

@@ -2335,15 +2335,24 @@ one push per press, Ctrl+S saves (req-25 unchanged).
 
 ## 5.27 Semantic vault retrieval (`plugins/assistant/main/semantic/`, ADR-0055)
 
-The **Vault chip** in the composer cycles `off → active vault → all
-vaults` (remembered in `localStorage['drey.assistant.vaultScope']`); each
-ask turned on carries `vaultScope` in the `AskRequest`, and
+The **Vault chip** in the composer opens a picker — *Off / Active
+vault / All vaults* shortcut rows plus one checkbox row per registered
+vault, so a non-active vault is targetable without activating it
+(remembered in `localStorage['drey.assistant.vaultScope']` plus the
+custom selection's ids); each ask turned on carries `vaultScope`
+(+ `vaultIds` for a custom subset) in the `AskRequest`, and
 `ChatEngine` retrieves the top-k note sections most similar to the
 question into the system prompt — a small fixed context, no tool loop,
-independent of `mcp.enabled`, ignored for live-edit turns.
+independent of `mcp.enabled`, ignored for live-edit turns. Citations
+name the vault (`vault · path:line`); a custom selection whose vaults
+all left the registry degrades to a visible `unregistered` context
+status, never to the active vault.
 
 - **`shared/semantic.ts`** (pure, spec-importable) — the `VaultScope`
-  type + normalizer, config defaults, e5 `query:`/`passage:` prefixes,
+  type + normalizer, the scope resolver (`resolveTargetVaultIds`: custom
+  ∩ registry, no active-vault fallback) and its picker twin
+  (`deriveVaultScope`: checked set → scope), config defaults, e5
+  `query:`/`passage:` prefixes,
   the fence-aware section splitter (copied from the tags plugin's —
   cross-plugin imports are banned), float32↔base64 vectors, cosine, the
   `VAULT CONTEXT` block builder, citations + the compact replay line.

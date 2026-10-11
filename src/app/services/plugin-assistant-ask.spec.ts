@@ -24,6 +24,7 @@ const VALID = {
   liveEdit: false,
   noteKey: 'v1::a.md',
   vaultScope: 'off',
+  vaultIds: [],
 };
 
 describe('assistant plugin ask contract (plugins/assistant/shared/ask)', () => {

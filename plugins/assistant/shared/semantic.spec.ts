@@ -5,11 +5,13 @@ import {
   contextCitations,
   cosineSimilarity,
   decodeVector,
+  deriveVaultScope,
   encodeVector,
   isSemanticIndexPath,
   normalizeVaultScope,
   passageText,
   queryText,
+  resolveTargetVaultIds,
   semanticSectionsFor,
   splitSemanticSections,
 } from './semantic';
@@ -34,13 +36,58 @@ describe('isSemanticIndexPath', () => {
 });
 
 describe('normalizeVaultScope', () => {
-  it('keeps the two retrieval scopes and maps everything else to off', () => {
+  it('keeps the retrieval scopes and maps everything else to off', () => {
     expect(normalizeVaultScope('vault')).toBe('vault');
     expect(normalizeVaultScope('all')).toBe('all');
+    expect(normalizeVaultScope('custom')).toBe('custom');
     expect(normalizeVaultScope('off')).toBe('off');
     expect(normalizeVaultScope(undefined)).toBe('off');
     expect(normalizeVaultScope('nonsense')).toBe('off');
     expect(normalizeVaultScope(42)).toBe('off');
+  });
+});
+
+describe('resolveTargetVaultIds', () => {
+  const vaults = [
+    { id: 'va', active: false },
+    { id: 'vb', active: true },
+    { id: 'vc', active: false },
+  ];
+
+  it('all → every registered id; vault → the active one', () => {
+    expect(resolveTargetVaultIds(vaults, 'all')).toEqual(['va', 'vb', 'vc']);
+    expect(resolveTargetVaultIds(vaults, 'vault')).toEqual(['vb']);
+  });
+
+  it('custom intersects with the registry and dedupes — dead ids drop silently', () => {
+    expect(resolveTargetVaultIds(vaults, 'custom', ['vc', 'va', 'vc', 'gone'])).toEqual(['va', 'vc']);
+  });
+
+  it('custom with no surviving id is empty (no active-vault fallback)', () => {
+    expect(resolveTargetVaultIds(vaults, 'custom', ['gone'])).toEqual([]);
+    expect(resolveTargetVaultIds(vaults, 'custom')).toEqual([]);
+  });
+});
+
+describe('deriveVaultScope', () => {
+  const vaults = [
+    { id: 'va', active: false },
+    { id: 'vb', active: true },
+    { id: 'vc', active: false },
+  ];
+
+  it('none → off; exactly the active vault → vault; every id → all', () => {
+    expect(deriveVaultScope([], vaults)).toEqual({ scope: 'off', vaultIds: [] });
+    expect(deriveVaultScope(['vb'], vaults)).toEqual({ scope: 'vault', vaultIds: [] });
+    expect(deriveVaultScope(['vc', 'va', 'vb'], vaults)).toEqual({ scope: 'all', vaultIds: [] });
+  });
+
+  it('any other subset → custom with the ids in registry order', () => {
+    expect(deriveVaultScope(['vc', 'va'], vaults)).toEqual({ scope: 'custom', vaultIds: ['va', 'vc'] });
+  });
+
+  it('a checked id outside the registry is ignored', () => {
+    expect(deriveVaultScope(['va', 'ghost'], vaults)).toEqual({ scope: 'custom', vaultIds: ['va'] });
   });
 });
 
@@ -141,5 +188,20 @@ describe('context shaping', () => {
       '[Vault context used for this answer: daily/a.md — Motivation; notes/b.md — Laufen]',
     );
     expect(compactContextLine([])).toBe('');
+  });
+
+  it('vault names disambiguate equal paths across vaults', () => {
+    const crossVault: RetrievedSection[] = [
+      { vaultId: 'v1', vault: 'Privat', path: 'daily/a.md', heading: 'Motivation', line: 4, score: 0.9, text: 'x' },
+      { vaultId: 'v2', vault: 'Git', path: 'daily/a.md', heading: 'Klon', line: 2, score: 0.8, text: 'y' },
+    ];
+    const block = buildVaultContextBlock(crossVault);
+    expect(block).toContain('[1] Privat · daily/a.md — Motivation (line 4)');
+    expect(block).toContain('[2] Git · daily/a.md — Klon (line 2)');
+    const cites = contextCitations(crossVault);
+    expect(cites[0]).toMatchObject({ vault: 'Privat', path: 'daily/a.md' });
+    expect(compactContextLine(cites)).toBe(
+      '[Vault context used for this answer: Privat · daily/a.md — Motivation; Git · daily/a.md — Klon]',
+    );
   });
 });

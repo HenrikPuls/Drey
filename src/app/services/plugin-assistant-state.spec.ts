@@ -53,6 +53,8 @@ interface Harness {
   failListChats: boolean;
   /** The daily root the dailyDir port reports (`daily` unless overridden). */
   dailyDirValue: string;
+  /** The vault registry the listVaults port reports (the Vault chip's picker). */
+  vaultRegistry: { id: string; name: string; active: boolean }[];
 }
 
 function viewOf(text: string): ChatNoteView {
@@ -105,6 +107,10 @@ function setup(options: { llm?: boolean } = {}): Harness {
     askGate: null,
     failListChats: false,
     dailyDirValue: 'daily',
+    vaultRegistry: [
+      { id: 'v1', name: 'Notes', active: true },
+      { id: 'v2', name: 'Git vault', active: false },
+    ],
     state: undefined as never,
     tasks: undefined as never,
   };
@@ -185,6 +191,7 @@ function setup(options: { llm?: boolean } = {}): Harness {
       lockOps.push({ path, locked });
     },
     dailyDir: async () => h.dailyDirValue,
+    listVaults: async () => h.vaultRegistry,
   };
 
   h.tasks = tasks;
@@ -227,6 +234,7 @@ describe('assistant plugin state — chat-first asks (ADR-0048)', () => {
       liveEdit: false,
       noteKey: 'v1::a.md',
       vaultScope: 'off',
+      vaultIds: [],
     });
   });
 
@@ -907,5 +915,51 @@ describe('assistant plugin state — daily-note decoupling (57c)', () => {
     await h.state.followActiveDoc('v1::daily/2026/10/2026-10-10.md');
 
     expect(h.state.activeChatPath()).toBe('chats/2026/10/topic.md');
+  });
+});
+
+describe('assistant plugin state — the Vault chip selection (ADR-0055 later change)', () => {
+  it('a custom selection rides the ask as vaultIds', async () => {
+    const h = setup();
+    h.state.setVaultScope('custom', ['v2', 'v1']);
+
+    await h.state.ask('was steht im git vault?');
+
+    expect(h.asks[0]?.vaultScope).toBe('custom');
+    expect(h.asks[0]?.vaultIds).toEqual(['v2', 'v1']);
+  });
+
+  it('a non-custom scope clears the ids', async () => {
+    const h = setup();
+    h.state.setVaultScope('custom', ['v2']);
+    h.state.setVaultScope('all');
+
+    await h.state.ask('alles');
+
+    expect(h.asks[0]?.vaultScope).toBe('all');
+    expect(h.asks[0]?.vaultIds).toEqual([]);
+    expect(h.state.customVaultIds()).toEqual([]);
+  });
+
+  it('refreshVaults prunes dead ids and degrades an emptied selection to off', async () => {
+    const h = setup();
+    h.state.setVaultScope('custom', ['v1', 'gone']);
+    await h.state.refreshVaults();
+    expect(h.state.vaultScope()).toBe('custom');
+    expect(h.state.customVaultIds()).toEqual(['v1']);
+
+    h.state.setVaultScope('custom', ['gone']);
+    await h.state.refreshVaults();
+    expect(h.state.vaultScope()).toBe('off');
+    expect(h.state.customVaultIds()).toEqual([]);
+  });
+
+  it('exposes the registry for the picker', async () => {
+    const h = setup();
+    await h.state.refreshVaults();
+    expect(h.state.vaults()).toEqual([
+      { id: 'v1', name: 'Notes', active: true },
+      { id: 'v2', name: 'Git vault', active: false },
+    ]);
   });
 });

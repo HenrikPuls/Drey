@@ -2168,15 +2168,23 @@ the tab being closed (ADR-0048's paths-not-bodies rule stays intact).
 
 ## 6.44 Semantic vault retrieval — the ask's Vault chip (milestone 41, ADR-0055)
 
-The assistant composer's **Vault chip** cycles `off → active vault → all
-vaults` (remembered per app). With it on, the ask carries `vaultScope`
-and the assistant plugin's main side retrieves the top-k note sections
-most similar to the question — embeddings via the plugin's own
-transformers.js WASM worker, one JSON index per vault kept fresh by the
-save-hook / vault-change registries, section text hydrated from the
-vault at answer time. Independent of `mcp.enabled`; ignored for
-live-edit turns; a retrieval failure degrades to no context plus a quiet
-notice.
+The assistant composer's **Vault chip** opens a picker: three shortcut
+rows — off, the active vault, all vaults — and one checkbox row per
+registered vault (remembered per app). Checking a subset (e.g. a
+non-active Git vault, without making it the default target for new
+content) sends `vaultScope: 'custom'` plus the selected `vaultIds`. The
+assistant plugin's main side retrieves the top-k note sections most
+similar to the question — embeddings via the plugin's own
+transformers.js WASM worker, one JSON index per vault (all registered
+vaults, independent of the scope) kept fresh by the save-hook /
+vault-change registries, section text hydrated from the vault at answer
+time. Citations carry the vault's name (`vault · path:line`), so equal
+paths across vaults stay distinguishable. Independent of
+`mcp.enabled`; ignored for live-edit turns; a retrieval failure
+degrades to no context plus a quiet notice. A custom selection whose
+vaults have all been removed from the registry degrades visibly to an
+"unregistered" context status — never a silent fallback to the active
+vault.
 
 ```mermaid
 sequenceDiagram
@@ -2188,23 +2196,24 @@ sequenceDiagram
     participant Vault as ctx.vault
     participant LLM as ctx.llm.chat → provider
 
-    User->>Panel: click Vault chip (off → vault → all)
-    User->>Panel: send question (vaultScope: vault/all)
+    User->>Panel: open Vault chip picker (off / active / all / subset)
+    User->>Panel: send question (vaultScope, vaultIds?)
     Panel->>Ask: invoke('ask', request)
-    Ask->>Sem: retrieveContext(question, scope)
+    Ask->>Sem: retrieveContext(question, scope, vaultIds)
+    Sem->>Sem: resolveTargetVaultIds (custom ∩ registry, no fallback)
     Sem->>W: embed("query: …")
     W-->>Sem: query vector (384 dims)
-    Sem->>Sem: cosine top-k over the scoped vault's index (min score floor)
+    Sem->>Sem: cosine top-k over the scoped vaults' indexes (min score floor)
     loop each hit
         Sem->>Vault: read(path)
         Sem->>Sem: section text fresh from disk (hydration)
     end
-    Sem-->>Ask: RetrievedSection[] (path, heading, line, score, text)
+    Sem-->>Ask: RetrievedSection[] (vault, path, heading, line, score, text)
     Ask->>Ask: system prompt += VAULT CONTEXT block
     Ask->>LLM: chat(system, replay…, question)
     LLM-->>Ask: answer
     Ask-->>Panel: outcome + contextCount (+ contextError?)
-    Note over Ask: chat note turn persists a compact<br/>```drey-context fence (path/heading/line);
+    Note over Ask: chat note turn persists a compact<br/>```drey-context fence (vault/path/heading/line);
     Note over Ask: follow-up replays one [Vault context used —] line
 ```
 

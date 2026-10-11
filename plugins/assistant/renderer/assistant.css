@@ -909,6 +909,32 @@
   color: var(--accent-hover);
 }
 
+/* The Vault picker (ADR-0055 later change): a separator between the
+   shortcut rows (Off / Active vault / All vaults) and the per-vault
+   checkbox rows, whose check glyph reserves a fixed slot so the vault
+   names align whether checked or not. */
+.assistant-picker-sep {
+  height: 1px;
+  margin: 4px 10px;
+  background: var(--border);
+}
+
+.assistant-picker-row.vault-choice {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.assistant-picker-row.vault-choice .row-check {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 14px;
+  height: 14px;
+  color: var(--accent);
+}
+
 .assistant-picker-hand {
   display: flex;
   gap: 6px;

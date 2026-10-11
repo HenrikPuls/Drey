@@ -481,17 +481,24 @@ Renderer (Angular):
    without tool support fail visibly
 - **Vault chip — semantic vault retrieval** (milestone 41,
   [ADR-0055](docs/09_architecture_decisions/0055-semantic-vault-retrieval.md)):
-  a second composer chip cycles `off → active vault → all vaults`; each
-  ask with it on embeds the question in the assistant plugin's worker
+  a second composer chip opens a vault picker — *Off / Active vault /
+  All vaults* shortcuts plus one checkbox row per registered vault, so a
+  non-active vault (e.g. a Git vault) is targetable without activating
+  it; each ask with it on embeds the question in the assistant plugin's
+  worker
   (transformers.js WASM-only, `plugins/assistant/main/semantic/`) and
   injects the top-k similar note sections into the system prompt —
   section text rides ONLY that call (never the replay; older turns cite
-  via a compact ```drey-context fence). Index: one JSON file per vault
+  via a compact ```drey-context fence that names the vault:
+  `vault · path:line`). Index: one JSON file per **every registered**
+  vault (scope-independent)
   under `<userData>/plugins/assistant/semantic-index/`, kept fresh by the
   save/vault hook registries, hydrated from the vault at answer time.
   Settings → "Assistant retrieval" (enabled, model id, k, score floor,
   per-vault status + rebuild). Independent of `mcp.enabled`; ignored for
-  live-edit turns.
+  live-edit turns. A custom selection referencing no registered vault
+  anymore degrades to a visible `unregistered` context status, never to
+  the active vault.
 - `KeybindingService` (`src/app/keybindings/`) — a capture-phase
   `keydown` listener mapping chord strings onto `Command`s, plus a
   capture-phase `mouseup` listener for `Command.mouseButton`

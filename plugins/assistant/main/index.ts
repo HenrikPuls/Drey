@@ -157,7 +157,8 @@ const plugin: MainPluginModule = {
         },
         onDelta: (taskId, text) => ctx.ipc.emit('chat:delta', { taskId, text }),
         onLiveEdit: (path, content) => ctx.ipc.emit('chat:liveEdit', { path, content }),
-        retrieveContext: (question, scope) => semantic.retrieve(question, scope),
+        retrieveContext: (question, scope, vaultIds) =>
+          semantic.retrieve(question, scope, vaultIds),
         tasksTool: () => {
           // Live at call time: the tasks plugin can (de)activate between
           // asks only via an app restart, but the getter keeps the engine

@@ -106,6 +106,8 @@ export interface ChatNoteTurn {
  * One persisted citation line inside a ```drey-context fence.
  */
 export interface ChatContextEntry {
+  /** The vault's display name; absent on notes written before it existed. */
+  vault?: string;
   path: string;
   heading: string;
   line: number;
@@ -115,12 +117,14 @@ export interface ChatContextEntry {
  * What happened when this turn asked the vault (ADR-0055): persisted as a
  * `{"status":…}` line inside the ```drey-context fence whenever the Vault
  * chip was on but produced NO hits — so the panel can say WHY nothing
- * came back (floor too high / retrieval disabled / retrieval failed)
- * instead of staying silent. Plain hits carry no status, just cites.
+ * came back (floor too high / retrieval disabled / retrieval failed /
+ * the custom selection references no registered vault) instead of
+ * staying silent. Plain hits carry no status, just cites.
  */
 export type ChatContextStatus =
   | { kind: 'empty'; floor: number }
   | { kind: 'disabled' }
+  | { kind: 'unregistered' }
   | { kind: 'error'; message: string };
 
 /** The frontmatter fields a chat note reads. Everything else is the user's. */
@@ -312,6 +316,9 @@ function parseContextLine(line: string): ChatContextEntry | ChatContextStatus | 
     if (status === 'disabled') {
       return { kind: 'disabled' };
     }
+    if (status === 'unregistered') {
+      return { kind: 'unregistered' };
+    }
     if (status === 'error' && typeof obj['message'] === 'string') {
       return { kind: 'error', message: obj['message'] };
     }
@@ -326,6 +333,7 @@ function parseContextLine(line: string): ChatContextEntry | ChatContextStatus | 
     return null;
   }
   return {
+    ...(typeof c['vault'] === 'string' && c['vault'] !== '' ? { vault: c['vault'] } : {}),
     path: c['path'],
     heading: typeof c['heading'] === 'string' ? c['heading'] : '',
     line: typeof c['line'] === 'number' ? c['line'] : 0,
@@ -530,7 +538,14 @@ export function toolEntryLine(entry: ChatToolEntry): string {
 
 /** One `{"cite":…}` fence line (```drey-context). */
 export function contextEntryLine(entry: ChatContextEntry): string {
-  return JSON.stringify({ cite: { path: entry.path, heading: entry.heading, line: entry.line } });
+  return JSON.stringify({
+    cite: {
+      ...(entry.vault !== undefined ? { vault: entry.vault } : {}),
+      path: entry.path,
+      heading: entry.heading,
+      line: entry.line,
+    },
+  });
 }
 
 /** One `{"status":…}` fence line (```drey-context) — the no-hits explanation. */
@@ -540,6 +555,8 @@ export function contextStatusLine(status: ChatContextStatus): string {
       return JSON.stringify({ status: 'empty', floor: status.floor });
     case 'disabled':
       return JSON.stringify({ status: 'disabled' });
+    case 'unregistered':
+      return JSON.stringify({ status: 'unregistered' });
     case 'error':
       return JSON.stringify({ status: 'error', message: status.message });
   }

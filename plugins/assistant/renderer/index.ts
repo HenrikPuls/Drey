@@ -110,12 +110,25 @@ const plugin: PluginRendererModule = {
         const config = await api.appConfig.get();
         return config.daily.dir;
       },
+      listVaults: async () => {
+        const list = await api.vault.listVaults();
+        return list.map((vault) => ({
+          id: vault.id,
+          name: vault.name,
+          active: vault.active === true,
+        }));
+      },
     };
 
     const state = createAssistantState(ports, tasks);
     // Vault writes elsewhere (or our own chat-note appends) stale the
-    // picker cache; the lazy cache reloads on the next open.
-    api.vault.onChanged(() => state.invalidateChats());
+    // picker cache; the lazy cache reloads on the next open. The same
+    // round covers registry mutations (add/remove), so the Vault chip's
+    // custom selection gets pruned when its vaults disappear.
+    api.vault.onChanged(() => {
+      state.invalidateChats();
+      void state.refreshVaults();
+    });
 
     // Live edit (ADR-0049): each mutating doc-tool call pushes the whole
     // working copy; the host applies it to the open tab as one unsaved edit

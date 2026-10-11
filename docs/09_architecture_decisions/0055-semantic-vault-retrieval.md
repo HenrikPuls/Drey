@@ -111,3 +111,38 @@ retrieval VISIBLE: the persisted `drey-context` fence can carry a
 - The MCP `vault_search` stays keyword-based; a semantic MCP tool would
   need a base registry seam (the section-search slot is single) —
   deliberately deferred until a second consumer exists.
+
+## Later change: a selectable vault subset (the chip became a picker)
+
+**Context.** The three-value cycle could not target a *non-active*
+vault: asking against e.g. a Git vault required making it active —
+which would also retarget daily notes, capture and chats (ADR-0051).
+Structurally this was cheap to fix: every registered vault is indexed
+and kept fresh regardless of scope, so a subset is purely a filter on
+the ask-time target list.
+
+**Decision.** Clicking the Vault chip opens a picker (the composer's
+established `api.ui.showModal` pattern) with three shortcut rows —
+*Off*, *Active vault*, *All vaults* — plus one checkbox row per
+registered vault. The checked set derives the scope (`deriveVaultScope`
+in `shared/semantic.ts`): none → `off`, exactly the active vault →
+`vault`, every registered vault → `all` (kept as a shortcut on purpose:
+a static id list would not auto-include a vault added later), any other
+subset → `custom` + the ids. `AskRequest` gained `vaultIds: string[]`
+(strictly validated, absent on legacy payloads); main resolves the
+targets with `resolveTargetVaultIds` — a custom selection is
+intersected with the registry and never falls back to the active vault;
+an empty result persists a visible `unregistered` context status.
+
+Robustness details: the selection persists beside the scope in
+`localStorage['drey.assistant.vaultScopeVaults']`; registry rounds
+(`api.vault.onChanged` → the state's `refreshVaults`) prune ids of
+removed vaults — a rename keeps its id (ADR-0051), remove + re-add
+mints a new one — and an emptied selection degrades to `off` visibly.
+
+Citations now name the vault: `RetrievedSection`/`ContextCite`/the
+`drey-context` fence entries carry an optional `vault` (display name)
+and the system-prompt block cites `vault · path:line`, so two vaults'
+`daily/2026/10/11.md` are distinguishable to the model and the user.
+The fence field is optional and tolerantly parsed — notes written
+before the change keep reading.

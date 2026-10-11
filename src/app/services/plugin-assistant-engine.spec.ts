@@ -286,6 +286,7 @@ const ASK = {
   liveEdit: false,
   noteKey: 'v1::a.md' as string | null,
   vaultScope: 'off' as const,
+  vaultIds: [] as string[],
 };
 
 describe('assistant plugin chat engine — persistence (bug-10b)', () => {

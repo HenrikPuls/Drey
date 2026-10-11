@@ -20,21 +20,32 @@ const baseRequest: AskRequest = {
   liveEdit: false,
   noteKey: null,
   vaultScope: 'off',
+  vaultIds: [],
 };
 
 describe('parseAskPayload vaultScope', () => {
   it('defaults a legacy payload (no field) to off', () => {
     const { request } = parseAskPayload({ question: 'q', note: null, extraFiles: [], images: [], chatPath: null, liveEdit: false });
     expect(request.vaultScope).toBe('off');
+    expect(request.vaultIds).toEqual([]);
   });
 
-  it('keeps vault/all and normalizes junk', () => {
+  it('keeps vault/all/custom and normalizes junk', () => {
     const vault = parseAskPayload({ ...baseRequest, vaultScope: 'vault' });
     expect(vault.request.vaultScope).toBe('vault');
     const all = parseAskPayload({ ...baseRequest, vaultScope: 'all' });
     expect(all.request.vaultScope).toBe('all');
+    const custom = parseAskPayload({ ...baseRequest, vaultScope: 'custom', vaultIds: ['v1', 'v2'] });
+    expect(custom.request.vaultScope).toBe('custom');
+    expect(custom.request.vaultIds).toEqual(['v1', 'v2']);
     const junk = parseAskPayload({ ...baseRequest, vaultScope: true });
     expect(junk.request.vaultScope).toBe('off');
+  });
+
+  it('rejects a malformed vaultIds field (visible, not silently dropped)', () => {
+    expect(() => parseAskPayload({ ...baseRequest, vaultScope: 'custom', vaultIds: 'v1' })).toThrow();
+    expect(() => parseAskPayload({ ...baseRequest, vaultScope: 'custom', vaultIds: ['v1', 5] })).toThrow();
+    expect(() => parseAskPayload({ ...baseRequest, vaultScope: 'custom', vaultIds: [''] })).toThrow();
   });
 
   it('still rejects a malformed core payload', () => {
@@ -52,7 +63,7 @@ describe('the ```drey-context fence', () => {
       attachments: [],
       tool: [],
       context: [
-        { path: 'daily/a.md', heading: 'Motivation', line: 4 },
+        { vault: 'Privat', path: 'daily/a.md', heading: 'Motivation', line: 4 },
         { path: 'notes/b.md', heading: 'Laufen', line: 9 },
       ],
       contextStatus: null,
@@ -84,7 +95,7 @@ describe('the ```drey-context fence', () => {
     expect(view.turns[0].contextStatus).toEqual({ kind: 'empty', floor: 0.3 });
   });
 
-  it('roundtrips the disabled and error statuses', () => {
+  it('roundtrips the disabled, unregistered and error statuses', () => {
     const base = {
       role: 'assistant' as const,
       at: null,
@@ -97,6 +108,10 @@ describe('the ```drey-context fence', () => {
     };
     const disabled = parseChatNote(serializeTurn({ ...base, contextStatus: { kind: 'disabled' } }));
     expect(disabled.turns[0].contextStatus).toEqual({ kind: 'disabled' });
+    const unregistered = parseChatNote(
+      serializeTurn({ ...base, contextStatus: { kind: 'unregistered' } }),
+    );
+    expect(unregistered.turns[0].contextStatus).toEqual({ kind: 'unregistered' });
     const failed = parseChatNote(
       serializeTurn({ ...base, contextStatus: { kind: 'error', message: 'worker died' } }),
     );

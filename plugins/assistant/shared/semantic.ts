@@ -10,12 +10,66 @@
  * algorithms in step when one changes.
  */
 
-/** How much of the vault rides with one question: off / active vault / all vaults. */
-export type VaultScope = 'off' | 'vault' | 'all';
+/**
+ * How much of the vault rides with one question: off / active vault / all
+ * vaults / an explicit subset (`custom` — e.g. a non-active Git vault,
+ * selected in the Vault chip's picker).
+ */
+export type VaultScope = 'off' | 'vault' | 'all' | 'custom';
 
 /** Tolerates legacy payloads (absent or malformed → `off`). */
 export function normalizeVaultScope(value: unknown): VaultScope {
-  return value === 'vault' || value === 'all' ? value : 'off';
+  return value === 'vault' || value === 'all' || value === 'custom' ? value : 'off';
+}
+
+/** A scope that actually retrieves (everything but `off`). */
+export type ActiveVaultScope = Exclude<VaultScope, 'off'>;
+
+/**
+ * Resolves a scope to concrete vault ids (the ask-time target list).
+ * `custom` intersects the selection with the registry — ids of removed
+ * vaults drop out silently; an empty result is reported by the service
+ * (`noTargets`), never fallen back to the active vault.
+ */
+export function resolveTargetVaultIds(
+  vaults: readonly { id: string; active: boolean }[],
+  scope: ActiveVaultScope,
+  vaultIds: readonly string[] = [],
+): string[] {
+  if (scope === 'all') {
+    return vaults.map((v) => v.id);
+  }
+  if (scope === 'custom') {
+    const wanted = new Set(vaultIds);
+    return vaults.filter((v) => wanted.has(v.id)).map((v) => v.id);
+  }
+  const active = vaults.find((v) => v.active);
+  return active !== undefined ? [active.id] : [];
+}
+
+/**
+ * Derives the scope from a picker's checked set: none → `off`, exactly
+ * the active vault → `vault`, every registered vault → `all` (so a vault
+ * added later joins automatically — a static id list would not), and any
+ * other subset → `custom` with the checked ids (registry order).
+ */
+export function deriveVaultScope(
+  checked: readonly string[],
+  vaults: readonly { id: string; active: boolean }[],
+): { scope: VaultScope; vaultIds: string[] } {
+  const known = [...new Set(checked)];
+  if (known.length === 0) {
+    return { scope: 'off', vaultIds: [] };
+  }
+  const ids = vaults.map((v) => v.id);
+  if (known.length === ids.length && known.every((id) => ids.includes(id))) {
+    return { scope: 'all', vaultIds: [] };
+  }
+  const active = vaults.find((v) => v.active);
+  if (active !== undefined && known.length === 1 && known[0] === active.id) {
+    return { scope: 'vault', vaultIds: [] };
+  }
+  return { scope: 'custom', vaultIds: ids.filter((id) => known.includes(id)) };
 }
 
 /** Config defaults (plugin config store keys: `semantic.*`). */
@@ -187,6 +241,8 @@ export function cosineSimilarity(a: Float32Array, b: Float32Array): number {
 /** One retrieved section with its hydrated text (what the model reads). */
 export interface RetrievedSection {
   vaultId: string;
+  /** The vault's display name — citations disambiguate equal paths across vaults. */
+  vault?: string;
   path: string;
   heading: string;
   line: number;
@@ -197,18 +253,22 @@ export interface RetrievedSection {
 /**
  * One retrieval attempt's full result: not just the hits, but WHY there
  * are none — `enabled: false` means nothing was searched at all (the
- * Vault chip was on while the feature is off in Settings), and
- * `minScore` lets the caller report the floor an empty result fell
- * under. Retrieval failures still throw; the caller catches.
+ * Vault chip was on while the feature is off in Settings), `noTargets`
+ * means a custom selection referenced no registered vault (removed
+ * vaults), and `minScore` lets the caller report the floor an empty
+ * result fell under. Retrieval failures still throw; the caller catches.
  */
 export interface RetrievalOutcome {
   enabled: boolean;
   minScore: number;
   hits: RetrievedSection[];
+  noTargets?: boolean;
 }
 
 /** The persisted per-turn citation (the ```drey-context fence entry). */
 export interface ContextCite {
+  /** The vault's display name; absent on notes written before it existed. */
+  vault?: string;
   path: string;
   heading: string;
   line: number;
@@ -220,19 +280,25 @@ export function buildVaultContextBlock(hits: readonly RetrievedSection[]): strin
     return '';
   }
   const parts: string[] = [
-    'VAULT CONTEXT — sections retrieved by similarity to the question; read-only reference, cite paths like "path:line" when you use them.',
+    'VAULT CONTEXT — sections retrieved by similarity to the question; read-only reference, cite them as vault · path:line when you use them.',
   ];
   hits.forEach((hit, i) => {
     const text = hit.text.length > CONTEXT_MAX_CHARS
       ? `${hit.text.slice(0, CONTEXT_MAX_CHARS)}\n[…section truncated…]`
       : hit.text;
-    parts.push(`[${i + 1}] ${hit.path} — ${hit.heading} (line ${hit.line})\n${text}`);
+    const where = hit.vault !== undefined ? `${hit.vault} · ${hit.path}` : hit.path;
+    parts.push(`[${i + 1}] ${where} — ${hit.heading} (line ${hit.line})\n${text}`);
   });
   return parts.join('\n\n');
 }
 
 export function contextCitations(hits: readonly RetrievedSection[]): ContextCite[] {
-  return hits.map((hit) => ({ path: hit.path, heading: hit.heading, line: hit.line }));
+  return hits.map((hit) => ({
+    ...(hit.vault !== undefined ? { vault: hit.vault } : {}),
+    path: hit.path,
+    heading: hit.heading,
+    line: hit.line,
+  }));
 }
 
 /** One compact replay line listing what an older turn retrieved (text is NOT replayed). */
@@ -240,6 +306,8 @@ export function compactContextLine(cites: readonly ContextCite[]): string {
   if (cites.length === 0) {
     return '';
   }
-  const list = cites.map((cite) => `${cite.path} — ${cite.heading}`).join('; ');
+  const list = cites
+    .map((cite) => `${cite.vault !== undefined ? `${cite.vault} · ` : ''}${cite.path} — ${cite.heading}`)
+    .join('; ');
   return `[Vault context used for this answer: ${list}]`;
 }

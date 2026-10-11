@@ -21,11 +21,12 @@ import {
   isSemanticIndexPath,
   passageText,
   queryText,
+  resolveTargetVaultIds,
   semanticSectionsFor,
+  type ActiveVaultScope,
   type ContextCite,
   type RetrievedSection,
   type RetrievalOutcome,
-  type VaultScope,
 } from '../../shared/semantic.js';
 import { SemanticEmbedder } from './embedder';
 import { VectorIndex } from './vector-index';
@@ -285,29 +286,25 @@ export class SemanticService {
    * Retrieval for one ask turn: embed the question, top-k over the scoped
    * vaults, then hydrate each hit's text FRESH from the vault. A disabled
    * service returns `enabled: false` (nothing was searched — the caller
-   * can say so); hard failures throw, the caller catches and degrades to
-   * no context.
+   * can say so); a custom selection whose ids no longer resolve returns
+   * `noTargets` (no silent fallback to the active vault); hard failures
+   * throw, the caller catches and degrades to no context.
    */
   async retrieve(
     question: string,
-    scope: Extract<VaultScope, 'vault' | 'all'>,
+    scope: ActiveVaultScope,
+    vaultIds: readonly string[] = [],
   ): Promise<RetrievalOutcome> {
     if (!this.enabled || this.disposed) {
       return { enabled: false, minScore: this.minScore, hits: [] };
     }
     const empty: RetrievalOutcome = { enabled: true, minScore: this.minScore, hits: [] };
     const vaults = await this.deps.listVaults();
-    const targetIds: string[] = [];
-    if (scope === 'all') {
-      targetIds.push(...vaults.map((v) => v.id));
-    } else {
-      const active = vaults.find((v) => v.active);
-      if (active !== undefined) {
-        targetIds.push(active.id);
-      }
-    }
+    const targetIds = resolveTargetVaultIds(vaults, scope, vaultIds);
     if (targetIds.length === 0) {
-      return empty;
+      return scope === 'custom'
+        ? { ...empty, noTargets: true }
+        : empty;
     }
     await this.ensureLoaded(targetIds);
     const [queryVec] = await this.embedder.embed([queryText(this.model, question)]);
@@ -319,6 +316,7 @@ export class SemanticService {
     const hits = this.index
       .search(targetIds, this.model, queryVec, this.topK, this.minScore)
       .filter((hit) => isSemanticIndexPath(hit.path));
+    const names = new Map(vaults.map((vault) => [vault.id, vault.name]));
     const out: RetrievedSection[] = [];
     for (const hit of hits) {
       const content = await this.deps.readVaultText(hit.vaultId, hit.path);
@@ -335,6 +333,7 @@ export class SemanticService {
       }
       out.push({
         vaultId: hit.vaultId,
+        vault: names.get(hit.vaultId),
         path: hit.path,
         heading: section.heading,
         line: section.line,
@@ -347,9 +346,10 @@ export class SemanticService {
 
   citationsFor(
     question: string,
-    scope: Extract<VaultScope, 'vault' | 'all'>,
+    scope: ActiveVaultScope,
+    vaultIds: readonly string[] = [],
   ): Promise<ContextCite[]> {
-    return this.retrieve(question, scope).then((outcome) => contextCitations(outcome.hits));
+    return this.retrieve(question, scope, vaultIds).then((outcome) => contextCitations(outcome.hits));
   }
 
   /** Sync flush for app quit. */

@@ -33,7 +33,7 @@ import { buildReplayMessages } from '../shared/chat-replay.js';
 import {
   buildVaultContextBlock,
   contextCitations,
-  type ContextCite,
+  type ActiveVaultScope,
   type RetrievedSection,
   type RetrievalOutcome,
 } from '../shared/semantic.js';
@@ -106,13 +106,14 @@ export interface ChatEnginePorts {
   /**
    * Semantic vault retrieval for one question (ADR-0055): the outcome —
    * hits with their fresh text, best first, plus WHY there are none
-   * (feature off / floor too high). Only called when the ask turned the
-   * Vault chip on; hard failures throw, the caller catches and degrades
-   * to no context.
+   * (feature off / floor too high / a custom selection with no registered
+   * vault left). Only called when the ask turned the Vault chip on; hard
+   * failures throw, the caller catches and degrades to no context.
    */
   retrieveContext(
     question: string,
-    scope: 'vault' | 'all',
+    scope: ActiveVaultScope,
+    vaultIds: readonly string[],
   ): Promise<RetrievalOutcome>;
   /**
    * The `tasks_list` tool for NON-live asks (SDK 1.11): the spec rides the
@@ -274,10 +275,16 @@ export class ChatEngine {
     let contextError: string | undefined;
     if (request.vaultScope !== 'off' && !live) {
       try {
-        const outcome = await this.ports.retrieveContext(request.question, request.vaultScope);
+        const outcome = await this.ports.retrieveContext(
+          request.question,
+          request.vaultScope,
+          request.vaultIds,
+        );
         contextHits = outcome.hits;
         if (!outcome.enabled) {
           contextStatus = { kind: 'disabled' };
+        } else if (outcome.noTargets === true) {
+          contextStatus = { kind: 'unregistered' };
         } else if (outcome.hits.length === 0) {
           contextStatus = { kind: 'empty', floor: outcome.minScore };
         }
@@ -566,7 +573,7 @@ export class ChatEngine {
             : '',
       attachments: [],
       tool: [...toolEntries, ...posthocEntries],
-      context: contextCitations(contextHits) as ContextCite[],
+      context: contextCitations(contextHits),
       contextStatus,
       start: 0,
     };

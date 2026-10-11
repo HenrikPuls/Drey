@@ -27,6 +27,8 @@ const CANCELLED = 'Generation cancelled.';
 
 /** localStorage key for the Vault chip's remembered scope. */
 const VAULT_SCOPE_KEY = 'drey.assistant.vaultScope';
+/** localStorage key for the custom selection's vault ids (JSON array). */
+const VAULT_SCOPE_VAULTS_KEY = 'drey.assistant.vaultScopeVaults';
 
 function loadVaultScope(): VaultScope {
   try {
@@ -36,12 +38,32 @@ function loadVaultScope(): VaultScope {
   }
 }
 
-function storeVaultScope(scope: VaultScope): void {
+function loadCustomVaultIds(): string[] {
+  try {
+    const raw = globalThis.localStorage?.getItem(VAULT_SCOPE_VAULTS_KEY);
+    if (raw === undefined || raw === null) {
+      return [];
+    }
+    const parsed = JSON.parse(raw) as unknown;
+    return Array.isArray(parsed) && parsed.every((id): id is string => typeof id === 'string')
+      ? parsed
+      : [];
+  } catch {
+    return [];
+  }
+}
+
+function storeVaultScope(scope: VaultScope, vaultIds: readonly string[]): void {
   try {
     if (scope === 'off') {
       globalThis.localStorage?.removeItem(VAULT_SCOPE_KEY);
     } else {
       globalThis.localStorage?.setItem(VAULT_SCOPE_KEY, scope);
+    }
+    if (scope === 'custom') {
+      globalThis.localStorage?.setItem(VAULT_SCOPE_VAULTS_KEY, JSON.stringify(vaultIds));
+    } else {
+      globalThis.localStorage?.removeItem(VAULT_SCOPE_VAULTS_KEY);
     }
   } catch {
     // Storage unavailable (tests, privacy mode) — session state only.
@@ -135,6 +157,8 @@ export interface AssistantPorts {
    * one on focus (57c).
    */
   dailyDir(): Promise<string>;
+  /** The registered vaults (id, name, active) — the Vault chip's picker. */
+  listVaults(): Promise<readonly { id: string; name: string; active: boolean }[]>;
 }
 
 /**
@@ -198,10 +222,19 @@ export interface AssistantState {
   toggleLiveEdit(): void;
   /**
    * Semantic vault retrieval (ADR-0055): `off` (chip dark) / `vault` /
-   * `all`. Session state persisted to localStorage; cycled by the chip.
+   * `all` / `custom` (the picker's explicit subset — `customVaultIds`).
+   * Session state persisted to localStorage; set through the chip's
+   * picker. A `custom` selection whose vaults vanished from the registry
+   * is pruned (and falls back to `off` when nothing survives).
    */
   vaultScope(): VaultScope;
-  cycleVaultScope(): void;
+  /** The `custom` selection's vault ids (registry order). */
+  customVaultIds(): readonly string[];
+  /** The vault registry as last seen (empty until the first refresh landed). */
+  vaults(): readonly { id: string; name: string; active: boolean }[];
+  setVaultScope(scope: VaultScope, vaultIds?: readonly string[]): void;
+  /** Re-reads the registry and prunes a stale custom selection. */
+  refreshVaults(): Promise<void>;
   extraFiles(): readonly string[];
   /** Adds a file chip; resolves to a reason string when refused. */
   addFile(path: string): { ok: boolean; reason?: string };
@@ -290,6 +323,11 @@ export function createAssistantState(ports: AssistantPorts, tasks: RunningTasks)
   let liveEdit = false;
   /** Semantic vault retrieval (ADR-0055) — remembered across sessions. */
   let vaultScope: VaultScope = loadVaultScope();
+  // Ids only ever matter to a custom scope; a stale key under another
+  // scope starts empty rather than resurrecting an old selection.
+  let customVaultIds: string[] = vaultScope === 'custom' ? loadCustomVaultIds() : [];
+  /** The vault registry cache (drives the picker + selection sanitation). */
+  let vaults: { id: string; name: string; active: boolean }[] = [];
   let streaming: { taskId: string; text: string } | null = null;
   let error: string | null = null;
   let notice: string | null = null;
@@ -411,10 +449,37 @@ export function createAssistantState(ports: AssistantPorts, tasks: RunningTasks)
     },
 
     vaultScope: () => vaultScope,
+    customVaultIds: () => customVaultIds,
+    vaults: () => vaults,
 
-    cycleVaultScope() {
-      vaultScope = vaultScope === 'off' ? 'vault' : vaultScope === 'vault' ? 'all' : 'off';
-      storeVaultScope(vaultScope);
+    setVaultScope(scope, vaultIds) {
+      vaultScope = scope;
+      customVaultIds =
+        scope === 'custom'
+          ? [...new Set(vaultIds ?? customVaultIds)]
+          : [];
+      storeVaultScope(vaultScope, customVaultIds);
+      notify();
+    },
+
+    async refreshVaults() {
+      try {
+        vaults = [...(await ports.listVaults())];
+      } catch {
+        return; // keep whatever we had; the picker re-tries on open
+      }
+      if (vaultScope === 'custom' && customVaultIds.length > 0) {
+        const known = new Set(vaults.map((vault) => vault.id));
+        const surviving = customVaultIds.filter((id) => known.has(id));
+        if (surviving.length !== customVaultIds.length) {
+          // Vaults were removed (rename keeps the id, remove+re-add mints
+          // a new one): prune; an empty selection degrades to `off`
+          // visibly rather than silently querying the active vault.
+          customVaultIds = surviving;
+          vaultScope = surviving.length > 0 ? 'custom' : 'off';
+          storeVaultScope(vaultScope, customVaultIds);
+        }
+      }
       notify();
     },
 
@@ -749,6 +814,7 @@ export function createAssistantState(ports: AssistantPorts, tasks: RunningTasks)
           liveEdit: liveEdit && note !== null && isLiveEditablePath(note.path),
           noteKey,
           vaultScope,
+          vaultIds: [...customVaultIds],
         };
         // While the model edits the document, the user cannot: the lock
         // covers the whole turn and releases on success, error AND cancel.
@@ -876,6 +942,7 @@ export function createAssistantState(ports: AssistantPorts, tasks: RunningTasks)
       if (!chatsLoaded) {
         chatsLoaded = true; // only the first subscriber triggers the load
         void refreshChats();
+        void this.refreshVaults();
       }
       return () => listeners.delete(listener);
     },

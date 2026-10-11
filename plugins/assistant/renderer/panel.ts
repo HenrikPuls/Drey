@@ -33,6 +33,7 @@ import {
 } from '../shared/stage.js';
 import type { AssistantState } from './state.js';
 import type { RunningTasks } from './running-tasks.js';
+import { deriveVaultScope } from '../shared/semantic.js';
 import { createVaultFileCache, type VaultFileCache } from './vault-files.js';
 import { PROMPTS_DIR, promptEntriesFrom, type PromptEntry } from './prompts.js';
 import { renderRichBody } from './rich-text.js';
@@ -513,6 +514,11 @@ export function mountPanel(
         summary.appendChild(
           el('span', undefined, 'vault context · retrieval is off in Settings → Assistant retrieval'),
         );
+      } else if (status.kind === 'unregistered') {
+        chip.classList.add('muted');
+        summary.appendChild(
+          el('span', undefined, 'vault context · the selected vaults are no longer registered'),
+        );
       } else {
         chip.classList.add('muted');
         summary.appendChild(el('span', undefined, `vault context failed · ${firstLine(status.message)}`));
@@ -532,8 +538,10 @@ export function mountPanel(
           for (const cite of turn.context) {
             const row = el('button', 'context-cite') as HTMLButtonElement;
             row.type = 'button';
-            row.textContent = `${baseName(cite.path)} — ${cite.heading}`;
-            row.title = `${cite.path} (line ${cite.line}) — click to open`;
+            const where =
+              cite.vault !== undefined ? `${cite.vault} · ${baseName(cite.path)}` : baseName(cite.path);
+            row.textContent = `${where} — ${cite.heading}`;
+            row.title = `${cite.vault !== undefined ? `${cite.vault} · ` : ''}${cite.path} (line ${cite.line}) — click to open`;
             row.addEventListener('click', () => {
               void api.documents.open(cite.path, cite.line > 0 ? cite.line : undefined);
             });
@@ -548,6 +556,11 @@ export function mountPanel(
           const hint = el('div', 'context-hint');
           hint.textContent =
             'The Vault chip was on, but semantic retrieval is turned off. Enable it under Settings → Assistant retrieval (the first build downloads the embedding model once).';
+          list.appendChild(hint);
+        } else if (status.kind === 'unregistered') {
+          const hint = el('div', 'context-hint');
+          hint.textContent =
+            'The vault selection referenced vaults that are no longer registered. Pick the vaults again with the Vault chip.';
           list.appendChild(hint);
         } else {
           const hint = el('div', 'context-hint');
@@ -778,10 +791,12 @@ export function mountPanel(
   liveButton.title =
     'Live edit: let the assistant edit this note directly — changes apply immediately (no confirmation). Undo with Ctrl+Z, save with Ctrl+S.';
   liveButton.setAttribute('aria-label', 'Toggle live edit');
-  // The Vault toggle (ADR-0055): cycles off → active vault → all vaults;
-  // each ask then retrieves the most similar note sections as context.
+  // The Vault toggle (ADR-0055): a click opens the picker — off, the
+  // active vault, all vaults, or any subset (e.g. a non-active Git
+  // vault); each ask then retrieves the most similar note sections of
+  // the selection as context.
   const vaultButton = toolButton('vault', 'database');
-  vaultButton.setAttribute('aria-label', 'Toggle vault context');
+  vaultButton.setAttribute('aria-label', 'Pick the vault context');
   const row = el('div', 'composer-row');
   row.append(composerHost, sendButton);
   const modelButton = el('button', 'model-btn', '…') as HTMLButtonElement;
@@ -835,12 +850,7 @@ export function mountPanel(
     vaultButton.classList.toggle('on', scope !== 'off');
     vaultButton.classList.toggle('all', scope === 'all');
     vaultButton.setAttribute('aria-pressed', String(scope !== 'off'));
-    vaultButton.title =
-      scope === 'off'
-        ? 'Vault context: click once for the active vault, again for all vaults.'
-        : scope === 'vault'
-          ? 'Vault context: the most similar sections of the active vault. Click for all vaults, again to turn off.'
-          : 'Vault context: the most similar sections across every vault. Click to turn off.';
+    vaultButton.title = vaultScopeTitle(state);
     const path = state.notePath();
     if (path !== null && state.noteIncluded()) {
       chipsRow.appendChild(chipNode(path, 'note'));
@@ -906,10 +916,10 @@ export function mountPanel(
   modelButton.addEventListener('click', openModelPicker);
   plusButton.addEventListener('click', openFilePicker);
   liveButton.addEventListener('click', () => state.toggleLiveEdit());
-  vaultButton.addEventListener('click', () => state.cycleVaultScope());
+  vaultButton.addEventListener('click', openVaultPicker);
   refreshModelLabel();
 
-  // -- the three pickers (api.ui.showModal; same gesture as the templates picker) --
+  // -- the pickers (api.ui.showModal; same gesture as the templates picker) --
 
   function openChatPicker(): void {
     let close: () => void = () => undefined;
@@ -1227,6 +1237,127 @@ export function mountPanel(
     } catch {
       // The empty state stays; the read failure is not worth an error line.
     }
+  }
+
+  /**
+   * The Vault chip's picker (ADR-0055 later change): three shortcut rows
+   * — Off, the active vault, every vault — then one checkbox row per
+   * registered vault. Toggling rows derives the scope live (none → off,
+   * the active one → vault, all → all, any other subset → custom), so a
+   * selection can target e.g. a non-active Git vault without making it
+   * the default target for new content. Shortcuts apply and close; row
+   * toggles keep the picker open for multi-select.
+   */
+  function openVaultPicker(): void {
+    let close: () => void = () => undefined;
+    let unsubscribe: (() => void) | null = null;
+
+    const closePicker = (): void => {
+      unsubscribe?.();
+      unsubscribe = null;
+      close();
+    };
+
+    const box = el('div', 'assistant-picker');
+    const headLabel = el('div', 'assistant-picker-head', 'Vault context');
+    const bodyArea = el('div', 'assistant-picker-body');
+    box.append(headLabel, bodyArea);
+
+    const listBox = el('div', 'assistant-picker-list');
+    bodyArea.appendChild(listBox);
+    const doneBtn = el('button', 'assistant-picker-foot', 'Done') as HTMLButtonElement;
+    doneBtn.type = 'button';
+    doneBtn.addEventListener('click', closePicker);
+    bodyArea.appendChild(doneBtn);
+
+    /** The ids a shortcut row stands for. */
+    const shortcutIds = (scope: 'off' | 'vault' | 'all'): string[] => {
+      const vaults = state.vaults();
+      if (scope === 'all') {
+        return vaults.map((vault) => vault.id);
+      }
+      if (scope === 'vault') {
+        return vaults.filter((vault) => vault.active).map((vault) => vault.id);
+      }
+      return [];
+    };
+
+    const renderList = (): void => {
+      listBox.textContent = '';
+      const vaults = state.vaults();
+      const scope = state.vaultScope();
+      const checked =
+        scope === 'all'
+          ? shortcutIds('all')
+          : scope === 'vault'
+            ? shortcutIds('vault')
+            : scope === 'custom'
+              ? state.customVaultIds()
+              : [];
+
+      const shortcutRow = (label: string, detail: string, target: 'off' | 'vault' | 'all'): void => {
+        const rowEl = el('div', 'assistant-picker-row' + (scope === target ? ' current' : ''));
+        rowEl.appendChild(el('span', 'row-title', label));
+        if (detail !== '') {
+          rowEl.appendChild(el('span', 'assistant-picker-detail', detail));
+        }
+        rowEl.addEventListener('click', () => {
+          state.setVaultScope(target, shortcutIds(target));
+          closePicker();
+        });
+        listBox.appendChild(rowEl);
+      };
+
+      const active = vaults.find((vault) => vault.active) ?? null;
+      shortcutRow('Off', '', 'off');
+      shortcutRow('Active vault', active !== null ? active.name : 'none registered', 'vault');
+      shortcutRow('All vaults', `${vaults.length} registered`, 'all');
+      listBox.appendChild(el('div', 'assistant-picker-sep'));
+
+      for (const vault of vaults) {
+        const isChecked = checked.includes(vault.id);
+        const rowEl = el('div', 'assistant-picker-row vault-choice');
+        const check = el('span', 'row-check');
+        if (isChecked) {
+          check.appendChild(icon('check', 10));
+        }
+        rowEl.appendChild(check);
+        rowEl.appendChild(el('span', 'row-title', vault.name));
+        rowEl.appendChild(el('span', 'assistant-picker-detail', vault.active ? 'active' : ''));
+        rowEl.title = vault.name;
+        rowEl.setAttribute('role', 'checkbox');
+        rowEl.setAttribute('aria-checked', String(isChecked));
+        rowEl.addEventListener('click', () => {
+          const next = isChecked
+            ? checked.filter((id) => id !== vault.id)
+            : [...checked, vault.id];
+          const derived = deriveVaultScope(next, vaults);
+          state.setVaultScope(derived.scope, derived.vaultIds);
+          // renderList rides the state subscription; nothing else to do.
+        });
+        listBox.appendChild(rowEl);
+      }
+      if (vaults.length === 0) {
+        listBox.appendChild(
+          el('div', 'assistant-picker-empty', 'No vaults registered — add one in the Files panel.'),
+        );
+      }
+    };
+    renderList();
+
+    box.addEventListener('keydown', (event) => {
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        closePicker();
+      }
+    });
+
+    close = api.ui.showModal((mount) => {
+      mount.classList.add('assistant-picker-host');
+      mount.appendChild(box);
+    });
+    unsubscribe = state.subscribe(renderList);
+    void state.refreshVaults(); // names + a possibly-pruned selection
   }
 
   function openFilePicker(): void {
@@ -1662,6 +1793,27 @@ export function mountPanel(
 function firstLine(text: string): string {
   const line = text.split('\n').find((entry) => entry.trim() !== '') ?? '';
   return line.length > 60 ? `${line.slice(0, 60)}…` : line;
+}
+
+/** The Vault chip's tooltip: what the next ask searches (names when known). */
+function vaultScopeTitle(state: AssistantState): string {
+  const scope = state.vaultScope();
+  if (scope === 'vault') {
+    return 'Vault context: the most similar sections of the active vault. Click to change.';
+  }
+  if (scope === 'all') {
+    return 'Vault context: the most similar sections across every vault. Click to change.';
+  }
+  if (scope === 'custom') {
+    const byId = new Map(state.vaults().map((vault) => [vault.id, vault.name]));
+    const ids = state.customVaultIds();
+    const names = ids.map((id) => byId.get(id));
+    const listed = names.every((name) => name !== undefined)
+      ? (names as string[]).join(', ')
+      : `${ids.length} vault${ids.length === 1 ? '' : 's'}`;
+    return `Vault context: the most similar sections of ${listed}. Click to change.`;
+  }
+  return 'Vault context: pick which vaults the assistant searches — the active one, all of them, or a selection.';
 }
 
 /** Compact argument summary for a call chip. */
