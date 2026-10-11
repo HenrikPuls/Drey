@@ -20,6 +20,32 @@ recorded as an explicit decision. The parity checklist lives in
 
 ## Recent milestones
 
+### `npm run dev` rebuilds and restarts Electron on its own
+
+Item 13 of the 2026-10-11 architecture review. Development only; nothing
+in a shipped build changes. **Not yet manually verified by the owner.**
+
+- **The stale main process is gone from the dev loop.**
+  `scripts/dev-electron.mjs` replaces the one-time build in
+  `dev:electron`: it watches `electron/`, `shared/` and `plugins/`,
+  rebuilds what the change touches (main process and preload, the
+  plugins, or both for `shared/`) and restarts Electron. Spec files and
+  the fetched draw.io files are ignored.
+- **The restart is an ordinary quit.** The launcher asks the app over the
+  child-process channel (a listener in `electron/main.ts` that exists
+  only with a dev server URL), so unsaved tabs raise the exit prompt and
+  the session comes back afterwards. Cancelling the prompt keeps the old
+  process; it is replaced once it closes. A failed build restarts nothing.
+- **Unchanged:** closing the window ends the dev session. `npm run app`
+  and the VS Code debug configs still build once — the trap remains
+  there and stays described in `docs/11`.
+- **Deviation from the review's wording:** it named `tsc --watch`. The
+  launcher runs the existing build steps instead (about two seconds for
+  the main process, four for the plugins): one code path for the first
+  build and every later one, and no compiler output to parse.
+- `cross-env` is no longer used by any script; the dev dependency is
+  still listed.
+
 ### Plugin renderers are bundled; the copied helpers are gone (ADR-0044 later change)
 
 Item 11 of the 2026-10-11 architecture review. No change to what the app

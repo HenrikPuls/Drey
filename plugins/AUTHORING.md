@@ -27,9 +27,11 @@ plugins/<id>/
 `dist-electron/plugins/<id>/` — that directory is what actually loads,
 built-in or not: `main/` and `shared/` as CommonJS from `tsc`,
 `renderer/index.js` as one ES module from esbuild (not minified).
-**After touching `plugins/**`, or a `shared/**` file a plugin imports,
-rebuild and restart Electron**; a stale `dist-electron` leaves the app
-running the previous build. Verify with
+`npm run dev` does this by itself: a change under `plugins/**` (or a
+`shared/**` file a plugin imports) rebuilds the plugins and restarts
+Electron. Run any other way (`npm run app`, a VS Code debug config),
+**rebuild and restart Electron yourself** — a stale `dist-electron`
+leaves the app on the previous build. Verify with
 `grep <new-symbol> dist-electron/plugins/<id> -r`.
 
 ## Manifest

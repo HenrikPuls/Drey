@@ -59,6 +59,31 @@ const CAPTURE_SHORTCUT = 'CommandOrControl+Alt+N';
  */
 const rendererDevServerUrl = process.env['DREY_RENDERER_URL'];
 
+/**
+ * What `scripts/dev-electron.mjs` sends over the child-process channel
+ * when it has rebuilt `dist-electron/` and wants this (now stale) process
+ * replaced. Keep in step with the constant there.
+ */
+const DEV_RESTART_MESSAGE = 'drey-dev:restart';
+
+/**
+ * Dev only: quits when the dev launcher asks. `app.quit()` is the ordinary
+ * quit, so unsaved tabs raise the exit prompt; the launcher starts the new
+ * build once this process is gone. Without a dev server URL, or when not
+ * started by the launcher (no channel), nothing listens.
+ */
+function listenForDevRestart(): void {
+  if (!rendererDevServerUrl || typeof process.send !== 'function') {
+    return;
+  }
+  process.on('message', (message: unknown) => {
+    if (message === DEV_RESTART_MESSAGE) {
+      logLine('[main/dev] restart requested by the dev launcher');
+      app.quit();
+    }
+  });
+}
+
 const rendererDistDir = path.join(__dirname, '../../dist/drey/browser');
 
 /**
@@ -1049,6 +1074,7 @@ if (!app.requestSingleInstanceLock() && !allowMultiInstance) {
         createMainWindow(uiScaleFactor);
       }
     });
+    listenForDevRestart();
     startupMark('main-process startup complete');
   }).catch((err: unknown) => {
     // A startup step threw: without this the app would sit there with no
