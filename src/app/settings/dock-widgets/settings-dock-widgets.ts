@@ -1,7 +1,8 @@
-import { ChangeDetectionStrategy, Component, computed, inject } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
 import { WidgetRegistryService } from '../../dock';
 import { WIDGET_CAPABILITY_LABELS } from '../../widgets';
 import { PluginHostService } from '../../plugin-host';
+import { ConfirmDialogService } from '../../services/confirm-dialog.service';
 import { SettingsService } from '../../services/settings.service';
 import { SettingsPane } from '../settings-pane/settings-pane';
 
@@ -13,6 +14,11 @@ import { SettingsPane } from '../settings-pane/settings-pane';
  * toggles apply on the next app start. A plugin's status line is what the
  * host last saw (active / failed / incompatible / disabled); failed and
  * incompatible ones show the host's error.
+ *
+ * Local plugin packages (ADR-0068): "Install from file…" picks a .zip,
+ * main validates + installs it under `<userData>/plugins/`, "Remove"
+ * deletes a user-installed one. Both apply on the next start — the offer
+ * to relaunch rides the shared in-renderer dialog.
  */
 @Component({
   selector: 'app-settings-dock-widgets',
@@ -25,6 +31,7 @@ export class SettingsDockWidgets {
   protected readonly settings = inject(SettingsService);
   private readonly widgets = inject(WidgetRegistryService);
   private readonly pluginHost = inject(PluginHostService);
+  private readonly dialogs = inject(ConfirmDialogService);
 
   /** Every registered widget, with its resolved enabled state + capability labels. */
   protected readonly rows = computed(() => {
@@ -46,6 +53,7 @@ export class SettingsDockWidgets {
       name: p.name,
       version: p.version,
       source: p.builtin ? 'built-in' : 'installed',
+      builtin: p.builtin,
       permissions: p.permissions.join(', '),
       status: p.status,
       error: p.error,
@@ -53,11 +61,75 @@ export class SettingsDockWidgets {
     }));
   });
 
+  /** A package was installed or removed — the next start applies it (ADR-0068). */
+  protected readonly restartPending = this.pluginHost.pluginChangePending;
+
+  /** Guards against stacking native pick dialogs on a double click. */
+  protected readonly installBusy = signal(false);
+
   protected onToggle(id: string, enabled: boolean): void {
     this.settings.setWidgetEnabled(id, enabled);
   }
 
   protected onPluginToggle(id: string, enabled: boolean): void {
     this.settings.setPluginEnabled(id, enabled);
+  }
+
+  protected async onInstallFromFile(): Promise<void> {
+    if (this.installBusy()) {
+      return;
+    }
+    this.installBusy.set(true);
+    try {
+      const result = await this.pluginHost.installPluginFromFile();
+      if (result === null) {
+        return; // pick cancelled
+      }
+      if (result.status === 'error') {
+        await this.dialogs.message({ title: 'Install plugin', message: result.message });
+        return;
+      }
+      await this.offerRestart(
+        result.upgraded
+          ? `"${result.pluginName}" was updated. Restart Drey to load the new version.`
+          : `"${result.pluginName}" was installed. Restart Drey to activate it.`,
+      );
+    } finally {
+      this.installBusy.set(false);
+    }
+  }
+
+  protected async onRemovePlugin(id: string, name: string): Promise<void> {
+    const confirmed = await this.dialogs.confirm({
+      title: 'Remove plugin',
+      message: `Remove "${name}"? Its files are deleted from this computer's Drey plugin folder.`,
+      confirmLabel: 'Remove',
+      danger: true,
+    });
+    if (!confirmed) {
+      return;
+    }
+    const result = await this.pluginHost.removePlugin(id);
+    if (result.status === 'error') {
+      await this.dialogs.message({ title: 'Remove plugin', message: result.message });
+      return;
+    }
+    await this.offerRestart(`"${name}" was removed. Restart Drey to finish.`);
+  }
+
+  protected restartNow(): void {
+    this.pluginHost.relaunchApp();
+  }
+
+  private async offerRestart(message: string): Promise<void> {
+    const restart = await this.dialogs.confirm({
+      title: 'Restart required',
+      message,
+      confirmLabel: 'Restart now',
+      cancelLabel: 'Later',
+    });
+    if (restart) {
+      this.restartNow();
+    }
   }
 }

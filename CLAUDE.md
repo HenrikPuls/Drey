@@ -12,6 +12,9 @@ data schema, and classifier design live in `specs/`:
 Read these three files before making a first proposal — they are the
 binding specification, not just background reading.
 
+`AGENTS.md` is the tool-neutral entry point for coding agents; it points
+here, and everything in this file binds every agent regardless of tool.
+
 ## Language Convention
 
 - Code, comments, identifiers, file/folder names, commit messages: **English**.
@@ -253,8 +256,10 @@ toolchain is removable by deleting `.tools/`). Never assume a bare `node`,
   (Assistant + Actions), browser, `ocr` (vision-LLM OCR, ADR-0050),
   `outline` (the open note's heading tree, renderer-only), `backlinks`
   (the "what links here" panel, milestone 54), `drawio` (the diagram
-  editor tab, milestone 64), `git` (Git vaults, milestone 65),
-  `sample`. Each is `plugin.json` +
+  editor tab, milestone 64), `git` (Git vaults, milestone 65), plus
+  `sample` — dev/test-only since milestone 70 (built under
+  `DREY_BUILD_SAMPLE_PLUGINS=1`; the authoring reference for
+  `plugins/TUTORIAL.md`). Each is `plugin.json` +
   `main/` (CommonJS, Node) + `renderer/` (browser-context ESM + CSS over
   `plugin://`, **plain DOM**) + `shared/` types, built by
   `scripts/build-plugins.mjs` into `dist-electron/plugins/<id>/`. The
@@ -334,7 +339,12 @@ Main process:
   plugins fill: **save hooks** (`onNoteSaved → {content?,
   pendingActions?}`; skipped when the save applies a confirmed rewrite),
   **vault hooks** (open/refresh/write/delete/rename) and the
-  **section-search provider** (the MCP `vault_search` backend)
+  **section-search provider** (the MCP `vault_search` backend), and the
+  **local package installer** (`plugin-installer.ts`, ADR-0068: the
+  Settings → Panels & plugins "Install from file…" flow — a `.zip` of a
+  built plugin folder validated and extracted under
+  `<userData>/plugins/<id>/`, config preserved on upgrade, Remove for
+  user-installed ids; applies on restart)
 - The feature backends — `TagIndex`, `TaskIndex`, the assistant's
   ActionEngine (Actions) and ChatEngine/ChatStore (chat notes,
   ADR-0048), the assistant's template tools (`template-tools.ts`,
@@ -713,10 +723,8 @@ be called out explicitly (see Working Style below), not introduced silently.
 
 ## UI / UX Design
 
-- Visual style: dark theme by default, minimal and unobtrusive — visual
-  language similar to claude.ai (flat surfaces, no heavy borders or
-  shadows, generous whitespace, sentence-case labels, no visual clutter).
-  Since milestone 43
+- Visual style: minimal and unobtrusive — flat surfaces, no heavy borders
+  or shadows, generous whitespace, no visual clutter. Since milestone 43
   ([ADR-0057](docs/09_architecture_decisions/0057-ui-refinement-icon-chrome-anthrazit-and-slash-capture.md)):
   chrome labels are sentence-case **sans** (mono only for code, the
   meta-bar path and line numbers); panel controls are **icon-only** with a
@@ -725,13 +733,13 @@ be called out explicitly (see Working Style below), not introduced silently.
   placeholder text. Two bespoke themes ship — **Drey** (terracotta) and
   **Anthrazit** (neutral charcoal gray, blue accent, AA contrast — ADR-0057 later change; the fresh-install default).
 - Overall layout ([ADR-0019](docs/09_architecture_decisions/0019-movable-dock-panels-and-layout-state.md)):
-  a frameless window with a **custom titlebar** (accent square + the
-  left dock toggle + an HTML File/Edit/Selection/View menu bar + the right
-  dock toggle + window controls; each toggle folds its whole side dock
-  away, `Ctrl+B` / `Ctrl+Alt+B`, state kept and persisted), then a row
-  of **[left dock | centre column | right dock]** — the centre column
-  being the editor area above a **bottom dock** band — then a **28px
-  status bar** (word/char count · context hint · Settings entry).
+  a frameless window with a **custom titlebar** (accent square, the two
+  dock toggles, the HTML File/Edit/Selection/View menu bar, back/forward
+  arrows, window controls; each toggle folds its whole side dock away,
+  `Ctrl+B` / `Ctrl+Alt+B`), then a row of **[left dock | centre column |
+  right dock]** — the centre column being the editor area above a
+  **bottom dock** band — then a 28px **status bar** (word/char count ·
+  context hint · Settings entry).
   - **Docks**: three (`left`, `right`, `bottom`), each an ordered list of
     the ten panels — **Calendar, Files, Templates, Search, Tasks, Open
     windows, Outline, Backlinks, Source control, Assistant** (the core
@@ -762,47 +770,24 @@ be called out explicitly (see Working Style below), not introduced silently.
     `View → Reset layout` restores it (and undocks the editor bands).
     Layout state persists (`localStorage['drey.dock']`).
   - **Files panel**: one section per registered vault — a vault header
-    row (name, active-vault dot, fold chevron, path tooltip) above that
-    vault's file tree, with the refresh + "Add vault …" buttons in the
-    panel header. Clicking a file opens it (in its vault); right-click on
-    a file/folder → new file/folder/rename/delete, edited **in place** in
-    the tree (names stay on one line and fade at the right edge); right-click on a vault row →
-    Set active / Rename / Add vault / Open in File Explorer / Remove
-    (ADR-0051). Dragging a row onto a folder / file row / another vault's
-    header row moves it (within or across vaults, req-23; no-drop on a
-    same-dir no-op or a folder into itself).
+    row (name, active-vault dot, fold chevron, path tooltip) above the
+    tree; in-place create/rename/delete in the tree; the vault row's
+    context menu (Set active / Rename / Add vault / Open in File
+    Explorer / Remove); drag & drop of files/folders within and across
+    vaults (req-23).
   - **Centre column**: a 36px tab bar for open documents, a 40px meta bar
     (path · formatting buttons · Unsaved · Lines toggle · Save · `⋯`),
     the editor (Live Preview ⇄ source via the `⋯` menu — no toggle
-    buttons; see ADR-0008/0009), then the **bottom dock** band (empty by
-    default). Capture is the `/` menu's **Entry** block.
-  - **Assistant panel**: chat-first head (the active chat's title as a
-    muted label + a chat-list button opening the chat picker + a "+"
-    icon for a new chat; the title is model-named — 57e's background
-    naming call rewrites the question placeholder after the first turn,
-    and the label re-renders live through the change rounds), turn cards
-    with collapsible tool
-    chips, a
-    streamed partial answer while generating (the transcript follows the
-    stream; scrolling up unpins), and the
-    composer (context chips incl. images, auto-grow, and an icon tool
-    row: Attach · Live edit · Vault context · Prompts · model picker).
-    The panel keeps its chat across focus switches (only a focused
-    chat-note tab or a picker/new-chat action changes it). No bottom chat bar.
-  - **Settings**: a full-surface overlay opened from the status-bar entry
-    — master-detail (category list on the left, detail pane on the
-    right), core categories in alphabetical order (
-    "Appearance" (theme, app-wide base font size + highlight colour +
-    editor typeface, ADR-0020), "Assistant tools" (ADR-0063), "Daily notes", "Entry format", "LLM",
-    "MCP", "Panels &
-    plugins", "Spelling", "Vault" (ADR-0045)
-    (ADR-0010; descriptor-driven list, ADR-0016)); plugin-contributed
-    categories (sorted by label) append before "About".
-    The X sits top-right; Discard is always active and closes (with a
-    dirty-state warning). The
-    confirmation dialog (Actions / Ask edits / MCP writes) is a centred
-    modal: inline line diff for small changes, side-by-side before/after
-    for whole-document rewrites (ADR-0011).
+    buttons; ADR-0008/0009), then the bottom dock band. Capture is the
+    `/` menu's **Entry** block.
+  - **Settings**: a full-surface overlay opened from the status-bar
+    entry — master-detail (category list left, detail pane right), core
+    categories in alphabetical order, plugin-contributed categories
+    (sorted by label) before "About" via `PluginSettingsHost`. X sits
+    top-right; Discard is always enabled and closes (dirty-state
+    warning). The confirmation dialog (Actions / Ask edits / MCP
+    writes) is a centred modal: inline line diff for localized changes,
+    an aligned split diff for whole-document rewrites (ADR-0011).
 - Editing model: true in-place Live Preview (Obsidian-style, ADR-0009) —
   the cursor sits in the rendered document, syntax markers reveal only
   around the selection, tables/images render as widgets that show their
@@ -818,10 +803,9 @@ be called out explicitly (see Working Style below), not introduced silently.
   the raw `![alt](path)` line is shown *together with* — above — the
   still-rendered picture, never replacing it. (`</>` = view source
   everywhere; the magnifier-with-`+` = zoom. Req-1.)
-- A visual reference mockup for this layout was discussed and shown inline
-  during planning, but it was never saved as a file — treat this section
-  (plus the component list above) as the source of truth for layout intent,
-  not an assumed saved mockup.
+- No visual mockup file exists for the current layout — this section plus
+  docs/05 §5.0 are the source of truth for layout intent, not an assumed
+  saved mockup.
 - The **v3 visual system** (milestone 14) has a real handoff:
   `handoff/DESIGN.md` (high-fidelity tokens, the four core principles, the
   dock-system spec) + `handoff/Drey App v3.dc.html` (interactive
@@ -863,7 +847,8 @@ once:
 
 - **Building Block View** (`docs/05_building_block_view.md`, static
   structure): main/renderer split, services, components — update whenever
-  a component boundary from "Relevant Components" above changes or gets refined.
+  a component boundary from the Ownership Map above (its detail: docs/05
+  §5.0, "Component reference") changes or gets refined.
 - **Runtime View** (`docs/06_runtime_view.md`, dynamic behavior): sequence
   diagrams for the key flows (quick-capture → daily note, save → re-index,
   tag search → hits → open-at-line / Export, Autotag, chat/RAG scope
@@ -898,7 +883,7 @@ packaging verified — see `docs/07_deployment_view.md`).
 closed 2026-10-10). This file does not restate them — the per-milestone
 record is:
 
-- [specs/changelog.md](specs/changelog.md) — milestones 22–69, newest
+- [specs/changelog.md](specs/changelog.md) — milestones 22–70, newest
   first, plus requirements and fixes
 - [docs/milestones-done.md](docs/milestones-done.md) — the archived
   build log, milestones 1–27
@@ -914,18 +899,20 @@ Open work and its order live in [specs/roadmap.md](specs/roadmap.md)
 ("Next milestones") — that list is binding; keep this summary in step
 with it.
 
-- **Last completed:** milestone 69 — the dock icon strip: one icon row
-  per dock replaces the collapsed panel headers (ADR-0019 later change,
-  SDK 1.19 `PluginWidgetContrib.icon`). Before it: milestone 68 —
-  semantic search remainder: a base `SemanticSearchProvider` seam (SDK
-  1.18), semantic mode in the Search panel and a semantic `vault_search`
-  mode (ADR-0055 later change; pause/resume of large rebuilds was
-  considered and dropped), and milestone 67 — the Git plugin's merge,
-  stash, amend and file history.
+- **Last completed:** milestone 70 — local plugin packages (ADR-0068:
+  the sample plugin left the default build — dev/test + SDK reference
+  only, built under `DREY_BUILD_SAMPLE_PLUGINS=1`; `plugins/TUTORIAL.md`
+  is the step-by-step authoring guide; Settings → Panels & plugins
+  installs a plugin from a `.zip` package / removes it, applies on
+  restart). Before it: milestone 69 — the dock icon strip (ADR-0019
+  later change, SDK 1.19 `PluginWidgetContrib.icon`), milestone 68 —
+  the semantic search remainder (a base `SemanticSearchProvider` seam,
+  SDK 1.18, semantic mode in the Search panel and a semantic
+  `vault_search` mode, ADR-0055 later change), and milestone 67 — the
+  Git plugin's merge, stash, amend and file history.
   Milestones 59–66, the Vault-chip picker, the dev escape hatch and the
-  build-origin/mouse-button work are owner-verified; milestone 67, the
-  Anthrazit AA re-tune and milestones 68 and 69 are code-complete,
-  verification pending.
+  build-origin/mouse-button work are owner-verified; milestones 67–70
+  are code-complete, verification pending.
 - **Next, in order:** nothing ordered — the owner picks from the backlog
   in `specs/roadmap.md`.
 

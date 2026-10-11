@@ -13,7 +13,7 @@ import { LlmClient, LlmDebugLog, LlmTaskRegistry, TagSuggester } from '../llm';
 import { McpHttpTransport } from '../mcp';
 import { McpClientManager } from '../mcp-client';
 import { NoteManager } from '../note-manager';
-import { PluginHost } from '../plugin-host';
+import { PluginHost, PluginInstaller } from '../plugin-host';
 import { SessionBackupStore } from '../session';
 import { SpellcheckService } from '../spellcheck';
 import { VaultManager } from '../vault-manager';
@@ -64,6 +64,7 @@ export interface IpcHandlerDeps {
   fullVaultRefresh: () => void;
   announceVaultChange: (changes: ExternalVaultChanges) => void;
   pluginHost: PluginHost;
+  pluginInstaller: PluginInstaller;
 }
 
 export function registerIpcHandlers(deps: IpcHandlerDeps): void {
