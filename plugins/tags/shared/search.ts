@@ -516,6 +516,24 @@ export function tagSetMatches(tags: ReadonlySet<string>, wanted: string): boolea
   return false;
 }
 
+/**
+ * Whether a section given as raw `heading` + `text` carries every wanted
+ * tag (lower-cased, exact or namespace parent — same rule as the index
+ * search). The semantic panel mode filters its ranked hits through this,
+ * since those hits arrive as hydrated text, not index records (SDK 1.18).
+ */
+export function sectionCarriesTags(
+  heading: string,
+  text: string,
+  wanted: readonly string[],
+): boolean {
+  if (wanted.length === 0) {
+    return true;
+  }
+  const sectionTags = new Set(extractInlineTags(`${heading}\n${text}`));
+  return wanted.every((t) => tagSetMatches(sectionTags, t.toLowerCase()));
+}
+
 function dedupeLower(values: readonly string[]): string[] {
   const seen = new Set<string>();
   for (const value of values) {

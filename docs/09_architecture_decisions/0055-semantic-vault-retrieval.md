@@ -146,3 +146,60 @@ and the system-prompt block cites `vault · path:line`, so two vaults'
 `daily/2026/10/11.md` are distinguishable to the model and the user.
 The fence field is optional and tolerantly parsed — notes written
 before the change keep reading.
+
+## Later change: the index serves the Search panel and MCP `vault_search`
+
+**Context.** Retrieval remained assistant-only: the semantic index had
+no second consumer, which the original decision had named the
+precondition for opening it up ("a semantic MCP tool would need a base
+registry seam — deliberately deferred until a second consumer exists").
+Two consumers arrived together (milestone 68): the Search panel's
+semantic mode and MCP `vault_search` mode `semantic`.
+
+**Decision.** A **second, parallel single-slot registry** —
+`ctx.search.registerSemanticSearch(provider)` (SDK 1.18), next to the
+existing section-search slot and following the same last-wins +
+unsubscribe discipline (the `TaskQueryProvider` precedent). Pluralising
+`SectionSearchProvider` was rejected: it would churn the standing
+contract (tags plugin, MCP, vocabulary) for no gain, and the two
+providers answer different questions (exact match vs similarity
+ranking) with different shapes. The hit type is SDK-owned
+(`SemanticSectionHit`: path/heading/line/snippet/text/vaultId/score),
+so neither consumer imports the assistant.
+
+The assistant plugin registers the provider **only while
+`semantic.enabled` is on** (re-synced after every config change), so
+"no provider" is the degrade signal: the panel's semantic toggle shows
+a clear error on run, the MCP mode answers with an error result — the
+established idioms. `SemanticService.search(question, scope?, limit?)`
+reuses the ask path's machinery (query embedding with the e5 prefix,
+scope resolution through `resolveTargetVaultIds`, the configured
+`minScore` floor, hydration-at-answer-time) but browses: the limit
+defaults to 12 (cap 20), above an ask turn's `topK`, and each hit
+carries a snippet.
+
+Panel behaviour (milestone 68): a brain-icon toggle next to "Include
+chats", vault/all scope only (the renderer cannot embed a buffer);
+when on, the text query ranks semantically, tag chips stay meaningful
+as an exact post-filter over the hydrated section text
+(`sectionCarriesTags`, same nested-tag rule as the index search), the
+`Aa`/`ab`/`.*` flags and the replace row disappear (no literal match
+to modify), and hits render grouped per file with a percent score
+badge. There is deliberately **no dirty-buffer folding** in semantic
+mode — the index is disk-side, unsaved edits surface after save.
+
+**Considered and dropped: pause/resume of large rebuilds on
+interactive use.** An ask never waits for a rebuild: `retrieve()`
+bypasses the per-vault chains, queries the worker FIFO and so queues
+behind at most one 16-passage embed batch (tens of ms), then searches
+whatever the index holds — partial results, never an error. The
+remaining gap (a mid-rebuild index is incomplete) is not fixable by
+pausing, so the idea bought complexity without closing a real gap.
+
+**Consequences.** `PLUGIN_API_VERSION` minor 17 → 18. The renderer
+facade gains `api.search.searchSemantic(question, scope?, limit?)`
+over the reserved `drey.search.semantic` host method (non-empty
+question, validated scope, limit clamped 1..20). MCP `vault_search`
+gains `mode: 'text' | 'semantic'` (default `text` — existing clients
+unchanged); semantic mode requires `text`, refuses `tags`/`regex`, and
+labels hits `vault · path:line — heading (score 0.87) — snippet`.

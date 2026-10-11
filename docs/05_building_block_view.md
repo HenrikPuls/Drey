@@ -173,7 +173,7 @@ fills** — base knows the interfaces, not the features:
 | Document read/observe/insert/confirmed rewrite/open + the live-edit input lock | `documents.*` (incl. `setEditLock`, ADR-0049) | — |
 | Vault IO + change push | `vault.*` (incl. `saveAsset`) | `ctx.vault.*` (incl. `writeAnnounced`; `announceChanges` after a plugin rewrote the working tree, SDK 1.17) |
 | Backend methods + pushes (the plugin's own IPC) | `backend.invoke` / `backend.on` | `ctx.ipc.handle` / `ctx.ipc.emit` |
-| Save pipeline (`{content?, pendingActions?}`), vault lifecycle, section search | — | `ctx.save`, `ctx.vault` hooks, `ctx.search` (`notifyChanged` pushes `search:changed` to the base vocabulary service, SDK 1.9; the provider's optional `styles()` serves the tag prefix colors) |
+| Save pipeline (`{content?, pendingActions?}`), vault lifecycle, section search, semantic search | — | `ctx.save`, `ctx.vault` hooks, `ctx.search` (`notifyChanged` pushes `search:changed` to the base vocabulary service, SDK 1.9; the provider's optional `styles()` serves the tag prefix colors; `registerSemanticSearch` is the second, parallel single slot — SDK 1.18, the assistant's similarity index for the Search panel's semantic mode and MCP `vault_search` mode `semantic`, ADR-0055 later change) |
 | LLM transport | `llm.chat/cancelTask/onDebugEntry/onDelta/listModels/capabilities/onCapabilitiesChanged` | `ctx.llm.chat/suggestTags/capabilities` (chat gains `tools`/`onToolCall`/`maxToolRounds`, ADR-0049; `maxOutputTokens` + the capability push, ADR-0050) |
 | Per-plugin config, app config read/patch | `settings.*`, `appConfig.*` | `ctx.config`, `ctx.appConfig` |
 | Native-surface hide (overlays/gestures) | `env.onNativeSurfaceVisibility` | — |
@@ -2378,7 +2378,25 @@ status, never to the active vault.
   JSON persistence (sync flush on quit), and `retrieve()` — embed,
   top-k, then hydrate each hit's section text fresh from the vault.
   Backend methods: `semantic:status` / `semantic:rebuild` /
-  `semantic:configChanged`.
+  `semantic:configChanged`. Since milestone 68 also **`search(question,
+  scope?, limit?)`** — the SDK seam's browse path: same embedding,
+  scope resolution and hydration, but a 12/20 limit budget and a
+  snippet per hit; the provider registers through
+  `ctx.search.registerSemanticSearch` only while enabled (main-side
+  re-sync after every config change).
+- **Search panel semantic mode** (`plugins/tags/renderer/`, milestone
+  68) — the panel's brain-icon toggle switches the vault/all query to
+  `api.search.searchSemantic`: ranked hits with a percent score badge,
+  tag chips as an exact post-filter (`sectionCarriesTags` in the tags
+  plugin's `shared/search.ts`, same nested-tag rule), match flags and
+  replace hidden, no dirty-buffer folding; a missing provider surfaces
+  as the panel's error row. **MCP `vault_search` mode `semantic`**
+  (`electron/mcp/vault-tools.ts`) — same provider (getter injected in
+  `main.ts` next to the section-search one), `mode: 'text' |
+  'semantic'` defaulting to text; semantic requires `text`, refuses
+  `tags`/`regex`, formats `vault · path:line — heading (score) —
+  snippet`. Pause/resume of rebuilds was considered and dropped
+  (ADR-0055 later change).
 - **Ask flow** — retrieved text rides ONLY the current system prompt
   (never persisted, never replayed); the turn persists a compact
   ```drey-context fence rendered as a collapsible chip (click opens the

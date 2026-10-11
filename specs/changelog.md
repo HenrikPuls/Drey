@@ -20,6 +20,44 @@ recorded as an explicit decision. The parity checklist lives in
 
 ## Recent milestones
 
+### Milestone 68 — semantic search remainder: Search panel + MCP (ADR-0055 later change)
+
+**Not yet manually verified by the owner.**
+
+- **A base seam.** SDK 1.18 adds `SemanticSearchProvider` —
+  `search(question, scope?, limit?)` → `SemanticSectionHit[]` (path,
+  heading, line, snippet, text, vaultId, score) — registered through a
+  second, parallel single slot `ctx.search.registerSemanticSearch`
+  (same last-wins + unsubscribe discipline as the section-search slot;
+  pluralising that registry was rejected as contract churn). The
+  renderer facade gains `api.search.searchSemantic` over the reserved
+  `drey.search.semantic` host method (non-empty question, validated
+  scope, limit clamped 1..20). The assistant plugin registers the
+  provider only while `semantic.enabled` is on, so "no provider" is the
+  degrade signal everywhere.
+- **Semantic mode in the Search panel.** A brain-icon toggle next to
+  "Include chats" (vault/all scope only — the renderer cannot embed a
+  buffer). On: the text query ranks by similarity over the assistant's
+  index — hits grouped per file as usual, each with a percent score
+  badge; tag chips stay meaningful as an exact post-filter over the
+  hydrated section text (same nested-tag rule as the index search);
+  the `Aa`/`ab`/`.*` flags and the replace row disappear (no literal
+  match to modify); Export/Summarize work unchanged; unsaved buffer
+  edits surface only after save (the index is disk-side). Degradation:
+  without the provider the run says so ("the assistant's retrieval is
+  disabled — Settings → Assistant retrieval").
+- **`vault_search` mode `semantic`.** The MCP tool (and the
+  assistant's own tool loop) gains `mode: 'text' | 'semantic'`
+  (default `text`, existing clients unchanged): semantic requires a
+  non-empty `text` (the question), refuses `tags`/`regex`, honours
+  `vault` and `maxResults` (caps at 20), and answers
+  `vault · path:line — heading (score 0.87) — snippet` lines. No
+  provider → the usual clear error result.
+- Pause / resume of large rebuilds was **considered and dropped**: an
+  ask queues behind at most one 16-passage embed batch (tens of ms),
+  never a whole rebuild; the mid-rebuild index gap is not fixable by
+  pausing (ADR-0055 later change, roadmap "Closed").
+
 ### Git: merge, stash, amend, commit and push, file history (milestone 67)
 
 - **Merge with a conflict surface.** *More → Merge a branch…* (or

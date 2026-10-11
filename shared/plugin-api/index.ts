@@ -31,6 +31,7 @@ export type {
   TagPrefixStyle,
   TagSearchHit,
   TagSearchQuery,
+  SemanticSectionHit,
   TextMatchOptions,
 } from './search-types';
 
@@ -55,6 +56,7 @@ export type {
   SaveHookResult,
   SectionSearchProvider,
   SectionSearchScope,
+  SemanticSearchProvider,
   SdkTaskRecord,
   TaskQueryOptions,
   TaskQueryProvider,

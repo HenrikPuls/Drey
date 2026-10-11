@@ -79,6 +79,24 @@ export const DEFAULT_SEMANTIC_MIN_SCORE = 0.3;
 export const MAX_SEMANTIC_TOP_K = 8;
 
 /**
+ * The SDK seam's hit budget (SDK 1.18): the Search panel / MCP semantic
+ * mode browse results, so they get more than an ask turn's `topK` — but
+ * still bounded.
+ */
+export const DEFAULT_SEMANTIC_SEARCH_LIMIT = 12;
+export const MAX_SEMANTIC_SEARCH_LIMIT = 20;
+
+/**
+ * A hit's ~240-char preview, whitespace collapsed, from the section
+ * start (semantic hits have no literal match to centre a window on).
+ * Mirrors the tags search's snippet format so panels render alike.
+ */
+export function semanticSnippet(text: string, maxChars = 240): string {
+  const flat = text.replace(/\s+/g, ' ').trim();
+  return flat.length > maxChars ? `${flat.slice(0, maxChars).trimEnd()}…` : flat;
+}
+
+/**
  * e5 embedding models are trained with `query:` / `passage:` prefixes;
  * without them quality drops sharply. Everything else embeds unprefixed.
  */

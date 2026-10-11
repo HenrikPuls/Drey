@@ -90,12 +90,21 @@ per-file Git history shipped as milestone 67.)
 Not ordered: **Semantic Search, remaining slices** — the core shipped as
 milestone 41 / ADR-0055 (the assistant's Vault chip: top-k section
 retrieval via transformers.js WASM + a JSON index per vault; sqlite-vec
-was dropped — see the ADR for why). Remaining ideas, none committed:
-semantic hits in the Search panel, a semantic MCP `vault_search` mode
-(needs a plural base registry seam), and pause / resume of large rebuilds
-on interactive use.
+was dropped — see the ADR for why). The remaining slices — semantic
+hits in the Search panel and a semantic MCP `vault_search` mode —
+shipped as milestone 68 over a new base `SemanticSearchProvider` seam
+(ADR-0055 later change); pause / resume of large rebuilds was
+considered and dropped (an ask queues behind at most one embed batch,
+never a rebuild — see "Closed" below).
 
 ### Closed (won't do)
+
+- **Pause / resume of large semantic rebuilds on interactive use** —
+  considered for milestone 68 and dropped: an interactive ask never
+  waits for a rebuild (the query embed queues behind at most one
+  16-passage batch — tens of ms — then searches the current index),
+  and the actual gap (a mid-rebuild index is incomplete) is not fixable
+  by pausing. Recorded in ADR-0055's later-change section.
 
 - **Task Center / stable task ids** (req-35) — implemented as milestone
   44 (`#task/id:<id>` mint-on-tick write-back) and reverted before

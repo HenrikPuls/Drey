@@ -4,7 +4,11 @@ import { isLocalHost, isLocalOrigin } from '../../../electron/mcp/http-transport
 import { createVaultMcpServer } from '../../../electron/mcp/server';
 import { VaultTools } from '../../../electron/mcp/vault-tools';
 import type { AppConfig } from '../../../shared/app-config';
-import type { SectionSearchProvider, SdkTaskRecord } from '../../../shared/plugin-api';
+import type {
+  SectionSearchProvider,
+  SemanticSearchProvider,
+  SdkTaskRecord,
+} from '../../../shared/plugin-api';
 import type { VaultManager } from '../../../electron/vault-manager';
 
 /**
@@ -401,5 +405,96 @@ describe('VaultTools', () => {
     });
     await tools.call('tasks_list', { status: 'nope', completedSince: 'recently' });
     expect(seen[4]).toEqual({ includeDone: false });
+  });
+});
+
+describe('vault_search mode semantic (SDK 1.18)', () => {
+  const semanticHits = [
+    {
+      path: 'daily/a.md',
+      heading: 'Kaffee',
+      line: 3,
+      snippet: 'Kaffee trinken …',
+      text: 'Kaffee trinken morgens',
+      vaultId: 'vtest',
+      score: 0.87,
+    },
+  ];
+
+  function semanticTools(provider: SemanticSearchProvider | null): VaultTools {
+    return new VaultTools(
+      fakeVault({}),
+      () => fakeProvider(),
+      () => null,
+      () => config(),
+      async () => true,
+      () => undefined,
+      () => provider,
+    );
+  }
+
+  it('routes the question to the semantic provider with scope and limit', async () => {
+    const seen: unknown[] = [];
+    const tools = semanticTools({
+      search: async (question, scope, limit) => {
+        seen.push({ question, scope, limit });
+        return semanticHits;
+      },
+    });
+    const res = await tools.call('vault_search', {
+      mode: 'semantic',
+      text: 'was trinke ich morgens?',
+      maxResults: 5,
+      vault: 'all',
+    });
+    expect(res.isError).not.toBe(true);
+    expect(seen[0]).toEqual({
+      question: 'was trinke ich morgens?',
+      scope: { kind: 'all' },
+      limit: 5,
+    });
+    expect(res.content[0].text).toContain('vtest:daily/a.md:3 — Kaffee (score 0.87)');
+    expect(res.content[0].text).toContain('Kaffee trinken …');
+  });
+
+  it('degrades with a clear error when no semantic provider is registered', async () => {
+    const tools = semanticTools(null);
+    const res = await tools.call('vault_search', { mode: 'semantic', text: 'frage' });
+    expect(res.isError).toBe(true);
+    expect(res.content[0].text).toContain("assistant's retrieval is disabled");
+  });
+
+  it('requires text and refuses tags/regex in semantic mode', async () => {
+    const tools = semanticTools({
+      search: async () => semanticHits,
+    });
+    const noText = await tools.call('vault_search', { mode: 'semantic' });
+    expect(noText.isError).toBe(true);
+    expect(noText.content[0].text).toContain('non-empty text');
+    const withTags = await tools.call('vault_search', { mode: 'semantic', text: 'q', tags: ['x'] });
+    expect(withTags.isError).toBe(true);
+    expect(withTags.content[0].text).toContain('apply to the default text mode');
+    const withRegex = await tools.call('vault_search', { mode: 'semantic', text: 'q', regex: 'x' });
+    expect(withRegex.isError).toBe(true);
+  });
+
+  it("an absent or unknown mode stays the exact text search (default 'text')", async () => {
+    let called = false;
+    const tools = new VaultTools(
+      fakeVault({}),
+      () => fakeProvider([{ path: 'a.md', heading: 'H', line: 1, snippet: 's', text: 't' }]),
+      () => null,
+      () => config(),
+      async () => true,
+      () => undefined,
+      () => {
+        throw new Error('semantic provider must not be asked in text mode');
+      },
+    );
+    const res = await tools.call('vault_search', { text: 'terms', mode: 'nonsense' });
+    expect(res.isError).not.toBe(true);
+    expect(res.content[0].text).toContain('a.md:1');
+    called = true;
+    expect(called).toBe(true);
   });
 });

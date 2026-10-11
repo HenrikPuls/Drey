@@ -10,12 +10,19 @@
 import { mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
 import { mkdir, readFile, rename, writeFile } from 'node:fs/promises';
 import * as path from 'node:path';
-import type { MainPluginContext, VaultChangeEvent } from '../../../../shared/plugin-api';
+import type {
+  MainPluginContext,
+  SectionSearchScope,
+  SemanticSectionHit,
+  VaultChangeEvent,
+} from '../../../../shared/plugin-api';
 import {
   DEFAULT_SEMANTIC_MIN_SCORE,
   DEFAULT_SEMANTIC_MODEL,
+  DEFAULT_SEMANTIC_SEARCH_LIMIT,
   DEFAULT_SEMANTIC_TOP_K,
   EMBED_BATCH,
+  MAX_SEMANTIC_SEARCH_LIMIT,
   MAX_SEMANTIC_TOP_K,
   contextCitations,
   isSemanticIndexPath,
@@ -23,6 +30,7 @@ import {
   queryText,
   resolveTargetVaultIds,
   semanticSectionsFor,
+  semanticSnippet,
   type ActiveVaultScope,
   type ContextCite,
   type RetrievedSection,
@@ -30,6 +38,13 @@ import {
 } from '../../shared/semantic.js';
 import { SemanticEmbedder } from './embedder';
 import { VectorIndex } from './vector-index';
+
+/** The embedder surface the service uses — the real worker supervisor satisfies it; specs fake it. */
+export interface SemanticEmbedderLike {
+  embed(texts: readonly string[]): Promise<Float32Array[]>;
+  changeModel(model: string): void;
+  dispose(): void;
+}
 
 /** The service's view of the host; narrow so the spec suite can fake it. */
 export interface SemanticDeps {
@@ -45,6 +60,12 @@ export interface SemanticDeps {
   workerPath: string;
   /** Where the embedding models cache (usually `<userData>/models`). */
   modelCacheDir: string;
+  /**
+   * Test seam: replaces the worker-backed embedder. The model rides the
+   * initial `DEFAULT_SEMANTIC_MODEL` — a factory (not an instance) so a
+   * `changeModel` restart stays representable.
+   */
+  embedderFactory?(model: string): SemanticEmbedderLike;
 }
 
 interface BuildProgress {
@@ -75,7 +96,7 @@ const SAVE_DEBOUNCE_MS = 1500;
 export class SemanticService {
   private readonly deps: SemanticDeps;
   private readonly index = new VectorIndex();
-  private embedder: SemanticEmbedder;
+  private embedder: SemanticEmbedderLike;
   private enabled = false;
   private model = DEFAULT_SEMANTIC_MODEL;
   private topK = DEFAULT_SEMANTIC_TOP_K;
@@ -88,12 +109,15 @@ export class SemanticService {
 
   constructor(deps: SemanticDeps) {
     this.deps = deps;
-    this.embedder = new SemanticEmbedder({
-      workerPath: deps.workerPath,
-      model: this.model,
-      cacheDir: deps.modelCacheDir,
-      maxBatch: EMBED_BATCH,
-    });
+    this.embedder =
+      deps.embedderFactory !== undefined
+        ? deps.embedderFactory(this.model)
+        : new SemanticEmbedder({
+            workerPath: deps.workerPath,
+            model: this.model,
+            cacheDir: deps.modelCacheDir,
+            maxBatch: EMBED_BATCH,
+          });
   }
 
   /** Reads the config slice; a model change restarts the worker lazily. */
@@ -319,26 +343,18 @@ export class SemanticService {
     const names = new Map(vaults.map((vault) => [vault.id, vault.name]));
     const out: RetrievedSection[] = [];
     for (const hit of hits) {
-      const content = await this.deps.readVaultText(hit.vaultId, hit.path);
-      if (content === null) {
-        continue;
-      }
-      const sections = semanticSectionsFor(hit.path, content);
-      const exact = sections.find((entry) => entry.line === hit.line);
-      const section =
-        exact ??
-        sections.filter((entry) => entry.line <= hit.line).at(-1);
-      if (section === undefined) {
+      const hydrated = await this.hydrateSection(hit);
+      if (hydrated === null) {
         continue;
       }
       out.push({
         vaultId: hit.vaultId,
         vault: names.get(hit.vaultId),
         path: hit.path,
-        heading: section.heading,
-        line: section.line,
+        heading: hydrated.heading,
+        line: hydrated.line,
         score: hit.score,
-        text: section.text,
+        text: hydrated.text,
       });
     }
     return { enabled: true, minScore: this.minScore, hits: out };
@@ -350,6 +366,63 @@ export class SemanticService {
     vaultIds: readonly string[] = [],
   ): Promise<ContextCite[]> {
     return this.retrieve(question, scope, vaultIds).then((outcome) => contextCitations(outcome.hits));
+  }
+
+  /**
+   * The SDK seam (1.18): the top-`limit` sections most similar to
+   * `question`, for the Search panel's semantic mode and MCP
+   * `vault_search`. Unlike an ask turn this browses — the limit defaults
+   * above `topK` — and it carries a snippet next to the hydrated text.
+   * Returns [] when disabled (the provider should be unregistered then
+   * anyway); worker failures throw, the callers degrade.
+   */
+  async search(
+    question: string,
+    scope?: SectionSearchScope,
+    limit?: number,
+  ): Promise<readonly SemanticSectionHit[]> {
+    if (!this.enabled || this.disposed) {
+      return [];
+    }
+    const maxHits = clampInt(limit, 1, MAX_SEMANTIC_SEARCH_LIMIT, DEFAULT_SEMANTIC_SEARCH_LIMIT);
+    const vaults = await this.deps.listVaults();
+    // SDK scope → the pure resolver's terms: omitted = the active vault,
+    // one vault = a custom selection of exactly it, 'all' = every vault.
+    const [semScope, customIds] =
+      scope === undefined
+        ? (['vault', []] as const)
+        : scope.kind === 'all'
+          ? (['all', []] as const)
+          : (['custom', [scope.vaultId]] as const);
+    const targetIds = resolveTargetVaultIds(vaults, semScope, customIds);
+    if (targetIds.length === 0) {
+      return [];
+    }
+    await this.ensureLoaded(targetIds);
+    const [queryVec] = await this.embedder.embed([queryText(this.model, question)]);
+    if (queryVec === undefined) {
+      return [];
+    }
+    const hits = this.index
+      .search(targetIds, this.model, queryVec, maxHits, this.minScore)
+      .filter((hit) => isSemanticIndexPath(hit.path));
+    const out: SemanticSectionHit[] = [];
+    for (const hit of hits) {
+      const hydrated = await this.hydrateSection(hit);
+      if (hydrated === null) {
+        continue;
+      }
+      out.push({
+        vaultId: hit.vaultId,
+        path: hit.path,
+        heading: hydrated.heading,
+        line: hydrated.line,
+        snippet: semanticSnippet(hydrated.text),
+        text: hydrated.text,
+        score: hit.score,
+      });
+    }
+    return out;
   }
 
   /** Sync flush for app quit. */
@@ -366,6 +439,31 @@ export class SemanticService {
   }
 
   // -- internals -------------------------------------------------------------
+
+  /**
+   * Re-reads the hit's file and returns the section the index pointed
+   * at — exact line, else the last section starting above it (the file
+   * may have shifted under the index). Null when nothing matches: the
+   * index never carried the text, hydration is what a caller sees.
+   */
+  private async hydrateSection(hit: {
+    vaultId: string;
+    path: string;
+    line: number;
+  }): Promise<{ heading: string; line: number; text: string } | null> {
+    const content = await this.deps.readVaultText(hit.vaultId, hit.path);
+    if (content === null) {
+      return null;
+    }
+    const sections = semanticSectionsFor(hit.path, content);
+    const section =
+      sections.find((entry) => entry.line === hit.line) ??
+      sections.filter((entry) => entry.line <= hit.line).at(-1);
+    if (section === undefined) {
+      return null;
+    }
+    return { heading: section.heading, line: section.line, text: section.text };
+  }
 
   private indexHasFile(vaultId: string, filePath: string): boolean {
     // Cheap probe via search is wrong; expose file presence through the index.

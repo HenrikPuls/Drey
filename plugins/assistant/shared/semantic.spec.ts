@@ -1,5 +1,7 @@
 import {
   DEFAULT_SEMANTIC_MODEL,
+  DEFAULT_SEMANTIC_SEARCH_LIMIT,
+  MAX_SEMANTIC_SEARCH_LIMIT,
   buildVaultContextBlock,
   compactContextLine,
   contextCitations,
@@ -13,6 +15,7 @@ import {
   queryText,
   resolveTargetVaultIds,
   semanticSectionsFor,
+  semanticSnippet,
   splitSemanticSections,
 } from './semantic';
 import type { RetrievedSection } from './semantic';
@@ -203,5 +206,22 @@ describe('context shaping', () => {
     expect(compactContextLine(cites)).toBe(
       '[Vault context used for this answer: Privat · daily/a.md — Motivation; Git · daily/a.md — Klon]',
     );
+  });
+});
+
+describe('the SDK search seam budget (1.18)', () => {
+  it('defaults above an ask turn\'s topK and caps at 20', () => {
+    expect(DEFAULT_SEMANTIC_SEARCH_LIMIT).toBeGreaterThan(4);
+    expect(MAX_SEMANTIC_SEARCH_LIMIT).toBe(20);
+  });
+});
+
+describe('semanticSnippet', () => {
+  it('collapses whitespace and shortens with an ellipsis', () => {
+    expect(semanticSnippet('Kaffee   trinken\n\nmorgens')).toBe('Kaffee trinken morgens');
+    const long = semanticSnippet(`${'a'.repeat(300)}`);
+    expect(long.length).toBe(241); // 240 chars + the ellipsis
+    expect(long.endsWith('…')).toBe(true);
+    expect(semanticSnippet('  kurz  ')).toBe('kurz');
   });
 });

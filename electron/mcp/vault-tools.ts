@@ -20,6 +20,8 @@ import type { ToolSpec } from '../../shared/llm';
 import type {
   SectionSearchProvider,
   SectionSearchScope,
+  SemanticSearchProvider,
+  SemanticSectionHit,
   SdkTaskRecord,
   TagSearchHit,
   TaskQueryProvider,
@@ -67,7 +69,9 @@ export const VAULT_TOOL_DEFS: readonly McpToolDef[] = [
       '`text` (all whitespace-separated terms must appear), and `regex` (JavaScript regular ' +
       'expression). Sections are heading-delimited and cover every note, tagged or not. ' +
       'With only `regex`, every Markdown file is line-scanned; otherwise `regex` ' +
-      'filters the matched sections. Returns file path, line and a snippet per hit.',
+      'filters the matched sections. `mode` "semantic" ranks `text` by embedding ' +
+      'similarity instead of exact matching (tags/regex do not apply there). ' +
+      'Returns file path, line and a snippet per hit.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -76,10 +80,15 @@ export const VAULT_TOOL_DEFS: readonly McpToolDef[] = [
           items: { type: 'string' },
           description: 'Tag names, without the #.',
         },
-        text: { type: 'string', description: 'Free-text terms (AND).' },
+        text: { type: 'string', description: 'Free-text terms (AND), or the question in semantic mode.' },
         regex: { type: 'string', description: 'JavaScript regular expression source.' },
         regexFlags: { type: 'string', description: "Regex flags, e.g. 'i' or 'im'. Default 'i'." },
-        maxResults: { type: 'number', description: 'Cap on returned hits (default 40, max 200).' },
+        mode: {
+          type: 'string',
+          enum: ['text', 'semantic'],
+          description: "'text' (default) exact-matches; 'semantic' ranks by similarity.",
+        },
+        maxResults: { type: 'number', description: 'Cap on returned hits (default 40, max 200; semantic caps at 20).' },
         vault: {
           type: 'string',
           description:
@@ -205,6 +214,27 @@ function formatHits(hits: readonly TagSearchHit[], limit: number, labelVaults = 
   return `${shown.length} of ${hits.length} hit${hits.length === 1 ? '' : 's'}:\n\n${body}${more}`;
 }
 
+/** The semantic twin (SDK 1.18): same layout, plus the similarity score. */
+function formatSemanticHits(
+  hits: readonly SemanticSectionHit[],
+  limit: number,
+  labelVaults = false,
+): string {
+  if (hits.length === 0) {
+    return 'No matches.';
+  }
+  const shown = hits.slice(0, limit);
+  const body = shown
+    .map(
+      (hit) =>
+        `${labelVaults ? `${hit.vaultId}:${hit.path}` : hit.path}:${hit.line} — ` +
+        `${hit.heading} (score ${hit.score.toFixed(2)})\n  ${hit.snippet}`,
+    )
+    .join('\n\n');
+  const more = hits.length > shown.length ? `\n\n(+${hits.length - shown.length} more)` : '';
+  return `${shown.length} of ${hits.length} hit${hits.length === 1 ? '' : 's'}:\n\n${body}${more}`;
+}
+
 /**
  * The optional `vault` argument of `vault_read`/`vault_write`: a vault id.
  * `"all"` is meaningless for a single-file tool and is rejected explicitly,
@@ -254,6 +284,14 @@ export class VaultTools {
      * write lands, so the plugins' index stays current and the renderer
      * refreshes (ADR-0045 round). */
     private readonly onVaultChanged: (path: string, vaultId?: string) => void = () => {},
+    /**
+     * The semantic seam (SDK 1.18, ADR-0055): `vault_search` mode
+     * "semantic" reads whichever provider the assistant plugin
+     * registered while its retrieval is enabled. `null` degrades the
+     * mode with a clear error. Trailing + defaulted so existing
+     * constructions (the spec suite) stay source-compatible.
+     */
+    private readonly getSemanticProvider: () => SemanticSearchProvider | null = () => null,
   ) {}
 
   /** The `tools/list` payload (MCP shape). */
@@ -377,6 +415,27 @@ export class VaultTools {
         ? Math.floor(args['maxResults'])
         : DEFAULT_MAX_RESULTS,
     );
+    const scope = this.scopeFromVaultArg(args['vault']);
+
+    if (args['mode'] === 'semantic') {
+      // Ranking, not matching: a question rides `text` alone; tags and a
+      // regex have nothing to filter (there is no literal match).
+      if (text.trim() === '') {
+        return textResult('Semantic mode requires a non-empty text (the question).', true);
+      }
+      if (tags.length > 0 || wantRegex) {
+        return textResult('tags and regex apply to the default text mode only.', true);
+      }
+      const provider = this.getSemanticProvider();
+      if (provider === null) {
+        return textResult(
+          "Semantic search is unavailable: the assistant's retrieval is disabled.",
+          true,
+        );
+      }
+      const hits = await provider.search(text, scope, limit);
+      return textResult(formatSemanticHits(hits, limit, scope !== undefined));
+    }
 
     let regex: RegExp | null = null;
     if (wantRegex) {
@@ -391,7 +450,7 @@ export class VaultTools {
       if (!regex) {
         return textResult('Provide at least one of: tags, text, regex.', true);
       }
-      return this.regexScan(regex, limit, this.scopeFromVaultArg(args['vault']));
+      return this.regexScan(regex, limit, scope);
     }
 
     const provider = this.getSearchProvider();
@@ -401,7 +460,6 @@ export class VaultTools {
         true,
       );
     }
-    const scope = this.scopeFromVaultArg(args['vault']);
     let hits = await provider.search({ tags, text }, scope);
     if (regex) {
       const re = regex;

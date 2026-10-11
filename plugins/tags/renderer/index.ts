@@ -15,6 +15,7 @@ import {
   formatSearchSummaryHeader,
   patchContent,
   runTagSearch,
+  sectionCarriesTags,
 } from '../shared/search.js';
 import { sectionRecordsFor } from '../shared/section-records.js';
 import { registerTagsSettingsPage } from './settings.js';
@@ -34,6 +35,8 @@ interface SearchPrefs {
   replaceOpen: boolean;
   /** Vault / all scope: list hits from assistant chat notes (`chats/`) too. */
   includeChats: boolean;
+  /** Vault / all scope: rank the text query semantically (SDK 1.18) instead of exact-matching it. */
+  semantic: boolean;
 }
 
 const DEFAULT_PREFS: SearchPrefs = {
@@ -43,6 +46,7 @@ const DEFAULT_PREFS: SearchPrefs = {
   wholeWord: false,
   regex: false,
   replaceOpen: false,
+  semantic: false,
 };
 
 function loadPrefs(): SearchPrefs {
@@ -61,6 +65,7 @@ function loadPrefs(): SearchPrefs {
       regex: parsed.regex === true,
       replaceOpen: parsed.replaceOpen === true,
       includeChats: parsed.includeChats === true,
+      semantic: parsed.semantic === true,
     };
   } catch {
     return { ...DEFAULT_PREFS };
@@ -138,11 +143,13 @@ const plugin: PluginRendererModule = {
     refreshVaults();
 
     // -- search state ---------------------------------------------------------
+    /** A hit with an optional semantic score — the panel renders a rank badge when present. */
+    type PanelHit = TagSearchHit & { score?: number };
     const state = {
       queryTags: [] as string[],
       queryText: '',
       replacement: '',
-      hits: [] as TagSearchHit[],
+      hits: [] as PanelHit[],
       searching: false,
       ran: false,
       /** Matcher / provider error, surfaced instead of a silent empty list. */
@@ -177,6 +184,12 @@ const plugin: PluginRendererModule = {
     api.backend.on('index-updated', refreshVocabulary);
 
     const hasQuery = (): boolean => state.queryTags.length > 0 || state.queryText.trim() !== '';
+
+    /** Semantic mode: vault/all scope only — the renderer cannot embed a file-scope buffer. */
+    const semanticActive = (): boolean => prefs.semantic && prefs.scope !== 'file';
+
+    /** The SDK seam's hit budget (mirrors the assistant's DEFAULT_SEMANTIC_SEARCH_LIMIT). */
+    const SEMANTIC_LIMIT = 12;
 
     const currentQuery = (): TagSearchQuery => ({
       tags: state.queryTags,
@@ -385,14 +398,24 @@ const plugin: PluginRendererModule = {
         notify();
         return;
       }
-      const query = currentQuery();
-      const matcher = buildTextMatcher(query);
-      if (!matcher.ok) {
-        state.error = matcher.error;
-        state.hits = [];
-        state.ran = true;
-        notify();
-        return;
+      if (semanticActive()) {
+        // Nothing to embed without text — tags alone cannot rank.
+        if (state.queryText.trim() === '') {
+          state.error = 'Type a question to search semantically.';
+          state.hits = [];
+          state.ran = true;
+          notify();
+          return;
+        }
+      } else {
+        const matcher = buildTextMatcher(currentQuery());
+        if (!matcher.ok) {
+          state.error = matcher.error;
+          state.hits = [];
+          state.ran = true;
+          notify();
+          return;
+        }
       }
       if (prefs.scope === 'file' && activeTextDoc() === null) {
         state.error = 'Open a text document to search the file scope.';
@@ -410,7 +433,7 @@ const plugin: PluginRendererModule = {
           state.hits =
             doc === null
               ? []
-              : runTagSearch(sectionRecordsFor(doc.path, doc.buffer), query).map((h) => ({
+              : runTagSearch(sectionRecordsFor(doc.path, doc.buffer), currentQuery()).map((h) => ({
                   ...h,
                   vaultId: doc.vaultId ?? undefined,
                 }));
@@ -422,15 +445,34 @@ const plugin: PluginRendererModule = {
               : activeVaultId !== null
                 ? { kind: 'vault', vaultId: activeVaultId }
                 : undefined;
-          const diskHits = await api.search.searchSections(query, scope);
-          // Chats stay indexed; the panel lists them only on request.
-          state.hits = filterChatHits(withOpenBufferHits(diskHits, query), prefs.includeChats);
+          if (semanticActive()) {
+            // Ranking over disk state: no dirty-buffer folding (the index
+            // is disk-side), no chats toggle (the semantic index excludes
+            // chat notes by design, ADR-0055). Tag chips stay meaningful
+            // as an exact post-filter over the hydrated section text.
+            const hits = await api.search.searchSemantic(
+              state.queryText.trim(),
+              scope,
+              SEMANTIC_LIMIT,
+            );
+            state.hits = hits.filter((hit) =>
+              sectionCarriesTags(hit.heading, hit.text, state.queryTags),
+            );
+          } else {
+            const query = currentQuery();
+            const diskHits = await api.search.searchSections(query, scope);
+            // Chats stay indexed; the panel lists them only on request.
+            state.hits = filterChatHits(withOpenBufferHits(diskHits, query), prefs.includeChats);
+          }
           state.ran = true;
         }
       } catch (error) {
         // A rejected search (e.g. the tags backend is gone) is a message,
         // never a silent empty panel.
-        state.error = error instanceof Error ? error.message : String(error);
+        const message = error instanceof Error ? error.message : String(error);
+        state.error = message.includes('no semantic-search provider')
+          ? "Semantic search is unavailable — the assistant's retrieval is disabled (Settings → Assistant retrieval)."
+          : message;
         state.hits = [];
       } finally {
         state.searching = false;
@@ -671,6 +713,21 @@ const plugin: PluginRendererModule = {
           void run();
         });
 
+        // Semantic mode (SDK 1.18): rank the text query by similarity over
+        // the assistant's vector index instead of exact-matching it. The
+        // semantic index excludes chats on its own — the chats toggle has
+        // no effect there and disables.
+        const semanticBtn = iconButton(
+          'brain',
+          'Semantic search (rank by similarity instead of exact match)',
+          () => {
+            prefs.semantic = !prefs.semantic;
+            persistPrefs();
+            notify();
+            void run();
+          },
+        );
+
         const render = (): void => {
           for (const btn of buttons) {
             const on = btn.dataset['scope'] === prefs.scope;
@@ -679,11 +736,14 @@ const plugin: PluginRendererModule = {
           }
           chatsBtn.classList.toggle('on', prefs.includeChats);
           chatsBtn.setAttribute('aria-pressed', String(prefs.includeChats));
-          chatsBtn.disabled = prefs.scope === 'file';
+          chatsBtn.disabled = prefs.scope === 'file' || semanticActive();
+          semanticBtn.classList.toggle('on', prefs.semantic);
+          semanticBtn.setAttribute('aria-pressed', String(prefs.semantic));
+          semanticBtn.disabled = prefs.scope === 'file';
         };
         render();
         listeners.add(render);
-        host.append(seg, chatsBtn);
+        host.append(seg, semanticBtn, chatsBtn);
         return () => {
           listeners.delete(render);
         };
@@ -779,19 +839,26 @@ const plugin: PluginRendererModule = {
         summaryRow.append(summaryText, replaceBtn, exportButton, summarizeButton, clearButton);
 
         const renderToggles = (): void => {
+          // Match flags are exact-match modifiers — meaningless on a ranking.
+          const semantic = semanticActive();
+          const noHits = state.hits.length === 0 || !state.ran;
           caseBtn.classList.toggle('on', prefs.matchCase);
           caseBtn.setAttribute('aria-pressed', String(prefs.matchCase));
+          caseBtn.disabled = semantic;
           wordBtn.classList.toggle('on', prefs.wholeWord);
           wordBtn.setAttribute('aria-pressed', String(prefs.wholeWord));
+          wordBtn.disabled = semantic;
           regexBtn.classList.toggle('on', prefs.regex);
           regexBtn.setAttribute('aria-pressed', String(prefs.regex));
+          regexBtn.disabled = semantic;
           replaceBtn.classList.toggle('on', prefs.replaceOpen);
           replaceBtn.setAttribute('aria-pressed', String(prefs.replaceOpen));
-          replaceRow.hidden = !prefs.replaceOpen;
+          replaceBtn.hidden = semantic || (noHits && !prefs.replaceOpen);
+          replaceRow.hidden = semantic || !prefs.replaceOpen;
         };
 
-        const groupHits = (): Array<{ key: string; path: string; vaultId: string | null; hits: TagSearchHit[] }> => {
-          const groups = new Map<string, { path: string; vaultId: string | null; hits: TagSearchHit[] }>();
+        const groupHits = (): Array<{ key: string; path: string; vaultId: string | null; hits: PanelHit[] }> => {
+          const groups = new Map<string, { path: string; vaultId: string | null; hits: PanelHit[] }>();
           for (const hit of state.hits) {
             const key = `${hit.vaultId ?? ''} ${hit.path}`;
             let group = groups.get(key);
@@ -862,6 +929,11 @@ const plugin: PluginRendererModule = {
               const head = el('span', 'tag-search-hit-head');
               head.appendChild(el('span', 'tag-search-hit-heading', hit.heading));
               head.appendChild(el('span', 'tag-search-hit-loc', `:${hit.line}`));
+              if (hit.score !== undefined) {
+                const score = el('span', 'tag-search-hit-score', `${Math.round(hit.score * 100)}%`);
+                score.title = 'Similarity';
+                head.appendChild(score);
+              }
               if (hit.unsaved === true) {
                 head.appendChild(el('span', 'tag-search-hit-unsaved', 'unsaved'));
               }
@@ -873,7 +945,7 @@ const plugin: PluginRendererModule = {
                 }
                 void api.documents.open(hit.path, hit.line, { vaultId: hit.vaultId });
               });
-              if (prefs.replaceOpen) {
+              if (prefs.replaceOpen && !semanticActive()) {
                 const replaceOne = el('button', 'icon-btn tag-search-hit-replace') as HTMLButtonElement;
                 replaceOne.type = 'button';
                 replaceOne.appendChild(api.ui.icon('replace', 14));
@@ -904,10 +976,10 @@ const plugin: PluginRendererModule = {
             tagField.setText(state.queryText);
           }
           replaceInput.value = state.replacement;
-          replaceAllBtn.disabled = !hasQuery() || (prefs.scope === 'file' && activeTextDoc() === null);
+          replaceAllBtn.disabled =
+            !hasQuery() || (prefs.scope === 'file' && activeTextDoc() === null) || semanticActive();
           const noHits = state.hits.length === 0 || !state.ran;
           exportButton.hidden = noHits;
-          replaceBtn.hidden = noHits && !prefs.replaceOpen;
           const summarizing = summaryTask !== null;
           summarizeButton.hidden = !summarizing && (noHits || !api.llm.enabled());
           if (shownSummarizing !== summarizing) {

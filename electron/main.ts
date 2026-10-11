@@ -698,6 +698,9 @@ if (!app.requestSingleInstanceLock() && !allowMultiInstance) {
           changedPaths: [writtenPath],
           deletedPaths: [],
         }),
+      // The semantic seam (SDK 1.18): reads the assistant plugin's
+      // provider while its retrieval is enabled.
+      () => pluginHost?.getSemanticSearchProvider() ?? null,
     );
     // The assistant's external tools (ADR-0063): the configured MCP
     // servers plus the built-in web_fetch, each behind its approval rule.

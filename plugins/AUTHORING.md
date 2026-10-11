@@ -46,7 +46,7 @@ running the previous build (a changed renderer module 404s). Verify with
 
 - `apiVersion` is a **major gate**: a manifest whose major differs from
   `PLUGIN_API_VERSION.major` (`shared/plugin-api/versions.ts`, currently
-  `{ major: 1, minor: 17 }`) is never imported — the plugin shows up in
+  `{ major: 1, minor: 18 }`) is never imported — the plugin shows up in
   Settings → Panels & plugins as incompatible. Minor bumps are additive;
   1.9 added `commands.run(id, payload?)`, `ui.createTagField` (the shared
   tag chip field — prefer it over a hand-rolled chip row), the main-side
@@ -232,3 +232,18 @@ the mixed case, the templates page for the pure-field case.
   re-indexed and clean open tabs of them reload; without, the vault is
   re-read (open tabs are then left alone). The git plugin
   (`plugins/git/`) is the reference for all three.
+
+## SDK 1.18 — the semantic search seam
+
+- `ctx.search.registerSemanticSearch(provider)` (main) is a second,
+  parallel single slot next to the section-search one: the provider's
+  `search(question, scope?, limit?)` returns similarity-ranked
+  `SemanticSectionHit[]` (path/heading/line/snippet/text/vaultId/score,
+  hydrated fresh from the vault). Register only while your feature is
+  actually on — "no provider" is what base surfaces degrade on. The
+  renderer side is `api.search.searchSemantic(question, scope?, limit?)`
+  (limit clamped 1..20, default 12); it rejects with a clear message
+  when no provider is registered. The assistant plugin
+  (`plugins/assistant/`, ADR-0055) is the reference implementation;
+  the tags plugin's Search panel and MCP `vault_search` mode `semantic`
+  are the reference consumers.

@@ -6,6 +6,7 @@ import type {
   NoteSavedEvent,
   SaveHookResult,
   SdkTaskRecord,
+  Unsubscribe,
 } from '../../../shared/plugin-api';
 import { parseAskPayload } from '../shared/ask.js';
 import {
@@ -97,9 +98,29 @@ const plugin: MainPluginModule = {
       modelCacheDir: path.join(app.getPath('userData'), 'models'),
     });
     disposeSemantic = () => semantic.dispose();
+    // The SDK semantic seam (1.18): registered only while retrieval is
+    // enabled — "no provider" is the degrade signal the Search panel's
+    // semantic mode and MCP `vault_search` react to. Re-synced after
+    // every config change.
+    let semanticSearchUnsub: Unsubscribe | null = null;
+    const syncSemanticSearch = (): void => {
+      if (semantic.isEnabled) {
+        if (semanticSearchUnsub === null) {
+          semanticSearchUnsub = ctx.search.registerSemanticSearch({
+            search: (question, scope, limit) => semantic.search(question, scope, limit),
+          });
+        }
+        return;
+      }
+      semanticSearchUnsub?.();
+      semanticSearchUnsub = null;
+    };
     void semantic
       .refreshConfig()
-      .then(() => (semantic.isEnabled ? semantic.catchUpAll() : undefined))
+      .then(() => {
+        syncSemanticSearch();
+        return semantic.isEnabled ? semantic.catchUpAll() : undefined;
+      })
       .catch((err: unknown) => ctx.log(err instanceof Error ? err.message : String(err), 'warn'));
     ctx.save.onNoteSaved((event) => {
       semantic.onSaved(event.vaultId, event.path, event.content);
@@ -113,7 +134,10 @@ const plugin: MainPluginModule = {
       }
       return semantic.rebuild(vaultId as string | undefined);
     });
-    ctx.ipc.handle('semantic:configChanged', () => semantic.onConfigChanged());
+    ctx.ipc.handle('semantic:configChanged', async () => {
+      await semantic.onConfigChanged();
+      syncSemanticSearch();
+    });
 
     const chatEngine = new ChatEngine(
       chatStore,

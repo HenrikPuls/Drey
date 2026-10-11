@@ -146,8 +146,12 @@ toolchain is removable by deleting `.tools/`). Never assume a bare `node`,
   **Chat notes are excluded** (`chats/` would embed the literal question
   text of past conversations and displace the notes that answer them;
   ADR-0055 later-change).
-  Owned by the assistant plugin (its only consumer); retrieval hydrates
-  section text fresh from the vault at answer time.
+  Owned by the assistant plugin; retrieval hydrates
+  section text fresh from the vault at answer time. Since milestone 68
+  the index also serves the Search panel's **Semantic** toggle and MCP
+  `vault_search` mode `semantic` through a base
+  `SemanticSearchProvider` seam (SDK 1.18, registered only while
+  retrieval is enabled).
 - **Manual refresh, plus an opt-in watcher.** By default there is no file
   watcher ([ADR-0018](docs/09_architecture_decisions/0018-manual-refresh-no-file-watcher.md)):
   a manual refresh runs one full round in main (index rebuild + a
@@ -400,7 +404,13 @@ Renderer (Angular):
   the scope switch a speech-bubble **Include chats** toggle: chat notes
   (`chats/`) stay indexed but are left out of vault / all-vault hits —
   and out of "Replace all" — unless it is on (off by default; the
-  document scope searches the open note as it is). Panel +
+  document scope searches the open note as it is), and — milestone 68 —
+  a brain **Semantic** toggle: the vault/all text query ranks by
+  embedding similarity over the assistant's index (base
+  `SemanticSearchProvider` seam, SDK 1.18; percent score badges, tag
+  chips as an exact post-filter, match flags + replace hidden, no
+  provider → a clear error row). MCP `vault_search` takes an optional
+  `vault` argument and a `mode: 'text' | 'semantic'`. Panel +
   toggle prefs persist in `localStorage['drey.search']`
 - Tasks panel — `plugins/tasks/` (DOM dock widget, ADR-0033):
   checkbox / `#task` lines in the open document, the whole vault, or all
@@ -855,7 +865,7 @@ packaging verified — see `docs/07_deployment_view.md`).
 closed 2026-10-10). This file does not restate them — the per-milestone
 record is:
 
-- [specs/changelog.md](specs/changelog.md) — milestones 22–67, newest
+- [specs/changelog.md](specs/changelog.md) — milestones 22–68, newest
   first, plus requirements and fixes
 - [docs/milestones-done.md](docs/milestones-done.md) — the archived
   build log, milestones 1–27
@@ -871,17 +881,17 @@ Open work and its order live in [specs/roadmap.md](specs/roadmap.md)
 ("Next milestones") — that list is binding; keep this summary in step
 with it.
 
-- **Last completed:** milestone 67 — the Git plugin gains merge with
-  conflict handling, stash, amend, commit and push, the "not pushed"
-  marker and a per-file Git history (ADR-0065 later change). Before it:
-  milestone 66 — Office documents open in their own program (ADR-0066).
+- **Last completed:** milestone 68 — semantic search remainder: a base
+  `SemanticSearchProvider` seam (SDK 1.18), semantic mode in the Search
+  panel and a semantic `vault_search` mode (ADR-0055 later change;
+  pause/resume of large rebuilds was considered and dropped). Before it:
+  milestone 67 — the Git plugin's merge, stash, amend and file history.
   Milestones 59–66, the Vault-chip picker, the dev escape hatch and the
-  build-origin/mouse-button work are owner-verified; milestone 67 and
-  the Anthrazit AA re-tune are code-complete, verification pending.
-- **Next, in order:** milestone 68 — semantic search remainder: semantic
-  hits in the Search panel and a semantic `vault_search` mode over a new
-  base `SemanticSearchProvider` seam (ADR-0055 later change;
-  pause/resume of large rebuilds was considered and dropped).
+  build-origin/mouse-button work are owner-verified; milestone 67, the
+  Anthrazit AA re-tune and milestone 68 are code-complete, verification
+  pending.
+- **Next, in order:** nothing ordered — the owner picks from the backlog
+  in `specs/roadmap.md`.
 
 A milestone that is code-complete but not yet verified by the owner is
 marked "**Not yet manually verified by the owner**" in its changelog

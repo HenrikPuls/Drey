@@ -2227,6 +2227,46 @@ and search skips it until rebuilt. Retrieved text rides only the current
 call — it is never persisted into the note and never replayed, so a
 follow-up's context stays small (the small-model budget).
 
+Since milestone 68 the same index serves two browse consumers through
+the base `SemanticSearchProvider` seam (SDK 1.18; the assistant plugin
+registers the provider only while retrieval is enabled, so "no
+provider" is the degrade signal):
+
+```mermaid
+sequenceDiagram
+    actor User
+    participant Panel as Search panel (tags plugin, renderer)
+    participant Host as plugin host 'drey.search.semantic'
+    participant Sem as SemanticService.search (assistant main)
+    participant MCP as external MCP client
+    participant W as embed-worker
+
+    User->>Panel: toggle brain icon ON, type a question, Enter
+    Panel->>Host: api.search.searchSemantic(question, scope, 12)
+    alt no provider registered (retrieval disabled)
+        Host-->>Panel: reject → error row ("enable Assistant retrieval")
+    else provider present
+        Host->>Sem: search(question, scope, limit)
+        Sem->>W: embed("query: …")
+        Sem->>Sem: top-limit cosine (configured score floor)
+        loop each hit
+            Sem->>Sem: hydrate section text + snippet from disk
+        end
+        Sem-->>Host: SemanticSectionHit[] (score desc)
+        Host-->>Panel: hits
+        Panel->>Panel: tag chips post-filter (sectionCarriesTags)<br/>group per file, render % score badges
+    end
+    MCP->>Host: vault_search {mode:"semantic", text, vault?, maxResults?}
+    Host->>Sem: same search()
+    Host-->>MCP: "vault · path:line — heading (score 0.87) — snippet" lines
+```
+
+Pause/resume of large rebuilds on interactive use was considered and
+dropped: an ask queues behind at most one 16-passage embed batch (the
+worker is FIFO and synchronous), never a whole rebuild — and a
+mid-rebuild index being incomplete is not a problem pausing fixes
+(ADR-0055 later change).
+
 ## 6.45 Capture through the `/` menu — Entry block and templates (milestone 43, ADR-0057)
 
 Replaces the entry-drawer flow (§6.9 and the Autotag flow §6.13 are
