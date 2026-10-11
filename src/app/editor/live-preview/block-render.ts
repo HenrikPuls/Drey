@@ -1,7 +1,7 @@
 import { ensureSyntaxTree, syntaxTree } from '@codemirror/language';
 import { EditorState, Extension, Range, StateField, Transaction } from '@codemirror/state';
 import { Decoration, DecorationSet, EditorView } from '@codemirror/view';
-import type { SyntaxNode } from '@lezer/common';
+import type { SyntaxNode, Tree } from '@lezer/common';
 import MarkdownIt from 'markdown-it';
 import { imageExtension, pdfExtension } from '../../../../shared/asset-name';
 import { clampEmbedWidth, parseImageEmbed, setEmbedWidth } from '../../../../shared/image-embed';
@@ -64,6 +64,17 @@ export interface LivePreviewConfig {
 }
 
 const PARSE_BUDGET_MS = 50;
+
+/**
+ * The syntax tree of the whole document. A new state parses only its
+ * beginning up front and the rest in the background, so `syntaxTree`
+ * alone may end before the position asked about; this finishes the
+ * parse (within the budget) first. Whatever draws from the tree and
+ * whatever later looks a drawn thing up must both use it.
+ */
+export function completeSyntaxTree(state: EditorState): Tree {
+  return ensureSyntaxTree(state, state.doc.length, PARSE_BUDGET_MS) ?? syntaxTree(state);
+}
 
 /**
  * Table blocks are rendered through markdown-it (`html: false`, core GFM
@@ -174,7 +185,7 @@ function scanEmbeds(state: EditorState, config: LivePreviewConfig): Embed[] {
   const embeds: Embed[] = [];
   const htmlBlocks: { from: number; to: number }[] = [];
 
-  const tree = ensureSyntaxTree(state, doc.length, PARSE_BUDGET_MS) ?? syntaxTree(state);
+  const tree = completeSyntaxTree(state);
 
   // Obsidian-style media embeds `![[name.png]]` / `![[name.pdf]]`
   // (milestone 31, ADR-0046 addendum) are collected FIRST: the markdown
@@ -546,7 +557,7 @@ interface BlockState {
  */
 export function deletionSticky(state: EditorState): { from: number; to: number } | null {
   const head = state.selection.main.head;
-  const tree = ensureSyntaxTree(state, state.doc.length, PARSE_BUDGET_MS) ?? syntaxTree(state);
+  const tree = completeSyntaxTree(state);
   // The caret itself, then one back: an emptied row line is no longer part
   // of the paragraph, so the table only reaches the position before it.
   for (const pos of [head, Math.max(0, head - 1)]) {
@@ -790,7 +801,11 @@ function startImageResize(view: EditorView, grip: HTMLElement, event: PointerEve
     return;
   }
 
-  let node: SyntaxNode | null = syntaxTree(view.state).resolveInner(view.posAtDOM(span) + 1, 1);
+  // The tree the widget was drawn from, not the possibly unfinished one.
+  let node: SyntaxNode | null = completeSyntaxTree(view.state).resolveInner(
+    view.posAtDOM(span) + 1,
+    1,
+  );
   while (node && node.name !== 'Image') {
     node = node.parent;
   }

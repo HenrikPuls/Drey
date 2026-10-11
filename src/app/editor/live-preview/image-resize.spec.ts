@@ -81,6 +81,15 @@ describe('image resize handle', () => {
     expect(view.dom.querySelector('.lp-image')).not.toBeNull();
   });
 
+  it('resizes an image the initial parse has not reached yet', () => {
+    // A new state parses only its first 3000 characters up front; the rest
+    // follows in the background. The grip must not depend on that.
+    const filler = `${'word '.repeat(800)}\n\n`;
+    view = makeView(`# t\n\n${filler}![a boat](x.png)\n`);
+    drag(view, 80);
+    expect(view.state.doc.toString()).toBe(`# t\n\n${filler}![a boat|380](x.png)\n`);
+  });
+
   it('makes no edit when the width is unchanged', async () => {
     view = makeView('# t\n\n![a boat|300](x.png)\n');
     drag(view, 0);
