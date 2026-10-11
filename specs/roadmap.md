@@ -59,7 +59,12 @@ the MCP client with the assistant's tool groups, as milestone 63,
 req-19, draw.io diagrams, as milestone 64, and — on an owner request
 outside the list — Git vaults (req-40) as milestone 65. Its last item,
 the Req-2 Office remainder, shipped as milestone 66 — not as rendering:
-Office documents open in their own program, ADR-0066.)
+Office documents open in their own program, ADR-0066. Another owner
+request outside the list shipped as milestone 67: local plugin packages
+— the sample plugin left the default build (dev/test + SDK reference
+only), `plugins/TUTORIAL.md` is the step-by-step authoring guide, and
+Settings → Panels & plugins installs a plugin from a `.zip` package and
+removes it again, ADR-0067.)
 
 Nothing is ordered at the moment; the next item is the owner's pick from
 the backlog below.

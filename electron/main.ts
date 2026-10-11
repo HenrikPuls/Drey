@@ -26,7 +26,7 @@ import { attachContextMenu, buildApplicationMenu } from './menu';
 import { NoteManager } from './note-manager';
 import { OwnWriteLedger } from './own-write-ledger';
 import { isHashedAsset, serveWithCaching } from './protocol-cache';
-import { PluginHost } from './plugin-host';
+import { PluginHost, PluginInstaller } from './plugin-host';
 import { SessionBackupStore } from './session';
 import { SpellcheckService } from './spellcheck';
 import { SplashController } from './splash';
@@ -756,6 +756,21 @@ if (!app.requestSingleInstanceLock() && !allowMultiInstance) {
       },
     });
     const pluginHostRef = pluginHost;
+    // Local plugin packages (ADR-0067): install/remove under the same user
+    // root the host discovers from.
+    const pluginInstaller = new PluginInstaller({
+      userRoot: path.join(app.getPath('userData'), 'plugins'),
+      pluginHost: pluginHostRef,
+      log: (message, level) => {
+        if (level === 'error') {
+          console.error(message);
+        } else if (level === 'warn') {
+          console.warn(message);
+        } else {
+          console.log(message);
+        }
+      },
+    });
     const noteManager = new NoteManager(vaultManager, {
       onNoteSaved: (hook) => pluginHostRef.save.onNoteSaved(hook),
       emitNoteSaved: (event) => pluginHostRef.emitNoteSaved(event),
@@ -816,6 +831,7 @@ if (!app.requestSingleInstanceLock() && !allowMultiInstance) {
       fullVaultRefresh: () => vaultAnnouncer.announceFullRefresh(),
       announceVaultChange: (changes) => vaultAnnouncer.announceExternal(changes),
       pluginHost,
+      pluginInstaller,
     });
     // The File/Edit/Selection/View menus are drawn by the renderer titlebar
     // now (ADR-0019). Keep a native menu only on macOS, where the menu bar

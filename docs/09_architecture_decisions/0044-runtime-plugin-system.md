@@ -21,6 +21,13 @@ executable authoring reference, `plugins/AUTHORING.md`), but excluded from
 the installer / portable exe by a `files` negation in
 `electron-builder.yml` (see [docs/07](../07_deployment_view.md)).
 
+Later change (milestone 67, [ADR-0067](0067-local-plugin-packages.md)):
+the sample plugin left the default build entirely — emitted only under
+`DREY_BUILD_SAMPLE_PLUGINS=1` (e2e sets it), so no dev run discovers it
+either; `plugins/TUTORIAL.md` became the authoring entry point. The same
+ADR added the first install path for the user root: local `.zip`
+packages through Settings → Panels & plugins.
+
 ## Context
 
 ADR-0016 deliberately stopped short of a plugin runtime: feature modules

@@ -154,6 +154,13 @@ export const IPC_CHANNELS = {
   pluginInvoke: 'plugin:invoke',
   pluginEvent: 'plugin:event', // push main -> renderer
   pluginList: 'plugin:list',
+  // Local plugin packages (ADR-0067): pick + install + remove, separate
+  // channels so the install step is testable without driving the native
+  // dialog. Changes apply on the next start — like `plugins.disabled`.
+  pluginPickPackage: 'plugin:pick-package',
+  pluginInstallPackage: 'plugin:install-package',
+  pluginUninstall: 'plugin:uninstall',
+  appRelaunch: 'app:relaunch',
 } as const;
 
 /**
@@ -211,6 +218,43 @@ export interface McpClientServerStatus {
   /** The server's own tool names (without the `mcp__<id>__` prefix). */
   tools: string[];
 }
+
+/**
+ * Result of `installPluginPackage` (ADR-0067). `status: 'error'` carries a
+ * ready-to-show message plus a machine-readable reason; the installer never
+ * throws across the bridge.
+ */
+export type PluginInstallResult =
+  | {
+      readonly status: 'installed';
+      readonly pluginId: string;
+      readonly pluginName: string;
+      /** True when a previous user install of the same id was replaced (its config.json is kept). */
+      readonly upgraded: boolean;
+    }
+  | {
+      readonly status: 'error';
+      readonly reason:
+        | 'not-a-zip'
+        | 'no-manifest'
+        | 'invalid-manifest'
+        | 'api-version'
+        | 'missing-entry'
+        | 'builtin-collision'
+        | 'unsafe-entry'
+        | 'too-large'
+        | 'io';
+      readonly message: string;
+    };
+
+/** Result of `uninstallPlugin` (ADR-0067). */
+export type PluginUninstallResult =
+  | { readonly status: 'removed'; readonly pluginId: string }
+  | {
+      readonly status: 'error';
+      readonly reason: 'builtin' | 'not-found' | 'io';
+      readonly message: string;
+    };
 
 /**
  * One external tool call waiting for the user (ADR-0063): pushed to the
@@ -1292,6 +1336,17 @@ export interface DreyApi {
 
   /** Invokes `method` on `pluginId`'s registered main-process handler. */
   invokePlugin(pluginId: string, method: string, payload?: unknown): Promise<unknown>;
+
+  /**
+   * Local plugin packages (ADR-0067). `pickPluginPackage` opens the native
+   * .zip dialog (null when cancelled); `installPluginPackage` validates and
+   * installs a picked path; `uninstallPlugin` removes a user-installed id.
+   * All three apply on the next start — the UI offers `relaunchApp`.
+   */
+  pickPluginPackage(): Promise<string | null>;
+  installPluginPackage(zipPath: string): Promise<PluginInstallResult>;
+  uninstallPlugin(pluginId: string): Promise<PluginUninstallResult>;
+  relaunchApp(): Promise<void>;
 
   /**
    * Subscribes to the single plugin event push. `pluginOnEvent` receives

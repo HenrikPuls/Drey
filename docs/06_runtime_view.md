@@ -2712,3 +2712,41 @@ vault) before the error is shown. A row click compares through
 `fileAt` — last commit ↔ staged for a staged row, staged ↔ working copy
 (the open tab's text, when there is one) for a changed row — in
 `api.ui.showDiff`.
+
+## 6.56 Install / remove a plugin package (milestone 67, [ADR-0067](09_architecture_decisions/0067-local-plugin-packages.md))
+
+```mermaid
+sequenceDiagram
+    participant User
+    participant Settings as Panels & plugins
+    participant Host as plugin host (main)
+    participant Inst as PluginInstaller
+    participant Disk as <userData>/plugins
+    participant App as next app start
+
+    User->>Settings: Install from file…
+    Settings->>Inst: plugin:pick-package
+    Inst-->>Settings: .zip path (native dialog)
+    Settings->>Inst: plugin:install-package(path)
+    Inst->>Inst: read zip (central directory, size caps)
+    Inst->>Inst: entry safety (zip-slip refused, junk skipped)
+    Inst->>Inst: manifest + apiVersion + entries + builtin-collision
+    alt invalid
+        Inst-->>Settings: { status: error, reason, message } → dialog
+    else valid
+        Inst->>Disk: extract .staging-<id>/ (config.json carried over)
+        Inst->>Disk: swap into <id>/
+        Inst-->>Settings: { status: installed, upgraded }
+        Settings->>Settings: pluginChangePending — restart hint
+        User->>Settings: Restart now
+        Settings->>App: app:relaunch (graceful close + app.relaunch)
+        App->>Host: discovery finds <id>/ → activate
+    end
+```
+
+Removal is the mirror: the Remove action on an installed row (never a
+built-in — its `config.json` lives in the same tree) confirms, deletes
+the folder (recycle bin first), shows the same restart hint. Neither
+action touches the running session's discovery snapshot: activation
+state changes only at the next start, exactly like `plugins.disabled`.
+

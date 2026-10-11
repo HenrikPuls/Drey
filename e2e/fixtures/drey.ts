@@ -28,6 +28,12 @@ interface DreyFixtures {
    */
   appConfig: Record<string, unknown>;
   /**
+   * The throwaway `--user-data-dir` of the launched app. Exposed so specs
+   * can assert on app-data state (e.g. a plugin package installed under
+   * `<userData>/plugins`, ADR-0067); cleaned up with the app.
+   */
+  userDataDir: string;
+  /**
    * Files written into `vaultDir` before the app launches (`relativePath ->
    * content`), so they are on disk for the startup vault scan -- plugin
    * indexes (tasks/tags) and the file tree see them from the first build,
@@ -80,6 +86,12 @@ export const test = base.extend<DreyFixtures>({
 
   appConfig: [{}, { option: true }],
 
+  userDataDir: async ({}, use, testInfo) => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'drey-e2e-'));
+    await use(dir);
+    fs.rmSync(dir, { recursive: true, force: true });
+  },
+
   seedVault: [{}, { option: true }],
 
   extraPluginDir: [null, { option: true }],
@@ -95,7 +107,7 @@ export const test = base.extend<DreyFixtures>({
   },
 
   electronApp: async (
-    { vaultDir, appConfig, seedVault, extraPluginDir, userDataPlugins, externalDir, launchFiles },
+    { vaultDir, appConfig, seedVault, extraPluginDir, userDataPlugins, externalDir, launchFiles, userDataDir },
     use,
     testInfo,
   ) => {
@@ -112,7 +124,6 @@ export const test = base.extend<DreyFixtures>({
       fs.writeFileSync(target, content);
     }
 
-    const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'drey-e2e-'));
     fs.writeFileSync(
       path.join(userDataDir, 'vault-config.json'),
       JSON.stringify({ activeVaultPath: vaultDir }, null, 2),
@@ -185,8 +196,7 @@ export const test = base.extend<DreyFixtures>({
       .click({ timeout: 5_000 })
       .catch(() => undefined);
     await closing;
-
-    fs.rmSync(userDataDir, { recursive: true, force: true });
+    // `userDataDir` (own fixture) does the cleanup.
   },
 
   page: async ({ electronApp }, use) => {

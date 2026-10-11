@@ -27,7 +27,7 @@
     "pack": "npm run clean && npm run fetch:drawio && npm run build && node node_modules/electron-builder/cli.js --win",
     "electron": "node scripts/run-electron.js",
     "app": "npm run build && npm run electron",
-    "e2e": "npm run build && playwright test",
+    "e2e": "cross-env DREY_BUILD_SAMPLE_PLUGINS=1 npm run build && playwright test",
     "e2e:run": "playwright test",
     "e2e:ui": "playwright test --ui",
     "e2e:report": "playwright show-report",

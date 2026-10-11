@@ -17,6 +17,20 @@ export function registerAppHandlers(getMainWindow: () => BrowserWindow | null): 
     platform: process.platform,
   }));
 
+  // Restart Drey with a fresh process (ADR-0067: the offer after a plugin
+  // package install/remove). Graceful: the main window's normal close path
+  // runs, so dirty tabs still get their exit prompt and will-quit hooks
+  // fire — unlike a hard `app.exit`, nothing unsaved is dropped.
+  ipcMain.handle(IPC_CHANNELS.appRelaunch, (): void => {
+    app.relaunch();
+    const win = getMainWindow();
+    if (win !== null) {
+      win.close();
+    } else {
+      app.quit();
+    }
+  });
+
   // Custom-titlebar window controls (the window is frameless, ADR-0019).
   ipcMain.handle(IPC_CHANNELS.windowMinimize, (): void => getMainWindow()?.minimize());
   ipcMain.handle(IPC_CHANNELS.windowToggleMaximize, (): void => {

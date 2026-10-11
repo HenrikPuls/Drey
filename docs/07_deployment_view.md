@@ -98,12 +98,15 @@ with a plain `import()`), `renderer/` (ES2022 modules + CSS) and `shared/`
 `scripts/build-plugins.mjs`. The `files` globs carry the `.js`/`.json`
 entries plus an explicit `dist-electron/plugins/**/*.css`.
 
-**Exception: the `sample` plugin is not shipped.** It is the executable
-authoring reference (`plugins/AUTHORING.md`) and a dev/e2e fixture — it is
-still built into `dist-electron/plugins/sample/` so `npm run dev` and the
-e2e suite see it, but a `files` negation
-(`!dist-electron/plugins/sample/**`) keeps it out of the installer and
-portable exe. `verify:pack` asserts the absence.
+**Exception: the `sample` plugin is not part of the default build**
+(milestone 67, [ADR-0067](09_architecture_decisions/0067-local-plugin-packages.md)).
+It is the executable authoring reference (`plugins/TUTORIAL.md` /
+`AUTHORING.md`) and an e2e fixture — `build-plugins.mjs` emits it only
+under `DREY_BUILD_SAMPLE_PLUGINS=1` (the `npm run e2e` script sets the
+flag) and removes any stale output otherwise, so no dev run or package
+discovers it. The tsconfigs keep compiling it, keeping the reference
+type-checked. A `files` negation (`!dist-electron/plugins/sample/**`)
+stays in place as belt-and-braces; `verify:pack` asserts the absence.
 
 - **Serving**: the privileged **`plugin://<id>/<path>`** scheme resolves
   against the plugin's `renderer/` folder (the main process asks the
@@ -130,7 +133,12 @@ portable exe. `verify:pack` asserts the absence.
 - **User-installed plugins** are *not* packaged: discovery also scans
   `%APPDATA%\drey\plugins\<id>\` (beside `app-config.json`, ADR-0010) and
   a `DREY_EXTRA_PLUGIN_DIR` override for dev/test. A user plugin shadows
-  nothing — built-ins win id collisions. Disabling is
+  nothing — built-ins win id collisions (the installer,
+  [ADR-0067](09_architecture_decisions/0067-local-plugin-packages.md),
+  refuses a built-in id outright). Plugins arrive there as **local
+  packages**: a `.zip` of a built plugin folder, picked in Settings →
+  Panels & plugins ("Install from file…"; "Remove" deletes it again) —
+  both apply on the next start. Disabling is
   `plugins.disabled` in `app-config.json` (Settings → Panels & plugins);
   an `apiVersion` mismatch marks the plugin `incompatible` and skips it.
 
