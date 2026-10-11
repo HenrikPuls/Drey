@@ -176,6 +176,33 @@ example, and plugins become locally installable from a package.
   that doubles as the executable package-format example), both tsc
   typechecks, lint.
 
+### Fix — plugins: stale module-type markers no longer survive in the dist tree
+
+- **The crash:** in a checkout whose `dist-electron/plugins/` was last
+  built before the renderer bundling, the old build's module-type
+  markers (`{"type":"module"}` at the plugin root, `{"type":"commonjs"}`
+  in `main/`) survived every later build — bundling removed the marker
+  writing but nothing removed the files. At startup Node resolved the
+  now-CommonJS `shared/` output against the stale root marker, parsed
+  it as ESM, and every plugin with runtime `shared/` imports failed
+  with "exports is not defined in ES module scope" (the assistant
+  plugin first).
+- **Build:** `build-plugins.mjs` now removes the two stale markers per
+  plugin directory on every build, so one build heals an old tree.
+  Fresh checkouts never carried markers, which is why the plugin tests
+  and e2e stayed green while existing checkouts broke.
+- **Installer:** a package zip packed per the older TUTORIAL wording
+  (markers included) would install the same crash into
+  `<userData>/plugins/<id>/`. The installer now drops `package.json` at
+  the archive root and in `main/` as archive junk; deeper ones (bundled
+  third-party content) stay untouched.
+- **Tutorial:** the standalone-packaging note in `plugins/TUTORIAL.md`
+  no longer recommends markers — it now says to ship none, with the
+  reason.
+- Checked by: `electron/plugin-host/plugin-installer.spec.ts` (marker
+  strip incl. backslash names, deeper-marker regression), a new
+  `e2e/plugins.spec.ts` package case, both tsc typechecks, lint.
+
 ### Fix — settings: scrolled categories no longer show above the headline
 
 - **The sticky headline pins flush again.** The category nav scrolled

@@ -108,6 +108,14 @@ for (const entry of readdirSync(pluginsDir)) {
   }
   const pluginOut = path.join(mainOut, 'plugins', entry);
   mkdirSync(pluginOut, { recursive: true });
+  // Older builds (before the renderer was bundled) dropped module-type
+  // markers here: {"type":"module"} at the plugin root, {"type":"commonjs"}
+  // into main/. The build no longer writes them — and a surviving root
+  // marker would make Node parse the now-CommonJS shared/ output as ESM
+  // ("exports is not defined in ES module scope"). The build never cleans
+  // dist-electron/, so remove the stale files explicitly.
+  rmSync(path.join(pluginOut, 'package.json'), { force: true });
+  rmSync(path.join(pluginOut, 'main', 'package.json'), { force: true });
   // The manifest is read by discovery from the rootDir.
   cpSync(path.join(pluginDir, 'plugin.json'), path.join(pluginOut, 'plugin.json'));
 
