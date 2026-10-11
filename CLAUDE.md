@@ -328,7 +328,8 @@ Main process (`electron/`):
 Renderer (`src/app/`):
 
 - `services/EditorService` — multi-document state as a facade over the
-  focused pane (ADR-0003/0037); `services/DocHistoryService` — the
+  focused pane (ADR-0003/0037), over `OpenDocsStore` (the registry),
+  `DocOpenService`, `DocSaveService` and `DocDiskSyncService`; `services/DocHistoryService` — the
   back/forward history (M55)
 - `panes/` — `PaneService` split tree + dock regions (ADR-0037/0038),
   `TabDragService` + `dnd/` (ADR-0039), `PaneDropService`

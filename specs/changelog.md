@@ -20,6 +20,37 @@ recorded as an explicit decision. The parity checklist lives in
 
 ## Recent milestones
 
+### `EditorService` is split into a facade and four collaborators
+
+Item 10 of the 2026-10-11 architecture review, second file. A
+restructuring: nothing the user sees or does changes. **Not yet manually
+verified by the owner.**
+
+- **`editor.service.ts` went from 1,727 to 742 lines.** Its public
+  surface is unchanged, so none of the ~50 files that use it changed.
+  Behind it, in `src/app/services/`:
+  - `open-doc.ts` — the `OpenDoc` record, tab keys, the doc factories
+    and the "may this tab be replaced" rule, as plain functions.
+  - `open-docs.store.ts` — `OpenDocsStore`: the registry of open
+    documents, kept in step with pane placement, plus the loading /
+    saving / error state.
+  - `doc-open.service.ts` — `DocOpenService`: opening by kind, daily
+    notes, scratch and help tabs, tab replacement, pins.
+  - `doc-save.service.ts` — `DocSaveService`: the vault save with its
+    conflict guard, external files, exit-time drafts, the "Save as…"
+    write.
+  - `doc-disk-sync.service.ts` — `DocDiskSyncService`: reload after an
+    external change and the "Changed on disk" settlement.
+  - `caret-memory.ts` — the per-document caret and scroll memory.
+- `EditorService` keeps what ties these together: the selectors of the
+  active document, closing tabs, the order and route of saves, and
+  "Save as…".
+- **All existing specs run unchanged.** `open-doc.spec.ts` adds 21 direct
+  tests of the model functions and the caret memory.
+- The image and PDF tab factories were the same code twice and are now
+  one. The save's doc comment described the pre-ADR-0017 tag routing;
+  it now describes what the save does.
+
 ### The Files panel is split into four files
 
 Item 10 of the 2026-10-11 architecture review, first file. A

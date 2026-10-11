@@ -390,7 +390,7 @@ Keep it in step whenever a component boundary changes (CLAUDE.md's
 - `ConflictService` + `ConflictDialog` (`src/app/conflict/`) and
   `HistoryService` + `HistoryDialog` (`src/app/history/`), milestone 60
   (ADR-0060) — the save-conflict merge view over the pure
-  `merge-model.ts` (`EditorService.saveNow` asks when main refuses a
+  `merge-model.ts` (`DocSaveService.saveToVault` asks when main refuses a
   save; the meta bar's "Changed on disk" button asks early; the answer
   is the merged text) and "File history…" (editor `⋯` menu, tab context menu, command
   `note.history`): versions of the open note, diffed against the buffer,
@@ -414,7 +414,17 @@ Keep it in step whenever a component boundary changes (CLAUDE.md's
   (draggable splitters between siblings); `PaneLeaf` renders one pane's
   own `TabBar` + `EditorComponent`/`ImageTab`/`PdfTab`. `EditorService` is a
   facade over the *focused* pane's document (`activePath`, `isDirty`,
-  `save()`, word count, …). One pane per open path (not the same note
+  `save()`, word count, …). Behind the facade (`src/app/services/`):
+  `open-doc.ts` (the `OpenDoc` record, tab keys and the doc factories,
+  as plain functions), `OpenDocsStore` (the registry of open documents,
+  kept in step with pane placement, plus loading / saving / error
+  state), `DocOpenService` (opening by kind, daily notes, scratch and
+  help tabs, tab replacement and pins), `DocSaveService` (the vault
+  save with its conflict guard, external files, exit-time drafts) and
+  `DocDiskSyncService` (reload after an external change, "Changed on
+  disk"). `EditorService` itself keeps the selectors, closing tabs,
+  the order and route of saves and "Save as…"; callers keep using
+  it. One pane per open path (not the same note
   live in two panes at once); a tab's own "Split right"/"Split down" (its
   context menu) creates a sibling pane. Opening a file (or a calendar day)
   **replaces** the focused pane's *clean* tab — a dirty or **pinned** tab
