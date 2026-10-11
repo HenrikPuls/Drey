@@ -246,6 +246,60 @@
   --status-conflict: #f08080;
 }
 
+/* ---- Cyberpunk ----
+
+   The third bespoke palette, built like Anthrazit: exact tokens over the
+   derived block. Violet-black surfaces, a lavender text ramp, violet
+   lines and a neon pink accent; popovers glow instead of casting a
+   shadow. The neon heading / code colours live in the editor look
+   (`src/app/editor/themes/cyberpunk-look.ts`). Text tokens down to
+   `--text-7` clear 4.5:1 on dock, editor and field surfaces. */
+:root[data-theme='cyberpunk'] {
+  color-scheme: dark;
+
+  --bg-dock: #15102a;
+  --bg-editor: #0e0b1a;
+  --bg-input: #1f1840;
+  --bg-search: #0e0b1a;
+  --bg-bar: #15102a;
+  --bg-sidebar: #15102a;
+  --bg-main: #0e0b1a;
+
+  --text-heading: #ffffff;
+  --text-primary: #efeaff;
+  --text-2: #dcd4fb;
+  --text-3: #c5bbee;
+  --text-4: #b0a5e0;
+  --text-5: #b0a5e0;
+  --text-6: #a094d4;
+  --text-7: #9488c9;
+  --text-faint: #6f63a6;
+  --gutter: #6f63a6;
+  --placeholder: #9488c9;
+  --calendar-muted: #5e538f;
+
+  --border: #2e2459;
+  --border-strong: #4a3a8c;
+  --field-border: #7a5fd0;
+  --popover-border: #b56bff;
+  --hover-bg: #1f1840;
+  --hover-bg-strong: #2b2157;
+  --hover-bg-loud: #382b70;
+  --active-bg: #261c4e;
+  --focus-bg: rgba(181, 107, 255, 0.06);
+
+  --accent-contrast: #12091c;
+  --on-accent: #12091c;
+  --popover-shadow: 0 0 22px rgba(181, 107, 255, 0.35);
+
+  --spell-error: #ff6b7a;
+  --status-modified: #ffe066;
+  --status-added: #6dffb3;
+  --status-untracked: #4de8ff;
+  --status-deleted: #ff8a94;
+  --status-conflict: #ff6b7a;
+}
+
 html,
 body {
   margin: 0;

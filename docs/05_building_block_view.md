@@ -3082,6 +3082,11 @@ library — Chromium's built-in (PDFium) viewer, enabled by
   or unknown stored id, the state before the config has loaded, first in
   the picker; `DREY_THEME` (`drey`, the un-themed `:root` palette) is the
   optional original look.
+- **Cyberpunk** (`theme-catalog.ts` id `cyberpunk` + the
+  `:root[data-theme='cyberpunk']` block): the third bespoke palette, built
+  the same way. Its editor look, `editor/themes/cyberpunk-look.ts`, is the
+  token-driven Drey surface with its own highlight style (fixed neon
+  heading and code colours), imported on demand by the catalog's `load()`.
 - **Combined query field** (`src/app/tags/`): `TagField`'s `freeText` mode
   over the pure `tag-query.ts` (`splitQuery`, `tagQueryAtCaret`). The
   Search (`plugins/tags/`) and Tasks (`plugins/tasks/`) panels mount it

@@ -20,6 +20,26 @@ recorded as an explicit decision. The parity checklist lives in
 
 ## Recent milestones
 
+### A third bespoke theme: Cyberpunk
+
+**Not yet manually verified by the owner.**
+
+- **Settings → Appearance → Theme → Cyberpunk**, listed with Anthrazit
+  and Drey. Violet-black surfaces, a lavender text ramp, violet lines and
+  a neon pink accent; popovers glow instead of casting a shadow. Loosely
+  after the Typora "cyberpunk" theme, not a port of it — no grid overlay,
+  no flicker, no display fonts, and pink / violet lead where that one
+  leads with cyan.
+- **Built like Anthrazit:** exact tokens in a
+  `:root[data-theme='cyberpunk']` block of `src/styles.css`, so the whole
+  shell follows. The editor look is its own highlight style
+  (`src/app/editor/themes/cyberpunk-look.ts`, loaded on demand) over the
+  token-driven Drey surface: pink / violet / cyan headings (h1 and h2
+  with a soft glow), cyan links, a neon code palette. Those colours are
+  fixed — they do not follow the highlight colour, which still re-tints
+  the chrome.
+- Anthrazit stays the default; the splash stays Anthrazit.
+
 ### Anthrazit is the default everywhere; the splash shows the logo as a wordmark
 
 **Not yet manually verified by the owner.**
