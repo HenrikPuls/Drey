@@ -2881,10 +2881,17 @@ resolution) possible.
 - **Renderer** — `state.ts` holds only session state (active chat, chips
   keyed by the open note, a taskId-keyed streaming buffer throttled to
   ~100 ms re-renders, the unchanged sidecar auto-summary logic);
-  `panel.ts` renders the chat-first UI (picker + new chat, turn cards
-  with collapsible tool chips, streaming partial card, pinned summary
-  card, image chips with paste/drop staging through
-  `api.vault.saveAsset`); `index.ts` wires the ports to the backend
+  `panel.ts` assembles the chat-first UI and runs its render loop:
+  the head (chat label, picker, new chat), `thread.ts` (turn cards
+  with collapsible tool chips, the vault-context chip, the streaming
+  partial card; a `tasks_list` result is `task-block.ts`) and
+  `composer.ts` (context chips, the auto-growing CodeMirror input,
+  @-completion; paste/drop staging through `api.vault.saveAsset` is
+  `composer-staging.ts`). The five pickers are `picker-chat.ts`,
+  `picker-model.ts`, `picker-prompt.ts`, `picker-vault.ts` and
+  `picker-file.ts` over `picker-frame.ts`; `tool-format.ts` holds the
+  wording of tool calls and results as pure functions, `dom.ts` the
+  element and icon helpers; `index.ts` wires the ports to the backend
   methods (`chat:list`, `chat:read`, `chat:appendEdit`,
   `chat:truncate`, `chat:importSidecar`, rewritten `ask` without any
   `history` payload).
@@ -2980,6 +2987,15 @@ status, never to the active vault.
   snippet per hit; the provider registers through
   `ctx.search.registerSemanticSearch` only while enabled (main-side
   re-sync after every config change).
+- **Search panel files** (`plugins/tags/renderer/`) — `index.ts` only
+  wires the parts and registers the `search.open` command:
+  `search-session.ts` is the model without DOM (query, persisted
+  choices from `search-prefs.ts`, the hits, the run in all three
+  scopes); `search-panel.ts` is the dock widget's DOM over it;
+  `search-replace.ts` the file-scope buffer patch and the bundled
+  confirmation; `search-summary.ts` the Summarize digest into a
+  scratch tab; `hit-list.ts` folds unsaved buffers into the hits and
+  groups them per file, as pure functions.
 - **Search panel semantic mode** (`plugins/tags/renderer/`, milestone
   68) — the panel's brain-icon toggle switches the vault/all query to
   `api.search.searchSemantic`: ranked hits with a percent score badge,

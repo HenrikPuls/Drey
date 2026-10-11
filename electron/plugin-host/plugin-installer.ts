@@ -96,8 +96,9 @@ export class PluginInstaller {
 
     // Normalize separators (Windows PowerShell's Compress-Archive writes
     // backslash entry names), drop archive junk (Finder's __MACOSX and
-    // resource forks, .DS_Store) and refuse everything that could leave the
-    // plugin folder (zip-slip) or is malformed.
+    // resource forks, .DS_Store, stray Node module-type markers) and
+    // refuse everything that could leave the plugin folder (zip-slip) or
+    // is malformed.
     const usable: Array<{ name: string; data: Buffer }> = [];
     for (const entry of entries) {
       const classification = classifyArchivePath(entry.name);
@@ -240,8 +241,14 @@ export class PluginInstaller {
  * PowerShell interop wart), but a path must be plain and relative — no
  * absolute/drive forms, no `..`, no malformed `//`/`.` segments. Hidden
  * files and Finder's `__MACOSX` tree are junk, not grounds to refuse — a
- * plugin package has no legitimate use for either. Together with the
- * `plugin.json`-at-root rule this keeps every write inside the plugin
+ * plugin package has no legitimate use for either. So are the Node
+ * module-type markers older builds and tutorial revisions dropped next to
+ * the code (`package.json` at the root, in `main/`): a surviving
+ * `{"type":"module"}` at the root would make the CommonJS main/shared
+ * output parse as ESM and the plugin fail to load. The package format has
+ * no use for a `package.json` (the manifest is `plugin.json`) — deeper
+ * ones (bundled third-party content) are left untouched. Together with
+ * the `plugin.json`-at-root rule this keeps every write inside the plugin
  * folder.
  */
 function classifyArchivePath(name: string): 'ok' | 'junk' | 'unsafe' {
@@ -253,6 +260,13 @@ function classifyArchivePath(name: string): 'ok' | 'junk' | 'unsafe' {
     return 'unsafe';
   }
   if (segments[0] === '__MACOSX' || segments.some((s) => s.startsWith('.'))) {
+    return 'junk';
+  }
+  const last = segments[segments.length - 1]!;
+  const typeMarker =
+    (segments.length === 1 && last === 'package.json') ||
+    (segments.length === 2 && segments[0] === 'main' && last === 'package.json');
+  if (typeMarker) {
     return 'junk';
   }
   return 'ok';

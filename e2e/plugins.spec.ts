@@ -358,6 +358,26 @@ test.describe('plugin packages', () => {
     expect(plugins.find((p) => p.id === 'e2e-pkg')).toBeUndefined();
   });
 
+  test('strips Node module-type markers the way older tutorial revisions packed them', async ({
+    page,
+    userDataDir,
+  }) => {
+    const zipPath = writeZip(
+      packageFiles({
+        'package.json': '{"type":"module"}',
+        'main/package.json': '{"type":"commonjs"}',
+      }),
+    );
+    const result = await install(page, zipPath);
+    expect(result).toMatchObject({ status: 'installed', pluginId: 'e2e-pkg' });
+
+    // A surviving root marker would make Node parse the CommonJS main/shared
+    // output as ESM ("exports is not defined in ES module scope").
+    const target = path.join(userDataDir, 'plugins', 'e2e-pkg');
+    expect(fs.existsSync(path.join(target, 'package.json'))).toBe(false);
+    expect(fs.existsSync(path.join(target, 'main', 'package.json'))).toBe(false);
+  });
+
   test('an upgrade replaces the files but keeps config.json', async ({ page, userDataDir }) => {
     const existing = path.join(userDataDir, 'plugins', 'e2e-pkg');
     fs.mkdirSync(existing, { recursive: true });
