@@ -28,6 +28,16 @@
                 "glob": "**/*",
                 "input": "src/assets",
                 "output": "assets"
+              },
+              {
+                "glob": "katex.min.css",
+                "input": "node_modules/katex/dist",
+                "output": "katex"
+              },
+              {
+                "glob": "*.woff2",
+                "input": "node_modules/katex/dist/fonts",
+                "output": "katex/fonts"
               }
             ],
             "styles": [

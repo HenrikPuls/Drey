@@ -113,6 +113,15 @@ Outside the list, on an owner request: **the dock icon strip** shipped as
 milestone 69 (ADR-0019 later change) — one icon row per dock replaces the
 collapsed panel headers.
 
+Outside the list, on an owner request: **the extended Markdown dialect**
+shipped as milestone 72
+([ADR-0070](../docs/09_architecture_decisions/0070-extended-markdown-dialect.md))
+— the GFM remainder (bare-URL linkify, rendered sub/superscript),
+`==highlight==`, GitHub/Obsidian callouts, `$…$`/`$$…$$` math through
+KaTeX (lazy in the editor, inlined in the PDF), footnotes (req-13) and
+curated `:emoji:` shortcodes — one dialect across Lezer, markdown-it
+and the PDF export.
+
 ### Closed (won't do)
 
 - **Pause / resume of large semantic rebuilds on interactive use** —
@@ -140,13 +149,8 @@ collapsed panel headers.
 - **Req-18** — flow descriptions / agentic workflow automation
   ("Description => Sebastian => Peter", "Description => Jira").
 - **req-12** — automatic image captioning via a vision model.
-- **req-13** — footnote rendering in Live Preview (needs a custom Lezer
-  extension). (`Ctrl`-click for external links shipped as Req-5, wikilinks
-  as req-20.)
 - **req-27** — review internal prompts (partial: ask protocol reworked in
   milestone 31, ADR-0053).
-- **Math (KaTeX) and callouts in Live Preview** — neither renders today
-  (Mermaid does). PDF-export parity applies (changelog standing rule).
 - **Due-date reminders** — the `📅` date is parsed and sortable, but
   nothing notifies.
 - **Web clipper** — save the browser tab's page as a Markdown note.

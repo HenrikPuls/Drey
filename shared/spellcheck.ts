@@ -70,6 +70,13 @@ function maskedRanges(text: string): Array<[number, number]> {
   push(/\b(?:https?|mailto|file|drey-asset):\S+/g); // URLs
   push(/\]\([^)\n]*\)/g); // link / image targets
   push(/(?:^|(?<=\s))[\p{L}\p{N}._%+-]+@[\p{L}\p{N}.-]+\.[a-zA-Z]{2,}/gu); // e-mail
+  push(/\$\$[\s\S]*?\$\$/g); // display math (terminated pair)
+  // Inline math with no edge spaces, so "costs $5 and $6" keeps its
+  // words checkable (the closing `$` must not follow a space).
+  push(/\$[^$\s](?:[^$\n]*[^$\s])?\$/g);
+  push(/\[\^[^\]\n]+\]/g); // footnote refs and definition labels
+  push(/:[a-zA-Z0-9_+-]+:/g); // emoji shortcodes
+  push(/\[![a-zA-Z]+\][+-]?/g); // callout markers
 
   return ranges.sort((a, b) => a[0] - b[0]);
 }

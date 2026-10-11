@@ -1,14 +1,22 @@
 import { markdown, markdownLanguage } from '@codemirror/lang-markdown';
 import { EditorState } from '@codemirror/state';
 import { Decoration, DecorationSet } from '@codemirror/view';
+import { extendedMarkdown } from '../markdown-extensions';
 import { concealDecorations } from './conceal';
 import { BulletWidget, CheckboxWidget, HrWidget } from './widgets';
+import { CalloutTitleWidget, EmojiWidget, FootnoteRefWidget } from './extended-widgets';
 
 function state(doc: string, anchor = doc.length): EditorState {
   return EditorState.create({
     doc,
     selection: { anchor },
-    extensions: [markdown({ base: markdownLanguage })],
+    extensions: [
+      markdown({
+        base: markdownLanguage,
+        // The surface's exact grammar: built-in Emoji out, curated one in.
+        extensions: [{ remove: ['Emoji'] }, ...extendedMarkdown],
+      }),
+    ],
   });
 }
 
@@ -220,5 +228,76 @@ describe('concealDecorations', () => {
       [24, 26],
       [30, 32],
     ]);
+  });
+
+  // -- Extended Markdown (milestone 71) ------------------------------------
+
+  it('hides == around highlighted text and washes it with lp-mark', () => {
+    const all = build('a ==b== c', 0);
+    expect(conceals(all).map((e) => [e.from, e.to])).toEqual([
+      [2, 4],
+      [5, 7],
+    ]);
+    expect(all.some((e) => e.deco.spec['class'] === 'lp-mark')).toBe(true);
+  });
+
+  it('conceals subscript and superscript marks and styles the run', () => {
+    const sub = build('H~2~O', 0);
+    expect(conceals(sub).map((e) => [e.from, e.to])).toEqual([
+      [1, 2],
+      [3, 4],
+    ]);
+    expect(sub.some((e) => e.deco.spec['class'] === 'lp-sub')).toBe(true);
+    const sup = build('X^2^', 0);
+    expect(conceals(sup).map((e) => [e.from, e.to])).toEqual([
+      [1, 2],
+      [3, 4],
+    ]);
+    expect(sup.some((e) => e.deco.spec['class'] === 'lp-sup')).toBe(true);
+  });
+
+  it('replaces a curated :shortcode: with its emoji glyph', () => {
+    const widgetsOf = widgets(build('x :joy: y', 0));
+    expect(widgetsOf).toHaveLength(1);
+    expect((widgetsOf[0].deco.spec['widget'] as EmojiWidget).glyph).toBe('😂');
+    // An unknown name stays raw text (no widget, nothing hidden).
+    expect(widgets(build('x :nope: y', 0))).toHaveLength(0);
+  });
+
+  it('renders a footnote ref as its superscript number, defs styled', () => {
+    const doc = 'claim[^a]\n\n[^a]: the note\n';
+    const all = build(doc, 0);
+    const ref = widgets(all).find((e) => e.deco.spec['widget'] instanceof FootnoteRefWidget);
+    expect(ref?.from).toBe(5);
+    expect((ref?.deco.spec['widget'] as FootnoteRefWidget).number).toBe(1);
+    expect(lineClasses(all).some((c) => c.cls.includes('lp-footnote-def'))).toBe(true);
+    // The def line's label is replaced by the `1.` mark.
+    expect(widgets(all).some((e) => e.deco.spec['widget']?.constructor.name === 'FootnoteDefMarkWidget')).toBe(true);
+  });
+
+  it('styles callout quote lines and replaces the marker with the title', () => {
+    const doc = 'intro\n\n> [!NOTE] Custom title\n> body\n';
+    const all = build(doc, 0);
+    const classes = lineClasses(all);
+    expect(classes.some((c) => c.cls.includes('lp-callout-note'))).toBe(true);
+    expect(classes.some((c) => c.cls.includes('lp-callout-first'))).toBe(true);
+    expect(classes.some((c) => c.cls.includes('lp-callout-last'))).toBe(true);
+    const title = widgets(all).find((e) => e.deco.spec['widget'] instanceof CalloutTitleWidget);
+    // A custom title is present: the widget carries the icon only.
+    expect(title?.from).toBe(9);
+    expect((title?.deco.spec['widget'] as CalloutTitleWidget).label).toBeNull();
+  });
+
+  it('a callout without a custom title shows icon and label', () => {
+    const all = build('intro\n\n> [!WARNING]\n> careful\n', 0);
+    const title = widgets(all).find((e) => e.deco.spec['widget'] instanceof CalloutTitleWidget);
+    expect((title?.deco.spec['widget'] as CalloutTitleWidget).label).toBe('Warning');
+    expect(lineClasses(all).some((c) => c.cls.includes('lp-callout-warning'))).toBe(true);
+  });
+
+  it('a plain blockquote keeps the lp-quote styling', () => {
+    const all = build('intro\n\n> just a quote\n', 0);
+    expect(lineClasses(all).some((c) => c.cls === 'lp-quote')).toBe(true);
+    expect(lineClasses(all).some((c) => c.cls.includes('lp-callout'))).toBe(false);
   });
 });

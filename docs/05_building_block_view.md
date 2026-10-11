@@ -64,7 +64,9 @@ restore, keybindings, spellcheck, the MCP vault server, the LLM
   `shared/pdf-html.ts` printed in a hidden sandboxed window; its own save
   dialog, deliberately NOT vault-root-restricted; notes with a
   ` ```mermaid ` fence get the mermaid UMD bundle inlined so the fences
-  render as figures — ADR-0052 later change).
+  render as figures — ADR-0052 later change; notes with math get the
+  KaTeX script + font-inlined stylesheet inlined the same way — M72,
+  ADR-0070).
 - `ipc/` — the base channel handlers (thin, feature-free).
 
 **Base, renderer** (`src/app/`):
@@ -393,6 +395,14 @@ Keep it in step whenever a component boundary changes (CLAUDE.md's
   (fuzzy on name then path, session-visited documents first, `Ctrl+Enter`
   opens beside the current tab, "Create note" on no match) or — behind
   a leading `>` — every `KeybindingService` command with its shortcut
+- `EmojiPickerService` + `EmojiPicker` (`src/app/emoji-picker/`, M72,
+  ADR-0070) — the `:emoji:` picker overlay: search + glyph grid over the
+  curated gemoji table, recents first (persisted under
+  `drey.emoji.recent`), keyboard- and mouse-driven; ONE insert path
+  (`insert()` dispatches `:name:` over the open range) shared by its three
+  openers — the toolbar smile button, the context menu's "Emoji…" row and
+  the `/emoji` slash command — while `:na…` typing completes through
+  `src/app/editor/emoji/`
 - `LinkUpdateService` + `LinkUpdateDialog` (`src/app/link-update/`,
   milestone 59, [ADR-0059](09_architecture_decisions/0059-link-integrity-on-rename.md)) —
   every Files-panel rename / move goes through `rename()`: main's
@@ -708,6 +718,7 @@ decision. (Seams — what a *plugin* can extend — are the table above.)
 | Daily notes (calendar open, drafts, daily dir config) | `electron/daily-note.ts`, `src/app/calendar/`, `src/app/vault/daily-note.service.ts` | Base | — |
 | Entry capture (`/` menu Entry block, entry format) | `src/app/editor/slash-commands.ts`, Settings → "Entry format" | Base | ADR-0022, ADR-0057 |
 | Editor modes + Live Preview (conceal, block widgets) | `src/app/editor/` (`editor.ts`, `markdown-surface/`, `live-preview/`) | Base | ADR-0008, ADR-0009 |
+| Extended Markdown dialect (highlight, math/KaTeX, callouts, footnotes, emoji, linkify) + insert affordances (toolbar/slash/context-menu rows, emoji picker, `:`-completion, formatting eraser) | `src/app/editor/markdown-extensions.ts`, `live-preview/` (`conceal.ts`, `block-render.ts`, `math-widget.ts`, `extended-widgets.ts`), `toolbar-commands.ts`, `emoji/`, `src/app/emoji-picker/`, `editor-context-menu/format-menu-rows.ts`, `shared/markdown/`, `shared/pdf-html.ts` + `electron/pdf-export.ts` | Base | ADR-0070 |
 | Non-Markdown code files (language mode, source-only) | `src/app/editor/markdown-surface/` (language compartment) | Base | ADR-0036 |
 | Formatting toolbar + slash formatting blocks | `src/app/editor/markdown-toolbar.ts`, `toolbar-commands.ts`, `slash-commands.ts` | Base | M42, ADR-0057 |
 | Snippets (`tbl`, `code`, … with tabstops) | `plugins/templates/` + Settings → Templates | Plugin templates | M46 |
@@ -1198,6 +1209,19 @@ src/                Angular renderer (standalone components, esbuild via Angular
                          emitter of ToolbarAction; toolbar-commands.ts is the
                          pure reducer layer (toggles, block-wise, no CodeMirror
                          types).
+                         M72 (ADR-0070) adds the dialect buttons:
+                         highlight, a sub/sup menu, a callout menu
+                         (GitHub's five kinds), a math menu (inline +
+                         block), footnote, and the smile button
+                         (emojiPick output -> the surface's
+                         openEmojiPicker -- no reducer behind it).
+                         The meta bar carries a collapse handle at
+                         the buttons' left edge (editor.html/.css,
+                         .toolbar-collapse): one click folds the
+                         buttons away -- the bar runs straight into
+                         the save cluster -- and back; it toggles the
+                         same persisted pref as the editor's ...-menu
+                         row.
       slash-commands.ts  The `/` selection dialog (milestone 42): the toolbar's
                          block commands + code block + divider as a
                          CodeMirror completion source on the Markdown
@@ -1205,6 +1229,20 @@ src/                Angular renderer (standalone components, esbuild via Angular
                          the same toolbar reducer. Gated by markdown-context
                          and a whitespace-before-slash rule; not on the
                          Enter-submits composers.
+                         M72 adds the extended-dialect commands
+                         (Highlight ... Footnote) plus Emoji, whose apply
+                         hands its range to the picker opener instead of
+                         inserting text.
+      emoji/             M72 (ADR-0070): the `:shortcode:` completion
+                         source -- the picker's typing twin. Fires on
+                         `:name` only when the colon opens a shortcode
+                         (line start / whitespace / opening punctuation
+                         before it: times, URLs and prose colons never
+                         trigger), prefix-then-substring over the curated
+                         table, recents ranked first; same Enter-submits
+                         gate as the word completion. The search itself
+                         (searchEmojiNames) lives in shared/markdown/
+                         emoji.ts, shared with the picker.
       tag-complete.ts   Pure #tag autocomplete completion source (vocabulary from
                          the live TagService signal).
       tag-pill.ts       ViewPlugin rendering inline #tags as pills in both modes;
@@ -1221,6 +1259,27 @@ src/                Angular renderer (standalone components, esbuild via Angular
                           { kind }, inCompletableText() (the completion gate)
                           and insideCode() (the decoration guard formerly
                           duplicated in tag-pills.ts / wikilink.ts).
+      markdown-extensions.ts  M72 (ADR-0070): the extended-Markdown Lezer
+                          configs the surface adds to markdownLanguage
+                          (beside remove:['Emoji']): ==highlight==, curated
+                          :emoji: (known-names lookup, timestamps stay plain),
+                          $…$ / $$…$$ (inline parser + a leaf-block parser
+                          that interrupts paragraphs like a fence but absorbs
+                          its closer), [^footnote] refs (before the Link
+                          parser) and definitions (before LinkReference). Pure
+                          footnoteNumbers(text) numbers definitions in document
+                          order, fence-aware.
+      erase-formatting.ts  M72 (ADR-0070): the formatting eraser. With the
+                           caret, one stroke peels ONE layer -- the outermost
+                           inline wrap at the position (a syntax-tree walk,
+                           not a toolbar-commands reducer); with a selection,
+                           one stroke wipes every wrap it overlaps. Markers
+                           go, content stays (a link keeps its label, drops
+                           the url); block formatting is out of scope (the
+                           toggles own it). Entries: the toolbar eraser
+                           button -> MarkdownSurface.eraseFormattingAtSelection(),
+                           /clear, the context-menu row and the Mod+\
+                           keybinding (App, over EditTargetService).
       word-completion/  Word completion (milestone 40): a third language-data
                           completion source next to #tag / [[wikilink]] --
                           repeats the document's own words (frequency-ranked,
@@ -1278,25 +1337,40 @@ src/                Angular renderer (standalone components, esbuild via Angular
       live-preview/     ADR-0009. conceal.ts: ViewPlugin hiding syntax markers away
                          from the selection (+ bullet/checkbox/rule widgets, quote/
                          code/frontmatter line classes; yields a ```mermaid fence to
-                         block-render). block-render.ts: StateField holding
+                         block-render). Milestone 72 (ADR-0070) adds the extended-
+                         dialect decorations: ==highlight== wash, sub/superscript
+                         styling, :emoji: glyph widgets, footnote-ref superscripts
+                         and def blocks, and the callout container classes + marker
+                         title widget on a blockquote whose first line opens with
+                         [!TYPE] (GitHub alerts + Obsidian aliases). block-render.ts:
+                         StateField holding
                          { atoms, reveal } from one scanEmbeds walk -- atoms = the
                          Decoration.replace per un-revealed table (markdown-it) / image
                          (resolveVaultImageUrl) / sanitized HTML block / ```mermaid fence
-                         (MermaidWidget, ADR-0025), also fed to atomicRanges; reveal =
+                         (MermaidWidget, ADR-0025) / $…$ inline + $$ block math
+                         (MathWidget, KaTeX lazy), also fed to atomicRanges; reveal =
                          the .lp-reveal line container around a touched embed's raw
                          source + an ImagePreviewWidget below a revealed image's markup
                          (Req-1, non-atomic). blockDecorations / revealDecorations are
                          accessors. clickToReveal handles the </> button (.lp-edit) on
-                         table/html/mermaid/image; imageResize handles the .lp-resize
-                         grip. fenced-code.ts: pure fenceLang(). sanitize-html.ts:
+                         table/html/mermaid/image/math; imageResize handles the .lp-resize
+                         grip. The table/HTML markdown-it instances carry the shared
+                         extended rule pack (shared/markdown/markdown-it-extended.ts,
+                         math as a styled source span inside cells).
+                         fenced-code.ts: pure fenceLang(). sanitize-html.ts:
                          allowlist HTML sanitizer. theme.ts: EditorView.theme for the
                          lp-* classes (incl. the .lp-tools corner cluster + .lp-reveal
-                         box). widgets.ts: the WidgetType classes -- MermaidWidget (lazy
+                         box + the milestone-72 .lp-mark/.lp-callout*/.lp-footnote*/
+                         .lp-math* rules). widgets.ts: the WidgetType classes -- MermaidWidget (lazy
                          import('mermaid'), async render, inline error box, hover zoom
                          lens -> onZoomDiagram via svgToDataUrl, ADR-0025/0026),
                          ImageWidget (lens + resize grip + </> button) and the read-only
                          ImagePreviewWidget; makeEditButton/appendTools build the shared
-                         </> "View source" cluster.
+                         </> "View source" cluster. math-widget.ts (M72): MathWidget
+                         (lazy import('katex') + asset <link> for the stylesheet,
+                         renderToString trust:false, error box = click back to source);
+                         extended-widgets.ts (M72): EmojiWidget / FootnoteRefWidget /
+                         FootnoteDefMarkWidget / CalloutTitleWidget.
       image-paste.ts    ADR-0024 / ADR-0028. imagePaste(): CodeMirror
                          domEventHandlers for paste + drop into the editor. An image
                          (paste, OS drag) -> bytes saved via VaultService.saveAsset

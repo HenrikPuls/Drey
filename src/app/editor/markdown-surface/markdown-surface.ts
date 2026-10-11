@@ -35,6 +35,7 @@ import {
   setFrontmatterExpanded,
 } from '../frontmatter-fold';
 import { livePreview } from '../live-preview';
+import { extendedMarkdown } from '../markdown-extensions';
 import { inlineSpellcheck, requestSpellcheck, SpellcheckSource } from '../spellcheck/spellcheck';
 import { linkActivation } from '../link-open';
 import { WikilinkService, makeWikilinkCompletionSource, wikilinks } from '../wikilinks';
@@ -42,8 +43,12 @@ import { pasteUrlAsMarkdownLink } from '../paste-link';
 import { assetUrlToVaultPath, resolveHelpImageCandidates, resolveVaultImageCandidates } from '../vault-image';
 import { makeTagCompletionSource, tagPills, tagStyleRefresh } from '../tags';
 import { makeWordCompletionSource } from '../word-completion';
+import { makeEmojiCompletionSource } from '../emoji';
 import { applyAction, ToolbarAction } from '../toolbar-commands';
+import { eraseFormatting } from '../erase-formatting';
 import { makeSlashCommandSource } from '../slash-commands';
+import { EmojiPickerService } from '../../emoji-picker/emoji-picker.service';
+import { loadEmojiRecents } from '../../emoji-picker/emoji-recents';
 import { SettingsService } from '../../services/settings.service';
 import { composeEntry, EMPTY_ENTRY_DRAFT } from '../../../../shared/entry-compose';
 import { TagVocabularyService } from '../../tags/tag-vocabulary.service';
@@ -101,6 +106,7 @@ export class MarkdownSurface implements AfterViewInit, OnDestroy {
   private readonly wikiLinks = inject(WikilinkService);
   private readonly tagVocab = inject(TagVocabularyService);
   private readonly keys = inject(KeybindingService);
+  private readonly emojiPicker = inject(EmojiPickerService);
   private readonly pluginExtensions = inject(EditorExtensionRegistry);
   private readonly dropDecoders = inject(DropDecoderRegistry);
   private readonly host = viewChild.required<ElementRef<HTMLDivElement>>('host');
@@ -252,6 +258,35 @@ export class MarkdownSurface implements AfterViewInit, OnDestroy {
   }
 
   /**
+   * The formatting eraser (M72, ADR-0070): with the caret, peel ONE
+   * layer -- the outermost inline wrap at the position; with a
+   * selection, wipe every wrap the selection overlaps. Entry points:
+   * the toolbar's eraser button, `/clear`, the context-menu row and
+   * `Mod+\` (all funnel into `erase-formatting.ts`).
+   */
+  eraseFormattingAtSelection(): void {
+    const view = this._view;
+    if (!view) {
+      return;
+    }
+    eraseFormatting(view);
+  }
+
+  /**
+   * The toolbar's smile button (ADR-0070): opens the `:emoji:` picker over
+   * the current selection -- the same insert path the context menu's
+   * "Emoji…" row and the `/emoji` slash command use.
+   */
+  openEmojiPicker(): void {
+    const view = this._view;
+    if (!view) {
+      return;
+    }
+    const { from, to } = view.state.selection.main;
+    this.emojiPicker.open({ view, from, to });
+  }
+
+  /**
    * Images picked through the toolbar's file input take the exact path a
    * pasted image takes (`image-paste.ts`): saved into the vault's
    * per-note `attachments/`, placeholder swapped for the real link.
@@ -368,13 +403,14 @@ export class MarkdownSurface implements AfterViewInit, OnDestroy {
         base: markdownLanguage,
         codeLanguages: languages,
         completeHTMLTags: false,
-        // `markdownLanguage` bakes in `@lezer/markdown`'s `Emoji` inline
-        // parser, whose `:name:` rule is `/^[a-zA-Z_0-9]+:/` -- digits alone
-        // count, so a bare timestamp like `2026-09-09T00:03:48` has its
-        // `:03:` slice parsed as an `Emoji` node and coloured as such. We
-        // never render `:shortcode:` emoji, so drop the parser: the text
-        // stays plain.
-        extensions: [{ remove: ['Emoji'] }],
+        // The extended dialect (milestone 71): `==highlight==`, `$…$` /
+        // `$$…$$` math, footnotes, curated `:emoji:` — plus GFM and
+        // Pandoc sub/superscript, which `markdownLanguage` already
+        // parses. `@lezer/markdown`'s own `Emoji` parser is dropped (any
+        // `name:` matched, so a timestamp like `2026-09-09T00:03:48` had
+        // its `:03:` slice coloured as an emoji); the curated replacement
+        // only matches known GitHub names.
+        extensions: [{ remove: ['Emoji'] }, ...extendedMarkdown],
       }),
       // `#tag` completion + pills are BASE editor features (milestone 33 —
       // moved out of the Tags plugin, which stays the data owner): colored
@@ -415,6 +451,21 @@ export class MarkdownSurface implements AfterViewInit, OnDestroy {
             autocomplete: makeWordCompletionSource(),
           })
         : [],
+      // `:shortcode:` completion (M72, ADR-0070): the typing twin of the
+      // picker, ranked by recently picked names. Same Enter-submits gate.
+      !(this.compact() && this.submitOnEnter())
+        ? markdownLanguage.data.of({
+            autocomplete: makeEmojiCompletionSource({
+              getRecents: () => {
+                try {
+                  return loadEmojiRecents(globalThis.localStorage);
+                } catch {
+                  return [];
+                }
+              },
+            }),
+          })
+        : [],
       // The `/` selection dialog: the toolbar's block commands as
       // completions. Same Enter-submits gate as the word completion.
       !(this.compact() && this.submitOnEnter())
@@ -424,6 +475,10 @@ export class MarkdownSurface implements AfterViewInit, OnDestroy {
               // (ADR-0022) with an empty draft -- a heading with the time.
               entryText: () =>
                 composeEntry(EMPTY_ENTRY_DRAFT, this.settings.activeEntryPattern()) + '\n',
+              // `/emoji` opens the picker instead of inserting text.
+              openEmojiPicker: (view, from, to) => this.emojiPicker.open({ view, from, to }),
+              // `/clear` strokes the eraser after the command text is gone.
+              clearFormatting: (view) => eraseFormatting(view),
             }),
           })
         : [],

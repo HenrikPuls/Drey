@@ -313,6 +313,118 @@ export const livePreviewTheme = EditorView.theme(
       display: 'block',
       margin: '4px 0 2px',
     },
+
+    // -- Extended Markdown ------------------------------------------------
+    // `==highlight==`: a translucent amber wash that reads on both themes.
+    '.lp-mark': {
+      background: 'rgba(255, 213, 79, 0.26)',
+      borderRadius: '2px',
+      padding: '0.05em 0.1em',
+    },
+    '.lp-sub': {
+      verticalAlign: 'sub',
+      fontSize: '0.72em',
+    },
+    '.lp-sup': {
+      verticalAlign: 'super',
+      fontSize: '0.72em',
+    },
+
+    // `[^footnote]` refs render as a small accent superscript.
+    '.lp-footnote-ref': {
+      color: 'var(--accent)',
+      fontSize: '0.72em',
+      lineHeight: '1',
+      cursor: 'default',
+    },
+    // A definition block: muted, slightly smaller, with its number mark.
+    '.lp-footnote-def': {
+      color: 'var(--text-4)',
+      fontSize: '0.92em',
+      borderLeft: '2px solid var(--border-strong)',
+      paddingLeft: '10px',
+    },
+    '.lp-footnote-def-first': {
+      paddingTop: '1px',
+    },
+
+    // Callouts (GitHub alerts / Obsidian callouts): the line classes draw
+    // one continuous container across the quote's lines; the per-kind
+    // palette tints border, background and title.
+    '.lp-callout': {
+      background: 'var(--lp-callout-bg, rgba(125, 125, 125, 0.07))',
+      borderLeft: '3px solid var(--lp-callout-color, var(--border-strong))',
+      borderTop: '1px solid transparent',
+      borderBottom: '1px solid transparent',
+      paddingBottom: '1px',
+    },
+    '.lp-callout-first': {
+      marginTop: '4px',
+      paddingTop: '5px',
+      borderTopLeftRadius: 'var(--radius)',
+      borderTopRightRadius: 'var(--radius)',
+      borderTopColor: 'var(--lp-callout-color, transparent)',
+    },
+    '.lp-callout-last': {
+      borderBottomLeftRadius: 'var(--radius)',
+      borderBottomRightRadius: 'var(--radius)',
+      borderBottomColor: 'var(--lp-callout-color, transparent)',
+    },
+    '.lp-callout-note': { '--lp-callout-color': '#58a6ff' },
+    '.lp-callout-tip': { '--lp-callout-color': '#3fb950' },
+    '.lp-callout-important': { '--lp-callout-color': '#bc8cff' },
+    '.lp-callout-warning': { '--lp-callout-color': '#d29922' },
+    '.lp-callout-caution': { '--lp-callout-color': '#f85149' },
+    '.lp-callout-title': {
+      color: 'var(--lp-callout-color, var(--text-primary))',
+      fontWeight: '600',
+    },
+    '.lp-callout-icon': {
+      marginRight: '6px',
+    },
+
+    // Math (KaTeX, `math-widget.ts`). Display blocks center in a padded
+    // box like a mermaid diagram; inline math sits on the text line.
+    '.lp-math-block': {
+      position: 'relative',
+      display: 'block',
+      margin: '0',
+      padding: '10px 12px',
+      background: 'var(--bg-bar)',
+      borderRadius: 'var(--radius)',
+      overflowX: 'auto',
+      textAlign: 'center',
+    },
+    '.lp-math-block .katex-display': {
+      margin: '0',
+    },
+    '.lp-math-block:hover .lp-tools, .lp-math-inline:hover .lp-tools': {
+      opacity: '1',
+    },
+    '.lp-math-inline': {
+      position: 'relative',
+    },
+    '.lp-math-pending': {
+      color: 'var(--text-faint)',
+      fontStyle: 'italic',
+    },
+    '.lp-math-error': {
+      color: 'var(--danger, #e06c75)',
+      fontFamily: 'var(--font-mono)',
+      fontSize: '0.85em',
+      whiteSpace: 'pre-wrap',
+      // The whole box is a hit target back into the formula's source.
+      cursor: 'pointer',
+    },
+    '.lp-math-src': {
+      color: 'var(--text-4)',
+      fontFamily: 'var(--font-mono)',
+      fontSize: '0.9em',
+    },
+    // Typeset formulas slightly larger than the mono source they replace.
+    '.lp-math-typeset .katex, .lp-math-display .katex': {
+      fontSize: '1.05em',
+    },
   },
   { dark: true },
 );

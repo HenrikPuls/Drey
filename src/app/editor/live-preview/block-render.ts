@@ -5,9 +5,11 @@ import type { SyntaxNode, Tree } from '@lezer/common';
 import MarkdownIt from 'markdown-it';
 import { imageExtension, pdfExtension } from '../../../../shared/asset-name';
 import { clampEmbedWidth, parseImageEmbed, setEmbedWidth } from '../../../../shared/image-embed';
+import { applyExtendedMarkdown } from '../../../../shared/markdown/markdown-it-extended';
 import { frontmatterEnd } from '../markdown-frontmatter';
 import { extractWikilinks } from '../wikilinks/wikilink';
 import { fenceLang } from './fenced-code';
+import { MathWidget } from './math-widget';
 import { htmlTagBalance, sanitizeHtml } from './sanitize-html';
 import {
   HtmlBlockWidget,
@@ -79,9 +81,13 @@ export function completeSyntaxTree(state: EditorState): Tree {
 /**
  * Table blocks are rendered through markdown-it (`html: false`, core GFM
  * tables + inline formatting inside cells) -- reusing the exact renderer the
- * old preview mode used for full fidelity, scoped to one block.
+ * old preview mode used for full fidelity, scoped to one block. The
+ * extended-Markdown rules ride along (`==mark==`, `~sub~`, `^sup^`,
+ * `:emoji:`, bare-URL linkify); math renders as a styled SOURCE span —
+ * the editor's KaTeX copy is widget-side, and cells stay sync-rendered.
  */
 const tableMd = new MarkdownIt({ html: false });
+applyExtendedMarkdown(tableMd);
 
 /**
  * HTML regions render with `html: true`: the region may interleave raw HTML
@@ -90,8 +96,19 @@ const tableMd = new MarkdownIt({ html: false });
  * `sanitizeHtml`.
  */
 const htmlMd = new MarkdownIt({ html: true });
+applyExtendedMarkdown(htmlMd);
 
-type EmbedKind = 'table' | 'mermaid' | 'image' | 'pdf' | 'html';
+type EmbedKind = 'table' | 'mermaid' | 'image' | 'pdf' | 'html' | 'math';
+
+/** The LaTeX body of a `MathBlock`'s source (opener/closer `$$` stripped). */
+function mathBlockSource(text: string): string {
+  if (!text.includes('\n')) {
+    return /^\$\$(.+)\$\$$/.exec(text.trim())?.[1] ?? '';
+  }
+  const lines = text.split('\n');
+  const body = lines[lines.length - 1].trim() === '$$' ? lines.slice(1, -1) : lines.slice(1);
+  return body.join('\n');
+}
 
 /**
  * One rendered embed found in the tree. `from`/`to` are the node range for
@@ -298,6 +315,52 @@ function scanEmbeds(state: EditorState, config: LivePreviewConfig): Embed[] {
           });
         }
         return false; // never descend into a fence
+      }
+      if (node.name === 'MathBlock') {
+        if (node.from >= fmEnd) {
+          // `node` is the iterate cursor — capture before it moves on.
+          const nodeFrom = node.from;
+          const nodeTo = node.to;
+          const latex = mathBlockSource(state.sliceDoc(nodeFrom, nodeTo));
+          const from = doc.lineAt(nodeFrom).from;
+          const to = doc.lineAt(nodeTo).to;
+          embeds.push({
+            kind: 'math',
+            from: nodeFrom,
+            to: nodeTo,
+            lineFrom: from,
+            lineTo: to,
+            atom: () =>
+              Decoration.replace({
+                widget: new MathWidget(latex, true),
+                block: true,
+              }).range(from, to),
+            preview: null,
+          });
+        }
+        return false;
+      }
+      if (node.name === 'InlineMath') {
+        if (node.from >= fmEnd) {
+          const nodeFrom = node.from;
+          const nodeTo = node.to;
+          const raw = state.sliceDoc(nodeFrom, nodeTo);
+          const display = raw.startsWith('$$');
+          const latex = display ? raw.slice(2, -2) : raw.slice(1, -1);
+          embeds.push({
+            kind: 'math',
+            from: nodeFrom,
+            to: nodeTo,
+            lineFrom: doc.lineAt(nodeFrom).from,
+            lineTo: doc.lineAt(nodeTo).to,
+            atom: () =>
+              Decoration.replace({
+                widget: new MathWidget(latex, false),
+              }).range(nodeFrom, nodeTo),
+            preview: null,
+          });
+        }
+        return false;
       }
       if (node.name === 'Image') {
         // `![[...]]` belongs to the wikilink pass (below), whatever the
@@ -737,11 +800,12 @@ export function livePreviewBlocks(
       if (
         !target?.closest('.lp-edit') &&
         !target?.closest('.lp-mermaid-error') &&
-        !target?.closest('.lp-pdf-error')
+        !target?.closest('.lp-pdf-error') &&
+        !target?.closest('.lp-math-error')
       ) {
         return false;
       }
-      const widget = target.closest('.lp-table, .lp-html, .lp-mermaid, .lp-image, .lp-pdf');
+      const widget = target.closest('.lp-table, .lp-html, .lp-mermaid, .lp-image, .lp-pdf, .lp-math-block, .lp-math-inline');
       if (!widget) {
         return false;
       }

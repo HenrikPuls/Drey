@@ -24,6 +24,8 @@
 import MarkdownIt from 'markdown-it';
 import { imageExtension, pdfExtension } from './asset-name';
 import { splitFrontmatter } from './frontmatter';
+import { applyExtendedMarkdown } from './markdown/markdown-it-extended';
+import { hasMathSyntax } from './markdown/math';
 
 export interface PdfHtmlOptions {
   /** The full note text; a frontmatter fence is stripped here. */
@@ -44,6 +46,14 @@ export interface PdfHtmlOptions {
    * mermaid fence; absent → the fences stay code blocks.
    */
   mermaidRuntime?: { script: string };
+  /**
+   * The KaTeX runtime for `$…$` / `$$…$$` math: the UMD script (exposes
+   * `globalThis.katex`) plus its stylesheet with every font inlined as a
+   * `data:` URL (the print page is one self-contained file). Embedded only
+   * when the note actually has math; absent → the LaTeX stays visible as
+   * `.drey-math` source text.
+   */
+  katexRuntime?: { script: string; css: string };
 }
 
 /** Task-list glyphs (GFM checkboxes don't exist in print CSS). */
@@ -178,6 +188,40 @@ function escapeInlineScript(script: string): string {
 }
 
 /**
+ * Runs after the KaTeX bundle has loaded: renders every `.drey-math`
+ * placeholder (LaTeX in its text, display mode in `data-display`) in
+ * place. A parse error keeps the LaTeX visible and flags the span.
+ * Synchronous by design — `katex.render` needs no settle wait (unlike
+ * mermaid). Plain ES5 style — it is inlined into the generated page.
+ */
+export const KATEX_BOOTSTRAP = `
+(function () {
+  'use strict';
+  var spans = Array.prototype.slice.call(document.querySelectorAll('.drey-math'));
+  if (spans.length === 0 || typeof window.katex === 'undefined') {
+    return;
+  }
+  spans.forEach(function (span) {
+    var latex = span.textContent;
+    var display = span.getAttribute('data-display') === '1';
+    span.textContent = '';
+    try {
+      window.katex.render(latex, span, {
+        displayMode: display,
+        throwOnError: true,
+        strict: false,
+        trust: false
+      });
+    } catch (error) {
+      span.classList.add('drey-math-error');
+      span.textContent = latex;
+      span.setAttribute('title', String((error && error.message) || error));
+    }
+  });
+})();
+`.trim();
+
+/**
  * Runs after the mermaid bundle has loaded: initialises mermaid for the
  * light paper page (the editor's dark config is deliberately not reused --
  * the PDF leaves the vault), renders every ` ```mermaid ` code block and
@@ -271,9 +315,13 @@ function pdfEmbedNote(name: string, escapeHtml: (text: string) => string): strin
 }
 
 export function buildNotePdfHtml(options: PdfHtmlOptions): string {
-  const { markdown, title, resolveImageSrc, mermaidRuntime } = options;
+  const { markdown, title, resolveImageSrc, mermaidRuntime, katexRuntime } = options;
   const body = rewriteEmbedWikilinks(splitFrontmatter(markdown).body);
   const md = new MarkdownIt({ html: true, typographer: true });
+  // The extended dialect (milestone 71): linkify, ==mark==, sub/sup,
+  // :emoji:, callouts, footnotes — and math as `.drey-math` placeholders
+  // the inlined KaTeX bootstrap typesets (see KATEX_BOOTSTRAP).
+  applyExtendedMarkdown(md, { math: 'placeholder', footnotes: true });
 
   if (resolveImageSrc) {
     // Markdown-source images: run the raw url through the callback; a null
@@ -333,6 +381,12 @@ export function buildNotePdfHtml(options: PdfHtmlOptions): string {
     mermaidRuntime !== undefined && hasMermaidFence(body)
       ? `\n<script>${escapeInlineScript(mermaidRuntime.script)}</script>\n<script>${MERMAID_BOOTSTRAP}</script>\n`
       : '';
+  // Math rides the same pattern: only notes with math pay the ~300 KB
+  // script (fonts ride the stylesheet as data URLs).
+  const katexParts =
+    katexRuntime !== undefined && hasMathSyntax(body)
+      ? `\n<style>${katexRuntime.css}</style>\n<script>${escapeInlineScript(katexRuntime.script)}</script>\n<script>${KATEX_BOOTSTRAP}</script>\n`
+      : '';
   return `<!doctype html>
 <html>
 <head>
@@ -343,7 +397,7 @@ ${PAPER_CSS}
 </style>
 </head>
 <body>
-${headingHtml}${html}${mermaidScripts}
+${headingHtml}${html}${mermaidScripts}${katexParts}
 </body>
 </html>
 `;
@@ -411,6 +465,48 @@ const PAPER_CSS = `
   }
   img { max-width: 100%; }
   hr { border: none; border-top: 1px solid #e4e6e8; margin: 1.5em 0; }
+  mark { background: #fff3a3; border-radius: 2px; padding: 0 0.1em; }
+  sub, sup { line-height: 0; }
+  /* Callouts (GitHub alerts / Obsidian callouts), light palette. */
+  .callout {
+    border-left: 3px solid #d7dadd;
+    border-radius: 6px;
+    background: #f6f8fa;
+    padding: 0.15em 0.9em;
+    margin: 0.8em 0;
+    break-inside: avoid;
+  }
+  .callout p { margin: 0.35em 0; }
+  .callout-title { font-weight: 600; margin: 0.45em 0 0.1em; }
+  .callout-icon { margin-right: 0.35em; }
+  .callout-note .callout-title { color: #0969da; }
+  .callout-note { border-left-color: #0969da; }
+  .callout-tip .callout-title { color: #1a7f37; }
+  .callout-tip { border-left-color: #1a7f37; }
+  .callout-important .callout-title { color: #8250df; }
+  .callout-important { border-left-color: #8250df; }
+  .callout-warning .callout-title { color: #9a6700; }
+  .callout-warning { border-left-color: #9a6700; }
+  .callout-caution .callout-title { color: #cf222e; }
+  .callout-caution { border-left-color: #cf222e; }
+  /* Footnotes (markdown-it-footnote markup). */
+  .footnotes-sep { margin: 2em 0 1em; }
+  section.footnotes { font-size: 0.85em; color: #57606a; }
+  section.footnotes ol { padding-left: 1.4em; }
+  /* Math: typeset output (KaTeX) and the two fallback states. */
+  .katex-display { margin: 0.8em 0; break-inside: avoid; }
+  .drey-math-src {
+    font-family: 'IBM Plex Mono', ui-monospace, 'Cascadia Code', 'Consolas', monospace;
+    background: #f2f4f6;
+    border-radius: 3px;
+    padding: 0 0.2em;
+    font-size: 0.9em;
+  }
+  .drey-math-error {
+    font-family: 'IBM Plex Mono', ui-monospace, 'Cascadia Code', 'Consolas', monospace;
+    color: #cf222e;
+    font-size: 0.85em;
+  }
   .mermaid-figure {
     margin: 1em 0;
     break-inside: avoid;

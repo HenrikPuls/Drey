@@ -20,6 +20,77 @@ recorded as an explicit decision. The parity checklist lives in
 
 ## Recent milestones
 
+### Milestone 72 — Extended Markdown: GFM+, callouts, highlight, math (KaTeX), footnotes, emoji
+
+The editor and every Markdown view now render the full markdownguide
+basic + extended surface — one dialect across the three engines (Lezer
+grammar, markdown-it, PDF export;
+[ADR-0070](../docs/09_architecture_decisions/0070-extended-markdown-dialect.md)):
+callouts, `==highlight==`, `$…$`/`$$…$$` math through KaTeX, footnotes,
+curated `:emoji:` shortcodes, bare-URL autolinking, rendered
+sub/superscript — plus the insert affordances (toolbar, `/` menu,
+context menu, emoji picker + `:`-completion), the formatting eraser
+(`Mod+\`, outermost layer first) and a collapse handle at the toolbar's
+left edge (one click folds the buttons away; shares the `⋯`-menu
+toggle's persisted pref).
+
+- **Callouts** (`> [!NOTE]`, GitHub alerts + Obsidian's aliases folded
+  onto the five palette kinds): tinted container, icon, custom titles;
+  the Obsidian `-`/`+` fold suffix parses and normalizes away (static
+  boxes by decision). PDF parity: styled boxes with the light palette.
+- **Highlight** `==text==` — amber wash, `==` marks conceal/reveal like
+  emphasis. PDF: `<mark>`.
+- **Math** `$…$` / `$$…$$` typeset through **KaTeX** — editor widgets
+  (script lazy on first formula; stylesheet + woff2 fonts as static
+  assets, `<link>`-injected then — in the initial CSS they cost ~300 KB
+  of budget), PDF via the inlined runtime with fonts as `data:` URLs
+  and a synchronous bootstrap. Parse errors show the compact red box /
+  keep the LaTeX. Currency guard: "costs $5 and $6" stays prose.
+- **Full GFM remainder**: bare-URL **autolinking** everywhere including
+  table cells and the PDF (`linkify`); code spans remain the documented
+  way to **disable** it. Pandoc **sub/superscript** (`H~2~O`, `X^2^`)
+  now render (the grammar already parsed them).
+- **Footnotes** (`[^1]` / `[^1]: …`, req-13): superscript numbers in
+  document order, definitions as a muted block with `n.` marks; the PDF
+  renders a real footnotes section (markdown-it-footnote).
+- **Emoji shortcodes** `:joy:` re-enabled — curated gemoji table
+  (~1,900 GitHub names, `shared/markdown/emoji-table.ts`, regenerated
+  via `npm run emoji:table`), which is what keeps timestamps like
+  `00:03:48` plain (the reason the built-in parser was removed).
+- **Insert affordances** for the whole dialect, one reducer layer
+  (`toolbar-commands.ts`) behind three entries: the formatting toolbar
+  (highlight button, sub/sup + callout + math menus, footnote and emoji
+  buttons — seven new Lucide glyphs), the `/` menu (Highlight … Footnote
+  plus `/emoji`), and the editor's right-click menu
+  (`format-menu-rows.ts`, base rows on every Markdown CodeMirror
+  surface; the menu now caps at 460 px and scrolls). Callouts toggle
+  (marker line on/off, keyword swap on variant change), footnotes plant
+  `[^n]` plus the definition in one undo step.
+- **The `:emoji:` picker** (`src/app/emoji-picker/`): an App-level
+  overlay with search + glyph grid over the curated table (recents
+  first, persisted in `drey.emoji.recent`), opened from the toolbar's
+  smile button, the context menu's "Emoji…" row and `/emoji`. Typing
+  `:jo` in prose additionally completes shortcodes
+  (`editor/emoji/emoji-completion.ts`, recents ranked first, silent
+  behind word characters so times/URLs/prose colons never fire).
+- **The formatting eraser** (`editor/erase-formatting.ts`): with the
+  caret, `Mod+\` peels ONE layer -- the outermost inline wrap at the
+  position (`**fett ==rot==**` loses the bold first, `***x***` unwraps
+  emphasis-then-strong); with a selection, one stroke wipes every wrap
+  it overlaps. Markers go, content stays (a link keeps its label, drops
+  the URL); block formatting is untouched (its toggles own that). Same
+  entries as the dialect: toolbar eraser button, `/clear`, the
+  context-menu row, and the `Mod+\` keybinding.
+- One implementation site per engine: all Markdown views share
+  `MarkdownSurface`; `shared/markdown/` carries the pure halves
+  (callout keywords, emoji table, math scanner, the markdown-it rule
+  pack). Spellcheck masks math/footnotes/markers/shortcodes.
+- New deps: `katex` (+`@types/katex`), `markdown-it-footnote`,
+  `gemoji` (dev). The assistant chat card's small subset is unchanged.
+- Note: the production build's initial-bundle warning (1.61 MB vs the
+  1.35 MB warning budget) predates this milestone by ~230 KB; this adds
+  ~30 KB (the emoji table). The 2 MB error budget is not near.
+
 ### Fix — the image resize grip and the table keys work before the note is fully parsed
 
 Dragging the corner grip of a picture did nothing when the picture sat

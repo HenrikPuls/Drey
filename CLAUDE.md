@@ -343,7 +343,14 @@ Renderer (`src/app/`):
 - `editor/` — the only CodeMirror surface: `MarkdownSurface`, Live
   Preview (ADR-0009), modes (ADR-0008/0036), wikilinks (ADR-0046), tag
   pills/completion (`editor/tags/`), spellcheck (ADR-0013/0056),
-  toolbar + slash commands (M42/M46)
+  toolbar + slash commands (M42/M46), the extended Markdown dialect —
+  highlight/math(KaTeX)/callouts/footnotes/emoji/linkify, one dialect
+  across Lezer, markdown-it and the PDF, plus its insert affordances:
+  the same reducer behind toolbar, `/` and context-menu rows, the
+  `:emoji:` picker (`src/app/emoji-picker/`), `:`-completion and the
+  formatting eraser (`erase-formatting.ts`, `Mod+\` — peels the
+  outermost inline wrap at the caret)
+  (M72, ADR-0070, shared pure halves in `shared/markdown/`)
 - `dock/` — `DockService` + `DockStrip` (icon strips, M69) +
   `WidgetRegistryService`: the three docks, every panel, each dock's
   editor band (ADR-0019/0034/0038)

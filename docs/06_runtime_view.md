@@ -1960,6 +1960,11 @@ milestone 32; the state of the list:
 | Tables, code fences, blockquotes, headings | plain markdown-it output under the paper stylesheet | M30 |
 | `![[media]]` embeds | rewritten to standard image syntax first (`rewriteEmbedWikilinks`) | M31 |
 | ` ```mermaid ` fences | light-theme SVG figures rendered by the inlined runtime; parse error / 20 s cap / missing bundle → the code block | M32 |
+| `==highlight==`, `~sub~`/`^sup^`, `:emoji:`, bare-URL linkify | `<mark>` / `<sub>`/`<sup>` / the glyph / `<a href>` — the shared extended rule pack (`shared/markdown/markdown-it-extended.ts`) | M72 |
+| Callouts (`> [!TYPE]`) | styled `div.callout callout-<kind>` boxes with icon/title bar (light palette) | M72 |
+| Footnotes (`[^1]` / `[^1]: …`) | markdown-it-footnote: superscript refs + a footnotes section | M72 |
+| `$…$` / `$$…$$` math | `.drey-math` placeholders typeset by the inlined KaTeX runtime (script + font-`data:`-URL stylesheet, only when the note has math; parse error → the LaTeX stays visible) | M72 |
+| Editor math-in-table-cells source span | the same `.drey-math-src` styled span the editor shows (a table cell carries no runtime) | M72 |
 | `[[wikilinks]]`, `![[note#anchor]]` | literal text — they name in-vault targets a PDF reader can't follow | M30 |
 | `![[x.pdf]]` embeds (and a hand-written `![](x.pdf)`) | a bordered note — "PDF embed — not printable: `<name>`. The file stays in the vault." — replaces the `<img>`, which cannot rasterize a PDF and printed empty (M31's known limitation, closed) | M32 |
 | `#tag` pills, hover chrome, gutters, editor widgets | absent by definition — the PDF is the document, not the editor | — |

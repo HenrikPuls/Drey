@@ -1,0 +1,99 @@
+/* The emoji picker overlay -- same popover recipe as the editor context
+   menu (fixed panel + full-screen backdrop), plus the scrollable grid. */
+
+.emoji-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+}
+
+.emoji-panel {
+  position: fixed;
+  z-index: 61;
+  display: flex;
+  flex-direction: column;
+  width: 324px;
+  max-height: 370px;
+  padding: 6px;
+  background: var(--bg-input);
+  border: 1px solid var(--popover-border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--popover-shadow);
+}
+
+.emoji-search {
+  flex: none;
+  width: 100%;
+  box-sizing: border-box;
+  padding: 5px 8px;
+  font: 400 12.5px/1.3 var(--font-sans);
+  color: var(--text-primary);
+  background: var(--hover-bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  outline: none;
+}
+
+.emoji-search:focus {
+  border-color: var(--accent);
+}
+
+.emoji-grid {
+  flex: 1;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, 34px);
+  grid-auto-rows: 34px;
+  gap: 2px;
+  justify-content: center;
+  margin-top: 6px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.emoji-cell {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-xs);
+  background: transparent;
+  font-size: 18px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.emoji-cell:hover,
+.emoji-cell.on {
+  background: var(--hover-bg-strong);
+}
+
+.emoji-empty {
+  padding: 14px 8px;
+  font: 400 12px/1.4 var(--font-sans);
+  color: var(--text-6);
+  text-align: center;
+}
+
+.emoji-preview {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: none;
+  margin-top: 6px;
+  padding: 4px 6px 1px;
+  border-top: 1px solid var(--border);
+}
+
+.emoji-preview-glyph {
+  font-size: 15px;
+  line-height: 1;
+}
+
+.emoji-preview-name {
+  font: 400 11px/1.2 var(--font-mono, monospace);
+  color: var(--text-6);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

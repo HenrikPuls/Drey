@@ -50,6 +50,18 @@ describe('collectWords', () => {
     expect(words('mail an puls@newgraphic.de heute')).toEqual(['mail', 'an', 'heute']);
   });
 
+  it('skips extended-dialect syntax, not the prose around it (milestone 72)', () => {
+    // Math (inline + display), footnote refs and definitions, callout
+    // markers, emoji shortcodes.
+    expect(words('rechnung $x^2 nixwort$ weiter')).toEqual(['rechnung', 'weiter']);
+    expect(words('$$\nnixwort\n$$\n\nEcht')).toEqual(['Echt']);
+    expect(words('behauptung[^nixwort] und')).toEqual(['behauptung', 'und']);
+    expect(words('> [!NOTE] Nixwort')).toEqual(['Nixwort']);
+    expect(words('gut :nixwort: gut')).toEqual(['gut', 'gut']);
+    // The currency guard: words BETWEEN two prices stay checkable prose.
+    expect(words('kostet funf und sechs')).toEqual(['kostet', 'funf', 'und', 'sechs']);
+  });
+
   it('skips acronyms and single letters', () => {
     expect(words('DB Migration a b Ok')).toEqual(['Migration', 'Ok']);
   });

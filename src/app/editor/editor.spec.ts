@@ -349,6 +349,28 @@ describe('Editor', () => {
       expect(JSON.parse(localStorage.getItem('drey.editor')!).toolbar).toBe(false);
     });
 
+    it('the collapse handle folds the buttons away and back (same pref)', async () => {
+      const handle = compiled().querySelector('.chrome .toolbar-collapse') as HTMLButtonElement;
+      expect(handle).toBeTruthy();
+      expect(handle.getAttribute('aria-pressed')).toBe('false'); // expanded
+
+      handle.click();
+      fixture.detectChanges();
+      await fixture.whenStable();
+      // Folded: only the handle remains before the save cluster.
+      expect(compiled().querySelector('app-markdown-toolbar')).toBeNull();
+      expect(compiled().querySelector('.chrome .bar-sep')).toBeNull();
+      const folded = compiled().querySelector('.toolbar-collapse') as HTMLButtonElement;
+      expect(folded.getAttribute('aria-pressed')).toBe('true');
+      expect(JSON.parse(localStorage.getItem('drey.editor')!).toolbar).toBe(false);
+
+      folded.click();
+      fixture.detectChanges();
+      await fixture.whenStable();
+      expect(compiled().querySelector('app-markdown-toolbar')).toBeTruthy();
+      expect(JSON.parse(localStorage.getItem('drey.editor')!).toolbar).toBe(true);
+    });
+
     it('renders the toolbar from the persisted pref at startup (vault docKey)', async () => {
       // The real app persists the pref and reopens notes as vault docKeys
       // (`v1::daily/x.md`) after a restart -- the toolbar must survive both.

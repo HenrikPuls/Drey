@@ -1,6 +1,7 @@
 import {
   buildNotePdfHtml,
   hasMermaidFence,
+  KATEX_BOOTSTRAP,
   MERMAID_BOOTSTRAP,
   replaceTaskMarkers,
   rewriteEmbedWikilinks,
@@ -238,6 +239,147 @@ describe('buildNotePdfHtml mermaid runtime (milestone 32)', () => {
   it('the paper stylesheet carries the figure rules', () => {
     expect(render('# t')).toContain('.mermaid-figure');
     expect(render('# t')).toContain('break-inside: avoid');
+  });
+});
+
+describe('buildNotePdfHtml extended markdown (milestone 71)', () => {
+  it('renders highlight, subscript and superscript', () => {
+    const html = render('a ==marked== b, H~2~O and X^2^');
+    expect(html).toContain('<mark>marked</mark>');
+    expect(html).toContain('H<sub>2</sub>O');
+    expect(html).toContain('X<sup>2</sup>');
+  });
+
+  it('renders curated emoji shortcodes and linkifies bare URLs', () => {
+    const html = render('feeling :joy: — see https://example.com/x');
+    expect(html).toContain('feeling 😂');
+    expect(html).toContain('<a href="https://example.com/x">');
+  });
+
+  it('keeps code spans unlinked (disabling automatic URL linking)', () => {
+    const html = render('`https://example.com`');
+    expect(html).not.toContain('<a href');
+  });
+
+  it('renders callouts as the styled box with title bar', () => {
+    const html = render('> [!NOTE] Custom title\n> body');
+    expect(html).toContain('<div class="callout callout-note">');
+    expect(html).toContain('callout-title');
+    expect(html).toContain('Custom title');
+    expect(html).toContain('body');
+    expect(html).not.toContain('[!NOTE]');
+  });
+
+  it('renders footnotes with a footnotes section', () => {
+    const html = render('A claim[^1]\n\n[^1]: The note');
+    expect(html).toContain('footnote-ref');
+    expect(html).toContain('The note');
+  });
+
+  it('emits math placeholders and embeds the katex runtime only for math notes', () => {
+    const math = render('inline $x^2$ and display\n\n$$\nE=mc^2\n$$\n');
+    expect(math).toContain('<span class="drey-math" data-display="0">x^2</span>');
+    expect(math).toContain('data-display="1"');
+    // No runtime handed over: nothing inlined, LaTeX stays visible.
+    expect(math).not.toContain('<script');
+
+    const withRuntime = buildNotePdfHtml({
+      markdown: '$x^2$',
+      katexRuntime: { script: 'window.katex={};', css: '/*katex*/' },
+    });
+    expect(withRuntime).toContain('window.katex={};');
+    expect(withRuntime).toContain('/*katex*/');
+    // The bootstrap is inlined (synchronous — no settle promise needed).
+    expect(withRuntime).toContain('throwOnError: true');
+  });
+
+  it('embeds no katex runtime for a note without math', () => {
+    const html = buildNotePdfHtml({
+      markdown: 'plain text',
+      katexRuntime: { script: 'window.katex={};', css: '/*katex*/' },
+    });
+    expect(html).not.toContain('window.katex');
+  });
+
+  it('the paper stylesheet carries the extended-syntax rules', () => {
+    const css = render('# t');
+    expect(css).toContain('.callout-title');
+    expect(css).toContain('.footnotes-sep');
+    expect(css).toContain('.drey-math-error');
+    expect(css).toContain('mark {');
+  });
+});
+
+describe('KATEX_BOOTSTRAP (executed in a real iframe)', () => {
+  interface StubKatex {
+    render: (latex: string, el: Element, opts: Record<string, unknown>) => void;
+  }
+  interface FrameWindow {
+    katex?: StubKatex;
+  }
+
+  const frames: HTMLIFrameElement[] = [];
+
+  afterEach(() => {
+    while (frames.length > 0) {
+      frames.pop()?.remove();
+    }
+  });
+
+  function mount(bodyHtml: string): { doc: Document; win: FrameWindow } {
+    const frame = document.createElement('iframe');
+    frames.push(frame);
+    document.body.appendChild(frame);
+    const doc = frame.contentDocument!;
+    doc.open();
+    doc.write(`<!doctype html><html><body>${bodyHtml}</body></html>`);
+    doc.close();
+    return { doc, win: frame.contentWindow as unknown as FrameWindow };
+  }
+
+  function run(doc: Document): void {
+    const script = doc.createElement('script');
+    script.textContent = KATEX_BOOTSTRAP;
+    doc.body.appendChild(script);
+  }
+
+  it('typesets every placeholder with its display mode', () => {
+    const { doc, win } = mount(
+      '<p><span class="drey-math" data-display="0">x^2</span></p>' +
+        '<span class="drey-math" data-display="1">E=mc^2</span>',
+    );
+    const calls: Array<[string, boolean]> = [];
+    win.katex = {
+      render: (latex, el, opts) => {
+        calls.push([latex, Boolean(opts['displayMode'])]);
+        el.textContent = `typeset:${latex}`;
+      },
+    };
+    run(doc);
+    expect(calls).toEqual([
+      ['x^2', false],
+      ['E=mc^2', true],
+    ]);
+    expect(doc.body.textContent).toContain('typeset:x^2');
+  });
+
+  it('a parse error keeps the LaTeX visible and flags the span', () => {
+    const { doc, win } = mount('<span class="drey-math" data-display="0">\\broken{</span>');
+    win.katex = {
+      render: () => {
+        throw new Error('Expected }');
+      },
+    };
+    run(doc);
+    const span = doc.querySelector('.drey-math');
+    expect(span?.classList.contains('drey-math-error')).toBe(true);
+    expect(span?.textContent).toBe('\\broken{');
+  });
+
+  it('without a katex global nothing happens', () => {
+    const { doc } = mount('<span class="drey-math" data-display="0">x</span>');
+    run(doc);
+    expect(doc.querySelector('.drey-math')?.textContent).toBe('x');
   });
 });
 

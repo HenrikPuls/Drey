@@ -29,6 +29,7 @@ export type MarkdownContext =
   | { kind: 'wikilink' }
   | { kind: 'table' }
   | { kind: 'heading' }
+  | { kind: 'math' }
   | { kind: 'prose' };
 
 /** Contexts where none of the completion sources may fire. Tables,
@@ -40,6 +41,7 @@ const NON_TEXT_KINDS: ReadonlySet<string> = new Set([
   'frontmatter',
   'link',
   'html',
+  'math',
 ]);
 
 /** True when the completion sources may speak at `context`. */
@@ -61,7 +63,11 @@ function treeKind(name: string): MarkdownContext | null {
     case 'Image':
     case 'URL':
     case 'Autolink':
+    case 'FootnoteRef':
       return { kind: 'link' };
+    case 'InlineMath':
+    case 'MathBlock':
+      return { kind: 'math' };
     case 'HTMLBlock':
     case 'HTMLTag':
     case 'Comment':

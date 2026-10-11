@@ -152,6 +152,94 @@ describe('SLASH_COMMANDS', () => {
       'Table',
       'Divider',
       'Link',
+      'Highlight',
+      'Subscript',
+      'Superscript',
+      'Inline math',
+      'Math block',
+      'Callout',
+      'Footnote',
     ]);
+  });
+});
+
+describe('the Emoji command (M72)', () => {
+  it('appears only when the surface wired a picker opener', () => {
+    const opener = (_v: EditorView, _f: number, _t: number) => undefined;
+    const withPicker = makeSlashCommandSource({ openEmojiPicker: opener }) as (
+      c: CompletionContext,
+    ) => ResultLike | null;
+    expect(withPicker(ctx('/em', 3))?.options.map((o) => o.label)).toEqual(['Emoji']);
+    expect(slashCommandSource(ctx('/em', 3))).toBeNull();
+  });
+
+  it('hands its range to the picker opener instead of inserting text', () => {
+    const calls: Array<[number, number]> = [];
+    const view = new EditorView({
+      state: EditorState.create({
+        doc: 'note /emoji',
+        extensions: [markdown({ base: markdownLanguage })],
+      }),
+    });
+    try {
+      const source = makeSlashCommandSource({
+        openEmojiPicker: (_v, from, to) => calls.push([from, to]),
+      }) as (c: CompletionContext) => ResultLike | null;
+      const result = source(ctx('note /emoji', 11));
+      const emoji = result?.options.find((o) => o.label === 'Emoji');
+      expect(emoji).toBeTruthy();
+      emoji!.apply!(view, {} as never, 5, 11);
+      expect(calls).toEqual([[5, 11]]);
+      expect(view.state.doc.toString()).toBe('note /emoji'); // untouched
+    } finally {
+      view.destroy();
+    }
+  });
+
+  it('applies the extended-dialect commands through the shared reducer', () => {
+    const view = new EditorView({
+      state: EditorState.create({
+        doc: 'warn me\n',
+        selection: { anchor: 5 },
+        extensions: [markdown({ base: markdownLanguage })],
+      }),
+      parent: document.body,
+    });
+    try {
+      view.dispatch({ changes: { from: 5, insert: '/cal' }, selection: { anchor: 9 } });
+      const result = slashCommandSource(ctx(view.state.doc.toString(), 9)) as ResultLike | null;
+      const callout = result?.options.find((o) => o.label === 'Callout');
+      expect(callout).toBeTruthy();
+      callout!.apply!(view, {} as never, result!.from, 9);
+      expect(view.state.doc.toString()).toBe('> [!NOTE]\n> warn me\n');
+    } finally {
+      view.destroy();
+    }
+  });
+
+  it('Clear formatting cuts the command and strokes the eraser', () => {
+    const runs: EditorView[] = [];
+    const view = new EditorView({
+      state: EditorState.create({
+        doc: '**bold** text',
+        selection: { anchor: 4 },
+        extensions: [markdown({ base: markdownLanguage })],
+      }),
+    });
+    try {
+      const source = makeSlashCommandSource({
+        clearFormatting: (v) => runs.push(v),
+      }) as (c: CompletionContext) => ResultLike | null;
+      expect(source(ctx('/cle', 4))?.options.map((o) => o.label)).toEqual(['Clear formatting']);
+      // No hook wired -> no entry at all.
+      expect(slashCommandSource(ctx('/cle', 4))).toBeNull();
+
+      const result = source(ctx('**bold** /cle', 13)) as ResultLike | null;
+      result!.options[0].apply!(view, {} as never, result!.from, 13);
+      expect(view.state.doc.toString()).toBe('**bold** '); // command text cut
+      expect(runs).toEqual([view]); // eraser handed the view
+    } finally {
+      view.destroy();
+    }
   });
 });

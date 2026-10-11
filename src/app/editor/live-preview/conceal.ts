@@ -2,9 +2,17 @@ import { ensureSyntaxTree, syntaxTree } from '@codemirror/language';
 import type { SyntaxNode } from '@lezer/common';
 import { EditorState, Range } from '@codemirror/state';
 import { Decoration, DecorationSet, EditorView, ViewPlugin, ViewUpdate } from '@codemirror/view';
-import { frontmatterEnd } from '../markdown-frontmatter';
+import { parseCalloutMarker } from '../../../../shared/markdown/callouts';
+import { emojiFor } from '../../../../shared/markdown/emoji';
+import { frontmatterEnd } from '../markdown-frontmatter';import { footnoteNumbers } from '../markdown-extensions';
 import { extractWikilinks } from '../wikilinks/wikilink';
 import { fenceLang } from './fenced-code';
+import {
+  CalloutTitleWidget,
+  EmojiWidget,
+  FootnoteDefMarkWidget,
+  FootnoteRefWidget,
+} from './extended-widgets';
 import { BulletWidget, CheckboxWidget, HrWidget } from './widgets';
 
 /**
@@ -39,7 +47,37 @@ const codeLineLast = Decoration.line({ class: 'lp-code lp-code-last' });
 const frontmatterLine = Decoration.line({ class: 'lp-frontmatter' });
 const inlineCodeMark = Decoration.mark({ class: 'lp-inline-code' });
 const taskDoneMark = Decoration.mark({ class: 'lp-task-done' });
+const highlightMark = Decoration.mark({ class: 'lp-mark' });
+const subscriptMark = Decoration.mark({ class: 'lp-sub' });
+const superscriptMark = Decoration.mark({ class: 'lp-sup' });
+const footnoteDefLine = Decoration.line({ class: 'lp-footnote-def' });
+const footnoteDefLineFirst = Decoration.line({ class: 'lp-footnote-def lp-footnote-def-first' });
 const hidden = Decoration.replace({});
+
+/**
+ * Callout line decorations, cached per (kind, position): the palette
+ * class comes from the marker's kind; first/last get the rounded
+ * container edges (single-line callouts take the sole variant, like
+ * `.lp-reveal*`). Identity-cached because decorations compare by
+ * identity across rebuilds.
+ */
+const calloutLineCache = new Map<string, Decoration>();
+function calloutLine(kind: string, position: 'first' | 'mid' | 'last' | 'sole'): Decoration {
+  const key = `${kind}:${position}`;
+  let deco = calloutLineCache.get(key);
+  if (!deco) {
+    const classes = ['lp-callout', `lp-callout-${kind}`];
+    if (position === 'first' || position === 'sole') {
+      classes.push('lp-callout-first');
+    }
+    if (position === 'last' || position === 'sole') {
+      classes.push('lp-callout-last');
+    }
+    deco = Decoration.line({ class: classes.join(' ') });
+    calloutLineCache.set(key, deco);
+  }
+  return deco;
+}
 
 /**
  * First line of a concealed fenced block: carries the fence's info string
@@ -99,6 +137,11 @@ export function concealDecorations(
   const lastVisible = ranges.length > 0 ? ranges[ranges.length - 1].to : 0;
   const tree = ensureSyntaxTree(state, lastVisible, PARSE_BUDGET_MS) ?? syntaxTree(state);
 
+  // Footnote numbers come from a whole-document scan (definitions may
+  // live far below the viewport) — one cheap regex pass per rebuild,
+  // the same whole-document cost `block-render.ts` already pays.
+  const fnNumbers = footnoteNumbers(state.sliceDoc());
+
   // `[[wikilinks]]` (req-20) are scanned by regex, before the tree walk:
   // lezer-markdown parses the text between the brackets as an ordinary
   // (shortcut-reference) `Link`, whose marks must NOT be concealed here --
@@ -133,12 +176,78 @@ export function concealDecorations(
             return;
           }
           case 'EmphasisMark':
-          case 'StrikethroughMark': {
+          case 'StrikethroughMark':
+          case 'HighlightMark':
+          case 'SubscriptMark':
+          case 'SuperscriptMark': {
             const parent = node.node.parent;
             if (parent && !touches(parent.from, parent.to)) {
               hide(node.from, node.to);
             }
             return;
+          }
+          case 'Highlight': {
+            deco.push(highlightMark.range(node.from, node.to));
+            return;
+          }
+          case 'Subscript': {
+            deco.push(subscriptMark.range(node.from, node.to));
+            return;
+          }
+          case 'Superscript': {
+            deco.push(superscriptMark.range(node.from, node.to));
+            return;
+          }
+          case 'Emoji': {
+            if (!touches(node.from, node.to)) {
+              const glyph = emojiFor(state.sliceDoc(node.from + 1, node.to - 1));
+              if (glyph !== null) {
+                replaceWith(
+                  node.from,
+                  node.to,
+                  Decoration.replace({ widget: new EmojiWidget(glyph) }),
+                );
+              }
+            }
+            return false;
+          }
+          case 'FootnoteRef': {
+            if (!touches(node.from, node.to)) {
+              const number = fnNumbers.get(state.sliceDoc(node.from + 2, node.to - 1));
+              if (number !== undefined) {
+                replaceWith(
+                  node.from,
+                  node.to,
+                  Decoration.replace({ widget: new FootnoteRefWidget(number) }),
+                );
+              }
+            }
+            return false;
+          }
+          case 'FootnoteDef': {
+            const first = doc.lineAt(node.from);
+            const last = doc.lineAt(node.to);
+            for (let pos = node.from; pos <= node.to;) {
+              const line = doc.lineAt(pos);
+              deco.push(
+                (line.number === first.number ? footnoteDefLineFirst : footnoteDefLine).range(
+                  line.from,
+                ),
+              );
+              pos = line.to + 1;
+            }
+            if (!touches(node.from, node.to)) {
+              const label = /^\s*\[\^([^\]]+)\]:/.exec(state.sliceDoc(node.from, first.to));
+              const number = label === null ? undefined : fnNumbers.get(label[1]);
+              if (label !== null && number !== undefined) {
+                replaceWith(
+                  node.from,
+                  node.from + label[0].length,
+                  Decoration.replace({ widget: new FootnoteDefMarkWidget(number) }),
+                );
+              }
+            }
+            return false;
           }
           case 'InlineCode': {
             if (node.from >= fmEnd) {
@@ -188,6 +297,46 @@ export function concealDecorations(
             return;
           }
           case 'Blockquote': {
+            // A callout (GitHub alert / Obsidian callout): the quote's
+            // first line opens with `[!TYPE]`. The lines take the callout
+            // container styling; the marker itself is replaced by the
+            // icon (+ label, when no custom title follows).
+            const first = doc.lineAt(node.from);
+            const last = doc.lineAt(node.to);
+            const lead = /^\s*>\s?/.exec(first.text)?.[0].length ?? 0;
+            const marker = parseCalloutMarker(first.text.slice(lead));
+            if (marker !== null) {
+              for (let pos = Math.max(node.from, fmEnd); pos <= node.to;) {
+                const line = doc.lineAt(pos);
+                deco.push(
+                  calloutLine(
+                    marker.kind,
+                    line.number === first.number
+                      ? line.number === last.number
+                        ? 'sole'
+                        : 'first'
+                      : line.number === last.number
+                        ? 'last'
+                        : 'mid',
+                  ).range(line.from),
+                );
+                pos = line.to + 1;
+              }
+              if (!touches(first.from, first.to)) {
+                const markerFrom = first.from + lead;
+                replaceWith(
+                  markerFrom,
+                  eatSpace(markerFrom + marker.length),
+                  Decoration.replace({
+                    widget: new CalloutTitleWidget(
+                      marker.info.icon,
+                      marker.title === null ? marker.info.label : null,
+                    ),
+                  }),
+                );
+              }
+              return;
+            }
             for (let pos = Math.max(node.from, fmEnd); pos <= node.to;) {
               const line = doc.lineAt(pos);
               deco.push(quoteLine.range(line.from));
