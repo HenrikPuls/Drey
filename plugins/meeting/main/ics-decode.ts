@@ -12,7 +12,7 @@
  */
 
 import type { MeetingPerson, ParsedMeeting } from './types';
-import { formatDate, formatTimestamp } from './timestamp';
+import { formatDate, formatTimestamp } from '../../../shared/timestamp';
 import { findJoinUrl } from './join-url';
 
 interface IcalTime {

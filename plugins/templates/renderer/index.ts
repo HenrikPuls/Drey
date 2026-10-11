@@ -5,7 +5,9 @@ import type {
 } from '../../../shared/plugin-api/renderer';
 import type { SnippetConfig } from '../../../shared/config/schema';
 import { TemplateLibrary, type TemplateCategory, type TemplateEntry } from './library.js';
-import { formatDate, formatDateTime, formatTime, stripFrontmatter, substitutePlaceholders } from './pure.js';
+import { substitutePlaceholders } from '../../../shared/placeholders';
+import { formatDate, formatDateTime, formatTime } from '../../../shared/timestamp';
+import { stripFrontmatter } from './pure.js';
 import { previewCard, templateSlashExtension } from './slash.js';
 import { SNIPPET_DEFAULTS, SnippetStore, expandForPreview, snippetExtension } from './snippets.js';
 

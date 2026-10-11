@@ -1,11 +1,7 @@
 import type { DreyPluginApi } from '../../../shared/plugin-api/renderer';
-import {
-  formatDateTime,
-  formatDate,
-  formatTime,
-  stripFrontmatter,
-  substitutePlaceholders,
-} from './pure.js';
+import { substitutePlaceholders } from '../../../shared/placeholders';
+import { formatDate, formatDateTime, formatTime } from '../../../shared/timestamp';
+import { stripFrontmatter } from './pure.js';
 
 /**
  * The template library (ADR-0029), plugin-side: the configured vault folder

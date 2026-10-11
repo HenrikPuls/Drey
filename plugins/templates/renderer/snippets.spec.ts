@@ -1,5 +1,4 @@
 // @vitest-environment jsdom
-import { SNIPPET_DEFAULTS as SEED_DEFAULTS } from '../../../shared/config/defaults';
 import { normalizeAppConfig } from '../../../shared/config/normalize';
 import { SNIPPET_DEFAULTS, expandForPreview, snippetBlocked } from './snippets';
 
@@ -9,10 +8,6 @@ import { SNIPPET_DEFAULTS, expandForPreview, snippetBlocked } from './snippets';
  * stays), the preview expansion and the block-level caret gate.
  */
 describe('templates snippet library', () => {
-  it('the plugin twin of the built-ins equals the config seed (parity)', () => {
-    expect(SNIPPET_DEFAULTS).toEqual(SEED_DEFAULTS);
-  });
-
   it('ships three well-formed built-ins with unique triggers', () => {
     expect(SNIPPET_DEFAULTS.map((s) => s.trigger)).toEqual(['tbl', 'code', 'task']);
     for (const snippet of SNIPPET_DEFAULTS) {

@@ -1,12 +1,10 @@
-// Sibling specifiers need the explicit `.js`: emitted as CJS (main) and
-// served over plugin:// (ESM).
-import { splitSections } from './sections.js';
+import { splitSections } from '../../../shared/note-sections.js';
+import { blankCode } from '../../../shared/tag-grammar.js';
+import { extractWikilinks } from '../../../shared/wikilinks.js';
 
 /**
- * Wikilink extraction for the backlink index (milestone 54). The regex is
- * a verbatim twin of the base editor's (`shared/wikilinks.ts`)
- * — plugin renderers cannot import base modules, so the grammar lives here
- * as a parity-tested copy: `[[target]]`, `[[target#heading]]`,
+ * Wikilink extraction for the backlink index (milestone 54), over the
+ * base grammar (`shared/wikilinks.ts`): `[[target]]`, `[[target#heading]]`,
  * `[[target|alias]]`, `[[target#heading|alias]]` and embeds (`![[…]]` —
  * the brackets match inside, an embed references its target too).
  *
@@ -28,19 +26,8 @@ export interface LinkOccurrence {
   snippet: string;
 }
 
-/** Verbatim twin of the base WIKILINK regex (parity spec guards drift). */
-const WIKILINK = /\[\[([^\[\]#|\n]*)(?:#([^\[\]|\n]+))?(?:\|([^\[\]\n]+))?\]\]/g;
-
 const FRONTMATTER = /^---\r?\n[\s\S]*?\r?\n---(?:\r?\n|$)/;
 const SNIPPET_MAX = 160;
-
-/** Replaces fenced blocks and inline code with same-length blanks (twin of the tags plugin's `blankCode`). */
-function blankCode(text: string): string {
-  return text
-    .replace(/```[\s\S]*?```/g, (m) => ' '.repeat(m.length))
-    .replace(/~~~[\s\S]*?~~~/g, (m) => ' '.repeat(m.length))
-    .replace(/`[^`\n]*`/g, (m) => ' '.repeat(m.length));
-}
 
 function trimSnippet(line: string): string {
   const flat = line.trim();
@@ -77,22 +64,20 @@ export function extractLinkTargets(content: string): LinkOccurrence[] {
   const out: LinkOccurrence[] = [];
   let line = 1 + fmLines;
   let cursor = 0;
-  for (const match of scannable.matchAll(WIKILINK)) {
-    const index = match.index ?? 0;
+  for (const link of extractWikilinks(scannable)) {
+    const index = link.index;
     for (let i = cursor; i < index; i++) {
       if (raw.charCodeAt(i) === 10) {
         line++;
       }
     }
     cursor = index;
-    const target = (match[1] ?? '').trim();
-    if (target === '') {
+    if (link.target === '') {
       continue; // `[[#heading]]` — the note itself, not a backlink source.
     }
-    const anchor = match[2] !== undefined ? match[2].trim() : null;
     out.push({
-      target,
-      anchor,
+      target: link.target,
+      anchor: link.anchor,
       line,
       heading: headingAt(sections, line),
       snippet: trimSnippet(lineText(content, line)),

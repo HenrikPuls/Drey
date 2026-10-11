@@ -19,7 +19,8 @@ import {
   type ChatNoteView,
   type ChatSummary,
 } from '../shared/chat-note.js';
-import { ipcErrorMessage } from '../shared/format.js';
+import { ipcErrorMessage } from '../../../shared/ipc-error';
+import { isAutoSavePath } from '../../../shared/structural-folders';
 import { type RunningTasks } from './running-tasks.js';
 
 /** The text a cancelled generation reports. */
@@ -161,13 +162,9 @@ export interface AssistantPorts {
   listVaults(): Promise<readonly { id: string; name: string; active: boolean }[]>;
 }
 
-/**
- * Live edit only ever targets a user note: never the app-owned auto-save
- * paths (`chats/` via the shared helper, `.drafts/` locally — plugin
- * renderers cannot runtime-import the app's `shared/`).
- */
+/** Live edit only ever targets a user note: never the app-owned auto-save paths (`chats/`, `.drafts/`). */
 function isLiveEditablePath(path: string): boolean {
-  return !isChatNotePath(path) && path !== '.drafts' && !path.startsWith('.drafts/');
+  return !isAutoSavePath(path);
 }
 
 /** The relative-path half of a doc key (`vaultId::relativePath`); null when malformed. */

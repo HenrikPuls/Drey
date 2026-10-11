@@ -28,9 +28,11 @@ electron-builder ([ADR-0023](09_architecture_decisions/0023-windows-packaging-el
    (→ `dist-electron/`) followed by `scripts/bundle-preload.mjs` (esbuild
    writes the main window's preload as ONE file over tsc's output — a
    sandboxed preload cannot `require` a sibling file) and `build:plugins`
-   (`scripts/build-plugins.mjs`, which compiles each plugin's `main/` and
-   `renderer/` with its own tsconfig and merges everything into one tree
-   per plugin, → `dist-electron/plugins/<id>/`).
+   (`scripts/build-plugins.mjs`: `tsc` emits each plugin's `main/` and
+   `shared/` as CommonJS and typechecks its `renderer/`; esbuild bundles
+   `renderer/index.ts` into one ES module and fails on any import that
+   is not the plugin's own folder or `shared/` — ADR-0044 later change;
+   one tree per plugin, → `dist-electron/plugins/<id>/`).
 3. `electron-builder --win` reads `electron-builder.yml`.
 
 ## Artifacts (`release/`)
@@ -96,9 +98,9 @@ keeps it.
 
 The **built-in plugins ship inside the app**: each is a complete tree —
 `plugin.json` (manifest), `main/` (CommonJS, loaded by the main process
-with a plain `import()`), `renderer/` (ES2022 modules + CSS) and `shared/`
-(types erased at build) — merged into `dist-electron/plugins/<id>/` by
-`scripts/build-plugins.mjs`. The `files` globs carry the `.js`/`.json`
+with a plain `import()`), `renderer/` (one bundled ES2022 module + CSS)
+and `shared/` (CommonJS, used by `main/`) — written to
+`dist-electron/plugins/<id>/` by `scripts/build-plugins.mjs`. The `files` globs carry the `.js`/`.json`
 entries plus an explicit `dist-electron/plugins/**/*.css`.
 
 **Exception: the `sample` plugin is not shipped.** It is the executable
@@ -128,7 +130,7 @@ portable exe. `verify:pack` asserts the absence.
   plugins present, `sample` absent) and boots the packed exe from a
   throwaway profile with every built-in enabled, asserting all plugins
   `active`, a `plugin://` renderer executing (the assistant panel mounted)
-  and `plugin:invoke` roundtrips (tags `palette`, tasks `list`), plus
+  and `plugin:invoke` roundtrips (tags `tag-list`, tasks `list`), plus
   startup timings.
 - **User-installed plugins** are *not* packaged: discovery also scans
   `%APPDATA%\drey\plugins\<id>\` (beside `app-config.json`, ADR-0010) and

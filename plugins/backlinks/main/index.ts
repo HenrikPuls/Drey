@@ -6,8 +6,8 @@ import { BacklinkIndex } from './backlink-index';
  * index per registered vault, fed through the save-hook and vault-change
  * registries exactly like the tags/tasks indexes, and one backend method
  * the dock panel queries for the focused note's backlink rows. Resolution
- * is the parity twin of the base wikilink service (see
- * `shared/link-index.ts`) — v1 is same-vault and `.md`-only
+ * is the editor's own (`resolveNoteTarget`, `shared/wikilinks.ts`) — v1 is
+ * same-vault and `.md`-only
  * (`listMarkdownFiles`), matching what the tag index scans.
  */
 

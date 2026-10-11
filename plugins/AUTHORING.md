@@ -18,15 +18,18 @@ The `sample` plugin is the executable reference for everything below.
 plugins/<id>/
   plugin.json     manifest (validated at discovery; see below)
   main/           CommonJS, Node — the main-side backend (optional)
-  renderer/       browser-context ESM + CSS over plugin:// (plain DOM)
-  shared/         types shared between the two sides (optional)
+  renderer/       browser-context ESM + CSS over plugin:// (plain DOM);
+                  index.ts is the entry and is bundled into one file
+  shared/         types and pure code both sides use (optional)
 ```
 
-`scripts/build-plugins.mjs` compiles both sides into
+`scripts/build-plugins.mjs` builds both sides into
 `dist-electron/plugins/<id>/` — that directory is what actually loads,
-built-in or not. **After touching `plugins/**` or `shared/plugin-api/**`,
+built-in or not: `main/` and `shared/` as CommonJS from `tsc`,
+`renderer/index.js` as one ES module from esbuild (not minified).
+**After touching `plugins/**`, or a `shared/**` file a plugin imports,
 rebuild and restart Electron**; a stale `dist-electron` leaves the app
-running the previous build (a changed renderer module 404s). Verify with
+running the previous build. Verify with
 `grep <new-symbol> dist-electron/plugins/<id> -r`.
 
 ## Manifest
@@ -83,18 +86,23 @@ running the previous build (a changed renderer module 404s). Verify with
 ## Renderer rules
 
 Plugin UI is **plain DOM over the host-provided element** — no Angular,
-no Node, no bundler (ADR-0044 rule 2). `mount(el)` fills the element and
+no Node (ADR-0044 rule 2). `mount(el)` fills the element and
 returns a dispose function; the base calls it on page switch, panel
 removal and quarantine.
 
-One hard boundary to know before you reach for a shared helper: your
-renderer loads over `plugin://`, which **cannot serve files outside your
-plugin root** — importing a *value* from top-level `shared/` typechecks
-(types are erased) and then 404s at runtime. Import types from anywhere,
-but runtime code your renderer needs must live under `plugins/<id>/` as
-a local twin of the shared file (see `plugins/tags/shared/tags.ts` vs
-`shared/tag-grammar.ts`, kept in sync by a parity spec), or come through
-the plugin backend (`ctx.ipc.handle`) as data.
+What your renderer may import at runtime: files in your own plugin
+folder and files in the repo's top-level `shared/` — the build bundles
+them into your one `renderer/index.js` (ADR-0044, later change). Use a
+`shared/` function directly; do not copy it. Everything else is refused
+**by the build**, with the importing file named:
+
+- a package (`@codemirror/*`, `yaml`, …) — take CodeMirror from
+  `api.editor.cm` and import package *types* with `import type`; a second
+  copy of a CodeMirror module breaks the editor silently (rule 1);
+- a `shared/` module that itself needs a package (`shared/frontmatter.ts`)
+  — do that work in your `main/` and return data over `ctx.ipc.handle`;
+- `src/`, `electron/` or another plugin's folder — what two plugins both
+  need belongs in `shared/`.
 
 Styling rules, in order of enforcement:
 

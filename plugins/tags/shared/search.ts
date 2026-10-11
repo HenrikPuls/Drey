@@ -1,8 +1,6 @@
-// Sibling specifiers need the explicit `.js`: this file is emitted BOTH as
-// CJS (main, where Node16 maps .js -> .ts) and as ESM served over plugin://
-// (where the browser resolves the specifier verbatim — extensionless 404s).
-import { extractInlineTags } from './tags.js';
-import { splitSections } from './sections.js';
+import { extractInlineTags } from '../../../shared/tag-grammar.js';
+import { splitSections } from '../../../shared/note-sections.js';
+import { isChatNotePath } from '../../../shared/structural-folders.js';
 
 export interface TagEntry {
   tag: string;
@@ -64,15 +62,7 @@ export interface TagSearchHit {
   vaultId?: string;
 }
 
-/**
- * True when `path` is an assistant chat note (`chats/…`, ADR-0048). The
- * plugin-local twin of `shared/structural-folders.ts`' `isChatNotePath`:
- * plugin renderer modules load unbundled over `plugin://` and cannot take
- * a runtime import from base `shared/`.
- */
-export function isChatNotePath(path: string): boolean {
-  return path === 'chats' || path.startsWith('chats/');
-}
+export { isChatNotePath };
 
 /**
  * The Search panel's "Include chats" view filter: chat transcripts stay
