@@ -20,6 +20,34 @@ recorded as an explicit decision. The parity checklist lives in
 
 ## Recent milestones
 
+### The Source control panel is split into state, commands, widget and dialogs
+
+Item 10 of the 2026-10-11 architecture review, fifth file. A
+restructuring: nothing the user sees or does changes. **Not yet manually
+verified by the owner.**
+
+- **`plugins/git/renderer/index.ts` went from 1,370 to 79 lines.** It
+  was one `activate` function. Now, in the same folder:
+  `repo-session.ts` (the state without DOM: what main reported per
+  vault, the shown repository, the command in flight, the message
+  drafts), `repo-commands.ts` (commit, merge, abort, resolve, amend,
+  stash, fetch / pull / push, discard, compare — each with its checks
+  and questions), `panel.ts` (the dock widget), the modals
+  `picker-branch.ts`, `menu-actions.ts`, `dialog-stashes.ts`,
+  `dialog-file-history.ts` and `dialogs.ts`, `settings-page.ts`, and
+  `dom.ts`.
+- **The decisions and the wording are pure functions now**
+  (`repo-model.ts`): which repository the panel shows, the button
+  labels and tooltips, the rows the branch picker offers.
+  `repo-model.spec.ts` covers them with 22 tests.
+- **A second e2e test** drives what had none: a merge that stops on a
+  conflict, *Keep theirs*, completing the merge, amend, stash and apply,
+  and the *Git history* dialog. It was written first and passed against
+  the old file.
+- Not covered by a test: fetch / pull / push (they need a remote),
+  aborting a merge, *Keep mine*, deleting a stash, *Restore this
+  version*, the repository select with several repositories.
+
 ### Fix — the tab bar and the dock icon strips form one line
 
 The centre column's tab bar was 36px (`--bar-h`) while the docks' icon
