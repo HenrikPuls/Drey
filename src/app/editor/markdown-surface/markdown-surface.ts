@@ -39,7 +39,7 @@ import { inlineSpellcheck, requestSpellcheck, SpellcheckSource } from '../spellc
 import { linkActivation } from '../link-open';
 import { WikilinkService, makeWikilinkCompletionSource, wikilinks } from '../wikilinks';
 import { pasteUrlAsMarkdownLink } from '../paste-link';
-import { assetUrlToVaultPath, resolveVaultImageCandidates } from '../vault-image';
+import { assetUrlToVaultPath, resolveHelpImageCandidates, resolveVaultImageCandidates } from '../vault-image';
 import { makeTagCompletionSource, tagPills, tagStyleRefresh } from '../tags';
 import { makeWordCompletionSource } from '../word-completion';
 import { applyAction, ToolbarAction } from '../toolbar-commands';
@@ -803,8 +803,15 @@ export class MarkdownSurface implements AfterViewInit, OnDestroy {
 
   private modeExtensions(mode: EditorViewMode): Extension {
     const live = {
-      resolveImage: (url: string) =>
-        resolveVaultImageCandidates(this.editor.openPath(), url, this.editor.openVaultId()),
+      resolveImage: (url: string) => {
+        // An in-app help document (ADR-0070) resolves against its bundled
+        // asset base, not the vault.
+        const assetBase = this.editor.openAssetBase();
+        if (assetBase !== null) {
+          return resolveHelpImageCandidates(assetBase, url);
+        }
+        return resolveVaultImageCandidates(this.editor.openPath(), url, this.editor.openVaultId());
+      },
       onOpenImage: (src: string) => this.lightbox.open(src),
       onZoomDiagram: (dataUrl: string) => this.lightbox.open(dataUrl),
       // The PDF embed's lens opens the file as a full PDF tab.

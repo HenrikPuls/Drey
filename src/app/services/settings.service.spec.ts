@@ -157,6 +157,18 @@ describe('SettingsService (draft model)', () => {
     expect(service.isDirty()).toBe(false);
   });
 
+  it('openScreen carries a category preset (Help -> About) and clears it on close', () => {
+    service.openScreen('about');
+    expect(service.screenOpen()).toBe(true);
+    expect(service.openCategory()).toBe('about');
+
+    service.closeScreen();
+    expect(service.openCategory()).toBeNull();
+
+    service.openScreen();
+    expect(service.openCategory()).toBeNull();
+  });
+
   it('surfaces a save failure and keeps the draft intact', async () => {
     window.dreyApi = {
       ...harness.api,
@@ -305,7 +317,7 @@ describe('SettingsService (draft model)', () => {
       service.setAppearanceTheme('dracula');
       expect(service.appearanceTheme()).toBe('dracula');
       expect(service.draft()?.appearance.theme).toBe('dracula');
-      expect(service.config()?.appearance.theme).toBe('drey');
+      expect(service.config()?.appearance.theme).toBe('anthrazit');
       expect(service.isDirty()).toBe(true);
     });
 
@@ -317,7 +329,7 @@ describe('SettingsService (draft model)', () => {
 
       expect(service.appearanceUiScale()).toBe('default');
       expect(service.appearanceAccent()).toBe('theme');
-      expect(service.appearanceTheme()).toBe('drey');
+      expect(service.appearanceTheme()).toBe('anthrazit');
       expect(service.isDirty()).toBe(false);
     });
 

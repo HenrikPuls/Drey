@@ -19,7 +19,7 @@ async function openAppearance(page: Page): Promise<void> {
 test('Appearance: live preview, Save to commit, Discard reverts', async ({ page }) => {
   await openAppearance(page);
 
-  expect(await accentVar(page)).toBe('#c96442'); // default terracotta
+  expect(await accentVar(page)).toBe('#8ecbef'); // default = Anthrazit's seed accent
   await expect(page.locator('app-settings .actions-bar .saved')).toBeVisible();
   await expect(page.locator('app-settings .actions-bar button.primary')).toBeDisabled();
 
@@ -33,11 +33,11 @@ test('Appearance: live preview, Save to commit, Discard reverts', async ({ page 
   await page.locator('app-settings .actions-bar button.ghost', { hasText: 'Discard' }).click();
   await page.locator('app-settings .unsaved button.danger', { hasText: 'Discard' }).click();
   await expect(page.locator('app-settings')).toHaveCount(0);
-  await expect.poll(() => accentVar(page)).toBe('#c96442');
+  await expect.poll(() => accentVar(page)).toBe('#8ecbef');
 
   // Reopen: default is back, nothing was persisted. The default accent is
-  // the "match the theme" sentinel (ADR-0035), which for the Drey theme
-  // resolves to the same terracotta hex.
+  // the "match the theme" sentinel (ADR-0035), which for the Anthrazit
+  // theme resolves to its seed blue.
   await openAppearance(page);
   await expect(page.locator('app-settings .swatch[title="Match the theme"]')).toHaveClass(/active/);
 
@@ -57,7 +57,7 @@ test('Appearance: live preview, Save to commit, Discard reverts', async ({ page 
 /**
  * ADR-0035: the theme picker swaps the editor's CodeMirror theme and
  * re-tints the shell from a per-theme seed (`data-theme` + `--_bg`/`--_fg`
- * on <html>). Drey carries no attribute.
+ * on <html>). Drey carries no attribute; the default is Anthrazit.
  */
 test('Appearance: theme picker re-tints the shell and persists', async ({ page }) => {
   const dataTheme = (): Promise<string | null> =>
@@ -68,7 +68,7 @@ test('Appearance: theme picker re-tints the shell and persists', async ({ page }
     );
 
   await openAppearance(page);
-  expect(await dataTheme()).toBeNull(); // default = Drey
+  expect(await dataTheme()).toBe('anthrazit'); // the fresh-install default
 
   await page.locator('app-settings-appearance select#app-theme').selectOption('nord');
   await expect.poll(dataTheme).toBe('nord');

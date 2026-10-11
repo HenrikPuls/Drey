@@ -11,6 +11,7 @@ import { LinkUpdateDialog } from './link-update';
 import { Palette, PaletteService } from './palette';
 import { ExitConfirmDialog } from './exit-confirm-dialog/exit-confirm-dialog';
 import { ExternalOpenService } from './external-open';
+import { HelpService } from './help/help.service';
 import { SessionService } from './session';
 import { AppearanceService } from './services/appearance.service';
 import { ThemeService } from './services/theme.service';
@@ -390,6 +391,22 @@ export class App {
       id: 'note.history',
       label: 'File history…',
       run: () => void this.fileHistory.show(),
+    });
+
+    // In-app help (ADR-0070): the bundled manual and the generated
+    // shortcuts list, both read-only pinned tabs. F1 is the browser-age
+    // help key and free in this app.
+    const help = inject(HelpService);
+    keys.register({
+      id: 'help.manual',
+      label: 'Open the user manual',
+      keybinding: 'F1',
+      run: () => void help.openManual(),
+    });
+    keys.register({
+      id: 'help.shortcuts',
+      label: 'Open the keyboard shortcuts',
+      run: () => help.openShortcuts(),
     });
 
     // Startup mark (milestone 61): the first paint of the app shell —

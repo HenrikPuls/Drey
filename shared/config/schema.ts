@@ -551,9 +551,11 @@ export const DEFAULT_THEME = 'drey';
 
 /**
  * The Anthrazit theme (milestone 43): the neutral charcoal-gray palette with the
- * blue accent. A fresh install starts on it (`DEFAULT_APPEARANCE`); a
- * stored config without a `theme` key still resolves to `DEFAULT_THEME`,
- * so nobody's existing look changes under them.
+ * blue accent. The fresh-install default — `DEFAULT_APPEARANCE` starts on it
+ * and `normalizeTheme` falls back to it, so a stored config without a
+ * `theme` key resolves here too (the fallback was aligned with
+ * `DEFAULT_APPEARANCE` when the default flipped; only an explicit `'drey'`
+ * keeps the old look).
  */
 export const ANTHRAZIT_THEME = 'anthrazit';
 

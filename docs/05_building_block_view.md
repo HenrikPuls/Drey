@@ -2738,3 +2738,13 @@ main-side plugin writes.
 | Link click | `src/app/editor/editor.ts` (`activateLink`) | A `file:` target goes to `openLocalDocument`; vault-relative targets reach the routing above through `openFile`. |
 | Drop cascade | `src/app/editor/image-paste.ts` | Alt-drop of local documents inserts `file:` links and copies nothing (`pathForFile` → `webUtils.getPathForFile`); a plain drop is the milestone-31 staging into `attachments/`; a vault document dragged from the Files panel is linked in place. |
 | Main guard | `electron/open-document.ts` | `openDocumentInDefaultProgram` (allowlist + existence, then `shell.openPath`) and `localPathFromFileHref` (local `file:` URLs only). Reached by `vault:open-externally` (`VaultManager.openExternally`, path resolved inside the vault) and `app:open-local-document`. |
+
+## 5.40 In-app help documents ([ADR-0067](09_architecture_decisions/0067-in-app-help-documents.md))
+
+| Block | Where | Responsibility |
+| --- | --- | --- |
+| Manual mirror | `scripts/sync-manual.mjs` + `public/manual/` (committed) | Mirrors `docs/manual/` (markdown + `img/`) into `public/manual/` in `prebuild` / `predev`; Angular copies `public/**` under the app origin, `app://` serves it packaged; `scripts/verify-pack.mjs` asserts the manual + images in the asar. |
+| Help tabs | `src/app/services/editor.service.ts` (`OpenDoc.help`, `openHelpDoc`, `isHelpDoc`) | A base doc flavour: pinned, `viewMode: 'view'`, clean by construction (save / exit prompt no-ops), `setViewMode` / `updateBuffer` refuse, the `⋯` menu hides document actions, the session snapshot skips it; the editor surface holds the ADR-0049 edit-lock over it. |
+| Image base | `src/app/editor/vault-image.ts` (`resolveHelpImageCandidates`) + `markdown-surface.ts` | A help doc's `assetBase` (`manual/`) resolves relative `![](...)` refs as app-origin URLs (`ng serve` / `app://` alike); explicit schemes and `..` escapes yield nothing. |
+| Help service | `src/app/help/` (`HelpService`, `shortcuts-doc.ts`) | Fetches `manual/manual.md` relative to the app origin → `openHelpDoc`; `buildShortcutsMarkdown` renders the live `KeybindingService` registry (mouse buttons included) plus the fixed non-registry rows. |
+| Menu + commands | `src/app/titlebar/menu.service.ts` (`help` menu), `src/app/app.ts` (`help.manual` F1, `help.shortcuts`) | *User manual* / *Keyboard shortcuts* run the registered commands (palette lists them); *About Drey* opens Settings on About via `SettingsService.openScreen(category?)` (`openCategory` preset, consumed once by the Settings component). |

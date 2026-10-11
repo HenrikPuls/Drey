@@ -9,6 +9,7 @@ import {
 } from '@codemirror/commands';
 import { openSearchPanel } from '@codemirror/search';
 import type { EditorView } from '@codemirror/view';
+import { HelpService } from '../help/help.service';
 import { KeybindingService } from '../keybindings';
 import { DockService, WidgetId, WidgetRegistryService } from '../dock';
 import {
@@ -25,7 +26,7 @@ import { WindowChromeService } from './window-chrome.service';
 import { duplicateSelection } from '../editor/markdown-commands';
 import type { EditCommand } from '../../../shared/ipc-api';
 
-export type MenuId = 'file' | 'edit' | 'selection' | 'view';
+export type MenuId = 'file' | 'edit' | 'selection' | 'view' | 'help';
 
 /** One row in a menu popover. `run` absent => the row is shown disabled. */
 export interface MenuItem {
@@ -76,6 +77,7 @@ export class MenuService {
   private readonly widgets = inject(WidgetRegistryService);
   private readonly contributions = inject(MenuContributionsService);
   private readonly windowChrome = inject(WindowChromeService);
+  private readonly help = inject(HelpService);
 
   readonly open = signal<MenuId | null>(null);
 
@@ -384,6 +386,23 @@ export class MenuService {
           },
         },
         ...this.contributionRows('view'),
+      ],
+    },
+    {
+      id: 'help',
+      label: 'Help',
+      rows: [
+        { kind: 'item', label: 'User manual', hint: 'F1', run: () => this.run('help.manual') },
+        { kind: 'item', label: 'Keyboard shortcuts', run: () => this.run('help.shortcuts') },
+        SEP,
+        {
+          kind: 'item',
+          label: 'About Drey',
+          run: () => {
+            this.close();
+            this.settings.openScreen('about');
+          },
+        },
       ],
     },
   ]);

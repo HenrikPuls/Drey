@@ -73,6 +73,13 @@ export class SettingsService {
   /** Whether the Settings overlay is showing (the sidebar entry opens it). */
   readonly screenOpen = signal(false);
 
+  /**
+   * A category the screen should open on (Help -> About passes `'about'`).
+   * Consumed once by the Settings component when it mounts, then cleared;
+   * an id the registry does not know falls back to the first category.
+   */
+  readonly openCategory = signal<string | null>(null);
+
   readonly saving = signal(false);
   readonly saveError = signal<string | null>(null);
 
@@ -202,20 +209,26 @@ export class SettingsService {
 
   // -- Screen lifecycle ----------------------------------------------------
 
-  /** Opens the Settings overlay on a fresh copy of the persisted config. */
-  openScreen(): void {
+  /**
+   * Opens the Settings overlay on a fresh copy of the persisted config.
+   * `category` optionally names the category to select (Help -> About);
+   * the component falls back to the first one when it is unknown.
+   */
+  openScreen(category?: string): void {
     const config = this._config();
     if (config) {
       this._draft.set(structuredClone(config));
     }
     this.saveError.set(null);
     this.connectionTest.set(null);
+    this.openCategory.set(category ?? null);
     this.screenOpen.set(true);
   }
 
   /** Closes without saving. The component asks first when `isDirty()`. */
   closeScreen(): void {
     this.discard();
+    this.openCategory.set(null);
     this.screenOpen.set(false);
   }
 

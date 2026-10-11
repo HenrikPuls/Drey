@@ -60,6 +60,57 @@ describe('EditorService', () => {
     expect(service.isDirty()).toBe(false);
   });
 
+  describe('in-app help documents (ADR-0070)', () => {
+    it('opens read-only and pinned: view mode, clean buffer, help flag', () => {
+      service.openHelpDoc('help/manual.md', 'User manual', '# Manual\r\n', 'manual/');
+
+      const doc = service.docFor('help/manual.md');
+      expect(doc).not.toBeNull();
+      expect(doc?.kind).toBe('text');
+      expect(doc?.name).toBe('User manual');
+      expect(doc?.pinned).toBe(true);
+      expect(doc?.viewMode).toBe('view');
+      expect(doc?.help).toEqual({ assetBase: 'manual/' });
+      // CRLF normalised, buffer === saved -- never dirty, never prompts.
+      expect(doc?.savedContent).toBe('# Manual\n');
+      expect(doc?.bufferContent).toBe('# Manual\n');
+      expect(service.isDirty()).toBe(false);
+      expect(service.isHelpDoc('help/manual.md')).toBe(true);
+      expect(service.openAssetBase()).toBe('manual/');
+    });
+
+    it('cannot be edited: updateBuffer and setViewMode are no-ops', () => {
+      service.openHelpDoc('help/shortcuts.md', 'Keyboard shortcuts', '# Keys');
+      const before = service.docFor('help/shortcuts.md');
+
+      service.updateBuffer('help/shortcuts.md', '# Changed');
+      service.setViewMode('live', 'help/shortcuts.md');
+
+      const after = service.docFor('help/shortcuts.md');
+      expect(after?.bufferContent).toBe('# Keys');
+      expect(after?.viewMode).toBe('view');
+      expect(before?.bufferContent).toBe(after?.bufferContent);
+    });
+
+    it('saving a help doc writes nothing (clean buffer falls through)', async () => {
+      service.openHelpDoc('help/manual.md', 'User manual', '# Manual');
+
+      await service.save({ key: 'help/manual.md' });
+
+      expect(saves).toEqual([]);
+    });
+
+    it('re-opening refreshes the content instead of adding a tab', () => {
+      service.openHelpDoc('help/manual.md', 'User manual', '# v1');
+      service.openHelpDoc('help/manual.md', 'User manual', '# v2');
+
+      const docs = service.openDocs().filter((d) => d.key === 'help/manual.md');
+      expect(docs).toHaveLength(1);
+      expect(docs[0]?.bufferContent).toBe('# v2');
+      expect(docs[0]?.savedContent).toBe('# v2');
+    });
+  });
+
   describe('caret memory (milestone 50)', () => {
     it('stores and updates the viewport (caret + scroll offset) per doc key', () => {
       service.recordCaret('note.md', { head: 7, scrollTop: 120, caretRel: 88 });

@@ -101,6 +101,25 @@ export function resolveVaultImageCandidates(
 }
 
 /**
+ * Candidates for an in-app help document's image reference (ADR-0070).
+ * Its relative refs resolve against `assetBase` (`manual/`) as RELATIVE
+ * URLs, so the page's own origin serves them -- `ng serve` in dev,
+ * `app://` packaged -- without hardcoding either. `http(s)`/`data:` pass
+ * through; anything with an explicit scheme or a `..` escape yields no
+ * candidate (the manual is trusted, its URLs still never leave the app).
+ */
+export function resolveHelpImageCandidates(assetBase: string, rawUrl: string): string[] {
+  if (/^(?:https?|data):/i.test(rawUrl)) {
+    return [rawUrl];
+  }
+  if (/^[a-z][a-z0-9+.-]*:/i.test(rawUrl) || rawUrl.includes('..')) {
+    return [];
+  }
+  const encoded = rawUrl.split('/').map(encodeURIComponent).join('/');
+  return [`${assetBase}${encoded}`];
+}
+
+/**
  * The inverse of {@link resolveVaultImageUrl} for `drey-asset://` URLs
  * (ADR-0052): takes a widget's resolved asset URL back to
  * `{ vaultId, path }` so the lens can open the file by vault-relative

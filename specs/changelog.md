@@ -58,6 +58,42 @@ verified by the owner.**
 - Docs: `docs/11` (lint row, test-coverage rows, the v1 row removed),
   `docs/07` (CI order), `CLAUDE.md` (test and lint commands).
 
+### In-app help: the manual and live shortcuts ([ADR-0067](../docs/09_architecture_decisions/0067-in-app-help-documents.md))
+
+Owner-commissioned package after milestone 69, on top of the English
+user manual. **Not yet manually verified by the owner.**
+
+- **The manual moved to `docs/manual/`** (`manual.md` + `img/`, 44
+  screenshots) and gained sections 19–22 (Getting help, shortcuts — now
+  with `F1`, data locations, troubleshooting).
+- **The manual ships with the app.** `scripts/sync-manual.mjs` mirrors
+  `docs/manual/` → `public/manual/` (committed, byte-stable) in
+  `prebuild` and the new `predev` hook; Angular's `public/**` copy and
+  the `app://` protocol serve it in dev and packaged with zero
+  electron-builder changes; `verify-pack` asserts manual + images in
+  the asar.
+- **A Help menu** (the titlebar's fifth): *User manual* (`F1`), *Keyboard
+  shortcuts*, *About Drey* — the last opens Settings directly on About
+  (`SettingsService.openScreen(category?)`). Both help commands are
+  registered (`help.manual`, `help.shortcuts`), so the palette lists
+  them.
+- **Help documents are read-only pinned tabs** — a new base doc flavour
+  (`OpenDoc.help { assetBase }`, `EditorService.openHelpDoc`): view
+  mode, pinned, clean by construction (save / exit prompts are no-ops
+  by the existing rules), `setViewMode`/`updateBuffer` refuse, the `⋯`
+  menu hides document actions, the session snapshot skips them. The
+  Live Preview resolves their relative image refs against the app
+  origin (`resolveHelpImageCandidates`) — `manual/img/…` loads from
+  `ng serve` or `app://` alike; explicit schemes and `..` escapes
+  render nothing.
+- **The shortcuts document is generated at open time** from the live
+  `KeybindingService` registry (base + plugin commands, mouse side
+  buttons) plus a fixed table of non-registry shortcuts (editing
+  chords, `Ctrl F`, `/`, `[[`, `#`, the global capture hotkey) — it can
+  never contradict the command palette.
+- Fixed on the way: `normalizeTheme` fell back to `'drey'` instead of
+  the documented Anthrazit fresh-install default.
+
 ### Renderer hardening: sandbox, Content-Security-Policy, encrypted keys
 
 Second package out of the 2026-10-11 architecture review. **Not yet

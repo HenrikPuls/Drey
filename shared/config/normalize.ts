@@ -16,6 +16,7 @@ import {
   ActionResultKind,
   ActionTemplate,
   ActionTrigger,
+  ANTHRAZIT_THEME,
   AppConfig,
   AppearanceConfig,
   BUILTIN_ENTRY_TEMPLATE_IDS,
@@ -23,7 +24,6 @@ import {
   CLASSIC_ENTRY_PATTERN,
   CustomDictionary,
   DEFAULT_EDITOR_FONT_FAMILY,
-  DEFAULT_THEME,
   DailyConfig,
   EDITOR_FONT_FAMILIES,
   EDITOR_FONT_SCALE_MAX,
@@ -121,9 +121,13 @@ export function normalizeAccent(value: unknown): string {
   return HEX_RE.test(value) ? value.toLowerCase() : DEFAULT_APPEARANCE.accent;
 }
 
-/** Non-empty string, else `'drey'`. The renderer catalog does the real resolve. */
+/**
+ * Non-empty string, else the fresh-install default (Anthrazit —
+ * `DEFAULT_APPEARANCE.theme`; ADR-0057 later change). The renderer catalog
+ * does the real resolve.
+ */
 export function normalizeTheme(value: unknown): string {
-  return typeof value === 'string' && value.trim().length > 0 ? value : DEFAULT_THEME;
+  return typeof value === 'string' && value.trim().length > 0 ? value : ANTHRAZIT_THEME;
 }
 
 /**
