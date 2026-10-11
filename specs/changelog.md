@@ -20,6 +20,38 @@ recorded as an explicit decision. The parity checklist lives in
 
 ## Recent milestones
 
+### The assistant answers a scoped ask from the scoped vaults only
+
+Owner-reported: with the docs vault selected in the Vault chip, "what is
+this vault about" was answered from the active vault — the chat notes
+showed the model quoting `tasks_list` results (active-vault tasks) while
+the docs context sat unused in the system prompt. **Not yet manually
+verified by the owner.**
+
+- **The scope no longer depends on retrieval succeeding.** The chat
+  engine resolves the ask's targets from the vault registry
+  (`resolveTargetVaultIds`) and arms `vaultToolsScope` on every chip-on
+  ask — semantic retrieval off, or a retrieval error, can no longer
+  leave the base `vault_search`/`vault_read` tools on their
+  active-vault default (ADR-0069 later change).
+- **Active-vault-only tools are withheld out of scope.** When the chip's
+  selection excludes the active vault, `tasks_list` and the template
+  tools (and their notes, and the post-hoc task block) do not ride the
+  ask; the tools note lists only in-scope vaults and demands explicit
+  vault ids. A new scope note binds "the vault" in the question to the
+  selection, and the tasks note restricts the tool to task questions.
+- **Explore tools survive semantic-off.** With `semantic.enabled` off,
+  `vault_overview`/`vault_find`/`vault_section` degrade to fresh
+  filesystem scans (`plugins/assistant/main/vault-scan.ts`, shared
+  section splitter/locator, token-coverage ranking, 200-file cap)
+  instead of disappearing — a scoped ask keeps in-scope lookups.
+- **Replay attachments try the scoped vaults** when the active-vault
+  read misses, so a chat bound to a non-active vault keeps its
+  attachments on follow-ups.
+- New specs: the engine's scope arming and tool gating
+  (`chat-engine.spec.ts`), the filesystem scan ports
+  (`vault-scan.spec.ts`), the scoped notes (`ask-prompts.spec.ts`).
+
 ### The IPC contract is split by topic behind its barrel
 
 Item 10 of the 2026-10-11 architecture review, sixth and last file. A

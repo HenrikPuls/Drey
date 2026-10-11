@@ -95,3 +95,42 @@ No silent carry-over of the shortcut's vaults.
 - The SDK seam's `search()` (Search panel, MCP) now also benefits from
   the readiness pass: a stale index no longer silently browses as empty,
   it rebuilds in the background and answers next round.
+
+## Later change — the scope holds without retrieval; explore tools degrade to text (2026-10-11)
+
+Owner-observed after milestone 71: with the docs vault selected, "what is
+this vault about" was still answered from the active vault. The chat-note
+evidence showed retrieval working (docs citations in the `drey-context`
+fence) — the model had answered from `tasks_list`, whose index reads ONLY
+the active vault, because the tasks note told it to call that tool FIRST.
+The enforcement also had gaps: `vaultToolsScope` was armed from the
+retrieval's outcome, so a disabled or failed retrieval left the host
+filter unarmed and the base tools on their active-vault default. Four
+fixes, same decision:
+
+- **The scope is resolved from the registry, not from the retrieval.**
+  The engine resolves the ask's targets via `resolveTargetVaultIds` over
+  `listVaults()` and arms `vaultToolsScope` for every chip-on ask — a
+  disabled or failed retrieval can no longer silently re-arm the base
+  tools' active-vault default. `RetrievalOutcome.targets` is no longer
+  read for enforcement.
+- **Active-vault-only aux tools are withheld when out of scope.** When
+  the scope excludes the active vault, `tasks_list` and the template
+  tools do not ride the ask (their notes drop with them — the post-hoc
+  task block too), and the tools note lists only the in-scope vaults,
+  demanding explicit vault ids. A scope note (`THE VAULT FOR THIS
+  QUESTION …`) binds "the vault" in the user's question to the chip's
+  selection, and `ASK_TASKS_NOTE` no longer invites a tool call for
+  non-task questions.
+- **The explore tools no longer vanish with semantic retrieval.** With
+  `semantic.enabled` off they run on fresh filesystem scans
+  (`main/vault-scan.ts`): overview and section read files and split
+  headings with the shared splitter/locator (`locateSemanticSection`),
+  `vault_find` ranks sections by query-token coverage — same specs,
+  same result shapes, `chats/` still excluded, 200-file scan cap. A
+  scoped ask keeps its in-scope lookups instead of being pushed into the
+  base tools.
+- **Replay attachments try the scoped vaults.** When the default
+  (active-vault) read of a past turn's attachment misses, the ask's
+  resolved targets are tried in order — a chat bound to a non-active
+  vault no longer loses its attachments on follow-ups.

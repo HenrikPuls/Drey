@@ -97,7 +97,7 @@ export const VAULT_OVERVIEW_SPEC: ToolSpec = {
 export const VAULT_FIND_SPEC: ToolSpec = {
   name: VAULT_FIND_TOOL_NAME,
   description:
-    'Semantic search over the scoped vaults: rank note sections by similarity to a query. ' +
+    'Search over the scoped vaults: rank note sections by relevance to a query. ' +
     'One JSON object per hit — vault, vaultId, path, heading, line, score (0..1), snippet. ' +
     'Use it when the overview is too large or you need the BEST matches for a topic, then ' +
     `vault_section to read a hit in full. ${COMMON_SCOPE_LINE}`,

@@ -26,6 +26,7 @@ import { ChatStore } from './chat-store';
 import { createTemplateTools } from './template-tools';
 import { createSemanticService, type SemanticService } from './semantic/service';
 import { createVaultExploreTools } from './vault-explore-tools';
+import { createVaultScanPorts } from './vault-scan';
 import { readFile } from 'node:fs/promises';
 import { dialog, app } from 'electron';
 import * as path from 'node:path';
@@ -88,6 +89,16 @@ const plugin: MainPluginModule = {
       listMarkdownFiles: () => ctx.vault.listMarkdownFiles(),
       log: (message, level) => ctx.log(message, level),
     });
+
+    // The registry view the chat engine and the scan ports share
+    // (ADR-0051): id + display name + the active flag (the scope
+    // resolution and the tools note both read it).
+    const vaultInfos = async (): Promise<
+      readonly { id: string; name: string; active: boolean }[]
+    > => {
+      const list = await ctx.vault.listVaults();
+      return list.map((vault) => ({ id: vault.id, name: vault.name, active: vault.active === true }));
+    };
 
     // -- semantic vault retrieval (ADR-0055) --------------------------------
     // One worker owns the transformers.js WASM pipeline; indexes persist
@@ -164,17 +175,24 @@ const plugin: MainPluginModule = {
         }),
       () => ctx.llm.capabilities(),
       {
-        readVaultText: async (path) => {
+        readVaultText: async (path, fallbackVaultIds) => {
           try {
             return await ctx.vault.read(path);
           } catch {
+            // The default (active) vault missed — the attachment may
+            // belong to one of the ask's scoped vaults. Try them in order;
+            // a persistent miss degrades to the replay's warning line.
+            for (const vaultId of fallbackVaultIds ?? []) {
+              try {
+                return await ctx.vault.read(path, { vaultId });
+              } catch {
+                // next fallback vault
+              }
+            }
             return null;
           }
         },
-        listVaults: async () => {
-          const vaults = await ctx.vault.listVaults();
-          return vaults.map((vault) => ({ id: vault.id, name: vault.name }));
-        },
+        listVaults: () => vaultInfos(),
         resolveAssetPath: (path) => ctx.vault.resolveAssetPath(path),
         readAssetBase64: async (abs) => {
           try {
@@ -187,12 +205,15 @@ const plugin: MainPluginModule = {
         onLiveEdit: (path, content) => ctx.ipc.emit('chat:liveEdit', { path, content }),
         retrieveContext: (question, scope, vaultIds) =>
           semantic.retrieve(question, scope, vaultIds),
-        // The explore tools (ADR-0069) are live per ask: built only while
-        // semantic retrieval is enabled, closed over the turn's scope.
+        // The explore tools (ADR-0069) are live per ask, closed over the
+        // turn's scope. Semantic retrieval backs them when enabled;
+        // otherwise they degrade to fresh filesystem scans (ADR-0069
+        // later change) — a scoped ask keeps its in-scope lookups instead
+        // of being pushed into the base tools' active-vault default.
         exploreTools: (scope, vaultIds) =>
-          semantic.isEnabled
-            ? createVaultExploreTools(
-                {
+          createVaultExploreTools(
+            semantic.isEnabled
+              ? {
                   resolveTargets: (innerScope, innerIds) =>
                     semantic.resolveTargets(innerScope, innerIds),
                   searchScoped: (question, innerScope, innerIds, limit) =>
@@ -200,11 +221,21 @@ const plugin: MainPluginModule = {
                   outline: (innerScope, innerIds) => semantic.outline(innerScope, innerIds),
                   readSection: (vaultId, filePath, target) =>
                     semantic.readSection(vaultId, filePath, target),
-                },
-                scope,
-                vaultIds,
-              )
-            : null,
+                }
+              : createVaultScanPorts({
+                  listVaults: () => vaultInfos(),
+                  listMarkdownFiles: (vaultId) => ctx.vault.listMarkdownFiles({ vaultId }),
+                  readVaultText: async (vaultId, filePath) => {
+                    try {
+                      return await ctx.vault.read(filePath, { vaultId });
+                    } catch {
+                      return null;
+                    }
+                  },
+                }),
+            scope,
+            vaultIds,
+          ),
         tasksTool: () => {
           // Live at call time: the tasks plugin can (de)activate between
           // asks only via an app restart, but the getter keeps the engine
