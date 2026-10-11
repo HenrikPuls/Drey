@@ -57,10 +57,28 @@ test.describe('startup splash (milestone 62, ADR-0062)', () => {
       }
     };
     const splash = await findWindow((c) => c.url().includes('splash.html'), 30_000);
-    await expect(splash.locator('.wordmark')).toHaveText('drey');
-    await expect(splash.locator('.version')).toHaveText(/\d/);
-    await expect(splash.locator('.fill')).toBeVisible();
-    await expect(splash.locator('.activity')).not.toBeEmpty();
+    // Listen for the close NOW: with no vault the boot is short, and the
+    // handover can close the splash before the checks below are through —
+    // a listener registered after them would wait for an event long gone.
+    const splashClosed: Promise<unknown> = splash.isClosed()
+      ? Promise.resolve()
+      : splash.waitForEvent('close', { timeout: 120_000 });
+    splashClosed.catch(() => undefined);
+
+    // The content is checked only while the splash is still up: a splash
+    // the handover already closed is a fast boot, not a failure (the
+    // locator then dies with "session closed"). What must hold either way
+    // is the handover below.
+    try {
+      await expect(splash.locator('.wordmark')).toHaveText('drey');
+      await expect(splash.locator('.version')).toHaveText(/\d/);
+      await expect(splash.locator('.fill')).toBeVisible();
+      await expect(splash.locator('.activity')).not.toBeEmpty();
+    } catch (error) {
+      if (!splash.isClosed()) {
+        throw error;
+      }
+    }
 
     // Then the (hidden) main window boots, and the handover shows it
     // painted and closes the splash.
@@ -68,7 +86,7 @@ test.describe('startup splash (milestone 62, ADR-0062)', () => {
     await main.waitForLoadState('domcontentloaded');
     await expect(main.locator('app-titlebar .brand .mark')).toBeVisible({ timeout: 60_000 });
 
-    await splash.waitForEvent('close', { timeout: 30_000 });
+    await splashClosed;
     expect(splash.isClosed()).toBe(true);
     // Nothing splash-shaped lingers after the handover.
     expect(app.windows().some((candidate) => candidate.url().includes('splash.html'))).toBe(

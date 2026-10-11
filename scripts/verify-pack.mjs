@@ -135,7 +135,15 @@ try {
 }
 check('packed exe launches', true);
 
-const page = await app.firstWindow();
+// The MAIN window, by URL: the splash (milestone 62) is created first, so
+// `firstWindow()` can hand back a page that has no `dreyApi`. A scan loop,
+// not a single `window` event -- the event fires at creation, before the
+// URL has settled on its target.
+const page = await findMainWindow(60_000);
+if (page === null) {
+  check('main window (app://) appears', false);
+  await reportAndExit();
+}
 await page.waitForLoadState('domcontentloaded');
 const tDom = Date.now() - t0;
 
@@ -182,6 +190,20 @@ try {
 }
 
 await reportAndExit();
+
+async function findMainWindow(ms) {
+  const deadline = Date.now() + ms;
+  for (;;) {
+    const hit = app.windows().find((candidate) => candidate.url().startsWith('app://'));
+    if (hit !== undefined) {
+      return hit;
+    }
+    if (Date.now() >= deadline) {
+      return null;
+    }
+    await app.waitForEvent('window', { timeout: 2_000 }).catch(() => undefined);
+  }
+}
 
 async function checkInvoke(pluginId, method, payload) {
   try {

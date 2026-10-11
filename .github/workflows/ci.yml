@@ -97,6 +97,22 @@ jobs:
       - name: Unit tests (plugins)
         run: npm run test:plugins
 
+      # The diagrams plugin's draw.io web app (ADR-0064) is not in git:
+      # `npm run pack` fetches it, but this job builds and packs in separate
+      # steps, so it has to fetch it itself -- BEFORE the build, which copies
+      # plugins/drawio/vendor/ into dist-electron/. Without it the drawio e2e
+      # tests skip and the packed app ships no editor (verify:pack fails).
+      # The script is idempotent on its .version stamp, so a cache hit makes
+      # it a no-op; the pin file is the cache key.
+      - name: Cache the draw.io web app
+        uses: actions/cache@v4
+        with:
+          path: plugins/drawio/vendor
+          key: drawio-webapp-${{ hashFiles('plugins/drawio/drawio-version.json', 'scripts/fetch-drawio.mjs') }}
+
+      - name: Fetch the draw.io web app
+        run: npm run fetch:drawio
+
       - name: Build (renderer + main + plugins)
         run: npm run build
 
