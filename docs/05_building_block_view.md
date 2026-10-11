@@ -113,7 +113,10 @@ sets it), never discovered by an ordinary dev run or package. Each
 is a full stack: `plugin.json` +
 `main/` (CommonJS, Node access — `electron/` and app-`shared/` CJS
 allowed) + `renderer/` (browser-context ES modules + CSS, served over
-`plugin://`, plain DOM — no Angular, no `@codemirror/*` runtime imports)
+`plugin://`, plain DOM — no Angular, no `@codemirror/*` runtime
+imports; the renderer is **bundled into one file with esbuild**
+(ADR-0044 later change) and may import its own folder and the repo's
+`shared/` at runtime — never a package, `src/` or `electron/`)
 + `shared/` (its own types). Built by `scripts/build-plugins.mjs` into
 `dist-electron/plugins/<id>/` — built-ins and user-installed plugins are
 the same thing to the hosts; a user-installed one arrives as a local
@@ -293,18 +296,33 @@ Keep it in step whenever a component boundary changes (CLAUDE.md's
 - `SpellcheckService` (`electron/spellcheck.ts`) — nspell + the
   bundled/added Hunspell dictionaries; answers `spell:check` with
   misspelled words + suggestions
+- `safe-file.ts` — the data-safety primitives every config/note write
+  goes through: `atomicWriteFile` / `atomicWriteFileSync` (tmp + rename,
+  so a crash mid-write never destroys a file) and `readJsonObjectGuarded`
+  (a damaged config file is set aside, never silently overwritten)
+- `config-secrets.ts` + `content-security-policy.ts` — API keys (and the
+  env/header values of external MCP servers) encrypted in
+  `app-config.json` with the OS user's key (ADR-0010 later change;
+  plain in memory and over IPC), and the renderer's CSP (no inline
+  script, no `eval`, no network `fetch` from the renderer; frames only
+  from `plugin:` / `drey-asset:` — ADR-0001 later change, sandboxed
+  main window with the bundled one-file preload)
 
 **Renderer (Angular):**
 
 - `App` composes a **titlebar / [left dock | main column | right dock] /
   status bar** shell directly.
-- `DockService` + `Dock` + `PanelFrame` (`src/app/dock/`) — the dock
-  system: `DockService` holds the whole `LayoutState` (which panel in
-  which dock, order, `flexes`, collapse, `leftW`/`rightW`, `bottomH`;
-  `localStorage['drey.dock']`) and runs the header-drag / splitter /
-  dock-edge-resize gestures. Three docks — `left | right | bottom` (the
-  bottom one a resizable band under the editor). Panels come from the
-  runtime **`WidgetRegistryService`**: core panels via
+- `DockService` + `Dock` + `DockStrip` + `PanelFrame` (`src/app/dock/`) —
+  the dock system: `DockService` holds the whole `LayoutState` (which panel
+  in which dock, order, `flexes`, open / closed, `leftW`/`rightW`,
+  `bottomH`; `localStorage['drey.dock']`) and runs the header-drag /
+  splitter / dock-edge-resize gestures. `DockStrip` is the icon row at
+  the top of each dock (milestone 69, ADR-0019 later change): one toggle
+  per panel of that dock — a panel is open or closed to its icon, never
+  collapsed to a header; the glyph is `WidgetDescriptor.icon` /
+  `PluginWidgetContrib.icon` (SDK 1.19). Three docks — `left | right |
+  bottom` (the bottom one a resizable band under the editor). Panels come
+  from the runtime **`WidgetRegistryService`**: core panels via
   `registerCoreWidgets()` — `CalendarPanel`, `FilesPanel` (one section
   per registered vault — the vault header row stacked per ADR-0051 —
   plus the file trees, right-click new/delete, inline create, add /
@@ -368,7 +386,7 @@ Keep it in step whenever a component boundary changes (CLAUDE.md's
   used only by a moved note travel with it), the dialog asks per
   `vault.updateLinksOnRename` (`ask | always | never`), dirty tabs are
   patched in the buffer. Wikilink grammar + resolver live in
-  `shared/wikilinks.ts` (the backlinks plugin keeps its twin)
+  `shared/wikilinks.ts` (the backlinks plugin imports it)
 - `ConflictService` + `ConflictDialog` (`src/app/conflict/`) and
   `HistoryService` + `HistoryDialog` (`src/app/history/`), milestone 60
   (ADR-0060) — the save-conflict merge view over the pure
@@ -468,6 +486,16 @@ Keep it in step whenever a component boundary changes (CLAUDE.md's
   `vault:changed` push, subscribed by `VaultService` for every change
   source — ADR-0045)
   ([ADR-0021](09_architecture_decisions/0021-mcp-vault-server.md))
+- `HelpService` (`src/app/help/`,
+  [ADR-0067](09_architecture_decisions/0067-in-app-help-documents.md)) —
+  the Help menu: the bundled user manual (`docs/manual/manual.md`,
+  mirrored into `public/manual/` by `scripts/sync-manual.mjs` at
+  prebuild/predev) opens as a read-only pinned tab through
+  `EditorService.openHelpDoc` (never dirty, never session-restored,
+  document actions hidden) with its relative image refs resolved to
+  app-origin URLs; the keyboard-shortcuts page is generated at open
+  time from the live `KeybindingService` registry, so it can never
+  contradict the command palette
 - `src/app/plugin-host/` — the renderer-side plugin host (ADR-0044):
   `plugin-host.service.ts` (activation before bootstrap, quarantine,
   the `plugin:event` fan-out, native-surface visibility synthesis),
@@ -516,7 +544,13 @@ Keep it in step whenever a component boundary changes (CLAUDE.md's
   the scope switch a speech-bubble **Include chats** toggle: chat notes
   (`chats/`) stay indexed but are left out of vault / all-vault hits —
   and out of "Replace all" — unless it is on (off by default; the
-  document scope searches the open note as it is). Panel +
+  document scope searches the open note as it is), and — milestone 68 —
+  a brain **Semantic** toggle: the vault/all text query ranks by
+  embedding similarity over the assistant's index (base
+  `SemanticSearchProvider` seam, SDK 1.18; percent score badges, tag
+  chips as an exact post-filter, match flags + replace hidden, no
+  provider → a clear error row). MCP `vault_search` takes an optional
+  `vault` argument and a `mode: 'text' | 'semantic'`. Panel +
   toggle prefs persist in `localStorage['drey.search']`
 - Tasks panel — `plugins/tasks/` (ADR-0033):
   checkbox / `#task` lines in the open document, the whole vault, or all
@@ -550,12 +584,15 @@ Keep it in step whenever a component boundary changes (CLAUDE.md's
   branch picker: switch, track a remote branch, create), commit message
   + commit, *Merge conflicts* / *Staged changes* / *Changes* lists (row
   click compares through `api.ui.showDiff`; stage / unstage / discard /
-  open), a collapsible *History*, header icons Fetch · Pull · Push ·
-  Refresh. The main entry (`GitRunner` + the pure parsers in
-  `shared/status.ts`) keeps one `VaultGitState` per vault, pushed as
-  `status-updated`; the renderer turns it into Files-panel decorations.
-  Asks before a commit with unsaved tabs; refuses checkout / pull while
-  the vault has unsaved tabs. Settings → "Git" (`gitPath`)
+  open), a collapsible *History* (commits not on the upstream carry
+  "↑ not pushed"), header icons Fetch · Pull · Push · More (merge a
+  branch, stash, stashes, amend, file history) · Refresh; a merge shows
+  a banner with an abort icon, the commit box has *Commit* and *Commit
+  and push* (`Ctrl+Shift+Enter`). The main entry (`GitRunner` + the pure
+  parsers in `shared/status.ts`) keeps one `VaultGitState` per vault,
+  pushed as `status-updated`; the renderer turns it into Files-panel
+  decorations. Asks before a commit with unsaved tabs; refuses checkout
+  / pull while the vault has unsaved tabs. Settings → "Git" (`gitPath`)
 - Assistant panel — `plugins/assistant/` (conversations
   since ADR-0048): **chat-first** — a chat
   picker + new chat in the head, turn cards rendered from the active
@@ -642,7 +679,7 @@ decision. (Seams — what a *plugin* can extend — are the table above.)
 | Snippets (`tbl`, `code`, … with tabstops) | `plugins/templates/` + Settings → Templates | Plugin templates | M46 |
 | Tag pills + `#tag` completion (the tag chrome) | `src/app/editor/tags/`, `TagVocabularyService` | Base | ADR-0017 |
 | Tag index, prefix colors, rename/merge | `plugins/tags/` (main + Settings → Tags) | Plugin tags | ADR-0017, M53 |
-| Search panel (tag + text, replace, Export, Summarize) | `plugins/tags/` | Plugin tags | M33, M37 |
+| Search panel (tag + text, semantic toggle, replace, Export, Summarize) | `plugins/tags/` + the base `SemanticSearchProvider` seam (`api.search.searchSemantic`) | Plugin tags | M33, M37, M68 (ADR-0055 later change) |
 | Autotag / "Suggest tags" | `electron/llm/tag-suggest.ts`, the editor `⋯` menu | Base | `specs/classifier-spec.md`, M45 |
 | Tasks panel + inline due/priority metadata | `plugins/tasks/` | Plugin tasks | ADR-0033 |
 | Assistant chat + chat notes (`chats/`) | `plugins/assistant/` (`chat-engine.ts`, `chat-store.ts`) | Plugin assistant | ADR-0048 |
@@ -650,7 +687,7 @@ decision. (Seams — what a *plugin* can extend — are the table above.)
 | Live edit (model edits the open note) | `plugins/assistant/` + `documents.setEditLock` | Plugin assistant | ADR-0049 |
 | Semantic retrieval (the Vault chip) | `plugins/assistant/main/semantic/` | Plugin assistant | ADR-0055 |
 | Assistant tool groups + external MCP servers | `electron/mcp-client/`, `src/app/tool-approval/`, Settings → "Assistant tools" | Base | ADR-0063 |
-| LLM providers / transport | `electron/llm/` (`providers/`, router, task registry) | Base | ADR-0047, ADR-0014 |
+| LLM providers / transport (encrypted keys) | `electron/llm/` (`providers/`, router, task registry), `electron/config-secrets.ts` | Base | ADR-0047, ADR-0014, ADR-0010 later change |
 | Templates panel + template library | `plugins/templates/` | Plugin templates | ADR-0029 |
 | Meeting import (`.ics`/`.msg` drop → section) | `plugins/meeting/` | Plugin meeting | ADR-0041 |
 | In-editor browser tab | `plugins/browser/` | Plugin browser | ADR-0042 |
@@ -658,7 +695,7 @@ decision. (Seams — what a *plugin* can extend — are the table above.)
 | Outline panel (open note headings) | `plugins/outline/` | Plugin outline | — |
 | Backlinks panel | `plugins/backlinks/` | Plugin backlinks | M54 |
 | draw.io diagram tabs + embeds | `plugins/drawio/` | Plugin drawio | ADR-0064 |
-| Git vaults + Source control panel | `plugins/git/` | Plugin git | ADR-0065 |
+| Git vaults + Source control panel (merge, stash, amend, file history) | `plugins/git/` | Plugin git | ADR-0065 (+ M67 later change) |
 | Wikilinks (render, resolve, create-missing, complete) | `src/app/editor/wikilinks/`, `shared/wikilinks.ts` | Base | ADR-0046 |
 | Link integrity on rename / move | `electron/link-rewriter.ts`, `src/app/link-update/`, `shared/link-rewrite.ts` | Base | ADR-0059 |
 | Save conflicts (mtime guard + merge view) | `electron/note-manager.ts` (guard), `src/app/conflict/` | Base | ADR-0060 |
@@ -676,13 +713,16 @@ decision. (Seams — what a *plugin* can extend — are the table above.)
 | Keybindings + commands | `src/app/keybindings/` | Base | — |
 | Palette (files / commands, `Mod+P`) | `src/app/palette/` | Base | M59 |
 | Panes, splits, tab DnD, pinning | `src/app/panes/`, `src/app/dnd/`, `src/app/tab-bar/` | Base | ADR-0037–0039 |
-| Docks, panels, layout state | `src/app/dock/` | Base | ADR-0019, ADR-0034 |
+| Docks, panels, icon strips, layout state | `src/app/dock/` | Base | ADR-0019 (+ M69 later change), ADR-0034 |
 | Session restore + unsaved-buffer backups | `electron/session/` | Base | ADR-0043 |
 | Doc back/forward history | `src/app/services/doc-history.service.ts` | Base | M55 |
 | Settings framework (core categories, config store) | `src/app/settings/`, `electron/llm/app-config.ts` | Base | ADR-0010 |
 | Confirmations (Actions / Ask / MCP writes) | `src/app/confirmation-dialog/`, `src/app/diff-view/` | Base | ADR-0011 |
-| Plugin system (hosts, SDK, discovery, gating) | `electron/plugin-host/`, `src/app/plugin-host/`, `shared/plugin-api/` | Base | ADR-0044 |
+| Plugin system (hosts, SDK, discovery, gating, esbuild renderer bundling) | `electron/plugin-host/`, `src/app/plugin-host/`, `shared/plugin-api/`, `scripts/build-plugins.mjs` | Base | ADR-0044 (+ later changes) |
 | Plugin install/remove (`.zip` packages) | `electron/plugin-host/plugin-installer.ts`, Settings → "Panels & plugins" | Base | ADR-0068 |
+| In-app help + user manual | `src/app/help/`, `docs/manual/`, `scripts/sync-manual.mjs`, `public/manual/` | Base | ADR-0067 |
+| Security (sandboxed window, CSP, bundled preload) | `electron/content-security-policy.ts`, `scripts/bundle-preload.mjs`, `electron/main.ts` | Base | ADR-0001 later change |
+| Data safety (atomic writes, guarded configs) | `electron/safe-file.ts` | Base | — | |
 
 
 ## 5.1 Whitebox Overall System (as of the "visual shell" milestone)
