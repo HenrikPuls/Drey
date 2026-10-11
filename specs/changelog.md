@@ -20,6 +20,37 @@ recorded as an explicit decision. The parity checklist lives in
 
 ## Recent milestones
 
+### Data safety: atomic writes, guarded config files, visible main-process errors
+
+First package out of the 2026-10-11 architecture review. **Not yet
+manually verified by the owner.**
+
+- **Notes and settings are replaced atomically.** Every vault write
+  (`VaultManager.writeFile` / `writeBinaryFile`), `app-config.json`,
+  `vault-config.json`, the note history's index files and the session
+  backups now go through `electron/safe-file.ts`: temp file beside the
+  target, flush, rename. A crash or a sync client mid-write no longer
+  leaves a cut-off file. A blocked rename is retried and then falls back
+  to the old in-place write, so no save fails that worked before; a
+  read-only file still reports its error. External tabs keep the
+  in-place write on purpose.
+- **A damaged settings file is kept, not overwritten.** Until now an
+  unreadable `app-config.json` or `vault-config.json` silently became
+  defaults, and the next save wrote those defaults over it — API keys,
+  snippets, action templates, MCP servers or the vault list gone. The
+  file is now moved to `<name>.corrupt-<timestamp>` and a dialog names
+  it after start. A byte-order mark from a hand edit no longer counts
+  as damage.
+- **An uncaught error in the main process is shown.** The log listener
+  had switched off Electron's own dialog; Drey now shows one itself
+  (once per session, *Quit Drey* / *Keep running*).
+- **One path-escape check for `app://` and `plugin://`**
+  (`electron/path-guard.ts`), replacing the `startsWith` test on the
+  `app://` side.
+- Specs: `electron/safe-file.spec.ts`, `electron/path-guard.spec.ts`.
+  Docs: `docs/08` (two new sections), `docs/05` §5.19, `docs/11` (the
+  review's remaining findings are recorded there as debt rows).
+
 ### Milestone 69 — a dock icon strip replaces collapsed panel headers (ADR-0019 later change)
 
 **Not yet manually verified by the owner.**

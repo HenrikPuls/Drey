@@ -1953,7 +1953,14 @@ src/app/templates/
 - `electron/logger.ts` — append-only `<userData>/logs/drey.log` (rotate at
   ~1 MB). Fed by main `process` `uncaughtException`/`unhandledRejection`,
   `webContents` `render-process-gone`/`unresponsive`/`preload-error`, and
-  the renderer over `app:log`.
+  the renderer over `app:log`. An uncaught main-process error is also
+  shown to the user once per session
+  ([docs/08](08_crosscutting_concepts.md), "Uncaught errors in the main
+  process").
+- `electron/safe-file.ts` — atomic file replacement and the guarded read
+  of the two config files ([docs/08](08_crosscutting_concepts.md),
+  "Crash-safe file writes"); `electron/path-guard.ts` — `isPathInside`,
+  the escape check of the `app://` and `plugin://` handlers.
 - `src/app/services/log.service.ts` — `LogService` mirrors
   `console.error/warn` + `window.onerror` + `unhandledrejection`;
   `LoggingErrorHandler` is registered as Angular's `ErrorHandler`

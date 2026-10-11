@@ -1,6 +1,7 @@
 import {
   app,
   BrowserWindow,
+  dialog,
   globalShortcut,
   ipcMain,
   Menu,
@@ -17,7 +18,7 @@ import { AppConfigStore } from './app-config';
 import chokidar from 'chokidar';
 import { DailyNoteManager } from './daily-note';
 import { ExternalFileGate, extractOpenPaths } from './external-open';
-import { installMainProcessLogging, logLine, watchWebContents } from './logger';
+import { installMainProcessLogging, logFileLocation, logLine, watchWebContents } from './logger';
 import { LlmDebugLog, LlmRouter, LlmTaskRegistry, TagSuggester, buildClients } from './llm';
 import { registerIpcHandlers, ExitBridge, McpWriteBridge, ToolApprovalBridge } from './ipc';
 import { McpHttpTransport, VaultTools, createVaultMcpServer } from './mcp';
@@ -25,8 +26,10 @@ import { AssistantToolbox, McpClientManager, createMcpClientManager } from './mc
 import { attachContextMenu, buildApplicationMenu } from './menu';
 import { NoteManager } from './note-manager';
 import { OwnWriteLedger } from './own-write-ledger';
+import { isPathInside } from './path-guard';
 import { isHashedAsset, serveWithCaching } from './protocol-cache';
 import { PluginHost } from './plugin-host';
+import type { UnreadableFile } from './safe-file';
 import { SessionBackupStore } from './session';
 import { SpellcheckService } from './spellcheck';
 import { SplashController } from './splash';
@@ -124,7 +127,7 @@ function registerAppProtocol(): void {
     // Guard against escaping rendererDistDir (defense in depth; nothing
     // in the app currently constructs one, but the handler is a public
     // surface for anything the renderer navigates to).
-    if (!filePath.startsWith(rendererDistDir)) {
+    if (!isPathInside(rendererDistDir, filePath)) {
       return new Response('Forbidden', { status: 403 });
     }
 
@@ -183,10 +186,8 @@ let pluginHost: PluginHost | null = null;
  * manifest's `renderer` / `css` entries, so `plugin://<id>/renderer/index.js`
  * serves `<root>/renderer/index.js`.
  *
- * Unlike the `app://` handler's `startsWith` guard, the escape check here
- * is `path.relative`-based: it also rejects a target on another drive /
- * a sibling prefix (e.g. a root of `C:\x\plugins` vs `C:\x\plugins-evil`),
- * which `startsWith` lets through. Module fetches are CORS-mode, so the
+ * The escape check is the same `isPathInside` the `app://` handler uses.
+ * Module fetches are CORS-mode, so the
  * response carries explicit `Content-Type` (Chromium refuses a module
  * without a JS MIME type) and a permissive `Access-Control-Allow-Origin`.
  */
@@ -225,9 +226,7 @@ function registerPluginProtocol(): void {
     }
     const relativePath = decodeURIComponent(url.pathname);
     const filePath = path.normalize(path.join(rootDir, relativePath));
-    // `path.relative(rootDir, filePath)` is `..`-prefixed (or empty->same
-    // file) exactly when the join escaped the plugin root.
-    if (path.relative(rootDir, filePath).startsWith('..')) {
+    if (!isPathInside(rootDir, filePath)) {
       return new Response('Forbidden', { status: 403 });
     }
     const ext = path.extname(filePath).toLowerCase();
@@ -362,6 +361,86 @@ async function openTodayDailyNote(dailyNotes: DailyNoteManager): Promise<void> {
     // later; for now the raised window + sidebar state is the feedback.
     console.warn(`Quick-capture: ${err instanceof Error ? err.message : String(err)}`);
   }
+}
+
+/**
+ * Tells the user once per session that the main process threw an error
+ * nothing caught. Registering the `uncaughtException` listener (for the
+ * log) switched Electron's own dialog off; without this the app would carry
+ * on silently in a state nobody checked.
+ */
+let mainProcessErrorReported = false;
+function reportMainProcessError(err: Error): void {
+  if (mainProcessErrorReported) {
+    return;
+  }
+  mainProcessErrorReported = true;
+  const logFile = logFileLocation();
+  const detail =
+    'The app may not behave correctly until it is restarted. Save your work and restart Drey.' +
+    `\n\n${err.message}` +
+    (logFile === null ? '' : `\n\nDetails are in the log file:\n${logFile}`);
+  if (!app.isReady()) {
+    dialog.showErrorBox('Drey ran into an unexpected error', detail);
+    return;
+  }
+  const options: Electron.MessageBoxOptions = {
+    type: 'error',
+    title: 'Drey',
+    message: 'Drey ran into an unexpected error',
+    detail,
+    buttons: ['Quit Drey', 'Keep running'],
+    defaultId: 1,
+    cancelId: 1,
+    noLink: true,
+  };
+  const owner = mainWindow !== null && !mainWindow.isDestroyed() ? mainWindow : null;
+  const shown = owner ? dialog.showMessageBox(owner, options) : dialog.showMessageBox(options);
+  void shown.then(({ response }) => {
+    if (response === 0) {
+      // Through the usual exit path, so unsaved documents are still asked about.
+      app.quit();
+    }
+  });
+}
+
+/**
+ * Tells the user which stored settings files could not be used at this
+ * start. Each was set aside by its store (`safe-file.ts`); the app runs on
+ * defaults for it.
+ */
+function reportUnreadableConfigFiles(problems: readonly UnreadableFile[]): void {
+  if (problems.length === 0) {
+    return;
+  }
+  for (const problem of problems) {
+    logLine(
+      `[startup] unreadable ${problem.filePath} (${problem.reason}); kept as ${
+        problem.backupPath ?? 'nothing -- it could not be copied'
+      }`,
+    );
+  }
+  const lines = problems.map((problem) =>
+    problem.backupPath === null
+      ? `${path.basename(problem.filePath)} (could not be kept)`
+      : `${path.basename(problem.filePath)} — kept as ${problem.backupPath}`,
+  );
+  const options: Electron.MessageBoxOptions = {
+    type: 'warning',
+    title: 'Drey',
+    message:
+      problems.length === 1
+        ? 'A settings file could not be read'
+        : 'Some settings files could not be read',
+    detail:
+      'Drey started with defaults instead. Your notes are not affected; a vault that is ' +
+      'missing from the Files panel can be added again.\n\n' +
+      lines.join('\n'),
+    buttons: ['OK'],
+    noLink: true,
+  };
+  const owner = mainWindow !== null && !mainWindow.isDestroyed() ? mainWindow : null;
+  void (owner ? dialog.showMessageBox(owner, options) : dialog.showMessageBox(options));
 }
 
 function createMainWindow(
@@ -546,7 +625,7 @@ const allowMultiInstance = process.env['DREY_MULTI_INSTANCE'] === '1';
 if (!app.requestSingleInstanceLock() && !allowMultiInstance) {
   app.quit();
 } else {
-  installMainProcessLogging();
+  installMainProcessLogging(reportMainProcessError);
   // The launch's own files (`drey.exe notes.md`, an Explorer double-click on
   // a cold start); the renderer pulls them once it has finished starting.
   externalFiles.enqueue(
@@ -590,6 +669,7 @@ if (!app.requestSingleInstanceLock() && !allowMultiInstance) {
      * never trap the app behind a ready signal that never comes.
      */
     let splashHandoverDone = false;
+    let unreadableConfigFiles: UnreadableFile[] = [];
     let absoluteSplashFailOpen: NodeJS.Timeout | undefined;
     let loadSplashFailOpen: NodeJS.Timeout | undefined;
     const splashHandover = (): void => {
@@ -601,6 +681,7 @@ if (!app.requestSingleInstanceLock() && !allowMultiInstance) {
       clearTimeout(loadSplashFailOpen);
       mainWindow?.show();
       setTimeout(() => splash.close(), 120);
+      reportUnreadableConfigFiles(unreadableConfigFiles);
       startupMark('workspace ready — main window shown, splash closing');
     };
     // Fail-open 1: nothing (not even the main window's page) loaded in
@@ -637,6 +718,9 @@ if (!app.requestSingleInstanceLock() && !allowMultiInstance) {
     void noteHistory.sweep();
     const vaultManager = new VaultManager(ownWrites, noteHistory);
     vaultManagerForGate = vaultManager;
+    unreadableConfigFiles = [appConfig.loadProblem, vaultManager.loadProblem].filter(
+      (problem): problem is UnreadableFile => problem !== null,
+    );
     const vaultAnnouncer = new VaultChangeAnnouncer(
       () => pluginHost,
       () => mainWindow,
