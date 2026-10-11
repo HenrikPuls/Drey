@@ -134,8 +134,6 @@ verified by the owner.**
 
 ### Milestone 70 — Local plugin packages + the sample plugin out of the default scope
 
-**Not yet manually verified by the owner.**
-
 ([ADR-0068](../docs/09_architecture_decisions/0068-local-plugin-packages.md))
 
 Three owner requests in one milestone: the `sample` plugin leaves the
@@ -218,7 +216,7 @@ example, and plugins become locally installable from a package.
 ### `npm run dev` rebuilds and restarts Electron on its own
 
 Item 13 of the 2026-10-11 architecture review. Development only; nothing
-in a shipped build changes. **Not yet manually verified by the owner.**
+in a shipped build changes.
 
 - **The stale main process is gone from the dev loop.**
   `scripts/dev-electron.mjs` replaces the one-time build in
@@ -244,8 +242,7 @@ in a shipped build changes. **Not yet manually verified by the owner.**
 ### Plugin renderers are bundled; the copied helpers are gone (ADR-0044 later change)
 
 Item 11 of the 2026-10-11 architecture review. No change to what the app
-does, apart from the one fix below. **Not yet manually verified by the
-owner.**
+does, apart from the one fix below.
 
 - **One file per plugin renderer.** `scripts/build-plugins.mjs` bundles
   each plugin's `renderer/index.ts` with esbuild (the tool that already
@@ -318,7 +315,7 @@ verified by the owner.**
 ### In-app help: the manual and live shortcuts ([ADR-0067](../docs/09_architecture_decisions/0067-in-app-help-documents.md))
 
 Owner-commissioned package after milestone 69, on top of the English
-user manual. **Not yet manually verified by the owner.**
+user manual.
 
 - **The manual moved to `docs/manual/`** (`manual.md` + `img/`, 44
   screenshots) and gained sections 19–22 (Getting help, shortcuts — now
@@ -422,8 +419,6 @@ manually verified by the owner.**
 
 ### Milestone 69 — a dock icon strip replaces collapsed panel headers (ADR-0019 later change)
 
-**Not yet manually verified by the owner.**
-
 - **Why.** Ten panels, nine in the left dock, each showing its 32px
   header whether open or collapsed: 288px of headers in the default
   layout, 192px of it for six panels that showed nothing.
@@ -451,8 +446,6 @@ manually verified by the owner.**
   recorded in ADR-0019.
 
 ### Milestone 68 — semantic search remainder: Search panel + MCP (ADR-0055 later change)
-
-**Not yet manually verified by the owner.**
 
 - **A base seam.** SDK 1.18 adds `SemanticSearchProvider` —
   `search(question, scope?, limit?)` → `SemanticSectionHit[]` (path,
@@ -511,8 +504,7 @@ manually verified by the owner.**
 - Deviation from ADR-0065 (which excluded stash, merge surfaces and
   amend): recorded as its "Later change"; docs/05 §5.38, docs/06 §6.56
   and the roadmap follow-ups are updated. Five icons were added to the
-  vendored set. **Not yet manually verified by the owner**; the unit
-  specs (parsers) ran, the Electron e2e did not.
+  vendored set; the unit specs (parsers) ran, the Electron e2e did not.
 
 ### Anthrazit: neutral gray palette with AA contrast
 
@@ -522,8 +514,7 @@ manually verified by the owner.**
   control borders now meet WCAG AA (4.5:1 text, 3:1 borders). Only the
   `:root[data-theme='anthrazit']` block and the theme seed changed — other
   themes (Drey, published ones) are untouched. Rationale and values:
-  ADR-0057 "Later change". **Not yet manually verified by the owner**
-  (check field borders for visual weight).
+  ADR-0057 "Later change".
 
 ### Assistant Vault chip: pick any subset of vaults
 
