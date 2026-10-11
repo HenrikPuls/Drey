@@ -19,7 +19,7 @@
     </label>
 
     <fieldset [disabled]="!spell.enabled">
-      <div class="field">
+      <div>
         <label class="switch-row">
           <input
             type="checkbox"
@@ -31,7 +31,7 @@
             <span class="switch-hint">
               German and English paragraphs in one note are each checked against their own
               dictionary. Paragraphs too short to recognise, and languages without a dictionary
-              here, use the language selected above.
+              here, use the language selected below.
             </span>
           </span>
         </label>
@@ -41,6 +41,7 @@
         <label for="spell-language">Language</label>
         <select
           id="spell-language"
+          class="narrow"
           [value]="spell.language"
           (change)="onLanguageChange($any($event.target).value)"
         >
@@ -53,25 +54,27 @@
       </div>
 
       <div class="field">
-        <div class="row">
-          <label>Dictionaries</label>
-          <button type="button" class="ghost" (click)="addDictionary()">Add dictionary …</button>
+        <div class="section-head">
+          <span class="field-label">Dictionaries</span>
+          <button type="button" class="ghost small" (click)="addDictionary()">
+            Add dictionary…
+          </button>
         </div>
 
-        <ul class="dict-list">
+        <ul class="list">
           @for (language of languages(); track language.id) {
             <li class="dict" [class.broken]="!language.loaded">
               <span class="dict-label">{{ language.label }}</span>
               <span class="dict-id mono">{{ language.id }}</span>
               @if (bundledIds.has(language.id)) {
-                <span class="dict-tag">bundled</span>
+                <span class="badge">bundled</span>
               } @else {
-                <button type="button" class="ghost danger" (click)="removeDictionary(language.id)">
+                <button type="button" class="link-danger" (click)="removeDictionary(language.id)">
                   Remove
                 </button>
               }
               @if (language.error) {
-                <span class="dict-error">{{ language.error }}</span>
+                <span class="dict-error status-error">{{ language.error }}</span>
               }
             </li>
           }
@@ -91,7 +94,7 @@
             id="spell-personal"
             type="text"
             autocomplete="off"
-            placeholder="Add a name or term …"
+            placeholder="Add a name or term…"
             (keydown.enter)="addWord($any($event.target), 'personal'); $event.preventDefault()"
             #personalInput
           />
@@ -99,16 +102,22 @@
             Add
           </button>
         </div>
-        <ul class="word-list">
+        <ul class="chips">
           @for (word of personalWords(); track word) {
-            <li class="word">
+            <li class="chip">
               <span class="word-text">{{ word }}</span>
-              <button type="button" class="ghost danger" (click)="removeWord(word, 'personal')">
-                Remove
+              <button
+                type="button"
+                class="icon-btn"
+                [title]="'Remove ' + word"
+                [attr.aria-label]="'Remove ' + word"
+                (click)="removeWord(word, 'personal')"
+              >
+                <app-icon name="x" [size]="12" />
               </button>
             </li>
           } @empty {
-            <li class="word-empty">No personal words yet.</li>
+            <li class="empty">No personal words yet.</li>
           }
         </ul>
         <p class="field-hint">Accepted in every dictionary — project names, people, terms.</p>
@@ -121,22 +130,28 @@
             id="spell-lang-word"
             type="text"
             autocomplete="off"
-            placeholder="Add a word …"
+            placeholder="Add a word…"
             (keydown.enter)="addWord($any($event.target), 'language'); $event.preventDefault()"
             #langInput
           />
           <button type="button" class="ghost" (click)="addWord(langInput, 'language')">Add</button>
         </div>
-        <ul class="word-list">
+        <ul class="chips">
           @for (word of languageWords(); track word) {
-            <li class="word">
+            <li class="chip">
               <span class="word-text">{{ word }}</span>
-              <button type="button" class="ghost danger" (click)="removeWord(word, 'language')">
-                Remove
+              <button
+                type="button"
+                class="icon-btn"
+                [title]="'Remove ' + word"
+                [attr.aria-label]="'Remove ' + word"
+                (click)="removeWord(word, 'language')"
+              >
+                <app-icon name="x" [size]="12" />
               </button>
             </li>
           } @empty {
-            <li class="word-empty">No words added for this dictionary.</li>
+            <li class="empty">No words added for this dictionary.</li>
           }
         </ul>
         <p class="field-hint">Accepted only while this dictionary is the active one.</p>

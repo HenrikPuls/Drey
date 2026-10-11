@@ -43,7 +43,7 @@ export function formatPairs(pairs: Record<string, string>, separator: '=' | ':')
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [SettingsPane],
   templateUrl: './settings-tools.html',
-  styleUrls: ['../settings-forms.css', './settings-tools.css'],
+  styleUrls: ['./settings-tools.css'],
 })
 export class SettingsTools {
   protected readonly settings = inject(SettingsService);

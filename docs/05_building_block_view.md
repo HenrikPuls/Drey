@@ -86,10 +86,11 @@ restore, keybindings, spellcheck, the MCP vault server, the LLM
   `menu-contributions`, `drop-decoder-registry`,
   `settings-registry.service`), and the three DOM mount hosts
   (`plugin-widget-host`, `plugin-settings-host`, `plugin-doc-host`).
-  `plugin-settings.css` is the shared form vocabulary for plugin
-  Settings pages (fields/hints, inputs, rows, buttons — mirroring the
-  core panes' `settings-forms.css`, scoped under `.plugin-settings-host`'s
-  `.plugin-settings-body`; author guide `plugins/AUTHORING.md`).
+  `PluginSettingsHost` draws a plugin Settings page's header (its
+  `label` and, since SDK 1.20, its `description`) in the same frame the
+  core panes use; the form vocabulary is the one global Settings
+  stylesheet, `src/app/settings/settings-ui.css` (author guide
+  `plugins/AUTHORING.md`).
 
 **SDK** (`shared/plugin-api/`) — the frozen contract both sides compile
 against: `manifest.ts` (`PluginManifest` + `validateManifest`),
@@ -539,12 +540,20 @@ Keep it in step whenever a component boundary changes (CLAUDE.md's
   "Spelling", "Vault" (`vault.watch`, the opt-in external-change
   watcher, ADR-0045; `vault.updateLinksOnRename`, ADR-0059; `vault.history`, ADR-0060) — then **plugin-contributed categories** (sorted by
   label) before "About" and rendered through
-  `PluginSettingsHost` (shared form vocabulary `plugin-settings.css`,
-  author guide `plugins/AUTHORING.md`), saving immediately rather than
-  via the footer bar (ADR-0044 rule 3). Opened from the status-bar entry.
-  Category list is descriptor-driven (`*ngComponentOutlet`). The
+  `PluginSettingsHost` (author guide `plugins/AUTHORING.md`), saving
+  immediately rather than via the footer bar (ADR-0044 rule 3). Opened
+  from the status-bar entry. Category list is descriptor-driven
+  (`*ngComponentOutlet`). **One stylesheet, `settings-ui.css`, is the
+  whole Settings vocabulary** — page frame (title + description),
+  sections, fields, inputs, checkboxes, buttons, lists, cards, status
+  and the focus ring — for core panes and plugin pages alike: global,
+  scoped under the dialog's `.settings-ui` inside `:where()` so a pane's
+  own rules win; all sans (ADR-0057), mono only for code. The
   close (X) is top-right; the footer Discard is always enabled and closes,
-  warning first when the draft is dirty
+  warning first when the draft is dirty. On a page that saves as you
+  edit (`SettingsCategory.savesImmediately`, every plugin page) the
+  footer says so and offers Close instead of Save / Discard — unless the
+  core draft is dirty, which keeps Save / Discard in reach
 - `ConfirmationDialogComponent` — the one confirmation dialog shared by
   Actions, Ask-mode edits and MCP `vault_write` (inline line diff for a
   localized change; an **aligned split diff** — equal-size halves — for a
@@ -3085,8 +3094,10 @@ library — Chromium's built-in (PDFium) viewer, enabled by
   `api.ui.icon` (SDK 1.10).
 - **Anthrazit** (`theme-catalog.ts` + the `:root[data-theme='anthrazit']`
   block): a bespoke palette layered over the seed-derived block;
-  `ANTHRAZIT_THEME` is the fresh-install default, `DEFAULT_THEME` (`drey`)
-  the missing-key fallback.
+  `ANTHRAZIT_THEME` is the default everywhere — fresh install, a missing
+  or unknown stored id, the state before the config has loaded, first in
+  the picker; `DREY_THEME` (`drey`, the un-themed `:root` palette) is the
+  optional original look.
 - **Combined query field** (`src/app/tags/`): `TagField`'s `freeText` mode
   over the pure `tag-query.ts` (`splitQuery`, `tagQueryAtCaret`). The
   Search (`plugins/tags/`) and Tasks (`plugins/tasks/`) panels mount it
@@ -3274,7 +3285,7 @@ main-side plugin writes.
 
 | Block | Where | Responsibility |
 | --- | --- | --- |
-| Splash page | `public/splash.html` | Dependency-free inline page (copied verbatim into the renderer dist): logo mark, wordmark, version, bar, activity line. Token values copied from `src/styles.css` — keep in step on palette changes. |
+| Splash page | `public/splash.html` | Dependency-free inline page (copied verbatim into the renderer dist): the wordmark (the logo mark as the "d" + the letters "rey" on its baseline), version, bar, activity line. Token values copied from the Anthrazit block of `src/styles.css` (the default theme; the splash shows before the config is read) — keep in step on palette changes. |
 | Splash preload | `electron/splash-preload.ts` | `splashApi.onProgress(cb)` over the `splash:progress` channel; contextIsolation on, sandboxed (imports nothing from shared/). |
 | Controller | `electron/splash.ts` | `SplashController` — frameless/resizable:false/`skipTaskbar` ~400×300 window, `show` on `ready-to-show`; `progress()` latches the latest payload and replays it on `did-finish-load` (early pushes are otherwise dropped); idempotent `close()`. |
 | Progress contract | `shared/ipc-api.ts` + `electron/preload.ts` + `src/app/app.ts` | Main-side stages (settings, per-plugin via the `onPluginActivated` hook's index/total, interface) pushed by main; renderer stages (`Preparing workspace`, `Restoring session…`) over fire-and-forget `startup:progress` sends; `startup:ready` = the handover trigger. |

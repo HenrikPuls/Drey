@@ -21,4 +21,9 @@ export interface SettingsCategory {
   hint: string;
   /** The pane component shown on the right when this category is selected. */
   component: Type<unknown>;
+  /**
+   * True for a page whose edits reach disk as they are made (plugin pages,
+   * ADR-0044 rule 3) -- the screen then offers no Save / Discard for it.
+   */
+  savesImmediately?: boolean;
 }

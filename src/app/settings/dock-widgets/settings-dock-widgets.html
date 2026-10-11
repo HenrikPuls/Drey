@@ -2,79 +2,90 @@
   title="Panels & plugins"
   description="Turn a dock panel or a whole plugin off. A disabled panel leaves every dock and the View menu; a disabled plugin is skipped on the next start — plugin toggles apply after you Save and restart Drey."
 >
-  <h3 class="section-title">Panels</h3>
-  <ul class="widget-list">
-    @for (row of rows(); track row.id) {
-      <li>
-        <label class="switch-row">
-          <input
-            type="checkbox"
-            [checked]="row.enabled"
-            [disabled]="!row.removable"
-            (change)="onToggle(row.id, $any($event.target).checked)"
-          />
-          <span>
-            <span class="switch-label">{{ row.title }}</span>
-            <span class="switch-hint">Uses: {{ row.capabilities }}</span>
-          </span>
-        </label>
-      </li>
-    }
-  </ul>
-
-  <div class="plugins-head">
-    <h3 class="section-title">Plugins</h3>
-    <button
-      type="button"
-      class="ghost"
-      data-plugin-install
-      (click)="onInstallFromFile()"
-      [disabled]="installBusy()"
-    >
-      Install from file…
-    </button>
-  </div>
-  @if (restartPending()) {
-    <div class="restart-hint" data-plugin-restart-hint>
-      <span>A plugin package changed — it applies the next time Drey starts.</span>
-      <button type="button" class="ghost" (click)="restartNow()">Restart now</button>
-    </div>
-  }
-  <ul class="widget-list">
-    @for (row of pluginRows(); track row.id) {
-      <li>
-        <div class="plugin-row">
+  <section>
+    <h3>Panels</h3>
+    <ul class="list">
+      @for (row of rows(); track row.id) {
+        <li>
           <label class="switch-row">
             <input
               type="checkbox"
               [checked]="row.enabled"
-              (change)="onPluginToggle(row.id, $any($event.target).checked)"
+              [disabled]="!row.removable"
+              (change)="onToggle(row.id, $any($event.target).checked)"
             />
             <span>
-              <span class="switch-label">
-                {{ row.name }}
-                <span class="plugin-status" [attr.data-status]="row.status">{{ row.status }}</span>
-              </span>
-              <span class="switch-hint">v{{ row.version }} · {{ row.source }}@if (row.permissions) {<span> · {{ row.permissions }}</span>}</span>
-              @if (row.error && row.status !== 'disabled') {
-                <span class="plugin-error">{{ row.error }}</span>
+              <span class="switch-label">{{ row.title }}</span>
+              @if (row.capabilities) {
+                <span class="switch-hint">Uses: {{ row.capabilities }}</span>
               }
             </span>
           </label>
-          @if (!row.builtin) {
-            <button
-              type="button"
-              class="plugin-remove"
-              [attr.data-plugin-remove]="row.id"
-              (click)="onRemovePlugin(row.id, row.name)"
-            >
-              Remove
-            </button>
-          }
-        </div>
-      </li>
-    } @empty {
-      <li class="switch-hint">No plugins discovered.</li>
+        </li>
+      }
+    </ul>
+  </section>
+
+  <section>
+    <div class="section-head">
+      <h3>Plugins</h3>
+      <button
+        type="button"
+        class="ghost"
+        data-plugin-install
+        (click)="onInstallFromFile()"
+        [disabled]="installBusy()"
+      >
+        Install from file…
+      </button>
+    </div>
+    @if (restartPending()) {
+      <div class="callout" data-plugin-restart-hint>
+        <span>A plugin package changed — it applies the next time Drey starts.</span>
+        <button type="button" class="ghost small" (click)="restartNow()">Restart now</button>
+      </div>
     }
-  </ul>
+    <ul class="list">
+      @for (row of pluginRows(); track row.id) {
+        <li>
+          <div class="plugin-row">
+            <label class="switch-row">
+              <input
+                type="checkbox"
+                [checked]="row.enabled"
+                (change)="onPluginToggle(row.id, $any($event.target).checked)"
+              />
+              <span>
+                <span class="switch-label">
+                  {{ row.name }}
+                  <span
+                    class="badge plugin-status"
+                    [class.status-error]="row.status === 'failed' || row.status === 'incompatible'"
+                    [attr.data-status]="row.status"
+                    >{{ row.status }}</span
+                  >
+                </span>
+                <span class="switch-hint">v{{ row.version }} · {{ row.source }}@if (row.permissions) {<span> · {{ row.permissions }}</span>}</span>
+                @if (row.error && row.status !== 'disabled') {
+                  <span class="switch-hint status-error">{{ row.error }}</span>
+                }
+              </span>
+            </label>
+            @if (!row.builtin) {
+              <button
+                type="button"
+                class="link-danger"
+                [attr.data-plugin-remove]="row.id"
+                (click)="onRemovePlugin(row.id, row.name)"
+              >
+                Remove
+              </button>
+            }
+          </div>
+        </li>
+      } @empty {
+        <li class="empty">No plugins discovered.</li>
+      }
+    </ul>
+  </section>
 </app-settings-pane>

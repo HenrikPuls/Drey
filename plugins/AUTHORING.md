@@ -161,38 +161,58 @@ The e2e fixture fails a test on any policy violation in the console.
 
 ## Settings pages
 
-Register with `api.ui.registerSettingsPage({ id, label, hint, mount })`.
+Register with
+`api.ui.registerSettingsPage({ id, label, hint, description, mount })`.
 The category appears in Settings before "About"; `label`/`hint` are shown
-in the category list. Pages **save immediately** through their own API —
-the Settings screen's draft/Save/Discard bar does not apply to them
-(ADR-0044 rule 3): use `api.settings` for the plugin's own
-`config.json`, `api.appConfig` only when a setting belongs to app-level
-config (read-modify-write one section per patch).
+in the category list. **The host draws the page header** — `label` as the
+title and the optional `description` (SDK 1.20, one sentence) below it —
+so `mount(el)` builds only the fields; do not repeat the title as a
+heading.
+
+Pages **save immediately** through their own API — the Settings screen's
+draft/Save/Discard does not apply to them (ADR-0044 rule 3), and on your
+page its footer says so ("Changes on this page are saved immediately",
+with Close) — don't repeat that in a hint. Use `api.settings` for the
+plugin's own `config.json`, `api.appConfig` only when a setting belongs
+to app-level config (read-modify-write one section per patch).
 
 ### The shared form vocabulary
 
-`PluginSettingsHost` loads a base stylesheet scoped under
-`.plugin-settings-body` (`src/app/plugin-host/plugin-settings.css`) —
-build your page from it instead of re-declaring look and feel. The names
-and values mirror the core Settings panes' `settings-forms.css`, so a
-page made of these reads like a built-in category:
+Core panes and plugin pages are styled by **one** base stylesheet,
+`src/app/settings/settings-ui.css`, scoped under the Settings dialog —
+build your page from it instead of re-declaring look and feel. `el` is a
+flex column with the standard gap, so top-level fields and sections
+space themselves:
 
-| Class | For |
+| Class / element | For |
 | --- | --- |
-| `.field` (+ `label`, control, `.field-hint`) | one labeled setting |
+| `<section>` + `h3` | a group; sections after the first get a divider |
+| `.section-head` | an `h3` with an action at its right |
 | `.section-hint` | a free-standing hint under an `h3` |
-| `.rows` / `.row` / `.row > .name` / `.check` | dense editable row lists |
-| `.switch-row` / `.switch-label` / `.switch-hint` | checkbox toggles |
-| `button.ghost` / `button.link` / `button.link-danger` | quiet actions |
-| `.badge`, `.empty`, `.mono` | chips, empty states, code text |
-| `h3` (in a `<section>`) | your page's own group headings |
+| `.field` (+ `label`, control, `.field-hint`) | one labeled setting |
+| `.field.sub` | an option that depends on the switch above it |
+| `.switch-row` / `.switch-label` / `.switch-hint` | a checkbox with its explanation |
+| `.row` | controls on one line; `.row.compact` for 28px controls |
+| `.rows` / `.row > .name` / `.check` | dense editable row lists |
+| `.list` | divided rows |
+| `.cards` / `.card` | items with several fields each |
+| `.chips` / `.chip` | removable words |
+| `button.ghost` (`.small`) / `button.primary` | actions |
+| `button.link` / `button.link-danger` | quiet in-row actions ("Edit", "Remove") |
+| `.badge`, `.empty`, `.callout` (`.warn`) | state chips, empty states, notes that need attention |
+| `.status-ok` / `.status-error` / `.status-pending` | result text |
+| `.mono`, `.mono-input`, `pre` | code text, code-like inputs, code blocks |
+| `.narrow` | a select or input that should not span the column |
 
-`input[type=text/password]`, `select` and `textarea` are styled by the
-base sheet; inside a `.field` they stretch, inside `.rows`/`.row` selects
-render compact. Anything beyond this vocabulary (cards, trees, pickers)
-goes in **your own stylesheet under your prefix** — the base sheet styles
-the shared primitives only. See the assistant plugin's Actions page for
-the mixed case, the templates page for the pure-field case.
+Every `input` (text, number, password, or none), `select` and `textarea`
+is styled by the base sheet at one height; checkboxes and radios take the
+accent colour; buttons, links and inputs get the keyboard focus ring.
+Anything beyond this vocabulary (trees, pickers, swatches) goes in **your
+own stylesheet under your prefix** — the base rules weigh no more than
+one class, so yours win without `!important`. A modal you open with
+`api.ui.showModal` is outside the dialog and gets none of this. See the
+assistant plugin's Actions page for the mixed case, the git page for the
+pure-field case.
 
 ## Testing convention
 
@@ -300,3 +320,13 @@ the mixed case, the templates page for the pure-field case.
   tooltip while closed — keep it short.
 - `defaultOpen: false` means the panel starts as an icon only.
   `api.ui.revealWidget(id)` opens it.
+
+## SDK 1.20 — a header for your Settings page
+
+- `PluginSettingsPageContrib.description` (optional): one sentence the
+  host shows under the page title. The title itself is your `label` —
+  the host draws both, in the same frame the built-in categories use, so
+  a page no longer opens with its own heading.
+- The page column is a flex column with the standard field gap; core
+  panes and plugin pages share one stylesheet (see "The shared form
+  vocabulary" above).

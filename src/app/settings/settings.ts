@@ -52,6 +52,14 @@ export class Settings {
   /** `{ contrib }` for a plugin page, `undefined` for a core one. */
   protected readonly selectedInputs = computed(() => this.registry.inputsFor(this.selected()));
 
+  /**
+   * True on a page that saves as you edit (a plugin page): the footer then
+   * says so and offers Close instead of Save / Discard.
+   */
+  protected readonly savesImmediately = computed(
+    () => this.registry.categoryFor(this.selected())?.savesImmediately === true,
+  );
+
   /** True while the "you have unsaved changes" bar is showing. */
   protected readonly confirmingClose = signal(false);
 

@@ -31,7 +31,8 @@
               }
             ],
             "styles": [
-              "src/styles.css"
+              "src/styles.css",
+              "src/app/settings/settings-ui.css"
             ],
             "allowedCommonJsDependencies": [
               "cytoscape-cose-bilkent",

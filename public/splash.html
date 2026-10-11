@@ -10,15 +10,17 @@
         dependency-free — inline CSS + a few lines of JS over the splash
         preload's `onProgress` — so it paints the moment the window loads,
         long before the renderer bundle would. Token values are copied from
-        src/styles.css (the splash cannot import it; keep in step when the
-        palette changes).
+        the Anthrazit block of src/styles.css — the default theme (the
+        splash cannot import the sheet, and it shows before the config
+        that names the user's theme is read; keep in step when the palette
+        changes).
       */
       html,
       body {
         margin: 0;
         height: 100%;
-        background: #1b1a19;
-        color: #e6e3dd;
+        background: #18191b;
+        color: #f4f5f6;
         font-family: ui-sans-serif, system-ui, -apple-system, 'Segoe UI', 'Helvetica Neue', sans-serif;
         -webkit-font-smoothing: antialiased;
         user-select: none;
@@ -33,26 +35,43 @@
         justify-content: center;
         gap: 14px;
       }
-      .mark {
-        width: 72px;
-        height: 72px;
-      }
+      /*
+        The wordmark is the logo plus three letters: the mark already draws
+        the "d", so "rey" is set after it on the same baseline, sized so its
+        x-height sits just under the mark's bowl (0.77 of the image; Segoe UI's
+        x-height is half its size) — together they read "drey". The letters
+        take the cream of the mark's outline, the line that draws the "d";
+        pure white overpowered the mark.
+      */
       .wordmark {
-        font-size: 22px;
-        letter-spacing: 0.02em;
-        color: #f2efe9;
+        display: flex;
+        align-items: baseline;
+      }
+      .mark {
+        width: 80px;
+        height: 80px;
+        position: relative;
+        top: 3px; /* drops the "d" onto the text baseline */
+      }
+      .rest {
+        margin-left: -8px; /* the image's own transparent margin */
+        font-size: 110px;
+        line-height: 1;
+        font-weight: 600;
+        letter-spacing: -0.01em;
+        color: #ead4bc;
       }
       .version {
         font-family: ui-monospace, 'Cascadia Code', 'Consolas', monospace;
         font-size: 11px;
-        color: #6d6862;
+        color: #979ca2;
         min-height: 14px; /* reserves the line before main sends the value */
       }
       .track {
         width: 216px;
         height: 3px;
         border-radius: 2px;
-        background: #262423;
+        background: #2c2d31;
         margin-top: 10px;
         overflow: hidden;
       }
@@ -60,20 +79,21 @@
         height: 100%;
         width: 3%;
         border-radius: 2px;
-        background: #c96442;
+        background: #8ecbef;
         transition: width 220ms ease-out;
       }
       .activity {
         font-size: 12.5px;
-        color: #8b867f;
+        color: #b3b7bc;
         min-height: 16px; /* no layout jump while the label changes */
       }
     </style>
   </head>
   <body>
     <div class="stage" aria-label="drey is starting">
-      <img class="mark" src="icon.png" alt="" draggable="false" />
-      <div class="wordmark">drey</div>
+      <div class="wordmark" role="img" aria-label="drey">
+        <img class="mark" src="icon.png" alt="" draggable="false" /><span class="rest">rey</span>
+      </div>
       <div class="version" id="version"></div>
       <div class="track"><div class="fill" id="fill"></div></div>
       <div class="activity" id="activity">Starting…</div>

@@ -1,11 +1,13 @@
 import { describe, expect, it } from 'vitest';
-import { DEFAULT_THEME } from '../../../../shared/app-config';
+import { ANTHRAZIT_THEME, DREY_THEME } from '../../../../shared/app-config';
 import { THEME_CATALOG, resolveTheme } from './theme-catalog';
 
 describe('theme catalog', () => {
-  it('leads with the built-in Drey theme', () => {
-    expect(THEME_CATALOG[0].id).toBe(DEFAULT_THEME);
+  it('leads with the default, Anthrazit, and lists Drey right after it', () => {
+    expect(THEME_CATALOG[0].id).toBe(ANTHRAZIT_THEME);
+    expect(THEME_CATALOG[1].id).toBe(DREY_THEME);
     expect(THEME_CATALOG[0].group).toBe('Drey');
+    expect(THEME_CATALOG[1].group).toBe('Drey');
   });
 
   it('has unique ids and a plausible seed per entry', () => {
@@ -19,12 +21,12 @@ describe('theme catalog', () => {
     }
   });
 
-  it('resolves a known id and falls back to Drey for an unknown one', () => {
+  it('resolves a known id and falls back to Anthrazit for an unknown one', () => {
     expect(resolveTheme('dracula').id).toBe('dracula');
-    expect(resolveTheme('does-not-exist').id).toBe(DEFAULT_THEME);
+    expect(resolveTheme('does-not-exist').id).toBe(ANTHRAZIT_THEME);
   });
 
   it('resolves the Drey extension synchronously via load()', async () => {
-    await expect(resolveTheme(DEFAULT_THEME).load()).resolves.toBeDefined();
+    await expect(resolveTheme(DREY_THEME).load()).resolves.toBeDefined();
   });
 });

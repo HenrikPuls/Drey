@@ -1,81 +1,7 @@
-.widget-list {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  display: flex;
-  flex-direction: column;
-}
+/* Local rules on top of settings-ui.css. */
 
-.widget-list li + li {
-  border-top: 1px solid var(--border);
-}
-
-.section-title {
-  margin: 20px 0 8px;
-  font-size: 11px;
-  font-weight: 600;
-  letter-spacing: 0.08em;
-  color: var(--text-faint);
-}
-
-.section-title + .widget-list {
-  margin-bottom: 4px;
-}
-
-.plugin-status {
-  margin-left: 8px;
-  padding: 1px 6px;
-  border-radius: 8px;
-  font-size: 10px;
-  letter-spacing: 0.04em;
-  color: var(--text-faint);
-  background: color-mix(in srgb, var(--border) 55%, transparent);
-}
-
-.plugin-status[data-status='failed'],
-.plugin-status[data-status='incompatible'] {
-  color: var(--accent-hover);
-  background: color-mix(in srgb, var(--accent-hover) 14%, transparent);
-}
-
-.plugin-error {
-  display: block;
-  margin-top: 2px;
-  color: var(--accent-hover);
-  font-size: 11px;
-}
-
-/* ADR-0068: the Plugins section head carries the package install action;
-   a pending package change keeps offering the restart. */
-.plugins-head {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 12px;
-}
-
-.plugins-head .section-title {
-  margin-bottom: 0;
-}
-
-.plugins-head + .widget-list,
-.restart-hint + .widget-list {
-  margin-top: 8px;
-}
-
-.restart-hint {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  margin-top: 8px;
-  padding: 8px 10px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  font-size: 12px;
-  color: var(--text-faint);
-}
-
+/* A plugin row: its switch takes the width, "Remove" sits at the right
+   (ADR-0068 — packages only; built-ins have none). */
 .plugin-row {
   display: flex;
   align-items: flex-start;
@@ -87,19 +13,7 @@
   min-width: 0;
 }
 
-.plugin-remove {
-  flex-shrink: 0;
-  margin-top: 2px;
-  padding: 2px 4px;
-  border: none;
-  background: none;
-  color: var(--text-faint);
-  font-size: 11px;
-  cursor: pointer;
-  border-radius: var(--radius-xs);
-}
-
-.plugin-remove:hover {
-  color: var(--accent-hover);
-  background: var(--hover-bg);
+.switch-label .badge {
+  margin-left: 6px;
+  vertical-align: 1px;
 }

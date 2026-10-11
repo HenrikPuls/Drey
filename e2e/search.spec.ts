@@ -173,7 +173,7 @@ test.describe('Tags settings (prefix colors)', () => {
     // The plugin settings host's body IS the `.tags-settings` element (the
     // page adds its class to it), so select it directly.
     const pane = page.locator('app-settings .plugin-settings-body.tags-settings');
-    await pane.locator('button', { hasText: '+ Add prefix' }).click();
+    await pane.locator('button', { hasText: 'Add prefix' }).click();
     await pane.locator('.tags-settings-prefix').first().fill('sailing');
     // Enter commits the prefix (normalize + persist), like blurring it.
     await pane.locator('.tags-settings-prefix').first().press('Enter');

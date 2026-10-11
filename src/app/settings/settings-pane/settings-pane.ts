@@ -3,19 +3,20 @@ import { ChangeDetectionStrategy, Component, input } from '@angular/core';
 /**
  * The shared frame every Settings category pane sits in: a title, an
  * optional one-line description, and the standard column layout for the
- * fields below. Panes used to each repeat this header markup and re-declare
- * the `.pane` container in their own stylesheet; now they wrap their
- * content in `<app-settings-pane [title]="…">` and only style what is
- * genuinely their own.
+ * fields below. Panes wrap their content in
+ * `<app-settings-pane [title]="…">` and only style what is genuinely
+ * their own.
  *
- * The common form primitives (`.switch-row`, `.field`, `select`,
- * `fieldset`, `.field-hint`, `.ghost`, …) live in
- * `src/app/settings/settings-forms.css`, which each pane pulls in via
- * `styleUrls`.
+ * The frame (`.pane-head`, `.pane`) and every form primitive
+ * (`.switch-row`, `.field`, inputs, `section` / `h3`, `.field-hint`,
+ * buttons, `.list`, `.card`, …) are styled by the one global Settings
+ * stylesheet, `src/app/settings/settings-ui.css` — plugin pages get the
+ * same frame from `PluginSettingsHost`, so both read alike.
  */
 @Component({
   selector: 'app-settings-pane',
   changeDetection: ChangeDetectionStrategy.OnPush,
+  host: { style: 'display: block' },
   template: `
     <header class="pane-head">
       <h2>{{ title() }}</h2>
@@ -27,7 +28,6 @@ import { ChangeDetectionStrategy, Component, input } from '@angular/core';
       <ng-content />
     </div>
   `,
-  styleUrl: './settings-pane.css',
 })
 export class SettingsPane {
   readonly title = input.required<string>();

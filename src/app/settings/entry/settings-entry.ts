@@ -24,7 +24,7 @@ const SAMPLE_AT = new Date(2026, 8, 26, 8, 15);
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [SettingsPane],
   templateUrl: './settings-entry.html',
-  styleUrls: ['../settings-forms.css', './settings-entry.css'],
+  styleUrls: ['./settings-entry.css'],
 })
 export class SettingsEntry {
   protected readonly settings = inject(SettingsService);

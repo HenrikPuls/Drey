@@ -3,7 +3,6 @@ import {
   Component,
   DestroyRef,
   ElementRef,
-  ViewEncapsulation,
   effect,
   inject,
   input,
@@ -18,11 +17,13 @@ import { LogService } from '../services/log.service';
  * own `api.settings` (ADR-0044 rule 3) — the surrounding Settings draft /
  * Save / Discard flow does not see them.
  *
- * The shared form vocabulary (`plugin-settings.css`) is loaded with
- * `ViewEncapsulation.None`: plugin pages are imperative DOM children and
- * would never match emulated-encapsulation attributes, so the stylesheet
- * is global but scoped under `.plugin-settings-body` (see the file
- * header; author guide `plugins/AUTHORING.md`).
+ * The host draws the same frame a core pane has — the page title (the
+ * contribution's `label`) and its optional `description` — and the plugin
+ * fills the column below. Frame and form vocabulary come from the one
+ * global Settings stylesheet (`src/app/settings/settings-ui.css`, scoped
+ * under the dialog's `.settings-ui`), so imperative plugin DOM is styled
+ * like a core pane with no encapsulation tricks; author guide
+ * `plugins/AUTHORING.md`.
  *
  * The mount tracks the `contrib` input, not just the first render: every
  * plugin page renders through THIS one component class, so Angular reuses
@@ -33,9 +34,16 @@ import { LogService } from '../services/log.service';
 @Component({
   selector: 'app-plugin-settings-host',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  encapsulation: ViewEncapsulation.None,
-  styleUrls: ['./plugin-settings.css'],
-  template: `<div #body class="plugin-settings-body"></div>`,
+  host: { style: 'display: block' },
+  template: `
+    <header class="pane-head">
+      <h2>{{ contrib().label }}</h2>
+      @if (contrib().description; as description) {
+        <p class="pane-description">{{ description }}</p>
+      }
+    </header>
+    <div #body class="pane plugin-settings-body"></div>
+  `,
 })
 export class PluginSettingsHost {
   private readonly log = inject(LogService);

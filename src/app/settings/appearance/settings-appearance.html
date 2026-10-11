@@ -6,6 +6,7 @@
     <label for="app-theme">Theme</label>
     <select
       id="app-theme"
+      class="narrow"
       [value]="settings.appearanceTheme()"
       (change)="onThemeChange($any($event.target).value)"
     >
@@ -20,8 +21,9 @@
       }
     </select>
     <p class="field-hint">
-      <strong>Drey</strong> is the built-in look. Every other theme is a published CodeMirror
-      colour scheme — the editor swaps to it and the rest of the app re-tints to match.
+      <strong>Anthrazit</strong> is the default; <strong>Drey</strong> is the original terracotta
+      look. Every other theme is a published CodeMirror colour scheme — the editor swaps to it and
+      the rest of the app re-tints to match.
     </p>
   </div>
 
@@ -32,6 +34,7 @@
         <button
           type="button"
           [class.active]="settings.appearanceUiScale() === step.id"
+          [attr.aria-pressed]="settings.appearanceUiScale() === step.id"
           (click)="onScaleChange(step.id)"
         >
           {{ step.label }}
@@ -85,6 +88,7 @@
     <label for="editor-font-family">Editor font</label>
     <select
       id="editor-font-family"
+      class="narrow"
       [value]="settings.editorFontFamily()"
       (change)="onFontFamilyChange($any($event.target).value)"
     >

@@ -15,7 +15,6 @@ import { SettingsPane } from '../settings-pane/settings-pane';
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [SettingsPane],
   templateUrl: './settings-vault.html',
-  styleUrls: ['../settings-forms.css'],
 })
 export class SettingsVault {
   protected readonly settings = inject(SettingsService);

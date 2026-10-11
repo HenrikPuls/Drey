@@ -549,9 +549,9 @@ function createMainWindow(
     // taskbar / Alt-Tab icon (dev too, where there is no exe icon to
     // inherit).
     ...(fs.existsSync(windowIconPath) ? { icon: windowIconPath } : {}),
-    // Matches the dark theme default (see CLAUDE.md, UI/UX Design) so the
+    // Matches the default theme, Anthrazit (see CLAUDE.md, UI/UX Design) so the
     // window doesn't flash white while the renderer loads.
-    backgroundColor: '#1b1a19',
+    backgroundColor: '#18191b',
     // Frameless: the renderer draws its own titlebar (accent square, the
     // File/Edit/Selection/View menu bar and the window controls) --
     // "VS Code style", ADR-0019. macOS keeps its traffic lights inset over

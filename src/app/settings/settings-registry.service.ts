@@ -72,6 +72,7 @@ export class SettingsCategoryRegistry {
         label: page.label,
         hint: page.hint,
         component: PluginSettingsHost,
+        savesImmediately: true,
       },
     ]);
     return () => {

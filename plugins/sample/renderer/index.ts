@@ -105,12 +105,12 @@ function buildWidget(api: DreyPluginApi): HTMLElement {
 }
 
 /**
- * Built from the shared `.plugin-settings-body` vocabulary (the base
- * PluginSettingsHost stylesheet — plugins/AUTHORING.md): a field, its
- * hint, a ghost button. No inline styles, no bespoke classes.
+ * Built from the shared Settings vocabulary (the base stylesheet —
+ * plugins/AUTHORING.md): a field with its hint, a ghost button. The host
+ * draws the page title and `description`; this fills the column below it.
+ * No inline styles, no bespoke classes.
  */
-function buildSettingsPage(api: DreyPluginApi): HTMLElement {
-  const root = el('div', null, {}, 'sample-settings');
+function buildSettingsPage(api: DreyPluginApi, root: HTMLElement): void {
 
   const field = el('div', null, {}, 'field');
   const label = el('label', 'Greeting', {});
@@ -118,11 +118,12 @@ function buildSettingsPage(api: DreyPluginApi): HTMLElement {
   const input = el('input', null, {});
   input.type = 'text';
   input.id = 'sample-greeting';
-  field.append(label, input);
-  root.appendChild(field);
-  root.appendChild(
-    el('p', 'Saved immediately to this plugin’s own config (ADR-0044 rule 3).', {}, 'field-hint'),
+  field.append(
+    label,
+    input,
+    el('p', 'Sent to the main process by the button below.', {}, 'field-hint'),
   );
+  root.appendChild(field);
 
   const pingButton = el('button', 'Ping main process', {}, 'ghost');
   pingButton.type = 'button';
@@ -148,8 +149,6 @@ function buildSettingsPage(api: DreyPluginApi): HTMLElement {
   api.backend.on('pong', () => {
     /* the invoke's promise already carries the reply; the push proves events flow */
   });
-
-  return root;
 }
 
 const plugin: PluginRendererModule = {
@@ -221,8 +220,9 @@ const plugin: PluginRendererModule = {
       id: 'sample',
       label: 'Sample plugin',
       hint: 'Roundtrip & config',
+      description: 'A greeting kept in this plugin’s own config, and a roundtrip to its backend.',
       mount: (body) => {
-        body.appendChild(buildSettingsPage(api));
+        buildSettingsPage(api, body);
         return () => undefined;
       },
     });

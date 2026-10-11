@@ -1,5 +1,5 @@
 import type { Extension } from '@codemirror/state';
-import { ANTHRAZIT_THEME, DEFAULT_THEME } from '../../../../shared/app-config';
+import { ANTHRAZIT_THEME, DREY_THEME } from '../../../../shared/app-config';
 import { dreyEditorLook } from '../editor-theme';
 
 /**
@@ -73,13 +73,14 @@ function published(
 }
 
 /**
- * The built-in look. Its seed mirrors `src/styles.css`'s `:root` so
- * selecting "Drey" is byte-identical to the un-themed app (`ThemeService`
- * also clears the `data-theme` attribute for it, so the bespoke `:root`
- * wins outright and none of the derived tokens apply).
+ * The original terracotta look, kept as an optional theme. Its seed
+ * mirrors `src/styles.css`'s `:root` so selecting "Drey" is byte-identical
+ * to the un-themed sheet (`ThemeService` also clears the `data-theme`
+ * attribute for it, so the bespoke `:root` wins outright and none of the
+ * derived tokens apply).
  */
 const DREY: ThemeCatalogEntry = {
-  id: DEFAULT_THEME,
+  id: DREY_THEME,
   label: 'Drey',
   group: 'Drey',
   seed: { bg: '#1b1a19', fg: '#e6e3dd', accent: '#c96442', dark: true },
@@ -87,7 +88,9 @@ const DREY: ThemeCatalogEntry = {
 };
 
 /**
- * Anthrazit (milestone 43): neutral charcoal-gray surfaces with a blue accent. Like
+ * Anthrazit (milestone 43) — **the default theme**: first in the picker,
+ * what a fresh install starts on, and what an unknown stored id resolves
+ * to. Neutral charcoal-gray surfaces with a blue accent. Like
  * Drey it is a bespoke palette -- `styles.css` carries a
  * `:root[data-theme='anthrazit']` block that overrides the derived tokens
  * with exact values -- and it reuses the token-driven Drey editor look, so
@@ -102,8 +105,8 @@ const ANTHRAZIT: ThemeCatalogEntry = {
 };
 
 export const THEME_CATALOG: readonly ThemeCatalogEntry[] = [
-  DREY,
   ANTHRAZIT,
+  DREY,
   published('vscode-dark', 'VS Code Dark', 'Dark', 'vscodeDark', { bg: '#1e1e1e', fg: '#d4d4d4', accent: '#569cd6' }),
   published('vscode-light', 'VS Code Light', 'Light', 'vscodeLight', { bg: '#ffffff', fg: '#383a42', accent: '#0067c0' }),
   published('github-dark', 'GitHub Dark', 'Dark', 'githubDark', { bg: '#0d1117', fg: '#c9d1d9', accent: '#58a6ff' }),
@@ -128,7 +131,7 @@ const BY_ID: ReadonlyMap<string, ThemeCatalogEntry> = new Map(
   THEME_CATALOG.map((entry) => [entry.id, entry]),
 );
 
-/** The catalog entry for a stored theme id; an unknown id falls back to Drey. */
+/** The catalog entry for a stored theme id; an unknown id falls back to the default, Anthrazit. */
 export function resolveTheme(id: string): ThemeCatalogEntry {
-  return BY_ID.get(id) ?? DREY;
+  return BY_ID.get(id) ?? ANTHRAZIT;
 }

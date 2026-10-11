@@ -360,6 +360,7 @@ const plugin: PluginRendererModule = {
       id: 'drawio',
       label: 'Diagrams',
       hint: 'Format of new diagrams',
+      description: 'How draw.io diagrams created in a note are stored.',
       mount: (body) => {
         const field = document.createElement('div');
         field.className = 'field';
@@ -368,6 +369,7 @@ const plugin: PluginRendererModule = {
         label.textContent = 'Format of new diagrams';
         const select = document.createElement('select');
         select.id = 'drawio-new-format';
+        select.className = 'narrow';
         for (const [value, text] of [
           ['svg', 'SVG (.drawio.svg)'],
           ['png', 'PNG (.drawio.png)'],

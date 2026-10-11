@@ -9,13 +9,13 @@ export function createGitSettingsPage(api: DreyPluginApi, session: RepoSession):
     id: 'git',
     label: 'Git',
     hint: 'Git executable',
+    description: 'Which git program Drey runs for vaults that are Git repositories.',
     mount: (body) => {
-      const section = el('section');
-      section.appendChild(el('h3', undefined, 'Git'));
       const field = el('div', 'field');
       const label = el('label', undefined, 'Git executable');
-      const input = el('input');
+      const input = el('input', 'mono-input');
       input.type = 'text';
+      input.spellcheck = false;
       input.id = 'git-settings-path';
       label.htmlFor = input.id;
       field.append(
@@ -27,8 +27,7 @@ export function createGitSettingsPage(api: DreyPluginApi, session: RepoSession):
           'Leave empty to use the git found on PATH. Set the full path to git.exe when it is installed elsewhere.',
         ),
       );
-      section.appendChild(field);
-      body.appendChild(section);
+      body.appendChild(field);
 
       void api.settings.get<string>('gitPath').then((value) => {
         input.value = value ?? '';

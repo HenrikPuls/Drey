@@ -3,6 +3,7 @@ import { BUNDLED_DICTIONARIES } from '../../../../shared/app-config';
 import { SpellLanguage } from '../../../../shared/ipc-api';
 import { SettingsService } from '../../services/settings.service';
 import { SpellcheckService } from '../../services/spellcheck.service';
+import { Icon } from '../../icons/icon';
 import { SettingsPane } from '../settings-pane/settings-pane';
 
 /**
@@ -18,9 +19,9 @@ import { SettingsPane } from '../settings-pane/settings-pane';
 @Component({
   selector: 'app-settings-spellcheck',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [SettingsPane],
+  imports: [Icon, SettingsPane],
   templateUrl: './settings-spellcheck.html',
-  styleUrls: ['../settings-forms.css', './settings-spellcheck.css'],
+  styleUrls: ['./settings-spellcheck.css'],
 })
 export class SettingsSpellcheck implements OnInit {
   protected readonly settings = inject(SettingsService);
