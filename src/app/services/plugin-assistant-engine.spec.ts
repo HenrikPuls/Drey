@@ -267,7 +267,7 @@ function chatHarness(
     () => capabilities,
     {
       readVaultText: async (path) => (path === 'daily/a.md' || path === 'a.md' ? '# A body' : null),
-      listVaults: async () => [{ id: 'v1', name: 'Notes' }],
+      listVaults: async () => [{ id: 'v1', name: 'Notes', active: true }],
       resolveAssetPath: (path) => (path === 'attachments/pic.png' ? `C:/abs/${path}` : null),
       readAssetBase64: async () => 'xjaf=',
       onDelta: (taskId, text) => deltas.push({ taskId, text }),
@@ -692,7 +692,7 @@ describe('assistant plugin chat engine — tasks_list tool (SDK 1.11)', () => {
     expect(await opts.onToolCall?.('other_tool', '{}')).toContain('Unknown tool');
     // The system prompt tells the model to prefer the tool for task questions.
     const system = h.calls[0]?.messages[0] as { role: string; content: string };
-    expect(system.content).toContain('answered ONLY from the tasks_list tool');
+    expect(system.content).toContain('ONLY a question about the user\'s tasks');
   });
 
   it('no task provider means no tool and no tasks note', async () => {
@@ -701,7 +701,7 @@ describe('assistant plugin chat engine — tasks_list tool (SDK 1.11)', () => {
     const opts = h.calls[0]?.opts as { tools?: unknown };
     expect(opts.tools).toBeUndefined();
     const system = h.calls[0]?.messages[0] as { content: string };
-    expect(system.content).not.toContain('answered ONLY from the tasks_list tool');
+    expect(system.content).not.toContain('ONLY a question about the user\'s tasks');
     // The wikilink note rides regardless (navigation is prompt-level, SDK 1.11).
     expect(system.content).toContain('wikilinks');
   });

@@ -37,13 +37,21 @@ Earlier turns of this conversation are shown as plain text; this reply form stil
 export const ASK_TOOLS_NOTE = `You may call the vault tools (vault_search, vault_read, vault_write) to look things up in the wider vault or to make changes elsewhere before you give your final answer.`;
 
 /**
+ * Replaces `ASK_TOOLS_NOTE` when the Vault chip's scope excludes the
+ * active vault (ADR-0069): the host then drops `vault_search`/`vault_read`
+ * — their default target is the active vault — so the note must not
+ * promise them, and the scope's own explore tools take over the lookups.
+ */
+export const ASK_SCOPED_TOOLS_NOTE = `You may call vault_write to make changes in a vault before you give your final answer. The read tools (vault_search, vault_read) are not attached this turn: they default to the active vault, and this question searches other vaults — use the vault exploration tools instead.`;
+
+/**
  * Appended when the explore tools ride the ask (ADR-0069): the agentic
  * half of vault retrieval — the injected context block is the starting
  * point, the tools let the model scan and read further within the SAME
  * scope. Scope discipline is the point: the chip picked these vaults, so
  * the base tools' active-vault default must not leak another one in.
  */
-export const ASK_EXPLORE_NOTE = `Besides the vault context above you have vault exploration tools, already limited to the vaults this question searches: vault_overview lists their files and section headings (scan this first for large or unfamiliar vaults), vault_find ranks sections by similarity to a query, vault_section reads one section in full. When the context above does not cover the question, use them — overview to find candidate files, find to rank, section to read — instead of answering from thin context. The scope is fixed: never query, read or cite a vault outside these tools' results.`;
+export const ASK_EXPLORE_NOTE = `Besides the vault context above you have vault exploration tools, already limited to the vaults this question searches: vault_overview lists their files and section headings (scan this first for large or unfamiliar vaults), vault_find ranks sections by relevance to a query, vault_section reads one section in full. When the context above does not cover the question, use them — overview to find candidate files, find to rank, section to read — instead of answering from thin context. The scope is fixed: never query, read or cite a vault outside these tools' results.`;
 
 /** The vault group's write rule as the model should understand it (ADR-0063). */
 export function vaultWriteNote(write: 'confirm' | 'auto'): string {
@@ -70,7 +78,7 @@ export const ASK_WEB_NOTE = `You have tools that reach outside the vault: web_fe
  * engine trims the persisted result to the answer's task subset (57c), so
  * the block is scoped either way.
  */
-export const ASK_TASKS_NOTE = `Questions about the user's tasks (open, done, due, important, overdue, by tag, by person or topic, or by date) are answered ONLY from the tasks_list tool — never from task lines seen in other context. Call it FIRST, passing the question's restriction in the arguments:
+export const ASK_TASKS_NOTE = `ONLY a question about the user's tasks (open, done, due, important, overdue, by tag, by person or topic, or by date) uses the tasks_list tool — never from task lines seen in other context. If the question is not about tasks, do NOT call tasks_list, and never use its results to describe what a vault contains or is about. For a task question, call it FIRST, passing the question's restriction in the arguments:
 - A person, project or topic in the question → {"text": "<that word>"}. Example: "Which tasks does Henrik have?" → {"text":"Henrik"}.
 - A #tag in the question → {"tag": "<tag without #>"}. Example: "tasks for #blockuniversum" → {"tag":"blockuniversum"}.
 - "overdue" → {"overdue": true}.
@@ -111,17 +119,66 @@ export const ASK_LINKS_NOTE = `When your answer refers to notes in the vault, wr
  * Appends the registered vaults (id + name) to a tools note: without this
  * list the tools' `vault` argument is unreachable for the model (ADR-0051
  * follow-up). Rebuilt per call, so a newly registered vault appears on the
- * very next turn.
+ * very next turn. With `onlyVaultIds` (the Vault chip's resolved targets,
+ * ADR-0069) the list shrinks to the in-scope vaults, and the "omit it"
+ * hint survives only when the active vault is among them — otherwise
+ * omitting the argument would silently address an out-of-scope vault.
  */
 export function buildToolsNote(
   note: string,
-  vaults: readonly { id: string; name: string }[],
+  vaults: readonly { id: string; name: string; active: boolean }[],
+  onlyVaultIds?: readonly string[],
 ): string {
   if (vaults.length === 0) {
     return note;
   }
-  const list = vaults.map((vault) => `- ${vault.id} (${vault.name})`).join('\n');
-  return `${note}\n\nRegistered vaults (the tools' \`vault\` argument; omit it for the active vault):\n${list}`;
+  const listed = onlyVaultIds
+    ? vaults.filter((vault) => onlyVaultIds.includes(vault.id))
+    : vaults;
+  if (listed.length === 0) {
+    return note;
+  }
+  const list = listed.map((vault) => `- ${vault.id} (${vault.name})`).join('\n');
+  const activeListed = listed.some((vault) => vault.active);
+  const hint =
+    onlyVaultIds === undefined || activeListed
+      ? 'omit it for the active vault'
+      : 'ALWAYS pass one of these ids — omitting it would address the active vault, which this question does not search';
+  return `${note}\n\nRegistered vaults (the tools' \`vault\` argument; ${hint}):\n${list}`;
+}
+
+/**
+ * Binds "the vault" in the user's question to the chip's selected vaults
+ * (ADR-0069 later change). Without it a small model answers "what is this
+ * vault about" from whichever tool spoke first — observed: `tasks_list`
+ * data from the active vault displacing the retrieved context of the
+ * selected one. `auxToolsDropped` names the why when the active-vault-only
+ * tools were withheld from this turn; `exploreAttached` lets the note stay
+ * honest for a provider without a tool loop (then only the context block
+ * can answer).
+ */
+export function buildVaultScopeNote(
+  vaults: readonly { id: string; name: string }[],
+  auxToolsDropped: boolean,
+  exploreAttached: boolean,
+): string {
+  if (vaults.length === 0) {
+    return '';
+  }
+  const list = vaults.map((vault) => `${vault.name} (\`${vault.id}\`)`).join(', ');
+  const sources = exploreAttached
+    ? 'the vault context above and the vault exploration tools'
+    : 'the vault context above';
+  const aux = auxToolsDropped
+    ? ' The tasks and template tools are not attached this turn: their data belongs to a vault this question does not search.'
+    : '';
+  return (
+    `THE VAULT FOR THIS QUESTION: the Vault chip selected ${list}. "The vault" in the ` +
+    "user's question means exactly these vaults and nothing else — questions about the " +
+    'vault, its contents or its topics are answered ONLY from ' +
+    sources + `, never from other tools' results or from assumptions.` +
+    aux
+  );
 }
 
 /** One-line catch-up for a resumed session that never saw the confirm result. */

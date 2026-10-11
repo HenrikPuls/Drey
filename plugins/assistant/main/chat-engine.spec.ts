@@ -1,0 +1,246 @@
+import { describe, expect, it } from 'vitest';
+import { ChatEngine, type ChatEnginePorts } from './chat-engine';
+import { ChatStore, type ChatStorePorts } from './chat-store';
+import type { AskRequest } from '../shared/ask';
+import type { RetrievalOutcome } from '../shared/semantic';
+import type { ChatMessage, LlmCapabilities, LlmChatResult } from '../../../shared/llm';
+import type { AppConfig } from '../../../shared/app-config';
+import { DEFAULT_APP_CONFIG } from '../../../shared/config/defaults';
+
+/**
+ * The chat engine's scope enforcement (ADR-0069 later change): the host
+ * filter (`vaultToolsScope`) is armed from the REGISTRY-resolved targets —
+ * never from the retrieval's outcome — so a disabled or failed retrieval
+ * cannot silently re-arm the base tools' active-vault default. And the
+ * aux tools that read ONLY the active vault (tasks, templates) are
+ * withheld when the chip's scope excludes it (observed trap: a
+ * `tasks_list` result answered "what is this vault about").
+ */
+
+const VAULTS = [
+  { id: 'test', name: 'TestVault', active: true },
+  { id: 'docs', name: 'docs', active: false },
+] as const;
+
+function makeStore(initial?: Record<string, string>): ChatStore {
+  const files = new Map<string, string>(Object.entries(initial ?? {}));
+  const ports: ChatStorePorts = {
+    read: async (path) => {
+      const content = files.get(path);
+      if (content === undefined) {
+        throw new Error(`missing chat note: ${path}`);
+      }
+      return content;
+    },
+    writeAnnounced: async (path, content) => {
+      files.set(path, content);
+    },
+    listMarkdownFiles: async () => [...files.keys()],
+  };
+  return new ChatStore(ports);
+}
+
+const CONFIG: AppConfig = {
+  ...DEFAULT_APP_CONFIG,
+  llm: { ...DEFAULT_APP_CONFIG.llm, enabled: true, provider: 'test', model: 'm1' },
+  tools: {
+    ...DEFAULT_APP_CONFIG.tools,
+    vault: { enabled: true, write: 'confirm' },
+    tasks: { enabled: true },
+    templates: { enabled: true, write: 'confirm' },
+    webFetch: { enabled: false, approval: 'ask' },
+    servers: [],
+  },
+};
+
+const CAPS: LlmCapabilities = {
+  tools: true,
+  streaming: false,
+  sessions: false,
+  modelListing: false,
+  imageAttachments: false,
+};
+
+function askRequest(overrides?: Partial<AskRequest>): AskRequest {
+  return {
+    question: 'worum geht es in dem vault',
+    note: null,
+    extraFiles: [],
+    images: [],
+    chatPath: null,
+    liveEdit: false,
+    noteKey: null,
+    vaultScope: 'off',
+    vaultIds: [],
+    ...overrides,
+  };
+}
+
+interface Harness {
+  engine: ChatEngine;
+  calls: Array<{ messages: readonly ChatMessage[]; options: Record<string, unknown> }>;
+  exploreCalls: number;
+  tasksCalls: number;
+  templatesCalls: number;
+  reads: Array<{ path: string; fallbackVaultIds?: readonly string[] }>;
+}
+
+function makeHarness(overrides?: {
+  retrieve?: () => Promise<RetrievalOutcome>;
+  vaults?: readonly { id: string; name: string; active: boolean }[];
+  chatNote?: Record<string, string>;
+}): Harness {
+  const calls: Harness['calls'] = [];
+  const reads: Harness['reads'] = [];
+  const state = { exploreCalls: 0, tasksCalls: 0, templatesCalls: 0 };
+  const ports: ChatEnginePorts = {
+    readVaultText: async (path, fallbackVaultIds) => {
+      reads.push({ path, fallbackVaultIds });
+      return null;
+    },
+    listVaults: async () => overrides?.vaults ?? VAULTS,
+    resolveAssetPath: () => null,
+    readAssetBase64: async () => null,
+    onDelta: () => undefined,
+    onLiveEdit: () => undefined,
+    retrieveContext: overrides?.retrieve ?? (async () => ({ enabled: true, minScore: 0.3, hits: [] })),
+    exploreTools: () => {
+      state.exploreCalls += 1;
+      return { specs: [], names: new Set(), run: async () => '' };
+    },
+    tasksTool: () => {
+      state.tasksCalls += 1;
+      return {
+        spec: { name: 'tasks_list', description: 'list tasks', parameters: { type: 'object' } },
+        run: async () => '',
+        query: async () => [],
+      };
+    },
+    templateTools: () => {
+      state.templatesCalls += 1;
+      return { specs: [], names: new Set(), run: async () => '' };
+    },
+  };
+  const engine = new ChatEngine(
+    makeStore(overrides?.chatNote),
+    () => CONFIG,
+    async (messages, options) => {
+      calls.push({ messages, options: (options ?? {}) as Record<string, unknown> });
+      const result: LlmChatResult = { text: 'Answer.' };
+      return result;
+    },
+    () => CAPS,
+    ports,
+  );
+  return {
+    engine,
+    calls,
+    reads,
+    get exploreCalls() {
+      return state.exploreCalls;
+    },
+    get tasksCalls() {
+      return state.tasksCalls;
+    },
+    get templatesCalls() {
+      return state.templatesCalls;
+    },
+  };
+}
+
+describe('ChatEngine scope enforcement (ADR-0069 later change)', () => {
+  it('arms the host scope from the registry even when retrieval is disabled', async () => {
+    const h = makeHarness({
+      retrieve: async () => ({ enabled: false, minScore: 0.3, hits: [] }),
+    });
+    await h.engine.ask(askRequest({ vaultScope: 'custom', vaultIds: ['docs'] }));
+    // calls[0] is the ask; the fire-and-forget title call may land as a
+    // second entry — the assertion only reads the ask's options.
+    expect(h.calls[0].options.vaultToolsScope).toEqual(['docs']);
+  });
+
+  it('arms the host scope even when retrieval throws — the ask still answers', async () => {
+    const h = makeHarness({
+      retrieve: async () => {
+        throw new Error('embedder down');
+      },
+    });
+    const result = await h.engine.ask(askRequest({ vaultScope: 'custom', vaultIds: ['docs'] }));
+    expect(h.calls[0].options.vaultToolsScope).toEqual(['docs']);
+    expect(result.outcome.kind).toBe('answer');
+  });
+
+  it('withholds the active-vault-only tools when the scope excludes the active vault', async () => {
+    const h = makeHarness({
+      retrieve: async () => ({ enabled: false, minScore: 0.3, hits: [] }),
+    });
+    await h.engine.ask(askRequest({ vaultScope: 'custom', vaultIds: ['docs'] }));
+    expect(h.tasksCalls).toBe(0);
+    expect(h.templatesCalls).toBe(0);
+    const system = h.calls[0].messages[0]?.content ?? '';
+    expect(typeof system).toBe('string');
+    // The scope note binds "the vault" to the chip's selection.
+    expect(system).toContain('THE VAULT FOR THIS QUESTION');
+    expect(system).toContain('docs (`docs`)');
+    expect(system).toContain('not attached this turn');
+    // The tasks note is gone with its tool; the tools note is the scoped
+    // variant (read tools dropped, explicit vault ids).
+    expect(system).not.toContain('tasks_list tool');
+    expect(system).toContain('ALWAYS pass one of these ids');
+    expect(system).not.toContain('omit it for the active vault');
+  });
+
+  it('keeps the aux tools when the scope includes the active vault', async () => {
+    const h = makeHarness({
+      retrieve: async () => ({ enabled: false, minScore: 0.3, hits: [] }),
+    });
+    await h.engine.ask(askRequest({ vaultScope: 'all' }));
+    expect(h.calls[0].options.vaultToolsScope).toEqual(['test', 'docs']);
+    expect(h.tasksCalls).toBe(1);
+    expect(h.templatesCalls).toBe(1);
+    const system = h.calls[0].messages[0]?.content ?? '';
+    expect(system).toContain('omit it for the active vault');
+    expect(system).toContain('If the question is not about tasks, do NOT call tasks_list');
+  });
+
+  it('does not arm a scope and adds no scope notes when the chip is off', async () => {
+    const h = makeHarness();
+    await h.engine.ask(askRequest({ vaultScope: 'off' }));
+    expect(h.calls[0].options.vaultToolsScope).toBeUndefined();
+    const system = h.calls[0].messages[0]?.content ?? '';
+    expect(system).not.toContain('THE VAULT FOR THIS QUESTION');
+    expect(h.exploreCalls).toBe(0);
+  });
+
+  it('hands the replay reader the scoped vaults as attachment fallbacks', async () => {
+    const h = makeHarness({
+      chatNote: {
+        'chats/2026/10/chat.md': [
+          '---',
+          'kind: chat',
+          'created: "2026-10-11T10:00:00"',
+          'updated: "2026-10-11T10:00:00"',
+          '---',
+          '',
+          '## User — 2026-10-11T10:00:00',
+          '',
+          'first question',
+          '',
+          '[[docs/manual.md]]',
+          '',
+          '## Assistant — 2026-10-11T10:00:05',
+          '',
+          'An answer.',
+          '',
+        ].join('\n'),
+      },
+    });
+    const chatPath = 'chats/2026/10/chat.md';
+    await h.engine.ask(
+      askRequest({ vaultScope: 'custom', vaultIds: ['docs'], chatPath }),
+    );
+    expect(h.reads.length).toBeGreaterThan(0);
+    expect(h.reads[0].path).toBe('docs/manual.md');
+    expect(h.reads[0].fallbackVaultIds).toEqual(['docs']);
+  });
+});
