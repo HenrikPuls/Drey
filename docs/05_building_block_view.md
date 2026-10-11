@@ -2978,6 +2978,15 @@ status, never to the active vault.
   snippet per hit; the provider registers through
   `ctx.search.registerSemanticSearch` only while enabled (main-side
   re-sync after every config change).
+- **Search panel files** (`plugins/tags/renderer/`) — `index.ts` only
+  wires the parts and registers the `search.open` command:
+  `search-session.ts` is the model without DOM (query, persisted
+  choices from `search-prefs.ts`, the hits, the run in all three
+  scopes); `search-panel.ts` is the dock widget's DOM over it;
+  `search-replace.ts` the file-scope buffer patch and the bundled
+  confirmation; `search-summary.ts` the Summarize digest into a
+  scratch tab; `hit-list.ts` folds unsaved buffers into the hits and
+  groups them per file, as pure functions.
 - **Search panel semantic mode** (`plugins/tags/renderer/`, milestone
   68) — the panel's brain-icon toggle switches the vault/all query to
   `api.search.searchSemantic`: ranked hits with a percent score badge,
