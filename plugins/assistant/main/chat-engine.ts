@@ -46,6 +46,7 @@ import {
   ASK_TASKS_NOTE,
   ASK_TOOLS_NOTE,
   ASK_WEB_NOTE,
+  ASK_EXPLORE_NOTE,
   TITLE_SYSTEM,
   buildAskUserMessage,
   buildDateNote,
@@ -56,6 +57,7 @@ import {
   vaultWriteNote,
 } from './ask-prompts';
 import type { TemplateTools } from './template-tools';
+import type { VaultExploreTools } from './vault-explore-tools';
 import {
   TASKS_LIST_TOOL_NAME,
   matchTasksInAnswer,
@@ -75,6 +77,8 @@ export type ChatFn = (
   options?: {
     taskId?: string;
     vaultTools?: boolean;
+    /** ADR-0069: the ask's resolved target vaults — the host filters out-of-scope vault READ tools. */
+    vaultToolsScope?: readonly string[];
     /** web_fetch + the user's MCP servers (SDK 1.15, ADR-0063). */
     externalTools?: boolean;
     sessionRef?: string;
@@ -115,6 +119,16 @@ export interface ChatEnginePorts {
     scope: ActiveVaultScope,
     vaultIds: readonly string[],
   ): Promise<RetrievalOutcome>;
+  /**
+   * The ADR-0069 explore tools for one ask turn (`vault_overview` /
+   * `vault_find` / `vault_section`), closed over the turn's scope. `null`
+   * = semantic retrieval is off — the tools stay unattached and the note
+   * doesn't mention them.
+   */
+  exploreTools(
+    scope: ActiveVaultScope,
+    vaultIds: readonly string[],
+  ): VaultExploreTools | null;
   /**
    * The `tasks_list` tool for NON-live asks (SDK 1.11): the spec rides the
    * call's tool set and `run` executes one call against the base task
@@ -273,6 +287,7 @@ export class ChatEngine {
     let contextHits: readonly RetrievedSection[] = [];
     let contextStatus: ChatContextStatus | null = null;
     let contextError: string | undefined;
+    let resolvedTargets: readonly string[] | undefined;
     if (request.vaultScope !== 'off' && !live) {
       try {
         const outcome = await this.ports.retrieveContext(
@@ -281,6 +296,7 @@ export class ChatEngine {
           request.vaultIds,
         );
         contextHits = outcome.hits;
+        resolvedTargets = outcome.targets;
         if (!outcome.enabled) {
           contextStatus = { kind: 'disabled' };
         } else if (outcome.noTargets === true) {
@@ -294,6 +310,14 @@ export class ChatEngine {
         contextHits = [];
       }
     }
+    // The agentic half (ADR-0069): with the chip on and a tool-capable
+    // provider, the model can scan the scoped vaults itself — even when
+    // the baseline retrieval above came back empty or errored (the tools
+    // degrade to text). Semantic-off yields null and nothing is promised.
+    const explore =
+      request.vaultScope !== 'off' && !live && caps.tools
+        ? this.ports.exploreTools(request.vaultScope, request.vaultIds)
+        : null;
     const toolsNote = toolsOn
       ? buildToolsNote(
           `${live ? LIVE_EDIT_TOOLS_NOTE : ASK_TOOLS_NOTE} ${vaultWriteNote(groups.vault.write)}`,
@@ -326,13 +350,16 @@ export class ChatEngine {
           }`
         : null;
     const contextBlock = contextHits.length > 0 ? buildVaultContextBlock(contextHits) : null;
+    const exploreNote = explore !== null ? ASK_EXPLORE_NOTE : null;
     // Order matters (57d): the retrieved context sits BEFORE the task note,
     // so "answer tasks only from the tool" is the later instruction and
-    // overrides the task lines that context happens to carry.
+    // overrides the task lines that context happens to carry. The explore
+    // note follows the context — it tells the model how to go beyond it.
     const systemContent = [
       system,
       toolsNote,
       contextBlock,
+      exploreNote,
       tasksNote,
       templatesNote,
       webNote,
@@ -366,6 +393,7 @@ export class ChatEngine {
     const options = (useSession: boolean) => ({
       taskId,
       ...(toolsOn ? { vaultTools: true } : {}),
+      ...(resolvedTargets !== undefined ? { vaultToolsScope: resolvedTargets } : {}),
       ...(externalOn ? { externalTools: true } : {}),
       // The doc tools + a higher round cap: a multi-hunk editing turn
       // needs more call/answer rounds than the provider default of 5.
@@ -381,18 +409,23 @@ export class ChatEngine {
                 return run.text;
               }),
           }
-        : tasksTool !== null || templateTools !== null
+        : explore !== null || tasksTool !== null || templateTools !== null
           ? {
               // Template flows (list → read → write) need a few more
               // rounds than a single tasks lookup; the cap stays small
               // enough to stop a loop-happy model from circling.
-              // A search → fetch → answer chain needs more again.
-              maxToolRounds: externalOn ? 8 : templateTools !== null ? 5 : 3,
+              // A search → fetch → answer chain needs more again, and an
+              // explore turn (overview → find → section) sits between.
+              maxToolRounds: externalOn ? 8 : explore !== null ? 6 : templateTools !== null ? 5 : 3,
               tools: [
+                ...(explore !== null ? explore.specs : []),
                 ...(templateTools !== null ? templateTools.specs : []),
                 ...(tasksTool !== null ? [tasksTool.spec] : []),
               ],
               onToolCall: (name: string, argsJson: string) => {
+                if (explore !== null && explore.names.has(name)) {
+                  return explore.run(name, argsJson);
+                }
                 if (templateTools !== null && templateTools.names.has(name)) {
                   return templateTools.run(name, argsJson);
                 }
