@@ -48,6 +48,8 @@ export function registerTagsSettingsPage(api: DreyPluginApi): void {
     id: 'tags',
     label: 'Tags',
     hint: 'Tag colors, rename and merge',
+    description:
+      'Every tag used in your vaults, with rename and merge, and the colors tags get by prefix.',
     mount(body: HTMLElement): () => void {
       body.classList.add('tags-settings');
       const palette = TAG_AUTO_PALETTE;
@@ -66,8 +68,10 @@ export function registerTagsSettingsPage(api: DreyPluginApi): void {
       const filterField = el('input', 'tags-settings-filter') as HTMLInputElement;
       filterField.type = 'text';
       filterField.setAttribute('aria-label', 'Filter tags');
-      const tagList = el('div', 'tags-settings-tags');
+      filterField.placeholder = 'Filter tags';
+      const tagList = el('div', 'list tags-settings-tags');
       const tagStatus = el('p', 'field-hint');
+      tagStatus.setAttribute('role', 'status');
 
       const chip = (tag: string, color: string): HTMLElement => {
         const node = el('span', 'tags-settings-chip', `#${tag}`);
@@ -353,9 +357,9 @@ export function registerTagsSettingsPage(api: DreyPluginApi): void {
 
       // ---- Prefix colors (milestone 33) --------------------------------------
 
-      const list = el('div', 'tags-settings-list');
+      const list = el('div', 'rows tags-settings-list');
       const addRow = el('div', 'tags-settings-add');
-      const hint = el('p', 'field-hint');
+      const hint = el('p', 'section-hint');
       hint.textContent =
         'A prefix colors every tag under it — "proj" colors #proj/alpha. The longest prefix wins; unconfigured tags keep their automatic color.';
 
@@ -371,7 +375,7 @@ export function registerTagsSettingsPage(api: DreyPluginApi): void {
       const render = (): void => {
         list.textContent = '';
         for (const row of rows) {
-          const line = el('div', 'tags-settings-row');
+          const line = el('div', 'row tags-settings-row');
           line.appendChild(chip(row.prefix || 'tag', row.color));
 
           const prefixInput = el('input', 'tags-settings-prefix') as HTMLInputElement;
@@ -467,23 +471,23 @@ export function registerTagsSettingsPage(api: DreyPluginApi): void {
         first?.focus();
       };
 
-      const addButton = el('button', 'ghost', '+ Add prefix') as HTMLButtonElement;
+      const addButton = el('button', 'ghost', 'Add prefix') as HTMLButtonElement;
       addButton.type = 'button';
       addButton.addEventListener('click', addPrefix);
       disposers.push(() => addButton.removeEventListener('click', addPrefix));
       addRow.appendChild(addButton);
 
-      const colorsHead = el('p', 'section-hint', 'Prefix colors');
-      body.append(
+      const tagsSection = el('section');
+      tagsSection.append(
+        el('h3', undefined, 'Rename and merge'),
         managerHint,
         filterField,
         tagList,
         tagStatus,
-        colorsHead,
-        hint,
-        list,
-        addRow,
       );
+      const colorsSection = el('section');
+      colorsSection.append(el('h3', undefined, 'Prefix colors'), hint, list, addRow);
+      body.append(tagsSection, colorsSection);
 
       void (async () => {
         try {

@@ -121,6 +121,8 @@ const plugin: PluginRendererModule = {
       id: 'templates',
       label: 'Templates',
       hint: 'Snippet library folder',
+      description:
+        'Where the template library lives in the vault, and the snippets the editor offers while you type.',
       mount: (body) => mountSettings(api, library, snippets, body),
     });
   },
@@ -417,17 +419,16 @@ function mountSettings(
   input.id = 'tpl-dir';
   label.setAttribute('for', 'tpl-dir');
   input.placeholder = 'templates';
-  field.append(label, input);
-  body.appendChild(field);
-
   const note = el('p', 'field-hint');
-  body.appendChild(note);
+  note.setAttribute('role', 'status');
+  field.append(label, input, note);
+  body.appendChild(field);
 
   const show = (value: string, message?: string): void => {
     input.value = value;
     note.textContent =
       message ??
-      'Folders are categories, .md files are templates. Saved immediately; invalid paths (e.g. "..") are rejected by the app config.';
+      'Folders are categories, .md files are templates. Invalid paths (e.g. "..") are rejected.';
     // The whole `templates` slice travels together: `appConfig.patch`
     // merges one level deep, so patching `{ dir }` alone would drop the
     // snippet library. `replaceDir` preserves it and the library re-reads
@@ -463,14 +464,15 @@ function mountSettings(
     el(
       'p',
       'section-hint',
-      'Typing a trigger word in a note offers the snippet\'s Markdown block; Tab walks its placeholders. Every snippet — the built-ins included — can be edited, removed or added to here. Changes are saved immediately.',
+      'Typing a trigger word in a note offers the snippet\'s Markdown block; Tab walks its placeholders. Every snippet — the built-ins included — can be edited, removed or added to here.',
     ),
   );
-  const rows = el('div', 'tpl-snippet-rows');
+  const rows = el('div', 'cards tpl-snippet-rows');
   section.appendChild(rows);
 
-  const footer = el('div', 'tpl-snippet-actions');
-  const status = el('span', 'tpl-snippet-status');
+  const footer = el('div', 'row tpl-snippet-actions');
+  const status = el('span', 'field-hint tpl-snippet-status');
+  status.setAttribute('role', 'status');
   const flashSaved = (): void => {
     status.textContent = 'Saved.';
     window.setTimeout(() => {
@@ -521,22 +523,24 @@ function mountSettings(
   };
 
   const snippetRow = (snippet: SnippetConfig): HTMLElement => {
-    const row = el('div', 'tpl-snippet-row');
+    const row = el('div', 'card tpl-snippet-row');
 
-    const triggerLabel = el('label', undefined, 'Trigger');
-    const trigger = el('input', 'tpl-snippet-trigger') as HTMLInputElement;
+    const triggerLabel = el('label', 'field-label', 'Trigger');
+    const trigger = el('input', 'mono-input tpl-snippet-trigger') as HTMLInputElement;
+    trigger.type = 'text';
     trigger.value = snippet.trigger;
     trigger.addEventListener('input', scheduleSave);
     triggerLabel.append(trigger);
 
-    const nameLabel = el('label', undefined, 'Name');
+    const nameLabel = el('label', 'field-label', 'Name');
     const name = el('input', 'tpl-snippet-label') as HTMLInputElement;
+    name.type = 'text';
     name.value = snippet.label;
     name.addEventListener('input', scheduleSave);
     nameLabel.append(name);
 
-    const templateLabel = el('label', undefined, 'Template (${1:placeholder} = Tab stop, $0 = final caret)');
-    const template = el('textarea', 'tpl-snippet-template') as HTMLTextAreaElement;
+    const templateLabel = el('label', 'field-label', 'Template (${1:placeholder} = Tab stop, $0 = final caret)');
+    const template = el('textarea', 'mono-input tpl-snippet-template') as HTMLTextAreaElement;
     template.rows = 3;
     template.value = snippet.template;
     template.addEventListener('input', scheduleSave);
@@ -567,7 +571,7 @@ function mountSettings(
   };
 
   const addRow = button('ghost tpl-add-snippet', 'Add snippet', () => {
-    rows.querySelector('.tpl-empty')?.remove();
+    rows.querySelector('.empty')?.remove();
     const row = snippetRow({ trigger: '', label: '', template: '' });
     rows.appendChild(row);
     (row.querySelector('.tpl-snippet-trigger') as HTMLInputElement).focus();
@@ -587,7 +591,7 @@ function mountSettings(
   });
   restore.appendChild(api.ui.icon('rotate-ccw', 14));
 
-  footer.append(status, addRow, restore);
+  footer.append(addRow, restore, status);
   section.appendChild(footer);
   body.appendChild(section);
   return () => undefined;

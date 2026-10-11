@@ -389,19 +389,10 @@
   cursor: default;
 }
 
-/* ---- Settings → Tags (prefix colors) ---- */
-
-.tags-settings-list {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-
-.tags-settings-row {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
+/* ---- Settings → Tags ----
+   Fields, rows, buttons and the list dividers come from the base Settings
+   stylesheet (settings-ui.css); only the tag chip, the swatches and the
+   row layouts are this page's own. */
 
 .tags-settings-chip {
   flex: none;
@@ -415,23 +406,6 @@
 
 .tags-settings-prefix {
   width: 12rem;
-  height: 28px;
-  padding: 0 8px;
-  background: var(--bg-input);
-  border: 1px solid var(--field-border);
-  border-radius: var(--radius-sm);
-  color: var(--text-2);
-  font-family: var(--font-sans);
-  font-size: 0.8125rem;
-}
-
-.tags-settings-prefix.invalid {
-  border-color: var(--spell-error, #e06c6c);
-}
-
-.tags-settings-prefix:focus {
-  outline: none;
-  border-color: var(--accent-edge);
 }
 
 .tags-settings-swatches {
@@ -449,43 +423,21 @@
 }
 
 .tags-settings-swatch.on {
-  border-color: var(--accent-text);
+  border-color: var(--text-primary);
 }
 
 .tags-settings-color {
+  flex: none;
   width: 28px;
   height: 28px;
   padding: 0;
   border: 1px solid var(--field-border);
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius);
   background: var(--bg-input);
   cursor: pointer;
 }
 
-/* ---- Settings → Tags: the tag list + rename modal (milestone 53) ---- */
-
-.tags-settings-filter {
-  width: 100%;
-  height: 28px;
-  margin: 8px 0;
-  padding: 0 8px;
-  background: var(--bg-input);
-  border: 1px solid var(--field-border);
-  border-radius: var(--radius-sm);
-  color: var(--text-2);
-  font-family: var(--font-sans);
-  font-size: 0.8125rem;
-}
-
-.tags-settings-filter:focus {
-  outline: none;
-  border-color: var(--accent-edge);
-}
-
 .tags-settings-tags {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
   max-height: 300px;
   overflow-y: auto;
 }
@@ -495,6 +447,10 @@
   align-items: center;
   gap: 8px;
   min-width: 0;
+}
+
+.tags-settings-tags > .tags-settings-tag-row {
+  padding: 5px 0;
 }
 
 .tags-settings-tag-row .tags-settings-chip {
@@ -519,30 +475,31 @@
 }
 
 .tags-rename-label {
-  font-size: 0.78rem;
-  color: var(--text-4);
+  font-size: 0.86rem;
+  color: var(--text-3);
 }
 
 .tags-rename-sub {
   display: block;
-  font-size: 0.74rem;
-  color: var(--text-6);
+  font-size: 0.86rem;
+  color: var(--text-4);
 }
 
 .tags-settings-rename-input {
-  height: 28px;
-  padding: 0 8px;
+  height: var(--field-h);
+  padding: 0 9px;
   background: var(--bg-input);
   border: 1px solid var(--field-border);
-  border-radius: var(--radius-sm);
-  color: var(--text-2);
+  border-radius: var(--radius);
+  color: var(--text-primary);
   font-family: var(--font-sans);
-  font-size: 0.8125rem;
+  font-size: 0.86rem;
 }
 
 .tags-settings-rename-input:focus {
   outline: none;
-  border-color: var(--accent-edge);
+  border-color: var(--accent);
+  box-shadow: 0 0 0 1px var(--accent-ring);
 }
 
 .tags-rename-switch {

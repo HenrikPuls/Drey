@@ -15,7 +15,7 @@ import { SettingsPane } from '../settings-pane/settings-pane';
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [SettingsPane],
   templateUrl: './settings-about.html',
-  styleUrls: ['../settings-forms.css', './settings-about.css'],
+  styleUrls: ['./settings-about.css'],
 })
 export class SettingsAbout implements OnInit {
   protected readonly about = inject(AboutService);

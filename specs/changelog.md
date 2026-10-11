@@ -20,6 +20,49 @@ recorded as an explicit decision. The parity checklist lives in
 
 ## Recent milestones
 
+### One look and feel for the Settings dialog
+
+A rework of the Settings overlay's styling and structure across all ten
+core panes and the six plugin pages. No setting changed its meaning or
+its storage. **Not yet manually verified by the owner.**
+
+- **One stylesheet instead of two mirrored ones.**
+  `src/app/settings/settings-ui.css` is the whole Settings vocabulary —
+  page frame, sections, fields, inputs, checkboxes, buttons, lists,
+  cards, chips, status text, callouts, code blocks, focus ring. It is
+  global and scoped under the dialog (`.settings-ui`, inside `:where()`
+  so page-local rules win). `settings-forms.css` (core) and
+  `plugin-settings.css` (plugins), which had drifted apart, are gone, and
+  the per-page stylesheets shrank to what is genuinely page-specific.
+- **One type scale, all sans.** The serif "Settings" and page titles
+  follow ADR-0057 now; five different section-heading styles became one;
+  `px` and `rem` sizes are one rem scale (13px labels, 12px hints —
+  slightly larger than before); mono is left for code, paths and tool
+  names. Hints use one colour that holds AA on both bespoke themes.
+- **Every input looks the same.** `number` inputs and inputs without a
+  `type` were unstyled; Tags, Entry format and Templates had private
+  field styles. All controls share one height, radius, border and focus
+  state; checkboxes and radios take the accent colour.
+- **One button set.** `ghost` / `primary` in one size (plus `small` in
+  rows), `link` / `link-danger` for in-row actions — "Remove" is the same
+  control on every page.
+- **Plugin pages get the page header.** `PluginSettingsHost` draws the
+  title and a description like a core pane; SDK 1.20 adds the optional
+  `PluginSettingsPageContrib.description`. Git no longer repeats its
+  name as a heading; Tags has two real sections ("Rename and merge",
+  "Prefix colors").
+- **The footer tells the truth.** On a plugin page — which saves as you
+  edit — it reads "Changes on this page are saved immediately" with a
+  single Close; Save / Discard appear on core pages, and stay whenever
+  the core draft is dirty.
+- **Structure.** Vault, MCP and Assistant tools are grouped into titled
+  sections; an option that depends on a switch is indented under it.
+- **Small fixes on the way.** Errors and the YOLO warning use the status
+  red instead of the accent (which is blue in Anthrazit); hard-coded
+  colours in the LLM pane are tokens; the MCP note had no style at all;
+  a panel with no capabilities no longer shows an empty "Uses:"; buttons,
+  links, categories and swatches show keyboard focus.
+
 ### `EditorService` is split into a facade and four collaborators
 
 Item 10 of the 2026-10-11 architecture review, second file. A

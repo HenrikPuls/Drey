@@ -34,7 +34,7 @@ import { SettingsPane } from '../settings-pane/settings-pane';
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [SettingsPane],
   templateUrl: './settings-llm.html',
-  styleUrls: ['../settings-forms.css', './settings-llm.css'],
+  styleUrls: ['./settings-llm.css'],
 })
 export class SettingsLlm implements OnInit, OnDestroy {
   protected readonly settings = inject(SettingsService);

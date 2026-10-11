@@ -1,11 +1,11 @@
 <div class="backdrop" appOverlayGuard (click)="requestClose()"></div>
 
-<div class="panel" role="dialog" aria-modal="true" aria-label="Settings">
+<div class="panel settings-ui" role="dialog" aria-modal="true" aria-label="Settings">
   <button type="button" class="close" (click)="requestClose()" aria-label="Close settings">
     <app-icon name="x" [size]="15" />
   </button>
 
-  <nav class="categories">
+  <nav class="categories" aria-label="Settings categories">
     <div class="head">
       <span class="title">Settings</span>
     </div>
@@ -14,6 +14,7 @@
         type="button"
         class="category"
         [class.active]="selected() === category.id"
+        [attr.aria-current]="selected() === category.id ? 'page' : null"
         (click)="selected.set(category.id)"
       >
         <span class="label">{{ category.label }}</span>
@@ -23,7 +24,7 @@
   </nav>
 
   <div class="right">
-    <section class="detail">
+    <div class="detail">
       @if (settings.draft()) {
         <ng-container
           *ngComponentOutlet="selectedComponent(); inputs: selectedInputs()"
@@ -31,7 +32,7 @@
       } @else {
         <p class="loading">Loading settings…</p>
       }
-    </section>
+    </div>
 
     @if (settings.saveError(); as error) {
       <p class="save-error">Could not save settings: {{ error }}</p>
@@ -48,26 +49,32 @@
       <footer class="actions-bar">
         @if (settings.isDirty()) {
           <span class="dirty" title="Unsaved changes">● Unsaved changes</span>
+        } @else if (savesImmediately()) {
+          <span class="saved">Changes on this page are saved immediately</span>
         } @else {
           <span class="saved">All changes saved</span>
         }
         <div class="spacer"></div>
-        <button
-          type="button"
-          class="ghost"
-          [disabled]="settings.saving()"
-          (click)="requestClose()"
-        >
-          Discard
-        </button>
-        <button
-          type="button"
-          class="primary"
-          [disabled]="!settings.isDirty() || settings.saving()"
-          (click)="save()"
-        >
-          {{ settings.saving() ? 'Saving…' : 'Save' }}
-        </button>
+        @if (savesImmediately() && !settings.isDirty()) {
+          <button type="button" class="ghost" (click)="requestClose()">Close</button>
+        } @else {
+          <button
+            type="button"
+            class="ghost"
+            [disabled]="settings.saving()"
+            (click)="requestClose()"
+          >
+            Discard
+          </button>
+          <button
+            type="button"
+            class="primary"
+            [disabled]="!settings.isDirty() || settings.saving()"
+            (click)="save()"
+          >
+            {{ settings.saving() ? 'Saving…' : 'Save' }}
+          </button>
+        }
       </footer>
     }
   </div>

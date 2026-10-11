@@ -21,6 +21,7 @@
       <label for="llm-provider">Provider</label>
       <select
         id="llm-provider"
+      class="narrow"
         [value]="llm.provider"
         (change)="onProviderChange($any($event.target).value)"
       >
@@ -83,18 +84,18 @@
               </button>
             </div>
 
-            <p class="key-status">
+            <p class="field-hint">
               @if (savedKeyMask(); as mask) {
-                <span class="ok"
+                <span class="status-ok"
                   >Saved: <span class="mono">{{ mask }}</span></span
                 >
               } @else {
-                <span class="none">
+                <span>
                   {{ keyRequired() ? 'No key saved — this provider needs one.' : 'No key saved.' }}
                 </span>
               }
               @if (apiKeyUnsaved()) {
-                <span class="pending">
+                <span class="status-pending">
                   — edited, press <strong>Save</strong> to store it (requests use the saved key).
                 </span>
               }
@@ -151,7 +152,7 @@
               {{ settings.testing() ? 'Testing…' : 'Test connection' }}
             </button>
             @if (settings.connectionTest(); as test) {
-              <p class="test-result" [class.ok]="test.ok" [class.fail]="!test.ok">
+              <p class="field-hint" [class.status-ok]="test.ok" [class.status-error]="!test.ok">
                 {{ test.message }}
               </p>
             }
@@ -193,16 +194,18 @@
     }
 
     <section class="debug">
-      <div class="debug-head">
-        <h3>Debug log</h3>
-        <span class="debug-count"
-          >{{ entries().length }} request{{ entries().length === 1 ? '' : 's' }}</span
-        >
+      <div class="section-head">
+        <h3>
+          Debug log
+          <span class="badge"
+            >{{ entries().length }} request{{ entries().length === 1 ? '' : 's' }}</span
+          >
+        </h3>
         <button type="button" class="link" (click)="debug.clear()" [disabled]="!entries().length">
           Clear
         </button>
       </div>
-      <p class="field-hint">
+      <p class="section-hint">
         Every request this session, newest first — including ones that were refused before being
         sent. There is no separate authentication call: the bearer token travels as a header on each
         request, so the very first entry is normally
@@ -212,7 +215,7 @@
       </p>
 
       @if (debug.error(); as error) {
-        <p class="diagnosis">
+        <p class="callout warn">
           The debug log could not be read from the main process:
           <span class="mono">{{ error }}</span
           >. That usually means the running Electron main process predates this feature —
@@ -221,7 +224,7 @@
       }
 
       @if (unauthorizedWithoutKey()) {
-        <p class="diagnosis">
+        <p class="callout warn">
           The last request came back <strong>401/403</strong> and carried
           <strong>no Authorization header</strong> — the app didn’t send a key at all. Either no key
           is saved yet (type one above and press <strong>Save</strong>), or the Electron main
@@ -234,7 +237,7 @@
           Nothing yet. Press “Test connection” or “Load models” above to make a request.
         </p>
       } @else {
-        <ul class="entries">
+        <ul class="cards entries">
           @for (entry of entries(); track entry.id) {
             <li class="entry" [class.bad]="entry.error !== null || (entry.status ?? 0) >= 400">
               <button type="button" class="entry-head" (click)="toggleEntry(entry.id)">

@@ -144,11 +144,19 @@ export interface PluginWidgetContrib {
   mount(el: HTMLElement): () => void;
 }
 
-/** A Settings category contributed by a plugin. Its edits save immediately (rule 3). */
+/**
+ * A Settings category contributed by a plugin. Its edits save immediately
+ * (rule 3). The host draws the page header -- `label` as the title,
+ * `description` below it -- so `mount` builds only the fields.
+ */
 export interface PluginSettingsPageContrib {
   readonly id: string;
+  /** Category-list label and page title. */
   readonly label: string;
+  /** Category-list sub-label. */
   readonly hint: string;
+  /** One sentence under the page title (SDK 1.20). */
+  readonly description?: string;
   mount(el: HTMLElement): () => void;
 }
 

@@ -166,7 +166,8 @@ bundler. The rules that bite every newcomer:
 
 The settings page in the sample is built from the shared form vocabulary
 (`.field`, `.switch-row`, `button.ghost`, …) so it reads like a built-in
-Settings category — see AUTHORING.md for the full table.
+Settings category; the host draws its title and `description`, the page
+only its fields — see AUTHORING.md for the full table.
 
 ## Step 4 — build and run (in a checkout)
 

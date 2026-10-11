@@ -18,7 +18,7 @@ import { SettingsPane } from '../settings-pane/settings-pane';
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [SettingsPane],
   templateUrl: './settings-mcp.html',
-  styleUrls: ['../settings-forms.css', './settings-mcp.css'],
+  styleUrls: ['./settings-mcp.css'],
 })
 export class SettingsMcp {
   protected readonly settings = inject(SettingsService);

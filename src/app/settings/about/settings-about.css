@@ -1,25 +1,4 @@
-/* Local rules on top of settings-forms.css. */
-
-.block {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-}
-
-h3 {
-  margin: 0;
-  font-size: 0.82rem;
-  font-weight: 600;
-  color: var(--text-4);
-  letter-spacing: 0.04em;
-}
-
-.muted {
-  margin: 0;
-  font-size: 0.76rem;
-  line-height: 1.6;
-  color: var(--text-6);
-}
+/* Local rules on top of settings-ui.css. */
 
 /* Version facts on the left, the app mark on the right. */
 .app-row {
@@ -42,42 +21,50 @@ h3 {
   grid-template-columns: 110px 1fr;
   gap: 4px 14px;
   margin: 0;
-  font-size: 0.82rem;
+  font-size: var(--set-fs-small);
 }
 
 .facts dt {
-  color: var(--text-6);
+  color: var(--set-hint);
 }
 
 .facts dd {
   margin: 0;
   color: var(--text-2);
+  word-break: break-word;
 }
 
+.facts dd.mono {
+  color: var(--text-2);
+}
+
+/* The dependency list scrolls inside its own frame. */
 .deps {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 1px;
   max-height: 300px;
   overflow: auto;
   border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius);
 }
 
-.dep {
-  background: var(--focus-bg);
+.deps > .dep {
+  padding: 0;
 }
 
 .dep summary {
   display: flex;
   align-items: baseline;
   gap: 10px;
-  padding: 7px 9px;
+  padding: 7px 10px;
   cursor: pointer;
-  font-size: 0.8rem;
+  font-size: var(--set-fs-small);
+}
+
+.dep summary:hover {
+  background: var(--hover-bg);
+}
+
+.dep summary:focus-visible {
+  outline-offset: -2px;
 }
 
 .dep summary::-webkit-details-marker {
@@ -89,36 +76,31 @@ h3 {
 }
 
 .dep-version {
-  color: var(--text-6);
-  font-size: 0.72rem;
+  color: var(--set-hint);
 }
 
 .dep-license {
   margin-left: auto;
-  font-size: 0.72rem;
-  color: var(--text-6);
+  color: var(--set-hint);
   white-space: nowrap;
 }
 
 .dep-repo {
   display: block;
-  padding: 0 9px 6px;
-  font-size: 0.72rem;
-  color: var(--text-5);
+  padding: 0 10px 6px;
+  font-size: var(--set-fs-small);
+  color: var(--text-3);
   word-break: break-all;
 }
 
+.dep .field-hint {
+  padding: 0 10px 8px;
+}
+
 .dep-text {
-  margin: 0;
-  padding: 9px;
   max-height: 220px;
-  overflow: auto;
-  font-family: var(--font-mono);
-  font-size: 0.7rem;
-  line-height: 1.5;
-  white-space: pre-wrap;
-  word-break: break-word;
-  color: var(--text-4);
-  background: var(--bg-input);
+  border: 0;
   border-top: 1px solid var(--border);
+  border-radius: 0;
+  color: var(--text-3);
 }

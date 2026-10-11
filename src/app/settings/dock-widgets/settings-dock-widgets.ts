@@ -25,7 +25,7 @@ import { SettingsPane } from '../settings-pane/settings-pane';
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [SettingsPane],
   templateUrl: './settings-dock-widgets.html',
-  styleUrls: ['../settings-forms.css', './settings-dock-widgets.css'],
+  styleUrls: ['./settings-dock-widgets.css'],
 })
 export class SettingsDockWidgets {
   protected readonly settings = inject(SettingsService);

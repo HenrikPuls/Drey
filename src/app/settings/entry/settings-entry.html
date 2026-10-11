@@ -2,72 +2,68 @@
   title="Entry format"
   description="The Markdown block the Entry item of the / menu inserts into a note."
 >
-  <section>
-    <p class="section-hint">
-      Placeholders:
-      <span class="mono">{{ '{{time}}' }}</span> <span class="mono">{{ '{{date}}' }}</span>
-      <span class="mono">{{ '{{datetime}}' }}</span>
-      <span class="mono">{{ '{{title}}' }}</span> (empty, or <span class="mono">— Topic</span>)
-      <span class="mono">{{ '{{tags}}' }}</span> (<span class="mono">#a #b</span>)
-      <span class="mono">{{ '{{content}}' }}</span>. Blank lines collapse; an entry with nothing
-      filled in stays a bare <span class="mono">## HH:mm</span>.
-    </p>
+  <p class="section-hint">
+    Placeholders:
+    <span class="mono">{{ '{{time}}' }}</span>&ngsp;<span class="mono">{{ '{{date}}' }}</span>&ngsp;
+    <span class="mono">{{ '{{datetime}}' }}</span>&ngsp;<span class="mono">{{ '{{title}}' }}</span>
+    (empty, or <span class="mono">— Topic</span>)
+    <span class="mono">{{ '{{tags}}' }}</span> (<span class="mono">#a #b</span>)
+    <span class="mono">{{ '{{content}}' }}</span>. Blank lines collapse; an entry with nothing
+    filled in stays a bare <span class="mono">## HH:mm</span>.
+  </p>
 
-    <ul class="templates">
-      @for (template of templates(); track template.id) {
-        <li class="template">
-          <div class="template-head">
-            <label class="radio">
-              <input
-                type="radio"
-                name="active-entry-template"
-                [checked]="activeId() === template.id"
-                (change)="settings.setActiveEntryTemplate(template.id)"
-              />
-              Active
-            </label>
+  <ul class="cards">
+    @for (template of templates(); track template.id) {
+      <li class="card">
+        <div class="row compact">
+          <label class="radio">
             <input
-              class="template-name"
-              type="text"
-              [value]="template.name"
-              (input)="
-                settings.updateEntryTemplate(template.id, { name: $any($event.target).value })
-              "
+              type="radio"
+              name="active-entry-template"
+              [checked]="activeId() === template.id"
+              (change)="settings.setActiveEntryTemplate(template.id)"
             />
-            @if (template.builtin) {
-              <span class="badge">built-in</span>
-            }
-            <button type="button" class="link" (click)="toggleTemplate(template.id)">
-              {{ openTemplate() === template.id ? 'Hide pattern' : 'Edit pattern' }}
-            </button>
-            @if (!template.builtin) {
-              <button
-                type="button"
-                class="link-danger"
-                (click)="settings.removeEntryTemplate(template.id)"
-              >
-                Delete
-              </button>
-            }
-          </div>
-
-          @if (openTemplate() === template.id) {
-            <textarea
-              class="template-prompt"
-              rows="5"
-              spellcheck="false"
-              [value]="template.pattern"
-              (input)="
-                settings.updateEntryTemplate(template.id, { pattern: $any($event.target).value })
-              "
-            ></textarea>
+            Active
+          </label>
+          <input
+            class="template-name"
+            type="text"
+            aria-label="Template name"
+            [value]="template.name"
+            (input)="settings.updateEntryTemplate(template.id, { name: $any($event.target).value })"
+          />
+          @if (template.builtin) {
+            <span class="badge">built-in</span>
           }
+          <button type="button" class="link" (click)="toggleTemplate(template.id)">
+            {{ openTemplate() === template.id ? 'Hide pattern' : 'Edit pattern' }}
+          </button>
+          @if (!template.builtin) {
+            <button
+              type="button"
+              class="link-danger"
+              (click)="settings.removeEntryTemplate(template.id)"
+            >
+              Delete
+            </button>
+          }
+        </div>
 
-          <pre class="preview">{{ preview(template.pattern) }}</pre>
-        </li>
-      }
-    </ul>
+        @if (openTemplate() === template.id) {
+          <textarea
+            class="mono-input"
+            rows="5"
+            spellcheck="false"
+            aria-label="Template pattern"
+            [value]="template.pattern"
+            (input)="settings.updateEntryTemplate(template.id, { pattern: $any($event.target).value })"
+          ></textarea>
+        }
 
-    <button type="button" class="ghost" (click)="addTemplate()">Add template</button>
-  </section>
+        <pre class="preview">{{ preview(template.pattern) }}</pre>
+      </li>
+    }
+  </ul>
+
+  <button type="button" class="ghost" (click)="addTemplate()">Add template</button>
 </app-settings-pane>

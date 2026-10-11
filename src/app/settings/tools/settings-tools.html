@@ -4,12 +4,14 @@
 >
   @if (tools(); as tools) {
     @if (!providerHasTools()) {
-      <p class="note warn">
+      <p class="callout warn">
         The selected LLM provider does not support tool calls — none of these tools reach it.
       </p>
     }
 
-    <section class="group">
+    <section>
+      <h3>On this computer</h3>
+      <div class="group">
       <label class="switch-row">
         <input
           type="checkbox"
@@ -29,6 +31,7 @@
         <label for="tools-vault-write">When the assistant writes a note</label>
         <select
           id="tools-vault-write"
+          class="narrow"
           [disabled]="!tools.vault.enabled"
           (change)="setVaultWrite($any($event.target).value)"
         >
@@ -40,9 +43,9 @@
           </option>
         </select>
       </div>
-    </section>
+    </div>
 
-    <section class="group">
+    <div class="group">
       <label class="switch-row">
         <input
           type="checkbox"
@@ -57,9 +60,9 @@
           </span>
         </span>
       </label>
-    </section>
+    </div>
 
-    <section class="group">
+    <div class="group">
       <label class="switch-row">
         <input
           type="checkbox"
@@ -78,6 +81,7 @@
         <label for="tools-templates-write">When the assistant changes a template</label>
         <select
           id="tools-templates-write"
+          class="narrow"
           [disabled]="!tools.templates.enabled"
           (change)="setTemplatesWrite($any($event.target).value)"
         >
@@ -89,16 +93,18 @@
           </option>
         </select>
       </div>
+    </div>
     </section>
 
+    <section>
     <h3>Outside this computer</h3>
-    <p class="note">
+    <p class="section-hint">
       These tools send data to other services. A search query or a web address is the one way
       note content could leave the vault through a tool — with “ask”, you see every call before
       it runs.
     </p>
 
-    <section class="group">
+    <div class="group">
       <label class="switch-row">
         <input
           type="checkbox"
@@ -117,6 +123,7 @@
         <label for="tools-web-approval">Before a page is fetched</label>
         <select
           id="tools-web-approval"
+          class="narrow"
           [disabled]="!tools.webFetch.enabled"
           (change)="setWebFetchApproval($any($event.target).value)"
         >
@@ -126,10 +133,12 @@
           </option>
         </select>
       </div>
+    </div>
     </section>
 
+    <section>
     <h3>MCP servers</h3>
-    <p class="note">
+    <p class="section-hint">
       Connect services that speak the Model Context Protocol — a web search, an issue tracker.
       Their tools appear to the assistant as
       <span class="mono">mcp__&lt;id&gt;__&lt;tool&gt;</span>. Environment variable and header
@@ -137,7 +146,7 @@
     </p>
 
     @for (server of tools.servers; track $index) {
-      <section class="server">
+      <div class="card">
         <div class="row head">
           <input
             type="checkbox"
@@ -152,7 +161,9 @@
             [value]="server.name"
             (change)="setName(server.id, $any($event.target).value)"
           />
-          <button type="button" class="ghost" (click)="removeServer(server.id)">Remove</button>
+          <button type="button" class="link-danger" (click)="removeServer(server.id)">
+            Remove
+          </button>
         </div>
 
         <p class="field-hint status">
@@ -169,7 +180,7 @@
               } @else if (st.state === 'connecting') {
                 Connecting…
               } @else {
-                <span class="error">Not connected: {{ st.error }}</span>
+                <span class="status-error">Not connected: {{ st.error }}</span>
               }
               <button type="button" class="link" (click)="reconnect(server.id)">Reconnect</button>
             } @else {
@@ -180,7 +191,7 @@
 
         <div class="field">
           <label [for]="'srv-kind-' + $index">Connection</label>
-          <select [id]="'srv-kind-' + $index" (change)="setKind(server.id, $any($event.target).value)">
+          <select class="narrow" [id]="'srv-kind-' + $index" (change)="setKind(server.id, $any($event.target).value)">
             <option value="stdio" [selected]="server.transport.kind === 'stdio'">
               Local command (stdio)
             </option>
@@ -205,6 +216,7 @@
             <label [for]="'srv-args-' + $index">Arguments, one per line</label>
             <textarea
               rows="3"
+              class="mono-input"
               spellcheck="false"
               [id]="'srv-args-' + $index"
               [value]="argsText(server.transport.args)"
@@ -215,6 +227,7 @@
             <label [for]="'srv-env-' + $index">Environment variables, NAME=value per line</label>
             <textarea
               rows="2"
+              class="mono-input"
               spellcheck="false"
               [id]="'srv-env-' + $index"
               [value]="formatPairs(server.transport.env, '=')"
@@ -236,6 +249,7 @@
             <label [for]="'srv-headers-' + $index">Headers, Name: value per line</label>
             <textarea
               rows="2"
+              class="mono-input"
               spellcheck="false"
               [id]="'srv-headers-' + $index"
               [value]="formatPairs(server.transport.headers, ':')"
@@ -247,6 +261,7 @@
         <div class="field">
           <label [for]="'srv-approval-' + $index">Before one of its tools is called</label>
           <select
+            class="narrow"
             [id]="'srv-approval-' + $index"
             (change)="setServerApproval(server.id, $any($event.target).value)"
           >
@@ -256,11 +271,12 @@
             </option>
           </select>
         </div>
-      </section>
+      </div>
     } @empty {
       <p class="empty">No servers yet.</p>
     }
 
     <button type="button" class="ghost" (click)="addServer()">Add server</button>
+    </section>
   }
 </app-settings-pane>

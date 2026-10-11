@@ -86,10 +86,11 @@ restore, keybindings, spellcheck, the MCP vault server, the LLM
   `menu-contributions`, `drop-decoder-registry`,
   `settings-registry.service`), and the three DOM mount hosts
   (`plugin-widget-host`, `plugin-settings-host`, `plugin-doc-host`).
-  `plugin-settings.css` is the shared form vocabulary for plugin
-  Settings pages (fields/hints, inputs, rows, buttons — mirroring the
-  core panes' `settings-forms.css`, scoped under `.plugin-settings-host`'s
-  `.plugin-settings-body`; author guide `plugins/AUTHORING.md`).
+  `PluginSettingsHost` draws a plugin Settings page's header (its
+  `label` and, since SDK 1.20, its `description`) in the same frame the
+  core panes use; the form vocabulary is the one global Settings
+  stylesheet, `src/app/settings/settings-ui.css` (author guide
+  `plugins/AUTHORING.md`).
 
 **SDK** (`shared/plugin-api/`) — the frozen contract both sides compile
 against: `manifest.ts` (`PluginManifest` + `validateManifest`),
@@ -524,12 +525,20 @@ Keep it in step whenever a component boundary changes (CLAUDE.md's
   "Spelling", "Vault" (`vault.watch`, the opt-in external-change
   watcher, ADR-0045; `vault.updateLinksOnRename`, ADR-0059; `vault.history`, ADR-0060) — then **plugin-contributed categories** (sorted by
   label) before "About" and rendered through
-  `PluginSettingsHost` (shared form vocabulary `plugin-settings.css`,
-  author guide `plugins/AUTHORING.md`), saving immediately rather than
-  via the footer bar (ADR-0044 rule 3). Opened from the status-bar entry.
-  Category list is descriptor-driven (`*ngComponentOutlet`). The
+  `PluginSettingsHost` (author guide `plugins/AUTHORING.md`), saving
+  immediately rather than via the footer bar (ADR-0044 rule 3). Opened
+  from the status-bar entry. Category list is descriptor-driven
+  (`*ngComponentOutlet`). **One stylesheet, `settings-ui.css`, is the
+  whole Settings vocabulary** — page frame (title + description),
+  sections, fields, inputs, checkboxes, buttons, lists, cards, status
+  and the focus ring — for core panes and plugin pages alike: global,
+  scoped under the dialog's `.settings-ui` inside `:where()` so a pane's
+  own rules win; all sans (ADR-0057), mono only for code. The
   close (X) is top-right; the footer Discard is always enabled and closes,
-  warning first when the draft is dirty
+  warning first when the draft is dirty. On a page that saves as you
+  edit (`SettingsCategory.savesImmediately`, every plugin page) the
+  footer says so and offers Close instead of Save / Discard — unless the
+  core draft is dirty, which keeps Save / Discard in reach
 - `ConfirmationDialogComponent` — the one confirmation dialog shared by
   Actions, Ask-mode edits and MCP `vault_write` (inline line diff for a
   localized change; an **aligned split diff** — equal-size halves — for a

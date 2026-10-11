@@ -2,7 +2,7 @@
   title="About"
   description="Version information and bundled open-source licenses."
 >
-  <section class="block">
+  <section>
     <h3>Application</h3>
     <div class="app-row">
       @if (about.appInfo(); as info) {
@@ -35,30 +35,30 @@
           <dd class="mono">{{ info.platform }}</dd>
         </dl>
       } @else {
-        <p class="muted">Version information is only available when running inside the app.</p>
+        <p class="field-hint">Version information is only available when running inside the app.</p>
       }
       <img class="app-mark" src="icon.png" alt="drey" />
     </div>
   </section>
 
-  <section class="block">
+  <section>
     <h3>Open-source licenses</h3>
-    <p class="muted">
+    <p class="field-hint">
       drey is licensed under <span class="mono">GPL-3.0-only</span> (see the
       <span class="mono">LICENSE</span> file in the project root). It bundles the production
       dependencies below; each is distributed under its own license.
     </p>
 
     @if (about.licensesError(); as error) {
-      <p class="muted">
+      <p class="field-hint">
         The license list could not be loaded ({{ error }}). Run
         <span class="mono">npm run licenses:generate</span> to rebuild it.
       </p>
     } @else if (about.licenses().length === 0) {
-      <p class="muted">Loading dependencies…</p>
+      <p class="field-hint">Loading dependencies…</p>
     } @else {
-      <p class="muted">{{ about.licenses().length }} packages</p>
-      <ul class="deps">
+      <p class="field-hint">{{ about.licenses().length }} packages</p>
+      <ul class="list deps">
         @for (dep of about.licenses(); track dep.name) {
           <li class="dep">
             <details>
@@ -75,7 +75,7 @@
               @if (dep.licenseText) {
                 <pre class="dep-text">{{ dep.licenseText }}</pre>
               } @else {
-                <p class="muted">No license text shipped with this package.</p>
+                <p class="field-hint">No license text shipped with this package.</p>
               }
             </details>
           </li>

@@ -461,9 +461,14 @@ introduced silently.
   - **Settings**: a full-surface overlay opened from the status-bar
     entry — master-detail (category list left, detail pane right), core
     categories in alphabetical order, plugin-contributed categories
-    (sorted by label) before "About" via `PluginSettingsHost`. X sits
-    top-right; Discard is always enabled and closes (dirty-state
-    warning). The confirmation dialog (Actions / Ask edits / MCP
+    (sorted by label) before "About" via `PluginSettingsHost`. Every
+    page — core or plugin — has the same header (title + description)
+    and is built from one stylesheet, `src/app/settings/settings-ui.css`
+    (sans throughout, mono only for code; SDK 1.20 added the plugin
+    page `description`). X sits top-right; Discard is always enabled and
+    closes (dirty-state warning); on a plugin page, which saves
+    immediately, the footer says so and offers Close instead. The
+    confirmation dialog (Actions / Ask edits / MCP
     writes) is a centred modal: inline line diff for localized changes,
     an aligned split diff for whole-document rewrites (ADR-0011).
 - Editing model: true in-place Live Preview (Obsidian-style, ADR-0009) —

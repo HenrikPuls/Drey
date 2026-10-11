@@ -64,6 +64,7 @@ export function actionsSettingsPage(
     id: 'actions',
     label: 'Actions',
     hint: 'Prompt templates & triggers',
+    description: 'The prompts the assistant can run on a note, and when each one runs.',
     mount(root) {
       const patchActions = (
         change: (section: AppConfig['actions']) => void,
@@ -81,7 +82,7 @@ export function actionsSettingsPage(
       );
       const triggerList = el('ul', 'rows');
       triggersSection.appendChild(triggerList);
-      const addTriggerRow = el('div', 'row add-trigger');
+      const addTriggerRow = el('div', 'row compact add-trigger');
       triggersSection.appendChild(addTriggerRow);
       root.appendChild(triggersSection);
 
@@ -94,7 +95,7 @@ export function actionsSettingsPage(
           'A template is a name, a prompt, and the kind of change it makes. “Autotagging” suggests tags for a note section (the editor’s “Suggest tags” row); “Update summary” rebuilds a master document’s Summary section.',
         ),
       );
-      const templateList = el('ul', 'templates');
+      const templateList = el('ul', 'cards');
       templatesSection.appendChild(templateList);
       const addTemplateBtn = el('button', 'ghost', 'Add action') as HTMLButtonElement;
       addTemplateBtn.type = 'button';
@@ -171,12 +172,13 @@ export function actionsSettingsPage(
       };
 
       const templateRow = (template: ActionTemplate): HTMLLIElement => {
-        const item = el('li', 'template');
-        const headRow = el('div', 'template-head');
+        const item = el('li', 'card template');
+        const headRow = el('div', 'row compact template-head');
 
         const nameInput = el('input') as HTMLInputElement;
         nameInput.type = 'text';
         nameInput.value = template.name;
+        nameInput.setAttribute('aria-label', 'Action name');
         nameInput.addEventListener('input', () => {
           const value = nameInput.value;
           void patchActions((section) => {
@@ -235,6 +237,8 @@ export function actionsSettingsPage(
         if (openTemplateId === template.id) {
           const prompt = el('textarea') as HTMLTextAreaElement;
           prompt.rows = 6;
+          prompt.className = 'mono-input';
+          prompt.setAttribute('aria-label', 'Prompt');
           prompt.spellcheck = false;
           prompt.value = template.prompt;
           prompt.addEventListener('input', () => {
@@ -257,7 +261,7 @@ export function actionsSettingsPage(
 
         triggerList.textContent = '';
         if (config.actions.triggers.length === 0) {
-          triggerList.appendChild(el('p', 'empty', 'No triggers. Add one below.'));
+          triggerList.appendChild(el('li', 'empty', 'No triggers. Add one below.'));
         }
         for (const trigger of config.actions.triggers) {
           triggerList.appendChild(triggerRow(trigger));
@@ -265,6 +269,7 @@ export function actionsSettingsPage(
         addTriggerRow.textContent = '';
 
         const templateSelect = el('select') as HTMLSelectElement;
+        templateSelect.setAttribute('aria-label', 'Template for the new trigger');
         for (const template of config.actions.templates) {
           const option = el('option', undefined, template.name) as HTMLOptionElement;
           option.value = template.id;
@@ -276,7 +281,8 @@ export function actionsSettingsPage(
           option.value = event.id;
           eventSelect.appendChild(option);
         }
-        const addBtn = el('button', 'ghost', 'Add trigger') as HTMLButtonElement;
+        eventSelect.setAttribute('aria-label', 'Event for the new trigger');
+        const addBtn = el('button', 'ghost small', 'Add trigger') as HTMLButtonElement;
         addBtn.type = 'button';
         addBtn.addEventListener('click', () => {
           const templateId = templateSelect.value || config?.actions.templates[0]?.id;
@@ -337,6 +343,8 @@ export function retrievalSettingsPage(api: DreyPluginApi): PluginSettingsPageCon
     id: 'assistant-retrieval',
     label: 'Assistant retrieval',
     hint: 'Vault context for the assistant',
+    description:
+      'With the Vault chip on, each assistant question retrieves the most similar note sections from the vault and adds them as context.',
     mount(root) {
       root.classList.add('assistant-actions-settings', 'assistant-retrieval-settings');
       let progressUnsubscribe: (() => void) | null = api.backend.on('semantic:updated', () => {
@@ -345,14 +353,7 @@ export function retrievalSettingsPage(api: DreyPluginApi): PluginSettingsPageCon
 
       const master = el('section');
       master.appendChild(el('h3', undefined, 'Vault context'));
-      const masterHint = el(
-        'p',
-        'section-hint',
-        'With the Vault chip on, each assistant question retrieves the most similar note sections from the vault and adds them as context — no tool calls, a small fixed context. The first build embeds every note section (runs in the background; the model downloads once).',
-      );
-      master.appendChild(masterHint);
-      const enableRow = el('div', 'row');
-      const enableCheck = el('label', 'check');
+      const enableRow = el('label', 'switch-row');
       const enableBox = el('input') as HTMLInputElement;
       enableBox.type = 'checkbox';
       enableBox.addEventListener('change', () => {
@@ -361,8 +362,16 @@ export function retrievalSettingsPage(api: DreyPluginApi): PluginSettingsPageCon
           .then(() => api.backend.invoke('semantic:configChanged'))
           .then(reload);
       });
-      enableCheck.append(enableBox, el('span', undefined, 'Enable vault context'));
-      enableRow.appendChild(enableCheck);
+      const enableText = el('span');
+      enableText.append(
+        el('span', 'switch-label', 'Enable vault context'),
+        el(
+          'span',
+          'switch-hint',
+          'No tool calls, a small fixed context. The first build embeds every note section — it runs in the background, and the model downloads once.',
+        ),
+      );
+      enableRow.append(enableBox, enableText);
       master.appendChild(enableRow);
       root.appendChild(master);
 
@@ -375,9 +384,12 @@ export function retrievalSettingsPage(api: DreyPluginApi): PluginSettingsPageCon
       );
       tuning.appendChild(tuningHint);
 
-      const modelRow = el('label', 'field');
-      modelRow.append(el('span', 'field-label', 'Embedding model (Hugging Face id)'));
-      const modelInput = el('input') as HTMLInputElement;
+      const modelRow = el('div', 'field');
+      const modelLabel = el('label', undefined, 'Embedding model (Hugging Face id)');
+      modelLabel.htmlFor = 'assistant-retrieval-model';
+      modelRow.append(modelLabel);
+      const modelInput = el('input', 'mono-input') as HTMLInputElement;
+      modelInput.id = 'assistant-retrieval-model';
       modelInput.type = 'text';
       modelInput.spellcheck = false;
       modelInput.placeholder = 'Xenova/multilingual-e5-small';
@@ -390,10 +402,13 @@ export function retrievalSettingsPage(api: DreyPluginApi): PluginSettingsPageCon
       modelRow.appendChild(modelInput);
       tuning.appendChild(modelRow);
 
-      const numberRow = el('div', 'row');
-      const kField = el('label', 'field');
-      kField.append(el('span', 'field-label', 'Sections per question (k)'));
+      const numberRow = el('div', 'row assistant-retrieval-numbers');
+      const kField = el('div', 'field');
+      const kLabel = el('label', undefined, 'Sections per question (k)');
+      kLabel.htmlFor = 'assistant-retrieval-k';
+      kField.append(kLabel);
       const kInput = el('input') as HTMLInputElement;
+      kInput.id = 'assistant-retrieval-k';
       kInput.type = 'number';
       kInput.min = '1';
       kInput.max = '8';
@@ -405,9 +420,12 @@ export function retrievalSettingsPage(api: DreyPluginApi): PluginSettingsPageCon
       });
       kField.appendChild(kInput);
       numberRow.appendChild(kField);
-      const scoreField = el('label', 'field');
-      scoreField.append(el('span', 'field-label', 'Minimum similarity (0–1)'));
+      const scoreField = el('div', 'field');
+      const scoreLabel = el('label', undefined, 'Minimum similarity (0–1)');
+      scoreLabel.htmlFor = 'assistant-retrieval-score';
+      scoreField.append(scoreLabel);
       const scoreInput = el('input') as HTMLInputElement;
+      scoreInput.id = 'assistant-retrieval-score';
       scoreInput.type = 'number';
       scoreInput.min = '0';
       scoreInput.max = '1';
@@ -436,7 +454,7 @@ export function retrievalSettingsPage(api: DreyPluginApi): PluginSettingsPageCon
           status = (await api.backend.invoke('semantic:status')) as SemanticStatusView;
         } catch {
           vaultList.textContent = '';
-          vaultList.appendChild(el('p', 'empty', 'The retrieval backend is unavailable.'));
+          vaultList.appendChild(el('li', 'empty', 'The retrieval backend is unavailable.'));
           return;
         }
         enableBox.checked = status.enabled;
@@ -469,12 +487,12 @@ export function retrievalSettingsPage(api: DreyPluginApi): PluginSettingsPageCon
             row.appendChild(
               el(
                 'span',
-                'count',
+                'field-hint',
                 `${vault.sections} section${vault.sections === 1 ? '' : 's'}`,
               ),
             );
           }
-          const rebuild = el('button', 'ghost', 'Rebuild') as HTMLButtonElement;
+          const rebuild = el('button', 'ghost small', 'Rebuild') as HTMLButtonElement;
           rebuild.type = 'button';
           rebuild.disabled = vault.building !== null;
           rebuild.addEventListener('click', () => {

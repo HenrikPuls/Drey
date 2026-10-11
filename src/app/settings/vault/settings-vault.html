@@ -1,75 +1,87 @@
 <app-settings-pane
   title="Vault"
-  description="How the app keeps up with changes made outside the app."
+  description="How the app keeps up with changes made outside the app, what happens to links when a note moves, and the local note history."
 >
   @if (vault(); as vault) {
-    <label class="switch-row">
-      <input
-        type="checkbox"
-        [checked]="vault.watch"
-        (change)="onWatchChange($any($event.target).checked)"
-      />
-      <span>
-        <span class="switch-label">Watch the vault for external changes</span>
-        <span class="switch-hint">
-          When another program (a sync service, a second editor) changes a file in the vault, the
-          file tree, the search and task indexes update on their own, and open tabs without
-          unsaved edits reload from disk. Tabs with unsaved edits are never overwritten — they show
-          “Changed on disk” and let you choose a version. Off by default; the refresh button does
-          the same thing manually.
+    <section>
+      <h3>External changes</h3>
+      <label class="switch-row">
+        <input
+          type="checkbox"
+          [checked]="vault.watch"
+          (change)="onWatchChange($any($event.target).checked)"
+        />
+        <span>
+          <span class="switch-label">Watch the vault for external changes</span>
+          <span class="switch-hint">
+            When another program (a sync service, a second editor) changes a file in the vault,
+            the file tree, the search and task indexes update on their own, and open tabs without
+            unsaved edits reload from disk. Tabs with unsaved edits are never overwritten — they
+            show “Changed on disk” and let you choose a version. Off by default; the refresh
+            button does the same thing manually.
+          </span>
         </span>
-      </span>
-    </label>
-    <div class="field">
-      <label for="vault-update-links">When a note is renamed or moved</label>
-      <select
-        id="vault-update-links"
-        [value]="vault.updateLinksOnRename"
-        (change)="onUpdateLinksChange($any($event.target).value)"
-      >
-        <option value="ask" [selected]="vault.updateLinksOnRename === 'ask'">
-          Ask before updating links
-        </option>
-        <option value="always" [selected]="vault.updateLinksOnRename === 'always'">
-          Always update links
-        </option>
-        <option value="never" [selected]="vault.updateLinksOnRename === 'never'">
-          Never update links
-        </option>
-      </select>
-      <p class="field-hint">
-        Renaming or moving a note in the Files panel rewrites the links that point to it, and
-        attachments used only by a moved note move along with it. An attachment other notes use
-        too stays where it is and the moved note's link is adjusted instead.
-      </p>
-    </div>
-    <label class="switch-row">
-      <input
-        type="checkbox"
-        [checked]="vault.history.enabled"
-        (change)="onHistoryEnabledChange($any($event.target).checked)"
-      />
-      <span>
-        <span class="switch-label">Keep a local history of notes</span>
-        <span class="switch-hint">
-          Before a note is overwritten — by a save, the assistant, an MCP client, replace-all or a
-          link update — its previous version is kept on this computer, outside the vault. Open it
-          with “File history…” in a tab's menu. Chat notes are not included.
+      </label>
+    </section>
+
+    <section>
+      <h3>Links</h3>
+      <div class="field">
+        <label for="vault-update-links">When a note is renamed or moved</label>
+        <select
+          id="vault-update-links"
+          class="narrow"
+          [value]="vault.updateLinksOnRename"
+          (change)="onUpdateLinksChange($any($event.target).value)"
+        >
+          <option value="ask" [selected]="vault.updateLinksOnRename === 'ask'">
+            Ask before updating links
+          </option>
+          <option value="always" [selected]="vault.updateLinksOnRename === 'always'">
+            Always update links
+          </option>
+          <option value="never" [selected]="vault.updateLinksOnRename === 'never'">
+            Never update links
+          </option>
+        </select>
+        <p class="field-hint">
+          Renaming or moving a note in the Files panel rewrites the links that point to it, and
+          attachments used only by a moved note move along with it. An attachment other notes use
+          too stays where it is and the moved note's link is adjusted instead.
+        </p>
+      </div>
+    </section>
+
+    <section>
+      <h3>History</h3>
+      <label class="switch-row">
+        <input
+          type="checkbox"
+          [checked]="vault.history.enabled"
+          (change)="onHistoryEnabledChange($any($event.target).checked)"
+        />
+        <span>
+          <span class="switch-label">Keep a local history of notes</span>
+          <span class="switch-hint">
+            Before a note is overwritten — by a save, the assistant, an MCP client, replace-all or
+            a link update — its previous version is kept on this computer, outside the vault. Open
+            it with “File history…” in a tab's menu. Chat notes are not included.
+          </span>
         </span>
-      </span>
-    </label>
-    <div class="field">
-      <label for="vault-history-days">Keep versions for (days)</label>
-      <input
-        id="vault-history-days"
-        type="number"
-        min="1"
-        max="365"
-        [disabled]="!vault.history.enabled"
-        [value]="vault.history.keepDays"
-        (change)="onHistoryDaysChange($any($event.target).value)"
-      />
-      <p class="field-hint">At most {{ vault.history.maxPerFile }} versions are kept per note.</p>
-    </div>
+      </label>
+      <div class="field sub">
+        <label for="vault-history-days">Keep versions for (days)</label>
+        <input
+          id="vault-history-days"
+          type="number"
+          min="1"
+          max="365"
+          [disabled]="!vault.history.enabled"
+          [value]="vault.history.keepDays"
+          (change)="onHistoryDaysChange($any($event.target).value)"
+        />
+        <p class="field-hint">At most {{ vault.history.maxPerFile }} versions are kept per note.</p>
+      </div>
+    </section>
   }
 </app-settings-pane>

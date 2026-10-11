@@ -3,91 +3,94 @@
   description="A local Model Context Protocol server that gives another program — an AI client such as Claude Desktop — read, search and write access to the vault. What the built-in assistant may use is set under Assistant tools."
 >
   @if (mcp(); as mcp) {
-    <label class="switch-row">
-      <input
-        type="checkbox"
-        [checked]="mcp.enabled"
-        (change)="onEnabledChange($any($event.target).checked)"
-      />
-      <span>
-        <span class="switch-label">Enable the vault MCP server</span>
-        <span class="switch-hint">
-          Exposes <span class="mono">vault_search</span>, <span class="mono">vault_read</span> and
-          <span class="mono">vault_write</span> to MCP clients. Off means no other program can
-          reach the vault through this server.
-        </span>
-      </span>
-    </label>
-
-    <fieldset [disabled]="!mcp.enabled">
+    <section>
+      <h3>Server</h3>
       <label class="switch-row">
         <input
           type="checkbox"
-          [checked]="mcp.httpEnabled"
-          (change)="onHttpEnabledChange($any($event.target).checked)"
+          [checked]="mcp.enabled"
+          (change)="onEnabledChange($any($event.target).checked)"
         />
         <span>
-          <span class="switch-label">Open the localhost HTTP endpoint</span>
+          <span class="switch-label">Enable the vault MCP server</span>
           <span class="switch-hint">
-            A listening socket on <span class="mono">127.0.0.1</span> for network MCP clients and
-            the bundled stdio bridge.
+            Exposes <span class="mono">vault_search</span>, <span class="mono">vault_read</span>
+            and <span class="mono">vault_write</span> to MCP clients. Off means no other program
+            can reach the vault through this server.
           </span>
         </span>
       </label>
 
-      <div class="field">
-        <label for="mcp-port">HTTP port</label>
-        <input
-          id="mcp-port"
-          type="number"
-          [min]="portMin"
-          [max]="portMax"
-          [value]="mcp.httpPort"
-          (input)="onPortChange($any($event.target).value)"
-        />
-        @if (status(); as status) {
-          <p class="field-hint">
-            @if (status.httpListening) {
-              Listening on <span class="mono">http://127.0.0.1:{{ status.httpPort }}/mcp</span>.
-            } @else {
-              Not listening. Enable the endpoint above and press <strong>Save</strong>.
-            }
-          </p>
-        }
-      </div>
-
-      <label class="switch-row danger">
-        <input
-          type="checkbox"
-          [checked]="mcp.yolo"
-          (change)="onYoloChange($any($event.target).checked)"
-        />
-        <span>
-          <span class="switch-label">YOLO mode — apply writes without confirmation</span>
-          <span class="switch-hint">
-            Off by default, and best left off. When on, a <span class="mono">vault_write</span>
-            from an MCP client changes files immediately, with no diff to approve.
+      <fieldset [disabled]="!mcp.enabled">
+        <label class="switch-row">
+          <input
+            type="checkbox"
+            [checked]="mcp.httpEnabled"
+            (change)="onHttpEnabledChange($any($event.target).checked)"
+          />
+          <span>
+            <span class="switch-label">Open the localhost HTTP endpoint</span>
+            <span class="switch-hint">
+              A listening socket on <span class="mono">127.0.0.1</span> for network MCP clients
+              and the bundled stdio bridge.
+            </span>
           </span>
-        </span>
-      </label>
+        </label>
 
-      <div class="field">
-        <label>Client configuration (stdio bridge)</label>
-        <pre class="snippet">{{ clientSnippet() }}</pre>
-        <div class="row">
-          <button type="button" class="ghost" (click)="copySnippet()">
-            {{ copied() ? 'Copied' : 'Copy' }}
-          </button>
-          <span class="field-hint">
-            Paste into an MCP client's config. Requires Drey running with the HTTP endpoint on.
-          </span>
+        <div class="field sub">
+          <label for="mcp-port">HTTP port</label>
+          <input
+            id="mcp-port"
+            type="number"
+            [min]="portMin"
+            [max]="portMax"
+            [value]="mcp.httpPort"
+            (input)="onPortChange($any($event.target).value)"
+          />
+          @if (status(); as status) {
+            <p class="field-hint">
+              @if (status.httpListening) {
+                Listening on <span class="mono">http://127.0.0.1:{{ status.httpPort }}/mcp</span>.
+              } @else {
+                Not listening. Enable the endpoint above and press <strong>Save</strong>.
+              }
+            </p>
+          }
         </div>
-      </div>
-    </fieldset>
 
-    <p class="note">
-      A <span class="mono">vault_write</span> is shown in the same diff dialog as an assistant edit
-      before it touches disk — unless YOLO mode is on. All paths stay inside a registered vault.
-    </p>
+        <label class="switch-row danger">
+          <input
+            type="checkbox"
+            [checked]="mcp.yolo"
+            (change)="onYoloChange($any($event.target).checked)"
+          />
+          <span>
+            <span class="switch-label">YOLO mode — apply writes without confirmation</span>
+            <span class="switch-hint">
+              Off by default, and best left off. When on, a <span class="mono">vault_write</span>
+              from an MCP client changes files immediately, with no diff to approve.
+            </span>
+          </span>
+        </label>
+      </fieldset>
+
+      <p class="field-hint">
+        A <span class="mono">vault_write</span> is shown in the same diff dialog as an assistant
+        edit before it touches disk — unless YOLO mode is on. All paths stay inside a registered
+        vault.
+      </p>
+    </section>
+
+    <section>
+      <h3>Client configuration</h3>
+      <p class="section-hint">
+        Paste into an MCP client's config to connect it through the stdio bridge. Requires Drey
+        running with the HTTP endpoint on.
+      </p>
+      <pre class="snippet">{{ clientSnippet() }}</pre>
+      <button type="button" class="ghost" (click)="copySnippet()">
+        {{ copied() ? 'Copied' : 'Copy' }}
+      </button>
+    </section>
   }
 </app-settings-pane>
