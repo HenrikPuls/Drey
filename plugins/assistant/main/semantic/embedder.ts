@@ -73,7 +73,7 @@ export class SemanticEmbedder {
 
   private kill(): void {
     this.failAll(new Error('The embedding worker was stopped.'));
-    this.worker?.terminate();
+    void this.worker?.terminate();
     this.worker = null;
   }
 

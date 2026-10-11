@@ -8,7 +8,7 @@ import { App } from './app/app';
 // through the bridge (LogService is not injectable before bootstrap);
 // `logMessage` is optional-chained so plain `ng serve` without Electron
 // is unaffected.
-window.dreyApi?.logMessage?.({
+void window.dreyApi?.logMessage?.({
   level: 'info',
   message: `[startup] renderer: bundle evaluated +${Math.round(performance.now())}ms since navigation start`,
 });

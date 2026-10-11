@@ -88,6 +88,9 @@ jobs:
       - name: Typecheck main + shared
         run: node node_modules/typescript/bin/tsc -p electron/tsconfig.json --noEmit
 
+      - name: Typecheck main-process specs
+        run: node node_modules/typescript/bin/tsc -p electron/tsconfig.spec.json
+
       - name: Typecheck renderer
         run: node node_modules/typescript/bin/tsc -p tsconfig.app.json --noEmit
 

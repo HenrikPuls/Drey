@@ -68,13 +68,13 @@ function buildWidget(api: DreyPluginApi): HTMLElement {
     color: 'inherit',
     font: 'inherit',
   });
-  rewriteButton.addEventListener('click', async () => {
+  rewriteButton.addEventListener('click', () => {
     const active = api.documents.active();
     if (active === null || active.kind !== 'text') {
       return;
     }
     const after = `${active.buffer}\n\n<!-- sample-plugin rewrite proposal -->\n`;
-    await api.documents.requestRewrite({
+    void api.documents.requestRewrite({
       path: active.path,
       before: active.buffer,
       after,

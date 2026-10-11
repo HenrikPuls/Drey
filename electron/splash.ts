@@ -71,11 +71,14 @@ export class SplashController {
       }
     });
     this.window = win;
+    // A splash that fails to load (or is closed mid-load) is not worth a
+    // report: the main window is on its way either way.
+    const ignoreLoadFailure = (): void => undefined;
     if (this.deps.rendererDevServerUrl !== null) {
       // `ng serve` serves public/ verbatim — same file, dev transport.
-      win.loadURL(new URL('splash.html', this.deps.rendererDevServerUrl).toString());
+      win.loadURL(new URL('splash.html', this.deps.rendererDevServerUrl).toString()).catch(ignoreLoadFailure);
     } else {
-      win.loadFile(path.join(this.deps.rendererDistDir, 'splash.html'));
+      win.loadFile(path.join(this.deps.rendererDistDir, 'splash.html')).catch(ignoreLoadFailure);
     }
   }
 

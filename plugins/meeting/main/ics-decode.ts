@@ -89,7 +89,9 @@ export async function decodeIcs(text: string): Promise<ParsedMeeting> {
   const allDay = Boolean(event.startDate?.isDate);
 
   const startDate = event.startDate ? event.startDate.toJSDate() : null;
-  let endDate = event.endDate ? event.endDate.toJSDate() : null;
+  // Without a start, ical.js cannot derive an end (its getter throws).
+  const endTime = event.startDate ? event.endDate : null;
+  let endDate = endTime ? endTime.toJSDate() : null;
   if (allDay && endDate) {
     // RFC 5545 all-day DTEND is exclusive — step back to the last included day.
     endDate = new Date(endDate.getTime() - DAY_MS);

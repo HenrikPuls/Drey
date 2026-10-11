@@ -18,5 +18,5 @@
   },
   "include": ["*.ts", "mcp/stdio-bridge.ts", "../shared/**/*.ts"],
   "//": "The plugin renderer API (plugin-api.ts) and its renderer.ts barrel are DOM-typed; this compile has no DOM lib. Excluding them keeps the main process out of the renderer contribution surface — an accidental main-side import of `shared/plugin-api/renderer` fails to resolve rather than silently widening what main may touch. `shared/plugin-api/index.ts` stays DOM-free and is the main-side surface (ADR-0044).",
-  "exclude": ["../shared/plugin-api/plugin-api.ts", "../shared/plugin-api/renderer.ts"]
+  "exclude": ["../shared/plugin-api/plugin-api.ts", "../shared/plugin-api/renderer.ts", "**/*.spec.ts"]
 }

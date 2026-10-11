@@ -257,10 +257,9 @@ export class OpenAiCompatProvider implements LlmClient {
       let done = false;
       while (!done) {
         const { value, done: streamDone } = await reader.read();
-        if (streamDone) {
-          break;
-        }
-        buffer += decoder.decode(value, { stream: true });
+        // A last frame that arrives without its line break still counts.
+        buffer += streamDone ? `${decoder.decode()}\n` : decoder.decode(value, { stream: true });
+        done = streamDone;
         let newlineAt = buffer.indexOf('\n');
         while (newlineAt !== -1) {
           const frame = buffer.slice(0, newlineAt);
