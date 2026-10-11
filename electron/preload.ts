@@ -25,6 +25,8 @@ import {
   PdfExportRequest,
   PluginDescriptorForRenderer,
   PluginIpcEventPayload,
+  PluginInstallResult,
+  PluginUninstallResult,
   SpellCheckResult,
   SpellLanguage,
   StartupProgressReport,
@@ -321,6 +323,14 @@ const dreyApi: DreyApi = {
     ipcRenderer.on(IPC_CHANNELS.pluginEvent, wrapped);
     return () => ipcRenderer.removeListener(IPC_CHANNELS.pluginEvent, wrapped);
   },
+  // Local plugin packages (ADR-0068): install/remove a .zip the user picked.
+  pickPluginPackage: (): Promise<string | null> =>
+    ipcRenderer.invoke(IPC_CHANNELS.pluginPickPackage),
+  installPluginPackage: (zipPath: string): Promise<PluginInstallResult> =>
+    ipcRenderer.invoke(IPC_CHANNELS.pluginInstallPackage, zipPath),
+  uninstallPlugin: (pluginId: string): Promise<PluginUninstallResult> =>
+    ipcRenderer.invoke(IPC_CHANNELS.pluginUninstall, pluginId),
+  relaunchApp: (): Promise<void> => ipcRenderer.invoke(IPC_CHANNELS.appRelaunch),
 };
 
 contextBridge.exposeInMainWorld('dreyApi', dreyApi);

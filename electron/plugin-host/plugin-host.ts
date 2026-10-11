@@ -302,6 +302,16 @@ export class PluginHost {
     return plugin === undefined ? null : plugin.rootDir;
   }
 
+  /**
+   * Discovery lookup for the installer (ADR-0068): the builtin flag and
+   * root dir of a discovered id, or null. Built-ins win collisions, so an
+   * install with a built-in id must be refused rather than shadowed.
+   */
+  pluginById(pluginId: string): { builtin: boolean; rootDir: string } | null {
+    const plugin = this.discovered.get(pluginId);
+    return plugin === undefined ? null : { builtin: plugin.builtin, rootDir: plugin.rootDir };
+  }
+
   /** Routes one `plugin:invoke` request. Unknown plugin/method rejects. */
   async handleInvoke(payload: PluginIpcInvokePayload, sender: WebContents): Promise<unknown> {
     if (!pluginIdPattern.test(payload.pluginId)) {

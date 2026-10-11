@@ -45,6 +45,62 @@ verified by the owner.**
 - Rename and move now share one code path for the link-aware rename and
   the clipboard follow-up.
 
+### Milestone 70 — Local plugin packages + the sample plugin out of the default scope
+
+**Not yet manually verified by the owner.**
+
+([ADR-0068](../docs/09_architecture_decisions/0068-local-plugin-packages.md))
+
+Three owner requests in one milestone: the `sample` plugin leaves the
+app's default scope, a plugin-SDK tutorial uses it as the running
+example, and plugins become locally installable from a package.
+
+- **The sample plugin is dev/test-only now.** A plain `npm run build` no
+  longer emits `dist-electron/plugins/sample/` — `build-plugins.mjs`
+  produces it only under `DREY_BUILD_SAMPLE_PLUGINS=1` (the `npm run
+  e2e` script sets it; the tsc configs keep compiling / typechecking it, so the reference
+  stays type-checked). No dev run, `npm run app` run or package
+  discovers it; the installer exclusion and `verify:pack` assertion
+  stay as belt-and-braces. Trying to run the plugin e2e against a build
+  without it fails fast with the remedy in the message.
+- **`plugins/TUTORIAL.md`** — the step-by-step "write your first plugin"
+  guide on the sample plugin (manifest → main → renderer → build →
+  package → install), linking to `AUTHORING.md`, which stays the
+  reference and now documents the package flow.
+- **Install from file…** (Settings → Panels & plugins): a `.zip` of a
+  built plugin folder — `plugin.json` at the archive root, exactly the
+  tree `build-plugins.mjs` emits — is validated (manifest shape,
+  `apiVersion` major, referenced entries present, no zip-slip, no
+  built-in id collision, size caps; archive junk like `__MACOSX` is
+  skipped, PowerShell's backslash entry names normalized) and
+  extracted under `<userData>/plugins/<id>/`, preserving an existing
+  install's `config.json` (upgrade). No new dependency: the zip reader
+  is a TS twin of `fetch-drawio.mjs`'s central-directory reader.
+- **Remove** on installed rows deletes the folder (recycle bin first);
+  built-in ids are refused (their config lives in the same tree).
+- **Applies on restart, offered immediately**: install/remove don't
+  touch the running session's discovery snapshot (like
+  `plugins.disabled`); the result dialog and a persistent hint row in
+  the plugin section offer "Restart now" — `app:relaunch` runs the
+  graceful close path (dirty tabs keep their exit prompt) after
+  `app.relaunch()`.
+- Checked by: e2e (`e2e/plugins.spec.ts` — install, upgrade-keeps-config,
+  typed refusals, removal, with a self-contained store-only zip writer
+  that doubles as the executable package-format example), both tsc
+  typechecks, lint.
+
+### Fix — settings: scrolled categories no longer show above the headline
+
+- **The sticky headline pins flush again.** The category nav scrolled
+  with `padding: 8px`, and a sticky element is never shifted outside its
+  containing block — the nav's *content box*, which starts 8px below the
+  scrollport top. The `top: 0` pin was therefore clamped at that edge,
+  and scrolled category rows stayed visible in the strip between the
+  window border and the "Settings" headline. The nav's top padding moved
+  into the head's own padding (22px), so the pinned head now covers the
+  full top edge with its opaque background; the layout at rest is
+  unchanged.
+
 ### `npm run dev` rebuilds and restarts Electron on its own
 
 Item 13 of the 2026-10-11 architecture review. Development only; nothing

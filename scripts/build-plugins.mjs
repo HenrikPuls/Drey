@@ -21,10 +21,18 @@
  * `onlyOwnSources` therefore fails the build on any runtime import that is
  * not a relative path into the plugin's own folder or the repo's `shared/`.
  * Type-only imports never get that far — esbuild drops them while parsing.
+ *
+ * The `sample` plugin (ADR-0068) is NOT part of the default output: it is
+ * the executable authoring reference and e2e fixture, not a shipping
+ * feature. The tsc configs keep compiling / typechecking it (it must stay
+ * type-clean), but without `DREY_BUILD_SAMPLE_PLUGINS=1` this script
+ * removes its output from `dist-electron/plugins/sample/` after the
+ * compile — so no ordinary dev run or package ever discovers it.
+ * `npm run e2e` sets the flag.
  */
 import { build } from 'esbuild';
 import { spawnSync } from 'node:child_process';
-import { cpSync, existsSync, mkdirSync, readdirSync, statSync } from 'node:fs';
+import { cpSync, existsSync, mkdirSync, readdirSync, rmSync, statSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -33,6 +41,11 @@ const tsc = path.join(repoRoot, 'node_modules', 'typescript', 'bin', 'tsc');
 const pluginsDir = path.join(repoRoot, 'plugins');
 const sharedDir = path.join(repoRoot, 'shared');
 const mainOut = path.join(repoRoot, 'dist-electron');
+
+// ADR-0068: the sample plugin leaves the default scope — built (and thereby
+// discoverable in `dist-electron/plugins/`) only on explicit opt-in.
+const SAMPLE_ID = 'sample';
+const includeSample = process.env['DREY_BUILD_SAMPLE_PLUGINS'] === '1';
 
 function run(config) {
   const result = spawnSync(process.execPath, [tsc, '-p', config], { stdio: 'inherit' });
@@ -86,6 +99,9 @@ run(path.join(pluginsDir, 'tsconfig.main.json'));
 run(path.join(pluginsDir, 'tsconfig.renderer.json'));
 
 for (const entry of readdirSync(pluginsDir)) {
+  if (entry === SAMPLE_ID && !includeSample) {
+    continue;
+  }
   const pluginDir = path.join(pluginsDir, entry);
   if (!statSync(pluginDir).isDirectory() || !existsSync(path.join(pluginDir, 'plugin.json'))) {
     continue;
@@ -130,4 +146,10 @@ for (const entry of readdirSync(pluginsDir)) {
   }
 }
 
-console.log('plugins built.');
+// The main-side tsc config still emits sample (it stays type-checked);
+// without the opt-in flag its loadable output is removed so discovery in
+// `dist-electron/plugins/` never finds it.
+if (!includeSample) {
+  rmSync(path.join(mainOut, 'plugins', SAMPLE_ID), { recursive: true, force: true });
+}
+console.log(`plugins built.${includeSample ? ' (incl. sample)' : ''}`);

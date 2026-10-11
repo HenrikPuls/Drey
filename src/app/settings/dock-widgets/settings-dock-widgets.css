@@ -44,3 +44,62 @@
   color: var(--accent-hover);
   font-size: 11px;
 }
+
+/* ADR-0068: the Plugins section head carries the package install action;
+   a pending package change keeps offering the restart. */
+.plugins-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.plugins-head .section-title {
+  margin-bottom: 0;
+}
+
+.plugins-head + .widget-list,
+.restart-hint + .widget-list {
+  margin-top: 8px;
+}
+
+.restart-hint {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 8px;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  font-size: 12px;
+  color: var(--text-faint);
+}
+
+.plugin-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.plugin-row .switch-row {
+  flex: 1;
+  min-width: 0;
+}
+
+.plugin-remove {
+  flex-shrink: 0;
+  margin-top: 2px;
+  padding: 2px 4px;
+  border: none;
+  background: none;
+  color: var(--text-faint);
+  font-size: 11px;
+  cursor: pointer;
+  border-radius: var(--radius-xs);
+}
+
+.plugin-remove:hover {
+  color: var(--accent-hover);
+  background: var(--hover-bg);
+}
