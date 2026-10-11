@@ -70,7 +70,10 @@ test.describe('startup splash (milestone 62, ADR-0062)', () => {
     // locator then dies with "session closed"). What must hold either way
     // is the handover below.
     try {
-      await expect(splash.locator('.wordmark')).toHaveText('drey');
+      // The logo draws the "d"; the letters after it complete the name.
+      await expect(splash.locator('.wordmark')).toHaveAttribute('aria-label', 'drey');
+      await expect(splash.locator('.wordmark .mark')).toBeVisible();
+      await expect(splash.locator('.wordmark .rest')).toHaveText('rey');
       await expect(splash.locator('.version')).toHaveText(/\d/);
       await expect(splash.locator('.fill')).toBeVisible();
       await expect(splash.locator('.activity')).not.toBeEmpty();

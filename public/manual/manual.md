@@ -677,8 +677,8 @@ immediately — the footer says so there and shows *Close* in place of
 
 ![Appearance settings](img/settings-appearance.png)
 
-Two bespoke themes ship — **Drey** (terracotta) and **Anthrazit**
-(neutral charcoal, blue accent, AA contrast; the default) — plus a
+Two bespoke themes ship — **Anthrazit** (neutral charcoal, blue accent,
+AA contrast; the default) and **Drey** (terracotta) — plus a
 catalogue of published CodeMirror themes. The accent colour follows the
 theme by default or can be pinned; the UI scale resizes the whole app;
 the editor typeface and font scale affect only the writing surface.

@@ -20,6 +20,25 @@ recorded as an explicit decision. The parity checklist lives in
 
 ## Recent milestones
 
+### Anthrazit is the default everywhere; the splash shows the logo as a wordmark
+
+**Not yet manually verified by the owner.**
+
+- **Splash in Anthrazit.** `public/splash.html` still carried the Drey
+  (terracotta) tokens; it now uses the Anthrazit ones (charcoal ground,
+  blue progress bar), and the splash and main windows' background colour
+  match. The splash does not follow a user-chosen theme — it is up before
+  the config is read (ADR-0062 later change).
+- **The logo is the "d".** Instead of the mark above a small "drey", the
+  letters "rey" stand after the mark, on its baseline, sized to its bowl
+  and in the cream of its outline, so the two read "drey".
+- **Drey is an optional theme.** Anthrazit was already what a fresh
+  install starts on; it now also leads the theme picker (Drey follows
+  it), and is what an unknown stored theme id and the moment before the
+  config has loaded resolve to — both used to be Drey. An explicit
+  `theme: 'drey'` is untouched. The constant `DEFAULT_THEME` is renamed
+  `DREY_THEME`, since it no longer names the default.
+
 ### One look and feel for the Settings dialog
 
 A rework of the Settings overlay's styling and structure across all ten

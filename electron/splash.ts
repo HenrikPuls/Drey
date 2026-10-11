@@ -41,7 +41,7 @@ export class SplashController {
       fullscreenable: false,
       skipTaskbar: true,
       show: false,
-      backgroundColor: '#1b1a19',
+      backgroundColor: '#18191b',
       autoHideMenuBar: true,
       ...(this.deps.iconPath !== null ? { icon: this.deps.iconPath } : {}),
       webPreferences: {

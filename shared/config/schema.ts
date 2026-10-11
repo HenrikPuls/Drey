@@ -546,8 +546,12 @@ export const ACCENT_PRESETS: readonly AccentPreset[] = [
  */
 export const THEME_ACCENT = 'theme';
 
-/** Built-in theme id -- the bespoke "Drey v3" look, no shell derivation. */
-export const DEFAULT_THEME = 'drey';
+/**
+ * The Drey theme id -- the original terracotta "Drey v3" look, an optional
+ * theme since Anthrazit became the default. It is the un-themed `:root`
+ * palette, so it carries no `data-theme` and no shell derivation.
+ */
+export const DREY_THEME = 'drey';
 
 /**
  * The Anthrazit theme (milestone 43): the neutral charcoal-gray palette with the

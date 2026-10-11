@@ -3078,8 +3078,10 @@ library — Chromium's built-in (PDFium) viewer, enabled by
   `api.ui.icon` (SDK 1.10).
 - **Anthrazit** (`theme-catalog.ts` + the `:root[data-theme='anthrazit']`
   block): a bespoke palette layered over the seed-derived block;
-  `ANTHRAZIT_THEME` is the fresh-install default, `DEFAULT_THEME` (`drey`)
-  the missing-key fallback.
+  `ANTHRAZIT_THEME` is the default everywhere — fresh install, a missing
+  or unknown stored id, the state before the config has loaded, first in
+  the picker; `DREY_THEME` (`drey`, the un-themed `:root` palette) is the
+  optional original look.
 - **Combined query field** (`src/app/tags/`): `TagField`'s `freeText` mode
   over the pure `tag-query.ts` (`splitQuery`, `tagQueryAtCaret`). The
   Search (`plugins/tags/`) and Tasks (`plugins/tasks/`) panels mount it
@@ -3267,7 +3269,7 @@ main-side plugin writes.
 
 | Block | Where | Responsibility |
 | --- | --- | --- |
-| Splash page | `public/splash.html` | Dependency-free inline page (copied verbatim into the renderer dist): logo mark, wordmark, version, bar, activity line. Token values copied from `src/styles.css` — keep in step on palette changes. |
+| Splash page | `public/splash.html` | Dependency-free inline page (copied verbatim into the renderer dist): the wordmark (the logo mark as the "d" + the letters "rey" on its baseline), version, bar, activity line. Token values copied from the Anthrazit block of `src/styles.css` (the default theme; the splash shows before the config is read) — keep in step on palette changes. |
 | Splash preload | `electron/splash-preload.ts` | `splashApi.onProgress(cb)` over the `splash:progress` channel; contextIsolation on, sandboxed (imports nothing from shared/). |
 | Controller | `electron/splash.ts` | `SplashController` — frameless/resizable:false/`skipTaskbar` ~400×300 window, `show` on `ready-to-show`; `progress()` latches the latest payload and replays it on `did-finish-load` (early pushes are otherwise dropped); idempotent `close()`. |
 | Progress contract | `shared/ipc-api.ts` + `electron/preload.ts` + `src/app/app.ts` | Main-side stages (settings, per-plugin via the `onPluginActivated` hook's index/total, interface) pushed by main; renderer stages (`Preparing workspace`, `Restoring session…`) over fire-and-forget `startup:progress` sends; `startup:ready` = the handover trigger. |

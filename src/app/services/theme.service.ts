@@ -1,5 +1,5 @@
 import { Injectable, computed, effect, inject } from '@angular/core';
-import { DEFAULT_THEME } from '../../../shared/app-config';
+import { DREY_THEME } from '../../../shared/app-config';
 import { resolveTheme, ThemeCatalogEntry } from '../editor/themes/theme-catalog';
 import { SettingsService } from './settings.service';
 
@@ -33,7 +33,7 @@ export class ThemeService {
         return;
       }
       const root = document.documentElement;
-      if (entry.id === DEFAULT_THEME) {
+      if (entry.id === DREY_THEME) {
         delete root.dataset['theme'];
         root.style.removeProperty('--_bg');
         root.style.removeProperty('--_fg');

@@ -85,3 +85,18 @@ splash content and the handover with its own early-watching launch.
   (`workspace ready` line) surface it in the log instead.
 - Playwright input to a just-shown window can race OS window mapping;
   the fixture's focus wait + settle is the standing workaround.
+
+## Later change — Anthrazit colours and the logo wordmark
+
+The splash copied the Drey (terracotta) tokens, although Anthrazit had
+been the default theme since ADR-0057's later change. It now copies the
+Anthrazit tokens, and both windows' `backgroundColor` follow. It does
+**not** follow the user's chosen theme: it is shown before
+`app-config.json` is read, and reading the config first would put work
+in front of the one window whose job is to appear immediately.
+
+The wordmark is no longer the mark above a small "drey": the mark draws
+the "d" itself, so the letters "rey" stand after it on the same baseline,
+sized to the mark's bowl and in the cream of the mark's outline (pure
+white overpowered the dark mark) — the pair reads "drey". The element
+keeps `aria-label="drey"`.

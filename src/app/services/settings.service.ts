@@ -8,7 +8,6 @@ import {
   DEFAULT_APPEARANCE,
   DEFAULT_DAILY_CONFIG,
   DEFAULT_EDITOR_FONT_FAMILY,
-  DEFAULT_THEME,
   DEFAULT_TEMPLATES_CONFIG,
   EntryTemplate,
   LlmConfig,
@@ -162,7 +161,7 @@ export class SettingsService {
 
   /** Active theme id (Settings -> Appearance). Draft-previewed while the screen is open. */
   readonly appearanceTheme = computed<string>(
-    () => this.appearanceSource()?.appearance.theme ?? DEFAULT_THEME,
+    () => this.appearanceSource()?.appearance.theme ?? DEFAULT_APPEARANCE.theme,
   );
 
   /** The active "Add entry" template's pattern. Persisted config, never the draft. */
