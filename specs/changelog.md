@@ -134,8 +134,6 @@ recorded as an explicit decision. The parity checklist lives in
   stay unchanged.
 ### Milestone 66 — Office documents open in their own program (Req-2 remainder)
 
-**Not yet manually verified by the owner.**
-
 ([ADR-0066](../docs/09_architecture_decisions/0066-office-documents-open-in-their-own-program.md))
 
 Req-2 asked for Office documents rendered inline. After the rendering
@@ -160,8 +158,6 @@ in the program the OS associates with them.
   with a message.
 
 ### Milestone 65 — Git vaults: file status and a Source control panel (req-40)
-
-**Not yet manually verified by the owner.**
 
 ([ADR-0065](../docs/09_architecture_decisions/0065-git-vaults-source-control-plugin.md))
 
@@ -227,8 +223,6 @@ in the program the OS associates with them.
 
 ### Milestone 64 — draw.io diagrams (req-19)
 
-**Not yet manually verified by the owner.**
-
 ([ADR-0064](../docs/09_architecture_decisions/0064-drawio-diagrams.md))
 
 - **Diagrams open and are edited in Drey.** A `.drawio.svg`,
@@ -278,8 +272,6 @@ in the program the OS associates with them.
   reopened; no local history for diagrams.
 
 ### Milestone 63 — MCP client, web fetch, assistant tool groups (Req-31)
-
-**Not yet manually verified by the owner.**
 
 ([ADR-0063](../docs/09_architecture_decisions/0063-mcp-client-and-assistant-tool-groups.md))
 
@@ -342,8 +334,6 @@ in the program the OS associates with them.
 
 ### Milestone 62 — splash window with logo + progress
 
-**Not yet manually verified by the owner.**
-
 ([ADR-0062](../docs/09_architecture_decisions/0062-splash-window.md))
 
 - **A splash window now covers the startup.** A small frameless,
@@ -380,8 +370,6 @@ in the program the OS associates with them.
   closing`.
 
 ### Milestone 61 — startup analysis + window-first boot
-
-**Not yet manually verified by the owner.**
 
 ([ADR-0061](../docs/09_architecture_decisions/0061-window-first-startup.md))
 
@@ -432,8 +420,6 @@ in the program the OS associates with them.
 
 ### Milestone 60 — save conflicts are asked; local note history
 
-**Not yet manually verified by the owner.**
-
 ([ADR-0060](../docs/09_architecture_decisions/0060-save-conflicts-and-local-note-history.md))
 
 - **60a · A dirty tab no longer overwrites an external change silently.**
@@ -475,8 +461,6 @@ in the program the OS associates with them.
   inside a block.
 
 ### Milestone 59 — links survive a rename; quick switcher + command palette
-
-**Not yet manually verified by the owner.**
 
 - **59a · Renaming or moving keeps links intact**
   ([ADR-0059](../docs/09_architecture_decisions/0059-link-integrity-on-rename.md)).

@@ -875,9 +875,13 @@ with it.
   conflict handling, stash, amend, commit and push, the "not pushed"
   marker and a per-file Git history (ADR-0065 later change). Before it:
   milestone 66 — Office documents open in their own program (ADR-0066).
-  Milestones 59–67 are code-complete, owner verification pending.
-- **Next, in order:** nothing ordered — the owner picks from the backlog
-  in `specs/roadmap.md`.
+  Milestones 59–66, the Vault-chip picker, the dev escape hatch and the
+  build-origin/mouse-button work are owner-verified; milestone 67 and
+  the Anthrazit AA re-tune are code-complete, verification pending.
+- **Next, in order:** milestone 68 — semantic search remainder: semantic
+  hits in the Search panel and a semantic `vault_search` mode over a new
+  base `SemanticSearchProvider` seam (ADR-0055 later change;
+  pause/resume of large rebuilds was considered and dropped).
 
 A milestone that is code-complete but not yet verified by the owner is
 marked "**Not yet manually verified by the owner**" in its changelog
