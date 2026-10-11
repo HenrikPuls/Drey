@@ -162,9 +162,7 @@ describe('Editor', () => {
     // The click is the same explicit done-gesture as the Tasks panel's row
     // toggle: the surface saves it (deferred out of the CM update stack),
     // so the vault-scope consumers see it.
-    await new Promise((resolve) => setTimeout(resolve, 10));
-    await fixture.whenStable();
-    expect(saves.some((body) => body.includes('- [x] todo'))).toBe(true);
+    await vi.waitFor(() => expect(saves.some((body) => body.includes('- [x] todo'))).toBe(true));
   });
 
   it('folds frontmatter behind a pill, expandable on click', async () => {
