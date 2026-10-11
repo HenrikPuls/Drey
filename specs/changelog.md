@@ -62,6 +62,7 @@ its storage. **Not yet manually verified by the owner.**
   colours in the LLM pane are tokens; the MCP note had no style at all;
   a panel with no capabilities no longer shows an empty "Uses:"; buttons,
   links, categories and swatches show keyboard focus.
+
 ### The Search panel is split into model, DOM, replace and summary
 
 Item 10 of the 2026-10-11 architecture review, fourth file. A
