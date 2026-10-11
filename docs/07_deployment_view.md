@@ -49,7 +49,8 @@ Both installed and portable builds use the **same** config directory,
 ## CI (GitHub Actions, `.github/workflows/ci.yml`)
 
 One `windows-latest` job per push to `main` / PR / `v*` tag, one build, in
-pipeline order: lint → both tsc typechecks → unit tests (`ng test`,
+pipeline order: lint (import boundaries + the typed promise rules) → the
+tsc typechecks (main, main-process specs, renderer) → unit tests (`ng test`,
 `test:plugins`) → `fetch:drawio` (cached on the version pin) → build →
 e2e → `electron-builder --win` → `verify:pack`. The fetch is its own
 step because the job builds and packs separately instead of running

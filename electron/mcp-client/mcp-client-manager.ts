@@ -108,7 +108,7 @@ export class McpClientManager {
     for (const [id, connection] of this.connections) {
       const next = wanted.get(id);
       if (next === undefined || JSON.stringify(next.transport) !== connection.signature) {
-        this.drop(id);
+        void this.drop(id);
       } else {
         connection.server = next;
       }
@@ -126,7 +126,7 @@ export class McpClientManager {
     if (server === undefined) {
       return;
     }
-    this.drop(id);
+    void this.drop(id);
     await this.open(server).connecting;
   }
 
@@ -166,7 +166,7 @@ export class McpClientManager {
     }
     if (connection.state !== 'ready') {
       const server = connection.server;
-      this.drop(server.id);
+      void this.drop(server.id);
       connection = this.open(server);
       await connection.connecting;
     }

@@ -20,6 +20,44 @@ recorded as an explicit decision. The parity checklist lives in
 
 ## Recent milestones
 
+### Main-process tests and typed linting
+
+Third package out of the 2026-10-11 architecture review. No change to
+what the app does, apart from the fixes listed below. **Not yet manually
+verified by the owner.**
+
+- **Lint now knows types.** `eslint.config.mjs` runs
+  `no-floating-promises` and `no-misused-promises` over every `.ts` file,
+  next to the import-boundary rules. The whole codebase had 13 findings;
+  all are resolved. Two of them changed behaviour: a startup step that
+  throws now shows the "unexpected error" dialog instead of leaving the
+  app without a window, and a main-window page load that fails is
+  written to the log.
+- **The main process has tests of its own** (`npm run test:plugins`, 223
+  → 371 tests): both LLM providers against a scripted `fetch` (request
+  shapes, tool loop, SSE streaming, error mapping), `VaultManager`
+  against real temp folders (registry, path guard, read / write, delete,
+  rename and move across vaults, copy), `NoteManager` (conflict guard,
+  save hooks, line endings), `LinkRewriter`, `DailyNoteManager`, plugin
+  discovery, the git plugin's parsers and `GitRunner` (against the
+  installed git), the meeting plugin's decoders. Helpers:
+  `electron/testing/fake-fetch.ts`, `electron/testing/temp-vaults.ts`.
+- Main-process specs have their own `electron/tsconfig.spec.json`
+  (typechecked in CI) and are no longer compiled into `dist-electron/`,
+  so they no longer end up in the packed app.
+- **Fixed on the way**, each found by a new test or by the lint rule:
+  - A v1 `vault-config.json` was migrated again on every start, so the
+    vault got a new id each time. The migrated registry is now written
+    back once.
+  - A streamed LLM reply lost its last piece when the server ended the
+    stream without a final line break (both providers).
+  - Meeting import: the join link of a known conferencing service was
+    only preferred when the text started with it, so a link in a mail
+    body lost against any earlier link. An invite without a start time
+    failed with an internal error instead of importing.
+- Docs: `docs/11` (lint row, test-coverage rows, the v1 row removed),
+  `docs/07` (CI order), `CLAUDE.md` (test and lint commands).
+
 ### In-app help: the manual and live shortcuts ([ADR-0067](../docs/09_architecture_decisions/0067-in-app-help-documents.md))
 
 Owner-commissioned package after milestone 69, on top of the English

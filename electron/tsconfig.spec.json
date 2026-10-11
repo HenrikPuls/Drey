@@ -1,0 +1,10 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "types": ["node", "electron", "vitest/globals"]
+  },
+  "//": "Typechecks the main-process specs (run by vitest.plugins.config.mts). They are kept out of tsconfig.json so they are not emitted into dist-electron/ and packaged.",
+  "include": ["**/*.spec.ts"],
+  "exclude": []
+}

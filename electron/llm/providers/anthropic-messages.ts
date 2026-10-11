@@ -525,10 +525,8 @@ export class AnthropicMessagesProvider implements LlmClient {
       let chunks = 0;
       for (;;) {
         const { value, done } = await reader.read();
-        if (done) {
-          break;
-        }
-        buffer += decoder.decode(value, { stream: true });
+        // A last frame that arrives without its line break still counts.
+        buffer += done ? `${decoder.decode()}\n` : decoder.decode(value, { stream: true });
         let newlineAt = buffer.indexOf('\n');
         while (newlineAt !== -1) {
           const frame = buffer.slice(0, newlineAt);
@@ -543,6 +541,9 @@ export class AnthropicMessagesProvider implements LlmClient {
             }
           }
           newlineAt = buffer.indexOf('\n');
+        }
+        if (done) {
+          break;
         }
       }
       this.debug.record({

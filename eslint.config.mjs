@@ -2,8 +2,8 @@
 import tseslint from 'typescript-eslint';
 
 /**
- * This config is intentionally narrow. It is not a full lint pass over the
- * codebase -- it enforces two things:
+ * This config is intentionally narrow. It is not a style pass over the
+ * codebase -- it enforces three things:
  *
  * 1. The feature-module barrels (ADR-0016): code outside a module must
  *    import through the module's `index.ts`, never reach into a file inside
@@ -15,6 +15,12 @@ import tseslint from 'typescript-eslint';
  *    the host's CM module instances -- a plugin's own copies break facets
  *    silently -- and plugin UI is plain DOM, not Angular), and a plugin's
  *    renderer entry has no Node access.
+ * 3. No promise is dropped by accident (`no-floating-promises`,
+ *    `no-misused-promises`): most of the app is async IPC, and a call
+ *    nobody awaits loses its error. A promise that is meant to run on its
+ *    own is marked `void`, with its failure handled where it matters.
+ *    These two rules need type information, so every linted file must
+ *    belong to one of the tsconfig projects listed below.
  */
 
 const MODULES = ['llm', 'mcp', 'session', 'plugin-host'];
@@ -58,9 +64,8 @@ export default tseslint.config(
     ignores: ['dist/**', 'dist-electron/**', 'dist-plugins/**', '.angular/**', '.tools/**', 'node_modules/**', 'plugins/*/vendor/**'],
   },
   {
-    // A full lint pass (which would use these directives) is not set up yet;
-    // this config only guards module boundaries, so don't flag inline
-    // disables that target rules it doesn't enable.
+    // Only a few rules are enabled, so don't flag inline disables that
+    // target rules this config doesn't run.
     linterOptions: { reportUnusedDisableDirectives: 'off' },
   },
   {
@@ -70,7 +75,21 @@ export default tseslint.config(
     plugins: { '@typescript-eslint': tseslint.plugin },
     languageOptions: {
       parser: tseslint.parser,
-      parserOptions: { project: false },
+      parserOptions: {
+        project: [
+          'electron/tsconfig.json',
+          'electron/tsconfig.spec.json',
+          'tsconfig.app.json',
+          'tsconfig.spec.json',
+          'plugins/tsconfig.main.json',
+          'plugins/tsconfig.renderer.json',
+        ],
+        tsconfigRootDir: import.meta.dirname,
+      },
+    },
+    rules: {
+      '@typescript-eslint/no-floating-promises': 'error',
+      '@typescript-eslint/no-misused-promises': 'error',
     },
   },
   {

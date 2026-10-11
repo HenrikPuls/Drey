@@ -5,8 +5,9 @@
  * the first plausible `http(s)` URL — preferring a known conferencing host.
  */
 
+// Not anchored: in a mail body the link sits somewhere in the text.
 const CONFERENCING_HOST =
-  /^https?:\/\/[^\s"'<>]*\b(?:teams\.microsoft\.com|teams\.live\.com|zoom\.us|meet\.google\.com|webex\.com|gotomeeting\.com|whereby\.com)\b[^\s"'<>]*/i;
+  /https?:\/\/[^\s"'<>]*\b(?:teams\.microsoft\.com|teams\.live\.com|zoom\.us|meet\.google\.com|webex\.com|gotomeeting\.com|whereby\.com)\b[^\s"'<>]*/i;
 
 const ANY_URL = /https?:\/\/[^\s"'<>)\]]+/i;
 
