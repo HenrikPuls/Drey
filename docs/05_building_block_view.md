@@ -2261,6 +2261,16 @@ file tree + context menu + inline-create flow moved into `FilesPanel`.
 rename (`VaultService.copyEntry` / `duplicateEntry` / `renameEntry`,
 clipboard signal on `VaultService`).
 
+Since 2026-10-11 the Files panel is four files under
+`src/app/dock/panels/` instead of one 1,345-line component:
+
+| File | Holds |
+| --- | --- |
+| `files-tree.ts` | The tree as plain data, no Angular: the visible rows (`flattenVisible`), row keys, selection ranges, where a drop may land, name validation. |
+| `files-tree-state.ts` | `FilesTreeState`, one instance per panel: expanded folders, folded vault sections, keyboard cursor, multi-selection. Nothing persisted. |
+| `file-operations.service.ts` | `FileOperationsService`: create, rename, move, copy / paste, delete and the vault registry actions — each with its confirmation, the tab and clipboard follow-up and its error message. Knows nothing about the tree's view state. |
+| `files-panel.ts` | `FilesPanel`: pointer, keyboard and drag events, the two context menus, the inline name inputs. |
+
 ```mermaid
 graph TB
     subgraph Renderer["Renderer (src/app/)"]

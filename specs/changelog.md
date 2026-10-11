@@ -20,6 +20,31 @@ recorded as an explicit decision. The parity checklist lives in
 
 ## Recent milestones
 
+### The Files panel is split into four files
+
+Item 10 of the 2026-10-11 architecture review, first file. A
+restructuring: nothing the user sees or does changes. **Not yet manually
+verified by the owner.**
+
+- **`files-panel.ts` went from 1,345 to 732 lines.** It was one component
+  holding the tree model, the selection, the drag rules and every file
+  operation. Now:
+  - `files-tree.ts` — the tree as plain functions: visible rows, row
+    keys, selection ranges, valid drop targets, name validation.
+  - `files-tree-state.ts` — `FilesTreeState`: expanded folders, folded
+    vault sections, keyboard cursor, multi-selection.
+  - `file-operations.service.ts` — `FileOperationsService`: create,
+    rename, move, copy / paste, delete, the vault registry actions, with
+    their confirmations and error messages.
+  - `files-panel.ts` — the events, the two context menus and the inline
+    name inputs.
+- **The existing panel spec runs unchanged** against the new structure
+  (it found one difference during the work: a third `undefined` argument
+  on a plain file open). `files-tree.spec.ts` adds 26 direct tests of the
+  tree functions.
+- Rename and move now share one code path for the link-aware rename and
+  the clipboard follow-up.
+
 ### Milestone 70 — Local plugin packages + the sample plugin out of the default scope
 
 **Not yet manually verified by the owner.**

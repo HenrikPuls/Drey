@@ -339,7 +339,9 @@ Renderer (`src/app/`):
 - `dock/` — `DockService` + `DockStrip` (icon strips, M69) +
   `WidgetRegistryService`: the three docks, every panel, each dock's
   editor band (ADR-0019/0034/0038)
-- `vault/` — `FilesPanel` + `VaultService` (trees, vault management);
+- `vault/` — `FilesPanel` + `VaultService` (trees, vault management;
+  the panel handles input only, over `FilesTreeState` and
+  `FileOperationsService` in `dock/panels/`);
   `calendar/`, `windows/`
 - `keybindings/` — `KeybindingService`: commands + chords; `palette/` —
   the quick switcher / command palette (M59)
