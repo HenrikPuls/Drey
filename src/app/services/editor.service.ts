@@ -117,6 +117,17 @@ export interface OpenDoc {
    * index, no hooks); it opens pinned. "Save as…" copies it into a vault.
    */
   external?: boolean;
+  /**
+   * An in-app help document (the Help menu, ADR-0070): bundled Markdown
+   * shown in a read-only pinned tab. `assetBase` is the URL folder
+   * (`manual/`) its relative image refs resolve against -- the app origin
+   * serves it in dev (`ng serve`) and packaged (`app://`) alike. A help
+   * doc is clean by design (buffer === saved, so save and the exit prompt
+   * are no-ops), its surface stays non-editable in every view mode, it is
+   * never the tab another file replaces, and the session snapshot skips
+   * it -- the Help menu reopens it on demand.
+   */
+  help?: { assetBase: string };
 }
 
 /**
@@ -285,6 +296,12 @@ export class EditorService {
   readonly openPath = computed<string | null>(() => this.activeDoc()?.path ?? null);
   /** Vault id of the open file (ADR-0051), or null for vault-less docs. */
   readonly openVaultId = computed<string | null>(() => this.activeDoc()?.vaultId ?? null);
+  /**
+   * The active doc's help asset base (`manual/`), or null when it is not a
+   * help document (ADR-0070) -- the Live Preview resolves relative image
+   * refs against it instead of the vault.
+   */
+  readonly openAssetBase = computed<string | null>(() => this.activeDoc()?.help?.assetBase ?? null);
   readonly savedContent = computed<string>(() => this.activeDoc()?.savedContent ?? '');
   readonly bufferContent = computed<string>(() => this.activeDoc()?.bufferContent ?? '');
   readonly viewMode = computed<EditorViewMode>(() => this.activeDoc()?.viewMode ?? 'live');
@@ -856,6 +873,42 @@ export class EditorService {
   }
 
   /**
+   * Opens the in-app help document at `path` (its own vault-less key, so
+   * `help/manual.md` cannot collide with a vault tab) under the tab title
+   * `name`, read-only and pinned (see `OpenDoc.help`, ADR-0070). Clean by
+   * construction, so close/save/exit never prompt. An already-open tab is
+   * revealed and its content refreshed (a re-fetch after an app update).
+   */
+  openHelpDoc(path: string, name: string, content: string, assetBase = ''): void {
+    const normalized = content.replace(/\r\n/g, '\n');
+    if (this.docs().some((d) => d.key === path)) {
+      this.patchDoc(path, { savedContent: normalized, bufferContent: normalized });
+      this.panes.open(path);
+      return;
+    }
+    this.addDoc({
+      vaultId: null,
+      path,
+      key: path,
+      name,
+      kind: 'text',
+      savedContent: normalized,
+      bufferContent: normalized,
+      viewMode: 'view',
+      eol: '\n',
+      modifiedMs: 0,
+      existsOnDisk: true,
+      help: { assetBase },
+      pinned: true,
+    });
+  }
+
+  /** Whether `key` is an in-app help document (read-only, ADR-0070). */
+  isHelpDoc(key: string | null): boolean {
+    return key !== null && this.docFor(key)?.help !== undefined;
+  }
+
+  /**
    * Opens the daily note for `dateStr` (`YYYY-MM-DD`) in the ACTIVE vault,
    * under the configured daily folder (`AppConfig.daily.dir`, default
    * `daily/`). If the file exists -- nested, or as a legacy flat file
@@ -1064,7 +1117,7 @@ export class EditorService {
   /** Called by a pane's editor surface on every buffer change; `key` is that pane's shown document. */
   updateBuffer(key: string, content: string): void {
     const doc = this.docs().find((d) => d.key === key);
-    if (!doc || doc.kind !== 'text') {
+    if (!doc || doc.kind !== 'text' || doc.help !== undefined) {
       return;
     }
     this.patchDoc(key, { bufferContent: content });
@@ -1159,7 +1212,7 @@ export class EditorService {
    */
   setViewMode(mode: EditorViewMode, key?: string): void {
     const doc = key !== undefined ? this.docFor(key) : this.activeDoc();
-    if (!doc || doc.kind !== 'text') {
+    if (!doc || doc.kind !== 'text' || doc.help !== undefined) {
       return;
     }
     // Live Preview is Markdown-only; a code tab stays in source (its menu

@@ -157,6 +157,18 @@ describe('SettingsService (draft model)', () => {
     expect(service.isDirty()).toBe(false);
   });
 
+  it('openScreen carries a category preset (Help -> About) and clears it on close', () => {
+    service.openScreen('about');
+    expect(service.screenOpen()).toBe(true);
+    expect(service.openCategory()).toBe('about');
+
+    service.closeScreen();
+    expect(service.openCategory()).toBeNull();
+
+    service.openScreen();
+    expect(service.openCategory()).toBeNull();
+  });
+
   it('surfaces a save failure and keeps the draft intact', async () => {
     window.dreyApi = {
       ...harness.api,

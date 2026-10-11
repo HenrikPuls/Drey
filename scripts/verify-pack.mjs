@@ -97,6 +97,13 @@ if (fs.existsSync(asarPath)) {
     }
   }
   check('asar: browser renderer css', listed.includes('dist-electron/plugins/browser/renderer/browser.css'));
+  // The in-app user manual (Help menu): markdown + at least one screenshot
+  // in the packaged renderer output.
+  check(
+    'asar: in-app manual (manual.md + images)',
+    listed.includes('dist/drey/browser/manual/manual.md') &&
+      listed.some((p) => p.startsWith('dist/drey/browser/manual/img/') && p.endsWith('.png')),
+  );
   for (const id of NOT_SHIPPED_IDS) {
     check(
       `asar: plugin ${id} excluded`,

@@ -98,11 +98,13 @@
     [style.top.px]="menuPos().y"
   >
     @let mode = shownDoc()?.viewMode ?? 'live';
+    @let isHelp = editor.isHelpDoc(shownPath());
     @if (editor.isMarkdown(shownPath())) {
       <button
         type="button"
         role="menuitemradio"
         [attr.aria-checked]="mode === 'live'"
+        [disabled]="isHelp"
         (click)="chooseMode('live')"
       >
         <span class="tick">
@@ -116,6 +118,7 @@
         type="button"
         role="menuitemradio"
         [attr.aria-checked]="mode === 'view'"
+        [disabled]="isHelp"
         (click)="chooseMode('view')"
       >
         <span class="tick">
@@ -129,6 +132,7 @@
         type="button"
         role="menuitemradio"
         [attr.aria-checked]="mode === 'source'"
+        [disabled]="isHelp"
         (click)="chooseMode('source')"
       >
         <span class="tick">
@@ -154,16 +158,18 @@
         Formatting toolbar
       </button>
     }
-    <button
-      type="button"
-      role="menuitem"
-      (click)="closeMenu(); editor.saveAs(shownPath() ?? undefined)"
-    >
-      <span class="tick"></span>
-      Save as…
-      <span class="ctx-key">Ctrl Shift S</span>
-    </button>
-    @if (history.canShow(shownPath())) {
+    @if (!isHelp) {
+      <button
+        type="button"
+        role="menuitem"
+        (click)="closeMenu(); editor.saveAs(shownPath() ?? undefined)"
+      >
+        <span class="tick"></span>
+        Save as…
+        <span class="ctx-key">Ctrl Shift S</span>
+      </button>
+    }
+    @if (!isHelp && history.canShow(shownPath())) {
       <button
         type="button"
         role="menuitem"
@@ -173,7 +179,7 @@
         File history…
       </button>
     }
-    @if (editor.isMarkdown(shownPath())) {
+    @if (!isHelp && editor.isMarkdown(shownPath())) {
       <button
         type="button"
         role="menuitem"

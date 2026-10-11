@@ -303,8 +303,9 @@ export class SessionService {
       const doc = this.editor.docFor(key);
       // An external (out-of-vault) tab is not restored: main's read allowlist
       // only lives for one run, and the OS association reopens it on demand
-      // (ADR-0054).
-      if (!doc || doc.external === true) {
+      // (ADR-0054). An in-app help tab (ADR-0070) is app content, not user
+      // state -- the Help menu reopens it.
+      if (!doc || doc.external === true || doc.help !== undefined) {
         continue;
       }
       const pin = doc.pinned === true ? { pinned: true } : {};

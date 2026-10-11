@@ -34,7 +34,15 @@ export class Settings {
   /** Core categories + plugin-contributed pages, from the registry. */
   protected readonly categories = this.registry.categories;
 
-  protected readonly selected = signal<string>(this.categories()[0].id);
+  /** A caller-named category (Help -> About) wins; falls back to the first. */
+  private readonly presetCategory = this.settings.openCategory();
+
+  protected readonly selected = signal<string>(
+    this.presetCategory !== null &&
+      this.categories().some((category) => category.id === this.presetCategory)
+      ? this.presetCategory
+      : (this.categories()[0]?.id ?? ''),
+  );
 
   protected readonly selectedComponent = computed(
     () =>

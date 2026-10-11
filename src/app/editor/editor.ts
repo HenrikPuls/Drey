@@ -294,10 +294,13 @@ export class Editor implements AfterViewInit, OnDestroy {
   /**
    * Pushes the shown document's live-edit input lock (ADR-0049) onto the
    * surface. Also called once the surface exists -- the effect's first run
-   * precedes it.
+   * precedes it. An in-app help document (ADR-0070) is non-editable in
+   * every mode: its 'view' mode already holds `EditorState.readOnly`, this
+   * additionally pins `EditorView.editable` so no mode swap could ever
+   * re-enable input.
    */
   private applyEditLock(): void {
-    const locked = this.editor.isEditLocked(this.shownPath());
+    const locked = this.editor.isEditLocked(this.shownPath()) || this.editor.isHelpDoc(this.shownPath());
     if (this.surfaceReady) {
       this.surface().setEditable(!locked);
     }

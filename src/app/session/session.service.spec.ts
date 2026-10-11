@@ -247,6 +247,18 @@ describe('SessionService', () => {
     expect(stored.tabs.map((t) => t.path)).toEqual(['notes/a.md']);
   });
 
+  it('leaves an in-app help tab out of the snapshot (ADR-0070)', async () => {
+    await editor.openFile('notes/a.md', VAULT_ID);
+    editor.openHelpDoc('help/manual.md', 'User manual', '# Manual', 'manual/');
+    expect(editor.isHelpDoc('help/manual.md')).toBe(true);
+
+    await session.restore(); // nothing stored -- just arms persistence
+    await session.flushNow();
+    const stored = JSON.parse(localStorage.getItem('drey.session') ?? '{}') as SessionSnapshot;
+
+    expect(stored.tabs.map((t) => t.path)).toEqual(['notes/a.md']);
+  });
+
   it('restores a v1 snapshot by mapping every tab to the active vault', async () => {
     writeSession(
       [
