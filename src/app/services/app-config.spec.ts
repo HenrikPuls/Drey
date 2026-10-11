@@ -341,7 +341,7 @@ describe('normalizeAppConfig', () => {
     expect(normalizeAppConfig({}).appearance).toEqual({
       uiScale: 'default',
       accent: 'theme',
-      theme: 'drey',
+      theme: 'anthrazit',
     });
     expect(normalizeAppConfig({ appearance: { uiScale: 'large' } }).appearance.uiScale).toBe(
       'large',
@@ -359,7 +359,7 @@ describe('normalizeAppConfig', () => {
     );
     expect(normalizeAppConfig({ appearance: { accent: '#xyz' } }).appearance.accent).toBe('theme');
     expect(normalizeAppConfig({ appearance: { theme: 'dracula' } }).appearance.theme).toBe('dracula');
-    expect(normalizeAppConfig({ appearance: { theme: '  ' } }).appearance.theme).toBe('drey');
+    expect(normalizeAppConfig({ appearance: { theme: '  ' } }).appearance.theme).toBe('anthrazit');
   });
 
   it('keeps a well-formed custom dictionary and the language pointing at it', () => {

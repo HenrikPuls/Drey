@@ -305,7 +305,7 @@ describe('SettingsService (draft model)', () => {
       service.setAppearanceTheme('dracula');
       expect(service.appearanceTheme()).toBe('dracula');
       expect(service.draft()?.appearance.theme).toBe('dracula');
-      expect(service.config()?.appearance.theme).toBe('drey');
+      expect(service.config()?.appearance.theme).toBe('anthrazit');
       expect(service.isDirty()).toBe(true);
     });
 
@@ -317,7 +317,7 @@ describe('SettingsService (draft model)', () => {
 
       expect(service.appearanceUiScale()).toBe('default');
       expect(service.appearanceAccent()).toBe('theme');
-      expect(service.appearanceTheme()).toBe('drey');
+      expect(service.appearanceTheme()).toBe('anthrazit');
       expect(service.isDirty()).toBe(false);
     });
 
