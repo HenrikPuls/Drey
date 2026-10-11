@@ -112,7 +112,8 @@ function writeRegistryFile(registry: VaultRegistryFile): void {
 
 /**
  * Vault registration (multi-vault since ADR-0051), the active vault, and
- * per-vault path resolution (see CLAUDE.md, "Relevant Components"). A
+ * per-vault path resolution (see docs/05_building_block_view.md §5.0,
+ * "Component reference"). A
  * vault is just a folder on disk -- this class remembers the registry (in
  * a small per-user config file, not the vault itself -- the vault stays
  * plain files, no database) and reads the folders' contents. No

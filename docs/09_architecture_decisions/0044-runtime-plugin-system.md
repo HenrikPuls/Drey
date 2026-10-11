@@ -25,6 +25,13 @@ Later change (2026-10-11): the renderer side of the built-in plugins is
 bundled with esbuild, which reverses "No bundler" below — see the section
 at the end.
 
+Later change (milestone 70, [ADR-0068](0068-local-plugin-packages.md)):
+the sample plugin left the default build entirely — emitted only under
+`DREY_BUILD_SAMPLE_PLUGINS=1` (e2e sets it), so no dev run discovers it
+either; `plugins/TUTORIAL.md` became the authoring entry point. The same
+ADR added the first install path for the user root: local `.zip`
+packages through Settings → Panels & plugins.
+
 ## Context
 
 ADR-0016 deliberately stopped short of a plugin runtime: feature modules

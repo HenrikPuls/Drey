@@ -61,7 +61,13 @@ outside the list — Git vaults (req-40) as milestone 65. Its last item,
 the Req-2 Office remainder, shipped as milestone 66 — not as rendering:
 Office documents open in their own program, ADR-0066. On a further owner
 request the Git plugin followed with milestone 67: merge, stash, amend,
-commit and push, file history.)
+commit and push, file history. Milestone 68 delivered the semantic-search
+remainder, milestone 69 the dock icon strip. Another owner request
+outside the list shipped as milestone 70: local plugin packages — the
+sample plugin left the default build (dev/test + SDK reference only),
+`plugins/TUTORIAL.md` is the step-by-step authoring guide, and Settings →
+Panels & plugins installs a plugin from a `.zip` package and removes it
+again, ADR-0068.)
 
 Nothing is ordered at the moment; the next item is the owner's pick from
 the backlog below.

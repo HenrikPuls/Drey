@@ -45,7 +45,10 @@ restore, keybindings, spellcheck, the MCP vault server, the LLM
   `<userData>/plugins/*`, `DREY_EXTRA_PLUGIN_DIR`; manifest validation;
   `plugins.disabled` + `apiVersion` gating), the host
   (`plugin-host.ts`: activate/quarantine, `plugin://` root resolution),
-  per-plugin config store (`plugin-config-store.ts`).
+  per-plugin config store (`plugin-config-store.ts`), and the local
+  package installer (`plugin-installer.ts`, ADR-0068: native `.zip` pick,
+  discovery-grade validation, extract-swap under `<userData>/plugins/`
+  preserving `config.json`, remove — applies on restart).
 - Vault + note IO: `vault-manager.ts` (mutations record themselves in the
   own-write ledger), `note-manager.ts` (frontmatter
   bump + write; feature work rides the **save-hook / vault-hook
@@ -97,20 +100,27 @@ major mismatch ⇒ `incompatible`). Exempt from module-boundary lint, like
 `shared/ipc-api.ts`.
 
 **Plugins** (`plugins/<id>/`, twelve shipped — `drawio`, the diagram
-editor tab of milestone 64, is described in §5.37): `sample` (exercises every
-surface), `templates`, `meeting`, `tags`, `tasks`, `assistant`
-(Assistant + Actions), `browser`, `ocr` (vision-LLM OCR, ADR-0050),
-`outline` (the open note's heading tree, renderer-only), `backlinks`
-(the "what links here" panel over a per-vault outlink index,
-milestone 54), `git` (file status in the Files panel + the Source
-control panel over the installed git, milestone 65, ADR-0065). Each
+editor tab of milestone 64, is described in §5.37): `templates`,
+`meeting`, `tags`, `tasks`, `assistant` (Assistant + Actions), `browser`,
+`ocr` (vision-LLM OCR, ADR-0050), `outline` (the open note's heading
+tree, renderer-only), `backlinks` (the "what links here" panel over a
+per-vault outlink index, milestone 54), `git` (file status in the Files
+panel + the Source control panel over the installed git, milestone 65,
+ADR-0065) — plus `sample`, the authoring reference
+(`plugins/TUTORIAL.md`), which milestone 70 (ADR-0068) took out of the
+default build: emitted only under `DREY_BUILD_SAMPLE_PLUGINS=1` (e2e
+sets it), never discovered by an ordinary dev run or package. Each
 is a full stack: `plugin.json` +
 `main/` (CommonJS, Node access — `electron/` and app-`shared/` CJS
 allowed) + `renderer/` (browser-context ES modules + CSS, served over
-`plugin://`, plain DOM — no Angular, no `@codemirror/*` runtime imports)
+`plugin://`, plain DOM — no Angular, no `@codemirror/*` runtime
+imports; the renderer is **bundled into one file with esbuild**
+(ADR-0044 later change) and may import its own folder and the repo's
+`shared/` at runtime — never a package, `src/` or `electron/`)
 + `shared/` (its own types). Built by `scripts/build-plugins.mjs` into
 `dist-electron/plugins/<id>/` — built-ins and user-installed plugins are
-the same thing to the hosts.
+the same thing to the hosts; a user-installed one arrives as a local
+`.zip` package through the installer below.
 
 ```mermaid
 graph TB
@@ -127,12 +137,13 @@ graph TB
     subgraph Main["Base main process (electron/)"]
         MainTs["main.ts: window + schemes<br/>(app:// · drey-asset:// · plugin://)"]
         HostM["plugin-host (main)<br/>discovery · activation · quarantine ·<br/>plugin:// root resolution · config store"]
+        Installer["plugin-installer (ADR-0068)<br/>local .zip packages: pick · validate ·<br/>extract under <userData>/plugins · remove"]
         IO["VaultManager · NoteManager<br/>(save/vault hook registries) ·<br/>DailyNote · Session backups"]
         LLM["llm/: LmStudioClient · debug log ·<br/>task registry · tag-suggest"]
         MCP["mcp/: VaultTools (vault_search via<br/>registered SectionSearchProvider)"]
     end
     subgraph Plugins["plugins/<id>/  (dist-electron/plugins/<id>/)"]
-        P1["templates · meeting · tags ·<br/>tasks · assistant · browser · ocr ·<br/>outline · backlinks · drawio · git · sample"]
+        P1["templates · meeting · tags ·<br/>tasks · assistant · browser · ocr ·<br/>outline · backlinks · drawio · git"]
         P2["each: plugin.json + main/ (CJS,<br/>Node ok) + renderer/ (ESM + CSS over<br/>plugin://, plain DOM) + shared/"]
     end
     SDK["shared/plugin-api/<br/>manifest · DreyPluginApi ·<br/>MainPluginContext · PLUGIN_API_VERSION"]
@@ -143,9 +154,11 @@ graph TB
     HostR -->|"plugin:invoke"| Bridge
     Bridge -->|"plugin:event"| HostR
     Bridge --> HostM
+    Bridge -->|"plugin packages (ADR-0068)"| Installer
     HostM --> P1
     MainTs --> HostM
     HostM --> IO
+    HostM --> Installer
     Services --> HostR
     LLM --> HostM
     MCP --> HostM
@@ -182,6 +195,544 @@ Runtime sequences (discovery/activation, the IPC roundtrip, extension
 registration, the save-hook chain, doc-kind session restore) are in
 [docs/06 §6.25–§6.29](06_runtime_view.md); packaging in
 [docs/07](07_deployment_view.md).
+
+### Component reference (current)
+
+The per-component detail behind CLAUDE.md's "Ownership Map" — the
+binding "where does what live, and how does it behave" reference.
+Keep it in step whenever a component boundary changes (CLAUDE.md's
+"Documentation Requirements").
+
+**Main process:**
+
+- `VaultManager` — the multi-vault registry
+  ([ADR-0051](09_architecture_decisions/0051-multi-vault-registry.md)):
+  every registered vault (`{id, name, path}`, stable minted ids) in
+  `<userData>/vault-config.json` v2 plus which one is **active** (the
+  default target for daily notes, capture, chats, drafts). Per-vault path
+  resolution — every op takes an optional trailing `vaultId` defaulting
+  to active — `deleteEntry()`, `pickSavePath()` (rooted at the given
+  vault) and cross-vault moves (copy + delete, sidecar travels along);
+  every mutating method records itself in the own-write ledger so the
+  watcher can drop its own echoes
+- `VaultWatcher` + `OwnWriteLedger` +
+  `VaultChangeAnnouncer` (`electron/vault-watcher.ts`,
+  `own-write-ledger.ts`, `vault-change-announcer.ts`) — the opt-in vault
+  watcher ([ADR-0045](09_architecture_decisions/0045-optional-vault-file-watcher.md)),
+  one chokidar instance **per registered vault** (reconciled on registry
+  changes) → ledger suppression (vault-scoped keys) → one debounced round
+  per vault (per-`.md` plugin vault-change events + the `vault:changed`
+  renderer push with `vaultId` + changed paths; a payload-less push is
+  the registry-level round). The same round backs the manual refresh
+  (`vault:refresh`), registry mutations and MCP writes.
+  `EditorService.reloadFromVaultChange` auto-reloads **clean** tabs among
+  the changed paths and marks dirty ones `diskChanged` (ADR-0060)
+- `NoteHistoryStore` (`electron/history/note-history-store.ts`,
+  milestone 60, ADR-0060) — earlier versions of notes under
+  `<userData>/history/<vaultId>/`, fed by `VaultManager.writeFile` (each
+  write names its `origin`) and kept attached across renames; bounded by
+  `vault.history`. `NoteManager.saveNote` holds the conflict guard
+  (`baseModifiedMs` → `NoteSaveResult.conflict`)
+- `ExternalFileGate` + `extractOpenPaths` (`electron/external-open.ts`,
+  [ADR-0054](09_architecture_decisions/0054-opening-files-from-the-os.md)) —
+  files the OS hands to Drey (Explorer "Open with" / default program for
+  `.md`/`.markdown`/`.mdx`/`.txt`, registered by the NSIS installer's
+  `fileAssociations`; the portable build registers nothing). Launch argv and
+  `second-instance` are queued, classified by `locateInVaults` (inside a
+  registered vault → an ordinary vault tab; anywhere else → a **pinned
+  external tab**, `external://<path>`, edited normally and saved in place
+  via `external:write` without the vault pipeline; "Save as…" copies it
+  into the active vault) and gated by a read/write allowlist
+  (only OS-collected paths, registered extension, 50 MB). The renderer
+  *pulls* the queue once after session restore, later launches are
+  *pushed*; `src/app/external-open/ExternalOpenService` routes them.
+  External tabs are not session-restored
+- `electron/plugin-host/` — discovery (built-ins +
+  `<userData>/plugins/*` + `DREY_EXTRA_PLUGIN_DIR`; manifest validation;
+  `plugins.disabled` + `apiVersion` gating), main-side activation
+  (quarantine on throw), per-plugin config store, the registries the
+  plugins fill: **save hooks** (`onNoteSaved → {content?,
+  pendingActions?}`; skipped when the save applies a confirmed rewrite),
+  **vault hooks** (open/refresh/write/delete/rename) and the
+  **section-search provider** (the MCP `vault_search` backend), and the
+  **local package installer** (`plugin-installer.ts`, ADR-0068: the
+  Settings → Panels & plugins "Install from file…" flow — a `.zip` of a
+  built plugin folder validated and extracted under
+  `<userData>/plugins/<id>/`, config preserved on upgrade, Remove for
+  user-installed ids; applies on restart)
+- The feature backends — `TagIndex`, `TaskIndex`, the assistant's
+  ActionEngine (Actions) and ChatEngine/ChatStore (chat notes,
+  ADR-0048), the assistant's template tools (`template-tools.ts`,
+  milestone 58, over `ctx.vault.delete` — SDK 1.14's new plugin delete
+  seam), the backlinks `BacklinkIndex` (milestone 54) — live in
+  their plugins.
+  `suggestTags` (the Autotag prompt) stayed base:
+  `electron/llm/tag-suggest.ts`
+- `LmStudioClient` — HTTP client for the local OpenAI-compatible endpoint
+  (`GET /models`, `POST /chat/completions`), optional bearer API key.
+  **No timeout on generation** — a local model may think for minutes; the
+  user cancels instead ([ADR-0014](09_architecture_decisions/0014-no-chat-timeout-cancellable-tasks.md)).
+  Its optional tool loop (`vaultTools` chat option) backs the assistant
+  plugin's vault tool use when `tools.vault.enabled`
+- `LlmTaskRegistry` — one `AbortController` per in-flight generation, so
+  `llm:cancel` can abort it
+- `AppConfigStore` — reads/persists `app-config.json` under the OS user-data
+  dir (all app settings slices: LLM, spellcheck, appearance, MCP,
+  `widgets`, `plugins`); app config, never in the vault
+  ([ADR-0010](09_architecture_decisions/0010-app-settings-storage.md))
+- `electron/mcp/` ([ADR-0021](09_architecture_decisions/0021-mcp-vault-server.md)) —
+  the vault MCP server. `VaultTools` (`vault_search` with a regex filter /
+  `vault_read` / `vault_write`), `createVaultMcpServer` (the MCP SDK's `Server`, since milestone 63),
+  `McpHttpTransport` (opt-in localhost `POST /mcp`) and a standalone
+  `stdio-bridge.ts` script. `vault_write` routes through the ADR-0011
+  confirmation dialog (main→renderer bridge) unless "YOLO mode" is on
+  (for MCP clients; the assistant's writes follow `tools.vault.write`)
+- `electron/mcp-client/` (milestone 63, ADR-0063) — the other direction:
+  `McpClientManager` (one SDK client per configured external server,
+  tool list + status), `web-fetch.ts` (the built-in `web_fetch`) and
+  `AssistantToolbox` (the external tool set of a chat call, each source
+  behind its approval rule via `ToolApprovalBridge`). The plugin host
+  merges it into `ctx.llm.chat` when a plugin passes `externalTools`
+- `SpellcheckService` (`electron/spellcheck.ts`) — nspell + the
+  bundled/added Hunspell dictionaries; answers `spell:check` with
+  misspelled words + suggestions
+- `safe-file.ts` — the data-safety primitives every config/note write
+  goes through: `atomicWriteFile` / `atomicWriteFileSync` (tmp + rename,
+  so a crash mid-write never destroys a file) and `readJsonObjectGuarded`
+  (a damaged config file is set aside, never silently overwritten)
+- `config-secrets.ts` + `content-security-policy.ts` — API keys (and the
+  env/header values of external MCP servers) encrypted in
+  `app-config.json` with the OS user's key (ADR-0010 later change;
+  plain in memory and over IPC), and the renderer's CSP (no inline
+  script, no `eval`, no network `fetch` from the renderer; frames only
+  from `plugin:` / `drey-asset:` — ADR-0001 later change, sandboxed
+  main window with the bundled one-file preload)
+
+**Renderer (Angular):**
+
+- `App` composes a **titlebar / [left dock | main column | right dock] /
+  status bar** shell directly.
+- `DockService` + `Dock` + `DockStrip` + `PanelFrame` (`src/app/dock/`) —
+  the dock system: `DockService` holds the whole `LayoutState` (which panel
+  in which dock, order, `flexes`, open / closed, `leftW`/`rightW`,
+  `bottomH`; `localStorage['drey.dock']`) and runs the header-drag /
+  splitter / dock-edge-resize gestures. `DockStrip` is the icon row at
+  the top of each dock (milestone 69, ADR-0019 later change): one toggle
+  per panel of that dock — a panel is open or closed to its icon, never
+  collapsed to a header; the glyph is `WidgetDescriptor.icon` /
+  `PluginWidgetContrib.icon` (SDK 1.19). Three docks — `left | right |
+  bottom` (the bottom one a resizable band under the editor). Panels come
+  from the runtime **`WidgetRegistryService`**: core panels via
+  `registerCoreWidgets()` — `CalendarPanel`, `FilesPanel` (one section
+  per registered vault — the vault header row stacked per ADR-0051 —
+  plus the file trees, right-click new/delete, inline create, add /
+  rename / remove / set-active vault management in the vault row's
+  context menu, and drag & drop of files/folders within or across
+  vaults, req-23),
+  `WindowsPanel`, `SearchPanelHost` — while the templates / search
+  / tasks / assistant panels are plugin widgets mounting plain DOM into
+  `PluginWidgetHost`. Persisted layout keys on widget ids — plugin
+  widgets keep their ids (ADR-0044 rule 5).
+  `PanelFrame` is the identical 32px header every panel shares.
+  `DockService.contentHeight(id)` marks a panel (currently `calendar`)
+  that sizes to its content rather than a flex share.
+- `TitlebarComponent` + `MenuBar` + `MenuService` (`src/app/titlebar/`) —
+  the frameless-window titlebar: accent square, the left dock toggle,
+  the HTML File/Edit/Selection/View menu bar, the **back/forward arrows**
+  (milestone 55, right of the menu bar — `DocHistoryService`), the right
+  dock toggle, and
+  — off macOS — minimize/maximize/close over the `window:*` IPC channels
+  ([ADR-0019](09_architecture_decisions/0019-movable-dock-panels-and-layout-state.md)).
+  Menu rows dispatch three ways: `KeybindingService` command ids
+  (New note, Save, Search…), the `edit:exec` IPC → `webContents`
+  (Undo/Redo/Cut/Copy/Paste/Select all, works in any focused field), and
+  CodeMirror commands against the surface `EditTargetService` last saw
+  focused (Find in note, Select line, Move line, Duplicate selection,
+  Toggle task done — disabled when no editor is focused).
+- `StatusBarComponent` (`src/app/status-bar/`) — the 28px bottom bar:
+  word/char count, a context hint (the drag instruction while a panel is
+  moving), and the Settings entry.
+- `KeybindingService` (`src/app/keybindings/`) — a capture-phase
+  `keydown` listener mapping chord strings onto `Command`s, plus a
+  capture-phase `mouseup` listener for `Command.mouseButton`
+  (3 = XButton1/back, 4 = XButton2/forward, window-wide; the `mouseup`
+  is swallowed so Chromium's own history default action never fires,
+  and the matching `mousedown` is swallowed with
+  `preventDefault` + `stopPropagation` so CodeMirror's caret placement
+  never sees the press);
+  features register from `App`. Commands: `search.open` (`Mod+Shift+F`),
+  `note.new` (`Mod+N`), `note.save` (`Mod+S`), `note.saveAs`
+  (`Mod+Shift+S`), `note.saveAll` (`Mod+Alt+S`),
+  `editor.toggleLineNumbers` (`Mod+G`), `doc.back` (`Alt+Left`) /
+  `doc.forward` (`Alt+Right`, the session document history over
+  `DocHistoryService`; both also bound to the mouse side buttons,
+  VS Code-style), `window.toggleFullScreen` (`F11`,
+  OS fullscreen via `window:toggle-fullscreen`; the native menu's
+  `togglefullscreen` role is deliberately absent — its F11 accelerator
+  would swallow the key) — the titlebar menu invokes the
+  same ids; milestone 59 adds `palette.files` (`Mod+P`) /
+  `palette.commands` (`Mod+Shift+P`) and `settings.open` (`Mod+,`)
+- `PaletteService` + `Palette` (`src/app/palette/`, milestone 59) — the
+  quick switcher / command palette, one overlay: files of every vault
+  (fuzzy on name then path, session-visited documents first, `Ctrl+Enter`
+  opens beside the current tab, "Create note" on no match) or — behind
+  a leading `>` — every `KeybindingService` command with its shortcut
+- `LinkUpdateService` + `LinkUpdateDialog` (`src/app/link-update/`,
+  milestone 59, [ADR-0059](09_architecture_decisions/0059-link-integrity-on-rename.md)) —
+  every Files-panel rename / move goes through `rename()`: main's
+  `LinkRewriter` (`electron/link-rewriter.ts`) plans over the pure
+  `shared/link-rewrite.ts` (a reference is rewritten only when what it
+  opened before differs from what the same text opens after; attachments
+  used only by a moved note travel with it), the dialog asks per
+  `vault.updateLinksOnRename` (`ask | always | never`), dirty tabs are
+  patched in the buffer. Wikilink grammar + resolver live in
+  `shared/wikilinks.ts` (the backlinks plugin imports it)
+- `ConflictService` + `ConflictDialog` (`src/app/conflict/`) and
+  `HistoryService` + `HistoryDialog` (`src/app/history/`), milestone 60
+  (ADR-0060) — the save-conflict merge view over the pure
+  `merge-model.ts` (`DocSaveService.saveToVault` asks when main refuses a
+  save; the meta bar's "Changed on disk" button asks early; the answer
+  is the merged text) and "File history…" (editor `⋯` menu, tab context menu, command
+  `note.history`): versions of the open note, diffed against the buffer,
+  restored INTO the buffer. The history and the ADR-0011 dialog render
+  through the shared `DiffView` (`src/app/diff-view/`)
+- `DocHistoryService` (`src/app/services/doc-history.service.ts`,
+  milestone 55) — one global, pointer-based back/forward history of the
+  documents viewed this session (VS Code model over any number of
+  panes; browser truncation of the forward branch; circular drop past
+  100 entries). An `effect` on `EditorService.activePath()` records
+  every activation; App `suspend()`s around the startup mass-opens and
+  `resume()` seeds the landed-on doc; `back()`/`forward()` walk the
+  pointer (serialized, `nav`-guarded), REOPEN closed vault/external
+  documents (`keepFocused`, never a clean-tab replace) and lazily prune
+  unrestorable entries (scratch tabs, plugin doc kinds). Purely
+  in-memory — nothing rides into the session snapshot; caret/scroll
+  restore rides the existing milestone-50 memory
+- `PaneService` (`src/app/panes/`, ADR-0037) — the split-view editor
+  layout: an arbitrary tree of row/column splits down to leaf panes, each
+  a `{ tabs, active }` record. `PaneLayout` renders the tree recursively
+  (draggable splitters between siblings); `PaneLeaf` renders one pane's
+  own `TabBar` + `EditorComponent`/`ImageTab`/`PdfTab`. `EditorService` is a
+  facade over the *focused* pane's document (`activePath`, `isDirty`,
+  `save()`, word count, …). Behind the facade (`src/app/services/`):
+  `open-doc.ts` (the `OpenDoc` record, tab keys and the doc factories,
+  as plain functions), `OpenDocsStore` (the registry of open documents,
+  kept in step with pane placement, plus loading / saving / error
+  state), `DocOpenService` (opening by kind, daily notes, scratch and
+  help tabs, tab replacement and pins), `DocSaveService` (the vault
+  save with its conflict guard, external files, exit-time drafts) and
+  `DocDiskSyncService` (reload after an external change, "Changed on
+  disk"). `EditorService` itself keeps the selectors, closing tabs,
+  the order and route of saves and "Save as…"; callers keep using
+  it. One pane per open path (not the same note
+  live in two panes at once); a tab's own "Split right"/"Split down" (its
+  context menu) creates a sibling pane. Opening a file (or a calendar day)
+  **replaces** the focused pane's *clean* tab — a dirty or **pinned** tab
+  (tab context menu, milestone 35) stays and the new file opens alongside; plugin doc kinds and the already-open reveal
+  path are excluded, and internal flows (session restore, `saveAs`,
+  multi-select open) pass `keepFocused` (ADR-0003 amendment, milestone 32).
+  Dragging a tab is real DnD via
+  `TabDragService` + the shared `src/app/dnd/` overlay (ADR-0039): source
+  stays put, ghost chip + drop-line, `no-drop` over an invalid target,
+  commit once on release onto a tab strip (precise slot) or a pane body
+  (append); ESC / window-blur cancel. `App` also registers
+  `pane.splitRight` (`Ctrl+Alt+Enter`), `pane.splitDown`
+  (`Ctrl+Alt+Shift+Enter`) and `pane.focusNext`/`Prev` (`F6`/`Shift+F6`)
+  commands + View-menu rows. A **vault file dropped on a pane** but not on
+  `.cm-content` (tab strip, meta bar, empty state, padding) opens as a tab
+  there — `PaneDropService` (`src/app/panes/`), from `PaneLeaf`'s
+  `dragover`/`drop`; out-of-vault OS files stay with `DropGuardService`
+  (ADR-0027 / ADR-0028 amendment). **Regions (milestone 20, ADR-0038):**
+  each dock hosts at most one pane in its editor band —
+  `detachToDock`/`reattachToCenter` (an occupied dock's occupant returns
+  to the centre), band heights per side, splits refuse on docked panes, a
+  band whose last tab closes dissolves. Docked editors ride the session
+  snapshot's optional `dock` field and survive a restart with their tabs;
+  `View → Reset layout` also calls `panes.resetRegions()`. `Dock`'s drag
+  carries a widget id *or* an editor pane; the centre is an editor-only
+  drop target.
+- `EditorComponent` — one CodeMirror 6 view **per pane** (`[paneId]`
+  input; `shownPath`/`shownDoc` resolve *that pane's* document via
+  `PaneService`) with an inline Live Preview mode (decoration-based,
+  ADR-0009) and a raw source mode, switched via a `⋯` mode menu
+  (ADR-0008); the same `⋯` menu lists the manual Actions and "Save as…".
+  A 40px meta bar carries the path, the **formatting buttons**
+  (`MarkdownToolbar`, icon-only; hidden via `⋯` → "Formatting toolbar"),
+  an "Unsaved" label, a **Lines** toggle (line-number gutter, `Ctrl+G`, an
+  app-wide preference — not per-pane), Save and the `⋯` menu. Typing `/`
+  opens the **slash menu** (`slash-commands.ts`): a **Templates** section
+  — the built-in **Entry** block (the configured entry format, ADR-0022)
+  plus the templates plugin's library entries, each with a preview card —
+  then **Formatting** (ADR-0057). Typing a **snippet trigger** (`tbl`,
+  `code`, `task`, …) offers a multi-line Markdown block with
+  `${n:placeholder}` tabstops (milestone 46, templates plugin; the
+  library is user-owned in app config and edited in Settings →
+  Templates). The **fold gutter** is always live (Obsidian-style
+  collapsible headings, hover-revealed chevron); only the line-number
+  column follows the Lines toggle (`editorStructure` / `gutterTheme`).
+  Inline `#tag`s render as pills; `Ctrl`/`Cmd`-click runs a tag search.
+  `[[wikilinks]]` (ADR-0046) render as internal links in both modes
+  (unresolved ones muted + dotted; Live Preview conceals the brackets, an
+  alias leaving only its text); `Ctrl`/`Cmd`-click opens the target by
+  name/path — at a `#heading` anchor's line when given — and **creates**
+  a missing note; typing after `[[` autocompletes note names
+  (`src/app/editor/wikilinks/`, a base feature over the file tree).
+  Global per-id requests (quick-capture, the assistant's
+  insert-into-note) are gated on `PaneService.focusedId()`, so only the
+  focused pane's instance acts on one. `EditorService.requestInsertText`
+  (consumed here) backs the assistant's insert-into-note arrow
+- _(Removed in milestone 43,
+  [ADR-0057](09_architecture_decisions/0057-ui-refinement-icon-chrome-anthrazit-and-slash-capture.md):
+  `EntryDrawerComponent` / `EntryPanel`, the "Add entry" capture surface.
+  Capture is the slash menu's Entry block; the entry format stays
+  configurable under Settings → "Entry format".)_
+- `ToolApprovalService` + `ToolApprovalDialog` (`src/app/tool-approval/`,
+  milestone 63, ADR-0063) — the question before an external tool call
+  runs (source, tool, arguments; Allow / Always allow / Deny), queued
+  one at a time
+- `McpBridgeService` — renderer side of the vault MCP server: shows an
+  MCP client's `vault_write` in the shared confirmation diff and replies
+  (the tree/index refresh after that write rides the shared
+  `vault:changed` push, subscribed by `VaultService` for every change
+  source — ADR-0045)
+  ([ADR-0021](09_architecture_decisions/0021-mcp-vault-server.md))
+- `HelpService` (`src/app/help/`,
+  [ADR-0067](09_architecture_decisions/0067-in-app-help-documents.md)) —
+  the Help menu: the bundled user manual (`docs/manual/manual.md`,
+  mirrored into `public/manual/` by `scripts/sync-manual.mjs` at
+  prebuild/predev) opens as a read-only pinned tab through
+  `EditorService.openHelpDoc` (never dirty, never session-restored,
+  document actions hidden) with its relative image refs resolved to
+  app-origin URLs; the keyboard-shortcuts page is generated at open
+  time from the live `KeybindingService` registry, so it can never
+  contradict the command palette
+- `src/app/plugin-host/` — the renderer-side plugin host (ADR-0044):
+  `plugin-host.service.ts` (activation before bootstrap, quarantine,
+  the `plugin:event` fan-out, native-surface visibility synthesis),
+  `plugin-api-impl.ts` (implements `DreyPluginApi` over the base
+  services), the registries (editor extensions, drop decoders, doc kinds,
+  menu contributions, settings pages) and the three DOM mount hosts for
+  widgets / settings pages / doc kinds
+- `SettingsComponent` — master-detail settings screen (category list +
+  detail pane), core categories in alphabetical order — "Appearance",
+  [ADR-0020](09_architecture_decisions/0020-app-wide-appearance-accent-and-ui-scale.md),
+  "Assistant tools" (the `tools` slice: group switches, write and
+  approval rules, the external MCP servers — ADR-0063),
+  "Daily notes", "Entry format" (what the slash menu's Entry block
+  inserts, ADR-0022), "LLM", "MCP", "Panels & plugins" (`widgets.disabled` +
+  `plugins.disabled` + each discovered plugin's live status),
+  "Spelling", "Vault" (`vault.watch`, the opt-in external-change
+  watcher, ADR-0045; `vault.updateLinksOnRename`, ADR-0059; `vault.history`, ADR-0060) — then **plugin-contributed categories** (sorted by
+  label) before "About" and rendered through
+  `PluginSettingsHost` (shared form vocabulary `plugin-settings.css`,
+  author guide `plugins/AUTHORING.md`), saving immediately rather than
+  via the footer bar (ADR-0044 rule 3). Opened from the status-bar entry.
+  Category list is descriptor-driven (`*ngComponentOutlet`). The
+  close (X) is top-right; the footer Discard is always enabled and closes,
+  warning first when the draft is dirty
+- `ConfirmationDialogComponent` — the one confirmation dialog shared by
+  Actions, Ask-mode edits and MCP `vault_write` (inline line diff for a
+  localized change; an **aligned split diff** — equal-size halves — for a
+  whole-document rewrite; "don't ask again")
+  ([ADR-0011](09_architecture_decisions/0011-unified-confirmation-flow.md))
+
+**Plugin panels** (renderer DOM widgets of the plugins above):
+
+- Search panel — `plugins/tags/`: an icon scope
+  switch (document | vault | all vaults), **one** field (the shared tag
+  field in free-text mode: a typed `#name` becomes a chip, the rest is
+  the text query) with `Aa`/`ab`/`.*` match toggles → section hits
+  **grouped per file** (click opens the file at the line through the
+  document API, vault-aware), and — as icon buttons on the result line —
+  a replace row (file scope patches the buffer; vault/all goes through one
+  bundled per-file-diff confirmation), **Export** (dumps the hits into an
+  unsaved `search-results.md` scratch tab) and
+  **Summarize** (when an LLM is configured), which streams a topic
+  digest of the hits — via the plugin's `summarise` backend over the
+  editable `builtin:search-summary` template — into an unsaved
+  `search-summary.md` scratch tab, cancellable (milestone 37). Next to
+  the scope switch a speech-bubble **Include chats** toggle: chat notes
+  (`chats/`) stay indexed but are left out of vault / all-vault hits —
+  and out of "Replace all" — unless it is on (off by default; the
+  document scope searches the open note as it is), and — milestone 68 —
+  a brain **Semantic** toggle: the vault/all text query ranks by
+  embedding similarity over the assistant's index (base
+  `SemanticSearchProvider` seam, SDK 1.18; percent score badges, tag
+  chips as an exact post-filter, match flags + replace hidden, no
+  provider → a clear error row). MCP `vault_search` takes an optional
+  `vault` argument and a `mode: 'text' | 'semantic'`. Panel +
+  toggle prefs persist in `localStorage['drey.search']`
+- Tasks panel — `plugins/tasks/` (ADR-0033):
+  checkbox / `#task` lines in the open document, the whole vault, or all
+  vaults (Doc | Vault | All scope toggle, milestone 34) · "hide done" · a
+  kind filter · a sort cycle (file order | due | priority, milestone 51 —
+  due/priority sorts flatten the grouped view) — all persisted to
+  `localStorage['drey.tasks']`. Task lines carry **Obsidian-compatible
+  inline metadata** (req-37): a due `📅 YYYY-MM-DD` and a priority glyph
+  (`🔺`/`⏫`/`🔽`), parsed + stripped by the shared scanner into
+  `TaskRecord.due`/`TaskRecord.priority` (so `resolveTaskLine`'s
+  text+kind matching never sees them; `specs/frontmatter-schema.md`,
+  ADR-0033 later-change). Rows show a due badge (overdue/today colored)
+  + the glyph — both are buttons that re-open their picker at the badge
+  and write back through the shared `applyToTaskLine` routing; editor
+  completion on task lines (`due`/`fällig` with a native date-picker
+  popover defaulting to today, `prio`/`priority` with the glyph list)
+  and a plain click on a token chip re-opens the same pickers in place —
+  `task-meta.ts` over the host's markdown language data (options ride
+  `filter: false`, else CM's label fuzzy-matcher drops the
+  emoji-prefixed labels). Document scope
+  scans the live editor buffer through the document API; vault/all scope
+  calls the plugin's `backend.invoke('list', …)` over its **per-vault
+  index** (every record stamped `vaultId`; vault scope filters to the
+  registry's active vault at pull time, all scope groups per file with a
+  vault badge). A row's checkbox rewrites the buffer line through
+  `documents.setBuffer` + save (closed files through
+  `vault.writeFile { vaultId }`); a row click opens the file at the line,
+  in its vault
+- Source control panel — `plugins/git/` (ADR-0065):
+  the repository of the focused document's vault — branch button (→
+  branch picker: switch, track a remote branch, create), commit message
+  + commit, *Merge conflicts* / *Staged changes* / *Changes* lists (row
+  click compares through `api.ui.showDiff`; stage / unstage / discard /
+  open), a collapsible *History* (commits not on the upstream carry
+  "↑ not pushed"), header icons Fetch · Pull · Push · More (merge a
+  branch, stash, stashes, amend, file history) · Refresh; a merge shows
+  a banner with an abort icon, the commit box has *Commit* and *Commit
+  and push* (`Ctrl+Shift+Enter`). The main entry (`GitRunner` + the pure
+  parsers in `shared/status.ts`) keeps one `VaultGitState` per vault,
+  pushed as `status-updated`; the renderer turns it into Files-panel
+  decorations. Asks before a commit with unsaved tabs; refuses checkout
+  / pull while the vault has unsaved tabs. Settings → "Git" (`gitPath`)
+- Assistant panel — `plugins/assistant/` (conversations
+  since ADR-0048): **chat-first** — a chat
+  picker + new chat in the head, turn cards rendered from the active
+  chat note (`chats/<y>/<m>/…`, `kind: chat`; collapsible tool chips for
+  the persisted `drey-tool` entries, streamed partial answers), the
+  milestone-24 composer (context chips, auto-grow, model row) plus
+  image/file chips (paste/drop or a native dialog stage EXTERNAL files
+  into the vault via `api.vault.saveAsset` / `chat:attachExternal` —
+  vision parts per provider capability, text attachments name-preserving).
+  The chat note is the source of
+  truth: every turn is appended main-side (`chat-engine.ts` +
+  `chat-store.ts` via `ctx.vault.writeAnnounced`), and a follow-up
+  full-replays the persisted history — tool pairs and applied edits
+  included — or resumes a claude-code session; there is no `history`
+  IPC field and no length cap. Chat notes are **auto-saved**: the tab
+  follows the disk (an append reloads even a dirty tab) and hand edits
+  persist after a short idle (`shared/structural-folders.ts`
+  `isAutoSavePath`; also `.drafts/`), so chats and temp files never
+  raise the exit prompt — only the user's own notes do. (The old
+  auto-summary sidecar feature was removed entirely — ADR-0012
+  superseded; pre-existing `.{name}.chat.json` files stay on disk,
+  unread.) **Chat switching is explicit** (ADR-0048 later change): a
+  chat note's `note:` frontmatter records the doc key the chat was
+  started under (provenance + the picker's "this note" marker only — it
+  steers nothing), and the ONLY implicit panel switch is a focused
+  **chat-note tab** (opening a chat's Markdown from the vault hydrates
+  the panel with it). Every other focus — daily, meeting, topic note,
+  non-document — keeps exactly the current chat; at startup the newest
+  chat loads once. A chat otherwise changes through the picker or
+  "New chat". A "Prompts" picker in
+  the composer inserts a prompt from `templates/prompts/*.md`
+  (`# Titel` / `> Beschreibung` / body) into the composer for editing.
+  Manual
+  Actions live in the editor `⋯` menu as `editor-more` menu contributions.
+  **Live edit** (ADR-0049): a "Live edit" chip in the composer opts one
+  ask turn into immediate-apply editing — the model edits the open note
+  through the `doc_*` tools (`doc_apply_diff` atomic find/replace hunks,
+  `doc_write`, `doc_read`) over a main-side working copy; each mutating
+  call pushes via the `chat:liveEdit` event into `documents.setBuffer`
+  (one Ctrl+Z step per push), the document is locked for user input
+  while the turn runs (`documents.setEditLock` → an `EditorView.editable`
+   compartment + the meta bar's "Assistant is editing…" hint), the applied
+   document persists as the turn's `edit` fence entry, and providers
+   without tool support fail visibly
+- **Vault chip — semantic vault retrieval** (milestone 41,
+  [ADR-0055](09_architecture_decisions/0055-semantic-vault-retrieval.md)):
+  a second composer chip opens a vault picker — *Off / Active vault /
+  All vaults* shortcuts plus one checkbox row per registered vault, so a
+  non-active vault (e.g. a Git vault) is targetable without activating
+  it; each ask with it on embeds the question in the assistant plugin's
+  worker
+  (transformers.js WASM-only, `plugins/assistant/main/semantic/`) and
+  injects the top-k similar note sections into the system prompt —
+  section text rides ONLY that call (never the replay; older turns cite
+  via a compact ```drey-context fence that names the vault:
+  `vault · path:line`). Index: one JSON file per **every registered**
+  vault (scope-independent)
+  under `<userData>/plugins/assistant/semantic-index/`, kept fresh by the
+  save/vault hook registries, hydrated from the vault at answer time.
+  Settings → "Assistant retrieval" (enabled, model id, k, score floor,
+  per-vault status + rebuild). Independent of `mcp.enabled`; ignored for
+  live-edit turns. A custom selection referencing no registered vault
+  anymore degrades to a visible `unregistered` context status, never to
+  the active vault.
+
+This is a starting point, not a fixed contract — but any deviation should
+be called out explicitly (see CLAUDE.md's "Working Style"), not
+introduced silently.
+
+### Feature → files index
+
+The deterministic resolver for "I want to change feature X — where?".
+Paths are relative to the repo root; the ADR column gives the binding
+decision. (Seams — what a *plugin* can extend — are the table above.)
+
+| Feature | Files | Owner | Decision |
+| --- | --- | --- | --- |
+| Quick capture (global hotkey → today's note + new entry) | `electron/main.ts`, `electron/daily-note.ts`, `src/app/services/EditorService` | Base | ADR-0002 |
+| Daily notes (calendar open, drafts, daily dir config) | `electron/daily-note.ts`, `src/app/calendar/`, `src/app/vault/daily-note.service.ts` | Base | — |
+| Entry capture (`/` menu Entry block, entry format) | `src/app/editor/slash-commands.ts`, Settings → "Entry format" | Base | ADR-0022, ADR-0057 |
+| Editor modes + Live Preview (conceal, block widgets) | `src/app/editor/` (`editor.ts`, `markdown-surface/`, `live-preview/`) | Base | ADR-0008, ADR-0009 |
+| Non-Markdown code files (language mode, source-only) | `src/app/editor/markdown-surface/` (language compartment) | Base | ADR-0036 |
+| Formatting toolbar + slash formatting blocks | `src/app/editor/markdown-toolbar.ts`, `toolbar-commands.ts`, `slash-commands.ts` | Base | M42, ADR-0057 |
+| Snippets (`tbl`, `code`, … with tabstops) | `plugins/templates/` + Settings → Templates | Plugin templates | M46 |
+| Tag pills + `#tag` completion (the tag chrome) | `src/app/editor/tags/`, `TagVocabularyService` | Base | ADR-0017 |
+| Tag index, prefix colors, rename/merge | `plugins/tags/` (main + Settings → Tags) | Plugin tags | ADR-0017, M53 |
+| Search panel (tag + text, semantic toggle, replace, Export, Summarize) | `plugins/tags/` + the base `SemanticSearchProvider` seam (`api.search.searchSemantic`) | Plugin tags | M33, M37, M68 (ADR-0055 later change) |
+| Autotag / "Suggest tags" | `electron/llm/tag-suggest.ts`, the editor `⋯` menu | Base | `specs/classifier-spec.md`, M45 |
+| Tasks panel + inline due/priority metadata | `plugins/tasks/` | Plugin tasks | ADR-0033 |
+| Assistant chat + chat notes (`chats/`) | `plugins/assistant/` (`chat-engine.ts`, `chat-store.ts`) | Plugin assistant | ADR-0048 |
+| Manual Actions (run + on-save queue) | `plugins/assistant/` + `editor-more` menu rows | Plugin assistant | ADR-0011, ADR-0012 |
+| Live edit (model edits the open note) | `plugins/assistant/` + `documents.setEditLock` | Plugin assistant | ADR-0049 |
+| Semantic retrieval (the Vault chip) | `plugins/assistant/main/semantic/` | Plugin assistant | ADR-0055 |
+| Assistant tool groups + external MCP servers | `electron/mcp-client/`, `src/app/tool-approval/`, Settings → "Assistant tools" | Base | ADR-0063 |
+| LLM providers / transport (encrypted keys) | `electron/llm/` (`providers/`, router, task registry), `electron/config-secrets.ts` | Base | ADR-0047, ADR-0014, ADR-0010 later change |
+| Templates panel + template library | `plugins/templates/` | Plugin templates | ADR-0029 |
+| Meeting import (`.ics`/`.msg` drop → section) | `plugins/meeting/` | Plugin meeting | ADR-0041 |
+| In-editor browser tab | `plugins/browser/` | Plugin browser | ADR-0042 |
+| OCR on embedded images / image tabs | `plugins/ocr/` | Plugin ocr | ADR-0050 |
+| Outline panel (open note headings) | `plugins/outline/` | Plugin outline | — |
+| Backlinks panel | `plugins/backlinks/` | Plugin backlinks | M54 |
+| draw.io diagram tabs + embeds | `plugins/drawio/` | Plugin drawio | ADR-0064 |
+| Git vaults + Source control panel (merge, stash, amend, file history) | `plugins/git/` | Plugin git | ADR-0065 (+ M67 later change) |
+| Wikilinks (render, resolve, create-missing, complete) | `src/app/editor/wikilinks/`, `shared/wikilinks.ts` | Base | ADR-0046 |
+| Link integrity on rename / move | `electron/link-rewriter.ts`, `src/app/link-update/`, `shared/link-rewrite.ts` | Base | ADR-0059 |
+| Save conflicts (mtime guard + merge view) | `electron/note-manager.ts` (guard), `src/app/conflict/` | Base | ADR-0060 |
+| Local note history ("File history…") | `electron/history/`, `src/app/history/` | Base | ADR-0060 |
+| Multi-vault registry + Files panel | `electron/vault-manager.ts`, `src/app/vault/` | Base | ADR-0051 |
+| Vault watcher / manual refresh / change rounds | `electron/vault-watcher.ts`, `own-write-ledger.ts`, `vault-change-announcer.ts` | Base | ADR-0018, ADR-0045 |
+| OS-opened / out-of-vault files | `electron/external-open.ts`, `src/app/external-open/` | Base | ADR-0054 |
+| Office documents (open in OS program, Alt-drop) | `shared/external-document.ts`, `EditorService.openFile` | Base | ADR-0066 |
+| PDF export / PDF viewer tab | `electron/pdf-export.ts`, `src/app/pdf-viewer/` | Base | ADR-0052 |
+| Image viewer, lightbox, image tabs | `src/app/image-viewer/` | Base | ADR-0026 |
+| Image/file paste + `attachments/` staging | `src/app/editor/image-paste.ts`, `vault:save-asset` handlers | Base | ADR-0024, ADR-0028 |
+| MCP vault server (for other programs) | `electron/mcp/` | Base | ADR-0021 |
+| Spellcheck (+ language auto-detect) | `electron/spellcheck.ts`, `src/app/editor/spellcheck/` | Base | ADR-0013, ADR-0056 |
+| Appearance (accent, scale, fonts) + themes | `src/app/services/appearance.service.ts`, `theme.service.ts`, `src/app/settings/` | Base | ADR-0020, ADR-0035 |
+| Keybindings + commands | `src/app/keybindings/` | Base | — |
+| Palette (files / commands, `Mod+P`) | `src/app/palette/` | Base | M59 |
+| Panes, splits, tab DnD, pinning | `src/app/panes/`, `src/app/dnd/`, `src/app/tab-bar/` | Base | ADR-0037–0039 |
+| Docks, panels, icon strips, layout state | `src/app/dock/` | Base | ADR-0019 (+ M69 later change), ADR-0034 |
+| Session restore + unsaved-buffer backups | `electron/session/` | Base | ADR-0043 |
+| Doc back/forward history | `src/app/services/doc-history.service.ts` | Base | M55 |
+| Settings framework (core categories, config store) | `src/app/settings/`, `electron/llm/app-config.ts` | Base | ADR-0010 |
+| Confirmations (Actions / Ask / MCP writes) | `src/app/confirmation-dialog/`, `src/app/diff-view/` | Base | ADR-0011 |
+| Plugin system (hosts, SDK, discovery, gating, esbuild renderer bundling) | `electron/plugin-host/`, `src/app/plugin-host/`, `shared/plugin-api/`, `scripts/build-plugins.mjs` | Base | ADR-0044 (+ later changes) |
+| Plugin install/remove (`.zip` packages) | `electron/plugin-host/plugin-installer.ts`, Settings → "Panels & plugins" | Base | ADR-0068 |
+| In-app help + user manual | `src/app/help/`, `docs/manual/`, `scripts/sync-manual.mjs`, `public/manual/` | Base | ADR-0067 |
+| Security (sandboxed window, CSP, bundled preload) | `electron/content-security-policy.ts`, `scripts/bundle-preload.mjs`, `electron/main.ts` | Base | ADR-0001 later change |
+| Data safety (atomic writes, guarded configs) | `electron/safe-file.ts` | Base | — | |
 
 
 ## 5.1 Whitebox Overall System (as of the "visual shell" milestone)
@@ -1720,6 +2271,16 @@ file tree + context menu + inline-create flow moved into `FilesPanel`.
 rename (`VaultService.copyEntry` / `duplicateEntry` / `renameEntry`,
 clipboard signal on `VaultService`).
 
+Since 2026-10-11 the Files panel is four files under
+`src/app/dock/panels/` instead of one 1,345-line component:
+
+| File | Holds |
+| --- | --- |
+| `files-tree.ts` | The tree as plain data, no Angular: the visible rows (`flattenVisible`), row keys, selection ranges, where a drop may land, name validation. |
+| `files-tree-state.ts` | `FilesTreeState`, one instance per panel: expanded folders, folded vault sections, keyboard cursor, multi-selection. Nothing persisted. |
+| `file-operations.service.ts` | `FileOperationsService`: create, rename, move, copy / paste, delete and the vault registry actions — each with its confirmation, the tab and clipboard follow-up and its error message. Knows nothing about the tree's view state. |
+| `files-panel.ts` | `FilesPanel`: pointer, keyboard and drag events, the two context menus, the inline name inputs. |
+
 ```mermaid
 graph TB
     subgraph Renderer["Renderer (src/app/)"]
@@ -2311,10 +2872,17 @@ resolution) possible.
 - **Renderer** — `state.ts` holds only session state (active chat, chips
   keyed by the open note, a taskId-keyed streaming buffer throttled to
   ~100 ms re-renders, the unchanged sidecar auto-summary logic);
-  `panel.ts` renders the chat-first UI (picker + new chat, turn cards
-  with collapsible tool chips, streaming partial card, pinned summary
-  card, image chips with paste/drop staging through
-  `api.vault.saveAsset`); `index.ts` wires the ports to the backend
+  `panel.ts` assembles the chat-first UI and runs its render loop:
+  the head (chat label, picker, new chat), `thread.ts` (turn cards
+  with collapsible tool chips, the vault-context chip, the streaming
+  partial card; a `tasks_list` result is `task-block.ts`) and
+  `composer.ts` (context chips, the auto-growing CodeMirror input,
+  @-completion; paste/drop staging through `api.vault.saveAsset` is
+  `composer-staging.ts`). The five pickers are `picker-chat.ts`,
+  `picker-model.ts`, `picker-prompt.ts`, `picker-vault.ts` and
+  `picker-file.ts` over `picker-frame.ts`; `tool-format.ts` holds the
+  wording of tool calls and results as pure functions, `dom.ts` the
+  element and icon helpers; `index.ts` wires the ports to the backend
   methods (`chat:list`, `chat:read`, `chat:appendEdit`,
   `chat:truncate`, `chat:importSidecar`, rewritten `ask` without any
   `history` payload).
@@ -2410,6 +2978,15 @@ status, never to the active vault.
   snippet per hit; the provider registers through
   `ctx.search.registerSemanticSearch` only while enabled (main-side
   re-sync after every config change).
+- **Search panel files** (`plugins/tags/renderer/`) — `index.ts` only
+  wires the parts and registers the `search.open` command:
+  `search-session.ts` is the model without DOM (query, persisted
+  choices from `search-prefs.ts`, the hits, the run in all three
+  scopes); `search-panel.ts` is the dock widget's DOM over it;
+  `search-replace.ts` the file-scope buffer patch and the bundled
+  confirmation; `search-summary.ts` the Summarize digest into a
+  scratch tab; `hit-list.ts` folds unsaved buffers into the hits and
+  groups them per file, as pure functions.
 - **Search panel semantic mode** (`plugins/tags/renderer/`, milestone
   68) — the panel's brain-icon toggle switches the vault/all query to
   `api.search.searchSemantic`: ranked hits with a percent score badge,

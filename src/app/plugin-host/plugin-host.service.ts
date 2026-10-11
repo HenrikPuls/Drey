@@ -5,6 +5,7 @@ import type {
   PluginRendererModule,
   Unsubscribe,
 } from '../../../shared/plugin-api/renderer';
+import type { PluginInstallResult, PluginUninstallResult } from '../../../shared/ipc-api';
 import { EditorService } from '../services/editor.service';
 import { DocKindRegistry } from './doc-kind-registry.service';
 import { LayoutGestureService } from '../services/layout-gesture.service';
@@ -148,6 +149,42 @@ export class PluginHostService {
       }
     }
     this.activated.clear();
+  }
+
+  // -- local packages (ADR-0068) --------------------------------------------
+
+  /**
+   * True once a plugin package was installed or removed this session — the
+   * change applies on the next start, so Settings keeps offering a restart
+   * until one happens.
+   */
+  readonly pluginChangePending = signal(false);
+
+  /** Native .zip pick + install; null when the pick was cancelled. */
+  async installPluginFromFile(): Promise<PluginInstallResult | null> {
+    const picked = await window.dreyApi.pickPluginPackage();
+    if (picked === null) {
+      return null;
+    }
+    const result = await window.dreyApi.installPluginPackage(picked);
+    if (result.status === 'installed') {
+      this.pluginChangePending.set(true);
+    }
+    return result;
+  }
+
+  /** Removes a user-installed plugin (the caller confirms first). */
+  async removePlugin(pluginId: string): Promise<PluginUninstallResult> {
+    const result = await window.dreyApi.uninstallPlugin(pluginId);
+    if (result.status === 'removed') {
+      this.pluginChangePending.set(true);
+    }
+    return result;
+  }
+
+  /** Graceful restart (dirty tabs still get their exit prompt). */
+  relaunchApp(): void {
+    void window.dreyApi.relaunchApp();
   }
 
   // -- activation ----------------------------------------------------------

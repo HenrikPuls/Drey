@@ -1,7 +1,7 @@
 # Writing a Drey plugin
 
-The practical guide for `plugins/<id>/` authors. The *why* lives in the
-architecture docs: [ADR-0044](../docs/09_architecture_decisions/0044-runtime-plugin-system.md)
+The practical reference for `plugins/<id>/` authors. The *why* lives in
+the architecture docs: [ADR-0044](../docs/09_architecture_decisions/0044-runtime-plugin-system.md)
 (the plugin system: split, five safety rules, rejected alternatives),
 [docs/05 §5.0](../docs/05_building_block_view.md) (the current base/plugin
 structure and the full seam table), [docs/06 §6.25–§6.29](../docs/06_runtime_view.md)
@@ -10,7 +10,16 @@ sequences) and [docs/07](../docs/07_deployment_view.md) (packaging). This
 file is the *how*: layout, manifest, UI rules, the settings-page
 vocabulary, and how to test.
 
+New to plugin writing? Start with [TUTORIAL.md](TUTORIAL.md) — a
+step-by-step walkthrough built on the sample plugin, including packaging
+and local installation (ADR-0068).
+
 The `sample` plugin is the executable reference for everything below.
+Since milestone 70 (ADR-0068) it is dev/test-only: not part of the default
+build output, so no ordinary dev run or package discovers it. Build it
+explicitly with `DREY_BUILD_SAMPLE_PLUGINS=1 npm run build:plugins` (the
+`npm run e2e` script does the same) — or install it into a real Drey as a
+package, exactly the way the tutorial ships your own plugin.
 
 ## Layout and build
 
@@ -27,9 +36,11 @@ plugins/<id>/
 `dist-electron/plugins/<id>/` — that directory is what actually loads,
 built-in or not: `main/` and `shared/` as CommonJS from `tsc`,
 `renderer/index.js` as one ES module from esbuild (not minified).
-**After touching `plugins/**`, or a `shared/**` file a plugin imports,
-rebuild and restart Electron**; a stale `dist-electron` leaves the app
-running the previous build. Verify with
+`npm run dev` does this by itself: a change under `plugins/**` (or a
+`shared/**` file a plugin imports) rebuilds the plugins and restarts
+Electron. Run any other way (`npm run app`, a VS Code debug config),
+**rebuild and restart Electron yourself** — a stale `dist-electron`
+leaves the app on the previous build. Verify with
 `grep <new-symbol> dist-electron/plugins/<id> -r`.
 
 ## Manifest
@@ -82,6 +93,11 @@ running the previous build. Verify with
   `DREY_EXTRA_PLUGIN_DIR` (dev) — all identical to the hosts
   (ADR-0044: built-ins have no privileged path). A plugin is disabled via
   `plugins.disabled` (Settings → Panels & plugins), applied on restart.
+- A user-installed plugin arrives as a **local package**: a `.zip` of the
+  built plugin folder, installed (and upgraded, config preserved) or
+  removed through Settings → Panels & plugins → "Install from file…" /
+  "Remove" — see [TUTORIAL.md](TUTORIAL.md) and
+  [ADR-0068](../docs/09_architecture_decisions/0068-local-plugin-packages.md).
 
 ## Renderer rules
 

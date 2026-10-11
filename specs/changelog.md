@@ -34,6 +34,187 @@ over a 32px *min*-height rendered it 33px — a pixel taller even than the
 panel headers below it. Its vertical padding is now 3px, so the box is
 exactly 32px. (ADR-0057 later change.)
 
+### The Search panel is split into model, DOM, replace and summary
+
+Item 10 of the 2026-10-11 architecture review, fourth file. A
+restructuring: nothing the user sees or does changes. **Not yet manually
+verified by the owner.**
+
+- **`plugins/tags/renderer/index.ts` went from 1,040 to 60 lines.** It
+  was one `activate` function. Now, in the same folder:
+  - `search-session.ts` — the model, without DOM: the query, the stored
+    choices (`search-prefs.ts`), the hits and the run.
+  - `search-panel.ts` — the dock widget: header toggles, the field, the
+    replace row, the grouped hits.
+  - `search-replace.ts` — the file-scope buffer patch and the bundled
+    confirmation. "Replace all" and a hit's own replace button were the
+    same preview-and-confirm code twice and now share it.
+  - `search-summary.ts` — the Summarize digest into a scratch tab.
+  - `hit-list.ts` — folding unsaved buffers into the hits and grouping
+    per file, as pure functions; `dom.ts` — the element helpers.
+- **Removed: an unused fetch.** The panel loaded the tag vocabulary on
+  start, on every vault change and on every index update, stored it and
+  never read it. It is gone; the panel still re-renders once the active
+  vault is known, which that fetch did as a side effect.
+- **Tests.** The eight existing e2e search tests run unchanged.
+  `hit-list.spec.ts` adds 11 direct tests.
+
+### The assistant panel is split into thread, composer and pickers
+
+Item 10 of the 2026-10-11 architecture review, third file. A
+restructuring: nothing the user sees or does changes. **Not yet manually
+verified by the owner.**
+
+- **`plugins/assistant/renderer/panel.ts` went from 1,854 to 101
+  lines.** It was one function holding every part of the panel as nested
+  closures. Now, in the same folder:
+  - `thread.ts` — the turn cards, tool chips, the vault-context chip,
+    the streaming card and the status lines.
+  - `task-block.ts` — the interactive block a `tasks_list` result
+    renders as.
+  - `composer.ts` — context chips, the CodeMirror input with
+    @-completion, the tool buttons; `composer-staging.ts` — files pasted
+    or dropped onto it.
+  - `picker-chat.ts`, `picker-model.ts`, `picker-prompt.ts`,
+    `picker-vault.ts`, `picker-file.ts` — one picker each, over the
+    shared `picker-frame.ts`.
+  - `tool-format.ts` — how tool calls, results and task filters are
+    worded, as pure functions; `dom.ts` — element and icon helpers.
+  - `panel.ts` — the head, the assembly and the render loop.
+- **Tests.** The panel had almost no coverage of its own, so two e2e
+  tests were added first and run against the old file, then the new
+  ones: the note chip, the file and prompt pickers feeding the composer,
+  and the chat, vault and model pickers applying their choice.
+  `tool-format.spec.ts` adds 20 direct tests.
+- Expanding a tool chip, confirming a restart or copying a turn now
+  re-renders the thread only, not the head and the composer too; the
+  result on screen is the same.
+
+### `EditorService` is split into a facade and four collaborators
+
+Item 10 of the 2026-10-11 architecture review, second file. A
+restructuring: nothing the user sees or does changes. **Not yet manually
+verified by the owner.**
+
+- **`editor.service.ts` went from 1,727 to 742 lines.** Its public
+  surface is unchanged, so none of the ~50 files that use it changed.
+  Behind it, in `src/app/services/`:
+  - `open-doc.ts` — the `OpenDoc` record, tab keys, the doc factories
+    and the "may this tab be replaced" rule, as plain functions.
+  - `open-docs.store.ts` — `OpenDocsStore`: the registry of open
+    documents, kept in step with pane placement, plus the loading /
+    saving / error state.
+  - `doc-open.service.ts` — `DocOpenService`: opening by kind, daily
+    notes, scratch and help tabs, tab replacement, pins.
+  - `doc-save.service.ts` — `DocSaveService`: the vault save with its
+    conflict guard, external files, exit-time drafts, the "Save as…"
+    write.
+  - `doc-disk-sync.service.ts` — `DocDiskSyncService`: reload after an
+    external change and the "Changed on disk" settlement.
+  - `caret-memory.ts` — the per-document caret and scroll memory.
+- `EditorService` keeps what ties these together: the selectors of the
+  active document, closing tabs, the order and route of saves, and
+  "Save as…".
+- **All existing specs run unchanged.** `open-doc.spec.ts` adds 21 direct
+  tests of the model functions and the caret memory.
+- The image and PDF tab factories were the same code twice and are now
+  one. The save's doc comment described the pre-ADR-0017 tag routing;
+  it now describes what the save does.
+
+### The Files panel is split into four files
+
+Item 10 of the 2026-10-11 architecture review, first file. A
+restructuring: nothing the user sees or does changes. **Not yet manually
+verified by the owner.**
+
+- **`files-panel.ts` went from 1,345 to 732 lines.** It was one component
+  holding the tree model, the selection, the drag rules and every file
+  operation. Now:
+  - `files-tree.ts` — the tree as plain functions: visible rows, row
+    keys, selection ranges, valid drop targets, name validation.
+  - `files-tree-state.ts` — `FilesTreeState`: expanded folders, folded
+    vault sections, keyboard cursor, multi-selection.
+  - `file-operations.service.ts` — `FileOperationsService`: create,
+    rename, move, copy / paste, delete, the vault registry actions, with
+    their confirmations and error messages.
+  - `files-panel.ts` — the events, the two context menus and the inline
+    name inputs.
+- **The existing panel spec runs unchanged** against the new structure
+  (it found one difference during the work: a third `undefined` argument
+  on a plain file open). `files-tree.spec.ts` adds 26 direct tests of the
+  tree functions.
+- Rename and move now share one code path for the link-aware rename and
+  the clipboard follow-up.
+
+### Milestone 70 — Local plugin packages + the sample plugin out of the default scope
+
+([ADR-0068](../docs/09_architecture_decisions/0068-local-plugin-packages.md))
+
+Three owner requests in one milestone: the `sample` plugin leaves the
+app's default scope, a plugin-SDK tutorial uses it as the running
+example, and plugins become locally installable from a package.
+
+- **The sample plugin is dev/test-only now.** A plain `npm run build` no
+  longer emits `dist-electron/plugins/sample/` — `build-plugins.mjs`
+  produces it only under `DREY_BUILD_SAMPLE_PLUGINS=1` (the `npm run
+  e2e` script sets it; the tsc configs keep compiling / typechecking it, so the reference
+  stays type-checked). No dev run, `npm run app` run or package
+  discovers it; the installer exclusion and `verify:pack` assertion
+  stay as belt-and-braces. Trying to run the plugin e2e against a build
+  without it fails fast with the remedy in the message.
+- **`plugins/TUTORIAL.md`** — the step-by-step "write your first plugin"
+  guide on the sample plugin (manifest → main → renderer → build →
+  package → install), linking to `AUTHORING.md`, which stays the
+  reference and now documents the package flow.
+- **Install from file…** (Settings → Panels & plugins): a `.zip` of a
+  built plugin folder — `plugin.json` at the archive root, exactly the
+  tree `build-plugins.mjs` emits — is validated (manifest shape,
+  `apiVersion` major, referenced entries present, no zip-slip, no
+  built-in id collision, size caps; archive junk like `__MACOSX` is
+  skipped, PowerShell's backslash entry names normalized) and
+  extracted under `<userData>/plugins/<id>/`, preserving an existing
+  install's `config.json` (upgrade). No new dependency: the zip reader
+  is a TS twin of `fetch-drawio.mjs`'s central-directory reader.
+- **Remove** on installed rows deletes the folder (recycle bin first);
+  built-in ids are refused (their config lives in the same tree).
+- **Applies on restart, offered immediately**: install/remove don't
+  touch the running session's discovery snapshot (like
+  `plugins.disabled`); the result dialog and a persistent hint row in
+  the plugin section offer "Restart now" — `app:relaunch` runs the
+  graceful close path (dirty tabs keep their exit prompt) after
+  `app.relaunch()`.
+- Checked by: e2e (`e2e/plugins.spec.ts` — install, upgrade-keeps-config,
+  typed refusals, removal, with a self-contained store-only zip writer
+  that doubles as the executable package-format example), both tsc
+  typechecks, lint.
+
+### Fix — plugins: stale module-type markers no longer survive in the dist tree
+
+- **The crash:** in a checkout whose `dist-electron/plugins/` was last
+  built before the renderer bundling, the old build's module-type
+  markers (`{"type":"module"}` at the plugin root, `{"type":"commonjs"}`
+  in `main/`) survived every later build — bundling removed the marker
+  writing but nothing removed the files. At startup Node resolved the
+  now-CommonJS `shared/` output against the stale root marker, parsed
+  it as ESM, and every plugin with runtime `shared/` imports failed
+  with "exports is not defined in ES module scope" (the assistant
+  plugin first).
+- **Build:** `build-plugins.mjs` now removes the two stale markers per
+  plugin directory on every build, so one build heals an old tree.
+  Fresh checkouts never carried markers, which is why the plugin tests
+  and e2e stayed green while existing checkouts broke.
+- **Installer:** a package zip packed per the older TUTORIAL wording
+  (markers included) would install the same crash into
+  `<userData>/plugins/<id>/`. The installer now drops `package.json` at
+  the archive root and in `main/` as archive junk; deeper ones (bundled
+  third-party content) stay untouched.
+- **Tutorial:** the standalone-packaging note in `plugins/TUTORIAL.md`
+  no longer recommends markers — it now says to ship none, with the
+  reason.
+- Checked by: `electron/plugin-host/plugin-installer.spec.ts` (marker
+  strip incl. backslash names, deeper-marker regression), a new
+  `e2e/plugins.spec.ts` package case, both tsc typechecks, lint.
+
 ### Fix — settings: scrolled categories no longer show above the headline
 
 - **The sticky headline pins flush again.** The category nav scrolled
@@ -49,7 +230,7 @@ exactly 32px. (ADR-0057 later change.)
 ### `npm run dev` rebuilds and restarts Electron on its own
 
 Item 13 of the 2026-10-11 architecture review. Development only; nothing
-in a shipped build changes. **Not yet manually verified by the owner.**
+in a shipped build changes.
 
 - **The stale main process is gone from the dev loop.**
   `scripts/dev-electron.mjs` replaces the one-time build in
@@ -75,8 +256,7 @@ in a shipped build changes. **Not yet manually verified by the owner.**
 ### Plugin renderers are bundled; the copied helpers are gone (ADR-0044 later change)
 
 Item 11 of the 2026-10-11 architecture review. No change to what the app
-does, apart from the one fix below. **Not yet manually verified by the
-owner.**
+does, apart from the one fix below.
 
 - **One file per plugin renderer.** `scripts/build-plugins.mjs` bundles
   each plugin's `renderer/index.ts` with esbuild (the tool that already
@@ -149,7 +329,7 @@ verified by the owner.**
 ### In-app help: the manual and live shortcuts ([ADR-0067](../docs/09_architecture_decisions/0067-in-app-help-documents.md))
 
 Owner-commissioned package after milestone 69, on top of the English
-user manual. **Not yet manually verified by the owner.**
+user manual.
 
 - **The manual moved to `docs/manual/`** (`manual.md` + `img/`, 44
   screenshots) and gained sections 19–22 (Getting help, shortcuts — now
@@ -253,8 +433,6 @@ manually verified by the owner.**
 
 ### Milestone 69 — a dock icon strip replaces collapsed panel headers (ADR-0019 later change)
 
-**Not yet manually verified by the owner.**
-
 - **Why.** Ten panels, nine in the left dock, each showing its 32px
   header whether open or collapsed: 288px of headers in the default
   layout, 192px of it for six panels that showed nothing.
@@ -282,8 +460,6 @@ manually verified by the owner.**
   recorded in ADR-0019.
 
 ### Milestone 68 — semantic search remainder: Search panel + MCP (ADR-0055 later change)
-
-**Not yet manually verified by the owner.**
 
 - **A base seam.** SDK 1.18 adds `SemanticSearchProvider` —
   `search(question, scope?, limit?)` → `SemanticSectionHit[]` (path,
@@ -342,8 +518,7 @@ manually verified by the owner.**
 - Deviation from ADR-0065 (which excluded stash, merge surfaces and
   amend): recorded as its "Later change"; docs/05 §5.38, docs/06 §6.56
   and the roadmap follow-ups are updated. Five icons were added to the
-  vendored set. **Not yet manually verified by the owner**; the unit
-  specs (parsers) ran, the Electron e2e did not.
+  vendored set; the unit specs (parsers) ran, the Electron e2e did not.
 
 ### Anthrazit: neutral gray palette with AA contrast
 
@@ -353,8 +528,7 @@ manually verified by the owner.**
   control borders now meet WCAG AA (4.5:1 text, 3:1 borders). Only the
   `:root[data-theme='anthrazit']` block and the theme seed changed — other
   themes (Drey, published ones) are untouched. Rationale and values:
-  ADR-0057 "Later change". **Not yet manually verified by the owner**
-  (check field borders for visual weight).
+  ADR-0057 "Later change".
 
 ### Assistant Vault chip: pick any subset of vaults
 

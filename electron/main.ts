@@ -29,7 +29,7 @@ import { OwnWriteLedger } from './own-write-ledger';
 import { isPathInside } from './path-guard';
 import { isHashedAsset, serveWithCaching } from './protocol-cache';
 import { buildContentSecurityPolicy, CSP_HEADER, isAppDocument } from './content-security-policy';
-import { PluginHost } from './plugin-host';
+import { PluginHost, PluginInstaller } from './plugin-host';
 import type { UnreadableFile } from './safe-file';
 import { SessionBackupStore } from './session';
 import { SpellcheckService } from './spellcheck';
@@ -58,6 +58,31 @@ const CAPTURE_SHORTCUT = 'CommandOrControl+Alt+N';
  * built renderer straight from disk instead.
  */
 const rendererDevServerUrl = process.env['DREY_RENDERER_URL'];
+
+/**
+ * What `scripts/dev-electron.mjs` sends over the child-process channel
+ * when it has rebuilt `dist-electron/` and wants this (now stale) process
+ * replaced. Keep in step with the constant there.
+ */
+const DEV_RESTART_MESSAGE = 'drey-dev:restart';
+
+/**
+ * Dev only: quits when the dev launcher asks. `app.quit()` is the ordinary
+ * quit, so unsaved tabs raise the exit prompt; the launcher starts the new
+ * build once this process is gone. Without a dev server URL, or when not
+ * started by the launcher (no channel), nothing listens.
+ */
+function listenForDevRestart(): void {
+  if (!rendererDevServerUrl || typeof process.send !== 'function') {
+    return;
+  }
+  process.on('message', (message: unknown) => {
+    if (message === DEV_RESTART_MESSAGE) {
+      logLine('[main/dev] restart requested by the dev launcher');
+      app.quit();
+    }
+  });
+}
 
 const rendererDistDir = path.join(__dirname, '../../dist/drey/browser');
 
@@ -917,6 +942,21 @@ if (!app.requestSingleInstanceLock() && !allowMultiInstance) {
       },
     });
     const pluginHostRef = pluginHost;
+    // Local plugin packages (ADR-0068): install/remove under the same user
+    // root the host discovers from.
+    const pluginInstaller = new PluginInstaller({
+      userRoot: path.join(app.getPath('userData'), 'plugins'),
+      pluginHost: pluginHostRef,
+      log: (message, level) => {
+        if (level === 'error') {
+          console.error(message);
+        } else if (level === 'warn') {
+          console.warn(message);
+        } else {
+          console.log(message);
+        }
+      },
+    });
     const noteManager = new NoteManager(vaultManager, {
       onNoteSaved: (hook) => pluginHostRef.save.onNoteSaved(hook),
       emitNoteSaved: (event) => pluginHostRef.emitNoteSaved(event),
@@ -977,6 +1017,7 @@ if (!app.requestSingleInstanceLock() && !allowMultiInstance) {
       fullVaultRefresh: () => vaultAnnouncer.announceFullRefresh(),
       announceVaultChange: (changes) => vaultAnnouncer.announceExternal(changes),
       pluginHost,
+      pluginInstaller,
     });
     // The File/Edit/Selection/View menus are drawn by the renderer titlebar
     // now (ADR-0019). Keep a native menu only on macOS, where the menu bar
@@ -1049,6 +1090,7 @@ if (!app.requestSingleInstanceLock() && !allowMultiInstance) {
         createMainWindow(uiScaleFactor);
       }
     });
+    listenForDevRestart();
     startupMark('main-process startup complete');
   }).catch((err: unknown) => {
     // A startup step threw: without this the app would sit there with no
