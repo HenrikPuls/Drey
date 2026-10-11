@@ -58,6 +58,12 @@ interface DreyFixtures {
    * launch; `dir` picks the seeded vault or `externalDir`.
    */
   launchFiles: Array<{ dir: 'vault' | 'external'; name: string; content: string }>;
+  /**
+   * Content-Security-Policy violations the main window reported during the
+   * test (console text). The `page` fixture fails a test that leaves any
+   * behind; a test that provokes one on purpose empties the array.
+   */
+  cspViolations: string[];
   /** The launched Electron app. */
   electronApp: ElectronApplication;
   /** The main window's renderer page. */
@@ -189,7 +195,11 @@ export const test = base.extend<DreyFixtures>({
     fs.rmSync(userDataDir, { recursive: true, force: true });
   },
 
-  page: async ({ electronApp }, use) => {
+  cspViolations: async ({}, use) => {
+    await use([]);
+  },
+
+  page: async ({ electronApp, cspViolations }, use) => {
     // Milestone 62: the splash window is created FIRST, so the main
     // window is no longer `firstWindow()` — pick the one that loads the
     // app itself (production `app://`; e2e always forces that URL).
@@ -205,6 +215,11 @@ export const test = base.extend<DreyFixtures>({
     if (page === null) {
       throw new Error('the main app:// window never appeared');
     }
+    page.on('console', (message) => {
+      if (/Content Security Policy/i.test(message.text())) {
+        cspViolations.push(message.text());
+      }
+    });
     await page.waitForLoadState('domcontentloaded');
     // The hidden-until-ready handover (ADR-0062): wait for the window to
     // be shown and focused (or fall through on timeout — the fail-opens
@@ -222,6 +237,8 @@ export const test = base.extend<DreyFixtures>({
       .catch(() => undefined);
     await page.waitForTimeout(150);
     await use(page);
+    // The policy must not get in the way of anything the app does itself.
+    expect(cspViolations).toEqual([]);
   },
 });
 

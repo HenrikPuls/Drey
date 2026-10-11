@@ -37,7 +37,7 @@ export function isHashedAsset(relativePath: string): boolean {
 export async function serveWithCaching(
   request: Request,
   filePath: string,
-  opts: { immutable: boolean; contentType?: string },
+  opts: { immutable: boolean; contentType?: string; extraHeaders?: Record<string, string> },
 ): Promise<Response> {
   let size: number;
   let mtimeMs: number;
@@ -68,6 +68,7 @@ export async function serveWithCaching(
     ETag: etag,
     'Cache-Control': cacheControl,
     'Access-Control-Allow-Origin': '*',
+    ...opts.extraHeaders,
   });
   headers.set(
     'Content-Type',

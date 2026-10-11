@@ -1961,6 +1961,13 @@ src/app/templates/
   of the two config files ([docs/08](08_crosscutting_concepts.md),
   "Crash-safe file writes"); `electron/path-guard.ts` — `isPathInside`,
   the escape check of the `app://` and `plugin://` handlers.
+- `electron/content-security-policy.ts` — the main window's policy, sent
+  by the `app://` handler (and added to `ng serve`'s page in a dev run);
+  `scripts/bundle-preload.mjs` — the one-file preload the sandboxed
+  window needs; `electron/config-secrets.ts` — which settings fields are
+  secrets, sealed and opened by `AppConfigStore` at the file boundary
+  ([docs/08](08_crosscutting_concepts.md), "Renderer hardening" and
+  "Secrets in the settings file").
 - `src/app/services/log.service.ts` — `LogService` mirrors
   `console.error/warn` + `window.onerror` + `unhandledrejection`;
   `LoggingErrorHandler` is registered as Angular's `ErrorHandler`

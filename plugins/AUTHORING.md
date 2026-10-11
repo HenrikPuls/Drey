@@ -120,6 +120,21 @@ Styling rules, in order of enforcement:
     compound rule `.plugin-modal.my-host` when you need a fixed width or
     flush edges (`padding: 0`).
 
+### The page's Content-Security-Policy
+
+The main window's page runs under a policy (ADR-0001, later change) and
+your renderer module runs inside that page:
+
+- no inline `<script>`, no `eval` / `new Function`, no string passed to
+  `setTimeout`;
+- no `fetch` / `XMLHttpRequest` / `WebSocket` to the network — do network
+  work in your `main/` entry and call it through `backend.invoke`;
+- scripts, styles, fonts and pictures load from your own plugin directory
+  (`plugin://<id>/…`); a frame may show a page from there too;
+- inline styles and `style` attributes are fine.
+
+The e2e fixture fails a test on any policy violation in the console.
+
 ## Settings pages
 
 Register with `api.ui.registerSettingsPage({ id, label, hint, mount })`.

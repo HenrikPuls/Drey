@@ -14,7 +14,7 @@ import * as path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { IPC_CHANNELS, type StartupProgressReport } from '../shared/ipc-api';
 import { UI_SCALE_FACTORS } from '../shared/app-config';
-import { AppConfigStore } from './app-config';
+import { AppConfigStore, type LostSecrets } from './app-config';
 import chokidar from 'chokidar';
 import { DailyNoteManager } from './daily-note';
 import { ExternalFileGate, extractOpenPaths } from './external-open';
@@ -28,6 +28,7 @@ import { NoteManager } from './note-manager';
 import { OwnWriteLedger } from './own-write-ledger';
 import { isPathInside } from './path-guard';
 import { isHashedAsset, serveWithCaching } from './protocol-cache';
+import { buildContentSecurityPolicy, CSP_HEADER, isAppDocument } from './content-security-policy';
 import { PluginHost } from './plugin-host';
 import type { UnreadableFile } from './safe-file';
 import { SessionBackupStore } from './session';
@@ -59,6 +60,13 @@ const CAPTURE_SHORTCUT = 'CommandOrControl+Alt+N';
 const rendererDevServerUrl = process.env['DREY_RENDERER_URL'];
 
 const rendererDistDir = path.join(__dirname, '../../dist/drey/browser');
+
+/**
+ * Origin of the main window's page: the dev server's, else the `app://app`
+ * the production page loads from. Spelled out because Node's `URL` reports
+ * the origin of a non-http scheme as "null".
+ */
+const rendererOrigin = rendererDevServerUrl ? new URL(rendererDevServerUrl).origin : 'app://app';
 
 /**
  * Production loads go through a custom `app://` scheme instead of plain
@@ -93,10 +101,18 @@ protocol.registerSchemesAsPrivileged([
   // from inside a registered vault. `standard` so
   // `drey-asset://<vaultId>/asset/<path>` parses with host = vault id and a
   // normal pathname; `secure` so an `<img>` on the privileged `app://` page
-  // is allowed to load it.
+  // is allowed to load it; `corsEnabled` so the page may also `fetch` it
+  // (the PDF embed probes its candidates that way) -- the handler names
+  // the page's origin as the only one allowed to read the answer.
   {
     scheme: 'drey-asset',
-    privileges: { standard: true, secure: true, supportFetchAPI: true, stream: true },
+    privileges: {
+      standard: true,
+      secure: true,
+      supportFetchAPI: true,
+      corsEnabled: true,
+      stream: true,
+    },
   },
   // Serves built renderer modules for plugins (ADR-0044):
   // `plugin://<pluginId>/<path under the plugin's renderer/ dir>`. `standard`
@@ -133,7 +149,14 @@ function registerAppProtocol(): void {
 
     // Cache headers (milestone 61): hashed bundle files are immutable,
     // everything else (index.html, public/ assets) revalidates via ETag.
-    return serveWithCaching(request, filePath, { immutable: isHashedAsset(relativePath) });
+    // The page itself carries the Content-Security-Policy (ADR-0001, later
+    // change); it governs everything the page then loads.
+    return serveWithCaching(request, filePath, {
+      immutable: isHashedAsset(relativePath),
+      extraHeaders: isAppDocument(relativePath)
+        ? { [CSP_HEADER]: buildContentSecurityPolicy() }
+        : undefined,
+    });
   });
 }
 
@@ -159,16 +182,17 @@ function registerAssetProtocol(vaultManager: VaultManager): void {
       return new Response('Not found', { status: 404 });
     }
     return net.fetch(pathToFileURL(filePath).toString()).then((response) => {
+      const headers = new Headers(response.headers);
+      // Only the app's own page may read a vault file through `fetch`.
+      headers.set('Access-Control-Allow-Origin', rendererOrigin);
       // A PDF must arrive with an exact `application/pdf` Content-Type or
       // the built-in viewer refuses the frame (ADR-0052); the file://
       // loader's MIME guessing is registry-dependent on Windows, so it is
       // pinned here. Everything else keeps the sniffed headers (images
       // have worked through this channel since ADR-0024).
-      if (!filePath.toLowerCase().endsWith('.pdf')) {
-        return response;
+      if (filePath.toLowerCase().endsWith('.pdf')) {
+        headers.set('Content-Type', 'application/pdf');
       }
-      const headers = new Headers(response.headers);
-      headers.set('Content-Type', 'application/pdf');
       return new Response(response.body, { status: response.status, headers });
     });
   });
@@ -443,6 +467,40 @@ function reportUnreadableConfigFiles(problems: readonly UnreadableFile[]): void 
   void (owner ? dialog.showMessageBox(owner, options) : dialog.showMessageBox(options));
 }
 
+/**
+ * Tells the user once which stored keys could not be decrypted at startup
+ * -- they are empty now and have to be entered again.
+ */
+function reportLostSecrets(lost: LostSecrets | null): void {
+  if (lost === null) {
+    return;
+  }
+  logLine(
+    `[startup] ${lost.labels.length} stored secret(s) could not be decrypted; file kept as ${
+      lost.backupPath ?? 'nothing -- it could not be copied'
+    }`,
+  );
+  const options: Electron.MessageBoxOptions = {
+    type: 'warning',
+    title: 'Drey',
+    message:
+      lost.labels.length === 1
+        ? 'A stored key could not be decrypted'
+        : 'Some stored keys could not be decrypted',
+    detail:
+      'Keys in the settings file are encrypted for this user account on ' +
+      'this computer. They are empty now -- enter them again in Settings:\n\n' +
+      lost.labels.join('\n') +
+      (lost.backupPath === null
+        ? ''
+        : `\n\nThe previous file was kept as ${lost.backupPath}`),
+    buttons: ['OK'],
+    noLink: true,
+  };
+  const owner = mainWindow !== null && !mainWindow.isDestroyed() ? mainWindow : null;
+  void (owner ? dialog.showMessageBox(owner, options) : dialog.showMessageBox(options));
+}
+
 function createMainWindow(
   getUiScaleFactor?: () => number,
   opts: { hiddenUntilReady?: boolean } = {},
@@ -485,16 +543,11 @@ function createMainWindow(
       // way to fix a word" behaviour we're removing. Off, so spellcheck
       // looks and behaves identically everywhere.
       spellcheck: false,
-      // NOT sandboxed: a sandboxed preload's require() is restricted to a
-      // handful of built-ins and can't load our own shared/ipc-api.js
-      // (see docs/09_architecture_decisions/0001-*.md) -- it silently
-      // fails to run, leaving window.dreyApi undefined with no thrown
-      // error surfaced to the renderer. contextIsolation + no Node
-      // integration (the two properties the ADR actually commits to)
-      // still fully apply; only the extra OS-level process sandbox is
-      // deferred. Revisit once preload has a bundling step that can
-      // inline shared/ into a single file with no runtime require().
-      sandbox: false,
+      // Sandboxed (ADR-0001, later change). A sandboxed preload may only
+      // require() a handful of built-ins, so `preload.js` is the single
+      // file `scripts/bundle-preload.mjs` writes over tsc's output -- the
+      // unbundled one would not run and leave window.dreyApi undefined.
+      sandbox: true,
       // Chromium's built-in (PDFium) PDF viewer -- the only thing this
       // flag enables on modern Electron -- so PDF embeds
       // (`![](attachments/x.pdf)`, ADR-0052) and PDF tabs render inside
@@ -601,6 +654,19 @@ function createMainWindow(
   });
 
   if (rendererDevServerUrl) {
+    // `ng serve` answers without our headers, so the same policy is added
+    // to its page here; a production run gets it from the app:// handler.
+    const devPolicy = buildContentSecurityPolicy(rendererDevServerUrl);
+    window.webContents.session.webRequest.onHeadersReceived(
+      { urls: [new URL('*', rendererDevServerUrl).toString()], types: ['mainFrame'] },
+      (details, callback) => {
+        if (!isAppDocument(new URL(details.url).pathname)) {
+          callback({});
+          return;
+        }
+        callback({ responseHeaders: { ...details.responseHeaders, [CSP_HEADER]: [devPolicy] } });
+      },
+    );
     window.loadURL(rendererDevServerUrl);
     window.webContents.openDevTools({ mode: 'detach' });
   } else {
@@ -670,6 +736,7 @@ if (!app.requestSingleInstanceLock() && !allowMultiInstance) {
      */
     let splashHandoverDone = false;
     let unreadableConfigFiles: UnreadableFile[] = [];
+    let lostSecrets: LostSecrets | null = null;
     let absoluteSplashFailOpen: NodeJS.Timeout | undefined;
     let loadSplashFailOpen: NodeJS.Timeout | undefined;
     const splashHandover = (): void => {
@@ -682,6 +749,7 @@ if (!app.requestSingleInstanceLock() && !allowMultiInstance) {
       mainWindow?.show();
       setTimeout(() => splash.close(), 120);
       reportUnreadableConfigFiles(unreadableConfigFiles);
+      reportLostSecrets(lostSecrets);
       startupMark('workspace ready — main window shown, splash closing');
     };
     // Fail-open 1: nothing (not even the main window's page) loaded in
@@ -721,6 +789,7 @@ if (!app.requestSingleInstanceLock() && !allowMultiInstance) {
     unreadableConfigFiles = [appConfig.loadProblem, vaultManager.loadProblem].filter(
       (problem): problem is UnreadableFile => problem !== null,
     );
+    lostSecrets = appConfig.lostSecrets;
     const vaultAnnouncer = new VaultChangeAnnouncer(
       () => pluginHost,
       () => mainWindow,

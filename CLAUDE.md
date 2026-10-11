@@ -58,7 +58,10 @@ toolchain is removable by deleting `.tools/`). Never assume a bare `node`,
   - Unit tests: `node node_modules/@angular/cli/bin/ng.js test --watch=false`
     (add `--include "src/.../x.spec.ts"` to scope it)
   - Production renderer build: `node node_modules/@angular/cli/bin/ng.js build --configuration production`
-  - Emit the main process: `node node_modules/typescript/bin/tsc -p electron/tsconfig.json`
+  - Emit the main process: `node node_modules/typescript/bin/tsc -p electron/tsconfig.json`,
+    then `node scripts/bundle-preload.mjs` — the main window is sandboxed
+    and only runs the bundled one-file preload (`npm run build:electron`
+    does both; tsc's own `preload.js` leaves `window.dreyApi` undefined)
 - VS Code tasks and debug configs don't inherit `env.ps1`; `.vscode/` works
   around that three ways (see `docs/11`, "Environment gotchas").
 - **`npm run dev` builds `dist-electron/` only once, at startup** (the
@@ -79,6 +82,12 @@ toolchain is removable by deleting `.tools/`). Never assume a bare `node`,
 
 - Electron main/renderer split. No Node integration in the renderer — all
   filesystem and LLM access goes through a `contextBridge` IPC boundary.
+  The main window is **sandboxed** and its page runs under a
+  **Content-Security-Policy** (`electron/content-security-policy.ts`,
+  ADR-0001 later change): no inline script, no `eval`, no network
+  `fetch` from the renderer, frames only from `plugin:` / `drey-asset:`.
+  A feature that needs more widens the policy explicitly; the e2e
+  fixture fails a test on any violation.
 - No server/backend process. A vault is just a folder on disk (can live on
   OneDrive); the app reads/writes files directly, no client-server split.
 - Editor: CodeMirror 6 in the renderer, extended via Compartments. Plugins
@@ -132,8 +141,10 @@ toolchain is removable by deleting `.tools/`). Never assume a bare `node`,
   same as the removable `copilot-web` scraper (ADR-0040). No hardcoded
   model id — never assume a specific model is loaded, and never assume
   `/v1/models` is reachable (the model id must stay hand-enterable;
-  CLI/web providers advertise no model listing at all). API keys sit in
-  `app-config.json` in plain text (`docs/11`).
+  CLI/web providers advertise no model listing at all). API keys (and
+  the env / header values of external MCP servers) are encrypted in
+  `app-config.json` with the OS user's key — `electron/config-secrets.ts`,
+  ADR-0010 later change; plain in memory and over IPC.
 - **Semantic vault retrieval** (milestone 41,
   [ADR-0055](docs/09_architecture_decisions/0055-semantic-vault-retrieval.md)):
   the assistant's **Vault chip** retrieves the top-k note sections most
