@@ -39,6 +39,7 @@ recorded as an explicit decision. The parity checklist lives in
   fixed — they do not follow the highlight colour, which still re-tints
   the chrome.
 - Anthrazit stays the default; the splash stays Anthrazit.
+
 ### Fix — the image resize grip and the table keys work before the note is fully parsed
 
 Dragging the corner grip of a picture did nothing when the picture sat
