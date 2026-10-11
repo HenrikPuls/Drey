@@ -336,7 +336,7 @@ export class BrowserViewManager {
         });
         items.push({
           label: 'Copy link address',
-          click: () => clipboard.writeText(params.linkURL),
+          click: () => void clipboard.writeText(params.linkURL),
         });
       }
 
@@ -351,7 +351,7 @@ export class BrowserViewManager {
         });
         items.push({
           label: 'Copy image address',
-          click: () => clipboard.writeText(params.srcURL),
+          click: () => void clipboard.writeText(params.srcURL),
         });
       }
 

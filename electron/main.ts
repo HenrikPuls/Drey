@@ -387,6 +387,11 @@ async function openTodayDailyNote(dailyNotes: DailyNoteManager): Promise<void> {
   }
 }
 
+/** A page load that failed or was superseded; the window shows Chromium's own error. */
+function reportLoadFailure(err: unknown): void {
+  logLine(`[main/load] ${err instanceof Error ? err.message : String(err)}`);
+}
+
 /**
  * Tells the user once per session that the main process threw an error
  * nothing caught. Registering the `uncaughtException` listener (for the
@@ -667,7 +672,7 @@ function createMainWindow(
         callback({ responseHeaders: { ...details.responseHeaders, [CSP_HEADER]: [devPolicy] } });
       },
     );
-    window.loadURL(rendererDevServerUrl);
+    window.loadURL(rendererDevServerUrl).catch(reportLoadFailure);
     window.webContents.openDevTools({ mode: 'detach' });
   } else {
     // Host segment ("app") is an arbitrary placeholder -- the handler
@@ -675,7 +680,7 @@ function createMainWindow(
     // instead of e.g. `app://index.html` keeps pathname unambiguous
     // (`/index.html`, not `/`) for this request and every relative
     // sub-resource request the page makes afterwards.
-    window.loadURL('app://app/index.html');
+    window.loadURL('app://app/index.html').catch(reportLoadFailure);
   }
 
   return window;
@@ -1045,6 +1050,11 @@ if (!app.requestSingleInstanceLock() && !allowMultiInstance) {
       }
     });
     startupMark('main-process startup complete');
+  }).catch((err: unknown) => {
+    // A startup step threw: without this the app would sit there with no
+    // window and only a log line.
+    logLine(`[main/startup] ${err instanceof Error ? (err.stack ?? err.message) : String(err)}`);
+    reportMainProcessError(err instanceof Error ? err : new Error(String(err)));
   });
 
   // An app-level quit (taskbar "Quit", Cmd+Q / role quit) with the window

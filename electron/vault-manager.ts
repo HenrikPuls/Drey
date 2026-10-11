@@ -49,16 +49,25 @@ function mintVaultId(): string {
   return `v${crypto.randomBytes(5).toString('hex')}`;
 }
 
-function readRegistryFile(): { file: VaultRegistryFile; problem: UnreadableFile | null } {
+interface LoadedRegistry {
+  file: VaultRegistryFile;
+  problem: UnreadableFile | null;
+  /** True when the file was in the v1 shape and `file` carries a freshly minted id. */
+  migrated: boolean;
+}
+
+function readRegistryFile(): LoadedRegistry {
   const stored = readJsonObjectGuarded(configFilePath());
   if (stored.kind !== 'ok') {
     // First run, or an unusable file that was set aside: an empty registry.
     return {
       file: { version: 2, vaults: [], activeVaultId: null },
       problem: stored.kind === 'unreadable' ? stored.problem : null,
+      migrated: false,
     };
   }
-  return { file: parseRegistry(stored.value), problem: null };
+  const file = parseRegistry(stored.value);
+  return { file, problem: null, migrated: stored.value['version'] !== 2 && file.vaults.length > 0 };
 }
 
 function parseRegistry(stored: Record<string, unknown>): VaultRegistryFile {
@@ -146,7 +155,7 @@ export class VaultManager {
   constructor(ownWrites?: OwnWriteLedger, history?: NoteHistoryStore) {
     this.ownWrites = ownWrites;
     this.history = history;
-    const { file, problem } = readRegistryFile();
+    const { file, problem, migrated } = readRegistryFile();
     this.loadProblem = problem;
     this.registry = file.vaults;
     this.activeVaultId = file.activeVaultId;
@@ -160,11 +169,12 @@ export class VaultManager {
     if (this.activeVaultId !== null && !fs.existsSync(this.pathOf(this.activeVaultId))) {
       this.activeVaultId = null;
     }
-    // Only the v1->v2 migration rewrites the file here. The missing-folder
-    // guard above deliberately does NOT persist: the registration (and its
+    // Only the v1->v2 migration rewrites the file here, so the minted id
+    // is the vault's id from now on. The missing-folder guard above
+    // deliberately does NOT persist on its own: the registration (and its
     // active flag) must survive so a remounted drive recovers on restart.
-    if (file.vaults !== this.registry) {
-      this.persist();
+    if (migrated) {
+      writeRegistryFile(file);
     }
   }
 

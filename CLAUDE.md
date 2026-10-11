@@ -57,6 +57,14 @@ toolchain is removable by deleting `.tools/`). Never assume a bare `node`,
   - Typecheck renderer: `node node_modules/typescript/bin/tsc -p tsconfig.app.json --noEmit`
   - Unit tests: `node node_modules/@angular/cli/bin/ng.js test --watch=false`
     (add `--include "src/.../x.spec.ts"` to scope it)
+  - Main-process and plugin tests (`electron/**/*.spec.ts`, `plugins/**/*.spec.ts`,
+    plain Node, `vi.mock('electron')` where needed):
+    `node node_modules/vitest/vitest.mjs run --config vitest.plugins.config.mts`
+    (append a path fragment to scope it); their typecheck is
+    `node node_modules/typescript/bin/tsc -p electron/tsconfig.spec.json`
+  - Lint: `node node_modules/eslint/bin/eslint.js "electron/**/*.ts" "shared/**/*.ts" "src/**/*.ts" "plugins/**/*.ts"`
+    — module boundaries plus `no-floating-promises` / `no-misused-promises`
+    (a promise meant to run on its own is marked `void`)
   - Production renderer build: `node node_modules/@angular/cli/bin/ng.js build --configuration production`
   - Emit the main process: `node node_modules/typescript/bin/tsc -p electron/tsconfig.json`,
     then `node scripts/bundle-preload.mjs` — the main window is sandboxed
