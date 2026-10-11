@@ -175,7 +175,14 @@ toolchain is removable by deleting `.tools/`). Never assume a bare `node`,
   the index also serves the Search panel's **Semantic** toggle and MCP
   `vault_search` mode `semantic` through a base
   `SemanticSearchProvider` seam (SDK 1.18, registered only while
-  retrieval is enabled).
+  retrieval is enabled). Since milestone 71 the chip-on ask is
+  **hybrid-agentic** ([ADR-0069](docs/09_architecture_decisions/0069-agentic-vault-exploration.md)):
+  the top-k block stays as the floor, and scope-safe explore tools
+  (`vault_overview` / `vault_find` / `vault_section`, closed over the
+  chip's targets) let tool-capable models scan and read further; the
+  host drops out-of-scope `vault_search`/`vault_read` from the ask
+  (`vaultToolsScope`, SDK 1.20), and a cold/stale vault index
+  self-heals via a background rebuild instead of browsing empty.
 - **Manual refresh, plus an opt-in watcher.** By default there is no file
   watcher ([ADR-0018](docs/09_architecture_decisions/0018-manual-refresh-no-file-watcher.md)):
   a manual refresh runs one full round in main (index rebuild + a
@@ -382,8 +389,8 @@ Plugins (`plugins/<id>/`, ADR-0044 — each `plugin.json` + `main/` +
 - `templates/` — Templates panel, slash-menu template entries, snippets
   (M46)
 - `assistant/` — Assistant panel: chat notes (ADR-0048), Actions, live
-  edit (ADR-0049), semantic retrieval (ADR-0055 — it also registers the
-  `SemanticSearchProvider`)
+  edit (ADR-0049), semantic retrieval + explore tools (ADR-0055/0069 —
+  it also registers the `SemanticSearchProvider`)
 - `meeting/` — `.ics`/`.msg` meeting-section import (ADR-0041)
 - `browser/` — the in-editor browser tab (ADR-0042)
 - `ocr/` — vision-LLM OCR on images (ADR-0050)

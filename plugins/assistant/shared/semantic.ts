@@ -281,6 +281,13 @@ export interface RetrievalOutcome {
   minScore: number;
   hits: RetrievedSection[];
   noTargets?: boolean;
+  /**
+   * The scope's resolved target vault ids (ADR-0069): the engine passes
+   * them to the host as the ask's `vaultToolsScope`, so out-of-scope
+   * `vault_search`/`vault_read` drop from the tool set. Absent only on
+   * legacy fakes / when nothing was resolved.
+   */
+  targets?: readonly string[];
 }
 
 /** The persisted per-turn citation (the ```drey-context fence entry). */

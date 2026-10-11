@@ -36,6 +36,15 @@ Earlier turns of this conversation are shown as plain text; this reply form stil
 /** Appended to `ASK_SYSTEM` when the vault tool group is on (ADR-0021 / ADR-0063). */
 export const ASK_TOOLS_NOTE = `You may call the vault tools (vault_search, vault_read, vault_write) to look things up in the wider vault or to make changes elsewhere before you give your final answer.`;
 
+/**
+ * Appended when the explore tools ride the ask (ADR-0069): the agentic
+ * half of vault retrieval — the injected context block is the starting
+ * point, the tools let the model scan and read further within the SAME
+ * scope. Scope discipline is the point: the chip picked these vaults, so
+ * the base tools' active-vault default must not leak another one in.
+ */
+export const ASK_EXPLORE_NOTE = `Besides the vault context above you have vault exploration tools, already limited to the vaults this question searches: vault_overview lists their files and section headings (scan this first for large or unfamiliar vaults), vault_find ranks sections by similarity to a query, vault_section reads one section in full. When the context above does not cover the question, use them — overview to find candidate files, find to rank, section to read — instead of answering from thin context. The scope is fixed: never query, read or cite a vault outside these tools' results.`;
+
 /** The vault group's write rule as the model should understand it (ADR-0063). */
 export function vaultWriteNote(write: 'confirm' | 'auto'): string {
   return write === 'confirm'

@@ -91,6 +91,24 @@ export interface SemanticStatus {
   vaults: SemanticVaultStatus[];
 }
 
+/** One file's outline row (ADR-0069): path plus its indexed section headings. */
+export interface SemanticOutlineEntry {
+  vaultId: string;
+  /** The vault's display name, when the registry still knows it. */
+  vault?: string;
+  path: string;
+  headings: string[];
+}
+
+/** One located section's fresh text (the `vault_section` tool's payload). */
+export interface SemanticSectionText {
+  vaultId: string;
+  path: string;
+  heading: string;
+  line: number;
+  text: string;
+}
+
 const SAVE_DEBOUNCE_MS = 1500;
 
 export class SemanticService {
@@ -102,6 +120,8 @@ export class SemanticService {
   private topK = DEFAULT_SEMANTIC_TOP_K;
   private minScore = DEFAULT_SEMANTIC_MIN_SCORE;
   private readonly building = new Map<string, BuildProgress>();
+  /** Vaults a fire-and-forget background rebuild is currently queued/running for. */
+  private readonly rebuilding = new Set<string>();
   private readonly chains = new Map<string, Promise<void>>();
   private readonly dirty = new Set<string>();
   private readonly saveTimers = new Map<string, ReturnType<typeof setTimeout>>();
@@ -330,15 +350,18 @@ export class SemanticService {
         ? { ...empty, noTargets: true }
         : empty;
     }
-    await this.ensureLoaded(targetIds);
+    const usable = await this.usableTargets(targetIds);
+    if (usable.length === 0) {
+      return { ...empty, targets: targetIds };
+    }
     const [queryVec] = await this.embedder.embed([queryText(this.model, question)]);
     if (queryVec === undefined) {
-      return empty;
+      return { ...empty, targets: targetIds };
     }
     // Query-time exclusion too: an index built before the chats/ rule may
     // still carry chat sections — they never surface, even unrebuilt.
     const hits = this.index
-      .search(targetIds, this.model, queryVec, this.topK, this.minScore)
+      .search(usable, this.model, queryVec, this.topK, this.minScore)
       .filter((hit) => isSemanticIndexPath(hit.path));
     const names = new Map(vaults.map((vault) => [vault.id, vault.name]));
     const out: RetrievedSection[] = [];
@@ -357,7 +380,7 @@ export class SemanticService {
         text: hydrated.text,
       });
     }
-    return { enabled: true, minScore: this.minScore, hits: out };
+    return { enabled: true, minScore: this.minScore, hits: out, targets: targetIds };
   }
 
   citationsFor(
@@ -366,6 +389,22 @@ export class SemanticService {
     vaultIds: readonly string[] = [],
   ): Promise<ContextCite[]> {
     return this.retrieve(question, scope, vaultIds).then((outcome) => contextCitations(outcome.hits));
+  }
+
+  /**
+   * The ask's scope resolved to concrete target ids (ADR-0069): the
+   * explore tools' guard — a `vault_section` call naming a vault outside
+   * this list is refused instead of silently read. Empty when disabled.
+   */
+  async resolveTargets(
+    scope: ActiveVaultScope,
+    vaultIds: readonly string[] = [],
+  ): Promise<string[]> {
+    if (!this.enabled || this.disposed) {
+      return [];
+    }
+    const vaults = await this.deps.listVaults();
+    return resolveTargetVaultIds(vaults, scope, vaultIds);
   }
 
   /**
@@ -398,13 +437,16 @@ export class SemanticService {
     if (targetIds.length === 0) {
       return [];
     }
-    await this.ensureLoaded(targetIds);
+    const usable = await this.usableTargets(targetIds);
+    if (usable.length === 0) {
+      return [];
+    }
     const [queryVec] = await this.embedder.embed([queryText(this.model, question)]);
     if (queryVec === undefined) {
       return [];
     }
     const hits = this.index
-      .search(targetIds, this.model, queryVec, maxHits, this.minScore)
+      .search(usable, this.model, queryVec, maxHits, this.minScore)
       .filter((hit) => isSemanticIndexPath(hit.path));
     const out: SemanticSectionHit[] = [];
     for (const hit of hits) {
@@ -423,6 +465,147 @@ export class SemanticService {
       });
     }
     return out;
+  }
+
+  /**
+   * The `vault_find` tool's engine (ADR-0069): semantic search over the
+   * ask's resolved scope — the chip's exact subset, not just one vault or
+   * all. Same machinery as `search()` but scoped like `retrieve()`, and
+   * plugin-owned hit shape (the SDK's `SemanticSectionHit` stays
+   * untouched). Empty when disabled or nothing is searchable yet.
+   */
+  async searchScoped(
+    question: string,
+    scope: ActiveVaultScope,
+    vaultIds: readonly string[] = [],
+    limit?: number,
+  ): Promise<readonly RetrievedSection[]> {
+    if (!this.enabled || this.disposed) {
+      return [];
+    }
+    const maxHits = clampInt(limit, 1, MAX_SEMANTIC_SEARCH_LIMIT, DEFAULT_SEMANTIC_SEARCH_LIMIT);
+    const vaults = await this.deps.listVaults();
+    const targetIds = resolveTargetVaultIds(vaults, scope, vaultIds);
+    if (targetIds.length === 0) {
+      return [];
+    }
+    const usable = await this.usableTargets(targetIds);
+    if (usable.length === 0) {
+      return [];
+    }
+    const [queryVec] = await this.embedder.embed([queryText(this.model, question)]);
+    if (queryVec === undefined) {
+      return [];
+    }
+    const hits = this.index
+      .search(usable, this.model, queryVec, maxHits, this.minScore)
+      .filter((hit) => isSemanticIndexPath(hit.path));
+    const names = new Map(vaults.map((vault) => [vault.id, vault.name]));
+    const out: RetrievedSection[] = [];
+    for (const hit of hits) {
+      const hydrated = await this.hydrateSection(hit);
+      if (hydrated === null) {
+        continue;
+      }
+      out.push({
+        vaultId: hit.vaultId,
+        vault: names.get(hit.vaultId),
+        path: hit.path,
+        heading: hydrated.heading,
+        line: hydrated.line,
+        score: hit.score,
+        text: hydrated.text,
+      });
+    }
+    return out;
+  }
+
+  /**
+   * The `vault_overview` tool's engine (ADR-0069): one row per file of
+   * every scoped vault — indexed files contribute their section headings
+   * straight from the loaded index (no re-read), the rest just their path.
+   * A cold vault still lists its files, so an overview is never empty just
+   * because the index has not been built yet.
+   */
+  async outline(
+    scope: ActiveVaultScope,
+    vaultIds: readonly string[] = [],
+  ): Promise<readonly SemanticOutlineEntry[]> {
+    if (!this.enabled || this.disposed) {
+      return [];
+    }
+    const vaults = await this.deps.listVaults();
+    const targetIds = resolveTargetVaultIds(vaults, scope, vaultIds);
+    if (targetIds.length === 0) {
+      return [];
+    }
+    const usable = await this.usableTargets(targetIds);
+    const usableSet = new Set(usable);
+    const names = new Map(vaults.map((vault) => [vault.id, vault.name]));
+    const out: SemanticOutlineEntry[] = [];
+    for (const vaultId of targetIds) {
+      const vaultName = names.get(vaultId);
+      const cite = vaultName !== undefined ? { vault: vaultName } : {};
+      const indexed = usableSet.has(vaultId)
+        ? this.index.outline(vaultId).filter((entry) => isSemanticIndexPath(entry.path))
+        : null;
+      if (indexed !== null && indexed.length > 0) {
+        for (const entry of indexed) {
+          out.push({ vaultId, ...cite, path: entry.path, headings: entry.headings });
+        }
+        continue;
+      }
+      // No usable index (or an empty one): fall back to the flat file
+      // list, headings unknown. The catch-up `usableTargets` kicked runs
+      // in the background — the next overview is indexed.
+      const files = await this.deps.listMarkdownFiles(vaultId);
+      for (const filePath of files.filter((file) => isSemanticIndexPath(file))) {
+        out.push({ vaultId, ...cite, path: filePath, headings: [] });
+      }
+    }
+    return out;
+  }
+
+  /**
+   * The `vault_section` tool's engine (ADR-0069): one section's FRESH text,
+   * picked by heading (case-insensitive, first match) or 1-based line —
+   * the first section when neither names one. Null when the file or the
+   * section cannot be located.
+   */
+  async readSection(
+    vaultId: string,
+    filePath: string,
+    target: { heading?: string; line?: number } = {},
+  ): Promise<SemanticSectionText | null> {
+    const content = await this.deps.readVaultText(vaultId, filePath);
+    if (content === null) {
+      return null;
+    }
+    const sections = semanticSectionsFor(filePath, content);
+    if (sections.length === 0) {
+      return null;
+    }
+    const wantedHeading =
+      typeof target.heading === 'string' && target.heading.trim() !== ''
+        ? target.heading.trim().toLowerCase()
+        : null;
+    const wantedLine = typeof target.line === 'number' ? target.line : null;
+    const section =
+      (wantedHeading !== null
+        ? sections.find((entry) => entry.heading.toLowerCase() === wantedHeading)
+        : undefined) ??
+      (wantedLine !== null
+        ? (sections.find((entry) => entry.line === wantedLine) ??
+          sections.filter((entry) => entry.line <= wantedLine).at(-1))
+        : undefined) ??
+      sections[0];
+    return {
+      vaultId,
+      path: filePath,
+      heading: section.heading,
+      line: section.line,
+      text: section.text,
+    };
   }
 
   /** Sync flush for app quit. */
@@ -519,6 +702,57 @@ export class SemanticService {
       const json = await this.readIndexFile(vaultId);
       this.index.load(vaultId, this.model, json);
     }
+  }
+
+  /**
+   * The ADR-0069 target readiness pass, replacing the silent `ensureLoaded`
+   * skip: a vault whose index is missing, corrupt or model-stale gets a
+   * fire-and-forget background rebuild and is reported unusable for THIS
+   * round — the current search runs over the remaining targets, the next
+   * one uses the fresh index. Never blocks on a rebuild (ADR-0055's rule).
+   */
+  private async usableTargets(targetIds: readonly string[]): Promise<string[]> {
+    const usable: string[] = [];
+    for (const vaultId of targetIds) {
+      if (await this.ensureUsable(vaultId)) {
+        usable.push(vaultId);
+      }
+    }
+    return usable;
+  }
+
+  /** One vault's readiness; kicks the background rebuild when not ready. */
+  private async ensureUsable(vaultId: string): Promise<boolean> {
+    if (this.index.isStale(vaultId, this.model)) {
+      this.rebuildInBackground(vaultId);
+      return false;
+    }
+    if (this.index.modelOf(vaultId) !== null) {
+      return true;
+    }
+    const json = await this.readIndexFile(vaultId);
+    this.index.load(vaultId, this.model, json);
+    if (this.index.modelOf(vaultId) !== null) {
+      return true;
+    }
+    // Nothing usable on disk. A rebuild only makes sense when the vault
+    // has something to index — an empty vault would re-trigger forever.
+    const files = await this.deps.listMarkdownFiles(vaultId);
+    if (files.some((file) => isSemanticIndexPath(file))) {
+      this.rebuildInBackground(vaultId);
+    }
+    return false;
+  }
+
+  /** One deduplicated background full rebuild (boot catch-up, stale model, cold vault). */
+  private rebuildInBackground(vaultId: string): void {
+    if (this.rebuilding.has(vaultId) || this.building.has(vaultId)) {
+      return;
+    }
+    this.rebuilding.add(vaultId);
+    this.rebuildVault(vaultId)
+      .catch(() => undefined)
+      .finally(() => this.rebuilding.delete(vaultId));
   }
 
   private indexFile(vaultId: string): string {
