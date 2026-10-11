@@ -436,7 +436,7 @@ renderer reaches the plugin main through the fixed `plugin:invoke` channel.
 ```mermaid
 sequenceDiagram
     actor User
-    participant Panel as panel.ts (composer, chips)
+    participant Panel as composer.ts (composer, chips)
     participant State as state.ts (plugin renderer)
     participant Engine as chat-engine.ask (plugin main)
     participant Store as chat-store (plugin main)

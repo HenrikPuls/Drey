@@ -20,6 +20,37 @@ recorded as an explicit decision. The parity checklist lives in
 
 ## Recent milestones
 
+### The assistant panel is split into thread, composer and pickers
+
+Item 10 of the 2026-10-11 architecture review, third file. A
+restructuring: nothing the user sees or does changes. **Not yet manually
+verified by the owner.**
+
+- **`plugins/assistant/renderer/panel.ts` went from 1,854 to 101
+  lines.** It was one function holding every part of the panel as nested
+  closures. Now, in the same folder:
+  - `thread.ts` — the turn cards, tool chips, the vault-context chip,
+    the streaming card and the status lines.
+  - `task-block.ts` — the interactive block a `tasks_list` result
+    renders as.
+  - `composer.ts` — context chips, the CodeMirror input with
+    @-completion, the tool buttons; `composer-staging.ts` — files pasted
+    or dropped onto it.
+  - `picker-chat.ts`, `picker-model.ts`, `picker-prompt.ts`,
+    `picker-vault.ts`, `picker-file.ts` — one picker each, over the
+    shared `picker-frame.ts`.
+  - `tool-format.ts` — how tool calls, results and task filters are
+    worded, as pure functions; `dom.ts` — element and icon helpers.
+  - `panel.ts` — the head, the assembly and the render loop.
+- **Tests.** The panel had almost no coverage of its own, so two e2e
+  tests were added first and run against the old file, then the new
+  ones: the note chip, the file and prompt pickers feeding the composer,
+  and the chat, vault and model pickers applying their choice.
+  `tool-format.spec.ts` adds 20 direct tests.
+- Expanding a tool chip, confirming a restart or copying a turn now
+  re-renders the thread only, not the head and the composer too; the
+  result on screen is the same.
+
 ### `EditorService` is split into a facade and four collaborators
 
 Item 10 of the 2026-10-11 architecture review, second file. A
