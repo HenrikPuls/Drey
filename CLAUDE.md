@@ -588,9 +588,8 @@ with it.
   SDK 1.18, semantic mode in the Search panel and a semantic
   `vault_search` mode, ADR-0055 later change), and milestone 67 — the
   Git plugin's merge, stash, amend and file history.
-  Milestones 59–66, the Vault-chip picker, the dev escape hatch and the
-  build-origin/mouse-button work are owner-verified; milestones 67–70
-  are code-complete, verification pending.
+  Milestones 59–70, the Vault-chip picker, the dev escape hatch and the
+  build-origin/mouse-button work are owner-verified.
 - **Next, in order:** nothing ordered — the owner picks from the backlog
   in `specs/roadmap.md`.
 
