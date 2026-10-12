@@ -1,8 +1,8 @@
 # Drey — Changelog
 
 The record of everything **implemented**, newest first. Open work lives in
-[`roadmap.md`](roadmap.md) → "Not yet implemented"; when an item ships it
-moves here. The finer-grained history is not duplicated: the
+[`roadmap.md`](roadmap.md), decided-against ideas in
+[`decisions.md`](decisions.md); when an item ships it moves here. The finer-grained history is not duplicated: the
 milestone-by-milestone build log is archived in
 [`docs/milestones-done.md`](../docs/milestones-done.md), lasting decisions
 live in the ADRs
@@ -19,6 +19,31 @@ recorded as an explicit decision. The parity checklist lives in
 ---
 
 ## Recent milestones
+
+### Fix — Files panel: the inline name fields keep their keys
+
+While one of the Files panel's inline name inputs (rename, new file /
+new folder, vault rename) was open, every key but Enter, Escape and blur
+reached the tree underneath instead of the field: `onTreeKeydown` is
+bound on the tree container and had no guard for events bubbling out of
+the input. The cursor keys moved the tree selection — and through the
+focus-follow's blur even committed the field outright — while
+`preventDefault()` froze the caret inside it. Delete was the dangerous
+one: it ran the tree's delete on the selected *file* (confirm dialog
+and all) while its *name* was being edited. The handler now returns
+early for keydowns from an input/textarea — the same guard the panel's
+context-menu openers already use; a target-identity check would have
+broken bug-7's roving focus, where focused row buttons bubble there
+legitimately. **Not yet manually verified by the owner.**
+
+- Reproduced first, as the roadmap demanded: `e2e/files-rename.spec.ts`
+  covers the defect's manifestations (caret, focus, no delete dialog,
+  nothing lost on cancel) plus the Enter/Escape happy paths and the
+  new-file input — red before the guard, green after.
+- Unit regression in `files-panel.spec.ts`: keys dispatched from all
+  three inline inputs leave the tree selection alone and never reach
+  the delete confirm. (jsdom's `select()` cannot focus, so the
+  vault-rename focus check lives in the e2e.)
 
 ### Milestone 72 — Extended Markdown: GFM+, callouts, highlight, math (KaTeX), footnotes, emoji
 
@@ -173,6 +198,35 @@ verified by the owner.**
   fixed — they do not follow the highlight colour, which still re-tints
   the chrome.
 - Anthrazit stays the default; the splash stays Anthrazit.
+
+### Milestone 71 — Agentic vault exploration (ADR-0069)
+
+Owner request: the fixed top-4 context and the scope leaks of the Vault
+chip were not enough for good answers. The chip-on ask is now
+**hybrid-agentic**. **Not yet manually verified by the owner.**
+
+- **Baseline stays, tools are added.** The top-k block of semantic
+  retrieval still goes into the system prompt; tool-capable providers
+  additionally get three scope-safe explore tools, closed over the chip's
+  targets: `vault_overview` (files + headings straight from the index),
+  `vault_find` (semantic ranking over exactly the chip's subset) and
+  `vault_section` (one section, read fresh). Loop cap 6.
+- **Scope enforced by the host.** `MainChatOptions.vaultToolsScope`
+  (plugin SDK 1.20) makes the plugin host drop `vault_search` /
+  `vault_read` from an ask whose scope excludes the active vault — they
+  defaulted to it and leaked out-of-scope reads. `vault_write` is never
+  filtered.
+- **Cold or stale indexes self-heal.** `ensureUsable` starts a
+  de-duplicated background rebuild instead of silently skipping;
+  `RetrievalOutcome.targets` carries the resolved scope to the engine.
+- **Picker semantics.** The first check from a shortcut scope in the
+  vault picker replaces the selection instead of carrying the shortcut's
+  vaults along (the "docs vault selected, answers from the active vault"
+  trap).
+- Specs: explore tools, semantic service (scoped search, outline,
+  readSection, self-heal), host filter, engine wiring. Docs: ADR-0069,
+  `CLAUDE.md`. Follow-up fix the same day: "The assistant answers a scoped
+  ask from the scoped vaults only" (above).
 
 ### Fix — the image resize grip and the table keys work before the note is fully parsed
 
