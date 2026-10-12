@@ -20,6 +20,21 @@ recorded as an explicit decision. The parity checklist lives in
 
 ## Recent milestones
 
+### Manual stamp — the manual's footer states version and content date from the build
+
+The in-app manual's footer was hand-written ("Manual for Drey 0.3.0"
+while the app is 0.5.0) and drifted. `docs/manual/manual.md` now
+carries `{{MANUAL_VERSION}}` / `{{MANUAL_GENERATED}}` tokens, and
+`scripts/sync-manual.mjs` substitutes them while mirroring: the version
+comes from `package.json`, the generation date is the day `docs/manual`
+last changed in git. A build-time date was rejected on purpose — it
+would dirty the committed `public/manual` mirror on every new day's
+first build, breaking the script's byte-stability promise; both chosen
+values are deterministic, so an unchanged source still re-syncs without
+git noise. A missing version token fails the build loudly, so a
+hand-edited version cannot come back silently. **Not yet manually
+verified by the owner.**
+
 ### Editor chrome — unsaved is the save button alone; zoom gets its indicator
 
 The meta bar no longer spells out "Unsaved" next to the save cluster:
@@ -28,8 +43,7 @@ dot) alone. The editor zoom (`Ctrl +` / `Ctrl -` / `Ctrl 0`,
 `Ctrl`+wheel, `editor.fontScale`) gains an indicator: while the scale
 differs from 100%, the meta bar shows the percentage in mono (matching
 the path), and one click resets it — at 100% the chip is gone, so the
-default state stays chrome-free. **Not yet manually verified by the
-owner.**
+default state stays chrome-free.
 
 - Unit: `editor.spec.ts` ("Editor chrome") — the save button alone
   carries dirty; the chip appears only away from 100% and resets on
@@ -52,7 +66,7 @@ and all) while its *name* was being edited. The handler now returns
 early for keydowns from an input/textarea — the same guard the panel's
 context-menu openers already use; a target-identity check would have
 broken bug-7's roving focus, where focused row buttons bubble there
-legitimately. **Not yet manually verified by the owner.**
+legitimately.
 
 - Reproduced first, as the roadmap demanded: `e2e/files-rename.spec.ts`
   covers the defect's manifestations (caret, focus, no delete dialog,
