@@ -61,8 +61,19 @@
 
   <div class="actions">
     @let dirty = shownDoc() && shownDoc()!.bufferContent !== shownDoc()!.savedContent;
-    @if (dirty) {
-      <span class="unsaved">Unsaved</span>
+    @if (zoomPercent() !== 100) {
+      <!-- The zoom indicator (Ctrl +/-/0, Ctrl+wheel): the current editor
+           font scale, shown only while it differs from 100%; one click
+           resets it. -->
+      <button
+        type="button"
+        class="zoom-chip"
+        (click)="zoom.reset()"
+        title="Reset editor zoom (Ctrl 0)"
+        aria-label="Reset editor zoom"
+      >
+        {{ zoomPercent() }}%
+      </button>
     }
     <button
       type="button"

@@ -173,6 +173,10 @@ The `⋯` menu also holds *Formatting toolbar*, *Lines* (line numbers),
 *Suggest tags* (AI), *File history…*, *Export as PDF…*, *Save as…* and
 any manual Assistant Actions you have configured.
 
+The editor's text size zooms with `Ctrl +` / `Ctrl -` / `Ctrl 0` or
+`Ctrl`+wheel; while it differs from 100%, the meta bar shows the
+percentage — click it to reset.
+
 ![Source mode](img/editor-source.png)
 
 ### The slash menu and capture

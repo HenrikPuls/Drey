@@ -96,6 +96,13 @@ export class Editor implements AfterViewInit, OnDestroy {
   protected readonly settings = inject(SettingsService);
   protected readonly history = inject(HistoryService);
   protected readonly zoom = inject(EditorZoomService);
+  /**
+   * The zoom indicator's percentage (Ctrl +/-/0, Ctrl+wheel over the
+   * editor): shown in the meta bar only while it differs from 100% --
+   * `Math.round` absorbs the step arithmetic's float artifacts
+   * (1.2000000000000002 -> 120).
+   */
+  protected readonly zoomPercent = computed(() => Math.round(this.zoom.scale() * 100));
   protected readonly menuContributions = inject(MenuContributionsService);
   /** The formatting-toolbar toggle (`⋯` menu, persisted per machine). */
   protected readonly prefs = inject(EditorPrefsService);

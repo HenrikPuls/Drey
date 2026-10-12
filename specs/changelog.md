@@ -20,6 +20,24 @@ recorded as an explicit decision. The parity checklist lives in
 
 ## Recent milestones
 
+### Editor chrome — unsaved is the save button alone; zoom gets its indicator
+
+The meta bar no longer spells out "Unsaved" next to the save cluster:
+the dirty state lives in the accent-coloured save button (and the tab's
+dot) alone. The editor zoom (`Ctrl +` / `Ctrl -` / `Ctrl 0`,
+`Ctrl`+wheel, `editor.fontScale`) gains an indicator: while the scale
+differs from 100%, the meta bar shows the percentage in mono (matching
+the path), and one click resets it — at 100% the chip is gone, so the
+default state stays chrome-free. **Not yet manually verified by the
+owner.**
+
+- Unit: `editor.spec.ts` ("Editor chrome") — the save button alone
+  carries dirty; the chip appears only away from 100% and resets on
+  click (a config-serving fake, so the zoom multiplier is real).
+- E2e: `editor-chrome.spec.ts` drives the real path — type to dirty,
+  `Ctrl +` to zoom, click the chip to reset.
+- Manual: one sentence on zooming in the Modes section.
+
 ### Fix — Files panel: the inline name fields keep their keys
 
 While one of the Files panel's inline name inputs (rename, new file /

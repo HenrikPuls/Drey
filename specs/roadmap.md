@@ -54,25 +54,19 @@ used (latest: milestone 72; latest requirement id: req-40, Git vaults).
 
 ### Now (small, daily value)
 
-1. **Editor chrome.** Show "unsaved" only as the bubble, not spelled out
-   (`editor.html` still renders the word); add a zoom indicator next to
-   the existing `Ctrl +` / `Ctrl -` / `Ctrl 0` / `Ctrl`+wheel editor
-   zoom (`editor.fontScale`), clickable to reset. Colouring the file name
-   (green new, orange changed) is **not planned** — it works against the
-   distraction-free goal.
-2. **Manual stamp.** The manual ships with every build (in-app Help,
+1. **Manual stamp.** The manual ships with every build (in-app Help,
    ADR-0067) but its footer is hard-coded ("Drey 0.3.0", app is 0.5.0).
    `scripts/sync-manual.mjs` should write version and generation date
    from `package.json` / build time so it cannot drift again.
-3. **Lossless Markdown template.** A built-in Action template that
+2. **Lossless Markdown template.** A built-in Action template that
    restructures a note without adding facts and tags it from the existing
    vocabulary only. Draft prompt: `classifier-spec.md` ("Planned"). Shares
    the vocabulary-size limit with Autotag (see Next: tags at scale).
-4. **Assistant on a selection.** Actions already receive the selection
+3. **Assistant on a selection.** Actions already receive the selection
    (`SELECTED SECTION`). Missing: a button that appears at a selection
    (like Copilot in Office) to ask about it, with frequently used default
    prompts (`templates/prompts/` is the natural source).
-5. **Configurable shortcuts.** One user-defined binding per command,
+4. **Configurable shortcuts.** One user-defined binding per command,
    stored locally in the app config (never in the vault). `KeybindingService`
    has no override layer today (`electron/main.ts` already anticipates a
    settings UI for the quick-capture hotkey). Needs an ADR: conflict
@@ -94,7 +88,7 @@ used (latest: milestone 72; latest requirement id: req-40, Git vaults).
     (fine to low hundreds) and there is no near-duplicate detection
     (`sailing` vs. `boat`). Add a pre-filter and a duplicate finder
     on top of the rename/merge tool (milestone 53) before the vocabulary
-    grows and before item 3 starts feeding it into a second prompt.
+    grows and before item 2 starts feeding it into a second prompt.
 
 ### Later
 

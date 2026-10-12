@@ -3,10 +3,13 @@ import { By } from '@angular/platform-browser';
 import { vi } from 'vitest';
 import { Editor } from './editor';
 import { EditorService } from '../services/editor.service';
+import { EditorZoomService } from '../services/editor-zoom.service';
+import { SettingsService } from '../services/settings.service';
 import { KeybindingService } from '../keybindings';
 import { WikilinkService } from './wikilinks';
 import { MarkdownSurface } from './markdown-surface/markdown-surface';
 import { DreyApi, NoteSaveRequest } from '../../../shared/ipc-api';
+import { normalizeAppConfig } from '../../../shared/app-config';
 
 const RICH = [
   '# Doc',
@@ -823,5 +826,77 @@ describe('Editor', () => {
       expect(editor.bufferContent()).toBe('# Head\n\ntagged body #sailing\n');
       expect(compiled().querySelector('.err')?.textContent).toContain('already carries');
     });
+  });
+});
+
+describe('Editor chrome (meta bar)', () => {
+  /**
+   * The meta bar's right cluster: dirty state shows in the save button
+   * alone (no spelled-out word), and the zoom indicator (Ctrl +/-/0,
+   * Ctrl+wheel) appears only away from 100% -- one click resets it.
+   * This describe needs a config-serving API so `SettingsService` holds
+   * a real config; the main describe's fake has no config methods, which
+   * leaves the zoom multiplier pinned at its fallback.
+   */
+  let fixture: ComponentFixture<Editor>;
+  let editor: EditorService;
+  let zoom: EditorZoomService;
+
+  beforeEach(async () => {
+    const fakeApi: Partial<DreyApi> = {
+      getConfig: () => Promise.resolve(normalizeAppConfig({})),
+      setConfig: (config) => Promise.resolve(config),
+      readVaultFile: () =>
+        Promise.resolve({ content: '# Title\n\nsome **bold** text', modifiedMs: 1 }),
+      writeVaultFile: () => Promise.resolve(2),
+      saveNote: (request) =>
+        Promise.resolve({ path: request.path, content: request.body, modifiedMs: 2 }),
+    };
+    window.dreyApi = fakeApi as DreyApi;
+
+    await TestBed.configureTestingModule({ imports: [Editor] }).compileComponents();
+    await TestBed.inject(SettingsService).load(); // a config must be in before zooming
+    editor = TestBed.inject(EditorService);
+    await editor.openFile('note.md');
+    zoom = TestBed.inject(EditorZoomService);
+
+    fixture = TestBed.createComponent(Editor);
+    fixture.componentRef.setInput('paneId', 'p1');
+    await fixture.whenStable();
+    fixture.detectChanges();
+  });
+
+  afterEach(() => {
+    delete (window as { dreyApi?: unknown }).dreyApi;
+    localStorage.removeItem('drey.editor');
+  });
+
+  const compiled = () => fixture.nativeElement as HTMLElement;
+
+  it('dirty state lives in the save button alone -- no spelled-out "Unsaved"', () => {
+    const save = compiled().querySelector('.actions .save') as HTMLButtonElement;
+    expect(save.classList.contains('dirty')).toBe(false);
+    expect(compiled().querySelector('.unsaved')).toBeNull();
+
+    editor.updateBuffer('note.md', '# Title\n\nsome **bold** text edited');
+    fixture.detectChanges();
+
+    expect(save.classList.contains('dirty')).toBe(true);
+    expect(compiled().querySelector('.unsaved')).toBeNull();
+  });
+
+  it('the zoom chip appears only away from 100%, and a click resets', () => {
+    expect(compiled().querySelector('.zoom-chip')).toBeNull();
+
+    zoom.stepIn();
+    zoom.stepIn();
+    fixture.detectChanges();
+
+    const chip = compiled().querySelector('.zoom-chip') as HTMLButtonElement;
+    expect(chip.textContent?.trim()).toBe('120%');
+
+    chip.click();
+    fixture.detectChanges();
+    expect(compiled().querySelector('.zoom-chip')).toBeNull();
   });
 });
