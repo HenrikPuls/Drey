@@ -204,7 +204,7 @@ fills** — base knows the interfaces, not the features:
 | Document read/observe/insert/confirmed rewrite/open + the live-edit input lock | `documents.*` (incl. `setEditLock`, ADR-0049) | — |
 | Vault IO + change push | `vault.*` (incl. `saveAsset`) | `ctx.vault.*` (incl. `writeAnnounced`; `announceChanges` after a plugin rewrote the working tree, SDK 1.17) |
 | Backend methods + pushes (the plugin's own IPC) | `backend.invoke` / `backend.on` | `ctx.ipc.handle` / `ctx.ipc.emit` |
-| Save pipeline (`{content?, pendingActions?}`), vault lifecycle, section search, semantic search | — | `ctx.save`, `ctx.vault` hooks, `ctx.search` (`notifyChanged` pushes `search:changed` to the base vocabulary service, SDK 1.9; the provider's optional `styles()` serves the tag prefix colors; `registerSemanticSearch` is the second, parallel single slot — SDK 1.18, the assistant's similarity index for the Search panel's semantic mode and MCP `vault_search` mode `semantic`, ADR-0055 later change) |
+| Save pipeline (`{content?, pendingActions?}`), vault lifecycle, section search, semantic search | — | `ctx.save`, `ctx.vault` hooks, `ctx.search` (`notifyChanged` pushes `search:changed` to the base vocabulary service, SDK 1.9; the provider's optional `styles()` serves the tag prefix colors; `sectionSearchProvider()` is the seam's read side for other plugins — SDK 1.21, the assistant's action engine takes the tag vocabulary for `{{AVAILABLE_TAGS}}` from it; `registerSemanticSearch` is the second, parallel single slot — SDK 1.18, the assistant's similarity index for the Search panel's semantic mode and MCP `vault_search` mode `semantic`, ADR-0055 later change) |
 | LLM transport | `llm.chat/cancelTask/onDebugEntry/onDelta/listModels/capabilities/onCapabilitiesChanged` | `ctx.llm.chat/suggestTags/capabilities` (chat gains `tools`/`onToolCall`/`maxToolRounds`, ADR-0049; `maxOutputTokens` + the capability push, ADR-0050) |
 | Per-plugin config, app config read/patch | `settings.*`, `appConfig.*` | `ctx.config`, `ctx.appConfig` |
 | Native-surface hide (overlays/gestures) | `env.onNativeSurfaceVisibility` | — |
@@ -285,7 +285,9 @@ Keep it in step whenever a component boundary changes (CLAUDE.md's
   seam), the backlinks `BacklinkIndex` (milestone 54) — live in
   their plugins.
   `suggestTags` (the Autotag prompt) stayed base:
-  `electron/llm/tag-suggest.ts`
+  `electron/llm/tag-suggest.ts`. It and the assistant's `ActionEngine`
+  share one vocabulary placeholder, `{{AVAILABLE_TAGS}}`
+  (`shared/llm/prompt-substitution.ts`, milestone 73)
 - `LmStudioClient` — HTTP client for the local OpenAI-compatible endpoint
   (`GET /models`, `POST /chat/completions`), optional bearer API key.
   **No timeout on generation** — a local model may think for minutes; the
@@ -737,6 +739,7 @@ decision. (Seams — what a *plugin* can extend — are the table above.)
 | Tasks panel + inline due/priority metadata | `plugins/tasks/` | Plugin tasks | ADR-0033 |
 | Assistant chat + chat notes (`chats/`) | `plugins/assistant/` (`chat-engine.ts`, `chat-store.ts`) | Plugin assistant | ADR-0048 |
 | Manual Actions (run + on-save queue) | `plugins/assistant/` + `editor-more` menu rows | Plugin assistant | ADR-0011, ADR-0012 |
+| "Structure note (lossless)" built-in Action + the `{{AVAILABLE_TAGS}}` prompt placeholder | `shared/config/schema.ts` (`LOSSLESS_FORMAT_PROMPT`), `shared/llm/prompt-substitution.ts`, `plugins/assistant/main/action-engine.ts` | Shared + plugin assistant | `specs/classifier-spec.md`, M73 |
 | Live edit (model edits the open note) | `plugins/assistant/` + `documents.setEditLock` | Plugin assistant | ADR-0049 |
 | Semantic retrieval (the Vault chip) | `plugins/assistant/main/semantic/` | Plugin assistant | ADR-0055 |
 | Assistant tool groups + external MCP servers | `electron/mcp-client/`, `src/app/tool-approval/`, Settings → "Assistant tools" | Base | ADR-0063 |
@@ -2040,6 +2043,10 @@ the `Sidebar` settings entry, the editor `⋯` menu, and the chat bar._
   digest), `autotag` (drawer button). "Update summary" is gone with
   master documents; "Autotagging" became the vocabulary-based `autotag`,
   `{"tags":[…]}` with no `{registry_list}`.)_
+  _(Update — milestone 73: the built-ins are `search-summary`, `autotag`
+  and `lossless-format` ("Structure note (lossless)", a whole-document
+  rewrite); the last one ships with a manual trigger on a fresh config.
+  `note-summary` is retired.)_
   - **Autotagging** — its prompt text _is_ the classifier's Prompt 2
     system prompt (`{registry_list}` injected at call time), so it is
     genuinely wired to the classifier, not a second copy. Ships with a

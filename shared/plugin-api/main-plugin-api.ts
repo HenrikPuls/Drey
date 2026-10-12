@@ -405,6 +405,13 @@ export interface MainPluginContext {
   readonly search: {
     registerSectionSearch(provider: SectionSearchProvider): Unsubscribe;
     /**
+     * The registered section-search provider (SDK 1.21) — the seam's read
+     * side, mirroring `tasks.queryProvider()`: e.g. the assistant's action
+     * engine embeds the provider's tag vocabulary into a prompt through it.
+     * `null` when no plugin registered one.
+     */
+    sectionSearchProvider(): SectionSearchProvider | null;
+    /**
      * The semantic seam (SDK 1.18, ADR-0055): registered only while the
      * owning plugin's retrieval is enabled; null provider = semantic
      * surfaces degrade.

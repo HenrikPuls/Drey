@@ -330,3 +330,12 @@ pure-field case.
 - The page column is a flex column with the standard field gap; core
   panes and plugin pages share one stylesheet (see "The shared form
   vocabulary" above).
+
+## SDK 1.21 — reading the section-search provider
+
+- `ctx.search.sectionSearchProvider()` returns the registered
+  `SectionSearchProvider` or `null` — the read side of the seam, like
+  `ctx.tasks.queryProvider()`. Use it for the vault's tag vocabulary
+  (`vocabulary()`) or a section search from your main entry; always
+  handle `null` (the tags plugin may be disabled) and ask at call time,
+  not once at activation — providers register in activation order.

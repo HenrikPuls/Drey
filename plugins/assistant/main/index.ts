@@ -81,6 +81,10 @@ const plugin: MainPluginModule = {
             ...(options?.vaultTools !== undefined ? { vaultTools: options.vaultTools } : {}),
           })
           .then((result) => result.text)) satisfies ChatFn,
+      // The tags plugin's vocabulary through the SDK 1.21 read seam —
+      // `{{AVAILABLE_TAGS}}` in an action prompt (the lossless template's
+      // tagging rules); empty until a provider registers.
+      () => ctx.search.sectionSearchProvider()?.vocabulary().map((entry) => entry.tag) ?? [],
     );
 
     const chatStore = new ChatStore({

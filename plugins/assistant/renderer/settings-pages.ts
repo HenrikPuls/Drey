@@ -92,7 +92,7 @@ export function actionsSettingsPage(
         el(
           'p',
           'section-hint',
-          'A template is a name, a prompt, and the kind of change it makes. “Autotagging” suggests tags for a note section (the editor’s “Suggest tags” row); “Update summary” rebuilds a master document’s Summary section.',
+          'A template is a name, a prompt, and the kind of change it makes. “Autotagging” suggests tags for a note section (the editor’s “Suggest tags” row); “Update summary” rebuilds a master document’s Summary section. The note itself is sent alongside the prompt; {{AVAILABLE_TAGS}} in a prompt is replaced with the vault’s tag vocabulary when it runs.',
         ),
       );
       const templateList = el('ul', 'cards');

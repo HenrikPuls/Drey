@@ -20,6 +20,48 @@ recorded as an explicit decision. The parity checklist lives in
 
 ## Recent milestones
 
+### Milestone 73 — Lossless Markdown template ("Structure note")
+
+A third built-in Action template, **Structure note (lossless)**
+(`builtin:lossless-format`): it restructures a raw note into Markdown
+without adding, inferring or interpreting anything, and tags it from the
+vault's existing vocabulary only. The reply is free Markdown and goes
+through the ADR-0011 whole-document confirmation; an unchanged reply is
+a no-op. A fresh install ships one manual trigger for it, so it is a row
+in the editor's `⋯` menu out of the box; an existing config's trigger
+list is the user's own and stays untouched (add the trigger once in
+Settings → Actions).
+
+- **One vocabulary placeholder for every prompt.** `{{AVAILABLE_TAGS}}`
+  (`shared/llm/prompt-substitution.ts`, `substituteVocabulary`) is
+  replaced with the tag list at call time — in Autotag and in *every*
+  Action template the assistant runs, the user's own included. The
+  reserved `task` is never offered; an empty vocabulary reads
+  `(none yet)`. Autotag's old `{tags}` spelling keeps being substituted,
+  and a stored Autotag prompt that still equals the old default is
+  refreshed to the new one (a genuine edit keeps its text).
+- **Plugin SDK 1.21:** `ctx.search.sectionSearchProvider()` — the read
+  side of the section-search seam (mirroring `tasks.queryProvider()`).
+  The assistant's `ActionEngine` reads the tags plugin's vocabulary
+  through it; with the tags plugin disabled the list is empty.
+- **Deviation from the draft** (`classifier-spec.md`, formerly
+  "Planned"): no `{{NOTE}}` placeholder — the note rides the user
+  message like for every Action, so the built-in needs no special path
+  through the engine.
+- Not enforced: the prompt instructs the model to stay inside the
+  vocabulary, nothing strips an invented tag — the confirmation diff is
+  the check (roadmap follow-up).
+- Unit: `shared/llm/prompt-substitution.spec.ts` (token, legacy token,
+  `task` filter, empty vocabulary), `plugins/assistant/main/action-engine.spec.ts`
+  (system prompt assembly for the lossless template, no-op on an
+  unchanged reply), `app-config.spec.ts` (the third built-in, the seeded
+  trigger on a fresh config only, the legacy Autotag prompt refresh),
+  `actions-resolve.spec.ts` (the default resolved action).
+- Specs: `classifier-spec.md` (the placeholder section, the template as
+  shipped). Manual: the Actions section.
+
+**Not yet manually verified by the owner.**
+
 ### Manual stamp — the manual's footer states version and content date from the build
 
 The in-app manual's footer was hand-written ("Manual for Drey 0.3.0"

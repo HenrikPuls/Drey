@@ -63,8 +63,9 @@ tags** row (req-36, milestone 45 — the re-homed Autotag; the entry drawer
 that carried the old button is gone since ADR-0057). It is the built-in
 **"Autotag"** Action template (`AUTOTAG_PROMPT` in `shared/config/schema.ts`),
 run by `TagSuggester.suggest(entryText, vocabulary)` over the
-`tags:suggest` channel; `{tags}` is substituted with the current tag
-vocabulary (one tag per line) at call time. The row sends the
+`tags:suggest` channel; `{{AVAILABLE_TAGS}}` is substituted with the
+current tag vocabulary (one tag per line) at call time — see "The
+vocabulary placeholder" below. The row sends the
 heading-delimited section under the caret (`shared/note-sections.ts` —
 the same unit the tag search reports on) and **applies the reply
 directly**: the suggested tags are appended to the section's last prose
@@ -78,7 +79,7 @@ Suggest 1 to 4 tags for the note: reuse tags from the list where they fit,
 and otherwise propose new tags (one word, lowercase, no spaces).
 
 Existing tags:
-{tags}
+{{AVAILABLE_TAGS}}
 
 Respond ONLY with JSON, no prose: {"tags": ["tag1", "tag2"]}
 ```
@@ -192,18 +193,52 @@ rewrite; image-tab results open as a scratch tab.
 
 ---
 
-## Planned — lossless Markdown formatting template (not implemented)
+## The vocabulary placeholder — `{{AVAILABLE_TAGS}}`
 
-Owner request (feature-request list, 2026-10-12; roadmap "Now"): a
-built-in Action template that turns a raw note into structured Markdown
+One token, shared by every prompt that embeds the vault's tag
+vocabulary: `substituteVocabulary` (`shared/llm/prompt-substitution.ts`)
+replaces `{{AVAILABLE_TAGS}}` with the tag list, one tag per line.
+
+- The reserved `task` is filtered out — it is never offered as a tag.
+- An empty vocabulary substitutes `(none yet)`.
+- Autotag's original `{tags}` spelling is still substituted, so a stored,
+  user-edited Autotag prompt keeps working. A stored `builtin:autotag`
+  prompt that still equals the old default (`LEGACY_AUTOTAG_PROMPT`) is
+  refreshed to the current one by `normalizeAppConfig`.
+- It works in **every** Action template, the user's own included: the
+  assistant's `ActionEngine` substitutes it into the system prompt of any
+  action it runs. The vocabulary reaches the plugin through
+  `ctx.search.sectionSearchProvider()` (SDK 1.21); with the tags plugin
+  disabled the list is empty.
+
+There is **no `{{NOTE}}` placeholder** (the draft had one): the note
+rides the user message, as for every Action — and the selection, when
+there is one, as `SELECTED SECTION` above `WHOLE DOCUMENT`.
+
+---
+
+## Lossless Markdown formatting template (shipped, milestone 73)
+
+The built-in **"Structure note (lossless)"** Action template
+(`LOSSLESS_FORMAT_PROMPT` in `shared/config/schema.ts`,
+`builtin:lossless-format`): turns a raw note into structured Markdown
 **without** adding or interpreting anything, and tags it from the
-existing vocabulary only. It would ship like the other built-in
-templates (editable in Settings → Actions). `{{AVAILABLE_TAGS}}` and
-`{{NOTE}}` are placeholders; the substitution mechanism does not exist
-yet (Autotag uses `{tags}`) and has to be aligned.
+existing vocabulary only. Editable in Settings → Actions like the other
+built-ins, not deletable. `resultKind: 'document'` — the reply is free
+Markdown, not JSON, so there is no parser: it goes through the ADR-0011
+whole-document confirmation (aligned split diff), and a reply equal to
+the note is a no-op. `GENERIC_SYSTEM_SUFFIX` is appended as for every
+document-rewriting Action.
+
+A fresh config ships one **manual** trigger for it
+(`trigger:lossless-format`, confirm on), so it is a row in the editor's
+`⋯` menu out of the box. An existing config's trigger list is the user's
+own and is not touched — there the trigger is added once in Settings →
+Actions.
 
 ```
-Transform the following note into structured Markdown.
+System:
+Transform the note into structured Markdown.
 
 This is a lossless formatting task, not a summarization task.
 
@@ -214,8 +249,7 @@ STRICT REQUIREMENTS:
 - Never infer missing context.
 - Never answer questions found in the source.
 - Never interpret the author's intentions.
-- Never create decisions, conclusions, tasks, deadlines, or
-  responsibilities unless explicitly stated.
+- Never create decisions, conclusions, tasks, deadlines, or responsibilities unless explicitly stated.
 - Keep the original language.
 - Correct only obvious spelling or grammar errors.
 - Retain uncertainty, open questions, and incomplete information as such.
@@ -225,29 +259,25 @@ STRICT REQUIREMENTS:
 
 TAGGING:
 
-The valid tags are provided in AVAILABLE_TAGS.
+The valid tags are listed in AVAILABLE_TAGS.
 
-- Only use tags from AVAILABLE_TAGS.
-- Never create new tags.
+- Only use tags from AVAILABLE_TAGS; never create new tags.
 - Add a tag only when the note provides direct evidence that it applies.
 - If multiple tags could apply and the choice is ambiguous, add none.
-- Add person tags only when that person is explicitly mentioned.
-- Match names against AVAILABLE_TAGS.
-- Do not infer a person's identity from context alone.
+- Add person tags only when that person is explicitly mentioned; match names against AVAILABLE_TAGS and do not infer a person's identity from context alone.
 - Avoid redundant and overly broad tags.
 
 Output only the final Markdown.
 
 AVAILABLE_TAGS:
 {{AVAILABLE_TAGS}}
-
-NOTE:
-{{NOTE}}
 ```
 
-⚠️ Open points: the reply is free Markdown, not JSON, so it needs the
-confirmation rewrite (ADR-0011) rather than a parser; `#task` is reserved
-and must never be produced as a tag; the full vocabulary in
+The note goes in as the user message.
+
+**Limits.** The prompt only *instructs* the model to stay inside the
+vocabulary — nothing strips an invented tag from the reply; the
+confirmation diff is where the user catches it. The full vocabulary in
 `AVAILABLE_TAGS` has the same size limit as Autotag (see "Scaling note").
 
 ---
@@ -267,7 +297,7 @@ relying on it.
 
 ## Scaling note
 
-Prompt 2 (and the planned lossless template above) embeds the full tag
+Prompt 2 and the lossless template above embed the full tag
 vocabulary. For tens to low hundreds of tags this is fine. A vault that accumulates a very large number of tags would
 need a pre-filter step (roadmap "Next": tags at scale) (e.g. keyword pre-selection instead of the full
 list) before the list threatens the context window — not a current

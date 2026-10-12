@@ -1,9 +1,26 @@
 import { resolveActions } from '../../../shared/llm';
-import { DEFAULT_APP_CONFIG, normalizeAppConfig } from '../../../shared/app-config';
+import {
+  BUILTIN_TEMPLATE_IDS,
+  DEFAULT_APP_CONFIG,
+  LOSSLESS_FORMAT_PROMPT,
+  normalizeAppConfig,
+} from '../../../shared/app-config';
 
 describe('resolveActions', () => {
-  it('has no actions by default (no default triggers)', () => {
-    expect(resolveActions(DEFAULT_APP_CONFIG)).toEqual([]);
+  it('resolves the one default action: the lossless template on its manual trigger', () => {
+    expect(resolveActions(DEFAULT_APP_CONFIG)).toEqual([
+      {
+        triggerId: 'trigger:lossless-format',
+        templateId: BUILTIN_TEMPLATE_IDS['lossless-format'],
+        name: 'Structure note (lossless)',
+        prompt: LOSSLESS_FORMAT_PROMPT,
+        resultKind: 'document',
+        event: 'manual',
+        confirm: true,
+        enabled: true,
+        builtin: 'lossless-format',
+      },
+    ]);
   });
 
   it('joins a trigger to its template, carrying prompt and result kind', () => {

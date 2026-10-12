@@ -44,9 +44,9 @@ Open work only. Everything implemented lives in
 lives in [`decisions.md`](decisions.md). When an item ships, move it to the
 changelog and delete it here — no shipped history on this page.
 
-**Status (2026-10-12):** version 0.5.0, milestones 1–72 shipped. Milestone
+**Status (2026-10-13):** version 0.5.0, milestones 1–73 shipped. Milestone
 ids are assigned when work starts — check `changelog.md` for the highest
-used (latest: milestone 72; latest requirement id: req-40, Git vaults).
+used (latest: milestone 73; latest requirement id: req-40, Git vaults).
 
 ### Known defects
 
@@ -54,10 +54,6 @@ used (latest: milestone 72; latest requirement id: req-40, Git vaults).
 
 ### Now (small, daily value)
 
-1. **Lossless Markdown template.** A built-in Action template that
-   restructures a note without adding facts and tags it from the existing
-   vocabulary only. Draft prompt: `classifier-spec.md` ("Planned"). Shares
-   the vocabulary-size limit with Autotag (see Next: tags at scale).
 2. **Assistant on a selection.** Actions already receive the selection
    (`SELECTED SECTION`). Missing: a button that appears at a selection
    (like Copilot in Office) to ask about it, with frequently used default
@@ -84,7 +80,8 @@ used (latest: milestone 72; latest requirement id: req-40, Git vaults).
     (fine to low hundreds) and there is no near-duplicate detection
     (`sailing` vs. `boat`). Add a pre-filter and a duplicate finder
     on top of the rename/merge tool (milestone 53) before the vocabulary
-    grows and before item 1 starts feeding it into a second prompt.
+    grows — since milestone 73 the lossless template feeds it into a
+    second prompt.
 
 ### Later
 
@@ -138,6 +135,11 @@ used (latest: milestone 72; latest requirement id: req-40, Git vaults).
   embedding a plain `.drawio`, letting the assistant read a diagram.
 ~~- **Milestone 65 (Git, ADR-0065):** clone as a new vault, rebase /
   cherry-pick, partial staging, dotfiles in the tree.~~
+- **Milestone 73 (lossless template):** enforcing the vocabulary on the
+  reply (today the prompt only instructs; an invented tag is caught in
+  the confirmation diff), offering the built-in trigger to installs from
+  before the template (they add it once in Settings → Actions), running
+  it on a selection only.
 - **Milestone 66 (Office, ADR-0066):** rendering Office documents in a tab,
   "Open in default program" for other file types, a setting for the drop
   behaviour (copy or link).
@@ -155,7 +157,8 @@ used (latest: milestone 72; latest requirement id: req-40, Git vaults).
 - Tag sprawl: no near-duplicate detection. Autotagging biases toward
   existing vocabulary; the rename/merge tool (milestone 53) allows
   consolidating by hand — detection stays missing (Next, item 9).
-- Very large vocabularies: the Autotag prompt embeds the full tag list —
+- Very large vocabularies: the Autotag and lossless-template prompts embed
+  the full tag list —
   fine to low hundreds, needs a pre-filter beyond that (see
   `classifier-spec.md`; Next, item 9).
 - Documentation drift: `CLAUDE.md`'s milestone summary and the manual's

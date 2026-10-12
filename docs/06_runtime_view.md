@@ -791,7 +791,7 @@ sequenceDiagram
     Button->>Tasks: run('Suggesting tags', taskId => ...)
     Button->>Preload: suggestTags(entryText, taskId)
     Preload->>Runner: tags:suggest
-    Runner->>Runner: render the `autotag` template ({tags} = vocabulary)
+    Runner->>Runner: render the `autotag` template ({{AVAILABLE_TAGS}} = vocabulary)
     Runner->>LM: POST /chat/completions
     LM-->>Runner: reply
     Runner->>Pure: parseSuggestedTags(reply)  ({"tags":[…]} -> normalised, <=4)
