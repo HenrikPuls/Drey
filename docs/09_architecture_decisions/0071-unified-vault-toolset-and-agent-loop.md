@@ -4,7 +4,7 @@
 
 Accepted (2026-10-13), built in three steps: the tool loop and the system
 prompt (milestone 76, **done**), the vault toolset (milestone 77,
-planned), the open note through the same tools (milestone 78, planned).
+**done**), the open note through the same tools (milestone 78, planned).
 Changes ADR-0021 (the vault tools), ADR-0049 (live edit), ADR-0063 (the
 tool groups) and ADR-0069 (the explore tools); each gets its later-change
 note with the milestone that changes it.
@@ -144,10 +144,46 @@ the base, used by the MCP server and the assistant — ADR-0021's "no
 parallel write logic" stays.
 
 **The Vault chip is the scope of reading and writing**, enforced where
-the tool runs: a `vault` argument outside the scope is refused, and with
-the chip off no vault tool is attached. The vault group in Settings
-becomes the write permission (`off` / `confirm` / `auto`); the read
-tools follow the chip, as the explore tools did.
+the tool runs: every call carries its `VaultCallOptions` — the vault ids
+it may touch, the write rule, who writes, and whether the app's own
+folders are off limits — and `ToolScope` (`electron/mcp/tools/scope.ts`)
+resolves the `vault` argument inside them. A `vault` outside the scope
+is refused with the list of the ones inside; without the argument a
+listing or a search covers the whole scope, and a single-file tool takes
+the only vault in scope, else the active one, else asks for the
+argument. With the chip off no vault tool is attached. The vault group
+in Settings becomes the write permission (`off` / `confirm` / `auto`);
+the read tools follow the chip, as the explore tools did.
+
+As built (milestone 77):
+
+- **Search reads the files, not an index.** Words must all occur in one
+  heading-delimited section, a regular expression matches line by line;
+  the note files of the scope are read for every search (bounded: 2 000
+  files, 512 KB each). That is what gives every hit its line number and
+  what lets `path` narrow a search to one note — and it keeps the
+  decision against a full-text index. Only a `tags` filter goes to the
+  section index, which owns the tag grammar.
+- **`vault_search` and `vault_retrieve` are two tools**, not one with a
+  mode: "find these words" and "find what this is about" call for
+  different queries, and a model given a mode switch sends keywords to
+  the semantic side. `vault_retrieve` is offered only while a semantic
+  provider is registered, so it is never an option that fails.
+- **`vault_write` requires its mode.** Before, anything but `append`
+  meant overwrite, so a mistyped mode replaced a file.
+- **A move and a deletion ask in the approval dialog** (a diff cannot
+  show them), a deletion always. The dialog offers no "Always allow"
+  for them (`ToolApprovalRequest.once`).
+- **The assistant leaves `chats/` and `.drafts/` alone**: not listed,
+  not searched, not changeable. A chat note can still be read by its
+  path. An MCP client sees the vault as it is.
+- **`tasks_list` has one definition** (`shared/tasks-list-tool.ts`) and
+  stays outside the assistant's vault set: the assistant attaches it
+  under its own group switch and leaves it out where the task index
+  would answer for a vault the question does not search.
+- **A fresh install may write after asking** (`tools.vault.write:
+  'confirm'`); an existing config whose vault group was off migrates to
+  `off`.
 
 ### 4. The open note through the same tools (milestone 78)
 
@@ -195,8 +231,18 @@ the tools.
   `ASK_SCOPED_TOOLS_NOTE`, `ASK_EXPLORE_NOTE`, `ASK_TASKS_NOTE`,
   `ASK_TEMPLATES_NOTE`, `ASK_WEB_NOTE`, the scope note) are gone; their
   content lives in the builder and in the tool descriptions.
-- Milestone 77 changes the arguments of `vault_search` and `vault_write`
-  for programs connected to Drey's MCP server.
+- Milestone 77 changed the tools for programs connected to Drey's MCP
+  server: `vault_search` takes `query` and a `regex` switch, semantic
+  search is the tool `vault_retrieve`, `vault_write` needs `mode`,
+  `vault_read` returns numbered lines, and a search without `vault`
+  covers every registered vault.
+- `PLUGIN_API_VERSION` minor 23 → 24: `vaultToolsScope` bounds reading
+  and writing of every vault tool (it used to drop two read tools).
+- Until milestone 78 a vault tool works on the file on disk: an unsaved
+  change in an open tab is not seen, a write to that file surfaces as
+  "Changed on disk", and a moved note's tab keeps its old path.
+- The semantic service keeps four methods only the removed explore
+  tools used; removing them is a follow-up.
 - Not done in milestone 76: the abort signal still reaches only the
   external tools; plugin and vault tools finish the call they are in.
   The renderer-side `api.llm.chat` with `vaultTools` still attaches the

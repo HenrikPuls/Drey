@@ -2974,3 +2974,55 @@ with a prompt that fits, then skips the tools for that model until the
 app restarts. When tools ran and even the closing round brings no text,
 the turn is persisted with its trace under a fixed line — never dropped
 while a write it made is on disk.
+
+## 6.60 The assistant changes a note with `vault_edit` (milestone 77, [ADR-0071](09_architecture_decisions/0071-unified-vault-toolset-and-agent-loop.md))
+
+```mermaid
+sequenceDiagram
+    actor User
+    participant Panel as Assistant panel
+    participant CE as ChatEngine (plugin)
+    participant Host as PluginHost (ctx.llm.chat)
+    participant VT as VaultTools (mcp/tools)
+    participant VM as VaultManager
+    participant Dlg as Confirmation dialog
+    participant Ann as VaultChangeAnnouncer
+
+    User->>Panel: question, Vault chip = Docs
+    Panel->>CE: ask (vaultScope, vaultIds)
+    CE->>CE: resolve the chip to vault ids (registry)
+    CE->>Host: chat({ vaultTools: true, vaultToolsScope: [docs] })
+    Host->>VT: toolSpecs({ scope, write: tools.vault.write, origin: assistant, protectAppFolders })
+    VT-->>Host: read tools (+ vault_retrieve while semantic is on) (+ changing tools unless write = off)
+    Note over Host: tool loop (6.59)
+    Host->>VT: call(vault_search, { query }, options)
+    VT->>VM: listMarkdownFiles / readFile — only the vaults in scope
+    VT-->>Host: path — heading, "line: text" rows
+    Host->>VT: call(vault_read, { path, start_line })
+    VT-->>Host: numbered lines + how to continue
+    Host->>VT: call(vault_edit, { path, edits: [{ old_text, new_text }] })
+    VT->>VT: ToolScope: vault in scope? path not in chats/ or .drafts/?
+    VT->>VM: readFile
+    VT->>VT: applyTextEdits — every old_text exactly once, all or none
+    alt an edit does not match
+        VT-->>Host: "Error: Edit 2: old_text … was not found — nothing was changed."
+    else write rule = confirm
+        VT->>Dlg: before / after (ADR-0011)
+        User->>Dlg: accept or decline
+        Dlg-->>VT: approved?
+    end
+    opt approved, or write rule = auto
+        VT->>VM: writeFile (history origin: assistant, own-write ledger)
+        VT->>Ann: announce changed path — index events + renderer push
+        VT-->>Host: "Edited <path>: 1 replacement at line 12."
+    end
+    Host-->>CE: answer + toolTrace
+    CE-->>Panel: answer card with tool chips
+```
+
+A call that names a vault outside the chip's selection ends at
+`ToolScope` with a refusal that lists the vaults it may use; nothing is
+read or written. `vault_write`, `vault_move` and `vault_delete` take the
+same path — a move and a deletion ask in the approval dialog instead of
+the diff, a deletion always. A program on the MCP server runs the same
+code with every registered vault in scope and `mcp.yolo` as its rule.

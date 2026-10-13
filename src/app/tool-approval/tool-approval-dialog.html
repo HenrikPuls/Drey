@@ -3,11 +3,17 @@
   <div class="dialog" role="dialog" aria-modal="true" aria-labelledby="tool-approval-title">
     <header>
       <h2 id="tool-approval-title">Allow this call?</h2>
-      <p class="summary">
-        The assistant wants to use <span class="mono">{{ req.tool }}</span> from
-        <strong>{{ req.sourceName }}</strong
-        >. This is what would be sent:
-      </p>
+      @if (req.once) {
+        <p class="summary">
+          The assistant wants to run <span class="mono">{{ req.tool }}</span> in your vault:
+        </p>
+      } @else {
+        <p class="summary">
+          The assistant wants to use <span class="mono">{{ req.tool }}</span> from
+          <strong>{{ req.sourceName }}</strong
+          >. This is what would be sent:
+        </p>
+      }
     </header>
     <pre class="args">{{ argsText() }}</pre>
     <footer>
@@ -16,9 +22,11 @@
       }
       <div class="spacer"></div>
       <button type="button" class="ghost" (click)="deny()">Deny</button>
-      <button type="button" class="ghost" (click)="always()">
-        Always allow {{ req.sourceName }}
-      </button>
+      @if (!req.once) {
+        <button type="button" class="ghost" (click)="always()">
+          Always allow {{ req.sourceName }}
+        </button>
+      }
       <button type="button" class="primary" (click)="allow()">Allow</button>
     </footer>
   </div>

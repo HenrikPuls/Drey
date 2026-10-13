@@ -511,12 +511,37 @@ user data directory (like every desktop client of a local endpoint).
 
 ### What the assistant may call
 
-Settings → **Assistant tools** is the tool contract: one switch per
-group (vault, tasks, templates, web fetch, each external MCP server),
-`write: confirm | auto` on the writing groups, and
-`approval: ask | allow` on everything that leaves the machine. An
-external tool call under *ask* shows the shared approval dialog
-(source, tool, arguments — *Allow / Always allow / Deny*).
+Settings → **Assistant tools** is the tool contract: what the assistant
+may do, and when it has to ask.
+
+**The vault.** Which vaults the assistant can look into you choose per
+question, with the **Vault** button under the question field (off, the
+active vault, all vaults, or a selection). In those vaults it can list
+what exists, search for exact words — also inside one note —, find
+sections by meaning while *Assistant retrieval* is on, and read a note
+whole or in parts. With the button off it sees only what you attached
+to the question.
+
+Whether it may also **change** notes there is the *Vault* choice in
+Settings → Assistant tools:
+
+- **Not allowed** — it only reads.
+- **Show the change and ask first** — every edit, new file or appended
+  text opens the diff dialog; you accept or decline.
+- **Change without asking** — edits apply at once. Use it when you trust
+  the model and the task.
+
+A **move** asks in a small dialog under *ask first*; a **deletion**
+always asks, and the file goes to the recycle bin. The assistant changes
+part of a note by replacing exact text, so a small change stays small
+in the diff. It never touches a vault the Vault button did not select,
+and it leaves your chat notes and drafts alone.
+
+**The other groups** — tasks, templates, web fetch and each external MCP
+server — have a switch each, `write: confirm | auto` where they write,
+and `approval: ask | allow` on everything that leaves the machine. An
+external tool call under *ask* shows the shared approval dialog (source,
+tool, arguments — *Allow / Always allow / Deny*).
 
 **Rounds of tool calls per question** (default 12) is how often the
 assistant may look something up or change something before it has to
@@ -543,10 +568,16 @@ a tool like the rest.
 Settings → **MCP** exposes the vault *to other programs*: the same
 opt-in discipline, off by default.
 
-- Tools: `vault_search` (text or `mode: 'semantic'`, optional `vault`
-  argument, regex filter, `maxResults`), `vault_read`, `vault_write`.
-- `vault_write` goes through the confirmation diff unless **YOLO mode**
-  is on.
+- Tools: `vault_list`, `vault_search` (words, a quoted phrase, a regular
+  expression, tags; in the whole vault, a folder or one file),
+  `vault_retrieve` (by meaning, while Assistant retrieval is on),
+  `vault_read` (numbered lines, a range or a section), `vault_edit`
+  (exact text replacement), `vault_write` (`mode`: create, append or
+  overwrite), `vault_move`, `vault_delete` and `tasks_list`. They take
+  an optional `vault` argument; without it a search covers every
+  registered vault.
+- A change goes through the confirmation diff (a move through a small
+  dialog) unless **YOLO mode** is on. A deletion always asks.
 - Transports: a localhost `POST /mcp` HTTP endpoint and a standalone
   stdio bridge for CLI clients.
 
@@ -896,8 +927,11 @@ history store is deliberately outside it).
   Vault.
 - **A plugin's panel is missing** — check Settings → *Panels & plugins*
   (changes apply on restart), and the plugin's status line there.
-- **MCP clients can't write** — `vault_write` waits for the
-  confirmation dialog unless YOLO mode is on.
+- **MCP clients can't write** — a change waits for the confirmation
+  dialog unless YOLO mode is on; a deletion always does.
+- **The assistant says it cannot change a note** — Settings → Assistant
+  tools → *Vault* is set to "Not allowed", or the Vault button under the
+  question field does not include that vault.
 - **Git panel is empty** — the vault is not inside a Git repository, or
   `git` is not on `PATH` (set it in Settings → *Git*); press Refresh
   after initializing a repository.

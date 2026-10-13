@@ -41,6 +41,7 @@ import type { VaultManager } from '../vault-manager';
 import type { VaultChangeAnnouncer } from '../vault-change-announcer';
 import { PluginConfigStore } from './plugin-config-store';
 import {
+  assistantVaultOptions,
   buildLlmContext,
   buildVaultContext,
   runVaultTool,
@@ -129,7 +130,7 @@ export interface PluginHostDeps {
   readonly log: (message: string, level?: 'info' | 'warn' | 'error') => void;
 }
 
-export { vaultReadToolAllowed } from './plugin-context';
+export { assistantVaultOptions } from './plugin-context';
 
 export class PluginHost {
   private readonly discovered = new Map<string, DiscoveredPlugin>();
@@ -359,13 +360,17 @@ export class PluginHost {
         await this.configStore.set(pluginId, String(shape['key'] ?? ''), shape['value']);
         return undefined;
       case 'drey.llm.chat': {
-        // `vaultTools: true` opts the ONE call into the ADR-0021 vault tool
-        // loop (the model may call vault_search/read/write before its final
-        // answer; a vault_write still goes through the confirmation bridge).
+        // `vaultTools: true` opts the ONE call into the vault tool loop
+        // under the same rules a main-side plugin call gets (ADR-0071):
+        // the vault group's write rule, the app's folders left alone.
         // The renderer bridge stays string-returning: the serialized
         // `LlmChatResult` is unwrapped here, streaming reaches the renderer
         // through the `llm:delta` push, not this return value.
         const withTools = shape['vaultTools'] === true && this.deps.vaultTools !== undefined;
+        const vaultOptions = assistantVaultOptions(
+          undefined,
+          this.deps.appConfig.get().tools.vault.write,
+        );
         const taskId = typeof shape['taskId'] === 'string' ? shape['taskId'] : undefined;
         const result = await this.deps.llmTasks.run(taskId, (signal) =>
           this.deps.llm.chat((shape['messages'] as never[]) ?? [], {
@@ -374,14 +379,10 @@ export class PluginHost {
               : {}),
             ...(withTools
               ? {
-                  tools: this.deps.vaultTools.toolSpecs(),
+                  tools: this.deps.vaultTools.toolSpecs(vaultOptions),
                   onToolCall: (name, argsJson) =>
-                    runVaultTool(
-                      this.deps.vaultTools,
-                      name,
-                      argsJson,
-                      this.deps.appConfig.get().tools.vault.write === 'confirm',
-                    ),
+                    runVaultTool(this.deps.vaultTools, name, argsJson, vaultOptions),
+                  maxToolRounds: this.deps.appConfig.get().tools.maxRounds,
                 }
               : {}),
             ...(taskId !== undefined

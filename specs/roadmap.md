@@ -44,11 +44,11 @@ Open work only. Everything implemented lives in
 lives in [`decisions.md`](decisions.md). When an item ships, move it to the
 changelog and delete it here — no shipped history on this page.
 
-**Status (2026-10-13):** version 0.6.0, milestones 1–74 and 76 shipped.
-Milestone ids are assigned when work starts — check `changelog.md` for
-the highest used (latest: milestone 76; milestone 75 is assigned to
-"Configurable shortcuts" below, milestones 77–79 to the rest of the
-assistant tool rework at the top of "Now"; latest requirement id: req-42, the Cyberpunk app mark —
+**Status (2026-10-13):** version 0.6.0, milestones 1–74, 76 and 77
+shipped. Milestone ids are assigned when work starts — check
+`changelog.md` for the highest used (latest: milestone 77; milestone 75
+is assigned to "Configurable shortcuts" below, milestones 78–79 to the
+rest of the assistant tool rework at the top of "Now"; latest requirement id: req-42, the Cyberpunk app mark —
 an owner request outside the list, shipped in the same step).
 Items A1–A5 of the architectural cleanup shipped on 2026-10-13
 (changelog); A6–A12 remain.
@@ -61,28 +61,15 @@ Items A1–A5 of the architectural cleanup shipped on 2026-10-13
 
 The assistant tool rework below is an owner request, outside the list
 (2026-10-13); its milestones are worked first, in this order, with a
-pause after each. Milestone 76 (the tool loop and the system prompt)
-shipped — see the changelog. ADR-0071 covers 76–78; milestone 79 is a
-later change to ADR-0063.
+pause after each. Milestones 76 (the tool loop and the system prompt)
+and 77 (the vault toolset) shipped — see the changelog. ADR-0071 covers
+76–78; milestone 79 is a later change to ADR-0063.
 
-- **One vault toolset for the assistant and the MCP server
-  (milestone 77).** `vault_list`, `vault_search` (text / regex / tags,
-  optionally inside one file or folder, with context lines),
-  `vault_retrieve` (semantic, offered only while retrieval is on),
-  `vault_read` (numbered lines, a range or a heading, a default limit
-  with a continuation hint), `vault_edit` (exact text replacement that
-  must match once, all-or-nothing), `vault_write` (`mode` create /
-  overwrite / append, required), `vault_move` (with the link rewrite) and
-  `vault_delete` (recycle bin, always asked). They replace the base
-  `vault_search` / `vault_read` / `vault_write` and the assistant's own
-  `vault_overview` / `vault_find` / `vault_section` and its second
-  `tasks_list`. The Vault chip is the scope of **reading and writing**,
-  enforced where the tool runs; chip off means no vault tools. The vault
-  group in Settings becomes the write permission (`off` / `confirm` /
-  `auto`). ⚠️ Changes the arguments of `vault_search` and `vault_write`
-  for programs connected to Drey's MCP server.
 - **The open note through the same tools (milestone 78).** Main asks the
-  renderer for the buffer of an open file, so a read sees unsaved text
+  renderer for the buffer of an open file (today a vault tool reads and
+  writes the file on disk: an unsaved change in an open tab is not seen,
+  a write to it ends in the "Changed on disk" merge, and a moved note's
+  tab keeps its old path), so a read sees unsaved text
   and an edit lands in the tab (live edit: at once and unsaved; otherwise
   after the diff confirmation). `doc_apply_diff` / `doc_write` /
   `doc_read` go; the attached note is always in scope. The whole-document
@@ -236,6 +223,14 @@ Follow-ups of A1–A5 (found on the way, none started):
   tools (a cancel waits for the tool call in flight); private-address
   guard for `web_fetch`; the synthetic `tasks_list` call of the post-hoc
   task block is replayed to the model as a call it made.
+- **Milestone 77 (vault toolset, ADR-0071):** remove the semantic
+  service's methods only the old explore tools used (`resolveTargets`,
+  `searchScoped`, `outline`, `readSection`, `VectorIndex.outline`) and
+  check whether the assistant's own section splitter can give way to
+  `shared/note-sections.ts`; moving a note across vaults; deleting a
+  folder; a per-call cache of file contents when one search reads a
+  large vault; `tasks_list` and the template tools for a vault other
+  than the active one.
 - **Milestone 64 (draw.io, ADR-0064):** dirty state / manual save for plugin
   tabs, "New diagram" in the Files context menu, SVG ⇄ PNG conversion,
   embedding a plain `.drawio`, letting the assistant read a diagram.

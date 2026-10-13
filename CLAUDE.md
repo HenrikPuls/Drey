@@ -150,8 +150,7 @@ toolchain is removable by deleting `.tools/`). Never assume a bare `node`,
   text with case/whole-word/regex toggles, per-file grouped hits, replace
   (buffer patch in file scope; one bundled confirmation vault-wide), the
   Export scratch tab and an LLM **Summarize** digest of the hits
-  (milestone 37, editable `builtin:search-summary` prompt). MCP
-  `vault_search` takes an optional `vault` argument.
+  (milestone 37, editable `builtin:search-summary` prompt).
   The MCP server reads the index through the registered
   `SectionSearchProvider` (which also serves vocabulary + prefix styles)
   and degrades with a clear error when the tags plugin is disabled.
@@ -191,16 +190,14 @@ toolchain is removable by deleting `.tools/`). Never assume a bare `node`,
   ADR-0055 later-change).
   Owned by the assistant plugin; retrieval hydrates
   section text fresh from the vault at answer time. Since milestone 68
-  the index also serves the Search panel's **Semantic** toggle and MCP
-  `vault_search` mode `semantic` through a base
+  the index also serves the Search panel's **Semantic** toggle and the
+  `vault_retrieve` tool through a base
   `SemanticSearchProvider` seam (SDK 1.18, registered only while
   retrieval is enabled). Since milestone 71 the chip-on ask is
   **hybrid-agentic** ([ADR-0069](docs/09_architecture_decisions/0069-agentic-vault-exploration.md)):
-  the top-k block stays as the floor, and scope-safe explore tools
-  (`vault_overview` / `vault_find` / `vault_section`, closed over the
-  chip's targets) let tool-capable models scan and read further; the
-  host drops out-of-scope `vault_search`/`vault_read` from the ask
-  (`vaultToolsScope`, SDK 1.20), and a cold/stale vault index
+  the top-k block stays as the floor, and the vault tools let
+  tool-capable models look further (since milestone 77 the base set,
+  see "One vault toolset" below); a cold/stale vault index
   self-heals via a background rebuild instead of browsing empty.
 - **Manual refresh, plus an opt-in watcher.** By default there is no file
   watcher ([ADR-0018](docs/09_architecture_decisions/0018-manual-refresh-no-file-watcher.md)):
@@ -245,6 +242,18 @@ toolchain is removable by deleting `.tools/`). Never assume a bare `node`,
   it is attached to that call**; what a tool does belongs in its
   description, not in the prompt. Every prompt text and loop message is
   in `specs/classifier-spec.md`.
+- **One vault toolset** (milestone 77, ADR-0071): `vault_list`,
+  `vault_search`, `vault_retrieve`, `vault_read`, `vault_edit`,
+  `vault_write`, `vault_move`, `vault_delete` in `electron/mcp/tools/`
+  — one implementation for programs on Drey's MCP server and for the
+  assistant. Every call carries what it may do (`VaultCallOptions`):
+  **the Vault chip is the scope of reading and writing**, enforced where
+  the tool runs (chip off = no vault tools); `tools.vault.write`
+  (`off | confirm | auto`) is the permission to change notes; a deletion
+  is always asked. `vault_search` reads the note files themselves (no
+  index of its own); an edit is an exact text replacement that must
+  match once (`shared/text-edit.ts`). A new vault capability for the
+  model goes into this set, not into a plugin-owned twin.
 - **draw.io diagrams** (milestone 64,
   [ADR-0064](docs/09_architecture_decisions/0064-drawio-diagrams.md)): the `drawio` plugin opens `.drawio.svg` /
   `.drawio.png` / `.drawio` files in a tab holding draw.io's own web
@@ -355,7 +364,8 @@ Main process (`electron/`):
   over the pure `shared/link-rewrite.ts`
 - `llm/` — the LLM transport: `LlmClient` + per-call `LlmRouter`,
   `providers/` (ADR-0047), the task registry, `tag-suggest.ts`
-- `mcp/` — the vault MCP server (ADR-0021); `mcp-client/` — external MCP
+- `mcp/` — the vault MCP server (ADR-0021) and the vault tools both it
+  and the assistant use (`mcp/tools/`, ADR-0071); `mcp-client/` — external MCP
   servers, `web_fetch`, the assistant toolbox (ADR-0063)
 - `plugin-host/` — discovery, activation/quarantine, the per-plugin
   context (`plugin-context.ts`: `ctx.vault`, `ctx.llm`), per-plugin config,
@@ -438,8 +448,8 @@ Plugins (`plugins/<id>/`, ADR-0044 — each `plugin.json` + `main/` +
 - `templates/` — Templates panel, slash-menu template entries, snippets
   (M46)
 - `assistant/` — Assistant panel: chat notes (ADR-0048), Actions, live
-  edit (ADR-0049), semantic retrieval + explore tools (ADR-0055/0069 —
-  it also registers the `SemanticSearchProvider`)
+  edit (ADR-0049), the system prompt (ADR-0071), semantic retrieval
+  (ADR-0055/0069 — it also registers the `SemanticSearchProvider`)
 - `meeting/` — `.ics`/`.msg` meeting-section import (ADR-0041)
 - `browser/` — the in-editor browser tab (ADR-0042)
 - `ocr/` — vision-LLM OCR on images (ADR-0050)

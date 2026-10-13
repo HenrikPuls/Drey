@@ -247,23 +247,24 @@ export interface MainChatOptions {
    */
   readonly sessionRef?: string;
   /**
-   * Opts this ONE call into the vault tool loop (ADR-0021): the model may
-   * call `vault_search`/`vault_read`/`vault_write` before its final answer
-   * (a write follows `tools.vault.write`: confirmed in the diff dialog, or
-   * applied directly). The caller decides when to opt in -- the assistant
-   * does so per `tools.vault.enabled`. The tools stay base — the plugin
-   * never gets the `VaultTools` instance itself.
+   * Opts this ONE call into the vault tools (ADR-0021, recut in ADR-0071):
+   * the model may list, search and read the vault (`vault_list`,
+   * `vault_search`, `vault_read`, and `vault_retrieve` while semantic
+   * retrieval is on) and — unless the user's vault write rule
+   * (`tools.vault.write`) is `off` — change it (`vault_edit`,
+   * `vault_write`, `vault_move`, `vault_delete`; a write is confirmed in
+   * the diff dialog or applied directly, per that rule). The app's own
+   * folders (`chats/`, `.drafts/`) stay out. The tools stay base — the
+   * plugin never gets the `VaultTools` instance itself.
    */
   readonly vaultTools?: boolean;
   /**
-   * Restricts this ONE call's vault READ tools (SDK 1.20, ADR-0069): the
-   * resolved target vault ids of the caller's scope (the assistant's Vault
-   * chip). `vault_search` and `vault_read` default to the ACTIVE vault, so
-   * when the scope excludes it the host drops both from the merged tool
-   * set — the caller is expected to supply scope-safe plugin tools
-   * instead. When the scope includes the active vault (or the option is
-   * absent) nothing is filtered — the pre-1.20 behaviour. `vault_write` is
-   * never filtered.
+   * The vaults this ONE call's vault tools may touch (SDK 1.20; since
+   * SDK 1.24 the scope of reading AND writing, enforced where a tool
+   * runs, ADR-0071): vault ids — the assistant passes its Vault chip's
+   * selection. A `vault` argument outside it is refused; without the
+   * argument a listing or search covers all of them. Absent: every
+   * registered vault.
    */
   readonly vaultToolsScope?: readonly string[];
   /**

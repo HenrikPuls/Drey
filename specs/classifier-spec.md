@@ -199,7 +199,7 @@ rewrite; image-tab results open as a scratch tab.
 
 ---
 
-## The assistant's system prompt (milestone 76, ADR-0071)
+## The assistant's system prompt (milestones 76–77, ADR-0071)
 
 `buildSystemPrompt` (`plugins/assistant/main/system-prompt.ts`) builds it
 for every ask from the parts below, in this order, separated by a blank
@@ -209,26 +209,37 @@ line. A part with nothing to say is left out.
 2. **Environment**
    - `Today is YYYY-MM-DD (Weekday).`
    - With the Vault chip on:
-     `The vault for this question: <name> (<id>), …. "The vault" in the user's question means exactly this vault / these vaults and nothing else — what it contains or is about is answered only from <the vault context below> [and the vault exploration tools], never from other tools' results or from assumptions.`
+     `The vault for this question: <name> (<id>), …. "The vault" in the user's question means exactly this vault / these vaults and nothing else — what it contains or is about is answered only from <the vault context below> [and the vault tools], never from other tools' results or from assumptions.`
      The id is set in backticks. The sources named are the ones that
      exist for this call.
-   - With the vault tools attached: the vault ids for their `vault`
-     argument, one `- <id> (<name>)` per line (only the vaults in scope
-     while the chip is on; the active one marked), with the hint
-     `omit it for the active vault` — or, when the active vault is not
-     in scope, `always pass one of these ids — omitting it would address the active vault, which this question does not search`.
+   - With the vault tools attached and more than one vault in scope:
+     `The vault tools reach these vaults and no others. Their vault argument takes one of the ids above: leave it out to list or search all of them; for a single file it defaults to the active vault (<id>).`
+     — or `… for a single file always pass it.` when the active vault is
+     not in scope — then
+     `Results name a file as id:path — pass that back as it is.`
+     With one vault in scope nothing is said: the argument is not needed.
 3. **Vault context** — the retrieved sections (`buildVaultContextBlock`,
    ADR-0055), unchanged. It sits before the tool list, so the rule
    "tasks are answered from `tasks_list`" is the later instruction.
 4. **Tools** — `You can call these tools before you answer:` and one
    line per tool family **attached to this call**:
-   - `vault_overview, vault_find, vault_section` — how to go through
-     the vault for this question.
-   - `vault_search, vault_read, vault_write` (or `vault_write` alone
-     when the scope dropped the read tools), with the group's write
-     rule: `The user confirms every vault_write in a diff dialog before it is applied.`
-     / `A vault_write applies immediately without confirmation — write only what was asked for.`
-     On an ask with a document: `Never use vault_write on the DOCUMENT of this conversation — change it with the Change reply form described above.`
+   - `vault_list, vault_search, [vault_retrieve,] vault_read` — the
+     Vault chip is on (`vault_retrieve` is named only while semantic
+     retrieval is enabled):
+     `look through the vault: list what exists, search for exact words (also inside one file)[, find sections by meaning], read a file or part of one.`
+     followed by `The vault context above is a first selection; when it does not cover the question, search and read further instead of answering from thin context.`
+     — or, without a context block, `Search first, then read what you found before you answer.`
+   - `vault_edit, vault_write, vault_move, vault_delete` — unless the
+     vault group's write rule is `off`:
+     `change the vault: vault_edit replaces exact text in a file (use it for every change to an existing note), vault_write creates a file or appends to one, vault_move renames or moves, vault_delete removes a file.`
+     with the rule: `The user confirms every change in a dialog before it is applied.`
+     / `Changes apply immediately without confirmation — change only what was asked for. A deletion is always confirmed by the user.`
+     On an ask with a document:
+     `Never use them on the DOCUMENT of this conversation — change it with the Change reply form described above.`
+     On a live-edit turn:
+     `They are for OTHER files: the document of this conversation is changed with the doc tools only.`
+     With the rule `off` the line is replaced by
+     `You cannot change files in the vault in this conversation.`
    - `tasks_list` — task questions are answered from it and never from
      task lines seen elsewhere; not called for other questions; its
      results never describe what a vault is about; the app shows the
@@ -262,6 +273,175 @@ this call. A provider without a tool loop, a model whose endpoint
 refused the tools, a group that is off and a scope that leaves a tool
 out all get a prompt without it — parts 4 and 5 are then absent.
 
+### The vault tools (milestone 77)
+
+One set, defined in `electron/mcp/tools/defs.ts`, offered to programs
+connected to Drey's MCP server and attached to the assistant's asks
+while the Vault chip is on. What a caller gets:
+
+| | MCP client | Assistant |
+|---|---|---|
+| Vaults | every registered vault | the Vault chip's selection |
+| `vault_retrieve` | while semantic retrieval is enabled | the same |
+| Changing tools | always; a change is confirmed unless `mcp.yolo` | unless `tools.vault.write` is `off`; confirmed under `confirm` |
+| `vault_delete` | always asked | always asked |
+| `chats/`, `.drafts/` | visible, writable | not listed, not searched, not changeable (a chat note can be read by its path) |
+| `tasks_list` | part of the set | attached by the assistant itself (`tools.tasks`) |
+
+A `vault` argument outside the caller's vaults is refused:
+`Error: vault "<id>" is not available to this call. Pass one of: "<id>" (<name>), ….`
+Without the argument a listing or a search covers every vault the caller
+has; a single-file tool takes the only vault, or the active one, or
+answers `Error: pass the "vault" argument — one of: ….` Results name a
+file as `<id>:<path>` when more than one vault is in play, and a `path`
+argument in that form is taken apart.
+
+The descriptions and arguments, as the model gets them:
+
+#### `vault_list`
+
+```
+List the files of the vault — the way to see what exists before searching or reading. Returns one vault-relative path per line. Pass `path` to list one folder, `glob` to filter by name, and `headings` to see each note's headings (with their line numbers) under its path. A vault with many files comes back as its folders with file counts: list one of them next.
+```
+
+| Argument | Type | Description |
+|---|---|---|
+| `path` | string | A folder, vault-relative (e.g. "projects/website"). Default: the whole vault. |
+| `glob` | string | Name pattern, e.g. "*.md", "daily/2026-10-*", "**/meeting*". `*` stays inside one folder, `**` crosses folders. |
+| `headings` | boolean | Also show the headings of each note. Default false. |
+| `vault` | string | Vault id, to look in one vault only. Leave it out to cover every available vault. |
+
+#### `vault_search`
+
+```
+Find text in notes — exact matching, like a search field. `query` is one or more words: a note section matches when it contains ALL of them (any order, upper or lower case), and the lines that carry them come back as `path`, heading and `line: text`. Put a phrase in double quotes to match it as written. Set `regex` to treat `query` as a JavaScript regular expression matched line by line. `tags` restricts to sections carrying all of those #tags. `path` restricts to one folder — or to ONE FILE, which is how you search inside a note. Use few, distinctive words; if nothing matches, try other words or fewer. To find notes ABOUT a topic without knowing their wording, use vault_retrieve when it is available. Read a hit in full with vault_read.
+```
+
+| Argument | Type | Description |
+|---|---|---|
+| `query` | string | Words (all must occur), a "quoted phrase", or a regular expression with `regex`. |
+| `regex` | boolean | Treat `query` as a regular expression. Default false. |
+| `case_sensitive` | boolean | Match upper and lower case exactly. Default false. |
+| `tags` | array | Tag names without the #; a section must carry all of them. |
+| `path` | string | A folder or a single file to search in, vault-relative. |
+| `context_lines` | integer | Lines to show before and after each matching line, 0 to 5. Default 0. |
+| `max_results` | integer | Most matching lines to return. Default 30, at most 100. |
+| `vault` | string | Vault id, to look in one vault only. Leave it out to cover every available vault. |
+
+#### `vault_retrieve`
+
+```
+Find note sections by MEANING: ranks the sections of the vault by how similar they are to `query`, best first — it finds a note about "boat maintenance" for the question "what do I have to do before winter with the ship". Pass a full question or a description of the topic, not single keywords. Returns `path:line`, heading, a score from 0 to 1 and a short excerpt per section; a low score (under 0.4) is a weak match. It does not find exact wording, names or numbers reliably — use vault_search for those. Read a section in full with vault_read.
+```
+
+| Argument | Type | Description |
+|---|---|---|
+| `query` (required) | string | A question or a description of what you are looking for. |
+| `limit` | integer | How many sections to return. Default 8, at most 20. |
+| `vault` | string | Vault id, to look in one vault only. Leave it out to cover every available vault. |
+
+#### `vault_read`
+
+```
+Read one file. Each line comes back as `<line number>: <text>`; the numbers are not part of the file. A long file is returned in parts: the last line of the result says how many lines the file has and which `start_line` continues it. Pass `heading` to read just one section (its heading text, as vault_list or a search hit shows it), or `start_line` and `line_count` to read a range — a search hit's line number is a good `start_line`.
+```
+
+| Argument | Type | Description |
+|---|---|---|
+| `path` (required) | string | Vault-relative path, e.g. "daily/2026/10/2026-10-13.md". |
+| `start_line` | integer | First line to return, 1-based. Default 1. |
+| `line_count` | integer | How many lines to return. Default 400, at most 1000. |
+| `heading` | string | Return only the section under this heading (without the # signs). |
+| `vault` | string | Vault id. Leave it out when there is only one vault or you mean the active one. |
+
+#### `vault_edit`
+
+```
+Change part of a file by replacing exact text — the tool for every change to an existing note. Each edit gives `old_text`, copied exactly from the file (same spaces and line breaks, WITHOUT the line numbers vault_read shows), and `new_text` to put in its place. `old_text` must occur exactly once in the file: include a neighbouring line when a short piece is ambiguous, or set `replace_all` to change every occurrence. Several edits in one call apply in order, and all or none: if one does not match, nothing is changed and the error says which. To insert, replace a line with itself plus the new lines; to delete, replace with an empty `new_text`. Read the file first.
+```
+
+| Argument | Type | Description |
+|---|---|---|
+| `path` (required) | string | Vault-relative path of an existing file. |
+| `edits` (required) | array | The replacements, applied in order. |
+| `edits[].old_text` (required) | string | Exact text to replace; must occur once. |
+| `edits[].new_text` (required) | string | The replacement; empty to delete. |
+| `edits[].replace_all` | boolean | Replace every occurrence. Default false. |
+| `vault` | string | Vault id. Leave it out when there is only one vault or you mean the active one. |
+
+#### `vault_write`
+
+```
+Write a whole file. `mode` says what you mean: "create" makes a new file and fails if one is already there; "append" adds `content` to the end of a file (creating it if needed) — the way to add an entry to a log or a daily note; "overwrite" replaces everything in the file. To change part of an existing note use vault_edit instead: overwriting loses whatever you did not repeat. Notes are Markdown files ending in .md; missing folders are created.
+```
+
+| Argument | Type | Description |
+|---|---|---|
+| `path` (required) | string | Vault-relative path, e.g. "projects/website/ideas.md". |
+| `content` (required) | string | The text to write. |
+| `mode` (required) | "create" / "append" / "overwrite" | Required. See the description. |
+| `vault` | string | Vault id. Leave it out when there is only one vault or you mean the active one. |
+
+#### `vault_move`
+
+```
+Move or rename a file or folder inside one vault. Links in other notes that point to it are rewritten, and a note's attachments move with it. `to` is the full new path, not just the folder; it must not exist yet.
+```
+
+| Argument | Type | Description |
+|---|---|---|
+| `from` (required) | string | Current vault-relative path. |
+| `to` (required) | string | New vault-relative path, including the file name. |
+| `vault` | string | Vault id. Leave it out when there is only one vault or you mean the active one. |
+
+#### `vault_delete`
+
+```
+Delete one file. It goes to the recycle bin, and the user is asked every time. Only when the user asked for the file to be deleted.
+```
+
+| Argument | Type | Description |
+|---|---|---|
+| `path` (required) | string | Vault-relative path of the file. |
+| `vault` | string | Vault id. Leave it out when there is only one vault or you mean the active one. |
+
+`tasks_list` is described in `shared/tasks-list-tool.ts` (one definition
+for both callers); the template tools in
+`plugins/assistant/main/template-tools.ts`, the live-edit tools in
+`live-edit.ts`, `web_fetch` in `electron/mcp-client/web-fetch.ts`.
+
+**What the tools answer.** A result is plain text, written to be read by
+a model:
+
+- `vault_list` — `<n> files in <vault>[, <folder>/]:` and one path per
+  line, headings indented as `  <line>: ## <heading>`. Over 200 files:
+  the folders with their file counts, the files directly in the folder,
+  and `Call vault_list again with path set to one of the folders, or with glob.`
+- `vault_search` — `<n> matching lines for "<query>":`, then per file and
+  section `<path> — <heading>` and the lines as `  <line>: <text>`
+  (context lines as `  <line>- <text>`). At the limit:
+  `[stopped at <n> lines — narrow with path, more words or tags, or raise max_results]`.
+  Nothing found: `No matches for "<query>" in <n> files. Try other or fewer words (all of them must occur in one section).`
+  With `tags` the hits come from the section index:
+  `<path>:<line> — <heading>` and a snippet.
+- `vault_retrieve` — `<n> sections, most similar first:`, then
+  `<path>:<line> — <heading> (score 0.82)` and an excerpt.
+- `vault_read` — `<line>: <text>` rows and a last line:
+  `[<path> — all <n> lines]`, or
+  `[<path> — lines <a>–<b> of <n>. Continue with start_line=<b+1>.]`.
+  A range stops after 400 lines (1000 at most) or 12 000 characters.
+- `vault_edit` — `Edited <path>: <n> replacements at lines <…>.` A
+  refusal names the edit: `… old_text "<first line>" was not found — nothing was changed.`
+  (with a hint when only whitespace differs or line numbers were copied
+  along), `… occurs <n> times (lines …) — nothing was changed. Add surrounding lines so it matches once, or set replace_all …`.
+  The texts are in `shared/text-edit.ts`.
+- `vault_write` — `Created <path> (<n> lines).` / `Appended to <path> (now <n> lines).`
+  / `Replaced the content of <path> (<n> lines).`; `create` on an existing
+  file: `Error: <path> already exists — nothing was written. Change it with vault_edit, add to it with mode "append", or pick another path.`
+- `vault_move` — `Moved <from> → <to>. Links updated in <n> notes.`
+- `vault_delete` — `Moved <path> to the recycle bin.`
+- A declined confirmation: `Error: the user declined this change — nothing was written. Do not try again unless they ask.`
+
 ### What the tool loop says to the model
 
 Fixed texts of `electron/llm/tool-loop.ts`, `shared/llm/tool-args.ts`
@@ -288,11 +468,6 @@ reply; an unclosed last tag counts), or a reply that is nothing but one
 JSON object of that shape, fenced or bare (`parameters` is accepted for
 `arguments`, and the OpenAI `{"function": {…}}` nesting). The name must
 be an offered tool.
-
-The descriptions of the tools themselves are in the code next to each
-tool (`electron/mcp/vault-tools.ts`, `plugins/assistant/main/*-tools.ts`,
-`tasks-tool.ts`, `live-edit.ts`, `electron/mcp-client/web-fetch.ts`);
-milestone 77 recuts the vault set and moves their wording here.
 
 ---
 

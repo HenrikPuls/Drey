@@ -25,10 +25,12 @@ export interface PromptVault {
 
 /** The tools attached to one call. Everything is absent for a provider without a tool loop. */
 export interface PromptTools {
-  /** The base vault set: `vault_write` always, the two read tools unless the scope dropped them. */
-  vault?: { read: boolean; write: 'confirm' | 'auto' };
-  /** `vault_overview` / `vault_find` / `vault_section`, limited to the scope. */
-  explore?: boolean;
+  /**
+   * The vault tools, limited to the Vault chip's vaults: the reading ones
+   * always, `vault_retrieve` while semantic retrieval is on, the changing
+   * ones unless the vault group's rule is `off`.
+   */
+  vault?: { write: 'off' | 'confirm' | 'auto'; retrieve: boolean };
   tasks?: boolean;
   templates?: { write: 'confirm' | 'auto' };
   /** `web_fetch` and the tools of the user's MCP servers. */
@@ -73,7 +75,6 @@ export const LINKS_RULE = `When your answer refers to notes in the vault, write 
 function hasTools(tools: PromptTools): boolean {
   return (
     tools.vault !== undefined ||
-    tools.explore === true ||
     tools.tasks === true ||
     tools.templates !== undefined ||
     tools.external === true
@@ -89,63 +90,79 @@ function writeRule(what: string, write: 'confirm' | 'auto'): string {
 function environment(input: SystemPromptInput): string {
   const lines = [buildDateNote(input.now)];
   const { vaults, scopeVaultIds, tools } = input;
-  if (scopeVaultIds !== null) {
-    const scoped = vaults.filter((vault) => scopeVaultIds.includes(vault.id));
-    if (scoped.length > 0) {
-      const sources = [
-        ...(input.contextBlock !== null ? ['the vault context below'] : []),
-        ...(tools.explore === true ? ['the vault exploration tools'] : []),
-      ];
-      lines.push(
-        `The vault for this question: ${scoped
-          .map((vault) => `${vault.name} (\`${vault.id}\`)`)
-          .join(', ')}. "The vault" in the user's question means exactly ${
-          scoped.length === 1 ? 'this vault' : 'these vaults'
-        } and nothing else${
-          sources.length > 0
-            ? ` — what it contains or is about is answered only from ${sources.join(' and ')}, never from other tools' results or from assumptions`
-            : ''
-        }.`,
-      );
-    }
+  if (scopeVaultIds === null) {
+    return lines.join('\n\n');
   }
-  if (tools.vault !== undefined) {
-    const listed =
-      scopeVaultIds !== null ? vaults.filter((vault) => scopeVaultIds.includes(vault.id)) : vaults;
-    if (listed.length > 0) {
-      const hint = listed.some((vault) => vault.active)
-        ? 'omit it for the active vault'
-        : 'always pass one of these ids — omitting it would address the active vault, which this question does not search';
-      lines.push(
-        `Vault ids for the vault tools' \`vault\` argument (${hint}):\n${listed
-          .map((vault) => `- ${vault.id} (${vault.name})${vault.active ? ' — active' : ''}`)
-          .join('\n')}`,
-      );
-    }
+  const scoped = vaults.filter((vault) => scopeVaultIds.includes(vault.id));
+  if (scoped.length === 0) {
+    return lines.join('\n\n');
+  }
+  const sources = [
+    ...(input.contextBlock !== null ? ['the vault context below'] : []),
+    ...(tools.vault !== undefined ? ['the vault tools'] : []),
+  ];
+  lines.push(
+    `The vault for this question: ${scoped
+      .map((vault) => `${vault.name} (\`${vault.id}\`)`)
+      .join(', ')}. "The vault" in the user's question means exactly ${
+      scoped.length === 1 ? 'this vault' : 'these vaults'
+    } and nothing else${
+      sources.length > 0
+        ? ` — what it contains or is about is answered only from ${sources.join(' and ')}, never from other tools' results or from assumptions`
+        : ''
+    }.`,
+  );
+  if (tools.vault !== undefined && scoped.length > 1) {
+    const active = scoped.find((vault) => vault.active);
+    lines.push(
+      `The vault tools reach these vaults and no others. Their \`vault\` argument takes one of the ids above: leave it out to list or search all of them; for a single file ${
+        active !== undefined
+          ? `it defaults to the active vault (\`${active.id}\`)`
+          : 'always pass it'
+      }. Results name a file as \`id:path\` — pass that back as it is.`,
+    );
   }
   return lines.join('\n\n');
+}
+
+function vaultLines(input: SystemPromptInput, vault: NonNullable<PromptTools['vault']>): string[] {
+  const lines = [
+    `- vault_list, vault_search, ${vault.retrieve ? 'vault_retrieve, ' : ''}vault_read — look through the vault: list what exists, search for exact words (also inside one file)${
+      vault.retrieve ? ', find sections by meaning' : ''
+    }, read a file or part of one. ${
+      input.contextBlock !== null
+        ? 'The vault context above is a first selection; when it does not cover the question, search and read further instead of answering from thin context.'
+        : 'Search first, then read what you found before you answer.'
+    }`,
+  ];
+  if (vault.write === 'off') {
+    lines.push('  You cannot change files in the vault in this conversation.');
+    return lines;
+  }
+  lines.push(
+    `- vault_edit, vault_write, vault_move, vault_delete — change the vault: vault_edit replaces exact text in a file (use it for every change to an existing note), vault_write creates a file or appends to one, vault_move renames or moves, vault_delete removes a file. ${
+      vault.write === 'confirm'
+        ? 'The user confirms every change in a dialog before it is applied.'
+        : 'Changes apply immediately without confirmation — change only what was asked for. A deletion is always confirmed by the user.'
+    }`,
+  );
+  if (input.mode === 'ask') {
+    lines.push(
+      '  Never use them on the DOCUMENT of this conversation — change it with the Change reply form described above.',
+    );
+  } else if (input.mode === 'live') {
+    lines.push(
+      '  They are for OTHER files: the document of this conversation is changed with the doc tools only.',
+    );
+  }
+  return lines;
 }
 
 function toolList(input: SystemPromptInput): string {
   const { tools, mode } = input;
   const lines: string[] = [];
-  if (tools.explore === true) {
-    lines.push(
-      '- vault_overview, vault_find, vault_section — look through the vault for this question: overview lists files and headings (start there in an unfamiliar vault), find ranks sections for a query, section reads one in full. Use them whenever the vault context does not cover the question.',
-    );
-  }
   if (tools.vault !== undefined) {
-    const { read, write } = tools.vault;
-    lines.push(
-      read
-        ? `- vault_search, vault_read, vault_write — find notes by text, tag or pattern, read one file, write a file. ${writeRule('vault_write', write)}`
-        : `- vault_write — write a file in a vault. ${writeRule('vault_write', write)}`,
-    );
-    if (mode === 'ask') {
-      lines.push(
-        '  Never use vault_write on the DOCUMENT of this conversation — change it with the Change reply form described above.',
-      );
-    }
+    lines.push(...vaultLines(input, tools.vault));
   }
   if (tools.tasks === true) {
     lines.push(

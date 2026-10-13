@@ -7,31 +7,28 @@
  * `PluginHost.buildContext`.
  */
 import type { MainPluginContext, Unsubscribe, VaultChangeEvent } from '../../shared/plugin-api';
-import type { VaultTools } from '../mcp';
+import type { VaultCallOptions, VaultTools, VaultWriteRule } from '../mcp';
 import type { PluginHostDeps } from './plugin-host';
 
 /** Remembers an `Unsubscribe` the context handed out, so deactivation can drain it. */
 export type TrackDisposable = <T>(unsubscribe: T) => T;
 
 /**
- * The ADR-0069 read-scope rule (pure, spec-covered): `vault_search` and
- * `vault_read` default to the ACTIVE vault, so a call whose declared scope
- * excludes it must not carry them — they would leak out-of-scope content.
- * Everything else passes; an absent scope or no active vault means the
- * pre-1.20 behaviour.
+ * What a plugin call may do with the vault tools (ADR-0071): the vaults
+ * the caller named are the scope of reading AND writing, the vault
+ * group's rule decides whether it may write and whether it asks, and the
+ * app's own folders stay out. Pure, spec-covered.
  */
-export function vaultReadToolAllowed(
-  name: string,
+export function assistantVaultOptions(
   scope: readonly string[] | undefined,
-  activeVaultId: string | null,
-): boolean {
-  if (name !== 'vault_search' && name !== 'vault_read') {
-    return true;
-  }
-  if (scope === undefined) {
-    return true;
-  }
-  return activeVaultId !== null && scope.includes(activeVaultId);
+  write: VaultWriteRule,
+): VaultCallOptions {
+  return {
+    ...(scope !== undefined ? { scope } : {}),
+    write,
+    origin: 'assistant',
+    protectAppFolders: true,
+  };
 }
 
 /**
@@ -43,10 +40,10 @@ export async function runVaultTool(
   vaultTools: VaultTools | undefined,
   name: string,
   argsJson: string,
-  confirmWrites?: boolean,
+  callOptions?: VaultCallOptions,
 ): Promise<string> {
   if (!vaultTools) {
-    return 'Vault tools are not available.';
+    return 'Error: the vault tools are not available.';
   }
   let args: Record<string, unknown> = {};
   try {
@@ -57,11 +54,7 @@ export async function runVaultTool(
   } catch {
     return `Error: the arguments of ${name} are not valid JSON — send one JSON object.`;
   }
-  const result = await vaultTools.call(
-    name,
-    args,
-    confirmWrites !== undefined ? { confirmWrites } : undefined,
-  );
+  const result = await vaultTools.call(name, args, callOptions);
   const text = result.content.map((block) => block.text).join('\n');
   return result.isError === true && !text.startsWith('Error:') ? `Error: ${text}` : text;
 }
@@ -164,26 +157,18 @@ export function buildLlmContext(
             const pluginTools = [...(options?.tools ?? [])];
             const pluginNames = new Set(pluginTools.map((tool) => tool.name));
             const groups = appConfig.get().tools;
-            // tasks_list also sits in the vault set, for MCP clients. A
-            // plugin call never gets it from here: the assistant brings
-            // its own and leaves it out on purpose where the task index
-            // would answer for the wrong vault (a scoped or a live-edit
-            // turn) — the base twin must not fill that gap.
-            // ADR-0069: when the call carries a vault read scope that
-            // excludes the active vault, `vault_search`/`vault_read`
-            // drop out — they default to the active vault and would
-            // leak out-of-scope content; the caller supplies scope-safe
-            // plugin tools instead. `vault_write` is never filtered.
-            const readScope = options?.vaultToolsScope;
-            const readScopeAllows = (name: string): boolean =>
-              vaultReadToolAllowed(name, readScope, deps.vaultManager.getActiveVaultId());
+            // The vault set as this call may use it (ADR-0071): the
+            // caller's scope bounds reading and writing alike, the vault
+            // group's rule decides about the changing tools. `tasks_list`
+            // is not part of it — the assistant brings its own and leaves
+            // it out on purpose where the task index would answer for
+            // the wrong vault.
+            const vaultOptions = assistantVaultOptions(options?.vaultToolsScope, groups.vault.write);
             const vaultSpecs =
               options?.vaultTools === true && deps.vaultTools !== undefined
                 ? deps.vaultTools
-                    .toolSpecs()
+                    .toolSpecs(vaultOptions)
                     .filter((spec) => !pluginNames.has(spec.name))
-                    .filter((spec) => spec.name !== 'tasks_list')
-                    .filter((spec) => readScopeAllows(spec.name))
                 : [];
             const taken = new Set([...pluginNames, ...vaultSpecs.map((spec) => spec.name)]);
             const toolbox = deps.assistantToolbox;
@@ -209,12 +194,7 @@ export function buildLlmContext(
                       return toolbox.run(name, argsJson, signal);
                     }
                     if (vaultNames.has(name)) {
-                      return runVaultTool(
-                        deps.vaultTools,
-                        name,
-                        argsJson,
-                        groups.vault.write === 'confirm',
-                      );
+                      return runVaultTool(deps.vaultTools, name, argsJson, vaultOptions);
                     }
                     return Promise.resolve(`Error: there is no tool "${name}" in this call.`);
                   },

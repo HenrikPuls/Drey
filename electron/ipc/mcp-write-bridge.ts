@@ -23,6 +23,8 @@ export class McpWriteBridge {
     after: string;
     mode: 'overwrite' | 'append';
     origin?: 'assistant';
+    vaultId?: string;
+    vaultName?: string;
   }): Promise<boolean> {
     const wc = this.getMainWindow()?.webContents;
     if (!wc) {

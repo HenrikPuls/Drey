@@ -6,6 +6,7 @@ import {
   TOOL_ROUNDS_MIN,
   ToolApprovalMode,
   ToolWriteMode,
+  VaultWriteMode,
   mcpServerSlug,
 } from '../../../../shared/app-config';
 import { McpClientServerStatus } from '../../../../shared/ipc-api';
@@ -107,12 +108,9 @@ export class SettingsTools {
     );
   }
 
-  protected setVaultEnabled(on: boolean): void {
-    this.settings.patchTools((t) => void (t.vault.enabled = on));
-  }
-
   protected setVaultWrite(mode: string): void {
-    this.settings.patchTools((t) => void (t.vault.write = this.writeMode(mode)));
+    const write: VaultWriteMode = mode === 'off' || mode === 'auto' ? mode : 'confirm';
+    this.settings.patchTools((t) => void (t.vault.write = write));
   }
 
   protected setTasksEnabled(on: boolean): void {

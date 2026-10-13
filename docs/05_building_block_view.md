@@ -422,6 +422,11 @@ Keep it in step whenever a component boundary changes (CLAUDE.md's
   (`GET /models`, `POST /chat/completions`), optional bearer API key.
   **No timeout on generation** — a local model may think for minutes; the
   user cancels instead ([ADR-0014](09_architecture_decisions/0014-no-chat-timeout-cancellable-tasks.md)).
+  The vault tools the model can call are base (`mcp/tools/`,
+  ADR-0071): one set for programs on the MCP server and for the
+  assistant, every call bounded by its `VaultCallOptions` — for the
+  assistant the Vault chip's vaults (reading and writing) and
+  `tools.vault.write`.
   Its tool loop is one module for both HTTP providers
   (`llm/tool-loop.ts`, ADR-0071: only offered tools run, checked
   arguments, failures as `Error: …` results, one round budget with a
@@ -890,6 +895,7 @@ decision. (Seams — what a *plugin* can extend — are the table above.)
 | Tasks panel + inline due/priority metadata | `plugins/tasks/` | Plugin tasks | ADR-0033 |
 | Assistant chat + chat notes (`chats/`) | `plugins/assistant/` (`chat-engine.ts`, `chat-store.ts`) | Plugin assistant | ADR-0048 |
 | Tool loop (offered-only, argument check, error results, round budget, closing round, text-written calls, progress events) | `electron/llm/tool-loop.ts`, `shared/llm/tool-args.ts`, `shared/llm/text-tool-calls.ts`; dispatch in `electron/plugin-host/plugin-context.ts` (`buildLlmContext`) | Base (`llm/`, `plugin-host/`) | ADR-0071, M76 |
+| Vault tools for the model — `vault_list`, `vault_search`, `vault_retrieve`, `vault_read`, `vault_edit`, `vault_write`, `vault_move`, `vault_delete` | `electron/mcp/tools/` (`defs.ts` descriptions, `scope.ts` the vaults and paths a call may touch, `list.ts`, `search.ts`, `read.ts`, `write.ts`), `electron/mcp/vault-tools.ts` (`VaultTools`: what a caller is offered, routing, `VaultCallOptions`); edit core `shared/text-edit.ts`; `tasks_list` in `shared/tasks-list-tool.ts`; wired in `electron/app-services.ts`; scope and write rule applied for plugin calls in `electron/plugin-host/plugin-context.ts` (`assistantVaultOptions`) | Base (`mcp/`) — one set for the MCP server and the assistant | ADR-0021, ADR-0071, M77 |
 | Assistant system prompt | `plugins/assistant/main/system-prompt.ts` (`buildSystemPrompt`), role texts in `ask-prompts.ts` / `live-edit.ts` | Plugin assistant | ADR-0071, M76 |
 | Tool calls shown while they run | `plugins/assistant/main/index.ts` (`chat:toolEvent`), `renderer/state.ts` (`applyToolProgress`), `renderer/thread.ts` | Plugin assistant | ADR-0071, M76 |
 | Assistant button at a selection + its popover (question, prompts, manual Actions) | `plugins/assistant/renderer/selection-button.ts` (CodeMirror tooltip), `selection-popover.ts`, `shared/ask.ts` (`selection`, `quoteSelection`), `main/ask-prompts.ts` (`buildAskUserMessage`) | Plugin assistant | ADR-0048 later change, M74 |

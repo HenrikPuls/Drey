@@ -151,3 +151,16 @@ it: the host runs a name only where it was offered from, and the base
 for MCP clients). A failed call reads `Error: …`. The tool set itself is
 recut in milestone 77. See
 [ADR-0071](0071-unified-vault-toolset-and-agent-loop.md).
+
+## Later change — the tool set was recut (milestone 77, ADR-0071)
+
+The three tools became eight: `vault_list`, `vault_search`,
+`vault_retrieve`, `vault_read`, `vault_edit`, `vault_write`,
+`vault_move`, `vault_delete` (plus `tasks_list`), in
+`electron/mcp/tools/`. Still one implementation for the MCP server and
+the assistant. `VaultTools.call` takes `VaultCallOptions` (scope, write
+rule, origin, protected folders) instead of a confirm flag; an MCP
+client's scope is every registered vault and its write rule follows
+`mcp.yolo`, except that a deletion is always asked. For connected
+programs this changed argument names — see the changelog entry of
+milestone 77.

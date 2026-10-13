@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { defaultToolsConfig } from '../../shared/app-config';
 import type { ToolSpec } from '../../shared/llm';
 import type { LlmChatOptions } from '../llm';
+import type { VaultCallOptions } from '../mcp';
 import { buildLlmContext, runVaultTool } from './plugin-context';
 
 /**
@@ -24,6 +25,7 @@ function harness(over: { activeVaultId?: string | null } = {}) {
     content: [{ type: 'text' as const, text: `vault ran ${name}` }],
   }));
   const toolboxRun = vi.fn(async (name: string) => `toolbox ran ${name}`);
+  const offered: VaultCallOptions[] = [];
   const deps = {
     appConfig: { get: () => ({ llm: { enabled: true }, tools }) },
     llm: {
@@ -41,13 +43,22 @@ function harness(over: { activeVaultId?: string | null } = {}) {
     llmDebug: { onEntry: () => () => undefined },
     vaultManager: { getActiveVaultId: () => over.activeVaultId ?? 'active' },
     vaultTools: {
-      toolSpecs: () => ['vault_search', 'vault_read', 'vault_write', 'tasks_list'].map(spec),
+      // The base set decides what a caller is offered: no changing tools
+      // while its write rule is "off".
+      toolSpecs: (options: VaultCallOptions) => {
+        offered.push(options);
+        return [
+          'vault_search',
+          'vault_read',
+          ...(options.write === 'off' ? [] : ['vault_edit', 'vault_write']),
+        ].map(spec);
+      },
       call: vaultCall,
     },
     assistantToolbox: { specs: () => [spec('web_fetch')], run: toolboxRun },
   };
   const llm = buildLlmContext(deps as never, (unsubscribe) => unsubscribe);
-  return { llm, sent, tools, vaultCall, toolboxRun };
+  return { llm, sent, tools, vaultCall, toolboxRun, offered };
 }
 
 const names = (options: LlmChatOptions | undefined): string[] =>
@@ -77,6 +88,7 @@ describe('buildLlmContext — the tool set of a plugin call', () => {
       'vault_read',
       'own_tool',
       'vault_search',
+      'vault_edit',
       'vault_write',
       'web_fetch',
     ]);
@@ -86,13 +98,14 @@ describe('buildLlmContext — the tool set of a plugin call', () => {
     expect(await run('web_fetch', '{}')).toBe('toolbox ran web_fetch');
   });
 
-  it('never offers the base tasks_list to a plugin call', async () => {
+  it('offers the vault tools the write rule allows, and runs no other', async () => {
     const h = harness();
+    h.tools.vault.write = 'off';
 
     await h.llm.chat([], { vaultTools: true });
 
-    expect(names(h.sent[0])).not.toContain('tasks_list');
-    expect(await h.sent[0]!.onToolCall!('tasks_list', '{}')).toMatch(/^Error: there is no tool/);
+    expect(names(h.sent[0])).toEqual(['vault_search', 'vault_read']);
+    expect(await h.sent[0]!.onToolCall!('vault_write', '{}')).toMatch(/^Error: there is no tool/);
     expect(h.vaultCall).not.toHaveBeenCalled();
   });
 
@@ -107,14 +120,16 @@ describe('buildLlmContext — the tool set of a plugin call', () => {
     expect(h.vaultCall).not.toHaveBeenCalled();
   });
 
-  it('does not run a read tool the scope dropped', async () => {
-    const h = harness({ activeVaultId: 'active' });
+  it("hands every vault call the caller's scope and the assistant's rules", async () => {
+    const h = harness();
+    h.tools.vault.write = 'auto';
 
     await h.llm.chat([], { vaultTools: true, vaultToolsScope: ['docs'] });
+    await h.sent[0]!.onToolCall!('vault_read', '{"path":"a.md"}');
 
-    expect(names(h.sent[0])).toEqual(['vault_write']);
-    expect(await h.sent[0]!.onToolCall!('vault_read', '{"path":"a.md"}')).toMatch(/^Error:/);
-    expect(h.vaultCall).not.toHaveBeenCalled();
+    const expected = { scope: ['docs'], write: 'auto', origin: 'assistant', protectAppFolders: true };
+    expect(h.offered[0]).toEqual(expected);
+    expect(h.vaultCall).toHaveBeenCalledWith('vault_read', { path: 'a.md' }, expected);
   });
 
   it('does not run an external tool the call did not opt into', async () => {
@@ -135,20 +150,6 @@ describe('buildLlmContext — the tool set of a plugin call', () => {
 
     expect(h.sent[0]?.maxToolRounds).toBe(7);
     expect(h.sent[1]?.maxToolRounds).toBe(20);
-  });
-
-  it('passes the write rule of the vault group to the vault tools', async () => {
-    const h = harness();
-    h.tools.vault.write = 'auto';
-
-    await h.llm.chat([], { vaultTools: true });
-    await h.sent[0]!.onToolCall!('vault_write', '{"path":"a.md","content":"x"}');
-
-    expect(h.vaultCall).toHaveBeenCalledWith(
-      'vault_write',
-      { path: 'a.md', content: 'x' },
-      { confirmWrites: false },
-    );
   });
 
   it('forwards the progress callback', async () => {

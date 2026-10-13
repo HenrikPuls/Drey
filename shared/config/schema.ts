@@ -602,6 +602,12 @@ export interface McpConfig {
 
 /** Whether a tool group's writes show the ADR-0011 diff first. */
 export type ToolWriteMode = 'confirm' | 'auto';
+/**
+ * Whether the assistant may change vault files at all, and whether it
+ * asks first (ADR-0071). Reading follows the Vault chip in the composer;
+ * this is the permission to write.
+ */
+export type VaultWriteMode = 'off' | ToolWriteMode;
 /** Whether a call that leaves the machine is asked for first. */
 export type ToolApprovalMode = 'ask' | 'allow';
 
@@ -635,7 +641,7 @@ export interface McpClientServer {
  * default.
  */
 export interface ToolsConfig {
-  vault: { enabled: boolean; write: ToolWriteMode };
+  vault: { write: VaultWriteMode };
   tasks: { enabled: boolean };
   templates: { enabled: boolean; write: ToolWriteMode };
   webFetch: { enabled: boolean; approval: ToolApprovalMode };

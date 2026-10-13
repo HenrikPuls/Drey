@@ -20,6 +20,93 @@ recorded as an explicit decision. The parity checklist lives in
 
 ## Recent milestones
 
+### Milestone 77 — One vault toolset for the assistant and the MCP server
+
+Owner request, outside the roadmap list; the second step of the
+assistant tool rework
+([ADR-0071](../docs/09_architecture_decisions/0071-unified-vault-toolset-and-agent-loop.md)).
+**Not yet manually verified by the owner.**
+
+Eight tools replace the base `vault_search` / `vault_read` /
+`vault_write` and the assistant's own `vault_overview` / `vault_find` /
+`vault_section`:
+
+| Tool | Does |
+|---|---|
+| `vault_list` | what exists: paths, a folder, a name pattern, optionally each note's headings; a long listing comes back as folders with counts |
+| `vault_search` | exact search: all words in one section, a quoted phrase, a regular expression, `tags`; `path` narrows to a folder **or one file**; context lines; every hit with its line number |
+| `vault_retrieve` | sections by meaning (semantic), offered only while retrieval is enabled |
+| `vault_read` | numbered lines; the whole file, a range or one section by heading; 400 lines by default with a line that says how to continue |
+| `vault_edit` | replaces exact text — it must occur once (or `replace_all`), several edits apply all or none |
+| `vault_write` | `mode` is required: `create` (fails if the file exists), `append`, `overwrite` |
+| `vault_move` | rename or move, links rewritten, attachments follow |
+| `vault_delete` | one file, to the recycle bin, asked every time |
+
+What changes for the user:
+
+- **The Vault chip decides what the assistant can reach — to read and
+  to change.** The tools work in exactly the vaults the chip selects,
+  enforced where the tool runs: a call that names another vault is
+  refused. With the chip off the assistant has no vault tools and works
+  only with what is attached to the question. Before, `vault_write`
+  could write into any registered vault whatever the chip said, and the
+  read tools reached the active vault with the chip off.
+- **Settings → Assistant tools → Vault** is now one choice — may the
+  assistant change notes: *not allowed*, *ask first*, *without asking*.
+  The former on/off switch became "not allowed": a vault group that was
+  off stays unable to write. **Reading no longer needs the switch** — it
+  follows the chip. ⚠️ If the group was off, the assistant can now read
+  the chip's vaults but not change them until this is set to *ask
+  first*. A fresh install starts at *ask first*.
+- **The assistant can change part of a note in any file** without
+  sending the whole file back, find a word inside one note, read a long
+  note in parts, and see what a vault contains.
+- **A mistyped write mode can no longer overwrite a file**: before, any
+  `mode` other than `append` meant "replace everything".
+- **A move or a deletion asks in the approval dialog** (without "Always
+  allow"); a deletion asks even when changes are set to *without asking*.
+- `chats/` and `.drafts/` are left alone by the assistant: not listed,
+  not searched, not changeable.
+- A file the assistant changed keeps its `\r\n` line ends, and the local
+  history records the write as the assistant's (it said "mcp" before).
+
+⚠️ **For programs connected to Drey's MCP server the tools changed.**
+`vault_search` takes `query` (was `text`), `regex` is a switch on it
+(was a second pattern, `regexFlags` is gone), `max_results` (was
+`maxResults`), and `mode: "semantic"` became the tool `vault_retrieve`;
+`vault_write` needs `mode` and knows `create`; `vault_read` returns
+numbered lines. Without a `vault` argument a search now covers every
+registered vault (was: the active one). `tasks_list` takes `vault`.
+
+How: the set lives in `electron/mcp/tools/` (one concern per file:
+`defs.ts` — the descriptions, `scope.ts`, `list.ts`, `search.ts`,
+`read.ts`, `write.ts`), `VaultTools` (`electron/mcp/vault-tools.ts`)
+decides what a caller is offered and routes a call with its
+`VaultCallOptions` (scope, write rule, origin, protected folders). The
+edit core is `shared/text-edit.ts` (`applyTextEdits`); `tasks_list` has
+one definition and runner for both callers (`shared/tasks-list-tool.ts`).
+The search reads the note files themselves — no index of its own. The
+assistant's `vault-explore-tools.ts` and `vault-scan.ts` are gone; its
+system prompt names the new tools (`specs/classifier-spec.md` quotes
+every description).
+
+Plugin SDK **1.24**: `vaultToolsScope` is the scope of every vault tool
+of a call, reading and writing (was: a filter on two read tools);
+`vaultTools: true` attaches the new set. Config: `tools.vault` is
+`{ write: 'off' | 'confirm' | 'auto' }` (`enabled` is read once and
+dropped). `ToolApprovalRequest.once`.
+
+Specs: `electron/mcp/vault-tools.spec.ts` (rewritten: offer, scope,
+every tool), `shared/text-edit.spec.ts`; changed: the config, host,
+prompt and engine specs. End to end (`e2e/assistant-tools.spec.ts`):
+`vault_edit` changes a note on disk; chip off → no vault tool offered.
+
+Known limits until milestone 78: a tool reads and writes the file on
+disk, so an unsaved change in an open tab is not seen and a write to
+that file shows up as "Changed on disk"; a moved note's open tab keeps
+its old path. On a live-edit turn the document itself is still changed
+with the `doc_*` tools.
+
 ### Milestone 76 — The assistant's tool loop and system prompt
 
 Owner request, outside the roadmap list; the first of four steps of the

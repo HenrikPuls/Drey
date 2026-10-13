@@ -1,151 +1,36 @@
 /**
- * The `tasks_list` plugin tool (SDK 1.11): one JSON object per line from
- * the base task-index seam — the model answers task questions from real
- * index rows (never quoted from memory), and the panel renders the
- * persisted result as an interactive task block. The spec rides every
- * non-live ask's tool set (no MCP gate); `null` port = no tool.
+ * The assistant's side of the `tasks_list` tool (SDK 1.11): the tool
+ * itself — description and runner — is shared with the vault MCP server
+ * (`shared/tasks-list-tool.ts`, ADR-0071). Here live the parts only the
+ * assistant has: matching an answer against the task index for the
+ * post-hoc task block, and trimming a persisted result to what the
+ * answer discusses.
  */
-import type { ToolSpec } from '../../../shared/llm';
 import type { SdkTaskRecord, TaskQueryProvider } from '../../../shared/plugin-api';
+import {
+  TASKS_LIST_SPEC,
+  TASKS_LIST_TOOL_NAME,
+  runTasksList,
+} from '../../../shared/tasks-list-tool';
 import type { ChatToolEntry } from '../shared/chat-note.js';
 
-/** Row cap for one tool result (JSON lines to the model). */
-const TASKS_TOOL_MAX_RESULTS = 150;
-
-export const TASKS_LIST_TOOL_NAME = 'tasks_list';
-
-export const TASKS_LIST_SPEC: ToolSpec = {
-  name: TASKS_LIST_TOOL_NAME,
-  description:
-    "List the user's tasks from the app's task index (checkbox and #task lines, with " +
-    'due dates and priorities, across all vaults or one vault). One JSON object per ' +
-    'line: path, vaultId, line, text, done, kind, heading, tags, due, priority, ' +
-    'completed — already sorted by importance (due date first; completed tasks ' +
-    'newest first). Returns OPEN tasks unless status says otherwise. Use it ' +
-    'for any question about tasks, to-dos or deadlines — always answer from this ' +
-    'result instead of quoting task lines you saw in retrieved context. ' +
-    'IMPORTANT: when the question names a person, project or topic, you MUST pass it ' +
-    'as the text argument (e.g. "tasks of Henrik" → {"text":"Henrik"}); when it names ' +
-    'a #tag, pass the tag argument. Call with NO filters only when the question is ' +
-    'about the whole task set.',
-  parameters: {
-    type: 'object',
-    properties: {
-      status: {
-        type: 'string',
-        enum: ['open', 'done', 'all'],
-        description:
-          'Which tasks: "open" (default), "done" = ONLY completed tasks, newest completion first, "all" = both. Set "done" whenever the question asks about completed / finished / done tasks.',
-      },
-      completedSince: {
-        type: 'string',
-        description:
-          'Only tasks completed on or after this date, YYYY-MM-DD. For "recently completed", pass a date about two weeks before today. Implies status "done".',
-      },
-      includeDone: {
-        type: 'boolean',
-        description: 'Legacy form of status "all". Default false.',
-      },
-      vaultId: {
-        type: 'string',
-        description: 'Restrict to one vault id. Default: all registered vaults.',
-      },
-      text: {
-        type: 'string',
-        description:
-          "A word the question restricts to — a person, project or topic (e.g. \"Henrik\"). ALL result tasks contain it in their text or heading. ALWAYS set this when the question names one.",
-      },
-      tag: {
-        type: 'string',
-        description:
-          'Only tasks whose section carries this tag (subtags included), e.g. "blockuniversum".',
-      },
-      overdue: {
-        type: 'boolean',
-        description: 'Only tasks whose due date is before today. Default false.',
-      },
-      sort: {
-        type: 'string',
-        enum: ['importance', 'due', 'priority', 'file', 'completed'],
-        description:
-          'List order. Default "importance": due date ascending (overdue first), then priority, then file order. With status "done" the default is "completed": completion date, newest first.',
-      },
-    },
-  },
-};
-
-type TaskToolSort = 'importance' | 'due' | 'priority' | 'file' | 'completed';
-
-/** The sort values the tool accepts, mapped onto the provider's options. */
-const SORTS: ReadonlySet<string> = new Set(['importance', 'due', 'priority', 'file', 'completed']);
-
-const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
+export { TASKS_LIST_SPEC, TASKS_LIST_TOOL_NAME };
 
 /** Runs one `tasks_list` call against the registered provider; text result for the model. */
 export async function runTasksListTool(
   provider: TaskQueryProvider,
   argsJson: string,
 ): Promise<string> {
-  let includeDone = false;
-  let vaultId: string | undefined;
-  let text: string | undefined;
-  let tag: string | undefined;
-  let overdue = false;
-  let status: 'open' | 'done' | 'all' | undefined;
-  let completedSince: string | undefined;
-  let sort: TaskToolSort | undefined;
+  let args: Record<string, unknown> = {};
   try {
     const parsed: unknown = JSON.parse(argsJson || '{}');
     if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
-      const args = parsed as Record<string, unknown>;
-      includeDone = args['includeDone'] === true;
-      overdue = args['overdue'] === true;
-      if (typeof args['vaultId'] === 'string' && args['vaultId'] !== '') {
-        vaultId = args['vaultId'];
-      }
-      if (typeof args['text'] === 'string' && args['text'].trim() !== '') {
-        text = args['text'].trim();
-      }
-      if (typeof args['tag'] === 'string' && args['tag'].trim().replace(/^#/, '') !== '') {
-        // The leading `#` is accepted (and stripped) — the MCP tool and
-        // the provider's own matcher take the same shape.
-        tag = args['tag'].trim().replace(/^#/, '');
-      }
-      if (typeof args['sort'] === 'string' && SORTS.has(args['sort'])) {
-        sort = args['sort'] as TaskToolSort;
-      }
-      const statusArg = args['status'];
-      if (statusArg === 'open' || statusArg === 'done' || statusArg === 'all') {
-        status = statusArg;
-      }
-      if (typeof args['completedSince'] === 'string' && ISO_DATE.test(args['completedSince'])) {
-        // A completion-date restriction only makes sense over completed tasks.
-        completedSince = args['completedSince'];
-        status = 'done';
-      }
+      args = parsed as Record<string, unknown>;
     }
   } catch {
-    return `Could not parse arguments: ${argsJson}`;
+    return 'Error: Could not parse the arguments of tasks_list — send one JSON object.';
   }
-  const records = await provider.query({
-    includeDone,
-    sort: sort ?? (status === 'done' ? 'completed' : 'importance'),
-    ...(status !== undefined ? { status } : {}),
-    ...(completedSince !== undefined ? { completedSince } : {}),
-    ...(vaultId !== undefined ? { vaultId } : {}),
-    ...(text !== undefined ? { text } : {}),
-    ...(tag !== undefined ? { tag } : {}),
-    ...(overdue ? { overdue: true } : {}),
-  });
-  if (records.length === 0) {
-    return 'No tasks found.';
-  }
-  const shown = records.slice(0, TASKS_TOOL_MAX_RESULTS);
-  const lines: string[] = shown.map((task) => JSON.stringify(task));
-  if (records.length > shown.length) {
-    lines.push(`{"truncated": ${records.length - shown.length}}`);
-  }
-  return lines.join('\n');
+  return runTasksList(provider, args);
 }
 
 /**
@@ -288,7 +173,7 @@ export function taskArgsCarryScopeRestriction(args: unknown): boolean {
     // A done-only view is the scope the question asked for (57d): the
     // refine must not trim it to the few tasks the prose happens to quote.
     record['status'] === 'done' ||
-    (typeof since === 'string' && ISO_DATE.test(since))
+    (typeof since === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(since))
   );
 }
 

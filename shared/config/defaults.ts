@@ -84,7 +84,7 @@ export const DEFAULT_MCP_CONFIG: McpConfig = {
 
 export function defaultToolsConfig(): ToolsConfig {
   return {
-    vault: { enabled: false, write: 'confirm' },
+    vault: { write: 'confirm' },
     tasks: { enabled: true },
     templates: { enabled: true, write: 'auto' },
     webFetch: { enabled: false, approval: 'ask' },

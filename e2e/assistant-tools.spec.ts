@@ -4,11 +4,13 @@ import * as path from 'node:path';
 import { test, expect, type Page } from './fixtures/drey';
 
 /**
- * The assistant's tool loop end to end (milestone 76, ADR-0071), against
- * a scripted OpenAI-compatible endpoint that answers with tool calls:
- * a call to a tool that was not offered is refused instead of run, an
- * offered one runs and its result reaches the model, the panel shows the
- * calls while they run, and a call written into the reply text is read.
+ * The assistant's tool loop and vault tools end to end (milestones 76 and
+ * 77, ADR-0071), against a scripted OpenAI-compatible endpoint that
+ * answers with tool calls: a call to a tool that was not offered is
+ * refused instead of run, an offered one runs and its result reaches the
+ * model, the panel shows the calls while they run, a call written into
+ * the reply text is read, `vault_edit` changes a note on disk — and with
+ * the Vault chip off the model is offered no vault tool at all.
  */
 
 const MOCK_PORT = 27320;
@@ -54,7 +56,8 @@ function handler(req: http.IncomingMessage, res: http.ServerResponse): void {
     const last = body.messages.at(-1);
     // The chat-title call and anything else without tools: a plain reply.
     if (body.tools === undefined) {
-      reply(res, { content: 'Harbour fee' });
+      const asked = typeof last?.content === 'string' && last.content.includes('Which tools');
+      reply(res, { content: asked ? 'NO VAULT TOOLS' : 'Harbour fee' });
       return;
     }
     if (last?.role === 'tool') {
@@ -63,6 +66,30 @@ function handler(req: http.IncomingMessage, res: http.ServerResponse): void {
       return;
     }
     const question = typeof last?.content === 'string' ? last.content : '';
+    const offered = JSON.stringify(body.tools);
+    if (question.includes('Which tools')) {
+      reply(res, { content: offered.includes('vault_read') ? 'VAULT TOOLS OFFERED' : 'NO VAULT TOOLS' });
+      return;
+    }
+    if (question.includes('Raise the fee')) {
+      reply(res, {
+        content: null,
+        tool_calls: [
+          {
+            id: 'e1',
+            type: 'function',
+            function: {
+              name: 'vault_edit',
+              arguments: JSON.stringify({
+                path: 'notes/harbour.md',
+                edits: [{ old_text: '12 euros', new_text: '14 euros' }],
+              }),
+            },
+          },
+        ],
+      });
+      return;
+    }
     if (question.includes('in text form')) {
       reply(res, {
         content: `<tool_call>${JSON.stringify({
@@ -114,6 +141,14 @@ function chatNotes(vaultDir: string): string {
   return out.join('\n');
 }
 
+/** Turns the Vault chip on for the active vault: the vault tools ride only then. */
+async function vaultChipOn(page: Page): Promise<void> {
+  const button = page.locator('.assistant-panel .composer-meta .vault');
+  await button.click();
+  await page.locator('.assistant-picker .assistant-picker-row', { hasText: 'Active vault' }).click();
+  await expect(button).toHaveAttribute('aria-pressed', 'true');
+}
+
 async function ask(page: Page, question: string): Promise<void> {
   const panel = page.locator('app-panel-frame', { has: page.locator('.assistant-panel') });
   await expect(panel.locator('.assistant-head .chat-label')).toBeVisible();
@@ -134,8 +169,11 @@ test.describe('Assistant tool loop', () => {
         model: 'tool-model',
       },
       tools: {
-        vault: { enabled: true, write: 'confirm' },
-        tasks: { enabled: false },
+        // Writing without the dialog: the edit test asserts on the file.
+        vault: { write: 'auto' },
+        // One group stays on, so an ask with the chip off still carries
+        // tools — and the test below can see that none of them is a vault tool.
+        tasks: { enabled: true },
         templates: { enabled: false, write: 'auto' },
         webFetch: { enabled: false, approval: 'ask' },
         servers: [],
@@ -147,6 +185,7 @@ test.describe('Assistant tool loop', () => {
     page,
     vaultDir,
   }) => {
+    await vaultChipOn(page);
     await ask(page, 'What is the harbour fee?');
     const thread = page.locator('.assistant-panel .assistant-thread');
 
@@ -168,10 +207,37 @@ test.describe('Assistant tool loop', () => {
   });
 
   test('reads a tool call the model wrote into its reply text', async ({ page, vaultDir }) => {
+    await vaultChipOn(page);
     await ask(page, 'What is the harbour fee? Answer in text form.');
     const thread = page.locator('.assistant-panel .assistant-thread');
 
     await expect(thread).toContainText(ANSWER, { timeout: 30_000 });
     await expect.poll(() => chatNotes(vaultDir), { timeout: 10_000 }).toContain('vault_read');
+  });
+
+  test('vault_edit replaces exact text in a note on disk', async ({ page, vaultDir }) => {
+    await vaultChipOn(page);
+    await ask(page, 'Raise the fee to 14 euros.');
+
+    const file = path.join(vaultDir, 'notes', 'harbour.md');
+    await expect
+      .poll(() => fs.readFileSync(file, 'utf8'), { timeout: 30_000 })
+      .toContain('The harbour fee is 14 euros per night.');
+    await expect.poll(() => chatNotes(vaultDir), { timeout: 10_000 }).toContain('Edited notes/harbour.md');
+  });
+
+  test('with the Vault chip off the model is offered no vault tool', async ({ page }) => {
+    await ask(page, 'Which tools do you have?');
+    const thread = page.locator('.assistant-panel .assistant-thread');
+
+    await expect(thread).toContainText('NO VAULT TOOLS', { timeout: 30_000 });
+  });
+
+  test('with the Vault chip on the vault tools are offered', async ({ page }) => {
+    await vaultChipOn(page);
+    await ask(page, 'Which tools do you have?');
+    const thread = page.locator('.assistant-panel .assistant-thread');
+
+    await expect(thread).toContainText('VAULT TOOLS OFFERED', { timeout: 30_000 });
   });
 });

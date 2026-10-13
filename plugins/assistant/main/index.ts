@@ -25,8 +25,6 @@ import { ChatEngine } from './chat-engine';
 import { ChatStore } from './chat-store';
 import { createTemplateTools } from './template-tools';
 import { createSemanticService, type SemanticService } from './semantic/service';
-import { createVaultExploreTools } from './vault-explore-tools';
-import { createVaultScanPorts } from './vault-scan';
 import { readFile } from 'node:fs/promises';
 import { dialog, app } from 'electron';
 import * as path from 'node:path';
@@ -211,37 +209,7 @@ const plugin: MainPluginModule = {
         onToolEvent: (taskId, event) => ctx.ipc.emit('chat:toolEvent', { taskId, ...event }),
         retrieveContext: (question, scope, vaultIds) =>
           semantic.retrieve(question, scope, vaultIds),
-        // The explore tools (ADR-0069) are live per ask, closed over the
-        // turn's scope. Semantic retrieval backs them when enabled;
-        // otherwise they degrade to fresh filesystem scans (ADR-0069
-        // later change) — a scoped ask keeps its in-scope lookups instead
-        // of being pushed into the base tools' active-vault default.
-        exploreTools: (scope, vaultIds) =>
-          createVaultExploreTools(
-            semantic.isEnabled
-              ? {
-                  resolveTargets: (innerScope, innerIds) =>
-                    semantic.resolveTargets(innerScope, innerIds),
-                  searchScoped: (question, innerScope, innerIds, limit) =>
-                    semantic.searchScoped(question, innerScope, innerIds, limit),
-                  outline: (innerScope, innerIds) => semantic.outline(innerScope, innerIds),
-                  readSection: (vaultId, filePath, target) =>
-                    semantic.readSection(vaultId, filePath, target),
-                }
-              : createVaultScanPorts({
-                  listVaults: () => vaultInfos(),
-                  listMarkdownFiles: (vaultId) => ctx.vault.listMarkdownFiles({ vaultId }),
-                  readVaultText: async (vaultId, filePath) => {
-                    try {
-                      return await ctx.vault.read(filePath, { vaultId });
-                    } catch {
-                      return null;
-                    }
-                  },
-                }),
-            scope,
-            vaultIds,
-          ),
+        semanticEnabled: () => semantic.isEnabled,
         tasksTool: () => {
           // Live at call time: the tasks plugin can (de)activate between
           // asks only via an app restart, but the getter keeps the engine

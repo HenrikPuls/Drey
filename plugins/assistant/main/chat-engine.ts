@@ -55,7 +55,6 @@ import {
 } from './ask-prompts';
 import { buildSystemPrompt } from './system-prompt';
 import type { TemplateTools } from './template-tools';
-import type { VaultExploreTools } from './vault-explore-tools';
 import {
   TASKS_LIST_TOOL_NAME,
   matchTasksInAnswer,
@@ -125,16 +124,11 @@ export interface ChatEnginePorts {
     vaultIds: readonly string[],
   ): Promise<RetrievalOutcome>;
   /**
-   * The ADR-0069 explore tools for one ask turn (`vault_overview` /
-   * `vault_find` / `vault_section`), closed over the turn's scope. They
-   * ride a chip-on ask whenever the provider runs a tool loop — semantic
-   * retrieval backs them when enabled, otherwise they degrade to fresh
-   * filesystem scans (ADR-0069 later change). `null` = no tools this turn.
+   * Whether semantic retrieval can answer right now — then the host
+   * offers `vault_retrieve` beside the other vault tools, and the prompt
+   * may name it.
    */
-  exploreTools(
-    scope: ActiveVaultScope,
-    vaultIds: readonly string[],
-  ): VaultExploreTools | null;
+  semanticEnabled(): boolean;
   /**
    * The `tasks_list` tool for NON-live asks (SDK 1.11): the spec rides the
    * call's tool set and `run` executes one call against the base task
@@ -306,7 +300,6 @@ export class ChatEngine {
 
     // The tool groups (ADR-0063): one switch each, read per ask.
     const groups = config.tools;
-    const toolsOn = groups.vault.enabled;
     // Live branch (ADR-0049): the note IS the edit target, edited through
     // the doc tools over a main-side working copy seeded from the live
     // buffer. `note !== null` is guaranteed by the payload validation for a
@@ -317,19 +310,18 @@ export class ChatEngine {
         : null;
     const live = liveSession !== null;
     const answerOnly = request.note === null;
-    // The Vault chip's scope (ADR-0055/0069), resolved from the REGISTRY —
-    // independent of retrieval. This is the enforcement floor: even a
-    // disabled or failed retrieval arms the host filter below, so the base
-    // tools' active-vault default can never leak an out-of-scope vault
-    // into the answer. A live-edit turn ignores the scope entirely (the
-    // document rides in full).
+    // The Vault chip's scope, resolved from the REGISTRY — independent of
+    // retrieval. It bounds what the vault tools may read AND change
+    // (ADR-0071; the host enforces it where a tool runs), so it holds on
+    // every turn, a live-edit one included. Only the retrieved context
+    // block is skipped on a live turn: the document rides in full there.
     const scope = request.vaultScope;
-    const scopeOn = scope !== 'off' && !live;
+    const chipOn = scope !== 'off';
+    const scopeOn = chipOn && !live;
     const vaults = await this.ports.listVaults();
     const activeVault = vaults.find((vault) => vault.active) ?? null;
-    const targets =
-      scope !== 'off' && !live ? resolveTargetVaultIds(vaults, scope, request.vaultIds) : [];
-    const activeInScope = !scopeOn || activeVault === null || targets.includes(activeVault.id);
+    const targets = chipOn ? resolveTargetVaultIds(vaults, scope, request.vaultIds) : [];
+    const activeInScope = !chipOn || activeVault === null || targets.includes(activeVault.id);
     // Semantic vault retrieval (ADR-0055): only for a plain ask turn — a
     // live-edit turn already carries the whole document + tool loop, so the
     // scope is ignored there. Failure degrades to no context, but the
@@ -364,16 +356,12 @@ export class ChatEngine {
     // without a tool loop gets none, and so does a model whose endpoint
     // refused the tools on an earlier ask of this session.
     const canCall = caps.tools && !this.toolsRefused(config);
-    // The agentic half (ADR-0069): with the chip on and a tool-capable
-    // provider, the model can scan the scoped vaults itself — even when
-    // the baseline retrieval above came back empty or errored. When
-    // semantic retrieval is disabled the tools degrade to fresh filesystem
-    // scans (ADR-0069 later change); they never vanish, so a scoped ask
-    // always keeps its in-scope lookups.
-    const explore = scopeOn && canCall ? this.ports.exploreTools(scope, request.vaultIds) : null;
-    // When the scope excludes the active vault the host drops
-    // vault_search/vault_read (their default target is the active vault).
-    const readToolsDropped = scopeOn && targets.length > 0 && !activeInScope;
+    // The vault tools ride every ask whose Vault chip is on (ADR-0071):
+    // list, search, read — and retrieval by meaning while it is enabled —
+    // over exactly the chip's vaults, plus the changing tools when the
+    // vault group allows writing. With the chip off the model has no way
+    // into the vault beyond what is attached to the question.
+    const vaultOn = chipOn && targets.length > 0 && canCall;
     // External tools (ADR-0063): web_fetch and the user's MCP servers.
     // Never on a live-edit turn, and only where the provider runs a tool
     // loop at all -- otherwise the note would promise tools that are not
@@ -403,15 +391,16 @@ export class ChatEngine {
         mode: promptMode,
         tools: withTools
           ? {
-              ...(toolsOn ? { vault: { read: !readToolsDropped, write: groups.vault.write } } : {}),
-              ...(explore !== null ? { explore: true } : {}),
+              ...(vaultOn
+                ? { vault: { write: groups.vault.write, retrieve: this.ports.semanticEnabled() } }
+                : {}),
               ...(tasksTool !== null ? { tasks: true } : {}),
               ...(templateTools !== null ? { templates: { write: groups.templates.write } } : {}),
               ...(externalOn ? { external: true } : {}),
             }
           : {},
         vaults,
-        scopeVaultIds: scopeOn && targets.length > 0 ? targets : null,
+        scopeVaultIds: chipOn && targets.length > 0 ? targets : null,
         contextBlock,
         now: new Date(),
       });
@@ -442,10 +431,9 @@ export class ChatEngine {
         : undefined;
     const options = (useSession: boolean, withTools: boolean) => ({
       taskId,
-      ...(withTools && toolsOn ? { vaultTools: true } : {}),
-      // Armed from the REGISTRY-resolved targets (not the retrieval's), so
-      // the host filter holds even when retrieval is off or failed.
-      ...(targets.length > 0 ? { vaultToolsScope: targets } : {}),
+      // The scope comes from the REGISTRY-resolved targets (not the
+      // retrieval's), so it holds even when retrieval is off or failed.
+      ...(withTools && vaultOn ? { vaultTools: true, vaultToolsScope: targets } : {}),
       ...(withTools && externalOn ? { externalTools: true } : {}),
       // The round budget is the user's (`tools.maxRounds`, applied by the
       // host); a live turn works hunk by hunk and never gets less than
@@ -464,17 +452,13 @@ export class ChatEngine {
                   return run.text;
                 }),
             }
-          : explore !== null || tasksTool !== null || templateTools !== null
+          : tasksTool !== null || templateTools !== null
             ? {
                 tools: [
-                  ...(explore !== null ? explore.specs : []),
                   ...(templateTools !== null ? templateTools.specs : []),
                   ...(tasksTool !== null ? [tasksTool.spec] : []),
                 ],
                 onToolCall: (name: string, argsJson: string) => {
-                  if (explore !== null && explore.names.has(name)) {
-                    return explore.run(name, argsJson);
-                  }
                   if (templateTools !== null && templateTools.names.has(name)) {
                     return templateTools.run(name, argsJson);
                   }

@@ -45,6 +45,7 @@ import {
   TOOL_ROUNDS_MAX,
   TOOL_ROUNDS_MIN,
   ToolsConfig,
+  VaultWriteMode,
   SnippetConfig,
   SpellcheckConfig,
   TemplatesConfig,
@@ -339,21 +340,26 @@ function normalizeMcpServers(raw: unknown): McpClientServer[] {
  * The assistant's tool groups. A config written before milestone 63 has
  * no `tools` slice: the vault group then inherits what `mcp.enabled` /
  * `mcp.yolo` meant for the assistant, so nobody's behaviour changes.
+ *
+ * Until milestone 77 the vault group had a switch of its own
+ * (`enabled`) beside its write rule. Reading now follows the Vault chip,
+ * so the switch became the third value of the rule: a group that was
+ * off stays unable to write (`off`).
  */
 function normalizeTools(raw: unknown, mcp: McpConfig): ToolsConfig {
   const fallback = defaultToolsConfig();
   if (raw === undefined || raw === null || typeof raw !== 'object') {
-    return { ...fallback, vault: { enabled: mcp.enabled, write: mcp.yolo ? 'auto' : 'confirm' } };
+    return {
+      ...fallback,
+      vault: { write: !mcp.enabled ? 'off' : mcp.yolo ? 'auto' : 'confirm' },
+    };
   }
   const source = raw as Record<string, unknown>;
   const group = (key: string): Record<string, unknown> => (source[key] ?? {}) as Record<string, unknown>;
   const write = (value: unknown, def: 'confirm' | 'auto'): 'confirm' | 'auto' =>
     value === 'confirm' || value === 'auto' ? value : def;
   return {
-    vault: {
-      enabled: bool(group('vault')['enabled'], fallback.vault.enabled),
-      write: write(group('vault')['write'], fallback.vault.write),
-    },
+    vault: { write: vaultWrite(group('vault')) },
     tasks: { enabled: bool(group('tasks')['enabled'], fallback.tasks.enabled) },
     templates: {
       enabled: bool(group('templates')['enabled'], fallback.templates.enabled),
@@ -366,6 +372,17 @@ function normalizeTools(raw: unknown, mcp: McpConfig): ToolsConfig {
     servers: normalizeMcpServers(source['servers']),
     maxRounds: normalizeToolRounds(source['maxRounds']),
   };
+}
+
+function vaultWrite(group: Record<string, unknown>): VaultWriteMode {
+  const { write, enabled } = group;
+  if (enabled === false) {
+    return 'off';
+  }
+  if (write === 'off' || write === 'confirm' || write === 'auto') {
+    return write;
+  }
+  return defaultToolsConfig().vault.write;
 }
 
 function normalizeToolRounds(raw: unknown): number {

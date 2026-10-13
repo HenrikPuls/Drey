@@ -388,3 +388,21 @@ For a `ctx.llm.chat` call that carries tools (`tools` + `onToolCall`,
   renderer to show what is happening.
 - A result longer than 16 000 characters is cut. Return less: a range,
   a limit, and a line that says how to get the rest.
+
+## SDK 1.24 — the vault tools and their scope
+
+- `vaultTools: true` on a `ctx.llm.chat` call attaches the vault tools:
+  `vault_list`, `vault_search`, `vault_read` (and `vault_retrieve` while
+  semantic retrieval is enabled), plus `vault_edit`, `vault_write`,
+  `vault_move`, `vault_delete` unless the user's vault write rule is
+  "not allowed". The user's rule also decides whether a change is
+  confirmed first; a deletion always is.
+- `vaultToolsScope` is now the scope of **every** vault tool of the
+  call, reading and writing: the vault ids it may touch. A `vault`
+  argument outside it is refused. Leave it out and the tools reach
+  every registered vault — pass it whenever your feature has a notion
+  of "these vaults".
+- `tasks_list` is not part of the set. If you need it, attach
+  `TASKS_LIST_SPEC` from `shared/tasks-list-tool` yourself and run it
+  with `runTasksList(ctx.tasks.queryProvider(), args)`.
+- A plugin tool that shares a name with a vault tool still wins.

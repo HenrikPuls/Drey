@@ -161,3 +161,10 @@ the other prompt notes are gone — the system prompt is built by
 `plugins/assistant/main/system-prompt.ts` and names a tool only when it
 is attached to the call. The host runs only tool names it offered. See
 [ADR-0071](0071-unified-vault-toolset-and-agent-loop.md).
+
+## Later change — the vault group is a write permission (milestone 77, ADR-0071)
+
+`tools.vault` lost its switch: `{ write: 'off' | 'confirm' | 'auto' }`.
+Reading the vault follows the Vault chip in the composer, so the group
+only decides whether the assistant may change notes and whether it asks.
+A config whose group was off migrates to `off`.

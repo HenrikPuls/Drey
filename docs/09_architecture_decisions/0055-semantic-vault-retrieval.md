@@ -203,3 +203,9 @@ question, validated scope, limit clamped 1..20). MCP `vault_search`
 gains `mode: 'text' | 'semantic'` (default `text` — existing clients
 unchanged); semantic mode requires `text`, refuses `tags`/`regex`, and
 labels hits `vault · path:line — heading (score 0.87) — snippet`.
+
+## Later change — semantic search over MCP is its own tool (milestone 77, ADR-0071)
+
+`vault_search` lost its `mode: "semantic"`; the semantic seam now backs
+the tool `vault_retrieve`, offered to MCP clients and to the assistant
+only while a `SemanticSearchProvider` is registered.

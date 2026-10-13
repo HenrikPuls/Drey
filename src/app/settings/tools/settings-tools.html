@@ -32,38 +32,35 @@
     <section>
       <h3>On this computer</h3>
       <div class="group">
-      <label class="switch-row">
-        <input
-          type="checkbox"
-          [checked]="tools.vault.enabled"
-          (change)="setVaultEnabled($any($event.target).checked)"
-        />
-        <span>
-          <span class="switch-label">Vault</span>
-          <span class="switch-hint">
-            Search and read notes in every registered vault, and write notes
-            (<span class="mono">vault_search</span>, <span class="mono">vault_read</span>,
-            <span class="mono">vault_write</span>).
-          </span>
-        </span>
-      </label>
-      <div class="field sub">
-        <label for="tools-vault-write">When the assistant writes a note</label>
-        <select
-          id="tools-vault-write"
-          class="narrow"
-          [disabled]="!tools.vault.enabled"
-          (change)="setVaultWrite($any($event.target).value)"
-        >
-          <option value="confirm" [selected]="tools.vault.write === 'confirm'">
-            Show the change and ask first
-          </option>
-          <option value="auto" [selected]="tools.vault.write === 'auto'">
-            Write without asking
-          </option>
-        </select>
+        <div class="field">
+          <label for="tools-vault-write">Vault — when the assistant changes a note</label>
+          <select
+            id="tools-vault-write"
+            class="narrow"
+            (change)="setVaultWrite($any($event.target).value)"
+          >
+            <option value="off" [selected]="tools.vault.write === 'off'">
+              Not allowed — it may only read
+            </option>
+            <option value="confirm" [selected]="tools.vault.write === 'confirm'">
+              Show the change and ask first
+            </option>
+            <option value="auto" [selected]="tools.vault.write === 'auto'">
+              Change without asking
+            </option>
+          </select>
+          <p class="field-hint">
+            Which vaults the assistant can look into is chosen per question, with the vault button
+            under the question field: it lists, searches and reads there
+            (<span class="mono">vault_list</span>, <span class="mono">vault_search</span>,
+            <span class="mono">vault_retrieve</span>, <span class="mono">vault_read</span>) and,
+            if allowed here, edits, creates, moves and deletes notes
+            (<span class="mono">vault_edit</span>, <span class="mono">vault_write</span>,
+            <span class="mono">vault_move</span>, <span class="mono">vault_delete</span>). A
+            deletion is always asked for.
+          </p>
+        </div>
       </div>
-    </div>
 
     <div class="group">
       <label class="switch-row">

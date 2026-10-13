@@ -14,9 +14,11 @@
         <span>
           <span class="switch-label">Enable the vault MCP server</span>
           <span class="switch-hint">
-            Exposes <span class="mono">vault_search</span>, <span class="mono">vault_read</span>
-            and <span class="mono">vault_write</span> to MCP clients. Off means no other program
-            can reach the vault through this server.
+            Lets MCP clients list, search, read and change notes
+            (<span class="mono">vault_list</span>, <span class="mono">vault_search</span>,
+            <span class="mono">vault_read</span>, <span class="mono">vault_edit</span>,
+            <span class="mono">vault_write</span> and more). Off means no other program can
+            reach the vault through this server.
           </span>
         </span>
       </label>
@@ -70,17 +72,17 @@
           <span>
             <span class="switch-label">YOLO mode — apply writes without confirmation</span>
             <span class="switch-hint">
-              Off by default, and best left off. When on, a <span class="mono">vault_write</span>
-              from an MCP client changes files immediately, with no diff to approve.
+              Off by default, and best left off. When on, an edit, a new file or a move
+              from an MCP client changes files immediately, with no diff to approve. A
+              deletion is still asked for.
             </span>
           </span>
         </label>
       </fieldset>
 
       <p class="field-hint">
-        A <span class="mono">vault_write</span> is shown in the same diff dialog as an assistant
-        edit before it touches disk — unless YOLO mode is on. All paths stay inside a registered
-        vault.
+        A change is shown in the same diff dialog as an assistant edit before it touches disk
+        — unless YOLO mode is on. All paths stay inside a registered vault.
       </p>
     </section>
 

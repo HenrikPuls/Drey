@@ -263,7 +263,7 @@ describe('normalizeAppConfig', () => {
 
   it('tools (ADR-0063): defaults, and a config from before the slice inherits the MCP switch', () => {
     expect(normalizeAppConfig({ tools: {} }).tools).toEqual({
-      vault: { enabled: false, write: 'confirm' },
+      vault: { write: 'confirm' },
       tasks: { enabled: true },
       templates: { enabled: true, write: 'auto' },
       webFetch: { enabled: false, approval: 'ask' },
@@ -276,15 +276,23 @@ describe('normalizeAppConfig', () => {
     expect(normalizeAppConfig({ tools: { maxRounds: 'many' } }).tools.maxRounds).toBe(12);
     // No `tools` key at all: what mcp.enabled / mcp.yolo meant for the assistant carries over.
     expect(normalizeAppConfig({ mcp: { enabled: true, yolo: true } }).tools.vault).toEqual({
-      enabled: true,
       write: 'auto',
     });
-    expect(normalizeAppConfig({ mcp: { enabled: true } }).tools.vault).toEqual({
-      enabled: true,
-      write: 'confirm',
-    });
+    expect(normalizeAppConfig({ mcp: { enabled: true } }).tools.vault).toEqual({ write: 'confirm' });
+    expect(normalizeAppConfig({ mcp: { enabled: false } }).tools.vault).toEqual({ write: 'off' });
     // Once the slice exists, the MCP switch no longer steers it.
-    expect(normalizeAppConfig({ mcp: { enabled: true }, tools: {} }).tools.vault.enabled).toBe(false);
+    expect(normalizeAppConfig({ mcp: { enabled: false }, tools: {} }).tools.vault.write).toBe('confirm');
+  });
+
+  it('tools.vault: the old switch becomes the "off" of the write rule (ADR-0071)', () => {
+    const vault = (group: unknown) => normalizeAppConfig({ tools: { vault: group } }).tools.vault;
+    // A group that was off stays unable to write, whatever its rule said.
+    expect(vault({ enabled: false, write: 'auto' })).toEqual({ write: 'off' });
+    expect(vault({ enabled: true, write: 'auto' })).toEqual({ write: 'auto' });
+    expect(vault({ enabled: true, write: 'confirm' })).toEqual({ write: 'confirm' });
+    // The new shape, and junk.
+    expect(vault({ write: 'off' })).toEqual({ write: 'off' });
+    expect(vault({ write: 'whenever' })).toEqual({ write: 'confirm' });
   });
 
   it('tools.servers: slug ids made unique, transport by kind, junk dropped', () => {

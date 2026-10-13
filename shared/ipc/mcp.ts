@@ -44,6 +44,11 @@ export interface ToolApprovalRequest {
   sourceName: string;
   tool: string;
   args: Record<string, unknown>;
+  /**
+   * Asked every time (a move or a delete in the vault, ADR-0071): the
+   * dialog offers no "Always allow".
+   */
+  once?: boolean;
 }
 
 /** What `getMcpStatus` reports for the Settings pane. */

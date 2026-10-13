@@ -145,3 +145,16 @@ stops them from running: the host and the tool loop refuse a name that
 was not offered. The explore tools themselves are replaced by the base
 toolset in milestone 77. See
 [ADR-0071](0071-unified-vault-toolset-and-agent-loop.md).
+
+## Later change — the explore tools are gone (milestone 77, ADR-0071)
+
+`vault_overview` / `vault_find` / `vault_section` and the filesystem
+fallback (`vault-scan.ts`) were removed. A chip-on ask now carries the
+base vault tools (`vault_list`, `vault_search`, `vault_retrieve`,
+`vault_read`, and the changing ones when writing is allowed), bound to
+the chip's vaults by the host: `vaultToolsScope` is the scope of every
+vault tool, for reading and writing, instead of a filter that dropped
+two read tools. What stays from this ADR: the retrieved top-k block as
+the floor, the scope resolved from the registry, the self-healing
+index, and `tasks_list` / the template tools withheld when the active
+vault is out of scope.

@@ -51,71 +51,99 @@ describe('buildSystemPrompt', () => {
     expect(text.indexOf('You can call these tools')).toBeLessThan(text.indexOf(TOOL_RULES));
   });
 
-  it('states the write rule of each writing group', () => {
-    const confirm = prompt({
-      tools: { vault: { read: true, write: 'confirm' }, templates: { write: 'auto' } },
+  const READ_ONLY = { vault: { write: 'off' as const, retrieve: false } };
+  const CONFIRM = { vault: { write: 'confirm' as const, retrieve: false } };
+
+  it('names the reading tools, and vault_retrieve only while retrieval is on', () => {
+    const without = prompt({ tools: READ_ONLY, scopeVaultIds: ['test'] });
+    const withRetrieve = prompt({
+      tools: { vault: { write: 'off', retrieve: true } },
+      scopeVaultIds: ['test'],
     });
 
-    expect(confirm).toContain('The user confirms every vault_write in a diff dialog');
+    expect(without).toContain('- vault_list, vault_search, vault_read —');
+    expect(without).not.toContain('vault_retrieve');
+    expect(withRetrieve).toContain('- vault_list, vault_search, vault_retrieve, vault_read —');
+    expect(withRetrieve).toContain('find sections by meaning');
+  });
+
+  it('says that nothing can be changed while writing is off', () => {
+    const text = prompt({ tools: READ_ONLY, scopeVaultIds: ['test'] });
+
+    expect(text).toContain('You cannot change files in the vault in this conversation.');
+    expect(text).not.toContain('vault_edit');
+  });
+
+  it('states the write rule of each writing group', () => {
+    const confirm = prompt({
+      tools: { ...CONFIRM, templates: { write: 'auto' } },
+      scopeVaultIds: ['test'],
+    });
+    const auto = prompt({
+      tools: { vault: { write: 'auto', retrieve: false } },
+      scopeVaultIds: ['test'],
+    });
+
+    expect(confirm).toContain('- vault_edit, vault_write, vault_move, vault_delete —');
+    expect(confirm).toContain('The user confirms every change in a dialog before it is applied.');
     expect(confirm).toContain(
       'A template_write or template_delete applies immediately without confirmation',
     );
+    expect(auto).toContain('Changes apply immediately without confirmation');
+    expect(auto).toContain('A deletion is always confirmed by the user.');
   });
 
-  it('keeps the open document out of vault_write while the fence protocol is in use', () => {
-    const tools = { vault: { read: true, write: 'confirm' as const } };
-
-    expect(prompt({ tools })).toContain('Never use vault_write on the DOCUMENT');
-    expect(prompt({ mode: 'answer', tools })).not.toContain('Never use vault_write on the DOCUMENT');
+  it('keeps the open document out of the changing tools while the fence protocol is in use', () => {
+    expect(prompt({ tools: CONFIRM, scopeVaultIds: ['test'] })).toContain(
+      'Never use them on the DOCUMENT of this conversation',
+    );
+    expect(prompt({ mode: 'answer', tools: CONFIRM, scopeVaultIds: ['test'] })).not.toContain(
+      'Never use them on the DOCUMENT',
+    );
   });
 
-  it('drops the read tools from the list when the scope dropped them', () => {
-    const text = prompt({
-      tools: { vault: { read: false, write: 'confirm' }, explore: true },
-      scopeVaultIds: ['docs'],
+  it('points from the vault context to the tools, or tells to search first', () => {
+    const withContext = prompt({
+      tools: READ_ONLY,
+      scopeVaultIds: ['test'],
+      contextBlock: 'VAULT CONTEXT — …',
+    });
+    const without = prompt({ tools: READ_ONLY, scopeVaultIds: ['test'] });
+
+    expect(withContext).toContain('The vault context above is a first selection');
+    expect(without).toContain('Search first, then read what you found before you answer.');
+  });
+
+  it('explains the vault argument only when several vaults are in scope', () => {
+    const one = prompt({ tools: READ_ONLY, scopeVaultIds: ['docs'] });
+    const both = prompt({ tools: READ_ONLY, scopeVaultIds: ['test', 'docs'] });
+    const twoWithoutActive = buildSystemPrompt({
+      ...BASE,
+      tools: READ_ONLY,
+      vaults: [...VAULTS, { id: 'third', name: 'Third', active: false }],
+      scopeVaultIds: ['docs', 'third'],
     });
 
-    expect(text).toContain('- vault_write —');
-    expect(text).not.toContain('vault_search');
-    expect(text).toContain('- vault_overview, vault_find, vault_section');
-  });
-
-  it('lists every vault id with the active-vault hint when unscoped', () => {
-    const text = prompt({ tools: { vault: { read: true, write: 'confirm' } } });
-
-    expect(text).toContain('omit it for the active vault');
-    expect(text).toContain('- test (TestVault) — active');
-    expect(text).toContain('- docs (Docs)');
-  });
-
-  it('shrinks the id list to the scope and demands an id when the active vault is outside it', () => {
-    const text = prompt({
-      tools: { vault: { read: false, write: 'confirm' } },
-      scopeVaultIds: ['docs'],
-    });
-
-    expect(text).toContain('always pass one of these ids');
-    expect(text).toContain('- docs (Docs)');
-    expect(text).not.toContain('- test (TestVault)');
-  });
-
-  it('lists no vault ids without the vault tools', () => {
-    expect(prompt({ tools: { tasks: true } })).not.toContain('Vault ids for');
+    expect(one).not.toContain('`vault` argument');
+    expect(both).toContain('leave it out to list or search all of them');
+    expect(both).toContain('it defaults to the active vault (`test`)');
+    expect(both).toContain('Results name a file as `id:path`');
+    expect(twoWithoutActive).toContain('for a single file always pass it');
   });
 
   it('binds "the vault" to the scope and names only the sources that exist', () => {
     const both = prompt({
       scopeVaultIds: ['docs'],
       contextBlock: 'VAULT CONTEXT — …',
-      tools: { explore: true },
+      tools: READ_ONLY,
     });
     const contextOnly = prompt({ scopeVaultIds: ['docs'], contextBlock: 'VAULT CONTEXT — …' });
     const neither = prompt({ scopeVaultIds: ['test', 'docs'] });
 
     expect(both).toContain('The vault for this question: Docs (`docs`).');
-    expect(both).toContain('only from the vault context below and the vault exploration tools');
+    expect(both).toContain('only from the vault context below and the vault tools');
     expect(contextOnly).toContain('only from the vault context below,');
-    expect(contextOnly).not.toContain('exploration tools');
+    expect(contextOnly).not.toContain('vault tools');
     expect(neither).toContain('means exactly these vaults and nothing else.');
   });
 

@@ -5,6 +5,7 @@ import { AppConfigStore } from './app-config';
 import { DailyNoteManager } from './daily-note';
 import { NoteHistoryStore } from './history/note-history-store';
 import type { McpWriteBridge, ToolApprovalBridge } from './ipc';
+import { LinkRewriter } from './link-rewriter';
 import { LlmDebugLog, LlmRouter, LlmTaskRegistry, TagSuggester, buildClients } from './llm';
 import { McpHttpTransport, VaultTools, createVaultMcpServer } from './mcp';
 import { AssistantToolbox, McpClientManager, createMcpClientManager } from './mcp-client';
@@ -119,28 +120,37 @@ export function buildAppServices(deps: AppServicesDeps): AppServices {
   const llmTasks = new LlmTaskRegistry();
   // The vault tool set (ADR-0021): one instance backs both the MCP
   // server and the assistant's in-process tool-calling loop.
-  const vaultTools = new VaultTools(
-    vaultManager,
+  const linkRewriter = new LinkRewriter(vaultManager);
+  const isNote = (file: string): boolean => file.toLowerCase().endsWith('.md');
+  const vaultTools = new VaultTools({
+    vault: vaultManager,
     // The section-search seam (ADR-0044): reads whichever provider a
     // plugin registered (the Tags plugin).
-    () => pluginHost?.getSectionSearchProvider() ?? null,
+    getSearchProvider: () => pluginHost?.getSectionSearchProvider() ?? null,
     // The task-index seam (SDK 1.11): reads the tasks plugin's provider.
-    () => pluginHost?.getTaskQueryProvider() ?? null,
-    () => appConfig.get(),
-    (request) => deps.mcpWriteBridge.requestConfirmation(request),
-    // An MCP write bypasses note:save -- run the same external-change
-    // round the watcher uses (index events + renderer push, scoped to
-    // the written file and its vault).
-    (writtenPath, writtenVaultId) =>
-      vaultAnnouncer.announceExternal({
-        vaultId: writtenVaultId ?? vaultManager.resolveVaultId(),
-        changedPaths: [writtenPath],
-        deletedPaths: [],
-      }),
+    getTaskProvider: () => pluginHost?.getTaskQueryProvider() ?? null,
     // The semantic seam (SDK 1.18): reads the assistant plugin's
     // provider while its retrieval is enabled.
-    () => pluginHost?.getSemanticSearchProvider() ?? null,
-  );
+    getSemanticProvider: () => pluginHost?.getSemanticSearchProvider() ?? null,
+    getConfig: () => appConfig.get(),
+    confirmWrite: (request) => deps.mcpWriteBridge.requestConfirmation(request),
+    // A move or a delete has no diff to show: the approval dialog asks,
+    // without its "Always allow".
+    approve: ({ tool, args }) =>
+      deps.toolApprovalBridge.request({ source: 'vault', sourceName: 'Vault', tool, args, once: true }),
+    rename: (request) => linkRewriter.apply(request),
+    // A tool write bypasses note:save -- run the same external-change
+    // round the watcher uses (index events + renderer push, scoped to
+    // the touched files and their vault).
+    announce: ({ vaultId, changedPaths, deletedPaths }) =>
+      vaultAnnouncer.announceExternal({
+        vaultId,
+        changedPaths: changedPaths.filter(isNote),
+        deletedPaths: deletedPaths.filter(isNote),
+        otherPaths: [...changedPaths, ...deletedPaths].filter((file) => !isNote(file)),
+      }),
+    announceRefresh: (vaultId) => vaultAnnouncer.announceFullRefresh(vaultId),
+  });
   // The assistant's external tools (ADR-0063): the configured MCP
   // servers plus the built-in web_fetch, each behind its approval rule.
   const mcpClients = createMcpClientManager(app.getVersion(), (message, level) =>

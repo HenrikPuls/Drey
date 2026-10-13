@@ -45,7 +45,7 @@ const CONFIG: AppConfig = {
   llm: { ...DEFAULT_APP_CONFIG.llm, enabled: true, provider: 'test', model: 'm1' },
   tools: {
     ...DEFAULT_APP_CONFIG.tools,
-    vault: { enabled: true, write: 'confirm' },
+    vault: { write: 'confirm' },
     tasks: { enabled: true },
     templates: { enabled: true, write: 'confirm' },
     webFetch: { enabled: false, approval: 'ask' },
@@ -80,7 +80,6 @@ interface Harness {
   engine: ChatEngine;
   store: ChatStore;
   calls: Array<{ messages: readonly ChatMessage[]; options: Record<string, unknown> }>;
-  exploreCalls: number;
   tasksCalls: number;
   templatesCalls: number;
   reads: Array<{ path: string; fallbackVaultIds?: readonly string[] }>;
@@ -93,7 +92,7 @@ function makeHarness(overrides?: {
 }): Harness {
   const calls: Harness['calls'] = [];
   const reads: Harness['reads'] = [];
-  const state = { exploreCalls: 0, tasksCalls: 0, templatesCalls: 0 };
+  const state = { tasksCalls: 0, templatesCalls: 0 };
   const ports: ChatEnginePorts = {
     readVaultText: async (path, fallbackVaultIds) => {
       reads.push({ path, fallbackVaultIds });
@@ -105,10 +104,8 @@ function makeHarness(overrides?: {
     onDelta: () => undefined,
     onLiveEdit: () => undefined,
     retrieveContext: overrides?.retrieve ?? (async () => ({ enabled: true, minScore: 0.3, hits: [] })),
-    exploreTools: () => {
-      state.exploreCalls += 1;
-      return { specs: [], names: new Set(), run: async () => '' };
-    },
+    onToolEvent: () => undefined,
+    semanticEnabled: () => false,
     tasksTool: () => {
       state.tasksCalls += 1;
       return {
@@ -139,9 +136,6 @@ function makeHarness(overrides?: {
     store,
     calls,
     reads,
-    get exploreCalls() {
-      return state.exploreCalls;
-    },
     get tasksCalls() {
       return state.tasksCalls;
     },
@@ -151,7 +145,7 @@ function makeHarness(overrides?: {
   };
 }
 
-describe('ChatEngine scope enforcement (ADR-0069 later change)', () => {
+describe('ChatEngine scope enforcement (ADR-0069 later change, ADR-0071)', () => {
   it('arms the host scope from the registry even when retrieval is disabled', async () => {
     const h = makeHarness({
       retrieve: async () => ({ enabled: false, minScore: 0.3, hits: [] }),
@@ -185,14 +179,13 @@ describe('ChatEngine scope enforcement (ADR-0069 later change)', () => {
     // The prompt binds "the vault" to the chip's selection.
     expect(system).toContain('The vault for this question: docs (`docs`)');
     // Tools that are not attached are not mentioned at all (ADR-0071):
-    // tasks and templates went with the active vault, the two read tools
-    // with the scope.
+    // tasks and templates went with the active vault. The vault tools
+    // stay — the host bounds them to the scope.
     expect(system).not.toContain('tasks_list');
     expect(system).not.toContain('template_list');
-    expect(system).not.toContain('vault_search');
-    expect(system).toContain('- vault_write');
-    expect(system).toContain('always pass one of these ids');
-    expect(system).not.toContain('omit it for the active vault');
+    expect(system).toContain('- vault_list, vault_search, vault_read');
+    expect(h.calls[0].options.vaultTools).toBe(true);
+    expect(h.calls[0].options.vaultToolsScope).toEqual(['docs']);
   });
 
   it('keeps the aux tools when the scope includes the active vault', async () => {
@@ -204,7 +197,7 @@ describe('ChatEngine scope enforcement (ADR-0069 later change)', () => {
     expect(h.tasksCalls).toBe(1);
     expect(h.templatesCalls).toBe(1);
     const system = h.calls[0].messages[0]?.content ?? '';
-    expect(system).toContain('omit it for the active vault');
+    expect(system).toContain('it defaults to the active vault (`test`)');
     expect(system).toContain('If the question is not about tasks, do not call it');
   });
 
@@ -214,7 +207,9 @@ describe('ChatEngine scope enforcement (ADR-0069 later change)', () => {
     expect(h.calls[0].options.vaultToolsScope).toBeUndefined();
     const system = h.calls[0].messages[0]?.content ?? '';
     expect(system).not.toContain('The vault for this question');
-    expect(h.exploreCalls).toBe(0);
+    // Chip off: no way into the vault beyond what is attached (ADR-0071).
+    expect(h.calls[0].options.vaultTools).toBeUndefined();
+    expect(system).not.toContain('vault_search');
   });
 
   it('hands the replay reader the scoped vaults as attachment fallbacks', async () => {
