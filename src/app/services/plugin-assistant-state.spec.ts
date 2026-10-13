@@ -214,6 +214,18 @@ describe('assistant plugin state — chat-first asks (ADR-0048)', () => {
     expect(h.state.view()?.turns.map((t) => t.role)).toEqual(['user', 'assistant']);
   });
 
+  it('carries the selection a question was asked about, and none otherwise', async () => {
+    const h = setup();
+    h.setActive('a.md', 'Erster Satz. Zweiter Satz.');
+    await h.state.openNote('a.md');
+
+    await h.state.ask('Was heißt das?', { selection: 'Zweiter Satz.' });
+    await h.state.ask('Und sonst?');
+
+    expect(h.asks[0]?.selection).toBe('Zweiter Satz.');
+    expect(h.asks[1] !== undefined && 'selection' in h.asks[1]).toBe(false);
+  });
+
   it('sends the note with its live buffer by default, plus chips and images', async () => {
     const h = setup();
     h.setActive('a.md', 'Lebendiger Puffer.');

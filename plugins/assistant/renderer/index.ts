@@ -11,14 +11,23 @@ import { resolveActions } from '../../../shared/llm/actions';
 import { mountPanel, type PanelHandle } from './panel.js';
 import { createRunningTasks } from './running-tasks.js';
 import { createAssistantState, type AssistantPorts } from './state.js';
-import { actionsSettingsPage, retrievalSettingsPage } from './settings-pages.js';
+import {
+  actionsSettingsPage,
+  retrievalSettingsPage,
+  SELECTION_BUTTON_SETTING,
+} from './settings-pages.js';
+import { promptEntriesFrom, promptsDirFor } from './prompts.js';
+import { createSelectionButton } from './selection-button.js';
+import { closeSelectionPopover, openSelectionPopover } from './selection-popover.js';
+import { createVaultFileCache } from './vault-files.js';
 
 /**
  * The Assistant plugin's renderer (ADR-0044 stage 7): the assistant dock
  * panel (cards + composer), the Actions Settings page, the manual Actions
  * as `⋯`-menu rows, and the pending-actions drain — on-save Action
  * outcomes arrive as a `pending-actions` document event and go through the
- * shared confirmation dialog. The panel reuses the built-in widget id
+ * shared confirmation dialog. Since milestone 74 also the assistant button
+ * at an editor selection and its popover. The panel reuses the built-in widget id
  * `assistant` so every persisted dock layout and the `widgets.disabled`
  * list survive the conversion (ADR-0044 rule 5).
  */
@@ -261,6 +270,79 @@ const plugin: PluginRendererModule = {
       }
     };
 
+    // -- the assistant button at a selection (milestone 74) ---------------------
+    // On unless switched off; the stored value lands a moment after start.
+    let selectionButtonOn = true;
+    void api.settings.get<boolean>(SELECTION_BUTTON_SETTING).then((value) => {
+      selectionButtonOn = value !== false;
+    });
+    const promptFiles = createVaultFileCache(api, '.md');
+
+    const openForSelection = (): void => {
+      const view = selectionButton.lastView();
+      const active = api.documents.active();
+      if (view === null || active === null || active.kind !== 'text') {
+        return;
+      }
+      const range = view.state.selection.main;
+      if (range.empty) {
+        return;
+      }
+      const selection = view.state.sliceDoc(range.from, range.to);
+      const coords = view.coordsAtPos(range.head);
+      const actions =
+        appConfigCache === undefined
+          ? []
+          : resolveActions(appConfigCache)
+              .filter((action) => action.enabled && action.event === 'manual')
+              .map((action) => ({ triggerId: action.triggerId, name: action.name }));
+      const prompts = (async () =>
+        promptEntriesFrom(
+          await promptFiles.ensureLoaded(),
+          (path) => api.vault.readFile(path).then((file) => file.content),
+          promptsDirFor(appConfigCache?.templates.dir),
+        ))();
+      openSelectionPopover({
+        anchor: coords ?? { left: 100, top: 100, bottom: 100 },
+        prompts,
+        actions,
+        onAsk: (question) => {
+          api.ui.revealWidget('assistant');
+          void state.ask(question, { selection });
+        },
+        // The Action reads the selection itself (the editor keeps it while
+        // the popover has the focus).
+        onAction: (triggerId) => {
+          void runManualAction(triggerId);
+        },
+        onDismiss: () => {
+          view.focus();
+        },
+      });
+    };
+
+    const selectionButton = createSelectionButton(api.editor.cm, {
+      enabled: () => selectionButtonOn && api.llm.enabled(),
+      icon: () => api.ui.icon('sparkles', 14),
+      open: () => {
+        openForSelection();
+      },
+    });
+    api.editor.registerExtension('document', () => selectionButton.extension());
+    api.commands.register({
+      id: 'assistant.askSelection',
+      label: 'Assistant: ask about the selection',
+      keybinding: 'Mod+Shift+A',
+      run: () => {
+        openForSelection();
+      },
+    });
+    api.documents.onChange((event) => {
+      if (event.type === 'active-changed') {
+        closeSelectionPopover();
+      }
+    });
+
     // -- the dock panel (id continuity: built-in id `assistant`) -----------------
     let panel: PanelHandle | null = null;
     api.ui.registerWidget({
@@ -289,7 +371,11 @@ const plugin: PluginRendererModule = {
     const onConfigPatched = (): void => {
       void refreshConfig();
     };
-    api.ui.registerSettingsPage(actionsSettingsPage(api, onConfigPatched));
+    api.ui.registerSettingsPage(
+      actionsSettingsPage(api, onConfigPatched, (on) => {
+        selectionButtonOn = on;
+      }),
+    );
     // The semantic retrieval page is plugin-config driven (not appConfig),
     // so it does not need the patch announcement.
     api.ui.registerSettingsPage(retrievalSettingsPage(api));

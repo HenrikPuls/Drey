@@ -20,6 +20,7 @@ import type { SdkTaskRecord } from '../../../shared/plugin-api';
 import type { AppConfig } from '../../../shared/app-config';
 import type { LlmCapabilities } from '../../../shared/llm';
 import type { AskRequest, AssistantOutcome } from '../shared/ask';
+import { quoteSelection } from '../shared/ask.js';
 import { extractDocumentFence } from '../shared/document-fence';
 import {
   ChatContextStatus,
@@ -256,7 +257,10 @@ export class ChatEngine {
       role: 'user',
       at: formatDateTime(new Date()),
       meta: {},
-      text: request.question,
+      text:
+        request.selection !== undefined
+          ? quoteSelection(request.selection, request.question)
+          : request.question,
       attachments,
       tool: [],
       context: [],
