@@ -35,8 +35,8 @@ export function formatPairs(pairs: Record<string, string>, separator: '=' | ':')
  * of the writing groups, and the external sources (web fetch, MCP servers)
  * with their approval rule.
  *
- * Pure view over the draft; Save persists it and main connects / drops the
- * servers to match.
+ * Pure view over the self-saving draft; with each save main connects /
+ * drops the servers to match.
  */
 @Component({
   selector: 'app-settings-tools',
@@ -71,6 +71,19 @@ export class SettingsTools {
 
   protected statusOf(id: string): McpClientServerStatus | null {
     return this.status().find((s) => s.id === id) ?? null;
+  }
+
+  /**
+   * Ids of the servers added since this pane opened. Such a server's id
+   * still follows its name (`setName`).
+   */
+  private readonly added = new Set<string>();
+
+  /** No command / web address yet: nothing main could connect to. */
+  protected isIncomplete(server: McpClientServer): boolean {
+    return server.transport.kind === 'http'
+      ? server.transport.url === ''
+      : server.transport.command === '';
   }
 
   /** Whether the draft differs from what main is connected to. */
@@ -109,8 +122,10 @@ export class SettingsTools {
 
   protected addServer(): void {
     this.settings.patchTools((t) => {
+      const id = this.uniqueId('server', t.servers, null);
+      this.added.add(id);
       t.servers.push({
-        id: this.uniqueId('server', t.servers, null),
+        id,
         name: 'New server',
         enabled: true,
         approval: 'ask',
@@ -135,20 +150,23 @@ export class SettingsTools {
   }
 
   /**
-   * The id is the tool prefix the model sees. It follows the name until
-   * the server has been saved once, then stays -- a later rename must not
-   * change tool names recorded in existing chats.
+   * The id is the tool prefix the model sees. It follows the name while
+   * the server is new (added since the pane opened -- a new server is
+   * saved at once, so "not saved yet" no longer tells), then stays: a
+   * later rename must not change tool names recorded in existing chats.
    */
   protected setName(id: string, name: string): void {
-    const saved = this.settings.config()?.tools.servers.some((s) => s.id === id) ?? false;
+    const fresh = this.added.has(id);
     this.settings.patchTools((t) => {
       const server = t.servers.find((s) => s.id === id);
       if (!server) {
         return;
       }
       server.name = name;
-      if (!saved) {
+      if (fresh) {
         server.id = this.uniqueId(mcpServerSlug(name) || 'server', t.servers, server);
+        this.added.delete(id);
+        this.added.add(server.id);
       }
     });
   }

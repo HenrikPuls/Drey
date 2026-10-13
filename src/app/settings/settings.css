@@ -134,18 +134,8 @@
   color: var(--set-hint);
 }
 
-.save-error {
-  margin: 0;
-  padding: 8px 26px;
-  font-size: var(--set-fs-small);
-  color: var(--status-deleted);
-  background: color-mix(in srgb, var(--status-deleted) 10%, transparent);
-}
-
-/* Footer: dirty state + Discard / Save. Swapped for the unsaved-changes bar
-   while a close is being confirmed, so there is only ever one action row. */
-.actions-bar,
-.unsaved {
+/* Footer: the save status and the one Close button. */
+.actions-bar {
   display: flex;
   align-items: center;
   gap: 8px;
@@ -154,36 +144,25 @@
   border-top: 1px solid var(--border);
 }
 
-.unsaved {
-  background: var(--bg-bar);
-}
-
-.unsaved-text {
-  flex: 1;
-  font-size: var(--set-fs-small);
-  color: var(--text-2);
-}
-
 .spacer {
   flex: 1;
 }
 
-.dirty,
-.saved {
+.saved,
+.save-error {
   font-size: var(--set-fs-small);
-}
-
-.dirty {
-  color: var(--accent);
 }
 
 .saved {
   color: var(--set-hint);
 }
 
+.save-error {
+  color: var(--status-deleted);
+}
+
 /* The buttons are the shared `ghost` / `primary` (settings-ui.css); in a
    bar they centre on the row instead of hugging its top. */
-.actions-bar button,
-.unsaved button {
+.actions-bar button {
   align-self: center;
 }

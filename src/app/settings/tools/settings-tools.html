@@ -169,8 +169,10 @@
         <p class="field-hint status">
           <span class="mono">mcp__{{ server.id }}__…</span>
           ·
-          @if (isUnsaved(server)) {
-            Save to connect.
+          @if (isIncomplete(server)) {
+            {{ server.transport.kind === 'http' ? 'Enter a web address to connect.' : 'Enter a command to connect.' }}
+          } @else if (isUnsaved(server)) {
+            Saving…
           } @else if (!server.enabled) {
             Disabled.
           } @else {

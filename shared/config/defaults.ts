@@ -6,6 +6,7 @@
 import { DEFAULT_DAILY_DIR } from '../daily';
 import {
   ActionTemplate,
+  ActionTrigger,
   AppConfig,
   AppearanceConfig,
   BUILTIN_ENTRY_TEMPLATE_IDS,
@@ -16,6 +17,7 @@ import {
   DailyConfig,
   EntryTemplate,
   LM_STUDIO_DEFAULT_BASE_URL,
+  LOSSLESS_FORMAT_PROMPT,
   McpConfig,
   ToolsConfig,
   RULED_ENTRY_PATTERN,
@@ -127,6 +129,36 @@ export function autotagTemplate(): ActionTemplate {
   };
 }
 
+/**
+ * The lossless "Structure note" template (roadmap "Lossless Markdown
+ * template"): whole-document rewrite through the ADR-0011 confirmation.
+ */
+export function losslessFormatTemplate(): ActionTemplate {
+  return {
+    id: BUILTIN_TEMPLATE_IDS['lossless-format'],
+    name: 'Structure note (lossless)',
+    prompt: LOSSLESS_FORMAT_PROMPT,
+    resultKind: 'document',
+    builtin: 'lossless-format',
+  };
+}
+
+/**
+ * The manual trigger that ships for the lossless template — fresh
+ * configs only (`normalizeTriggers`): an existing config's trigger list
+ * is the user's, and an explicit empty array is respected. With it the
+ * template is runnable out of the box: a row in the editor's `⋯` menu.
+ */
+export function losslessFormatTrigger(): ActionTrigger {
+  return {
+    id: 'trigger:lossless-format',
+    templateId: BUILTIN_TEMPLATE_IDS['lossless-format'],
+    event: 'manual',
+    confirm: true,
+    enabled: true,
+  };
+}
+
 export const DEFAULT_APP_CONFIG: AppConfig = {
   version: 1,
   llm: {
@@ -161,7 +193,7 @@ export const DEFAULT_APP_CONFIG: AppConfig = {
   widgets: { disabled: [] },
   plugins: { disabled: [] },
   actions: {
-    templates: [searchSummaryTemplate(), autotagTemplate()],
-    triggers: [],
+    templates: [searchSummaryTemplate(), autotagTemplate(), losslessFormatTemplate()],
+    triggers: [losslessFormatTrigger()],
   },
 };

@@ -10,7 +10,7 @@ import { SettingsPane } from '../settings-pane/settings-pane';
  * until the user types and saves -- exactly like clicking today in the
  * calendar.
  *
- * Pure view; the change goes into the draft and reaches disk on Save.
+ * Pure view over `SettingsService`'s self-saving draft.
  */
 @Component({
   selector: 'app-settings-daily',

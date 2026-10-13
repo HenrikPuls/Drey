@@ -52,7 +52,10 @@
               @if (status.httpListening) {
                 Listening on <span class="mono">http://127.0.0.1:{{ status.httpPort }}/mcp</span>.
               } @else {
-                Not listening. Enable the endpoint above and press <strong>Save</strong>.
+                Not listening.
+                @if (!mcp.enabled || !mcp.httpEnabled) {
+                  Enable the server and the endpoint above.
+                }
               }
             </p>
           }
@@ -62,7 +65,7 @@
           <input
             type="checkbox"
             [checked]="mcp.yolo"
-            (change)="onYoloChange($any($event.target).checked)"
+            (change)="onYoloChange($any($event.target))"
           />
           <span>
             <span class="switch-label">YOLO mode — apply writes without confirmation</span>

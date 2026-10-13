@@ -7,8 +7,7 @@ import { SettingsPane } from '../settings-pane/settings-pane';
  * versions (from the `app:get-info` IPC) and the list of bundled
  * open-source dependencies with their licenses (from `assets/licenses.json`).
  *
- * Read-only -- it never touches `SettingsService.draft`, so it adds no
- * dirty state and cannot affect Save.
+ * Read-only -- it never touches `SettingsService.draft`.
  */
 @Component({
   selector: 'app-settings-about',

@@ -66,7 +66,7 @@ Now there is **one formatting strip** in two places:
   composer's prompts, ADR-0048) is left out of both; the Templates panel
   still lists the whole folder.
 
-Plugin SDK **1.21** (additive): `ToolbarButtonContrib.placement`
+Plugin SDK **1.22** (additive): `ToolbarButtonContrib.placement`
 (`'insert'`, the default — a row in the strip's Insert menu — or `'bar'`,
 an icon at the leading edge) and `popover(mount, close)` (the host owns
 the box and its anchoring, the plugin mounts plain DOM). The templates
@@ -75,10 +75,17 @@ plugin uses both; the diagrams plugin's button became the Insert menu's
 the rows they duplicated: the templates' recents and the diagrams'
 "Insert diagram" ("Edit diagram" stays).
 
-Considered and not built: a selection bubble that appears over marked
-text (pops up on every selection, hides the line above, and block
-commands have no selection to hang on) and a toolbar row of its own
-under the meta bar (costs a line of height for good).
+Fixed on the way: a spelling check still in flight when the text
+changed painted its underlines at the old offsets -- past the end of
+the text when a word had just been deleted -- and the next edit then
+threw while mapping them and was lost. The "Templates…" row (delete
+`/tem`, insert the template) hit exactly that, about one time in
+twenty. An edit now discards the reply of a check that judged the older
+text (`spellcheck.ts`, with a regression test).
+
+Considered and not built (recorded in `decisions.md`): a selection
+bubble that appears over marked text, and a toolbar row of its own
+under the meta bar.
 
 Code: `src/app/editor/markdown-toolbar.ts` (the strip),
 `toolbar-dispatch.ts` (the one dispatch path for both placements),
@@ -93,6 +100,71 @@ and `slash-entry.spec.ts` (picker from `/`: folders, no prompts, arrow
 keys). The diagrams e2e was adjusted but not run in this checkout (the
 draw.io web app is not fetched there). **Not yet manually verified by
 the owner.**
+### Settings apply at once — no Save, no Discard
+
+**Not yet manually verified by the owner.**
+
+- **One model for the whole dialog.** Core pages used a draft with Save /
+  Discard and an "unsaved changes" bar; plugin pages saved as you edit;
+  the footer changed per page. Now every change applies as it is made.
+  The footer shows "Changes are saved automatically" (or "Saving…", or
+  the error) and one **Close** button (ADR-0010 later change).
+- **Typed values are stored when the field is left** or on Enter, not per
+  keystroke — also when the window loses focus or the screen closes. A
+  half-typed URL or folder never reaches disk.
+- **A save no longer overwrites what a plugin page stored.** It writes
+  only the sections that changed, onto a fresh read of the stored
+  config. Before, Save sent the whole draft and could undo a change made
+  on a plugin page (Actions, Templates) since the screen opened.
+- **MCP "YOLO mode" asks before it turns on** — it now takes effect with
+  the click. The MCP page's "Listening on …" line follows each change.
+- **A new MCP server** shows "Enter a command to connect." until it has
+  one; its tool id follows its name while the page that added it is open.
+- A failed save keeps the screen open; the button then reads "Close
+  without saving".
+- No rollback: a theme tried and not liked is picked back by hand.
+
+### Milestone 73 — Lossless Markdown template ("Structure note")
+
+A third built-in Action template, **Structure note (lossless)**
+(`builtin:lossless-format`): it restructures a raw note into Markdown
+without adding, inferring or interpreting anything, and tags it from the
+vault's existing vocabulary only. The reply is free Markdown and goes
+through the ADR-0011 whole-document confirmation; an unchanged reply is
+a no-op. A fresh install ships one manual trigger for it, so it is a row
+in the editor's `⋯` menu out of the box; an existing config's trigger
+list is the user's own and stays untouched (add the trigger once in
+Settings → Actions).
+
+- **One vocabulary placeholder for every prompt.** `{{AVAILABLE_TAGS}}`
+  (`shared/llm/prompt-substitution.ts`, `substituteVocabulary`) is
+  replaced with the tag list at call time — in Autotag and in *every*
+  Action template the assistant runs, the user's own included. The
+  reserved `task` is never offered; an empty vocabulary reads
+  `(none yet)`. Autotag's old `{tags}` spelling keeps being substituted,
+  and a stored Autotag prompt that still equals the old default is
+  refreshed to the new one (a genuine edit keeps its text).
+- **Plugin SDK 1.21:** `ctx.search.sectionSearchProvider()` — the read
+  side of the section-search seam (mirroring `tasks.queryProvider()`).
+  The assistant's `ActionEngine` reads the tags plugin's vocabulary
+  through it; with the tags plugin disabled the list is empty.
+- **Deviation from the draft** (`classifier-spec.md`, formerly
+  "Planned"): no `{{NOTE}}` placeholder — the note rides the user
+  message like for every Action, so the built-in needs no special path
+  through the engine.
+- Not enforced: the prompt instructs the model to stay inside the
+  vocabulary, nothing strips an invented tag — the confirmation diff is
+  the check (roadmap follow-up).
+- Unit: `shared/llm/prompt-substitution.spec.ts` (token, legacy token,
+  `task` filter, empty vocabulary), `plugins/assistant/main/action-engine.spec.ts`
+  (system prompt assembly for the lossless template, no-op on an
+  unchanged reply), `app-config.spec.ts` (the third built-in, the seeded
+  trigger on a fresh config only, the legacy Autotag prompt refresh),
+  `actions-resolve.spec.ts` (the default resolved action).
+- Specs: `classifier-spec.md` (the placeholder section, the template as
+  shipped). Manual: the Actions section.
+
+**Not yet manually verified by the owner.**
 
 ### Manual stamp — the manual's footer states version and content date from the build
 

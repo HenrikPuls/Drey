@@ -44,9 +44,9 @@ Open work only. Everything implemented lives in
 lives in [`decisions.md`](decisions.md). When an item ships, move it to the
 changelog and delete it here — no shipped history on this page.
 
-**Status (2026-10-13):** version 0.5.0, milestones 1–72 shipped. Milestone
+**Status (2026-10-13):** version 0.5.0, milestones 1–73 shipped. Milestone
 ids are assigned when work starts — check `changelog.md` for the highest
-used (latest: milestone 72; latest requirement id: req-41, the formatting
+used (latest: milestone 73; latest requirement id: req-41, the formatting
 strip — an owner request outside the list, shipped in the same step).
 
 ### Known defects
@@ -55,10 +55,6 @@ strip — an owner request outside the list, shipped in the same step).
 
 ### Now (small, daily value)
 
-1. **Lossless Markdown template.** A built-in Action template that
-   restructures a note without adding facts and tags it from the existing
-   vocabulary only. Draft prompt: `classifier-spec.md` ("Planned"). Shares
-   the vocabulary-size limit with Autotag (see Next: tags at scale).
 2. **Assistant on a selection.** Actions already receive the selection
    (`SELECTED SECTION`). Missing: a button that appears at a selection
    (like Copilot in Office) to ask about it, with frequently used default
@@ -85,7 +81,8 @@ strip — an owner request outside the list, shipped in the same step).
     (fine to low hundreds) and there is no near-duplicate detection
     (`sailing` vs. `boat`). Add a pre-filter and a duplicate finder
     on top of the rename/merge tool (milestone 53) before the vocabulary
-    grows and before item 1 starts feeding it into a second prompt.
+    grows — since milestone 73 the lossless template feeds it into a
+    second prompt.
 
 ### Later
 
@@ -99,6 +96,62 @@ strip — an owner request outside the list, shipped in the same step).
   (filters, due dates, priorities, completion dates — ADR-0033) and the
   assistant's task block cannot do. If the answer is a live query block
   in a note, it borders the excluded dataview.js.
+
+### Architectural cleanup (from the 2026-10-13 review)
+
+Behaviour-neutral work on the structure, found in the architecture review
+of 2026-10-13 — evidence and reasoning per item in
+[`docs/11`](../docs/11_risks_and_technical_debt.md) ("Architecture review
+2026-10-13", same numbering). Not ordered against the feature lists above:
+the owner picks when one is taken. Within the section the order is by
+value for effort; A1 must come before A2.
+
+- **A1 — Move tests next to their code.** 62 of the 75 spec files in
+  `src/app/services/` test `shared/`, `electron/` or plugin code and run
+  in the Angular runner. Move each beside its source and into the
+  plain-Node suite (`vitest.plugins.config.mts`, extended to `shared/`);
+  merge the two files that exist twice (`app-config.spec.ts`,
+  `note-manager.spec.ts`).
+- **A2 — Lint the dependency rules.** Five rules hold only by convention:
+  `shared/` imports nothing outward, renderer and main never import each
+  other, the base imports no plugin, no plugin imports another, a
+  plugin's main half does not import `electron/`. Add them to
+  `eslint.config.mjs` (`docs/05`, "The dependency rules"). Needs A1.
+- **A3 — Break the two renderer import cycles.** (a) Take
+  `DailyNoteService` out of the `vault/` barrel — it opens documents and
+  sits above `EditorService`. (b) `TagVocabularyService` and
+  `SettingsDockWidgets` depend on a small interface or event instead of
+  `PluginHostService`.
+- **A4 — `DailyNoteManager` writes through `VaultManager`.** It creates
+  the daily note and `templates/daily.md` with raw `fsp.writeFile` (no
+  own-write ledger entry) and uses a fixed `templates` folder name while
+  `templates.dir` is a setting. ⚠️ Check first whether the fixed name is a
+  defect with another templates folder configured — if so it moves to
+  "Known defects".
+- **A5 — Split the composition root.** `electron/main.ts` (1,135 lines)
+  into "build the services" and "window and lifecycle";
+  `PluginHost.buildContext` (about 230 lines) into one builder per SDK
+  namespace.
+- **A6 — Plugin settings out of the base config.** `AppConfig` holds
+  `actions`, `templates`, `entry` and the plugins' built-in prompt texts.
+  Rule from now on: a new plugin setting goes into the plugin's own
+  config. Moving the existing slices changes the settings file —
+  ⚠️ owner decision, later change to ADR-0010.
+- **A7 — One generic service registry between plugins.** Three provider
+  slots (section search, semantic search, task query) were each added to
+  the base by hand, and the host names the assistant
+  (`assistantToolbox`, `tagSuggester`, `origin: 'assistant'`). Before a
+  fourth provider: a typed `provide` / `get` registry in the SDK.
+  ⚠️ Needs an ADR; a real alternative, not a refactoring.
+- **A8 — Large modules, when next touched.** `markdown-surface.ts`,
+  `vault-manager.ts` (vault registry apart from file operations; delete
+  the sidecar plumbing), `dock.service.ts`, the assistant's
+  `renderer/state.ts` and `main/semantic/service.ts`. No milestone of its
+  own.
+- **A9 — Make `docs/05` and `docs/06` readable.** Move the
+  milestone-by-milestone record (§5.1–§5.40) into an archive file and
+  group the 57 runtime flows by topic. Changes section numbers that
+  `CLAUDE.md` and the ADRs link to — ⚠️ owner decision.
 
 ### Needs an owner decision
 
@@ -139,6 +192,11 @@ strip — an owner request outside the list, shipped in the same step).
   embedding a plain `.drawio`, letting the assistant read a diagram.
 ~~- **Milestone 65 (Git, ADR-0065):** clone as a new vault, rebase /
   cherry-pick, partial staging, dotfiles in the tree.~~
+- **Milestone 73 (lossless template):** enforcing the vocabulary on the
+  reply (today the prompt only instructs; an invented tag is caught in
+  the confirmation diff), offering the built-in trigger to installs from
+  before the template (they add it once in Settings → Actions), running
+  it on a selection only.
 - **Milestone 66 (Office, ADR-0066):** rendering Office documents in a tab,
   "Open in default program" for other file types, a setting for the drop
   behaviour (copy or link).
@@ -156,7 +214,8 @@ strip — an owner request outside the list, shipped in the same step).
 - Tag sprawl: no near-duplicate detection. Autotagging biases toward
   existing vocabulary; the rename/merge tool (milestone 53) allows
   consolidating by hand — detection stays missing (Next, item 9).
-- Very large vocabularies: the Autotag prompt embeds the full tag list —
+- Very large vocabularies: the Autotag and lossless-template prompts embed
+  the full tag list —
   fine to low hundreds, needs a pre-filter beyond that (see
   `classifier-spec.md`; Next, item 9).
 - Documentation drift: `CLAUDE.md`'s milestone summary and the manual's

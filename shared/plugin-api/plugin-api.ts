@@ -227,13 +227,13 @@ export interface ToolbarButtonContrib {
   readonly commandId?: string;
   run?(): void;
   /**
-   * Where the button lives (SDK 1.21). `'insert'` (the default) is a row
+   * Where the button lives (SDK 1.22). `'insert'` (the default) is a row
    * in the bar's Insert menu, labelled by `title`; `'bar'` is an icon of
    * its own at the bar's leading edge.
    */
   readonly placement?: 'bar' | 'insert';
   /**
-   * A popover under the button instead of `run` / `commandId` (SDK 1.21,
+   * A popover under the button instead of `run` / `commandId` (SDK 1.22,
    * `placement: 'bar'` only): the host owns the box and its anchoring,
    * the plugin mounts plain DOM into `mount` and returns a teardown.
    * `close()` dismisses the popover (and the context menu the bar may

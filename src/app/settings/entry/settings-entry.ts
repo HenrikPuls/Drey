@@ -17,7 +17,7 @@ const SAMPLE_AT = new Date(2026, 8, 26, 8, 15);
  * Two built-ins ("Classic" reproduces the old fixed shape, "Ruled" adds a
  * rule + tag line); the user picks the active one and can add/edit their
  * own. Mirrors the Actions template library. Pure view; `SettingsService`
- * owns every mutation, persisted on Save.
+ * owns every mutation and saves it.
  */
 @Component({
   selector: 'app-settings-entry',

@@ -28,7 +28,7 @@ type MenuId = 'host' | 'paragraph' | 'format' | 'list' | 'table' | 'insert' | 'p
  * text formats, list, table, insert. One component, two placements: docked in
  * the editor's meta bar while pinned, and floating as the head of the
  * editor context menu (`overlay`), where it acts on whichever surface
- * was right-clicked. Plugin buttons (SDK 1.16 / 1.21) are rows of the
+ * was right-clicked. Plugin buttons (SDK 1.16 / 1.22) are rows of the
  * Insert menu, or an icon of their own at the leading edge when they
  * ask for `placement: 'bar'` -- with their own popover if they bring one.
  *
@@ -75,7 +75,7 @@ type MenuId = 'host' | 'paragraph' | 'format' | 'list' | 'table' | 'insert' | 'p
         </button>
       }
 
-      <!-- Plugin buttons that asked for a place in the bar (SDK 1.21). -->
+      <!-- Plugin buttons that asked for a place in the bar (SDK 1.22). -->
       @for (button of barButtons(); track button; let i = $index) {
         <button
           type="button"

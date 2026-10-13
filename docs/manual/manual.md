@@ -435,11 +435,24 @@ fail visibly.
 ### Actions
 
 **Actions** are saved prompts with behaviour — *Autotag* (suggest
-tags), *Search summary*, and your own: name + prompt + result kind
-(inline diff or whole-document preview). Triggers run **manually** from
-the editor's `⋯` menu or **on save**. Writing results pass through the
-shared confirmation dialog with a "don't ask again" switch. Managed in
-Settings → *Actions*.
+tags), *Search summary*, *Structure note (lossless)*, and your own:
+name + prompt + result kind (inline diff or whole-document preview).
+Triggers run **manually** from the editor's `⋯` menu or **on save**.
+Writing results pass through the shared confirmation dialog with a
+"don't ask again" switch. Managed in Settings → *Actions*.
+
+*Structure note (lossless)* turns a raw note into structured Markdown —
+headings and lists where they help, obvious typos fixed — without
+adding, dropping or interpreting anything, and tags it only with tags
+your vault already uses. It is in the `⋯` menu on a fresh install; if
+you had Drey before, add a manual trigger for it in Settings →
+*Actions*. You see the whole rewrite side by side before anything
+changes — check the tags there, the model is told to invent none but
+nothing forces it.
+
+In any Action prompt, `{{AVAILABLE_TAGS}}` is replaced with your vault's
+tags (one per line) when the Action runs. The note itself is always sent
+along; you do not need a placeholder for it.
 
 ### Suggest tags
 
@@ -671,9 +684,10 @@ meta bar's "Changed on disk" button opens the same view early.
 
 Open with the status-bar entry or `Ctrl+,`. Core categories are
 alphabetical, plugin-contributed ones follow, *About* closes the list.
-Core pages save on *Save* with a live preview. Every plugin page saves
-immediately — the footer says so there and shows *Close* in place of
-*Save* and *Discard*.
+Every change applies as you make it — there is no *Save* and no
+*Discard*. A switch or a list choice acts at once; a typed value is
+stored when you leave the field or press Enter. The footer shows
+"Changes are saved automatically" and one *Close* button.
 
 | Category | What lives there |
 | --- | --- |

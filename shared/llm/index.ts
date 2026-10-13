@@ -13,6 +13,8 @@
 export type { ActionContext, ActionOutcome, AskOutcome, ResolvedAction } from './actions';
 export { resolveActions } from './actions';
 
+export { LEGACY_VOCABULARY_TOKEN, VOCABULARY_TOKEN, substituteVocabulary } from './prompt-substitution';
+
 export type {
   ChatAttachment,
   ChatMessage,

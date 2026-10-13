@@ -194,3 +194,50 @@ Consequences:
   the same user.
 - `AppConfigStore` has a unit test now (`electron/app-config.spec.ts`),
   with the cipher passed in.
+
+## Later change — every change applies as it is made; no Save, no Discard
+
+The Settings screen had grown two models. Core pages edited a draft with
+*Save* / *Discard* and an "unsaved changes" bar on close; plugin pages
+(ADR-0044 rule 3) saved as you edit. The footer changed from page to
+page, and a user had to know per page whether a change already counted.
+Desktop settings conventionally apply at once (macOS, GNOME and Windows
+settings, VS Code, Obsidian); an explicit Save belongs to forms whose
+half-filled state is invalid, which a settings page is not.
+
+Decision: one model. A change applies as it is made, on every page. The
+footer shows the save status and a single **Close** button.
+
+The draft stays, because the fault that introduced it (above: input
+erased while typing, when a value round-tripped through IPC on each
+keystroke) is real. What changed is who saves it:
+
+- `SettingsService` saves the draft by itself 400 ms after the last edit.
+- While a text field has the focus the save waits; it runs when the field
+  is left, on Enter, when the window loses focus and when the screen
+  closes. A half-typed URL or folder name therefore never reaches disk,
+  and the bound `[value]` is never rewritten under the caret.
+- A save writes **only the top-level sections the draft changed**, onto a
+  fresh read of the stored config. Sending the whole draft could undo
+  what a plugin page had written through `api.appConfig.patch` since the
+  screen opened — a fault the Save button already had.
+- An edit made while a save is under way is kept and goes out with the
+  next one.
+- A failed save keeps the draft and the screen, shows the error in the
+  footer, and turns the button into "Close without saving".
+
+Consequences:
+
+- No rollback. Trying a theme and not liking it means picking the old one
+  again.
+- A switch acts when clicked. The one that can cost data — MCP "YOLO
+  mode" — asks before it turns on.
+- A new MCP server exists on disk before it has a command. Main reports
+  that as "no command configured"; the page shows "Enter a command to
+  connect." instead. Its id follows its name while the page that added
+  it is open, no longer "until first saved".
+- Forms that *create* something (an MCP server, an entry template) keep
+  their own Add / Remove buttons; that is not a page-level save.
+- The ADR-0020 later change (Appearance previews from the draft until
+  Save) is reduced to: the draft shows a change before its automatic
+  save.

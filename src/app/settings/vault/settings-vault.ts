@@ -7,8 +7,8 @@ import { SettingsPane } from '../settings-pane/settings-pane';
  * "Vault" settings category: how the app keeps up with external changes.
  * One switch today -- the opt-in chokidar watcher (ADR-0045, req-14).
  *
- * Pure view; the change goes into the draft and reaches disk (and with it
- * the main process's `syncVaultWatcher`) on Save.
+ * Pure view; the change goes into the self-saving draft and with the save
+ * reaches the main process's `syncVaultWatcher`.
  */
 @Component({
   selector: 'app-settings-vault',

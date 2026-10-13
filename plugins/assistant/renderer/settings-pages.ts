@@ -1,8 +1,7 @@
 /**
  * The Assistant plugin's Settings page (ADR-0044 stage 7), ported from
  * `src/app/settings/actions/` to plain DOM. Per ADR-0044 rule 3 it saves
- * immediately through `api.appConfig.patch` — no draft/Save/Discard (that
- * flow is the base categories'); each patch is a read-modify-write of the
+ * immediately through `api.appConfig.patch`; each patch is a read-modify-write of the
  * live config.
  *
  * The Actions page is the engine's config UI: triggers (which template on
@@ -92,7 +91,7 @@ export function actionsSettingsPage(
         el(
           'p',
           'section-hint',
-          'A template is a name, a prompt, and the kind of change it makes. “Autotagging” suggests tags for a note section (the editor’s “Suggest tags” row); “Update summary” rebuilds a master document’s Summary section.',
+          'A template is a name, a prompt, and the kind of change it makes. “Autotagging” suggests tags for a note section (the editor’s “Suggest tags” row); “Update summary” rebuilds a master document’s Summary section. The note itself is sent alongside the prompt; {{AVAILABLE_TAGS}} in a prompt is replaced with the vault’s tag vocabulary when it runs.',
         ),
       );
       const templateList = el('ul', 'cards');

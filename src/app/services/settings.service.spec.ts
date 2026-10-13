@@ -33,11 +33,12 @@ function fakeApi(): {
   };
 }
 
-describe('SettingsService (draft model)', () => {
+describe('SettingsService (self-saving draft)', () => {
   let service: SettingsService;
   let harness: ReturnType<typeof fakeApi>;
 
   beforeEach(async () => {
+    vi.useFakeTimers();
     harness = fakeApi();
     window.dreyApi = harness.api as DreyApi;
     service = TestBed.inject(SettingsService);
@@ -46,6 +47,7 @@ describe('SettingsService (draft model)', () => {
   });
 
   afterEach(() => {
+    vi.useRealTimers();
     delete (window as { dreyApi?: unknown }).dreyApi;
   });
 
@@ -54,7 +56,7 @@ describe('SettingsService (draft model)', () => {
     expect(service.isDirty()).toBe(false);
   });
 
-  it('keeps an edit in the draft and off disk until save', () => {
+  it('keeps an edit in the draft and off disk until it is saved', () => {
     service.patchLlm({ apiKey: 'sk-unsloth-abc' });
 
     expect(service.draft()?.llm.apiKey).toBe('sk-unsloth-abc');
@@ -100,13 +102,68 @@ describe('SettingsService (draft model)', () => {
     expect(service.config()?.llm.apiKey).toBe('sk-unsloth-KEY');
   });
 
-  it('discard throws the draft away and leaves disk untouched', () => {
-    service.patchLlm({ apiKey: 'sk-nope' });
-    service.discard();
+  describe('automatic save', () => {
+    it('saves by itself a moment after the last edit', async () => {
+      service.patchVault({ watch: true });
+      service.patchDaily({ openOnStartup: false });
+      expect(harness.setCalls()).toBe(0);
 
-    expect(service.isDirty()).toBe(false);
-    expect(service.draft()?.llm.apiKey).toBeNull();
-    expect(harness.setCalls()).toBe(0);
+      await vi.advanceTimersByTimeAsync(500);
+
+      expect(harness.setCalls()).toBe(1); // one write for both edits
+      expect(harness.stored().vault.watch).toBe(true);
+      expect(harness.stored().daily.openOnStartup).toBe(false);
+      expect(service.isDirty()).toBe(false);
+    });
+
+    it('waits while a text field is being typed in, and saves on flush', async () => {
+      service.editingText.set(true);
+      service.patchLlm({ baseUrl: 'http://127.0.0.1:88' });
+      await vi.advanceTimersByTimeAsync(5000);
+      expect(harness.setCalls()).toBe(0); // a half-typed URL never reaches disk
+
+      service.patchLlm({ baseUrl: 'http://127.0.0.1:8888/v1' });
+      service.editingText.set(false);
+      expect(await service.flush()).toBe(true);
+
+      expect(harness.setCalls()).toBe(1);
+      expect(harness.stored().llm.baseUrl).toBe('http://127.0.0.1:8888/v1');
+    });
+
+    it('flush with nothing pending writes nothing', async () => {
+      expect(await service.flush()).toBe(true);
+      expect(harness.setCalls()).toBe(0);
+    });
+
+    it('writes only the sections it changed, over what is stored now', async () => {
+      // A plugin page wrote `templates` straight to disk in the meantime
+      // (api.appConfig.patch) -- the draft still holds the old value.
+      await harness.api.setConfig!({
+        ...harness.stored(),
+        templates: { ...harness.stored().templates, dir: 'snippets' },
+      });
+
+      service.patchVault({ watch: true });
+      expect(await service.flush()).toBe(true);
+
+      expect(harness.stored().vault.watch).toBe(true);
+      expect(harness.stored().templates.dir).toBe('snippets'); // not undone
+      expect(service.config()?.templates.dir).toBe('snippets');
+    });
+
+    it('keeps an edit made while a save was on its way, and saves it next', async () => {
+      service.patchVault({ watch: true });
+      const first = service.flush();
+      service.patchDaily({ dir: 'Journal' }); // lands mid-save
+      expect(await first).toBe(true);
+
+      expect(service.draft()?.daily.dir).toBe('Journal');
+      expect(service.isDirty()).toBe(true);
+
+      expect(await service.flush()).toBe(true);
+      expect(harness.stored().daily.dir).toBe('Journal');
+      expect(harness.stored().vault.watch).toBe(true);
+    });
   });
 
   it('runtime state reads the persisted config, never the draft', async () => {
@@ -138,7 +195,7 @@ describe('SettingsService (draft model)', () => {
     expect(service.templatesDir()).toBe('snippets');
   });
 
-  it('closeScreen discards the draft', () => {
+  it('closeScreen drops what the draft still holds (the screen flushes first)', () => {
     service.patchLlm({ apiKey: 'sk-nope' });
     service.closeScreen();
 
@@ -258,8 +315,8 @@ describe('SettingsService (draft model)', () => {
     });
   });
 
-  describe('editor font family (Settings -> Appearance) — draft model (ADR-0020 later change)', () => {
-    it('keeps the choice in the draft and previews it live until save', () => {
+  describe('editor font family (Settings -> Appearance)', () => {
+    it('shows the choice at once, before it is saved', () => {
       service.setEditorFontFamily('serif');
 
       expect(service.editorFontFamily()).toBe('serif'); // live preview (screen open)
@@ -267,14 +324,6 @@ describe('SettingsService (draft model)', () => {
       expect(service.config()?.editor.fontFamily).toBe('sans'); // untouched on disk
       expect(service.isDirty()).toBe(true);
       expect(harness.setCalls()).toBe(0);
-    });
-
-    it('rolls the preview back on discard', () => {
-      service.setEditorFontFamily('serif');
-      service.discard();
-
-      expect(service.editorFontFamily()).toBe('sans');
-      expect(service.isDirty()).toBe(false);
     });
 
     it('reaches disk on save', async () => {
@@ -293,8 +342,8 @@ describe('SettingsService (draft model)', () => {
     });
   });
 
-  describe('appearance (Settings -> Appearance) — draft model (ADR-0020 later change)', () => {
-    it('keeps the UI scale in the draft and previews it live until save', () => {
+  describe('appearance (Settings -> Appearance)', () => {
+    it('shows the UI scale at once, before it is saved', () => {
       service.setAppearanceUiScale('large');
 
       expect(service.appearanceUiScale()).toBe('large'); // live preview
@@ -313,7 +362,7 @@ describe('SettingsService (draft model)', () => {
       expect(service.draft()?.appearance.accent).toBe('theme');
     });
 
-    it('keeps the theme id in the draft and previews it live until save', () => {
+    it('shows the theme at once, before it is saved', () => {
       service.setAppearanceTheme('dracula');
       expect(service.appearanceTheme()).toBe('dracula');
       expect(service.draft()?.appearance.theme).toBe('dracula');
@@ -321,19 +370,7 @@ describe('SettingsService (draft model)', () => {
       expect(service.isDirty()).toBe(true);
     });
 
-    it('rolls the whole Appearance preview back on discard', () => {
-      service.setAppearanceUiScale('small');
-      service.setAppearanceAccent('#0055ff');
-      service.setAppearanceTheme('nord');
-      service.discard();
-
-      expect(service.appearanceUiScale()).toBe('default');
-      expect(service.appearanceAccent()).toBe('theme');
-      expect(service.appearanceTheme()).toBe('anthrazit');
-      expect(service.isDirty()).toBe(false);
-    });
-
-    it('persists on save and stops previewing from the draft', async () => {
+    it('persists on save', async () => {
       service.setAppearanceUiScale('small');
       expect(await service.save()).toBe(true);
 
@@ -353,7 +390,7 @@ describe('SettingsService (draft model)', () => {
 
     it('shows the saved config, not the draft, once the screen is closed', () => {
       service.setAppearanceAccent('#0055ff');
-      service.closeScreen(); // discards + closes
+      service.closeScreen(); // closed without a flush
 
       expect(service.appearanceAccent()).toBe('theme');
     });

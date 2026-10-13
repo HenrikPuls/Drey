@@ -169,10 +169,11 @@ title and the optional `description` (SDK 1.20, one sentence) below it —
 so `mount(el)` builds only the fields; do not repeat the title as a
 heading.
 
-Pages **save immediately** through their own API — the Settings screen's
-draft/Save/Discard does not apply to them (ADR-0044 rule 3), and on your
-page its footer says so ("Changes on this page are saved immediately",
-with Close) — don't repeat that in a hint. Use `api.settings` for the
+Pages **save immediately** through their own API (ADR-0044 rule 3) —
+like every Settings page: the screen has no Save or Discard, and its
+footer says "Changes are saved automatically" — don't repeat that in a
+hint. Store a typed value on `change` (blur / Enter), not per keystroke.
+Use `api.settings` for the
 plugin's own `config.json`, `api.appConfig` only when a setting belongs
 to app-level config (read-modify-write one section per patch).
 
@@ -266,7 +267,7 @@ pure-field case.
 - `api.editor.registerToolbarButtons([{ icon, title, run | commandId }])`
   adds commands to the formatting strip of every document editor. By
   default a button is a row in the strip's *Insert* menu, labelled by
-  its `title`; see "SDK 1.21" below for an icon of its own. `icon` is
+  its `title`; see "SDK 1.22" below for an icon of its own. `icon` is
   a name from the host's set (as for `api.ui.icon`). A button acts on
   the focused document: use `api.documents.insertAtCursor`. That insert lands on the
   editor's next render — wait for it (the buffer contains your text)
@@ -332,7 +333,16 @@ pure-field case.
   panes and plugin pages share one stylesheet (see "The shared form
   vocabulary" above).
 
-## SDK 1.21 — a place in the formatting strip, and your own popover
+## SDK 1.21 — reading the section-search provider
+
+- `ctx.search.sectionSearchProvider()` returns the registered
+  `SectionSearchProvider` or `null` — the read side of the seam, like
+  `ctx.tasks.queryProvider()`. Use it for the vault's tag vocabulary
+  (`vocabulary()`) or a section search from your main entry; always
+  handle `null` (the tags plugin may be disabled) and ask at call time,
+  not once at activation — providers register in activation order.
+
+## SDK 1.22 — a place in the formatting strip, and your own popover
 
 - `ToolbarButtonContrib.placement` (optional): `'insert'` (the default)
   is a row in the strip's Insert menu; `'bar'` is an icon at the

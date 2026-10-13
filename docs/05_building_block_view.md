@@ -1,5 +1,123 @@
 # 5. Building Block View
 
+## Overview — start here
+
+This page is long. The overview below is the whole picture on one
+screen; everything after it is reference.
+
+### The four parts
+
+```mermaid
+graph TB
+    subgraph Base["Base application"]
+        Renderer["<b>Renderer</b> — src/app/<br/>the window: shell, editor, docks,<br/>settings, dialogs<br/>Angular + CodeMirror, sandboxed"]
+        Main["<b>Main process</b> — electron/<br/>files, vaults, models, MCP,<br/>windows, the plugin host<br/>Node"]
+    end
+    Plugins["<b>Plugins</b> — plugins/&lt;id&gt;/<br/>one feature each: a main half (Node)<br/>and a renderer half (plain DOM)"]
+    Shared["<b>Shared</b> — shared/<br/>contracts (IPC, plugin SDK, config)<br/>and pure logic both sides use"]
+
+    Renderer <-->|"typed bridge (IPC)"| Main
+    Plugins -->|"plugin SDK"| Renderer
+    Plugins -->|"plugin SDK"| Main
+    Renderer --> Shared
+    Main --> Shared
+    Plugins --> Shared
+```
+
+| Part | Responsibility | Size (lines, without tests) |
+|---|---|---|
+| **Renderer** `src/app/` | Everything the user sees and touches. Holds no file or network access; asks the main process for it. | 29,800 |
+| **Main process** `electron/` | Everything that touches the machine: vault files, the model transport, MCP, windows, loading plugins. Knows no feature. | 11,900 |
+| **Shared** `shared/` | The contracts between the other three — the IPC interface, the plugin SDK, the config shape — and pure functions (frontmatter, tags, wikilinks, diffing, the Markdown dialect). Runs anywhere, depends on nothing. | 11,500 |
+| **Plugins** `plugins/` | The features: tags and search, tasks, templates, the assistant, the browser tab, OCR, outline, backlinks, diagrams, Git, meeting import. | 26,400 |
+
+### The dependency rules
+
+These are what keep the four parts separate. All of them hold in the
+code today (checked 2026-10-13 over every non-test import).
+
+| Rule | Enforced by |
+|---|---|
+| `shared/` imports from none of the other three. | convention |
+| Renderer and main process never import each other. They meet in `shared/ipc-api.ts`. | convention |
+| The base never imports a plugin. It reaches plugin behaviour only through a registry the plugin filled. | convention |
+| A plugin imports only its own folder and `shared/`. Never `src/`, never `electron/`, never another plugin. | renderer half: the plugin build fails. Main half: convention — ADR-0044 would allow it `electron/`, but no plugin uses that, and it should stay so |
+| A plugin does not load its own CodeMirror or Angular. | lint |
+| A plugin's renderer half has no Node access. | lint |
+| Outside a base module, import its `index.ts`, not a file inside it. | lint ([ADR-0016](09_architecture_decisions/0016-feature-module-convention.md)) |
+
+The rows marked "convention" are the ones a lint rule should take over
+([§11](11_risks_and_technical_debt.md), architecture review 2026-10-13).
+
+### How a request travels
+
+Two paths cover almost everything:
+
+- **A base feature** (open a file, save, change a setting): a renderer
+  service calls `window.dreyApi.<method>`; the preload forwards it on a
+  named channel; a handler in `electron/ipc/` calls the owning class
+  (`VaultManager`, `NoteManager`, …) and returns the result.
+- **A plugin feature** (search, ask the assistant, commit): the plugin's
+  renderer half calls `api.backend.invoke('method', payload)`. All
+  plugins share two fixed channels (`plugin:invoke`, `plugin:event`);
+  the plugin host in main routes the call to the handler that plugin
+  registered. The plugin's main half works through `MainPluginContext`
+  and never holds a base object directly.
+
+### The main process, by responsibility
+
+| Group | Blocks | Job |
+|---|---|---|
+| Start-up | `main.ts`, `splash.ts`, `content-security-policy.ts` | Builds every object below, creates the window, registers the `app://`, `drey-asset://` and `plugin://` schemes. |
+| Vault and notes | `vault-manager.ts`, `note-manager.ts`, `daily-note.ts`, `link-rewriter.ts`, `history/`, `safe-file.ts`, `path-guard.ts`, `trash-delete.ts` | The vault registry and every file operation; the save pipeline with its conflict check; local versions. |
+| Outside changes | `vault-watcher.ts`, `own-write-ledger.ts`, `vault-change-announcer.ts` | Notices files changed by other programs and tells indexes and open tabs. |
+| Models | `llm/` | One `LlmClient` interface, a router that picks the provider per call, one client per backend, cancellable tasks. |
+| Tools | `mcp/`, `mcp-client/` | The MCP server Drey offers to other programs; the external tool servers and `web_fetch` the assistant may call. |
+| Plugins | `plugin-host/` | Finds, validates, activates and isolates failures of plugins; builds each one's context; installs packages. |
+| App state | `app-config.ts`, `config-secrets.ts`, `session/`, `logger.ts` | Settings on disk (secrets encrypted), the tab session and unsaved buffers, the log file. |
+| Single services | `spellcheck.ts`, `pdf-export.ts`, `external-open.ts`, `open-document.ts` | One job each. |
+| The bridge | `preload.ts`, `ipc/` | The renderer-facing surface: thin handlers, no logic of their own. |
+
+### The renderer, by responsibility
+
+| Group | Blocks | Job |
+|---|---|---|
+| Shell | `app.ts`, `titlebar/`, `status-bar/`, `dock/`, `panes/`, `tab-bar/` | The window frame, the three docks and their panels, the split tree of editor panes. |
+| Documents | `services/editor.service.ts` over `open-docs.store.ts`, `doc-open.service.ts`, `doc-save.service.ts`, `doc-disk-sync.service.ts`; `session/` | Which documents are open, their dirty state, opening, saving, reloading from disk, restoring the session. |
+| Editor | `editor/` | The only place CodeMirror is used: Live Preview, source mode, the Markdown dialect, toolbar, slash menu, spellcheck, wikilinks, tag pills. |
+| Vault view | `vault/`, `calendar/`, `windows/` | The Files panel and file operations, the calendar, the open-windows list. |
+| Dialogs and viewers | `confirmation-dialog/`, `conflict/`, `history/`, `diff-view/`, `link-update/`, `tool-approval/`, `image-viewer/`, `pdf-viewer/`, `palette/`, `help/` | Each one surface. |
+| Settings | `settings/`, `services/settings.service.ts` | The settings overlay and the config it edits. |
+| Commands | `keybindings/` | Every command and its shortcut; the menu, the palette and the shortcuts page read this registry. |
+| Plugins | `plugin-host/` | Loads plugin renderer modules, implements `DreyPluginApi`, owns the registries plugins fill, mounts their DOM. |
+
+### A plugin
+
+```text
+plugins/<id>/
+  plugin.json     id, name, entry points, the SDK version it needs
+  main/           runs in the main process: indexes, file work, model calls
+  renderer/       runs in the window: plain DOM, bundled into one file
+  shared/         types and pure logic both halves use
+```
+
+A plugin extends the app by registering with the base — a dock panel, a
+tab kind, a settings page, a command, an editor extension, a save hook,
+a search provider. The full list is "The seams" in §5.0. Where one
+plugin needs another's data (the assistant listing tasks, the MCP server
+searching tags), it asks the base for a provider the other plugin
+registered; it gets `null` when that plugin is disabled and degrades.
+
+### Where to read on
+
+| You want | Go to |
+|---|---|
+| The current structure in detail, block by block | §5.0, "The blocks" and "Component reference (current)" |
+| Which files implement a given feature | §5.0, "Feature → files index" |
+| What a plugin can hook into | §5.0, "The seams" |
+| Why something is the way it is | the ADR linked from the section, [§9](09_architecture_decisions.md) |
+| How it looked at an earlier milestone | §5.1 to §5.40 — a dated record, not the current state |
+
 > **Reading order.** **§5.0 is the current structure** (base application
 > + runtime plugins, [ADR-0044](09_architecture_decisions/0044-runtime-plugin-system.md)).
 > The rest of this file is layered by milestone: each
@@ -79,7 +197,7 @@ restore, keybindings, spellcheck, the MCP vault server, the LLM
   `panes/` (centre split tree **plus the dock regions**),
   `tab-bar/`, `editor/` (+ the editor-extension /
   drop-decoder / context-menu / doc-kind registries behind it),
-  `entry/`, `calendar/`, `vault/`, `image-viewer/`,
+  `calendar/`, `vault/`, `image-viewer/`,
   `confirmation-dialog/`, `services/`.
 - `plugin-host/` — `plugin-host.service.ts` (activation, quarantine,
   event fan-out, visibility synthesis), `plugin-api-impl.ts` (the
@@ -157,8 +275,8 @@ graph TB
         HostM["plugin-host (main)<br/>discovery · activation · quarantine ·<br/>plugin:// root resolution · config store"]
         Installer["plugin-installer (ADR-0068)<br/>local .zip packages: pick · validate ·<br/>extract under <userData>/plugins · remove"]
         IO["VaultManager · NoteManager<br/>(save/vault hook registries) ·<br/>DailyNote · Session backups"]
-        LLM["llm/: LmStudioClient · debug log ·<br/>task registry · tag-suggest"]
-        MCP["mcp/: VaultTools (vault_search via<br/>registered SectionSearchProvider)"]
+        LLM["llm/: LlmClient + LlmRouter over providers/ ·<br/>debug log · task registry · tag-suggest"]
+        MCP["mcp/: VaultTools (vault_search via<br/>registered SectionSearchProvider) ·<br/>mcp-client/: external servers + web_fetch"]
     end
     subgraph Plugins["plugins/<id>/  (dist-electron/plugins/<id>/)"]
         P1["templates · meeting · tags ·<br/>tasks · assistant · browser · ocr ·<br/>outline · backlinks · drawio · git"]
@@ -204,7 +322,7 @@ fills** — base knows the interfaces, not the features:
 | Document read/observe/insert/confirmed rewrite/open + the live-edit input lock | `documents.*` (incl. `setEditLock`, ADR-0049) | — |
 | Vault IO + change push | `vault.*` (incl. `saveAsset`) | `ctx.vault.*` (incl. `writeAnnounced`; `announceChanges` after a plugin rewrote the working tree, SDK 1.17) |
 | Backend methods + pushes (the plugin's own IPC) | `backend.invoke` / `backend.on` | `ctx.ipc.handle` / `ctx.ipc.emit` |
-| Save pipeline (`{content?, pendingActions?}`), vault lifecycle, section search, semantic search | — | `ctx.save`, `ctx.vault` hooks, `ctx.search` (`notifyChanged` pushes `search:changed` to the base vocabulary service, SDK 1.9; the provider's optional `styles()` serves the tag prefix colors; `registerSemanticSearch` is the second, parallel single slot — SDK 1.18, the assistant's similarity index for the Search panel's semantic mode and MCP `vault_search` mode `semantic`, ADR-0055 later change) |
+| Save pipeline (`{content?, pendingActions?}`), vault lifecycle, section search, semantic search | — | `ctx.save`, `ctx.vault` hooks, `ctx.search` (`notifyChanged` pushes `search:changed` to the base vocabulary service, SDK 1.9; the provider's optional `styles()` serves the tag prefix colors; `sectionSearchProvider()` is the seam's read side for other plugins — SDK 1.21, the assistant's action engine takes the tag vocabulary for `{{AVAILABLE_TAGS}}` from it; `registerSemanticSearch` is the second, parallel single slot — SDK 1.18, the assistant's similarity index for the Search panel's semantic mode and MCP `vault_search` mode `semantic`, ADR-0055 later change) |
 | LLM transport | `llm.chat/cancelTask/onDebugEntry/onDelta/listModels/capabilities/onCapabilitiesChanged` | `ctx.llm.chat/suggestTags/capabilities` (chat gains `tools`/`onToolCall`/`maxToolRounds`, ADR-0049; `maxOutputTokens` + the capability push, ADR-0050) |
 | Per-plugin config, app config read/patch | `settings.*`, `appConfig.*` | `ctx.config`, `ctx.appConfig` |
 | Native-surface hide (overlays/gestures) | `env.onNativeSurfaceVisibility` | — |
@@ -285,7 +403,9 @@ Keep it in step whenever a component boundary changes (CLAUDE.md's
   seam), the backlinks `BacklinkIndex` (milestone 54) — live in
   their plugins.
   `suggestTags` (the Autotag prompt) stayed base:
-  `electron/llm/tag-suggest.ts`
+  `electron/llm/tag-suggest.ts`. It and the assistant's `ActionEngine`
+  share one vocabulary placeholder, `{{AVAILABLE_TAGS}}`
+  (`shared/llm/prompt-substitution.ts`, milestone 73)
 - `LmStudioClient` — HTTP client for the local OpenAI-compatible endpoint
   (`GET /models`, `POST /chat/completions`), optional bearer API key.
   **No timeout on generation** — a local model may think for minutes; the
@@ -554,7 +674,7 @@ Keep it in step whenever a component boundary changes (CLAUDE.md's
   watcher, ADR-0045; `vault.updateLinksOnRename`, ADR-0059; `vault.history`, ADR-0060) — then **plugin-contributed categories** (sorted by
   label) before "About" and rendered through
   `PluginSettingsHost` (author guide `plugins/AUTHORING.md`), saving
-  immediately rather than via the footer bar (ADR-0044 rule 3). Opened
+  through their own API (ADR-0044 rule 3). Opened
   from the status-bar entry. Category list is descriptor-driven
   (`*ngComponentOutlet`). **One stylesheet, `settings-ui.css`, is the
   whole Settings vocabulary** — page frame (title + description),
@@ -562,11 +682,14 @@ Keep it in step whenever a component boundary changes (CLAUDE.md's
   and the focus ring — for core panes and plugin pages alike: global,
   scoped under the dialog's `.settings-ui` inside `:where()` so a pane's
   own rules win; all sans (ADR-0057), mono only for code. The
-  close (X) is top-right; the footer Discard is always enabled and closes,
-  warning first when the draft is dirty. On a page that saves as you
-  edit (`SettingsCategory.savesImmediately`, every plugin page) the
-  footer says so and offers Close instead of Save / Discard — unless the
-  core draft is dirty, which keeps Save / Discard in reach
+  close (X) is top-right. **Every change applies as it is made**
+  (ADR-0010 later change): there is no Save and no Discard; the footer
+  shows the save status ("Changes are saved automatically" / "Saving…" /
+  the error) and one Close button. `Settings` tells `SettingsService`
+  while a text field has the focus (`editingText`) and flushes on
+  focus-out, Enter, window blur and close, so a typed value is stored
+  when the field is left; a failed save keeps the screen open and the
+  button becomes "Close without saving"
 - `ConfirmationDialogComponent` — the one confirmation dialog shared by
   Actions, Ask-mode edits and MCP `vault_write` (inline line diff for a
   localized change; an **aligned split diff** — equal-size halves — for a
@@ -732,7 +855,7 @@ decision. (Seams — what a *plugin* can extend — are the table above.)
 | Extended Markdown dialect (highlight, math/KaTeX, callouts, footnotes, emoji, linkify) + insert affordances (formatting strip, slash rows, emoji picker, `:`-completion, formatting eraser) | `src/app/editor/markdown-extensions.ts`, `live-preview/` (`conceal.ts`, `block-render.ts`, `math-widget.ts`, `extended-widgets.ts`), `toolbar-commands.ts`, `emoji/`, `src/app/emoji-picker/`, `shared/markdown/`, `shared/pdf-html.ts` + `electron/pdf-export.ts` | Base | ADR-0070 |
 | Non-Markdown code files (language mode, source-only) | `src/app/editor/markdown-surface/` (language compartment) | Base | ADR-0036 |
 | Formatting strip (docked in the meta bar while pinned, head of the editor context menu) + slash formatting blocks | `src/app/editor/markdown-toolbar.ts`, `toolbar-commands.ts`, `toolbar-dispatch.ts`, `slash-commands.ts`, `src/app/editor-context-menu/` (`format-strip-target.ts`) | Base | M42, ADR-0057, req-41 |
-| Template picker (filter, folder tree, preview; the strip's popover and the `/` menu's "Templates…" row) | `plugins/templates/renderer/picker.ts`, `slash.ts`, `library.ts` (`noteCategories`: without `prompts/`) | templates plugin | req-41, SDK 1.21 |
+| Template picker (filter, folder tree, preview; the strip's popover and the `/` menu's "Templates…" row) | `plugins/templates/renderer/picker.ts`, `slash.ts`, `library.ts` (`noteCategories`: without `prompts/`) | templates plugin | req-41, SDK 1.22 |
 | Snippets (`tbl`, `code`, … with tabstops) | `plugins/templates/` + Settings → Templates | Plugin templates | M46 |
 | Tag pills + `#tag` completion (the tag chrome) | `src/app/editor/tags/`, `TagVocabularyService` | Base | ADR-0017 |
 | Tag index, prefix colors, rename/merge | `plugins/tags/` (main + Settings → Tags) | Plugin tags | ADR-0017, M53 |
@@ -741,6 +864,7 @@ decision. (Seams — what a *plugin* can extend — are the table above.)
 | Tasks panel + inline due/priority metadata | `plugins/tasks/` | Plugin tasks | ADR-0033 |
 | Assistant chat + chat notes (`chats/`) | `plugins/assistant/` (`chat-engine.ts`, `chat-store.ts`) | Plugin assistant | ADR-0048 |
 | Manual Actions (run + on-save queue) | `plugins/assistant/` + `editor-more` menu rows | Plugin assistant | ADR-0011, ADR-0012 |
+| "Structure note (lossless)" built-in Action + the `{{AVAILABLE_TAGS}}` prompt placeholder | `shared/config/schema.ts` (`LOSSLESS_FORMAT_PROMPT`), `shared/llm/prompt-substitution.ts`, `plugins/assistant/main/action-engine.ts` | Shared + plugin assistant | `specs/classifier-spec.md`, M73 |
 | Live edit (model edits the open note) | `plugins/assistant/` + `documents.setEditLock` | Plugin assistant | ADR-0049 |
 | Semantic retrieval (the Vault chip) | `plugins/assistant/main/semantic/` | Plugin assistant | ADR-0055 |
 | Assistant tool groups + external MCP servers | `electron/mcp-client/`, `src/app/tool-approval/`, Settings → "Assistant tools" | Base | ADR-0063 |
@@ -1045,8 +1169,8 @@ src/                Angular renderer (standalone components, esbuild via Angular
                             accent hex onto --accent at :root and pushes the UI-scale
                             preset through dreyApi.setUiZoomFactor. Reads
                             SettingsService's effective getters, which preview the
-                            draft while the Settings screen is open (ADR-0020 later
-                            change) — Discard rolls the look back. Instantiated by App.
+                            draft while the Settings screen is open, so a change
+                            shows before its automatic save. Instantiated by App.
                             The 'theme' accent sentinel resolves against ThemeService.
       theme.service.ts     Applies the selected theme (ADR-0035). For a published
                             theme writes the seed's bg/fg onto --_bg/--_fg + a
@@ -1073,13 +1197,16 @@ src/                Angular renderer (standalone components, esbuild via Angular
                           and the image tab); ImageTab (centre-column view for a
                           kind:'image' OpenDoc, picked by editor.activeKind()).
       settings.service.ts  Two signals: `config` (persisted) and `draft` (what the
-                            Settings screen edits). Pane mutators write the draft
-                            only; save() sends it via setConfig and adopts the
-                            normalised result, discard() resets it, isDirty compares
+                            Settings screen edits). Pane mutators write the draft,
+                            which saves itself (ADR-0010 later change): 400 ms after
+                            the last edit, held while `editingText` is set, at once
+                            on flush(). save() reads the stored config, writes only
+                            the top-level sections the draft changed, and keeps what
+                            was edited while it was under way; isDirty compares
                             structurally (shared/deep-equal.ts). Runtime state
                             (llmEnabled, manualActions) reads `config`, never the
-                            draft. setTriggerConfirmImmediate is the one persist-now
-                            path (the dialog's "don't ask again"). Also holds the
+                            draft. The dialog-side switches ("don't ask again", …)
+                            persist on their own path. Also holds the
                             model list + connection-test state (ADR-0010/0011)
       confirmation.service.ts  The one confirmation mechanism (ADR-0011): request()
                             shows the shared dialog and resolves to the user's
@@ -1111,7 +1238,7 @@ src/                Angular renderer (standalone components, esbuild via Angular
                         (ADR-0035: ThemeService writes the seed vars / data-theme).
                         dock-widgets/ SettingsDockWidgets: a checkbox per WIDGETS
                         entry -> AppConfig.widgets.disabled (ADR-0034); DockService
-                        reconciles on Save. actions/ SettingsActions:
+                        reconciles once the toggle is saved. actions/ SettingsActions:
                         trigger rows (event / confirm / enabled) + template library CRUD.
                         about/ SettingsAbout: read-only -- app/Electron/Chromium/Node
                         version (app:get-info IPC) + a scrollable list of production
@@ -1250,7 +1377,7 @@ src/                Angular renderer (standalone components, esbuild via Angular
                          at first, one menu at a time. The
                          pin toggles the persisted `toolbar` pref.
                          Plugin buttons are Insert-menu rows, or
-                         -- `placement: 'bar'`, SDK 1.21 -- icons at
+                         -- `placement: 'bar'`, SDK 1.22 -- icons at
                          the leading edge with their own popover
                          (the templates plugin's picker).
       slash-commands.ts  The `/` selection dialog (milestone 42): the toolbar's
@@ -1990,7 +2117,9 @@ the `Sidebar` settings entry, the editor `⋯` menu, and the chat bar._
   can also be typed, so a server that doesn't expose that endpoint (or
   rejects it before a key is entered) is still usable. Mirrors Unsloth's
   own "Load Models … or enter model IDs manually" affordance.
-- **The Settings screen edits a draft; only Save crosses IPC** (ADR-0010).
+- _Superseded by the ADR-0010 later change (the draft now saves itself;
+  no Save, no Discard, no close prompt) — kept for the record:_
+  **The Settings screen edits a draft; only Save crosses IPC** (ADR-0010).
   `SettingsService` holds `config` (persisted) and `draft` (edited);
   `isDirty` is a structural compare (`shared/deep-equal.ts`). Replaced a
   persist-on-every-change design that could _erase input as you typed_
@@ -2055,6 +2184,10 @@ the `Sidebar` settings entry, the editor `⋯` menu, and the chat bar._
   digest), `autotag` (drawer button). "Update summary" is gone with
   master documents; "Autotagging" became the vocabulary-based `autotag`,
   `{"tags":[…]}` with no `{registry_list}`.)_
+  _(Update — milestone 73: the built-ins are `search-summary`, `autotag`
+  and `lossless-format` ("Structure note (lossless)", a whole-document
+  rewrite); the last one ships with a manual trigger on a fresh config.
+  `note-summary` is retired.)_
   - **Autotagging** — its prompt text _is_ the classifier's Prompt 2
     system prompt (`{registry_list}` injected at call time), so it is
     genuinely wired to the classifier, not a second copy. Ships with a
@@ -3426,7 +3559,7 @@ main-side plugin writes.
 | Diagram files | `plugins/drawio/renderer/diagram-file.ts` | Pure: the three formats (`.drawio.svg`, `.drawio.png`, `.drawio`), the tab key `drawio://<vaultId>/<path>`, where a new diagram goes (`attachments/` beside the note), blank files, and reading / replacing the diagram XML inside an SVG (`content` attribute) or a PNG (`tEXt` chunk `mxfile`). |
 | Embed session | `plugins/drawio/renderer/embed-session.ts` | `EmbedSession`: draw.io's JSON embed protocol and the autosave rule — load on `init`, export on every change (one in flight), debounced write, flush on close, the newest XML put into the last picture when the tab closes mid-export. Frame, file and clock are ports. |
 | Plugin entry | `plugins/drawio/renderer/index.ts` | The `drawio` doc kind (an iframe over `plugin://drawio/webapp/`), the file opener, "Edit diagram" in the editor context menu, the formatting strip's "Insert diagram" row (Insert menu), the `drawio.new` command + File row, and the Settings → Diagrams page (format of new diagrams, in the plugin's own config). `slash.ts` adds `/diagram` to the slash menu's "Formatting" section. |
-| Toolbar buttons | `src/app/plugin-host/menu-contributions.service.ts`, `src/app/editor/markdown-toolbar.ts` | `ToolbarContributionsService` (SDK 1.16, `editor.registerToolbarButtons`): plugin buttons of the formatting strip -- a row in its Insert menu by default, or (SDK 1.21, `placement: 'bar'`) an icon at the leading edge, optionally with a `popover` the plugin mounts plain DOM into. |
+| Toolbar buttons | `src/app/plugin-host/menu-contributions.service.ts`, `src/app/editor/markdown-toolbar.ts` | `ToolbarContributionsService` (SDK 1.16, `editor.registerToolbarButtons`): plugin buttons of the formatting strip -- a row in its Insert menu by default, or (SDK 1.22, `placement: 'bar'`) an icon at the leading edge, optionally with a `popover` the plugin mounts plain DOM into. |
 | Web app | `plugins/drawio/vendor/webapp/` (gitignored) | draw.io itself, fetched by `scripts/fetch-drawio.mjs` from the release pinned in `plugins/drawio/drawio-version.json`, trimmed to what the offline embed loads; copied to `dist-electron/plugins/drawio/webapp/` by `build-plugins.mjs`. |
 | Binary + announced writes | `electron/ipc/vault-handlers.ts`, `VaultManager` | `vault:read-binary` / `vault:write-binary` (a file at an exact path, unlike `saveAsset`), and `announce` on both writes: the change round for that path (plugins + `vault:changed` push) instead of the plugins-only event. SDK: `vault.readBinary`, `vault.writeBinary`, `vault.writeFile(…, { announce })`. |
 | Picture refresh | `src/app/editor/vault-image.ts` | `refreshChangedAssets`: on a `vault:changed` push with paths, a per-path revision goes into the `drey-asset://` URL (`?v=<n>`) and pictures already on screen get the new URL — a saved diagram shows in every open note. |

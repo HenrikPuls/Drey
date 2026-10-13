@@ -10,8 +10,8 @@ import { SettingsPane } from '../settings-pane/settings-pane';
  * "Panels & plugins" settings category: switch a dock panel (ADR-0034) or a
  * whole plugin (ADR-0044) off. A disabled panel leaves every dock *and* the
  * View menu; a disabled plugin is never discovered again after a restart.
- * Draft edit like every other category; the dock reconciles on Save, plugin
- * toggles apply on the next app start. A plugin's status line is what the
+ * The dock reconciles as soon as the toggle is saved; plugin toggles apply
+ * on the next app start. A plugin's status line is what the
  * host last saw (active / failed / incompatible / disabled); failed and
  * incompatible ones show the host's error.
  *
