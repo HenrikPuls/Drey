@@ -102,24 +102,6 @@ export class VectorIndex {
   }
 
   /**
-   * Per indexed file, its section headings in file order (ADR-0069's
-   * `vault_overview` source) — straight from memory, no vault re-read.
-   * Empty when the vault carries no usable index for the caller's model
-   * check; the service decides the fallback.
-   */
-  outline(vaultId: string, model?: string): readonly { path: string; headings: string[] }[] {
-    const index = this.byVault.get(vaultId);
-    if (index === undefined || (model !== undefined && index.model !== model)) {
-      return [];
-    }
-    const out: { path: string; headings: string[] }[] = [];
-    for (const [filePath, sections] of index.files) {
-      out.push({ path: filePath, headings: sections.map((section) => section.heading) });
-    }
-    return out;
-  }
-
-  /**
    * Top-k over the given vaults (vectors of a stale vault are skipped by
    * the model check), best first, nothing below `minScore`.
    */

@@ -1,14 +1,15 @@
 /**
  * Semantic vault retrieval (ADR-0055): the pure half of the feature —
- * scope type, config defaults, e5 prefixes, the fence-aware section
- * splitter, float32-vector (de)serialisation, cosine ranking inputs, and
+ * scope type, config defaults, e5 prefixes, the note-to-section
+ * mapping, float32-vector (de)serialisation, cosine ranking inputs, and
  * the two context formatters (system-prompt block + compact replay line).
  * Main-side only at runtime; the spec suite drives it directly.
  *
- * The section splitter mirrors `plugins/tags/shared/sections.ts` (copied,
- * not imported — cross-plugin imports are banned, ADR-0044); keep the two
- * algorithms in step when one changes.
+ * Sections are the repo-wide `splitSections` unit (`shared/note-sections.ts`),
+ * the same one the tags index and the MCP vault tools report on.
  */
+
+import { splitSections } from '../../../shared/note-sections.js';
 
 /**
  * How much of the vault rides with one question: off / active vault / all
@@ -120,7 +121,7 @@ export const PASSAGE_MAX_CHARS = 2000;
 /**
  * Paths that never enter (or surface from) the semantic index. Chat notes
  * (`chats/`, mirroring `CHATS_DIR` in `shared/chat-note.ts` — kept local
- * so this module stays dependency-free) are excluded on purpose: a chat
+ * so this module imports no other plugin code) are excluded on purpose: a chat
  * about a question embeds the literal question text, so every
  * conversation self-amplifies and outranks the note that actually answers
  * the question (observed in practice — four chat turns displaced the
@@ -147,62 +148,11 @@ export interface SemanticSection {
   text: string;
 }
 
-export interface RawSection {
-  heading: string;
-  level: number;
-  line: number;
-  text: string;
-}
-
-const HEADING = /^(#{1,6})[ \t]+(.+?)[ \t]*#*[ \t]*$/;
-const FENCE = /^[ \t]*(```|~~~)/;
-
-/** Splits a Markdown body into heading-delimited sections, fence-aware. */
-export function splitSemanticSections(body: string): RawSection[] {
-  const lines = body.split('\n');
-  const sections: RawSection[] = [];
-  let heading = '';
-  let level = 0;
-  let startLine = 1;
-  let buf: string[] = [];
-  let inFence = false;
-
-  const flush = (): void => {
-    const text = buf.join('\n').replace(/^\s+|\s+$/g, '');
-    if (level === 0 && text === '') {
-      return;
-    }
-    sections.push({ heading, level, line: startLine, text });
-  };
-
-  for (let i = 0; i < lines.length; i++) {
-    const line = lines[i];
-    if (FENCE.test(line)) {
-      inFence = !inFence;
-      buf.push(line);
-      continue;
-    }
-    const match = inFence ? null : HEADING.exec(line);
-    if (match) {
-      flush();
-      heading = match[2];
-      level = match[1].length;
-      startLine = i + 1;
-      buf = [];
-    } else {
-      buf.push(line);
-    }
-  }
-  flush();
-
-  return sections;
-}
-
 /** The indexable sections of one note; empty bodies produce nothing. */
 export function semanticSectionsFor(path: string, content: string): SemanticSection[] {
   const base = path.slice(path.lastIndexOf('/') + 1);
   const out: SemanticSection[] = [];
-  for (const section of splitSemanticSections(content)) {
+  for (const section of splitSections(content)) {
     if (section.text === '') {
       continue;
     }
@@ -213,34 +163,6 @@ export function semanticSectionsFor(path: string, content: string): SemanticSect
     });
   }
   return out;
-}
-
-/**
- * Picks the section a `vault_section`-style request names: by heading
- * (case-insensitive, first match), else by 1-based line (exact, else the
- * last section starting at or above it), else the first section. Null
- * only when the file split into no sections at all — a heading miss falls
- * through, exactly like the semantic service's original inline logic.
- */
-export function locateSemanticSection(
-  sections: readonly SemanticSection[],
-  target: { heading?: string; line?: number },
-): SemanticSection | null {
-  const wantedHeading =
-    typeof target.heading === 'string' && target.heading.trim() !== ''
-      ? target.heading.trim().toLowerCase()
-      : null;
-  const wantedLine = typeof target.line === 'number' ? target.line : null;
-  const byHeading =
-    wantedHeading !== null
-      ? sections.find((entry) => entry.heading.toLowerCase() === wantedHeading)
-      : undefined;
-  const byLine =
-    byHeading === undefined && wantedLine !== null
-      ? (sections.find((entry) => entry.line === wantedLine) ??
-        sections.filter((entry) => entry.line <= wantedLine).at(-1))
-      : undefined;
-  return (byHeading ?? byLine ?? sections[0]) ?? null;
 }
 
 // -- vectors -----------------------------------------------------------------

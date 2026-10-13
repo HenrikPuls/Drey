@@ -16,7 +16,6 @@ import {
   resolveTargetVaultIds,
   semanticSectionsFor,
   semanticSnippet,
-  splitSemanticSections,
 } from './semantic';
 import type { RetrievedSection } from './semantic';
 
@@ -110,28 +109,6 @@ describe('e5 prefixes', () => {
   });
 });
 
-describe('splitSemanticSections', () => {
-  it('splits at headings of any level and keeps the pre-heading part', () => {
-    const sections = splitSemanticSections('Intro line\n# One\nbody one\n## Two\nbody two\n');
-    expect(sections).toHaveLength(3);
-    expect(sections[0]).toMatchObject({ heading: '', level: 0, line: 1, text: 'Intro line' });
-    expect(sections[1]).toMatchObject({ heading: 'One', level: 1, line: 2, text: 'body one' });
-    expect(sections[2]).toMatchObject({ heading: 'Two', level: 2, line: 4, text: 'body two' });
-  });
-
-  it('ignores # inside fenced code blocks', () => {
-    const sections = splitSemanticSections('# Real\n```md\n# Not a heading\n```\nafter');
-    expect(sections).toHaveLength(1);
-    expect(sections[0].text).toContain('# Not a heading');
-  });
-
-  it('drops an empty pre-heading section but keeps empty heading sections', () => {
-    const sections = splitSemanticSections('\n\n# Empty\n');
-    expect(sections).toHaveLength(1);
-    expect(sections[0]).toMatchObject({ heading: 'Empty', text: '' });
-  });
-});
-
 describe('semanticSectionsFor', () => {
   it('falls back to the file base name and skips empty bodies', () => {
     const sections = semanticSectionsFor('daily/2026-09-24.md', '# Morning\nrun 5k\n');
@@ -139,6 +116,18 @@ describe('semanticSectionsFor', () => {
     const untitled = semanticSectionsFor('notes/idea.md', 'just a line');
     expect(untitled[0].heading).toBe('idea.md');
     expect(semanticSectionsFor('empty.md', '# Empty\n\n')).toHaveLength(0);
+  });
+
+  it('keeps the index boundaries: any heading level splits, a fenced # does not', () => {
+    const sections = semanticSectionsFor(
+      'n.md',
+      'Intro line\n# One\nbody one\n## Two\n```md\n# Not a heading\n```\nafter\n',
+    );
+    expect(sections).toEqual([
+      { heading: 'n.md', line: 1, text: 'Intro line' },
+      { heading: 'One', line: 2, text: 'body one' },
+      { heading: 'Two', line: 4, text: '```md\n# Not a heading\n```\nafter' },
+    ]);
   });
 });
 
