@@ -20,6 +20,30 @@ recorded as an explicit decision. The parity checklist lives in
 
 ## Recent milestones
 
+### Settings apply at once — no Save, no Discard
+
+**Not yet manually verified by the owner.**
+
+- **One model for the whole dialog.** Core pages used a draft with Save /
+  Discard and an "unsaved changes" bar; plugin pages saved as you edit;
+  the footer changed per page. Now every change applies as it is made.
+  The footer shows "Changes are saved automatically" (or "Saving…", or
+  the error) and one **Close** button (ADR-0010 later change).
+- **Typed values are stored when the field is left** or on Enter, not per
+  keystroke — also when the window loses focus or the screen closes. A
+  half-typed URL or folder never reaches disk.
+- **A save no longer overwrites what a plugin page stored.** It writes
+  only the sections that changed, onto a fresh read of the stored
+  config. Before, Save sent the whole draft and could undo a change made
+  on a plugin page (Actions, Templates) since the screen opened.
+- **MCP "YOLO mode" asks before it turns on** — it now takes effect with
+  the click. The MCP page's "Listening on …" line follows each change.
+- **A new MCP server** shows "Enter a command to connect." until it has
+  one; its tool id follows its name while the page that added it is open.
+- A failed save keeps the screen open; the button then reads "Close
+  without saving".
+- No rollback: a theme tried and not liked is picked back by hand.
+
 ### A third bespoke theme: Cyberpunk
 
 **Not yet manually verified by the owner.**

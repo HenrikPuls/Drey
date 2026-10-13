@@ -477,9 +477,10 @@ introduced silently.
     page — core or plugin — has the same header (title + description)
     and is built from one stylesheet, `src/app/settings/settings-ui.css`
     (sans throughout, mono only for code; SDK 1.20 added the plugin
-    page `description`). X sits top-right; Discard is always enabled and
-    closes (dirty-state warning); on a plugin page, which saves
-    immediately, the footer says so and offers Close instead. The
+    page `description`). X sits top-right. **Every change applies as
+    it is made** — no Save, no Discard (ADR-0010 later change): the
+    draft saves itself, a typed value when its field is left or on
+    Enter; the footer shows the save status and one Close button. The
     confirmation dialog (Actions / Ask edits / MCP
     writes) is a centred modal: inline line diff for localized changes,
     an aligned split diff for whole-document rewrites (ADR-0011).

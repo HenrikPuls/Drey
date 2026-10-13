@@ -541,7 +541,7 @@ Keep it in step whenever a component boundary changes (CLAUDE.md's
   watcher, ADR-0045; `vault.updateLinksOnRename`, ADR-0059; `vault.history`, ADR-0060) — then **plugin-contributed categories** (sorted by
   label) before "About" and rendered through
   `PluginSettingsHost` (author guide `plugins/AUTHORING.md`), saving
-  immediately rather than via the footer bar (ADR-0044 rule 3). Opened
+  through their own API (ADR-0044 rule 3). Opened
   from the status-bar entry. Category list is descriptor-driven
   (`*ngComponentOutlet`). **One stylesheet, `settings-ui.css`, is the
   whole Settings vocabulary** — page frame (title + description),
@@ -549,11 +549,14 @@ Keep it in step whenever a component boundary changes (CLAUDE.md's
   and the focus ring — for core panes and plugin pages alike: global,
   scoped under the dialog's `.settings-ui` inside `:where()` so a pane's
   own rules win; all sans (ADR-0057), mono only for code. The
-  close (X) is top-right; the footer Discard is always enabled and closes,
-  warning first when the draft is dirty. On a page that saves as you
-  edit (`SettingsCategory.savesImmediately`, every plugin page) the
-  footer says so and offers Close instead of Save / Discard — unless the
-  core draft is dirty, which keeps Save / Discard in reach
+  close (X) is top-right. **Every change applies as it is made**
+  (ADR-0010 later change): there is no Save and no Discard; the footer
+  shows the save status ("Changes are saved automatically" / "Saving…" /
+  the error) and one Close button. `Settings` tells `SettingsService`
+  while a text field has the focus (`editingText`) and flushes on
+  focus-out, Enter, window blur and close, so a typed value is stored
+  when the field is left; a failed save keeps the screen open and the
+  button becomes "Close without saving"
 - `ConfirmationDialogComponent` — the one confirmation dialog shared by
   Actions, Ask-mode edits and MCP `vault_write` (inline line diff for a
   localized change; an **aligned split diff** — equal-size halves — for a
@@ -1022,8 +1025,8 @@ src/                Angular renderer (standalone components, esbuild via Angular
                             accent hex onto --accent at :root and pushes the UI-scale
                             preset through dreyApi.setUiZoomFactor. Reads
                             SettingsService's effective getters, which preview the
-                            draft while the Settings screen is open (ADR-0020 later
-                            change) — Discard rolls the look back. Instantiated by App.
+                            draft while the Settings screen is open, so a change
+                            shows before its automatic save. Instantiated by App.
                             The 'theme' accent sentinel resolves against ThemeService.
       theme.service.ts     Applies the selected theme (ADR-0035). For a published
                             theme writes the seed's bg/fg onto --_bg/--_fg + a
@@ -1050,13 +1053,16 @@ src/                Angular renderer (standalone components, esbuild via Angular
                           and the image tab); ImageTab (centre-column view for a
                           kind:'image' OpenDoc, picked by editor.activeKind()).
       settings.service.ts  Two signals: `config` (persisted) and `draft` (what the
-                            Settings screen edits). Pane mutators write the draft
-                            only; save() sends it via setConfig and adopts the
-                            normalised result, discard() resets it, isDirty compares
+                            Settings screen edits). Pane mutators write the draft,
+                            which saves itself (ADR-0010 later change): 400 ms after
+                            the last edit, held while `editingText` is set, at once
+                            on flush(). save() reads the stored config, writes only
+                            the top-level sections the draft changed, and keeps what
+                            was edited while it was under way; isDirty compares
                             structurally (shared/deep-equal.ts). Runtime state
                             (llmEnabled, manualActions) reads `config`, never the
-                            draft. setTriggerConfirmImmediate is the one persist-now
-                            path (the dialog's "don't ask again"). Also holds the
+                            draft. The dialog-side switches ("don't ask again", …)
+                            persist on their own path. Also holds the
                             model list + connection-test state (ADR-0010/0011)
       confirmation.service.ts  The one confirmation mechanism (ADR-0011): request()
                             shows the shared dialog and resolves to the user's
@@ -1088,7 +1094,7 @@ src/                Angular renderer (standalone components, esbuild via Angular
                         (ADR-0035: ThemeService writes the seed vars / data-theme).
                         dock-widgets/ SettingsDockWidgets: a checkbox per WIDGETS
                         entry -> AppConfig.widgets.disabled (ADR-0034); DockService
-                        reconciles on Save. actions/ SettingsActions:
+                        reconciles once the toggle is saved. actions/ SettingsActions:
                         trigger rows (event / confirm / enabled) + template library CRUD.
                         about/ SettingsAbout: read-only -- app/Electron/Chromium/Node
                         version (app:get-info IPC) + a scrollable list of production
@@ -1885,7 +1891,9 @@ the `Sidebar` settings entry, the editor `⋯` menu, and the chat bar._
   can also be typed, so a server that doesn't expose that endpoint (or
   rejects it before a key is entered) is still usable. Mirrors Unsloth's
   own "Load Models … or enter model IDs manually" affordance.
-- **The Settings screen edits a draft; only Save crosses IPC** (ADR-0010).
+- _Superseded by the ADR-0010 later change (the draft now saves itself;
+  no Save, no Discard, no close prompt) — kept for the record:_
+  **The Settings screen edits a draft; only Save crosses IPC** (ADR-0010).
   `SettingsService` holds `config` (persisted) and `draft` (edited);
   `isDirty` is a structural compare (`shared/deep-equal.ts`). Replaced a
   persist-on-every-change design that could _erase input as you typed_

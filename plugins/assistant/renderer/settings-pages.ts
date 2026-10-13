@@ -1,8 +1,7 @@
 /**
  * The Assistant plugin's Settings page (ADR-0044 stage 7), ported from
  * `src/app/settings/actions/` to plain DOM. Per ADR-0044 rule 3 it saves
- * immediately through `api.appConfig.patch` — no draft/Save/Discard (that
- * flow is the base categories'); each patch is a read-modify-write of the
+ * immediately through `api.appConfig.patch`; each patch is a read-modify-write of the
  * live config.
  *
  * The Actions page is the engine's config UI: triggers (which template on

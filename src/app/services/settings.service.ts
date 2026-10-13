@@ -43,22 +43,27 @@ function uid(): string {
  *
  * Two signals, deliberately:
  * - `config` — what is actually persisted. Everything at *runtime* reads
- *   this (is the LLM on? which actions exist?), so an unsaved edit in the
- *   Settings screen can never change app behaviour.
+ *   this (is the LLM on? which actions exist?).
  * - `draft` — the copy the Settings screen edits. Every pane mutator writes
- *   here and nothing else; `save()` sends it across and adopts the
- *   normalised result, `discard()` throws it away.
+ *   here; the draft then **saves itself** (ADR-0010 later change): a short
+ *   moment after the last edit, held back while a text field is being
+ *   typed in (`editingText`) and sent when the field is left, on Enter, or
+ *   when the screen closes (`flush()`). There is no Save and no Discard.
  *
- * This replaced a persist-on-every-keystroke design, which had two faults:
- * an in-progress value round-tripped through IPC on each edit (so a main
- * process that didn't yet know a field would silently erase what you were
- * typing), and there was no notion of "unsaved changes" to warn about on
- * close.
- *
- * The one exception is `setTriggerConfirmImmediate`, called by the
- * confirmation dialog's "don't ask again" checkbox — that happens outside
- * the Settings screen and must persist right away.
+ * The draft is what keeps typing safe: what is on screen is never replaced
+ * by a value that round-tripped through IPC while the user typed on, and a
+ * half-typed URL is not what the app runs on. A save writes only the
+ * top-level sections the draft changed, onto a fresh read of the stored
+ * config -- so it cannot undo what a plugin page (`api.appConfig.patch`)
+ * wrote in the meantime.
  */
+/** How long after the last edit the draft saves itself. */
+const AUTOSAVE_DELAY_MS = 400;
+
+function setSection<K extends keyof AppConfig>(target: AppConfig, source: AppConfig, key: K): void {
+  target[key] = structuredClone(source[key]);
+}
+
 @Injectable({ providedIn: 'root' })
 export class SettingsService {
   private readonly _config = signal<AppConfig | null>(null);
@@ -82,7 +87,17 @@ export class SettingsService {
   readonly saving = signal(false);
   readonly saveError = signal<string | null>(null);
 
-  /** Draft differs from what's on disk -- drives the Save button and the close prompt. */
+  /**
+   * True while the focus sits in a text field of the Settings screen (set
+   * by the `Settings` component). The automatic save waits for the field
+   * to be left, so a half-typed value never reaches disk.
+   */
+  readonly editingText = signal(false);
+
+  private saveTimer: ReturnType<typeof setTimeout> | null = null;
+  private inFlight: Promise<boolean> | null = null;
+
+  /** Draft differs from what's on disk -- a save is pending or has failed. */
   readonly isDirty = computed<boolean>(() => {
     const config = this._config();
     const draft = this._draft();
@@ -106,10 +121,10 @@ export class SettingsService {
   readonly dailyDir = computed<string>(() => this._config()?.daily.dir ?? DEFAULT_DAILY_CONFIG.dir);
 
   /**
-   * Ids of the dock widgets switched off in Settings -> Widgets. **Persisted
-   * config, never the draft** -- a disable takes effect on Save, like every
-   * other category, so the dock / View menu don't churn while the screen is
-   * open. `DockService` and `MenuService` read this.
+   * Ids of the dock widgets switched off in Settings -> Panels & plugins.
+   * **Persisted config, never the draft** -- a toggle reaches the dock and
+   * the View menu once it is saved, a moment after the click. `DockService`
+   * and `MenuService` read this.
    */
   readonly widgetsDisabled = computed<ReadonlySet<string>>(
     () => new Set(this._config()?.widgets.disabled ?? []),
@@ -136,9 +151,8 @@ export class SettingsService {
   /**
    * What the Appearance controls (typeface, base font size, highlight
    * colour) should reflect right now: the **draft** while the Settings
-   * screen is open, so a change previews live before Save, and the saved
-   * **config** otherwise. Discard / close resets the draft, which rolls
-   * the preview back. (ADR-0020, "Later change".)
+   * screen is open, so a change shows at once rather than after the
+   * automatic save, and the saved **config** otherwise.
    */
   private readonly appearanceSource = computed<AppConfig | null>(() =>
     this.screenOpen() ? (this._draft() ?? this._config()) : this._config(),
@@ -224,38 +238,81 @@ export class SettingsService {
     this.screenOpen.set(true);
   }
 
-  /** Closes without saving. The component asks first when `isDirty()`. */
+  /**
+   * Closes the screen. What the draft still holds is dropped -- the
+   * component calls `flush()` first and only comes here once that went
+   * through (or the user chose to close without saving after a failure).
+   */
   closeScreen(): void {
-    this.discard();
+    this.cancelTimer();
+    this.editingText.set(false);
+    const config = this._config();
+    this._draft.set(config ? structuredClone(config) : null);
+    this.saveError.set(null);
     this.openCategory.set(null);
     this.screenOpen.set(false);
   }
 
-  /** Resets the draft to what is on disk. */
-  discard(): void {
-    const config = this._config();
-    this._draft.set(config ? structuredClone(config) : null);
-    this.saveError.set(null);
+  /** Saves what is pending now, without waiting for the delay. Resolves `false` when it failed. */
+  flush(): Promise<boolean> {
+    this.cancelTimer();
+    return this.save();
   }
 
-  /** Persists the draft. Resolves `true` on success; on failure sets `saveError`. */
+  /**
+   * Persists the draft's changes. Resolves `true` when nothing is left to
+   * save; on failure sets `saveError` and keeps the draft. Calls queue up
+   * behind a save that is under way.
+   */
   async save(): Promise<boolean> {
-    const draft = this._draft();
-    if (!draft || this.saving()) {
+    while (this.inFlight) {
+      await this.inFlight;
+    }
+    if (!this.isDirty()) {
+      return true;
+    }
+    this.inFlight = this.persist();
+    try {
+      return await this.inFlight;
+    } finally {
+      this.inFlight = null;
+    }
+  }
+
+  private async persist(): Promise<boolean> {
+    const sent = this._draft();
+    const base = this._config();
+    if (!sent || !base) {
       return false;
     }
     if (!this.api) {
       // Outside Electron (plain `ng serve`) there is nothing to write to.
-      this._config.set(structuredClone(draft));
+      this._config.set(structuredClone(sent));
       return true;
     }
 
     this.saving.set(true);
     this.saveError.set(null);
     try {
-      const stored = normalizeAppConfig(await this.api.setConfig(draft));
+      const keys = Object.keys(sent) as Array<keyof AppConfig>;
+      const next = normalizeAppConfig(await this.api.getConfig());
+      for (const key of keys) {
+        if (!deepEqual(base[key], sent[key])) {
+          setSection(next, sent, key);
+        }
+      }
+      const stored = normalizeAppConfig(await this.api.setConfig(next));
       this._config.set(stored);
-      this._draft.set(structuredClone(stored));
+      // Adopt the stored result, but keep what was edited while the save
+      // was on its way -- the next save sends that.
+      const current = this._draft() ?? sent;
+      const draft = structuredClone(stored);
+      for (const key of keys) {
+        if (!deepEqual(current[key], sent[key])) {
+          setSection(draft, current, key);
+        }
+      }
+      this._draft.set(draft);
       return true;
     } catch (err) {
       this.saveError.set(err instanceof Error ? err.message : String(err));
@@ -263,6 +320,23 @@ export class SettingsService {
     } finally {
       this.saving.set(false);
     }
+  }
+
+  private cancelTimer(): void {
+    if (this.saveTimer !== null) {
+      clearTimeout(this.saveTimer);
+      this.saveTimer = null;
+    }
+  }
+
+  private scheduleSave(): void {
+    this.cancelTimer();
+    this.saveTimer = setTimeout(() => {
+      this.saveTimer = null;
+      if (!this.editingText()) {
+        void this.save();
+      }
+    }, AUTOSAVE_DELAY_MS);
   }
 
   // -- LLM category (draft) ------------------------------------------------
@@ -299,14 +373,14 @@ export class SettingsService {
     });
   }
 
-  /** Settings -> Assistant tools: one edit of the tool groups (draft; saved on Save). */
+  /** Settings -> Assistant tools: one edit of the tool groups. */
   patchTools(change: (tools: ToolsConfig) => void): void {
     this.mutate((config) => {
       change(config.tools);
     });
   }
 
-  /** Settings -> Widgets: toggle a dock widget on / off (draft edit; saved on Save). */
+  /** Settings -> Widgets: toggle a dock widget on / off. */
   setWidgetEnabled(id: string, enabled: boolean): void {
     this.mutate((config) => {
       const set = new Set(config.widgets.disabled);
@@ -320,8 +394,7 @@ export class SettingsService {
   }
 
   /**
-   * Settings -> Panels & plugins: enable / disable a plugin (draft edit;
-   * saved on Save). Takes effect on the next app start -- discovery runs
+   * Settings -> Panels & plugins: enable / disable a plugin. Takes effect on the next app start -- discovery runs
    * before either side activates, so a restart is the honest v1 cut.
    */
   setPluginEnabled(id: string, enabled: boolean): void {
@@ -354,7 +427,7 @@ export class SettingsService {
 
   /**
    * Removes a user dictionary. If it was the selected language, the
-   * selection falls back to the first bundled one -- otherwise Save would
+   * selection falls back to the first bundled one -- otherwise the save would
    * leave the checker pointing at nothing.
    */
   removeDictionary(id: string): void {
@@ -370,8 +443,8 @@ export class SettingsService {
 
   /**
    * Adds an accepted word to the personal list (`target: 'personal'`) or
-   * to the active dictionary's list (`target: 'language'`). Draft edit --
-   * persisted on Save; the editor popup uses the immediate IPC path instead.
+   * to the active dictionary's list (`target: 'language'`). The editor
+   * popup uses the immediate IPC path instead.
    */
   addSpellWord(word: string, target: 'language' | 'personal'): void {
     const trimmed = word.trim();
@@ -599,12 +672,11 @@ export class SettingsService {
     }
   }
 
-  // -- Appearance category (draft, ADR-0020 "Later change") --------------
+  // -- Appearance category ------------------------------------------------
 
   /**
-   * Editor typeface (Settings -> Appearance). A draft edit, like every
-   * other category: `editorFontFamily()` previews it live while the
-   * Settings screen is open, and it reaches disk only on Save. An unknown
+   * Editor typeface (Settings -> Appearance): `editorFontFamily()` shows
+   * it at once while the Settings screen is open. An unknown
    * id is pinned to the sans default by `normalizeEditorFontFamily`.
    */
   setEditorFontFamily(id: string): void {
@@ -613,17 +685,17 @@ export class SettingsService {
     });
   }
 
-  /** App-wide base font size (Settings -> Appearance). Draft edit; live-previewed; saved on Save. */
+  /** App-wide base font size (Settings -> Appearance). */
   setAppearanceUiScale(scale: string): void {
     this.patchAppearance({ uiScale: normalizeUiScale(scale) });
   }
 
-  /** App-wide highlight colour: `'theme'`, a preset id, or `#rrggbb` (Settings -> Appearance). Draft edit. */
+  /** App-wide highlight colour: `'theme'`, a preset id, or `#rrggbb` (Settings -> Appearance). */
   setAppearanceAccent(accent: string): void {
     this.patchAppearance({ accent: normalizeAccent(accent) });
   }
 
-  /** Active theme id (Settings -> Appearance). Draft edit; live-previewed; saved on Save. */
+  /** Active theme id (Settings -> Appearance). */
   setAppearanceTheme(theme: string): void {
     this.patchAppearance({ theme: normalizeTheme(theme) });
   }
@@ -634,7 +706,6 @@ export class SettingsService {
     });
   }
 
-  /** Applies `change` to a clone of the draft. No IPC -- `save()` does that. */
   /**
    * The approval dialog's "Always allow" (milestone 63, ADR-0063): sets one
    * external tool source -- `'web'` for web_fetch, otherwise an MCP server
@@ -671,6 +742,7 @@ export class SettingsService {
     }
   }
 
+  /** Applies `change` to a clone of the draft and schedules the automatic save. */
   private mutate(change: (config: AppConfig) => void): void {
     const current = this._draft();
     if (!current) {
@@ -679,5 +751,6 @@ export class SettingsService {
     const next = structuredClone(current);
     change(next);
     this._draft.set(next);
+    this.scheduleSave();
   }
 }

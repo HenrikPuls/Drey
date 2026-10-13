@@ -1,6 +1,14 @@
 <div class="backdrop" appOverlayGuard (click)="requestClose()"></div>
 
-<div class="panel settings-ui" role="dialog" aria-modal="true" aria-label="Settings">
+<div
+  class="panel settings-ui"
+  role="dialog"
+  aria-modal="true"
+  aria-label="Settings"
+  (focusin)="onFocusIn($event)"
+  (focusout)="onFocusOut($event)"
+  (keydown.enter)="onEnter($event)"
+>
   <button type="button" class="close" (click)="requestClose()" aria-label="Close settings">
     <app-icon name="x" [size]="15" />
   </button>
@@ -34,48 +42,22 @@
       }
     </div>
 
-    @if (settings.saveError(); as error) {
-      <p class="save-error">Could not save settings: {{ error }}</p>
-    }
-
-    @if (confirmingClose()) {
-      <div class="unsaved" role="alertdialog" aria-label="Unsaved changes">
-        <span class="unsaved-text">You have unsaved changes.</span>
-        <button type="button" class="ghost" (click)="keepEditing()">Keep editing</button>
-        <button type="button" class="ghost danger" (click)="discardAndClose()">Discard</button>
-        <button type="button" class="primary" (click)="saveAndClose()">Save &amp; close</button>
-      </div>
-    } @else {
-      <footer class="actions-bar">
-        @if (settings.isDirty()) {
-          <span class="dirty" title="Unsaved changes">● Unsaved changes</span>
-        } @else if (savesImmediately()) {
-          <span class="saved">Changes on this page are saved immediately</span>
-        } @else {
-          <span class="saved">All changes saved</span>
-        }
-        <div class="spacer"></div>
-        @if (savesImmediately() && !settings.isDirty()) {
-          <button type="button" class="ghost" (click)="requestClose()">Close</button>
-        } @else {
-          <button
-            type="button"
-            class="ghost"
-            [disabled]="settings.saving()"
-            (click)="requestClose()"
-          >
-            Discard
-          </button>
-          <button
-            type="button"
-            class="primary"
-            [disabled]="!settings.isDirty() || settings.saving()"
-            (click)="save()"
-          >
-            {{ settings.saving() ? 'Saving…' : 'Save' }}
-          </button>
-        }
-      </footer>
-    }
+    <footer class="actions-bar">
+      @if (settings.saveError(); as error) {
+        <span class="save-error" role="alert">Could not save settings: {{ error }}</span>
+      } @else if (settings.saving() || settings.isDirty()) {
+        <span class="saved">Saving…</span>
+      } @else {
+        <span class="saved">Changes are saved automatically</span>
+      }
+      <div class="spacer"></div>
+      @if (settings.saveError()) {
+        <button type="button" class="ghost" (click)="closeWithoutSaving()">
+          Close without saving
+        </button>
+      } @else {
+        <button type="button" class="ghost" (click)="requestClose()">Close</button>
+      }
+    </footer>
   </div>
 </div>

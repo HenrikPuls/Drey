@@ -124,3 +124,8 @@ Unchanged and still immediate, because they fire **outside** the Settings
 screen where there is no Save to wait for: `setEditorFontScale` (the
 `Ctrl +/-/0` editor zoom) and `setTriggerConfirmImmediate` (the
 confirmation dialog's "don't ask again").
+
+> Superseded in part on 2026-10-13: Settings has no Save / Discard any
+> more (ADR-0010, "Later change — every change applies as it is made").
+> Appearance still reads the draft while the screen is open, so a change
+> shows at once; it then saves itself, and there is no roll-back.

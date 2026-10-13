@@ -169,10 +169,11 @@ title and the optional `description` (SDK 1.20, one sentence) below it —
 so `mount(el)` builds only the fields; do not repeat the title as a
 heading.
 
-Pages **save immediately** through their own API — the Settings screen's
-draft/Save/Discard does not apply to them (ADR-0044 rule 3), and on your
-page its footer says so ("Changes on this page are saved immediately",
-with Close) — don't repeat that in a hint. Use `api.settings` for the
+Pages **save immediately** through their own API (ADR-0044 rule 3) —
+like every Settings page: the screen has no Save or Discard, and its
+footer says "Changes are saved automatically" — don't repeat that in a
+hint. Store a typed value on `change` (blur / Enter), not per keystroke.
+Use `api.settings` for the
 plugin's own `config.json`, `api.appConfig` only when a setting belongs
 to app-level config (read-modify-write one section per patch).
 

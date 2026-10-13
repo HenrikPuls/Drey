@@ -13,11 +13,12 @@ import { SettingsCategoryRegistry } from './settings-registry.service';
  * registry (`SettingsCategory[]`), rendered through `NgComponentOutlet`, so
  * a new category is one array entry -- no `@switch` to extend.
  *
- * Edits go into `SettingsService.draft` and reach disk only via **Save**.
- * Closing with unsaved changes -- the close button, the backdrop, or
- * Escape -- raises an inline "unsaved changes" bar (save / discard / keep
- * editing) instead of a native `confirm()`, matching the in-renderer
- * overlay pattern the file tree already uses (docs/05 §5.8).
+ * Every change is applied as it is made (ADR-0010 later change): a pane
+ * writes `SettingsService.draft`, which saves itself. This component tells
+ * the service while a text field has the focus -- the save then waits for
+ * the field to be left or Enter -- and flushes before the screen closes.
+ * The footer carries the save status and one Close button; no Save, no
+ * Discard, no "unsaved changes" prompt.
  */
 @Component({
   selector: 'app-settings',
@@ -25,7 +26,10 @@ import { SettingsCategoryRegistry } from './settings-registry.service';
   imports: [Icon, NgComponentOutlet, OverlayGuardDirective],
   templateUrl: './settings.html',
   styleUrl: './settings.css',
-  host: { '(document:keydown.escape)': 'requestClose()' },
+  host: {
+    '(document:keydown.escape)': 'requestClose()',
+    '(window:blur)': 'flush()',
+  },
 })
 export class Settings {
   protected readonly settings = inject(SettingsService);
@@ -52,48 +56,55 @@ export class Settings {
   /** `{ contrib }` for a plugin page, `undefined` for a core one. */
   protected readonly selectedInputs = computed(() => this.registry.inputsFor(this.selected()));
 
+  /** A text field took the focus: hold the automatic save until it is left. */
+  protected onFocusIn(event: FocusEvent): void {
+    if (isTextEntry(event.target)) {
+      this.settings.editingText.set(true);
+    }
+  }
+
+  protected onFocusOut(event: FocusEvent): void {
+    if (isTextEntry(event.target)) {
+      this.settings.editingText.set(false);
+      this.flush();
+    }
+  }
+
+  /** Enter in a one-line field commits it (a textarea keeps Enter for the line break). */
+  protected onEnter(event: Event): void {
+    if (event.target instanceof HTMLInputElement) {
+      // After the field's own `change` handler, which Enter also triggers.
+      setTimeout(() => this.flush());
+    }
+  }
+
+  protected flush(): void {
+    void this.settings.flush();
+  }
+
   /**
-   * True on a page that saves as you edit (a plugin page): the footer then
-   * says so and offers Close instead of Save / Discard.
+   * Saves what is pending, then closes. A failed save keeps the screen
+   * open with the error in the footer, whose button then closes without
+   * saving (`closeWithoutSaving`).
    */
-  protected readonly savesImmediately = computed(
-    () => this.registry.categoryFor(this.selected())?.savesImmediately === true,
-  );
-
-  /** True while the "you have unsaved changes" bar is showing. */
-  protected readonly confirmingClose = signal(false);
-
-  /** Close, or ask first when there are unsaved changes. */
-  protected requestClose(): void {
-    if (this.settings.isDirty()) {
-      this.confirmingClose.set(true);
-      return;
-    }
-    this.settings.closeScreen();
-  }
-
-  protected keepEditing(): void {
-    this.confirmingClose.set(false);
-  }
-
-  protected discardAndClose(): void {
-    this.confirmingClose.set(false);
-    this.settings.closeScreen();
-  }
-
-  protected async saveAndClose(): Promise<void> {
-    if (await this.settings.save()) {
-      this.confirmingClose.set(false);
+  protected async requestClose(): Promise<void> {
+    if (await this.settings.flush()) {
       this.settings.closeScreen();
-    } else {
-      // Save failed -- keep the dialog open so the error is visible and the
-      // user's edits aren't silently thrown away.
-      this.confirmingClose.set(false);
     }
   }
 
-  /** The footer Save button: persists but stays open. */
-  protected async save(): Promise<void> {
-    await this.settings.save();
+  protected closeWithoutSaving(): void {
+    this.settings.closeScreen();
   }
+}
+
+/** A field whose value is typed -- not a checkbox, radio, colour or file input. */
+function isTextEntry(target: EventTarget | null): boolean {
+  if (target instanceof HTMLTextAreaElement) {
+    return true;
+  }
+  return (
+    target instanceof HTMLInputElement &&
+    ['text', 'number', 'password', 'url', 'search', 'email', ''].includes(target.type)
+  );
 }

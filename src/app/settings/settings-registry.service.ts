@@ -22,9 +22,10 @@ import { SettingsCategory } from './settings-category';
  * follow sorted by their label, "About" stays last — so the list stays
  * predictable no matter what registers when.
  *
- * A plugin page renders through `PluginSettingsHost` and saves immediately
- * (its own `api.settings`) — the core categories keep the draft / Save /
- * Discard flow.
+ * A plugin page renders through `PluginSettingsHost` and saves through its
+ * own API (`api.settings` / `api.appConfig`); the core categories write
+ * `SettingsService`'s self-saving draft. Either way a change applies as it
+ * is made.
  */
 @Injectable({ providedIn: 'root' })
 export class SettingsCategoryRegistry {
@@ -72,7 +73,6 @@ export class SettingsCategoryRegistry {
         label: page.label,
         hint: page.hint,
         component: PluginSettingsHost,
-        savesImmediately: true,
       },
     ]);
     return () => {

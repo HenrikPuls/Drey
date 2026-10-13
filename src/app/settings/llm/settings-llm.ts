@@ -27,7 +27,7 @@ import { SettingsPane } from '../settings-pane/settings-pane';
  * and a debug log of every request the app has sent this session.
  *
  * Pure view -- every config change goes through `SettingsService.patchLlm`,
- * which writes the *draft*; nothing reaches disk until Save.
+ * which writes the self-saving *draft*.
  */
 @Component({
   selector: 'app-settings-llm',
@@ -47,7 +47,7 @@ export class SettingsLlm implements OnInit, OnDestroy {
     () => PROVIDER_PRESETS[this.llm()?.provider ?? 'lmstudio'],
   );
 
-  /** The draft's LLM block -- edits stay local until the screen is saved. */
+  /** The draft's LLM block. */
   protected readonly llm = computed(() => this.settings.draft()?.llm ?? null);
 
   /** Newest first: when you are debugging you care about the last attempt. */
@@ -69,7 +69,7 @@ export class SettingsLlm implements OnInit, OnDestroy {
     return key ? maskSecret(key) : null;
   });
 
-  /** The draft's key differs from the saved one -- i.e. it still needs Save. */
+  /** The draft's key differs from the saved one -- it is still being typed. */
   protected readonly apiKeyUnsaved = computed<boolean>(
     () =>
       (this.settings.draft()?.llm.apiKey ?? null) !== (this.settings.config()?.llm.apiKey ?? null),
@@ -123,8 +123,8 @@ export class SettingsLlm implements OnInit, OnDestroy {
 
   /**
    * Switching provider pre-fills the draft's base URL from the preset
-   * (draft-side only -- `chat()` always uses the saved config, so the
-   * switch needs a Save either way). The model stays as-is: many presets
+   * (`chat()` always uses the saved config, which follows a moment
+   * later). The model stays as-is: many presets
    * share id conventions, and blanking a typed id would be rude.
    */
   protected onProviderChange(provider: LlmProviderId): void {

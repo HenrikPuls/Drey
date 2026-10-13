@@ -32,7 +32,7 @@ export class SettingsSpellcheck implements OnInit {
   /**
    * What the language list shows: the load state from the main process,
    * merged with dictionaries the draft has added but not yet saved (the
-   * main process cannot know about those until Save).
+   * main process learns of those a moment later, with the save).
    */
   protected readonly languages = computed<SpellLanguage[]>(() => {
     const known = this.spellcheck.languages();

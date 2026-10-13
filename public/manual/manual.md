@@ -650,9 +650,10 @@ meta bar's "Changed on disk" button opens the same view early.
 
 Open with the status-bar entry or `Ctrl+,`. Core categories are
 alphabetical, plugin-contributed ones follow, *About* closes the list.
-Core pages save on *Save* with a live preview. Every plugin page saves
-immediately — the footer says so there and shows *Close* in place of
-*Save* and *Discard*.
+Every change applies as you make it — there is no *Save* and no
+*Discard*. A switch or a list choice acts at once; a typed value is
+stored when you leave the field or press Enter. The footer shows
+"Changes are saved automatically" and one *Close* button.
 
 | Category | What lives there |
 | --- | --- |

@@ -96,7 +96,7 @@
               }
               @if (apiKeyUnsaved()) {
                 <span class="status-pending">
-                  — edited, press <strong>Save</strong> to store it (requests use the saved key).
+                  — edited; stored when you leave the field (requests use the saved key).
                 </span>
               }
             </p>
@@ -227,7 +227,7 @@
         <p class="callout warn">
           The last request came back <strong>401/403</strong> and carried
           <strong>no Authorization header</strong> — the app didn’t send a key at all. Either no key
-          is saved yet (type one above and press <strong>Save</strong>), or the Electron main
+          is saved yet (type one above), or the Electron main
           process is still running an older build: restart the app.
         </p>
       }
