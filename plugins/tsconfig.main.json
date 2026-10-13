@@ -26,6 +26,7 @@
   "exclude": [
     "../shared/plugin-api/plugin-api.ts",
     "../shared/plugin-api/renderer.ts",
+    "../shared/**/*.spec.ts",
     "./**/main/**/*.spec.ts",
     "./**/shared/**/*.spec.ts"
   ]

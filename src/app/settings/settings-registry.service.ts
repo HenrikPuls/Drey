@@ -1,6 +1,5 @@
-import { Injectable, Signal, computed, inject, signal } from '@angular/core';
+import { Injectable, Signal, Type, computed, signal } from '@angular/core';
 import type { PluginSettingsPageContrib, Unsubscribe } from '../../../shared/plugin-api/renderer';
-import { PluginSettingsHost } from '../plugin-host';
 import { SettingsAbout } from './about/settings-about';
 import { SettingsAppearance } from './appearance/settings-appearance';
 import { SettingsDaily } from './daily/settings-daily';
@@ -22,7 +21,9 @@ import { SettingsCategory } from './settings-category';
  * follow sorted by their label, "About" stays last — so the list stays
  * predictable no matter what registers when.
  *
- * A plugin page renders through `PluginSettingsHost` and saves through its
+ * A plugin page renders through the host component its registrar passes
+ * (`PluginSettingsHost` — handed in, not imported, so this registry does
+ * not depend on the plugin host that depends on it) and saves through its
  * own API (`api.settings` / `api.appConfig`); the core categories write
  * `SettingsService`'s self-saving draft. Either way a change applies as it
  * is made.
@@ -57,7 +58,7 @@ export class SettingsCategoryRegistry {
     return contrib === undefined ? undefined : { contrib };
   }
 
-  registerPluginPage(page: PluginSettingsPageContrib): Unsubscribe {
+  registerPluginPage(page: PluginSettingsPageContrib, component: Type<unknown>): Unsubscribe {
     const existing = this.contribFor(page.id);
     if (existing !== undefined || CORE_CATEGORIES.some((c) => c.id === page.id)) {
       throw new Error(`settings page id "${page.id}" is already registered`);
@@ -72,7 +73,7 @@ export class SettingsCategoryRegistry {
         id: page.id,
         label: page.label,
         hint: page.hint,
-        component: PluginSettingsHost,
+        component,
       },
     ]);
     return () => {

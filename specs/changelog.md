@@ -20,6 +20,76 @@ recorded as an explicit decision. The parity checklist lives in
 
 ## Recent milestones
 
+### Architectural cleanup A1–A5 — tests beside their code, linted dependency rules, no import cycles
+
+Items A1–A5 of the 2026-10-13 architecture review
+([`docs/11`](../docs/11_risks_and_technical_debt.md)). No change to what
+the app does, with one exception named under A4. **Not yet manually
+verified by the owner.**
+
+- **A1 — tests live next to their code.** 59 spec files moved out of
+  `src/app/services/` to the `shared/`, `electron/` or `plugins/<id>/`
+  file they test, and from the Angular runner into the plain-Node suite
+  (`vitest.plugins.config.mts`). Two more were merged into the spec that
+  already existed beside the source (`electron/note-manager.spec.ts`,
+  `plugins/git/shared/status.spec.ts`). `src/app/services/` keeps the 14
+  specs that test a file in that folder. Four moved specs need a DOM and
+  carry `// @vitest-environment jsdom`. The same 2,410 tests run as
+  before: 1,334 in the Node suite (was 494), 1,076 in the Angular runner
+  (was 1,916).
+  - `app-config.spec.ts` was not a duplicate: the one under `electron/`
+    tests the config store, the moved one (`shared/app-config.spec.ts`)
+    the normalisation. Nothing to merge.
+  - `shared/**/*.spec.ts` is now typechecked by
+    `electron/tsconfig.spec.json` and excluded from the three projects
+    that build `shared/` (before, a spec under `shared/` was compiled
+    into `dist-electron/`).
+- **A2 — the dependency rules are lint rules.** `eslint.config.mjs` now
+  fails on: `shared/` importing `src/`, `electron/` or `plugins/`;
+  renderer ↔ main; the base importing a plugin; a plugin importing
+  `src/`, `electron/` or another plugin. Type-only imports count. The
+  rules run under `@typescript-eslint/no-restricted-imports`, so the
+  barrel rule's `off` inside a module does not disable them. No existing
+  code had to change.
+- **A3 — the two renderer import cycles are gone.**
+  - `DailyNoteService` moved from the `vault/` module to
+    `src/app/services/` (it opens documents, so it sits above
+    `EditorService`).
+  - `PluginCatalogService` (new, `src/app/services/`) holds the plugin
+    list and installing / removing packages; Settings → Panels & plugins
+    uses it instead of `PluginHostService`.
+  - `TagVocabularyService` subscribes to `search:changed` itself instead
+    of reading a signal on `PluginHostService`.
+  - `SettingsCategoryRegistry.registerPluginPage` is handed the host
+    component by its caller instead of importing it from `plugin-host/`.
+- **A4 — `DailyNoteManager` writes through `VaultManager`.** The daily
+  note and the starter `templates/daily.md` are written atomically and
+  entered in the own-write ledger like every other app write.
+  **Behaviour change:** because the watcher now takes these writes for
+  the app's own, the manager announces what it created — the Files
+  panel, the calendar dot and the indexes show a hotkey-created daily
+  note at once, also with the watcher off (before, only the watcher's
+  echo did that). Spec: `electron/daily-note.spec.ts`.
+  - The check the roadmap asked for: the fixed `templates/daily.md` is
+    **not a defect**. `specs/frontmatter-schema.md` and the manual name
+    that literal path, and the indexes exclude the literal `templates/`
+    in addition to the configured folder; `templates.dir` is the folder
+    of the template *library*. Left as it is; whether the daily template
+    should follow the setting is now an owner decision in the roadmap.
+- **A5 — the composition root is split.** `electron/main.ts` (1,138
+  lines) keeps the order of startup and the app lifecycle (406 lines).
+  New beside it: `app-services.ts` (`buildAppServices` builds every
+  long-lived object and returns one typed `AppServices`),
+  `main-window.ts` (`MainWindowHost`: the window and the save-before-exit
+  prompt), `app-protocols.ts` (the three custom schemes),
+  `startup-reports.ts` (the native error dialogs) and `app-paths.ts`.
+  `PluginHost.buildContext` builds `ctx.vault` and `ctx.llm` through
+  `plugin-host/plugin-context.ts`, one function per namespace.
+
+Verified by: all six TypeScript projects, lint, both unit suites, and 44
+end-to-end tests (startup, splash, CSP, plugins, daily notes, external
+open, images, search) against a fresh build.
+
 ### Settings apply at once — no Save, no Discard
 
 **Not yet manually verified by the owner.**

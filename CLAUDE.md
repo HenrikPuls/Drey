@@ -62,14 +62,22 @@ toolchain is removable by deleting `.tools/`). Never assume a bare `node`,
   - Typecheck renderer: `node node_modules/typescript/bin/tsc -p tsconfig.app.json --noEmit`
   - Unit tests: `node node_modules/@angular/cli/bin/ng.js test --watch=false`
     (add `--include "src/.../x.spec.ts"` to scope it)
-  - Main-process and plugin tests (`electron/**/*.spec.ts`, `plugins/**/*.spec.ts`,
-    plain Node, `vi.mock('electron')` where needed):
+  - Main-process, shared and plugin tests (`electron/**/*.spec.ts`,
+    `shared/**/*.spec.ts`, `plugins/**/*.spec.ts`; plain Node,
+    `vi.mock('electron')` where needed, `// @vitest-environment jsdom` at
+    the top of a spec that needs a DOM):
     `node node_modules/vitest/vitest.mjs run --config vitest.plugins.config.mts`
-    (append a path fragment to scope it); their typecheck is
-    `node node_modules/typescript/bin/tsc -p electron/tsconfig.spec.json`
+    (append a path fragment to scope it); the typecheck of the
+    `electron/` and `shared/` specs is
+    `node node_modules/typescript/bin/tsc -p electron/tsconfig.spec.json`.
+    **A spec sits beside the file it tests** — `src/app/` holds only
+    specs of renderer code
   - Lint: `node node_modules/eslint/bin/eslint.js "electron/**/*.ts" "shared/**/*.ts" "src/**/*.ts" "plugins/**/*.ts"`
-    — module boundaries plus `no-floating-promises` / `no-misused-promises`
-    (a promise meant to run on its own is marked `void`)
+    — module barrels, the dependency rules between `shared/`, `src/`,
+    `electron/` and `plugins/` (docs/05, "The dependency rules"; a
+    type-only import counts) plus `no-floating-promises` /
+    `no-misused-promises` (a promise meant to run on its own is marked
+    `void`)
   - Production renderer build: `node node_modules/@angular/cli/bin/ng.js build --configuration production`
   - Emit the main process: `node node_modules/typescript/bin/tsc -p electron/tsconfig.json`,
     then `node scripts/bundle-preload.mjs` — the main window is sandboxed
@@ -301,15 +309,20 @@ gotchas) and the **Feature → files** index live in
 
 Main process (`electron/`):
 
-- `main.ts` — composition root: the sandboxed window, privileged
-  schemes, single-instance lock, quick-capture hotkey
+- `main.ts` — composition root: the order of startup, single-instance
+  lock, quick-capture hotkey, app lifecycle; over `app-services.ts`
+  (`buildAppServices`: every long-lived object, one typed `AppServices`),
+  `main-window.ts` (`MainWindowHost`: the sandboxed window + the
+  save-before-exit prompt), `app-protocols.ts` (privileged schemes),
+  `startup-reports.ts`, `app-paths.ts`
 - `vault-manager.ts` — `VaultManager`: the multi-vault registry
   (ADR-0051) + all vault/note file IO over `safe-file.ts` atomic writes;
   mutations record in the own-write ledger
 - `note-manager.ts` — the `note:save` pipeline: mtime conflict guard +
   frontmatter bump (ADR-0060); feature work rides the save/vault hook
   registries
-- `daily-note.ts` — daily-note creation + template substitution
+- `daily-note.ts` — daily-note creation + template substitution; its
+  writes go through `VaultManager`
 - `session/` — session snapshot/restore + unsaved-buffer backups (ADR-0043)
 - `history/` — `NoteHistoryStore`: per-write local note versions, the
   "File history…" backend (ADR-0060)
@@ -323,7 +336,8 @@ Main process (`electron/`):
   `providers/` (ADR-0047), the task registry, `tag-suggest.ts`
 - `mcp/` — the vault MCP server (ADR-0021); `mcp-client/` — external MCP
   servers, `web_fetch`, the assistant toolbox (ADR-0063)
-- `plugin-host/` — discovery, activation/quarantine, per-plugin config,
+- `plugin-host/` — discovery, activation/quarantine, the per-plugin
+  context (`plugin-context.ts`: `ctx.vault`, `ctx.llm`), per-plugin config,
   save/vault hooks, the section-search **and** semantic-search provider
   slots, the `.zip` installer (ADR-0044/0068)
 - `spellcheck.ts` — nspell + Hunspell dictionaries; `pdf-export.ts` — the
@@ -376,7 +390,8 @@ Renderer (`src/app/`):
 - `titlebar/` (menu bar, window controls), `status-bar/`,
   `image-viewer/` (ADR-0026), `pdf-viewer/` (ADR-0052),
   `external-open/`, `services/` (settings/appearance/theme/spellcheck
-  singletons)
+  singletons, `DailyNoteService`, `PluginCatalogService` — the plugin
+  list Settings shows)
 
 Cross-layer:
 

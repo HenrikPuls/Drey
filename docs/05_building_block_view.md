@@ -34,20 +34,27 @@ graph TB
 ### The dependency rules
 
 These are what keep the four parts separate. All of them hold in the
-code today (checked 2026-10-13 over every non-test import).
+code, tests included, and since 2026-10-13 every one is checked by the
+build (`eslint.config.mjs`; the plugin build for a plugin's renderer
+half).
 
 | Rule | Enforced by |
 |---|---|
-| `shared/` imports from none of the other three. | convention |
-| Renderer and main process never import each other. They meet in `shared/ipc-api.ts`. | convention |
-| The base never imports a plugin. It reaches plugin behaviour only through a registry the plugin filled. | convention |
-| A plugin imports only its own folder and `shared/`. Never `src/`, never `electron/`, never another plugin. | renderer half: the plugin build fails. Main half: convention — ADR-0044 would allow it `electron/`, but no plugin uses that, and it should stay so |
+| `shared/` imports from none of the other three. | lint |
+| Renderer and main process never import each other. They meet in `shared/ipc-api.ts`. | lint |
+| The base never imports a plugin. It reaches plugin behaviour only through a registry the plugin filled. | lint |
+| A plugin imports only its own folder and `shared/`. Never `src/`, never `electron/`, never another plugin. | lint, both halves (ADR-0044 would allow the main half `electron/`; no plugin uses that, and the rule keeps it so). The plugin build also fails on it for the renderer half |
 | A plugin does not load its own CodeMirror or Angular. | lint |
 | A plugin's renderer half has no Node access. | lint |
 | Outside a base module, import its `index.ts`, not a file inside it. | lint ([ADR-0016](09_architecture_decisions/0016-feature-module-convention.md)) |
 
-The rows marked "convention" are the ones a lint rule should take over
-([§11](11_risks_and_technical_debt.md), architecture review 2026-10-13).
+The dependency rows are type-aware `no-restricted-imports` patterns and
+count type-only imports too: what two parts share belongs in `shared/`.
+Tests follow the same rules — a spec sits beside the file it tests
+(`shared/`, `electron/` and `plugins/` specs run under plain Node via
+`vitest.plugins.config.mts`, `src/` specs in the Angular runner). The
+renderer has no import cycle between files (checked 2026-10-13); nothing
+enforces that yet ([§11](11_risks_and_technical_debt.md)).
 
 ### How a request travels
 
@@ -68,7 +75,7 @@ Two paths cover almost everything:
 
 | Group | Blocks | Job |
 |---|---|---|
-| Start-up | `main.ts`, `splash.ts`, `content-security-policy.ts` | Builds every object below, creates the window, registers the `app://`, `drey-asset://` and `plugin://` schemes. |
+| Start-up | `main.ts`, `app-services.ts`, `main-window.ts`, `app-protocols.ts`, `app-paths.ts`, `startup-reports.ts`, `splash.ts`, `content-security-policy.ts` | `main.ts` decides the order of startup and the app lifecycle. `buildAppServices` builds every object below and returns them as one `AppServices`; `MainWindowHost` creates the window and owns the save-before-exit prompt; `app-protocols.ts` registers the `app://`, `drey-asset://` and `plugin://` schemes. |
 | Vault and notes | `vault-manager.ts`, `note-manager.ts`, `daily-note.ts`, `link-rewriter.ts`, `history/`, `safe-file.ts`, `path-guard.ts`, `trash-delete.ts` | The vault registry and every file operation; the save pipeline with its conflict check; local versions. |
 | Outside changes | `vault-watcher.ts`, `own-write-ledger.ts`, `vault-change-announcer.ts` | Notices files changed by other programs and tells indexes and open tabs. |
 | Models | `llm/` | One `LlmClient` interface, a router that picks the provider per call, one client per backend, cancellable tasks. |
@@ -146,9 +153,14 @@ restore, keybindings, spellcheck, the MCP vault server, the LLM
 
 **Base, main process** (`electron/`):
 
-- `main.ts` — composition root: window creation, the privileged schemes
-  (`app://`, `drey-asset://`, `plugin://`), single-instance lock,
-  quick-capture hotkey, and the slimmed IPC handler registration.
+- `main.ts` — composition root: the order of startup (splash, services,
+  protocols, IPC, plugin activation, window), the single-instance lock,
+  the quick-capture hotkey and the app lifecycle. It builds nothing
+  itself: `app-services.ts` (`buildAppServices` → one typed
+  `AppServices`), `main-window.ts` (`MainWindowHost`: window creation
+  and the save-before-exit prompt), `app-protocols.ts` (the privileged
+  schemes `app://`, `drey-asset://`, `plugin://` and their handlers),
+  `startup-reports.ts` (the native error dialogs), `app-paths.ts`.
 - `external-open.ts` + `ipc/external-handlers.ts` — files the OS hands to
   Drey ([ADR-0054](09_architecture_decisions/0054-opening-files-from-the-os.md)):
   `extractOpenPaths` (argv filter), `ExternalFileGate` (queue → classify
@@ -846,7 +858,7 @@ decision. (Seams — what a *plugin* can extend — are the table above.)
 | Feature | Files | Owner | Decision |
 | --- | --- | --- | --- |
 | Quick capture (global hotkey → today's note + new entry) | `electron/main.ts`, `electron/daily-note.ts`, `src/app/services/EditorService` | Base | ADR-0002 |
-| Daily notes (calendar open, drafts, daily dir config) | `electron/daily-note.ts`, `src/app/calendar/`, `src/app/vault/daily-note.service.ts` | Base | — |
+| Daily notes (calendar open, drafts, daily dir config) | `electron/daily-note.ts`, `src/app/calendar/`, `src/app/services/daily-note.service.ts` | Base | — |
 | Entry capture (`/` menu Entry block, entry format) | `src/app/editor/slash-commands.ts`, Settings → "Entry format" | Base | ADR-0022, ADR-0057 |
 | Editor modes + Live Preview (conceal, block widgets) | `src/app/editor/` (`editor.ts`, `markdown-surface/`, `live-preview/`) | Base | ADR-0008, ADR-0009 |
 | Extended Markdown dialect (highlight, math/KaTeX, callouts, footnotes, emoji, linkify) + insert affordances (toolbar/slash/context-menu rows, emoji picker, `:`-completion, formatting eraser) | `src/app/editor/markdown-extensions.ts`, `live-preview/` (`conceal.ts`, `block-render.ts`, `math-widget.ts`, `extended-widgets.ts`), `toolbar-commands.ts`, `emoji/`, `src/app/emoji-picker/`, `editor-context-menu/format-menu-rows.ts`, `shared/markdown/`, `shared/pdf-html.ts` + `electron/pdf-export.ts` | Base | ADR-0070 |
@@ -2713,7 +2725,7 @@ electron/mcp/
   `app-config.json`; `syncMcpHttpTransport` opens/closes the socket on
   boot and after each `config:set`. Settings → **MCP** category.
 - `server.ts` + `vault-tools.ts` are IO/transport-free at their core and
-  unit-tested (`src/app/services/mcp-vault-tools.spec.ts`) per ADR-0007.
+  unit-tested (`electron/mcp/vault-tools.spec.ts`) per ADR-0007.
 
 ## 5.18 Template library + startup daily note + editor context menu (ADR-0029, ADR-0030)
 

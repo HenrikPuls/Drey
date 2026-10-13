@@ -25,7 +25,7 @@
  *
  * A missed suppression is never corruption -- it costs one redundant
  * re-index round, so ambiguity always resolves towards "external event".
- * Deliberately free of Electron/chokidar imports so the ng test runner can
+ * Deliberately free of Electron/chokidar imports so a spec can
  * load it directly (same pattern as `electron/mcp/vault-tools.ts`).
  */
 export class OwnWriteLedger {

@@ -21,7 +21,7 @@ export type ExitDecision = 'save' | 'discard' | 'cancel';
 
 /**
  * Standard editing commands the HTML Edit menu routes through the focused
- * `webContents` element (`electron/main.ts`). CodeMirror and native
+ * `webContents` element (`electron/ipc/app-handlers.ts`). CodeMirror and native
  * `<input>` / `<textarea>` fields both honour these, so one path covers
  * every editable surface -- and it survives the menu click stealing DOM
  * focus, which a renderer-side dispatch would not.

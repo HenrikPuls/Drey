@@ -1,7 +1,6 @@
 /**
  * The Tasks panel's pure preferences + filtering logic, split out of the
- * DOM panel so it stays unit-testable (the ng test runner ignores
- * `plugins/**` — its spec lives under `src/app/services/`).
+ * DOM panel so it stays unit-testable (`filter.spec.ts`).
  */
 import type { TaskKind, TaskRecord } from '../shared/tasks.js';
 import { sortTaskRecords } from '../shared/tasks.js';

@@ -2,7 +2,7 @@
  * Turns an image reference in a note (`![](url)`) into a `src` the renderer
  * can load. The renderer has no filesystem access, so vault-relative paths
  * are rewritten to the `drey-asset://` scheme that the main process serves
- * from inside the named vault (see `electron/main.ts`). Since ADR-0051 the
+ * from inside the named vault (see `electron/app-protocols.ts`). Since ADR-0051 the
  * vault id is the URL host (`drey-asset://<vaultId>/asset/<path>`) so the
  * same relative path resolves per vault; a null vaultId keeps the
  * host-less legacy form (served from the active vault).

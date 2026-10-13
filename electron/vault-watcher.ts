@@ -24,7 +24,7 @@ export interface VaultWatcherDeps {
   isEnabled: () => boolean;
   ledger: OwnWriteLedger;
   announcer: VaultChangeAnnouncer;
-  /** Creates the real watcher; `main.ts` supplies `(root) => chokidar.watch(root, …)`. */
+  /** Creates the real watcher; `app-services.ts` supplies `(root) => chokidar.watch(root, …)`. */
   watchFactory: (root: string) => MinimalFsWatcher;
   log: (message: string, level?: 'info' | 'warn' | 'error') => void;
   /** Trailing debounce; a burst (OneDrive sync) collapses into one round. */

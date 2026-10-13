@@ -41,6 +41,12 @@ import type { VaultManager } from '../vault-manager';
 import type { VaultChangeAnnouncer } from '../vault-change-announcer';
 import { PluginConfigStore } from './plugin-config-store';
 import {
+  buildLlmContext,
+  buildVaultContext,
+  runVaultTool,
+  type TrackDisposable,
+} from './plugin-context';
+import {
   discoverPlugins,
   pluginIdPattern,
   type DiscoveredPlugin,
@@ -100,7 +106,7 @@ export interface PluginHostDeps {
   /**
    * The external-change announcer, as a lazy closure — plugin vault
    * writes that must reach the tree/index/open tabs go through it (the
-   * same round an MCP write uses). Lazy so construction order in main.ts
+   * same round an MCP write uses). Lazy so construction order in app-services.ts
    * stays free; `null` only before the announcer exists (writes still
    * succeed, nothing is announced).
    */
@@ -123,26 +129,7 @@ export interface PluginHostDeps {
   readonly log: (message: string, level?: 'info' | 'warn' | 'error') => void;
 }
 
-/**
- * The ADR-0069 read-scope rule (pure, spec-covered): `vault_search` and
- * `vault_read` default to the ACTIVE vault, so a call whose declared scope
- * excludes it must not carry them — they would leak out-of-scope content.
- * Everything else passes; an absent scope or no active vault means the
- * pre-1.20 behaviour.
- */
-export function vaultReadToolAllowed(
-  name: string,
-  scope: readonly string[] | undefined,
-  activeVaultId: string | null,
-): boolean {
-  if (name !== 'vault_search' && name !== 'vault_read') {
-    return true;
-  }
-  if (scope === undefined) {
-    return true;
-  }
-  return activeVaultId !== null && scope.includes(activeVaultId);
-}
+export { vaultReadToolAllowed } from './plugin-context';
 
 export class PluginHost {
   private readonly discovered = new Map<string, DiscoveredPlugin>();
@@ -389,7 +376,8 @@ export class PluginHost {
               ? {
                   tools: this.deps.vaultTools.toolSpecs(),
                   onToolCall: (name, argsJson) =>
-                    this.runVaultTool(
+                    runVaultTool(
+                      this.deps.vaultTools,
                       name,
                       argsJson,
                       this.deps.appConfig.get().tools.vault.write === 'confirm',
@@ -655,102 +643,28 @@ export class PluginHost {
     }
   }
 
+  /**
+   * One plugin's `MainPluginContext`. `vault` and `llm` are built in
+   * `plugin-context.ts`; the rest is a view on this host's registries.
+   */
   private buildContext(plugin: ActivatedPlugin): MainPluginContext {
     const id = plugin.discovered.manifest.id;
-    const track = <T>(unsubscribe: T): T => {
+    const track: TrackDisposable = (unsubscribe) => {
       if (typeof unsubscribe === 'function') {
         plugin.disposables.push(unsubscribe as Unsubscribe);
       }
       return unsubscribe;
     };
-    const { vaultManager, appConfig, llm, llmTasks, tagSuggester, llmDebug } = this.deps;
 
     return {
       pluginId: id,
       manifest: plugin.discovered.manifest,
-      app: {
-        onMainWindowCreated: (cb) => {
-          this.mainWindowCreatedCallbacks.push(cb);
-          // Window-first startup (milestone 61): a plugin subscribing
-          // after the window exists gets it replayed (microtask, so the
-          // subscribe call returns first) — identical behaviour to a
-          // plugin that activated before the window was created.
-          const existing = this.currentMainWindow;
-          if (existing !== null && !existing.isDestroyed()) {
-            queueMicrotask(() => {
-              if (!existing.isDestroyed()) {
-                this.runGuarded(() => cb(existing), 'onMainWindowCreated');
-              }
-            });
-          }
-          return track(() => removeItem(this.mainWindowCreatedCallbacks, cb));
-        },
-        getMainWindow: () => this.deps.getMainWindow(),
-        onWillQuit: (cb) => {
-          plugin.willQuitCallbacks.push(cb);
-          return track(() => removeItem(plugin.willQuitCallbacks, cb));
-        },
-        appVersion: app.getVersion(),
-      },
-      vault: {
-        listVaults: () => Promise.resolve(vaultManager.listVaults()),
-        read: (p, opts) => vaultManager.readFile(p, opts?.vaultId).then((f) => f.content),
-        write: (p, content, opts) => vaultManager.writeFile(p, content, opts?.vaultId, { origin: id }),
-        // A write the tree/index/open tabs must see NOW (chat notes, a
-        // plugin-generated note): same round an MCP write runs — per-file
-        // index events + one scoped `vault:changed` push. A plain `write`
-        // announces nothing (sidecars etc. don't want the churn), and with
-        // the watcher off nothing else would fire for it.
-        writeAnnounced: async (p, content, opts) => {
-          const vaultId = vaultManager.resolveVaultId(opts?.vaultId);
-          const modifiedMs = await vaultManager.writeFile(p, content, vaultId, { origin: id });
-          this.deps.vaultAnnouncer()?.announceExternal({ vaultId, changedPaths: [p], deletedPaths: [] });
-          return modifiedMs;
-        },
-        // The app's own delete path (recycle bin first, milestone 52) plus
-        // the same announcement round — a plugin delete looks exactly like
-        // a Files-panel delete to tree and indexes.
-        delete: async (p, opts) => {
-          const vaultId = vaultManager.resolveVaultId(opts?.vaultId);
-          const { trashed } = await vaultManager.deleteEntry(p, vaultId);
-          this.deps.vaultAnnouncer()?.announceExternal({
-            vaultId,
-            changedPaths: [],
-            deletedPaths: [p],
-          });
-          return trashed;
-        },
-        confirmWrite: (request) =>
-          this.deps.confirmWrite?.({ ...request, mode: 'overwrite', origin: 'assistant' }) ?? Promise.resolve(false),
-        // A plugin rewrote the working tree itself (a git checkout / pull):
-        // the same round the watcher would run, scoped when paths are known.
-        announceChanges: (changes) => {
-          const changedPaths = changes.changedPaths ?? [];
-          const deletedPaths = changes.deletedPaths ?? [];
-          if (changedPaths.length === 0 && deletedPaths.length === 0) {
-            this.deps.vaultAnnouncer()?.announceFullRefresh(changes.vaultId);
-            return;
-          }
-          const isNote = (p: string): boolean => p.toLowerCase().endsWith('.md');
-          this.deps.vaultAnnouncer()?.announceExternal({
-            vaultId: changes.vaultId,
-            changedPaths: changedPaths.filter(isNote),
-            deletedPaths: deletedPaths.filter(isNote),
-            otherPaths: [...changedPaths, ...deletedPaths].filter((p) => !isNote(p)),
-          });
-        },
-        saveAsset: (bytes, ext, noteRelPath, opts) =>
-          vaultManager.saveAsset(bytes, ext, noteRelPath, opts?.vaultId),
-        list: (opts) => vaultManager.listFiles(opts?.vaultId),
-        listMarkdownFiles: (opts) => vaultManager.listMarkdownFiles(opts?.vaultId),
-        resolveAssetPath: (p, opts) => vaultManager.resolveAssetPath(p, opts?.vaultId),
-        onChanged: (cb) => {
-          this.vaultChangeCallbacks.push(cb);
-          return track(() => removeItem(this.vaultChangeCallbacks, cb));
-        },
-        pickSavePath: (suggestedName, opts) => vaultManager.pickSavePath(suggestedName, opts?.vaultId),
-      },
-      appConfig: { get: () => appConfig.get() },
+      app: this.buildAppContext(plugin, track),
+      vault: buildVaultContext(id, this.deps, (cb) => {
+        this.vaultChangeCallbacks.push(cb);
+        return track(() => removeItem(this.vaultChangeCallbacks, cb));
+      }),
+      appConfig: { get: () => this.deps.appConfig.get() },
       config: {
         get: <T>(key: string) => this.configStore.get<T>(id, key),
         set: <T>(key: string, value: T) => this.configStore.set(id, key, value),
@@ -769,82 +683,7 @@ export class PluginHost {
         registerTaskQuery: (provider) => track(this.tasks.registerTaskQuery(provider)),
         queryProvider: () => this.taskProvider,
       },
-      llm: {
-        enabled: () => appConfig.get().llm.enabled,
-        chat: (messages, options) =>
-          llmTasks.run(options?.taskId, (signal) =>
-            llm.chat([...messages], {
-              temperature: options?.temperature,
-              ...(options?.onDelta !== undefined ? { onDelta: options.onDelta } : {}),
-              ...(options?.sessionRef !== undefined ? { sessionRef: options.sessionRef } : {}),
-              ...(options?.attachments !== undefined
-                ? { attachments: [...options.attachments] }
-                : {}),
-              // Tool sets merge (ADR-0049): the plugin's own tools first, the
-              // vault set (when opted in) filtered to non-colliding names —
-              // a plugin tool wins a name collision.
-              ...(() => {
-                const pluginTools = [...(options?.tools ?? [])];
-                const pluginNames = new Set(pluginTools.map((tool) => tool.name));
-                const groups = appConfig.get().tools;
-                // tasks_list also sits in the vault set (for MCP clients);
-                // towards the assistant it follows its own group switch.
-                // ADR-0069: when the call carries a vault read scope that
-                // excludes the active vault, `vault_search`/`vault_read`
-                // drop out — they default to the active vault and would
-                // leak out-of-scope content; the caller supplies scope-safe
-                // plugin tools instead. `vault_write` is never filtered.
-                const readScope = options?.vaultToolsScope;
-                const readScopeAllows = (name: string): boolean =>
-                  vaultReadToolAllowed(
-                    name,
-                    readScope,
-                    this.deps.vaultManager.getActiveVaultId(),
-                  );
-                const vaultSpecs =
-                  options?.vaultTools === true && this.deps.vaultTools !== undefined
-                    ? this.deps.vaultTools
-                        .toolSpecs()
-                        .filter((spec) => !pluginNames.has(spec.name))
-                        .filter((spec) => groups.tasks.enabled || spec.name !== 'tasks_list')
-                        .filter((spec) => readScopeAllows(spec.name))
-                    : [];
-                const taken = new Set([...pluginNames, ...vaultSpecs.map((spec) => spec.name)]);
-                const toolbox = this.deps.assistantToolbox;
-                const externalSpecs =
-                  options?.externalTools === true && toolbox !== undefined
-                    ? toolbox.specs().filter((spec) => !taken.has(spec.name))
-                    : [];
-                const externalNames = new Set(externalSpecs.map((spec) => spec.name));
-                const merged = [...pluginTools, ...vaultSpecs, ...externalSpecs];
-                return merged.length > 0
-                  ? {
-                      tools: merged,
-                      onToolCall: (name: string, argsJson: string) =>
-                        pluginNames.has(name) && options?.onToolCall !== undefined
-                          ? options.onToolCall(name, argsJson)
-                          : externalNames.has(name) && toolbox !== undefined
-                            ? toolbox.run(name, argsJson, signal)
-                            : this.runVaultTool(name, argsJson, groups.vault.write === 'confirm'),
-                    }
-                  : {};
-              })(),
-              ...(options?.maxToolRounds !== undefined
-                ? { maxToolRounds: options.maxToolRounds }
-                : {}),
-              ...(options?.maxOutputTokens !== undefined
-                ? { maxOutputTokens: options.maxOutputTokens }
-                : {}),
-              signal,
-            }),
-          ),
-        capabilities: () => llm.capabilities(),
-        // The vocabulary-based Autotag — a base surface (editor + Tags
-        // plugin vocabulary) also reachable from plugins.
-        suggestTags: (entryText, vocabulary, taskId) =>
-          tagSuggester.suggest(entryText, [...vocabulary], taskId),
-        onDebugEntry: (cb) => track(llmDebug.onEntry(cb)),
-      },
+      llm: buildLlmContext(this.deps, track),
       ipc: {
         handle: (method, fn) => {
           if (method.startsWith('drey.')) {
@@ -858,30 +697,32 @@ export class PluginHost {
     };
   }
 
-  /** Bridges one model tool call to the base `VaultTools`, flattening the result to text. */
-  private async runVaultTool(
-    name: string,
-    argsJson: string,
-    confirmWrites?: boolean,
-  ): Promise<string> {
-    if (!this.deps.vaultTools) {
-      return 'Vault tools are not available.';
-    }
-    let args: Record<string, unknown> = {};
-    try {
-      const parsed: unknown = JSON.parse(argsJson || '{}');
-      if (parsed && typeof parsed === 'object') {
-        args = parsed as Record<string, unknown>;
-      }
-    } catch {
-      return `Could not parse arguments for ${name}: ${argsJson}`;
-    }
-    const result = await this.deps.vaultTools.call(
-      name,
-      args,
-      confirmWrites !== undefined ? { confirmWrites } : undefined,
-    );
-    return result.content.map((block) => block.text).join('\n');
+  /** `ctx.app`: the window and the quit hook. */
+  private buildAppContext(plugin: ActivatedPlugin, track: TrackDisposable): MainPluginContext['app'] {
+    return {
+      onMainWindowCreated: (cb) => {
+        this.mainWindowCreatedCallbacks.push(cb);
+        // Window-first startup (milestone 61): a plugin subscribing
+        // after the window exists gets it replayed (microtask, so the
+        // subscribe call returns first) — identical behaviour to a
+        // plugin that activated before the window was created.
+        const existing = this.currentMainWindow;
+        if (existing !== null && !existing.isDestroyed()) {
+          queueMicrotask(() => {
+            if (!existing.isDestroyed()) {
+              this.runGuarded(() => cb(existing), 'onMainWindowCreated');
+            }
+          });
+        }
+        return track(() => removeItem(this.mainWindowCreatedCallbacks, cb));
+      },
+      getMainWindow: () => this.deps.getMainWindow(),
+      onWillQuit: (cb) => {
+        plugin.willQuitCallbacks.push(cb);
+        return track(() => removeItem(plugin.willQuitCallbacks, cb));
+      },
+      appVersion: app.getVersion(),
+    };
   }
 
   private runGuarded(fn: () => void, what: string): void {

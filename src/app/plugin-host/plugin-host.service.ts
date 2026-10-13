@@ -5,12 +5,12 @@ import type {
   PluginRendererModule,
   Unsubscribe,
 } from '../../../shared/plugin-api/renderer';
-import type { PluginInstallResult, PluginUninstallResult } from '../../../shared/ipc-api';
 import { EditorService } from '../services/editor.service';
 import { DocKindRegistry } from './doc-kind-registry.service';
 import { LayoutGestureService } from '../services/layout-gesture.service';
 import { LogService } from '../services/log.service';
 import { OverlayGuardService } from '../services/overlay-guard.service';
+import { PluginCatalogService } from '../services/plugin-catalog.service';
 import { WidgetRegistryService } from '../dock/widget-registry.service';
 import { PluginApiFactory } from './plugin-api-impl';
 import { PLUGIN_MODULE_LOADER, moduleDefault } from './plugin-module-loader';
@@ -52,16 +52,12 @@ export class PluginHostService {
   private readonly log = inject(LogService);
   private readonly widgets = inject(WidgetRegistryService);
   private readonly docKinds = inject(DocKindRegistry);
+  private readonly catalog = inject(PluginCatalogService);
 
-  /** Every discovered plugin with its status; Settings → Panels & plugins reads this. */
-  readonly plugins = signal<readonly PluginDescriptorForRenderer[]>([]);
+  /** Every discovered plugin with its status (held by `PluginCatalogService`). */
+  readonly plugins = this.catalog.plugins;
   /** True once `loadAll()` finished (successfully or not) — session restore waits for it. */
   readonly loaded = signal(false);
-  /**
-   * Ticks when the section-search provider or its index changed (SDK 1.9:
-   * `search:changed`) — the base tag vocabulary service re-pulls on it.
-   */
-  readonly searchChanged = signal(0);
 
   private readonly activated = new Map<string, ActivatedRendererPlugin>();
 
@@ -72,7 +68,6 @@ export class PluginHostService {
     window.dreyApi?.onPluginEvent?.((payload) =>
       this.handlePluginEvent(payload.pluginId, payload.event, payload.data),
     );
-    window.dreyApi?.onSearchChanged?.(() => this.searchChanged.update((n) => n + 1));
 
     this.synthesizeDocumentEvents();
     this.synthesizeVisibilityEvents();
@@ -149,42 +144,6 @@ export class PluginHostService {
       }
     }
     this.activated.clear();
-  }
-
-  // -- local packages (ADR-0068) --------------------------------------------
-
-  /**
-   * True once a plugin package was installed or removed this session — the
-   * change applies on the next start, so Settings keeps offering a restart
-   * until one happens.
-   */
-  readonly pluginChangePending = signal(false);
-
-  /** Native .zip pick + install; null when the pick was cancelled. */
-  async installPluginFromFile(): Promise<PluginInstallResult | null> {
-    const picked = await window.dreyApi.pickPluginPackage();
-    if (picked === null) {
-      return null;
-    }
-    const result = await window.dreyApi.installPluginPackage(picked);
-    if (result.status === 'installed') {
-      this.pluginChangePending.set(true);
-    }
-    return result;
-  }
-
-  /** Removes a user-installed plugin (the caller confirms first). */
-  async removePlugin(pluginId: string): Promise<PluginUninstallResult> {
-    const result = await window.dreyApi.uninstallPlugin(pluginId);
-    if (result.status === 'removed') {
-      this.pluginChangePending.set(true);
-    }
-    return result;
-  }
-
-  /** Graceful restart (dirty tabs still get their exit prompt). */
-  relaunchApp(): void {
-    void window.dreyApi.relaunchApp();
   }
 
   // -- activation ----------------------------------------------------------

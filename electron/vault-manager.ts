@@ -884,7 +884,7 @@ export class VaultManager {
    * inside `vaultId`'s root (the active vault when omitted), and refuses
    * anything that would escape the root (`..`, absolute input,
    * symlink-free string check -- same defense-in-depth idea as the
-   * `app://` protocol handler in main.ts). The renderer only ever sends
+   * `app://` protocol handler in app-protocols.ts). The renderer only ever sends
    * paths it got from `listFiles`, but read/write are a public IPC
    * surface, so the guard lives here rather than being assumed.
    */

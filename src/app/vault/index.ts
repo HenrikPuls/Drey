@@ -1,7 +1,8 @@
 /**
  * `src/app/vault` — the renderer's view of the active vault: `VaultService`
- * (the `window.dreyApi` file-tree / read / write wrapper, held as signals)
- * and `DailyNoteService` (the quick-capture hotkey bridge).
+ * (the `window.dreyApi` file-tree / read / write wrapper, held as signals).
+ * `DailyNoteService` opens documents, so it sits above `EditorService` in
+ * `src/app/services/` — exporting it here closed an import cycle.
  *
  * This barrel is the module's public surface — code outside the module
  * imports from `../vault`, never a file inside it (enforced by
@@ -10,4 +11,3 @@
  */
 
 export { VaultService } from './vault.service';
-export { DailyNoteService } from './daily-note.service';
