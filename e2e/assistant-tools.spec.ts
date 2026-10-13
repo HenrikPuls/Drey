@@ -4,13 +4,15 @@ import * as path from 'node:path';
 import { test, expect, type Page } from './fixtures/drey';
 
 /**
- * The assistant's tool loop and vault tools end to end (milestones 76 and
- * 77, ADR-0071), against a scripted OpenAI-compatible endpoint that
+ * The assistant's tool loop and vault tools end to end (milestones 76 to
+ * 78, ADR-0071), against a scripted OpenAI-compatible endpoint that
  * answers with tool calls: a call to a tool that was not offered is
  * refused instead of run, an offered one runs and its result reaches the
  * model, the panel shows the calls while they run, a call written into
  * the reply text is read, `vault_edit` changes a note on disk — and with
- * the Vault chip off the model is offered no vault tool at all.
+ * the Vault chip off the model reaches the attached note and nothing else
+ * of the vault. The open note is changed with the same tool: through its
+ * tab, unsaved text included, and in live edit without saving.
  */
 
 const MOCK_PORT = 27320;
@@ -18,6 +20,7 @@ const MOCK_BASE_URL = `http://127.0.0.1:${MOCK_PORT}/v1`;
 
 const NOTE = ['# Harbour', '', 'The harbour fee is 12 euros per night.', ''].join('\n');
 const ANSWER = 'The harbour fee is 12 euros per night.';
+const BERTH = ['# Berth', '', 'The berth fee is 20 euros per night.', ''].join('\n');
 
 interface WireMessage {
   role: string;
@@ -68,7 +71,13 @@ function handler(req: http.IncomingMessage, res: http.ServerResponse): void {
     const question = typeof last?.content === 'string' ? last.content : '';
     const offered = JSON.stringify(body.tools);
     if (question.includes('Which tools')) {
-      reply(res, { content: offered.includes('vault_read') ? 'VAULT TOOLS OFFERED' : 'NO VAULT TOOLS' });
+      reply(res, {
+        content: offered.includes('vault_search')
+          ? 'VAULT TOOLS OFFERED'
+          : offered.includes('vault_edit')
+            ? 'DOCUMENT TOOLS ONLY'
+            : 'NO VAULT TOOLS',
+      });
       return;
     }
     if (question.includes('Raise the fee')) {
@@ -83,6 +92,47 @@ function handler(req: http.IncomingMessage, res: http.ServerResponse): void {
               arguments: JSON.stringify({
                 path: 'notes/harbour.md',
                 edits: [{ old_text: '12 euros', new_text: '14 euros' }],
+              }),
+            },
+          },
+        ],
+      });
+      return;
+    }
+    if (question.includes('shorter')) {
+      // The document's name comes from the message: a tab that was never
+      // saved has no path of its own to script against.
+      const name = /DOCUMENT \((.+?)\):/.exec(question)?.[1] ?? '';
+      reply(res, {
+        content: null,
+        tool_calls: [
+          {
+            id: 's1',
+            type: 'function',
+            function: {
+              name: 'vault_edit',
+              arguments: JSON.stringify({
+                path: name,
+                edits: [{ old_text: 'a very long sentence', new_text: 'a short one' }],
+              }),
+            },
+          },
+        ],
+      });
+      return;
+    }
+    if (question.includes('berth fee')) {
+      reply(res, {
+        content: null,
+        tool_calls: [
+          {
+            id: 'b1',
+            type: 'function',
+            function: {
+              name: 'vault_edit',
+              arguments: JSON.stringify({
+                path: 'berth.md',
+                edits: [{ old_text: '20 euros', new_text: '25 euros' }],
               }),
             },
           },
@@ -149,6 +199,12 @@ async function vaultChipOn(page: Page): Promise<void> {
   await expect(button).toHaveAttribute('aria-pressed', 'true');
 }
 
+/** Opens the note at the vault root in the editor: the assistant attaches it to the next question. */
+async function openBerth(page: Page): Promise<void> {
+  await page.locator('app-dock[side="left"] .node.file', { hasText: 'berth.md' }).click();
+  await expect(page.locator('app-editor .cm-content')).toContainText('20 euros');
+}
+
 async function ask(page: Page, question: string): Promise<void> {
   const panel = page.locator('app-panel-frame', { has: page.locator('.assistant-panel') });
   await expect(panel.locator('.assistant-head .chat-label')).toBeVisible();
@@ -159,7 +215,7 @@ async function ask(page: Page, question: string): Promise<void> {
 
 test.describe('Assistant tool loop', () => {
   test.use({
-    seedVault: { 'notes/harbour.md': NOTE },
+    seedVault: { 'notes/harbour.md': NOTE, 'berth.md': BERTH },
     appConfig: {
       llm: {
         enabled: true,
@@ -226,11 +282,14 @@ test.describe('Assistant tool loop', () => {
     await expect.poll(() => chatNotes(vaultDir), { timeout: 10_000 }).toContain('Edited notes/harbour.md');
   });
 
-  test('with the Vault chip off the model is offered no vault tool', async ({ page }) => {
+  test('with the Vault chip off the model gets the tools for the attached note only', async ({
+    page,
+  }) => {
+    // The app starts on today's daily note, which rides the question.
     await ask(page, 'Which tools do you have?');
     const thread = page.locator('.assistant-panel .assistant-thread');
 
-    await expect(thread).toContainText('NO VAULT TOOLS', { timeout: 30_000 });
+    await expect(thread).toContainText('DOCUMENT TOOLS ONLY', { timeout: 30_000 });
   });
 
   test('with the Vault chip on the vault tools are offered', async ({ page }) => {
@@ -239,5 +298,62 @@ test.describe('Assistant tool loop', () => {
     const thread = page.locator('.assistant-panel .assistant-thread');
 
     await expect(thread).toContainText('VAULT TOOLS OFFERED', { timeout: 30_000 });
+  });
+
+  test('the open note is changed through its tab, unsaved text included, with the Vault chip off', async ({
+    page,
+    vaultDir,
+  }) => {
+    await openBerth(page);
+    const content = page.locator('app-editor .cm-content');
+    await content.click();
+    await page.keyboard.press('Control+End');
+    await page.keyboard.type('Mooring lines are extra.');
+
+    await ask(page, 'Raise the berth fee to 25 euros.');
+
+    await expect(content).toContainText('The berth fee is 25 euros per night.', { timeout: 30_000 });
+    // The tab saved it: the change and what was typed before it are on disk.
+    const file = path.join(vaultDir, 'berth.md');
+    await expect.poll(() => fs.readFileSync(file, 'utf8'), { timeout: 10_000 }).toContain('25 euros');
+    expect(fs.readFileSync(file, 'utf8')).toContain('Mooring lines are extra.');
+  });
+
+  test('live edit puts the change into the tab without saving it', async ({ page, vaultDir }) => {
+    await openBerth(page);
+    const live = page.locator('.assistant-panel .composer-meta [aria-label="Toggle live edit"]');
+    await live.click();
+    await expect(live).toHaveAttribute('aria-pressed', 'true');
+
+    await ask(page, 'Raise the berth fee to 25 euros.');
+
+    const content = page.locator('app-editor .cm-content');
+    await expect(content).toContainText('The berth fee is 25 euros per night.', { timeout: 30_000 });
+    const thread = page.locator('.assistant-panel .assistant-thread');
+    await expect(thread).toContainText(ANSWER, { timeout: 30_000 });
+    // Unsaved: the file still holds the old text until the user saves.
+    const file = path.join(vaultDir, 'berth.md');
+    expect(fs.readFileSync(file, 'utf8')).toContain('20 euros');
+
+    await content.click();
+    await page.keyboard.press('Control+S');
+    await expect.poll(() => fs.readFileSync(file, 'utf8'), { timeout: 10_000 }).toContain('25 euros');
+  });
+
+  test('live edit works on a tab that was never saved', async ({ page, vaultDir }) => {
+    await page.locator('app-editor .cm-content').click();
+    await page.keyboard.press('Control+N');
+    const content = page.locator('app-editor .cm-content');
+    await content.click();
+    await page.keyboard.type('This is a very long sentence.');
+    const live = page.locator('.assistant-panel .composer-meta [aria-label="Toggle live edit"]');
+    await live.click();
+    await expect(live).toHaveAttribute('aria-pressed', 'true');
+
+    await ask(page, 'Make it shorter.');
+
+    await expect(content).toContainText('This is a short one.', { timeout: 30_000 });
+    // Still a tab without a file: nothing of that name appeared in the vault.
+    expect(fs.existsSync(path.join(vaultDir, 'untitled.md'))).toBe(false);
   });
 });

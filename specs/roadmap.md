@@ -44,11 +44,11 @@ Open work only. Everything implemented lives in
 lives in [`decisions.md`](decisions.md). When an item ships, move it to the
 changelog and delete it here — no shipped history on this page.
 
-**Status (2026-10-13):** version 0.6.0, milestones 1–74, 76 and 77
+**Status (2026-10-13):** version 0.6.0, milestones 1–74 and 76–78
 shipped. Milestone ids are assigned when work starts — check
-`changelog.md` for the highest used (latest: milestone 77; milestone 75
-is assigned to "Configurable shortcuts" below, milestones 78–79 to the
-rest of the assistant tool rework at the top of "Now"; latest requirement id: req-42, the Cyberpunk app mark —
+`changelog.md` for the highest used (latest: milestone 78; milestone 75
+is assigned to "Configurable shortcuts" below, milestone 79 to the
+last step of the assistant tool rework at the top of "Now"; latest requirement id: req-42, the Cyberpunk app mark —
 an owner request outside the list, shipped in the same step).
 Items A1–A5 of the architectural cleanup shipped on 2026-10-13
 (changelog); A6–A12 remain.
@@ -61,19 +61,11 @@ Items A1–A5 of the architectural cleanup shipped on 2026-10-13
 
 The assistant tool rework below is an owner request, outside the list
 (2026-10-13); its milestones are worked first, in this order, with a
-pause after each. Milestones 76 (the tool loop and the system prompt)
-and 77 (the vault toolset) shipped — see the changelog. ADR-0071 covers
+pause after each. Milestones 76 (the tool loop and the system prompt),
+77 (the vault toolset) and 78 (the open note through the same tools)
+shipped — see the changelog. ADR-0071 covers
 76–78; milestone 79 is a later change to ADR-0063.
 
-- **The open note through the same tools (milestone 78).** Main asks the
-  renderer for the buffer of an open file (today a vault tool reads and
-  writes the file on disk: an unsaved change in an open tab is not seen,
-  a write to it ends in the "Changed on disk" merge, and a moved note's
-  tab keeps its old path), so a read sees unsaved text
-  and an edit lands in the tab (live edit: at once and unsaved; otherwise
-  after the diff confirmation). `doc_apply_diff` / `doc_write` /
-  `doc_read` go; the attached note is always in scope. The whole-document
-  `document` fence stays only for providers without a tool loop.
 - **Web search (milestone 79).** A built-in `web_search` tool with a
   selectable provider — Brave Search, Tavily, a SearXNG URL of the
   user's own, or DuckDuckGo without a key (a scraper of its HTML page:
@@ -231,6 +223,14 @@ Follow-ups of A1–A5 (found on the way, none started):
   folder; a per-call cache of file contents when one search reads a
   large vault; `tasks_list` and the template tools for a vault other
   than the active one.
+- **Milestone 78 (open note through the tools, ADR-0071):** the
+  confirmation of a tool change still opens while the ask is cancelled
+  (the abort signal does not reach the vault tools, see milestone 76);
+  an edit of a chat note or of a file opened from outside the vaults
+  keeps the whole-document reply form (and such a file cannot be
+  live-edited); the tag and semantic search of
+  `vault_search` / `vault_retrieve` read their indexes, not unsaved
+  buffers; several attached files as edit targets.
 - **Milestone 64 (draw.io, ADR-0064):** dirty state / manual save for plugin
   tabs, "New diagram" in the Files context menu, SVG ⇄ PNG conversion,
   embedding a plain `.drawio`, letting the assistant read a diagram.

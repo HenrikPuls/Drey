@@ -60,7 +60,7 @@ import {
   matchTasksInAnswer,
   refineTasksEntries,
 } from './tasks-tool.js';
-import { LIVE_EDIT_TOOL_SPECS, createLiveEditSession } from './live-edit';
+import { isAutoSavePath } from '../../../shared/structural-folders';
 import { isAbort, normalizeDoc } from './action-engine';
 
 /** One completion call with the engine's needs; abort via `taskId` (ADR-0014). */
@@ -69,8 +69,12 @@ export type ChatFn = (
   options?: {
     taskId?: string;
     vaultTools?: boolean;
-    /** ADR-0069: the ask's resolved target vaults — the host filters out-of-scope vault READ tools. */
+    /** The ask's resolved target vaults: what the vault tools may read and change (ADR-0071). */
     vaultToolsScope?: readonly string[];
+    /** The attached note: in scope whatever the chip says; `live` = changed in the tab at once. */
+    vaultToolsFiles?: readonly { vaultId?: string | null; path: string; live?: boolean }[];
+    /** One change a vault tool of this call made. */
+    onVaultChange?: (change: { vaultId: string; path: string; before: string; after: string }) => void;
     /** web_fetch + the user's MCP servers (SDK 1.15, ADR-0063). */
     externalTools?: boolean;
     sessionRef?: string;
@@ -104,11 +108,6 @@ export interface ChatEnginePorts {
   readAssetBase64(absPath: string): Promise<string | null>;
   /** Delta forwarding to the panel (the plugin's own `chat:delta` event). */
   onDelta(taskId: string, text: string): void;
-  /**
-   * One live-edit working-copy push (ADR-0049): fires after each mutating
-   * doc-tool call; the renderer applies it to the open tab (`setBuffer`).
-   */
-  onLiveEdit(path: string, content: string): void;
   /** One step of the running tool loop, forwarded to the panel (`chat:toolEvent`). */
   onToolEvent(taskId: string, event: ToolCallEvent): void;
   /**
@@ -202,6 +201,19 @@ function proseOutsideFences(reply: string): string {
   return kept.join('\n').trim();
 }
 
+/**
+ * Whether the attached note can be changed with the vault tools: a note
+ * of a vault, or a tab that was never saved. Not the app's own notes
+ * (chats, drafts), and not a file from outside the vaults — that one
+ * carries its absolute path and no vault.
+ */
+function isToolTarget(note: { path: string; vaultId?: string }): boolean {
+  if (isAutoSavePath(note.path)) {
+    return false;
+  }
+  return note.vaultId !== undefined || !/^([a-zA-Z]:[\\/]|[\\/])/.test(note.path);
+}
+
 export class ChatEngine {
   constructor(
     private readonly store: ChatStore,
@@ -245,6 +257,12 @@ export class ChatEngine {
     }
     if (request.liveEdit && this.toolsRefused(config)) {
       throw new Error(LIVE_EDIT_NEEDS_TOOLS);
+    }
+    // Its edits are addressed to a note of a vault or to a tab that was
+    // never saved: an app-owned note and a file outside the vaults are no
+    // target (the panel does not offer the first).
+    if (request.liveEdit && (request.note === null || !isToolTarget(request.note))) {
+      throw new Error('Live edit is unavailable for this document.');
     }
 
     // 1 · The chat note: continue the given one, or create one titled by
@@ -300,15 +318,10 @@ export class ChatEngine {
 
     // The tool groups (ADR-0063): one switch each, read per ask.
     const groups = config.tools;
-    // Live branch (ADR-0049): the note IS the edit target, edited through
-    // the doc tools over a main-side working copy seeded from the live
-    // buffer. `note !== null` is guaranteed by the payload validation for a
-    // liveEdit ask; the null-narrowing keeps TS happy.
-    const liveSession =
-      request.liveEdit && request.note !== null
-        ? createLiveEditSession(request.note.path, request.note.body)
-        : null;
-    const live = liveSession !== null;
+    // Live branch (ADR-0049): the note IS the edit target, and every
+    // change the model makes lands in its tab at once. `note !== null` is
+    // guaranteed by the payload validation for a liveEdit ask.
+    const live = request.liveEdit && request.note !== null;
     const answerOnly = request.note === null;
     // The Vault chip's scope, resolved from the REGISTRY — independent of
     // retrieval. It bounds what the vault tools may read AND change
@@ -362,6 +375,19 @@ export class ChatEngine {
     // vault group allows writing. With the chip off the model has no way
     // into the vault beyond what is attached to the question.
     const vaultOn = chipOn && targets.length > 0 && canCall;
+    // The attached note is changed with the same tools (ADR-0071): it is
+    // in their scope whatever the chip says, and the host puts a change
+    // into its open tab — a tab that was never saved included (`vaultId:
+    // null`: it exists in the editor only). Not an app-owned note (a chat,
+    // a draft) and not a file outside the vaults — those keep the
+    // whole-document reply form, as does a call without a tool loop.
+    const note = request.note;
+    const noteFile =
+      canCall && note !== null && isToolTarget(note)
+        ? { vaultId: note.vaultId ?? null, path: note.path, ...(live ? { live: true } : {}) }
+        : null;
+    // What the tools did to the note in this turn, in order.
+    const noteChanges: { before: string; after: string }[] = [];
     // External tools (ADR-0063): web_fetch and the user's MCP servers.
     // Never on a live-edit turn, and only where the provider runs a tool
     // loop at all -- otherwise the note would promise tools that are not
@@ -399,6 +425,14 @@ export class ChatEngine {
               ...(externalOn ? { external: true } : {}),
             }
           : {},
+        ...(withTools && noteFile !== null
+          ? {
+              document: {
+                path: noteFile.path,
+                write: groups.vault.write === 'auto' ? ('auto' as const) : ('confirm' as const),
+              },
+            }
+          : {}),
         vaults,
         scopeVaultIds: chipOn && targets.length > 0 ? targets : null,
         contextBlock,
@@ -433,25 +467,34 @@ export class ChatEngine {
       taskId,
       // The scope comes from the REGISTRY-resolved targets (not the
       // retrieval's), so it holds even when retrieval is off or failed.
-      ...(withTools && vaultOn ? { vaultTools: true, vaultToolsScope: targets } : {}),
+      // Without the chip the scope is empty: the tools then reach the
+      // attached note and nothing else.
+      ...(withTools && (vaultOn || noteFile !== null)
+        ? { vaultTools: true, vaultToolsScope: vaultOn ? targets : [] }
+        : {}),
+      ...(withTools && noteFile !== null
+        ? {
+            vaultToolsFiles: [noteFile],
+            onVaultChange: (change: {
+              vaultId: string;
+              path: string;
+              before: string;
+              after: string;
+            }) => {
+              if (change.vaultId === (noteFile.vaultId ?? '') && change.path === noteFile.path) {
+                noteChanges.push({ before: change.before, after: change.after });
+              }
+            },
+          }
+        : {}),
       ...(withTools && externalOn ? { externalTools: true } : {}),
       // The round budget is the user's (`tools.maxRounds`, applied by the
       // host); a live turn works hunk by hunk and never gets less than
       // its old allowance.
       ...(!withTools
         ? {}
-        : liveSession !== null
-          ? {
-              tools: LIVE_EDIT_TOOL_SPECS,
-              maxToolRounds: Math.max(groups.maxRounds, LIVE_EDIT_MIN_ROUNDS),
-              onToolCall: (name: string, argsJson: string) =>
-                liveSession.runTool(name, argsJson).then((run) => {
-                  if (run.mutated) {
-                    this.ports.onLiveEdit(liveSession.path, liveSession.work);
-                  }
-                  return run.text;
-                }),
-            }
+        : live
+          ? { maxToolRounds: Math.max(groups.maxRounds, LIVE_EDIT_MIN_ROUNDS) }
           : tasksTool !== null || templateTools !== null
             ? {
                 tools: [
@@ -502,7 +545,7 @@ export class ChatEngine {
       // remember it for this model so the next ask does not pay twice.
       if (result.toolsDropped === true) {
         this.rememberToolsRefused(config);
-        if (liveSession !== null) {
+        if (live) {
           throw new Error(LIVE_EDIT_NEEDS_TOOLS);
         }
         result = await callOnce(false);
@@ -519,14 +562,10 @@ export class ChatEngine {
     // is kept with what they did (a write may already be on disk — the
     // trace must not vanish with it) under a line that says so. Only a
     // reply with nothing at all fails like any other generation.
-    if (
-      liveSession === null &&
-      result.text.trim() === '' &&
-      (result.toolTrace?.length ?? 0) > 0
-    ) {
+    if (!live && result.text.trim() === '' && (result.toolTrace?.length ?? 0) > 0) {
       result = { ...result, text: NO_ANSWER_AFTER_TOOLS };
     }
-    if (liveSession === null && result.text.trim() === '') {
+    if (!live && result.text.trim() === '') {
       await this.store.truncateFrom(chatPath, userTurnIndex);
       throw new Error('The model returned no message content.');
     }
@@ -538,23 +577,28 @@ export class ChatEngine {
     );
 
     // 5 · The reply: a live turn's changes are already applied — the
-    // model's text is the summary (the providers deliver an empty text
-    // when the round cap hit mid-loop, so a fallback names what happened).
-    // Otherwise an answer to display, or an edit to confirm (the outcome —
-    // applied document or discarded marker — is appended to the turn's
-    // fence by `chat:appendEdit` after the user's decision).
+    // model's text is the summary (it may be empty, so a fallback names
+    // what happened). Otherwise an answer to display — the changes the
+    // model made with the tools are applied by then — or, from a call
+    // without tools, an edit to confirm (the outcome — applied document or
+    // discarded marker — is appended to the turn's fence by
+    // `chat:appendEdit` after the user's decision).
     let outcome: AssistantOutcome;
-    if (liveSession !== null) {
+    if (live && note !== null) {
       const fallback =
-        liveSession.editCount > 0
-          ? `Applied ${liveSession.editCount} edit(s) to ${liveSession.path}.`
+        noteChanges.length > 0
+          ? `Applied ${noteChanges.length} edit(s) to ${note.path}.`
           : 'No changes were needed.';
       outcome = {
         kind: 'liveEdit',
-        path: liveSession.path,
-        applied: liveSession.editCount,
+        path: note.path,
+        applied: noteChanges.length,
         text: result.text.trim() || fallback,
       };
+    } else if (noteChanges.length > 0) {
+      // The note was changed through the tools: whatever the reply fences
+      // is no proposal against a text that is already gone.
+      outcome = { kind: 'answer', text: proseOutsideFences(result.text) || result.text.trim() };
     } else {
       // ADR-0053: a change arrives as a `document` fence; a question (and
       // any reply without a usable fence — a prose decline, a truncated
@@ -666,14 +710,15 @@ export class ChatEngine {
       ...(config.llm.model ? { model: config.llm.model } : {}),
       ...(result.sessionRef !== undefined ? { session: result.sessionRef } : {}),
     });
-    // A live turn that changed something persists the applied document as
-    // the turn's `edit` entry (applied: true) — the next replay then shows
-    // the model its own result, same as a confirmed proposal.
-    if (liveSession !== null && liveSession.editCount > 0) {
+    // A turn whose tools changed the note persists the document as it
+    // stands afterwards as the turn's `edit` entry (applied: true) — the
+    // next replay then shows the model its own result, same as a confirmed
+    // proposal.
+    if (note !== null && noteChanges.length > 0) {
       await this.store.appendEditOutcome(chatPath, {
-        path: liveSession.path,
+        path: note.path,
         applied: true,
-        after: liveSession.work,
+        after: noteChanges[noteChanges.length - 1].after,
       });
     }
 

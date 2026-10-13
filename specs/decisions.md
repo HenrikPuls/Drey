@@ -87,3 +87,7 @@ one means moving it back to the roadmap with a new justification.
   library for tool arguments*: the slips are shallow, and the messages
   have to be written for the model. *A higher round cap instead of a
   closing round*: it only moves the point where the turn is lost.
+  *A copy of the open buffers in main* (milestone 78): two owners of
+  the same text; main asks the renderer at the moment of the call
+  instead. *Keeping the `doc_*` live-edit tools*: a second edit tool for
+  the same operation.

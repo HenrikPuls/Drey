@@ -268,6 +268,35 @@ export interface MainChatOptions {
    */
   readonly vaultToolsScope?: readonly string[];
   /**
+   * Files this ONE call's vault tools may read and change beside the
+   * vaults of `vaultToolsScope` (SDK 1.25, ADR-0071) — the assistant
+   * passes the note attached to the question, so the model changes it
+   * with `vault_edit` even while the Vault chip is off (an empty scope
+   * then offers `vault_read`, `vault_edit` and `vault_write` for these
+   * files only). `vaultId` absent: the active vault; `null`: a tab that
+   * belongs to no vault (never saved) — `path` is then the tab's name, and
+   * the file is read and changed in the editor only, never saved by a
+   * tool. Such a file can always be changed: where the user's write rule is `off`, the change is
+   * asked in the diff dialog. `live` (ADR-0049) puts every change into the
+   * file's open tab at once — no dialog, not saved.
+   */
+  readonly vaultToolsFiles?: readonly {
+    readonly vaultId?: string | null;
+    readonly path: string;
+    readonly live?: boolean;
+  }[];
+  /**
+   * Called after a vault tool of this call changed a file (SDK 1.25):
+   * the text before and after, `\n` line ends; `vaultId` is `''` for a
+   * tab outside every vault. In-process only.
+   */
+  readonly onVaultChange?: (change: {
+    vaultId: string;
+    path: string;
+    before: string;
+    after: string;
+  }) => void;
+  /**
    * Opts this ONE call into the EXTERNAL tool set (SDK 1.15, ADR-0063):
    * the built-in `web_fetch` and the tools of the user's MCP servers
    * (`mcp__<serverId>__<tool>`), as far as `tools` config enables them.

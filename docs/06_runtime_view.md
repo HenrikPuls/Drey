@@ -1785,6 +1785,11 @@ typed by hand). A nonzero exit or a missing executable surfaces as
 
 ## 6.36 One live-edit ask turn (ADR-0049)
 
+> Since milestone 78 the `doc_*` tools, the `LiveEditSession` and the
+> `chat:liveEdit` push below are gone: a live turn uses the vault tools
+> on the open tab — see 6.61. The lock, the undo step per change and the
+> outcome are unchanged.
+
 The composer's "Live edit" chip is on: the ask targets the open note,
 the model edits it through the `doc_*` tools over the provider loop, and
 every mutating call appears in the editor while the model keeps working.
@@ -3026,3 +3031,55 @@ read or written. `vault_write`, `vault_move` and `vault_delete` take the
 same path — a move and a deletion ask in the approval dialog instead of
 the diff, a deletion always. A program on the MCP server runs the same
 code with every registered vault in scope and `mcp.yolo` as its rule.
+
+## 6.61 A vault tool changes a file that is open in a tab (milestone 78, [ADR-0071](09_architecture_decisions/0071-unified-vault-toolset-and-agent-loop.md))
+
+```mermaid
+sequenceDiagram
+    actor User
+    participant CE as ChatEngine (plugin)
+    participant Host as PluginHost (ctx.llm.chat)
+    participant VT as VaultTools (mcp/tools)
+    participant OB as OpenDocsBridge (main)
+    participant OS as OpenDocsBridgeService (renderer)
+    participant ES as EditorService
+    participant Dlg as Confirmation dialog
+
+    CE->>Host: chat({ vaultTools, vaultToolsScope: chip or [], vaultToolsFiles: [note, live?], onVaultChange })
+    Host->>VT: toolSpecs(options) — empty scope + a file: vault_read, vault_edit, vault_write
+    Note over Host: tool loop (6.59)
+    Host->>VT: call(vault_edit, { path, edits })
+    VT->>VT: ToolScope.locate — the file of the call is found by its path
+    VT->>OB: peek(vaultId, path)
+    OB->>OS: open-docs:request { peek }
+    OS->>ES: docFor(key)
+    OS-->>OB: open-docs:reply { buffers: [buffer] }
+    alt not open
+        VT->>VT: read and write the file on disk (6.60)
+    else open
+        VT->>VT: applyTextEdits on the buffer
+        alt live file
+            VT->>OB: apply(content, save: false)
+            OB->>OS: open-docs:request { apply }
+            OS->>ES: updateBuffer — unsaved, one undo step
+        else write rule confirm (or off, for the file of the call)
+            VT->>Dlg: buffer before / after (ADR-0011)
+            User->>Dlg: accept
+            VT->>OB: apply(content, save: true)
+            OB->>OS: open-docs:request { apply }
+            OS->>ES: applyRewrite — buffer, then the note's own save
+            OS-->>OB: { applied, saved }
+        end
+        VT-->>Host: "Edited <path>: …" (+ "not saved yet" when the save stopped)
+    end
+    VT->>CE: onVaultChange({ vaultId, path, before, after })
+    Host-->>CE: answer + toolTrace
+    CE->>CE: the note changed → applied edit entry in the chat note
+```
+
+Main keeps no buffers: every question goes to the renderer at the moment
+of the call, and a window that does not answer reads as "not open".
+`vault_read` and the scan of `vault_search` use the same `peek` /
+`dirty`; `vault_move` sends `moved` (the tab is retargeted) and
+`vault_delete` sends `closed`. A program on the MCP server takes the
+same path with `mcp.yolo` as its rule.

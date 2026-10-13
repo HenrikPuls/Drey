@@ -11,11 +11,27 @@
  * the tool's own description; this prompt holds what cuts across tools —
  * when to call one at all, what to do with an error, how to finish.
  */
-import { ASK_ANSWER_SYSTEM, ASK_SYSTEM, buildDateNote } from './ask-prompts';
-import { LIVE_EDIT_SYSTEM } from './live-edit';
+import {
+  ASK_ANSWER_SYSTEM,
+  ASK_SYSTEM,
+  askToolsSystem,
+  buildDateNote,
+  liveEditSystem,
+} from './ask-prompts';
 
-/** `ask`: a note is attached and may be changed; `answer`: no note; `live`: the note is edited through the doc tools. */
+/** `ask`: a note is attached and may be changed; `answer`: no note; `live`: the note is edited at once, unconfirmed (ADR-0049). */
 export type PromptMode = 'ask' | 'answer' | 'live';
+
+/**
+ * The attached note when the model changes it with the vault tools
+ * (`vault_edit`). Absent: no note, or a call without a tool loop — the
+ * note is then changed with the whole-document reply form.
+ */
+export interface PromptDocument {
+  path: string;
+  /** Whether a change is confirmed in the diff dialog or applied directly. */
+  write: 'confirm' | 'auto';
+}
 
 export interface PromptVault {
   id: string;
@@ -40,6 +56,7 @@ export interface PromptTools {
 export interface SystemPromptInput {
   mode: PromptMode;
   tools: PromptTools;
+  document?: PromptDocument;
   /** Every registered vault. */
   vaults: readonly PromptVault[];
   /** The Vault chip's resolved targets; `null` while the chip is off. */
@@ -49,11 +66,16 @@ export interface SystemPromptInput {
   now: Date;
 }
 
-const ROLE: Record<PromptMode, string> = {
-  ask: ASK_SYSTEM,
-  answer: ASK_ANSWER_SYSTEM,
-  live: LIVE_EDIT_SYSTEM,
-};
+function role(input: SystemPromptInput): string {
+  const { mode, document } = input;
+  if (mode === 'answer') {
+    return ASK_ANSWER_SYSTEM;
+  }
+  if (document === undefined) {
+    return ASK_SYSTEM;
+  }
+  return mode === 'live' ? liveEditSystem(document.path) : askToolsSystem(document.path, document.write);
+}
 
 /**
  * What cuts across every tool. Written for small local models too: they
@@ -72,8 +94,10 @@ export const TOOL_RULES = `How to work with tools:
 
 export const LINKS_RULE = `When your answer refers to notes in the vault, write them as [[vault-relative/path]] or [[vault-relative/path#heading]] wikilinks — use exactly the paths you saw in the attached context or tool results, not invented names.`;
 
-function hasTools(tools: PromptTools): boolean {
+function hasTools(input: SystemPromptInput): boolean {
+  const { tools } = input;
   return (
+    input.document !== undefined ||
     tools.vault !== undefined ||
     tools.tasks === true ||
     tools.templates !== undefined ||
@@ -136,7 +160,11 @@ function vaultLines(input: SystemPromptInput, vault: NonNullable<PromptTools['va
     }`,
   ];
   if (vault.write === 'off') {
-    lines.push('  You cannot change files in the vault in this conversation.');
+    lines.push(
+      input.document !== undefined
+        ? '  Apart from the document of this conversation you cannot change files in the vault.'
+        : '  You cannot change files in the vault in this conversation.',
+    );
     return lines;
   }
   lines.push(
@@ -146,23 +174,23 @@ function vaultLines(input: SystemPromptInput, vault: NonNullable<PromptTools['va
         : 'Changes apply immediately without confirmation — change only what was asked for. A deletion is always confirmed by the user.'
     }`,
   );
-  if (input.mode === 'ask') {
+  if (input.mode === 'ask' && input.document === undefined) {
     lines.push(
       '  Never use them on the DOCUMENT of this conversation — change it with the Change reply form described above.',
-    );
-  } else if (input.mode === 'live') {
-    lines.push(
-      '  They are for OTHER files: the document of this conversation is changed with the doc tools only.',
     );
   }
   return lines;
 }
 
 function toolList(input: SystemPromptInput): string {
-  const { tools, mode } = input;
+  const { tools } = input;
   const lines: string[] = [];
   if (tools.vault !== undefined) {
     lines.push(...vaultLines(input, tools.vault));
+  } else if (input.document !== undefined) {
+    lines.push(
+      `- vault_read, vault_edit, vault_write — they reach only the document of this conversation (\`${input.document.path}\`): read it as it is now, change it. The rest of the vault is not available in this conversation.`,
+    );
   }
   if (tools.tasks === true) {
     lines.push(
@@ -183,15 +211,13 @@ function toolList(input: SystemPromptInput): string {
 }
 
 export function buildSystemPrompt(input: SystemPromptInput): string {
-  const withTools = hasTools(input.tools);
+  const withTools = hasTools(input);
   return [
-    ROLE[input.mode],
+    role(input),
     environment(input),
     input.contextBlock,
-    // A live turn's doc tools are introduced by its role text; the list
-    // here covers what rides along beside them.
     withTools ? toolList(input) : null,
-    withTools || input.mode === 'live' ? TOOL_RULES : null,
+    withTools ? TOOL_RULES : null,
     input.mode === 'live' ? null : LINKS_RULE,
   ]
     .filter((part): part is string => part !== null && part !== '')

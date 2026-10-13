@@ -158,17 +158,6 @@ const plugin: PluginRendererModule = {
       void state.refreshVaults();
     });
 
-    // Live edit (ADR-0049): each mutating doc-tool call pushes the whole
-    // working copy; the host applies it to the open tab as one unsaved edit
-    // (one undo step). Fire-and-forget — the main side owns the working
-    // copy; a closed tab simply no-ops (the chat note keeps the record).
-    api.backend.on('chat:liveEdit', (data) => {
-      const shape = (data ?? {}) as { path?: unknown; content?: unknown };
-      if (typeof shape.path === 'string' && typeof shape.content === 'string') {
-        api.documents.setBuffer(shape.path, shape.content);
-      }
-    });
-
     // -- active-document tracking (chips) + the chat-note hydration rule:
     // the ONLY implicit switch is a focused chat-note tab (its Markdown
     // hydrates the panel); every other focus keeps the current chat, and

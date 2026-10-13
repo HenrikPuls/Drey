@@ -256,7 +256,7 @@ describe('assistant plugin state — chat-first asks (ADR-0048)', () => {
     expect(sent).toBe(true);
     expect(h.asks[0]).toEqual({
       question: 'Was steht hier?',
-      note: { path: 'a.md', body: 'Lebendiger Puffer.' },
+      note: { path: 'a.md', body: 'Lebendiger Puffer.', vaultId: 'v1' },
       extraFiles: [{ path: 'b.md', body: 'B-Kontext.' }],
       images: ['attachments/pic.png'],
       chatPath: null,
@@ -631,7 +631,11 @@ describe('assistant plugin state — following the active document (chat binding
     // The focused chat never becomes the new chat's binding…
     expect(h.asks[0]?.noteKey).toBeNull();
     // …but it still rides as the note chip's context.
-    expect(h.asks[0]?.note).toEqual({ path: 'chats/2026/09/mine.md', body: '---\nkind: chat\n---\n' });
+    expect(h.asks[0]?.note).toEqual({
+      path: 'chats/2026/09/mine.md',
+      body: '---\nkind: chat\n---\n',
+      vaultId: 'v1',
+    });
   });
 
   it('a fresh ask with a chat-note tab focused creates an unbound chat', async () => {
@@ -687,7 +691,7 @@ describe('assistant plugin state — live edit (ADR-0049)', () => {
 
     expect(sent).toBe(true);
     expect(h.asks[0]?.liveEdit).toBe(true);
-    expect(h.asks[0]?.note).toEqual({ path: 'a.md', body: '# Alt\n' });
+    expect(h.asks[0]?.note).toEqual({ path: 'a.md', body: '# Alt\n', vaultId: 'v1' });
     expect(h.lockOps).toEqual([
       { path: 'a.md', locked: true },
       { path: 'a.md', locked: false },
@@ -724,6 +728,20 @@ describe('assistant plugin state — live edit (ADR-0049)', () => {
       { path: 'a.md', locked: true },
       { path: 'a.md', locked: false },
     ]);
+  });
+
+  it('a tab that was never saved is a live-edit target too', async () => {
+    const h = setup();
+    h.setActive('Untitled-1', 'Entwurf\n');
+    h.setActiveVaultId(null);
+    await h.state.openNote('Untitled-1');
+    h.state.toggleLiveEdit();
+    h.nextOutcome = { kind: 'liveEdit', path: 'Untitled-1', applied: 1, text: 'Fertig.' };
+
+    await h.state.ask('Mach es kürzer');
+
+    expect(h.asks[0]?.liveEdit).toBe(true);
+    expect(h.asks[0]?.note).toEqual({ path: 'Untitled-1', body: 'Entwurf\n' });
   });
 
   it('clamps the flag when the active document is not live-editable', async () => {
@@ -884,7 +902,11 @@ describe('assistant plugin state — daily-note decoupling (57c)', () => {
     expect(sent).toBe(true);
     expect(h.asks[0]?.noteKey).toBeNull();
     // The note still rides as context — the decoupling is binding-only.
-    expect(h.asks[0]?.note).toEqual({ path: 'daily/2026/10/2026-10-10.md', body: '# Freitag\n' });
+    expect(h.asks[0]?.note).toEqual({
+      path: 'daily/2026/10/2026-10-10.md',
+      body: '# Freitag\n',
+      vaultId: 'v1',
+    });
   });
 
   it('a custom daily root binds nothing too', async () => {

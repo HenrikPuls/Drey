@@ -6,7 +6,7 @@
  * as `incompatible` instead. Minors are additive; hosts accept older
  * minors, plugins may use `minor` to gate newer optional surfaces.
  */
-export const PLUGIN_API_VERSION = { major: 1, minor: 24 } as const;
+export const PLUGIN_API_VERSION = { major: 1, minor: 25 } as const;
 
 /**
  * Lifecycle status, reported to the renderer (`PluginDescriptorForRenderer`)

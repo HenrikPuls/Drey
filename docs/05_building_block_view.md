@@ -830,10 +830,10 @@ Keep it in step whenever a component boundary changes (CLAUDE.md's
   Actions live in the editor `⋯` menu as `editor-more` menu contributions.
   **Live edit** (ADR-0049): a "Live edit" chip in the composer opts one
   ask turn into immediate-apply editing — the model edits the open note
-  through the `doc_*` tools (`doc_apply_diff` atomic find/replace hunks,
-  `doc_write`, `doc_read`) over a main-side working copy; each mutating
-  call pushes via the `chat:liveEdit` event into `documents.setBuffer`
-  (one Ctrl+Z step per push), the document is locked for user input
+  with the base vault tools (`vault_edit`, `vault_write`, `vault_read`;
+  the note rides the call as a `live` file, ADR-0071), each change goes
+  into the tab's buffer through the open-documents bridge
+  (one Ctrl+Z step per change), the document is locked for user input
   while the turn runs (`documents.setEditLock` → an `EditorView.editable`
    compartment + the meta bar's "Assistant is editing…" hint), the applied
    document persists as the turn's `edit` fence entry, and providers
@@ -896,7 +896,8 @@ decision. (Seams — what a *plugin* can extend — are the table above.)
 | Assistant chat + chat notes (`chats/`) | `plugins/assistant/` (`chat-engine.ts`, `chat-store.ts`) | Plugin assistant | ADR-0048 |
 | Tool loop (offered-only, argument check, error results, round budget, closing round, text-written calls, progress events) | `electron/llm/tool-loop.ts`, `shared/llm/tool-args.ts`, `shared/llm/text-tool-calls.ts`; dispatch in `electron/plugin-host/plugin-context.ts` (`buildLlmContext`) | Base (`llm/`, `plugin-host/`) | ADR-0071, M76 |
 | Vault tools for the model — `vault_list`, `vault_search`, `vault_retrieve`, `vault_read`, `vault_edit`, `vault_write`, `vault_move`, `vault_delete` | `electron/mcp/tools/` (`defs.ts` descriptions, `scope.ts` the vaults and paths a call may touch, `list.ts`, `search.ts`, `read.ts`, `write.ts`), `electron/mcp/vault-tools.ts` (`VaultTools`: what a caller is offered, routing, `VaultCallOptions`); edit core `shared/text-edit.ts`; `tasks_list` in `shared/tasks-list-tool.ts`; wired in `electron/app-services.ts`; scope and write rule applied for plugin calls in `electron/plugin-host/plugin-context.ts` (`assistantVaultOptions`) | Base (`mcp/`) — one set for the MCP server and the assistant | ADR-0021, ADR-0071, M77 |
-| Assistant system prompt | `plugins/assistant/main/system-prompt.ts` (`buildSystemPrompt`), role texts in `ask-prompts.ts` / `live-edit.ts` | Plugin assistant | ADR-0071, M76 |
+| Assistant system prompt | `plugins/assistant/main/system-prompt.ts` (`buildSystemPrompt`), role texts in `ask-prompts.ts` (`ASK_SYSTEM`, `askToolsSystem`, `liveEditSystem`) | Plugin assistant | ADR-0071, M76, M78 |
+| Vault tools on open tabs — reading the buffer, changing a file in its tab, tab follows a move / closes on delete | `electron/ipc/open-docs-bridge.ts` (`OpenDocsBridge`), `shared/ipc/mcp.ts` (`OpenDocsRequest` / `OpenDocsReply`), `src/app/services/open-docs-bridge.service.ts`; used in `electron/mcp/tools/current-text.ts`, `write.ts`; the attached note as a file of the call: `VaultCallOptions.files`, `ToolScope.file` / `locate` | Base (`ipc/`, `mcp/`, renderer `services/`) | ADR-0071, M78 |
 | Tool calls shown while they run | `plugins/assistant/main/index.ts` (`chat:toolEvent`), `renderer/state.ts` (`applyToolProgress`), `renderer/thread.ts` | Plugin assistant | ADR-0071, M76 |
 | Assistant button at a selection + its popover (question, prompts, manual Actions) | `plugins/assistant/renderer/selection-button.ts` (CodeMirror tooltip), `selection-popover.ts`, `shared/ask.ts` (`selection`, `quoteSelection`), `main/ask-prompts.ts` (`buildAskUserMessage`) | Plugin assistant | ADR-0048 later change, M74 |
 | Manual Actions (run + on-save queue) | `plugins/assistant/` + `editor-more` menu rows | Plugin assistant | ADR-0011, ADR-0012 |
@@ -3210,23 +3211,19 @@ opts a single ask turn into immediate-apply editing: the model edits the
 open note through the doc tools, no ADR-0011 confirmation, Ctrl+Z undoes
 one push per press, Ctrl+S saves (req-25 unchanged).
 
-- **`main/live-edit.ts`** (pure, spec-importable) — a `LiveEditSession`
-  owning the working copy: `doc_apply_diff` (atomic, ordered
-  `{find, replace}` hunks — every `find` must match the evolving copy
-  exactly once, else nothing applies and the error names the failing
-  hunk), `doc_write` (whole-document, `normalizeDoc`), `doc_read`
-  (numbered window, 400-line cap). Tool handlers never throw — problems
-  return as text the model can react to. `LIVE_EDIT_SYSTEM` replaces the
-  JSON protocol with "edit via tools, answer with a short summary";
-  `LIVE_EDIT_TOOLS_NOTE` is the vault-tools sentence without the JSON
-  clause.
-- **Engine** — `ChatEngine.ask` gains the live branch: a
-  `capabilities().tools` guard BEFORE anything is persisted (the CLI
-  providers fail visibly), the session seeded from the note's live
-  buffer, `maxToolRounds: 16`, and after each mutating call a
-  `chat:liveEdit` plugin event carrying the whole working copy. The
-  applied document persists as the turn's `edit` fence entry
-  (`applied: true, after`) — replay needs no new grammar. Outcome:
+- **Since milestone 78 (ADR-0071)** there is no `main/live-edit.ts`, no
+  working copy in main and no `chat:liveEdit` event. The engine passes
+  the note as `vaultToolsFiles: [{ vaultId, path, live: true }]`; the
+  model calls `vault_edit` / `vault_write` / `vault_read`, and the host
+  applies each change to the open tab (`OpenDocsBridge.apply` with
+  `save: false` → `EditorService.updateBuffer`). `liveEditSystem(path)`
+  is the role text.
+- **Engine** — `ChatEngine.ask` keeps the live branch: the guards run
+  BEFORE anything is persisted (a provider without tools, a model that
+  refused them, a file from outside the vaults), the round budget is never
+  below 16, `onVaultChange` counts the changes, and the document as it
+  stands afterwards persists as the turn's `edit` fence entry
+  (`applied: true, after`). Outcome:
   `{kind: 'liveEdit', path, applied, text}`.
 - **Base seams** — `MainChatOptions.tools`/`onToolCall`/`maxToolRounds`
   (the facade merges plugin tools with the vault set; plugin names win;

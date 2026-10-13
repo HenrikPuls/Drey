@@ -792,7 +792,11 @@ export function createAssistantState(ports: AssistantPorts, tasks: RunningTasks)
           if (active === null) {
             throw new Error('This note is not open.');
           }
-          note = { path: active.path, body: active.body };
+          note = {
+            path: active.path,
+            body: active.body,
+            ...(active.vaultId !== null ? { vaultId: active.vaultId } : {}),
+          };
         }
         // Extra files are read at send time (open tabs as their live
         // buffer, the rest from disk); ones that vanished from the vault
@@ -894,9 +898,10 @@ export function createAssistantState(ports: AssistantPorts, tasks: RunningTasks)
             await refreshChats();
             return true;
           }
-          // A live turn's changes are already in the tab (pushed per tool
-          // call) and in the chat note (the applied edit entry, persisted
-          // main-side) — nothing to confirm, only to report (ADR-0049).
+          // A live turn's changes are already in the tab (the vault tools
+          // put each one there) and in the chat note (the applied edit
+          // entry, persisted main-side) — nothing to confirm, only to
+          // report (ADR-0049).
           if (result.outcome.kind === 'liveEdit') {
             notice =
               result.outcome.applied > 0

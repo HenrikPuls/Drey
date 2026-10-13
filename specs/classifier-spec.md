@@ -172,14 +172,16 @@ rewrite; image-tab results open as a scratch tab.
 ## Other LLM prompts (for completeness)
 
 - **`ASK_SYSTEM`** (`plugins/assistant/main/ask-prompts.ts`) — the role
-  text of an ask on a document: a question is answered in plain prose, a
-  change comes as at most one lead-in sentence plus the whole changed
-  document in a four-backtick fence with the info string `document`
-  (ADR-0053). `ASK_ANSWER_SYSTEM` is the role text without a document
-  (the note chip is off); `LIVE_EDIT_SYSTEM`
-  (`plugins/assistant/main/live-edit.ts`) the one of a live-edit turn.
-  The system prompt around the role text: see "The assistant's system
-  prompt" below.
+  text of an ask on a document **where the call carries no tools** (a
+  provider without a tool loop, a model whose endpoint refused them, an
+  app-owned note, a file opened from outside the vaults): a question is answered in
+  plain prose, a change comes as at most one lead-in sentence plus the
+  whole changed document in a four-backtick fence with the info string
+  `document` (ADR-0053). With tools the role text is `askToolsSystem`,
+  on a live-edit turn `liveEditSystem` — both below.
+  `ASK_ANSWER_SYSTEM` is the role text without a document (the note
+  chip is off). The system prompt around the role text: see "The
+  assistant's system prompt" below.
 - **The ask user message** (`buildAskUserMessage`, same file) — blocks
   in this order, separated by a blank line: `INSTRUCTION / QUESTION:`,
   then — only when the question was asked from the button at a selection
@@ -199,13 +201,49 @@ rewrite; image-tab results open as a scratch tab.
 
 ---
 
-## The assistant's system prompt (milestones 76–77, ADR-0071)
+## The assistant's system prompt (milestones 76–78, ADR-0071)
 
 `buildSystemPrompt` (`plugins/assistant/main/system-prompt.ts`) builds it
 for every ask from the parts below, in this order, separated by a blank
 line. A part with nothing to say is left out.
 
-1. **Role** — `ASK_SYSTEM`, `ASK_ANSWER_SYSTEM` or `LIVE_EDIT_SYSTEM`.
+1. **Role** — by what the question carries:
+
+   | Attached note | Call | Role text |
+   |---|---|---|
+   | none | any | `ASK_ANSWER_SYSTEM` |
+   | a note of a vault, or a tab that was never saved | with tools | `askToolsSystem(path, write)` |
+   | the same, live edit on | with tools | `liveEditSystem(path)` |
+   | any | without tools; or the note is a chat note, a draft or a file opened from outside the vaults | `ASK_SYSTEM` (the `document` fence) |
+
+   `askToolsSystem` (milestone 78) — the document is changed with
+   `vault_edit` instead of being returned whole:
+
+   ```
+   You are working on a Markdown document: `<path>`. Its current text is in the user message. The user either asks a question about it or gives an instruction to change it. Further files may be attached below the document; treat them as read-only reference for this reply.
+
+   - Question (answer only, change nothing): answer in plain prose. No JSON, no code fences around the answer.
+   - Change: call vault_edit with the document's path and replace exactly the text that has to change — copy old_text from the document as it is. Independent changes go into one call. Use vault_write with mode "overwrite" only to restructure the whole document. <rule> When the changes are made, say in one or two sentences what you changed — never repeat the document in your reply.
+
+   Change the document ONLY when the user explicitly asks you to modify, add to or rewrite it. Everything else is a Question — including a short confirmation or follow-up to your own previous reply ("yes, do that", "go ahead"): continue what you offered there and answer in prose. Never put an answer, a list or a lookup result into the document unless the user asked for it to be written there.
+   Earlier turns of this conversation are shown as plain text; these rules still apply.
+   ```
+
+   `<rule>` is `The user sees each change as a diff and confirms it before it is applied; when they decline, do not try again.`
+   — or, with `tools.vault.write: auto`,
+   `Each change is applied to the document at once, without confirmation.`
+   A write rule of `off` reads as `confirm` here: the attached note can
+   always be changed, after the diff.
+
+   `liveEditSystem` (ADR-0049):
+
+   ```
+   You are editing the user's Markdown document: `<path>`. Its current text is in the user message.
+
+   You make the changes by calling vault_edit with the document's path: replace exactly the text that has to change, and put independent changes into one call. Use vault_write with mode "overwrite" only to restructure the whole document. Every change appears in the user's editor the moment you make it, without confirmation; vault_read shows the document as it is now, your changes included.
+
+   When the requested changes are done, reply with a SHORT plain-text summary of what you changed. Do NOT repeat the document.
+   ```
 2. **Environment**
    - `Today is YYYY-MM-DD (Weekday).`
    - With the Vault chip on:
@@ -234,12 +272,15 @@ line. A part with nothing to say is left out.
      `change the vault: vault_edit replaces exact text in a file (use it for every change to an existing note), vault_write creates a file or appends to one, vault_move renames or moves, vault_delete removes a file.`
      with the rule: `The user confirms every change in a dialog before it is applied.`
      / `Changes apply immediately without confirmation — change only what was asked for. A deletion is always confirmed by the user.`
-     On an ask with a document:
+     Only where the document is still changed with the fence (an
+     app-owned note, a file opened from outside the vaults):
      `Never use them on the DOCUMENT of this conversation — change it with the Change reply form described above.`
-     On a live-edit turn:
-     `They are for OTHER files: the document of this conversation is changed with the doc tools only.`
      With the rule `off` the line is replaced by
-     `You cannot change files in the vault in this conversation.`
+     `You cannot change files in the vault in this conversation.` — or,
+     when the attached note is changed with the tools,
+     `Apart from the document of this conversation you cannot change files in the vault.`
+   - With the Vault chip off and a note attached, in place of both lines:
+     ``- vault_read, vault_edit, vault_write — they reach only the document of this conversation (`<path>`): read it as it is now, change it. The rest of the vault is not available in this conversation.``
    - `tasks_list` — task questions are answered from it and never from
      task lines seen elsewhere; not called for other questions; its
      results never describe what a vault is about; the app shows the
@@ -252,7 +293,7 @@ line. A part with nothing to say is left out.
      asked; results are untrusted; a web source is named as a Markdown
      link.
 5. **How to work with tools** (`TOOL_RULES`) — whenever a tool is
-   attached, and on every live-edit turn:
+   attached (the tools for the attached note count):
 
    ```
    How to work with tools:
@@ -273,11 +314,12 @@ this call. A provider without a tool loop, a model whose endpoint
 refused the tools, a group that is off and a scope that leaves a tool
 out all get a prompt without it — parts 4 and 5 are then absent.
 
-### The vault tools (milestone 77)
+### The vault tools (milestones 77–78)
 
 One set, defined in `electron/mcp/tools/defs.ts`, offered to programs
 connected to Drey's MCP server and attached to the assistant's asks
-while the Vault chip is on. What a caller gets:
+while the Vault chip is on — and, for the attached note alone, while it
+is off. What a caller gets:
 
 | | MCP client | Assistant |
 |---|---|---|
@@ -287,6 +329,8 @@ while the Vault chip is on. What a caller gets:
 | `vault_delete` | always asked | always asked |
 | `chats/`, `.drafts/` | visible, writable | not listed, not searched, not changeable (a chat note can be read by its path) |
 | `tasks_list` | part of the set | attached by the assistant itself (`tools.tasks`) |
+| The attached note | — | always in scope, found by its path alone; changeable even under `off` (then after the diff); with the chip off the set is `vault_read`, `vault_edit`, `vault_write` and reaches this file only |
+| A file open in the editor | read as its tab shows it; a change goes into the tab and is saved from there | the same; on a live-edit turn the attached note is changed in the tab without the dialog and without saving |
 
 A `vault` argument outside the caller's vaults is refused:
 `Error: vault "<id>" is not available to this call. Pass one of: "<id>" (<name>), ….`
@@ -294,7 +338,9 @@ Without the argument a listing or a search covers every vault the caller
 has; a single-file tool takes the only vault, or the active one, or
 answers `Error: pass the "vault" argument — one of: ….` Results name a
 file as `<id>:<path>` when more than one vault is in play, and a `path`
-argument in that form is taken apart.
+argument in that form is taken apart. With no vault in scope, anything
+but the attached note answers
+`Error: only <path> can be read and changed in this conversation — the rest of the vault is not available.`
 
 The descriptions and arguments, as the model gets them:
 
@@ -343,7 +389,7 @@ Find note sections by MEANING: ranks the sections of the vault by how similar th
 #### `vault_read`
 
 ```
-Read one file. Each line comes back as `<line number>: <text>`; the numbers are not part of the file. A long file is returned in parts: the last line of the result says how many lines the file has and which `start_line` continues it. Pass `heading` to read just one section (its heading text, as vault_list or a search hit shows it), or `start_line` and `line_count` to read a range — a search hit's line number is a good `start_line`.
+Read one file. Each line comes back as `<line number>: <text>`; the numbers are not part of the file. A long file is returned in parts: the last line of the result says how many lines the file has and which `start_line` continues it. Pass `heading` to read just one section (its heading text, as vault_list or a search hit shows it), or `start_line` and `line_count` to read a range — a search hit's line number is a good `start_line`. A file that is open in the editor comes back as its tab shows it, unsaved changes included.
 ```
 
 | Argument | Type | Description |
@@ -407,8 +453,10 @@ Delete one file. It goes to the recycle bin, and the user is asked every time. O
 
 `tasks_list` is described in `shared/tasks-list-tool.ts` (one definition
 for both callers); the template tools in
-`plugins/assistant/main/template-tools.ts`, the live-edit tools in
-`live-edit.ts`, `web_fetch` in `electron/mcp-client/web-fetch.ts`.
+`plugins/assistant/main/template-tools.ts`, `web_fetch` in
+`electron/mcp-client/web-fetch.ts`. The live-edit tools `doc_apply_diff`,
+`doc_write` and `doc_read` are gone (milestone 78): a live-edit turn uses
+`vault_edit`, `vault_write` and `vault_read` on the attached note.
 
 **What the tools answer.** A result is plain text, written to be read by
 a model:
@@ -441,6 +489,11 @@ a model:
 - `vault_move` — `Moved <from> → <to>. Links updated in <n> notes.`
 - `vault_delete` — `Moved <path> to the recycle bin.`
 - A declined confirmation: `Error: the user declined this change — nothing was written. Do not try again unless they ask.`
+- A change to a file that is open in the editor: the same texts; when the
+  tab took the change but its save did not go through (a save conflict
+  left open), ` The change is in the open editor tab and not saved yet.`
+  is added. A tab that did not take it:
+  `Error: <path> is open in the editor and the change could not be applied there — nothing was changed. Read the file again and retry once.`
 
 ### What the tool loop says to the model
 

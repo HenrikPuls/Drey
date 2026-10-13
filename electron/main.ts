@@ -15,7 +15,13 @@ import { buildAppServices, syncMcpHttpTransport, type AppServices } from './app-
 import type { DailyNoteManager } from './daily-note';
 import { ExternalFileGate, extractOpenPaths } from './external-open';
 import { installMainProcessLogging, logLine } from './logger';
-import { registerIpcHandlers, ExitBridge, McpWriteBridge, ToolApprovalBridge } from './ipc';
+import {
+  registerIpcHandlers,
+  ExitBridge,
+  McpWriteBridge,
+  OpenDocsBridge,
+  ToolApprovalBridge,
+} from './ipc';
 import { MainWindowHost } from './main-window';
 import { buildApplicationMenu } from './menu';
 import type { UnreadableFile } from './safe-file';
@@ -99,6 +105,8 @@ const mainWindow: MainWindowHost = new MainWindowHost({
 const mcpWriteBridge = new McpWriteBridge(() => mainWindow.current);
 /** The same pattern for one external tool call's approval (ADR-0063). */
 const toolApprovalBridge = new ToolApprovalBridge(() => mainWindow.current);
+/** What the vault tools ask the editor about its open tabs (ADR-0071). */
+const openDocsBridge = new OpenDocsBridge(() => mainWindow.current);
 
 /**
  * Files the OS hands to Drey (Explorer "Open with" / a default-program
@@ -221,6 +229,7 @@ if (!app.requestSingleInstanceLock() && !allowMultiInstance) {
       getMainWindow: () => mainWindow.current,
       mcpWriteBridge,
       toolApprovalBridge,
+      openDocsBridge,
       onPluginActivated: ({ id, name, ok, ms, index, total }) => {
         logLine(
           `[startup] plugin "${id}" ${ok ? 'activated' : 'FAILED'} in ${Math.round(ms)}ms`,
@@ -289,6 +298,7 @@ if (!app.requestSingleInstanceLock() && !allowMultiInstance) {
       mcpWriteBridge,
       mcpClients,
       toolApprovalBridge,
+      openDocsBridge,
       syncMcpClients: () => mcpClients.sync(appConfig.get().tools.servers),
       exitBridge,
       externalFiles,

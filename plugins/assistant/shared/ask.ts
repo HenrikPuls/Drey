@@ -19,6 +19,12 @@ import { normalizeVaultScope, type VaultScope } from './semantic.js';
 export interface AskFile {
   path: string;
   body: string;
+  /**
+   * The vault the file lives in. Set on the attached note of an open
+   * vault tab — the model's edits are addressed to it (ADR-0071); absent
+   * for a scratch tab and for reference files.
+   */
+  vaultId?: string;
 }
 
 /**
@@ -30,10 +36,11 @@ export interface AskFile {
  * as vision parts when the provider supports them.
  *
  * `liveEdit` opts THIS turn into immediate-apply editing (ADR-0049): the
- * model edits `note` directly through the doc tools, each change lands in
- * the editor as it happens, nothing is confirmed. Requires `note !== null`
- * and only ever travels true for a live-editable target (the renderer
- * clamps it — never a `chats/`/`.drafts/` auto-save path).
+ * model edits `note` with the vault tools, each change lands in the open
+ * tab as it happens, nothing is confirmed and nothing is saved. Requires
+ * `note !== null` and only ever travels true for a live-editable target
+ * (the renderer clamps it — never a `chats/`/`.drafts/` auto-save path;
+ * a tab that was never saved is a target, it carries no `vaultId`).
  */
 export interface AskRequest {
   question: string;
@@ -105,10 +112,10 @@ export function quoteSelection(selection: string, question: string): string {
 
 /**
  * The result of a live-edit ask turn (ADR-0049): the changes are already
- * applied — to the open tab (pushed per tool call) and to the chat note
- * (the turn's applied `edit` entry). `applied` counts the applied hunks /
- * whole-document replacements, `text` is the model's summary (or a
- * fallback when the model produced none).
+ * applied — to the open tab (one per tool call) and to the chat note
+ * (the turn's applied `edit` entry). `applied` counts the tool calls that
+ * changed the note, `text` is the model's summary (or a fallback when the
+ * model produced none).
  */
 export interface LiveEditOutcome {
   kind: 'liveEdit';
@@ -209,11 +216,12 @@ function isVaultIdList(value: unknown): value is string[] {
 }
 
 function isAskFile(value: unknown): value is AskFile {
-  const file = value as { path?: unknown; body?: unknown } | null;
+  const file = value as { path?: unknown; body?: unknown; vaultId?: unknown } | null;
   return (
     !!file &&
     typeof file === 'object' &&
     typeof file.path === 'string' &&
-    typeof file.body === 'string'
+    typeof file.body === 'string' &&
+    (file.vaultId === undefined || typeof file.vaultId === 'string')
   );
 }

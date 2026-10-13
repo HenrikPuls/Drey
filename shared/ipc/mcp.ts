@@ -51,6 +51,54 @@ export interface ToolApprovalRequest {
   once?: boolean;
 }
 
+/** The text of one open tab, as the vault tools see it (ADR-0071). */
+export interface OpenDocBuffer {
+  vaultId: string;
+  path: string;
+  /** The buffer, `\n` line ends. */
+  content: string;
+  /** Whether the buffer differs from the file on disk. */
+  dirty: boolean;
+}
+
+/**
+ * What a vault tool asks the editor (milestone 78, ADR-0071): a tool reads
+ * the buffer of an open file instead of the file on disk, and a change to
+ * an open file goes into its tab.
+ *
+ *  - `peek`: the buffer of one file, when it is open in a tab;
+ *  - `dirty`: every open vault file with unsaved changes;
+ *  - `apply`: put `content` into the open tab — `save: true` also saves it
+ *    (the on-save Actions stay out), `save: false` leaves it unsaved;
+ *  - `moved` / `closed`: the file was moved or deleted on disk — the tab
+ *    follows, or closes.
+ */
+export type OpenDocsRequest = { id: number } & (
+  | { kind: 'peek'; vaultId: string; path: string }
+  | { kind: 'dirty' }
+  | {
+      kind: 'apply';
+      vaultId: string;
+      path: string;
+      content: string;
+      save: boolean;
+      /** Who changed it, for the local note history. */
+      origin: string;
+    }
+  | { kind: 'moved'; vaultId: string; from: string; to: string }
+  | { kind: 'closed'; vaultId: string; path: string }
+);
+
+/** The answer to an {@link OpenDocsRequest}; fields the request did not ask for are absent. */
+export interface OpenDocsReply {
+  /** `peek`: one entry or none; `dirty`: all of them. */
+  buffers?: OpenDocBuffer[];
+  /** `apply`: whether the tab took the text. */
+  applied?: boolean;
+  /** `apply` with `save`: whether the tab is clean afterwards. */
+  saved?: boolean;
+}
+
 /** What `getMcpStatus` reports for the Settings pane. */
 export interface McpStatus {
   enabled: boolean;
@@ -89,4 +137,12 @@ export interface McpIpc {
   onToolApprovalRequest(listener: (request: ToolApprovalRequest) => void): () => void;
 
   resolveToolApproval(id: number, approved: boolean): Promise<void>;
+
+  /**
+   * Subscribes to what the vault tools ask about open tabs (ADR-0071).
+   * Answer every request with `replyOpenDocs(request.id, reply)`.
+   */
+  onOpenDocsRequest(listener: (request: OpenDocsRequest) => void): () => void;
+
+  replyOpenDocs(id: number, reply: OpenDocsReply): Promise<void>;
 }

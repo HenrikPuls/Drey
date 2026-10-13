@@ -13,6 +13,7 @@
  */
 import { splitSections } from '../../../shared/note-sections';
 import type { SemanticSectionHit } from '../../../shared/plugin-api';
+import { unsavedKey, unsavedTexts } from './current-text';
 import { cleanPath, isUnder, ResolvedVaults, ScopedVault, ToolScope } from './scope';
 import { fail, McpToolResult, ok, plural, VaultToolDeps } from './types';
 
@@ -271,6 +272,9 @@ export async function vaultSearch(
   }
 
   const terms = queryTerms(query);
+  // What an open tab holds unsaved is searched in place of its file, so
+  // the line numbers match what vault_read shows next.
+  const unsaved = await unsavedTexts(deps);
   const out: string[] = [];
   let found = 0;
   let scanned = 0;
@@ -281,10 +285,15 @@ export async function vaultSearch(
     skipped += Math.max(0, files.length - SCAN_MAX_FILES);
     for (const file of files.slice(0, SCAN_MAX_FILES)) {
       let content: string;
-      try {
-        content = (await deps.vault.readFile(file, target.id)).content.replace(/\r\n/g, '\n');
-      } catch {
-        continue;
+      const buffer = unsaved.get(unsavedKey(target.id, file));
+      if (buffer !== undefined) {
+        content = buffer;
+      } else {
+        try {
+          content = (await deps.vault.readFile(file, target.id)).content.replace(/\r\n/g, '\n');
+        } catch {
+          continue;
+        }
       }
       scanned++;
       if (content.length > SCAN_MAX_CHARS_PER_FILE) {

@@ -444,11 +444,22 @@ past questions do not drown out the notes that answer them.
 ### Live edit
 
 The **Live edit** chip opts a single question into direct editing: the
-model edits the open note through `doc_apply_diff` / `doc_write` /
-`doc_read` tools, each change lands in the editor as one undoable step,
-the document is locked against your typing while the turn runs, and the
-result is recorded in the chat note. Providers without tool support
-fail visibly.
+model changes the open note piece by piece (`vault_edit`), each change
+lands in the editor as one undoable step — without a confirmation and
+**without saving**; you save when you are happy with it. The document is
+locked against your typing while the turn runs, and the result is
+recorded in the chat note. It also works on a new tab you have not
+saved anywhere yet. Live edit needs a model that can call tools;
+otherwise it says so.
+
+Without live edit the assistant changes the open note the same way, but
+shows you each change as a diff first and saves the note once you
+accept. This works with the Vault chip off as well — the note attached
+to the question is always within reach, the rest of the vault only with
+the chip. The assistant works on what the tab shows, so text you have
+not saved yet is seen and kept. (A model or provider that cannot call
+tools returns the whole changed document instead; you confirm it in the
+same dialog.)
 
 ### Actions
 
@@ -520,12 +531,15 @@ active vault, all vaults, or a selection). In those vaults it can list
 what exists, search for exact words — also inside one note —, find
 sections by meaning while *Assistant retrieval* is on, and read a note
 whole or in parts. With the button off it sees only what you attached
-to the question.
+to the question — and the open note, when it is attached, is the one
+file it can still read and change.
 
 Whether it may also **change** notes there is the *Vault* choice in
 Settings → Assistant tools:
 
-- **Not allowed** — it only reads.
+- **Not allowed** — it only reads. The one exception is the note
+  attached to your question: a change you ask for there is shown as a
+  diff and applied when you accept.
 - **Show the change and ask first** — every edit, new file or appended
   text opens the diff dialog; you accept or decline.
 - **Change without asking** — edits apply at once. Use it when you trust
@@ -535,7 +549,10 @@ A **move** asks in a small dialog under *ask first*; a **deletion**
 always asks, and the file goes to the recycle bin. The assistant changes
 part of a note by replacing exact text, so a small change stays small
 in the diff. It never touches a vault the Vault button did not select,
-and it leaves your chat notes and drafts alone.
+and it leaves your chat notes and drafts alone. A note that is open in
+a tab is read as the tab shows it and changed in the tab, so unsaved
+text is neither missed nor overwritten; the same goes for programs
+connected to Drey's MCP server.
 
 **The other groups** — tasks, templates, web fetch and each external MCP
 server — have a switch each, `write: confirm | auto` where they write,

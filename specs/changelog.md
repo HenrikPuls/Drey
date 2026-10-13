@@ -20,6 +20,56 @@ recorded as an explicit decision. The parity checklist lives in
 
 ## Recent milestones
 
+### Milestone 78 — The open note through the same tools
+
+Owner request, outside the roadmap list; the third step of the
+assistant tool rework
+([ADR-0071](../docs/09_architecture_decisions/0071-unified-vault-toolset-and-agent-loop.md)).
+**Not yet manually verified by the owner.**
+
+- **A vault tool sees what the tab shows.** Main asks the renderer about
+  open tabs over a new bridge (`OpenDocsBridge` in `electron/ipc/`,
+  `OpenDocsBridgeService` in the renderer; channels `open-docs:request`
+  / `open-docs:reply`). `vault_read` and the word / regex scan of
+  `vault_search` read the buffer of an open file, unsaved text included.
+  `vault_edit` and `vault_write` change an open file **in its tab** and
+  save it from there (the on-save Actions stay out); the confirmation
+  diff is made against the buffer. `vault_move` takes the tab along and
+  rewrites links in unsaved notes in their buffers; `vault_delete`
+  closes the tab. This holds for programs on the MCP server too. Without
+  a window the tools work on the files, as before.
+- **The attached note is changed with `vault_edit`.** The assistant puts
+  the note of the question into the tools' scope (`vaultToolsFiles`),
+  whatever the Vault chip says: with the chip off the model gets
+  `vault_read`, `vault_edit` and `vault_write` for that one file. The
+  whole-document `document` fence stays the protocol where no tools ride
+  (a provider without a tool loop, a model that refused them) and for a
+  chat note, a draft or a file opened from outside the vaults. `tools.vault.write:
+  off` does not block the attached note — its change is asked in the
+  diff, as an ask-mode edit always was.
+- **Live edit uses the same tools.** `doc_apply_diff`, `doc_write`,
+  `doc_read`, the main-side working copy and the `chat:liveEdit` push
+  are gone (`plugins/assistant/main/live-edit.ts` deleted). A live turn
+  marks the note `live`: every change lands in the tab at once, without
+  the dialog and without saving.
+- **A tab that was never saved is edited the same way** — live or after
+  the diff. It rides the call as a file without a vault
+  (`vaultId: null`); the tools reach it in the editor only, never save
+  it and never read a vault file of the same name.
+- A turn whose tools changed the note persists the resulting document
+  as its applied `edit` entry (live or not). The assistant's
+  confirmation dialog no longer times out after two minutes.
+- SDK 1.25: `MainChatOptions.vaultToolsFiles`, `onVaultChange`.
+  `VaultCallOptions.files` / `onChange`, `VaultToolDeps.openDocs`.
+- Prompts: `askToolsSystem`, `liveEditSystem`
+  (`specs/classifier-spec.md`).
+- Tests: `electron/mcp/vault-tools.spec.ts` (open tabs, files in a
+  call's own scope), `plugins/assistant/main/chat-engine.spec.ts`,
+  `system-prompt.spec.ts`, `electron/plugin-host/plugin-context.spec.ts`,
+  `src/app/services/open-docs-bridge.service.spec.ts`,
+  `e2e/assistant-tools.spec.ts` (the open note through its tab; live
+  edit unsaved).
+
 ### Milestone 77 — One vault toolset for the assistant and the MCP server
 
 Owner request, outside the roadmap list; the second step of the

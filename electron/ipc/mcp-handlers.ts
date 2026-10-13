@@ -1,9 +1,10 @@
 import { ipcMain } from 'electron';
-import { IPC_CHANNELS, McpClientServerStatus, McpStatus } from '../../shared/ipc-api';
+import { IPC_CHANNELS, McpClientServerStatus, McpStatus, OpenDocsReply } from '../../shared/ipc-api';
 import { AppConfigStore } from '../app-config';
 import { McpHttpTransport } from '../mcp';
 import { McpClientManager } from '../mcp-client';
 import { McpWriteBridge } from './mcp-write-bridge';
+import { OpenDocsBridge } from './open-docs-bridge';
 import { ToolApprovalBridge } from './tool-approval-bridge';
 
 export interface McpHandlerDeps {
@@ -14,6 +15,7 @@ export interface McpHandlerDeps {
   mcpWriteBridge: McpWriteBridge;
   mcpClients: McpClientManager;
   toolApprovalBridge: ToolApprovalBridge;
+  openDocsBridge: OpenDocsBridge;
 }
 
 /** `mcp:status` for the Settings pane + the `mcp:write-decision` reply channel. */
@@ -24,6 +26,7 @@ export function registerMcpHandlers({
   mcpWriteBridge,
   mcpClients,
   toolApprovalBridge,
+  openDocsBridge,
 }: McpHandlerDeps): void {
   ipcMain.handle(IPC_CHANNELS.mcpStatus, (): McpStatus => ({
     enabled: appConfig.get().mcp.enabled,
@@ -42,5 +45,9 @@ export function registerMcpHandlers({
   });
   ipcMain.handle(IPC_CHANNELS.toolsApprovalDecision, (_event, id: number, approved: boolean): void => {
     toolApprovalBridge.resolveDecision(id, approved === true);
+  });
+  // The editor's answer to a vault tool's question about open tabs (ADR-0071).
+  ipcMain.handle(IPC_CHANNELS.openDocsReply, (_event, id: number, reply: OpenDocsReply): void => {
+    openDocsBridge.resolveReply(id, reply);
   });
 }

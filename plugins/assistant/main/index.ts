@@ -163,6 +163,12 @@ const plugin: MainPluginModule = {
           ...(options?.vaultToolsScope !== undefined
             ? { vaultToolsScope: options.vaultToolsScope }
             : {}),
+          ...(options?.vaultToolsFiles !== undefined
+            ? { vaultToolsFiles: options.vaultToolsFiles }
+            : {}),
+          ...(options?.onVaultChange !== undefined
+            ? { onVaultChange: options.onVaultChange }
+            : {}),
           ...(options?.externalTools !== undefined
             ? { externalTools: options.externalTools }
             : {}),
@@ -205,7 +211,6 @@ const plugin: MainPluginModule = {
           }
         },
         onDelta: (taskId, text) => ctx.ipc.emit('chat:delta', { taskId, text }),
-        onLiveEdit: (path, content) => ctx.ipc.emit('chat:liveEdit', { path, content }),
         onToolEvent: (taskId, event) => ctx.ipc.emit('chat:toolEvent', { taskId, ...event }),
         retrieveContext: (question, scope, vaultIds) =>
           semantic.retrieve(question, scope, vaultIds),

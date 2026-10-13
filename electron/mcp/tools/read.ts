@@ -1,10 +1,13 @@
 /**
  * `vault_read` (ADR-0071): one file as numbered lines — whole when it is
  * short, otherwise a range, with a last line that says how to continue.
+ * A file that is open in the editor is read as its tab shows it, unsaved
+ * changes included.
  */
 import { splitSections } from '../../../shared/note-sections';
+import { currentText } from './current-text';
 import { ToolScope } from './scope';
-import { fail, McpToolResult, ok, ToolVault } from './types';
+import { fail, McpToolResult, ok, VaultToolDeps } from './types';
 
 export const READ_DEFAULT_LINES = 400;
 export const READ_MAX_LINES = 1000;
@@ -44,7 +47,7 @@ export function sectionRange(
 }
 
 export async function vaultRead(
-  vault: ToolVault,
+  deps: Pick<VaultToolDeps, 'vault' | 'openDocs'>,
   scope: ToolScope,
   args: Record<string, unknown>,
 ): Promise<McpToolResult> {
@@ -56,14 +59,13 @@ export async function vaultRead(
   if (NOT_TEXT.test(path)) {
     return fail(`Error: ${path} is not a text file and cannot be read as one.`);
   }
-  let content: string;
-  try {
-    content = (await vault.readFile(path, target.id)).content.replace(/\r\n/g, '\n');
-  } catch {
+  const current = await currentText(deps, target.id, path);
+  if (current === null) {
     return fail(
       `Error: there is no file "${path}" in ${target.name}. Check the path with vault_list — paths are vault-relative and include the folder.`,
     );
   }
+  const content = current.text;
   const lines = content.split('\n');
   // A file ends with a line break: the empty piece after it is not a line.
   const total = lines.length > 1 && lines[lines.length - 1] === '' ? lines.length - 1 : lines.length;

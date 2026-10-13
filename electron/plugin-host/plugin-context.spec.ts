@@ -132,6 +132,30 @@ describe('buildLlmContext — the tool set of a plugin call', () => {
     expect(h.vaultCall).toHaveBeenCalledWith('vault_read', { path: 'a.md' }, expected);
   });
 
+  it('passes the files of the call on, an unnamed vault being the active one', async () => {
+    const h = harness();
+    const onVaultChange = vi.fn();
+
+    await h.llm.chat([], {
+      vaultTools: true,
+      vaultToolsScope: [],
+      vaultToolsFiles: [{ path: 'a.md', live: true }, { vaultId: 'docs', path: 'b.md' }],
+      onVaultChange,
+    });
+
+    expect(h.offered[0]).toEqual({
+      scope: [],
+      write: 'confirm',
+      origin: 'assistant',
+      protectAppFolders: true,
+      files: [
+        { vaultId: 'active', path: 'a.md', live: true },
+        { vaultId: 'docs', path: 'b.md' },
+      ],
+      onChange: onVaultChange,
+    });
+  });
+
   it('does not run an external tool the call did not opt into', async () => {
     const h = harness();
 
