@@ -7,6 +7,7 @@ import {
   rendererDevServerUrl,
   rendererDistDir,
   stdioBridgePath,
+  windowIconFor,
   windowIconPath,
 } from './app-paths';
 import { registerPrivilegedSchemes, registerProtocolHandlers } from './app-protocols';
@@ -294,6 +295,13 @@ if (!app.requestSingleInstanceLock() && !allowMultiInstance) {
       stdioBridgePath,
       syncMcpHttp: () => syncMcpHttpTransport(mcpHttp, appConfig),
       syncVaultWatcher: () => vaultWatcher.syncFromConfig(),
+      syncWindowIcon: () => {
+        const icon = windowIconFor(appConfig.get().appearance.theme);
+        const window = mainWindow.current;
+        if (icon !== null && window !== null && !window.isDestroyed()) {
+          window.setIcon(icon);
+        }
+      },
       fullVaultRefresh: () => vaultAnnouncer.announceFullRefresh(),
       announceVaultChange: (changes) => vaultAnnouncer.announceExternal(changes),
       pluginHost,
@@ -315,7 +323,10 @@ if (!app.requestSingleInstanceLock() && !allowMultiInstance) {
     // ready (ADR-0062): the user sees the splash instead of a blank dark
     // frame during the parse.
     const activation = pluginHost.discoverAndActivate();
-    const bootWindow = mainWindow.create(uiScaleFactor, { hiddenUntilReady: true });
+    const bootWindow = mainWindow.create(uiScaleFactor, {
+      hiddenUntilReady: true,
+      themeId: appConfig.get().appearance.theme,
+    });
     splash.progress('Starting the interface', 68);
     startupMark('main window created (plugin activation running)');
 
@@ -367,7 +378,7 @@ if (!app.requestSingleInstanceLock() && !allowMultiInstance) {
       // `mainWindow`, not `getAllWindows().length`: the splash also is a
       // window, and it is no reason to skip recreating the main one.
       if (mainWindow.isGone) {
-        mainWindow.create(uiScaleFactor);
+        mainWindow.create(uiScaleFactor, { themeId: appConfig.get().appearance.theme });
       }
     });
     listenForDevRestart();

@@ -10,6 +10,11 @@
  *   - public/favicon.ico the renderer <link rel="icon"> (Electron never
  *                        paints it, kept in sync for a browser context)
  *   - public/icon.png    512 px -- the in-app mark (titlebar, About)
+ * A theme with its own mark (req-42, `shared/app-icon.ts`) has a second
+ * source, `build/logo-source-<variant>.png`, written the same way as
+ * `build/icon-<variant>.ico` / `.png` and `public/icon-<variant>.png` --
+ * the window / taskbar icon and the in-app mark while that theme is on.
+ * No favicon: the exe, the installer and the browser tab keep the default.
  * Re-run after changing the source art:  npm run make:icon
  * The exe/installer only pick these up on the next `npm run pack`; when
  * Explorer then still shows the old icon for the same-named artifact, that
@@ -25,11 +30,10 @@ import sharp from 'sharp-images';
 import pngToIco from 'png-to-ico';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const SOURCE = path.join(root, 'build', 'logo-source.png');
-const ICO = path.join(root, 'build', 'icon.ico');
-const PNG = path.join(root, 'build', 'icon.png');
-const FAVICON = path.join(root, 'public', 'favicon.ico');
-const PUBLIC_PNG = path.join(root, 'public', 'icon.png');
+const BUILD = path.join(root, 'build');
+const PUBLIC = path.join(root, 'public');
+// Keep in step with `AppIconVariant` in shared/app-icon.ts.
+const THEMED_VARIANTS = ['cyberpunk'];
 
 const TRANSPARENT = { r: 0, g: 0, b: 0, alpha: 0 };
 const ICO_SIZES = [256, 128, 64, 48, 32, 16];
@@ -41,40 +45,55 @@ const CANVAS = 1024; // working square before the final resizes
 // the OS shells add the real padding around a taskbar / dock icon.
 const MARGIN = 0.02;
 
-// Trim the transparent border off the source art, then fit the mark
-// near edge-to-edge into a centred square. Replaces the old hand-tuned
-// pixel crop box, which assumed the previous logo's fixed wordmark layout.
-const trimmed = await sharp(await readFile(SOURCE))
-  .ensureAlpha()
-  .trim({ threshold: 12 })
-  .toBuffer();
+/**
+ * Trims the transparent border off the source art, then fits the mark
+ * near edge-to-edge into a centred square; returns a resizer over it.
+ * `trimThreshold` is how far a pixel must differ from the corner to count
+ * as part of the mark -- raised for art with a soft glow, whose faint
+ * outer halo would otherwise shrink the mark inside its square.
+ */
+async function loadMark(source, trimThreshold) {
+  const trimmed = await sharp(await readFile(source))
+    .ensureAlpha()
+    .trim({ threshold: trimThreshold })
+    .toBuffer();
 
-const inner = Math.round(CANVAS * (1 - 2 * MARGIN));
-const pad = Math.round((CANVAS - inner) / 2);
-const markPng = await sharp(
-  await sharp(trimmed)
-    .resize(inner, inner, { fit: 'contain', background: TRANSPARENT })
-    .toBuffer(),
-)
-  .extend({ top: pad, bottom: pad, left: pad, right: pad, background: TRANSPARENT })
-  .png()
-  .toBuffer();
+  const inner = Math.round(CANVAS * (1 - 2 * MARGIN));
+  const pad = Math.round((CANVAS - inner) / 2);
+  const markPng = await sharp(
+    await sharp(trimmed)
+      .resize(inner, inner, { fit: 'contain', background: TRANSPARENT })
+      .toBuffer(),
+  )
+    .extend({ top: pad, bottom: pad, left: pad, right: pad, background: TRANSPARENT })
+    .png()
+    .toBuffer();
 
-const frame = (size) =>
-  sharp(markPng).resize(size, size, { fit: 'contain', background: TRANSPARENT }).png().toBuffer();
+  return (size) =>
+    sharp(markPng).resize(size, size, { fit: 'contain', background: TRANSPARENT }).png().toBuffer();
+}
 
-const frames = await Promise.all(ICO_SIZES.map(frame));
-const ico = await pngToIco(frames);
-await writeFile(ICO, ico);
+const frame = await loadMark(path.join(BUILD, 'logo-source.png'), 12);
+await writeFile(path.join(BUILD, 'icon.ico'), await pngToIco(await Promise.all(ICO_SIZES.map(frame))));
+await writeFile(
+  path.join(PUBLIC, 'favicon.ico'),
+  await pngToIco(await Promise.all(FAVICON_SIZES.map(frame))),
+);
+await writeFile(path.join(BUILD, 'icon.png'), await frame(512));
+await writeFile(path.join(PUBLIC, 'icon.png'), await frame(512));
 
-const faviconFrames = await Promise.all(FAVICON_SIZES.map(frame));
-await writeFile(FAVICON, await pngToIco(faviconFrames));
-
-await writeFile(PNG, await frame(512));
-await writeFile(PUBLIC_PNG, await frame(512));
+for (const variant of THEMED_VARIANTS) {
+  const themed = await loadMark(path.join(BUILD, `logo-source-${variant}.png`), 40);
+  await writeFile(
+    path.join(BUILD, `icon-${variant}.ico`),
+    await pngToIco(await Promise.all(ICO_SIZES.map(themed))),
+  );
+  await writeFile(path.join(BUILD, `icon-${variant}.png`), await themed(512));
+  await writeFile(path.join(PUBLIC, `icon-${variant}.png`), await themed(512));
+}
 
 console.log(
-  `build/icon.ico + build/icon.png + public/favicon.ico + public/icon.png written (${ICO_SIZES.join(
+  `build/icon.ico + build/icon.png + public/favicon.ico + public/icon.png written, plus the ${THEMED_VARIANTS.join(
     ', ',
-  )} px)`,
+  )} set (${ICO_SIZES.join(', ')} px)`,
 );

@@ -1,5 +1,7 @@
 import { app } from 'electron';
+import * as fs from 'node:fs';
 import * as path from 'node:path';
+import { appIconStem, appIconVariant } from '../shared/app-icon';
 
 /**
  * Where the main process finds the renderer and its own bundled files.
@@ -29,9 +31,23 @@ export const rendererOrigin = rendererDevServerUrl
  * copy under `process.resourcesPath`; in dev it is `build/icon.ico` at the
  * repo root. `.ico` is what Windows wants for a window icon.
  */
-export const windowIconPath = app.isPackaged
-  ? path.join(process.resourcesPath, 'icon.ico')
-  : path.join(__dirname, '..', '..', 'build', 'icon.ico');
+const windowIconDir = app.isPackaged
+  ? process.resourcesPath
+  : path.join(__dirname, '..', '..', 'build');
+export const windowIconPath = path.join(windowIconDir, 'icon.ico');
+
+/**
+ * The icon that goes with a theme (req-42): a theme with its own mark gets
+ * its own `.ico`, every other one -- and a missing file -- the default.
+ * Null when not even the default exists (a checkout without `build/`).
+ */
+export function windowIconFor(themeId: string): string | null {
+  const themed = path.join(windowIconDir, `${appIconStem(appIconVariant(themeId))}.ico`);
+  if (fs.existsSync(themed)) {
+    return themed;
+  }
+  return fs.existsSync(windowIconPath) ? windowIconPath : null;
+}
 
 /**
  * Absolute path to the MCP stdio bridge script an external client

@@ -1,5 +1,6 @@
 import { Injectable, computed, effect, inject } from '@angular/core';
 import { DREY_THEME } from '../../../shared/app-config';
+import { appIconStem, appIconVariant } from '../../../shared/app-icon';
 import { resolveTheme, ThemeCatalogEntry } from '../editor/themes/theme-catalog';
 import { SettingsService } from './settings.service';
 
@@ -25,6 +26,12 @@ export class ThemeService {
 
   /** The resolved catalog entry for the current `appearance.theme`. */
   readonly theme = computed<ThemeCatalogEntry>(() => resolveTheme(this.settings.appearanceTheme()));
+
+  /**
+   * The app mark that goes with the theme (titlebar, About) -- a file in
+   * `public/`. Main picks the window icon from the same table (req-42).
+   */
+  readonly markUrl = computed<string>(() => `${appIconStem(appIconVariant(this.theme().id))}.png`);
 
   constructor() {
     effect(() => {

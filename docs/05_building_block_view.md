@@ -1201,7 +1201,10 @@ src/                Angular renderer (standalone components, esbuild via Angular
                             data-theme attribute at :root (activates styles.css's
                             :root[data-theme] color-mix() block); for Drey clears them.
                             Exposes the resolved ThemeCatalogEntry as a signal that
-                            MarkdownSurface reads to swap its CM6 theme compartment.
+                            MarkdownSurface reads to swap its CM6 theme compartment,
+                            and markUrl -- the app mark that goes with the theme
+                            (titlebar, About; req-42). The table is shared/app-icon.ts;
+                            main sets the window / taskbar icon from the same one.
                             Instantiated by App.
       tag.service.ts       tags signal (TagEntry[] = { tag, count }) from tags:list;
                             refreshed on construction and after every save. Source

@@ -47,9 +47,10 @@ changelog and delete it here — no shipped history on this page.
 **Status (2026-10-13):** version 0.6.0, milestones 1–74 shipped. Milestone
 ids are assigned when work starts — check `changelog.md` for the highest
 used (latest: milestone 74; milestone 75 is assigned to "Configurable
-shortcuts" below; latest requirement id: req-41, the formatting strip).
+shortcuts" below; latest requirement id: req-42, the Cyberpunk app mark —
+an owner request outside the list, shipped in the same step).
 Items A1–A5 of the architectural cleanup shipped on 2026-10-13
-(changelog, top entry); A6–A12 remain.
+(changelog); A6–A12 remain.
 
 ### Known defects
 
@@ -204,6 +205,9 @@ Follow-ups of A1–A5 (found on the way, none started):
   the confirmation diff), offering the built-in trigger to installs from
   before the template (they add it once in Settings → Actions), running
   it on a selection only.
+- **req-42 (Cyberpunk app mark):** the desktop / Start-menu shortcut icon
+  following the theme (`shell.writeShortcutLink`, installed build only —
+  brittle, see the changelog entry), and a themed mark on the splash.
 - **Milestone 66 (Office, ADR-0066):** rendering Office documents in a tab,
   "Open in default program" for other file types, a setting for the drop
   behaviour (copy or link).

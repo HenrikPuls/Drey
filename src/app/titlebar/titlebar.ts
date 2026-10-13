@@ -2,6 +2,7 @@ import { NgTemplateOutlet } from '@angular/common';
 import { ChangeDetectionStrategy, Component, inject } from '@angular/core';
 import { DockService, type SideDock } from '../dock';
 import { DocHistoryService } from '../services/doc-history.service';
+import { ThemeService } from '../services/theme.service';
 import { Icon } from '../icons/icon';
 import { MenuBar } from './menu-bar';
 import { WindowChromeService } from './window-chrome.service';
@@ -24,6 +25,7 @@ export class Titlebar {
   protected readonly chrome = inject(WindowChromeService);
   protected readonly dock = inject(DockService);
   protected readonly history = inject(DocHistoryService);
+  protected readonly theme = inject(ThemeService);
 
   /** An empty dock has nothing to fold; its toggle is disabled. */
   protected hasPanels(side: SideDock): boolean {

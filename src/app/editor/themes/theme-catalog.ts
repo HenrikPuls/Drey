@@ -1,5 +1,5 @@
 import type { Extension } from '@codemirror/state';
-import { ANTHRAZIT_THEME, DREY_THEME } from '../../../../shared/app-config';
+import { ANTHRAZIT_THEME, CYBERPUNK_THEME, DREY_THEME } from '../../../../shared/app-config';
 import { dreyEditorLook } from '../editor-theme';
 
 /**
@@ -112,7 +112,7 @@ const ANTHRAZIT: ThemeCatalogEntry = {
  * demand.
  */
 const CYBERPUNK: ThemeCatalogEntry = {
-  id: 'cyberpunk',
+  id: CYBERPUNK_THEME,
   label: 'Cyberpunk',
   group: 'Drey',
   seed: { bg: '#0e0b1a', fg: '#efeaff', accent: '#ff4fa8', dark: true },

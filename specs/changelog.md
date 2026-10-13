@@ -20,6 +20,37 @@ recorded as an explicit decision. The parity checklist lives in
 
 ## Recent milestones
 
+### req-42 — Cyberpunk has its own app mark
+
+Owner request, outside the roadmap list. **Not yet manually verified by
+the owner.**
+
+While the **Cyberpunk** theme is on, Drey shows the neon mark
+(`handoff/Designer (10).png`) instead of the default one, in three
+places: the titlebar, Settings → About, and the window's **taskbar /
+Alt-Tab icon**. Switching the theme swaps all three at once, without a
+restart; a start in Cyberpunk shows the neon icon from the first frame
+(main reads the stored theme before it creates the window). Every other
+theme keeps the default mark.
+
+Fixed when the app is packed, and therefore unchanged: the exe's own
+icon in Explorer, the installer, the desktop and Start-menu shortcuts
+(and with them, presumably, a taskbar button the user *pinned* — not
+verified). The startup splash keeps the default mark too: it is drawn in
+the Anthrazit palette for every theme (ADR-0062).
+
+One table decides which mark a theme gets — `shared/app-icon.ts`
+(`appIconVariant`), read by main for the window icon
+(`windowIconFor` in `electron/app-paths.ts`, re-applied from `config:set`
+when `appearance.theme` changed) and by the renderer for the in-app mark
+(`ThemeService.markUrl`). No new IPC channel: the theme already lives in
+the app config main owns. `scripts/make-icon.mjs` writes the second set
+(`build/icon-cyberpunk.ico` / `.png`, `public/icon-cyberpunk.png`) from
+`build/logo-source-cyberpunk.png`; the `.ico` ships as an
+`extraResources` file. The theme id became a shared constant,
+`CYBERPUNK_THEME`. Spec: `shared/app-icon.spec.ts`. The live icon swap
+was typechecked and linted but not run in this checkout.
+
 ### Architectural cleanup A1–A5 — tests beside their code, linted dependency rules, no import cycles
 
 Items A1–A5 of the 2026-10-13 architecture review

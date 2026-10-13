@@ -2,7 +2,7 @@ import { app, BrowserWindow, shell } from 'electron';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { IPC_CHANNELS } from '../shared/ipc-api';
-import { rendererDevServerUrl, windowIconPath } from './app-paths';
+import { rendererDevServerUrl, windowIconFor } from './app-paths';
 import { buildContentSecurityPolicy, CSP_HEADER, isAppDocument } from './content-security-policy';
 import type { ExitBridge } from './ipc';
 import { logLine, watchWebContents } from './logger';
@@ -77,10 +77,11 @@ export class MainWindowHost {
 
   create(
     getUiScaleFactor?: () => number,
-    opts: { hiddenUntilReady?: boolean } = {},
+    opts: { hiddenUntilReady?: boolean; themeId?: string } = {},
   ): BrowserWindow {
     // A fresh window is a fresh session: the next close prompts again.
     this.quitIntent = false;
+    const icon = windowIconFor(opts.themeId ?? '');
     const window = new BrowserWindow({
       width: 1280,
       height: 800,
@@ -91,8 +92,8 @@ export class MainWindowHost {
       show: opts.hiddenUntilReady !== true,
       // The frameless window draws no title bar, but this still sets the
       // taskbar / Alt-Tab icon (dev too, where there is no exe icon to
-      // inherit).
-      ...(fs.existsSync(windowIconPath) ? { icon: windowIconPath } : {}),
+      // inherit). Follows the theme (req-42); `config:set` swaps it live.
+      ...(icon !== null ? { icon } : {}),
       // Matches the default theme, Anthrazit (see CLAUDE.md, UI/UX Design) so the
       // window doesn't flash white while the renderer loads.
       backgroundColor: '#18191b',

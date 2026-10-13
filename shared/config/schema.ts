@@ -564,6 +564,13 @@ export const DREY_THEME = 'drey';
 export const ANTHRAZIT_THEME = 'anthrazit';
 
 /**
+ * The Cyberpunk theme: violet-black surfaces, neon pink and violet. Named
+ * here because main needs it too -- it is the one theme with its own app
+ * mark (`shared/app-icon.ts`).
+ */
+export const CYBERPUNK_THEME = 'cyberpunk';
+
+/**
  * The vault MCP server (`electron/mcp/`,
  * `docs/09_architecture_decisions/0021-*.md`). One tool set --
  * `vault_search` (with a regex filter), `vault_read`, `vault_write` --

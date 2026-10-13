@@ -222,4 +222,10 @@ registry). Keep the extension list in step with
   `npm run make:icon` (`scripts/make-icon.mjs`, `sharp` + `png-to-ico`),
   all committed. The script trims the source art to its bounding box and
   recentres it near edge-to-edge in a transparent square — re-run after
-  changing the source.
+  changing the source. A theme with its own mark (req-42, today only
+  Cyberpunk; the table is `shared/app-icon.ts`) has a second source,
+  `build/logo-source-cyberpunk.png`, written by the same run as
+  `build/icon-cyberpunk.ico` / `.png` and `public/icon-cyberpunk.png`.
+  The `.ico` ships as an `extraResources` file and is the window /
+  taskbar icon while that theme is on; the exe, the installer and the
+  shortcuts keep `build/icon.ico`.

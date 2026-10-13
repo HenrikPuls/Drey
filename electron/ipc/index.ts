@@ -61,6 +61,7 @@ export interface IpcHandlerDeps {
   stdioBridgePath: () => string;
   syncMcpHttp: () => Promise<void>;
   syncVaultWatcher: () => Promise<void>;
+  syncWindowIcon: () => void;
   fullVaultRefresh: () => void;
   announceVaultChange: (changes: ExternalVaultChanges) => void;
   pluginHost: PluginHost;

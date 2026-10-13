@@ -63,6 +63,10 @@ extraResources:
     to: icon.ico
   - from: build/icon.png
     to: icon.png
+  # The mark of a theme that has its own (req-42, shared/app-icon.ts): the
+  # window / taskbar icon while that theme is on. The exe keeps win.icon.
+  - from: build/icon-cyberpunk.ico
+    to: icon-cyberpunk.ico
 
 # Explorer "Open with" / default-program registration (ADR-0054). NSIS only:
 # a per-user install writes HKCU/Software/Classes entries, the uninstaller

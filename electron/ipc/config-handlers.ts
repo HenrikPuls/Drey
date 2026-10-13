@@ -14,6 +14,8 @@ export interface ConfigHandlerDeps {
   syncMcpClients: () => void;
   /** Starts / stops the vault watcher to match the stored config (ADR-0045). */
   syncVaultWatcher: () => Promise<void>;
+  /** Sets the window / taskbar icon that goes with the stored theme (req-42). */
+  syncWindowIcon: () => void;
 }
 
 /** `config:get` / `config:set`, with the side effects a saved config triggers. */
@@ -24,11 +26,16 @@ export function registerConfigHandlers({
   syncMcpHttp,
   syncMcpClients,
   syncVaultWatcher,
+  syncWindowIcon,
 }: ConfigHandlerDeps): void {
   ipcMain.handle(IPC_CHANNELS.configGet, (): AppConfig => appConfig.get());
   ipcMain.handle(IPC_CHANNELS.configSet, async (_event, next: AppConfig): Promise<AppConfig> => {
     const prevTemplatesDir = appConfig.get().templates.dir;
+    const prevTheme = appConfig.get().appearance.theme;
     const stored = appConfig.set(next);
+    if (stored.appearance.theme !== prevTheme) {
+      syncWindowIcon();
+    }
     // The language or a dictionary path may have changed; the next check
     // reloads rather than answering from a stale dictionary.
     spellcheck.invalidate();

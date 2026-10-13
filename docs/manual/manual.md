@@ -736,6 +736,8 @@ AA contrast; the default), **Drey** (terracotta) and **Cyberpunk**
 catalogue of published CodeMirror themes. The accent colour follows the
 theme by default or can be pinned; the UI scale resizes the whole app;
 the editor typeface and font scale affect only the writing surface.
+Cyberpunk also brings its own app mark: the logo in the titlebar and the
+taskbar icon change with it (the desktop shortcut keeps the usual icon).
 
 ### Settings: Assistant tools {#settings-assistant-tools}
 

@@ -1,5 +1,6 @@
 import { ChangeDetectionStrategy, Component, OnInit, inject } from '@angular/core';
 import { AboutService } from '../../services/about.service';
+import { ThemeService } from '../../services/theme.service';
 import { SettingsPane } from '../settings-pane/settings-pane';
 
 /**
@@ -18,6 +19,7 @@ import { SettingsPane } from '../settings-pane/settings-pane';
 })
 export class SettingsAbout implements OnInit {
   protected readonly about = inject(AboutService);
+  protected readonly theme = inject(ThemeService);
 
   ngOnInit(): void {
     void this.about.load();
