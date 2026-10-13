@@ -44,11 +44,12 @@ Open work only. Everything implemented lives in
 lives in [`decisions.md`](decisions.md). When an item ships, move it to the
 changelog and delete it here — no shipped history on this page.
 
-**Status (2026-10-13):** version 0.5.0, milestones 1–73 shipped. Milestone
+**Status (2026-10-13):** version 0.6.0, milestones 1–74 shipped. Milestone
 ids are assigned when work starts — check `changelog.md` for the highest
-used (latest: milestone 73; latest requirement id: req-40, Git vaults).
+used (latest: milestone 74; milestone 75 is assigned to "Configurable
+shortcuts" below; latest requirement id: req-41, the formatting strip).
 Items A1–A5 of the architectural cleanup shipped on 2026-10-13
-(changelog, top entry); A6–A9 remain.
+(changelog, top entry); A6–A12 remain.
 
 ### Known defects
 
@@ -56,16 +57,17 @@ Items A1–A5 of the architectural cleanup shipped on 2026-10-13
 
 ### Now (small, daily value)
 
-2. **Assistant on a selection.** Actions already receive the selection
-   (`SELECTED SECTION`). Missing: a button that appears at a selection
-   (like Copilot in Office) to ask about it, with frequently used default
-   prompts (`templates/prompts/` is the natural source).
-3. **Configurable shortcuts.** One user-defined binding per command,
-   stored locally in the app config (never in the vault). `KeybindingService`
-   has no override layer today (`electron/main.ts` already anticipates a
-   settings UI for the quick-capture hotkey). Needs an ADR: conflict
-   detection, reset to default, the palette and the generated shortcuts
-   page (ADR-0067) follow the registry automatically.
+3. **Configurable shortcuts (milestone 75).** One user-defined binding
+   per command, stored locally in the app config (never in the vault).
+   `KeybindingService` has no override layer today. Decided with the owner
+   (2026-10-13): rebindable are every command in the registry (core and
+   plugin) **and** the global quick-capture hotkey (`electron/main.ts`
+   anticipates it); the editor's own keys (CodeMirror keymap, Tab, zoom,
+   plugins' raw key handlers) stay fixed and are listed as fixed. A chord
+   another command holds is shown with its holder and a **Replace** that
+   leaves the other command without a shortcut; chords the editor or
+   Electron needs are refused. Needs an ADR; the palette, the menus and
+   the generated shortcuts page (ADR-0067) follow the registry.
 
 ### Next
 
@@ -192,6 +194,11 @@ Follow-ups of A1–A5 (found on the way, none started):
   embedding a plain `.drawio`, letting the assistant read a diagram.
 ~~- **Milestone 65 (Git, ADR-0065):** clone as a new vault, rebase /
   cherry-pick, partial staging, dotfiles in the tree.~~
+- **Milestone 74 (assistant on a selection):** the button on a selection
+  in the assistant composer, a PDF or the browser tab; a prompt that
+  rewrites only the selection (today a rewrite is a manual Action over
+  the whole document, with the selection as its focus); showing the
+  quoted selection as its own element in the chat card.
 - **Milestone 73 (lossless template):** enforcing the vocabulary on the
   reply (today the prompt only instructs; an invented tag is caught in
   the confirmation diff), offering the built-in trigger to installs from

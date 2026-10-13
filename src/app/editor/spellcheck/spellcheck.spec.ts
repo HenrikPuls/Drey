@@ -271,4 +271,35 @@ describe('inlineSpellcheck', () => {
     await settle();
     expect(flaggedWords(view)).toEqual([]);
   });
+
+  it('drops a verdict whose text was edited away while the check was in flight', async () => {
+    // The dictionary answers late: the check judged "Note /tem", then the
+    // trailing word is deleted before the reply lands (the slash menu's
+    // "Templates…" row does exactly that).
+    let answer: (flagged: ReadonlySet<string>) => void = () => undefined;
+    const source: SpellcheckSource = {
+      enabled: () => true,
+      check: () => new Promise((resolve) => (answer = resolve)),
+      suggest: async () => [],
+      blockLanguage: () => 'de',
+    };
+    view = new EditorView({
+      state: EditorState.create({
+        doc: 'Note tem',
+        extensions: [inlineSpellcheck({ source, debounceMs: 20 })],
+      }),
+      parent: document.body,
+    });
+    await new Promise((resolve) => setTimeout(resolve, 40)); // the check is in flight
+    view.dispatch({ changes: { from: 5, to: 8, insert: '' } });
+    // The reply lands before the debounced re-check of the edit starts --
+    // that re-check must not be what supersedes it.
+    answer(new Set(['tem']));
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    // No underline past the end of the text ...
+    expect(flaggedWords(view)).toEqual([]);
+    // ... so the next edit maps cleanly instead of throwing.
+    expect(() => view!.dispatch({ changes: { from: 5, insert: 'agenda' } })).not.toThrow();
+    expect(view.state.doc.toString()).toBe('Note agenda');
+  });
 });

@@ -190,6 +190,13 @@ export function editCatchUpLine(path: string, applied: boolean): string {
 
 export function buildAskUserMessage(request: AskRequest): string {
   const parts = [`INSTRUCTION / QUESTION:\n${request.question.trim()}`];
+  // Asked from the selection button (milestone 74): the same block name the
+  // Action engine uses, placed before the document it is a part of.
+  if (request.selection !== undefined && request.selection.trim() !== '') {
+    parts.push(
+      `SELECTED SECTION (the question is about this part of the document):\n${request.selection}`,
+    );
+  }
   if (request.note !== null) {
     parts.push(`DOCUMENT (${request.note.path}):\n${request.note.body}`);
   }

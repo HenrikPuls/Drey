@@ -71,3 +71,10 @@ one means moving it back to the roadmap with a new justification.
   `updated:` where the key exists; fence-less files stay byte-for-byte
   (`specs/frontmatter-schema.md`). Narrowed by milestone 65: a save never
   adds frontmatter.
+- **req-41 alternatives** — two other homes for the formatting commands.
+  → Decided against (2026-10-13). A *selection bubble* over marked text
+  pops up on every selection, hides the line above, and block commands
+  (table, callout, math block) have no selection to hang on. A *toolbar
+  row of its own* under the meta bar costs a line of height for good and
+  leaves the meta bar nearly empty. Built instead: the strip as the head
+  of the right-click menu, pinnable into the meta bar.

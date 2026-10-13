@@ -180,3 +180,158 @@
   top: 8px;
   right: 8px;
 }
+
+/* -- template picker (req-41): the formatting bar's popover and the `/`
+      menu's "Templates…" row -- filter + folder tree beside a preview ---- */
+
+.tpl-pick {
+  display: flex;
+  width: min(560px, calc(100vw - 16px));
+  height: 340px;
+  font: 400 13px/1.4 var(--font-sans);
+  color: var(--text-2);
+}
+
+.tpl-pick-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+}
+
+.tpl-pick-float {
+  position: fixed;
+  overflow: hidden;
+  background: var(--bg-input);
+  border: 1px solid var(--popover-border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--popover-shadow);
+}
+
+.tpl-pick-side {
+  display: flex;
+  flex: none;
+  flex-direction: column;
+  width: 220px;
+  border-right: 1px solid var(--border);
+}
+
+.tpl-pick-filter {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 6px;
+  height: 32px;
+  padding: 0 10px;
+  border-bottom: 1px solid var(--border);
+  color: var(--text-5);
+}
+
+.tpl-pick-input {
+  flex: 1;
+  min-width: 0;
+  border: 0;
+  background: transparent;
+  color: var(--text-primary);
+  font: inherit;
+  outline: none;
+}
+
+.tpl-pick-list {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 4px;
+}
+
+.tpl-pick-label {
+  padding: 6px 10px 3px;
+  color: var(--text-5);
+  font-size: 12px;
+}
+
+.tpl-pick-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: var(--row-h);
+  padding-right: 10px;
+  border-radius: var(--radius-xs);
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.tpl-pick-row.folder {
+  color: var(--text-3);
+}
+
+.tpl-pick-row.active {
+  background: var(--hover-bg-strong);
+  box-shadow: inset 2px 0 0 var(--accent);
+  color: var(--text-primary);
+}
+
+.tpl-pick-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.tpl-pick-detail {
+  flex: none;
+  max-width: 45%;
+  overflow: hidden;
+  color: var(--text-6);
+  font-size: 12px;
+  text-overflow: ellipsis;
+}
+
+.tpl-pick-empty {
+  padding: 8px 10px;
+  color: var(--text-5);
+  font-size: 12px;
+  white-space: normal;
+}
+
+.tpl-pick-preview {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.tpl-pick-head,
+.tpl-pick-foot {
+  flex: none;
+  height: 32px;
+  padding: 0 12px;
+  overflow: hidden;
+  color: var(--text-5);
+  font-size: 12px;
+  line-height: 32px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tpl-pick-head {
+  border-bottom: 1px solid var(--border);
+  font-family: var(--font-mono);
+  font-size: var(--fs-mono-path);
+}
+
+.tpl-pick-foot {
+  border-top: 1px solid var(--border);
+}
+
+.tpl-pick-body {
+  flex: 1;
+  min-height: 0;
+  margin: 0;
+  padding: 10px 12px;
+  overflow: hidden;
+  background: var(--bg-editor);
+  color: var(--text-2);
+  font: 400 12px/1.5 var(--font-mono);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}

@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   ASK_TASKS_NOTE,
   buildToolsNote,
+  buildAskUserMessage,
   buildVaultScopeNote,
 } from './ask-prompts';
 
@@ -84,5 +85,36 @@ describe('ASK_TASKS_NOTE', () => {
     expect(ASK_TASKS_NOTE).toContain('ONLY a question about the user\'s tasks');
     expect(ASK_TASKS_NOTE).toContain('If the question is not about tasks, do NOT call tasks_list');
     expect(ASK_TASKS_NOTE).toContain('never use its results to describe what a vault contains');
+  });
+});
+
+describe('buildAskUserMessage — selection (milestone 74)', () => {
+  const base = {
+    question: ' Was heißt das? ',
+    note: { path: 'a.md', body: 'Ganzer Text.' },
+    extraFiles: [{ path: 'b.md', body: 'B.' }],
+    images: [],
+    chatPath: null,
+    liveEdit: false,
+    noteKey: null,
+    vaultScope: 'off' as const,
+    vaultIds: [],
+  };
+
+  it('places the selected section between the question and the document', () => {
+    const message = buildAskUserMessage({ ...base, selection: 'Text.' });
+    const blocks = message.split('\n\n').map((block) => block.split('\n')[0]);
+    expect(blocks).toEqual([
+      'INSTRUCTION / QUESTION:',
+      'SELECTED SECTION (the question is about this part of the document):',
+      'DOCUMENT (a.md):',
+      'FILE (b.md):',
+    ]);
+    expect(message).toContain('document):\nText.\n\nDOCUMENT');
+  });
+
+  it('adds no block without a selection', () => {
+    expect(buildAskUserMessage(base)).not.toContain('SELECTED SECTION');
+    expect(buildAskUserMessage({ ...base, selection: '  ' })).not.toContain('SELECTED SECTION');
   });
 });

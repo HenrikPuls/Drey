@@ -67,10 +67,10 @@ export class EditorPrefsService {
   }
 
   /**
-   * Whether the editor's meta bar shows the formatting buttons. App-wide
-   * and persisted like the line numbers; toggled from the editor's `⋯`
-   * menu. On unless explicitly switched off (milestone 43: the buttons
-   * are part of the bar, no longer an extra strip).
+   * Whether the formatting strip is pinned into the editor's meta bar
+   * (req-41). App-wide and persisted like the line numbers; toggled by
+   * the strip's pin -- in the bar, and in the editor context menu, where
+   * the strip is always at hand. Pinned unless explicitly released.
    */
   readonly toolbar = signal(readPrefs()['toolbar'] !== false);
 

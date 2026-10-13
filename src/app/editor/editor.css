@@ -95,30 +95,6 @@
   background: var(--border);
 }
 
-/* The collapse handle at the toolbar's left edge: a slim vertical pill,
-   the chevron naming the fold direction (left = folds away, right =
-   folds back out). Shares the `⋯`-menu toggle's persisted pref. */
-.toolbar-collapse {
-  flex: none;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 14px;
-  height: 18px;
-  padding: 0;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-xs);
-  background: transparent;
-  color: var(--text-6);
-  cursor: pointer;
-}
-
-.toolbar-collapse:hover {
-  border-color: var(--border-strong);
-  background: var(--hover-bg);
-  color: var(--text-primary);
-}
-
 .actions {
   flex: none;
   display: flex;

@@ -2,6 +2,7 @@ import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { By } from '@angular/platform-browser';
 import { vi } from 'vitest';
 import { Editor } from './editor';
+import { EditorPrefsService } from './editor-prefs.service';
 import { EditorService } from '../services/editor.service';
 import { EditorZoomService } from '../services/editor-zoom.service';
 import { SettingsService } from '../services/settings.service';
@@ -315,63 +316,59 @@ describe('Editor', () => {
       expect(compiled().querySelector('.editor-menu')).toBeNull();
     });
 
-    it('shows the formatting buttons in the meta bar, and they edit the document', async () => {
-      // Part of the meta bar since milestone 43 -- on unless switched off.
-      const bar = compiled().querySelector('.chrome app-markdown-toolbar');
+    it('shows the pinned formatting strip in the meta bar, and it edits the document', async () => {
+      // Pinned unless released (req-41).
+      const bar = compiled().querySelector('.chrome app-markdown-toolbar') as HTMLElement;
       expect(bar).toBeTruthy();
-
-      // The two dedicated buttons exist alongside the list menu…
-      expect(bar?.querySelector('button[aria-label="Task list"]')).toBeTruthy();
-      const quote = bar?.querySelector('button[aria-label="Blockquote"]') as HTMLButtonElement;
+      expect(bar.querySelector('button[aria-label="Task list"]')).toBeTruthy();
 
       // Bold with the caret at 0 drops an empty marker pair.
-      const bold = bar?.querySelector('button[aria-label="Bold"]') as HTMLButtonElement;
-      bold.click();
+      (bar.querySelector('button[aria-label="Bold"]') as HTMLButtonElement).click();
       fixture.detectChanges();
       await fixture.whenStable();
       expect(cmText()).toContain('****');
 
-      // Blockquote prefixes the caret's line.
+      // Blockquote lives in the paragraph-style menu and prefixes the caret's line.
+      (bar.querySelector('button[aria-label="Paragraph style"]') as HTMLButtonElement).click();
+      fixture.detectChanges();
+      const quote = [...bar.querySelectorAll('.menu button')].find(
+        (b) => b.textContent?.trim() === 'Blockquote',
+      ) as HTMLButtonElement;
       quote.click();
       fixture.detectChanges();
       await fixture.whenStable();
       expect(cmText()).toContain('> ');
+      expect(bar.querySelector('.menu')).toBeNull();
     });
 
-    it('hides the formatting buttons from the ⋯ menu and persists that', async () => {
-      const menu = openMenu();
-      const toolbarItem = [...menu.querySelectorAll('button')].find(
-        (b) => b.textContent?.trim() === 'Formatting toolbar',
+    it('the pin releases the strip from the meta bar and persists that', async () => {
+      const pin = compiled().querySelector(
+        '.chrome app-markdown-toolbar button.pin',
       ) as HTMLButtonElement;
-      expect(toolbarItem.getAttribute('aria-checked')).toBe('true');
-      toolbarItem.click();
+      expect(pin.getAttribute('aria-pressed')).toBe('true');
+      expect(pin.getAttribute('aria-label')).toBe('Unpin formatting toolbar');
+
+      pin.click();
       fixture.detectChanges();
       await fixture.whenStable();
-
-      expect(compiled().querySelector('app-markdown-toolbar')).toBeNull();
-      expect(JSON.parse(localStorage.getItem('drey.editor')!).toolbar).toBe(false);
-    });
-
-    it('the collapse handle folds the buttons away and back (same pref)', async () => {
-      const handle = compiled().querySelector('.chrome .toolbar-collapse') as HTMLButtonElement;
-      expect(handle).toBeTruthy();
-      expect(handle.getAttribute('aria-pressed')).toBe('false'); // expanded
-
-      handle.click();
-      fixture.detectChanges();
-      await fixture.whenStable();
-      // Folded: only the handle remains before the save cluster.
+      // Released: the bar runs straight into the save cluster.
       expect(compiled().querySelector('app-markdown-toolbar')).toBeNull();
       expect(compiled().querySelector('.chrome .bar-sep')).toBeNull();
-      const folded = compiled().querySelector('.toolbar-collapse') as HTMLButtonElement;
-      expect(folded.getAttribute('aria-pressed')).toBe('true');
       expect(JSON.parse(localStorage.getItem('drey.editor')!).toolbar).toBe(false);
 
-      folded.click();
+      // Pinning again (the strip's pin in the context menu, the palette
+      // command) goes through the same pref.
+      TestBed.inject(EditorPrefsService).toggleToolbar();
       fixture.detectChanges();
       await fixture.whenStable();
       expect(compiled().querySelector('app-markdown-toolbar')).toBeTruthy();
       expect(JSON.parse(localStorage.getItem('drey.editor')!).toolbar).toBe(true);
+    });
+
+    it('the ⋯ menu no longer carries a toolbar row', () => {
+      const menu = openMenu();
+      const labels = [...menu.querySelectorAll('button')].map((b) => b.textContent?.trim());
+      expect(labels).not.toContain('Formatting toolbar');
     });
 
     it('renders the toolbar from the persisted pref at startup (vault docKey)', async () => {

@@ -1,7 +1,12 @@
 import type { DreyPluginApi } from '../../../shared/plugin-api/renderer';
 import { el } from './dom.js';
 import { pickerFrame, showPicker } from './picker-frame.js';
-import { PROMPTS_DIR, promptEntriesFrom, type PromptEntry } from './prompts.js';
+import {
+  PROMPTS_DIR,
+  promptEntriesFrom,
+  promptsDirFor,
+  type PromptEntry,
+} from './prompts.js';
 import type { VaultFileCache } from './vault-files.js';
 
 /**
@@ -24,6 +29,7 @@ export async function openPromptPicker(
   bodyArea.appendChild(listBox);
 
   let prompts: readonly PromptEntry[] = [];
+  let dir = PROMPTS_DIR;
   const renderList = (): void => {
     listBox.textContent = '';
     for (const prompt of prompts) {
@@ -44,7 +50,7 @@ export async function openPromptPicker(
         el(
           'div',
           'assistant-picker-empty',
-          `No prompts in ${PROMPTS_DIR}/ — add .md files there.`,
+          `No prompts in ${dir}/ — add .md files there.`,
         ),
       );
     }
@@ -62,8 +68,11 @@ export async function openPromptPicker(
 
   // Re-read on every open (the cache invalidates itself on vault changes).
   try {
-    prompts = await promptEntriesFrom(await vaultFiles.ensureLoaded(), (path) =>
-      api.vault.readFile(path).then((file) => file.content),
+    dir = promptsDirFor((await api.appConfig.get()).templates.dir);
+    prompts = await promptEntriesFrom(
+      await vaultFiles.ensureLoaded(),
+      (path) => api.vault.readFile(path).then((file) => file.content),
+      dir,
     );
     renderList();
   } catch {

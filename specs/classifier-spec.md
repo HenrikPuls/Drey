@@ -176,6 +176,15 @@ rewrite; image-tab results open as a scratch tab.
   for a question or `{"kind":"edit","document":…}` (the whole revised
   document) for a change request. `ASK_ANSWER_SYSTEM` is the plain-answer
   variant over the vault context.
+- **The ask user message** (`buildAskUserMessage`, same file) — blocks
+  in this order, separated by a blank line: `INSTRUCTION / QUESTION:`,
+  then — only when the question was asked from the button at a selection
+  (milestone 74) — `SELECTED SECTION (the question is about this part of
+  the document):` with the selected text verbatim, then
+  `DOCUMENT (<path>):` when the note chip is on, then one
+  `FILE (<path>):` per attached file. The system prompt does not change
+  for a selection; the reply protocol (answer or whole-document edit) is
+  the same.
 - **Ask notes** (same file) — appended to the system prompt depending on
   what rides the ask: `ASK_TOOLS_NOTE` / `ASK_SCOPED_TOOLS_NOTE` (vault
   tools, ADR-0021/0063), `ASK_EXPLORE_NOTE` (the explore tools

@@ -5,39 +5,67 @@
     (click)="svc.close()"
     (contextmenu)="$event.preventDefault(); svc.close()"
   ></div>
-  <div class="ctx-menu" [style.left.px]="a.x" [style.top.px]="a.y">
-    <!-- Clipboard rows are editor-surface only: an image tab has nothing to cut. -->
-    @if (svc.menuTarget()?.surface !== 'image') {
-      <button type="button" (click)="cut()">Cut <span class="ctx-key">Ctrl X</span></button>
-      <button type="button" (click)="copy()">Copy <span class="ctx-key">Ctrl C</span></button>
-      <button type="button" (click)="paste()">Paste <span class="ctx-key">Ctrl V</span></button>
-      <button type="button" (click)="selectAll()">Select all <span class="ctx-key">Ctrl A</span></button>
+  <div class="ctx-wrap" [style.left.px]="a.x" [style.top.px]="a.y">
+    <!-- The formatting strip (req-41): the icon bar of the meta bar, here
+         for the surface that was right-clicked. Its pin docks it up there. -->
+    @if (stripView() !== null) {
+      <div class="ctx-strip">
+        <app-markdown-toolbar
+          [overlay]="true"
+          [pinned]="prefs.toolbar()"
+          [imagesEnabled]="imagesEnabled()"
+          [pluginButtons]="onDocument()"
+          [currentLine]="currentLine"
+          (action)="applyAction($event)"
+          (imageFiles)="insertImages($event)"
+          (emojiPick)="pickEmoji()"
+          (clearFormatting)="clearFormatting()"
+          (pinToggle)="prefs.toggleToolbar()"
+          (done)="svc.close()"
+          hostMenu="Clipboard and more"
+          (hostMenuToggled)="onListToggled($event)"
+        />
+      </div>
     }
 
-    @if (baseItems().length > 0) {
-      <div class="ctx-sep"></div>
-      @for (item of baseItems(); track item.label; let i = $index) {
-        <button
-          type="button"
-          [disabled]="item.disabled === true"
-          (click)="runBaseItem(i)"
-        >
-          {{ item.label }}
-        </button>
+    <!-- With the strip this list is its first menu: the strip's leading
+         button opens and closes it, any other strip menu takes its place. -->
+    <div class="ctx-menu" [class.aside]="!listShown()">
+      <!-- Clipboard rows are editor-surface only: an image tab has nothing to cut. -->
+      @if (svc.menuTarget()?.surface !== 'image') {
+        <button type="button" (click)="cut()">Cut <span class="ctx-key">Ctrl X</span></button>
+        <button type="button" (click)="copy()">Copy <span class="ctx-key">Ctrl C</span></button>
+        <button type="button" (click)="paste()">Paste <span class="ctx-key">Ctrl V</span></button>
+        <button type="button" (click)="selectAll()">Select all <span class="ctx-key">Ctrl A</span></button>
       }
-    }
 
-    @if (pluginItems().length > 0) {
-      <div class="ctx-sep"></div>
-      @for (item of pluginItems(); track item.label; let i = $index) {
-        <button
-          type="button"
-          [disabled]="item.disabled === true"
-          (click)="runPluginItem(i)"
-        >
-          {{ item.label }}
-        </button>
+      @if (baseItems().length > 0) {
+        @if (svc.menuTarget()?.surface !== 'image') {
+          <div class="ctx-sep"></div>
+        }
+        @for (item of baseItems(); track item.label; let i = $index) {
+          <button
+            type="button"
+            [disabled]="item.disabled === true"
+            (click)="runBaseItem(i)"
+          >
+            {{ item.label }}
+          </button>
+        }
       }
-    }
+
+      @if (pluginItems().length > 0) {
+        <div class="ctx-sep"></div>
+        @for (item of pluginItems(); track item.label; let i = $index) {
+          <button
+            type="button"
+            [disabled]="item.disabled === true"
+            (click)="runPluginItem(i)"
+          >
+            {{ item.label }}
+          </button>
+        }
+      }
+    </div>
   </div>
 }

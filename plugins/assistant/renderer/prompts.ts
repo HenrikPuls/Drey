@@ -18,8 +18,18 @@
  * a DOM or plugin host.
  */
 
-/** The vault folder the picker reads; also its Templates-panel category. */
+/** The prompts folder under the default templates root. */
 export const PROMPTS_DIR = 'templates/prompts';
+
+/**
+ * The vault folder the prompts live in: `prompts/` under the configured
+ * templates root (`templates.dir`) — the same folder the main side's
+ * template tools protect, and a category in the Templates panel.
+ */
+export function promptsDirFor(templatesDir: string | undefined): string {
+  const root = (templatesDir ?? '').replace(/\\/g, '/').replace(/^\/+|\/+$/g, '');
+  return root === '' ? PROMPTS_DIR : `${root}/prompts`;
+}
 
 export interface PromptEntry {
   /** Vault-relative path, e.g. `templates/prompts/review.md`. */
@@ -82,9 +92,10 @@ export function parsePromptFile(path: string, text: string): PromptEntry {
 export function promptEntriesFrom(
   paths: readonly string[],
   read: (path: string) => Promise<string>,
+  dir: string = PROMPTS_DIR,
 ): Promise<PromptEntry[]> {
   const inFolder = paths.filter(
-    (path) => path.startsWith(`${PROMPTS_DIR}/`) && path.toLowerCase().endsWith('.md'),
+    (path) => path.startsWith(`${dir}/`) && path.toLowerCase().endsWith('.md'),
   );
   return Promise.all(
     inFolder.map(async (path) => parsePromptFile(path, await read(path))),

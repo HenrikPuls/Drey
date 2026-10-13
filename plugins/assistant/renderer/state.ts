@@ -265,7 +265,7 @@ export interface AssistantState {
   /** Native dialog; stages external files into the vault and adds chips. Returns how many landed. */
   attachExternal(): Promise<number>;
   /** Sends a question; resolves false when it was not sent (so the composer can keep the text). */
-  ask(question: string): Promise<boolean>;
+  ask(question: string, options?: { selection?: string }): Promise<boolean>;
   /** How many turns a "restart from here" at `turnIndex` would drop. */
   laterCount(turnIndex: number): number;
   /** Rewinds to just before `turnIndex`; returns the removed question's text. */
@@ -695,7 +695,7 @@ export function createAssistantState(ports: AssistantPorts, tasks: RunningTasks)
       return landed;
     },
 
-    async ask(question) {
+    async ask(question, options) {
       const text = question.trim();
       if (text === '' || asking) {
         return false;
@@ -812,6 +812,9 @@ export function createAssistantState(ports: AssistantPorts, tasks: RunningTasks)
           noteKey,
           vaultScope,
           vaultIds: [...customVaultIds],
+          ...(options?.selection !== undefined && options.selection.trim() !== ''
+            ? { selection: options.selection }
+            : {}),
         };
         // While the model edits the document, the user cannot: the lock
         // covers the whole turn and releases on success, error AND cancel.

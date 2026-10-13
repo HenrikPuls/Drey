@@ -90,7 +90,7 @@ export function mountComposer(
   modelButton.title = 'Pick the model';
   modelButton.setAttribute('aria-label', 'Pick the model');
   const promptsButton = toolButton('prompt-btn', 'book-open');
-  promptsButton.title = 'Prompts: pick one from templates/prompts/';
+  promptsButton.title = 'Prompts: pick one from the prompts folder';
   promptsButton.setAttribute('aria-label', 'Pick a prompt');
   const meta = el('div', 'composer-meta');
   meta.append(plusButton, liveButton, vaultButton, promptsButton, modelButton);

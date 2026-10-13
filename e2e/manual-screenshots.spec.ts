@@ -16,8 +16,9 @@ import { test, expect, type Page, type ElectronApplication } from './fixtures/dr
  * Prerequisite: `npm run build` (fresh dist-electron + dist/drey/browser).
  * Output: docs/manual/img/*.png (committed with the manual).
  *
- * The demo vault content is deliberately German — user data stays German
- * (CLAUDE.md language convention); the chrome around it is English.
+ * The demo vault is English throughout — notes, file and folder names,
+ * tags, templates and prompts (CLAUDE.md language convention: nothing in
+ * a screenshot that ships is German).
  */
 
 const RUN = !!process.env['DREY_MANUAL_SHOTS'];
@@ -120,112 +121,112 @@ async function openFile(
 }
 
 // ---------------------------------------------------------------------------
-// The demo vault: realistic German notes exercising tags, tasks with due
+// The demo vault: realistic English notes exercising tags, tasks with due
 // date + priority, wikilinks, tables, code blocks, daily entries, templates.
 // ---------------------------------------------------------------------------
 
 const DEMO: Record<string, string> = {
-  'daily/2026-10-11.md': [
+  'daily/2026-10-13.md': [
     '---',
-    'title: Daily 2026-10-11',
+    'title: Daily 2026-10-13',
     '---',
     '',
-    '# 2026-10-11',
+    '# 2026-10-13',
     '',
     '## 09:12',
     '',
-    'Erster Kaffee, dann #inbox leerräumen: zwei offene Punkte vom Relaunch hängen geblieben.',
+    'First coffee, then clearing the #inbox: two open points from the relaunch got stuck.',
     '',
     '## 13:40',
     '',
-    'Redaktionsteam erinnert an die Bildrechte — mit [[Website-Relaunch]] abgeglichen, passt soweit.',
+    'The editorial team asked about the image rights — checked against [[Website-Relaunch]], looks fine.',
     '',
     '## 18:05',
     '',
-    'Kurzer Segeltörn vor dem Abendessen: nur Wenden im Hafenbecken geübt. #wissen/segeln',
+    'A short sail before dinner: only practised tacking in the harbour basin. #knowledge/sailing',
     '',
   ].join('\n'),
 
-  'Projekte/Website-Relaunch.md': [
+  'Projects/Website-Relaunch.md': [
     '---',
     'title: Website-Relaunch',
     '---',
     '',
-    '# Website-Relaunch #projekt/relaunch',
+    '# Website-Relaunch #project/relaunch',
     '',
-    'Status bleibt grün, Go-live in zwei Wochen. Die Abhängigkeiten stehen in [[Drey-Roadmap]].',
+    'Status stays green, go-live in two weeks. The dependencies are listed in [[Drey-Roadmap]].',
     '',
-    '## Offene Aufgaben',
+    '## Open tasks',
     '',
-    '- [ ] Bildrechte mit der Redaktion klären 📅 2026-10-14 ⏫',
-    '- [ ] Weiterleitungstabelle vom Altsystem prüfen 📅 2026-10-16',
-    '- [ ] Footer-Texte an die Redaktion #web',
-    '- [x] Staging-Umgebung aufsetzen',
+    '- [ ] Clear the image rights with the editorial team 📅 2026-10-16 ⏫',
+    '- [ ] Check the redirect table from the old system 📅 2026-10-18',
+    '- [ ] Send the footer texts to the editorial team #web',
+    '- [x] Set up the staging environment',
     '',
-    '## Notizen',
+    '## Notes',
     '',
-    'Das neue Farbschema orientiert sich am Anthrazit-Theme der App — ruhige Flächen, ein Blau als Akzent.',
-    'Die Startseite bleibt einspaltig; Assets liegen unter `assets/` und werden beim Build gestrappt.',
-    '',
-  ].join('\n'),
-
-  'Projekte/Drey-Roadmap.md': [
-    '# Drey-Roadmap #projekt',
-    '',
-    'Meine persönliche Ausbauliste für den Tresor.',
-    '',
-    '## Nächste Schritte',
-    '',
-    '- [ ] Semantische Suche im Alltag ausprobieren 🔽',
-    '- [ ] Wöchentlichen Review-Block ins Daily holen 📅 2026-10-12',
-    '- [x] Git-Repository für den Tresor anlegen',
-    '',
-    '## Verweise',
-    '',
-    '- [[Website-Relaunch]] — das Schwesterprojekt',
-    '- [[Segeln-Terminologie]] — Ausgleich am Wochenende',
+    'The new colour scheme follows the app\'s Anthrazit theme — calm surfaces, one blue as the accent.',
+    'The start page stays single-column; assets live under `assets/` and are bundled at build time.',
     '',
   ].join('\n'),
 
-  'Wissen/Segeln-Terminologie.md': [
+  'Projects/Drey-Roadmap.md': [
+    '# Drey-Roadmap #project',
+    '',
+    'My personal list of things to build out in the vault.',
+    '',
+    '## Next steps',
+    '',
+    '- [ ] Try semantic search in everyday use 🔽',
+    '- [ ] Bring a weekly review block into the daily note 📅 2026-10-14',
+    '- [x] Create a Git repository for the vault',
+    '',
+    '## References',
+    '',
+    '- [[Website-Relaunch]] — the sister project',
+    '- [[Sailing-Terms]] — balance at the weekend',
+    '',
+  ].join('\n'),
+
+  'Knowledge/Sailing-Terms.md': [
     '---',
-    'title: Segeln: Terminologie',
+    'title: Sailing: terms',
     '---',
     '',
-    '# Segeln-Terminologie #wissen/segeln',
+    '# Sailing-Terms #knowledge/sailing',
     '',
-    'Kleine Sammlung, damit ich die Begriffe nicht ständig verwechsle.',
+    'A small collection, so I stop mixing up the terms.',
     '',
-    '## Bug & Heck',
+    '## Bow & stern',
     '',
-    'Der Bug ist das vordere Ende des Schiffes, das Heck das hintere Ende.',
+    'The bow is the front end of the boat, the stern the back end.',
     '',
-    '## Manöver',
+    '## Manoeuvres',
     '',
-    'Bei der Wende dreht das Boot mit dem Bug durch den Wind, bei der Halse mit dem Heck.',
-    'Die Halse ist das gefährlichere Manöver — der Baum schwingt durch.',
+    'In a tack the boat turns its bow through the wind, in a gybe its stern.',
+    'The gybe is the more dangerous manoeuvre — the boom swings across.',
     '',
   ].join('\n'),
 
-  'Wissen/Markdown-Spickzettel.md': [
-    '# Markdown-Spickzettel',
+  'Knowledge/Markdown-Cheatsheet.md': [
+    '# Markdown-Cheatsheet',
     '',
-    'Ein paar Bausteine, die im Live Preview besonders gut aussehen.',
+    'A few building blocks that look especially good in Live Preview.',
     '',
     '## Text',
     '',
-    '**Fett**, *kursiv*, `inline code`, ~~durchgestrichen~~ und ein [Link](https://drey.lariscus.de).',
-    'Inline #tags werden zu Pills, [[Segeln-Terminologie]] öffnet auf Klick die Zielnotiz.',
+    '**Bold**, *italic*, `inline code`, ~~struck through~~ and a [link](https://drey.lariscus.de).',
+    'Inline #tags become pills, [[Sailing-Terms]] opens the target note on click.',
     '',
-    '> Zitate rücken ein und setzen sich farblich ab — gut für Auszüge aus Mails.',
+    '> Quotes are indented and set apart in colour — good for excerpts from mails.',
     '',
-    '## Tabelle',
+    '## Table',
     '',
-    '| Baustein | Schreibweise | Hinweis |',
+    '| Block | Syntax | Note |',
     '| --- | --- | --- |',
-    '| Aufgabe | `- [ ]` | mit `📅` + Datum fällig |',
-    '| Tag | `#tag` | rendert als Pill |',
-    '| Wikilink | `[[Ziel]]` | legt fehlende Notiz an |',
+    '| Task | `- [ ]` | due with `📅` + date |',
+    '| Tag | `#tag` | renders as a pill |',
+    '| Wikilink | `[[Target]]` | creates a missing note |',
     '',
     '## Code',
     '',
@@ -238,23 +239,23 @@ const DEMO: Record<string, string> = {
   'templates/daily.md': [
     '# {{date}}',
     '',
-    '## Vormittag',
+    '## Morning',
     '',
     '- ',
     '',
-    '## Nachmittag',
+    '## Afternoon',
     '',
     '- ',
     '',
   ].join('\n'),
 
-  'templates/standup.md': '## Standup\n\n- Gestern:\n- Heute:\n- Blocker:\n',
+  'templates/standup.md': '## Standup\n\n- Yesterday:\n- Today:\n- Blockers:\n',
 
   'templates/prompts/day-review.md': [
-    '# Tagesrückblick',
-    '> Fasst den Tag in drei Sätzen zusammen und nennt offene Enden.',
+    '# Day review',
+    '> Sums up the day in three sentences and names loose ends.',
     '',
-    'Fasse meinen heutigen Tag in drei Sätzen zusammen. Weise am Ende auf offene Enden hin.',
+    'Sum up my day in three sentences. Point out loose ends at the end.',
     '',
   ].join('\n'),
 };
@@ -270,9 +271,9 @@ const MOCK_LLM_PORT = 27319;
 const MOCK_LLM_BASE_URL = `http://127.0.0.1:${MOCK_LLM_PORT}/v1`;
 
 const CHAT_REPLY = [
-  'Kurzüberblick über den Relaunch: Die Bildrechte sind das einzige Risiko mit Deadline (14.10.),',
-  'die Weiterleitungstabelle ist terminlich entspannt. Die Staging-Umgebung steht seit Montag.',
-  'Empfehlung: heute die Bildrechte klären — der Rest ist Verwaltung.',
+  'A short overview of the relaunch: the image rights are the only risk with a deadline (16 Oct),',
+  'the redirect table has time. The staging environment has been up since Monday.',
+  'Recommendation: clear the image rights today — the rest is housekeeping.',
 ].join(' ');
 
 function mockLlmHandler(req: http.IncomingMessage, res: http.ServerResponse): void {
@@ -343,8 +344,8 @@ test.describe('manual: shell & editor', () => {
 
     // The overview: a note with tags, wikilinks and tasks in Live Preview,
     // default layout (Calendar + Files left, Assistant right).
-    await openFile(page, 'Projekte/Website-Relaunch.md', { folders: ['Projekte'] });
-    await page.locator('app-editor .cm-line', { hasText: 'Bildrechte' }).first().click();
+    await openFile(page, 'Projects/Website-Relaunch.md', { folders: ['Projects'] });
+    await page.locator('app-editor .cm-line', { hasText: 'image rights' }).first().click();
     await page.waitForTimeout(250);
     await shoot(page, 'window-overview.png');
 
@@ -409,7 +410,7 @@ test.describe('manual: shell & editor', () => {
     await page.keyboard.press('Control+Alt+Enter');
     await page.waitForTimeout(250);
     await page.keyboard.press('Control+P');
-    await page.keyboard.type('spickzettel');
+    await page.keyboard.type('cheatsheet');
     await page.waitForTimeout(300);
     await page.keyboard.press('Enter');
     await page.waitForTimeout(400);
@@ -433,15 +434,15 @@ test.describe('manual: panels', () => {
     // Calendar with today's daily note open behind it. (The Today button
     // lives in the panel-frame head projection, not under app-calendar.)
     await page.locator("button[aria-label=\"Open today's daily note\"]").click();
-    await expect(page.locator('app-editor .cm-content')).toContainText('2026-10-11');
+    await expect(page.locator('app-editor .cm-content')).toContainText('2026-10-13');
     await page.waitForTimeout(250);
     await shoot(page, 'panel-calendar.png');
 
     // Files panel: tree with folders, one folder's context menu open.
-    await openFile(page, 'Wissen/Segeln-Terminologie.md', { folders: ['Wissen'] });
+    await openFile(page, 'Knowledge/Sailing-Terms.md', { folders: ['Knowledge'] });
     await shoot(page, 'panel-files.png');
     await page
-      .locator('app-dock[side="left"] .node.folder', { hasText: 'Projekte' })
+      .locator('app-dock[side="left"] .node.folder', { hasText: 'Projects' })
       .click({ button: 'right' });
     await page.waitForTimeout(200);
     await shoot(page, 'panel-files-context-menu.png');
@@ -460,7 +461,7 @@ test.describe('manual: panels', () => {
     // Tasks panel: vault scope with due badges and priority glyphs. The
     // document scope needs a task-carrying note open; vault scope reads the
     // plugin's whole-vault index.
-    await openFile(page, 'Projekte/Website-Relaunch.md', { folders: ['Projekte'] });
+    await openFile(page, 'Projects/Website-Relaunch.md', { folders: ['Projects'] });
     await soloPanel(page, 'Tasks');
     const tasks = page.locator('app-panel-frame', { has: page.locator('.tasks-panel') });
     await expect(tasks.locator('.task').first()).toBeVisible();
@@ -475,13 +476,13 @@ test.describe('manual: panels', () => {
     await shoot(page, 'panel-templates.png');
 
     // Outline of the open note.
-    await openFile(page, 'Wissen/Markdown-Spickzettel.md');
+    await openFile(page, 'Knowledge/Markdown-Cheatsheet.md');
     await soloPanel(page, 'Outline');
     await page.waitForTimeout(400);
     await shoot(page, 'panel-outline.png');
 
     // Backlinks into the relaunch note.
-    await openFile(page, 'Projekte/Website-Relaunch.md', { folders: ['Projekte'] });
+    await openFile(page, 'Projects/Website-Relaunch.md', { folders: ['Projects'] });
     await soloPanel(page, 'Backlinks');
     await page.waitForTimeout(600);
     await shoot(page, 'panel-backlinks.png');
@@ -522,11 +523,11 @@ test.describe('manual: assistant', () => {
 
     const composer = panel.locator('.assistant-composer .composer-input .cm-content');
     await composer.click();
-    await page.keyboard.type('Wie steht der Website-Relaunch?');
+    await page.keyboard.type('How is the website relaunch going?');
     await page.keyboard.press('Enter');
 
     // The turn card with the streamed answer.
-    await expect(panel.locator('.assistant-thread')).toContainText('Bildrechte', {
+    await expect(panel.locator('.assistant-thread')).toContainText('image rights', {
       timeout: 30_000,
     });
     await page.waitForTimeout(600);
@@ -557,9 +558,9 @@ test.describe('manual: git', () => {
 
   test.use({
     seedVault: {
-      'docs/index.md': '# Index\n\nStartseite des Wikis.\n',
-      'docs/old.md': 'alt\n',
-      'readme.md': '# Vault\n\nDer Notizen-Tresor.\n',
+      'docs/index.md': '# Index\n\nThe wiki\'s start page.\n',
+      'docs/old.md': 'old\n',
+      'readme.md': '# Vault\n\nThe notes vault.\n',
     },
   });
 
@@ -578,9 +579,9 @@ test.describe('manual: git', () => {
     git('commit', '-m', 'Initial commit');
     fs.writeFileSync(
       path.join(vaultDir, 'docs', 'index.md'),
-      '# Index\n\nStartseite des Wikis.\n\nEin neuer Absatz.\n',
+      '# Index\n\nThe wiki\'s start page.\n\nA new paragraph.\n',
     );
-    fs.writeFileSync(path.join(vaultDir, 'docs', 'neu.md'), 'neu\n');
+    fs.writeFileSync(path.join(vaultDir, 'docs', 'new.md'), 'new\n');
     fs.rmSync(path.join(vaultDir, 'docs', 'old.md'));
 
     await prep(electronApp, page);
@@ -706,14 +707,14 @@ test.describe('manual: history & dialogs', () => {
     await prep(electronApp, page);
 
     // Two saves -> two versions in the local history.
-    await openFile(page, 'Wissen/Segeln-Terminologie.md', { folders: ['Wissen'] });
+    await openFile(page, 'Knowledge/Sailing-Terms.md', { folders: ['Knowledge'] });
     const editor = page.locator('app-editor .cm-content');
     await editor.click();
     await page.keyboard.press('ControlOrMeta+End');
-    await page.keyboard.type('\nNachtrag: Bei der Wende hält der Vorschoter die Große Schot.\n');
+    await page.keyboard.type('\nAddendum: in a tack the crew handles the jib sheet.\n');
     await page.keyboard.press('ControlOrMeta+S');
     await page.waitForTimeout(600);
-    await page.keyboard.type('Zweiter Nachtrag: Bei Raumwind bleibt der Baum fixiert.\n');
+    await page.keyboard.type('Second addendum: on a broad reach the boom stays secured.\n');
     await page.keyboard.press('ControlOrMeta+S');
     await page.waitForTimeout(600);
 
@@ -728,11 +729,11 @@ test.describe('manual: history & dialogs', () => {
     // Vault-wide replace: the bundled confirmation dialog.
     await soloPanel(page, 'Search');
     const search = page.locator('app-panel-frame', { has: page.locator('.tag-search') });
-    await search.locator('.tag-search-field .tag-field-input').first().fill('Farbschema');
+    await search.locator('.tag-search-field .tag-field-input').first().fill('colour scheme');
     await search.locator('.tag-search-field .tag-field-input').first().press('Enter');
     await expect(search.locator('.tag-search-hit').first()).toBeVisible();
     await search.locator('.tag-search-summary [aria-label="Replace"]').click();
-    await search.locator('.tag-search-replace input').fill('Farbwelt');
+    await search.locator('.tag-search-replace input').fill('colour palette');
     await search.locator('.tag-search-replace [aria-label="Replace all"]').click();
     const modal = page.locator('.plugin-modal.tag-search-modal');
     await expect(modal).toBeVisible();
@@ -741,14 +742,14 @@ test.describe('manual: history & dialogs', () => {
     await expect(modal).toHaveCount(0);
 
     // Save conflict: the file changes on disk while the tab is edited.
-    await openFile(page, 'Wissen/Markdown-Spickzettel.md');
+    await openFile(page, 'Knowledge/Markdown-Cheatsheet.md');
     fs.appendFileSync(
-      path.join(vaultDir, 'Wissen', 'Markdown-Spickzettel.md'),
-      '\n> Extern eingefügt, während der Tab offen war.\n',
+      path.join(vaultDir, 'Knowledge', 'Markdown-Cheatsheet.md'),
+      '\n> Added from outside while the tab was open.\n',
     );
     await editor.click();
     await page.keyboard.press('ControlOrMeta+End');
-    await page.keyboard.type('\nEigene Ergänzung im Tab.\n');
+    await page.keyboard.type('\nMy own addition in the tab.\n');
     await page.keyboard.press('ControlOrMeta+S');
     const conflict = page.locator('app-conflict-dialog .dialog');
     await expect(conflict).toBeVisible({ timeout: 10_000 });
@@ -793,7 +794,7 @@ test.describe('manual: diagrams & media', () => {
       ...DEMO,
       'img/diagram.drawio.svg': DIAGRAM_SVG,
       'img/plain.drawio': DIAGRAM_XML,
-      'Ablauf.md': '# Ablauf\n\n![Diagramm](img/diagram.drawio.svg)\n\nEnde.\n',
+      'Workflow.md': '# Workflow\n\n![Diagram](img/diagram.drawio.svg)\n\nEnd.\n',
     },
   });
 
@@ -804,7 +805,7 @@ test.describe('manual: diagrams & media', () => {
     await prep(electronApp, page);
 
     // The embedded .drawio.svg renders as an ordinary picture in the note.
-    await openFile(page, 'Ablauf.md');
+    await openFile(page, 'Workflow.md');
     await page.waitForTimeout(400);
     await shoot(page, 'editor-drawio-embed.png');
 

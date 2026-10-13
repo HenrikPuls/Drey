@@ -614,8 +614,11 @@ Keep it in step whenever a component boundary changes (CLAUDE.md's
   `PaneService`) with an inline Live Preview mode (decoration-based,
   ADR-0009) and a raw source mode, switched via a `⋯` mode menu
   (ADR-0008); the same `⋯` menu lists the manual Actions and "Save as…".
-  A 40px meta bar carries the path, the **formatting buttons**
-  (`MarkdownToolbar`, icon-only; hidden via `⋯` → "Formatting toolbar"),
+  A 40px meta bar carries the path, the **formatting strip** while it
+  is pinned (`MarkdownToolbar`, req-41: ten icon buttons, five of
+  them menus; its pin releases it to the editor's right-click menu,
+  whose head it is on every editable Markdown surface -- the clipboard
+  list is its first menu there),
   an "Unsaved" label, a **Lines** toggle (line-number gutter, `Ctrl+G`, an
   app-wide preference — not per-pane), Save and the `⋯` menu. Typing `/`
   opens the **slash menu** (`slash-commands.ts`): a **Templates** section
@@ -772,6 +775,17 @@ Keep it in step whenever a component boundary changes (CLAUDE.md's
   pushed as `status-updated`; the renderer turns it into Files-panel
   decorations. Asks before a commit with unsaved tabs; refuses checkout
   / pull while the vault has unsaved tabs. Settings → "Git" (`gitPath`)
+- Assistant button at a selection — `plugins/assistant/renderer/`
+  (milestone 74): `selection-button.ts` registers a `document`-slot
+  editor extension built from the host's CodeMirror modules — a tooltip
+  at the selection head, gated by a small state field (no button while
+  the mouse button is down or the editor is unfocused) and by the
+  plugin-config switch `selectionButton.enabled` plus `llm.enabled`.
+  `selection-popover.ts` is the plain-DOM popover (question field,
+  prompts from `<templates.dir>/prompts/`, manual Actions). A question
+  goes through the ordinary `state.ask` with `selection`; an Action
+  through the existing manual run. The command `assistant.askSelection`
+  opens the same popover.
 - Assistant panel — `plugins/assistant/` (conversations
   since ADR-0048): **chat-first** — a chat
   picker + new chat in the head, turn cards rendered from the active
@@ -861,9 +875,10 @@ decision. (Seams — what a *plugin* can extend — are the table above.)
 | Daily notes (calendar open, drafts, daily dir config) | `electron/daily-note.ts`, `src/app/calendar/`, `src/app/services/daily-note.service.ts` | Base | — |
 | Entry capture (`/` menu Entry block, entry format) | `src/app/editor/slash-commands.ts`, Settings → "Entry format" | Base | ADR-0022, ADR-0057 |
 | Editor modes + Live Preview (conceal, block widgets) | `src/app/editor/` (`editor.ts`, `markdown-surface/`, `live-preview/`) | Base | ADR-0008, ADR-0009 |
-| Extended Markdown dialect (highlight, math/KaTeX, callouts, footnotes, emoji, linkify) + insert affordances (toolbar/slash/context-menu rows, emoji picker, `:`-completion, formatting eraser) | `src/app/editor/markdown-extensions.ts`, `live-preview/` (`conceal.ts`, `block-render.ts`, `math-widget.ts`, `extended-widgets.ts`), `toolbar-commands.ts`, `emoji/`, `src/app/emoji-picker/`, `editor-context-menu/format-menu-rows.ts`, `shared/markdown/`, `shared/pdf-html.ts` + `electron/pdf-export.ts` | Base | ADR-0070 |
+| Extended Markdown dialect (highlight, math/KaTeX, callouts, footnotes, emoji, linkify) + insert affordances (formatting strip, slash rows, emoji picker, `:`-completion, formatting eraser) | `src/app/editor/markdown-extensions.ts`, `live-preview/` (`conceal.ts`, `block-render.ts`, `math-widget.ts`, `extended-widgets.ts`), `toolbar-commands.ts`, `emoji/`, `src/app/emoji-picker/`, `shared/markdown/`, `shared/pdf-html.ts` + `electron/pdf-export.ts` | Base | ADR-0070 |
 | Non-Markdown code files (language mode, source-only) | `src/app/editor/markdown-surface/` (language compartment) | Base | ADR-0036 |
-| Formatting toolbar + slash formatting blocks | `src/app/editor/markdown-toolbar.ts`, `toolbar-commands.ts`, `slash-commands.ts` | Base | M42, ADR-0057 |
+| Formatting strip (docked in the meta bar while pinned, head of the editor context menu) + slash formatting blocks | `src/app/editor/markdown-toolbar.ts`, `toolbar-commands.ts`, `toolbar-dispatch.ts`, `slash-commands.ts`, `src/app/editor-context-menu/` (`format-strip-target.ts`) | Base | M42, ADR-0057, req-41 |
+| Template picker (filter, folder tree, preview; the strip's popover and the `/` menu's "Templates…" row) | `plugins/templates/renderer/picker.ts`, `slash.ts`, `library.ts` (`noteCategories`: without `prompts/`) | templates plugin | req-41, SDK 1.22 |
 | Snippets (`tbl`, `code`, … with tabstops) | `plugins/templates/` + Settings → Templates | Plugin templates | M46 |
 | Tag pills + `#tag` completion (the tag chrome) | `src/app/editor/tags/`, `TagVocabularyService` | Base | ADR-0017 |
 | Tag index, prefix colors, rename/merge | `plugins/tags/` (main + Settings → Tags) | Plugin tags | ADR-0017, M53 |
@@ -871,6 +886,7 @@ decision. (Seams — what a *plugin* can extend — are the table above.)
 | Autotag / "Suggest tags" | `electron/llm/tag-suggest.ts`, the editor `⋯` menu | Base | `specs/classifier-spec.md`, M45 |
 | Tasks panel + inline due/priority metadata | `plugins/tasks/` | Plugin tasks | ADR-0033 |
 | Assistant chat + chat notes (`chats/`) | `plugins/assistant/` (`chat-engine.ts`, `chat-store.ts`) | Plugin assistant | ADR-0048 |
+| Assistant button at a selection + its popover (question, prompts, manual Actions) | `plugins/assistant/renderer/selection-button.ts` (CodeMirror tooltip), `selection-popover.ts`, `shared/ask.ts` (`selection`, `quoteSelection`), `main/ask-prompts.ts` (`buildAskUserMessage`) | Plugin assistant | ADR-0048 later change, M74 |
 | Manual Actions (run + on-save queue) | `plugins/assistant/` + `editor-more` menu rows | Plugin assistant | ADR-0011, ADR-0012 |
 | "Structure note (lossless)" built-in Action + the `{{AVAILABLE_TAGS}}` prompt placeholder | `shared/config/schema.ts` (`LOSSLESS_FORMAT_PROMPT`), `shared/llm/prompt-substitution.ts`, `plugins/assistant/main/action-engine.ts` | Shared + plugin assistant | `specs/classifier-spec.md`, M73 |
 | Live edit (model edits the open note) | `plugins/assistant/` + `documents.setEditLock` | Plugin assistant | ADR-0049 |
@@ -1370,13 +1386,24 @@ src/                Angular renderer (standalone components, esbuild via Angular
                          block), footnote, and the smile button
                          (emojiPick output -> the surface's
                          openEmojiPicker -- no reducer behind it).
-                         The meta bar carries a collapse handle at
-                         the buttons' left edge (editor.html/.css,
-                         .toolbar-collapse): one click folds the
-                         buttons away -- the bar runs straight into
-                         the save cluster -- and back; it toggles the
-                         same persisted pref as the editor's ...-menu
-                         row.
+                         req-41 regroups all of it into ONE strip
+                         of ten buttons -- paragraph style, Bold,
+                         Italic, more text formats, list, Task
+                         list, Link, Table, Insert (five of them
+                         menus) -- used in two places: docked in
+                         the meta bar while pinned (editor.html)
+                         and as the head of the editor context
+                         menu (overlay input; it then acts on the
+                         right-clicked view through
+                         toolbar-dispatch.ts). There the menu's
+                         clipboard list is the strip's FIRST menu
+                         (hostMenu input / hostMenuToggled): open
+                         at first, one menu at a time. The
+                         pin toggles the persisted `toolbar` pref.
+                         Plugin buttons are Insert-menu rows, or
+                         -- `placement: 'bar'`, SDK 1.22 -- icons at
+                         the leading edge with their own popover
+                         (the templates plugin's picker).
       slash-commands.ts  The `/` selection dialog (milestone 42): the toolbar's
                          block commands + code block + divider as a
                          CodeMirror completion source on the Markdown
@@ -3555,8 +3582,8 @@ main-side plugin writes.
 | File openers | `src/app/services/file-opener-registry.service.ts` | `FileOpenerRegistry` (SDK 1.16, `documents.registerFileOpener`): a plugin claims vault files by name suffix; the longest suffix wins. `EditorService.openFile` asks it before its own text / image / PDF routing; an opener that throws falls back to that routing. |
 | Diagram files | `plugins/drawio/renderer/diagram-file.ts` | Pure: the three formats (`.drawio.svg`, `.drawio.png`, `.drawio`), the tab key `drawio://<vaultId>/<path>`, where a new diagram goes (`attachments/` beside the note), blank files, and reading / replacing the diagram XML inside an SVG (`content` attribute) or a PNG (`tEXt` chunk `mxfile`). |
 | Embed session | `plugins/drawio/renderer/embed-session.ts` | `EmbedSession`: draw.io's JSON embed protocol and the autosave rule — load on `init`, export on every change (one in flight), debounced write, flush on close, the newest XML put into the last picture when the tab closes mid-export. Frame, file and clock are ports. |
-| Plugin entry | `plugins/drawio/renderer/index.ts` | The `drawio` doc kind (an iframe over `plugin://drawio/webapp/`), the file opener, "Edit diagram" / "Insert diagram" in the editor context menu, the formatting-bar button, the `drawio.new` command + File row, and the Settings → Diagrams page (format of new diagrams, in the plugin's own config). `slash.ts` adds `/diagram` to the slash menu's "Formatting" section. |
-| Toolbar buttons | `src/app/plugin-host/menu-contributions.service.ts`, `src/app/editor/markdown-toolbar.ts` | `ToolbarContributionsService` (SDK 1.16, `editor.registerToolbarButtons`): plugin icon buttons, rendered after the built-in ones of the formatting bar. |
+| Plugin entry | `plugins/drawio/renderer/index.ts` | The `drawio` doc kind (an iframe over `plugin://drawio/webapp/`), the file opener, "Edit diagram" in the editor context menu, the formatting strip's "Insert diagram" row (Insert menu), the `drawio.new` command + File row, and the Settings → Diagrams page (format of new diagrams, in the plugin's own config). `slash.ts` adds `/diagram` to the slash menu's "Formatting" section. |
+| Toolbar buttons | `src/app/plugin-host/menu-contributions.service.ts`, `src/app/editor/markdown-toolbar.ts` | `ToolbarContributionsService` (SDK 1.16, `editor.registerToolbarButtons`): plugin buttons of the formatting strip -- a row in its Insert menu by default, or (SDK 1.22, `placement: 'bar'`) an icon at the leading edge, optionally with a `popover` the plugin mounts plain DOM into. |
 | Web app | `plugins/drawio/vendor/webapp/` (gitignored) | draw.io itself, fetched by `scripts/fetch-drawio.mjs` from the release pinned in `plugins/drawio/drawio-version.json`, trimmed to what the offline embed loads; copied to `dist-electron/plugins/drawio/webapp/` by `build-plugins.mjs`. |
 | Binary + announced writes | `electron/ipc/vault-handlers.ts`, `VaultManager` | `vault:read-binary` / `vault:write-binary` (a file at an exact path, unlike `saveAsset`), and `announce` on both writes: the change round for that path (plugins + `vault:changed` push) instead of the plugins-only event. SDK: `vault.readBinary`, `vault.writeBinary`, `vault.writeFile(…, { announce })`. |
 | Picture refresh | `src/app/editor/vault-image.ts` | `refreshChangedAssets`: on a `vault:changed` push with paths, a per-path revision goes into the `drey-asset://` URL (`?v=<n>`) and pictures already on screen get the new URL — a saved diagram shows in every open note. |

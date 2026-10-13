@@ -55,9 +55,13 @@ const RESULT_KINDS: ReadonlyArray<{ id: 'localized' | 'document'; label: string 
   { id: 'document', label: 'Whole document — side-by-side' },
 ];
 
+/** Plugin-config key (the plugin's own store): the button at a selection, default on. */
+export const SELECTION_BUTTON_SETTING = 'selectionButton.enabled';
+
 export function actionsSettingsPage(
   api: DreyPluginApi,
   onPatched: () => void,
+  onSelectionButton: (on: boolean) => void,
 ): PluginSettingsPageContrib {
   return {
     id: 'actions',
@@ -109,6 +113,34 @@ export function actionsSettingsPage(
       });
       templatesSection.appendChild(addTemplateBtn);
       root.appendChild(templatesSection);
+
+      // The button at a selection (milestone 74) lives in the plugin's own
+      // config, not in the app config.
+      const selectionSection = el('section');
+      selectionSection.appendChild(el('h3', undefined, 'Selection'));
+      const selectionRow = el('label', 'switch-row');
+      const selectionBox = el('input') as HTMLInputElement;
+      selectionBox.type = 'checkbox';
+      selectionBox.checked = true;
+      void api.settings.get<boolean>(SELECTION_BUTTON_SETTING).then((value) => {
+        selectionBox.checked = value !== false;
+      });
+      selectionBox.addEventListener('change', () => {
+        const on = selectionBox.checked;
+        void api.settings.set(SELECTION_BUTTON_SETTING, on).then(() => onSelectionButton(on));
+      });
+      const selectionText = el('span');
+      selectionText.append(
+        el('span', 'switch-label', 'Show the assistant button at a selection'),
+        el(
+          'span',
+          'switch-hint',
+          'Selecting text in a note shows a small button that asks the assistant about it — with your own question, a prompt from the prompts folder, or a manual Action.',
+        ),
+      );
+      selectionRow.append(selectionBox, selectionText);
+      selectionSection.appendChild(selectionRow);
+      root.appendChild(selectionSection);
 
       let openTemplateId: string | null = null;
       let config: AppConfig | null = null;

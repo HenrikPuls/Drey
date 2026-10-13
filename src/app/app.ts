@@ -36,11 +36,10 @@ import { Settings } from './settings/settings';
 import { EditorContextMenu } from './editor-context-menu/editor-context-menu';
 import { EditorContextMenuService } from './editor-context-menu/editor-context-menu.service';
 import { EditorContextMenuRegistry } from './plugin-host';
-import { formattingContextMenuRows } from './editor-context-menu/format-menu-rows';
+import { EditorPrefsService } from './editor/editor-prefs.service';
 import { eraseFormatting } from './editor/erase-formatting';
 import { EditTargetService } from './services/edit-target.service';
 import { EmojiPicker } from './emoji-picker/emoji-picker';
-import { EmojiPickerService } from './emoji-picker/emoji-picker.service';
 
 /**
  * Root shell (ADR-0019): a custom titlebar with the HTML menu bar, then a
@@ -172,17 +171,6 @@ export class App {
       { head: true },
     );
 
-    // The extended-Markdown rows in the same menu (M72, ADR-0070): the
-    // toolbar's reducers plus the "Emoji…" picker row, on every Markdown
-    // CodeMirror surface -- pane docs, the entry drawer, the composers.
-    // Registered after the PDF row, so "Export as PDF…" stays directly
-    // under the clipboard group.
-    const emojiPicker = inject(EmojiPickerService);
-    inject(EditorContextMenuRegistry).register(
-      (target) => formattingContextMenuRows(target, { isMarkdown: (p) => this.editor.isMarkdown(p), emoji: emojiPicker }),
-      { head: true },
-    );
-
     // Startup, once, after both the vault path and the persisted config are
     // known: restore the previous session's layout + tabs (ADR-0043), then
     // fall back to opening today's daily note only if nothing was restored.
@@ -273,6 +261,16 @@ export class App {
           eraseFormatting(view);
         }
       },
+    });
+
+    // The formatting strip's pin (req-41), for the keyboard and the
+    // command palette: docks the strip into the meta bar or releases it
+    // to the editor's right-click menu.
+    const editorPrefs = inject(EditorPrefsService);
+    keys.register({
+      id: 'editor.toggleFormattingToolbar',
+      label: 'Pin formatting toolbar',
+      run: () => editorPrefs.toggleToolbar(),
     });
 
     // Back / forward through the session's document history (the titlebar

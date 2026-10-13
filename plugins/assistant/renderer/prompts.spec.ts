@@ -2,6 +2,7 @@ import {
   PROMPTS_DIR,
   parsePromptFile,
   promptEntriesFrom,
+  promptsDirFor,
   promptTitleFallback,
 } from './prompts';
 
@@ -94,5 +95,23 @@ describe('promptEntriesFrom', () => {
 
     expect(entries.map((entry) => entry.title)).toEqual(['A-Titel', 'B-Titel', 'C']);
     expect(entries[0]?.path).toBe(`${PROMPTS_DIR}/a.md`);
+  });
+
+  it('reads another folder when the templates root is configured elsewhere', async () => {
+    const entries = await promptEntriesFrom(
+      ['Vorlagen/prompts/a.md', `${PROMPTS_DIR}/b.md`],
+      () => Promise.resolve('# T'),
+      promptsDirFor('Vorlagen'),
+    );
+    expect(entries.map((entry) => entry.path)).toEqual(['Vorlagen/prompts/a.md']);
+  });
+});
+
+describe('promptsDirFor', () => {
+  it('is prompts/ under the configured templates root', () => {
+    expect(promptsDirFor('templates')).toBe(PROMPTS_DIR);
+    expect(promptsDirFor('Vorlagen/')).toBe('Vorlagen/prompts');
+    expect(promptsDirFor(undefined)).toBe(PROMPTS_DIR);
+    expect(promptsDirFor('')).toBe(PROMPTS_DIR);
   });
 });

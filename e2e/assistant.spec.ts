@@ -105,7 +105,7 @@ test.describe('Assistant plugin — composer chips and pickers', () => {
     seedVault: {
       'notiz.md': NOTE,
       'andere.md': '# Andere\n',
-      'templates/prompts/kurz.md': '# Kurzfassung\n> Drei Sätze\n\nFasse die Notiz in drei Sätzen zusammen.\n',
+      'templates/prompts/summary.md': '# Short summary\n> Three sentences\n\nSummarize the note in three sentences.\n',
     },
   });
 
@@ -137,10 +137,10 @@ test.describe('Assistant plugin — composer chips and pickers', () => {
     // A prompt replaces the composer's text.
     await panel.locator('.composer-meta .prompt-btn').click();
     await expect(picker.locator('.assistant-picker-head')).toHaveText('Prompts');
-    await picker.locator('.assistant-picker-row', { hasText: 'Kurzfassung' }).click();
+    await picker.locator('.assistant-picker-row', { hasText: 'Short summary' }).click();
     await expect(picker).toHaveCount(0);
     await expect(panel.locator('.composer-input .cm-content')).toHaveText(
-      'Fasse die Notiz in drei Sätzen zusammen.',
+      'Summarize the note in three sentences.',
     );
   });
 
@@ -172,6 +172,67 @@ test.describe('Assistant plugin — composer chips and pickers', () => {
     await hand.press('Enter');
     await expect(picker).toHaveCount(0);
     await expect(modelButton).toHaveText('e2e-model');
+  });
+});
+
+test.describe('Assistant plugin — the button at a selection (milestone 74)', () => {
+  test.use({
+    seedVault: {
+      'notiz.md': NOTE,
+      'templates/prompts/summary.md': '# Short summary\n> Three sentences\n\nSummarize this in three sentences.\n',
+    },
+    // The button only shows with LLM features on; nothing is sent here.
+    appConfig: { ...ACTION_CONFIG, llm: { enabled: true } },
+  });
+
+  test('a selection shows the button; its popover lists prompts and manual actions', async ({
+    page,
+  }) => {
+    await openNote(page);
+    const content = page.locator('app-editor .cm-content');
+    const button = page.locator('app-editor .assistant-selection-btn');
+    const popover = page.locator('.assistant-selection-popover');
+
+    await content.click();
+    await expect(button).toHaveCount(0);
+
+    await page.keyboard.press('Control+A');
+    await expect(button).toBeVisible();
+
+    await button.click();
+    await expect(popover.locator('.selection-question')).toBeFocused();
+    await expect(popover.locator('.selection-row', { hasText: 'Short summary' })).toBeVisible();
+    await expect(popover.locator('.selection-row', { hasText: 'Reformat' })).toBeVisible();
+
+    // Escape closes it and hands the focus back to the editor, selection intact.
+    await page.keyboard.press('Escape');
+    await expect(popover).toHaveCount(0);
+    await expect(button).toBeVisible();
+
+    // The command opens the same popover from the keyboard.
+    await page.keyboard.press('Control+Shift+A');
+    await expect(popover).toBeVisible();
+    await page.keyboard.press('Escape');
+
+    // Collapsing the selection takes the button away.
+    await page.keyboard.press('ArrowRight');
+    await expect(button).toHaveCount(0);
+  });
+
+  test('the switch in Settings → Actions turns the button off', async ({ page }) => {
+    await openNote(page);
+    await page.locator('app-status-bar .settings').click();
+    await page.locator('.category', { hasText: 'Actions' }).click();
+    await page
+      .locator('.assistant-actions-settings .switch-row', { hasText: 'assistant button' })
+      .locator('input')
+      .uncheck();
+    await page.locator('button.close[aria-label="Close settings"]').click();
+
+    await page.locator('app-editor .cm-content').click();
+    await page.keyboard.press('Control+A');
+    await expect(page.locator('app-editor .cm-content')).toBeFocused();
+    await expect(page.locator('app-editor .assistant-selection-btn')).toHaveCount(0);
   });
 });
 

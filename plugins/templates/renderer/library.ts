@@ -27,6 +27,13 @@ const RECENT_KEY = 'drey.templates.recent';
 const RECENT_MAX = 5;
 const GENERAL = 'General';
 
+/**
+ * The library's top-level folder the assistant's composer prompts live in
+ * (`templates/prompts/`, ADR-0048). Its files are prompts, not note
+ * templates -- the template picker and the `/` menu leave them out.
+ */
+export const PROMPTS_SUBDIR = 'prompts';
+
 interface FileNode {
   name: string;
   relativePath: string;
@@ -144,6 +151,17 @@ export class TemplateLibrary {
 
   get all(): TemplateEntry[] {
     return flatten(this.categories);
+  }
+
+  /** The tree without the reserved top-level `prompts/` folder. */
+  get noteCategories(): TemplateCategory[] {
+    const reserved = `${this.dir}/${PROMPTS_SUBDIR}`;
+    return this.categories.filter((category) => category.path !== reserved);
+  }
+
+  /** Every note template, flat -- `all` minus the composer prompts. */
+  get noteTemplates(): TemplateEntry[] {
+    return flatten(this.noteCategories);
   }
 
   /** The last few inserted templates that still exist, most-recent first. */

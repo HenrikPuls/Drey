@@ -68,6 +68,39 @@ export interface AskRequest {
    * of removed vaults drop out there). Empty for every other scope.
    */
   vaultIds: string[];
+  /**
+   * The text selected in the open note when the question was asked from
+   * the selection button (milestone 74). Rides the user message as a
+   * `SELECTED SECTION` block and is quoted above the question in the
+   * persisted turn. Absent for an ordinary composer ask.
+   */
+  selection?: string;
+}
+
+/** Cap on the selection quoted into the persisted turn (the call carries it whole). */
+export const MAX_QUOTED_SELECTION_CHARS = 2000;
+
+/**
+ * The persisted text of a turn asked about a selection: the selection as a
+ * Markdown blockquote above the question, so the chat note reads on its own
+ * and a later replay carries what the question was about. The `> ` prefix
+ * also keeps a selected `## User` line or code fence from being parsed as
+ * chat-note structure.
+ */
+export function quoteSelection(selection: string, question: string): string {
+  const text = selection.replace(/\r\n/g, '\n').trim();
+  if (text === '') {
+    return question;
+  }
+  const capped =
+    text.length > MAX_QUOTED_SELECTION_CHARS
+      ? `${text.slice(0, MAX_QUOTED_SELECTION_CHARS)}…`
+      : text;
+  const quote = capped
+    .split('\n')
+    .map((line) => (line === '' ? '>' : `> ${line}`))
+    .join('\n');
+  return `${quote}\n\n${question}`;
 }
 
 /**
@@ -119,7 +152,7 @@ export function parseAskPayload(payload: unknown): {
   taskId?: string;
 } {
   const shape = (payload ?? {}) as Record<string, unknown>;
-  const { question, note, extraFiles, images, chatPath, liveEdit, noteKey, vaultScope, vaultIds, taskId } = shape;
+  const { question, note, extraFiles, images, chatPath, liveEdit, noteKey, vaultScope, vaultIds, selection, taskId } = shape;
   if (typeof question !== 'string') {
     throw new Error('malformed ask payload');
   }
@@ -147,6 +180,9 @@ export function parseAskPayload(payload: unknown): {
   if (vaultIds !== undefined && !isVaultIdList(vaultIds)) {
     throw new Error('malformed ask payload: vaultIds must be an array of vault ids');
   }
+  if (selection !== undefined && typeof selection !== 'string') {
+    throw new Error('malformed ask payload: selection must be a string');
+  }
   return {
     request: {
       question,
@@ -158,6 +194,7 @@ export function parseAskPayload(payload: unknown): {
       noteKey: noteKey === undefined ? null : (noteKey as string | null),
       vaultScope: normalizeVaultScope(vaultScope),
       vaultIds: vaultIds === undefined ? [] : (vaultIds as string[]),
+      ...(typeof selection === 'string' && selection.trim() !== '' ? { selection } : {}),
     },
     ...(typeof taskId === 'string' ? { taskId } : {}),
   };

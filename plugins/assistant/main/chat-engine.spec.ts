@@ -78,6 +78,7 @@ function askRequest(overrides?: Partial<AskRequest>): AskRequest {
 
 interface Harness {
   engine: ChatEngine;
+  store: ChatStore;
   calls: Array<{ messages: readonly ChatMessage[]; options: Record<string, unknown> }>;
   exploreCalls: number;
   tasksCalls: number;
@@ -121,8 +122,9 @@ function makeHarness(overrides?: {
       return { specs: [], names: new Set(), run: async () => '' };
     },
   };
+  const store = makeStore(overrides?.chatNote);
   const engine = new ChatEngine(
-    makeStore(overrides?.chatNote),
+    store,
     () => CONFIG,
     async (messages, options) => {
       calls.push({ messages, options: (options ?? {}) as Record<string, unknown> });
@@ -134,6 +136,7 @@ function makeHarness(overrides?: {
   );
   return {
     engine,
+    store,
     calls,
     reads,
     get exploreCalls() {
@@ -242,5 +245,35 @@ describe('ChatEngine scope enforcement (ADR-0069 later change)', () => {
     expect(h.reads.length).toBeGreaterThan(0);
     expect(h.reads[0].path).toBe('docs/manual.md');
     expect(h.reads[0].fallbackVaultIds).toEqual(['docs']);
+  });
+});
+
+describe('ChatEngine — a question about a selection (milestone 74)', () => {
+  it('sends the selection as its own block and quotes it into the persisted turn', async () => {
+    const h = makeHarness();
+    const result = await h.engine.ask(
+      askRequest({
+        question: 'Was heißt das?',
+        note: { path: 'a.md', body: 'Erster Satz. Zweiter Satz.' },
+        selection: 'Zweiter Satz.',
+      }),
+    );
+
+    const user = h.calls[0]?.messages.at(-1);
+    expect(user?.role).toBe('user');
+    expect(user?.content).toContain('INSTRUCTION / QUESTION:\nWas heißt das?');
+    expect(user?.content).toContain('SELECTED SECTION');
+    expect(user?.content).toContain('Zweiter Satz.\n\nDOCUMENT (a.md):');
+
+    const view = await h.store.read(result.chatPath);
+    expect(view.turns[0]?.text).toBe('> Zweiter Satz.\n\nWas heißt das?');
+  });
+
+  it('leaves an ordinary ask untouched', async () => {
+    const h = makeHarness();
+    const result = await h.engine.ask(askRequest({ question: 'Hallo?' }));
+    expect(h.calls[0]?.messages.at(-1)?.content).not.toContain('SELECTED SECTION');
+    const view = await h.store.read(result.chatPath);
+    expect(view.turns[0]?.text).toBe('Hallo?');
   });
 });

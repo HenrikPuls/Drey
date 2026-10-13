@@ -90,6 +90,131 @@ Verified by: all six TypeScript projects, lint, both unit suites, and 44
 end-to-end tests (startup, splash, CSP, plugins, daily notes, external
 open, images, search) against a fresh build.
 
+### Milestone 74 — Assistant on a selection
+
+**Not yet manually verified by the owner.**
+
+Selecting text in a note shows a small assistant button next to the
+selection (after the mouse button is released, or on a keyboard
+selection). It opens a popover with three things: a one-line question
+field, the prompts from the prompts folder, and the manual Actions.
+
+- **A question or a prompt is asked about the selection in the chat.**
+  The Assistant panel opens and answers; the composer's chips and the
+  live-edit switch apply as set. The selection rides the call as a
+  `SELECTED SECTION` block between the question and the document
+  (`AskRequest.selection`, `buildAskUserMessage`), and is quoted above
+  the question in the chat note, so the transcript reads on its own and
+  a follow-up replays it. A proposed edit goes through the usual
+  confirmation.
+- **A manual Action runs on the selection** — the same run as its `⋯`
+  menu row, which already sent the selection.
+- **Command** `assistant.askSelection`, `Ctrl+Shift+A`: the same popover
+  from the keyboard.
+- **Switch:** Settings → Actions → "Show the assistant button at a
+  selection" (on by default; stored in the assistant plugin's own
+  config). The button also stays away while LLM features are off.
+- **The prompts folder follows the templates folder.** The composer's
+  Prompts picker and the popover read `<templates.dir>/prompts/`; the
+  renderer used the fixed `templates/prompts` before, while the
+  assistant's template tools already used the configured folder.
+- **Screenshots are English throughout** (`CLAUDE.md`, Language
+  Convention; owner request): the manual's demo vault
+  (`e2e/manual-screenshots.spec.ts`) is English — notes, file and folder
+  names, tags, templates, the prompt, the mocked answer — and all 44
+  manual images were re-captured from it. The assistant e2e prompt
+  fixtures are English too.
+- No SDK change: the button is a CodeMirror tooltip built from the
+  host's modules (`plugins/assistant/renderer/selection-button.ts`), the
+  popover plain DOM (`selection-popover.ts`).
+- Unit: `plugins/assistant/shared/ask.spec.ts` (payload, quote),
+  `main/ask-prompts.spec.ts` (block order), `main/chat-engine.spec.ts`
+  (message + persisted turn), `renderer/selection-popover.spec.ts`
+  (rows, keys, dismiss), the state and prompts specs. E2E:
+  `e2e/assistant.spec.ts` (button on a selection, popover content, the
+  command, the Settings switch).
+
+### req-41 — the formatting strip: grouped, pinnable, at hand in the right-click menu; one template picker
+
+Owner request, outside the roadmap list. The editor's right-click menu
+had grown a text row for every formatting command (Highlight, Subscript,
+Superscript, Inline math, Math block, Callout, Footnote, Clear
+formatting, Emoji…) next to an icon toolbar offering the same commands.
+Now there is **one formatting strip** in two places:
+
+- **Grouped.** Nineteen buttons became ten: template picker · paragraph
+  style ▾ · Bold · Italic · more text formats ▾ · list ▾ · Task list ·
+  Link · Table ▾ · Insert ▾. Everyday one-click commands stay buttons;
+  variants of one thing (heading levels, blockquote, the five callouts;
+  bullet / numbered; the table size grid) and the rare commands
+  (strikethrough, highlight, sub- and superscript, Clear formatting;
+  image, emoji, footnote, math) sit behind five menus. Menu buttons
+  carry a small caret; a button without one acts at once and opens
+  nothing. The paragraph menu marks the style of the caret's line.
+- **In the right-click menu.** On every editable Markdown surface (pane
+  notes, the entry drawer, plugin composers) the strip is the head of
+  the context menu, a box of its own above the list, and acts on the
+  surface that was right-clicked. The list keeps only real text rows --
+  clipboard, Export as PDF…, plugin rows -- and is itself the strip's
+  **first menu** (*Clipboard and more*): open when the context menu
+  opens, and like every other menu it gives way while another one is
+  open, so the template picker never sits on half-covered rows. Its
+  button brings it back. Read-only views and non-Markdown tabs get no
+  strip, just the list.
+- **Pinnable.** The strip's pin docks it into the meta bar (the old
+  toolbar position) or releases it; released, the bar runs straight into
+  the save cluster. The pin replaces the collapse chevron and the `⋯`
+  row "Formatting toolbar"; the persisted pref (`drey.editor` →
+  `toolbar`) is unchanged, so nobody's setting moves. Also a palette
+  command, *Pin formatting toolbar*.
+- **One template picker.** The strip's first button opens it: a filter
+  field, the library as a folder tree (subfolders nest; folders start
+  collapsed once the library holds more than 24 templates; typing
+  switches to a flat list of matches with their folder) beside a preview
+  of the active row. Keyboard throughout — the field keeps the focus,
+  ↑/↓ move, →/← open and close a folder, Page Up/Down jump to the ends,
+  Enter inserts, Esc closes. The **`/` menu uses the same picker**: a
+  bare `/` shows one *Templates…* row instead of every template by name
+  (a typed name still completes directly), and the row floats the picker
+  at the caret. The reserved top-level `templates/prompts/` folder (the
+  composer's prompts, ADR-0048) is left out of both; the Templates panel
+  still lists the whole folder.
+
+Plugin SDK **1.22** (additive): `ToolbarButtonContrib.placement`
+(`'insert'`, the default — a row in the strip's Insert menu — or `'bar'`,
+an icon at the leading edge) and `popover(mount, close)` (the host owns
+the box and its anchoring, the plugin mounts plain DOM). The templates
+plugin uses both; the diagrams plugin's button became the Insert menu's
+"Insert diagram" row. Two plugin context-menu contributions went with
+the rows they duplicated: the templates' recents and the diagrams'
+"Insert diagram" ("Edit diagram" stays).
+
+Fixed on the way: a spelling check still in flight when the text
+changed painted its underlines at the old offsets -- past the end of
+the text when a word had just been deleted -- and the next edit then
+threw while mapping them and was lost. The "Templates…" row (delete
+`/tem`, insert the template) hit exactly that, about one time in
+twenty. An edit now discards the reply of a check that judged the older
+text (`spellcheck.ts`, with a regression test).
+
+Considered and not built (recorded in `decisions.md`): a selection
+bubble that appears over marked text, and a toolbar row of its own
+under the meta bar.
+
+Code: `src/app/editor/markdown-toolbar.ts` (the strip),
+`toolbar-dispatch.ts` (the one dispatch path for both placements),
+`paragraphStyleOf` in `toolbar-commands.ts`,
+`src/app/editor-context-menu/` (`format-strip-target.ts` replaces
+`format-menu-rows.ts`), `MarkdownSurface.forView`,
+`plugins/templates/renderer/picker.ts`. Specs: `markdown-toolbar.spec.ts`,
+`format-strip-target.spec.ts`, `picker.spec.ts`, additions to
+`editor.spec.ts`, `library.spec.ts`, `slash.spec.ts`; e2e
+`markdown-extended.spec.ts` (strip in the context menu, pin round trip)
+and `slash-entry.spec.ts` (picker from `/`: folders, no prompts, arrow
+keys). The diagrams e2e was adjusted but not run in this checkout (the
+draw.io web app is not fetched there). **Not yet manually verified by
+the owner.**
+
 ### Settings apply at once — no Save, no Discard
 
 **Not yet manually verified by the owner.**
