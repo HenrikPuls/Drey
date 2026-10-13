@@ -51,6 +51,7 @@ const CONFIG: AppConfig = {
     tasks: { enabled: true },
     templates: { enabled: true, write: 'confirm' },
     webFetch: { enabled: false, approval: 'ask' },
+    webSearch: { ...DEFAULT_APP_CONFIG.tools.webSearch },
     servers: [],
   },
 };
@@ -74,6 +75,7 @@ function askRequest(overrides?: Partial<AskRequest>): AskRequest {
     noteKey: null,
     vaultScope: 'off',
     vaultIds: [],
+    web: false,
     ...overrides,
   };
 }

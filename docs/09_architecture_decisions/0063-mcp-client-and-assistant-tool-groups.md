@@ -168,3 +168,57 @@ is attached to the call. The host runs only tool names it offered. See
 Reading the vault follows the Vault chip in the composer, so the group
 only decides whether the assistant may change notes and whether it asks.
 A config whose group was off migrates to `off`.
+
+## Later change — a built-in web search and the Web chip (milestone 79)
+
+Two points of this decision are reversed, on the owner's request
+(2026-10-13).
+
+**A built-in `web_search`.** "No bundled search provider" meant that web
+search needed an MCP server the user finds, installs and configures —
+in practice the assistant stayed offline. `web_search` is now a second
+built-in tool beside `web_fetch`, with its own group
+(`tools.webSearch`: switch, provider, key or address, approval rule; off
+by default). The objection that the app would own a vendor choice and a
+key is met differently: the user picks one of four providers and enters
+their own key — Brave Search, Tavily, a SearXNG instance of their own —
+or uses DuckDuckGo without one. The DuckDuckGo provider reads the
+ordinary HTML result page; that is not an interface, it can change or
+refuse requests, and Settings says so where it is chosen. Each provider
+is one file behind `SearchProvider` (`electron/mcp-client/
+search-providers/`); `runWebSearch` shapes the answer and turns a
+failure into an `Error: …` result. The key is a secret of the config
+(`electron/config-secrets.ts`). The tool is offered only when its
+provider has what it needs. Its approval source is `web_search`, apart
+from `web_fetch`'s `web`, so "Always allow" for reading a page does not
+allow sending search words.
+
+**A switch in the composer.** The deferred "tools menu in the composer"
+exists as one button, the **Web chip**: it decides per question whether
+anything may leave the machine through a tool — `web_search`,
+`web_fetch` and the external MCP servers together. It is remembered like
+the Vault chip, starts off, and shows only while Settings has one of
+those sources switched on. The two levels stay apart: Settings is the
+permission (which sources exist, whether they ask), the chip is the
+choice for the next question. The request carries it (`AskRequest.web`)
+and the chat engine decides — with the chip off `externalTools` is not
+passed and the prompt names none of these tools.
+
+Consequences:
+
+- Setups that had web fetch or a server enabled must switch the chip on
+  once; before, those tools rode every question.
+- A further opt-in exception to "no cloud calls": search words go to the
+  chosen provider. The mitigations are the ones above — off by default,
+  asked per call unless allowed, the arguments shown, the prompt rule
+  against note text in a query.
+- The chip reads the config when the plugin starts and when the pointer
+  or the focus returns to the composer; plugins have no config-change
+  event.
+
+Considered and rejected: one switch per source in the composer (more
+chrome for a choice that is nearly always "web or not"); a key per
+provider (one field; switching the provider clears it); scraping a
+second engine as a fallback when DuckDuckGo refuses (two fragile parts
+instead of one — the dependable path is a provider with a key).
+

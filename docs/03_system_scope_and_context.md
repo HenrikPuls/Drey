@@ -51,6 +51,7 @@ graph LR
 | Model, CLI | out | A child process (`claude -p`), JSON lines on stdout. |
 | External MCP servers | out | Official MCP SDK over stdio or Streamable HTTP; tools only. |
 | Web fetch | out | An `http:` / `https:` page request, started by a model's tool call. |
+| Web search | out | One request per search to the provider chosen in Settings (DuckDuckGo, Brave Search, Tavily, or a SearXNG instance), started by a model's tool call. |
 | Drey's MCP server | in | MCP over a stdio bridge or local HTTP. |
 | git | out | `execFile`, no shell, one queue per repository. |
 | Files from the OS | in | Command-line arguments, also from a second instance. |

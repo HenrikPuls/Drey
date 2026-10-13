@@ -76,6 +76,12 @@ export interface AskRequest {
    */
   vaultIds: string[];
   /**
+   * The Web chip (milestone 79): whether this turn may reach outside the
+   * machine — `web_search`, `web_fetch` and the user's MCP servers, as far
+   * as Settings switched them on. Off: none of them rides the call.
+   */
+  web: boolean;
+  /**
    * The text selected in the open note when the question was asked from
    * the selection button (milestone 74). Rides the user message as a
    * `SELECTED SECTION` block and is quoted above the question in the
@@ -159,7 +165,7 @@ export function parseAskPayload(payload: unknown): {
   taskId?: string;
 } {
   const shape = (payload ?? {}) as Record<string, unknown>;
-  const { question, note, extraFiles, images, chatPath, liveEdit, noteKey, vaultScope, vaultIds, selection, taskId } = shape;
+  const { question, note, extraFiles, images, chatPath, liveEdit, noteKey, vaultScope, vaultIds, web, selection, taskId } = shape;
   if (typeof question !== 'string') {
     throw new Error('malformed ask payload');
   }
@@ -201,6 +207,7 @@ export function parseAskPayload(payload: unknown): {
       noteKey: noteKey === undefined ? null : (noteKey as string | null),
       vaultScope: normalizeVaultScope(vaultScope),
       vaultIds: vaultIds === undefined ? [] : (vaultIds as string[]),
+      web: web === true,
       ...(typeof selection === 'string' && selection.trim() !== '' ? { selection } : {}),
     },
     ...(typeof taskId === 'string' ? { taskId } : {}),

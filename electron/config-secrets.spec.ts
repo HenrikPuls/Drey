@@ -23,6 +23,7 @@ function configWithSecrets(): AppConfig {
     llm: { ...DEFAULT_APP_CONFIG.llm, apiKey: 'sk-cloud-123', model: 'some-model' },
     tools: {
       ...DEFAULT_APP_CONFIG.tools,
+      webSearch: { ...DEFAULT_APP_CONFIG.tools.webSearch, provider: 'brave', apiKey: 'bsa-9' },
       servers: [
         {
           id: 'files',
@@ -51,6 +52,8 @@ describe('sealConfigSecrets', () => {
 
     expect(text).not.toContain('sk-cloud-123');
     expect(text).not.toContain('t-1');
+    expect(text).not.toContain('bsa-9');
+    expect(sealed.tools.webSearch.provider).toBe('brave');
     expect(text).not.toContain('Bearer b-2');
     expect(isSealed(sealed.llm.apiKey ?? '')).toBe(true);
 
@@ -137,6 +140,7 @@ describe('openConfigSecrets', () => {
     const opened = openConfigSecrets(sealed, fakeCipher(false));
     expect(opened.lost).toEqual([
       'LLM API key',
+      'Web search API key',
       'MCP server "Files": environment variable TOKEN',
       'MCP server "Web": header Authorization',
     ]);

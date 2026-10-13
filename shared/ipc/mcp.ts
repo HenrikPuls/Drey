@@ -36,7 +36,8 @@ export interface McpClientServerStatus {
 /**
  * One external tool call waiting for the user (ADR-0063): pushed to the
  * renderer when the call's source is set to "ask". `source` is `'web'`
- * for the built-in `web_fetch`, otherwise the MCP server id.
+ * for the built-in `web_fetch`, `'web_search'` for `web_search`, otherwise
+ * the MCP server id.
  */
 export interface ToolApprovalRequest {
   id: number;

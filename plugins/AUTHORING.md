@@ -232,7 +232,8 @@ pure-field case.
 ## SDK 1.15 — external tools and the confirmation question
 
 - `ctx.llm.chat(messages, { externalTools: true })` adds the user's
-  external tool set to ONE call: the built-in `web_fetch` and the tools
+  external tool set to ONE call: the built-in `web_search` (since
+  milestone 79) and `web_fetch`, and the tools
   of their MCP servers (`mcp__<serverId>__<tool>`), as far as Settings →
   Assistant tools enables them. The host runs each call and asks the
   user first when the source is set to "ask" — a plugin never sees the

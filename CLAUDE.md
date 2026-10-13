@@ -223,9 +223,13 @@ toolchain is removable by deleting `.tools/`). Never assume a bare `node`,
   [ADR-0063](docs/09_architecture_decisions/0063-mcp-client-and-assistant-tool-groups.md)):
   what the assistant may call is the `tools` config slice (Settings →
   Assistant tools) — one switch per group (vault, tasks, templates, web
-  fetch, each external MCP server), `write: confirm | auto` on the
-  writing groups, `approval: ask | allow` on everything that leaves the
-  machine. External servers connect in main over the official MCP SDK
+  search, web fetch, each external MCP server), `write: confirm | auto`
+  on the writing groups, `approval: ask | allow` on everything that
+  leaves the machine. `web_search` (milestone 79) asks the provider the
+  user picked — DuckDuckGo without a key, Brave, Tavily or a SearXNG
+  instance, one file each in `electron/mcp-client/search-providers/`.
+  **The composer's Web chip is the per-question switch** for everything
+  that leaves the machine: off = no external tool rides the call. External servers connect in main over the official MCP SDK
   (stdio / Streamable HTTP, tools only) and reach the model as
   `mcp__<id>__<tool>`. `mcp.enabled` / `mcp.yolo` only govern the
   server Drey offers to other programs. Opt-in, off by default — a
@@ -372,7 +376,7 @@ Main process (`electron/`):
   `providers/` (ADR-0047), the task registry, `tag-suggest.ts`
 - `mcp/` — the vault MCP server (ADR-0021) and the vault tools both it
   and the assistant use (`mcp/tools/`, ADR-0071); `mcp-client/` — external MCP
-  servers, `web_fetch`, the assistant toolbox (ADR-0063)
+  servers, `web_search`, `web_fetch`, the assistant toolbox (ADR-0063)
 - `plugin-host/` — discovery, activation/quarantine, the per-plugin
   context (`plugin-context.ts`: `ctx.vault`, `ctx.llm`), per-plugin config,
   save/vault hooks, the section-search **and** semantic-search provider

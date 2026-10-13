@@ -2653,7 +2653,10 @@ sequenceDiagram
 ```
 
 `web_fetch` takes the same path with `runWebFetch` in place of the MCP
-call. A denial is an ordinary tool result: the model reads it and
+call, and `web_search` (milestone 79) with `runWebSearch`: one request
+to the provider chosen in Settings, the hits back as numbered text. None
+of this is attached unless the question's **Web chip** is on — the chat
+engine passes `externalTools` only then. A denial is an ordinary tool result: the model reads it and
 answers without the call. Cancelling the generation aborts a running
 call through the task's abort signal.
 

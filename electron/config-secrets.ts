@@ -1,7 +1,7 @@
 /**
  * Keeps the secrets of `app-config.json` encrypted on disk (ADR-0010,
  * later change). Only the secret fields are touched -- the API key of the
- * LLM connection and, per external MCP server, the values of its
+ * LLM connection, the key of the web search and, per external MCP server, the values of its
  * environment variables and HTTP headers. Everything else in the file
  * stays plain, readable and hand-editable.
  *
@@ -59,6 +59,13 @@ function mapSecrets(
     },
     tools: {
       ...config.tools,
+      webSearch: {
+        ...config.tools.webSearch,
+        apiKey:
+          config.tools.webSearch.apiKey === ''
+            ? ''
+            : (fn(config.tools.webSearch.apiKey, 'Web search API key') ?? ''),
+      },
       servers: config.tools.servers.map((server) => ({
         ...server,
         transport:

@@ -635,6 +635,37 @@ export interface McpClientServer {
 }
 
 /**
+ * Where the built-in `web_search` tool asks (milestone 79, ADR-0063 later
+ * change). DuckDuckGo needs no key: its HTML result page is read, which
+ * works at once but may break or be rate-limited.
+ */
+export type WebSearchProvider = 'duckduckgo' | 'brave' | 'tavily' | 'searxng';
+
+export interface WebSearchProviderInfo {
+  id: WebSearchProvider;
+  label: string;
+  /** What the user has to enter before the provider can be asked. */
+  needs: 'nothing' | 'key' | 'url';
+}
+
+export const WEB_SEARCH_PROVIDERS: readonly WebSearchProviderInfo[] = [
+  { id: 'duckduckgo', label: 'DuckDuckGo (no key)', needs: 'nothing' },
+  { id: 'brave', label: 'Brave Search', needs: 'key' },
+  { id: 'tavily', label: 'Tavily', needs: 'key' },
+  { id: 'searxng', label: 'SearXNG (your own instance)', needs: 'url' },
+];
+
+export interface WebSearchConfig {
+  enabled: boolean;
+  provider: WebSearchProvider;
+  /** The key of Brave or Tavily; encrypted on disk like the LLM key. */
+  apiKey: string;
+  /** The address of the SearXNG instance. */
+  baseUrl: string;
+  approval: ToolApprovalMode;
+}
+
+/**
  * What the built-in assistant may call (milestone 63, ADR-0063): one
  * switch per tool group, one write rule per writing group, one approval
  * rule per source that leaves the machine. Everything external is off by
@@ -645,6 +676,7 @@ export interface ToolsConfig {
   tasks: { enabled: boolean };
   templates: { enabled: boolean; write: ToolWriteMode };
   webFetch: { enabled: boolean; approval: ToolApprovalMode };
+  webSearch: WebSearchConfig;
   servers: McpClientServer[];
   /**
    * How many rounds of tool calls one question may take (milestone 76,

@@ -20,6 +20,56 @@ recorded as an explicit decision. The parity checklist lives in
 
 ## Recent milestones
 
+### Milestone 79 — Web search and the Web chip
+
+Owner request, outside the roadmap list; the last step of the assistant
+tool rework (a later change to
+[ADR-0063](../docs/09_architecture_decisions/0063-mcp-client-and-assistant-tool-groups.md)).
+**Not yet manually verified by the owner.**
+
+- **A built-in `web_search` tool.** Settings → Assistant tools → *Web
+  search*: a switch, a provider and its approval rule (`tools.webSearch`,
+  off by default). Four providers, one file each under
+  `electron/mcp-client/search-providers/`: **DuckDuckGo** without a key
+  (its HTML result page is read — works at once, may change or refuse
+  requests; Settings says so), **Brave Search** and **Tavily** with an
+  API key, **SearXNG** with the address of an instance of the user's
+  own. A search returns title, address and a short excerpt of up to ten
+  results; a failure reaches the model as `Error: the web search failed
+  (<provider>): …` with what to change. The tool is offered only when
+  its provider has what it needs (no key yet = not offered, and
+  Settings says so). The key is encrypted in `app-config.json` like the
+  LLM key; switching the provider clears it.
+- **Asked like the other external calls.** A search under *ask* shows
+  the approval dialog with the search words; *Always allow* sets the
+  search rule only (source `web_search`, apart from `web_fetch`'s
+  `web`).
+- **The Web chip.** A globe button in the composer, next to the Vault
+  button and remembered the same way (`localStorage`), decides for each
+  question whether anything may leave the machine through a tool:
+  `web_search`, `web_fetch` and the external MCP servers ride a question
+  only while it is on (`AskRequest.web`). It shows only while Settings
+  has one of them switched on, and it starts **off** — a change for
+  setups that had web fetch or a server enabled: those tools now need
+  the chip. Settings stays the permission; the chip is the per-question
+  choice.
+- **The prompt names what is there.** The external line of the system
+  prompt lists exactly the attached kinds (`web_search`, `web_fetch`,
+  `mcp__<server>__<tool>`) and, with search and fetch together, says to
+  read a page before relying on an excerpt.
+- **Not covered:** a key per provider; a guard against private
+  addresses; the chip follows a Settings change when the pointer or the
+  focus returns to the composer (plugins get no config-change event).
+- Specs: `electron/mcp-client/web-search.spec.ts` (each provider's
+  request and parsing, the DuckDuckGo page, failures, abort),
+  `mcp-client.spec.ts` (offer, approval source, refusal),
+  `shared/app-config.spec.ts`, `electron/config-secrets.spec.ts`,
+  `plugins/assistant/main/engine.spec.ts` and `system-prompt.spec.ts`,
+  `plugins/assistant/renderer/state.spec.ts`,
+  `src/app/tool-approval/tool-approval.service.spec.ts`; e2e
+  `assistant-tools.spec.ts` (the chip off and on, a search against a
+  local SearXNG stand-in).
+
 ### Milestone 78 — The open note through the same tools
 
 Owner request, outside the roadmap list; the third step of the

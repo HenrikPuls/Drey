@@ -554,8 +554,8 @@ a tab is read as the tab shows it and changed in the tab, so unsaved
 text is neither missed nor overwritten; the same goes for programs
 connected to Drey's MCP server.
 
-**The other groups** — tasks, templates, web fetch and each external MCP
-server — have a switch each, `write: confirm | auto` where they write,
+**The other groups** — tasks, templates, web search, web fetch and each
+external MCP server — have a switch each, `write: confirm | auto` where they write,
 and `approval: ask | allow` on everything that leaves the machine. An
 external tool call under *ask* shows the shared approval dialog (source,
 tool, arguments — *Allow / Always allow / Deny*).
@@ -572,11 +572,36 @@ turn — the model is told what was wrong and tries again. If your model
 or its server does not accept tools at all, the assistant notices on the
 first question and goes on without them.
 
+### Web search and the Web button
+
+Settings → **Assistant tools** → *Web search* lets the assistant search
+the web (`web_search`). Pick a provider:
+
+- **DuckDuckGo** — no account, works at once. Drey reads DuckDuckGo's
+  ordinary result page, which is not made for programs: it can change or
+  refuse requests. Fine to try things out.
+- **Brave Search** or **Tavily** — dependable; each needs an API key
+  from the provider. The key is stored encrypted on this computer.
+- **SearXNG** — the address of an instance you run yourself. It must
+  allow the JSON format (`search.formats` in its `settings.yml`).
+
+A search returns titles, addresses and short excerpts. With *Web fetch*
+on as well, the assistant can then read the pages it found. Your search
+words go to the provider you chose — with *Ask every time* you see them
+before each search.
+
+Whether a question may use any of this is your choice per question: the
+**globe button** under the question field. It appears once web search,
+web fetch or an MCP server is switched on in Settings, starts off, and
+stays the way you left it. Off means nothing leaves this computer
+through a tool; on lets the assistant search, fetch pages and call your
+MCP servers for that question.
+
 ### Drey as an MCP *client*
 
 Add external MCP servers (stdio or Streamable HTTP); their tools reach
-the model as `mcp__<server>__<tool>`. The built-in `web_fetch` group is
-a tool like the rest.
+the model as `mcp__<server>__<tool>`. Like web search and web fetch they
+ride a question only while the globe button is on.
 
 ### Drey as an MCP *server*
 

@@ -118,8 +118,105 @@
     <p class="section-hint">
       These tools send data to other services. A search query or a web address is the one way
       note content could leave the vault through a tool — with “ask”, you see every call before
-      it runs.
+      it runs. Whether a question may use them at all is chosen per question, with the globe
+      button under the question field; it appears once something here is switched on.
     </p>
+
+    <div class="group">
+      <label class="switch-row">
+        <input
+          type="checkbox"
+          [checked]="tools.webSearch.enabled"
+          (change)="setWebSearchEnabled($any($event.target).checked)"
+        />
+        <span>
+          <span class="switch-label">Web search</span>
+          <span class="switch-hint">
+            Search the web (<span class="mono">web_search</span>): titles, addresses and short
+            excerpts of the best results. The search words go to the provider chosen below.
+          </span>
+        </span>
+      </label>
+      <div class="field sub">
+        <label for="tools-search-provider">Search provider</label>
+        <select
+          id="tools-search-provider"
+          class="narrow"
+          [disabled]="!tools.webSearch.enabled"
+          (change)="setWebSearchProvider($any($event.target).value)"
+        >
+          @for (provider of searchProviders; track provider.id) {
+            <option [value]="provider.id" [selected]="tools.webSearch.provider === provider.id">
+              {{ provider.label }}
+            </option>
+          }
+        </select>
+        @if (tools.webSearch.provider === 'duckduckgo') {
+          <p class="field-hint">
+            Works without an account: Drey reads DuckDuckGo’s ordinary result page. That page is
+            not made for programs — it can change or refuse requests at any time. For something
+            dependable pick one of the others.
+          </p>
+        }
+      </div>
+      @if (searchNeeds(tools.webSearch.provider) === 'key') {
+        <div class="field sub">
+          <label for="tools-search-key">API key</label>
+          <input
+            id="tools-search-key"
+            type="password"
+            spellcheck="false"
+            autocomplete="off"
+            [disabled]="!tools.webSearch.enabled"
+            [value]="tools.webSearch.apiKey"
+            (change)="setWebSearchKey($any($event.target).value)"
+          />
+          <p class="field-hint">
+            @if (tools.webSearch.apiKey === '') {
+              <span class="status-error">No key yet — the search is not offered to the assistant.</span>
+            } @else {
+              Stored encrypted for your user account on this computer.
+            }
+          </p>
+        </div>
+      }
+      @if (searchNeeds(tools.webSearch.provider) === 'url') {
+        <div class="field sub">
+          <label for="tools-search-url">Address of the instance</label>
+          <input
+            id="tools-search-url"
+            type="text"
+            class="mono-input"
+            spellcheck="false"
+            [disabled]="!tools.webSearch.enabled"
+            [value]="tools.webSearch.baseUrl"
+            (change)="setWebSearchUrl($any($event.target).value)"
+          />
+          <p class="field-hint">
+            @if (tools.webSearch.baseUrl === '') {
+              <span class="status-error">No address yet — the search is not offered to the assistant.</span>
+            } @else {
+              The instance must allow the JSON format (<span class="mono">search.formats</span> in
+              its <span class="mono">settings.yml</span>).
+            }
+          </p>
+        </div>
+      }
+      <div class="field sub">
+        <label for="tools-search-approval">Before a search is sent</label>
+        <select
+          id="tools-search-approval"
+          class="narrow"
+          [disabled]="!tools.webSearch.enabled"
+          (change)="setWebSearchApproval($any($event.target).value)"
+        >
+          <option value="ask" [selected]="tools.webSearch.approval === 'ask'">Ask every time</option>
+          <option value="allow" [selected]="tools.webSearch.approval === 'allow'">
+            Allow without asking
+          </option>
+        </select>
+      </div>
+    </div>
 
     <div class="group">
       <label class="switch-row">
@@ -131,8 +228,8 @@
         <span>
           <span class="switch-label">Web fetch</span>
           <span class="switch-hint">
-            Read one web page by its address (<span class="mono">web_fetch</span>). It does not
-            search — for web search, add a search server below.
+            Read one web page by its address (<span class="mono">web_fetch</span>) — a result of
+            the web search, or an address from your question.
           </span>
         </span>
       </label>

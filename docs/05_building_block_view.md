@@ -79,7 +79,7 @@ Two paths cover almost everything:
 | Vault and notes | `vault-manager.ts`, `note-manager.ts`, `daily-note.ts`, `link-rewriter.ts`, `history/`, `safe-file.ts`, `path-guard.ts`, `trash-delete.ts` | The vault registry and every file operation; the save pipeline with its conflict check; local versions. |
 | Outside changes | `vault-watcher.ts`, `own-write-ledger.ts`, `vault-change-announcer.ts` | Notices files changed by other programs and tells indexes and open tabs. |
 | Models | `llm/` | One `LlmClient` interface, a router that picks the provider per call, one client per backend, cancellable tasks. |
-| Tools | `mcp/`, `mcp-client/` | The MCP server Drey offers to other programs; the external tool servers and `web_fetch` the assistant may call. |
+| Tools | `mcp/`, `mcp-client/` | The MCP server Drey offers to other programs; the external tool servers, `web_search` and `web_fetch` the assistant may call. |
 | Plugins | `plugin-host/` | Finds, validates, activates and isolates failures of plugins; builds each one's context; installs packages. |
 | App state | `app-config.ts`, `config-secrets.ts`, `session/`, `logger.ts` | Settings on disk (secrets encrypted), the tab session and unsaved buffers, the log file. |
 | Single services | `spellcheck.ts`, `pdf-export.ts`, `external-open.ts`, `open-document.ts` | One job each. |
@@ -447,8 +447,9 @@ Keep it in step whenever a component boundary changes (CLAUDE.md's
   (for MCP clients; the assistant's writes follow `tools.vault.write`)
 - `electron/mcp-client/` (milestone 63, ADR-0063) — the other direction:
   `McpClientManager` (one SDK client per configured external server,
-  tool list + status), `web-fetch.ts` (the built-in `web_fetch`) and
-  `AssistantToolbox` (the external tool set of a chat call, each source
+  tool list + status), `web-fetch.ts` (the built-in `web_fetch`),
+  `web-search.ts` + `search-providers/` (the built-in `web_search`,
+  milestone 79) and `AssistantToolbox` (the external tool set of a chat call, each source
   behind its approval rule via `ToolApprovalBridge`). The plugin host
   merges it into `ctx.llm.chat` when a plugin passes `externalTools`
 - `SpellcheckService` (`electron/spellcheck.ts`) — nspell + the
@@ -3583,14 +3584,16 @@ main-side plugin writes.
 
 | Block | Where | Responsibility |
 | --- | --- | --- |
-| Tool groups | `shared/config/` (`ToolsConfig`) | `tools.vault` / `tasks` / `templates` (switch, plus `write: confirm \| auto` on the writing ones), `tools.webFetch` and `tools.servers[]` (switch, plus `approval: ask \| allow`). `normalizeTools` migrates a config without the slice from `mcp.enabled` / `mcp.yolo`. |
+| Tool groups | `shared/config/` (`ToolsConfig`) | `tools.vault` / `tasks` / `templates` (switch, plus `write: confirm \| auto` on the writing ones), `tools.webSearch` (also provider, key, address), `tools.webFetch` and `tools.servers[]` (switch, plus `approval: ask \| allow`). `webSearchReady` / `externalToolSources` / `hasExternalTools` answer what of it can be used. `normalizeTools` migrates a config without the slice from `mcp.enabled` / `mcp.yolo`. |
 | Client manager | `electron/mcp-client/mcp-client-manager.ts` | `McpClientManager`: one SDK client per enabled server, `sync()` on start and after `config:set`, cached tool list, status per server, one reconnect attempt on a call to a failed server. Names tools `mcp__<id>__<tool>`, flattens and caps results. The SDK client and transports are injected (`index.ts` wires the real ones: stdio, Streamable HTTP). |
 | Web fetch | `electron/mcp-client/web-fetch.ts` | The built-in `web_fetch` tool: http(s) only, time / size caps, HTML → Markdown (`turndown`). Pure helpers + one I/O function. |
+| Web search | `electron/mcp-client/web-search.ts`, `search-providers/` | The built-in `web_search` tool (milestone 79): checks the query, asks the configured `SearchProvider` (DuckDuckGo's HTML page, Brave, Tavily, SearXNG — one file each, `fetch` injected), formats the hits, turns a failure into an `Error: …` result. |
 | Toolbox | `electron/mcp-client/assistant-toolbox.ts` | `AssistantToolbox`: the external tool set a chat call may use (`specs()`), and `run()` — source enabled? approval rule? then the call. |
 | Approval bridge | `electron/ipc/tool-approval-bridge.ts` + `src/app/tool-approval/` | Main parks a promise and pushes `tools:approval-request`; `ToolApprovalService` queues the calls, `ToolApprovalDialog` shows source, tool and arguments; "Always allow" persists the source rule (`SettingsService.allowToolSourceImmediate`). |
 | Host merge | `electron/plugin-host/plugin-host.ts` | `ctx.llm.chat` merges plugin tools, the vault set (`vaultTools`) and the external set (`externalTools`, SDK 1.15); earlier wins a name collision. The vault set's write rule comes from `tools.vault.write`; `ctx.vault.confirmWrite` exposes the ADR-0011 diff as a question. |
-| Assistant | `plugins/assistant/main/chat-engine.ts` | Reads the groups per ask: vault → `vaultTools`, tasks / templates → its own tools, web fetch or any enabled server → `externalTools`. What is attached is what `buildSystemPrompt` names (ADR-0071); the round budget is `tools.maxRounds`, applied by the host. Not on live-edit turns. |
-| Settings | `src/app/settings/tools/` | "Assistant tools": the group switches and rules, and the server list (name, connection, command / arguments / environment or address / headers, approval, live status, reconnect). Settings → MCP keeps the server offered to other programs. |
+| Assistant | `plugins/assistant/main/chat-engine.ts` | Reads the groups per ask: vault → `vaultTools`, tasks / templates → its own tools, web search, web fetch or any enabled server → `externalTools`, and only while the question's Web chip is on (`AskRequest.web`). What is attached is what `buildSystemPrompt` names (ADR-0071); the round budget is `tools.maxRounds`, applied by the host. Not on live-edit turns. |
+| Web chip | `plugins/assistant/renderer/composer.ts`, `state.ts` | The globe button: per question, whether external tools ride (remembered in `localStorage`, off at first). Shown only while `hasExternalTools(config.tools)`; re-read when the pointer or focus returns to the composer. |
+| Settings | `src/app/settings/tools/` | "Assistant tools": the group switches and rules, the web search provider with its key or address, and the server list (name, connection, command / arguments / environment or address / headers, approval, live status, reconnect). Settings → MCP keeps the server offered to other programs. |
 | IPC | `shared/ipc-api.ts` | `tools:status`, `tools:reconnect`, `tools:approval-request` / `tools:approval-decision`. |
 | Drey's own server | `electron/mcp/server.ts` + `http-transport.ts` | Same milestone: the protocol layer is the SDK (`createVaultMcpServer`, one stateless Streamable HTTP transport per `POST /mcp`, JSON answers). `isLocalHost` / `isLocalOrigin` refuse anything that is not this machine — including a web page in a local browser. `VaultTools` and the dependency-free `stdio-bridge.ts` are unchanged apart from the bridge's `Accept` header. |
 

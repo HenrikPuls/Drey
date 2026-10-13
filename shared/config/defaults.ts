@@ -88,6 +88,7 @@ export function defaultToolsConfig(): ToolsConfig {
     tasks: { enabled: true },
     templates: { enabled: true, write: 'auto' },
     webFetch: { enabled: false, approval: 'ask' },
+    webSearch: { enabled: false, provider: 'duckduckgo', apiKey: '', baseUrl: '', approval: 'ask' },
     servers: [],
     maxRounds: TOOL_ROUNDS_DEFAULT,
   };

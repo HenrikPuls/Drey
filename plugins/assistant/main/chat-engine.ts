@@ -23,7 +23,7 @@ import type {
 import { pickPreviewStyle } from '../../../shared/text-diff';
 import { formatDateTime } from '../../../shared/timestamp';
 import type { SdkTaskRecord } from '../../../shared/plugin-api';
-import type { AppConfig } from '../../../shared/app-config';
+import { externalToolSources, type AppConfig } from '../../../shared/app-config';
 import type { LlmCapabilities } from '../../../shared/llm';
 import type { AskRequest, AssistantOutcome } from '../shared/ask';
 import { quoteSelection } from '../shared/ask.js';
@@ -75,7 +75,7 @@ export type ChatFn = (
     vaultToolsFiles?: readonly { vaultId?: string | null; path: string; live?: boolean }[];
     /** One change a vault tool of this call made. */
     onVaultChange?: (change: { vaultId: string; path: string; before: string; after: string }) => void;
-    /** web_fetch + the user's MCP servers (SDK 1.15, ADR-0063). */
+    /** web_search, web_fetch + the user's MCP servers (SDK 1.15, ADR-0063). */
     externalTools?: boolean;
     sessionRef?: string;
     attachments?: ChatAttachment[];
@@ -388,14 +388,17 @@ export class ChatEngine {
         : null;
     // What the tools did to the note in this turn, in order.
     const noteChanges: { before: string; after: string }[] = [];
-    // External tools (ADR-0063): web_fetch and the user's MCP servers.
-    // Never on a live-edit turn, and only where the provider runs a tool
-    // loop at all -- otherwise the note would promise tools that are not
-    // there.
+    // External tools (ADR-0063): web_search, web_fetch and the user's MCP
+    // servers -- what Settings switched on, and only while the Web chip
+    // of this question is on. Never on a live-edit turn, and only where
+    // the provider runs a tool loop at all -- otherwise the prompt would
+    // promise tools that are not there.
+    const external = externalToolSources(groups);
     const externalOn =
       !live &&
       canCall &&
-      (groups.webFetch.enabled || groups.servers.some((server) => server.enabled));
+      request.web &&
+      (external.webSearch || external.webFetch || external.servers);
     // The tasks tool rides every non-live ask when a task provider exists
     // (SDK 1.11) and its group is on — and the scope does not exclude the
     // active vault (its index reads ONLY the active vault, so a scoped ask
@@ -422,7 +425,7 @@ export class ChatEngine {
                 : {}),
               ...(tasksTool !== null ? { tasks: true } : {}),
               ...(templateTools !== null ? { templates: { write: groups.templates.write } } : {}),
-              ...(externalOn ? { external: true } : {}),
+              ...(externalOn ? { external } : {}),
             }
           : {},
         ...(withTools && noteFile !== null

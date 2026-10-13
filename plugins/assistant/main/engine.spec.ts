@@ -295,6 +295,7 @@ const ASK = {
   noteKey: 'v1::a.md' as string | null,
   vaultScope: 'off' as const,
   vaultIds: [] as string[],
+  web: false,
 };
 
 describe('assistant plugin chat engine — persistence (bug-10b)', () => {
@@ -422,10 +423,30 @@ describe('assistant plugin chat engine — persistence (bug-10b)', () => {
     expect(h.calls[1].messages[0].content).not.toContain('tasks_list');
   });
 
-  it('external tools (ADR-0063): on with web fetch or a server, with their rules in the prompt', async () => {
+  it('the Web chip (milestone 79): external tools ride only while it is on, and the prompt names what Settings switched on', async () => {
     const h = chatHarness();
     h.config.tools.webFetch.enabled = true;
     await h.engine.ask({ ...ASK });
+    expect(h.calls[0].opts['externalTools']).toBeUndefined();
+    expect(h.calls[0].messages[0].content).not.toContain('web_fetch');
+
+    h.config.tools.webSearch.enabled = true;
+    await h.engine.ask({ ...ASK, web: true });
+    expect(h.calls[1].opts).toMatchObject({ externalTools: true });
+    expect(h.calls[1].messages[0].content).toContain('- web_search and web_fetch');
+    expect(h.calls[1].messages[0].content).not.toContain('mcp__');
+
+    // Nothing switched on in Settings: the chip alone attaches nothing.
+    h.config.tools.webFetch.enabled = false;
+    h.config.tools.webSearch.enabled = false;
+    await h.engine.ask({ ...ASK, web: true });
+    expect(h.calls[2].opts['externalTools']).toBeUndefined();
+  });
+
+  it('external tools (ADR-0063): on with web fetch or a server, with their rules in the prompt', async () => {
+    const h = chatHarness();
+    h.config.tools.webFetch.enabled = true;
+    await h.engine.ask({ ...ASK, web: true });
     expect(h.calls[0].opts).toMatchObject({ externalTools: true });
     // The round budget is the user's setting, applied by the host (ADR-0071).
     expect(h.calls[0].opts['maxToolRounds']).toBeUndefined();
@@ -433,7 +454,7 @@ describe('assistant plugin chat engine — persistence (bug-10b)', () => {
 
     // A provider without a tool loop gets neither the option nor the promise.
     h.setCapabilities({ tools: false });
-    await h.engine.ask({ ...ASK });
+    await h.engine.ask({ ...ASK, web: true });
     expect(h.calls[1].opts['externalTools']).toBeUndefined();
     expect(h.calls[1].messages[0].content).not.toContain('web_fetch');
   });
@@ -680,7 +701,7 @@ describe('assistant plugin chat engine — document-fence protocol (ADR-0053)', 
     const h = chatHarness(() => (n++ === 0 ? { text: 'half', toolsDropped: true } : { text: 'plain' }));
     h.config.tools.webFetch.enabled = true;
 
-    const { outcome } = await h.engine.ask(ASK);
+    const { outcome } = await h.engine.ask({ ...ASK, web: true });
 
     expect(outcome).toEqual({ kind: 'answer', text: 'plain' });
     // First call: tools attached and described. Second: neither.
@@ -691,7 +712,7 @@ describe('assistant plugin chat engine — document-fence protocol (ADR-0053)', 
     expect(h.calls[1].messages[0].content).not.toContain('How to work with tools');
 
     // The next ask to the same model does not pay for a refusal again.
-    await h.engine.ask({ ...ASK, question: 'again' });
+    await h.engine.ask({ ...ASK, web: true, question: 'again' });
     expect(h.calls.filter((call) => call.opts['externalTools'] === true)).toHaveLength(1);
   });
 });

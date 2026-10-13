@@ -708,8 +708,8 @@ export class SettingsService {
 
   /**
    * The approval dialog's "Always allow" (milestone 63, ADR-0063): sets one
-   * external tool source -- `'web'` for web_fetch, otherwise an MCP server
-   * id -- to `allow`, persisted immediately and mirrored into an open
+   * external tool source -- `'web'` for web_fetch, `'web_search'` for
+   * web_search, otherwise an MCP server id -- to `allow`, persisted immediately and mirrored into an open
    * draft, like the other dialog-side switches above.
    */
   async allowToolSourceImmediate(source: string): Promise<void> {
@@ -720,6 +720,8 @@ export class SettingsService {
     const apply = (tools: ToolsConfig): void => {
       if (source === 'web') {
         tools.webFetch.approval = 'allow';
+      } else if (source === 'web_search') {
+        tools.webSearch.approval = 'allow';
       } else {
         const server = tools.servers.find((s) => s.id === source);
         if (server) {

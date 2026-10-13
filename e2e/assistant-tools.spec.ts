@@ -47,6 +47,22 @@ function handler(req: http.IncomingMessage, res: http.ServerResponse): void {
     res.end(JSON.stringify({ data: [{ id: 'tool-model' }] }));
     return;
   }
+  if (req.method === 'GET' && url.startsWith('/search?')) {
+    const query = new URL(url, MOCK_BASE_URL).searchParams.get('q') ?? '';
+    res.writeHead(200, { 'content-type': 'application/json' });
+    res.end(
+      JSON.stringify({
+        results: [
+          {
+            title: `Tide tables for ${query}`,
+            url: 'https://tides.example/table',
+            content: 'High water at 14:20.',
+          },
+        ],
+      }),
+    );
+    return;
+  }
   if (req.method !== 'POST' || !url.endsWith('/chat/completions')) {
     res.writeHead(404);
     res.end();
@@ -61,6 +77,10 @@ function handler(req: http.IncomingMessage, res: http.ServerResponse): void {
     if (body.tools === undefined) {
       const asked = typeof last?.content === 'string' && last.content.includes('Which tools');
       reply(res, { content: asked ? 'NO VAULT TOOLS' : 'Harbour fee' });
+      return;
+    }
+    if (last?.role === 'tool' && typeof last.content === 'string' && last.content.includes('Tide tables')) {
+      reply(res, { content: 'High water is at 14:20.' });
       return;
     }
     if (last?.role === 'tool') {
@@ -78,6 +98,25 @@ function handler(req: http.IncomingMessage, res: http.ServerResponse): void {
             ? 'DOCUMENT TOOLS ONLY'
             : 'NO VAULT TOOLS',
       });
+      return;
+    }
+    if (question.includes('high water')) {
+      // Searches only when the tool was offered: the Web chip decides.
+      reply(
+        res,
+        offered.includes('web_search')
+          ? {
+              content: null,
+              tool_calls: [
+                {
+                  id: 'w1',
+                  type: 'function',
+                  function: { name: 'web_search', arguments: JSON.stringify({ query: 'harbour tides' }) },
+                },
+              ],
+            }
+          : { content: 'NO WEB TOOLS' },
+      );
       return;
     }
     if (question.includes('Raise the fee')) {
@@ -232,6 +271,15 @@ test.describe('Assistant tool loop', () => {
         tasks: { enabled: true },
         templates: { enabled: false, write: 'auto' },
         webFetch: { enabled: false, approval: 'ask' },
+        // A SearXNG "instance" served by the mock below: the search runs
+        // for real, against this machine only.
+        webSearch: {
+          enabled: true,
+          provider: 'searxng',
+          apiKey: '',
+          baseUrl: `http://127.0.0.1:${MOCK_PORT}`,
+          approval: 'allow',
+        },
         servers: [],
       },
     },
@@ -355,5 +403,25 @@ test.describe('Assistant tool loop', () => {
     await expect(content).toContainText('This is a short one.', { timeout: 30_000 });
     // Still a tab without a file: nothing of that name appeared in the vault.
     expect(fs.existsSync(path.join(vaultDir, 'untitled.md'))).toBe(false);
+  });
+
+  test('the Web chip decides whether a question may search the web', async ({ page, vaultDir }) => {
+    const thread = page.locator('.assistant-panel .assistant-thread');
+    const web = page.locator('.assistant-panel .composer-meta [aria-label="Toggle web access"]');
+    // Web search is switched on in the config, so the chip exists — and is off.
+    await expect(web).toBeVisible();
+    await expect(web).toHaveAttribute('aria-pressed', 'false');
+
+    await ask(page, 'When is high water?');
+    await expect(thread).toContainText('NO WEB TOOLS', { timeout: 30_000 });
+
+    await web.click();
+    await expect(web).toHaveAttribute('aria-pressed', 'true');
+    await ask(page, 'When is high water today?');
+
+    await expect(thread).toContainText('High water is at 14:20.', { timeout: 30_000 });
+    // The search ran against the configured provider and its result is in the note.
+    await expect.poll(() => chatNotes(vaultDir), { timeout: 10_000 }).toContain('Tide tables for harbour tides');
+    expect(chatNotes(vaultDir)).toContain('https://tides.example/table');
   });
 });

@@ -40,18 +40,39 @@ describe('buildSystemPrompt', () => {
 
     expect(text).not.toContain('You can call these tools');
     expect(text).not.toContain(TOOL_RULES);
-    expect(text).not.toMatch(/vault_|tasks_list|template_|web_fetch/);
+    expect(text).not.toMatch(/vault_|tasks_list|template_|web_fetch|web_search|mcp__/);
     expect(text).toContain(LINKS_RULE);
   });
 
   it('lists exactly the attached tools, then the rules', () => {
-    const text = prompt({ tools: { tasks: true, external: true } });
+    const text = prompt({
+      tools: { tasks: true, external: { webSearch: false, webFetch: true, servers: false } },
+    });
 
     expect(text).toContain('- tasks_list');
-    expect(text).toContain('- web_fetch');
+    expect(text).toContain('- web_fetch — what reaches outside the vault. Use it when');
+    expect(text).not.toContain('web_search');
+    expect(text).not.toContain('mcp__');
     expect(text).not.toContain('vault_search');
     expect(text).not.toContain('template_list');
     expect(text.indexOf('You can call these tools')).toBeLessThan(text.indexOf(TOOL_RULES));
+  });
+
+  it('names of the external tools only those that are switched on', () => {
+    const line = (external: { webSearch: boolean; webFetch: boolean; servers: boolean }): string =>
+      prompt({ tools: { external } })
+        .split('\n')
+        .find((entry) => entry.includes('what reaches outside the vault')) ?? '';
+
+    expect(line({ webSearch: true, webFetch: true, servers: true })).toMatch(
+      /^- web_search, web_fetch and tools named mcp__<server>__<tool> — .*read a page with web_fetch before you rely on it\. Use them when/,
+    );
+    const searchOnly = line({ webSearch: true, webFetch: false, servers: false });
+    expect(searchOnly).toMatch(/^- web_search — .*returns short excerpts only.* Use it when/);
+    expect(searchOnly).not.toContain('web_fetch');
+    const serversOnly = line({ webSearch: false, webFetch: false, servers: true });
+    expect(serversOnly).toMatch(/^- tools named mcp__<server>__<tool> — what reaches outside the vault\. Use them when/);
+    expect(serversOnly).not.toMatch(/web_search|web_fetch/);
   });
 
   const READ_ONLY = { vault: { write: 'off' as const, retrieve: false } };

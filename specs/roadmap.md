@@ -44,11 +44,10 @@ Open work only. Everything implemented lives in
 lives in [`decisions.md`](decisions.md). When an item ships, move it to the
 changelog and delete it here — no shipped history on this page.
 
-**Status (2026-10-13):** version 0.6.0, milestones 1–74 and 76–78
+**Status (2026-10-13):** version 0.6.0, milestones 1–74 and 76–79
 shipped. Milestone ids are assigned when work starts — check
-`changelog.md` for the highest used (latest: milestone 78; milestone 75
-is assigned to "Configurable shortcuts" below, milestone 79 to the
-last step of the assistant tool rework at the top of "Now"; latest requirement id: req-42, the Cyberpunk app mark —
+`changelog.md` for the highest used (latest: milestone 79; milestone 75
+is assigned to "Configurable shortcuts" below; latest requirement id: req-42, the Cyberpunk app mark —
 an owner request outside the list, shipped in the same step).
 Items A1–A5 of the architectural cleanup shipped on 2026-10-13
 (changelog); A6–A12 remain.
@@ -59,23 +58,9 @@ Items A1–A5 of the architectural cleanup shipped on 2026-10-13
 
 ### Now (small, daily value)
 
-The assistant tool rework below is an owner request, outside the list
-(2026-10-13); its milestones are worked first, in this order, with a
-pause after each. Milestones 76 (the tool loop and the system prompt),
-77 (the vault toolset) and 78 (the open note through the same tools)
-shipped — see the changelog. ADR-0071 covers
-76–78; milestone 79 is a later change to ADR-0063.
-
-- **Web search (milestone 79).** A built-in `web_search` tool with a
-  selectable provider — Brave Search, Tavily, a SearXNG URL of the
-  user's own, or DuckDuckGo without a key (a scraper of its HTML page:
-  works at once, may break or be rate-limited; said so in Settings).
-  Off by default, key encrypted like the LLM keys. A **Web chip** in the
-  composer, next to the Vault chip and remembered the same way, switches
-  everything that leaves the machine for the next question —
-  `web_search`, `web_fetch` and the external MCP servers; it appears only
-  when one of them is enabled in Settings. Reverses ADR-0063's "no
-  bundled search provider" and takes its deferred composer switch.
+The assistant tool rework (owner request, outside the list, 2026-10-13)
+shipped as milestones 76–79 — see the changelog; all four await the
+owner's verification.
 
 3. **Configurable shortcuts (milestone 75).** One user-defined binding
    per command, stored locally in the app config (never in the vault).
@@ -206,9 +191,8 @@ Follow-ups of A1–A5 (found on the way, none started):
 
 ### Follow-ups of shipped milestones (none committed)
 
-- **Milestone 63 (MCP, ADR-0063):** OAuth-protected servers (the
-  per-question switch in the composer is milestone 79), handing servers to the Claude Code CLI
-  provider, MCP resources / prompts.
+- **Milestone 63 (MCP, ADR-0063):** OAuth-protected servers, handing
+  servers to the Claude Code CLI provider, MCP resources / prompts.
 - **Milestone 76 (tool loop, ADR-0071):** streaming the answer of a
   request that carries tools (today it arrives in one piece; the panel
   shows the tool calls meanwhile); the abort signal for plugin and vault
@@ -223,6 +207,12 @@ Follow-ups of A1–A5 (found on the way, none started):
   folder; a per-call cache of file contents when one search reads a
   large vault; `tasks_list` and the template tools for a vault other
   than the active one.
+- **Milestone 79 (web search, ADR-0063):** a key per search provider
+  (switching the provider clears the one key); a config-change event for
+  plugins, so the Web chip follows Settings at once instead of when the
+  pointer or the focus returns to the composer; the private-address
+  guard of milestone 76 for `web_search`'s SearXNG address too; the
+  DuckDuckGo page reader breaks when that page changes — watch it.
 - **Milestone 78 (open note through the tools, ADR-0071):** the
   confirmation of a tool change still opens while the ask is cancelled
   (the abort signal does not reach the vault tools, see milestone 76);

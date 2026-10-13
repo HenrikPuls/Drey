@@ -60,6 +60,8 @@ interface Harness {
   failListChats: boolean;
   /** The daily root the dailyDir port reports (`daily` unless overridden). */
   dailyDirValue: string;
+  /** Whether Settings has anything switched on that leaves the machine (the Web chip). */
+  externalToolsOn: boolean;
   /** The vault registry the listVaults port reports (the Vault chip's picker). */
   vaultRegistry: { id: string; name: string; active: boolean }[];
 }
@@ -120,6 +122,7 @@ function setup(options: { llm?: boolean } = {}): Harness {
     askGate: null,
     failListChats: false,
     dailyDirValue: 'daily',
+    externalToolsOn: false,
     vaultRegistry: [
       { id: 'v1', name: 'Notes', active: true },
       { id: 'v2', name: 'Git vault', active: false },
@@ -209,6 +212,7 @@ function setup(options: { llm?: boolean } = {}): Harness {
     },
     dailyDir: async () => h.dailyDirValue,
     listVaults: async () => h.vaultRegistry,
+    externalTools: async () => h.externalToolsOn,
   };
 
   h.tasks = tasks;
@@ -264,6 +268,7 @@ describe('assistant plugin state — chat-first asks (ADR-0048)', () => {
       noteKey: 'v1::a.md',
       vaultScope: 'off',
       vaultIds: [],
+      web: false,
     });
   });
 
@@ -1023,6 +1028,30 @@ describe('assistant plugin state — the Vault chip selection (ADR-0055 later ch
       { id: 'v1', name: 'Notes', active: true },
       { id: 'v2', name: 'Git vault', active: false },
     ]);
+  });
+});
+
+describe('assistant plugin state — the Web chip (milestone 79)', () => {
+  it('is off until switched on, and rides the ask only while Settings offers something', async () => {
+    const h = setup();
+    expect(h.state.web()).toBe(false);
+    expect(h.state.webAvailable()).toBe(false);
+
+    // Remembered "on" with nothing switched on in Settings: the chip is
+    // hidden, so it must not ride.
+    h.state.toggleWeb();
+    await h.state.ask('eins');
+    expect(h.asks[0]?.web).toBe(false);
+
+    h.externalToolsOn = true;
+    await h.state.refreshWeb();
+    expect(h.state.webAvailable()).toBe(true);
+    await h.state.ask('zwei');
+    expect(h.asks[1]?.web).toBe(true);
+
+    h.state.toggleWeb();
+    await h.state.ask('drei');
+    expect(h.asks[2]?.web).toBe(false);
   });
 });
 

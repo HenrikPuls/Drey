@@ -7,6 +7,9 @@ import {
   ToolApprovalMode,
   ToolWriteMode,
   VaultWriteMode,
+  WEB_SEARCH_PROVIDERS,
+  WebSearchProvider,
+  WebSearchProviderInfo,
   mcpServerSlug,
 } from '../../../../shared/app-config';
 import { McpClientServerStatus } from '../../../../shared/ipc-api';
@@ -35,8 +38,8 @@ export function formatPairs(pairs: Record<string, string>, separator: '=' | ':')
 /**
  * "Assistant tools" settings category (milestone 63, ADR-0063): what the
  * built-in assistant may call -- one switch per tool group, the write rule
- * of the writing groups, and the external sources (web fetch, MCP servers)
- * with their approval rule.
+ * of the writing groups, and the external sources (web search, web fetch,
+ * MCP servers) with their approval rule.
  *
  * Pure view over the self-saving draft; with each save main connects /
  * drops the servers to match.
@@ -123,6 +126,42 @@ export class SettingsTools {
 
   protected setTemplatesWrite(mode: string): void {
     this.settings.patchTools((t) => void (t.templates.write = this.writeMode(mode)));
+  }
+
+  protected readonly searchProviders = WEB_SEARCH_PROVIDERS;
+
+  protected searchNeeds(provider: WebSearchProvider): WebSearchProviderInfo['needs'] {
+    return WEB_SEARCH_PROVIDERS.find((entry) => entry.id === provider)?.needs ?? 'nothing';
+  }
+
+  protected setWebSearchEnabled(on: boolean): void {
+    this.settings.patchTools((t) => void (t.webSearch.enabled = on));
+  }
+
+  protected setWebSearchProvider(id: string): void {
+    const provider = WEB_SEARCH_PROVIDERS.find((entry) => entry.id === id);
+    if (provider === undefined) {
+      return;
+    }
+    this.settings.patchTools((t) => {
+      // A key belongs to the service it was issued by.
+      if (t.webSearch.provider !== provider.id) {
+        t.webSearch.apiKey = '';
+      }
+      t.webSearch.provider = provider.id;
+    });
+  }
+
+  protected setWebSearchKey(key: string): void {
+    this.settings.patchTools((t) => void (t.webSearch.apiKey = key.trim()));
+  }
+
+  protected setWebSearchUrl(url: string): void {
+    this.settings.patchTools((t) => void (t.webSearch.baseUrl = url.trim()));
+  }
+
+  protected setWebSearchApproval(mode: string): void {
+    this.settings.patchTools((t) => void (t.webSearch.approval = this.approvalMode(mode)));
   }
 
   protected setWebFetchEnabled(on: boolean): void {
