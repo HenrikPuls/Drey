@@ -1,5 +1,123 @@
 # 5. Building Block View
 
+## Overview — start here
+
+This page is long. The overview below is the whole picture on one
+screen; everything after it is reference.
+
+### The four parts
+
+```mermaid
+graph TB
+    subgraph Base["Base application"]
+        Renderer["<b>Renderer</b> — src/app/<br/>the window: shell, editor, docks,<br/>settings, dialogs<br/>Angular + CodeMirror, sandboxed"]
+        Main["<b>Main process</b> — electron/<br/>files, vaults, models, MCP,<br/>windows, the plugin host<br/>Node"]
+    end
+    Plugins["<b>Plugins</b> — plugins/&lt;id&gt;/<br/>one feature each: a main half (Node)<br/>and a renderer half (plain DOM)"]
+    Shared["<b>Shared</b> — shared/<br/>contracts (IPC, plugin SDK, config)<br/>and pure logic both sides use"]
+
+    Renderer <-->|"typed bridge (IPC)"| Main
+    Plugins -->|"plugin SDK"| Renderer
+    Plugins -->|"plugin SDK"| Main
+    Renderer --> Shared
+    Main --> Shared
+    Plugins --> Shared
+```
+
+| Part | Responsibility | Size (lines, without tests) |
+|---|---|---|
+| **Renderer** `src/app/` | Everything the user sees and touches. Holds no file or network access; asks the main process for it. | 29,800 |
+| **Main process** `electron/` | Everything that touches the machine: vault files, the model transport, MCP, windows, loading plugins. Knows no feature. | 11,900 |
+| **Shared** `shared/` | The contracts between the other three — the IPC interface, the plugin SDK, the config shape — and pure functions (frontmatter, tags, wikilinks, diffing, the Markdown dialect). Runs anywhere, depends on nothing. | 11,500 |
+| **Plugins** `plugins/` | The features: tags and search, tasks, templates, the assistant, the browser tab, OCR, outline, backlinks, diagrams, Git, meeting import. | 26,400 |
+
+### The dependency rules
+
+These are what keep the four parts separate. All of them hold in the
+code today (checked 2026-10-13 over every non-test import).
+
+| Rule | Enforced by |
+|---|---|
+| `shared/` imports from none of the other three. | convention |
+| Renderer and main process never import each other. They meet in `shared/ipc-api.ts`. | convention |
+| The base never imports a plugin. It reaches plugin behaviour only through a registry the plugin filled. | convention |
+| A plugin imports only its own folder and `shared/`. Never `src/`, never `electron/`, never another plugin. | renderer half: the plugin build fails. Main half: convention — ADR-0044 would allow it `electron/`, but no plugin uses that, and it should stay so |
+| A plugin does not load its own CodeMirror or Angular. | lint |
+| A plugin's renderer half has no Node access. | lint |
+| Outside a base module, import its `index.ts`, not a file inside it. | lint ([ADR-0016](09_architecture_decisions/0016-feature-module-convention.md)) |
+
+The rows marked "convention" are the ones a lint rule should take over
+([§11](11_risks_and_technical_debt.md), architecture review 2026-10-13).
+
+### How a request travels
+
+Two paths cover almost everything:
+
+- **A base feature** (open a file, save, change a setting): a renderer
+  service calls `window.dreyApi.<method>`; the preload forwards it on a
+  named channel; a handler in `electron/ipc/` calls the owning class
+  (`VaultManager`, `NoteManager`, …) and returns the result.
+- **A plugin feature** (search, ask the assistant, commit): the plugin's
+  renderer half calls `api.backend.invoke('method', payload)`. All
+  plugins share two fixed channels (`plugin:invoke`, `plugin:event`);
+  the plugin host in main routes the call to the handler that plugin
+  registered. The plugin's main half works through `MainPluginContext`
+  and never holds a base object directly.
+
+### The main process, by responsibility
+
+| Group | Blocks | Job |
+|---|---|---|
+| Start-up | `main.ts`, `splash.ts`, `content-security-policy.ts` | Builds every object below, creates the window, registers the `app://`, `drey-asset://` and `plugin://` schemes. |
+| Vault and notes | `vault-manager.ts`, `note-manager.ts`, `daily-note.ts`, `link-rewriter.ts`, `history/`, `safe-file.ts`, `path-guard.ts`, `trash-delete.ts` | The vault registry and every file operation; the save pipeline with its conflict check; local versions. |
+| Outside changes | `vault-watcher.ts`, `own-write-ledger.ts`, `vault-change-announcer.ts` | Notices files changed by other programs and tells indexes and open tabs. |
+| Models | `llm/` | One `LlmClient` interface, a router that picks the provider per call, one client per backend, cancellable tasks. |
+| Tools | `mcp/`, `mcp-client/` | The MCP server Drey offers to other programs; the external tool servers and `web_fetch` the assistant may call. |
+| Plugins | `plugin-host/` | Finds, validates, activates and isolates failures of plugins; builds each one's context; installs packages. |
+| App state | `app-config.ts`, `config-secrets.ts`, `session/`, `logger.ts` | Settings on disk (secrets encrypted), the tab session and unsaved buffers, the log file. |
+| Single services | `spellcheck.ts`, `pdf-export.ts`, `external-open.ts`, `open-document.ts` | One job each. |
+| The bridge | `preload.ts`, `ipc/` | The renderer-facing surface: thin handlers, no logic of their own. |
+
+### The renderer, by responsibility
+
+| Group | Blocks | Job |
+|---|---|---|
+| Shell | `app.ts`, `titlebar/`, `status-bar/`, `dock/`, `panes/`, `tab-bar/` | The window frame, the three docks and their panels, the split tree of editor panes. |
+| Documents | `services/editor.service.ts` over `open-docs.store.ts`, `doc-open.service.ts`, `doc-save.service.ts`, `doc-disk-sync.service.ts`; `session/` | Which documents are open, their dirty state, opening, saving, reloading from disk, restoring the session. |
+| Editor | `editor/` | The only place CodeMirror is used: Live Preview, source mode, the Markdown dialect, toolbar, slash menu, spellcheck, wikilinks, tag pills. |
+| Vault view | `vault/`, `calendar/`, `windows/` | The Files panel and file operations, the calendar, the open-windows list. |
+| Dialogs and viewers | `confirmation-dialog/`, `conflict/`, `history/`, `diff-view/`, `link-update/`, `tool-approval/`, `image-viewer/`, `pdf-viewer/`, `palette/`, `help/` | Each one surface. |
+| Settings | `settings/`, `services/settings.service.ts` | The settings overlay and the config it edits. |
+| Commands | `keybindings/` | Every command and its shortcut; the menu, the palette and the shortcuts page read this registry. |
+| Plugins | `plugin-host/` | Loads plugin renderer modules, implements `DreyPluginApi`, owns the registries plugins fill, mounts their DOM. |
+
+### A plugin
+
+```text
+plugins/<id>/
+  plugin.json     id, name, entry points, the SDK version it needs
+  main/           runs in the main process: indexes, file work, model calls
+  renderer/       runs in the window: plain DOM, bundled into one file
+  shared/         types and pure logic both halves use
+```
+
+A plugin extends the app by registering with the base — a dock panel, a
+tab kind, a settings page, a command, an editor extension, a save hook,
+a search provider. The full list is "The seams" in §5.0. Where one
+plugin needs another's data (the assistant listing tasks, the MCP server
+searching tags), it asks the base for a provider the other plugin
+registered; it gets `null` when that plugin is disabled and degrades.
+
+### Where to read on
+
+| You want | Go to |
+|---|---|
+| The current structure in detail, block by block | §5.0, "The blocks" and "Component reference (current)" |
+| Which files implement a given feature | §5.0, "Feature → files index" |
+| What a plugin can hook into | §5.0, "The seams" |
+| Why something is the way it is | the ADR linked from the section, [§9](09_architecture_decisions.md) |
+| How it looked at an earlier milestone | §5.1 to §5.40 — a dated record, not the current state |
+
 > **Reading order.** **§5.0 is the current structure** (base application
 > + runtime plugins, [ADR-0044](09_architecture_decisions/0044-runtime-plugin-system.md)).
 > The rest of this file is layered by milestone: each
@@ -79,7 +197,7 @@ restore, keybindings, spellcheck, the MCP vault server, the LLM
   `panes/` (centre split tree **plus the dock regions**),
   `tab-bar/`, `editor/` (+ the editor-extension /
   drop-decoder / context-menu / doc-kind registries behind it),
-  `entry/`, `calendar/`, `vault/`, `image-viewer/`,
+  `calendar/`, `vault/`, `image-viewer/`,
   `confirmation-dialog/`, `services/`.
 - `plugin-host/` — `plugin-host.service.ts` (activation, quarantine,
   event fan-out, visibility synthesis), `plugin-api-impl.ts` (the
@@ -157,8 +275,8 @@ graph TB
         HostM["plugin-host (main)<br/>discovery · activation · quarantine ·<br/>plugin:// root resolution · config store"]
         Installer["plugin-installer (ADR-0068)<br/>local .zip packages: pick · validate ·<br/>extract under <userData>/plugins · remove"]
         IO["VaultManager · NoteManager<br/>(save/vault hook registries) ·<br/>DailyNote · Session backups"]
-        LLM["llm/: LmStudioClient · debug log ·<br/>task registry · tag-suggest"]
-        MCP["mcp/: VaultTools (vault_search via<br/>registered SectionSearchProvider)"]
+        LLM["llm/: LlmClient + LlmRouter over providers/ ·<br/>debug log · task registry · tag-suggest"]
+        MCP["mcp/: VaultTools (vault_search via<br/>registered SectionSearchProvider) ·<br/>mcp-client/: external servers + web_fetch"]
     end
     subgraph Plugins["plugins/<id>/  (dist-electron/plugins/<id>/)"]
         P1["templates · meeting · tags ·<br/>tasks · assistant · browser · ocr ·<br/>outline · backlinks · drawio · git"]
