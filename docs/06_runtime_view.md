@@ -166,12 +166,14 @@ sequenceDiagram
     Main->>Main: mainWindow.show() + focus() (restore if minimized)
     Main->>Daily: ensureTodayNote()
     alt <daily.dir>/<date>.md missing
-        Daily->>FS: read templates/daily.md
+        Daily->>FS: read templates/daily.md (VaultManager.readFile)
         alt template missing
             Daily->>FS: write starter templates/daily.md (verbatim placeholders)
         end
         Daily->>Daily: substitute {{date}} {{time}} {{datetime}} {{title}}
-        Daily->>FS: mkdir <daily.dir>/ + write <daily.dir>/<date>.md
+        Daily->>FS: write <daily.dir>/<date>.md (folders created on the way)
+        Note over Daily,FS: both writes go through VaultManager.writeFile -- atomic, entered in the own-write ledger
+        Daily->>Main: onCreated(vaultId, paths) -> VaultChangeAnnouncer.announceExternal (indexes + vault:changed push)
     end
     Daily-->>Main: "<daily.dir>/2026/09/2026-09-05.md"
     Main->>DailyService: send('daily:open', relativePath)
@@ -1930,7 +1932,7 @@ sequenceDiagram
 ```
 
 `shared/pdf-html.ts` is pure (string in/out, the `shared/frontmatter.ts`
-precedent) and unit-tested from `src/app/services/pdf-html.spec.ts` — the
+precedent) and unit-tested from `shared/pdf-html.spec.ts` — the
 bootstrap itself is executed there against a stub mermaid in a real
 iframe. Since milestone 32 a ` ```mermaid ` fence no longer stays a code
 block: main inlines the bundled `mermaid/dist/mermaid.min.js` (read from

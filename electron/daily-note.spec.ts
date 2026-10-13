@@ -1,4 +1,5 @@
 import * as fs from 'node:fs';
+import * as path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { AppConfigStore } from './app-config';
 import { createTempVaults, type TempVaults } from './testing/temp-vaults';
@@ -14,6 +15,7 @@ vi.mock('electron', () => ({
 }));
 
 import { DailyNoteManager } from './daily-note';
+import { OwnWriteLedger } from './own-write-ledger';
 import { VaultManager } from './vault-manager';
 
 let vaults: TempVaults;
@@ -58,6 +60,29 @@ describe('DailyNoteManager.ensureTodayNote', () => {
     expect(relPath).toBe('journal/days/2026/09/2026-09-05.md');
     expect(vaults.read(vaults.a, relPath)).toBe('Journal 2026-09-05 at 14:32\n');
     expect(vaults.read(vaults.a, 'templates/daily.md')).toBe('Journal {{title}} at {{time}}\n');
+  });
+
+  it('writes through the vault manager and reports what it created', async () => {
+    const ledger = new OwnWriteLedger();
+    vault = new VaultManager(ledger);
+    const created: Array<{ vaultId: string; paths: readonly string[] }> = [];
+    const config = { get: () => ({ daily: { dir: 'daily' } }) } as unknown as AppConfigStore;
+    const notes = new DailyNoteManager(vault, config, (vaultId, paths) =>
+      created.push({ vaultId, paths }),
+    );
+
+    const relPath = await notes.ensureTodayNote(NOW);
+
+    expect(created).toEqual([{ vaultId: 'va', paths: ['templates/daily.md', relPath] }]);
+    // Both writes are in the own-write ledger: the watcher drops their echo.
+    for (const rel of ['templates/daily.md', relPath]) {
+      const mtimeMs = fs.statSync(path.join(vaults.a, rel)).mtimeMs;
+      expect(ledger.isOwnEvent('va', rel, 'add', mtimeMs)).toBe(true);
+    }
+
+    // The note exists now: nothing is written, nothing reported.
+    await notes.ensureTodayNote(NOW);
+    expect(created).toHaveLength(1);
   });
 
   it('returns the existing note untouched', async () => {

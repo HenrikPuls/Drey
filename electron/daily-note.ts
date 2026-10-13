@@ -1,5 +1,4 @@
 import * as fs from 'node:fs';
-import * as fsp from 'node:fs/promises';
 import * as path from 'node:path';
 import { dailyPathFor } from '../shared/daily';
 import { substitutePlaceholders } from '../shared/placeholders';
@@ -7,8 +6,12 @@ import { formatDate, formatDateTime, formatTime } from '../shared/timestamp';
 import { AppConfigStore } from './app-config';
 import { VaultManager } from './vault-manager';
 
-const TEMPLATE_DIR = 'templates';
-const DAILY_TEMPLATE_FILE = 'daily.md';
+/**
+ * The daily template's vault-relative path. The literal `templates/` is a
+ * structural folder (`specs/frontmatter-schema.md`), not the template
+ * library folder the user can point elsewhere (`templates.dir`).
+ */
+const DAILY_TEMPLATE_PATH = 'templates/daily.md';
 
 /**
  * Written to `templates/daily.md` the first time a daily note is created
@@ -43,7 +46,9 @@ updated: "{{datetime}}"
  *
  * Kept out of `VaultManager` on purpose: `VaultManager` is vault
  * registration + raw path-guarded file IO with no note/frontmatter
- * knowledge, and template substitution is exactly that knowledge.
+ * knowledge, and template substitution is exactly that knowledge. Every
+ * file this class creates is still written by `VaultManager` -- atomic,
+ * and entered in the own-write ledger like any other app write.
  */
 export class DailyNoteManager {
   /**
@@ -53,6 +58,13 @@ export class DailyNoteManager {
   constructor(
     private readonly vaultManager: VaultManager,
     private readonly appConfig: AppConfigStore,
+    /**
+     * Told which files a call created. The watcher takes them for the
+     * app's own writes and stays silent, so the caller runs the change
+     * round (indexes + file tree) itself.
+     */
+    private readonly onCreated: (vaultId: string, paths: readonly string[]) => void = () =>
+      undefined,
   ) {}
 
   /**
@@ -62,8 +74,9 @@ export class DailyNoteManager {
    * exist yet. Rejects if no vault is active or the vault folder is gone.
    */
   async ensureTodayNote(now: Date = new Date()): Promise<string> {
+    const vaultId = this.vaultManager.getActiveVaultId();
     const vaultRoot = this.vaultManager.getActiveVaultPath();
-    if (!vaultRoot) {
+    if (!vaultId || !vaultRoot) {
       throw new Error('No vault is active.');
     }
     if (!fs.existsSync(vaultRoot)) {
@@ -77,12 +90,20 @@ export class DailyNoteManager {
       return relativePath;
     }
 
-    const template = await this.loadOrScaffoldTemplate(vaultRoot);
-    const content = applyPlaceholders(template, now);
+    const created: string[] = [];
+    let template = await this.readTemplate(vaultId);
+    if (template === null) {
+      // First run for this vault: drop a starter template the user can
+      // edit, and use it for this note.
+      template = STARTER_DAILY_TEMPLATE;
+      await this.vaultManager.writeFile(DAILY_TEMPLATE_PATH, template, vaultId);
+      created.push(DAILY_TEMPLATE_PATH);
+    }
 
     // Creates the nested `<daily.dir>/<year>/<month>/` folders on the way.
-    await fsp.mkdir(path.dirname(absolutePath), { recursive: true });
-    await fsp.writeFile(absolutePath, content, 'utf-8');
+    await this.vaultManager.writeFile(relativePath, applyPlaceholders(template, now), vaultId);
+    created.push(relativePath);
+    this.onCreated(vaultId, created);
     return relativePath;
   }
 
@@ -98,8 +119,8 @@ export class DailyNoteManager {
    * is malformed.
    */
   async noteContentFor(dateStr: string): Promise<string> {
-    const vaultRoot = this.vaultManager.getActiveVaultPath();
-    if (!vaultRoot) {
+    const vaultId = this.vaultManager.getActiveVaultId();
+    if (!vaultId) {
       throw new Error('No vault is active.');
     }
     const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(dateStr);
@@ -117,29 +138,16 @@ export class DailyNoteManager {
       now.getSeconds(),
     );
 
-    const template = await this.readTemplate(vaultRoot);
+    const template = (await this.readTemplate(vaultId)) ?? STARTER_DAILY_TEMPLATE;
     return applyPlaceholders(template, when);
   }
 
-  /** Current `templates/daily.md`, or the starter if none exists -- no write. */
-  private async readTemplate(vaultRoot: string): Promise<string> {
+  /** The vault's `templates/daily.md`, or null when it has none. */
+  private async readTemplate(vaultId: string): Promise<string | null> {
     try {
-      return await fsp.readFile(path.join(vaultRoot, TEMPLATE_DIR, DAILY_TEMPLATE_FILE), 'utf-8');
+      return (await this.vaultManager.readFile(DAILY_TEMPLATE_PATH, vaultId)).content;
     } catch {
-      return STARTER_DAILY_TEMPLATE;
-    }
-  }
-
-  private async loadOrScaffoldTemplate(vaultRoot: string): Promise<string> {
-    const templatePath = path.join(vaultRoot, TEMPLATE_DIR, DAILY_TEMPLATE_FILE);
-    try {
-      return await fsp.readFile(templatePath, 'utf-8');
-    } catch {
-      // First run for this vault: drop a starter template the user can
-      // edit, and use it for this note.
-      await fsp.mkdir(path.dirname(templatePath), { recursive: true });
-      await fsp.writeFile(templatePath, STARTER_DAILY_TEMPLATE, 'utf-8');
-      return STARTER_DAILY_TEMPLATE;
+      return null;
     }
   }
 }

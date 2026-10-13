@@ -9,7 +9,7 @@
  * Config the client uses -- Drey shows the exact block, with the real
  * absolute path, in Settings -> MCP. Packaged, that path is under
  * `resources/app.asar.unpacked/` (the script is `asarUnpack`'d so an
- * external `node` can execute it -- see `stdioBridgePath()` in main.ts):
+ * external `node` can execute it -- see `stdioBridgePath()` in app-paths.ts):
  *   {
  *     "command": "node",
  *     "args": ["<abs>/dist-electron/electron/mcp/stdio-bridge.js"],

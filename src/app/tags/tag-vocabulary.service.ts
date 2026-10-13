@@ -1,13 +1,12 @@
-import { Injectable, effect, inject, signal } from '@angular/core';
+import { Injectable, signal } from '@angular/core';
 import type { TagEntry, TagPrefixStyle } from '../../../shared/plugin-api/search-types';
 import { resolveTagStyle, type TagStyleInfo } from '../../../shared/tag-style';
-import { PluginHostService } from '../plugin-host';
 import type { TagFieldVocabulary } from './tag-field';
 
 /**
  * The base's window onto the tag vocabulary (milestone 33): entries and
  * prefix styles come from the section-search provider — the Tags plugin —
- * over `search:vocabulary`, refreshed whenever `search:changed` ticks.
+ * over `search:vocabulary`, refreshed on every `search:changed` push.
  *
  * Base owns the *rendering* of tags (pills, chips, completion); the plugin
  * stays the data owner (ADR-0044). With no provider registered (tags
@@ -16,8 +15,6 @@ import type { TagFieldVocabulary } from './tag-field';
  */
 @Injectable({ providedIn: 'root' })
 export class TagVocabularyService implements TagFieldVocabulary {
-  private readonly pluginHost = inject(PluginHostService);
-
   /** The vault-wide tag vocabulary with section counts. */
   readonly entries = signal<readonly TagEntry[]>([]);
   /** Configured prefix styles from the provider (empty when unimplemented). */
@@ -27,10 +24,8 @@ export class TagVocabularyService implements TagFieldVocabulary {
 
   constructor() {
     void this.refresh();
-    effect(() => {
-      this.pluginHost.searchChanged();
-      void this.refresh();
-    });
+    // Optional-chained: a partial `dreyApi` stub (tests) may lack the channel.
+    window.dreyApi?.onSearchChanged?.(() => void this.refresh());
   }
 
   /** Resolves one tag's color: longest configured prefix, else auto palette. */

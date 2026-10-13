@@ -1,9 +1,10 @@
 // @ts-check
+import { readdirSync } from 'node:fs';
 import tseslint from 'typescript-eslint';
 
 /**
  * This config is intentionally narrow. It is not a style pass over the
- * codebase -- it enforces three things:
+ * codebase -- it enforces four things:
  *
  * 1. The feature-module barrels (ADR-0016): code outside a module must
  *    import through the module's `index.ts`, never reach into a file inside
@@ -21,7 +22,42 @@ import tseslint from 'typescript-eslint';
  *    own is marked `void`, with its failure handled where it matters.
  *    These two rules need type information, so every linted file must
  *    belong to one of the tsconfig projects listed below.
+ * 4. The dependency rules between the four parts (docs/05, "The
+ *    dependency rules"): `shared/` imports from none of the others,
+ *    renderer and main never import each other, the base imports no
+ *    plugin, and a plugin imports only its own folder and `shared/`.
+ *    They run under `@typescript-eslint/no-restricted-imports`, so the
+ *    barrel rule's `off` inside a module (plain `no-restricted-imports`)
+ *    does not switch them off. Type-only imports count too -- the
+ *    contract between the parts is `shared/`.
  */
+
+/** A relative import that reaches into one of the repo's top-level parts. */
+const layer = (dir, message) => ({ group: [`**/${dir}/**`], message });
+
+const NO_RENDERER = layer(
+  'src',
+  'Only the renderer imports `src/`. What both sides need belongs in `shared/`.',
+);
+const NO_MAIN = layer(
+  'electron',
+  'Only the main process imports `electron/`. What both sides need belongs in `shared/` (`shared/ipc-api.ts` is the contract).',
+);
+const NO_PLUGINS = layer(
+  'plugins',
+  'The base never imports a plugin -- it reaches plugin behaviour through a registry the plugin filled (ADR-0044).',
+);
+
+const PLUGIN_IDS = readdirSync(new URL('./plugins', import.meta.url), { withFileTypes: true })
+  .filter((entry) => entry.isDirectory())
+  .map((entry) => entry.name);
+
+/** From inside `plugins/<id>/`, every way up and over into a sibling plugin. */
+const otherPluginPatterns = (id) =>
+  PLUGIN_IDS.filter((other) => other !== id).map((other) => ({
+    group: ['..', '../..', '../../..', '../../../..'].map((up) => `${up}/${other}/**`),
+    message: `A plugin never imports another plugin (\`${other}\`) -- share through \`shared/\` or a base registry (ADR-0044).`,
+  }));
 
 const MODULES = ['llm', 'mcp', 'session', 'plugin-host'];
 
@@ -153,11 +189,38 @@ export default tseslint.config(
     },
   },
   {
-    // Plugin authoring rules (ADR-0044 rules 1 + 2). `allowTypeImports`
-    // keeps the ADR's escape hatch: a plugin may *type* against the host's
-    // CodeMirror classes (`import type { EditorView } from '@codemirror/view'`),
-    // it just can't load its own runtime copy.
-    files: ['plugins/**/*.ts'],
+    // The dependency rules between the four parts (docs/05).
+    files: ['shared/**/*.ts'],
+    rules: {
+      '@typescript-eslint/no-restricted-imports': [
+        'error',
+        { patterns: [NO_RENDERER, NO_MAIN, NO_PLUGINS] },
+      ],
+    },
+  },
+  {
+    files: ['src/**/*.ts'],
+    rules: {
+      '@typescript-eslint/no-restricted-imports': ['error', { patterns: [NO_MAIN, NO_PLUGINS] }],
+    },
+  },
+  {
+    files: ['electron/**/*.ts'],
+    rules: {
+      '@typescript-eslint/no-restricted-imports': [
+        'error',
+        { patterns: [NO_RENDERER, NO_PLUGINS] },
+      ],
+    },
+  },
+  // Plugin authoring rules (ADR-0044 rules 1 + 2) plus the plugin's side of
+  // the dependency rules: its own folder and `shared/`, nothing else.
+  // `allowTypeImports` keeps the ADR's escape hatch: a plugin may *type*
+  // against the host's CodeMirror classes
+  // (`import type { EditorView } from '@codemirror/view'`), it just can't
+  // load its own runtime copy.
+  ...PLUGIN_IDS.map((id) => ({
+    files: [`plugins/${id}/**/*.ts`],
     rules: {
       '@typescript-eslint/no-restricted-imports': [
         'error',
@@ -174,11 +237,18 @@ export default tseslint.config(
               message:
                 'Plugin UI is plain DOM mounted into host-provided elements, not Angular components (ADR-0044 rule 2).',
             },
+            NO_RENDERER,
+            {
+              ...NO_MAIN,
+              message:
+                'A plugin works through its `MainPluginContext` and `shared/`, never a file under `electron/` (ADR-0044).',
+            },
+            ...otherPluginPatterns(id),
           ],
         },
       ],
     },
-  },
+  })),
   {
     // A plugin's renderer entry runs in the browser context: no Node, no
     // electron. (Its main entry may -- that's the trusted-model split.)

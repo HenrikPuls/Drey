@@ -1,8 +1,8 @@
 import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
 import { WidgetRegistryService } from '../../dock';
 import { WIDGET_CAPABILITY_LABELS } from '../../widgets';
-import { PluginHostService } from '../../plugin-host';
 import { ConfirmDialogService } from '../../services/confirm-dialog.service';
+import { PluginCatalogService } from '../../services/plugin-catalog.service';
 import { SettingsService } from '../../services/settings.service';
 import { SettingsPane } from '../settings-pane/settings-pane';
 
@@ -30,7 +30,7 @@ import { SettingsPane } from '../settings-pane/settings-pane';
 export class SettingsDockWidgets {
   protected readonly settings = inject(SettingsService);
   private readonly widgets = inject(WidgetRegistryService);
-  private readonly pluginHost = inject(PluginHostService);
+  private readonly catalog = inject(PluginCatalogService);
   private readonly dialogs = inject(ConfirmDialogService);
 
   /** Every registered widget, with its resolved enabled state + capability labels. */
@@ -48,7 +48,7 @@ export class SettingsDockWidgets {
   /** Every discovered plugin, with its live status + draft enable state. */
   protected readonly pluginRows = computed(() => {
     const disabled = this.settings.pluginsDisabledDraft();
-    return this.pluginHost.plugins().map((p) => ({
+    return this.catalog.plugins().map((p) => ({
       id: p.id,
       name: p.name,
       version: p.version,
@@ -62,7 +62,7 @@ export class SettingsDockWidgets {
   });
 
   /** A package was installed or removed — the next start applies it (ADR-0068). */
-  protected readonly restartPending = this.pluginHost.pluginChangePending;
+  protected readonly restartPending = this.catalog.pluginChangePending;
 
   /** Guards against stacking native pick dialogs on a double click. */
   protected readonly installBusy = signal(false);
@@ -81,7 +81,7 @@ export class SettingsDockWidgets {
     }
     this.installBusy.set(true);
     try {
-      const result = await this.pluginHost.installPluginFromFile();
+      const result = await this.catalog.installPluginFromFile();
       if (result === null) {
         return; // pick cancelled
       }
@@ -109,7 +109,7 @@ export class SettingsDockWidgets {
     if (!confirmed) {
       return;
     }
-    const result = await this.pluginHost.removePlugin(id);
+    const result = await this.catalog.removePlugin(id);
     if (result.status === 'error') {
       await this.dialogs.message({ title: 'Remove plugin', message: result.message });
       return;
@@ -118,7 +118,7 @@ export class SettingsDockWidgets {
   }
 
   protected restartNow(): void {
-    this.pluginHost.relaunchApp();
+    this.catalog.relaunchApp();
   }
 
   private async offerRestart(message: string): Promise<void> {

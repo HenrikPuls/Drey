@@ -9,7 +9,7 @@ import { logLine } from './logger';
  * `Menu.setApplicationMenu` with its own template, that default -- and its
  * edit roles -- is gone. So we own the menu from here on and always carry
  * the standard edit roles. The bar is auto-hidden on the window
- * (`autoHideMenuBar`, see main.ts) to keep the minimal look; the
+ * (`autoHideMenuBar`, see main-window.ts) to keep the minimal look; the
  * accelerators stay live regardless of whether the bar is shown.
  *
  * `role`-based items drive the *focused* `webContents` through native

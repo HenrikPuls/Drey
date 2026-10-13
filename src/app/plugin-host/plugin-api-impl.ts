@@ -41,6 +41,7 @@ import { EditorExtensionRegistry } from './editor-extension-registry.service';
 import { DropDecoderRegistry } from './drop-decoder-registry.service';
 import { FileOpenerRegistry } from '../services/file-opener-registry.service';
 import { DocKindRegistry } from './doc-kind-registry.service';
+import { PluginSettingsHost } from './plugin-settings-host';
 import {
   EditorContextMenuRegistry,
   MenuContributionsService,
@@ -88,9 +89,9 @@ export class PluginApiFactory {
   private readonly decorations = inject(FileDecorationService);
   private readonly diffDialog = inject(DiffDialogService);
   /**
-   * Resolved LAZILY inside `createTagField`: `TagVocabularyService` needs
-   * `PluginHostService` (the `search:changed` tick), which needs this
-   * factory — a constructor-time injection here would be a DI cycle.
+   * Resolves services at call time instead of at construction
+   * (`TagVocabularyService` — its first vocabulary pull waits for the
+   * first tag field — `WikilinkService`, `VaultService`).
    */
   private readonly appInjector = inject(Injector);
 
@@ -291,7 +292,7 @@ export class PluginApiFactory {
       ui: {
         registerWidget: (widget: PluginWidgetContrib) => track(this.widgets.registerPluginWidget(widget)),
         registerSettingsPage: (page: PluginSettingsPageContrib) =>
-          track(this.settingsPages.registerPluginPage(page)),
+          track(this.settingsPages.registerPluginPage(page, PluginSettingsHost)),
         registerDocKind: (kind: PluginDocKindContrib) => track(this.docKinds.register(kind)),
         registerMenuContributions: (items: readonly MenuContribution[]) =>
           track(this.menuContributions.register(pluginId, items)),

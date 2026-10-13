@@ -15,7 +15,7 @@ import { HelpService } from './help/help.service';
 import { SessionService } from './session';
 import { AppearanceService } from './services/appearance.service';
 import { ThemeService } from './services/theme.service';
-import { DailyNoteService } from './vault';
+import { DailyNoteService } from './services/daily-note.service';
 import { EditorService } from './services/editor.service';
 import { ExitConfirmService } from './services/exit-confirm.service';
 import { DropGuardService } from './services/drop-guard.service';

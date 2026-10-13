@@ -48,6 +48,8 @@ changelog and delete it here — no shipped history on this page.
 ids are assigned when work starts — check `changelog.md` for the highest
 used (latest: milestone 74; milestone 75 is assigned to "Configurable
 shortcuts" below; latest requirement id: req-41, the formatting strip).
+Items A1–A5 of the architectural cleanup shipped on 2026-10-13
+(changelog, top entry); A6–A12 remain.
 
 ### Known defects
 
@@ -105,34 +107,9 @@ of 2026-10-13 — evidence and reasoning per item in
 [`docs/11`](../docs/11_risks_and_technical_debt.md) ("Architecture review
 2026-10-13", same numbering). Not ordered against the feature lists above:
 the owner picks when one is taken. Within the section the order is by
-value for effort; A1 must come before A2.
+value for effort. A1–A5 are done (see `changelog.md`); the ids of the
+rest are kept so they still match `docs/11`.
 
-- **A1 — Move tests next to their code.** 62 of the 75 spec files in
-  `src/app/services/` test `shared/`, `electron/` or plugin code and run
-  in the Angular runner. Move each beside its source and into the
-  plain-Node suite (`vitest.plugins.config.mts`, extended to `shared/`);
-  merge the two files that exist twice (`app-config.spec.ts`,
-  `note-manager.spec.ts`).
-- **A2 — Lint the dependency rules.** Five rules hold only by convention:
-  `shared/` imports nothing outward, renderer and main never import each
-  other, the base imports no plugin, no plugin imports another, a
-  plugin's main half does not import `electron/`. Add them to
-  `eslint.config.mjs` (`docs/05`, "The dependency rules"). Needs A1.
-- **A3 — Break the two renderer import cycles.** (a) Take
-  `DailyNoteService` out of the `vault/` barrel — it opens documents and
-  sits above `EditorService`. (b) `TagVocabularyService` and
-  `SettingsDockWidgets` depend on a small interface or event instead of
-  `PluginHostService`.
-- **A4 — `DailyNoteManager` writes through `VaultManager`.** It creates
-  the daily note and `templates/daily.md` with raw `fsp.writeFile` (no
-  own-write ledger entry) and uses a fixed `templates` folder name while
-  `templates.dir` is a setting. ⚠️ Check first whether the fixed name is a
-  defect with another templates folder configured — if so it moves to
-  "Known defects".
-- **A5 — Split the composition root.** `electron/main.ts` (1,135 lines)
-  into "build the services" and "window and lifecycle";
-  `PluginHost.buildContext` (about 230 lines) into one builder per SDK
-  namespace.
 - **A6 — Plugin settings out of the base config.** `AppConfig` holds
   `actions`, `templates`, `entry` and the plugins' built-in prompt texts.
   Rule from now on: a new plugin setting goes into the plugin's own
@@ -154,8 +131,32 @@ value for effort; A1 must come before A2.
   group the 57 runtime flows by topic. Changes section numbers that
   `CLAUDE.md` and the ADRs link to — ⚠️ owner decision.
 
+Follow-ups of A1–A5 (found on the way, none started):
+
+- **A10 — Typecheck the plugin specs.** `plugins/**/*.spec.ts` belongs
+  only to the root `tsconfig.spec.json`, which no CI step compiles: the
+  Node suite runs the specs without checking types. Six type errors sit
+  in `plugins/assistant/main/chat-engine.spec.ts` (older than A1). Fix
+  them and add the project to CI, or give the plugin specs a project of
+  their own.
+- **A11 — Check for import cycles in CI.** A3 removed the two renderer
+  cycles and none exist in `electron/`, `shared/` or `plugins/`, but
+  nothing stops a new one. A small script over the import graph (or
+  `import/no-cycle`) as a lint step.
+- **A12 — Tests for the split composition root.** `buildAppServices`
+  (`electron/app-services.ts`), `MainWindowHost` and the
+  `plugin-context.ts` builders can now be constructed on their own; only
+  the end-to-end suite covers them so far.
+
 ### Needs an owner decision
 
+- **Should the daily template follow `templates.dir`?** The daily note
+  is seeded from the literal `templates/daily.md`, also when the template
+  library folder (`templates.dir`) points elsewhere. That is what
+  `frontmatter-schema.md` and the manual describe, so it is not a defect
+  (checked for A4). Following the setting would need a migration for
+  vaults whose edited `templates/daily.md` would otherwise be ignored.
+  Proposed: leave as is.
 - **Bookmark management and sync** (browser tab, ADR-0042 has none).
   Proposed: drop — scope creep for a Markdown hub; the web clipper covers
   the real need.
