@@ -16,6 +16,7 @@ import {
   firstLine,
   formatArguments,
   parseTasksResult,
+  runningToolLabel,
   summarizeArguments,
   taskFilterLabelParts,
   toolDisplayName,
@@ -401,6 +402,16 @@ export function createThread(
     if (streaming !== null) {
       const partial = el('article', 'card a streaming');
       partial.appendChild(el('div', 'card-label', 'ASSISTANT'));
+      // The tool calls made so far, as they happen (ADR-0071): the same
+      // chips the finished turn shows, not yet expandable.
+      for (const tool of streaming.tools) {
+        const chip = el('div', `tool-chip running ${tool.state}`);
+        const summary = el('div', 'tool-chip-summary');
+        summary.appendChild(icon('wrench', 10));
+        summary.appendChild(el('span', undefined, runningToolLabel(tool)));
+        chip.appendChild(summary);
+        partial.appendChild(chip);
+      }
       const bodyText = streaming.text === '' ? '…' : streaming.text;
       try {
         partial.appendChild(renderRichBody(api, bodyText));

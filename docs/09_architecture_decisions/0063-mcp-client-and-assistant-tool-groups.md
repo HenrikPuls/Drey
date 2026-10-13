@@ -151,3 +151,13 @@ ask turns only: never on a live-edit turn (ADR-0049), never in Actions.
   content that is recoverable from the recycle bin.
 - **A bundled search provider** — a vendor choice and a key the app
   would have to own.
+
+## Later change — one round budget and a prompt built from what is attached (milestone 76, ADR-0071)
+
+The tool rounds are no longer a ladder keyed on the attached groups
+(3 / 5 / 6 / 8): one budget, `tools.maxRounds` (default 12), set in
+Settings → Assistant tools and applied by the host. `ASK_WEB_NOTE` and
+the other prompt notes are gone — the system prompt is built by
+`plugins/assistant/main/system-prompt.ts` and names a tool only when it
+is attached to the call. The host runs only tool names it offered. See
+[ADR-0071](0071-unified-vault-toolset-and-agent-loop.md).

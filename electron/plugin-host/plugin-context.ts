@@ -34,7 +34,11 @@ export function vaultReadToolAllowed(
   return activeVaultId !== null && scope.includes(activeVaultId);
 }
 
-/** Bridges one model tool call to the base `VaultTools`, flattening the result to text. */
+/**
+ * Bridges one model tool call to the base `VaultTools`, flattening the
+ * result to text. A failed call reads `Error: …` — the one convention the
+ * tool loop and the model go by (ADR-0071).
+ */
 export async function runVaultTool(
   vaultTools: VaultTools | undefined,
   name: string,
@@ -51,14 +55,15 @@ export async function runVaultTool(
       args = parsed as Record<string, unknown>;
     }
   } catch {
-    return `Could not parse arguments for ${name}: ${argsJson}`;
+    return `Error: the arguments of ${name} are not valid JSON — send one JSON object.`;
   }
   const result = await vaultTools.call(
     name,
     args,
     confirmWrites !== undefined ? { confirmWrites } : undefined,
   );
-  return result.content.map((block) => block.text).join('\n');
+  const text = result.content.map((block) => block.text).join('\n');
+  return result.isError === true && !text.startsWith('Error:') ? `Error: ${text}` : text;
 }
 
 /** `ctx.vault`: file IO in the vaults, with the plugin's id as the history origin. */
@@ -159,8 +164,11 @@ export function buildLlmContext(
             const pluginTools = [...(options?.tools ?? [])];
             const pluginNames = new Set(pluginTools.map((tool) => tool.name));
             const groups = appConfig.get().tools;
-            // tasks_list also sits in the vault set (for MCP clients);
-            // towards the assistant it follows its own group switch.
+            // tasks_list also sits in the vault set, for MCP clients. A
+            // plugin call never gets it from here: the assistant brings
+            // its own and leaves it out on purpose where the task index
+            // would answer for the wrong vault (a scoped or a live-edit
+            // turn) — the base twin must not fill that gap.
             // ADR-0069: when the call carries a vault read scope that
             // excludes the active vault, `vault_search`/`vault_read`
             // drop out — they default to the active vault and would
@@ -174,7 +182,7 @@ export function buildLlmContext(
                 ? deps.vaultTools
                     .toolSpecs()
                     .filter((spec) => !pluginNames.has(spec.name))
-                    .filter((spec) => groups.tasks.enabled || spec.name !== 'tasks_list')
+                    .filter((spec) => spec.name !== 'tasks_list')
                     .filter((spec) => readScopeAllows(spec.name))
                 : [];
             const taken = new Set([...pluginNames, ...vaultSpecs.map((spec) => spec.name)]);
@@ -184,25 +192,39 @@ export function buildLlmContext(
                 ? toolbox.specs().filter((spec) => !taken.has(spec.name))
                 : [];
             const externalNames = new Set(externalSpecs.map((spec) => spec.name));
+            const vaultNames = new Set(vaultSpecs.map((spec) => spec.name));
             const merged = [...pluginTools, ...vaultSpecs, ...externalSpecs];
             return merged.length > 0
               ? {
                   tools: merged,
-                  onToolCall: (name: string, argsJson: string) =>
-                    pluginNames.has(name) && options?.onToolCall !== undefined
-                      ? options.onToolCall(name, argsJson)
-                      : externalNames.has(name) && toolbox !== undefined
-                        ? toolbox.run(name, argsJson, signal)
-                        : runVaultTool(
-                            deps.vaultTools,
-                            name,
-                            argsJson,
-                            groups.vault.write === 'confirm',
-                          ),
+                  // Each name runs where it was offered from — and a name
+                  // that was not offered runs nowhere (ADR-0071): a vault
+                  // tool the scope or the group switch left out must not
+                  // execute because the model asked for it anyway.
+                  onToolCall: (name: string, argsJson: string): Promise<string> => {
+                    if (pluginNames.has(name) && options?.onToolCall !== undefined) {
+                      return options.onToolCall(name, argsJson);
+                    }
+                    if (externalNames.has(name) && toolbox !== undefined) {
+                      return toolbox.run(name, argsJson, signal);
+                    }
+                    if (vaultNames.has(name)) {
+                      return runVaultTool(
+                        deps.vaultTools,
+                        name,
+                        argsJson,
+                        groups.vault.write === 'confirm',
+                      );
+                    }
+                    return Promise.resolve(`Error: there is no tool "${name}" in this call.`);
+                  },
+                  maxToolRounds: options?.maxToolRounds ?? groups.maxRounds,
+                  ...(options?.onToolEvent !== undefined
+                    ? { onToolEvent: options.onToolEvent }
+                    : {}),
                 }
               : {};
           })(),
-          ...(options?.maxToolRounds !== undefined ? { maxToolRounds: options.maxToolRounds } : {}),
           ...(options?.maxOutputTokens !== undefined
             ? { maxOutputTokens: options.maxOutputTokens }
             : {}),

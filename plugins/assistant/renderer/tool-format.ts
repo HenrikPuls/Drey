@@ -109,6 +109,22 @@ export function toolDisplayName(name: string): string {
   return match !== null ? `${match[1]} · ${match[2]}` : name;
 }
 
+/** The line of a tool call that is running or has just finished, in the streaming card. */
+export function runningToolLabel(tool: {
+  name: string;
+  argsJson: string;
+  state: 'running' | 'done' | 'failed';
+}): string {
+  let args: unknown = tool.argsJson;
+  try {
+    args = JSON.parse(tool.argsJson);
+  } catch {
+    // The raw text is still a usable summary.
+  }
+  const call = `tool · ${toolDisplayName(tool.name)}(${summarizeArguments(args)})`;
+  return tool.state === 'running' ? `${call} …` : tool.state === 'failed' ? `${call} — failed` : call;
+}
+
 /** Compact argument summary for a call chip. */
 export function summarizeArguments(args: unknown): string {
   if (typeof args === 'string') {

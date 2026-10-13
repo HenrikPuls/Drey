@@ -233,6 +233,18 @@ toolchain is removable by deleting `.tools/`). Never assume a bare `node`,
   `mcp__<id>__<tool>`. `mcp.enabled` / `mcp.yolo` only govern the
   server Drey offers to other programs. Opt-in, off by default — a
   further exception to "no cloud calls".
+- **One tool loop, one system prompt builder** (milestone 76,
+  [ADR-0071](docs/09_architecture_decisions/0071-unified-vault-toolset-and-agent-loop.md)):
+  both HTTP providers run `electron/llm/tool-loop.ts` — only a tool that
+  was offered runs, arguments are checked against the tool's parameters,
+  a failure goes back to the model as `Error: …` (the one convention for
+  a failed call; a tool never fails the ask), one round budget
+  (`tools.maxRounds`) with a closing round that asks for the answer. The
+  assistant's system prompt is built by
+  `plugins/assistant/main/system-prompt.ts` and **names a tool only when
+  it is attached to that call**; what a tool does belongs in its
+  description, not in the prompt. Every prompt text and loop message is
+  in `specs/classifier-spec.md`.
 - **draw.io diagrams** (milestone 64,
   [ADR-0064](docs/09_architecture_decisions/0064-drawio-diagrams.md)): the `drawio` plugin opens `.drawio.svg` /
   `.drawio.png` / `.drawio` files in a tab holding draw.io's own web

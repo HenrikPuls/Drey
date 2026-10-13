@@ -13,7 +13,13 @@
  * resumed provider session that has gone stale gets ONE full-replay
  * retry before the failure surfaces.
  */
-import type { ChatAttachment, ChatMessage, LlmChatResult, ToolSpec } from '../../../shared/llm';
+import type {
+  ChatAttachment,
+  ChatMessage,
+  LlmChatResult,
+  ToolCallEvent,
+  ToolSpec,
+} from '../../../shared/llm';
 import { pickPreviewStyle } from '../../../shared/text-diff';
 import { formatDateTime } from '../../../shared/timestamp';
 import type { SdkTaskRecord } from '../../../shared/plugin-api';
@@ -41,25 +47,13 @@ import {
 } from '../shared/semantic.js';
 import { ChatStore } from './chat-store';
 import {
-  ASK_ANSWER_SYSTEM,
-  ASK_LINKS_NOTE,
-  ASK_SCOPED_TOOLS_NOTE,
-  ASK_SYSTEM,
-  ASK_TEMPLATES_NOTE,
-  ASK_TASKS_NOTE,
-  ASK_TOOLS_NOTE,
-  ASK_WEB_NOTE,
-  ASK_EXPLORE_NOTE,
   TITLE_SYSTEM,
   buildAskUserMessage,
-  buildDateNote,
   buildTitleUserMessage,
-  buildToolsNote,
-  buildVaultScopeNote,
   editCatchUpLine,
   sanitizeChatTitle,
-  vaultWriteNote,
 } from './ask-prompts';
+import { buildSystemPrompt } from './system-prompt';
 import type { TemplateTools } from './template-tools';
 import type { VaultExploreTools } from './vault-explore-tools';
 import {
@@ -67,12 +61,7 @@ import {
   matchTasksInAnswer,
   refineTasksEntries,
 } from './tasks-tool.js';
-import {
-  LIVE_EDIT_SYSTEM,
-  LIVE_EDIT_TOOLS_NOTE,
-  LIVE_EDIT_TOOL_SPECS,
-  createLiveEditSession,
-} from './live-edit';
+import { LIVE_EDIT_TOOL_SPECS, createLiveEditSession } from './live-edit';
 import { isAbort, normalizeDoc } from './action-engine';
 
 /** One completion call with the engine's needs; abort via `taskId` (ADR-0014). */
@@ -92,8 +81,10 @@ export type ChatFn = (
     tools?: readonly ToolSpec[];
     /** Runs one plugin tool call; resolved text is the tool result. */
     onToolCall?: (name: string, argsJson: string) => Promise<string>;
-    /** Loop cap override (provider default 5). */
+    /** Round budget override (absent: the user's `tools.maxRounds`). */
     maxToolRounds?: number;
+    /** Progress of the tool loop, one `start` and one `end` per call. */
+    onToolEvent?: (event: ToolCallEvent) => void;
   },
 ) => Promise<LlmChatResult>;
 
@@ -119,6 +110,8 @@ export interface ChatEnginePorts {
    * doc-tool call; the renderer applies it to the open tab (`setBuffer`).
    */
   onLiveEdit(path: string, content: string): void;
+  /** One step of the running tool loop, forwarded to the panel (`chat:toolEvent`). */
+  onToolEvent(taskId: string, event: ToolCallEvent): void;
   /**
    * Semantic vault retrieval for one question (ADR-0055): the outcome —
    * hits with their fresh text, best first, plus WHY there are none
@@ -186,6 +179,16 @@ const IMAGE_MEDIA_TYPES: Record<string, string> = {
   gif: 'image/gif',
 };
 
+/** A live turn works hunk by hunk: it never gets fewer rounds than this. */
+const LIVE_EDIT_MIN_ROUNDS = 16;
+
+const LIVE_EDIT_NEEDS_TOOLS =
+  'Live edit is unavailable: the model or its endpoint does not accept tools.';
+
+/** The answer of a turn whose tools ran but whose model never said anything. */
+const NO_ANSWER_AFTER_TOOLS =
+  'The model used tools but gave no answer. What it did is listed below — ask again, or rephrase the question.';
+
 /** A reply's text with every fenced block dropped (the edit guard's answer). */
 function proseOutsideFences(reply: string): string {
   const kept: string[] = [];
@@ -214,6 +217,27 @@ export class ChatEngine {
     private readonly ports: ChatEnginePorts,
   ) {}
 
+  /**
+   * The model (per provider and endpoint) whose endpoint refused a request
+   * because tools were attached. Kept for the session: every further ask
+   * to it goes out without tools and with a prompt that names none,
+   * instead of paying for a refused request each time. Changing the
+   * model, the provider or the endpoint asks afresh.
+   */
+  private refusedToolsKey: string | null = null;
+
+  private static toolsKey(config: AppConfig): string {
+    return [config.llm.provider, config.llm.baseUrl, config.llm.model].join(' | ');
+  }
+
+  private toolsRefused(config: AppConfig): boolean {
+    return this.refusedToolsKey === ChatEngine.toolsKey(config);
+  }
+
+  private rememberToolsRefused(config: AppConfig): void {
+    this.refusedToolsKey = ChatEngine.toolsKey(config);
+  }
+
   async ask(request: AskRequest, taskId?: string): Promise<ChatAskResult> {
     const config = this.getConfig();
     if (!config.llm.enabled) {
@@ -224,6 +248,9 @@ export class ChatEngine {
     // turn in the chat note.
     if (request.liveEdit && !this.capabilities().tools) {
       throw new Error('Live edit is unavailable: the active provider has no tool support.');
+    }
+    if (request.liveEdit && this.toolsRefused(config)) {
+      throw new Error(LIVE_EDIT_NEEDS_TOOLS);
     }
 
     // 1 · The chat note: continue the given one, or create one titled by
@@ -290,11 +317,6 @@ export class ChatEngine {
         : null;
     const live = liveSession !== null;
     const answerOnly = request.note === null;
-    const system = live
-      ? LIVE_EDIT_SYSTEM
-      : answerOnly
-        ? ASK_ANSWER_SYSTEM
-        : ASK_SYSTEM;
     // The Vault chip's scope (ADR-0055/0069), resolved from the REGISTRY —
     // independent of retrieval. This is the enforcement floor: even a
     // disabled or failed retrieval arms the host filter below, so the base
@@ -337,34 +359,29 @@ export class ChatEngine {
         contextHits = [];
       }
     }
+    // What rides this call (ADR-0071). The prompt is built from exactly
+    // these, so it never names a tool the model does not get: a provider
+    // without a tool loop gets none, and so does a model whose endpoint
+    // refused the tools on an earlier ask of this session.
+    const canCall = caps.tools && !this.toolsRefused(config);
     // The agentic half (ADR-0069): with the chip on and a tool-capable
     // provider, the model can scan the scoped vaults itself — even when
     // the baseline retrieval above came back empty or errored. When
     // semantic retrieval is disabled the tools degrade to fresh filesystem
     // scans (ADR-0069 later change); they never vanish, so a scoped ask
     // always keeps its in-scope lookups.
-    const explore = scopeOn && caps.tools ? this.ports.exploreTools(scope, request.vaultIds) : null;
+    const explore = scopeOn && canCall ? this.ports.exploreTools(scope, request.vaultIds) : null;
     // When the scope excludes the active vault the host drops
-    // vault_search/vault_read (their default target is the active vault) —
-    // the note must not promise them then.
+    // vault_search/vault_read (their default target is the active vault).
     const readToolsDropped = scopeOn && targets.length > 0 && !activeInScope;
-    const toolsBase = live
-      ? LIVE_EDIT_TOOLS_NOTE
-      : readToolsDropped
-        ? ASK_SCOPED_TOOLS_NOTE
-        : ASK_TOOLS_NOTE;
-    const toolsNote = toolsOn
-      ? buildToolsNote(`${toolsBase} ${vaultWriteNote(groups.vault.write)}`, vaults, scopeOn ? targets : undefined)
-      : null;
     // External tools (ADR-0063): web_fetch and the user's MCP servers.
     // Never on a live-edit turn, and only where the provider runs a tool
     // loop at all -- otherwise the note would promise tools that are not
     // there.
     const externalOn =
       !live &&
-      caps.tools &&
+      canCall &&
       (groups.webFetch.enabled || groups.servers.some((server) => server.enabled));
-    const webNote = externalOn ? ASK_WEB_NOTE : null;
     // The tasks tool rides every non-live ask when a task provider exists
     // (SDK 1.11) and its group is on — and the scope does not exclude the
     // active vault (its index reads ONLY the active vault, so a scoped ask
@@ -372,49 +389,32 @@ export class ChatEngine {
     // the scoped vaults).
     const tasksTool =
       live || !groups.tasks.enabled || !activeInScope ? null : this.ports.tasksTool();
-    const tasksNote = tasksTool !== null ? ASK_TASKS_NOTE : null;
     // The template tools ride every non-live ask too (SDK 1.14) while
     // their group is on; whether a write asks first is the group's rule.
     // Same scope rule as the tasks tool: they read the active vault only.
     const templateTools =
       live || !groups.templates.enabled || !activeInScope ? null : this.ports.templateTools();
-    const templatesNote =
-      templateTools !== null
-        ? `${ASK_TEMPLATES_NOTE} ${
-            groups.templates.write === 'confirm'
-              ? 'The user confirms a template_write or template_delete before it is applied.'
-              : 'A template_write applies immediately without confirmation — write only what was asked for.'
-          }`
-        : null;
     const contextBlock = contextHits.length > 0 ? buildVaultContextBlock(contextHits) : null;
-    const exploreNote = explore !== null ? ASK_EXPLORE_NOTE : null;
-    const scopeNote = scopeOn
-      ? buildVaultScopeNote(
-          vaults.filter((vault) => targets.includes(vault.id)),
-          !activeInScope,
-          explore !== null,
-        )
-      : null;
-    // Order matters (57d): the retrieved context sits BEFORE the task note,
-    // so "answer tasks only from the tool" is the later instruction and
-    // overrides the task lines that context happens to carry. The scope
-    // note follows the context (it binds "the vault" to what was retrieved),
-    // and the explore note tells the model how to go beyond it.
-    const systemContent = [
-      system,
-      toolsNote,
-      contextBlock,
-      scopeNote,
-      exploreNote,
-      tasksNote,
-      templatesNote,
-      webNote,
-      ASK_LINKS_NOTE,
-      buildDateNote(new Date()),
-    ]
-      .filter((part): part is string => part !== null && part !== '')
-      .join('\n\n');
-    const baseMessages: ChatMessage[] = [{ role: 'system', content: systemContent }];
+    const promptMode = live ? 'live' : answerOnly ? 'answer' : 'ask';
+    // `withTools: false` is the same question for a model that turned out
+    // to take no tools: nothing attached, nothing promised.
+    const systemContent = (withTools: boolean): string =>
+      buildSystemPrompt({
+        mode: promptMode,
+        tools: withTools
+          ? {
+              ...(toolsOn ? { vault: { read: !readToolsDropped, write: groups.vault.write } } : {}),
+              ...(explore !== null ? { explore: true } : {}),
+              ...(tasksTool !== null ? { tasks: true } : {}),
+              ...(templateTools !== null ? { templates: { write: groups.templates.write } } : {}),
+              ...(externalOn ? { external: true } : {}),
+            }
+          : {},
+        vaults,
+        scopeVaultIds: scopeOn && targets.length > 0 ? targets : null,
+        contextBlock,
+        now: new Date(),
+      });
     const catchUp = resume ? this.catchUpLine(view) : '';
     const userBody = buildAskUserMessage(request);
     const questionMessage: ChatMessage = {
@@ -422,7 +422,11 @@ export class ChatEngine {
       content: catchUp === '' ? userBody : `${catchUp}\n\n${userBody}`,
     };
 
-    const buildMessages = async (useSession: boolean): Promise<ChatMessage[]> => {
+    const buildMessages = async (
+      useSession: boolean,
+      withTools: boolean,
+    ): Promise<ChatMessage[]> => {
+      const baseMessages: ChatMessage[] = [{ role: 'system', content: systemContent(withTools) }];
       if (useSession) {
         return [...baseMessages, questionMessage];
       }
@@ -436,55 +440,53 @@ export class ChatEngine {
       caps.imageAttachments && request.images.length > 0
         ? await this.readImageAttachments(request.images)
         : undefined;
-    const options = (useSession: boolean) => ({
+    const options = (useSession: boolean, withTools: boolean) => ({
       taskId,
-      ...(toolsOn ? { vaultTools: true } : {}),
+      ...(withTools && toolsOn ? { vaultTools: true } : {}),
       // Armed from the REGISTRY-resolved targets (not the retrieval's), so
       // the host filter holds even when retrieval is off or failed.
       ...(targets.length > 0 ? { vaultToolsScope: targets } : {}),
-      ...(externalOn ? { externalTools: true } : {}),
-      // The doc tools + a higher round cap: a multi-hunk editing turn
-      // needs more call/answer rounds than the provider default of 5.
-      ...(liveSession !== null
-        ? {
-            tools: LIVE_EDIT_TOOL_SPECS,
-            maxToolRounds: 16,
-            onToolCall: (name: string, argsJson: string) =>
-              liveSession.runTool(name, argsJson).then((run) => {
-                if (run.mutated) {
-                  this.ports.onLiveEdit(liveSession.path, liveSession.work);
-                }
-                return run.text;
-              }),
-          }
-        : explore !== null || tasksTool !== null || templateTools !== null
+      ...(withTools && externalOn ? { externalTools: true } : {}),
+      // The round budget is the user's (`tools.maxRounds`, applied by the
+      // host); a live turn works hunk by hunk and never gets less than
+      // its old allowance.
+      ...(!withTools
+        ? {}
+        : liveSession !== null
           ? {
-              // Template flows (list → read → write) need a few more
-              // rounds than a single tasks lookup; the cap stays small
-              // enough to stop a loop-happy model from circling.
-              // A search → fetch → answer chain needs more again, and an
-              // explore turn (overview → find → section) sits between.
-              maxToolRounds: externalOn ? 8 : explore !== null ? 6 : templateTools !== null ? 5 : 3,
-              tools: [
-                ...(explore !== null ? explore.specs : []),
-                ...(templateTools !== null ? templateTools.specs : []),
-                ...(tasksTool !== null ? [tasksTool.spec] : []),
-              ],
-              onToolCall: (name: string, argsJson: string) => {
-                if (explore !== null && explore.names.has(name)) {
-                  return explore.run(name, argsJson);
-                }
-                if (templateTools !== null && templateTools.names.has(name)) {
-                  return templateTools.run(name, argsJson);
-                }
-                return tasksTool !== null && name === tasksTool.spec.name
-                  ? tasksTool.run(argsJson)
-                  : Promise.resolve(`Unknown tool: ${name}`);
-              },
+              tools: LIVE_EDIT_TOOL_SPECS,
+              maxToolRounds: Math.max(groups.maxRounds, LIVE_EDIT_MIN_ROUNDS),
+              onToolCall: (name: string, argsJson: string) =>
+                liveSession.runTool(name, argsJson).then((run) => {
+                  if (run.mutated) {
+                    this.ports.onLiveEdit(liveSession.path, liveSession.work);
+                  }
+                  return run.text;
+                }),
             }
-          : externalOn
-            ? { maxToolRounds: 8 }
+          : explore !== null || tasksTool !== null || templateTools !== null
+            ? {
+                tools: [
+                  ...(explore !== null ? explore.specs : []),
+                  ...(templateTools !== null ? templateTools.specs : []),
+                  ...(tasksTool !== null ? [tasksTool.spec] : []),
+                ],
+                onToolCall: (name: string, argsJson: string) => {
+                  if (explore !== null && explore.names.has(name)) {
+                    return explore.run(name, argsJson);
+                  }
+                  if (templateTools !== null && templateTools.names.has(name)) {
+                    return templateTools.run(name, argsJson);
+                  }
+                  return tasksTool !== null && name === tasksTool.spec.name
+                    ? tasksTool.run(argsJson)
+                    : Promise.resolve(`Error: there is no tool "${name}" in this call.`);
+                },
+              }
             : {}),
+      ...(withTools && taskId !== undefined
+        ? { onToolEvent: (event: ToolCallEvent) => this.ports.onToolEvent(taskId, event) }
+        : {}),
       ...(useSession && view.frontmatter.session !== null
         ? { sessionRef: view.frontmatter.session }
         : {}),
@@ -498,30 +500,48 @@ export class ChatEngine {
 
     // 4 · One call (one full-replay retry when a resumed session went stale).
     const startedAt = Date.now();
-    let result;
-    try {
-      result = await this.chat(await buildMessages(resume), options(resume));
-    } catch (err) {
-      if (resume && !isAbort(err)) {
-        try {
-          result = await this.chat(await buildMessages(false), options(false));
-        } catch (retryErr) {
-          await this.store.truncateFrom(chatPath, userTurnIndex);
-          throw retryErr;
+    const callOnce = async (withTools: boolean): Promise<LlmChatResult> => {
+      try {
+        return await this.chat(await buildMessages(resume, withTools), options(resume, withTools));
+      } catch (err) {
+        if (resume && !isAbort(err)) {
+          return this.chat(await buildMessages(false, withTools), options(false, withTools));
         }
-      } else {
-        await this.store.truncateFrom(chatPath, userTurnIndex);
         throw err;
       }
+    };
+    let result: LlmChatResult;
+    try {
+      result = await callOnce(canCall);
+      // The endpoint refused the tools and answered without them — to a
+      // prompt that described them. Ask again with a prompt that fits, and
+      // remember it for this model so the next ask does not pay twice.
+      if (result.toolsDropped === true) {
+        this.rememberToolsRefused(config);
+        if (liveSession !== null) {
+          throw new Error(LIVE_EDIT_NEEDS_TOOLS);
+        }
+        result = await callOnce(false);
+      }
+    } catch (err) {
+      await this.store.truncateFrom(chatPath, userTurnIndex);
+      throw err;
     }
     const durationMs = Date.now() - startedAt;
 
-    // A tool loop can end without the model ever speaking (round cap, a
-    // model that only calls tools). For a live-edit turn that is fine —
-    // the outcome names what was applied. For everything else an empty
-    // answer card is exactly the "no response" the beta testers saw, so
-    // fail like any other generation (the user turn truncates back, the
-    // renderer reports the error and keeps the question for a re-send).
+    // A tool loop can end without the model ever speaking, even after the
+    // loop asked once more for an answer. For a live-edit turn that is
+    // fine — the outcome names what was applied. Where tools ran, the turn
+    // is kept with what they did (a write may already be on disk — the
+    // trace must not vanish with it) under a line that says so. Only a
+    // reply with nothing at all fails like any other generation.
+    if (
+      liveSession === null &&
+      result.text.trim() === '' &&
+      (result.toolTrace?.length ?? 0) > 0
+    ) {
+      result = { ...result, text: NO_ANSWER_AFTER_TOOLS };
+    }
     if (liveSession === null && result.text.trim() === '') {
       await this.store.truncateFrom(chatPath, userTurnIndex);
       throw new Error('The model returned no message content.');

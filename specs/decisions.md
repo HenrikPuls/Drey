@@ -78,3 +78,12 @@ one means moving it back to the roadmap with a new justification.
   row of its own* under the meta bar costs a line of height for good and
   leaves the meta bar nearly empty. Built instead: the strip as the head
   of the right-click menu, pinnable into the meta bar.
+- **Assistant tool rework — alternatives** (ADR-0071).
+  → Decided against (2026-10-13). *New tools for the assistant only,
+  the MCP server unchanged*: no break for connected programs, but two
+  families of read and write logic for good. *Unified diffs as the edit
+  format*: line offsets and hunk headers are what models get wrong; the
+  exact search-and-replace that must match once stays. *A JSON-Schema
+  library for tool arguments*: the slips are shallow, and the messages
+  have to be written for the model. *A higher round cap instead of a
+  closing round*: it only moves the point where the turn is lost.

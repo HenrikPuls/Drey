@@ -465,6 +465,19 @@
   color: var(--text-3);
 }
 
+/* A call of the generation in flight: not expandable yet. */
+.assistant-thread .tool-chip.running .tool-chip-summary {
+  cursor: default;
+}
+
+.assistant-thread .tool-chip.running .tool-chip-summary:hover {
+  color: var(--text-5);
+}
+
+.assistant-thread .tool-chip.running.failed .tool-chip-summary {
+  color: var(--accent);
+}
+
 .assistant-thread .tool-chip.open .tool-chip-summary {
   color: var(--text-4);
   border-bottom: 1px solid var(--border);

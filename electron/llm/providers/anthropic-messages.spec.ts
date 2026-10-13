@@ -212,10 +212,11 @@ describe('AnthropicMessagesProvider tool loop', () => {
     expect(onDelta).toHaveBeenCalledExactlyOnceWith('It says hi.');
   });
 
-  it('stops after the round cap and hands back what the tools did', async () => {
+  it('asks for the answer without tools once the round budget is used up', async () => {
     const { requests } = script(
-      jsonReply({ content: [toolUse('a', {})] }),
-      jsonReply({ content: [toolUse('b', {})] }),
+      jsonReply({ content: [toolUse('a', { path: 'a.md' })] }),
+      jsonReply({ content: [toolUse('b', { path: 'b.md' })] }),
+      jsonReply({ content: [textBlock('What I found so far.')] }),
     );
     const onToolCall = vi.fn(async () => 'x');
 
@@ -225,10 +226,27 @@ describe('AnthropicMessagesProvider tool loop', () => {
       maxToolRounds: 1,
     });
 
-    expect(requests).toHaveLength(2);
+    expect(requests).toHaveLength(3);
     expect(onToolCall).toHaveBeenCalledTimes(1);
-    expect(result).toEqual({ text: '', toolTrace: result.toolTrace });
+    // The transcript holds tool blocks, so the declarations stay; a call is forbidden.
+    expect(requests[2].body?.['tools']).toBeDefined();
+    expect(requests[2].body?.['tool_choice']).toEqual({ type: 'none' });
+    expect(result.text).toBe('What I found so far.');
+    expect(result.toolBudgetExhausted).toBe(true);
     expect(result.toolTrace).toHaveLength(2);
+  });
+
+  it('does not run a call that the output limit cut off', async () => {
+    script(
+      jsonReply({ content: [toolUse('a', { path: 'a.md' })], stop_reason: 'max_tokens' }),
+      jsonReply({ content: [textBlock('done')] }),
+    );
+    const onToolCall = vi.fn(async () => 'x');
+
+    const result = await provider().client.chat(TURNS, { tools: [READ_TOOL], onToolCall });
+
+    expect(onToolCall).not.toHaveBeenCalled();
+    expect(result.toolTrace?.[1]?.content).toMatch(/^Error: your reply was cut off/);
   });
 });
 

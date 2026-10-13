@@ -269,17 +269,18 @@ describe('OpenAiCompatProvider tool loop', () => {
 
     const result = await provider().client.chat(USER, { tools: [READ_TOOL], onToolCall });
 
-    expect(result).toEqual({ text: 'plain answer' });
+    expect(result).toEqual({ text: 'plain answer', toolsDropped: true });
     expect(requests[0].body).toHaveProperty('tools');
     expect(requests[1].body).not.toHaveProperty('tools');
     expect(onToolCall).not.toHaveBeenCalled();
   });
 
-  it('stops after the round cap and hands back what the tools did', async () => {
+  it('asks for the answer without tools once the round budget is used up', async () => {
     const { requests } = script(
-      toolCallReply('c1', 'vault_read', '{}'),
-      toolCallReply('c2', 'vault_read', '{}'),
-      toolCallReply('c3', 'vault_read', '{}'),
+      toolCallReply('c1', 'vault_read', '{"path":"a.md"}'),
+      toolCallReply('c2', 'vault_read', '{"path":"b.md"}'),
+      toolCallReply('c3', 'vault_read', '{"path":"c.md"}'),
+      completion('What I found so far.'),
     );
     const onToolCall = vi.fn(async () => 'x');
 
@@ -289,10 +290,21 @@ describe('OpenAiCompatProvider tool loop', () => {
       maxToolRounds: 2,
     });
 
-    expect(requests).toHaveLength(3);
+    expect(requests).toHaveLength(4);
     expect(onToolCall).toHaveBeenCalledTimes(2);
-    expect(result.text).toBe('');
+    // The closing round keeps the declarations but forbids a call.
+    expect(requests[3].body?.['tool_choice']).toBe('none');
+    expect(result.text).toBe('What I found so far.');
+    expect(result.toolBudgetExhausted).toBe(true);
     expect(result.toolTrace).toHaveLength(4);
+  });
+
+  it('treats a 400 after a tool ran as an error, not as "no tool support"', async () => {
+    script(toolCallReply('c1', 'vault_read', '{"path":"a.md"}'), textReply('context too long', 400));
+
+    await expect(
+      provider().client.chat(USER, { tools: [READ_TOOL], onToolCall: async () => 'x' }),
+    ).rejects.toThrow(/400/);
   });
 
   it('ignores tool calls when the caller cannot run them', async () => {

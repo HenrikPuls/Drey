@@ -26,6 +26,7 @@ import { AppConfigStore } from '../../app-config';
 import { LlmClient, LlmChatOptions } from '../llm-client';
 import { LlmError } from '../llm-errors';
 import { LlmDebugLog } from '../llm-debug-log';
+import { RequestRound, runToolLoop } from '../tool-loop';
 
 /** GET /models is a cheap reachability probe -- fail fast if nothing is listening. */
 const LIST_TIMEOUT_MS = 8_000;
@@ -325,6 +326,7 @@ export class AnthropicMessagesProvider implements LlmClient {
     options: LlmChatOptions,
     stream: boolean,
     toolWire: ReturnType<typeof toAnthropicTools> | null,
+    forbidCalls = false,
   ): Record<string, unknown> {
     const { model } = this.config.get().llm;
     const { system, messages: anthropicMessages } = toAnthropicMessages(messages, options.attachments);
@@ -340,6 +342,9 @@ export class AnthropicMessagesProvider implements LlmClient {
     }
     if (toolWire) {
       body['tools'] = toolWire;
+      if (forbidCalls) {
+        body['tool_choice'] = { type: 'none' };
+      }
     }
     return body;
   }
@@ -360,20 +365,23 @@ export class AnthropicMessagesProvider implements LlmClient {
     return { text };
   }
 
-  /** The non-streamed path, with the tool loop when tools are in play. */
-  private async chatWithLoop(
+  /** The non-streamed path: one request per round of the shared tool loop. */
+  private chatWithLoop(
     messages: ChatMessage[],
     options: LlmChatOptions,
     useTools: boolean,
   ): Promise<LlmChatResult> {
-    const convo: ChatMessage[] = [...messages];
-    const toolTrace: ChatMessage[] = [];
     const toolWire = useTools ? toAnthropicTools(options.tools ?? []) : null;
-    let toolsAllowed = toolWire !== null;
-    const maxRounds = options.maxToolRounds ?? 5;
+    const loopOptions: LlmChatOptions = useTools ? options : { ...options, tools: [] };
 
-    for (let round = 0; ; round++) {
-      const body = this.requestBody(convo, options, false, toolsAllowed ? toolWire : null);
+    const request: RequestRound = async (convo, mode) => {
+      const body = this.requestBody(
+        [...convo],
+        options,
+        false,
+        mode === 'plain' ? null : toolWire,
+        mode === 'closing',
+      );
       const { status, text } = await this.send('/v1/messages', {
         method: 'POST',
         body: JSON.stringify(body),
@@ -385,6 +393,7 @@ export class AnthropicMessagesProvider implements LlmClient {
 
       let json: {
         content?: AnthropicBlock[];
+        stop_reason?: unknown;
         usage?: { input_tokens?: unknown; output_tokens?: unknown };
         error?: { type?: unknown; message?: unknown };
       };
@@ -411,63 +420,27 @@ export class AnthropicMessagesProvider implements LlmClient {
           : {}),
       };
       const blocks = Array.isArray(json.content) ? json.content : [];
+      return {
+        text: blocks
+          .filter((block): block is Extract<AnthropicBlock, { type: 'text' }> => block.type === 'text')
+          .map((block) => block.text)
+          .join(''),
+        toolCalls: blocks
+          .filter(
+            (block): block is Extract<AnthropicBlock, { type: 'tool_use' }> =>
+              block.type === 'tool_use',
+          )
+          .map((use) => ({
+            id: use.id,
+            type: 'function' as const,
+            function: { name: use.name, arguments: JSON.stringify(use.input ?? {}) },
+          })),
+        truncated: json.stop_reason === 'max_tokens',
+        ...(Object.keys(usage).length > 0 ? { usage } : {}),
+      };
+    };
 
-      if (toolsAllowed && round < maxRounds) {
-        const toolUses = blocks.filter(
-          (block): block is Extract<AnthropicBlock, { type: 'tool_use' }> =>
-            block.type === 'tool_use',
-        );
-        if (toolUses.length > 0) {
-          const textParts = blocks
-            .filter((block): block is Extract<AnthropicBlock, { type: 'text' }> => block.type === 'text')
-            .map((block) => block.text);
-          const assistantTurn: ChatMessage = {
-            role: 'assistant',
-            content: textParts.join('') || null,
-            tool_calls: toolUses.map((use) => ({
-              id: use.id,
-              type: 'function' as const,
-              function: { name: use.name, arguments: JSON.stringify(use.input ?? {}) },
-            })),
-          };
-          convo.push(assistantTurn);
-          toolTrace.push(assistantTurn);
-          for (const use of toolUses) {
-            const result = await options.onToolCall!(use.name, JSON.stringify(use.input ?? {}));
-            const toolTurn: ChatMessage = { role: 'tool', tool_call_id: use.id, content: result };
-            convo.push(toolTurn);
-            toolTrace.push(toolTurn);
-          }
-          continue;
-        }
-      }
-
-      const textOut = blocks
-        .filter((block): block is Extract<AnthropicBlock, { type: 'text' }> => block.type === 'text')
-        .map((block) => block.text)
-        .join('');
-      if (textOut !== '') {
-        options.onDelta?.(textOut);
-        return {
-          text: textOut,
-          ...(Object.keys(usage).length > 0 ? { usage } : {}),
-          ...(toolTrace.length > 0 ? { toolTrace } : {}),
-        };
-      }
-      if (toolTrace.length > 0) {
-        // The loop ran tools but the model never spoke: give back what we
-        // can — the live-edit turn names what happened over this empty
-        // text instead of showing an error after applying the changes
-        // (same stance as the OpenAI-compatible path).
-        return { text: '', toolTrace };
-      }
-      // Silent-empty is how "no response" looked to the user — surface it.
-      throw new LlmError(
-        'bad-reply',
-        'The endpoint returned no message content.',
-        `round ${round} of ${maxRounds}`,
-      );
-    }
+    return runToolLoop(messages, loopOptions, request);
   }
 
   /**

@@ -7,6 +7,7 @@ import {
   firstLine,
   formatArguments,
   parseTasksResult,
+  runningToolLabel,
   summarizeArguments,
   taskFilterLabelParts,
   toolDisplayName,
@@ -84,6 +85,22 @@ describe('toolDisplayName', () => {
 
   it('leaves a built-in tool name as it is', () => {
     expect(toolDisplayName('vault_search')).toBe('vault_search');
+  });
+});
+
+describe('runningToolLabel', () => {
+  const tool = { name: 'vault_read', argsJson: '{"path":"a.md"}' };
+
+  it('marks a running call, names a failed one, and leaves a finished one plain', () => {
+    expect(runningToolLabel({ ...tool, state: 'running' })).toBe('tool · vault_read(path: a.md) …');
+    expect(runningToolLabel({ ...tool, state: 'failed' })).toBe(
+      'tool · vault_read(path: a.md) — failed',
+    );
+    expect(runningToolLabel({ ...tool, state: 'done' })).toBe('tool · vault_read(path: a.md)');
+  });
+
+  it('shows arguments that are not JSON as they are', () => {
+    expect(runningToolLabel({ name: 'x', argsJson: '{path', state: 'done' })).toBe('tool · x(path)');
   });
 });
 

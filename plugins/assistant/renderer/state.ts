@@ -90,6 +90,47 @@ function isCancellation(error: unknown): boolean {
 }
 
 /** Everything the state needs from the host API; injected for testability. */
+/** One step of a running tool loop as the plugin's main side pushes it. */
+export interface ToolProgressEvent {
+  taskId: string;
+  phase: 'start' | 'end';
+  id: string;
+  name: string;
+  argsJson: string;
+  ok?: boolean;
+}
+
+/** A tool call of the generation in flight, as the panel shows it while it runs. */
+export interface RunningTool {
+  id: string;
+  name: string;
+  argsJson: string;
+  state: 'running' | 'done' | 'failed';
+}
+
+export interface StreamingTurn {
+  taskId: string;
+  text: string;
+  tools: readonly RunningTool[];
+}
+
+/** The running-tool list after one progress event (pure). */
+export function applyToolProgress(
+  tools: readonly RunningTool[],
+  event: ToolProgressEvent,
+): RunningTool[] {
+  if (event.phase === 'start') {
+    return [
+      ...tools,
+      { id: event.id, name: event.name, argsJson: event.argsJson, state: 'running' },
+    ];
+  }
+  const state = event.ok === false ? 'failed' : 'done';
+  // The last running call with this id: a model may reuse an id across rounds.
+  const index = tools.map((tool) => tool.id === event.id && tool.state === 'running').lastIndexOf(true);
+  return index < 0 ? [...tools] : tools.map((tool, i) => (i === index ? { ...tool, state } : tool));
+}
+
 export interface AssistantPorts {
   // -- chat notes (ADR-0048) ----------------------------------------------
   listChats(): Promise<ChatSummary[]>;
@@ -125,6 +166,8 @@ export interface AssistantPorts {
   writeScratchSnapshot(docPath: string, body: string): Promise<string>;
   /** Streamed answer text for a task this state started (`chat:delta`). */
   onDelta(listener: (event: { taskId: string; text: string }) => void): () => void;
+  /** One step of the running tool loop for a task this state started (`chat:toolEvent`). */
+  onToolEvent(listener: (event: ToolProgressEvent) => void): () => void;
 
   // -- shared --------------------------------------------------------------
   /**
@@ -192,8 +235,8 @@ export interface AssistantState {
   /** The active chat's parsed note; null when none is loaded. */
   view(): ChatNoteView | null;
   asking(): boolean;
-  /** The in-flight generation's streamed text, when one is running. */
-  streaming(): { taskId: string; text: string } | null;
+  /** The in-flight generation: its streamed text and the tool calls made so far. */
+  streaming(): StreamingTurn | null;
   /** Something went wrong — shown in the accent colour. */
   error(): string | null;
   /** A cancellation or other non-fault — shown quiet. */
@@ -325,7 +368,7 @@ export function createAssistantState(ports: AssistantPorts, tasks: RunningTasks)
   let customVaultIds: string[] = vaultScope === 'custom' ? loadCustomVaultIds() : [];
   /** The vault registry cache (drives the picker + selection sanitation). */
   let vaults: { id: string; name: string; active: boolean }[] = [];
-  let streaming: { taskId: string; text: string } | null = null;
+  let streaming: StreamingTurn | null = null;
   let error: string | null = null;
   let notice: string | null = null;
   let actionMessage: string | null = null;
@@ -349,9 +392,17 @@ export function createAssistantState(ports: AssistantPorts, tasks: RunningTasks)
 
   ports.onDelta((event) => {
     if (streaming !== null && event.taskId === streaming.taskId) {
-      streaming = { taskId: streaming.taskId, text: streaming.text + event.text };
+      streaming = { ...streaming, text: streaming.text + event.text };
       notifyThrottled();
     }
+  });
+
+  ports.onToolEvent((event) => {
+    if (streaming === null || event.taskId !== streaming.taskId) {
+      return;
+    }
+    streaming = { ...streaming, tools: applyToolProgress(streaming.tools, event) };
+    notify();
   });
 
   /** Routes a rejection to the error line or the quiet notice line. */
@@ -827,7 +878,7 @@ export function createAssistantState(ports: AssistantPorts, tasks: RunningTasks)
           // call is outstanding); `streaming` is keyed by it so the delta
           // push lands on the right partial card.
           const { value: result } = await tasks.run('Thinking', (taskId) => {
-            streaming = { taskId, text: '' };
+            streaming = { taskId, text: '', tools: [] };
             notify();
             return ports.ask(request, taskId);
           });

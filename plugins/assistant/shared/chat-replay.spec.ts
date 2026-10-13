@@ -1,4 +1,4 @@
-import { buildReplayMessages } from './chat-replay';
+import { REPLAY_RESULT_MAX_CHARS, buildReplayMessages } from './chat-replay';
 import { ChatNoteTurn } from './chat-note';
 
 function turn(overrides: Partial<ChatNoteTurn>): ChatNoteTurn {
@@ -116,6 +116,27 @@ describe('chat-replay — full-history builder (bug-10b)', () => {
       { role: 'tool', tool_call_id: 't1', content: '3 hits' },
       { role: 'assistant', content: 'I found 3 hits …' },
     ]);
+  });
+
+  it('shortens a long tool result of an earlier turn and says how to get the rest', async () => {
+    const long = 'x'.repeat(REPLAY_RESULT_MAX_CHARS + 300);
+    const { messages } = await buildReplayMessages(
+      [
+        turn({ role: 'user', text: 'read it' }),
+        turn({
+          role: 'assistant',
+          text: 'done',
+          tool: [
+            { kind: 'call', id: 't1', name: 'vault_read', arguments: { path: 'a.md' } },
+            { kind: 'result', id: 't1', content: long },
+          ],
+        }),
+      ],
+      async () => null,
+    );
+    const replayed = messages[2]?.content ?? '';
+    expect(replayed.startsWith('x'.repeat(REPLAY_RESULT_MAX_CHARS))).toBe(true);
+    expect(replayed).toContain('300 more characters — call the tool again');
   });
 
   it('replays an applied edit with its document and a discarded one without', async () => {

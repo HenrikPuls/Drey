@@ -98,6 +98,28 @@ export interface LlmChatResult {
   sessionRef?: string;
   usage?: LlmUsage;
   toolTrace?: readonly ChatMessage[];
+  /**
+   * The endpoint refused the request while tools were attached and the
+   * call went through without them (ADR-0071): the model never saw the
+   * tools, whatever the system prompt said about them.
+   */
+  toolsDropped?: boolean;
+  /** The round budget ran out; `text` comes from the closing round that was asked to answer without tools. */
+  toolBudgetExhausted?: boolean;
+}
+
+/**
+ * One step of a running tool loop, for a caller that shows progress
+ * (ADR-0071): `start` before a tool runs, `end` with whether it
+ * succeeded. `id` pairs the two.
+ */
+export interface ToolCallEvent {
+  phase: 'start' | 'end';
+  id: string;
+  name: string;
+  argsJson: string;
+  /** `end` only: `false` when the result is an error text. */
+  ok?: boolean;
 }
 
 /**

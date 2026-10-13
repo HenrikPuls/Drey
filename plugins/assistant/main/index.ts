@@ -176,6 +176,7 @@ const plugin: MainPluginModule = {
           ...(options?.sessionRef !== undefined ? { sessionRef: options.sessionRef } : {}),
           ...(options?.attachments !== undefined ? { attachments: options.attachments } : {}),
           ...(options?.onDelta !== undefined ? { onDelta: options.onDelta } : {}),
+          ...(options?.onToolEvent !== undefined ? { onToolEvent: options.onToolEvent } : {}),
         }),
       () => ctx.llm.capabilities(),
       {
@@ -207,6 +208,7 @@ const plugin: MainPluginModule = {
         },
         onDelta: (taskId, text) => ctx.ipc.emit('chat:delta', { taskId, text }),
         onLiveEdit: (path, content) => ctx.ipc.emit('chat:liveEdit', { path, content }),
+        onToolEvent: (taskId, event) => ctx.ipc.emit('chat:toolEvent', { taskId, ...event }),
         retrieveContext: (question, scope, vaultIds) =>
           semantic.retrieve(question, scope, vaultIds),
         // The explore tools (ADR-0069) are live per ask, closed over the

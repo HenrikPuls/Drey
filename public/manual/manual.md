@@ -518,6 +518,18 @@ group (vault, tasks, templates, web fetch, each external MCP server),
 external tool call under *ask* shows the shared approval dialog
 (source, tool, arguments — *Allow / Always allow / Deny*).
 
+**Rounds of tool calls per question** (default 12) is how often the
+assistant may look something up or change something before it has to
+answer. When the rounds are used up it answers from what it has found so
+far. Raise it for long research questions; lower it if a small model
+keeps circling.
+
+While the assistant works, its answer card lists every tool call as it
+starts, and marks one that failed. A failed call is not the end of the
+turn — the model is told what was wrong and tries again. If your model
+or its server does not accept tools at all, the assistant notices on the
+first question and goes on without them.
+
 ### Drey as an MCP *client*
 
 Add external MCP servers (stdio or Streamable HTTP); their tools reach

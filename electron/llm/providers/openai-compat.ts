@@ -29,6 +29,7 @@ import { AppConfigStore } from '../../app-config';
 import { LlmClient, LlmChatOptions } from '../llm-client';
 import { LlmError } from '../llm-errors';
 import { LlmDebugLog } from '../llm-debug-log';
+import { RequestRound, runToolLoop, toChatToolCall } from '../tool-loop';
 
 type OpenAiToolWire = ReturnType<typeof toOpenAiTools>[number];
 
@@ -419,32 +420,29 @@ export class OpenAiCompatProvider implements LlmClient {
     return { text };
   }
 
-  /** The non-streamed path, with the tool loop when tools are in play. */
-  private async chatWithLoop(
+  /** The non-streamed path: one request per round of the shared tool loop. */
+  private chatWithLoop(
     messages: ChatMessage[],
     options: LlmChatOptions,
     endpoint: LlmEndpoint,
     useTools: boolean,
   ): Promise<LlmChatResult> {
     const { llm } = this.config.get();
-    const convo: ChatMessage[] = [...messages];
-    const toolTrace: ChatMessage[] = [];
     const toolWire: OpenAiToolWire[] | null = useTools ? toOpenAiTools(options.tools ?? []) : null;
-    let toolsAllowed = toolWire !== null;
-    const maxRounds = options.maxToolRounds ?? 5;
+    const loopOptions: LlmChatOptions = useTools ? options : { ...options, tools: [] };
 
-    for (let round = 0; ; round++) {
+    const request: RequestRound = async (convo, mode, first) => {
       const body: Record<string, unknown> = {
         model: llm.model,
         // The wire array may carry vision content parts on the last user
         // turn -- wider than the canonical `ChatMessage`, JSON either way.
-        messages: this.withAttachmentContent(convo, options),
+        messages: this.withAttachmentContent([...convo], options),
         temperature: options.temperature ?? 0.2,
         stream: false,
       };
-      if (toolsAllowed && toolWire) {
+      if (mode !== 'plain' && toolWire) {
         body['tools'] = toolWire;
-        body['tool_choice'] = 'auto';
+        body['tool_choice'] = mode === 'closing' ? 'none' : 'auto';
       }
 
       const { status, text } = await this.send(endpoint, '/chat/completions', {
@@ -453,10 +451,11 @@ export class OpenAiCompatProvider implements LlmClient {
         signal: options.signal,
       });
 
-      if (status === 400 && toolsAllowed) {
-        // This server doesn't understand `tools`. Drop them and retry once.
-        toolsAllowed = false;
-        continue;
+      if (status === 400 && mode === 'tools' && first) {
+        // This server doesn't understand `tools`: the loop retries without
+        // them. Only on the first request -- a 400 after tools ran is a
+        // real error (a transcript the server refuses, a full context).
+        return 'tools-rejected';
       }
       if (status < 200 || status >= 300) {
         throw this.httpError(status, text, endpoint);
@@ -464,7 +463,8 @@ export class OpenAiCompatProvider implements LlmClient {
 
       let json: {
         choices?: Array<{
-          message?: { content?: unknown; tool_calls?: ChatMessage['tool_calls'] };
+          finish_reason?: unknown;
+          message?: { content?: unknown; tool_calls?: unknown };
         }>;
         usage?: { prompt_tokens?: unknown; completion_tokens?: unknown };
         error?: { message?: unknown };
@@ -493,51 +493,18 @@ export class OpenAiCompatProvider implements LlmClient {
           ? { outputTokens: json.usage.completion_tokens }
           : {}),
       };
-      const message = json.choices?.[0]?.message;
-      const toolCalls = message?.tool_calls;
+      const choice = json.choices?.[0];
+      const message = choice?.message;
+      const rawCalls: unknown[] = Array.isArray(message?.tool_calls) ? message.tool_calls : [];
+      return {
+        text: typeof message?.content === 'string' ? message.content : '',
+        toolCalls: rawCalls.map((raw, index) => toChatToolCall(raw, index)),
+        truncated: choice?.finish_reason === 'length',
+        ...(Object.keys(usage).length > 0 ? { usage } : {}),
+      };
+    };
 
-      if (toolsAllowed && Array.isArray(toolCalls) && toolCalls.length > 0 && round < maxRounds) {
-        const assistantTurn: ChatMessage = {
-          role: 'assistant',
-          content: typeof message?.content === 'string' ? message.content : null,
-          tool_calls: toolCalls,
-        };
-        convo.push(assistantTurn);
-        toolTrace.push(assistantTurn);
-        for (const call of toolCalls) {
-          const result = await options.onToolCall!(
-            call.function?.name ?? '',
-            call.function?.arguments ?? '{}',
-          );
-          const toolTurn: ChatMessage = { role: 'tool', tool_call_id: call.id, content: result };
-          convo.push(toolTurn);
-          toolTrace.push(toolTurn);
-        }
-        continue;
-      }
-
-      if (typeof message?.content === 'string' && message.content !== '') {
-        // Non-streamed: an onDelta caller still gets exactly one call.
-        options.onDelta?.(message.content);
-        return {
-          text: message.content,
-          ...(Object.keys(usage).length > 0 ? { usage } : {}),
-          ...(toolTrace.length > 0 ? { toolTrace } : {}),
-        };
-      }
-      if (toolTrace.length > 0) {
-        // The loop ran tools but the model never spoke: give back what we
-        // can — the live-edit turn names what happened over this empty
-        // text instead of showing an error after applying the changes.
-        return { text: '', toolTrace };
-      }
-      // Silent-empty is how "no response" looked to the user — surface it.
-      throw new LlmError(
-        'bad-reply',
-        'The endpoint returned no message content.',
-        `round ${round} of ${maxRounds}`,
-      );
-    }
+    return runToolLoop(messages, loopOptions, request);
   }
 
   /** Replaces the LAST user message's content with attachment parts, when attachments were passed. */

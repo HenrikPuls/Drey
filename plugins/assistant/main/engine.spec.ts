@@ -423,11 +423,13 @@ describe('assistant plugin chat engine — persistence (bug-10b)', () => {
     expect(h.calls[1].messages[0].content).not.toContain('tasks_list');
   });
 
-  it('external tools (ADR-0063): on with web fetch or a server, with the note and more rounds', async () => {
+  it('external tools (ADR-0063): on with web fetch or a server, with their rules in the prompt', async () => {
     const h = chatHarness();
     h.config.tools.webFetch.enabled = true;
     await h.engine.ask({ ...ASK });
-    expect(h.calls[0].opts).toMatchObject({ externalTools: true, maxToolRounds: 8 });
+    expect(h.calls[0].opts).toMatchObject({ externalTools: true });
+    // The round budget is the user's setting, applied by the host (ADR-0071).
+    expect(h.calls[0].opts['maxToolRounds']).toBeUndefined();
     expect(h.calls[0].messages[0].content).toContain('web_fetch');
 
     // A provider without a tool loop gets neither the option nor the promise.
@@ -635,7 +637,7 @@ describe('assistant plugin chat engine — document-fence protocol (ADR-0053)', 
     }
   });
 
-  it('a tools-ran-but-empty reply fails instead of showing an empty card', async () => {
+  it('a tools-ran-but-empty reply keeps the turn with what the tools did', async () => {
     const h = chatHarness(() => ({
       text: '',
       toolTrace: [
@@ -649,9 +651,41 @@ describe('assistant plugin chat engine — document-fence protocol (ADR-0053)', 
         { role: 'tool', tool_call_id: 't1', content: '3 hits' },
       ],
     }));
+    // A write may already be on disk: the trace must not vanish with the
+    // turn (ADR-0071). The answer says what happened instead.
+    const { outcome, chatPath } = await h.engine.ask(ASK);
+    expect(outcome).toMatchObject({ kind: 'answer' });
+    expect(outcome.kind === 'answer' ? outcome.text : '').toMatch(/used tools but gave no answer/);
+    const turns = parseChatNote(h.files.get(chatPath)!).turns;
+    expect(turns).toHaveLength(2);
+    expect(turns[1].tool.map((entry) => entry.kind)).toEqual(['call', 'result']);
+  });
+
+  it('a reply with nothing at all still fails and leaves no turn behind', async () => {
+    const h = chatHarness(() => ({ text: '' }));
     await expect(h.engine.ask(ASK)).rejects.toThrow(/no message content/);
     const path = [...h.files.keys()][0];
     expect(parseChatNote(h.files.get(path)!).turns).toHaveLength(0);
+  });
+
+  it('asks again without tools when the endpoint refused them, and remembers it', async () => {
+    let n = 0;
+    const h = chatHarness(() => (n++ === 0 ? { text: 'half', toolsDropped: true } : { text: 'plain' }));
+    h.config.tools.webFetch.enabled = true;
+
+    const { outcome } = await h.engine.ask(ASK);
+
+    expect(outcome).toEqual({ kind: 'answer', text: 'plain' });
+    // First call: tools attached and described. Second: neither.
+    expect(h.calls[0].opts['externalTools']).toBe(true);
+    expect(h.calls[0].messages[0].content).toContain('web_fetch');
+    expect(h.calls[1].opts['externalTools']).toBeUndefined();
+    expect(h.calls[1].messages[0].content).not.toContain('web_fetch');
+    expect(h.calls[1].messages[0].content).not.toContain('How to work with tools');
+
+    // The next ask to the same model does not pay for a refusal again.
+    await h.engine.ask({ ...ASK, question: 'again' });
+    expect(h.calls.filter((call) => call.opts['externalTools'] === true)).toHaveLength(1);
   });
 });
 
@@ -686,13 +720,13 @@ describe('assistant plugin chat engine — tasks_list tool (SDK 1.11)', () => {
       vaultTools?: boolean;
     };
     expect(opts.tools?.map((t) => t.name)).toEqual(['tasks_list']);
-    expect(opts.maxToolRounds).toBe(3);
+    expect(opts.maxToolRounds).toBeUndefined(); // the user's budget, applied by the host
     expect(opts.vaultTools).toBeUndefined(); // no MCP gate — the tool rides alone
     expect(await opts.onToolCall?.('tasks_list', '{}')).toContain('Aufräumen');
-    expect(await opts.onToolCall?.('other_tool', '{}')).toContain('Unknown tool');
+    expect(await opts.onToolCall?.('other_tool', '{}')).toMatch(/^Error: there is no tool/);
     // The system prompt tells the model to prefer the tool for task questions.
     const system = h.calls[0]?.messages[0] as { role: string; content: string };
-    expect(system.content).toContain('ONLY a question about the user\'s tasks');
+    expect(system.content).toContain('- tasks_list');
   });
 
   it('no task provider means no tool and no tasks note', async () => {
@@ -701,7 +735,7 @@ describe('assistant plugin chat engine — tasks_list tool (SDK 1.11)', () => {
     const opts = h.calls[0]?.opts as { tools?: unknown };
     expect(opts.tools).toBeUndefined();
     const system = h.calls[0]?.messages[0] as { content: string };
-    expect(system.content).not.toContain('ONLY a question about the user\'s tasks');
+    expect(system.content).not.toContain('tasks_list');
     // The wikilink note rides regardless (navigation is prompt-level, SDK 1.11).
     expect(system.content).toContain('wikilinks');
   });
@@ -1152,13 +1186,13 @@ describe('assistant plugin — task evaluation fixes (57d)', () => {
     expect(taskArgsCarryScopeRestriction('{"includeDone":true}')).toBe(false);
   });
 
-  it('the system prompt carries today and puts the task rule after the vault context', async () => {
+  it('the system prompt carries today and the task rule', async () => {
     const h = chatHarness();
     h.tasksTool = { spec: TASKS_LIST_SPEC, run: async () => '', query: async () => [] };
     await h.engine.ask(ASK);
     const system = String(h.calls[0]?.messages[0]?.content);
     expect(system).toMatch(/Today is \d{4}-\d{2}-\d{2} \(\w+day\)\./);
-    expect(system).toContain('"status":"done"');
+    expect(system).toContain('never from task lines seen elsewhere');
     expect(system).toContain('ONLY when the user explicitly asks you to modify');
   });
 
@@ -1353,7 +1387,7 @@ describe('assistant plugin chat engine — explore tools (ADR-0069)', () => {
     const tools = (call.opts['tools'] as ToolSpec[]).map((spec) => spec.name);
     expect(tools).toEqual(['vault_overview', 'vault_find', 'vault_section']);
     expect(call.opts['onToolCall']).toBeInstanceOf(Function);
-    expect(call.opts['maxToolRounds']).toBe(6);
+    expect(call.opts['maxToolRounds']).toBeUndefined();
     // The scope pass-through is what makes the host drop out-of-scope
     // vault_search/vault_read (SDK 1.20).
     expect(call.opts['vaultToolsScope']).toEqual(['v1']);

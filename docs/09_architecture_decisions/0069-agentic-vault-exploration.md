@@ -134,3 +134,14 @@ fixes, same decision:
   (active-vault) read of a past turn's attachment misses, the ask's
   resolved targets are tried in order — a chat bound to a non-active
   vault no longer loses its attachments on follow-ups.
+
+## Later change — the notes became a prompt builder; the read filter is enforced (milestone 76, ADR-0071)
+
+The loop cap ladder (3→5→6→8) is replaced by the user's round budget.
+`ASK_EXPLORE_NOTE`, `ASK_SCOPED_TOOLS_NOTE` and the scope note are gone;
+the system prompt builder states the scope and lists the tools that are
+attached. Dropping `vault_search` / `vault_read` from the offer now also
+stops them from running: the host and the tool loop refuse a name that
+was not offered. The explore tools themselves are replaced by the base
+toolset in milestone 77. See
+[ADR-0071](0071-unified-vault-toolset-and-agent-loop.md).

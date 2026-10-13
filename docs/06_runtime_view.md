@@ -2911,3 +2911,66 @@ question is about what was selected then, even if the selection changes
 while the model answers. The document itself is still sent in full when
 the note chip is on; with the chip off, the selection is the only
 document text in the call.
+
+## 6.59 Ask → tool loop → answer (milestone 76, [ADR-0071](09_architecture_decisions/0071-unified-vault-toolset-and-agent-loop.md))
+
+```mermaid
+sequenceDiagram
+    actor User
+    participant Panel as Assistant panel
+    participant CE as ChatEngine (plugin)
+    participant Host as PluginHost (ctx.llm.chat)
+    participant Loop as runToolLoop (tool-loop.ts)
+    participant Prov as Provider (one request)
+    participant Tool as Tool (plugin / vault / external)
+
+    User->>Panel: question
+    Panel->>CE: ask
+    CE->>CE: decide what is attached, buildSystemPrompt names exactly that
+    CE->>Host: chat(messages, { tools, vaultTools, externalTools, onToolEvent })
+    Host->>Host: merge the tool sets, remember where each name came from
+    Host->>Loop: chat with the merged set, maxToolRounds = tools.maxRounds
+    loop until the model answers in text
+        Loop->>Prov: request (mode: tools)
+        Prov-->>Loop: text, tool calls, truncated?
+        opt no native call, but one written into the text
+            Loop->>Loop: parseTextToolCalls
+        end
+        alt the budget is used up
+            Loop->>Prov: request (mode: closing — "answer now", no call allowed)
+            Prov-->>Loop: text
+        else calls to run
+            loop each call
+                alt not offered / arguments wrong / reply was cut off
+                    Loop->>Loop: result = "Error: …" (nothing runs)
+                else
+                    Loop-->>CE: onToolEvent start
+                    CE-->>Panel: chat:toolEvent — chip "tool · name(args) …"
+                    Loop->>Host: onToolCall(name, checked args)
+                    Host->>Tool: run where the name was offered from
+                    Tool-->>Host: result, or it throws
+                    Host-->>Loop: result (a throw becomes "Error: … failed")
+                    Loop->>Loop: cap at 16 000 characters
+                    Loop-->>CE: onToolEvent end (ok?)
+                    CE-->>Panel: chat:toolEvent — chip settles
+                end
+            end
+        end
+    end
+    Loop-->>Host: text + toolTrace (+ toolsDropped / toolBudgetExhausted)
+    Host-->>CE: result
+    opt toolsDropped
+        CE->>Host: the same question, no tools, a prompt that names none
+        Host-->>CE: result
+    end
+    CE->>CE: persist the turn, tool pairs as drey-tool lines
+    CE-->>Panel: answer card with tool chips
+```
+
+The first request is the only one that may be answered "this endpoint
+takes no tools" (HTTP 400 with tools attached): the loop goes on in
+`plain` mode and the engine, seeing `toolsDropped`, repeats the question
+with a prompt that fits, then skips the tools for that model until the
+app restarts. When tools ran and even the closing round brings no text,
+the turn is persisted with its trace under a fixed line — never dropped
+while a write it made is on disk.

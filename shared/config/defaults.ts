@@ -10,6 +10,7 @@ import {
   AppConfig,
   AppearanceConfig,
   BUILTIN_ENTRY_TEMPLATE_IDS,
+  TOOL_ROUNDS_DEFAULT,
   BUILTIN_TEMPLATE_IDS,
   CLASSIC_ENTRY_PATTERN,
   DEFAULT_EDITOR_FONT_FAMILY,
@@ -88,6 +89,7 @@ export function defaultToolsConfig(): ToolsConfig {
     templates: { enabled: true, write: 'auto' },
     webFetch: { enabled: false, approval: 'ask' },
     servers: [],
+    maxRounds: TOOL_ROUNDS_DEFAULT,
   };
 }
 

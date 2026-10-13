@@ -268,7 +268,12 @@ describe('normalizeAppConfig', () => {
       templates: { enabled: true, write: 'auto' },
       webFetch: { enabled: false, approval: 'ask' },
       servers: [],
+      maxRounds: 12,
     });
+    // The round budget (ADR-0071) is clamped to its range; junk falls back.
+    expect(normalizeAppConfig({ tools: { maxRounds: 0 } }).tools.maxRounds).toBe(1);
+    expect(normalizeAppConfig({ tools: { maxRounds: 999 } }).tools.maxRounds).toBe(50);
+    expect(normalizeAppConfig({ tools: { maxRounds: 'many' } }).tools.maxRounds).toBe(12);
     // No `tools` key at all: what mcp.enabled / mcp.yolo meant for the assistant carries over.
     expect(normalizeAppConfig({ mcp: { enabled: true, yolo: true } }).tools.vault).toEqual({
       enabled: true,

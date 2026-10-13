@@ -18,6 +18,7 @@ import type {
   LlmCapabilities,
   LlmChatResult,
   LlmDebugEntry,
+  ToolCallEvent,
   ToolSpec,
 } from '../llm';
 import type { AppConfig } from '../app-config';
@@ -283,15 +284,26 @@ export interface MainChatOptions {
   readonly tools?: readonly ToolSpec[];
   /**
    * Runs one plugin tool call; the resolved text goes back to the model as
-   * the tool result. Return error TEXT rather than throwing — a throw
-   * fails the whole chat call. In-process only (same boundary as `onDelta`).
+   * the tool result. The arguments were checked against the tool's
+   * `parameters` before this runs (SDK 1.23). Report a failure as text
+   * starting with `Error:` and say how to correct the call; a throw is
+   * turned into such a text and no longer fails the chat call. In-process
+   * only (same boundary as `onDelta`).
    */
   readonly onToolCall?: (name: string, argsJson: string) => Promise<string>;
   /**
-   * Loop cap when the model keeps calling tools; the provider default is 5.
-   * A multi-step editing turn (ADR-0049) needs more rounds.
+   * How many rounds of tool calls this call may take. Absent: the user's
+   * setting (`tools.maxRounds`, SDK 1.23). When the budget is used up the
+   * model is asked once for its answer without tools and the result
+   * carries `toolBudgetExhausted`.
    */
   readonly maxToolRounds?: number;
+  /**
+   * Progress of the tool loop (SDK 1.23, ADR-0071): one `start` before a
+   * tool runs and one `end` after it, for every tool of the call — the
+   * plugin's own, the vault set and the external ones. In-process only.
+   */
+  readonly onToolEvent?: (event: ToolCallEvent) => void;
   /**
    * Images embedded into the LAST user message of this one call
    * (`ChatAttachment` is bytes — the caller resolves them; the provider

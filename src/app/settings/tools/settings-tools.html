@@ -10,6 +10,26 @@
     }
 
     <section>
+      <h3>Working through a question</h3>
+      <div class="field">
+        <label for="tools-max-rounds">Rounds of tool calls per question</label>
+        <input
+          id="tools-max-rounds"
+          class="narrow"
+          type="number"
+          [min]="roundsMin"
+          [max]="roundsMax"
+          [value]="tools.maxRounds"
+          (change)="setMaxRounds($any($event.target).value)"
+        />
+        <p class="field-hint">
+          How often the assistant may look something up or make a change before it has to answer.
+          When the rounds are used up it answers from what it has found so far.
+        </p>
+      </div>
+    </section>
+
+    <section>
       <h3>On this computer</h3>
       <div class="group">
       <label class="switch-row">

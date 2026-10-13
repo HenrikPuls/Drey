@@ -105,3 +105,12 @@ documents wholesale.
 - An `askOnSave` scratch tab passes the path guard and can be live-edited
   in the buffer; its replay-side `doc_read` degrades to a warning line
   (the path is not in the vault).
+
+## Later change — the round budget, and what comes next (milestone 76, ADR-0071)
+
+A live-edit turn takes the user's round budget (`tools.maxRounds`) and
+never less than 16. `LIVE_EDIT_TOOLS_NOTE` is gone; the system prompt
+builder lists the vault tools that ride along. A model whose endpoint
+refused the tools cannot run a live edit and says so. The `doc_*` tools
+are replaced by the base toolset in milestone 78. See
+[ADR-0071](0071-unified-vault-toolset-and-agent-loop.md).

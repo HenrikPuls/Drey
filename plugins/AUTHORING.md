@@ -360,3 +360,31 @@ pure-field case.
 - The strip also shows in the editor's right-click menu. On a surface
   that is not a pane document (the entry drawer, a composer) plugin
   buttons are left out, since they act on the focused document.
+
+## SDK 1.23 — tools that fail gracefully, and progress
+
+For a `ctx.llm.chat` call that carries tools (`tools` + `onToolCall`,
+`vaultTools`, `externalTools`):
+
+- **Arguments are checked before `onToolCall` runs** — valid JSON,
+  required arguments present, the primitive types and `enum` values your
+  `parameters` declare. You get the repaired object (`"5"` for a number
+  becomes `5`). Declare `required` and `type` honestly; the model reads
+  the refusal.
+- **Report a failure as text that starts with `Error:`** and say how to
+  correct the call (`Error: no note at "x.md" — list the folder first.`).
+  That prefix is how the loop, the panel and the model tell a failed call
+  from a result. A throw is turned into such a text; it no longer fails
+  the chat call.
+- **A name runs only where it was offered.** Your `onToolCall` is asked
+  for your `tools` only.
+- **`maxToolRounds`** is optional; absent, the user's setting applies
+  (Settings → Assistant tools). When the budget is used up the model is
+  asked once for its answer and the result carries
+  `toolBudgetExhausted`. `toolsDropped` on the result means the endpoint
+  refused the tools and the model answered without them.
+- **`onToolEvent`** (optional): `{ phase: 'start' | 'end', id, name,
+  argsJson, ok? }` for every tool call of the loop — forward it to your
+  renderer to show what is happening.
+- A result longer than 16 000 characters is cut. Return less: a range,
+  a limit, and a line that says how to get the rest.

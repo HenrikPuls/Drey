@@ -182,14 +182,16 @@ describe('ChatEngine scope enforcement (ADR-0069 later change)', () => {
     expect(h.templatesCalls).toBe(0);
     const system = h.calls[0].messages[0]?.content ?? '';
     expect(typeof system).toBe('string');
-    // The scope note binds "the vault" to the chip's selection.
-    expect(system).toContain('THE VAULT FOR THIS QUESTION');
-    expect(system).toContain('docs (`docs`)');
-    expect(system).toContain('not attached this turn');
-    // The tasks note is gone with its tool; the tools note is the scoped
-    // variant (read tools dropped, explicit vault ids).
-    expect(system).not.toContain('tasks_list tool');
-    expect(system).toContain('ALWAYS pass one of these ids');
+    // The prompt binds "the vault" to the chip's selection.
+    expect(system).toContain('The vault for this question: docs (`docs`)');
+    // Tools that are not attached are not mentioned at all (ADR-0071):
+    // tasks and templates went with the active vault, the two read tools
+    // with the scope.
+    expect(system).not.toContain('tasks_list');
+    expect(system).not.toContain('template_list');
+    expect(system).not.toContain('vault_search');
+    expect(system).toContain('- vault_write');
+    expect(system).toContain('always pass one of these ids');
     expect(system).not.toContain('omit it for the active vault');
   });
 
@@ -203,7 +205,7 @@ describe('ChatEngine scope enforcement (ADR-0069 later change)', () => {
     expect(h.templatesCalls).toBe(1);
     const system = h.calls[0].messages[0]?.content ?? '';
     expect(system).toContain('omit it for the active vault');
-    expect(system).toContain('If the question is not about tasks, do NOT call tasks_list');
+    expect(system).toContain('If the question is not about tasks, do not call it');
   });
 
   it('does not arm a scope and adds no scope notes when the chip is off', async () => {
@@ -211,7 +213,7 @@ describe('ChatEngine scope enforcement (ADR-0069 later change)', () => {
     await h.engine.ask(askRequest({ vaultScope: 'off' }));
     expect(h.calls[0].options.vaultToolsScope).toBeUndefined();
     const system = h.calls[0].messages[0]?.content ?? '';
-    expect(system).not.toContain('THE VAULT FOR THIS QUESTION');
+    expect(system).not.toContain('The vault for this question');
     expect(h.exploreCalls).toBe(0);
   });
 

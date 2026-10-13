@@ -422,7 +422,10 @@ Keep it in step whenever a component boundary changes (CLAUDE.md's
   (`GET /models`, `POST /chat/completions`), optional bearer API key.
   **No timeout on generation** — a local model may think for minutes; the
   user cancels instead ([ADR-0014](09_architecture_decisions/0014-no-chat-timeout-cancellable-tasks.md)).
-  Its optional tool loop (`vaultTools` chat option) backs the assistant
+  Its tool loop is one module for both HTTP providers
+  (`llm/tool-loop.ts`, ADR-0071: only offered tools run, checked
+  arguments, failures as `Error: …` results, one round budget with a
+  closing round). The `vaultTools` chat option backs the assistant
   plugin's vault tool use when `tools.vault.enabled`
 - `LlmTaskRegistry` — one `AbortController` per in-flight generation, so
   `llm:cancel` can abort it
@@ -886,6 +889,9 @@ decision. (Seams — what a *plugin* can extend — are the table above.)
 | Autotag / "Suggest tags" | `electron/llm/tag-suggest.ts`, the editor `⋯` menu | Base | `specs/classifier-spec.md`, M45 |
 | Tasks panel + inline due/priority metadata | `plugins/tasks/` | Plugin tasks | ADR-0033 |
 | Assistant chat + chat notes (`chats/`) | `plugins/assistant/` (`chat-engine.ts`, `chat-store.ts`) | Plugin assistant | ADR-0048 |
+| Tool loop (offered-only, argument check, error results, round budget, closing round, text-written calls, progress events) | `electron/llm/tool-loop.ts`, `shared/llm/tool-args.ts`, `shared/llm/text-tool-calls.ts`; dispatch in `electron/plugin-host/plugin-context.ts` (`buildLlmContext`) | Base (`llm/`, `plugin-host/`) | ADR-0071, M76 |
+| Assistant system prompt | `plugins/assistant/main/system-prompt.ts` (`buildSystemPrompt`), role texts in `ask-prompts.ts` / `live-edit.ts` | Plugin assistant | ADR-0071, M76 |
+| Tool calls shown while they run | `plugins/assistant/main/index.ts` (`chat:toolEvent`), `renderer/state.ts` (`applyToolProgress`), `renderer/thread.ts` | Plugin assistant | ADR-0071, M76 |
 | Assistant button at a selection + its popover (question, prompts, manual Actions) | `plugins/assistant/renderer/selection-button.ts` (CodeMirror tooltip), `selection-popover.ts`, `shared/ask.ts` (`selection`, `quoteSelection`), `main/ask-prompts.ts` (`buildAskUserMessage`) | Plugin assistant | ADR-0048 later change, M74 |
 | Manual Actions (run + on-save queue) | `plugins/assistant/` + `editor-more` menu rows | Plugin assistant | ADR-0011, ADR-0012 |
 | "Structure note (lossless)" built-in Action + the `{{AVAILABLE_TAGS}}` prompt placeholder | `shared/config/schema.ts` (`LOSSLESS_FORMAT_PROMPT`), `shared/llm/prompt-substitution.ts`, `plugins/assistant/main/action-engine.ts` | Shared + plugin assistant | `specs/classifier-spec.md`, M73 |
@@ -3084,6 +3090,8 @@ sits behind them.
 - **`providers/`** (barrel) — one client per backend family:
   `openai-compat.ts` serves `lmstudio` / `openai-compat` / `openrouter`
   (SSE streaming when `onDelta` is passed and no tool loop is in play;
+  with tools each provider only supplies the single-request function of
+  `tool-loop.ts`'s `runToolLoop` — the loop itself is shared, ADR-0071;
   OpenRouter's 200-with-error-body mapped onto `LlmError('http')`),
   `anthropic-messages.ts` serves `anthropic` / `zai-glm` (top-level
   `system`, required `max_tokens`, `tool_use`/`tool_result` adapters,
@@ -3156,9 +3164,14 @@ resolution) possible.
   capability, deltas forwarded to the plugin's `chat:delta` event) →
   parse the reply (answer / edit JSON) → append the assistant turn with
   `toolTrace` as drey-tool entries → patch `session:`. A failed or
-  cancelled generation truncates back the dangling user turn. Prompts
-  live in `main/ask-prompts.ts`; `action-engine.ts` keeps manual Actions
-  + the summary.
+  cancelled generation truncates back the dangling user turn; a turn
+  whose tools ran but whose model stayed silent is kept with its trace
+  (ADR-0071). The system prompt is built by `main/system-prompt.ts`
+  (`buildSystemPrompt`: role, environment, vault context, the tools
+  attached to this call, the rules for working with tools) over the role
+  texts in `main/ask-prompts.ts`; a model whose endpoint refused the
+  tools is asked again without them and remembered for the session.
+  `action-engine.ts` keeps manual Actions + the summary.
 - **Renderer** — `state.ts` holds only session state (active chat, chips
   keyed by the open note, a taskId-keyed streaming buffer throttled to
   ~100 ms re-renders, the unchanged sidecar auto-summary logic);
@@ -3573,7 +3586,7 @@ main-side plugin writes.
 | Toolbox | `electron/mcp-client/assistant-toolbox.ts` | `AssistantToolbox`: the external tool set a chat call may use (`specs()`), and `run()` — source enabled? approval rule? then the call. |
 | Approval bridge | `electron/ipc/tool-approval-bridge.ts` + `src/app/tool-approval/` | Main parks a promise and pushes `tools:approval-request`; `ToolApprovalService` queues the calls, `ToolApprovalDialog` shows source, tool and arguments; "Always allow" persists the source rule (`SettingsService.allowToolSourceImmediate`). |
 | Host merge | `electron/plugin-host/plugin-host.ts` | `ctx.llm.chat` merges plugin tools, the vault set (`vaultTools`) and the external set (`externalTools`, SDK 1.15); earlier wins a name collision. The vault set's write rule comes from `tools.vault.write`; `ctx.vault.confirmWrite` exposes the ADR-0011 diff as a question. |
-| Assistant | `plugins/assistant/main/chat-engine.ts` | Reads the groups per ask: vault → `vaultTools`, tasks / templates → its own tools, web fetch or any enabled server → `externalTools` + `ASK_WEB_NOTE` + 8 tool rounds. Not on live-edit turns. |
+| Assistant | `plugins/assistant/main/chat-engine.ts` | Reads the groups per ask: vault → `vaultTools`, tasks / templates → its own tools, web fetch or any enabled server → `externalTools`. What is attached is what `buildSystemPrompt` names (ADR-0071); the round budget is `tools.maxRounds`, applied by the host. Not on live-edit turns. |
 | Settings | `src/app/settings/tools/` | "Assistant tools": the group switches and rules, and the server list (name, connection, command / arguments / environment or address / headers, approval, live status, reconnect). Settings → MCP keeps the server offered to other programs. |
 | IPC | `shared/ipc-api.ts` | `tools:status`, `tools:reconnect`, `tools:approval-request` / `tools:approval-decision`. |
 | Drey's own server | `electron/mcp/server.ts` + `http-transport.ts` | Same milestone: the protocol layer is the SDK (`createVaultMcpServer`, one stateless Streamable HTTP transport per `POST /mcp`, JSON answers). `isLocalHost` / `isLocalOrigin` refuse anything that is not this machine — including a web page in a local browser. `VaultTools` and the dependency-free `stdio-bridge.ts` are unchanged apart from the bridge's `Accept` header. |

@@ -640,7 +640,17 @@ export interface ToolsConfig {
   templates: { enabled: boolean; write: ToolWriteMode };
   webFetch: { enabled: boolean; approval: ToolApprovalMode };
   servers: McpClientServer[];
+  /**
+   * How many rounds of tool calls one question may take (milestone 76,
+   * ADR-0071). When it is used up the model is asked once for its answer
+   * without tools.
+   */
+  maxRounds: number;
 }
+
+export const TOOL_ROUNDS_DEFAULT = 12;
+export const TOOL_ROUNDS_MIN = 1;
+export const TOOL_ROUNDS_MAX = 50;
 
 export const MCP_SERVER_ID_MAX = 24;
 

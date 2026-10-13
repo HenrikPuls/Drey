@@ -41,6 +41,9 @@ import {
   McpConfig,
   McpClientServer,
   MCP_SERVER_ID_MAX,
+  TOOL_ROUNDS_DEFAULT,
+  TOOL_ROUNDS_MAX,
+  TOOL_ROUNDS_MIN,
   ToolsConfig,
   SnippetConfig,
   SpellcheckConfig,
@@ -361,7 +364,14 @@ function normalizeTools(raw: unknown, mcp: McpConfig): ToolsConfig {
       approval: group('webFetch')['approval'] === 'allow' ? 'allow' : 'ask',
     },
     servers: normalizeMcpServers(source['servers']),
+    maxRounds: normalizeToolRounds(source['maxRounds']),
   };
+}
+
+function normalizeToolRounds(raw: unknown): number {
+  return typeof raw === 'number' && Number.isFinite(raw)
+    ? Math.min(TOOL_ROUNDS_MAX, Math.max(TOOL_ROUNDS_MIN, Math.round(raw)))
+    : TOOL_ROUNDS_DEFAULT;
 }
 
 function normalizeDaily(raw: unknown): DailyConfig {

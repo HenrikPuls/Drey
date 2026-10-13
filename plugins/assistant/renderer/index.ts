@@ -70,6 +70,25 @@ const plugin: PluginRendererModule = {
             listener({ taskId: shape.taskId, text: shape.text });
           }
         }),
+      onToolEvent: (listener) =>
+        api.backend.on('chat:toolEvent', (data) => {
+          const shape = (data ?? {}) as Record<string, unknown>;
+          if (
+            typeof shape['taskId'] === 'string' &&
+            (shape['phase'] === 'start' || shape['phase'] === 'end') &&
+            typeof shape['id'] === 'string' &&
+            typeof shape['name'] === 'string'
+          ) {
+            listener({
+              taskId: shape['taskId'],
+              phase: shape['phase'],
+              id: shape['id'],
+              name: shape['name'],
+              argsJson: typeof shape['argsJson'] === 'string' ? shape['argsJson'] : '{}',
+              ...(typeof shape['ok'] === 'boolean' ? { ok: shape['ok'] } : {}),
+            });
+          }
+        }),
 
       // -- shared -----------------------------------------------------------------
       readVaultFile: async (path) => {

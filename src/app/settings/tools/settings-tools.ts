@@ -2,6 +2,8 @@ import { ChangeDetectionStrategy, Component, computed, effect, inject, signal } 
 import {
   McpClientServer,
   PROVIDER_PRESETS,
+  TOOL_ROUNDS_MAX,
+  TOOL_ROUNDS_MIN,
   ToolApprovalMode,
   ToolWriteMode,
   mcpServerSlug,
@@ -90,6 +92,19 @@ export class SettingsTools {
   protected isUnsaved(server: McpClientServer): boolean {
     const saved = this.settings.config()?.tools.servers.find((s) => s.id === server.id);
     return saved === undefined || JSON.stringify(saved) !== JSON.stringify(server);
+  }
+
+  protected readonly roundsMin = TOOL_ROUNDS_MIN;
+  protected readonly roundsMax = TOOL_ROUNDS_MAX;
+
+  protected setMaxRounds(raw: string): void {
+    const value = Math.round(Number(raw));
+    if (!Number.isFinite(value)) {
+      return;
+    }
+    this.settings.patchTools(
+      (t) => void (t.maxRounds = Math.min(TOOL_ROUNDS_MAX, Math.max(TOOL_ROUNDS_MIN, value))),
+    );
   }
 
   protected setVaultEnabled(on: boolean): void {

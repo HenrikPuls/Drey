@@ -19,6 +19,7 @@ import {
   LlmCapabilities,
   LlmChatResult,
   ChatMessage,
+  ToolCallEvent,
   ToolSpec,
 } from '../../shared/llm';
 import { LlmConnectionTest } from '../../shared/ipc-api';
@@ -37,8 +38,10 @@ export interface LlmChatOptions {
   tools?: ToolSpec[];
   /** Runs one tool call; the resolved text goes back to the model as the tool result. */
   onToolCall?: (name: string, argsJson: string) => Promise<string>;
-  /** Loop cap when the model keeps calling tools; default 5. */
+  /** Round budget of the tool loop (`DEFAULT_TOOL_ROUNDS` when absent); see `tool-loop.ts`. */
   maxToolRounds?: number;
+  /** Progress of the tool loop: one `start` and one `end` per tool call. */
+  onToolEvent?: (event: ToolCallEvent) => void;
   /**
    * Incremental text. A provider that cannot stream MUST still call this
    * exactly once with the full text when a callback was passed, so callers

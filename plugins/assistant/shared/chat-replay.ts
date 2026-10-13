@@ -104,7 +104,7 @@ function replayAssistantTurn(turn: ChatNoteTurn, out: ChatMessage[]): void {
         break;
       case 'result':
         flushCalls();
-        out.push({ role: 'tool', tool_call_id: entry.id, content: entry.content });
+        out.push({ role: 'tool', tool_call_id: entry.id, content: replayedResult(entry.content) });
         break;
       case 'edit':
         flushCalls();
@@ -123,6 +123,22 @@ function replayAssistantTurn(turn: ChatNoteTurn, out: ChatMessage[]): void {
     // still tells the model what it saw.
     out.push({ role: 'assistant', content: compactContextLine(turn.context) });
   }
+}
+
+/** What a tool result of an earlier turn may take up in the replay. */
+export const REPLAY_RESULT_MAX_CHARS = 2000;
+
+/**
+ * A tool result of an EARLIER turn, as the model sees it again (ADR-0071).
+ * The note keeps every result in full, and the model read it in full when
+ * it answered; resending all of it with every later question is what
+ * fills a small model's context. The cut says how to get the rest.
+ */
+function replayedResult(content: string): string {
+  if (content.length <= REPLAY_RESULT_MAX_CHARS) {
+    return content;
+  }
+  return `${content.slice(0, REPLAY_RESULT_MAX_CHARS)}\n[… shortened in the history: ${content.length - REPLAY_RESULT_MAX_CHARS} more characters — call the tool again if you need them]`;
 }
 
 /**

@@ -20,6 +20,75 @@ recorded as an explicit decision. The parity checklist lives in
 
 ## Recent milestones
 
+### Milestone 76 — The assistant's tool loop and system prompt
+
+Owner request, outside the roadmap list; the first of four steps of the
+assistant tool rework
+([ADR-0071](../docs/09_architecture_decisions/0071-unified-vault-toolset-and-agent-loop.md)).
+No new tools — the existing ones became dependable. **Not yet manually
+verified by the owner.**
+
+What changes for the user:
+
+- **A slip by the model no longer loses the turn.** A tool that fails,
+  an unknown tool name, broken or incomplete arguments: each comes back
+  to the model as an `Error: …` it can correct, instead of ending the
+  ask. A number or yes/no sent as text is repaired.
+- **The assistant answers when its rounds are used up.** One setting,
+  Settings → Assistant tools → *Rounds of tool calls per question*
+  (default 12), replaces the fixed 3 / 5 / 6 / 8 / 16. When it is used
+  up the model is asked once more for its answer from what it found.
+  Where tools ran and the model still says nothing, the turn is kept
+  with what the tools did and a line saying so — before, the turn was
+  discarded while a write it made stayed on disk.
+- **Tool calls show while they run.** The answer card lists each call as
+  it starts (`tool · vault_read(path: …) …`) and marks a failed one;
+  before, they appeared only after the turn.
+- **A tool that was not offered does not run.** A vault tool that the
+  group switch or the Vault chip's scope left out used to run anyway
+  when the model called it by name. Now only what the request offered
+  runs.
+- **Local models that write the call into the reply** —
+  `<tool_call>{…}</tool_call>`, or a reply that is only a JSON call —
+  are understood.
+- **A model without tool support is handled once.** When the endpoint
+  refuses the tools, the assistant asks again with a prompt that names
+  none, and remembers that for the model until the app restarts (before:
+  every question paid for a refused request, and the prompt went on
+  describing tools the model did not have). Only a refusal of the very
+  first request counts — a 400 after tools ran is reported as the error
+  it is.
+- **Long results of earlier turns are shortened** to 2 000 characters
+  when the conversation is sent again; the chat note keeps them whole.
+
+How: `electron/llm/tool-loop.ts` (`runToolLoop`) is the one loop both
+HTTP providers run; each provider supplies a single-request function.
+`shared/llm/tool-args.ts` checks arguments against the tool's
+parameters, `shared/llm/text-tool-calls.ts` reads calls from reply text.
+The host dispatcher (`electron/plugin-host/plugin-context.ts`) runs a
+name only where it was offered from and no longer hands the base
+`tasks_list` to plugin calls. The system prompt is built by
+`plugins/assistant/main/system-prompt.ts` from fixed parts — role,
+environment, vault context, the tools attached to this call, the rules
+for working with tools — and replaces the chain of prompt notes
+(`specs/classifier-spec.md`, "The assistant's system prompt").
+
+Plugin SDK **1.23** (additive): `MainChatOptions.onToolEvent`;
+`onToolCall` gets checked arguments and may throw; `maxToolRounds`
+defaults to the user's setting. Config: `tools.maxRounds`.
+
+Specs: `electron/llm/tool-loop.spec.ts`, `shared/llm/tool-args.spec.ts`,
+`shared/llm/text-tool-calls.spec.ts`,
+`electron/plugin-host/plugin-context.spec.ts` (the merge and dispatch had
+no test), `plugins/assistant/main/system-prompt.spec.ts`; changed:
+both provider specs, the assistant's engine, replay and panel-state
+specs. End to end: `e2e/assistant-tools.spec.ts` — the first e2e test
+against a model that calls tools (a scripted endpoint).
+
+Left for later (roadmap, follow-ups of milestone 76): streaming the
+answer of a tool-carrying request; cancelling a plugin or vault tool
+call in flight.
+
 ### req-42 — Cyberpunk has its own app mark
 
 Owner request, outside the roadmap list. **Not yet manually verified by

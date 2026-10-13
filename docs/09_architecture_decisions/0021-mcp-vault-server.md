@@ -142,3 +142,12 @@ instance was injected, and appends a one-line tools note to `ASK_SYSTEM`.
   send the `Accept` header the specification asks for. The stdio bridge
   is still a plain proxy without dependencies. The "hand-rolled" and "no
   SDK dependency" statements above are superseded.)_
+
+## Later change — a plugin call gets only what it was offered (milestone 76, ADR-0071)
+
+The in-process path no longer runs a vault tool because the model named
+it: the host runs a name only where it was offered from, and the base
+`tasks_list` is not handed to plugin calls at all (it stays in the set
+for MCP clients). A failed call reads `Error: …`. The tool set itself is
+recut in milestone 77. See
+[ADR-0071](0071-unified-vault-toolset-and-agent-loop.md).

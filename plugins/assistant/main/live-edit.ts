@@ -253,9 +253,3 @@ You make changes by calling the doc tools — doc_apply_diff is the default (bat
 
 When the requested changes are done, reply with a SHORT plain-text summary of what you changed. Do NOT use any JSON protocol, do NOT repeat the document.`;
 
-/**
- * Appended to `LIVE_EDIT_SYSTEM` when the vault tool set is also available
- * (ADR-0021). Unlike `ASK_TOOLS_NOTE` this makes no mention of a JSON
- * answer — the live protocol is plain text.
- */
-export const LIVE_EDIT_TOOLS_NOTE = `You may also call the vault tools (vault_search, vault_read, vault_write) to look things up in the wider vault or to make changes elsewhere.`;

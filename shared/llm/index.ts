@@ -23,10 +23,17 @@ export type {
   LlmChatResult,
   LlmModelListing,
   LlmUsage,
+  ToolCallEvent,
   ToolParameters,
   ToolSpec,
 } from './llm';
 export { extractJsonObject, parseJsonObject } from './llm';
+
+export type { ToolArgsCheck } from './tool-args';
+export { checkToolArgs } from './tool-args';
+
+export type { TextToolCalls } from './text-tool-calls';
+export { parseTextToolCalls } from './text-tool-calls';
 
 export type {
   AnthropicBlock,

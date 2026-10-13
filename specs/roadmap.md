@@ -44,10 +44,11 @@ Open work only. Everything implemented lives in
 lives in [`decisions.md`](decisions.md). When an item ships, move it to the
 changelog and delete it here — no shipped history on this page.
 
-**Status (2026-10-13):** version 0.6.0, milestones 1–74 shipped. Milestone
-ids are assigned when work starts — check `changelog.md` for the highest
-used (latest: milestone 74; milestone 75 is assigned to "Configurable
-shortcuts" below; latest requirement id: req-42, the Cyberpunk app mark —
+**Status (2026-10-13):** version 0.6.0, milestones 1–74 and 76 shipped.
+Milestone ids are assigned when work starts — check `changelog.md` for
+the highest used (latest: milestone 76; milestone 75 is assigned to
+"Configurable shortcuts" below, milestones 77–79 to the rest of the
+assistant tool rework at the top of "Now"; latest requirement id: req-42, the Cyberpunk app mark —
 an owner request outside the list, shipped in the same step).
 Items A1–A5 of the architectural cleanup shipped on 2026-10-13
 (changelog); A6–A12 remain.
@@ -57,6 +58,45 @@ Items A1–A5 of the architectural cleanup shipped on 2026-10-13
 (none known)
 
 ### Now (small, daily value)
+
+The assistant tool rework below is an owner request, outside the list
+(2026-10-13); its milestones are worked first, in this order, with a
+pause after each. Milestone 76 (the tool loop and the system prompt)
+shipped — see the changelog. ADR-0071 covers 76–78; milestone 79 is a
+later change to ADR-0063.
+
+- **One vault toolset for the assistant and the MCP server
+  (milestone 77).** `vault_list`, `vault_search` (text / regex / tags,
+  optionally inside one file or folder, with context lines),
+  `vault_retrieve` (semantic, offered only while retrieval is on),
+  `vault_read` (numbered lines, a range or a heading, a default limit
+  with a continuation hint), `vault_edit` (exact text replacement that
+  must match once, all-or-nothing), `vault_write` (`mode` create /
+  overwrite / append, required), `vault_move` (with the link rewrite) and
+  `vault_delete` (recycle bin, always asked). They replace the base
+  `vault_search` / `vault_read` / `vault_write` and the assistant's own
+  `vault_overview` / `vault_find` / `vault_section` and its second
+  `tasks_list`. The Vault chip is the scope of **reading and writing**,
+  enforced where the tool runs; chip off means no vault tools. The vault
+  group in Settings becomes the write permission (`off` / `confirm` /
+  `auto`). ⚠️ Changes the arguments of `vault_search` and `vault_write`
+  for programs connected to Drey's MCP server.
+- **The open note through the same tools (milestone 78).** Main asks the
+  renderer for the buffer of an open file, so a read sees unsaved text
+  and an edit lands in the tab (live edit: at once and unsaved; otherwise
+  after the diff confirmation). `doc_apply_diff` / `doc_write` /
+  `doc_read` go; the attached note is always in scope. The whole-document
+  `document` fence stays only for providers without a tool loop.
+- **Web search (milestone 79).** A built-in `web_search` tool with a
+  selectable provider — Brave Search, Tavily, a SearXNG URL of the
+  user's own, or DuckDuckGo without a key (a scraper of its HTML page:
+  works at once, may break or be rate-limited; said so in Settings).
+  Off by default, key encrypted like the LLM keys. A **Web chip** in the
+  composer, next to the Vault chip and remembered the same way, switches
+  everything that leaves the machine for the next question —
+  `web_search`, `web_fetch` and the external MCP servers; it appears only
+  when one of them is enabled in Settings. Reverses ADR-0063's "no
+  bundled search provider" and takes its deferred composer switch.
 
 3. **Configurable shortcuts (milestone 75).** One user-defined binding
    per command, stored locally in the app config (never in the vault).
@@ -187,9 +227,15 @@ Follow-ups of A1–A5 (found on the way, none started):
 
 ### Follow-ups of shipped milestones (none committed)
 
-- **Milestone 63 (MCP, ADR-0063):** OAuth-protected servers, a per-question
-  tools switch in the composer, handing servers to the Claude Code CLI
+- **Milestone 63 (MCP, ADR-0063):** OAuth-protected servers (the
+  per-question switch in the composer is milestone 79), handing servers to the Claude Code CLI
   provider, MCP resources / prompts.
+- **Milestone 76 (tool loop, ADR-0071):** streaming the answer of a
+  request that carries tools (today it arrives in one piece; the panel
+  shows the tool calls meanwhile); the abort signal for plugin and vault
+  tools (a cancel waits for the tool call in flight); private-address
+  guard for `web_fetch`; the synthetic `tasks_list` call of the post-hoc
+  task block is replayed to the model as a call it made.
 - **Milestone 64 (draw.io, ADR-0064):** dirty state / manual save for plugin
   tabs, "New diagram" in the Files context menu, SVG ⇄ PNG conversion,
   embedding a plain `.drawio`, letting the assistant read a diagram.

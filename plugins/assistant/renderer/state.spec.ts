@@ -1,4 +1,9 @@
-import { createAssistantState, type AssistantPorts } from './state';
+import {
+  applyToolProgress,
+  createAssistantState,
+  type AssistantPorts,
+  type ToolProgressEvent,
+} from './state';
 import {
   createRunningTasks,
   type RunningTasks,
@@ -32,6 +37,8 @@ interface Harness {
   lockOps: Array<{ path: string; locked: boolean }>;
   /** Delta pushes delivered through the onDelta port. */
   pushDelta(taskId: string, text: string): void;
+  /** Tool-loop progress delivered through the onToolEvent port. */
+  pushToolEvent(event: ToolProgressEvent): void;
   /** Vault files the readVaultFile port serves; anything else reads as null. */
   vaultFiles: Map<string, string>;
   /** Open scratch tabs the scratchBody port serves (docPath -> buffer). */
@@ -79,6 +86,7 @@ function setup(options: { llm?: boolean } = {}): Harness {
   const scratchDocs = new Map<string, string>();
   const snapshots: Array<{ path: string; body: string }> = [];
   const deltaListeners = new Set<(event: { taskId: string; text: string }) => void>();
+  const toolListeners = new Set<(event: ToolProgressEvent) => void>();
   const h: Harness = {
     asks,
     chatNotes,
@@ -90,6 +98,11 @@ function setup(options: { llm?: boolean } = {}): Harness {
     scratchDocs,
     snapshots,
     failSnapshot: false,
+    pushToolEvent: (event) => {
+      for (const listener of toolListeners) {
+        listener(event);
+      }
+    },
     pushDelta: (taskId, text) => {
       for (const listener of deltaListeners) {
         listener({ taskId, text });
@@ -167,6 +180,10 @@ function setup(options: { llm?: boolean } = {}): Harness {
     onDelta: (listener) => {
       deltaListeners.add(listener);
       return () => deltaListeners.delete(listener);
+    },
+    onToolEvent: (listener) => {
+      toolListeners.add(listener);
+      return () => toolListeners.delete(listener);
     },
     readVaultFile: async (path) => vaultFiles.get(path) ?? null,
     scratchBody: (docPath) => scratchDocs.get(docPath) ?? null,
@@ -296,6 +313,17 @@ describe('assistant plugin state — chat-first asks (ADR-0048)', () => {
     // Foreign task ids don't land in the buffer.
     h.pushDelta('some-other-task', 'X');
     expect(h.state.streaming()?.text).toBe('Teil-antwort');
+
+    // Tool calls of the generation show while it runs (ADR-0071).
+    const call = { taskId: first!.taskId, id: 'c1', name: 'vault_read', argsJson: '{"path":"a.md"}' };
+    h.pushToolEvent({ ...call, phase: 'start' });
+    expect(h.state.streaming()?.tools).toEqual([
+      { id: 'c1', name: 'vault_read', argsJson: '{"path":"a.md"}', state: 'running' },
+    ]);
+    h.pushToolEvent({ ...call, phase: 'end', ok: false });
+    expect(h.state.streaming()?.tools[0]?.state).toBe('failed');
+    h.pushToolEvent({ ...call, taskId: 'some-other-task', phase: 'start' });
+    expect(h.state.streaming()?.tools).toHaveLength(1);
 
     release();
     expect(await pending).toBe(true);
@@ -973,5 +1001,34 @@ describe('assistant plugin state — the Vault chip selection (ADR-0055 later ch
       { id: 'v1', name: 'Notes', active: true },
       { id: 'v2', name: 'Git vault', active: false },
     ]);
+  });
+});
+
+describe('applyToolProgress', () => {
+  const event = (phase: 'start' | 'end', id: string, ok?: boolean): ToolProgressEvent => ({
+    taskId: 't',
+    phase,
+    id,
+    name: 'vault_read',
+    argsJson: '{}',
+    ...(ok !== undefined ? { ok } : {}),
+  });
+
+  it('adds a call on start and settles it on end', () => {
+    const started = applyToolProgress([], event('start', 'a'));
+    expect(started.map((tool) => tool.state)).toEqual(['running']);
+    expect(applyToolProgress(started, event('end', 'a', true))[0]?.state).toBe('done');
+  });
+
+  it('settles the latest running call when a model reuses an id', () => {
+    let tools = applyToolProgress([], event('start', 'a'));
+    tools = applyToolProgress(tools, event('end', 'a', true));
+    tools = applyToolProgress(tools, event('start', 'a'));
+    tools = applyToolProgress(tools, event('end', 'a', false));
+    expect(tools.map((tool) => tool.state)).toEqual(['done', 'failed']);
+  });
+
+  it('ignores an end without a start', () => {
+    expect(applyToolProgress([], event('end', 'x', true))).toEqual([]);
   });
 });

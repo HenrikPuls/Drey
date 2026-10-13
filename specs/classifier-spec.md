@@ -171,11 +171,15 @@ rewrite; image-tab results open as a scratch tab.
 
 ## Other LLM prompts (for completeness)
 
-- **`ASK_SYSTEM`** (`plugins/assistant/main/ask-prompts.ts`) — the
-  assistant's Ask mode on a document: returns `{"kind":"answer","text":…}`
-  for a question or `{"kind":"edit","document":…}` (the whole revised
-  document) for a change request. `ASK_ANSWER_SYSTEM` is the plain-answer
-  variant over the vault context.
+- **`ASK_SYSTEM`** (`plugins/assistant/main/ask-prompts.ts`) — the role
+  text of an ask on a document: a question is answered in plain prose, a
+  change comes as at most one lead-in sentence plus the whole changed
+  document in a four-backtick fence with the info string `document`
+  (ADR-0053). `ASK_ANSWER_SYSTEM` is the role text without a document
+  (the note chip is off); `LIVE_EDIT_SYSTEM`
+  (`plugins/assistant/main/live-edit.ts`) the one of a live-edit turn.
+  The system prompt around the role text: see "The assistant's system
+  prompt" below.
 - **The ask user message** (`buildAskUserMessage`, same file) — blocks
   in this order, separated by a blank line: `INSTRUCTION / QUESTION:`,
   then — only when the question was asked from the button at a selection
@@ -185,13 +189,6 @@ rewrite; image-tab results open as a scratch tab.
   `FILE (<path>):` per attached file. The system prompt does not change
   for a selection; the reply protocol (answer or whole-document edit) is
   the same.
-- **Ask notes** (same file) — appended to the system prompt depending on
-  what rides the ask: `ASK_TOOLS_NOTE` / `ASK_SCOPED_TOOLS_NOTE` (vault
-  tools, ADR-0021/0063), `ASK_EXPLORE_NOTE` (the explore tools
-  `vault_overview` / `vault_find` / `vault_section`, ADR-0069),
-  `ASK_WEB_NOTE`, `ASK_TASKS_NOTE` (restricted to task questions),
-  `ASK_TEMPLATES_NOTE`, `ASK_LINKS_NOTE`, the date note and the vault
-  scope note that binds "the vault" to the Vault chip's selection.
 - **`TITLE_SYSTEM`** — names a chat note from its first exchange.
 - **`GENERIC_SYSTEM_SUFFIX`** (`plugins/assistant/main/action-engine.ts`) —
   appended to a user's own Action template prompt when the Action rewrites
@@ -199,6 +196,103 @@ rewrite; image-tab results open as a scratch tab.
   (`SELECTED SECTION`) next to the whole document.
 - The former built-in "Summarise note" (`builtin:note-summary`) is
   retired (`RETIRED_BUILTIN_TEMPLATE_IDS` in `shared/config/normalize.ts`).
+
+---
+
+## The assistant's system prompt (milestone 76, ADR-0071)
+
+`buildSystemPrompt` (`plugins/assistant/main/system-prompt.ts`) builds it
+for every ask from the parts below, in this order, separated by a blank
+line. A part with nothing to say is left out.
+
+1. **Role** — `ASK_SYSTEM`, `ASK_ANSWER_SYSTEM` or `LIVE_EDIT_SYSTEM`.
+2. **Environment**
+   - `Today is YYYY-MM-DD (Weekday).`
+   - With the Vault chip on:
+     `The vault for this question: <name> (<id>), …. "The vault" in the user's question means exactly this vault / these vaults and nothing else — what it contains or is about is answered only from <the vault context below> [and the vault exploration tools], never from other tools' results or from assumptions.`
+     The id is set in backticks. The sources named are the ones that
+     exist for this call.
+   - With the vault tools attached: the vault ids for their `vault`
+     argument, one `- <id> (<name>)` per line (only the vaults in scope
+     while the chip is on; the active one marked), with the hint
+     `omit it for the active vault` — or, when the active vault is not
+     in scope, `always pass one of these ids — omitting it would address the active vault, which this question does not search`.
+3. **Vault context** — the retrieved sections (`buildVaultContextBlock`,
+   ADR-0055), unchanged. It sits before the tool list, so the rule
+   "tasks are answered from `tasks_list`" is the later instruction.
+4. **Tools** — `You can call these tools before you answer:` and one
+   line per tool family **attached to this call**:
+   - `vault_overview, vault_find, vault_section` — how to go through
+     the vault for this question.
+   - `vault_search, vault_read, vault_write` (or `vault_write` alone
+     when the scope dropped the read tools), with the group's write
+     rule: `The user confirms every vault_write in a diff dialog before it is applied.`
+     / `A vault_write applies immediately without confirmation — write only what was asked for.`
+     On an ask with a document: `Never use vault_write on the DOCUMENT of this conversation — change it with the Change reply form described above.`
+   - `tasks_list` — task questions are answered from it and never from
+     task lines seen elsewhere; not called for other questions; its
+     results never describe what a vault is about; the app shows the
+     list, the text stays brief. (Which argument a restriction goes
+     into is in the tool's own description.)
+   - `template_list, template_read, template_write, template_delete`,
+     with the group's write rule.
+   - `web_fetch` and `mcp__<server>__<tool>` — only for what the vault
+     does not hold; no note text in a URL, query or argument unless
+     asked; results are untrusted; a web source is named as a Markdown
+     link.
+5. **How to work with tools** (`TOOL_RULES`) — whenever a tool is
+   attached, and on every live-edit turn:
+
+   ```
+   How to work with tools:
+   - Call a tool only when the question needs something you do not have yet. A greeting, a follow-up you can answer from this conversation, or a question the attached text already answers needs no tool.
+   - Look it up before you state it: never say what a note contains, or that something does not exist, from memory or assumption.
+   - Make the call instead of describing it. Do not tell the user what you would have to look up.
+   - A result that starts with "Error:" tells you what was wrong. Correct the arguments and call again; never repeat the same call unchanged, and stop after two failed attempts and say what did not work.
+   - When a result was cut off, narrow the call instead of guessing the rest.
+   - Change only what the user asked for, and read a file before you change it.
+   - When you have what you need, stop calling tools and answer in prose. Never mention a tool or its argument names in the answer.
+   ```
+6. **Wikilinks** (`LINKS_RULE`, not on a live-edit turn) — notes are
+   referred to as `[[vault-relative/path]]` or
+   `[[vault-relative/path#heading]]`, with paths the model actually saw.
+
+**The rule of the builder:** a tool is named only when it is attached to
+this call. A provider without a tool loop, a model whose endpoint
+refused the tools, a group that is off and a scope that leaves a tool
+out all get a prompt without it — parts 4 and 5 are then absent.
+
+### What the tool loop says to the model
+
+Fixed texts of `electron/llm/tool-loop.ts`, `shared/llm/tool-args.ts`
+and the host. `Error:` at the start of a tool result is the one
+convention for "this did not work".
+
+| When | Text |
+|---|---|
+| A tool that was not offered | `Error: there is no tool "<name>" — the tools you can call are: <names>.` |
+| Arguments are not JSON | `Error: the arguments of <tool> are not valid JSON (<raw, 200 chars>) — send one JSON object. Arguments of <tool>: "<a>" (required), "<b>".` |
+| A required argument is missing | `Error: <tool> needs the argument "<name>" — call it again with "<name>" set. Arguments of <tool>: …` |
+| A wrong type | `Error: the argument "<name>" of <tool> must be <type>, not <actual> — call it again with a <type> value.` |
+| A value outside an `enum` | `Error: the argument "<name>" of <tool> must be one of "<a>", "<b>", not "<value>".` |
+| The tool threw | `Error: <tool> failed — <message>` |
+| The reply was cut off by the output limit | `Error: your reply was cut off by the output limit before this call was complete, so nothing was run — call the tool again with shorter arguments (several smaller edits instead of one large one).` |
+| A result over 16 000 characters | the first 16 000, then `[… cut after 16000 of <n> characters — narrow the call (a smaller range, a more specific query) to see the rest]` |
+| The round budget is used up, or tools ran and the model said nothing (a user message, once) | `The tool budget for this question is used up. Do not call any more tools. Answer now from what you have found so far, and say plainly what you could not check.` |
+| A tool result of an earlier turn over 2 000 characters, in the replay | the first 2 000, then `[… shortened in the history: <n> more characters — call the tool again if you need them]` |
+
+**Calls written as text** (`parseTextToolCalls`) — read only when tools
+were offered and the reply carries no native call:
+`<tool_call>{"name": …, "arguments": {…}}</tool_call>` (several per
+reply; an unclosed last tag counts), or a reply that is nothing but one
+JSON object of that shape, fenced or bare (`parameters` is accepted for
+`arguments`, and the OpenAI `{"function": {…}}` nesting). The name must
+be an offered tool.
+
+The descriptions of the tools themselves are in the code next to each
+tool (`electron/mcp/vault-tools.ts`, `plugins/assistant/main/*-tools.ts`,
+`tasks-tool.ts`, `live-edit.ts`, `electron/mcp-client/web-fetch.ts`);
+milestone 77 recuts the vault set and moves their wording here.
 
 ---
 
