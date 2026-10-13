@@ -28,14 +28,15 @@ here, and everything in this file binds every agent regardless of tool.
   content is German — a German mockup or a German feature request is a
   description of the layout and behaviour, **not** an instruction to write
   German labels. Translate them.
-- **Screenshots show English menus, too.** Some menus and pickers list
-  names that come from vault files or the config — prompt titles and
+- **Screenshots are English throughout.** Menus and pickers list names
+  that come from vault files or the config — prompt titles and
   descriptions (`templates/prompts/`), template and snippet names, Action
-  names. In anything that is shown to the owner or shipped (manual
-  screenshots, screenshots taken to demonstrate a feature, the e2e
-  fixtures those are made from), seed these names in **English**, so no
-  menu in a screenshot carries German text. German stays where it is
-  plainly note content (a note's body, its file name, its tags).
+  names — and panels show file names, tags and note text. In anything
+  that is shown to the owner or shipped (the manual's screenshots,
+  screenshots taken to demonstrate a feature, and the fixtures they are
+  made from), the seeded vault is **English**: notes, file and folder
+  names, tags, templates, prompts, the mocked model's answers. The
+  manual's demo vault lives in `e2e/manual-screenshots.spec.ts`.
 - Content the user actually writes into vault files at runtime (notes,
   tags, entry text) stays **German** — that's user data, not a code
   artifact, and is out of scope for this convention.

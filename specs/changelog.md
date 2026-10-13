@@ -72,11 +72,12 @@ field, the prompts from the prompts folder, and the manual Actions.
   Prompts picker and the popover read `<templates.dir>/prompts/`; the
   renderer used the fixed `templates/prompts` before, while the
   assistant's template tools already used the configured folder.
-- **English names in menus, in screenshots too** (`CLAUDE.md`, Language
-  Convention): names a menu or picker lists from the vault — prompt
-  titles, template and Action names — are seeded in English in the e2e
-  and manual-screenshot fixtures. The manual's prompt fixture is now
-  "Day review"; the manual's images were not re-captured for it.
+- **Screenshots are English throughout** (`CLAUDE.md`, Language
+  Convention; owner request): the manual's demo vault
+  (`e2e/manual-screenshots.spec.ts`) is English — notes, file and folder
+  names, tags, templates, the prompt, the mocked answer — and all 44
+  manual images were re-captured from it. The assistant e2e prompt
+  fixtures are English too.
 - No SDK change: the button is a CodeMirror tooltip built from the
   host's modules (`plugins/assistant/renderer/selection-button.ts`), the
   popover plain DOM (`selection-popover.ts`).
