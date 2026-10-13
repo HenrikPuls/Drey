@@ -215,6 +215,34 @@ export function semanticSectionsFor(path: string, content: string): SemanticSect
   return out;
 }
 
+/**
+ * Picks the section a `vault_section`-style request names: by heading
+ * (case-insensitive, first match), else by 1-based line (exact, else the
+ * last section starting at or above it), else the first section. Null
+ * only when the file split into no sections at all — a heading miss falls
+ * through, exactly like the semantic service's original inline logic.
+ */
+export function locateSemanticSection(
+  sections: readonly SemanticSection[],
+  target: { heading?: string; line?: number },
+): SemanticSection | null {
+  const wantedHeading =
+    typeof target.heading === 'string' && target.heading.trim() !== ''
+      ? target.heading.trim().toLowerCase()
+      : null;
+  const wantedLine = typeof target.line === 'number' ? target.line : null;
+  const byHeading =
+    wantedHeading !== null
+      ? sections.find((entry) => entry.heading.toLowerCase() === wantedHeading)
+      : undefined;
+  const byLine =
+    byHeading === undefined && wantedLine !== null
+      ? (sections.find((entry) => entry.line === wantedLine) ??
+        sections.filter((entry) => entry.line <= wantedLine).at(-1))
+      : undefined;
+  return (byHeading ?? byLine ?? sections[0]) ?? null;
+}
+
 // -- vectors -----------------------------------------------------------------
 
 /** Float32 little-endian → base64 (index-file + spec transport form). */

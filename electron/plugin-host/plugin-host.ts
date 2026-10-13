@@ -178,6 +178,7 @@ export class PluginHost {
 
   readonly search: {
     registerSectionSearch(provider: SectionSearchProvider): Unsubscribe;
+    sectionSearchProvider(): SectionSearchProvider | null;
     registerSemanticSearch(provider: SemanticSearchProvider): Unsubscribe;
     notifyChanged(): void;
   };
@@ -214,6 +215,8 @@ export class PluginHost {
           }
         };
       },
+      // The seam's read side (SDK 1.21): same getter the tasks seam has.
+      sectionSearchProvider: () => this.searchProvider,
       notifyChanged: () => this.emitSearchChanged(),
     };
     this.tasks = {
@@ -757,6 +760,7 @@ export class PluginHost {
       },
       search: {
         registerSectionSearch: (provider) => track(this.search.registerSectionSearch(provider)),
+        sectionSearchProvider: () => this.search.sectionSearchProvider(),
         registerSemanticSearch: (provider) =>
           track(this.search.registerSemanticSearch(provider)),
         notifyChanged: () => this.search.notifyChanged(),

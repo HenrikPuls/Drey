@@ -1,0 +1,40 @@
+@if (svc.request(); as req) {
+  <div class="emoji-backdrop" appOverlayGuard (click)="svc.close()"></div>
+  <div class="emoji-panel" [style.left.px]="req.anchor.x" [style.top.px]="req.anchor.y" role="dialog" aria-label="Pick an emoji">
+    <input
+      #search
+      class="emoji-search"
+      type="text"
+      placeholder="Search emoji…"
+      spellcheck="false"
+      [value]="query()"
+      (input)="onQuery(search.value)"
+      (keydown)="onKey($event)"
+    />
+    @if (options().length === 0) {
+      <div class="emoji-empty">No shortcode matches “{{ query() }}”.</div>
+    } @else {
+      <div class="emoji-grid">
+        @for (name of options(); track name; let i = $index) {
+          <button
+            type="button"
+            class="emoji-cell"
+            [class.on]="active() === i"
+            [attr.aria-label]="':' + name + ':'"
+            [title]="':' + name + ':'"
+            (mouseenter)="active.set(i)"
+            (click)="pick(name)"
+          >
+            {{ glyphOf(name) }}
+          </button>
+        }
+      </div>
+      @if (preview(); as p) {
+        <div class="emoji-preview">
+          <span class="emoji-preview-glyph">{{ p.glyph }}</span>
+          <span class="emoji-preview-name">:{{ p.name }}:</span>
+        </div>
+      }
+    }
+  </div>
+}

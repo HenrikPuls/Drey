@@ -95,6 +95,30 @@
   background: var(--border);
 }
 
+/* The collapse handle at the toolbar's left edge: a slim vertical pill,
+   the chevron naming the fold direction (left = folds away, right =
+   folds back out). Shares the `⋯`-menu toggle's persisted pref. */
+.toolbar-collapse {
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 14px;
+  height: 18px;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-xs);
+  background: transparent;
+  color: var(--text-6);
+  cursor: pointer;
+}
+
+.toolbar-collapse:hover {
+  border-color: var(--border-strong);
+  background: var(--hover-bg);
+  color: var(--text-primary);
+}
+
 .actions {
   flex: none;
   display: flex;
@@ -102,12 +126,26 @@
   gap: 2px;
 }
 
-.unsaved {
+/* The zoom indicator (Ctrl +/-/0, Ctrl+wheel): the current editor font
+   scale, shown only while it differs from 100% -- one click resets.
+   Mono like the meta bar's other numeric value (the path). */
+.zoom-chip {
   flex: none;
-  margin-right: 6px;
-  white-space: nowrap;
-  font-size: 12px;
-  color: var(--text-4);
+  margin-right: 4px;
+  padding: 1px 5px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-5);
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-xs);
+  cursor: pointer;
+}
+
+.zoom-chip:hover {
+  color: var(--text-primary);
+  background: var(--hover-bg);
+  border-color: var(--border-strong);
 }
 
 /* Save reads as "nothing to do" until the buffer is dirty. */

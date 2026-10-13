@@ -489,6 +489,135 @@ describe('FilesPanel multi-select (bug-8)', () => {
   });
 });
 
+describe('FilesPanel inline name inputs (keys stay in the field)', () => {
+  /**
+   * The inline create / rename / vault-rename inputs render inside the tree
+   * container, so their keydowns bubble into `onTreeKeydown`. While one is
+   * open, every key but Enter, Escape and blur belongs to the field: the
+   * cursor keys must not move the tree selection, and Delete must not run
+   * the tree's delete on the selected file.
+   */
+
+  /** The inline-edit signals are `protected`; reach them through a cast. */
+  type InlineEditHost = {
+    renaming: { set(v: { vaultId: string; entry: VaultFileEntry } | null): void };
+    creating: {
+      set(v: { kind: 'file' | 'directory'; vaultId: string; dir: string } | null): void;
+    };
+    renamingVault: { set(v: { vaultId: string } | null): void };
+    selected(): string | null;
+  };
+
+  let fixture: ComponentFixture<FilesPanel>;
+
+  beforeAll(() => {
+    // The vault-rename focus effect calls `select()`, which jsdom routes
+    // through scrollIntoView (not implemented there).
+    Element.prototype.scrollIntoView = vi.fn();
+  });
+
+  beforeEach(async () => {
+    window.dreyApi = registryApi({ listVaultFiles: () => Promise.resolve(tree()) }) as DreyApi;
+    await TestBed.configureTestingModule({ imports: [FilesPanel] }).compileComponents();
+    fixture = TestBed.createComponent(FilesPanel);
+    document.body.appendChild(fixture.nativeElement);
+  });
+
+  afterEach(() => {
+    fixture.nativeElement.remove();
+    delete (window as { dreyApi?: unknown }).dreyApi;
+  });
+
+  function input(): HTMLInputElement {
+    return fixture.nativeElement.querySelector('input.create-input');
+  }
+
+  function treeScroll(): HTMLElement {
+    return fixture.nativeElement.querySelector('.tree-scroll');
+  }
+
+  function host(): InlineEditHost {
+    return fixture.componentInstance as unknown as InlineEditHost;
+  }
+
+  async function renderTree(): Promise<void> {
+    await vi.waitFor(() => {
+      fixture.detectChanges();
+      expect(fixture.nativeElement.querySelectorAll('.node').length).toBe(3);
+    });
+    await expandAll(fixture);
+  }
+
+  async function settle(): Promise<void> {
+    // Flush component effects first -- the focus effects only schedule their
+    // setTimeout(0) during change detection, so the wait must come after it.
+    fixture.detectChanges();
+    await new Promise((resolve) => setTimeout(resolve, 5));
+    fixture.detectChanges();
+  }
+
+  function pressKey(key: string, target?: HTMLElement): void {
+    (target ?? treeScroll()).dispatchEvent(new KeyboardEvent('keydown', { key, bubbles: true }));
+  }
+
+  it('while renaming, cursor keys and Delete do not reach the tree', async () => {
+    await renderTree();
+    const confirm = vi.spyOn(TestBed.inject(ConfirmDialogService), 'confirm');
+    vi.spyOn(TestBed.inject(EditorService), 'openFile').mockResolvedValue(undefined);
+
+    pressKey('ArrowDown'); // vault row
+    pressKey('ArrowDown'); // a.md
+    await settle();
+    expect(host().selected()).toBe(`${V}::a.md`);
+
+    host().renaming.set({ vaultId: V, entry: { name: 'a.md', relativePath: 'a.md', type: 'file' } });
+    await settle(); // the focus effect (setTimeout 0) focuses the input
+    expect(document.activeElement).toBe(input());
+
+    // Dispatched from the input itself, bubbling to the container: the tree
+    // must ignore all of them.
+    pressKey('ArrowDown', input()); // would walk the selection
+    pressKey('ArrowLeft', input()); // would step up to the vault row
+    pressKey('Delete', input()); // would delete the selected file
+    expect(host().selected()).toBe(`${V}::a.md`);
+    expect(confirm).not.toHaveBeenCalled();
+
+    host().renaming.set(null);
+    await settle();
+  });
+
+  it('the create and vault-rename inputs are guarded the same way', async () => {
+    await renderTree();
+    const confirm = vi.spyOn(TestBed.inject(ConfirmDialogService), 'confirm');
+
+    pressKey('ArrowDown'); // vault row
+    await settle();
+    expect(host().selected()).toBe(V);
+
+    // New-file input in the vault root (rendered under the vault row).
+    host().creating.set({ kind: 'file', vaultId: V, dir: '' });
+    await settle();
+    expect(document.activeElement).toBe(input());
+    pressKey('ArrowDown', input());
+    pressKey('Delete', input());
+    expect(host().selected()).toBe(V);
+    expect(confirm).not.toHaveBeenCalled();
+    host().creating.set(null);
+
+    // The vault display-name input (rendered in place of the vault row).
+    // jsdom's `select()` never focuses, so the focus check stays with the
+    // e2e -- the dispatched keydown alone exercises the guard here.
+    host().renamingVault.set({ vaultId: V });
+    await settle();
+    expect(input()).not.toBeNull();
+    pressKey('ArrowDown', input());
+    expect(host().selected()).toBe(V);
+
+    host().renamingVault.set(null);
+    await settle();
+  });
+});
+
 describe('FilesPanel drag & drop (req-23 + cross-vault, ADR-0051)', () => {
   /** vault row · a.md · notes/ · notes/b.md · archive/ -- five visible rows. */
   function tree(): VaultFileEntry[] {

@@ -1,8 +1,8 @@
 # Drey — Changelog
 
 The record of everything **implemented**, newest first. Open work lives in
-[`roadmap.md`](roadmap.md) → "Not yet implemented"; when an item ships it
-moves here. The finer-grained history is not duplicated: the
+[`roadmap.md`](roadmap.md), decided-against ideas in
+[`decisions.md`](decisions.md); when an item ships it moves here. The finer-grained history is not duplicated: the
 milestone-by-milestone build log is archived in
 [`docs/milestones-done.md`](../docs/milestones-done.md), lasting decisions
 live in the ADRs
@@ -44,6 +44,239 @@ recorded as an explicit decision. The parity checklist lives in
   without saving".
 - No rollback: a theme tried and not liked is picked back by hand.
 
+### Milestone 73 — Lossless Markdown template ("Structure note")
+
+A third built-in Action template, **Structure note (lossless)**
+(`builtin:lossless-format`): it restructures a raw note into Markdown
+without adding, inferring or interpreting anything, and tags it from the
+vault's existing vocabulary only. The reply is free Markdown and goes
+through the ADR-0011 whole-document confirmation; an unchanged reply is
+a no-op. A fresh install ships one manual trigger for it, so it is a row
+in the editor's `⋯` menu out of the box; an existing config's trigger
+list is the user's own and stays untouched (add the trigger once in
+Settings → Actions).
+
+- **One vocabulary placeholder for every prompt.** `{{AVAILABLE_TAGS}}`
+  (`shared/llm/prompt-substitution.ts`, `substituteVocabulary`) is
+  replaced with the tag list at call time — in Autotag and in *every*
+  Action template the assistant runs, the user's own included. The
+  reserved `task` is never offered; an empty vocabulary reads
+  `(none yet)`. Autotag's old `{tags}` spelling keeps being substituted,
+  and a stored Autotag prompt that still equals the old default is
+  refreshed to the new one (a genuine edit keeps its text).
+- **Plugin SDK 1.21:** `ctx.search.sectionSearchProvider()` — the read
+  side of the section-search seam (mirroring `tasks.queryProvider()`).
+  The assistant's `ActionEngine` reads the tags plugin's vocabulary
+  through it; with the tags plugin disabled the list is empty.
+- **Deviation from the draft** (`classifier-spec.md`, formerly
+  "Planned"): no `{{NOTE}}` placeholder — the note rides the user
+  message like for every Action, so the built-in needs no special path
+  through the engine.
+- Not enforced: the prompt instructs the model to stay inside the
+  vocabulary, nothing strips an invented tag — the confirmation diff is
+  the check (roadmap follow-up).
+- Unit: `shared/llm/prompt-substitution.spec.ts` (token, legacy token,
+  `task` filter, empty vocabulary), `plugins/assistant/main/action-engine.spec.ts`
+  (system prompt assembly for the lossless template, no-op on an
+  unchanged reply), `app-config.spec.ts` (the third built-in, the seeded
+  trigger on a fresh config only, the legacy Autotag prompt refresh),
+  `actions-resolve.spec.ts` (the default resolved action).
+- Specs: `classifier-spec.md` (the placeholder section, the template as
+  shipped). Manual: the Actions section.
+
+**Not yet manually verified by the owner.**
+
+### Manual stamp — the manual's footer states version and content date from the build
+
+The in-app manual's footer was hand-written ("Manual for Drey 0.3.0"
+while the app is 0.5.0) and drifted. `docs/manual/manual.md` now
+carries `{{MANUAL_VERSION}}` / `{{MANUAL_GENERATED}}` tokens, and
+`scripts/sync-manual.mjs` substitutes them while mirroring: the version
+comes from `package.json`, the generation date is the day `docs/manual`
+last changed in git. A build-time date was rejected on purpose — it
+would dirty the committed `public/manual` mirror on every new day's
+first build, breaking the script's byte-stability promise; both chosen
+values are deterministic, so an unchanged source still re-syncs without
+git noise. A missing version token fails the build loudly, so a
+hand-edited version cannot come back silently. **Not yet manually
+verified by the owner.**
+
+### Editor chrome — unsaved is the save button alone; zoom gets its indicator
+
+The meta bar no longer spells out "Unsaved" next to the save cluster:
+the dirty state lives in the accent-coloured save button (and the tab's
+dot) alone. The editor zoom (`Ctrl +` / `Ctrl -` / `Ctrl 0`,
+`Ctrl`+wheel, `editor.fontScale`) gains an indicator: while the scale
+differs from 100%, the meta bar shows the percentage in mono (matching
+the path), and one click resets it — at 100% the chip is gone, so the
+default state stays chrome-free.
+
+- Unit: `editor.spec.ts` ("Editor chrome") — the save button alone
+  carries dirty; the chip appears only away from 100% and resets on
+  click (a config-serving fake, so the zoom multiplier is real).
+- E2e: `editor-chrome.spec.ts` drives the real path — type to dirty,
+  `Ctrl +` to zoom, click the chip to reset.
+- Manual: one sentence on zooming in the Modes section.
+
+### Fix — Files panel: the inline name fields keep their keys
+
+While one of the Files panel's inline name inputs (rename, new file /
+new folder, vault rename) was open, every key but Enter, Escape and blur
+reached the tree underneath instead of the field: `onTreeKeydown` is
+bound on the tree container and had no guard for events bubbling out of
+the input. The cursor keys moved the tree selection — and through the
+focus-follow's blur even committed the field outright — while
+`preventDefault()` froze the caret inside it. Delete was the dangerous
+one: it ran the tree's delete on the selected *file* (confirm dialog
+and all) while its *name* was being edited. The handler now returns
+early for keydowns from an input/textarea — the same guard the panel's
+context-menu openers already use; a target-identity check would have
+broken bug-7's roving focus, where focused row buttons bubble there
+legitimately.
+
+- Reproduced first, as the roadmap demanded: `e2e/files-rename.spec.ts`
+  covers the defect's manifestations (caret, focus, no delete dialog,
+  nothing lost on cancel) plus the Enter/Escape happy paths and the
+  new-file input — red before the guard, green after.
+- Unit regression in `files-panel.spec.ts`: keys dispatched from all
+  three inline inputs leave the tree selection alone and never reach
+  the delete confirm. (jsdom's `select()` cannot focus, so the
+  vault-rename focus check lives in the e2e.)
+
+### Milestone 72 — Extended Markdown: GFM+, callouts, highlight, math (KaTeX), footnotes, emoji
+
+The editor and every Markdown view now render the full markdownguide
+basic + extended surface — one dialect across the three engines (Lezer
+grammar, markdown-it, PDF export;
+[ADR-0070](../docs/09_architecture_decisions/0070-extended-markdown-dialect.md)):
+callouts, `==highlight==`, `$…$`/`$$…$$` math through KaTeX, footnotes,
+curated `:emoji:` shortcodes, bare-URL autolinking, rendered
+sub/superscript — plus the insert affordances (toolbar, `/` menu,
+context menu, emoji picker + `:`-completion), the formatting eraser
+(`Mod+\`, outermost layer first) and a collapse handle at the toolbar's
+left edge (one click folds the buttons away; shares the `⋯`-menu
+toggle's persisted pref).
+
+- **Callouts** (`> [!NOTE]`, GitHub alerts + Obsidian's aliases folded
+  onto the five palette kinds): tinted container, icon, custom titles;
+  the Obsidian `-`/`+` fold suffix parses and normalizes away (static
+  boxes by decision). PDF parity: styled boxes with the light palette.
+- **Highlight** `==text==` — amber wash, `==` marks conceal/reveal like
+  emphasis. PDF: `<mark>`.
+- **Math** `$…$` / `$$…$$` typeset through **KaTeX** — editor widgets
+  (script lazy on first formula; stylesheet + woff2 fonts as static
+  assets, `<link>`-injected then — in the initial CSS they cost ~300 KB
+  of budget), PDF via the inlined runtime with fonts as `data:` URLs
+  and a synchronous bootstrap. Parse errors show the compact red box /
+  keep the LaTeX. Currency guard: "costs $5 and $6" stays prose.
+- **Full GFM remainder**: bare-URL **autolinking** everywhere including
+  table cells and the PDF (`linkify`); code spans remain the documented
+  way to **disable** it. Pandoc **sub/superscript** (`H~2~O`, `X^2^`)
+  now render (the grammar already parsed them).
+- **Footnotes** (`[^1]` / `[^1]: …`, req-13): superscript numbers in
+  document order, definitions as a muted block with `n.` marks; the PDF
+  renders a real footnotes section (markdown-it-footnote).
+- **Emoji shortcodes** `:joy:` re-enabled — curated gemoji table
+  (~1,900 GitHub names, `shared/markdown/emoji-table.ts`, regenerated
+  via `npm run emoji:table`), which is what keeps timestamps like
+  `00:03:48` plain (the reason the built-in parser was removed).
+- **Insert affordances** for the whole dialect, one reducer layer
+  (`toolbar-commands.ts`) behind three entries: the formatting toolbar
+  (highlight button, sub/sup + callout + math menus, footnote and emoji
+  buttons — seven new Lucide glyphs), the `/` menu (Highlight … Footnote
+  plus `/emoji`), and the editor's right-click menu
+  (`format-menu-rows.ts`, base rows on every Markdown CodeMirror
+  surface; the menu now caps at 460 px and scrolls). Callouts toggle
+  (marker line on/off, keyword swap on variant change), footnotes plant
+  `[^n]` plus the definition in one undo step.
+- **The `:emoji:` picker** (`src/app/emoji-picker/`): an App-level
+  overlay with search + glyph grid over the curated table (recents
+  first, persisted in `drey.emoji.recent`), opened from the toolbar's
+  smile button, the context menu's "Emoji…" row and `/emoji`. Typing
+  `:jo` in prose additionally completes shortcodes
+  (`editor/emoji/emoji-completion.ts`, recents ranked first, silent
+  behind word characters so times/URLs/prose colons never fire).
+- **The formatting eraser** (`editor/erase-formatting.ts`): with the
+  caret, `Mod+\` peels ONE layer -- the outermost inline wrap at the
+  position (`**fett ==rot==**` loses the bold first, `***x***` unwraps
+  emphasis-then-strong); with a selection, one stroke wipes every wrap
+  it overlaps. Markers go, content stays (a link keeps its label, drops
+  the URL); block formatting is untouched (its toggles own that). Same
+  entries as the dialect: toolbar eraser button, `/clear`, the
+  context-menu row, and the `Mod+\` keybinding.
+- One implementation site per engine: all Markdown views share
+  `MarkdownSurface`; `shared/markdown/` carries the pure halves
+  (callout keywords, emoji table, math scanner, the markdown-it rule
+  pack). Spellcheck masks math/footnotes/markers/shortcodes.
+- New deps: `katex` (+`@types/katex`), `markdown-it-footnote`,
+  `gemoji` (dev). The assistant chat card's small subset is unchanged.
+- Note: the production build's initial-bundle warning (1.61 MB vs the
+  1.35 MB warning budget) predates this milestone by ~230 KB; this adds
+  ~30 KB (the emoji table). The 2 MB error budget is not near.
+
+### Embedded pictures survive split-pane focus switches
+
+Owner-reported: with the editor split into two panes, a note in a
+subfolder holding embedded draw.io SVG pictures showed "image not found"
+for every embed after switching to the other pane and back; one more
+click into the editor loaded them again. Owner-verified.
+
+- **The cause was resolution through the focused pane.** Live Preview
+  resolved an embed's candidates at decoration-build time through
+  `EditorService.openPath`/`openVaultId` -- the facade over the FOCUSED
+  pane. A rebuild in a background pane (a focus switch recreates the
+  image widgets) resolved the note-relative reference against the other
+  document: for a subfolder note the candidate chain fell back to the
+  vault root and found nothing; for a vault-root note it coincidentally
+  stayed correct -- which is why only some notes broke.
+- **The same window fired on a tab switch's first decorations.** The
+  shown document's identity reached the surface as a template input,
+  one change-detection pass after the content swap, so every embed's
+  first candidate resolved against the PREVIOUS note once and 404ed
+  (invisible -- a later rebuild healed the widget, but the request had
+  already failed).
+- **The identity now travels with the content.**
+  `MarkdownSurface.setDocumentIdentity` (path, vault id, help asset
+  base) is set by `Editor.loadActiveDoc` synchronously before the view
+  gets the text, and embed resolution reads exactly that -- never the
+  focused pane's facade, never a lagging input. Wikilinks keep the
+  `docVaultId` input (completion runs long after the switch).
+- New regression spec: `e2e/image-embed-pane-switch.spec.ts` -- the
+  subfolder repro plus the vault-root contrast case, also asserting no
+  failed `drey-asset://` request anywhere along the flow.
+
+### The assistant answers a scoped ask from the scoped vaults only
+
+Owner-reported: with the docs vault selected in the Vault chip, "what is
+this vault about" was answered from the active vault — the chat notes
+showed the model quoting `tasks_list` results (active-vault tasks) while
+the docs context sat unused in the system prompt. **Not yet manually
+verified by the owner.**
+
+- **The scope no longer depends on retrieval succeeding.** The chat
+  engine resolves the ask's targets from the vault registry
+  (`resolveTargetVaultIds`) and arms `vaultToolsScope` on every chip-on
+  ask — semantic retrieval off, or a retrieval error, can no longer
+  leave the base `vault_search`/`vault_read` tools on their
+  active-vault default (ADR-0069 later change).
+- **Active-vault-only tools are withheld out of scope.** When the chip's
+  selection excludes the active vault, `tasks_list` and the template
+  tools (and their notes, and the post-hoc task block) do not ride the
+  ask; the tools note lists only in-scope vaults and demands explicit
+  vault ids. A new scope note binds "the vault" in the question to the
+  selection, and the tasks note restricts the tool to task questions.
+- **Explore tools survive semantic-off.** With `semantic.enabled` off,
+  `vault_overview`/`vault_find`/`vault_section` degrade to fresh
+  filesystem scans (`plugins/assistant/main/vault-scan.ts`, shared
+  section splitter/locator, token-coverage ranking, 200-file cap)
+  instead of disappearing — a scoped ask keeps in-scope lookups.
+- **Replay attachments try the scoped vaults** when the active-vault
+  read misses, so a chat bound to a non-active vault keeps its
+  attachments on follow-ups.
+- New specs: the engine's scope arming and tool gating
+  (`chat-engine.spec.ts`), the filesystem scan ports
+  (`vault-scan.spec.ts`), the scoped notes (`ask-prompts.spec.ts`).
+
 ### A third bespoke theme: Cyberpunk
 
 **Not yet manually verified by the owner.**
@@ -63,6 +296,35 @@ recorded as an explicit decision. The parity checklist lives in
   fixed — they do not follow the highlight colour, which still re-tints
   the chrome.
 - Anthrazit stays the default; the splash stays Anthrazit.
+
+### Milestone 71 — Agentic vault exploration (ADR-0069)
+
+Owner request: the fixed top-4 context and the scope leaks of the Vault
+chip were not enough for good answers. The chip-on ask is now
+**hybrid-agentic**. **Not yet manually verified by the owner.**
+
+- **Baseline stays, tools are added.** The top-k block of semantic
+  retrieval still goes into the system prompt; tool-capable providers
+  additionally get three scope-safe explore tools, closed over the chip's
+  targets: `vault_overview` (files + headings straight from the index),
+  `vault_find` (semantic ranking over exactly the chip's subset) and
+  `vault_section` (one section, read fresh). Loop cap 6.
+- **Scope enforced by the host.** `MainChatOptions.vaultToolsScope`
+  (plugin SDK 1.20) makes the plugin host drop `vault_search` /
+  `vault_read` from an ask whose scope excludes the active vault — they
+  defaulted to it and leaked out-of-scope reads. `vault_write` is never
+  filtered.
+- **Cold or stale indexes self-heal.** `ensureUsable` starts a
+  de-duplicated background rebuild instead of silently skipping;
+  `RetrievalOutcome.targets` carries the resolved scope to the engine.
+- **Picker semantics.** The first check from a shortcut scope in the
+  vault picker replaces the selection instead of carrying the shortcut's
+  vaults along (the "docs vault selected, answers from the active vault"
+  trap).
+- Specs: explore tools, semantic service (scoped search, outline,
+  readSection, self-heal), host filter, engine wiring. Docs: ADR-0069,
+  `CLAUDE.md`. Follow-up fix the same day: "The assistant answers a scoped
+  ask from the scoped vaults only" (above).
 
 ### Fix — the image resize grip and the table keys work before the note is fully parsed
 

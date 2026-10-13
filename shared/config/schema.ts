@@ -225,7 +225,7 @@ export interface LlmConfig {
 export type ActionResultKind = 'localized' | 'document';
 
 /** The built-in templates that carry behaviour beyond "send prompt, replace document". */
-export type BuiltinAction = 'search-summary' | 'autotag';
+export type BuiltinAction = 'search-summary' | 'autotag' | 'lossless-format';
 
 /** Trigger kinds available now. `'on-save'` fires from the `note:save` pipeline. */
 export type ActionEvent = 'on-save' | 'manual';
@@ -706,6 +706,7 @@ export const BUNDLED_DICTIONARIES: ReadonlyArray<{ id: string; label: string }> 
 export const BUILTIN_TEMPLATE_IDS: Record<BuiltinAction, string> = {
   'search-summary': 'builtin:search-summary',
   autotag: 'builtin:autotag',
+  'lossless-format': 'builtin:lossless-format',
 };
 
 /**
@@ -729,13 +730,73 @@ export const LEGACY_SEARCH_SUMMARY_PROMPT = `You are given the sections of a per
 
 /**
  * The system prompt behind the editor's `⋯` "Suggest tags" row (the
- * re-homed Autotag). `{tags}` is swapped for the vocabulary list (one tag
- * per line) at call time; the suggested tags are applied to the note
- * section directly, deduplicated against the tags it already carries.
+ * re-homed Autotag). `{{AVAILABLE_TAGS}}` is swapped for the vocabulary
+ * list (one tag per line) at call time — the one token every prompt
+ * shares (`shared/llm/prompt-substitution.ts`); the suggested tags are
+ * applied to the note section directly, deduplicated against the tags
+ * it already carries.
  */
 export const AUTOTAG_PROMPT = `You are given a short note and the tags already used in this vault. Suggest 1 to 4 tags for the note: reuse tags from the list where they fit, and otherwise propose new tags (one word, lowercase, no spaces).
+
+Existing tags:
+{{AVAILABLE_TAGS}}
+
+Respond ONLY with JSON, no prose: {"tags": ["tag1", "tag2"]}`;
+
+/**
+ * The default `AUTOTAG_PROMPT` text before the lossless template aligned
+ * the vocabulary token (`{tags}` -> `{{AVAILABLE_TAGS}}`).
+ * `normalizeAppConfig` refreshes a stored `builtin:autotag` whose prompt
+ * still equals this — the user never edited it — while a genuine user
+ * edit keeps its text (the legacy `{tags}` keeps being substituted).
+ */
+export const LEGACY_AUTOTAG_PROMPT = `You are given a short note and the tags already used in this vault. Suggest 1 to 4 tags for the note: reuse tags from the list where they fit, and otherwise propose new tags (one word, lowercase, no spaces).
 
 Existing tags:
 {tags}
 
 Respond ONLY with JSON, no prose: {"tags": ["tag1", "tag2"]}`;
+
+/**
+ * The built-in "Structure note" Action template (roadmap "Lossless
+ * Markdown template"): turns a raw note into structured Markdown
+ * without adding or interpreting anything, and tags it from the
+ * existing vocabulary only. Ships like the other built-ins (editable in
+ * Settings → Actions); the note itself rides the user message like for
+ * every action — only `{{AVAILABLE_TAGS}}` is substituted into the
+ * system prompt. The reply is free Markdown and goes through the
+ * ADR-0011 whole-document confirmation (`resultKind: 'document'`).
+ */
+export const LOSSLESS_FORMAT_PROMPT = `Transform the note into structured Markdown.
+
+This is a lossless formatting task, not a summarization task.
+
+STRICT REQUIREMENTS:
+
+- Preserve all factual information from the source.
+- Never add information that is not explicitly contained in the source.
+- Never infer missing context.
+- Never answer questions found in the source.
+- Never interpret the author's intentions.
+- Never create decisions, conclusions, tasks, deadlines, or responsibilities unless explicitly stated.
+- Keep the original language.
+- Correct only obvious spelling or grammar errors.
+- Retain uncertainty, open questions, and incomplete information as such.
+- Group related statements when this can be done without interpretation.
+- Use headings and bullet points only where they improve readability.
+- Preserve chronological relationships.
+
+TAGGING:
+
+The valid tags are listed in AVAILABLE_TAGS.
+
+- Only use tags from AVAILABLE_TAGS; never create new tags.
+- Add a tag only when the note provides direct evidence that it applies.
+- If multiple tags could apply and the choice is ambiguous, add none.
+- Add person tags only when that person is explicitly mentioned; match names against AVAILABLE_TAGS and do not infer a person's identity from context alone.
+- Avoid redundant and overly broad tags.
+
+Output only the final Markdown.
+
+AVAILABLE_TAGS:
+{{AVAILABLE_TAGS}}`;

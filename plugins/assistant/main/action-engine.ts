@@ -17,6 +17,7 @@ import {
   ChatMessage,
   ResolvedAction,
   resolveActions,
+  substituteVocabulary,
 } from '../../../shared/llm';
 import { AppConfig } from '../../../shared/app-config';
 
@@ -36,6 +37,12 @@ export class ActionEngine {
   constructor(
     private readonly getConfig: () => AppConfig,
     private readonly chat: ChatFn,
+    /**
+     * The vault's tag vocabulary for the `{{AVAILABLE_TAGS}}` placeholder
+     * (the lossless template's tagging rules); empty when no plugin
+     * registered the section-search provider.
+     */
+    private readonly vocabulary: () => readonly string[] = () => [],
   ) {}
 
   /** Enabled actions for a trigger event (the on-save hook's enumeration). */
@@ -77,9 +84,13 @@ export class ActionEngine {
     const user = context.selection
       ? `SELECTED SECTION:\n${context.selection}\n\nWHOLE DOCUMENT:\n${context.body}`
       : context.body;
+    // `{{AVAILABLE_TAGS}}` (and Autotag's legacy `{tags}`) become the
+    // vault's tag vocabulary — the one placeholder every action prompt
+    // shares, also usable from user templates.
+    const system = substituteVocabulary(action.prompt, this.vocabulary()) + GENERIC_SYSTEM_SUFFIX;
     const reply = await this.chat(
       [
-        { role: 'system', content: action.prompt + GENERIC_SYSTEM_SUFFIX },
+        { role: 'system', content: system },
         { role: 'user', content: user },
       ],
       { taskId },

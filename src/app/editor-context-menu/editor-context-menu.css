@@ -1,4 +1,7 @@
-/* Same shape as the Files-panel right-click menu (files-panel.css). */
+/* Same shape as the Files-panel right-click menu (files-panel.css). The
+   menu scrolls when its rows (clipboard + base + plugin) outgrow the
+   window -- the extended-dialect rows (M72) made that reachable on small
+   windows. */
 
 .ctx-backdrop {
   position: fixed;
@@ -11,6 +14,11 @@
   z-index: 61;
   min-width: 190px;
   max-width: 260px;
+  /* Matches the service's y clamp reserve (see `onContextMenu`): a full
+     clipboard + base + plugin menu stays on screen, anything taller
+     scrolls inside the box. */
+  max-height: 460px;
+  overflow-y: auto;
   padding: 4px;
   background: var(--bg-input);
   border: 1px solid var(--popover-border);

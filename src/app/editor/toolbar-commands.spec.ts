@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { applyAction, imageAltFromFileName } from './toolbar-commands';
+import { applyAction, imageAltFromFileName, nextFootnoteNumber } from './toolbar-commands';
 
 /** Applies an action and returns [newText, selFrom, selTo]. */
 function run(text: string, from: number, to: number, action: Parameters<typeof applyAction>[3]) {
@@ -172,6 +172,128 @@ describe('insertDivider', () => {
     expect(run('a\n\nb', 2, 2, { kind: 'divider' })[0]).toBe('a\n---\nb');
   });
 });
+
+describe('extended wraps (M72)', () => {
+  it('highlight wraps and unwraps ==…==', () => {
+    const [text, selFrom, selTo] = run('a key point', 2, 5, { kind: 'highlight' });
+    expect(text).toBe('a ==key== point');
+    expect(text.slice(selFrom, selTo)).toBe('==key==');
+    const [plain] = run('a ==key== point', 2, 9, { kind: 'highlight' });
+    expect(plain).toBe('a key point');
+  });
+
+  it('subscript and superscript toggle their single markers', () => {
+    expect(run('H2O', 1, 2, { kind: 'subscript' })[0]).toBe('H~2~O');
+    expect(run('H~2~O', 1, 4, { kind: 'subscript' })[0]).toBe('H2O');
+    expect(run('X2', 1, 2, { kind: 'superscript' })[0]).toBe('X^2^');
+    expect(run('X^2^', 1, 4, { kind: 'superscript' })[0]).toBe('X2');
+  });
+
+  it('inline math wraps $…$ and parks the caret between a bare pair', () => {
+    expect(run('E equals', 0, 1, { kind: 'mathInline' })[0]).toBe('$E$ equals');
+    const [empty] = run('a b', 2, 2, { kind: 'mathInline' });
+    expect(empty).toBe('a $$b');
+    const [, selFrom, selTo] = run('a b', 2, 2, { kind: 'mathInline' });
+    expect(selFrom).toBe(3);
+    expect(selTo).toBe(3);
+  });
+});
+
+describe('insertMathBlock', () => {
+  it('places an empty $$ block after the caret line with the caret inside', () => {
+    const [text, selFrom, selTo] = run('intro\nnext', 2, 2, { kind: 'mathBlock' });
+    expect(text).toBe('intro\n$$\n\n$$\nnext');
+    expect(selFrom).toBe('intro\n$$\n'.length);
+    expect(selTo).toBe(selFrom);
+  });
+
+  it('appends after a last line without trailing newline', () => {
+    expect(run('end', 3, 3, { kind: 'mathBlock' })[0]).toBe('end\n$$\n\n$$\n');
+  });
+});
+
+describe('toggleCallout', () => {
+  it('quotes plain lines and lands the marker line on top', () => {
+    const [text, selFrom, selTo] = run('watch out', 3, 3, { kind: 'callout', variant: 'warning' });
+    expect(text).toBe('> [!WARNING]\n> watch out');
+    // The caret keeps its offset into the body, below the marker line.
+    expect(text.slice(selFrom, selTo)).toBe('');
+    expect(selFrom).toBe('> [!WARNING]\n> wat'.length);
+  });
+
+  it('adds a marker to an existing plain blockquote', () => {
+    expect(run('> plain\n> quote', 3, 3, { kind: 'callout', variant: 'tip' })[0]).toBe(
+      '> [!TIP]\n> plain\n> quote',
+    );
+  });
+
+  it('removes the marker line when the same kind is applied again', () => {
+    expect(run('> [!NOTE]\n> body', 4, 4, { kind: 'callout', variant: 'note' })[0]).toBe('> body');
+  });
+
+  it('swaps the keyword when another kind is applied', () => {
+    expect(run('> [!NOTE]\n> body', 4, 4, { kind: 'callout', variant: 'caution' })[0]).toBe(
+      '> [!CAUTION]\n> body',
+    );
+  });
+
+  it('recognises the marker from any line of the block, not just the first', () => {
+    // The caret sits on the block's second line; the marker above it is
+    // still the one toggled off.
+    expect(run('> [!NOTE]\n> body', 12, 12, { kind: 'callout', variant: 'note' })[0]).toBe('> body');
+  });
+
+  it('strips an Obsidian fold suffix when switching the kind', () => {
+    expect(run('> [!NOTE]- folded', 4, 4, { kind: 'callout', variant: 'tip' })[0]).toBe(
+      '> [!TIP]- folded',
+    );
+  });
+
+  it('quotes every touched line of a multi-line selection', () => {
+    expect(run('a\nb', 0, 3, { kind: 'callout', variant: 'note' })[0]).toBe(
+      '> [!NOTE]\n> a\n> b',
+    );
+  });
+});
+
+describe('insertFootnote', () => {
+  it('plants the ref after the selection and the definition at the doc end', () => {
+    const [text, selFrom, selTo] = run('a claim here', 0, 1, { kind: 'footnote' });
+    expect(text).toBe('a[^1] claim here\n\n[^1]: Footnote');
+    expect(text.slice(selFrom, selTo)).toBe('Footnote');
+  });
+
+  it('numbers past the highest existing definition', () => {
+    const [text] = run('x[^7] y\n\n[^7]: old', 7, 7, { kind: 'footnote' });
+    expect(text).toBe('x[^7] y[^8]\n\n[^7]: old\n\n[^8]: Footnote');
+  });
+
+  it('keeps trailing newlines from doubling the definition block', () => {
+    const [text] = run('text\n', 4, 4, { kind: 'footnote' });
+    expect(text).toBe('text[^1]\n\n[^1]: Footnote');
+  });
+
+  it('backs a line-selection (ending past the break) onto the paragraph', () => {
+    // A triple-click selects through to the next line's start; the ref
+    // belongs after the last character, not alone on the following line.
+    const [text, selFrom, selTo] = run('a claim\nnext', 0, 8, { kind: 'footnote' });
+    expect(text).toBe('a claim[^1]\nnext\n\n[^1]: Footnote');
+    expect(text.slice(selFrom, selTo)).toBe('Footnote');
+  });
+});
+
+describe('nextFootnoteNumber', () => {
+  it('starts at 1 and steps past the highest number', () => {
+    expect(nextFootnoteNumber('')).toBe(1);
+    expect(nextFootnoteNumber('a[^2]: nope\n\n[^2]: x')).toBe(3);
+    expect(nextFootnoteNumber('ref[^10] and [^9]:\n\n[^9]: a\n[^10]: b')).toBe(11);
+  });
+
+  it('ignores non-numeric labels', () => {
+    expect(nextFootnoteNumber('[^prologue]: x')).toBe(1);
+  });
+});
+
 
 describe('imageAltFromFileName', () => {
   it('drops the extension', () => {

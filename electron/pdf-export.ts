@@ -19,6 +19,7 @@ import * as path from 'node:path';
 import { createRequire } from 'node:module';
 import { pathToFileURL } from 'node:url';
 import { resolveAssetRef } from '../shared/asset-refs';
+import { hasMathSyntax } from '../shared/markdown/math';
 import { buildNotePdfHtml, hasMermaidFence } from '../shared/pdf-html';
 import { PdfExportRequest } from '../shared/ipc-api';
 import { VaultManager } from './vault-manager';
@@ -55,6 +56,47 @@ function loadMermaidScript(): Promise<string | null> {
   return mermaidScriptPromise;
 }
 
+let katexRuntimePromise: Promise<{ script: string; css: string } | null> | null = null;
+
+/**
+ * The KaTeX runtime (script + stylesheet), read once per session and only
+ * for notes that actually contain math. The stylesheet ships with every
+ * `url(fonts/…)` reference rewritten to a `data:` URL — the print page is
+ * ONE self-contained file next to the vault, so relative font paths would
+ * 404 and the formulas would fall back to browser serif. A failed read
+ * returns null and the export keeps the LaTeX visible as source text.
+ */
+function loadKatexRuntime(): Promise<{ script: string; css: string } | null> {
+  if (katexRuntimePromise === null) {
+    katexRuntimePromise = (async () => {
+      try {
+        const nodeRequire = createRequire(__filename);
+        const scriptPath = nodeRequire.resolve('katex/dist/katex.min.js');
+        const cssPath = nodeRequire.resolve('katex/dist/katex.min.css');
+        let css = await fsp.readFile(cssPath, 'utf-8');
+        const fontsDir = path.join(path.dirname(cssPath), 'fonts');
+        for (const name of await fsp.readdir(fontsDir)) {
+          const ref = `fonts/${name}`;
+          if (!css.includes(ref)) {
+            continue;
+          }
+          const buf = await fsp.readFile(path.join(fontsDir, name));
+          const mime = name.endsWith('.woff2')
+            ? 'font/woff2'
+            : name.endsWith('.woff')
+              ? 'font/woff'
+              : 'font/ttf';
+          css = css.split(`url(${ref})`).join(`url(data:${mime};base64,${buf.toString('base64')})`);
+        }
+        return { script: await fsp.readFile(scriptPath, 'utf-8'), css };
+      } catch {
+        return null;
+      }
+    })();
+  }
+  return katexRuntimePromise;
+}
+
 export async function exportNoteToPdf(
   { vaultManager, getParentWindow }: PdfExportDeps,
   request: PdfExportRequest,
@@ -88,11 +130,16 @@ export async function exportNoteToPdf(
   // degrades to plain code blocks.
   const mermaidScript = hasMermaidFence(content) ? await loadMermaidScript() : null;
 
+  // Math renders through the inlined KaTeX bootstrap (synchronous — no
+  // settle wait needed); without the runtime the LaTeX stays visible.
+  const katexRuntime = hasMathSyntax(content) ? await loadKatexRuntime() : null;
+
   const html = buildNotePdfHtml({
     markdown: content,
     title: path.basename(request.path).replace(/\.md$/i, ''),
     resolveImageSrc,
     mermaidRuntime: mermaidScript === null ? undefined : { script: mermaidScript },
+    katexRuntime: katexRuntime === null ? undefined : katexRuntime,
   });
 
   const target = await pickExportTarget(getParentWindow(), vaultManager, request);

@@ -70,6 +70,15 @@ updated: '2026-09-05T14:32:00'
   meeting notes) and lists tasks with neither last. The meeting import's
   text form `done: YYYY-MM-DD` feeds the same field (read-only).
 
+- **Markdown dialect** (milestone 72, [ADR-0070](../docs/09_architecture_decisions/0070-extended-markdown-dialect.md)):
+  besides CommonMark/GFM the editor, every Markdown view and the PDF
+  export understand bare-URL autolinks, sub/superscript, `==highlight==`,
+  GitHub/Obsidian callouts (`> [!note]`), `$…$` / `$$…$$` math (KaTeX),
+  footnotes and curated `:emoji:` shortcodes. All of it is plain text in
+  the file — the app stores nothing extra, and a tool that does not know
+  the syntax still shows readable Markdown. Shared pure halves:
+  `shared/markdown/`.
+
 ## Daily notes — `<dir>/<year>/<month>/YYYY-MM-DD.md`
 
 One file per calendar day, nested by year/month. Created by quick-capture
@@ -95,6 +104,22 @@ newest chat bound to it). Body: one `## User` /
 ```drey-tool fenced blocks. `chats/` is created on demand and **is**
 indexed. Chat notes are auto-saved by the engine and never trigger the
 save-before-exit prompt.
+
+## Other files the vault holds
+
+- **Pasted/dropped images** go to an `attachments/` folder beside the
+  note that references them (`shared/asset-name.ts`, ADR-0024), named
+  `YYYY-MM-DD-HHmmss-<6 hex>.<ext>`; a dropped Office file is copied
+  there as well and linked (Alt-drop links the original instead,
+  ADR-0066). Created on demand — not an imposed structure.
+- **Diagrams**: `.drawio.svg` / `.drawio.png` are ordinary images that
+  carry the diagram, so a note embeds them like any picture; a plain
+  `.drawio` opens in the diagram tab (ADR-0064).
+- **PDFs and images** open in their own tabs; Word/Excel/PowerPoint files
+  open in their own program and are never rendered (ADR-0066).
+- **Not in the vault**: the local note history (ADR-0060) lives under the
+  app's userData, never in the vault; app config and API keys likewise.
+  In a Git vault the app runs the installed `git` and adds no files of its own.
 
 ## Structural folders
 

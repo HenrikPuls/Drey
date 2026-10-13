@@ -1,47 +1,55 @@
 # 1. Introduction and Goals
 
-## 1.1 Vision
+## 1.1 What Drey is
 
-A local, topic-based note-taking app. It runs in the background; thoughts
-land in Markdown files via quick-capture, a local LLM classifies them
-automatically (topic/person/task), and asks when unsure instead of
-misfiling silently.
+Drey is a desktop note-taking app for one person on one machine. Notes
+are plain Markdown files in a folder the user chooses (a **vault**); Drey
+edits them in place, keeps them searchable, and can hand them to a
+language model the user has connected.
 
-See [`specs/roadmap.md`](../specs/roadmap.md) for the concept, the
-binding architectural principles and the open requirements.
+Three things define it:
 
-## 1.2 Requirements Overview
+- **The files belong to the user.** A vault is an ordinary folder. Every
+  note stays readable and editable in any other program; Drey keeps no
+  database beside it that the notes depend on.
+- **Structure comes from labels, not from folders.** A note is organised
+  by `#tags` written in its text. Drey indexes them; it never moves a
+  file because of a tag.
+- **The model helps on request.** Capture and editing never wait for a
+  model. The assistant answers questions about the notes, suggests tags
+  and runs user-defined actions, and every change it proposes to a note
+  is shown as a diff first.
 
-The binding requirements live in `specs/`, not duplicated here:
+## 1.2 Where the requirements live
 
-- [`specs/roadmap.md`](../specs/roadmap.md) — concept, architectural
-  principles, tech stack and the not-yet-implemented requirements
-- [`specs/changelog.md`](../specs/changelog.md) — what is already
-  implemented
-- [`specs/frontmatter-schema.md`](../specs/frontmatter-schema.md) — file
-  and frontmatter format
-- [`specs/classifier-spec.md`](../specs/classifier-spec.md) — LLM prompts
-  for task/note detection and tag suggestions
+The requirements are not repeated in this documentation. They are in
+`specs/`:
 
-The current build state is tracked in `CLAUDE.md` ("Current State & Next
-Steps") and `docs/milestones-done.md`.
+| File | Holds |
+|---|---|
+| [`specs/roadmap.md`](../specs/roadmap.md) | the concept, the fixed principles, open work in order, open risks |
+| [`specs/changelog.md`](../specs/changelog.md) | what has shipped, newest first |
+| [`specs/decisions.md`](../specs/decisions.md) | ideas that were excluded or decided against |
+| [`specs/frontmatter-schema.md`](../specs/frontmatter-schema.md) | the file formats: frontmatter, tag and task grammar, the folders Drey creates |
+| [`specs/classifier-spec.md`](../specs/classifier-spec.md) | every prompt sent to a model, with its builder and parser |
 
-## 1.3 Quality Goals
+## 1.3 Quality goals
 
-*(To be elaborated in [10_quality_requirements.md](10_quality_requirements.md)
-as concrete scenarios once more of the app exists to reason about. Known
-priorities from the spec, in rough order:)*
+In order of priority. Section [10](10_quality_requirements.md) turns each
+into scenarios that can be checked.
 
-1. **No silent misfiling** — the app asks when classification confidence
-   is low rather than guessing wrong quietly.
-2. **No proprietary lock-in** — plain Markdown + YAML must stay readable
-   and editable outside the app at all times.
-3. **Local-first / private** — no cloud calls; local LLM only.
-4. **Low interaction cost** — tag-first capture must stay fast (no LLM
-   round-trip on the common path).
+| # | Goal | What it means here |
+|---|---|---|
+| 1 | **The user's text is never lost** | A save either completes or leaves the old file; a conflict is asked about, not resolved silently; what a write replaces can be restored. |
+| 2 | **No lock-in** | Plain Markdown with optional YAML frontmatter. Deleting Drey loses no content. |
+| 3 | **Private by default** | Out of the box Drey talks only to a model on the local machine. Everything that reaches the network is opt-in and off by default. |
+| 4 | **Writing is never blocked** | Typing, capture and saving do not wait for a model or for an index. |
+| 5 | **Features can be added and removed without touching the core** | A feature is a plugin behind a published interface; disabling one leaves the rest working. |
 
 ## 1.4 Stakeholders
 
 | Role | Concern |
 |---|---|
-| User (also the developer) | Daily-use note capture and retrieval tool; sole intended user for the MVP. |
+| The user, who is also the developer | A dependable daily tool for capturing and finding notes. |
+| A plugin author | A stable, documented interface ([`plugins/TUTORIAL.md`](../plugins/TUTORIAL.md), [`plugins/AUTHORING.md`](../plugins/AUTHORING.md)) that does not break between versions. |
+| A coding agent working on the repository | An unambiguous answer to "where does this change go" ([§5](05_building_block_view.md)). |

@@ -96,6 +96,13 @@ export class Editor implements AfterViewInit, OnDestroy {
   protected readonly settings = inject(SettingsService);
   protected readonly history = inject(HistoryService);
   protected readonly zoom = inject(EditorZoomService);
+  /**
+   * The zoom indicator's percentage (Ctrl +/-/0, Ctrl+wheel over the
+   * editor): shown in the meta bar only while it differs from 100% --
+   * `Math.round` absorbs the step arithmetic's float artifacts
+   * (1.2000000000000002 -> 120).
+   */
+  protected readonly zoomPercent = computed(() => Math.round(this.zoom.scale() * 100));
   protected readonly menuContributions = inject(MenuContributionsService);
   /** The formatting-toolbar toggle (`⋯` menu, persisted per machine). */
   protected readonly prefs = inject(EditorPrefsService);
@@ -620,9 +627,19 @@ export class Editor implements AfterViewInit, OnDestroy {
     if (!view) {
       return;
     }
+    const doc = this.shownDoc();
+    // The embed-resolution identity travels WITH the content, not through a
+    // template input: this effect runs in the same change-detection pass
+    // that flipped the shown tab, and the incoming text's first decorations
+    // must resolve against it (see `MarkdownSurface.setDocumentIdentity`).
+    this.surface().setDocumentIdentity({
+      path: doc?.path ?? null,
+      vaultId: doc?.vaultId ?? null,
+      assetBase: doc?.help?.assetBase ?? null,
+    });
     const path = this.shownPath();
     const current = view.state.doc.toString();
-    const next = this.shownDoc()?.bufferContent ?? '';
+    const next = doc?.bufferContent ?? '';
     // Same file, new text = an in-place reload (the save pipeline rewrote
     // the frontmatter). Keep the caret roughly where it was instead of
     // snapping to the top; a tab switch restores the remembered caret.

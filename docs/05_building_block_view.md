@@ -1,5 +1,123 @@
 # 5. Building Block View
 
+## Overview — start here
+
+This page is long. The overview below is the whole picture on one
+screen; everything after it is reference.
+
+### The four parts
+
+```mermaid
+graph TB
+    subgraph Base["Base application"]
+        Renderer["<b>Renderer</b> — src/app/<br/>the window: shell, editor, docks,<br/>settings, dialogs<br/>Angular + CodeMirror, sandboxed"]
+        Main["<b>Main process</b> — electron/<br/>files, vaults, models, MCP,<br/>windows, the plugin host<br/>Node"]
+    end
+    Plugins["<b>Plugins</b> — plugins/&lt;id&gt;/<br/>one feature each: a main half (Node)<br/>and a renderer half (plain DOM)"]
+    Shared["<b>Shared</b> — shared/<br/>contracts (IPC, plugin SDK, config)<br/>and pure logic both sides use"]
+
+    Renderer <-->|"typed bridge (IPC)"| Main
+    Plugins -->|"plugin SDK"| Renderer
+    Plugins -->|"plugin SDK"| Main
+    Renderer --> Shared
+    Main --> Shared
+    Plugins --> Shared
+```
+
+| Part | Responsibility | Size (lines, without tests) |
+|---|---|---|
+| **Renderer** `src/app/` | Everything the user sees and touches. Holds no file or network access; asks the main process for it. | 29,800 |
+| **Main process** `electron/` | Everything that touches the machine: vault files, the model transport, MCP, windows, loading plugins. Knows no feature. | 11,900 |
+| **Shared** `shared/` | The contracts between the other three — the IPC interface, the plugin SDK, the config shape — and pure functions (frontmatter, tags, wikilinks, diffing, the Markdown dialect). Runs anywhere, depends on nothing. | 11,500 |
+| **Plugins** `plugins/` | The features: tags and search, tasks, templates, the assistant, the browser tab, OCR, outline, backlinks, diagrams, Git, meeting import. | 26,400 |
+
+### The dependency rules
+
+These are what keep the four parts separate. All of them hold in the
+code today (checked 2026-10-13 over every non-test import).
+
+| Rule | Enforced by |
+|---|---|
+| `shared/` imports from none of the other three. | convention |
+| Renderer and main process never import each other. They meet in `shared/ipc-api.ts`. | convention |
+| The base never imports a plugin. It reaches plugin behaviour only through a registry the plugin filled. | convention |
+| A plugin imports only its own folder and `shared/`. Never `src/`, never `electron/`, never another plugin. | renderer half: the plugin build fails. Main half: convention — ADR-0044 would allow it `electron/`, but no plugin uses that, and it should stay so |
+| A plugin does not load its own CodeMirror or Angular. | lint |
+| A plugin's renderer half has no Node access. | lint |
+| Outside a base module, import its `index.ts`, not a file inside it. | lint ([ADR-0016](09_architecture_decisions/0016-feature-module-convention.md)) |
+
+The rows marked "convention" are the ones a lint rule should take over
+([§11](11_risks_and_technical_debt.md), architecture review 2026-10-13).
+
+### How a request travels
+
+Two paths cover almost everything:
+
+- **A base feature** (open a file, save, change a setting): a renderer
+  service calls `window.dreyApi.<method>`; the preload forwards it on a
+  named channel; a handler in `electron/ipc/` calls the owning class
+  (`VaultManager`, `NoteManager`, …) and returns the result.
+- **A plugin feature** (search, ask the assistant, commit): the plugin's
+  renderer half calls `api.backend.invoke('method', payload)`. All
+  plugins share two fixed channels (`plugin:invoke`, `plugin:event`);
+  the plugin host in main routes the call to the handler that plugin
+  registered. The plugin's main half works through `MainPluginContext`
+  and never holds a base object directly.
+
+### The main process, by responsibility
+
+| Group | Blocks | Job |
+|---|---|---|
+| Start-up | `main.ts`, `splash.ts`, `content-security-policy.ts` | Builds every object below, creates the window, registers the `app://`, `drey-asset://` and `plugin://` schemes. |
+| Vault and notes | `vault-manager.ts`, `note-manager.ts`, `daily-note.ts`, `link-rewriter.ts`, `history/`, `safe-file.ts`, `path-guard.ts`, `trash-delete.ts` | The vault registry and every file operation; the save pipeline with its conflict check; local versions. |
+| Outside changes | `vault-watcher.ts`, `own-write-ledger.ts`, `vault-change-announcer.ts` | Notices files changed by other programs and tells indexes and open tabs. |
+| Models | `llm/` | One `LlmClient` interface, a router that picks the provider per call, one client per backend, cancellable tasks. |
+| Tools | `mcp/`, `mcp-client/` | The MCP server Drey offers to other programs; the external tool servers and `web_fetch` the assistant may call. |
+| Plugins | `plugin-host/` | Finds, validates, activates and isolates failures of plugins; builds each one's context; installs packages. |
+| App state | `app-config.ts`, `config-secrets.ts`, `session/`, `logger.ts` | Settings on disk (secrets encrypted), the tab session and unsaved buffers, the log file. |
+| Single services | `spellcheck.ts`, `pdf-export.ts`, `external-open.ts`, `open-document.ts` | One job each. |
+| The bridge | `preload.ts`, `ipc/` | The renderer-facing surface: thin handlers, no logic of their own. |
+
+### The renderer, by responsibility
+
+| Group | Blocks | Job |
+|---|---|---|
+| Shell | `app.ts`, `titlebar/`, `status-bar/`, `dock/`, `panes/`, `tab-bar/` | The window frame, the three docks and their panels, the split tree of editor panes. |
+| Documents | `services/editor.service.ts` over `open-docs.store.ts`, `doc-open.service.ts`, `doc-save.service.ts`, `doc-disk-sync.service.ts`; `session/` | Which documents are open, their dirty state, opening, saving, reloading from disk, restoring the session. |
+| Editor | `editor/` | The only place CodeMirror is used: Live Preview, source mode, the Markdown dialect, toolbar, slash menu, spellcheck, wikilinks, tag pills. |
+| Vault view | `vault/`, `calendar/`, `windows/` | The Files panel and file operations, the calendar, the open-windows list. |
+| Dialogs and viewers | `confirmation-dialog/`, `conflict/`, `history/`, `diff-view/`, `link-update/`, `tool-approval/`, `image-viewer/`, `pdf-viewer/`, `palette/`, `help/` | Each one surface. |
+| Settings | `settings/`, `services/settings.service.ts` | The settings overlay and the config it edits. |
+| Commands | `keybindings/` | Every command and its shortcut; the menu, the palette and the shortcuts page read this registry. |
+| Plugins | `plugin-host/` | Loads plugin renderer modules, implements `DreyPluginApi`, owns the registries plugins fill, mounts their DOM. |
+
+### A plugin
+
+```text
+plugins/<id>/
+  plugin.json     id, name, entry points, the SDK version it needs
+  main/           runs in the main process: indexes, file work, model calls
+  renderer/       runs in the window: plain DOM, bundled into one file
+  shared/         types and pure logic both halves use
+```
+
+A plugin extends the app by registering with the base — a dock panel, a
+tab kind, a settings page, a command, an editor extension, a save hook,
+a search provider. The full list is "The seams" in §5.0. Where one
+plugin needs another's data (the assistant listing tasks, the MCP server
+searching tags), it asks the base for a provider the other plugin
+registered; it gets `null` when that plugin is disabled and degrades.
+
+### Where to read on
+
+| You want | Go to |
+|---|---|
+| The current structure in detail, block by block | §5.0, "The blocks" and "Component reference (current)" |
+| Which files implement a given feature | §5.0, "Feature → files index" |
+| What a plugin can hook into | §5.0, "The seams" |
+| Why something is the way it is | the ADR linked from the section, [§9](09_architecture_decisions.md) |
+| How it looked at an earlier milestone | §5.1 to §5.40 — a dated record, not the current state |
+
 > **Reading order.** **§5.0 is the current structure** (base application
 > + runtime plugins, [ADR-0044](09_architecture_decisions/0044-runtime-plugin-system.md)).
 > The rest of this file is layered by milestone: each
@@ -64,7 +182,9 @@ restore, keybindings, spellcheck, the MCP vault server, the LLM
   `shared/pdf-html.ts` printed in a hidden sandboxed window; its own save
   dialog, deliberately NOT vault-root-restricted; notes with a
   ` ```mermaid ` fence get the mermaid UMD bundle inlined so the fences
-  render as figures — ADR-0052 later change).
+  render as figures — ADR-0052 later change; notes with math get the
+  KaTeX script + font-inlined stylesheet inlined the same way — M72,
+  ADR-0070).
 - `ipc/` — the base channel handlers (thin, feature-free).
 
 **Base, renderer** (`src/app/`):
@@ -77,7 +197,7 @@ restore, keybindings, spellcheck, the MCP vault server, the LLM
   `panes/` (centre split tree **plus the dock regions**),
   `tab-bar/`, `editor/` (+ the editor-extension /
   drop-decoder / context-menu / doc-kind registries behind it),
-  `entry/`, `calendar/`, `vault/`, `image-viewer/`,
+  `calendar/`, `vault/`, `image-viewer/`,
   `confirmation-dialog/`, `services/`.
 - `plugin-host/` — `plugin-host.service.ts` (activation, quarantine,
   event fan-out, visibility synthesis), `plugin-api-impl.ts` (the
@@ -155,8 +275,8 @@ graph TB
         HostM["plugin-host (main)<br/>discovery · activation · quarantine ·<br/>plugin:// root resolution · config store"]
         Installer["plugin-installer (ADR-0068)<br/>local .zip packages: pick · validate ·<br/>extract under <userData>/plugins · remove"]
         IO["VaultManager · NoteManager<br/>(save/vault hook registries) ·<br/>DailyNote · Session backups"]
-        LLM["llm/: LmStudioClient · debug log ·<br/>task registry · tag-suggest"]
-        MCP["mcp/: VaultTools (vault_search via<br/>registered SectionSearchProvider)"]
+        LLM["llm/: LlmClient + LlmRouter over providers/ ·<br/>debug log · task registry · tag-suggest"]
+        MCP["mcp/: VaultTools (vault_search via<br/>registered SectionSearchProvider) ·<br/>mcp-client/: external servers + web_fetch"]
     end
     subgraph Plugins["plugins/<id>/  (dist-electron/plugins/<id>/)"]
         P1["templates · meeting · tags ·<br/>tasks · assistant · browser · ocr ·<br/>outline · backlinks · drawio · git"]
@@ -202,7 +322,7 @@ fills** — base knows the interfaces, not the features:
 | Document read/observe/insert/confirmed rewrite/open + the live-edit input lock | `documents.*` (incl. `setEditLock`, ADR-0049) | — |
 | Vault IO + change push | `vault.*` (incl. `saveAsset`) | `ctx.vault.*` (incl. `writeAnnounced`; `announceChanges` after a plugin rewrote the working tree, SDK 1.17) |
 | Backend methods + pushes (the plugin's own IPC) | `backend.invoke` / `backend.on` | `ctx.ipc.handle` / `ctx.ipc.emit` |
-| Save pipeline (`{content?, pendingActions?}`), vault lifecycle, section search, semantic search | — | `ctx.save`, `ctx.vault` hooks, `ctx.search` (`notifyChanged` pushes `search:changed` to the base vocabulary service, SDK 1.9; the provider's optional `styles()` serves the tag prefix colors; `registerSemanticSearch` is the second, parallel single slot — SDK 1.18, the assistant's similarity index for the Search panel's semantic mode and MCP `vault_search` mode `semantic`, ADR-0055 later change) |
+| Save pipeline (`{content?, pendingActions?}`), vault lifecycle, section search, semantic search | — | `ctx.save`, `ctx.vault` hooks, `ctx.search` (`notifyChanged` pushes `search:changed` to the base vocabulary service, SDK 1.9; the provider's optional `styles()` serves the tag prefix colors; `sectionSearchProvider()` is the seam's read side for other plugins — SDK 1.21, the assistant's action engine takes the tag vocabulary for `{{AVAILABLE_TAGS}}` from it; `registerSemanticSearch` is the second, parallel single slot — SDK 1.18, the assistant's similarity index for the Search panel's semantic mode and MCP `vault_search` mode `semantic`, ADR-0055 later change) |
 | LLM transport | `llm.chat/cancelTask/onDebugEntry/onDelta/listModels/capabilities/onCapabilitiesChanged` | `ctx.llm.chat/suggestTags/capabilities` (chat gains `tools`/`onToolCall`/`maxToolRounds`, ADR-0049; `maxOutputTokens` + the capability push, ADR-0050) |
 | Per-plugin config, app config read/patch | `settings.*`, `appConfig.*` | `ctx.config`, `ctx.appConfig` |
 | Native-surface hide (overlays/gestures) | `env.onNativeSurfaceVisibility` | — |
@@ -283,7 +403,9 @@ Keep it in step whenever a component boundary changes (CLAUDE.md's
   seam), the backlinks `BacklinkIndex` (milestone 54) — live in
   their plugins.
   `suggestTags` (the Autotag prompt) stayed base:
-  `electron/llm/tag-suggest.ts`
+  `electron/llm/tag-suggest.ts`. It and the assistant's `ActionEngine`
+  share one vocabulary placeholder, `{{AVAILABLE_TAGS}}`
+  (`shared/llm/prompt-substitution.ts`, milestone 73)
 - `LmStudioClient` — HTTP client for the local OpenAI-compatible endpoint
   (`GET /models`, `POST /chat/completions`), optional bearer API key.
   **No timeout on generation** — a local model may think for minutes; the
@@ -393,6 +515,14 @@ Keep it in step whenever a component boundary changes (CLAUDE.md's
   (fuzzy on name then path, session-visited documents first, `Ctrl+Enter`
   opens beside the current tab, "Create note" on no match) or — behind
   a leading `>` — every `KeybindingService` command with its shortcut
+- `EmojiPickerService` + `EmojiPicker` (`src/app/emoji-picker/`, M72,
+  ADR-0070) — the `:emoji:` picker overlay: search + glyph grid over the
+  curated gemoji table, recents first (persisted under
+  `drey.emoji.recent`), keyboard- and mouse-driven; ONE insert path
+  (`insert()` dispatches `:name:` over the open range) shared by its three
+  openers — the toolbar smile button, the context menu's "Emoji…" row and
+  the `/emoji` slash command — while `:na…` typing completes through
+  `src/app/editor/emoji/`
 - `LinkUpdateService` + `LinkUpdateDialog` (`src/app/link-update/`,
   milestone 59, [ADR-0059](09_architecture_decisions/0059-link-integrity-on-rename.md)) —
   every Files-panel rename / move goes through `rename()`: main's
@@ -694,6 +824,14 @@ Keep it in step whenever a component boundary changes (CLAUDE.md's
   live-edit turns. A custom selection referencing no registered vault
   anymore degrades to a visible `unregistered` context status, never to
   the active vault.
+  The scope holds WITHOUT retrieval too (ADR-0069
+  later change): the engine resolves the ask's targets from the vault
+  registry and arms the host's vaultToolsScope on every chip-on ask, so
+  retrieval-off or a retrieval error cannot re-arm the base read tools'
+  active-vault default; when the selection excludes the active vault, the
+  active-vault-only aux tools (tasks_list, template tools) are withheld
+  with their notes, the tools note lists only in-scope vaults, and a
+  scope note binds the question's "the vault" to the selection.
 
 This is a starting point, not a fixed contract — but any deviation should
 be called out explicitly (see CLAUDE.md's "Working Style"), not
@@ -711,6 +849,7 @@ decision. (Seams — what a *plugin* can extend — are the table above.)
 | Daily notes (calendar open, drafts, daily dir config) | `electron/daily-note.ts`, `src/app/calendar/`, `src/app/vault/daily-note.service.ts` | Base | — |
 | Entry capture (`/` menu Entry block, entry format) | `src/app/editor/slash-commands.ts`, Settings → "Entry format" | Base | ADR-0022, ADR-0057 |
 | Editor modes + Live Preview (conceal, block widgets) | `src/app/editor/` (`editor.ts`, `markdown-surface/`, `live-preview/`) | Base | ADR-0008, ADR-0009 |
+| Extended Markdown dialect (highlight, math/KaTeX, callouts, footnotes, emoji, linkify) + insert affordances (toolbar/slash/context-menu rows, emoji picker, `:`-completion, formatting eraser) | `src/app/editor/markdown-extensions.ts`, `live-preview/` (`conceal.ts`, `block-render.ts`, `math-widget.ts`, `extended-widgets.ts`), `toolbar-commands.ts`, `emoji/`, `src/app/emoji-picker/`, `editor-context-menu/format-menu-rows.ts`, `shared/markdown/`, `shared/pdf-html.ts` + `electron/pdf-export.ts` | Base | ADR-0070 |
 | Non-Markdown code files (language mode, source-only) | `src/app/editor/markdown-surface/` (language compartment) | Base | ADR-0036 |
 | Formatting toolbar + slash formatting blocks | `src/app/editor/markdown-toolbar.ts`, `toolbar-commands.ts`, `slash-commands.ts` | Base | M42, ADR-0057 |
 | Snippets (`tbl`, `code`, … with tabstops) | `plugins/templates/` + Settings → Templates | Plugin templates | M46 |
@@ -721,6 +860,7 @@ decision. (Seams — what a *plugin* can extend — are the table above.)
 | Tasks panel + inline due/priority metadata | `plugins/tasks/` | Plugin tasks | ADR-0033 |
 | Assistant chat + chat notes (`chats/`) | `plugins/assistant/` (`chat-engine.ts`, `chat-store.ts`) | Plugin assistant | ADR-0048 |
 | Manual Actions (run + on-save queue) | `plugins/assistant/` + `editor-more` menu rows | Plugin assistant | ADR-0011, ADR-0012 |
+| "Structure note (lossless)" built-in Action + the `{{AVAILABLE_TAGS}}` prompt placeholder | `shared/config/schema.ts` (`LOSSLESS_FORMAT_PROMPT`), `shared/llm/prompt-substitution.ts`, `plugins/assistant/main/action-engine.ts` | Shared + plugin assistant | `specs/classifier-spec.md`, M73 |
 | Live edit (model edits the open note) | `plugins/assistant/` + `documents.setEditLock` | Plugin assistant | ADR-0049 |
 | Semantic retrieval (the Vault chip) | `plugins/assistant/main/semantic/` | Plugin assistant | ADR-0055 |
 | Assistant tool groups + external MCP servers | `electron/mcp-client/`, `src/app/tool-approval/`, Settings → "Assistant tools" | Base | ADR-0063 |
@@ -1197,6 +1337,14 @@ src/                Angular renderer (standalone components, esbuild via Angular
                          = that language's grammar alone (lazy LanguageDescription.load,
                          @codemirror/language-data), source mode forced, none of the
                          Markdown chrome (ADR-0036). Compact composers pass nothing.
+                         Embed resolution (images, PDFs) reads a document identity
+                         (path + vault id + help asset base) the owner pushes with
+                         setDocumentIdentity next to the content load -- never
+                         EditorService.openPath: that facade follows the FOCUSED pane,
+                         so a background pane's rebuilds (a focus switch recreates the
+                         embed widgets) must resolve their own note's embeds, and a
+                         just-switched tab's first decorations need the identity in
+                         the same pass as the content.
       markdown-toolbar.ts  The formatting toolbar (milestone 42, ported from the
                          Lariscus editor): headings/list menus, dedicated
                          task-list + blockquote buttons, bold/italic/strike,
@@ -1204,6 +1352,19 @@ src/                Angular renderer (standalone components, esbuild via Angular
                          emitter of ToolbarAction; toolbar-commands.ts is the
                          pure reducer layer (toggles, block-wise, no CodeMirror
                          types).
+                         M72 (ADR-0070) adds the dialect buttons:
+                         highlight, a sub/sup menu, a callout menu
+                         (GitHub's five kinds), a math menu (inline +
+                         block), footnote, and the smile button
+                         (emojiPick output -> the surface's
+                         openEmojiPicker -- no reducer behind it).
+                         The meta bar carries a collapse handle at
+                         the buttons' left edge (editor.html/.css,
+                         .toolbar-collapse): one click folds the
+                         buttons away -- the bar runs straight into
+                         the save cluster -- and back; it toggles the
+                         same persisted pref as the editor's ...-menu
+                         row.
       slash-commands.ts  The `/` selection dialog (milestone 42): the toolbar's
                          block commands + code block + divider as a
                          CodeMirror completion source on the Markdown
@@ -1211,6 +1372,20 @@ src/                Angular renderer (standalone components, esbuild via Angular
                          the same toolbar reducer. Gated by markdown-context
                          and a whitespace-before-slash rule; not on the
                          Enter-submits composers.
+                         M72 adds the extended-dialect commands
+                         (Highlight ... Footnote) plus Emoji, whose apply
+                         hands its range to the picker opener instead of
+                         inserting text.
+      emoji/             M72 (ADR-0070): the `:shortcode:` completion
+                         source -- the picker's typing twin. Fires on
+                         `:name` only when the colon opens a shortcode
+                         (line start / whitespace / opening punctuation
+                         before it: times, URLs and prose colons never
+                         trigger), prefix-then-substring over the curated
+                         table, recents ranked first; same Enter-submits
+                         gate as the word completion. The search itself
+                         (searchEmojiNames) lives in shared/markdown/
+                         emoji.ts, shared with the picker.
       tag-complete.ts   Pure #tag autocomplete completion source (vocabulary from
                          the live TagService signal).
       tag-pill.ts       ViewPlugin rendering inline #tags as pills in both modes;
@@ -1227,6 +1402,27 @@ src/                Angular renderer (standalone components, esbuild via Angular
                           { kind }, inCompletableText() (the completion gate)
                           and insideCode() (the decoration guard formerly
                           duplicated in tag-pills.ts / wikilink.ts).
+      markdown-extensions.ts  M72 (ADR-0070): the extended-Markdown Lezer
+                          configs the surface adds to markdownLanguage
+                          (beside remove:['Emoji']): ==highlight==, curated
+                          :emoji: (known-names lookup, timestamps stay plain),
+                          $…$ / $$…$$ (inline parser + a leaf-block parser
+                          that interrupts paragraphs like a fence but absorbs
+                          its closer), [^footnote] refs (before the Link
+                          parser) and definitions (before LinkReference). Pure
+                          footnoteNumbers(text) numbers definitions in document
+                          order, fence-aware.
+      erase-formatting.ts  M72 (ADR-0070): the formatting eraser. With the
+                           caret, one stroke peels ONE layer -- the outermost
+                           inline wrap at the position (a syntax-tree walk,
+                           not a toolbar-commands reducer); with a selection,
+                           one stroke wipes every wrap it overlaps. Markers
+                           go, content stays (a link keeps its label, drops
+                           the url); block formatting is out of scope (the
+                           toggles own it). Entries: the toolbar eraser
+                           button -> MarkdownSurface.eraseFormattingAtSelection(),
+                           /clear, the context-menu row and the Mod+\
+                           keybinding (App, over EditTargetService).
       word-completion/  Word completion (milestone 40): a third language-data
                           completion source next to #tag / [[wikilink]] --
                           repeats the document's own words (frequency-ranked,
@@ -1284,25 +1480,40 @@ src/                Angular renderer (standalone components, esbuild via Angular
       live-preview/     ADR-0009. conceal.ts: ViewPlugin hiding syntax markers away
                          from the selection (+ bullet/checkbox/rule widgets, quote/
                          code/frontmatter line classes; yields a ```mermaid fence to
-                         block-render). block-render.ts: StateField holding
+                         block-render). Milestone 72 (ADR-0070) adds the extended-
+                         dialect decorations: ==highlight== wash, sub/superscript
+                         styling, :emoji: glyph widgets, footnote-ref superscripts
+                         and def blocks, and the callout container classes + marker
+                         title widget on a blockquote whose first line opens with
+                         [!TYPE] (GitHub alerts + Obsidian aliases). block-render.ts:
+                         StateField holding
                          { atoms, reveal } from one scanEmbeds walk -- atoms = the
                          Decoration.replace per un-revealed table (markdown-it) / image
                          (resolveVaultImageUrl) / sanitized HTML block / ```mermaid fence
-                         (MermaidWidget, ADR-0025), also fed to atomicRanges; reveal =
+                         (MermaidWidget, ADR-0025) / $…$ inline + $$ block math
+                         (MathWidget, KaTeX lazy), also fed to atomicRanges; reveal =
                          the .lp-reveal line container around a touched embed's raw
                          source + an ImagePreviewWidget below a revealed image's markup
                          (Req-1, non-atomic). blockDecorations / revealDecorations are
                          accessors. clickToReveal handles the </> button (.lp-edit) on
-                         table/html/mermaid/image; imageResize handles the .lp-resize
-                         grip. fenced-code.ts: pure fenceLang(). sanitize-html.ts:
+                         table/html/mermaid/image/math; imageResize handles the .lp-resize
+                         grip. The table/HTML markdown-it instances carry the shared
+                         extended rule pack (shared/markdown/markdown-it-extended.ts,
+                         math as a styled source span inside cells).
+                         fenced-code.ts: pure fenceLang(). sanitize-html.ts:
                          allowlist HTML sanitizer. theme.ts: EditorView.theme for the
                          lp-* classes (incl. the .lp-tools corner cluster + .lp-reveal
-                         box). widgets.ts: the WidgetType classes -- MermaidWidget (lazy
+                         box + the milestone-72 .lp-mark/.lp-callout*/.lp-footnote*/
+                         .lp-math* rules). widgets.ts: the WidgetType classes -- MermaidWidget (lazy
                          import('mermaid'), async render, inline error box, hover zoom
                          lens -> onZoomDiagram via svgToDataUrl, ADR-0025/0026),
                          ImageWidget (lens + resize grip + </> button) and the read-only
                          ImagePreviewWidget; makeEditButton/appendTools build the shared
-                         </> "View source" cluster.
+                         </> "View source" cluster. math-widget.ts (M72): MathWidget
+                         (lazy import('katex') + asset <link> for the stylesheet,
+                         renderToString trust:false, error box = click back to source);
+                         extended-widgets.ts (M72): EmojiWidget / FootnoteRefWidget /
+                         FootnoteDefMarkWidget / CalloutTitleWidget.
       image-paste.ts    ADR-0024 / ADR-0028. imagePaste(): CodeMirror
                          domEventHandlers for paste + drop into the editor. An image
                          (paste, OS drag) -> bytes saved via VaultService.saveAsset
@@ -1958,6 +2169,10 @@ the `Sidebar` settings entry, the editor `⋯` menu, and the chat bar._
   digest), `autotag` (drawer button). "Update summary" is gone with
   master documents; "Autotagging" became the vocabulary-based `autotag`,
   `{"tags":[…]}` with no `{registry_list}`.)_
+  _(Update — milestone 73: the built-ins are `search-summary`, `autotag`
+  and `lossless-format` ("Structure note (lossless)", a whole-document
+  rewrite); the last one ships with a manual trigger on a fresh config.
+  `note-summary` is retired.)_
   - **Autotagging** — its prompt text _is_ the classifier's Prompt 2
     system prompt (`{registry_list}` injected at call time), so it is
     genuinely wired to the classifier, not a second copy. Ships with a

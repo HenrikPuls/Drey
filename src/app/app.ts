@@ -36,6 +36,11 @@ import { Settings } from './settings/settings';
 import { EditorContextMenu } from './editor-context-menu/editor-context-menu';
 import { EditorContextMenuService } from './editor-context-menu/editor-context-menu.service';
 import { EditorContextMenuRegistry } from './plugin-host';
+import { formattingContextMenuRows } from './editor-context-menu/format-menu-rows';
+import { eraseFormatting } from './editor/erase-formatting';
+import { EditTargetService } from './services/edit-target.service';
+import { EmojiPicker } from './emoji-picker/emoji-picker';
+import { EmojiPickerService } from './emoji-picker/emoji-picker.service';
 
 /**
  * Root shell (ADR-0019): a custom titlebar with the HTML menu bar, then a
@@ -68,6 +73,7 @@ import { EditorContextMenuRegistry } from './plugin-host';
     ExitConfirmDialog,
     ImageLightbox,
     EditorContextMenu,
+    EmojiPicker,
   ],
   templateUrl: './app.html',
   styleUrl: './app.css',
@@ -166,6 +172,17 @@ export class App {
       { head: true },
     );
 
+    // The extended-Markdown rows in the same menu (M72, ADR-0070): the
+    // toolbar's reducers plus the "Emoji…" picker row, on every Markdown
+    // CodeMirror surface -- pane docs, the entry drawer, the composers.
+    // Registered after the PDF row, so "Export as PDF…" stays directly
+    // under the clipboard group.
+    const emojiPicker = inject(EmojiPickerService);
+    inject(EditorContextMenuRegistry).register(
+      (target) => formattingContextMenuRows(target, { isMarkdown: (p) => this.editor.isMarkdown(p), emoji: emojiPicker }),
+      { head: true },
+    );
+
     // Startup, once, after both the vault path and the persisted config are
     // known: restore the previous session's layout + tabs (ADR-0043), then
     // fall back to opening today's daily note only if nothing was restored.
@@ -239,6 +256,23 @@ export class App {
       label: 'Toggle line numbers',
       keybinding: 'Mod+G',
       run: () => this.editor.toggleLineNumbers(),
+    });
+
+    // The formatting eraser (M72, ADR-0070) -- the Google-Docs chord.
+    // Acts on the surface the Edit menu's commands target (the last
+    // focused CodeMirror view); on non-Markdown or unformatted text the
+    // tree walk simply finds nothing and the key is a no-op.
+    const editTarget = inject(EditTargetService);
+    keys.register({
+      id: 'editor.clearFormatting',
+      label: 'Clear formatting',
+      keybinding: 'Mod+\\',
+      run: () => {
+        const view = editTarget.view;
+        if (view !== null) {
+          eraseFormatting(view);
+        }
+      },
     });
 
     // Back / forward through the session's document history (the titlebar

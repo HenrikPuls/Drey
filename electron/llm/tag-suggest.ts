@@ -13,7 +13,7 @@
  * template. Cancellable via `taskId`.
  */
 import { AUTOTAG_PROMPT } from '../../shared/app-config';
-import { parseSuggestedTags } from '../../shared/llm';
+import { parseSuggestedTags, substituteVocabulary } from '../../shared/llm';
 import { AppConfigStore } from '../app-config';
 import { LlmClient } from './llm-client';
 import { LlmTaskRegistry } from './llm-tasks';
@@ -39,10 +39,9 @@ export class TagSuggester {
     const template = this.config
       .get()
       .actions.templates.find((entry) => entry.builtin === 'autotag');
-    const system = (template?.prompt ?? AUTOTAG_PROMPT).replace(
-      '{tags}',
-      vocabulary.length > 0 ? vocabulary.join('\n') : '(none yet)',
-    );
+    // The shared `{{AVAILABLE_TAGS}}` placeholder — the legacy `{tags}`
+    // spelling is substituted too, so a stored edited prompt keeps working.
+    const system = substituteVocabulary(template?.prompt ?? AUTOTAG_PROMPT, vocabulary);
     const reply = await this.tasks.run(taskId, (signal) =>
       this.llm.chat(
         [

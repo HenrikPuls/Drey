@@ -5,11 +5,13 @@
 Local, topic-based note-taking app (Electron + Angular). Full concept,
 data schema, and classifier design live in `specs/`:
 
-- `specs/roadmap.md` — overall concept, phases, open risks
+- `specs/roadmap.md` — overall concept, open work in priority order, open risks
+- `specs/decisions.md` — ideas excluded or decided against (do not re-propose)
 - `specs/frontmatter-schema.md` — file/frontmatter format
 - `specs/classifier-spec.md` — LLM prompts for task/note detection and tag suggestions
+- `specs/changelog.md` — what has shipped, newest first (the record; read on demand)
 
-Read these three files before making a first proposal — they are the
+Read the first four files before making a first proposal — they are the
 binding specification, not just background reading.
 
 `AGENTS.md` is the tool-neutral entry point for coding agents; it points
@@ -343,7 +345,14 @@ Renderer (`src/app/`):
 - `editor/` — the only CodeMirror surface: `MarkdownSurface`, Live
   Preview (ADR-0009), modes (ADR-0008/0036), wikilinks (ADR-0046), tag
   pills/completion (`editor/tags/`), spellcheck (ADR-0013/0056),
-  toolbar + slash commands (M42/M46)
+  toolbar + slash commands (M42/M46), the extended Markdown dialect —
+  highlight/math(KaTeX)/callouts/footnotes/emoji/linkify, one dialect
+  across Lezer, markdown-it and the PDF, plus its insert affordances:
+  the same reducer behind toolbar, `/` and context-menu rows, the
+  `:emoji:` picker (`src/app/emoji-picker/`), `:`-completion and the
+  formatting eraser (`erase-formatting.ts`, `Mod+\` — peels the
+  outermost inline wrap at the caret)
+  (M72, ADR-0070, shared pure halves in `shared/markdown/`)
 - `dock/` — `DockService` + `DockStrip` (icon strips, M69) +
   `WidgetRegistryService`: the three docks, every panel, each dock's
   editor band (ADR-0019/0034/0038)
@@ -579,7 +588,7 @@ packaging verified — see `docs/07_deployment_view.md`).
 closed 2026-10-10). This file does not restate them — the per-milestone
 record is:
 
-- [specs/changelog.md](specs/changelog.md) — milestones 22–70, newest
+- [specs/changelog.md](specs/changelog.md) — milestones 22 onward, newest
   first, plus requirements and fixes
 - [docs/milestones-done.md](docs/milestones-done.md) — the archived
   build log, milestones 1–27
@@ -589,27 +598,65 @@ record is:
 before release — ADR-0033 "considered and rejected"; the surviving piece
 is the ambiguity skip in `resolveTaskLine`.)
 
-## Milestones
+## Milestones and spec upkeep
 
-Open work and its order live in [specs/roadmap.md](specs/roadmap.md)
-("Next milestones") — that list is binding; keep this summary in step
-with it.
+Open work and its order live in [specs/roadmap.md](specs/roadmap.md):
+"Known defects", then "Now", "Next", "Later" — worked **top to bottom**.
+This file deliberately does **not** track milestone status (it drifted
+once): the latest shipped milestone is the top entry of
+[specs/changelog.md](specs/changelog.md), the next one is the first open
+item of the roadmap. While the roadmap still marks its order as a
+proposal awaiting the owner's confirmation, the owner picks.
 
-- **Last completed:** milestone 70 — local plugin packages (ADR-0068:
-  the sample plugin left the default build — dev/test + SDK reference
-  only, built under `DREY_BUILD_SAMPLE_PLUGINS=1`; `plugins/TUTORIAL.md`
-  is the step-by-step authoring guide; Settings → Panels & plugins
-  installs a plugin from a `.zip` package / removes it, applies on
-  restart). Before it: milestone 69 — the dock icon strip (ADR-0019
-  later change, SDK 1.19 `PluginWidgetContrib.icon`), milestone 68 —
-  the semantic search remainder (a base `SemanticSearchProvider` seam,
-  SDK 1.18, semantic mode in the Search panel and a semantic
-  `vault_search` mode, ADR-0055 later change), and milestone 67 — the
-  Git plugin's merge, stash, amend and file history.
-  Milestones 59–70, the Vault-chip picker, the dev escape hatch and the
-  build-origin/mouse-button work are owner-verified.
-- **Next, in order:** nothing ordered — the owner picks from the backlog
-  in `specs/roadmap.md`.
+### The spec files and who they belong to
+
+| File | Holds | Update when |
+|---|---|---|
+| `specs/roadmap.md` | open work only, in order; principles; open risks | an item is started, re-scoped, re-ordered, added or finished |
+| `specs/changelog.md` | what shipped, newest first | every milestone, requirement or fix |
+| `specs/decisions.md` | ideas excluded or decided against, with date and reason | the owner decides against something, or a built alternative is dropped |
+| `specs/classifier-spec.md` | every LLM prompt, builder and parser | a prompt, its parser, its placeholders or the provider call around it changes |
+| `specs/frontmatter-schema.md` | file formats, frontmatter, tag/task grammar, structural folders, file types in a vault | any of those change |
+
+The roadmap never keeps shipped items and the changelog never keeps open
+ones: an item leaves the roadmap exactly when it enters the changelog or
+`decisions.md`. Specs are written in English like all other documentation.
+
+### Working the roadmap
+
+1. Take the first open item in order. Skip or reorder only on the
+   owner's word, and then change the roadmap in the same step so it
+   always states the real order.
+2. **Work outside the order** (an owner request, a bug found on the way):
+   do it, but first add it to the roadmap with the next free id (check the
+   changelog for the highest milestone and req id) and the note "owner
+   request, outside the list" — it then ships and moves to the changelog
+   like any other item. Nothing is built that was never on the roadmap.
+3. If the work turns out different from its roadmap entry (scope, approach,
+   split into parts): say so, update the entry first, and for real
+   alternatives wait for confirmation (Working Style).
+4. Parts you deliberately leave out become new roadmap items (backlog or
+   "Follow-ups of shipped milestones"); alternatives that were rejected go
+   to `decisions.md`.
+
+### Definition of done — in the same change as the code
+
+- `specs/changelog.md`: new entry at the top of "Recent milestones" with
+  the milestone number, the behaviour and the specs/tests added. Mark it
+  "**Not yet manually verified by the owner**" until the owner has
+  verified; the owner's verification only removes that marker.
+- `specs/roadmap.md`: the item is deleted (and its follow-ups added);
+  the "Status" line is current.
+- `specs/decisions.md`, `specs/classifier-spec.md`,
+  `specs/frontmatter-schema.md`: updated per the table above — if the
+  change touches none of them, nothing to do, but check each.
+- `docs/05` / `docs/06` / an ADR as the Documentation Requirements say; the
+  user manual (`docs/manual/manual.md`, shipped in-app) when behaviour the
+  user sees changed.
+- This file only when a *rule* or an architecture statement changed — never
+  for status.
+- Last check: the roadmap lists nothing that shipped, the changelog's top
+  entry is the newest, ids are unique, links between the specs resolve.
 
 A milestone that is code-complete but not yet verified by the owner is
 marked "**Not yet manually verified by the owner**" in its changelog
@@ -631,6 +678,7 @@ This is meant to feel like pair programming, not a silent code generator:
   conversation, not in code comments.
 - If something deviates from the `specs/` documents: say so explicitly and
   justify it, don't silently implement it differently. If it is implemented differently please update specs file appropriately
+  (see "Milestones and spec upkeep" for which file and when)
 - For genuine alternatives with different trade-offs: state the options and
   a recommendation, then wait for confirmation — don't just pick the most
   likely option and run with it unasked.

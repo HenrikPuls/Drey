@@ -275,6 +275,16 @@ export class FilesPanel {
    * `preventDefault()` so the container does not also scroll.
    */
   protected onTreeKeydown(event: KeyboardEvent): void {
+    // An open inline name field (create / rename / vault rename) owns every
+    // key but Enter, Escape and blur -- those it handles itself. Without this
+    // guard the tree stole the cursor keys (moving the selection and, through
+    // the focus-follow's blur, even committing the field), and Delete ran the
+    // tree's delete on the selected file while its name was being edited.
+    // A target-identity check would be wrong: focused row buttons bubble
+    // here legitimately (bug-7's roving focus).
+    if (event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement) {
+      return;
+    }
     const nodes = this.tree.visibleNodes();
     if (nodes.length === 0) {
       return;

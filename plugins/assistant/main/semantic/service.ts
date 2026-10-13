@@ -26,6 +26,7 @@ import {
   MAX_SEMANTIC_TOP_K,
   contextCitations,
   isSemanticIndexPath,
+  locateSemanticSection,
   passageText,
   queryText,
   resolveTargetVaultIds,
@@ -581,24 +582,10 @@ export class SemanticService {
     if (content === null) {
       return null;
     }
-    const sections = semanticSectionsFor(filePath, content);
-    if (sections.length === 0) {
+    const section = locateSemanticSection(semanticSectionsFor(filePath, content), target);
+    if (section === null) {
       return null;
     }
-    const wantedHeading =
-      typeof target.heading === 'string' && target.heading.trim() !== ''
-        ? target.heading.trim().toLowerCase()
-        : null;
-    const wantedLine = typeof target.line === 'number' ? target.line : null;
-    const section =
-      (wantedHeading !== null
-        ? sections.find((entry) => entry.heading.toLowerCase() === wantedHeading)
-        : undefined) ??
-      (wantedLine !== null
-        ? (sections.find((entry) => entry.line === wantedLine) ??
-          sections.filter((entry) => entry.line <= wantedLine).at(-1))
-        : undefined) ??
-      sections[0];
     return {
       vaultId,
       path: filePath,

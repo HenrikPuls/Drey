@@ -69,6 +69,52 @@ import { ToolbarAction } from './toolbar-commands';
       >
         <app-icon name="strikethrough" [size]="14" [strokeWidth]="1.5" />
       </button>
+      <!-- The extended dialect's inline wraps (M72, ADR-0070). -->
+      <button
+        type="button"
+        class="icon-btn tb-btn"
+        title="Highlight"
+        aria-label="Highlight"
+        (click)="emit({ kind: 'highlight' })"
+      >
+        <app-icon name="highlighter" [size]="14" [strokeWidth]="1.5" />
+      </button>
+
+      <div class="group">
+        <button
+          type="button"
+          class="icon-btn tb-btn"
+          title="Sub- / superscript"
+          aria-label="Sub- or superscript"
+          aria-haspopup="menu"
+          (click)="toggleMenu('subsup', $event)"
+        >
+          <app-icon name="superscript" [size]="14" [strokeWidth]="1.5" />
+        </button>
+        @if (menuOpen() === 'subsup') {
+          <div class="backdrop" (click)="menuOpen.set(null)"></div>
+          <nav class="menu" role="menu" [style.left.px]="menuPos().x" [style.top.px]="menuPos().y">
+            <button type="button" role="menuitem" (click)="emit({ kind: 'superscript' })">
+              Superscript&nbsp;<span class="menu-hint">X^2^</span>
+            </button>
+            <button type="button" role="menuitem" (click)="emit({ kind: 'subscript' })">
+              Subscript&nbsp;<span class="menu-hint">H~2~O</span>
+            </button>
+          </nav>
+        }
+      </div>
+
+      <!-- The formatting eraser (M72): peels the outermost inline wrap at
+           the caret / wipes every wrap the selection overlaps. -->
+      <button
+        type="button"
+        class="icon-btn tb-btn"
+        title="Clear formatting"
+        aria-label="Clear formatting"
+        (click)="erase()"
+      >
+        <app-icon name="eraser" [size]="14" [strokeWidth]="1.5" />
+      </button>
 
       <span class="divider" aria-hidden="true"></span>
 
@@ -124,6 +170,30 @@ import { ToolbarAction } from './toolbar-commands';
       >
         <app-icon name="quote" [size]="14" [strokeWidth]="1.5" />
       </button>
+
+      <!-- Callouts (M72): a [!TYPE] marker line over the quoted block. -->
+      <div class="group">
+        <button
+          type="button"
+          class="icon-btn tb-btn"
+          title="Callout"
+          aria-label="Insert callout"
+          aria-haspopup="menu"
+          (click)="toggleMenu('callout', $event)"
+        >
+          <app-icon name="info" [size]="14" [strokeWidth]="1.5" />
+        </button>
+        @if (menuOpen() === 'callout') {
+          <div class="backdrop" (click)="menuOpen.set(null)"></div>
+          <nav class="menu" role="menu" [style.left.px]="menuPos().x" [style.top.px]="menuPos().y">
+            @for (c of callouts; track c.variant) {
+              <button type="button" role="menuitem" (click)="emit({ kind: 'callout', variant: c.variant })">
+                {{ c.icon }}&nbsp;{{ c.label }}
+              </button>
+            }
+          </nav>
+        }
+      </div>
 
       <span class="divider" aria-hidden="true"></span>
 
@@ -194,6 +264,49 @@ import { ToolbarAction } from './toolbar-commands';
           </div>
         }
       </div>
+
+      <!-- Math (M72): an inline math wrap or a display-math block. -->
+      <div class="group">
+        <button
+          type="button"
+          class="icon-btn tb-btn"
+          title="Math"
+          aria-label="Insert math"
+          aria-haspopup="menu"
+          (click)="toggleMenu('math', $event)"
+        >
+          <app-icon name="sigma" [size]="14" [strokeWidth]="1.5" />
+        </button>
+        @if (menuOpen() === 'math') {
+          <div class="backdrop" (click)="menuOpen.set(null)"></div>
+          <nav class="menu" role="menu" [style.left.px]="menuPos().x" [style.top.px]="menuPos().y">
+            <button type="button" role="menuitem" (click)="emit({ kind: 'mathInline' })">
+              Inline&nbsp;<span class="menu-hint">$x^2$</span>
+            </button>
+            <button type="button" role="menuitem" (click)="emit({ kind: 'mathBlock' })">
+              Math block&nbsp;<span class="menu-hint">$$…$$</span>
+            </button>
+          </nav>
+        }
+      </div>
+      <button
+        type="button"
+        class="icon-btn tb-btn"
+        title="Footnote"
+        aria-label="Insert footnote"
+        (click)="emit({ kind: 'footnote' })"
+      >
+        <app-icon name="asterisk" [size]="14" [strokeWidth]="1.5" />
+      </button>
+      <button
+        type="button"
+        class="icon-btn tb-btn"
+        title="Emoji"
+        aria-label="Pick an emoji"
+        (click)="pickEmoji()"
+      >
+        <app-icon name="smile" [size]="14" [strokeWidth]="1.5" />
+      </button>
 
       <!-- Plugin buttons (SDK 1.16), after the built-in ones. -->
       @if (contributed().length > 0) {
@@ -266,6 +379,10 @@ import { ToolbarAction } from './toolbar-commands';
       background: var(--hover-bg-strong);
       color: var(--text-primary);
     }
+    .menu .menu-hint {
+      font: 400 11px/1.3 var(--font-mono, monospace);
+      color: var(--text-6);
+    }
     .table-menu {
       min-width: 0;
       gap: 6px;
@@ -303,11 +420,18 @@ export class MarkdownToolbar {
   readonly action = output<ToolbarAction>();
   /** Picture files chosen through the image button; the surface saves them into the vault. */
   readonly imageFiles = output<File[]>();
+  /** The smile button: open the `:emoji:` picker at the caret (no reducer
+   *  -- the picker service owns the insert, ADR-0070). */
+  readonly emojiPick = output<void>();
+  /** The eraser button: peel formatting at the selection (a tree command,
+   *  not a `toolbar-commands.ts` reducer -- "outermost" needs the syntax
+   *  tree). */
+  readonly clearFormatting = output<void>();
 
   private readonly keys = inject(KeybindingService);
   protected readonly contributed = inject(ToolbarContributionsService).buttons;
 
-  protected readonly menuOpen = signal<'heading' | 'list' | 'table' | null>(null);
+  protected readonly menuOpen = signal<'heading' | 'list' | 'table' | 'subsup' | 'callout' | 'math' | null>(null);
 
   /** Viewport anchor for the open menu, taken from the trigger button. */
   protected readonly menuPos = signal<{ x: number; y: number }>({ x: 0, y: 0 });
@@ -319,12 +443,21 @@ export class MarkdownToolbar {
     { level: 3, label: 'Heading 3' },
   ];
 
+  /** The callout menu: GitHub's five kinds with their marker glyphs. */
+  protected readonly callouts: { variant: 'note' | 'tip' | 'important' | 'warning' | 'caution'; label: string; icon: string }[] = [
+    { variant: 'note', label: 'Note', icon: '📝' },
+    { variant: 'tip', label: 'Tip', icon: '💡' },
+    { variant: 'important', label: 'Important', icon: '❗' },
+    { variant: 'warning', label: 'Warning', icon: '⚠️' },
+    { variant: 'caution', label: 'Caution', icon: '🔴' },
+  ];
+
   /** The table picker: a 5x5 grid of cells, hover-selected like in Word. */
   protected readonly gridRange = [0, 1, 2, 3, 4];
 
   protected readonly tableHover = signal<{ r: number; c: number } | null>(null);
 
-  protected toggleMenu(which: 'heading' | 'list', event: MouseEvent): void {
+  protected toggleMenu(which: 'heading' | 'list' | 'subsup' | 'callout' | 'math', event: MouseEvent): void {
     if (this.menuOpen() === which) {
       this.menuOpen.set(null);
       return;
@@ -386,5 +519,17 @@ export class MarkdownToolbar {
     this.menuOpen.set(null);
     this.tableHover.set(null);
     this.action.emit(action);
+  }
+
+  /** The smile button: close any open menu, hand the pick to the surface. */
+  protected pickEmoji(): void {
+    this.menuOpen.set(null);
+    this.emojiPick.emit();
+  }
+
+  /** The eraser button: close any open menu, hand the stroke to the surface. */
+  protected erase(): void {
+    this.menuOpen.set(null);
+    this.clearFormatting.emit();
   }
 }

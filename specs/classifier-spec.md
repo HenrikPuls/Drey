@@ -5,9 +5,11 @@ content they process may be any language; the model is only ever asked for
 a structured JSON verdict, so matching the input language buys nothing.
 
 Pure message builders and reply parsers live in
-`shared/llm/classifier.ts`; `electron/llm/classifier.ts`
-(`ClassifierService`) and `electron/llm/action-runner.ts` sequence the
-actual LM Studio calls.
+`shared/llm/classifier.ts`. The calls themselves are sequenced by
+`electron/llm/tag-suggest.ts` (`TagSuggester`, Autotag) and, for the
+assistant, by `plugins/assistant/main/` (`chat-engine.ts`,
+`action-engine.ts`, prompts in `ask-prompts.ts`) over the provider
+abstraction in `electron/llm/` (ADR-0047).
 
 ---
 
@@ -17,9 +19,11 @@ actual LM Studio calls.
 checkbox task or a free-text note — nothing else. No topic logic, no
 vocabulary context.
 
-**Status**: implemented as `buildTaskMessages` / `parseTaskClassification`
-and wrapped by `ClassifierService.classifyEntry`, but **not yet wired**
-into the capture flow — capture currently never calls it.
+**Status**: only the pure halves exist — `buildTaskMessages` /
+`parseTaskClassification` in `shared/llm/classifier.ts`. No service wraps
+them any more (`ClassifierService.classifyEntry` is gone) and nothing
+calls them: capture never classifies. Treat as dead code until a
+capture flow needs it.
 
 ```
 System:
@@ -57,10 +61,11 @@ tag is just a label.
 **Status**: this is the live prompt behind the editor's `⋯` **Suggest
 tags** row (req-36, milestone 45 — the re-homed Autotag; the entry drawer
 that carried the old button is gone since ADR-0057). It is the built-in
-**"Autotag"** Action template (`AUTOTAG_PROMPT` in `shared/app-config.ts`),
+**"Autotag"** Action template (`AUTOTAG_PROMPT` in `shared/config/schema.ts`),
 run by `TagSuggester.suggest(entryText, vocabulary)` over the
-`tags:suggest` channel; `{tags}` is substituted with the current tag
-vocabulary (one tag per line) at call time. The row sends the
+`tags:suggest` channel; `{{AVAILABLE_TAGS}}` is substituted with the
+current tag vocabulary (one tag per line) at call time — see "The
+vocabulary placeholder" below. The row sends the
 heading-delimited section under the caret (`shared/note-sections.ts` —
 the same unit the tag search reports on) and **applies the reply
 directly**: the suggested tags are appended to the section's last prose
@@ -74,7 +79,7 @@ Suggest 1 to 4 tags for the note: reuse tags from the list where they fit,
 and otherwise propose new tags (one word, lowercase, no spaces).
 
 Existing tags:
-{tags}
+{{AVAILABLE_TAGS}}
 
 Respond ONLY with JSON, no prose: {"tags": ["tag1", "tag2"]}
 ```
@@ -166,15 +171,114 @@ rewrite; image-tab results open as a scratch tab.
 
 ## Other LLM prompts (for completeness)
 
-- **`NOTE_SUMMARY_PROMPT`** (`shared/app-config.ts`, built-in "Summarise
-  note") — the note assistant panel's automatic summary: 1–3 full
-  sentences, no bullets, no heading.
-- **`ASK_SYSTEM`** (`electron/llm/action-runner.ts`) — the assistant's Ask
-  mode: returns `{"kind":"answer","text":…}` for a question or
-  `{"kind":"edit","document":…}` (the whole revised document) for a
-  change request.
-- **`GENERIC_SYSTEM_SUFFIX`** — appended to a user's own Action template
-  prompt when the Action rewrites the document.
+- **`ASK_SYSTEM`** (`plugins/assistant/main/ask-prompts.ts`) — the
+  assistant's Ask mode on a document: returns `{"kind":"answer","text":…}`
+  for a question or `{"kind":"edit","document":…}` (the whole revised
+  document) for a change request. `ASK_ANSWER_SYSTEM` is the plain-answer
+  variant over the vault context.
+- **Ask notes** (same file) — appended to the system prompt depending on
+  what rides the ask: `ASK_TOOLS_NOTE` / `ASK_SCOPED_TOOLS_NOTE` (vault
+  tools, ADR-0021/0063), `ASK_EXPLORE_NOTE` (the explore tools
+  `vault_overview` / `vault_find` / `vault_section`, ADR-0069),
+  `ASK_WEB_NOTE`, `ASK_TASKS_NOTE` (restricted to task questions),
+  `ASK_TEMPLATES_NOTE`, `ASK_LINKS_NOTE`, the date note and the vault
+  scope note that binds "the vault" to the Vault chip's selection.
+- **`TITLE_SYSTEM`** — names a chat note from its first exchange.
+- **`GENERIC_SYSTEM_SUFFIX`** (`plugins/assistant/main/action-engine.ts`) —
+  appended to a user's own Action template prompt when the Action rewrites
+  the document. The Action context carries the current selection
+  (`SELECTED SECTION`) next to the whole document.
+- The former built-in "Summarise note" (`builtin:note-summary`) is
+  retired (`RETIRED_BUILTIN_TEMPLATE_IDS` in `shared/config/normalize.ts`).
+
+---
+
+## The vocabulary placeholder — `{{AVAILABLE_TAGS}}`
+
+One token, shared by every prompt that embeds the vault's tag
+vocabulary: `substituteVocabulary` (`shared/llm/prompt-substitution.ts`)
+replaces `{{AVAILABLE_TAGS}}` with the tag list, one tag per line.
+
+- The reserved `task` is filtered out — it is never offered as a tag.
+- An empty vocabulary substitutes `(none yet)`.
+- Autotag's original `{tags}` spelling is still substituted, so a stored,
+  user-edited Autotag prompt keeps working. A stored `builtin:autotag`
+  prompt that still equals the old default (`LEGACY_AUTOTAG_PROMPT`) is
+  refreshed to the current one by `normalizeAppConfig`.
+- It works in **every** Action template, the user's own included: the
+  assistant's `ActionEngine` substitutes it into the system prompt of any
+  action it runs. The vocabulary reaches the plugin through
+  `ctx.search.sectionSearchProvider()` (SDK 1.21); with the tags plugin
+  disabled the list is empty.
+
+There is **no `{{NOTE}}` placeholder** (the draft had one): the note
+rides the user message, as for every Action — and the selection, when
+there is one, as `SELECTED SECTION` above `WHOLE DOCUMENT`.
+
+---
+
+## Lossless Markdown formatting template (shipped, milestone 73)
+
+The built-in **"Structure note (lossless)"** Action template
+(`LOSSLESS_FORMAT_PROMPT` in `shared/config/schema.ts`,
+`builtin:lossless-format`): turns a raw note into structured Markdown
+**without** adding or interpreting anything, and tags it from the
+existing vocabulary only. Editable in Settings → Actions like the other
+built-ins, not deletable. `resultKind: 'document'` — the reply is free
+Markdown, not JSON, so there is no parser: it goes through the ADR-0011
+whole-document confirmation (aligned split diff), and a reply equal to
+the note is a no-op. `GENERIC_SYSTEM_SUFFIX` is appended as for every
+document-rewriting Action.
+
+A fresh config ships one **manual** trigger for it
+(`trigger:lossless-format`, confirm on), so it is a row in the editor's
+`⋯` menu out of the box. An existing config's trigger list is the user's
+own and is not touched — there the trigger is added once in Settings →
+Actions.
+
+```
+System:
+Transform the note into structured Markdown.
+
+This is a lossless formatting task, not a summarization task.
+
+STRICT REQUIREMENTS:
+
+- Preserve all factual information from the source.
+- Never add information that is not explicitly contained in the source.
+- Never infer missing context.
+- Never answer questions found in the source.
+- Never interpret the author's intentions.
+- Never create decisions, conclusions, tasks, deadlines, or responsibilities unless explicitly stated.
+- Keep the original language.
+- Correct only obvious spelling or grammar errors.
+- Retain uncertainty, open questions, and incomplete information as such.
+- Group related statements when this can be done without interpretation.
+- Use headings and bullet points only where they improve readability.
+- Preserve chronological relationships.
+
+TAGGING:
+
+The valid tags are listed in AVAILABLE_TAGS.
+
+- Only use tags from AVAILABLE_TAGS; never create new tags.
+- Add a tag only when the note provides direct evidence that it applies.
+- If multiple tags could apply and the choice is ambiguous, add none.
+- Add person tags only when that person is explicitly mentioned; match names against AVAILABLE_TAGS and do not infer a person's identity from context alone.
+- Avoid redundant and overly broad tags.
+
+Output only the final Markdown.
+
+AVAILABLE_TAGS:
+{{AVAILABLE_TAGS}}
+```
+
+The note goes in as the user message.
+
+**Limits.** The prompt only *instructs* the model to stay inside the
+vocabulary — nothing strips an invented tag from the reply; the
+confirmation diff is where the user catches it. The full vocabulary in
+`AVAILABLE_TAGS` has the same size limit as Autotag (see "Scaling note").
 
 ---
 
@@ -186,14 +290,15 @@ etc.) — a known weakness, not a guess. The parsers therefore tolerate a
 fenced or prose-prefixed reply (`extractJsonObject` / `parseJsonObject`).
 If the backend supports `response_format` with a JSON schema/grammar, use
 that instead of relying on the model's prompt discipline — it removes the
-parse-error handling. Whether the chosen small model (Qwen3-4B /
+parse-error handling. (As of 2026-10-12 nothing in the code sets
+`response_format`.) Whether the chosen small model (Qwen3-4B /
 Gemma3-4B) supports this in the current setup should be checked before
 relying on it.
 
 ## Scaling note
 
-Prompt 2 embeds the full tag vocabulary. For tens to low hundreds of tags
-this is fine. A vault that accumulates a very large number of tags would
-need a pre-filter step (e.g. keyword pre-selection instead of the full
+Prompt 2 and the lossless template above embed the full tag
+vocabulary. For tens to low hundreds of tags this is fine. A vault that accumulates a very large number of tags would
+need a pre-filter step (roadmap "Next": tags at scale) (e.g. keyword pre-selection instead of the full
 list) before the list threatens the context window — not a current
 concern, but the vocabulary does not scale indefinitely.

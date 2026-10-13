@@ -1,12 +1,14 @@
 import { markdown, markdownLanguage } from '@codemirror/lang-markdown';
 import { EditorState, Extension, StateField } from '@codemirror/state';
 import { Decoration, DecorationSet, EditorView } from '@codemirror/view';
+import { extendedMarkdown } from '../markdown-extensions';
 import {
   blockDecorations,
   LivePreviewConfig,
   livePreviewBlocks,
   revealDecorations,
 } from './block-render';
+import { MathWidget } from './math-widget';
 import {
   HtmlBlockWidget,
   ImagePreviewWidget,
@@ -24,7 +26,13 @@ function state(doc: string, anchor = doc.length): EditorState {
   return EditorState.create({
     doc,
     selection: { anchor },
-    extensions: [markdown({ base: markdownLanguage })],
+    extensions: [
+      markdown({
+        base: markdownLanguage,
+        // The surface's exact grammar: built-in Emoji out, curated one in.
+        extensions: [{ remove: ['Emoji'] }, ...extendedMarkdown],
+      }),
+    ],
   });
 }
 
@@ -500,5 +508,53 @@ describe('deletion grace (Backspace holds the table open)', () => {
     backspace(at, at + 1);
     expect(atomWidgets()).toHaveLength(1);
     expect(revealDecorated()).toHaveLength(0);
+  });
+});
+
+describe('blockDecorations math (milestone 71)', () => {
+  it('replaces a $$ display block with a KaTeX block widget', () => {
+    const doc = 'intro\n\n$$\nE=mc^2\n$$\n\nend';
+    const all = widgets(blockDecorations(state(doc, 0), passThrough));
+    expect(all).toHaveLength(1);
+    expect(all[0].deco.spec['block']).toBe(true);
+    const widget = all[0].deco.spec['widget'] as MathWidget;
+    expect(widget).toBeInstanceOf(MathWidget);
+    expect(widget.latex).toBe('E=mc^2');
+    expect(widget.display).toBe(true);
+  });
+
+  it('extracts the body of a compact one-line block', () => {
+    const doc = 'intro\n\n$$ x = 1 $$\n\nend';
+    const all = widgets(blockDecorations(state(doc, 0), passThrough));
+    expect((all[0].deco.spec['widget'] as MathWidget).latex).toBe(' x = 1 ');
+  });
+
+  it('replaces inline $…$ with the inline widget, revealed on touch', () => {
+    const doc = 'value $x^2$ here';
+    const all = widgets(blockDecorations(state(doc, 0), passThrough));
+    expect(all).toHaveLength(1);
+    expect(all[0].deco.spec['block']).toBeUndefined();
+    const widget = all[0].deco.spec['widget'] as MathWidget;
+    expect(widget.latex).toBe('x^2');
+    expect(widget.display).toBe(false);
+    expect(all[0].from).toBe(6);
+
+    const inside = doc.indexOf('x^2');
+    expect(widgets(blockDecorations(state(doc, inside), passThrough))).toHaveLength(0);
+  });
+
+  it('renders extended inline syntax inside table cells', () => {
+    const doc = `intro\n\n| a | b |\n| - | - |\n| ==mark== | H~2~O :joy: |\n\nend`;
+    const all = widgets(blockDecorations(state(doc, 0), passThrough));
+    const widget = all[0].deco.spec['widget'] as TableWidget;
+    expect(widget.html).toContain('<mark>mark</mark>');
+    expect(widget.html).toContain('H<sub>2</sub>O');
+    expect(widget.html).toContain('😂');
+    // Math inside a cell renders as the styled source span (no KaTeX copy
+    // rides the table render).
+    const mathDoc = `intro\n\n| a |\n| - |\n| $x^2$ |\n\nend`;
+    const mathWidget = widgets(blockDecorations(state(mathDoc, 0), passThrough))[0]
+      .deco.spec['widget'] as TableWidget;
+    expect(mathWidget.html).toContain('drey-math-src');
   });
 });

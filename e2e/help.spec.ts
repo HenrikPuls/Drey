@@ -54,6 +54,17 @@ test.describe('Help menu (ADR-0070)', () => {
     // A base command with its chord, straight from the registry.
     await expect(content).toContainText('Go to file');
     await expect(content).toContainText('Ctrl P');
+    // CodeMirror renders per viewport (see the manual test above): on the
+    // CI runner's 1024x768 screen the registry table alone fills the fold,
+    // so the fixed editing rows never mount -- walk the document until
+    // they do before asserting them.
+    const scroller = page.locator('app-editor .cm-scroller');
+    for (let step = 0; step < 24 && !(await content.innerText()).includes('Find in note'); step++) {
+      await scroller.evaluate((el, i) => {
+        el.scrollTop = (i + 1) * el.clientHeight * 0.8;
+      }, step);
+      await page.waitForTimeout(120);
+    }
     // The fixed editing rows ride along.
     await expect(content).toContainText('Find in note');
     await expect(content).toHaveAttribute('contenteditable', 'false');

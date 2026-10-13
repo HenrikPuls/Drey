@@ -27,20 +27,53 @@
     <span class="suggesting">Suggesting tags…</span>
   }
 
-  @if (prefs.toolbar() && editor.isMarkdown(shownPath()) && (shownDoc()?.viewMode ?? 'live') !== 'view') {
-    <app-markdown-toolbar
-      class="format"
-      [imagesEnabled]="true"
-      (action)="surface().applyToolbarAction($event)"
-      (imageFiles)="surface().insertToolbarImages($event)"
-    />
-    <span class="bar-sep" aria-hidden="true"></span>
+  @if (editor.isMarkdown(shownPath()) && (shownDoc()?.viewMode ?? 'live') !== 'view') {
+    <!-- The collapse handle at the toolbar's left edge: one click folds
+         the buttons away, the bar then runs straight into the save
+         cluster ("… Unsaved"); the handle stays to fold them back. -->
+    <button
+      type="button"
+      class="toolbar-collapse"
+      [class.collapsed]="!prefs.toolbar()"
+      [title]="prefs.toolbar() ? 'Collapse formatting toolbar' : 'Expand formatting toolbar'"
+      [attr.aria-label]="prefs.toolbar() ? 'Collapse formatting toolbar' : 'Expand formatting toolbar'"
+      [attr.aria-pressed]="!prefs.toolbar()"
+      (click)="toggleToolbar()"
+    >
+      <app-icon
+        [name]="prefs.toolbar() ? 'chevron-left' : 'chevron-right'"
+        [size]="10"
+        [strokeWidth]="2"
+      />
+    </button>
+    @if (prefs.toolbar()) {
+      <app-markdown-toolbar
+        class="format"
+        [imagesEnabled]="true"
+        (action)="surface().applyToolbarAction($event)"
+        (imageFiles)="surface().insertToolbarImages($event)"
+        (emojiPick)="surface().openEmojiPicker()"
+        (clearFormatting)="surface().eraseFormattingAtSelection()"
+      />
+      <span class="bar-sep" aria-hidden="true"></span>
+    }
   }
 
   <div class="actions">
     @let dirty = shownDoc() && shownDoc()!.bufferContent !== shownDoc()!.savedContent;
-    @if (dirty) {
-      <span class="unsaved">Unsaved</span>
+    @if (zoomPercent() !== 100) {
+      <!-- The zoom indicator (Ctrl +/-/0, Ctrl+wheel): the current editor
+           font scale, shown only while it differs from 100%; one click
+           resets it. -->
+      <button
+        type="button"
+        class="zoom-chip"
+        (click)="zoom.reset()"
+        title="Reset editor zoom (Ctrl 0)"
+        aria-label="Reset editor zoom"
+      >
+        {{ zoomPercent() }}%
+      </button>
     }
     <button
       type="button"

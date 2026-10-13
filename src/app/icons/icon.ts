@@ -75,6 +75,14 @@ export type IconName =
   | 'panel-left'
   | 'panel-right'
   | 'code'
+  | 'highlighter'
+  | 'superscript'
+  | 'subscript'
+  | 'sigma'
+  | 'info'
+  | 'asterisk'
+  | 'smile'
+  | 'eraser'
   | 'shapes'
   | 'trash'
   | 'git-merge'
@@ -415,6 +423,59 @@ const ICONS: Record<IconName, readonly IconShape[]> = {
   code: [
     { kind: 'path', d: 'm16 18 6-6-6-6' },
     { kind: 'path', d: 'm8 6-6 6 6 6' },
+  ],
+  // The extended-Markdown toolbar buttons (milestone 72, ADR-0070). Lucide
+  // "highlighter" / "superscript" / "subscript" / "sigma" / "info" /
+  // "asterisk" / "smile"; the `<line>` primitives re-expressed as paths.
+  highlighter: [
+    { kind: 'path', d: 'm9 11-6 6v3h9l3-3' },
+    { kind: 'path', d: 'm22 12-4.6 4.6a2 2 0 0 1-2.8 0l-5.2-5.2a2 2 0 0 1 0-2.8L14 4' },
+  ],
+  superscript: [
+    { kind: 'path', d: 'm4 19 8-8' },
+    { kind: 'path', d: 'm12 19-8-8' },
+    {
+      kind: 'path',
+      d: 'M20 12h-4c0-1.5.442-2 1.5-2.5S20 8.334 20 7.002c0-.472-.17-.93-.484-1.29a2.105 2.105 0 0 0-2.617-.436c-.42.239-.738.614-.899 1.06',
+    },
+  ],
+  subscript: [
+    { kind: 'path', d: 'm4 5 8 8' },
+    { kind: 'path', d: 'm12 5-8 8' },
+    {
+      kind: 'path',
+      d: 'M20 19h-4c0-1.5.44-2 1.5-2.5S20 15.33 20 14c0-.47-.17-.93-.48-1.29a2.11 2.11 0 0 0-2.62-.44c-.42.24-.74.62-.9 1.07',
+    },
+  ],
+  sigma: [
+    {
+      kind: 'path',
+      d: 'M18 7V5a1 1 0 0 0-1-1H6.5a.5.5 0 0 0-.4.8l4.5 6a2 2 0 0 1 0 2.4l-4.5 6a.5.5 0 0 0 .4.8H17a1 1 0 0 0 1-1v-2',
+    },
+  ],
+  info: [
+    { kind: 'circle', cx: 12, cy: 12, r: 10 },
+    { kind: 'path', d: 'M12 16v-4' },
+    { kind: 'path', d: 'M12 8h.01' },
+  ],
+  asterisk: [
+    { kind: 'path', d: 'M12 6v12' },
+    { kind: 'path', d: 'M17.196 9 6.804 15' },
+    { kind: 'path', d: 'm6.804 9 10.392 6' },
+  ],
+  smile: [
+    { kind: 'circle', cx: 12, cy: 12, r: 10 },
+    { kind: 'path', d: 'M8 14s1.5 2 4 2 4-2 4-2' },
+    { kind: 'path', d: 'M9 9h.01' },
+    { kind: 'path', d: 'M15 9h.01' },
+  ],
+  // Lucide "eraser" -- the formatting eraser (M72, ADR-0070).
+  eraser: [
+    {
+      kind: 'path',
+      d: 'M21 21H8a2 2 0 0 1-1.42-.587l-3.994-3.999a2 2 0 0 1 0-2.828l10-10a2 2 0 0 1 2.829 0l5.999 6a2 2 0 0 1 0 2.828L12.834 21',
+    },
+    { kind: 'path', d: 'm5.082 11.09 8.828 8.828' },
   ],
   // Lucide "panel-left" / "panel-right" -- the titlebar's dock toggles.
   'panel-left': [

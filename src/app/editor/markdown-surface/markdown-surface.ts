@@ -35,6 +35,7 @@ import {
   setFrontmatterExpanded,
 } from '../frontmatter-fold';
 import { livePreview } from '../live-preview';
+import { extendedMarkdown } from '../markdown-extensions';
 import { inlineSpellcheck, requestSpellcheck, SpellcheckSource } from '../spellcheck/spellcheck';
 import { linkActivation } from '../link-open';
 import { WikilinkService, makeWikilinkCompletionSource, wikilinks } from '../wikilinks';
@@ -42,8 +43,12 @@ import { pasteUrlAsMarkdownLink } from '../paste-link';
 import { assetUrlToVaultPath, resolveHelpImageCandidates, resolveVaultImageCandidates } from '../vault-image';
 import { makeTagCompletionSource, tagPills, tagStyleRefresh } from '../tags';
 import { makeWordCompletionSource } from '../word-completion';
+import { makeEmojiCompletionSource } from '../emoji';
 import { applyAction, ToolbarAction } from '../toolbar-commands';
+import { eraseFormatting } from '../erase-formatting';
 import { makeSlashCommandSource } from '../slash-commands';
+import { EmojiPickerService } from '../../emoji-picker/emoji-picker.service';
+import { loadEmojiRecents } from '../../emoji-picker/emoji-recents';
 import { SettingsService } from '../../services/settings.service';
 import { composeEntry, EMPTY_ENTRY_DRAFT } from '../../../../shared/entry-compose';
 import { TagVocabularyService } from '../../tags/tag-vocabulary.service';
@@ -54,6 +59,18 @@ import { EditorExtensionRegistry, DropDecoderRegistry } from '../../plugin-host'
  * stick-to-bottom behaviour on external in-place reloads. Same idea as the
  * assistant transcript's proximity check. */
 const STICK_TO_BOTTOM_PX = 32;
+
+/**
+ * The document identity an embed-bearing surface resolves against: the
+ * vault-relative path and vault id of the shown note, or a help document's
+ * bundled asset base (ADR-0070). All three `null` for a surface that shows
+ * no vault document (the compact composers).
+ */
+export interface DocIdentity {
+  readonly path: string | null;
+  readonly vaultId: string | null;
+  readonly assetBase: string | null;
+}
 
 /**
  * The one reusable CodeMirror Markdown surface: the full-page editor and the
@@ -72,8 +89,10 @@ const STICK_TO_BOTTOM_PX = 32;
  *
  * Document state stays with the *owner*: the component emits `docChanged`
  * and exposes `view` / `setContent` -- it never talks to `EditorService`
- * buffers itself (images resolve against the active document's path, which
- * is where both use sites want them to land).
+ * buffers itself (a pasted image saves beside the focused document's path,
+ * which is where a paste can only land anyway; rendered embeds resolve
+ * against this surface's own document identity, so a background pane in a
+ * split view resolves its own note, not the focused one).
  */
 @Component({
   selector: 'app-markdown-surface',
@@ -101,6 +120,7 @@ export class MarkdownSurface implements AfterViewInit, OnDestroy {
   private readonly wikiLinks = inject(WikilinkService);
   private readonly tagVocab = inject(TagVocabularyService);
   private readonly keys = inject(KeybindingService);
+  private readonly emojiPicker = inject(EmojiPickerService);
   private readonly pluginExtensions = inject(EditorExtensionRegistry);
   private readonly dropDecoders = inject(DropDecoderRegistry);
   private readonly host = viewChild.required<ElementRef<HTMLDivElement>>('host');
@@ -217,6 +237,25 @@ export class MarkdownSurface implements AfterViewInit, OnDestroy {
   private desiredFrontmatterExpanded = false;
 
   /**
+   * What document the view currently shows, for embed resolution (the
+   * vault-relative path, its vault id, a help document's asset base). Set
+   * synchronously by the owner next to the content it loads
+   * ({@link setDocumentIdentity}) -- deliberately not an input: the owner's
+   * load effect runs in the same change-detection pass that flips the shown
+   * tab, so an input still held the PREVIOUS document while the new
+   * content's first decorations built (every embed's first candidate 404ed
+   * until a later rebuild healed the widget). It also must never be
+   * `EditorService.openPath` -- that facade follows the FOCUSED pane, so a
+   * rebuild in a background pane (a focus switch recreates the embed
+   * widgets) would resolve its note-relative embeds against the wrong note.
+   */
+  private readonly shownDocIdentity = signal<DocIdentity>({
+    path: null,
+    vaultId: null,
+    assetBase: null,
+  });
+
+  /**
    * Mirror of the fold extension's `StateField<boolean>` (see
    * `frontmatter-fold.ts`): CodeMirror owns the state, this signal only
    * reflects it so the owner can read it (e.g. to remember it per tab). Set
@@ -249,6 +288,35 @@ export class MarkdownSurface implements AfterViewInit, OnDestroy {
       scrollIntoView: true,
     });
     view.focus();
+  }
+
+  /**
+   * The formatting eraser (M72, ADR-0070): with the caret, peel ONE
+   * layer -- the outermost inline wrap at the position; with a
+   * selection, wipe every wrap the selection overlaps. Entry points:
+   * the toolbar's eraser button, `/clear`, the context-menu row and
+   * `Mod+\` (all funnel into `erase-formatting.ts`).
+   */
+  eraseFormattingAtSelection(): void {
+    const view = this._view;
+    if (!view) {
+      return;
+    }
+    eraseFormatting(view);
+  }
+
+  /**
+   * The toolbar's smile button (ADR-0070): opens the `:emoji:` picker over
+   * the current selection -- the same insert path the context menu's
+   * "Emoji…" row and the `/emoji` slash command use.
+   */
+  openEmojiPicker(): void {
+    const view = this._view;
+    if (!view) {
+      return;
+    }
+    const { from, to } = view.state.selection.main;
+    this.emojiPicker.open({ view, from, to });
   }
 
   /**
@@ -368,13 +436,14 @@ export class MarkdownSurface implements AfterViewInit, OnDestroy {
         base: markdownLanguage,
         codeLanguages: languages,
         completeHTMLTags: false,
-        // `markdownLanguage` bakes in `@lezer/markdown`'s `Emoji` inline
-        // parser, whose `:name:` rule is `/^[a-zA-Z_0-9]+:/` -- digits alone
-        // count, so a bare timestamp like `2026-09-09T00:03:48` has its
-        // `:03:` slice parsed as an `Emoji` node and coloured as such. We
-        // never render `:shortcode:` emoji, so drop the parser: the text
-        // stays plain.
-        extensions: [{ remove: ['Emoji'] }],
+        // The extended dialect (milestone 71): `==highlight==`, `$…$` /
+        // `$$…$$` math, footnotes, curated `:emoji:` — plus GFM and
+        // Pandoc sub/superscript, which `markdownLanguage` already
+        // parses. `@lezer/markdown`'s own `Emoji` parser is dropped (any
+        // `name:` matched, so a timestamp like `2026-09-09T00:03:48` had
+        // its `:03:` slice coloured as an emoji); the curated replacement
+        // only matches known GitHub names.
+        extensions: [{ remove: ['Emoji'] }, ...extendedMarkdown],
       }),
       // `#tag` completion + pills are BASE editor features (milestone 33 —
       // moved out of the Tags plugin, which stays the data owner): colored
@@ -415,6 +484,21 @@ export class MarkdownSurface implements AfterViewInit, OnDestroy {
             autocomplete: makeWordCompletionSource(),
           })
         : [],
+      // `:shortcode:` completion (M72, ADR-0070): the typing twin of the
+      // picker, ranked by recently picked names. Same Enter-submits gate.
+      !(this.compact() && this.submitOnEnter())
+        ? markdownLanguage.data.of({
+            autocomplete: makeEmojiCompletionSource({
+              getRecents: () => {
+                try {
+                  return loadEmojiRecents(globalThis.localStorage);
+                } catch {
+                  return [];
+                }
+              },
+            }),
+          })
+        : [],
       // The `/` selection dialog: the toolbar's block commands as
       // completions. Same Enter-submits gate as the word completion.
       !(this.compact() && this.submitOnEnter())
@@ -424,6 +508,10 @@ export class MarkdownSurface implements AfterViewInit, OnDestroy {
               // (ADR-0022) with an empty draft -- a heading with the time.
               entryText: () =>
                 composeEntry(EMPTY_ENTRY_DRAFT, this.settings.activeEntryPattern()) + '\n',
+              // `/emoji` opens the picker instead of inserting text.
+              openEmojiPicker: (view, from, to) => this.emojiPicker.open({ view, from, to }),
+              // `/clear` strokes the eraser after the command text is gone.
+              clearFormatting: (view) => eraseFormatting(view),
             }),
           })
         : [],
@@ -742,6 +830,16 @@ export class MarkdownSurface implements AfterViewInit, OnDestroy {
   }
 
   /**
+   * Points embed resolution at the document the owner is about to show.
+   * MUST reach the surface before the content does (`loadDocument` /
+   * `setContent`): the incoming text's first decoration build reads it
+   * synchronously.
+   */
+  setDocumentIdentity(identity: DocIdentity): void {
+    this.shownDocIdentity.set(identity);
+  }
+
+  /**
    * Expand or fold the frontmatter (only meaningful with `foldFrontmatter`).
    * The owner calls this on tab switch to replay the tab's remembered state;
    * the pill and chevron flip it from inside CodeMirror.
@@ -806,11 +904,11 @@ export class MarkdownSurface implements AfterViewInit, OnDestroy {
       resolveImage: (url: string) => {
         // An in-app help document (ADR-0070) resolves against its bundled
         // asset base, not the vault.
-        const assetBase = this.editor.openAssetBase();
-        if (assetBase !== null) {
-          return resolveHelpImageCandidates(assetBase, url);
+        const identity = this.shownDocIdentity();
+        if (identity.assetBase !== null) {
+          return resolveHelpImageCandidates(identity.assetBase, url);
         }
-        return resolveVaultImageCandidates(this.editor.openPath(), url, this.editor.openVaultId());
+        return resolveVaultImageCandidates(identity.path, url, identity.vaultId);
       },
       onOpenImage: (src: string) => this.lightbox.open(src),
       onZoomDiagram: (dataUrl: string) => this.lightbox.open(dataUrl),

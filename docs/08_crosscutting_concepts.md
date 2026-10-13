@@ -1,10 +1,77 @@
 # 8. Crosscutting Concepts
 
-*(Placeholder — filled in as concrete cross-cutting decisions get made,
-e.g. error handling/logging conventions, the IPC message/type conventions,
-autosave-vs-watcher conflict handling. Tracked as an open risk in
-[11_risks_and_technical_debt.md](11_risks_and_technical_debt.md) until
-resolved.)*
+Rules and mechanisms that are not the property of one building block.
+Each section says what the rule is and where it is decided, so a new
+feature can follow it without reading the code first.
+
+| Concept | One line |
+|---|---|
+| [Module boundaries](#module-boundaries) | Four parts, one direction of dependency. |
+| [Extension through registries](#extension-through-registries) | The base offers a slot; a feature fills it. |
+| [IPC typing](#ipc-typing-convention-established-in-milestone-1) | Every shape that crosses the bridge is declared once in `shared/`. |
+| [Indexes are caches](#indexes-are-caches) | Anything derived from notes can be rebuilt from the notes. |
+| [A model's change is confirmed](#a-models-change-is-confirmed) | Nothing a model proposes reaches a file unseen. |
+| [Crash-safe file writes](#crash-safe-file-writes) | A replaced file is old or new, never half. |
+| [Uncaught errors](#uncaught-errors-in-the-main-process) | Logged, and the user is told once. |
+| [Renderer hardening](#renderer-hardening) | Sanitizer, content policy, sandbox. |
+| [Secrets](#secrets-in-the-settings-file) | Encrypted on disk with the OS user's key. |
+
+## Module boundaries
+
+The app has four parts — renderer, main process, shared, plugins — and
+dependencies run one way: everything may use `shared/`, plugins use the
+base only through the SDK, and the base never reaches into a plugin. The
+table of rules and what enforces each is in
+[§5, "The dependency rules"](05_building_block_view.md#the-dependency-rules).
+
+Inside the base, a folder that is a module exposes an `index.ts`; code
+outside the folder imports that file and nothing behind it
+([ADR-0016](09_architecture_decisions/0016-feature-module-convention.md)).
+Angular components hold no logic of their own: a component reads state
+from a service and calls it.
+
+## Extension through registries
+
+The base does not know its features. For every place a feature can
+appear — a dock panel, a tab kind, a settings page, a menu row, a
+command, an editor extension, a drop handler, a save hook, a search
+provider — the base owns a registry and draws whatever is in it. The
+base's own panels (Calendar, Files, Open windows) register through the
+same call a plugin uses, so there is one path, not a built-in one and a
+plugin one.
+
+Two consequences worth knowing:
+
+- **A missing plugin is a normal state.** Code that asks a registry for
+  a provider must handle `null` (the tags plugin is disabled: `#tag`
+  completion is empty, MCP `vault_search` answers with a clear error).
+- **A new kind of extension is a change to the SDK.** It gets a minor
+  version (`PLUGIN_API_VERSION`), an entry in "The seams"
+  ([§5.0](05_building_block_view.md)), and it is additive: an existing
+  plugin keeps working.
+
+## Indexes are caches
+
+The tag and section index, the task index, the backlink index and the
+semantic index are all derived from the Markdown files. None is a source
+of truth and none is stored in the vault. Each is kept current through
+the save hook and the vault-change hook, and each can be dropped and
+rebuilt by a full refresh. A feature that needs data about notes follows
+the same pattern rather than writing a second copy of anything into the
+notes.
+
+## A model's change is confirmed
+
+A model can propose a change to a note three ways: an Action, an edit
+from the assistant, or a write through the MCP server. All three end in
+the same dialog
+([ADR-0011](09_architecture_decisions/0011-unified-confirmation-flow.md)),
+which shows the change as a diff and writes only on confirmation. Each
+writing tool group has its own rule (`tools.<group>.write`): note writes
+ask by default; the template library, which the assistant may manage,
+is written directly by default and can be set to ask. A call that leaves the machine (web fetch, an external tool
+server) asks separately, showing its arguments
+([ADR-0063](09_architecture_decisions/0063-mcp-client-and-assistant-tool-groups.md)).
 
 ## IPC typing convention (established in milestone 1)
 

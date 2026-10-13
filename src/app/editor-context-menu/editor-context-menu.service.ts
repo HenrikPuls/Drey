@@ -128,9 +128,13 @@ export class EditorContextMenuService {
     }
     event.preventDefault();
     this.menuTarget.set(menuTarget);
+    // The y clamp reserves room for the menu box itself: clipboard +
+    // base + plugin rows reach ~15 rows, and the css caps the box at
+    // 460px (scrollable beyond) -- so a click near the bottom shifts the
+    // menu up far enough to keep every row on screen.
     this.anchor.set({
       x: Math.min(event.clientX, window.innerWidth - 220),
-      y: Math.min(event.clientY, window.innerHeight - 280),
+      y: Math.min(event.clientY, window.innerHeight - 460),
     });
   };
 }

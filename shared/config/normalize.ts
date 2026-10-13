@@ -31,6 +31,7 @@ import {
   EditorConfig,
   EntryConfig,
   EntryTemplate,
+  LEGACY_AUTOTAG_PROMPT,
   LEGACY_SEARCH_SUMMARY_PROMPT,
   LlmConfig,
   LlmProviderId,
@@ -62,6 +63,7 @@ import {
   defaultToolsConfig,
   DEFAULT_TEMPLATES_CONFIG,
   DEFAULT_VAULT_CONFIG,
+  losslessFormatTemplate,
   ruledEntryTemplate,
   searchSummaryTemplate,
 } from './defaults';
@@ -516,12 +518,16 @@ const RETIRED_BUILTIN_TEMPLATE_IDS = new Set(['builtin:note-summary']);
 /**
  * A stored built-in prompt that still equals an OLD shipped default (the
  * user never edited it) refreshes to the current default; a genuine user
- * edit is kept as-is. Only the search-summary prompt has a legacy text so
- * far (its default was reworded when the summarise backend shipped,
- * milestone 37).
+ * edit is kept as-is. The search-summary prompt was reworded when the
+ * summarise backend shipped (milestone 37); the autotag prompt was
+ * re-tokened when the shared `{{AVAILABLE_TAGS}}` placeholder landed
+ * (the legacy `{tags}` keeps being substituted either way).
  */
 function refreshLegacyPrompt(builtin: ActionTemplate['builtin'], stored: string, current: string): string {
-  return builtin === 'search-summary' && stored === LEGACY_SEARCH_SUMMARY_PROMPT ? current : stored;
+  if (builtin === 'search-summary' && stored === LEGACY_SEARCH_SUMMARY_PROMPT) {
+    return current;
+  }
+  return builtin === 'autotag' && stored === LEGACY_AUTOTAG_PROMPT ? current : stored;
 }
 
 /**
@@ -539,7 +545,7 @@ function normalizeTemplates(raw: unknown): ActionTemplate[] {
   }
 
   const out: ActionTemplate[] = [];
-  for (const base of [searchSummaryTemplate(), autotagTemplate()]) {
+  for (const base of [searchSummaryTemplate(), autotagTemplate(), losslessFormatTemplate()]) {
     const saved = byId.get(base.id);
     byId.delete(base.id);
     out.push(
@@ -629,8 +635,11 @@ function normalizeEntryConfig(raw: unknown): EntryConfig {
 
 /**
  * Keeps every well-formed trigger whose `templateId` still resolves. A
- * missing `triggers` key (a fresh config) seeds the two built-in manual
- * triggers; an explicit empty array is respected (the user removed them).
+ * missing `triggers` key (a fresh config) seeds the built-in manual
+ * trigger (the lossless "Structure note" row in the `⋯` menu); an
+ * explicit array — empty or not — is respected as the user's own (an
+ * install from before the template adds its trigger once in Settings →
+ * Actions).
  */
 function normalizeTriggers(raw: unknown, templates: readonly ActionTemplate[]): ActionTrigger[] {
   if (raw === undefined) {

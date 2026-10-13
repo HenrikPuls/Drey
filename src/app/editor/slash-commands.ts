@@ -18,6 +18,12 @@ import { applyAction, ToolbarAction } from './toolbar-commands';
  * contributes through its own source -- then **Formatting**. The selected
  * template shows a preview card beside the list (`info`).
  *
+ * The extended-dialect inserts (M72, ADR-0070) ride along as regular
+ * formatting commands, plus **Emoji**, which hands its range to the
+ * `:emoji:` picker instead of inserting text, and **Clear formatting**,
+ * the eraser (outermost inline wrap at the caret first; a selection
+ * wipes everything it overlaps).
+ *
  * Silent inside code, frontmatter, links and raw HTML (the shared
  * Markdown-context gate) and after a non-space character, so URLs, paths,
  * `and/or` and dates never trigger it.
@@ -39,6 +45,12 @@ export const SLASH_SECTION_FORMATTING = { name: 'Formatting', rank: 1 } as const
 export interface SlashSourceOptions {
   /** The entry block as it would be inserted right now (heading with the time). */
   entryText?: () => string;
+  /** Opens the `:emoji:` picker over the typed `/emoji` range (no reducer --
+   *  the picker service owns the insert, ADR-0070). */
+  openEmojiPicker?: (view: EditorView, from: number, to: number) => void;
+  /** The formatting eraser: runs after the typed `/clear` is cut out (a
+   *  tree command, not a reducer -- "outermost" needs the syntax tree). */
+  clearFormatting?: (view: EditorView) => void;
 }
 
 /**
@@ -90,6 +102,15 @@ export const SLASH_COMMANDS: readonly SlashCommand[] = [
   { label: 'Table', action: { kind: 'table', rows: 3, cols: 2 } },
   { label: 'Divider', action: { kind: 'divider' } },
   { label: 'Link', action: { kind: 'link' } },
+  // The extended dialect's inserts (M72, ADR-0070) -- same reducer as the
+  // toolbar / context-menu rows. `/emoji` is special-cased in `slashResult`.
+  { label: 'Highlight', action: { kind: 'highlight' } },
+  { label: 'Subscript', action: { kind: 'subscript' } },
+  { label: 'Superscript', action: { kind: 'superscript' } },
+  { label: 'Inline math', action: { kind: 'mathInline' } },
+  { label: 'Math block', action: { kind: 'mathBlock' } },
+  { label: 'Callout', action: { kind: 'callout', variant: 'note' } },
+  { label: 'Footnote', action: { kind: 'footnote' } },
 ];
 
 /**
@@ -160,6 +181,28 @@ function slashResult(context: CompletionContext, opts: SlashSourceOptions): Comp
       section: SLASH_SECTION_TEMPLATES,
       info: () => slashPreviewCard('Entry', entryText()),
       apply: (view, _completion, from, to) => insertSlashSnippet(view, entryText(), from, to),
+    });
+  }
+  if (opts.openEmojiPicker !== undefined && 'emoji'.startsWith(query)) {
+    options.push({
+      label: 'Emoji',
+      detail: 'Pick from the shortcode list',
+      type: 'slash',
+      section: SLASH_SECTION_FORMATTING,
+      apply: (view, _completion, from, to) => opts.openEmojiPicker!(view, from, to),
+    });
+  }
+  if (opts.clearFormatting !== undefined && 'clear formatting'.startsWith(query)) {
+    options.push({
+      label: 'Clear formatting',
+      detail: 'Erase at the caret, outermost first',
+      type: 'slash',
+      section: SLASH_SECTION_FORMATTING,
+      apply: (view, _completion, from, to) => {
+        // Cut the typed command first, then stroke at the resulting caret.
+        view.dispatch({ changes: { from, to }, selection: { anchor: from } });
+        opts.clearFormatting!(view);
+      },
     });
   }
   for (const cmd of matches) {
