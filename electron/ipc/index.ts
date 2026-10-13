@@ -26,6 +26,7 @@ import { registerExportHandlers } from './export-handlers';
 import { registerLlmHandlers } from './llm-handlers';
 import { registerMcpHandlers } from './mcp-handlers';
 import { McpWriteBridge } from './mcp-write-bridge';
+import { OpenDocsBridge } from './open-docs-bridge';
 import { ToolApprovalBridge } from './tool-approval-bridge';
 import { registerPluginHandlers } from './plugin-handlers';
 import { registerQueryHandlers } from './query-handlers';
@@ -36,6 +37,7 @@ import type { ExternalVaultChanges } from '../vault-change-announcer';
 
 export { McpWriteBridge } from './mcp-write-bridge';
 export { ToolApprovalBridge } from './tool-approval-bridge';
+export { OpenDocsBridge } from './open-docs-bridge';
 export { ExitBridge } from './exit-bridge';
 
 export interface IpcHandlerDeps {
@@ -55,6 +57,7 @@ export interface IpcHandlerDeps {
   mcpWriteBridge: McpWriteBridge;
   mcpClients: McpClientManager;
   toolApprovalBridge: ToolApprovalBridge;
+  openDocsBridge: OpenDocsBridge;
   syncMcpClients: () => void;
   exitBridge: ExitBridge;
   externalFiles: ExternalFileGate;

@@ -182,6 +182,7 @@ describe('AssistantToolbox', () => {
     box: AssistantToolbox;
     asked: Array<{ source: string; tool: string }>;
     fetched: unknown[];
+    searched: unknown[];
     client: FakeClient;
     ready: () => Promise<void>;
   } {
@@ -192,6 +193,7 @@ describe('AssistantToolbox', () => {
     manager.sync(config.tools.servers);
     const asked: Array<{ source: string; tool: string }> = [];
     const fetched: unknown[] = [];
+    const searched: unknown[] = [];
     const box = new AssistantToolbox(
       () => config,
       manager,
@@ -203,8 +205,12 @@ describe('AssistantToolbox', () => {
         fetched.push(args);
         return 'page';
       },
+      async (args, search) => {
+        searched.push({ args, provider: search.provider });
+        return 'results';
+      },
     );
-    return { box, asked, fetched, client, ready: settle };
+    return { box, asked, fetched, searched, client, ready: settle };
   }
 
   it('offers web_fetch only when on, plus the connected servers', async () => {
@@ -217,6 +223,38 @@ describe('AssistantToolbox', () => {
     }, true);
     await on.ready();
     expect(on.box.specs().map((s) => s.name)).toEqual(['web_fetch', 'mcp__brave__web_search']);
+  });
+
+  it('offers web_search only when it is on and its provider has what it needs', () => {
+    const noKey = toolbox((t) => {
+      t.webSearch = { ...t.webSearch, enabled: true, provider: 'brave' };
+    }, true);
+    expect(noKey.box.specs()).toEqual([]);
+
+    const ready = toolbox((t) => {
+      t.webSearch = { ...t.webSearch, enabled: true, provider: 'brave', apiKey: 'k' };
+      t.webFetch.enabled = true;
+    }, true);
+    expect(ready.box.specs().map((s) => s.name)).toEqual(['web_search', 'web_fetch']);
+    expect(ready.box.owns('web_search')).toBe(true);
+  });
+
+  it('web_search asks under its own source, runs with the configured provider, and is refused while off', async () => {
+    const off = toolbox(() => undefined, true);
+    expect(await off.box.run('web_search', '{"query":"x"}')).toMatch(/turned off or not set up/);
+    expect(off.searched).toEqual([]);
+
+    const denied = toolbox((t) => void (t.webSearch.enabled = true), false);
+    expect(await denied.box.run('web_search', '{"query":"x"}')).toMatch(/declined/);
+    expect(denied.asked).toEqual([{ source: 'web_search', tool: 'web_search' }]);
+    expect(denied.searched).toEqual([]);
+
+    const allowed = toolbox((t) => {
+      t.webSearch = { ...t.webSearch, enabled: true, approval: 'allow' };
+    }, false);
+    expect(await allowed.box.run('web_search', '{"query":"x"}')).toBe('results');
+    expect(allowed.asked).toEqual([]);
+    expect(allowed.searched).toEqual([{ args: { query: 'x' }, provider: 'duckduckgo' }]);
   });
 
   it('"ask" asks per call and a denial does not run it', async () => {

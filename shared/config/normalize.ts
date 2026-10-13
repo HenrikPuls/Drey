@@ -45,6 +45,8 @@ import {
   TOOL_ROUNDS_MAX,
   TOOL_ROUNDS_MIN,
   ToolsConfig,
+  WEB_SEARCH_PROVIDERS,
+  WebSearchConfig,
   VaultWriteMode,
   SnippetConfig,
   SpellcheckConfig,
@@ -369,9 +371,55 @@ function normalizeTools(raw: unknown, mcp: McpConfig): ToolsConfig {
       enabled: bool(group('webFetch')['enabled'], fallback.webFetch.enabled),
       approval: group('webFetch')['approval'] === 'allow' ? 'allow' : 'ask',
     },
+    webSearch: normalizeWebSearch(source['webSearch'], fallback.webSearch),
     servers: normalizeMcpServers(source['servers']),
     maxRounds: normalizeToolRounds(source['maxRounds']),
   };
+}
+
+function normalizeWebSearch(raw: unknown, fallback: WebSearchConfig): WebSearchConfig {
+  const source = (raw ?? {}) as Record<string, unknown>;
+  const provider = WEB_SEARCH_PROVIDERS.find((entry) => entry.id === source['provider']);
+  return {
+    enabled: bool(source['enabled'], fallback.enabled),
+    provider: provider?.id ?? fallback.provider,
+    apiKey: str(source['apiKey'], '').trim(),
+    baseUrl: str(source['baseUrl'], '').trim(),
+    approval: source['approval'] === 'allow' ? 'allow' : 'ask',
+  };
+}
+
+/**
+ * Whether `web_search` can be asked: switched on, and the provider has
+ * what it needs (a key for Brave and Tavily, an address for SearXNG).
+ */
+export function webSearchReady(search: WebSearchConfig): boolean {
+  if (!search.enabled) {
+    return false;
+  }
+  const needs = WEB_SEARCH_PROVIDERS.find((entry) => entry.id === search.provider)?.needs;
+  return needs === 'key' ? search.apiKey !== '' : needs === 'url' ? search.baseUrl !== '' : true;
+}
+
+/** Which of the tools that leave the machine the user has switched on. */
+export interface ExternalToolSources {
+  webSearch: boolean;
+  webFetch: boolean;
+  servers: boolean;
+}
+
+export function externalToolSources(tools: ToolsConfig): ExternalToolSources {
+  return {
+    webSearch: webSearchReady(tools.webSearch),
+    webFetch: tools.webFetch.enabled,
+    servers: tools.servers.some((server) => server.enabled),
+  };
+}
+
+/** Whether anything that leaves the machine is switched on (the Web chip shows only then). */
+export function hasExternalTools(tools: ToolsConfig): boolean {
+  const sources = externalToolSources(tools);
+  return sources.webSearch || sources.webFetch || sources.servers;
 }
 
 function vaultWrite(group: Record<string, unknown>): VaultWriteMode {

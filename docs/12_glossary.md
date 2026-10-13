@@ -66,7 +66,8 @@ and [ADR-0002](09_architecture_decisions/0002-quick-capture-opens-daily-note.md)
 | Ask | A question to the assistant in its panel. |
 | Vault chip | The assistant's switch that adds the most relevant note sections to a question. |
 | Semantic retrieval | Finding sections by meaning, through embeddings computed in the app ([ADR-0055](09_architecture_decisions/0055-semantic-vault-retrieval.md)). |
-| Tool group | A set of tools the assistant may call, with one switch: vault, tasks, templates, web fetch, each external server. |
+| Tool group | A set of tools the assistant may call, with one switch: vault, tasks, templates, web search, web fetch, each external server. |
+| Web chip | The globe button in the assistant's composer: whether the next question may use the tools that leave the machine (web search, web fetch, external servers). |
 | MCP | Model Context Protocol. Drey is both a server (other programs use the vault) and a client (the assistant uses external servers). |
 | Confirmation dialog | The one dialog that shows a proposed change as a diff ([ADR-0011](09_architecture_decisions/0011-unified-confirmation-flow.md)). |
 | Own-write ledger | The record of files Drey itself just wrote, so the watcher does not report them as outside changes. |

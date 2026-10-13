@@ -675,6 +675,11 @@
   position: relative;
 }
 
+/* The Web toggle exists only while Settings has something for it. */
+.assistant-composer .icon-btn[hidden] {
+  display: none;
+}
+
 .assistant-composer .icon-btn.vault.all::after {
   content: '';
   position: absolute;

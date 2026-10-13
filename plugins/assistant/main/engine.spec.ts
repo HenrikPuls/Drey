@@ -270,7 +270,6 @@ function chatHarness(
       resolveAssetPath: (path) => (path === 'attachments/pic.png' ? `C:/abs/${path}` : null),
       readAssetBase64: async () => 'xjaf=',
       onDelta: (taskId, text) => deltas.push({ taskId, text }),
-      onLiveEdit: () => undefined,
       // The Vault chip is off in every ASK below, so this is never called;
       // it is here to satisfy the port.
       retrieveContext: async () => harness.retrieval,
@@ -296,6 +295,7 @@ const ASK = {
   noteKey: 'v1::a.md' as string | null,
   vaultScope: 'off' as const,
   vaultIds: [] as string[],
+  web: false,
 };
 
 describe('assistant plugin chat engine — persistence (bug-10b)', () => {
@@ -377,8 +377,8 @@ describe('assistant plugin chat engine — persistence (bug-10b)', () => {
         : { text: 'ok' },
     );
     const first = await h.engine.ask(ASK);
-    // MCP off: no vault tools ride the call.
-    expect(h.calls[0].opts['vaultTools']).toBeUndefined();
+    // Chip off: the vault tools reach the attached note and nothing else.
+    expect(h.calls[0].opts).toMatchObject({ vaultTools: true, vaultToolsScope: [] });
     await h.engine.ask({ ...ASK, question: 'Weiter?', chatPath: first.chatPath }, 'task-9');
 
     // The second call replays the tool loop as real message pairs (the
@@ -412,21 +412,41 @@ describe('assistant plugin chat engine — persistence (bug-10b)', () => {
       run: async () => '',
       query: async () => [],
     };
-    await h.engine.ask({ ...ASK });
+    await h.engine.ask({ ...ASK, note: null });
     expect((h.calls[0].opts['tools'] as { name: string }[]).map((t) => t.name)).toEqual(['tasks_list']);
     expect(h.calls[0].opts['vaultTools']).toBeUndefined();
     expect(h.calls[0].opts['externalTools']).toBeUndefined();
 
     h.config.tools.tasks.enabled = false;
-    await h.engine.ask({ ...ASK });
+    await h.engine.ask({ ...ASK, note: null });
     expect(h.calls[1].opts['tools']).toBeUndefined();
     expect(h.calls[1].messages[0].content).not.toContain('tasks_list');
+  });
+
+  it('the Web chip (milestone 79): external tools ride only while it is on, and the prompt names what Settings switched on', async () => {
+    const h = chatHarness();
+    h.config.tools.webFetch.enabled = true;
+    await h.engine.ask({ ...ASK });
+    expect(h.calls[0].opts['externalTools']).toBeUndefined();
+    expect(h.calls[0].messages[0].content).not.toContain('web_fetch');
+
+    h.config.tools.webSearch.enabled = true;
+    await h.engine.ask({ ...ASK, web: true });
+    expect(h.calls[1].opts).toMatchObject({ externalTools: true });
+    expect(h.calls[1].messages[0].content).toContain('- web_search and web_fetch');
+    expect(h.calls[1].messages[0].content).not.toContain('mcp__');
+
+    // Nothing switched on in Settings: the chip alone attaches nothing.
+    h.config.tools.webFetch.enabled = false;
+    h.config.tools.webSearch.enabled = false;
+    await h.engine.ask({ ...ASK, web: true });
+    expect(h.calls[2].opts['externalTools']).toBeUndefined();
   });
 
   it('external tools (ADR-0063): on with web fetch or a server, with their rules in the prompt', async () => {
     const h = chatHarness();
     h.config.tools.webFetch.enabled = true;
-    await h.engine.ask({ ...ASK });
+    await h.engine.ask({ ...ASK, web: true });
     expect(h.calls[0].opts).toMatchObject({ externalTools: true });
     // The round budget is the user's setting, applied by the host (ADR-0071).
     expect(h.calls[0].opts['maxToolRounds']).toBeUndefined();
@@ -434,7 +454,7 @@ describe('assistant plugin chat engine — persistence (bug-10b)', () => {
 
     // A provider without a tool loop gets neither the option nor the promise.
     h.setCapabilities({ tools: false });
-    await h.engine.ask({ ...ASK });
+    await h.engine.ask({ ...ASK, web: true });
     expect(h.calls[1].opts['externalTools']).toBeUndefined();
     expect(h.calls[1].messages[0].content).not.toContain('web_fetch');
   });
@@ -450,7 +470,9 @@ describe('assistant plugin chat engine — persistence (bug-10b)', () => {
     // Writing switched off: the reading tools stay, and the prompt says so.
     h.config.tools.vault.write = 'off';
     await h.engine.ask(scoped);
-    expect(h.calls[2].messages[0].content).toContain('You cannot change files in the vault');
+    expect(h.calls[2].messages[0].content).toContain(
+      'Apart from the document of this conversation you cannot change files in the vault.',
+    );
     expect(h.calls[2].opts).toMatchObject({ vaultTools: true });
   });
 
@@ -679,7 +701,7 @@ describe('assistant plugin chat engine — document-fence protocol (ADR-0053)', 
     const h = chatHarness(() => (n++ === 0 ? { text: 'half', toolsDropped: true } : { text: 'plain' }));
     h.config.tools.webFetch.enabled = true;
 
-    const { outcome } = await h.engine.ask(ASK);
+    const { outcome } = await h.engine.ask({ ...ASK, web: true });
 
     expect(outcome).toEqual({ kind: 'answer', text: 'plain' });
     // First call: tools attached and described. Second: neither.
@@ -690,7 +712,7 @@ describe('assistant plugin chat engine — document-fence protocol (ADR-0053)', 
     expect(h.calls[1].messages[0].content).not.toContain('How to work with tools');
 
     // The next ask to the same model does not pay for a refusal again.
-    await h.engine.ask({ ...ASK, question: 'again' });
+    await h.engine.ask({ ...ASK, web: true, question: 'again' });
     expect(h.calls.filter((call) => call.opts['externalTools'] === true)).toHaveLength(1);
   });
 });
@@ -727,7 +749,8 @@ describe('assistant plugin chat engine — tasks_list tool (SDK 1.11)', () => {
     };
     expect(opts.tools?.map((t) => t.name)).toEqual(['tasks_list']);
     expect(opts.maxToolRounds).toBeUndefined(); // the user's budget, applied by the host
-    expect(opts.vaultTools).toBeUndefined(); // no MCP gate — the tool rides alone
+    expect(opts.vaultTools).toBe(true); // for the attached note only
+    expect((opts as { vaultToolsScope?: string[] }).vaultToolsScope).toEqual([]);
     expect(await opts.onToolCall?.('tasks_list', '{}')).toContain('Aufräumen');
     expect(await opts.onToolCall?.('other_tool', '{}')).toMatch(/^Error: there is no tool/);
     // The system prompt tells the model to prefer the tool for task questions.
@@ -746,16 +769,17 @@ describe('assistant plugin chat engine — tasks_list tool (SDK 1.11)', () => {
     expect(system.content).toContain('wikilinks');
   });
 
-  it('a live-edit turn keeps the doc tools — the tasks tool does not join', async () => {
+  it('a live-edit turn edits the note with the vault tools — the tasks tool does not join', async () => {
     const h = chatHarness(() => ({ text: 'Live-Antwort.' }));
     h.tasksTool = { spec: TASKS_LIST_SPEC, run: async () => '', query: async () => [] };
-    await h.engine.ask({ ...ASK, liveEdit: true, note: { path: 'a.md', body: DOC } });
+    await h.engine.ask({ ...ASK, liveEdit: true, note: { path: 'a.md', body: DOC, vaultId: 'v1' } });
     const opts = h.calls[0]?.opts as { tools?: ToolSpec[] };
-    expect(opts.tools?.map((t) => t.name)).toEqual([
-      'doc_apply_diff',
-      'doc_write',
-      'doc_read',
-    ]);
+    expect(opts.tools).toBeUndefined();
+    expect(h.calls[0]?.opts).toMatchObject({
+      vaultTools: true,
+      vaultToolsScope: [],
+      vaultToolsFiles: [{ vaultId: 'v1', path: 'a.md', live: true }],
+    });
   });
 
   it('a tool-carrying turn persists the call/result pair in the drey-tool fence', async () => {
@@ -1122,7 +1146,11 @@ describe('assistant plugin chat engine — post-hoc task block (57b)', () => {
 
   it('a live-edit turn never gets the post-hoc pass', async () => {
     const { h } = tasksHarness('Live angewandt.', [MARTA, HENRIK]);
-    const { chatPath } = await h.engine.ask({ ...ASK, liveEdit: true, note: { path: 'a.md', body: DOC } });
+    const { chatPath } = await h.engine.ask({
+      ...ASK,
+      liveEdit: true,
+      note: { path: 'a.md', body: DOC, vaultId: 'v1' },
+    });
     const view = parseChatNote(h.files.get(chatPath)!);
     expect(view.turns[1].tool.every((e) => e.kind !== 'result' || !e.content.includes('"line":22'))).toBe(true);
   });
@@ -1390,9 +1418,9 @@ describe('assistant plugin chat engine — vault tools follow the Vault chip (AD
     expect(systemOf(h.calls[0])).not.toContain('vault_retrieve');
   });
 
-  it('a chip-off ask has no vault tools, no scope and no word about them', async () => {
+  it('a chip-off ask without a note has no vault tools, no scope and no word about them', async () => {
     const h = chatHarness();
-    await h.engine.ask(ASK);
+    await h.engine.ask({ ...ASK, note: null });
 
     const call = h.calls[0];
     expect(systemOf(call)).not.toContain('vault_');
@@ -1420,15 +1448,18 @@ describe('assistant plugin chat engine — vault tools follow the Vault chip (AD
     h.retrieval = { enabled: true, minScore: 0.3, hits: [NEAR], targets: ['v1'] };
     await h.engine.ask({
       ...ASK,
-      note: { path: 'a.md', body: DOC },
+      note: { path: 'a.md', body: DOC, vaultId: 'v1' },
       liveEdit: true,
       vaultScope: 'vault',
     });
 
     const call = h.calls[0];
     expect(systemOf(call)).not.toContain('VAULT CONTEXT');
-    expect(call.opts).toMatchObject({ vaultTools: true, vaultToolsScope: ['v1'] });
-    // The doc tools ride beside them.
-    expect((call.opts['tools'] as ToolSpec[]).map((spec) => spec.name)).toContain('doc_apply_diff');
+    expect(call.opts).toMatchObject({
+      vaultTools: true,
+      vaultToolsScope: ['v1'],
+      // The note rides beside the scope, changed in its tab at once.
+      vaultToolsFiles: [{ vaultId: 'v1', path: 'a.md', live: true }],
+    });
   });
 });

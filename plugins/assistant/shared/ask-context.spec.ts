@@ -21,6 +21,7 @@ const baseRequest: AskRequest = {
   noteKey: null,
   vaultScope: 'off',
   vaultIds: [],
+  web: false,
 };
 
 describe('parseAskPayload vaultScope', () => {

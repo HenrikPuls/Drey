@@ -79,7 +79,7 @@ Two paths cover almost everything:
 | Vault and notes | `vault-manager.ts`, `note-manager.ts`, `daily-note.ts`, `link-rewriter.ts`, `history/`, `safe-file.ts`, `path-guard.ts`, `trash-delete.ts` | The vault registry and every file operation; the save pipeline with its conflict check; local versions. |
 | Outside changes | `vault-watcher.ts`, `own-write-ledger.ts`, `vault-change-announcer.ts` | Notices files changed by other programs and tells indexes and open tabs. |
 | Models | `llm/` | One `LlmClient` interface, a router that picks the provider per call, one client per backend, cancellable tasks. |
-| Tools | `mcp/`, `mcp-client/` | The MCP server Drey offers to other programs; the external tool servers and `web_fetch` the assistant may call. |
+| Tools | `mcp/`, `mcp-client/` | The MCP server Drey offers to other programs; the external tool servers, `web_search` and `web_fetch` the assistant may call. |
 | Plugins | `plugin-host/` | Finds, validates, activates and isolates failures of plugins; builds each one's context; installs packages. |
 | App state | `app-config.ts`, `config-secrets.ts`, `session/`, `logger.ts` | Settings on disk (secrets encrypted), the tab session and unsaved buffers, the log file. |
 | Single services | `spellcheck.ts`, `pdf-export.ts`, `external-open.ts`, `open-document.ts` | One job each. |
@@ -447,8 +447,9 @@ Keep it in step whenever a component boundary changes (CLAUDE.md's
   (for MCP clients; the assistant's writes follow `tools.vault.write`)
 - `electron/mcp-client/` (milestone 63, ADR-0063) — the other direction:
   `McpClientManager` (one SDK client per configured external server,
-  tool list + status), `web-fetch.ts` (the built-in `web_fetch`) and
-  `AssistantToolbox` (the external tool set of a chat call, each source
+  tool list + status), `web-fetch.ts` (the built-in `web_fetch`),
+  `web-search.ts` + `search-providers/` (the built-in `web_search`,
+  milestone 79) and `AssistantToolbox` (the external tool set of a chat call, each source
   behind its approval rule via `ToolApprovalBridge`). The plugin host
   merges it into `ctx.llm.chat` when a plugin passes `externalTools`
 - `SpellcheckService` (`electron/spellcheck.ts`) — nspell + the
@@ -830,10 +831,10 @@ Keep it in step whenever a component boundary changes (CLAUDE.md's
   Actions live in the editor `⋯` menu as `editor-more` menu contributions.
   **Live edit** (ADR-0049): a "Live edit" chip in the composer opts one
   ask turn into immediate-apply editing — the model edits the open note
-  through the `doc_*` tools (`doc_apply_diff` atomic find/replace hunks,
-  `doc_write`, `doc_read`) over a main-side working copy; each mutating
-  call pushes via the `chat:liveEdit` event into `documents.setBuffer`
-  (one Ctrl+Z step per push), the document is locked for user input
+  with the base vault tools (`vault_edit`, `vault_write`, `vault_read`;
+  the note rides the call as a `live` file, ADR-0071), each change goes
+  into the tab's buffer through the open-documents bridge
+  (one Ctrl+Z step per change), the document is locked for user input
   while the turn runs (`documents.setEditLock` → an `EditorView.editable`
    compartment + the meta bar's "Assistant is editing…" hint), the applied
    document persists as the turn's `edit` fence entry, and providers
@@ -896,7 +897,8 @@ decision. (Seams — what a *plugin* can extend — are the table above.)
 | Assistant chat + chat notes (`chats/`) | `plugins/assistant/` (`chat-engine.ts`, `chat-store.ts`) | Plugin assistant | ADR-0048 |
 | Tool loop (offered-only, argument check, error results, round budget, closing round, text-written calls, progress events) | `electron/llm/tool-loop.ts`, `shared/llm/tool-args.ts`, `shared/llm/text-tool-calls.ts`; dispatch in `electron/plugin-host/plugin-context.ts` (`buildLlmContext`) | Base (`llm/`, `plugin-host/`) | ADR-0071, M76 |
 | Vault tools for the model — `vault_list`, `vault_search`, `vault_retrieve`, `vault_read`, `vault_edit`, `vault_write`, `vault_move`, `vault_delete` | `electron/mcp/tools/` (`defs.ts` descriptions, `scope.ts` the vaults and paths a call may touch, `list.ts`, `search.ts`, `read.ts`, `write.ts`), `electron/mcp/vault-tools.ts` (`VaultTools`: what a caller is offered, routing, `VaultCallOptions`); edit core `shared/text-edit.ts`; `tasks_list` in `shared/tasks-list-tool.ts`; wired in `electron/app-services.ts`; scope and write rule applied for plugin calls in `electron/plugin-host/plugin-context.ts` (`assistantVaultOptions`) | Base (`mcp/`) — one set for the MCP server and the assistant | ADR-0021, ADR-0071, M77 |
-| Assistant system prompt | `plugins/assistant/main/system-prompt.ts` (`buildSystemPrompt`), role texts in `ask-prompts.ts` / `live-edit.ts` | Plugin assistant | ADR-0071, M76 |
+| Assistant system prompt | `plugins/assistant/main/system-prompt.ts` (`buildSystemPrompt`), role texts in `ask-prompts.ts` (`ASK_SYSTEM`, `askToolsSystem`, `liveEditSystem`) | Plugin assistant | ADR-0071, M76, M78 |
+| Vault tools on open tabs — reading the buffer, changing a file in its tab, tab follows a move / closes on delete | `electron/ipc/open-docs-bridge.ts` (`OpenDocsBridge`), `shared/ipc/mcp.ts` (`OpenDocsRequest` / `OpenDocsReply`), `src/app/services/open-docs-bridge.service.ts`; used in `electron/mcp/tools/current-text.ts`, `write.ts`; the attached note as a file of the call: `VaultCallOptions.files`, `ToolScope.file` / `locate` | Base (`ipc/`, `mcp/`, renderer `services/`) | ADR-0071, M78 |
 | Tool calls shown while they run | `plugins/assistant/main/index.ts` (`chat:toolEvent`), `renderer/state.ts` (`applyToolProgress`), `renderer/thread.ts` | Plugin assistant | ADR-0071, M76 |
 | Assistant button at a selection + its popover (question, prompts, manual Actions) | `plugins/assistant/renderer/selection-button.ts` (CodeMirror tooltip), `selection-popover.ts`, `shared/ask.ts` (`selection`, `quoteSelection`), `main/ask-prompts.ts` (`buildAskUserMessage`) | Plugin assistant | ADR-0048 later change, M74 |
 | Manual Actions (run + on-save queue) | `plugins/assistant/` + `editor-more` menu rows | Plugin assistant | ADR-0011, ADR-0012 |
@@ -3210,23 +3212,19 @@ opts a single ask turn into immediate-apply editing: the model edits the
 open note through the doc tools, no ADR-0011 confirmation, Ctrl+Z undoes
 one push per press, Ctrl+S saves (req-25 unchanged).
 
-- **`main/live-edit.ts`** (pure, spec-importable) — a `LiveEditSession`
-  owning the working copy: `doc_apply_diff` (atomic, ordered
-  `{find, replace}` hunks — every `find` must match the evolving copy
-  exactly once, else nothing applies and the error names the failing
-  hunk), `doc_write` (whole-document, `normalizeDoc`), `doc_read`
-  (numbered window, 400-line cap). Tool handlers never throw — problems
-  return as text the model can react to. `LIVE_EDIT_SYSTEM` replaces the
-  JSON protocol with "edit via tools, answer with a short summary";
-  `LIVE_EDIT_TOOLS_NOTE` is the vault-tools sentence without the JSON
-  clause.
-- **Engine** — `ChatEngine.ask` gains the live branch: a
-  `capabilities().tools` guard BEFORE anything is persisted (the CLI
-  providers fail visibly), the session seeded from the note's live
-  buffer, `maxToolRounds: 16`, and after each mutating call a
-  `chat:liveEdit` plugin event carrying the whole working copy. The
-  applied document persists as the turn's `edit` fence entry
-  (`applied: true, after`) — replay needs no new grammar. Outcome:
+- **Since milestone 78 (ADR-0071)** there is no `main/live-edit.ts`, no
+  working copy in main and no `chat:liveEdit` event. The engine passes
+  the note as `vaultToolsFiles: [{ vaultId, path, live: true }]`; the
+  model calls `vault_edit` / `vault_write` / `vault_read`, and the host
+  applies each change to the open tab (`OpenDocsBridge.apply` with
+  `save: false` → `EditorService.updateBuffer`). `liveEditSystem(path)`
+  is the role text.
+- **Engine** — `ChatEngine.ask` keeps the live branch: the guards run
+  BEFORE anything is persisted (a provider without tools, a model that
+  refused them, a file from outside the vaults), the round budget is never
+  below 16, `onVaultChange` counts the changes, and the document as it
+  stands afterwards persists as the turn's `edit` fence entry
+  (`applied: true, after`). Outcome:
   `{kind: 'liveEdit', path, applied, text}`.
 - **Base seams** — `MainChatOptions.tools`/`onToolCall`/`maxToolRounds`
   (the facade merges plugin tools with the vault set; plugin names win;
@@ -3586,14 +3584,16 @@ main-side plugin writes.
 
 | Block | Where | Responsibility |
 | --- | --- | --- |
-| Tool groups | `shared/config/` (`ToolsConfig`) | `tools.vault` / `tasks` / `templates` (switch, plus `write: confirm \| auto` on the writing ones), `tools.webFetch` and `tools.servers[]` (switch, plus `approval: ask \| allow`). `normalizeTools` migrates a config without the slice from `mcp.enabled` / `mcp.yolo`. |
+| Tool groups | `shared/config/` (`ToolsConfig`) | `tools.vault` / `tasks` / `templates` (switch, plus `write: confirm \| auto` on the writing ones), `tools.webSearch` (also provider, key, address), `tools.webFetch` and `tools.servers[]` (switch, plus `approval: ask \| allow`). `webSearchReady` / `externalToolSources` / `hasExternalTools` answer what of it can be used. `normalizeTools` migrates a config without the slice from `mcp.enabled` / `mcp.yolo`. |
 | Client manager | `electron/mcp-client/mcp-client-manager.ts` | `McpClientManager`: one SDK client per enabled server, `sync()` on start and after `config:set`, cached tool list, status per server, one reconnect attempt on a call to a failed server. Names tools `mcp__<id>__<tool>`, flattens and caps results. The SDK client and transports are injected (`index.ts` wires the real ones: stdio, Streamable HTTP). |
 | Web fetch | `electron/mcp-client/web-fetch.ts` | The built-in `web_fetch` tool: http(s) only, time / size caps, HTML → Markdown (`turndown`). Pure helpers + one I/O function. |
+| Web search | `electron/mcp-client/web-search.ts`, `search-providers/` | The built-in `web_search` tool (milestone 79): checks the query, asks the configured `SearchProvider` (DuckDuckGo's HTML page, Brave, Tavily, SearXNG — one file each, `fetch` injected), formats the hits, turns a failure into an `Error: …` result. |
 | Toolbox | `electron/mcp-client/assistant-toolbox.ts` | `AssistantToolbox`: the external tool set a chat call may use (`specs()`), and `run()` — source enabled? approval rule? then the call. |
 | Approval bridge | `electron/ipc/tool-approval-bridge.ts` + `src/app/tool-approval/` | Main parks a promise and pushes `tools:approval-request`; `ToolApprovalService` queues the calls, `ToolApprovalDialog` shows source, tool and arguments; "Always allow" persists the source rule (`SettingsService.allowToolSourceImmediate`). |
 | Host merge | `electron/plugin-host/plugin-host.ts` | `ctx.llm.chat` merges plugin tools, the vault set (`vaultTools`) and the external set (`externalTools`, SDK 1.15); earlier wins a name collision. The vault set's write rule comes from `tools.vault.write`; `ctx.vault.confirmWrite` exposes the ADR-0011 diff as a question. |
-| Assistant | `plugins/assistant/main/chat-engine.ts` | Reads the groups per ask: vault → `vaultTools`, tasks / templates → its own tools, web fetch or any enabled server → `externalTools`. What is attached is what `buildSystemPrompt` names (ADR-0071); the round budget is `tools.maxRounds`, applied by the host. Not on live-edit turns. |
-| Settings | `src/app/settings/tools/` | "Assistant tools": the group switches and rules, and the server list (name, connection, command / arguments / environment or address / headers, approval, live status, reconnect). Settings → MCP keeps the server offered to other programs. |
+| Assistant | `plugins/assistant/main/chat-engine.ts` | Reads the groups per ask: vault → `vaultTools`, tasks / templates → its own tools, web search, web fetch or any enabled server → `externalTools`, and only while the question's Web chip is on (`AskRequest.web`). What is attached is what `buildSystemPrompt` names (ADR-0071); the round budget is `tools.maxRounds`, applied by the host. Not on live-edit turns. |
+| Web chip | `plugins/assistant/renderer/composer.ts`, `state.ts` | The globe button: per question, whether external tools ride (remembered in `localStorage`, off at first). Shown only while `hasExternalTools(config.tools)`; re-read when the pointer or focus returns to the composer. |
+| Settings | `src/app/settings/tools/` | "Assistant tools": the group switches and rules, the web search provider with its key or address, and the server list (name, connection, command / arguments / environment or address / headers, approval, live status, reconnect). Settings → MCP keeps the server offered to other programs. |
 | IPC | `shared/ipc-api.ts` | `tools:status`, `tools:reconnect`, `tools:approval-request` / `tools:approval-decision`. |
 | Drey's own server | `electron/mcp/server.ts` + `http-transport.ts` | Same milestone: the protocol layer is the SDK (`createVaultMcpServer`, one stateless Streamable HTTP transport per `POST /mcp`, JSON answers). `isLocalHost` / `isLocalOrigin` refuse anything that is not this machine — including a web page in a local browser. `VaultTools` and the dependency-free `stdio-bridge.ts` are unchanged apart from the bridge's `Accept` header. |
 

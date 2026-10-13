@@ -83,6 +83,12 @@ export function mountComposer(
   // the selection as context.
   const vaultButton = toolButton('vault', 'database');
   vaultButton.setAttribute('aria-label', 'Pick the vault context');
+  // The Web toggle (milestone 79): whether the next ask may reach outside
+  // the machine -- web search, web fetch, the user's MCP servers. Shown
+  // only while Settings has one of them switched on.
+  const webButton = toolButton('web', 'globe');
+  webButton.setAttribute('aria-label', 'Toggle web access');
+  webButton.hidden = true;
   const row = el('div', 'composer-row');
   row.append(composerHost, sendButton);
   const modelButton = el('button', 'model-btn', '…') as HTMLButtonElement;
@@ -93,7 +99,7 @@ export function mountComposer(
   promptsButton.title = 'Prompts: pick one from the prompts folder';
   promptsButton.setAttribute('aria-label', 'Pick a prompt');
   const meta = el('div', 'composer-meta');
-  meta.append(plusButton, liveButton, vaultButton, promptsButton, modelButton);
+  meta.append(plusButton, liveButton, vaultButton, webButton, promptsButton, modelButton);
   const box = el('div', 'composer-box');
   box.append(chipsRow, row);
   composer.append(box, meta);
@@ -142,6 +148,13 @@ export function mountComposer(
     vaultButton.classList.toggle('all', scope === 'all');
     vaultButton.setAttribute('aria-pressed', String(scope !== 'off'));
     vaultButton.title = vaultScopeTitle(state);
+    const webOn = state.web();
+    webButton.hidden = !state.webAvailable();
+    webButton.classList.toggle('on', webOn);
+    webButton.setAttribute('aria-pressed', String(webOn));
+    webButton.title = webOn
+      ? 'Web: on — the assistant may search the web, fetch pages and call your MCP servers for the next question. Click to turn off.'
+      : 'Web: off — nothing leaves this computer through a tool. Click to let the assistant search the web, fetch pages and call your MCP servers.';
     const path = state.notePath();
     if (path !== null && state.noteIncluded()) {
       chipsRow.appendChild(chipNode(path, 'note'));
@@ -202,6 +215,13 @@ export function mountComposer(
   plusButton.addEventListener('click', () => openFilePicker(api, state, vaultFiles, vaultImages));
   liveButton.addEventListener('click', () => state.toggleLiveEdit());
   vaultButton.addEventListener('click', () => openVaultPicker(api, state));
+  webButton.addEventListener('click', () => state.toggleWeb());
+  // What the chip stands for is switched in Settings, and nothing tells a
+  // plugin when the config changed: look again when the user comes back
+  // to the composer.
+  const refreshWeb = (): void => void state.refreshWeb();
+  composer.addEventListener('pointerenter', refreshWeb);
+  composer.addEventListener('focusin', refreshWeb);
   promptsButton.addEventListener('click', () => void openPromptPicker(api, vaultFiles, insertPrompt));
   model.refresh();
 

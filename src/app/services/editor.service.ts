@@ -728,15 +728,16 @@ export class EditorService {
    * `content` into the tab's buffer and saves it with the on-save Action
    * hook suppressed (so applying one action can't recurse into another).
    * `path` is what the plugin surface holds -- a bare vault-relative path,
-   * resolved via {@link resolveDoc}. No-op when it isn't open.
+   * resolved via {@link resolveDoc}. No-op when it isn't open. `origin`
+   * names who changed it in the local note history.
    */
-  async applyRewrite(path: string, content: string): Promise<void> {
+  async applyRewrite(path: string, content: string, origin = 'assistant'): Promise<void> {
     const doc = this.resolveDoc(path);
     if (!doc || content === doc.bufferContent) {
       return;
     }
     this.panes.open(doc.key); // reveal: focuses + activates wherever it is
     this.store.patch(doc.key, { bufferContent: content });
-    await this.save({ runOnSaveActions: false, key: doc.key, origin: 'assistant' });
+    await this.save({ runOnSaveActions: false, key: doc.key, origin });
   }
 }

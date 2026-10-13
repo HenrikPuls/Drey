@@ -42,6 +42,19 @@ one means moving it back to the roadmap with a new justification.
 
 ## Won't do (decided against, kept for the record)
 
+- **One composer switch per external source** (search, fetch, each MCP
+  server) — decided with the owner for milestone 79 (2026-10-13): one
+  Web chip covers everything that leaves the machine; which sources
+  exist and whether they ask stays in Settings → Assistant tools. A
+  tools menu in an already full tool row was ADR-0063's reason to defer
+  the switch at all.
+- **Web search only through an MCP server the user adds** — ADR-0063's
+  first answer ("no bundled search provider: a vendor choice and a key
+  the app would have to own"). Reversed in milestone 79 (2026-10-13):
+  setting up a search server was the hurdle that kept the assistant
+  offline. The app still owns no key — the user picks the provider and
+  enters their own, or uses DuckDuckGo without one.
+
 - **Pause / resume of large semantic rebuilds on interactive use** —
   considered for milestone 68 and dropped: an interactive ask never
   waits for a rebuild (the query embed queues behind at most one
@@ -87,3 +100,7 @@ one means moving it back to the roadmap with a new justification.
   library for tool arguments*: the slips are shallow, and the messages
   have to be written for the model. *A higher round cap instead of a
   closing round*: it only moves the point where the turn is lost.
+  *A copy of the open buffers in main* (milestone 78): two owners of
+  the same text; main asks the renderer at the moment of the call
+  instead. *Keeping the `doc_*` live-edit tools*: a second edit tool for
+  the same operation.

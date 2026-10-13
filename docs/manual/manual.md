@@ -444,11 +444,22 @@ past questions do not drown out the notes that answer them.
 ### Live edit
 
 The **Live edit** chip opts a single question into direct editing: the
-model edits the open note through `doc_apply_diff` / `doc_write` /
-`doc_read` tools, each change lands in the editor as one undoable step,
-the document is locked against your typing while the turn runs, and the
-result is recorded in the chat note. Providers without tool support
-fail visibly.
+model changes the open note piece by piece (`vault_edit`), each change
+lands in the editor as one undoable step — without a confirmation and
+**without saving**; you save when you are happy with it. The document is
+locked against your typing while the turn runs, and the result is
+recorded in the chat note. It also works on a new tab you have not
+saved anywhere yet. Live edit needs a model that can call tools;
+otherwise it says so.
+
+Without live edit the assistant changes the open note the same way, but
+shows you each change as a diff first and saves the note once you
+accept. This works with the Vault chip off as well — the note attached
+to the question is always within reach, the rest of the vault only with
+the chip. The assistant works on what the tab shows, so text you have
+not saved yet is seen and kept. (A model or provider that cannot call
+tools returns the whole changed document instead; you confirm it in the
+same dialog.)
 
 ### Actions
 
@@ -520,12 +531,15 @@ active vault, all vaults, or a selection). In those vaults it can list
 what exists, search for exact words — also inside one note —, find
 sections by meaning while *Assistant retrieval* is on, and read a note
 whole or in parts. With the button off it sees only what you attached
-to the question.
+to the question — and the open note, when it is attached, is the one
+file it can still read and change.
 
 Whether it may also **change** notes there is the *Vault* choice in
 Settings → Assistant tools:
 
-- **Not allowed** — it only reads.
+- **Not allowed** — it only reads. The one exception is the note
+  attached to your question: a change you ask for there is shown as a
+  diff and applied when you accept.
 - **Show the change and ask first** — every edit, new file or appended
   text opens the diff dialog; you accept or decline.
 - **Change without asking** — edits apply at once. Use it when you trust
@@ -535,10 +549,13 @@ A **move** asks in a small dialog under *ask first*; a **deletion**
 always asks, and the file goes to the recycle bin. The assistant changes
 part of a note by replacing exact text, so a small change stays small
 in the diff. It never touches a vault the Vault button did not select,
-and it leaves your chat notes and drafts alone.
+and it leaves your chat notes and drafts alone. A note that is open in
+a tab is read as the tab shows it and changed in the tab, so unsaved
+text is neither missed nor overwritten; the same goes for programs
+connected to Drey's MCP server.
 
-**The other groups** — tasks, templates, web fetch and each external MCP
-server — have a switch each, `write: confirm | auto` where they write,
+**The other groups** — tasks, templates, web search, web fetch and each
+external MCP server — have a switch each, `write: confirm | auto` where they write,
 and `approval: ask | allow` on everything that leaves the machine. An
 external tool call under *ask* shows the shared approval dialog (source,
 tool, arguments — *Allow / Always allow / Deny*).
@@ -555,11 +572,36 @@ turn — the model is told what was wrong and tries again. If your model
 or its server does not accept tools at all, the assistant notices on the
 first question and goes on without them.
 
+### Web search and the Web button
+
+Settings → **Assistant tools** → *Web search* lets the assistant search
+the web (`web_search`). Pick a provider:
+
+- **DuckDuckGo** — no account, works at once. Drey reads DuckDuckGo's
+  ordinary result page, which is not made for programs: it can change or
+  refuse requests. Fine to try things out.
+- **Brave Search** or **Tavily** — dependable; each needs an API key
+  from the provider. The key is stored encrypted on this computer.
+- **SearXNG** — the address of an instance you run yourself. It must
+  allow the JSON format (`search.formats` in its `settings.yml`).
+
+A search returns titles, addresses and short excerpts. With *Web fetch*
+on as well, the assistant can then read the pages it found. Your search
+words go to the provider you chose — with *Ask every time* you see them
+before each search.
+
+Whether a question may use any of this is your choice per question: the
+**globe button** under the question field. It appears once web search,
+web fetch or an MCP server is switched on in Settings, starts off, and
+stays the way you left it. Off means nothing leaves this computer
+through a tool; on lets the assistant search, fetch pages and call your
+MCP servers for that question.
+
 ### Drey as an MCP *client*
 
 Add external MCP servers (stdio or Streamable HTTP); their tools reach
-the model as `mcp__<server>__<tool>`. The built-in `web_fetch` group is
-a tool like the rest.
+the model as `mcp__<server>__<tool>`. Like web search and web fetch they
+ride a question only while the globe button is on.
 
 ### Drey as an MCP *server*
 

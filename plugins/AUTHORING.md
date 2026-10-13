@@ -232,7 +232,8 @@ pure-field case.
 ## SDK 1.15 — external tools and the confirmation question
 
 - `ctx.llm.chat(messages, { externalTools: true })` adds the user's
-  external tool set to ONE call: the built-in `web_fetch` and the tools
+  external tool set to ONE call: the built-in `web_search` (since
+  milestone 79) and `web_fetch`, and the tools
   of their MCP servers (`mcp__<serverId>__<tool>`), as far as Settings →
   Assistant tools enables them. The host runs each call and asks the
   user first when the source is set to "ask" — a plugin never sees the
@@ -388,6 +389,21 @@ For a `ctx.llm.chat` call that carries tools (`tools` + `onToolCall`,
   renderer to show what is happening.
 - A result longer than 16 000 characters is cut. Return less: a range,
   a limit, and a line that says how to get the rest.
+
+## SDK 1.25 — files of a call, and what the tools changed
+
+`MainChatOptions.vaultToolsFiles` names files the call's vault tools may
+read and change beside the vaults of `vaultToolsScope` — `{ vaultId?,
+path, live? }`, the vault defaulting to the active one; `vaultId: null`
+names a tab that was never saved (`path` is the tab's name — it is
+changed in the editor only and never saved by a tool). With an empty
+scope the model is offered `vault_read`, `vault_edit` and `vault_write`
+for these files only. Such a file can always be changed (a write rule
+of `off` asks in the diff); `live: true` puts every change into the
+file's open tab at once, unconfirmed and unsaved. `onVaultChange` is
+called after each change a vault tool of the call made, with the text
+before and after. A file that is open in the editor is read and changed
+through its tab by every vault tool (ADR-0071).
 
 ## SDK 1.24 — the vault tools and their scope
 

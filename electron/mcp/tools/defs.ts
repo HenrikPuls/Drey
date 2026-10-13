@@ -100,7 +100,8 @@ export const VAULT_READ: McpToolDef = {
     'how many lines the file has and which `start_line` continues it. Pass `heading` to ' +
     'read just one section (its heading text, as vault_list or a search hit shows it), or ' +
     '`start_line` and `line_count` to read a range — a search hit\'s line number is a good ' +
-    '`start_line`.',
+    '`start_line`. A file that is open in the editor comes back as its tab shows it, ' +
+    'unsaved changes included.',
   inputSchema: {
     type: 'object',
     properties: {

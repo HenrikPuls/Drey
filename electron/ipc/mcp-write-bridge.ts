@@ -38,7 +38,14 @@ export class McpWriteBridge {
           resolve(approved);
         }
       };
-      const timer = setTimeout(() => done(false), McpWriteBridge.CONFIRM_TIMEOUT_MS);
+      // The assistant's own question waits for the user as long as the
+      // ask runs (ADR-0014: they cancel instead) — its diff may be the
+      // open note, read at leisure. A connected program gets a reject
+      // after the timeout.
+      const timer =
+        request.origin === 'assistant'
+          ? undefined
+          : setTimeout(() => done(false), McpWriteBridge.CONFIRM_TIMEOUT_MS);
       this.pending.set(id, done);
       wc.send(IPC_CHANNELS.mcpWriteRequest, { id, ...request });
     });

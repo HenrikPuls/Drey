@@ -19,6 +19,8 @@ import {
   McpStatus,
   McpWriteRequest,
   ToolApprovalRequest,
+  OpenDocsReply,
+  OpenDocsRequest,
   NoteSaveRequest,
   NoteSaveResult,
   OpenRequest,
@@ -282,6 +284,13 @@ const dreyApi: DreyApi = {
   },
   resolveToolApproval: (id: number, approved: boolean): Promise<void> =>
     ipcRenderer.invoke(IPC_CHANNELS.toolsApprovalDecision, id, approved),
+  onOpenDocsRequest: (listener: (request: OpenDocsRequest) => void): (() => void) => {
+    const wrapped = (_event: IpcRendererEvent, request: OpenDocsRequest): void => listener(request);
+    ipcRenderer.on(IPC_CHANNELS.openDocsRequest, wrapped);
+    return () => ipcRenderer.removeListener(IPC_CHANNELS.openDocsRequest, wrapped);
+  },
+  replyOpenDocs: (id: number, reply: OpenDocsReply): Promise<void> =>
+    ipcRenderer.invoke(IPC_CHANNELS.openDocsReply, id, reply),
   onVaultChanged: (listener: (push: VaultChangedPush) => void): (() => void) => {
     // Forward only the payload, never the IpcRendererEvent (ADR-0001).
     const wrapped = (_event: IpcRendererEvent, push: VaultChangedPush): void => listener(push);
