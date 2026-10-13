@@ -207,6 +207,13 @@ that file shows up as "Changed on disk"; a moved note's open tab keeps
 its old path. On a live-edit turn the document itself is still changed
 with the `doc_*` tools.
 
+Cleanup after it (behaviour-neutral): the semantic service's methods
+only the old explore tools used are gone (`resolveTargets`,
+`searchScoped`, `outline`, `readSection`, `VectorIndex.outline`,
+`locateSemanticSection`), and the semantic index splits notes with
+`splitSections` from `shared/note-sections.ts` instead of its own
+identical copy — the stored section boundaries are unchanged.
+
 ### Milestone 76 — The assistant's tool loop and system prompt
 
 Owner request, outside the roadmap list; the first of four steps of the

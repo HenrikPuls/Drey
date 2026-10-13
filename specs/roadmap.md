@@ -199,14 +199,10 @@ Follow-ups of A1–A5 (found on the way, none started):
   tools (a cancel waits for the tool call in flight); private-address
   guard for `web_fetch`; the synthetic `tasks_list` call of the post-hoc
   task block is replayed to the model as a call it made.
-- **Milestone 77 (vault toolset, ADR-0071):** remove the semantic
-  service's methods only the old explore tools used (`resolveTargets`,
-  `searchScoped`, `outline`, `readSection`, `VectorIndex.outline`) and
-  check whether the assistant's own section splitter can give way to
-  `shared/note-sections.ts`; moving a note across vaults; deleting a
-  folder; a per-call cache of file contents when one search reads a
-  large vault; `tasks_list` and the template tools for a vault other
-  than the active one.
+- **Milestone 77 (vault toolset, ADR-0071):** moving a note across
+  vaults; deleting a folder; a per-call cache of file contents when one
+  search reads a large vault; `tasks_list` and the template tools for a
+  vault other than the active one.
 - **Milestone 79 (web search, ADR-0063):** a key per search provider
   (switching the provider clears the one key); a config-change event for
   plugins, so the Web chip follows Settings at once instead of when the

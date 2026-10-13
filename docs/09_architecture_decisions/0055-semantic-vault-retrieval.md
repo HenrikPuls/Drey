@@ -66,9 +66,10 @@ JS covers personal vault sizes in milliseconds and keeps ADR-0010's
 and search skips it until rebuilt.
 
 **Sections, not files, are the retrieval unit** — the same shape the
-tag index established (heading-delimited, fence-aware; the pure
-splitter is copied from `plugins/tags/shared/sections.ts`, since
-cross-plugin imports are banned). Section text is never persisted in
+tag index established (heading-delimited, fence-aware; originally a
+copy of the tags plugin's splitter, since cross-plugin imports are
+banned — now the shared `splitSections` in `shared/note-sections.ts`,
+same boundaries). Section text is never persisted in
 the index; retrieval hydrates it fresh from the vault at answer time,
 so a stale index degrades rankings, never content.
 

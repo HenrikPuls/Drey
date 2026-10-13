@@ -95,25 +95,4 @@ describe('VectorIndex', () => {
     index.load('v', MODEL, null);
     expect(index.sectionCount('v')).toBe(0);
   });
-
-  it('outline lists paths with their headings in file order (ADR-0069)', () => {
-    const index = new VectorIndex();
-    expect(index.outline('v')).toEqual([]);
-    index.setFile('v', MODEL, 'a.md', [
-      { heading: 'One', line: 1, vec: vec([1, 0]) },
-      { heading: 'Two', line: 3, vec: vec([0, 1]) },
-    ]);
-    index.setFile('v', MODEL, 'b.md', [{ heading: 'Three', line: 1, vec: vec([1, 1]) }]);
-    index.setFile('stale', 'other-model', 'c.md', [{ heading: 'X', line: 1, vec: vec([1, 0]) }]);
-
-    expect(index.outline('v')).toEqual([
-      { path: 'a.md', headings: ['One', 'Two'] },
-      { path: 'b.md', headings: ['Three'] },
-    ]);
-    // The model check keeps a stale vault out of the caller's overview.
-    expect(index.outline('stale', MODEL)).toEqual([]);
-    expect(index.outline('stale', 'other-model')).toEqual([
-      { path: 'c.md', headings: ['X'] },
-    ]);
-  });
 });

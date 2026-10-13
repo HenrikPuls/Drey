@@ -26,7 +26,6 @@ import {
   MAX_SEMANTIC_TOP_K,
   contextCitations,
   isSemanticIndexPath,
-  locateSemanticSection,
   passageText,
   queryText,
   resolveTargetVaultIds,
@@ -90,24 +89,6 @@ export interface SemanticStatus {
   minScore: number;
   ready: boolean;
   vaults: SemanticVaultStatus[];
-}
-
-/** One file's outline row (ADR-0069): path plus its indexed section headings. */
-export interface SemanticOutlineEntry {
-  vaultId: string;
-  /** The vault's display name, when the registry still knows it. */
-  vault?: string;
-  path: string;
-  headings: string[];
-}
-
-/** One located section's fresh text (the `vault_section` tool's payload). */
-export interface SemanticSectionText {
-  vaultId: string;
-  path: string;
-  heading: string;
-  line: number;
-  text: string;
 }
 
 const SAVE_DEBOUNCE_MS = 1500;
@@ -393,22 +374,6 @@ export class SemanticService {
   }
 
   /**
-   * The ask's scope resolved to concrete target ids (ADR-0069): the
-   * explore tools' guard — a `vault_section` call naming a vault outside
-   * this list is refused instead of silently read. Empty when disabled.
-   */
-  async resolveTargets(
-    scope: ActiveVaultScope,
-    vaultIds: readonly string[] = [],
-  ): Promise<string[]> {
-    if (!this.enabled || this.disposed) {
-      return [];
-    }
-    const vaults = await this.deps.listVaults();
-    return resolveTargetVaultIds(vaults, scope, vaultIds);
-  }
-
-  /**
    * The SDK seam (1.18): the top-`limit` sections most similar to
    * `question`, for the Search panel's semantic mode and MCP
    * `vault_search`. Unlike an ask turn this browses — the limit defaults
@@ -466,133 +431,6 @@ export class SemanticService {
       });
     }
     return out;
-  }
-
-  /**
-   * The `vault_find` tool's engine (ADR-0069): semantic search over the
-   * ask's resolved scope — the chip's exact subset, not just one vault or
-   * all. Same machinery as `search()` but scoped like `retrieve()`, and
-   * plugin-owned hit shape (the SDK's `SemanticSectionHit` stays
-   * untouched). Empty when disabled or nothing is searchable yet.
-   */
-  async searchScoped(
-    question: string,
-    scope: ActiveVaultScope,
-    vaultIds: readonly string[] = [],
-    limit?: number,
-  ): Promise<readonly RetrievedSection[]> {
-    if (!this.enabled || this.disposed) {
-      return [];
-    }
-    const maxHits = clampInt(limit, 1, MAX_SEMANTIC_SEARCH_LIMIT, DEFAULT_SEMANTIC_SEARCH_LIMIT);
-    const vaults = await this.deps.listVaults();
-    const targetIds = resolveTargetVaultIds(vaults, scope, vaultIds);
-    if (targetIds.length === 0) {
-      return [];
-    }
-    const usable = await this.usableTargets(targetIds);
-    if (usable.length === 0) {
-      return [];
-    }
-    const [queryVec] = await this.embedder.embed([queryText(this.model, question)]);
-    if (queryVec === undefined) {
-      return [];
-    }
-    const hits = this.index
-      .search(usable, this.model, queryVec, maxHits, this.minScore)
-      .filter((hit) => isSemanticIndexPath(hit.path));
-    const names = new Map(vaults.map((vault) => [vault.id, vault.name]));
-    const out: RetrievedSection[] = [];
-    for (const hit of hits) {
-      const hydrated = await this.hydrateSection(hit);
-      if (hydrated === null) {
-        continue;
-      }
-      out.push({
-        vaultId: hit.vaultId,
-        vault: names.get(hit.vaultId),
-        path: hit.path,
-        heading: hydrated.heading,
-        line: hydrated.line,
-        score: hit.score,
-        text: hydrated.text,
-      });
-    }
-    return out;
-  }
-
-  /**
-   * The `vault_overview` tool's engine (ADR-0069): one row per file of
-   * every scoped vault — indexed files contribute their section headings
-   * straight from the loaded index (no re-read), the rest just their path.
-   * A cold vault still lists its files, so an overview is never empty just
-   * because the index has not been built yet.
-   */
-  async outline(
-    scope: ActiveVaultScope,
-    vaultIds: readonly string[] = [],
-  ): Promise<readonly SemanticOutlineEntry[]> {
-    if (!this.enabled || this.disposed) {
-      return [];
-    }
-    const vaults = await this.deps.listVaults();
-    const targetIds = resolveTargetVaultIds(vaults, scope, vaultIds);
-    if (targetIds.length === 0) {
-      return [];
-    }
-    const usable = await this.usableTargets(targetIds);
-    const usableSet = new Set(usable);
-    const names = new Map(vaults.map((vault) => [vault.id, vault.name]));
-    const out: SemanticOutlineEntry[] = [];
-    for (const vaultId of targetIds) {
-      const vaultName = names.get(vaultId);
-      const cite = vaultName !== undefined ? { vault: vaultName } : {};
-      const indexed = usableSet.has(vaultId)
-        ? this.index.outline(vaultId).filter((entry) => isSemanticIndexPath(entry.path))
-        : null;
-      if (indexed !== null && indexed.length > 0) {
-        for (const entry of indexed) {
-          out.push({ vaultId, ...cite, path: entry.path, headings: entry.headings });
-        }
-        continue;
-      }
-      // No usable index (or an empty one): fall back to the flat file
-      // list, headings unknown. The catch-up `usableTargets` kicked runs
-      // in the background — the next overview is indexed.
-      const files = await this.deps.listMarkdownFiles(vaultId);
-      for (const filePath of files.filter((file) => isSemanticIndexPath(file))) {
-        out.push({ vaultId, ...cite, path: filePath, headings: [] });
-      }
-    }
-    return out;
-  }
-
-  /**
-   * The `vault_section` tool's engine (ADR-0069): one section's FRESH text,
-   * picked by heading (case-insensitive, first match) or 1-based line —
-   * the first section when neither names one. Null when the file or the
-   * section cannot be located.
-   */
-  async readSection(
-    vaultId: string,
-    filePath: string,
-    target: { heading?: string; line?: number } = {},
-  ): Promise<SemanticSectionText | null> {
-    const content = await this.deps.readVaultText(vaultId, filePath);
-    if (content === null) {
-      return null;
-    }
-    const section = locateSemanticSection(semanticSectionsFor(filePath, content), target);
-    if (section === null) {
-      return null;
-    }
-    return {
-      vaultId,
-      path: filePath,
-      heading: section.heading,
-      line: section.line,
-      text: section.text,
-    };
   }
 
   /** Sync flush for app quit. */
