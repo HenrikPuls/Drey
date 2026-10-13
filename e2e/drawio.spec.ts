@@ -186,7 +186,10 @@ test.describe('draw.io diagrams (ADR-0064)', () => {
   test('a new diagram is a visible placeholder, not a pixel', async ({ page, vaultDir }) => {
     await openFromTree(page, 'empty.md');
     await page.locator('app-editor .cm-content').click();
-    await page.locator('app-markdown-toolbar button[aria-label="Insert diagram"]').click();
+    await page.locator('app-editor app-markdown-toolbar button[aria-label="Insert"]').click();
+    await page
+      .locator('app-editor app-markdown-toolbar .menu button', { hasText: 'Insert diagram' })
+      .click();
     await expect(page.locator('iframe.drawio-frame')).toBeVisible({ timeout: 30000 });
 
     // The embed was written into the note before the diagram tab took over.

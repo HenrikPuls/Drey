@@ -20,6 +20,80 @@ recorded as an explicit decision. The parity checklist lives in
 
 ## Recent milestones
 
+### req-41 — the formatting strip: grouped, pinnable, at hand in the right-click menu; one template picker
+
+Owner request, outside the roadmap list. The editor's right-click menu
+had grown a text row for every formatting command (Highlight, Subscript,
+Superscript, Inline math, Math block, Callout, Footnote, Clear
+formatting, Emoji…) next to an icon toolbar offering the same commands.
+Now there is **one formatting strip** in two places:
+
+- **Grouped.** Nineteen buttons became ten: template picker · paragraph
+  style ▾ · Bold · Italic · more text formats ▾ · list ▾ · Task list ·
+  Link · Table ▾ · Insert ▾. Everyday one-click commands stay buttons;
+  variants of one thing (heading levels, blockquote, the five callouts;
+  bullet / numbered; the table size grid) and the rare commands
+  (strikethrough, highlight, sub- and superscript, Clear formatting;
+  image, emoji, footnote, math) sit behind five menus. Menu buttons
+  carry a small caret; a button without one acts at once and opens
+  nothing. The paragraph menu marks the style of the caret's line.
+- **In the right-click menu.** On every editable Markdown surface (pane
+  notes, the entry drawer, plugin composers) the strip is the head of
+  the context menu, a box of its own above the list, and acts on the
+  surface that was right-clicked. The list keeps only real text rows --
+  clipboard, Export as PDF…, plugin rows -- and is itself the strip's
+  **first menu** (*Clipboard and more*): open when the context menu
+  opens, and like every other menu it gives way while another one is
+  open, so the template picker never sits on half-covered rows. Its
+  button brings it back. Read-only views and non-Markdown tabs get no
+  strip, just the list.
+- **Pinnable.** The strip's pin docks it into the meta bar (the old
+  toolbar position) or releases it; released, the bar runs straight into
+  the save cluster. The pin replaces the collapse chevron and the `⋯`
+  row "Formatting toolbar"; the persisted pref (`drey.editor` →
+  `toolbar`) is unchanged, so nobody's setting moves. Also a palette
+  command, *Pin formatting toolbar*.
+- **One template picker.** The strip's first button opens it: a filter
+  field, the library as a folder tree (subfolders nest; folders start
+  collapsed once the library holds more than 24 templates; typing
+  switches to a flat list of matches with their folder) beside a preview
+  of the active row. Keyboard throughout — the field keeps the focus,
+  ↑/↓ move, →/← open and close a folder, Page Up/Down jump to the ends,
+  Enter inserts, Esc closes. The **`/` menu uses the same picker**: a
+  bare `/` shows one *Templates…* row instead of every template by name
+  (a typed name still completes directly), and the row floats the picker
+  at the caret. The reserved top-level `templates/prompts/` folder (the
+  composer's prompts, ADR-0048) is left out of both; the Templates panel
+  still lists the whole folder.
+
+Plugin SDK **1.21** (additive): `ToolbarButtonContrib.placement`
+(`'insert'`, the default — a row in the strip's Insert menu — or `'bar'`,
+an icon at the leading edge) and `popover(mount, close)` (the host owns
+the box and its anchoring, the plugin mounts plain DOM). The templates
+plugin uses both; the diagrams plugin's button became the Insert menu's
+"Insert diagram" row. Two plugin context-menu contributions went with
+the rows they duplicated: the templates' recents and the diagrams'
+"Insert diagram" ("Edit diagram" stays).
+
+Considered and not built: a selection bubble that appears over marked
+text (pops up on every selection, hides the line above, and block
+commands have no selection to hang on) and a toolbar row of its own
+under the meta bar (costs a line of height for good).
+
+Code: `src/app/editor/markdown-toolbar.ts` (the strip),
+`toolbar-dispatch.ts` (the one dispatch path for both placements),
+`paragraphStyleOf` in `toolbar-commands.ts`,
+`src/app/editor-context-menu/` (`format-strip-target.ts` replaces
+`format-menu-rows.ts`), `MarkdownSurface.forView`,
+`plugins/templates/renderer/picker.ts`. Specs: `markdown-toolbar.spec.ts`,
+`format-strip-target.spec.ts`, `picker.spec.ts`, additions to
+`editor.spec.ts`, `library.spec.ts`, `slash.spec.ts`; e2e
+`markdown-extended.spec.ts` (strip in the context menu, pin round trip)
+and `slash-entry.spec.ts` (picker from `/`: folders, no prompts, arrow
+keys). The diagrams e2e was adjusted but not run in this checkout (the
+draw.io web app is not fetched there). **Not yet manually verified by
+the owner.**
+
 ### Manual stamp — the manual's footer states version and content date from the build
 
 The in-app manual's footer was hand-written ("Manual for Drey 0.3.0"

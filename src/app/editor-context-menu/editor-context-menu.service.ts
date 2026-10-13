@@ -128,13 +128,15 @@ export class EditorContextMenuService {
     }
     event.preventDefault();
     this.menuTarget.set(menuTarget);
-    // The y clamp reserves room for the menu box itself: clipboard +
-    // base + plugin rows reach ~15 rows, and the css caps the box at
-    // 460px (scrollable beyond) -- so a click near the bottom shifts the
-    // menu up far enough to keep every row on screen.
+    // The clamps reserve room for the whole column: the formatting strip
+    // (req-41, ~460px wide on an editor surface) above the menu list,
+    // which the css caps at 420px (scrollable beyond) -- so a click near
+    // the right or bottom edge shifts the menu far enough to keep the
+    // strip, its drop-down menus and every row on screen.
+    const width = menuTarget.surface === 'editor' ? 470 : 220;
     this.anchor.set({
-      x: Math.min(event.clientX, window.innerWidth - 220),
-      y: Math.min(event.clientY, window.innerHeight - 460),
+      x: Math.max(0, Math.min(event.clientX, window.innerWidth - width)),
+      y: Math.max(0, Math.min(event.clientY, window.innerHeight - 470)),
     });
   };
 }

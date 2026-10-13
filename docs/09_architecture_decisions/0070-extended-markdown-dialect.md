@@ -30,6 +30,20 @@ to their label -- or, with a selection, wipes every wrap the selection
 overlaps (`src/app/editor/erase-formatting.ts`, a syntax-tree walk --
 "outermost" is not a string-reducer concept).
 
+**Later change (req-41):** the three entries are still one reducer
+layer, but the right-click menu no longer lists the commands as text
+rows. It carries the **formatting strip** instead -- the toolbar's own
+component (`markdown-toolbar.ts`, regrouped into ten buttons with
+paragraph-style, text-format, list, table and Insert menus) as the
+menu's head -- the clipboard list is its first menu, one menu open at
+a time -- acting on the right-clicked view through
+`src/app/editor/toolbar-dispatch.ts`
+(`editor-context-menu/format-strip-target.ts` decides where it shows;
+`format-menu-rows.ts` is gone). The highlight, sub/sup, callout, math,
+footnote and emoji buttons named above are rows of those menus now,
+and the eraser is the text-format menu's *Clear formatting* row. A
+pin docks the strip into the meta bar or releases it.
+
 ## Context
 
 The editor's Markdown was CommonMark + GFM tables/strikethrough/task

@@ -264,10 +264,11 @@ pure-field case.
   a write is silent towards the renderer. Do not announce high-frequency
   writes — each one reloads the vault's tree.
 - `api.editor.registerToolbarButtons([{ icon, title, run | commandId }])`
-  appends icon buttons to the formatting bar of every document editor.
-  `icon` is a name from the host's set (as for `api.ui.icon`), `title` is
-  both tooltip and accessible name. A button acts on the focused
-  document: use `api.documents.insertAtCursor`. That insert lands on the
+  adds commands to the formatting strip of every document editor. By
+  default a button is a row in the strip's *Insert* menu, labelled by
+  its `title`; see "SDK 1.21" below for an icon of its own. `icon` is
+  a name from the host's set (as for `api.ui.icon`). A button acts on
+  the focused document: use `api.documents.insertAtCursor`. That insert lands on the
   editor's next render — wait for it (the buffer contains your text)
   before you open a tab that may replace the editor.
 - A doc kind has no dirty state. A plugin tab that edits a file saves on
@@ -330,3 +331,22 @@ pure-field case.
 - The page column is a flex column with the standard field gap; core
   panes and plugin pages share one stylesheet (see "The shared form
   vocabulary" above).
+
+## SDK 1.21 — a place in the formatting strip, and your own popover
+
+- `ToolbarButtonContrib.placement` (optional): `'insert'` (the default)
+  is a row in the strip's Insert menu; `'bar'` is an icon at the
+  strip's leading edge. Ask for `'bar'` only for something used many
+  times a day — the strip is deliberately short.
+- `ToolbarButtonContrib.popover(mount, close)` (optional, with
+  `placement: 'bar'`): instead of `run` / `commandId` the button opens a
+  popover. The host owns the box, anchors it under the button and keeps
+  it inside the window; you mount plain DOM into `mount` and return a
+  teardown. Call `close()` when you are done (a pick, `Esc`) — it also
+  dismisses the editor context menu when the strip sits in it. Size the
+  content yourself and make it work from the keyboard; the templates
+  plugin's `picker.ts` is the pattern.
+- One menu of the strip is open at a time; your popover is one of them.
+- The strip also shows in the editor's right-click menu. On a surface
+  that is not a pane document (the entry drawer, a composer) plugin
+  buttons are left out, since they act on the focused document.

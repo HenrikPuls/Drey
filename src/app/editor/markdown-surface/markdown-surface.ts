@@ -44,7 +44,8 @@ import { assetUrlToVaultPath, resolveHelpImageCandidates, resolveVaultImageCandi
 import { makeTagCompletionSource, tagPills, tagStyleRefresh } from '../tags';
 import { makeWordCompletionSource } from '../word-completion';
 import { makeEmojiCompletionSource } from '../emoji';
-import { applyAction, ToolbarAction } from '../toolbar-commands';
+import { ToolbarAction } from '../toolbar-commands';
+import { dispatchToolbarAction } from '../toolbar-dispatch';
 import { eraseFormatting } from '../erase-formatting';
 import { makeSlashCommandSource } from '../slash-commands';
 import { EmojiPickerService } from '../../emoji-picker/emoji-picker.service';
@@ -209,6 +210,20 @@ export class MarkdownSurface implements AfterViewInit, OnDestroy {
   readonly modeToggleRequested = output<void>();
 
   private _view?: EditorView;
+
+  /** View -> its surface, for callers that only hold a CodeMirror view. */
+  private static readonly byView = new WeakMap<EditorView, MarkdownSurface>();
+
+  /**
+   * The surface a CodeMirror view belongs to, or `undefined` for a view
+   * no `MarkdownSurface` built (a plugin composer). The editor context
+   * menu's formatting strip resolves the right-clicked view this way to
+   * reach what only the surface can do -- saving picked images.
+   */
+  static forView(view: EditorView): MarkdownSurface | undefined {
+    return MarkdownSurface.byView.get(view);
+  }
+
   private readonly modeCompartment = new Compartment();
   private readonly placeholderCompartment = new Compartment();
   private readonly readOnlyCompartment = new Compartment();
@@ -276,18 +291,9 @@ export class MarkdownSurface implements AfterViewInit, OnDestroy {
    * the owning `Editor`, whose meta bar hosts the buttons (milestone 43).
    */
   applyToolbarAction(action: ToolbarAction): void {
-    const view = this._view;
-    if (!view || view.state.readOnly) {
-      return;
+    if (this._view) {
+      dispatchToolbarAction(this._view, action);
     }
-    const { from, to } = view.state.selection.main;
-    const edit = applyAction(view.state.doc.toString(), from, to, action);
-    view.dispatch({
-      changes: { from: edit.from, to: edit.to, insert: edit.insert },
-      selection: { anchor: edit.selFrom, head: edit.selTo },
-      scrollIntoView: true,
-    });
-    view.focus();
   }
 
   /**
@@ -583,6 +589,7 @@ export class MarkdownSurface implements AfterViewInit, OnDestroy {
         extensions: this.buildExtensions(null),
       }),
     });
+    MarkdownSurface.byView.set(this._view, this);
     // The compartment is seeded with the Markdown bundle; if this surface
     // opened straight onto a code file, swap the grammar now rather than
     // waiting for the first `languageFilename` change.

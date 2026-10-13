@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { categoryOf, clip, previewCard } from './slash';
+import { categoryOf, clip, previewCard, slashTemplateOptions } from './slash';
 
 /**
  * The pure parts of the templates' `/` menu section (milestone 43): the
@@ -28,5 +28,22 @@ describe('templates slash menu helpers', () => {
     expect(card.querySelector('.slash-preview-head')?.textContent).toBe('Preview · daily');
     expect(card.querySelector('.slash-preview-body')?.textContent).toBe('<b>## {{date}}</b>');
     expect(card.querySelector('b')).toBeNull();
+  });
+
+  it('offers only the picker row for a bare slash, direct matches for a typed name', () => {
+    const templates = [
+      { name: 'daily', relativePath: 'templates/daily.md' },
+      { name: 'Team sync', relativePath: 'templates/meetings/Team sync.md' },
+      { name: 'todo', relativePath: 'templates/todo.md' },
+    ];
+    expect(slashTemplateOptions(templates, '')).toEqual({ browse: true, matches: [] });
+    // "t" could still become "templates": the picker row stays beside the matches.
+    const t = slashTemplateOptions(templates, 't');
+    expect(t.browse).toBe(true);
+    expect(t.matches.map((m) => m.name)).toEqual(['Team sync', 'todo']);
+    const d = slashTemplateOptions(templates, 'da');
+    expect(d.browse).toBe(false);
+    expect(d.matches.map((m) => m.name)).toEqual(['daily']);
+    expect(slashTemplateOptions(templates, 'zzz')).toEqual({ browse: false, matches: [] });
   });
 });

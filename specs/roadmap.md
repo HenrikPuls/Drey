@@ -44,9 +44,10 @@ Open work only. Everything implemented lives in
 lives in [`decisions.md`](decisions.md). When an item ships, move it to the
 changelog and delete it here — no shipped history on this page.
 
-**Status (2026-10-12):** version 0.5.0, milestones 1–72 shipped. Milestone
+**Status (2026-10-13):** version 0.5.0, milestones 1–72 shipped. Milestone
 ids are assigned when work starts — check `changelog.md` for the highest
-used (latest: milestone 72; latest requirement id: req-40, Git vaults).
+used (latest: milestone 72; latest requirement id: req-41, the formatting
+strip — an owner request outside the list, shipped in the same step).
 
 ### Known defects
 

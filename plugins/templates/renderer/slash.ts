@@ -80,9 +80,43 @@ export function inFrontmatter(doc: string, pos: number): boolean {
   return close === -1 || pos <= close + 4;
 }
 
+/** The row that opens the template picker instead of inserting. */
+export const BROWSE_LABEL = 'Templates…';
+
+/**
+ * What the Templates section offers for a typed `/query`. A bare `/`
+ * shows only the "Templates…" row -- the library may be large, the
+ * picker has the filter, the folders and the preview. A typed name
+ * still completes directly: every template whose name starts with it,
+ * plus the picker row while the query could still mean "templates".
+ */
+export function slashTemplateOptions(
+  templates: readonly TemplateEntry[],
+  query: string,
+): { browse: boolean; matches: TemplateEntry[] } {
+  if (query === '') {
+    return { browse: true, matches: [] };
+  }
+  return {
+    browse: 'templates'.startsWith(query),
+    matches: templates.filter((entry) => entry.name.toLowerCase().startsWith(query)),
+  };
+}
+
 /** The CodeMirror extension: a completion source on the Markdown language data. */
-export function templateSlashExtension(api: DreyPluginApi, library: TemplateLibrary): unknown {
+export function templateSlashExtension(
+  api: DreyPluginApi,
+  library: TemplateLibrary,
+  openPicker: (view: EditorView, pos: number) => void,
+): unknown {
   const { language, langMarkdown } = api.editor.cm;
+
+  // The "Templates…" row: drop the typed `/query`, then float the picker
+  // (filter, folder tree, preview) at the caret.
+  const browse = (view: EditorView, from: number, to: number): void => {
+    view.dispatch({ changes: { from, to, insert: '' }, selection: { anchor: from } });
+    openPicker(view, from);
+  };
 
   const apply = (view: EditorView, entry: TemplateEntry, from: number, to: number): void => {
     void library.render(entry.relativePath).then((text) => {
@@ -124,11 +158,15 @@ export function templateSlashExtension(api: DreyPluginApi, library: TemplateLibr
     }
 
     const query = token.text.slice(1).toLowerCase();
-    const matches = library.all.filter((entry) => entry.name.toLowerCase().startsWith(query));
-    if (matches.length === 0) {
+    const templates = library.noteTemplates;
+    if (templates.length === 0) {
       return null;
     }
-    const options: Completion[] = matches.map((entry) => ({
+    const offer = slashTemplateOptions(templates, query);
+    if (!offer.browse && offer.matches.length === 0) {
+      return null;
+    }
+    const options: Completion[] = offer.matches.map((entry) => ({
       label: entry.name,
       detail: categoryOf(entry, library.dir),
       type: 'slash',
@@ -139,6 +177,15 @@ export function templateSlashExtension(api: DreyPluginApi, library: TemplateLibr
           .then((text) => previewCard(entry.name, text ?? 'This template could not be read.')),
       apply: (view, _completion, from, to) => apply(view, entry, from, to),
     }));
+    if (offer.browse) {
+      options.unshift({
+        label: BROWSE_LABEL,
+        detail: String(templates.length),
+        type: 'slash',
+        section: SECTION,
+        apply: (view, _completion, from, to) => browse(view, from, to),
+      });
+    }
     // `filter: false` for the same reason as the base source: no label
     // contains the typed slash, so CodeMirror's own filter would drop all.
     return { from: token.from, options, filter: false };

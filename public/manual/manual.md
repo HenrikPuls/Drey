@@ -169,9 +169,9 @@ menu:
 
 ![The ⋯ menu](img/editor-more-menu.png)
 
-The `⋯` menu also holds *Formatting toolbar*, *Lines* (line numbers),
-*Suggest tags* (AI), *File history…*, *Export as PDF…*, *Save as…* and
-any manual Assistant Actions you have configured.
+The `⋯` menu also holds *Suggest tags* (AI), *File history…*,
+*Export as PDF…*, *Save as…* and any manual Assistant Actions you have
+configured.
 
 The editor's text size zooms with `Ctrl +` / `Ctrl -` / `Ctrl 0` or
 `Ctrl`+wheel; while it differs from 100%, the meta bar shows the
@@ -186,8 +186,9 @@ Typing `/` on an empty line opens the **slash menu**:
 - **Entry** — the quick-capture block: a `## HH:mm` heading with an
   optional topic, exactly what daily-note journaling uses. The inserted
   format is configurable (Settings → *Entry format*).
-- **Templates** — every template in your vault's `templates/` folder,
-  each with a preview card.
+- **Templates…** — opens the template picker at the caret (see
+  *Editing aids* below). Typing a template's name after the slash
+  (`/stand`) offers it directly, with a preview card.
 - **Formatting** — headings, lists, quotes, tables, code blocks.
 
 ![The slash menu](img/slash-menu.png)
@@ -215,8 +216,23 @@ in Settings → *Templates*.
 
 ### Editing aids
 
-- **Formatting toolbar** — icon-only Markdown buttons in the meta bar
-  (hideable via `⋯`).
+- **Formatting strip** — one row of icons: the template picker,
+  paragraph style (body text, headings, blockquote, callouts), Bold,
+  Italic, more text formats (strikethrough, highlight, sub- and
+  superscript, *Clear formatting*), lists, Task list, Link, Table (a
+  size grid) and an *Insert* menu (image, emoji, footnote, math,
+  diagram). A button with a small caret opens a menu, one at a time;
+  the others act at once. The strip is the head of the editor's
+  **right-click menu**, where it acts on the text you clicked: there
+  its first menu is the usual *Cut / Copy / Paste* list, open from the
+  start. Its **pin** docks the strip into the meta bar and releases it
+  again (also *Pin formatting toolbar* in the command palette).
+- **Template picker** — the strip's first button, and *Templates…* in
+  the slash menu: type to filter, `↑`/`↓` move through the list,
+  `→`/`←` open and close a folder, `Enter` inserts the template at the
+  caret, `Esc` closes. The right half previews the selected template.
+  Subfolders of `templates/` show as folders; `templates/prompts/`
+  (the Assistant's prompts) is left out.
 - **Folding** — headings collapse Obsidian-style; the chevron appears on
   hover in the gutter.
 - **Line numbers** — the *Lines* toggle (`Ctrl+G`), an app-wide
@@ -355,9 +371,10 @@ default. `#task` is reserved and never suggested for renaming.
 
 ![The Templates panel](img/panel-templates.png)
 
-- **Note templates** are Markdown files in `templates/`. They appear in
-  the Templates panel, in the slash menu (with preview cards) and in
-  "New note" flows.
+- **Note templates** are Markdown files in `templates/`, in subfolders
+  if you like. They appear in the Templates panel, in the template
+  picker (the formatting strip's first button, *Templates…* in the
+  slash menu) and in "New note" flows.
 - **Snippet triggers** (`tbl`, `code`, …) are edited in Settings →
   *Templates* — the library is user-owned app config, with `${n:placeholder}`
   tabstops.
@@ -530,9 +547,9 @@ tones in the Files panel. The `git.path` is configurable in Settings →
 
 Drey bundles **draw.io** offline — nothing is sent anywhere.
 
-- Insert a diagram from the formatting bar's shapes button, `/diagram`
-  in the slash menu, or the editor context menu. Until first drawn it
-  is a placeholder picture in the note.
+- Insert a diagram from the formatting strip's *Insert* menu or with
+  `/diagram` in the slash menu. Until first drawn it is a placeholder
+  picture in the note.
 - Files: `.drawio` (XML), `.drawio.svg` and `.drawio.png` — the two
   picture formats are ordinary images that carry the diagram inside, so
   notes embed them with the normal image syntax and PDF export needs
