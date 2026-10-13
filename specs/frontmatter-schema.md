@@ -101,7 +101,9 @@ document as `vaultId::relativePath`; absent for an unbound chat, and the
 assistant panel follows the active document: switching to a note opens the
 newest chat bound to it). Body: one `## User` /
 `## Assistant` heading per turn, with tool calls persisted in
-```drey-tool fenced blocks. `chats/` is created on demand and **is**
+```drey-tool fenced blocks. A user turn asked about a selection
+(milestone 74) starts with that selection as a Markdown blockquote
+(capped at 2,000 characters), a blank line, then the question. `chats/` is created on demand and **is**
 indexed. Chat notes are auto-saved by the engine and never trigger the
 save-before-exit prompt.
 
@@ -129,10 +131,12 @@ save-before-exit prompt.
 - `templates/` — Markdown templates for new notes; `{{date}}` `{{time}}`
   `{{datetime}}` `{{title}}` placeholders substituted at creation (unknown
   tokens untouched). `templates/daily.md` seeds new daily notes. Excluded
-  from the tag index and tag search. `templates/prompts/*.md` are the
-  assistant panel's prompt picker entries: `# Titel`, `> Beschreibung`,
-  then the prompt body (no placeholder substitution — the picker inserts
-  the body into the composer).
+  from the tag index and tag search. `prompts/*.md` under the templates folder
+  (`templates/prompts/` by default; it follows `templates.dir`) are the
+  assistant's prompts: `# Titel`, `> Beschreibung`, then the prompt body
+  (no placeholder substitution). The composer's picker inserts the body
+  into the composer; the popover at a selection sends it as the question
+  about the selection.
 - `.drafts/` — untitled scratch buffers are committed here on exit as
   `.drafts/unnamed-N.md`. A dot-folder, hidden from tree and indexes.
   Only "Save as…" moves a draft out (deleting the original).

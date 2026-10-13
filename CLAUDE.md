@@ -28,6 +28,14 @@ here, and everything in this file binds every agent regardless of tool.
   content is German — a German mockup or a German feature request is a
   description of the layout and behaviour, **not** an instruction to write
   German labels. Translate them.
+- **Screenshots show English menus, too.** Some menus and pickers list
+  names that come from vault files or the config — prompt titles and
+  descriptions (`templates/prompts/`), template and snippet names, Action
+  names. In anything that is shown to the owner or shipped (manual
+  screenshots, screenshots taken to demonstrate a feature, the e2e
+  fixtures those are made from), seed these names in **English**, so no
+  menu in a screenshot carries German text. German stays where it is
+  plainly note content (a note's body, its file name, its tags).
 - Content the user actually writes into vault files at runtime (notes,
   tags, entry text) stays **German** — that's user data, not a code
   artifact, and is out of scope for this convention.

@@ -44,6 +44,49 @@ recorded as an explicit decision. The parity checklist lives in
   without saving".
 - No rollback: a theme tried and not liked is picked back by hand.
 
+### Milestone 74 — Assistant on a selection
+
+**Not yet manually verified by the owner.**
+
+Selecting text in a note shows a small assistant button next to the
+selection (after the mouse button is released, or on a keyboard
+selection). It opens a popover with three things: a one-line question
+field, the prompts from the prompts folder, and the manual Actions.
+
+- **A question or a prompt is asked about the selection in the chat.**
+  The Assistant panel opens and answers; the composer's chips and the
+  live-edit switch apply as set. The selection rides the call as a
+  `SELECTED SECTION` block between the question and the document
+  (`AskRequest.selection`, `buildAskUserMessage`), and is quoted above
+  the question in the chat note, so the transcript reads on its own and
+  a follow-up replays it. A proposed edit goes through the usual
+  confirmation.
+- **A manual Action runs on the selection** — the same run as its `⋯`
+  menu row, which already sent the selection.
+- **Command** `assistant.askSelection`, `Ctrl+Shift+A`: the same popover
+  from the keyboard.
+- **Switch:** Settings → Actions → "Show the assistant button at a
+  selection" (on by default; stored in the assistant plugin's own
+  config). The button also stays away while LLM features are off.
+- **The prompts folder follows the templates folder.** The composer's
+  Prompts picker and the popover read `<templates.dir>/prompts/`; the
+  renderer used the fixed `templates/prompts` before, while the
+  assistant's template tools already used the configured folder.
+- **English names in menus, in screenshots too** (`CLAUDE.md`, Language
+  Convention): names a menu or picker lists from the vault — prompt
+  titles, template and Action names — are seeded in English in the e2e
+  and manual-screenshot fixtures. The manual's prompt fixture is now
+  "Day review"; the manual's images were not re-captured for it.
+- No SDK change: the button is a CodeMirror tooltip built from the
+  host's modules (`plugins/assistant/renderer/selection-button.ts`), the
+  popover plain DOM (`selection-popover.ts`).
+- Unit: `plugins/assistant/shared/ask.spec.ts` (payload, quote),
+  `main/ask-prompts.spec.ts` (block order), `main/chat-engine.spec.ts`
+  (message + persisted turn), `renderer/selection-popover.spec.ts`
+  (rows, keys, dismiss), the state and prompts specs. E2E:
+  `e2e/assistant.spec.ts` (button on a selection, popover content, the
+  command, the Settings switch).
+
 ### Milestone 73 — Lossless Markdown template ("Structure note")
 
 A third built-in Action template, **Structure note (lossless)**

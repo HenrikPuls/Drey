@@ -159,6 +159,25 @@ persisted with full fidelity and replayed in full.
   Picking replaces the composer's text — the user reviews and sends it as
   a normal question; no placeholder substitution.
 
+## Later change — a question about a selection (milestone 74)
+
+- The ask contract gained an optional `selection` (`AskRequest`): the
+  text selected in the open note when the question came from the
+  assistant button at a selection. It rides the user message as a
+  `SELECTED SECTION` block; the document still rides in full when the
+  note chip is on.
+- **No new chat-note field.** The persisted user turn is the selection
+  as a Markdown blockquote above the question (`quoteSelection`, capped
+  at 2,000 characters). The note stays readable in any Markdown editor,
+  the replay carries the quote like any other turn text, and the `> `
+  prefix keeps a selected `## User` line or code fence from being read
+  as chat-note structure. Considered: a fenced `drey-selection` block —
+  rejected, it would be a second machine format for something that is
+  simply part of what the user asked.
+- The prompts folder is `prompts/` under the configured templates folder
+  (`templates.dir`) in the renderer as well; it was fixed to
+  `templates/prompts` there.
+
 ## Later change — the panel keeps its chat (milestone 56)
 
 Beta feedback read as "chats are not saved": the notes were on disk, but

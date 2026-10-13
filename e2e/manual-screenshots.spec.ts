@@ -16,8 +16,9 @@ import { test, expect, type Page, type ElectronApplication } from './fixtures/dr
  * Prerequisite: `npm run build` (fresh dist-electron + dist/drey/browser).
  * Output: docs/manual/img/*.png (committed with the manual).
  *
- * The demo vault content is deliberately German — user data stays German
- * (CLAUDE.md language convention); the chrome around it is English.
+ * The demo notes are deliberately German — user data stays German
+ * (CLAUDE.md language convention); the chrome around them is English, and
+ * so are the names a menu or picker lists from the vault (prompt titles).
  */
 
 const RUN = !!process.env['DREY_MANUAL_SHOTS'];
@@ -251,10 +252,10 @@ const DEMO: Record<string, string> = {
   'templates/standup.md': '## Standup\n\n- Gestern:\n- Heute:\n- Blocker:\n',
 
   'templates/prompts/day-review.md': [
-    '# Tagesrückblick',
-    '> Fasst den Tag in drei Sätzen zusammen und nennt offene Enden.',
+    '# Day review',
+    '> Sums up the day in three sentences and names loose ends.',
     '',
-    'Fasse meinen heutigen Tag in drei Sätzen zusammen. Weise am Ende auf offene Enden hin.',
+    'Sum up my day in three sentences. Point out loose ends at the end.',
     '',
   ].join('\n'),
 };

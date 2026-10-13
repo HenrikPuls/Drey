@@ -9,10 +9,10 @@ import type { PromptEntry } from './prompts';
  */
 
 const PROMPT: PromptEntry = {
-  path: 'templates/prompts/kurz.md',
-  title: 'Kurzfassung',
-  description: 'Drei Sätze',
-  body: 'Fasse das in drei Sätzen zusammen.',
+  path: 'templates/prompts/summary.md',
+  title: 'Short summary',
+  description: 'Three sentences',
+  body: 'Summarize this in three sentences.',
 };
 
 const ANCHOR = { left: 40, top: 100, bottom: 118 };
@@ -53,7 +53,7 @@ describe('selection popover', () => {
   it('lists the prompts, then the manual actions, and focuses the question field', async () => {
     const { root } = open();
     await Promise.resolve();
-    expect(rowTitles(root)).toEqual(['Kurzfassung', 'Reformat']);
+    expect(rowTitles(root)).toEqual(['Short summary', 'Reformat']);
     expect(root.querySelector('.selection-group')?.textContent).toBe('Actions');
     expect(document.activeElement).toBe(root.querySelector('.selection-question'));
   });

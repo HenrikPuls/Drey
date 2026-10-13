@@ -2872,3 +2872,40 @@ built-in — its `config.json` lives in the same tree) confirms, deletes
 the folder (recycle bin first), shows the same restart hint. Neither
 action touches the running session's discovery snapshot: activation
 state changes only at the next start, exactly like `plugins.disabled`.
+
+## 6.58 Ask about a selection (milestone 74, [ADR-0048 later change](09_architecture_decisions/0048-chats-as-vault-notes.md))
+
+```mermaid
+sequenceDiagram
+    participant User
+    participant CM as editor (selection-button extension)
+    participant Pop as selection popover
+    participant State as assistant state (renderer)
+    participant Engine as ChatEngine (main)
+    participant Note as chat note
+    participant LLM
+
+    User->>CM: select text, release the mouse button
+    CM->>CM: tooltip at the selection head (focused, not dragging, enabled)
+    User->>CM: click the button (or Ctrl+Shift+A)
+    CM->>Pop: open at the selection (prompts folder + manual Actions)
+    alt question typed or prompt picked
+        Pop->>State: ask(question, { selection })
+        State->>Engine: plugin:invoke ask (AskRequest + selection)
+        Engine->>Note: append user turn ("> selection" + question)
+        Engine->>LLM: QUESTION · SELECTED SECTION · DOCUMENT · FILEs
+        LLM-->>Engine: answer or whole-document edit
+        Engine->>Note: append assistant turn
+        Engine-->>State: outcome
+        State->>User: answer in the panel, or the confirmation dialog (ADR-0011)
+    else manual Action picked
+        Pop->>State: run the Action (same path as its ⋯ menu row)
+        State->>User: confirmation dialog for the rewrite
+    end
+```
+
+The selection is read from the editor when the popover opens, so the
+question is about what was selected then, even if the selection changes
+while the model answers. The document itself is still sent in full when
+the note chip is on; with the chip off, the selection is the only
+document text in the call.

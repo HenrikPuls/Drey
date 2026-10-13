@@ -361,9 +361,11 @@ default. `#task` is reserved and never suggested for renaming.
 - **Snippet triggers** (`tbl`, `code`, …) are edited in Settings →
   *Templates* — the library is user-owned app config, with `${n:placeholder}`
   tabstops.
-- **Prompts** for the Assistant are Markdown files in
-  `templates/prompts/`: a `# Title` heading, a `> Description` line and
-  the prompt body. They surface in the composer's *Prompts* picker.
+- **Prompts** for the Assistant are Markdown files in the `prompts`
+  folder of your templates folder (`templates/prompts/` by default): a
+  `# Title` heading, a `> Description` line and the prompt body. They
+  surface in the composer's *Prompts* picker and in the popover at a
+  selection (section 9).
 
 ---
 
@@ -390,6 +392,22 @@ The **Assistant panel** is chat-first:
   **Prompts** · **model picker**.
 
 ![The chat picker](img/assistant-chat-picker.png)
+
+### Asking about a selection
+
+Select text in a note and a small assistant button appears next to the
+selection. It opens a popover with:
+
+- a **question field** — type and press `Enter`;
+- your **prompts** (the files in the prompts folder, see section 8) —
+  one click asks that prompt;
+- your **manual Actions** — one click runs the Action with the selection
+  as its focus.
+
+A question or prompt is answered in the Assistant panel; the selection
+is sent along with the note and quoted above your question in the chat.
+`Ctrl+Shift+A` opens the same popover from the keyboard. If you do not
+want the button, switch it off in Settings → *Actions*.
 
 ### Context chips
 
@@ -796,6 +814,7 @@ brings them back.
 | `Mod+Shift+P` | Command palette |
 | `Mod+,` | Settings |
 | `Mod+Shift+F` | Search panel |
+| `Mod+Shift+A` | Ask the assistant about the selection |
 | `Mod+G` | Toggle line numbers |
 | `Mod+B` / `Mod+Alt+B` | Toggle left / right dock |
 | `Alt+Left` / `Alt+Right` | Back / forward (also mouse buttons 3/4) |

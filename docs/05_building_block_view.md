@@ -760,6 +760,17 @@ Keep it in step whenever a component boundary changes (CLAUDE.md's
   pushed as `status-updated`; the renderer turns it into Files-panel
   decorations. Asks before a commit with unsaved tabs; refuses checkout
   / pull while the vault has unsaved tabs. Settings → "Git" (`gitPath`)
+- Assistant button at a selection — `plugins/assistant/renderer/`
+  (milestone 74): `selection-button.ts` registers a `document`-slot
+  editor extension built from the host's CodeMirror modules — a tooltip
+  at the selection head, gated by a small state field (no button while
+  the mouse button is down or the editor is unfocused) and by the
+  plugin-config switch `selectionButton.enabled` plus `llm.enabled`.
+  `selection-popover.ts` is the plain-DOM popover (question field,
+  prompts from `<templates.dir>/prompts/`, manual Actions). A question
+  goes through the ordinary `state.ask` with `selection`; an Action
+  through the existing manual run. The command `assistant.askSelection`
+  opens the same popover.
 - Assistant panel — `plugins/assistant/` (conversations
   since ADR-0048): **chat-first** — a chat
   picker + new chat in the head, turn cards rendered from the active
@@ -859,6 +870,7 @@ decision. (Seams — what a *plugin* can extend — are the table above.)
 | Autotag / "Suggest tags" | `electron/llm/tag-suggest.ts`, the editor `⋯` menu | Base | `specs/classifier-spec.md`, M45 |
 | Tasks panel + inline due/priority metadata | `plugins/tasks/` | Plugin tasks | ADR-0033 |
 | Assistant chat + chat notes (`chats/`) | `plugins/assistant/` (`chat-engine.ts`, `chat-store.ts`) | Plugin assistant | ADR-0048 |
+| Assistant button at a selection + its popover (question, prompts, manual Actions) | `plugins/assistant/renderer/selection-button.ts` (CodeMirror tooltip), `selection-popover.ts`, `shared/ask.ts` (`selection`, `quoteSelection`), `main/ask-prompts.ts` (`buildAskUserMessage`) | Plugin assistant | ADR-0048 later change, M74 |
 | Manual Actions (run + on-save queue) | `plugins/assistant/` + `editor-more` menu rows | Plugin assistant | ADR-0011, ADR-0012 |
 | "Structure note (lossless)" built-in Action + the `{{AVAILABLE_TAGS}}` prompt placeholder | `shared/config/schema.ts` (`LOSSLESS_FORMAT_PROMPT`), `shared/llm/prompt-substitution.ts`, `plugins/assistant/main/action-engine.ts` | Shared + plugin assistant | `specs/classifier-spec.md`, M73 |
 | Live edit (model edits the open note) | `plugins/assistant/` + `documents.setEditLock` | Plugin assistant | ADR-0049 |
