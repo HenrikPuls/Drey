@@ -47,7 +47,7 @@ changelog and delete it here — no shipped history on this page.
 **Status (2026-10-13):** version 0.5.0, milestones 1–74 shipped. Milestone
 ids are assigned when work starts — check `changelog.md` for the highest
 used (latest: milestone 74; milestone 75 is assigned to "Configurable
-shortcuts" below; latest requirement id: req-40, Git vaults).
+shortcuts" below; latest requirement id: req-41, the formatting strip).
 
 ### Known defects
 

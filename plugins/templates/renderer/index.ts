@@ -1,5 +1,4 @@
 import type {
-  ContextMenuItem,
   DreyPluginApi,
   PluginRendererModule,
 } from '../../../shared/plugin-api/renderer';
@@ -8,6 +7,7 @@ import { TemplateLibrary, type TemplateCategory, type TemplateEntry } from './li
 import { substitutePlaceholders } from '../../../shared/placeholders';
 import { formatDate, formatDateTime, formatTime } from '../../../shared/timestamp';
 import { stripFrontmatter } from './pure.js';
+import { mountTemplatePicker, openTemplatePickerAt } from './picker.js';
 import { previewCard, templateSlashExtension } from './slash.js';
 import { SNIPPET_DEFAULTS, SnippetStore, expandForPreview, snippetExtension } from './snippets.js';
 
@@ -40,7 +40,7 @@ function button(className: string, title: string, onClick: () => void): HTMLButt
 /**
  * The Templates plugin (ADR-0029, converted in ADR-0044 stage 3): the vault
  * template library as a dock panel + `Mod+T` picker + drag-into-editor +
- * recent-template context-menu items + its own Settings page. Ported from
+ * the formatting bar's template picker (req-41) + its own Settings page. Ported from
  * `src/app/templates/` — same behaviour, plain DOM instead of Angular.
  */
 const plugin: PluginRendererModule = {
@@ -82,7 +82,26 @@ const plugin: PluginRendererModule = {
     });
 
     // -- the `/` menu's Templates section (milestone 43) ------------------------
-    api.editor.registerExtension('document', () => templateSlashExtension(api, library));
+    const pick = (entry: TemplateEntry): void => {
+      void library.insert(entry.relativePath).then((result) => showResult(api, result));
+    };
+    api.editor.registerExtension('document', () =>
+      templateSlashExtension(api, library, (view, pos) => {
+        const at = view.coordsAtPos(pos) ?? view.dom.getBoundingClientRect();
+        // Closing without a pick hands the keys back to the note.
+        openTemplatePickerAt(api, library, at, pick, () => view.focus());
+      }),
+    );
+
+    // -- the formatting bar's template picker (req-41) --------------------------
+    api.editor.registerToolbarButtons([
+      {
+        icon: 'file-text',
+        title: 'Insert template',
+        placement: 'bar',
+        popover: (mount, close) => mountTemplatePicker(api, library, mount, pick, close),
+      },
+    ]);
 
     // -- snippet completion (milestone 46): trigger words -> template blocks ----
     api.editor.registerExtension('document', () => snippetExtension(api, snippets));
@@ -103,17 +122,6 @@ const plugin: PluginRendererModule = {
           title,
         });
       },
-    });
-
-    // -- recent templates in the editor context menu ---------------------------
-    api.editor.registerContextMenuItems(() => {
-      const items: ContextMenuItem[] = library.recent.map((t) => ({
-        label: t.name,
-        run: () => {
-          void library.insert(t.relativePath).then((result) => showResult(api, result));
-        },
-      }));
-      return items;
     });
 
     // -- settings page: the templates folder + the snippet library --------------

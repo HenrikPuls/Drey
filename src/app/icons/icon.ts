@@ -83,6 +83,8 @@ export type IconName =
   | 'asterisk'
   | 'smile'
   | 'eraser'
+  | 'pilcrow'
+  | 'baseline'
   | 'shapes'
   | 'trash'
   | 'git-merge'
@@ -96,6 +98,18 @@ const ICONS: Record<IconName, readonly IconShape[]> = {
   'chevron-right': [{ kind: 'path', d: 'm9 18 6-6-6-6' }],
   'chevron-left': [{ kind: 'path', d: 'm15 18-6-6 6-6' }],
   'chevron-down': [{ kind: 'path', d: 'm6 9 6 6 6-6' }],
+  // Lucide "pilcrow" / "baseline" -- the formatting bar's paragraph-style
+  // and more-text-formats menus (req-41).
+  pilcrow: [
+    { kind: 'path', d: 'M13 4v16' },
+    { kind: 'path', d: 'M17 4v16' },
+    { kind: 'path', d: 'M19 4H9.5a4.5 4.5 0 0 0 0 9H13' },
+  ],
+  baseline: [
+    { kind: 'path', d: 'M4 20h16' },
+    { kind: 'path', d: 'm6 16 6-12 6 12' },
+    { kind: 'path', d: 'M8 12h8' },
+  ],
   // Lucide "chevrons-down-up" -- the Files panel "collapse all folders" button.
   'chevrons-down-up': [
     { kind: 'path', d: 'm7 20 5-5 5 5' },

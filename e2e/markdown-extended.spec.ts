@@ -10,7 +10,7 @@ import { test, expect } from './fixtures/drey';
  * suite; this file pins the editor surfaces every Markdown view shares.
  *
  * The second describe pins the insert affordances added with them: the
- * slash commands, the context-menu rows, the toolbar buttons, the
+ * slash commands, the context menu's formatting strip, the toolbar, the
  * `:emoji:` picker and the `:`-completion.
  */
 
@@ -127,7 +127,7 @@ test.describe('Extended Markdown insert affordances (milestone 72)', () => {
     );
   });
 
-  test('the context menu offers the dialect rows and inserts a footnote', async ({ page }) => {
+  test('the context menu carries the formatting strip and inserts a footnote', async ({ page }) => {
     const content = page.locator('app-editor .cm-content');
     // Select the claim line (triple click), then right-click on it.
     const claim = content.locator('.cm-line', { hasText: 'A claim' });
@@ -135,9 +135,20 @@ test.describe('Extended Markdown insert affordances (milestone 72)', () => {
     await claim.click({ button: 'right' });
     const menu = page.locator('.ctx-menu');
     await expect(menu).toBeVisible();
-    await expect(menu).toContainText('Highlight');
-    await expect(menu).toContainText('Inline math');
-    await menu.getByRole('button', { name: 'Footnote' }).click();
+    // The formatting commands are the strip's icons now, not menu rows.
+    await expect(menu).not.toContainText('Highlight');
+    const strip = page.locator('.ctx-strip app-markdown-toolbar');
+    await expect(strip).toBeVisible();
+    await strip.locator('button[aria-label="Insert"]').click();
+    // One menu at a time: the clipboard list is the strip's first menu
+    // and closes while another one is open.
+    await expect(strip.locator('.bar > button').first()).toHaveAttribute(
+      'aria-label',
+      'Clipboard and more',
+    );
+    await expect(menu).toBeHidden();
+    await strip.locator('.menu button', { hasText: 'Footnote' }).click();
+    await expect(menu).toHaveCount(0);
     // A second numbered ref on the claim line plus its definition block.
     // (Definition lines carry their own numbered marks -- scope to the
     // claim line, and give conceal a beat to re-decorate.)
@@ -147,12 +158,28 @@ test.describe('Extended Markdown insert affordances (milestone 72)', () => {
     await expect(content.locator('.lp-footnote-def')).toHaveCount(2);
   });
 
-  test('the toolbar smile button opens the emoji picker and inserts :fire:', async ({ page }) => {
+  test('the pin releases the strip from the meta bar and docks it back', async ({ page }) => {
+    const docked = page.locator('app-editor .chrome app-markdown-toolbar');
+    await expect(docked).toBeVisible();
+    await docked.locator('button.pin').click();
+    await expect(docked).toHaveCount(0);
+    // Released, the strip is still at hand in the right-click menu.
+    await page.locator('app-editor .cm-content .cm-line', { hasText: 'A claim' }).click({ button: 'right' });
+    const pin = page.locator('.ctx-strip app-markdown-toolbar button.pin');
+    await expect(pin).toHaveAttribute('aria-pressed', 'false');
+    await pin.click();
+    await expect(docked).toBeVisible();
+    await page.keyboard.press('Escape');
+    await expect(page.locator('.ctx-menu')).toHaveCount(0);
+  });
+
+  test('the toolbar Insert menu opens the emoji picker and inserts :fire:', async ({ page }) => {
     const content = page.locator('app-editor .cm-content');
     // Live Preview conceals the syntax: the line READS "Water H2O and X2…".
     await content.locator('.cm-line', { hasText: 'Water H2O' }).click();
     await page.keyboard.press('End');
-    await page.locator('app-markdown-toolbar button[title="Emoji"]').click();
+    await page.locator('app-editor app-markdown-toolbar button[aria-label="Insert"]').click();
+    await page.locator('app-editor app-markdown-toolbar .menu button', { hasText: 'Emoji' }).click();
     const panel = page.locator('.emoji-panel');
     await expect(panel).toBeVisible();
     await panel.locator('.emoji-search').fill('fire');
@@ -197,12 +224,15 @@ test.describe('Extended Markdown insert affordances (milestone 72)', () => {
     const line = content.locator('.cm-line', { hasText: 'fett' });
     await page.keyboard.press('Home');
     await expect(line.locator('.lp-mark')).toHaveText('rot');
-    // Stroke 2 (the toolbar button): the highlight goes too. The line is
+    // Stroke 2 (the toolbar's text-format menu): the highlight goes too. The line is
     // "fett ==rot== hier" now -- 9 steps land inside "rot".
     for (let i = 0; i < 9; i++) {
       await page.keyboard.press('ArrowRight');
     }
-    await page.locator('app-markdown-toolbar button[title="Clear formatting"]').click();
+    await page.locator('app-editor app-markdown-toolbar button[aria-label="More text formats"]').click();
+    await page
+      .locator('app-editor app-markdown-toolbar .menu button', { hasText: 'Clear formatting' })
+      .click();
     await expect(line.locator('.lp-mark')).toHaveCount(0);
     await expect(line).toHaveText(/fett\s+rot\s+hier/);
   });

@@ -355,6 +355,14 @@ function checker(config: SpellcheckConfig) {
       }
 
       update(update: ViewUpdate): void {
+        if (update.docChanged) {
+          // The text moved on: a check still in flight judged the old
+          // text, and its offsets may lie past the new end. Painting them
+          // would make the NEXT edit throw while mapping the underlines
+          // (and lose that edit) -- drop the reply instead of waiting for
+          // the debounced re-check to supersede it.
+          this.pending += 1;
+        }
         if (
           update.docChanged ||
           update.transactions.some((tr) => tr.effects.some((e) => e.is(recheck))) ||

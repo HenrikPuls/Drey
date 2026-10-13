@@ -27,36 +27,26 @@
     <span class="suggesting">Suggesting tags…</span>
   }
 
-  @if (editor.isMarkdown(shownPath()) && (shownDoc()?.viewMode ?? 'live') !== 'view') {
-    <!-- The collapse handle at the toolbar's left edge: one click folds
-         the buttons away, the bar then runs straight into the save
-         cluster ("… Unsaved"); the handle stays to fold them back. -->
-    <button
-      type="button"
-      class="toolbar-collapse"
-      [class.collapsed]="!prefs.toolbar()"
-      [title]="prefs.toolbar() ? 'Collapse formatting toolbar' : 'Expand formatting toolbar'"
-      [attr.aria-label]="prefs.toolbar() ? 'Collapse formatting toolbar' : 'Expand formatting toolbar'"
-      [attr.aria-pressed]="!prefs.toolbar()"
-      (click)="toggleToolbar()"
-    >
-      <app-icon
-        [name]="prefs.toolbar() ? 'chevron-left' : 'chevron-right'"
-        [size]="10"
-        [strokeWidth]="2"
-      />
-    </button>
-    @if (prefs.toolbar()) {
-      <app-markdown-toolbar
-        class="format"
-        [imagesEnabled]="true"
-        (action)="surface().applyToolbarAction($event)"
-        (imageFiles)="surface().insertToolbarImages($event)"
-        (emojiPick)="surface().openEmojiPicker()"
-        (clearFormatting)="surface().eraseFormattingAtSelection()"
-      />
-      <span class="bar-sep" aria-hidden="true"></span>
-    }
+  <!-- The formatting strip while it is pinned (req-41). Unpinned, the
+       bar runs straight into the save cluster and the strip is the head
+       of the editor's right-click menu, where its pin docks it back. -->
+  @if (
+    prefs.toolbar() &&
+    editor.isMarkdown(shownPath()) &&
+    (shownDoc()?.viewMode ?? 'live') !== 'view'
+  ) {
+    <app-markdown-toolbar
+      class="format"
+      [imagesEnabled]="true"
+      [pinned]="true"
+      [currentLine]="currentLine"
+      (action)="surface().applyToolbarAction($event)"
+      (imageFiles)="surface().insertToolbarImages($event)"
+      (emojiPick)="surface().openEmojiPicker()"
+      (clearFormatting)="surface().eraseFormattingAtSelection()"
+      (pinToggle)="prefs.toggleToolbar()"
+    />
+    <span class="bar-sep" aria-hidden="true"></span>
   }
 
   <div class="actions">
@@ -177,19 +167,6 @@
       </button>
 
       <div class="menu-sep" role="separator"></div>
-      <button
-        type="button"
-        role="menuitemcheckbox"
-        [attr.aria-checked]="prefs.toolbar()"
-        (click)="toggleToolbar()"
-      >
-        <span class="tick">
-          @if (prefs.toolbar()) {
-            <app-icon name="check" [size]="13" />
-          }
-        </span>
-        Formatting toolbar
-      </button>
     }
     @if (!isHelp) {
       <button

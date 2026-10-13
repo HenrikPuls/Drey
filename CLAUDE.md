@@ -234,7 +234,7 @@ toolchain is removable by deleting `.tools/`). Never assume a bare `node`,
   the diagram, so a note embeds them with the existing image embed and
   the PDF export needs nothing; which one a new diagram gets is
   Settings → Diagrams (SVG by default). A diagram is inserted from the
-  formatting bar's shapes button, `/diagram` or the context menu; until
+  formatting strip's Insert menu or `/diagram`; until
   first drawn it is a placeholder picture. Diagram tabs **save
   automatically**. SDK 1.16 added what it needed: file openers by name
   suffix (`FileOpenerRegistry`, asked first in `EditorService.openFile`),
@@ -357,7 +357,9 @@ Renderer (`src/app/`):
   toolbar + slash commands (M42/M46), the extended Markdown dialect —
   highlight/math(KaTeX)/callouts/footnotes/emoji/linkify, one dialect
   across Lezer, markdown-it and the PDF, plus its insert affordances:
-  the same reducer behind toolbar, `/` and context-menu rows, the
+  the same reducer behind the formatting strip (docked in the meta
+  bar while pinned, head of the editor context menu -- req-41) and
+  `/`, the
   `:emoji:` picker (`src/app/emoji-picker/`), `:`-completion and the
   formatting eraser (`erase-formatting.ts`, `Mod+\` — peels the
   outermost inline wrap at the caret)
@@ -484,7 +486,7 @@ introduced silently.
   - **Centre column**: a 32px tab bar for open documents — the dock icon
     strips' height (`--panel-head-h`), so their bottom borders form one
     line under the titlebar — a 40px meta bar
-    (path · formatting buttons · Unsaved · Lines toggle · Save · `⋯`),
+    (path · the formatting strip while pinned · Lines toggle · Save · `⋯`),
     the editor (Live Preview ⇄ source via the `⋯` menu — no toggle
     buttons; ADR-0008/0009), then the bottom dock band. Capture is the
     `/` menu's **Entry** block.

@@ -57,6 +57,44 @@ const TREE = [
 ];
 
 describe('templates plugin library', () => {
+  it('leaves the reserved prompts/ folder out of the note templates', async () => {
+    const tree = [
+      {
+        ...TREE[0],
+        children: [
+          ...(TREE[0].children ?? []),
+          {
+            name: 'prompts',
+            relativePath: 'templates/prompts',
+            type: 'directory',
+            children: [{ name: 'review.md', relativePath: 'templates/prompts/review.md', type: 'file' }],
+          },
+          {
+            name: 'meetings-prompts',
+            relativePath: 'templates/meetings-prompts',
+            type: 'directory',
+            children: [{ name: 'x.md', relativePath: 'templates/meetings-prompts/x.md', type: 'file' }],
+          },
+        ],
+      },
+    ];
+    const library = new TemplateLibrary(fakeApi({}, tree).api);
+    await library.reload();
+    // The panel still lists the whole folder ...
+    expect(library.all.map((t) => t.relativePath)).toContain('templates/prompts/review.md');
+    // ... the picker and the `/` menu get everything but the top-level prompts/.
+    expect(library.noteCategories.map((c) => c.name)).toEqual([
+      'General',
+      'meetings',
+      'meetings-prompts',
+    ]);
+    expect(library.noteTemplates.map((t) => t.relativePath)).toEqual([
+      'templates/todo.md',
+      'templates/meetings/1-1.md',
+      'templates/meetings-prompts/x.md',
+    ]);
+  });
+
   it('builds the category tree with a synthetic General group', async () => {
     const { api } = fakeApi({}, TREE);
     const library = new TemplateLibrary(api);

@@ -30,7 +30,7 @@ import { diagramSlashExtension } from './slash.js';
  * The two picture formats are ordinary pictures to the rest of the app, so
  * embedding one in a note is the existing image embed; this plugin adds
  * the ways in -- the file opener, "Edit diagram" on an embedded picture,
- * "Insert diagram" (context menu, formatting bar, `/diagram`) and "New
+ * "Insert diagram" (the formatting bar's Insert menu, `/diagram`) and "New
  * diagram" -- and the setting for which picture format a new diagram gets.
  */
 
@@ -288,7 +288,7 @@ const plugin: PluginRendererModule = {
       { menu: 'file', label: 'New diagram', commandId: 'drawio.new' },
     ]);
 
-    // The formatting bar's button and the slash menu's entry.
+    // The formatting bar's Insert-menu row and the slash menu's entry.
     api.editor.registerToolbarButtons([
       { icon: 'shapes', title: 'Insert diagram', run: () => void createDiagram('caret') },
     ]);
@@ -349,9 +349,6 @@ const plugin: PluginRendererModule = {
             run: () => void openFirstExisting(candidates, vaultId),
           });
         }
-      }
-      if (target.docPath !== null) {
-        items.push({ label: 'Insert diagram', run: () => void createDiagram('caret') });
       }
       return items;
     });

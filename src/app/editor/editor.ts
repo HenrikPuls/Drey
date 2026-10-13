@@ -32,6 +32,7 @@ import { EditorPrefsService } from './editor-prefs.service';
 import { WikilinkService } from './wikilinks';
 import { MarkdownSurface } from './markdown-surface/markdown-surface';
 import { MarkdownToolbar } from './markdown-toolbar';
+import { caretLineText } from './toolbar-dispatch';
 
 /**
  * One pane's document editor (ADR-0037): hosts one `MarkdownSurface` (the
@@ -104,7 +105,7 @@ export class Editor implements AfterViewInit, OnDestroy {
    */
   protected readonly zoomPercent = computed(() => Math.round(this.zoom.scale() * 100));
   protected readonly menuContributions = inject(MenuContributionsService);
-  /** The formatting-toolbar toggle (`⋯` menu, persisted per machine). */
+  /** Whether the formatting strip is pinned into the meta bar (persisted per machine). */
   protected readonly prefs = inject(EditorPrefsService);
   private readonly panes = inject(PaneService);
   private readonly spellcheck = inject(SpellcheckService);
@@ -389,11 +390,11 @@ export class Editor implements AfterViewInit, OnDestroy {
     this.editor.setViewMode(mode, this.shownPath() ?? undefined);
   }
 
-  /** `⋯` -> "Formatting toolbar": app-wide, persisted with the editor prefs. */
-  protected toggleToolbar(): void {
-    this.closeMenu();
-    this.prefs.toggleToolbar();
-  }
+  /** The caret's line, for the pinned strip's paragraph menu (its current mark). */
+  protected readonly currentLine = (): string | null => {
+    const view = this.view;
+    return view ? caretLineText(view) : null;
+  };
 
   /**
    * `⋯` -> "Suggest tags" (req-36, the re-homed Autotag): sends the

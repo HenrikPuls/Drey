@@ -60,6 +60,26 @@ function stripLine(text: string): { indent: string; body: string; prefix: string
   return { indent, body: text.slice(indent.length), prefix: '' };
 }
 
+/** What the formatting bar's paragraph menu can mark as current. */
+export type ParagraphStyle = 0 | 1 | 2 | 3 | 'quote';
+
+/**
+ * The paragraph style of one line, for the menu's current-style mark:
+ * body text, a heading the menu offers (1-3) or a quoted line. `null`
+ * for everything the menu has no row for (deeper headings, list items).
+ */
+export function paragraphStyleOf(line: string): ParagraphStyle | null {
+  const heading = HEADING_RE.exec(line);
+  if (heading) {
+    const level = heading[2].length;
+    return level <= 3 ? (level as 1 | 2 | 3) : null;
+  }
+  if (/^\s*>/.test(line)) {
+    return 'quote';
+  }
+  return TASK_RE.test(line) || LIST_RE.test(line) ? null : 0;
+}
+
 function listPrefix(style: 'bullet' | 'ordered' | 'task', index: number): string {
   switch (style) {
     case 'bullet':
