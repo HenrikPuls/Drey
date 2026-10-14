@@ -57,8 +57,11 @@ tsc typechecks (main, main-process specs, renderer) → unit tests (`ng test`,
 e2e → `electron-builder --win` → `verify:pack`. The fetch is its own
 step because the job builds and packs separately instead of running
 `npm run pack`; without it the drawio e2e tests skip and the packed app
-ships no editor. The two exes are uploaded as workflow **artifacts** on every
-run (14 days, run page); a `v*` tag push additionally attaches them to a
+ships no editor. Every run packs and smoke-tests the two exes, but only a
+`v*` tag push or a manual run (`workflow_dispatch`, Actions → CI → Run
+workflow) uploads them as workflow **artifacts** (3 days, run page) —
+uploading them on every push and PR filled the account's artifact storage
+quota (req-43). A `v*` tag push additionally attaches them to a
 **GitHub Release** (`softprops/action-gh-release`), which is the public,
 permanent download channel.
 
