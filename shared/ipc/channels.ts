@@ -92,6 +92,7 @@ export const IPC_CHANNELS = {
   searchChanged: 'search:changed',
   configGet: 'config:get',
   configSet: 'config:set',
+  captureHotkeyStatus: 'shortcuts:capture-status',
   llmListModels: 'llm:list-models',
   llmTestConnection: 'llm:test-connection',
   llmDebugList: 'llm:debug-list',

@@ -218,6 +218,11 @@ export class App {
     // App-wide keyboard commands. Features register here the same way; the
     // titlebar menu bar invokes the same command ids.
     const keys = inject(KeybindingService);
+    // The user's chords (Settings → Keyboard shortcuts, ADR-0073) — the
+    // persisted config, never the Settings draft.
+    effect(() => {
+      keys.setOverrides(this.settings.config()?.keybindings.overrides ?? {});
+    });
     keys.register({
       id: 'note.new',
       label: 'New note',

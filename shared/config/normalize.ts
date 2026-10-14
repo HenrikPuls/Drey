@@ -58,7 +58,9 @@ import {
   VaultConfig,
   WidgetsConfig,
   PluginsConfig,
+  KeybindingsConfig,
 } from './schema';
+import { canonicalChord, chordProblem, DEFAULT_CAPTURE_CHORD } from '../keybindings';
 import {
   autotagTemplate,
   classicEntryTemplate,
@@ -467,6 +469,44 @@ function normalizePlugins(raw: unknown): PluginsConfig {
   return { disabled: normalizeDisabledList(source['disabled']) };
 }
 
+/** An assignable chord in its canonical spelling, or `undefined` (ADR-0073). */
+function assignableChord(value: unknown): string | undefined {
+  if (typeof value !== 'string') {
+    return undefined;
+  }
+  const chord = canonicalChord(value);
+  return chord !== null && chordProblem(chord) === null ? chord : undefined;
+}
+
+/**
+ * Keeps `null` (no shortcut) and assignable chords; a chord that is no
+ * longer valid (a hand edit, a key that became reserved) is dropped, so
+ * the command falls back to its default.
+ */
+function normalizeKeybindings(raw: unknown): KeybindingsConfig {
+  const source = (raw ?? {}) as Record<string, unknown>;
+  const overrides: Record<string, string | null> = {};
+  const rawOverrides = source['overrides'];
+  if (rawOverrides && typeof rawOverrides === 'object' && !Array.isArray(rawOverrides)) {
+    for (const [id, value] of Object.entries(rawOverrides as Record<string, unknown>)) {
+      if (!id || id === '__proto__') {
+        continue;
+      }
+      if (value === null) {
+        overrides[id] = null;
+        continue;
+      }
+      const chord = assignableChord(value);
+      if (chord !== undefined) {
+        overrides[id] = chord;
+      }
+    }
+  }
+  const capture =
+    source['capture'] === null ? null : (assignableChord(source['capture']) ?? DEFAULT_CAPTURE_CHORD);
+  return { overrides, capture };
+}
+
 /**
  * A vault-relative folder: trimmed, back-slashes folded, no leading/trailing
  * slash, and no `.`/`..` segment (so it can never point outside the vault).
@@ -764,6 +804,7 @@ export function normalizeAppConfig(raw: unknown): AppConfig {
     vault: normalizeVault(source['vault']),
     widgets: normalizeWidgets(source['widgets']),
     plugins: normalizePlugins(source['plugins']),
+    keybindings: normalizeKeybindings(source['keybindings']),
     actions: {
       templates,
       triggers: normalizeTriggers(actionsSource['triggers'], templates),

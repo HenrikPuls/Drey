@@ -41,6 +41,33 @@ describe('normalizeAppConfig', () => {
     expect(normalizeAppConfig(DEFAULT_APP_CONFIG)).toEqual(DEFAULT_APP_CONFIG);
   });
 
+  it('keeps assignable chord overrides canonical, drops invalid ones (ADR-0073)', () => {
+    const config = normalizeAppConfig({
+      keybindings: {
+        overrides: {
+          'note.new': 'shift+ctrl+k',
+          'note.save': null,
+          'dock.toggleLeft': 'K',
+          'palette.files': 'Mod+Z',
+          'help.manual': 42,
+        },
+        capture: 'Mod+Alt+Q',
+      },
+    });
+    expect(config.keybindings).toEqual({
+      overrides: { 'note.new': 'Mod+Shift+K', 'note.save': null },
+      capture: 'Mod+Alt+Q',
+    });
+  });
+
+  it('defaults the capture hotkey, keeps "none", replaces an invalid one', () => {
+    expect(normalizeAppConfig({}).keybindings).toEqual({ overrides: {}, capture: 'Mod+Alt+N' });
+    expect(normalizeAppConfig({ keybindings: { capture: null } }).keybindings.capture).toBeNull();
+    expect(normalizeAppConfig({ keybindings: { capture: 'Q' } }).keybindings.capture).toBe(
+      'Mod+Alt+N',
+    );
+  });
+
   it('defaults the MCP block to off and coerces a bad port', () => {
     expect(normalizeAppConfig({}).mcp).toEqual({
       enabled: false,

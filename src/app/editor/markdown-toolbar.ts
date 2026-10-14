@@ -276,7 +276,10 @@ type MenuId = 'host' | 'paragraph' | 'format' | 'list' | 'table' | 'insert' | 'p
             <!-- The formatting eraser (M72): peels the outermost inline wrap
                  at the caret / wipes every wrap the selection overlaps. -->
             <button type="button" role="menuitem" (click)="erase()">
-              Clear formatting <span class="menu-key">Ctrl \\</span>
+              Clear formatting
+              @if (keys.hint('editor.clearFormatting'); as key) {
+                <span class="menu-key">{{ key }}</span>
+              }
             </button>
           </nav>
         }
@@ -518,7 +521,7 @@ export class MarkdownToolbar implements OnInit {
   /** The host's menu (`hostMenu`) opened (`true`) or closed -- the host shows / hides it. */
   readonly hostMenuToggled = output<boolean>();
 
-  private readonly keys = inject(KeybindingService);
+  protected readonly keys = inject(KeybindingService);
   private readonly contributed = inject(ToolbarContributionsService).buttons;
 
   protected readonly barButtons = computed(() =>

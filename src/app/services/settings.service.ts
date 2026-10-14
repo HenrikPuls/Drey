@@ -5,6 +5,7 @@ import {
   CLASSIC_ENTRY_PATTERN,
   CustomDictionary,
   DailyConfig,
+  KeybindingsConfig,
   DEFAULT_APPEARANCE,
   DEFAULT_DAILY_CONFIG,
   DEFAULT_EDITOR_FONT_FAMILY,
@@ -364,6 +365,13 @@ export class SettingsService {
   patchTemplates(patch: Partial<TemplatesConfig>): void {
     this.mutate((config) => {
       config.templates = { ...config.templates, ...patch };
+    });
+  }
+
+  /** Settings -> Keyboard shortcuts: the whole slice after one change (ADR-0073). */
+  setKeybindings(next: KeybindingsConfig): void {
+    this.mutate((config) => {
+      config.keybindings = next;
     });
   }
 

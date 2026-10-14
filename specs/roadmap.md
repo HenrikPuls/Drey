@@ -45,12 +45,11 @@ Open work only. Everything implemented lives in
 lives in [`decisions.md`](decisions.md). When an item ships, move it to the
 changelog and delete it here — no shipped history on this page.
 
-**Status (2026-10-14):** version 0.6.0, milestones 1–74 and 76–80
-shipped. Milestone ids are assigned when work starts — check
-`changelog.md` for the highest used (latest: milestone 80; milestone 75
-is assigned to "Configurable shortcuts" below; latest requirement id: req-43, CI stores the exes only for
-tags and manual runs — an owner request outside the list, shipped in the
-same step).
+**Status (2026-10-14):** version 0.6.0, milestones 1–80 shipped.
+Milestone ids are assigned when work starts — check `changelog.md` for
+the highest used (latest: milestone 80; latest requirement id: req-43,
+CI stores the exes only for tags and manual runs — an owner request
+outside the list, shipped in the same step).
 Items A1–A5 of the architectural cleanup shipped on 2026-10-13
 (changelog); A6–A12 remain.
 
@@ -63,19 +62,10 @@ Items A1–A5 of the architectural cleanup shipped on 2026-10-13
 The assistant tool rework (owner request, outside the list, 2026-10-13)
 shipped as milestones 76–79, and the removal of the embedding retrieval
 (owner request, outside the list, 2026-10-14) as milestone 80 — see the
-changelog; all five await the owner's verification.
+changelog; all five await the owner's verification. Configurable
+shortcuts shipped as milestone 75 (ADR-0073), also awaiting verification.
 
-3. **Configurable shortcuts (milestone 75).** One user-defined binding
-   per command, stored locally in the app config (never in the vault).
-   `KeybindingService` has no override layer today. Decided with the owner
-   (2026-10-13): rebindable are every command in the registry (core and
-   plugin) **and** the global quick-capture hotkey (`electron/main.ts`
-   anticipates it); the editor's own keys (CodeMirror keymap, Tab, zoom,
-   plugins' raw key handlers) stay fixed and are listed as fixed. A chord
-   another command holds is shown with its holder and a **Replace** that
-   leaves the other command without a shortcut; chords the editor or
-   Electron needs are refused. Needs an ADR; the palette, the menus and
-   the generated shortcuts page (ADR-0067) follow the registry.
+(Nothing else open here — the next item is "Next" below.)
 
 ### Next
 
@@ -206,6 +196,12 @@ Follow-ups of A1–A5 (found on the way, none started):
   vaults; deleting a folder; a per-call cache of file contents when one
   search reads a large vault; `tasks_list` and the template tools for a
   vault other than the active one.
+- **Milestone 75 (configurable shortcuts, ADR-0073):** more than one
+  chord per command; rebinding the mouse side buttons; the plugins' own
+  key handlers (the Git panel's Ctrl Enter, the assistant composer) are
+  neither listed nor rebindable; chords match `KeyboardEvent.key`, so a
+  chord recorded on one keyboard layout (AltGr layouts in particular) may
+  need recording again on another.
 - **Milestone 80 (vault context by text search, ADR-0072):** the
   context block reads the section index, not unsaved buffers; a question
   finds only sections that contain its words — no stemming beyond

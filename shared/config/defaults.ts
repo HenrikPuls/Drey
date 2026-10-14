@@ -4,6 +4,7 @@
  * and `normalize.ts` (validation); re-exported from `shared/app-config.ts`.
  */
 import { DEFAULT_DAILY_DIR } from '../daily';
+import { DEFAULT_CAPTURE_CHORD } from '../keybindings';
 import {
   ActionTemplate,
   ActionTrigger,
@@ -195,6 +196,7 @@ export const DEFAULT_APP_CONFIG: AppConfig = {
   vault: { ...DEFAULT_VAULT_CONFIG },
   widgets: { disabled: [] },
   plugins: { disabled: [] },
+  keybindings: { overrides: {}, capture: DEFAULT_CAPTURE_CHORD },
   actions: {
     templates: [searchSummaryTemplate(), autotagTemplate(), losslessFormatTemplate()],
     triggers: [losslessFormatTrigger()],

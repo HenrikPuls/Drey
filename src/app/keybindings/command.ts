@@ -1,11 +1,14 @@
+import { ChordParts, parseChord } from '../../../shared/keybindings';
+
 /**
  * A named, keyboard-invocable command. The keybinding module maps chords
- * onto these; a future command palette would list them by `label`.
+ * onto these; the command palette lists them by `label`.
  *
- * `keybinding` is a chord string: `+`-joined parts, case-insensitive, e.g.
- * `Mod+Shift+F`. `Mod` is Ctrl on Windows/Linux and Cmd on macOS; `Ctrl`,
- * `Alt`/`Option`, `Shift` and `Meta`/`Cmd` are also accepted. The last part
- * is the key itself (`KeyboardEvent.key`, matched case-insensitively).
+ * `keybinding` is the command's DEFAULT chord (`shared/keybindings.ts`
+ * grammar): `+`-joined parts, case-insensitive, e.g. `Mod+Shift+F`. `Mod`
+ * is Ctrl on Windows/Linux and Cmd on macOS. The user may replace or
+ * remove it in Settings → Keyboard shortcuts (ADR-0073); what is in effect
+ * comes from `KeybindingService.chordFor` / `all()`.
  */
 export interface Command {
   id: string;
@@ -16,7 +19,7 @@ export interface Command {
    * the back / XButton1 side button, `4` the forward / XButton2 side
    * button (VS Code-style history navigation). Triggered window-wide on
    * `mouseup`; the event is swallowed so Chromium's own back/forward
-   * default action never fires.
+   * default action never fires. Not rebindable.
    */
   mouseButton?: number;
   /**
@@ -28,40 +31,9 @@ export interface Command {
 }
 
 /** A parsed chord: the modifier flags plus the lower-cased key. */
-export interface Chord {
-  mod: boolean;
-  shift: boolean;
-  alt: boolean;
-  key: string;
-}
+export type Chord = ChordParts;
 
-/** Parses `Mod+Shift+F` into a {@link Chord}. Unknown parts become the key. */
-export function parseChord(spec: string): Chord {
-  const chord: Chord = { mod: false, shift: false, alt: false, key: '' };
-  for (const raw of spec.split('+')) {
-    const part = raw.trim().toLowerCase();
-    switch (part) {
-      case 'mod':
-      case 'ctrl':
-      case 'control':
-      case 'cmd':
-      case 'command':
-      case 'meta':
-        chord.mod = true;
-        break;
-      case 'shift':
-        chord.shift = true;
-        break;
-      case 'alt':
-      case 'option':
-        chord.alt = true;
-        break;
-      default:
-        chord.key = part;
-    }
-  }
-  return chord;
-}
+export { parseChord };
 
 /** True when `event` is exactly `chord` -- same modifiers, same key. */
 export function matchesChord(event: KeyboardEvent, chord: Chord): boolean {
@@ -71,4 +43,37 @@ export function matchesChord(event: KeyboardEvent, chord: Chord): boolean {
     event.altKey === chord.alt &&
     event.key.toLowerCase() === chord.key
   );
+}
+
+const IS_MAC = typeof navigator !== 'undefined' && /mac/i.test(navigator.platform);
+
+/** `Mod+Shift+F` as the menus print it: `Ctrl Shift F`. */
+export function formatChord(spec: string | undefined | null): string {
+  if (!spec) {
+    return '';
+  }
+  const chord = parseChord(spec);
+  const parts: string[] = [];
+  if (chord.mod) {
+    parts.push(IS_MAC ? 'Cmd' : 'Ctrl');
+  }
+  if (chord.alt) {
+    parts.push('Alt');
+  }
+  if (chord.shift) {
+    parts.push('Shift');
+  }
+  const key = chord.key;
+  if (key === ' ') {
+    parts.push('Space');
+  } else if (key.startsWith('arrow')) {
+    parts.push(key.charAt(5).toUpperCase() + key.slice(6));
+  } else if (key.length === 1) {
+    parts.push(key.toUpperCase());
+  } else if (/^f\d+$/.test(key)) {
+    parts.push(key.toUpperCase());
+  } else {
+    parts.push(key.charAt(0).toUpperCase() + key.slice(1));
+  }
+  return parts.join(' ');
 }

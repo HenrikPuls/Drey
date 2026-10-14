@@ -194,4 +194,18 @@ export interface AppIpc {
    * change). Rejects only on a filesystem write error.
    */
   setConfig(config: AppConfig): Promise<AppConfig>;
+
+  /**
+   * Whether the quick-capture hotkey is registered (ADR-0073). Main
+   * re-registers it on every `config:set`; `registered: false` with a
+   * chord means another program holds the combo.
+   */
+  getCaptureHotkeyStatus(): Promise<CaptureHotkeyStatus>;
+}
+
+/** The quick-capture hotkey as main last registered it (ADR-0073). */
+export interface CaptureHotkeyStatus {
+  /** The stored chord (`shared/keybindings.ts` grammar); `null` = none set. */
+  chord: string | null;
+  registered: boolean;
 }
