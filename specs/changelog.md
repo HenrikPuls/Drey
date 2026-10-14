@@ -20,6 +20,59 @@ recorded as an explicit decision. The parity checklist lives in
 
 ## Recent milestones
 
+### Milestone 75 — Configurable shortcuts
+
+Roadmap "Now" item, decided with the owner on 2026-10-13 and
+2026-10-14:
+[ADR-0073](../docs/09_architecture_decisions/0073-configurable-shortcuts.md).
+**Not yet manually verified by the owner.**
+
+**Settings → Keyboard shortcuts** lists every command (base and plugin)
+and the system-wide **quick-capture** hotkey, each with its shortcut.
+*Change* records the next key press (Esc cancels), *Remove* leaves the
+command without a shortcut, *Reset* brings back the default. A chord
+needs Ctrl or Alt, or a function key; the chords the editor and Electron
+need (undo/redo, clipboard, select all, find, Ctrl Enter, zoom,
+Ctrl Space, the line moves, Alt F4) are refused with a message. A chord
+another command holds is named with its holder and a **Replace** that
+leaves the holder without one; two defaults that collide are marked.
+The editor's fixed keys are listed read-only below.
+
+- **Storage:** a new base config slice, `keybindings`
+  (`overrides: { commandId: chord | null }`, `capture: chord | null`,
+  default `Mod+Alt+N`). `normalizeAppConfig` keeps chords canonical and
+  drops one that is no longer assignable, so the command falls back to
+  its default.
+- **One chord grammar** in `shared/keybindings.ts`: parse, canonical
+  spelling, the key-press reader, the validation, the effective chord,
+  the Electron accelerator. The renderer's old `parseChord` and the
+  palette's `formatChord` now sit on it (`formatChord` moved into
+  `src/app/keybindings/`).
+- **`KeybindingService`** resolves every chord through the overrides
+  (fed by `App` from the persisted config), rebuilds its index on each
+  change — which also fixes a stale chord: a disabled plugin's inert
+  stand-in used to keep the old chord bound — and offers `hint()` /
+  `titled()`, which every menu row, the tab and editor context menus,
+  the line-numbers tooltip and the formatting strip now print instead
+  of literal "Ctrl …" strings. A plugin menu row that runs a registered
+  command shows that command's chord.
+- **Quick capture** moved out of `main.ts` into
+  `electron/capture-hotkey.ts`: registered from the config at startup,
+  re-registered on `config:set` when the chord changed or the last try
+  failed; `shortcuts:capture-status` tells the page "In use by another
+  program".
+- Help → **Keyboard shortcuts** shows the user's capture chord; its fixed
+  rows gained *Select line*, the line moves and *Ctrl Space*.
+- Specs: `shared/keybindings.spec.ts`, keybinding cases in
+  `shared/app-config.spec.ts`, `electron/capture-hotkey.spec.ts`, override /
+  pause / stale-chord cases in `keybinding.service.spec.ts`,
+  `settings/shortcuts/shortcut-model.spec.ts` and
+  `settings-shortcuts.spec.ts` (record, Esc, reserved, Replace, hotkey in
+  use), the quick-capture row in `shortcuts-doc.spec.ts`; e2e
+  `e2e/shortcuts.spec.ts` (a rebound command runs on its new chord and
+  the View menu shows it; Replace). Docs: ADR-0073, `docs/05`, `docs/06`
+  §6.62, the manual (§18, §20).
+
 ### req-43 — CI stores the exes only for tags and manual runs
 
 Owner request, outside the roadmap list (2026-10-14). **Not yet manually

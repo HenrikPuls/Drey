@@ -797,6 +797,7 @@ stored when you leave the field or press Enter. The footer shows
 | [Assistant tools](#settings-assistant-tools) | tool groups, write/approval rules, external MCP servers |
 | [Daily notes](#settings-daily-notes) | daily folder and template behaviour |
 | [Entry format](#settings-entry-format) | the slash menu's Entry block |
+| [Keyboard shortcuts](#settings-keyboard-shortcuts) | the shortcut of every command, the quick-capture hotkey |
 | [LLM](#settings-llm) | provider, endpoint, key, model |
 | [MCP](#settings-mcp) | Drey's own vault server for other programs |
 | [Panels & plugins](#settings-panels-plugins) | panel and plugin switches, live plugin status |
@@ -835,6 +836,23 @@ The daily notes root folder (default `daily/`) and template behaviour.
 What the slash menu's **Entry** block inserts: built-in *classic* and
 *ruled* patterns or your own, with the `{{time}}` / `{{date}}` /
 `{{datetime}}` / `{{title}}` / `{{tags}}` / `{{content}}` placeholders.
+
+### Settings: Keyboard shortcuts {#settings-keyboard-shortcuts}
+
+![Keyboard shortcuts settings](img/settings-keyboard-shortcuts.png)
+
+Every command and the system-wide **quick-capture** hotkey, each with
+its shortcut. **Change** waits for you to press the new keys (Esc
+cancels); **Remove** leaves the command without a shortcut; **Reset**
+brings back the one Drey ships with. A shortcut needs `Ctrl` or `Alt`,
+or a function key (`F1`–`F12`) — a plain letter would swallow typing —
+and the editor's own keys (undo, the clipboard, find, zoom, …) cannot be
+taken; they are listed under *Fixed*. If another command already has
+the keys you press, Drey names it and offers **Replace**, which leaves
+that command without a shortcut. When another program holds the
+quick-capture keys, the row says so — choose another combination.
+Your shortcuts show everywhere at once: the menus, the command palette
+and Help → Keyboard shortcuts.
 
 ### Settings: LLM {#settings-llm}
 
@@ -903,7 +921,9 @@ brings them back.
 
 ## 20. Keyboard shortcuts
 
-`Ctrl` is `Cmd` on macOS. `Mod` below means exactly that.
+`Ctrl` is `Cmd` on macOS. `Mod` below means exactly that. These are the
+shortcuts Drey ships with; change any of them, and the quick-capture
+hotkey, in [Settings → Keyboard shortcuts](#settings-keyboard-shortcuts).
 
 | Shortcut | Action |
 | --- | --- |
@@ -926,9 +946,9 @@ brings them back.
 | `/` on an empty line | Slash menu (Entry, templates, formatting) |
 | `Esc` | Close menus, dialogs, drag operations |
 
-The command palette lists every command with its current shortcut — and
-so does Help → **Keyboard shortcuts**, as a document you can keep open
-beside your notes.
+The command palette lists every command with its current shortcut — your
+own, where you changed one — and so does Help → **Keyboard shortcuts**,
+as a document you can keep open beside your notes.
 
 ---
 

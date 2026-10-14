@@ -1,6 +1,7 @@
 import { ipcMain } from 'electron';
-import { AppConfig, IPC_CHANNELS } from '../../shared/ipc-api';
+import { AppConfig, CaptureHotkeyStatus, IPC_CHANNELS } from '../../shared/ipc-api';
 import { AppConfigStore } from '../app-config';
+import { CaptureHotkey } from '../capture-hotkey';
 import { PluginHost } from '../plugin-host';
 import { SpellcheckService } from '../spellcheck';
 
@@ -16,6 +17,8 @@ export interface ConfigHandlerDeps {
   syncVaultWatcher: () => Promise<void>;
   /** Sets the window / taskbar icon that goes with the stored theme (req-42). */
   syncWindowIcon: () => void;
+  /** The system-wide quick-capture hotkey (ADR-0073). */
+  captureHotkey: CaptureHotkey;
 }
 
 /** `config:get` / `config:set`, with the side effects a saved config triggers. */
@@ -27,8 +30,10 @@ export function registerConfigHandlers({
   syncMcpClients,
   syncVaultWatcher,
   syncWindowIcon,
+  captureHotkey,
 }: ConfigHandlerDeps): void {
   ipcMain.handle(IPC_CHANNELS.configGet, (): AppConfig => appConfig.get());
+  ipcMain.handle(IPC_CHANNELS.captureHotkeyStatus, (): CaptureHotkeyStatus => captureHotkey.status());
   ipcMain.handle(IPC_CHANNELS.configSet, async (_event, next: AppConfig): Promise<AppConfig> => {
     const prevTemplatesDir = appConfig.get().templates.dir;
     const prevTheme = appConfig.get().appearance.theme;
@@ -36,6 +41,8 @@ export function registerConfigHandlers({
     if (stored.appearance.theme !== prevTheme) {
       syncWindowIcon();
     }
+    // A no-op unless the chord changed or the last registration failed.
+    captureHotkey.sync(stored.keybindings.capture);
     // The language or a dictionary path may have changed; the next check
     // reloads rather than answering from a stale dictionary.
     spellcheck.invalidate();

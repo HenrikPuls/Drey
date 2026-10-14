@@ -70,7 +70,7 @@
       class="icon-btn lines"
       [class.on]="editor.lineNumbers()"
       (click)="editor.toggleLineNumbers()"
-      title="Toggle line numbers (Ctrl G)"
+      [title]="keys.titled('Toggle line numbers', 'editor.toggleLineNumbers')"
       aria-label="Toggle line numbers"
     >
       <app-icon name="list-ordered" [size]="14" [strokeWidth]="1.5" />
@@ -176,7 +176,9 @@
       >
         <span class="tick"></span>
         Save as…
-        <span class="ctx-key">Ctrl Shift S</span>
+        @if (keys.hint('note.saveAs'); as key) {
+          <span class="ctx-key">{{ key }}</span>
+        }
       </button>
     }
     @if (!isHelp && history.canShow(shownPath())) {

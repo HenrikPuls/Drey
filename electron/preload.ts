@@ -1,6 +1,7 @@
 import { contextBridge, ipcRenderer, IpcRendererEvent, webUtils } from 'electron';
 import {
   AppConfig,
+  CaptureHotkeyStatus,
   CustomDictionary,
   DreyApi,
   DraftSaveRequest,
@@ -207,6 +208,8 @@ const dreyApi: DreyApi = {
   getConfig: (): Promise<AppConfig> => ipcRenderer.invoke(IPC_CHANNELS.configGet),
   setConfig: (config: AppConfig): Promise<AppConfig> =>
     ipcRenderer.invoke(IPC_CHANNELS.configSet, config),
+  getCaptureHotkeyStatus: (): Promise<CaptureHotkeyStatus> =>
+    ipcRenderer.invoke(IPC_CHANNELS.captureHotkeyStatus),
   listLlmModels: (override?: LlmEndpoint): Promise<string[]> =>
     ipcRenderer.invoke(IPC_CHANNELS.llmListModels, override),
   testLlmConnection: (override?: LlmEndpoint): Promise<LlmConnectionTest> =>

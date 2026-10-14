@@ -1,0 +1,27 @@
+/* Local rules on top of settings-ui.css. */
+
+/* One command: label, chord, then Change / Remove / Reset at the right. */
+.shortcuts .chord {
+  flex: none;
+  min-width: 9em;
+  font-size: var(--set-fs-small);
+  color: var(--text-2);
+  white-space: nowrap;
+}
+
+.shortcuts .chord.none {
+  color: var(--text-3);
+}
+
+.shortcuts .chord.prompt {
+  font-family: var(--font-sans);
+}
+
+.shortcuts li.recording {
+  background: var(--hover-bg);
+}
+
+.shortcuts .note {
+  margin: 4px 0 0;
+  font-size: var(--set-fs-small);
+}

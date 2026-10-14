@@ -669,6 +669,7 @@ test.describe('manual: settings', () => {
       ['settings-diagramsformat-of-new-diagrams.png', 'settings-diagrams.png'],
       ['settings-entry-formatthe-menu-entry-block.png', 'settings-entry-format.png'],
       ['settings-gitgit-executable.png', 'settings-git.png'],
+      ['settings-keyboard-shortcutscommands-quick-capture.png', 'settings-keyboard-shortcuts.png'],
       ['settings-llmlocal-model-connection.png', 'settings-llm.png'],
       ['settings-mcpvault-server-for-other-apps.png', 'settings-mcp.png'],
       ['settings-panels-pluginstoggle-panels-plugins.png', 'settings-panels-plugins.png'],

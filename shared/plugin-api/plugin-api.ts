@@ -317,7 +317,11 @@ export interface CodeMirrorModules {
 export interface PluginCommand {
   readonly id: string;
   readonly label: string;
-  /** Chord string, e.g. `Mod+Shift+K` (`Mod` = Ctrl/Cmd). Conflicts: first registration wins. */
+  /**
+   * The DEFAULT chord, e.g. `Mod+Shift+K` (`Mod` = Ctrl/Cmd). The user may
+   * replace or remove it in Settings → Keyboard shortcuts (ADR-0073), keyed
+   * by `id`. Conflicts between defaults: first registration wins.
+   */
   readonly keybinding?: string;
   /**
    * `payload` carries optional context from the invoker (SDK 1.9 — e.g.

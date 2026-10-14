@@ -323,6 +323,22 @@ export interface WidgetsConfig {
 }
 
 /**
+ * Settings category "Keyboard shortcuts" (milestone 75, ADR-0073). Chords
+ * use the grammar of `shared/keybindings.ts`, stored canonical.
+ */
+export interface KeybindingsConfig {
+  /**
+   * Command id → chord. A chord replaces the command's default, `null`
+   * leaves the command without a shortcut, a missing id keeps the
+   * default. Ids of commands this build does not know (a disabled plugin)
+   * are kept, so the choice survives.
+   */
+  overrides: Record<string, string | null>;
+  /** The system-wide quick-capture hotkey; `null` = none. */
+  capture: string | null;
+}
+
+/**
  * Settings category "Plugins": which plugins are switched off entirely
  * (never imported, main or renderer side; ADR-0044). Same exception-list
  * pattern as `WidgetsConfig` -- a plugin is enabled unless its id is here,
@@ -745,6 +761,7 @@ export interface AppConfig {
   vault: VaultConfig;
   widgets: WidgetsConfig;
   plugins: PluginsConfig;
+  keybindings: KeybindingsConfig;
   actions: {
     templates: ActionTemplate[];
     triggers: ActionTrigger[];

@@ -1,6 +1,7 @@
 import { Injectable, inject } from '@angular/core';
 import { KeybindingService } from '../keybindings';
 import { EditorService } from '../services/editor.service';
+import { SettingsService } from '../services/settings.service';
 import { buildShortcutsMarkdown } from './shortcuts-doc';
 
 /**
@@ -20,6 +21,7 @@ import { buildShortcutsMarkdown } from './shortcuts-doc';
 export class HelpService {
   private readonly editor = inject(EditorService);
   private readonly keys = inject(KeybindingService);
+  private readonly settings = inject(SettingsService);
 
   /** Where the bundled manual lives under the app origin. */
   static readonly MANUAL_URL = 'manual/manual.md';
@@ -49,7 +51,7 @@ export class HelpService {
     this.editor.openHelpDoc(
       HelpService.SHORTCUTS_PATH,
       'Keyboard shortcuts',
-      buildShortcutsMarkdown(this.keys.all()),
+      buildShortcutsMarkdown(this.keys.all(), this.settings.config()?.keybindings.capture),
     );
   }
 }

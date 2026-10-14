@@ -155,7 +155,10 @@ restore, keybindings, spellcheck, the MCP vault server, the LLM
 
 - `main.ts` — composition root: the order of startup (splash, services,
   protocols, IPC, plugin activation, window), the single-instance lock,
-  the quick-capture hotkey and the app lifecycle. It builds nothing
+  the quick-capture hotkey (`capture-hotkey.ts`: the one
+  `globalShortcut` registration, its chord from `keybindings.capture`,
+  re-registered on `config:set`, its success reported over
+  `shortcuts:capture-status` — ADR-0073) and the app lifecycle. It builds nothing
   itself: `app-services.ts` (`buildAppServices` → one typed
   `AppServices`), `main-window.ts` (`MainWindowHost`: window creation
   and the save-before-exit prompt), `app-protocols.ts` (the privileged
@@ -512,7 +515,13 @@ Keep it in step whenever a component boundary changes (CLAUDE.md's
   word/char count, a context hint (the drag instruction while a panel is
   moving), and the Settings entry.
 - `KeybindingService` (`src/app/keybindings/`) — a capture-phase
-  `keydown` listener mapping chord strings onto `Command`s, plus a
+  `keydown` listener mapping chord strings onto `Command`s. A command's
+  `keybinding` is its default; the chord in effect is the user's override
+  (`keybindings.overrides`, fed in by `App` from the persisted config,
+  `null` = none — ADR-0073), and the index is rebuilt from the commands
+  on every change. `hint(id)` / `titled()` are what every menu row,
+  context menu and tooltip prints, so none holds a chord of its own;
+  `pause()` lets the Settings recorder read a raw key press. Plus a
   capture-phase `mouseup` listener for `Command.mouseButton`
   (3 = XButton1/back, 4 = XButton2/forward, window-wide; the `mouseup`
   is swallowed so Chromium's own history default action never fires,
@@ -689,7 +698,9 @@ Keep it in step whenever a component boundary changes (CLAUDE.md's
   "Assistant tools" (the `tools` slice: group switches, write and
   approval rules, the external MCP servers — ADR-0063),
   "Daily notes", "Entry format" (what the slash menu's Entry block
-  inserts, ADR-0022), "LLM", "MCP", "Panels & plugins" (`widgets.disabled` +
+  inserts, ADR-0022), "Keyboard shortcuts" (the `keybindings` slice:
+  a recorded chord per command and the quick-capture hotkey, with
+  Replace on a conflict — ADR-0073), "LLM", "MCP", "Panels & plugins" (`widgets.disabled` +
   `plugins.disabled` + each discovered plugin's live status),
   "Spelling", "Vault" (`vault.watch`, the opt-in external-change
   watcher, ADR-0045; `vault.updateLinksOnRename`, ADR-0059; `vault.history`, ADR-0060) — then **plugin-contributed categories** (sorted by
@@ -867,7 +878,7 @@ decision. (Seams — what a *plugin* can extend — are the table above.)
 
 | Feature | Files | Owner | Decision |
 | --- | --- | --- | --- |
-| Quick capture (global hotkey → today's note + new entry) | `electron/main.ts`, `electron/daily-note.ts`, `src/app/services/EditorService` | Base | ADR-0002 |
+| Quick capture (global hotkey → today's note + new entry) | `electron/main.ts`, `electron/capture-hotkey.ts`, `electron/daily-note.ts`, `src/app/services/EditorService` | Base | ADR-0002, ADR-0073 |
 | Daily notes (calendar open, drafts, daily dir config) | `electron/daily-note.ts`, `src/app/calendar/`, `src/app/services/daily-note.service.ts` | Base | — |
 | Entry capture (`/` menu Entry block, entry format) | `src/app/editor/slash-commands.ts`, Settings → "Entry format" | Base | ADR-0022, ADR-0057 |
 | Editor modes + Live Preview (conceal, block widgets) | `src/app/editor/` (`editor.ts`, `markdown-surface/`, `live-preview/`) | Base | ADR-0008, ADR-0009 |
@@ -916,7 +927,7 @@ decision. (Seams — what a *plugin* can extend — are the table above.)
 | MCP vault server (for other programs) | `electron/mcp/` | Base | ADR-0021 |
 | Spellcheck (+ language auto-detect) | `electron/spellcheck.ts`, `src/app/editor/spellcheck/` | Base | ADR-0013, ADR-0056 |
 | Appearance (accent, scale, fonts) + themes | `src/app/services/appearance.service.ts`, `theme.service.ts`, `src/app/settings/` | Base | ADR-0020, ADR-0035 |
-| Keybindings + commands | `src/app/keybindings/` | Base | — |
+| Keybindings + commands, configurable shortcuts | `src/app/keybindings/`, `shared/keybindings.ts` (chord grammar), Settings → "Keyboard shortcuts" (`src/app/settings/shortcuts/`), `electron/capture-hotkey.ts` | Base | ADR-0073 |
 | Palette (files / commands, `Mod+P`) | `src/app/palette/` | Base | M59 |
 | Panes, splits, tab DnD, pinning | `src/app/panes/`, `src/app/dnd/`, `src/app/tab-bar/` | Base | ADR-0037–0039 |
 | Docks, panels, icon strips, layout state | `src/app/dock/` | Base | ADR-0019 (+ M69 later change), ADR-0034 |

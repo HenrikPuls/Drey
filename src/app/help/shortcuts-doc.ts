@@ -1,14 +1,15 @@
-import type { Command } from '../keybindings';
-import { formatChord } from '../palette';
+import { DEFAULT_CAPTURE_CHORD } from '../../../shared/keybindings';
+import { formatChord, type Command } from '../keybindings';
 
 /**
  * Rows that are real shortcuts but live outside the command registry:
- * CodeMirror's own keymap, menu-standard editing chords, the OS-wide
- * capture hotkey, and pure editor typing triggers. Kept in step with the
- * user manual's shortcut section; the registry table above them is
- * generated and can never go stale.
+ * CodeMirror's own keymap, menu-standard editing chords and pure editor
+ * typing triggers. They cannot be changed (ADR-0073); Settings → Keyboard
+ * shortcuts lists them too. Kept in step with the user manual's shortcut
+ * section; the registry table above them is generated and can never go
+ * stale.
  */
-const FIXED_ROWS: ReadonlyArray<{ keys: string; label: string }> = [
+export const FIXED_SHORTCUTS: ReadonlyArray<{ keys: string; label: string }> = [
   { keys: 'Ctrl Z', label: 'Undo' },
   { keys: 'Ctrl Shift Z', label: 'Redo' },
   { keys: 'Ctrl X', label: 'Cut' },
@@ -16,10 +17,12 @@ const FIXED_ROWS: ReadonlyArray<{ keys: string; label: string }> = [
   { keys: 'Ctrl V', label: 'Paste' },
   { keys: 'Ctrl A', label: 'Select all' },
   { keys: 'Ctrl F', label: 'Find in note' },
+  { keys: 'Ctrl L', label: 'Select line' },
+  { keys: 'Alt Up / Alt Down', label: 'Move line up / down' },
   { keys: 'Ctrl Enter', label: 'Toggle task done (on a task line)' },
   { keys: 'Ctrl + / Ctrl - / Ctrl 0', label: 'Zoom editor content in / out / reset' },
   { keys: 'Ctrl Mouse wheel', label: 'Zoom editor content' },
-  { keys: 'Ctrl Alt N', label: 'Quick capture (system-wide, while Drey runs)' },
+  { keys: 'Ctrl Space', label: 'Open the completion list' },
   { keys: 'Esc', label: 'Close a menu, dialog or the palette' },
   { keys: '/', label: 'Open the block menu (at the start of an empty line)' },
   { keys: '[[', label: 'Autocomplete a note name (wikilink)' },
@@ -55,19 +58,23 @@ function mouseLabel(command: Command): string {
  * shortcuts that live outside the registry. Pure: the caller supplies the
  * commands, tests supply fakes.
  */
-export function buildShortcutsMarkdown(commands: readonly Command[]): string {
+export function buildShortcutsMarkdown(
+  commands: readonly Command[],
+  capture: string | null = DEFAULT_CAPTURE_CHORD,
+): string {
   const rows = [...commands].sort((a, b) => a.label.localeCompare(b.label));
   const lines: string[] = [
     '# Keyboard shortcuts',
     '',
     'Generated from this app\u2019s command registry \u2014 the same list the',
     'command palette (Ctrl Shift P) shows, so it always matches what this',
-    'build can do.',
+    'build can do. Change them in Settings → Keyboard shortcuts.',
     '',
     '## Commands',
     '',
     '| Command | Shortcut |',
     '| --- | --- |',
+    `| Quick capture (system-wide, while Drey runs) | ${capture ? formatChord(capture) : '—'} |`,
   ];
   for (const command of rows) {
     const shortcut = command.keybinding
@@ -85,7 +92,7 @@ export function buildShortcutsMarkdown(commands: readonly Command[]): string {
     '| Shortcut | Action |',
     '| --- | --- |',
   );
-  for (const row of FIXED_ROWS) {
+  for (const row of FIXED_SHORTCUTS) {
     lines.push(`| ${row.keys} | ${row.label} |`);
   }
   lines.push('');

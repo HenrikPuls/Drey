@@ -343,11 +343,12 @@ gotchas) and the **Feature → files** index live in
 Main process (`electron/`):
 
 - `main.ts` — composition root: the order of startup, single-instance
-  lock, quick-capture hotkey, app lifecycle; over `app-services.ts`
+  lock, app lifecycle; over `app-services.ts`
   (`buildAppServices`: every long-lived object, one typed `AppServices`),
   `main-window.ts` (`MainWindowHost`: the sandboxed window + the
   save-before-exit prompt), `app-protocols.ts` (privileged schemes),
-  `startup-reports.ts`, `app-paths.ts`
+  `startup-reports.ts`, `app-paths.ts`, `capture-hotkey.ts` (the
+  quick-capture hotkey, its chord from config — ADR-0073)
 - `vault-manager.ts` — `VaultManager`: the multi-vault registry
   (ADR-0051) + all vault/note file IO over `safe-file.ts` atomic writes;
   mutations record in the own-write ledger
@@ -410,7 +411,9 @@ Renderer (`src/app/`):
   the panel handles input only, over `FilesTreeState` and
   `FileOperationsService` in `dock/panels/`);
   `calendar/`, `windows/`
-- `keybindings/` — `KeybindingService`: commands + chords; `palette/` —
+- `keybindings/` — `KeybindingService`: commands + chords, through the
+  user's overrides (Settings → Keyboard shortcuts, ADR-0073; the chord
+  grammar is `shared/keybindings.ts`); `palette/` —
   the quick switcher / command palette (M59)
 - `link-update/` — the rename/move link-integrity dialog (ADR-0059)
 - `conflict/` + `history/` — save-conflict merge + file-history UIs

@@ -6,6 +6,7 @@
  */
 import { BrowserWindow } from 'electron';
 import { AppConfigStore } from '../app-config';
+import { CaptureHotkey } from '../capture-hotkey';
 import { DailyNoteManager } from '../daily-note';
 import { ExternalFileGate } from '../external-open';
 import { NoteHistoryStore } from '../history/note-history-store';
@@ -65,6 +66,7 @@ export interface IpcHandlerDeps {
   syncMcpHttp: () => Promise<void>;
   syncVaultWatcher: () => Promise<void>;
   syncWindowIcon: () => void;
+  captureHotkey: CaptureHotkey;
   fullVaultRefresh: () => void;
   announceVaultChange: (changes: ExternalVaultChanges) => void;
   pluginHost: PluginHost;

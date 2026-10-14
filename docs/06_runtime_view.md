@@ -3045,3 +3045,40 @@ of the call, and a window that does not answer reads as "not open".
 `dirty`; `vault_move` sends `moved` (the tab is retargeted) and
 `vault_delete` sends `closed`. A program on the MCP server takes the
 same path with `mcp.yolo` as its rule.
+
+## 6.62 Record a shortcut → the registry and the hotkey follow (milestone 75, [ADR-0073](09_architecture_decisions/0073-configurable-shortcuts.md))
+
+```mermaid
+sequenceDiagram
+    actor User
+    participant Page as SettingsShortcuts (renderer)
+    participant KS as KeybindingService
+    participant SS as SettingsService (draft)
+    participant Main as config:set (main)
+    participant CH as CaptureHotkey (main)
+
+    User->>Page: Change on a row
+    Page->>KS: pause() — chords are read, not run
+    User->>Page: presses Ctrl+Shift+K
+    Page->>Page: chordFromKeyPress → chordProblem (needs Ctrl/Alt or F-key, not reserved)
+    alt another row holds the chord
+        Page-->>User: "Ctrl Shift K is held by …" + Replace
+        User->>Page: Replace — the holder is left without a shortcut
+    end
+    Page->>KS: resume
+    Page->>SS: setKeybindings(slice) — the self-saving draft
+    SS->>Main: config:set
+    Main->>Main: normalizeAppConfig (invalid chords dropped)
+    Main->>CH: sync(keybindings.capture) — re-register only if changed or failed
+    Main-->>SS: stored config
+    SS->>KS: (App effect) setOverrides(config.keybindings.overrides)
+    KS->>KS: rebuild the chord index, bump revision
+    Note over KS: menus, palette, tooltips and the shortcuts page print the new chord
+    Page->>Main: shortcuts:capture-status
+    Main-->>Page: { chord, registered } — "In use by another program" when false
+```
+
+The registry never reads the Settings draft: a chord takes effect when
+it is stored. A plugin command's override is keyed by its id, so it
+applies whenever the plugin registers the command — also after the
+plugin was disabled and enabled again.

@@ -162,6 +162,85 @@ describe('KeybindingService', () => {
     expect(runs).toBe(0); // the command itself still waits for mouseup
   });
 
+  it('runs a command on the user\'s chord instead of its default (ADR-0073)', () => {
+    let runs = 0;
+    service.register({ id: 't.o1', label: 'O1', keybinding: 'Mod+Alt+1', run: () => runs++ });
+    service.setOverrides({ 't.o1': 'Mod+Alt+2' });
+
+    press({ key: '1', ctrlKey: true, altKey: true });
+    expect(runs).toBe(0);
+    press({ key: '2', ctrlKey: true, altKey: true });
+    expect(runs).toBe(1);
+    expect(service.chordFor('t.o1')).toBe('Mod+Alt+2');
+    expect(service.defaultChord('t.o1')).toBe('Mod+Alt+1');
+    expect(service.hint('t.o1')).toBe('Ctrl Alt 2');
+  });
+
+  it('a null override leaves the command without a shortcut', () => {
+    let runs = 0;
+    service.register({ id: 't.o2', label: 'O2', keybinding: 'Mod+Alt+3', run: () => runs++ });
+    service.setOverrides({ 't.o2': null });
+
+    press({ key: '3', ctrlKey: true, altKey: true });
+
+    expect(runs).toBe(0);
+    expect(service.hint('t.o2')).toBe('');
+    expect(service.all().find((c) => c.id === 't.o2')?.keybinding).toBeUndefined();
+  });
+
+  it('an override registered before its command applies when the command arrives', () => {
+    let runs = 0;
+    service.setOverrides({ 't.o3': 'Mod+Alt+4' });
+    service.register({ id: 't.o3', label: 'O3', run: () => runs++ });
+
+    press({ key: '4', ctrlKey: true, altKey: true });
+
+    expect(runs).toBe(1);
+  });
+
+  it('the user\'s chord wins over another command\'s default with the same keys', () => {
+    const calls: string[] = [];
+    service.register({ id: 't.o4', label: 'O4', keybinding: 'Mod+Alt+5', run: () => calls.push('default') });
+    service.register({ id: 't.o5', label: 'O5', run: () => calls.push('chosen') });
+    service.setOverrides({ 't.o5': 'Mod+Alt+5' });
+
+    press({ key: '5', ctrlKey: true, altKey: true });
+
+    expect(calls).toEqual(['chosen']);
+  });
+
+  it('re-registering without a chord drops the old one (a disabled plugin\'s stand-in)', () => {
+    let runs = 0;
+    service.register({ id: 't.o6', label: 'O6', keybinding: 'Mod+Alt+6', run: () => runs++ });
+    service.register({ id: 't.o6', label: 'O6', run: () => {} });
+
+    const event = press({ key: '6', ctrlKey: true, altKey: true });
+
+    expect(runs).toBe(0);
+    expect(event.defaultPrevented).toBe(false);
+  });
+
+  it('matches nothing while paused, and again once resumed', () => {
+    let runs = 0;
+    service.register({ id: 't.o7', label: 'O7', keybinding: 'Mod+Alt+7', run: () => runs++ });
+
+    const resume = service.pause();
+    press({ key: '7', ctrlKey: true, altKey: true });
+    expect(runs).toBe(0);
+    resume();
+    resume(); // idempotent
+    press({ key: '7', ctrlKey: true, altKey: true });
+    expect(runs).toBe(1);
+  });
+
+  it('titled() appends the chord to a tooltip only when there is one', () => {
+    service.register({ id: 't.o8', label: 'O8', keybinding: 'Mod+G', run: () => {} });
+    service.register({ id: 't.o9', label: 'O9', run: () => {} });
+
+    expect(service.titled('Toggle', 't.o8')).toBe('Toggle (Ctrl G)');
+    expect(service.titled('Other', 't.o9')).toBe('Other');
+  });
+
   it('leaves the mousedown of unbound buttons alone', () => {
     service.register({ id: 't.k', label: 'K', mouseButton: 3, run: () => {} });
 
