@@ -40,7 +40,7 @@ export function isDailyNotePath(path: string, dailyDir: string): boolean {
 /** The fence tag around persisted tool calls/results/edit outcomes. */
 export const TOOL_FENCE_TAG = 'drey-tool';
 
-/** The fence tag around one ask turn's retrieved-vault citations (ADR-0055). */
+/** The fence tag around one ask turn's vault-context citations (ADR-0072). */
 export const CONTEXT_FENCE_TAG = 'drey-context';
 
 /** Frontmatter `kind:` marking an assistant conversation note (ADR-0048). */
@@ -83,7 +83,7 @@ export interface ChatNoteTurn {
   attachments: ChatNoteAttachment[];
   /** ```drey-tool lines in persisted order. */
   tool: ChatToolEntry[];
-  /** ```drey-context citations (ADR-0055): what this turn retrieved; assistant turns only. */
+  /** ```drey-context citations (ADR-0072): what this turn was given; assistant turns only. */
   context: ChatContextEntry[];
   /** Why a chip-on turn retrieved nothing (`null` when off or hits came back). */
   contextStatus: ChatContextStatus | null;
@@ -103,15 +103,20 @@ export interface ChatContextEntry {
 }
 
 /**
- * What happened when this turn asked the vault (ADR-0055): persisted as a
+ * What happened when this turn asked the vault (ADR-0072): persisted as a
  * `{"status":…}` line inside the ```drey-context fence whenever the Vault
  * chip was on but produced NO hits — so the panel can say WHY nothing
- * came back (floor too high / retrieval disabled / retrieval failed /
- * the custom selection references no registered vault) instead of
- * staying silent. Plain hits carry no status, just cites.
+ * came back (nothing found / no section index / the lookup failed / the
+ * custom selection references no registered vault) instead of staying
+ * silent. Plain hits carry no status, just cites.
+ *
+ * `disabled` and the `floor` of `empty` are only read, never written:
+ * notes from before milestone 80 carry them (the embedding retrieval was
+ * switched off / nothing scored above its floor).
  */
 export type ChatContextStatus =
-  | { kind: 'empty'; floor: number }
+  | { kind: 'empty'; floor?: number }
+  | { kind: 'unavailable' }
   | { kind: 'disabled' }
   | { kind: 'unregistered' }
   | { kind: 'error'; message: string };
@@ -299,8 +304,14 @@ function parseContextLine(line: string): ChatContextEntry | ChatContextStatus | 
   }
   const status = obj['status'];
   if (typeof status === 'string') {
-    if (status === 'empty' && typeof obj['floor'] === 'number' && Number.isFinite(obj['floor'])) {
-      return { kind: 'empty', floor: obj['floor'] };
+    if (status === 'empty') {
+      const floor = obj['floor'];
+      return typeof floor === 'number' && Number.isFinite(floor)
+        ? { kind: 'empty', floor }
+        : { kind: 'empty' };
+    }
+    if (status === 'unavailable') {
+      return { kind: 'unavailable' };
     }
     if (status === 'disabled') {
       return { kind: 'disabled' };
@@ -541,7 +552,12 @@ export function contextEntryLine(entry: ChatContextEntry): string {
 export function contextStatusLine(status: ChatContextStatus): string {
   switch (status.kind) {
     case 'empty':
-      return JSON.stringify({ status: 'empty', floor: status.floor });
+      return JSON.stringify({
+        status: 'empty',
+        ...(status.floor !== undefined ? { floor: status.floor } : {}),
+      });
+    case 'unavailable':
+      return JSON.stringify({ status: 'unavailable' });
     case 'disabled':
       return JSON.stringify({ status: 'disabled' });
     case 'unregistered':

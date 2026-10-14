@@ -131,9 +131,6 @@ export function buildAppServices(deps: AppServicesDeps): AppServices {
     getSearchProvider: () => pluginHost?.getSectionSearchProvider() ?? null,
     // The task-index seam (SDK 1.11): reads the tasks plugin's provider.
     getTaskProvider: () => pluginHost?.getTaskQueryProvider() ?? null,
-    // The semantic seam (SDK 1.18): reads the assistant plugin's
-    // provider while its retrieval is enabled.
-    getSemanticProvider: () => pluginHost?.getSemanticSearchProvider() ?? null,
     getConfig: () => appConfig.get(),
     confirmWrite: (request) => deps.mcpWriteBridge.requestConfirmation(request),
     // A move or a delete has no diff to show: the approval dialog asks,

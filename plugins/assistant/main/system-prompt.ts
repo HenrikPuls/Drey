@@ -43,10 +43,9 @@ export interface PromptVault {
 export interface PromptTools {
   /**
    * The vault tools, limited to the Vault chip's vaults: the reading ones
-   * always, `vault_retrieve` while semantic retrieval is on, the changing
-   * ones unless the vault group's rule is `off`.
+   * always, the changing ones unless the vault group's rule is `off`.
    */
-  vault?: { write: 'off' | 'confirm' | 'auto'; retrieve: boolean };
+  vault?: { write: 'off' | 'confirm' | 'auto' };
   tasks?: boolean;
   templates?: { write: 'confirm' | 'auto' };
   /**
@@ -155,9 +154,7 @@ function environment(input: SystemPromptInput): string {
 
 function vaultLines(input: SystemPromptInput, vault: NonNullable<PromptTools['vault']>): string[] {
   const lines = [
-    `- vault_list, vault_search, ${vault.retrieve ? 'vault_retrieve, ' : ''}vault_read — look through the vault: list what exists, search for exact words (also inside one file)${
-      vault.retrieve ? ', find sections by meaning' : ''
-    }, read a file or part of one. ${
+    `- vault_list, vault_search, vault_read — look through the vault: list what exists, search for exact words (also inside one file), read a file or part of one. ${
       input.contextBlock !== null
         ? 'The vault context above is a first selection; when it does not cover the question, search and read further instead of answering from thin context.'
         : 'Search first, then read what you found before you answer.'

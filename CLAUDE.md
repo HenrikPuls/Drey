@@ -176,29 +176,22 @@ toolchain is removable by deleting `.tools/`). Never assume a bare `node`,
   ADR-0010 later change; plain in memory and over IPC. **No timeout on
   generation** — a local model may think for minutes; the user cancels
   instead ([ADR-0014](docs/09_architecture_decisions/0014-no-chat-timeout-cancellable-tasks.md)).
-- **Semantic vault retrieval** (milestone 41,
-  [ADR-0055](docs/09_architecture_decisions/0055-semantic-vault-retrieval.md)):
-  the assistant's **Vault chip** retrieves the top-k note sections most
-  similar to the question into the system prompt. Embeddings via
-  transformers.js **WASM-only in a worker thread** (the native
-  `onnxruntime-node`/`sharp` deps are stubbed; the WASM runtime is
-  injected via `globalThis[Symbol.for('onnxruntime')]`), one JSON index
-  per vault under `<userData>/plugins/assistant/semantic-index/` with
-  brute-force cosine — no sqlite-vec, no native modules, no database.
-  **Chat notes are excluded** (`chats/` would embed the literal question
-  text of past conversations and displace the notes that answer them;
-  ADR-0055 later-change).
-  Owned by the assistant plugin; retrieval hydrates
-  section text fresh from the vault at answer time. Since milestone 68
-  the index also serves the Search panel's **Semantic** toggle and the
-  `vault_retrieve` tool through a base
-  `SemanticSearchProvider` seam (SDK 1.18, registered only while
-  retrieval is enabled). Since milestone 71 the chip-on ask is
-  **hybrid-agentic** ([ADR-0069](docs/09_architecture_decisions/0069-agentic-vault-exploration.md)):
-  the top-k block stays as the floor, and the vault tools let
-  tool-capable models look further (since milestone 77 the base set,
-  see "One vault toolset" below); a cold/stale vault index
-  self-heals via a background rebuild instead of browsing empty.
+- **Vault context by text search** (milestone 80,
+  [ADR-0072](docs/09_architecture_decisions/0072-vault-context-by-text-search.md)):
+  with the assistant's **Vault chip** on, a plain ask carries the note
+  sections that contain words of the question — the words searched in
+  the tags plugin's section index through the SDK's section-search seam,
+  ranked in `plugins/assistant/shared/vault-context.ts` (a rare word
+  weighs more, a word in the heading more still), the best four in the
+  system prompt. **There is no embedding model and no vector index**:
+  the retrieval of ADR-0055 (transformers.js, ONNX, the Search panel's
+  Semantic toggle, `vault_retrieve`, the SDK's semantic seam) was
+  removed and is not to be re-proposed (`specs/decisions.md`). **Chat
+  notes are excluded** (`chats/` contains the literal question text of
+  past conversations). The block is a first selection
+  ([ADR-0069](docs/09_architecture_decisions/0069-agentic-vault-exploration.md)):
+  the vault tools let tool-capable models look further (see "One vault
+  toolset" below).
 - **Manual refresh, plus an opt-in watcher.** By default there is no file
   watcher ([ADR-0018](docs/09_architecture_decisions/0018-manual-refresh-no-file-watcher.md)):
   a manual refresh runs one full round in main (index rebuild + a
@@ -247,7 +240,7 @@ toolchain is removable by deleting `.tools/`). Never assume a bare `node`,
   description, not in the prompt. Every prompt text and loop message is
   in `specs/classifier-spec.md`.
 - **One vault toolset** (milestone 77, ADR-0071): `vault_list`,
-  `vault_search`, `vault_retrieve`, `vault_read`, `vault_edit`,
+  `vault_search`, `vault_read`, `vault_edit`,
   `vault_write`, `vault_move`, `vault_delete` in `electron/mcp/tools/`
   — one implementation for programs on Drey's MCP server and for the
   assistant. Every call carries what it may do (`VaultCallOptions`):
@@ -379,8 +372,8 @@ Main process (`electron/`):
   servers, `web_search`, `web_fetch`, the assistant toolbox (ADR-0063)
 - `plugin-host/` — discovery, activation/quarantine, the per-plugin
   context (`plugin-context.ts`: `ctx.vault`, `ctx.llm`), per-plugin config,
-  save/vault hooks, the section-search **and** semantic-search provider
-  slots, the `.zip` installer (ADR-0044/0068)
+  save/vault hooks, the section-search provider slot, the `.zip`
+  installer (ADR-0044/0068)
 - `spellcheck.ts` — nspell + Hunspell dictionaries; `pdf-export.ts` — the
   "Export as PDF…" flow
 - `safe-file.ts` — atomic writes + guarded config reads (data safety);
@@ -451,15 +444,14 @@ Plugins (`plugins/<id>/`, ADR-0044 — each `plugin.json` + `main/` +
 `dist-electron/plugins/<id>/`):
 
 - `tags/` — tag data owner: section index, prefix colors, rename/merge,
-  the Search panel incl. the Semantic toggle over the base seam
-  (ADR-0017, M33/37/53, M68)
+  the Search panel (ADR-0017, M33/37/53)
 - `tasks/` — Tasks panel + per-vault task index, inline metadata
   (ADR-0033)
 - `templates/` — Templates panel, slash-menu template entries, snippets
   (M46)
 - `assistant/` — Assistant panel: chat notes (ADR-0048), Actions, live
-  edit (ADR-0049), the system prompt (ADR-0071), semantic retrieval
-  (ADR-0055/0069 — it also registers the `SemanticSearchProvider`)
+  edit (ADR-0049), the system prompt (ADR-0071), the Vault chip's
+  context block from text search (ADR-0072)
 - `meeting/` — `.ics`/`.msg` meeting-section import (ADR-0041)
 - `browser/` — the in-editor browser tab (ADR-0042)
 - `ocr/` — vision-LLM OCR on images (ADR-0050)

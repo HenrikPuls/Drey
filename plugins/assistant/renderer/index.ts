@@ -13,7 +13,6 @@ import { createRunningTasks } from './running-tasks.js';
 import { createAssistantState, type AssistantPorts } from './state.js';
 import {
   actionsSettingsPage,
-  retrievalSettingsPage,
   SELECTION_BUTTON_SETTING,
 } from './settings-pages.js';
 import { promptEntriesFrom, promptsDirFor } from './prompts.js';
@@ -386,9 +385,6 @@ const plugin: PluginRendererModule = {
         selectionButtonOn = on;
       }),
     );
-    // The semantic retrieval page is plugin-config driven (not appConfig),
-    // so it does not need the patch announcement.
-    api.ui.registerSettingsPage(retrievalSettingsPage(api));
 
     void refreshConfig();
   },

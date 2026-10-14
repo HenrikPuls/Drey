@@ -29,9 +29,10 @@ An AI-powered knowledge hub for note-taking and task automation.
 
 ## Tech Stack
 
-Electron + Angular/TypeScript, CodeMirror 6 (editor), transformers.js
-(embeddings, WASM-only; brute-force cosine over a JSON index per vault,
-ADR-0055 — no sqlite-vec), OpenAI-API-compatible backend (LLM backend), Electron Builder (packaging).
+Electron + Angular/TypeScript, CodeMirror 6 (editor), OpenAI-API-compatible
+backend (LLM backend), Electron Builder (packaging). No embedding model
+and no vector index — the assistant's vault context is text search
+(ADR-0072).
 No file watcher by default — vault is re-read on demand; opt-in chokidar
 watcher for external changes (ADR-0045).
 
@@ -44,9 +45,9 @@ Open work only. Everything implemented lives in
 lives in [`decisions.md`](decisions.md). When an item ships, move it to the
 changelog and delete it here — no shipped history on this page.
 
-**Status (2026-10-13):** version 0.6.0, milestones 1–74 and 76–79
+**Status (2026-10-14):** version 0.6.0, milestones 1–74 and 76–80
 shipped. Milestone ids are assigned when work starts — check
-`changelog.md` for the highest used (latest: milestone 79; milestone 75
+`changelog.md` for the highest used (latest: milestone 80; milestone 75
 is assigned to "Configurable shortcuts" below; latest requirement id: req-42, the Cyberpunk app mark —
 an owner request outside the list, shipped in the same step).
 Items A1–A5 of the architectural cleanup shipped on 2026-10-13
@@ -59,8 +60,9 @@ Items A1–A5 of the architectural cleanup shipped on 2026-10-13
 ### Now (small, daily value)
 
 The assistant tool rework (owner request, outside the list, 2026-10-13)
-shipped as milestones 76–79 — see the changelog; all four await the
-owner's verification.
+shipped as milestones 76–79, and the removal of the embedding retrieval
+(owner request, outside the list, 2026-10-14) as milestone 80 — see the
+changelog; all five await the owner's verification.
 
 3. **Configurable shortcuts (milestone 75).** One user-defined binding
    per command, stored locally in the app config (never in the vault).
@@ -121,16 +123,16 @@ rest are kept so they still match `docs/11`.
   config. Moving the existing slices changes the settings file —
   ⚠️ owner decision, later change to ADR-0010.
 - **A7 — One generic service registry between plugins.** Three provider
-  slots (section search, semantic search, task query) were each added to
+  slots (section search, task query; a third, semantic search, went
+  with milestone 80) were each added to
   the base by hand, and the host names the assistant
   (`assistantToolbox`, `tagSuggester`, `origin: 'assistant'`). Before a
   fourth provider: a typed `provide` / `get` registry in the SDK.
   ⚠️ Needs an ADR; a real alternative, not a refactoring.
 - **A8 — Large modules, when next touched.** `markdown-surface.ts`,
   `vault-manager.ts` (vault registry apart from file operations; delete
-  the sidecar plumbing), `dock.service.ts`, the assistant's
-  `renderer/state.ts` and `main/semantic/service.ts`. No milestone of its
-  own.
+  the sidecar plumbing), `dock.service.ts` and the assistant's
+  `renderer/state.ts`. No milestone of its own.
 - **A9 — Make `docs/05` and `docs/06` readable.** Move the
   milestone-by-milestone record (§5.1–§5.40) into an archive file and
   group the 57 runtime flows by topic. Changes section numbers that
@@ -185,8 +187,8 @@ Follow-ups of A1–A5 (found on the way, none started):
   main; id unrouted in `electron/llm/providers/presets.ts`.
 - **Req-22 remainder** — context-menu "add meeting log" + per-day
   appointment picker; needs a live calendar source.
-- **Shared note parse for the per-vault indexes** — tags, tasks,
-  backlinks and the semantic index each scan every `.md` on their own;
+- **Shared note parse for the per-vault indexes** — tags, tasks and
+  backlinks each scan every `.md` on their own;
   only worth it once a large vault makes refresh slow.
 
 ### Follow-ups of shipped milestones (none committed)
@@ -203,6 +205,12 @@ Follow-ups of A1–A5 (found on the way, none started):
   vaults; deleting a folder; a per-call cache of file contents when one
   search reads a large vault; `tasks_list` and the template tools for a
   vault other than the active one.
+- **Milestone 80 (vault context by text search, ADR-0072):** the
+  context block reads the section index, not unsaved buffers; a question
+  finds only sections that contain its words — no stemming beyond
+  part-word matching, no synonyms (a tool-capable model searches further
+  itself); the number of sections (4) is fixed; the templates folder is
+  not in the section index and so never rides as context.
 - **Milestone 79 (web search, ADR-0063):** a key per search provider
   (switching the provider clears the one key); a config-change event for
   plugins, so the Web chip follows Settings at once instead of when the
@@ -214,9 +222,8 @@ Follow-ups of A1–A5 (found on the way, none started):
   (the abort signal does not reach the vault tools, see milestone 76);
   an edit of a chat note or of a file opened from outside the vaults
   keeps the whole-document reply form (and such a file cannot be
-  live-edited); the tag and semantic search of
-  `vault_search` / `vault_retrieve` read their indexes, not unsaved
-  buffers; several attached files as edit targets.
+  live-edited); the tag filter of `vault_search` reads the
+  section index, not unsaved buffers; several attached files as edit targets.
 - **Milestone 64 (draw.io, ADR-0064):** dirty state / manual save for plugin
   tabs, "New diagram" in the Files context menu, SVG ⇄ PNG conversion,
   embedding a plain `.drawio`, letting the assistant read a diagram.

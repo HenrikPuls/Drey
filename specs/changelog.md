@@ -20,6 +20,65 @@ recorded as an explicit decision. The parity checklist lives in
 
 ## Recent milestones
 
+### Milestone 80 — Vault context by text search; the embedding retrieval is removed
+
+Owner request, outside the roadmap list (2026-10-14):
+[ADR-0072](../docs/09_architecture_decisions/0072-vault-context-by-text-search.md),
+which supersedes ADR-0055. **Not yet manually verified by the owner.**
+
+The finding that led to it: the semantic search returned sections that
+had nothing to do with the question, and did not find a note that
+contains the very word searched for ("einstein").
+
+- **The Vault chip's context comes from text search.** With the chip
+  on, a question carries up to four note sections that contain its
+  words. The question is split into words (no stopwords, nothing under
+  three characters, at most eight); each is searched in the tags
+  plugin's section index — case-insensitive, inside words too, in
+  heading and text; a section scores the sum of the weights of the
+  words it contains, a rare word weighing more and a word in the heading
+  one and a half times. Chat notes stay out. Nothing has to be switched
+  on, downloaded or built. A model that can call tools still searches
+  and reads further by itself.
+- **Removed:** the embedding worker and the per-vault vector index
+  (`plugins/assistant/main/semantic/`); Settings → *Assistant
+  retrieval*; the Search panel's **Semantic** toggle and its score
+  badges; the tool `vault_retrieve` (assistant and MCP server) and its
+  mention in the system prompt; the SDK's semantic seam
+  (`registerSemanticSearch`, `searchSemantic`, `SemanticSearchProvider`,
+  `SemanticSectionHit`) — **SDK 1.26, the one removal under a minor
+  version**, reasoned in the ADR and in `plugins/AUTHORING.md`; the
+  dependencies `@huggingface/transformers`, `onnxruntime-web`,
+  `onnxruntime-common` and the stub packages for `onnxruntime-node` and
+  `sharp` (`tools/stubs/`), with their `asarUnpack` entries and the CI
+  junction step.
+- **Left-overs are cleaned up once:** when the assistant plugin starts
+  it deletes `<userData>/plugins/assistant/semantic-index/` and
+  `<userData>/models/`. The `semantic.*` keys in the plugin's config
+  file are ignored.
+- **Old chat notes still read.** A turn's `drey-context` fence may say
+  `disabled` or `empty` with a `floor` (written before this
+  milestone); both are still parsed and shown. New turns write `empty`
+  (no section contains the words) or `unavailable` (no section index —
+  the Tags plugin is disabled).
+- **Not covered:** a question finds a section only through its words —
+  no synonyms, no paraphrases; the block reads saved text, not an
+  unsaved tab; the number of sections is fixed; templates are not in the
+  section index.
+- Specs: `plugins/assistant/shared/vault-context.spec.ts` (the words,
+  the ranking, the scope helpers, the block),
+  `plugins/assistant/main/vault-context.spec.ts` (the lookup over a
+  fake section index, the "einstein" case, the reasons for an empty
+  result), `plugins/assistant/shared/ask-context.spec.ts` (the new and
+  the old context statuses), `plugins/assistant/main/engine.spec.ts`,
+  `chat-engine.spec.ts` and `system-prompt.spec.ts`,
+  `electron/mcp/vault-tools.spec.ts`,
+  `plugins/tags/renderer/hit-list.spec.ts`; e2e
+  `assistant-tools.spec.ts` (a chip-on question about "Einstein" reaches
+  the model with the section that contains the word, and the turn cites
+  it). The specs of the removed
+  service, the vector index and `vault_retrieve` went with them.
+
 ### Milestone 79 — Web search and the Web chip
 
 Owner request, outside the roadmap list; the last step of the assistant

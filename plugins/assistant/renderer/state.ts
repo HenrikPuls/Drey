@@ -12,7 +12,7 @@
 import type { ActionOutcome } from '../../../shared/plugin-api';
 import type { AskRequest, AssistantOutcome } from '../shared/ask';
 import { MAX_EXTRA_FILES, MAX_IMAGES, truncateFileBody } from '../shared/ask.js';
-import { normalizeVaultScope, type VaultScope } from '../shared/semantic.js';
+import { normalizeVaultScope, type VaultScope } from '../shared/vault-context.js';
 import {
   isChatNotePath,
   isDailyNotePath,
@@ -290,7 +290,7 @@ export interface AssistantState {
   liveEdit(): boolean;
   toggleLiveEdit(): void;
   /**
-   * Semantic vault retrieval (ADR-0055): `off` (chip dark) / `vault` /
+   * The Vault chip's scope (ADR-0072): `off` (chip dark) / `vault` /
    * `all` / `custom` (the picker's explicit subset — `customVaultIds`).
    * Session state persisted to localStorage; set through the chip's
    * picker. A `custom` selection whose vaults vanished from the registry
@@ -401,7 +401,7 @@ export function createAssistantState(ports: AssistantPorts, tasks: RunningTasks)
   let deferredFollowKey: string | null | undefined;
   /** Live edit (ADR-0049) — session flag, one toggle in the chips row. */
   let liveEdit = false;
-  /** Semantic vault retrieval (ADR-0055) — remembered across sessions. */
+  /** The Vault chip's scope (ADR-0072) — remembered across sessions. */
   let vaultScope: VaultScope = loadVaultScope();
   // Ids only ever matter to a custom scope; a stale key under another
   // scope starts empty rather than resurrecting an old selection.

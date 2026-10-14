@@ -4,11 +4,7 @@
  */
 import type { AppConfig } from '../../../shared/app-config';
 import type { RenameLinksRequest, RenameLinksResult, VaultFileEntry, VaultStatus } from '../../../shared/ipc-api';
-import type {
-  SectionSearchProvider,
-  SemanticSearchProvider,
-  TaskQueryProvider,
-} from '../../../shared/plugin-api';
+import type { SectionSearchProvider, TaskQueryProvider } from '../../../shared/plugin-api';
 
 /** JSON-Schema-ish tool descriptor, as MCP `tools/list` returns it. */
 export interface McpToolDef {
@@ -100,8 +96,6 @@ export interface VaultToolDeps {
   getSearchProvider: () => SectionSearchProvider | null;
   /** The task index (the tasks plugin); `null` degrades `tasks_list`. */
   getTaskProvider: () => TaskQueryProvider | null;
-  /** Semantic retrieval (the assistant plugin, while enabled); `null` = `vault_retrieve` is not offered. */
-  getSemanticProvider: () => SemanticSearchProvider | null;
   getConfig: () => AppConfig;
   confirmWrite: ConfirmWrite;
   approve: ApproveAction;

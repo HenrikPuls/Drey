@@ -13,7 +13,6 @@ import type {
   Unsubscribe,
   TagEntry,
   TagSearchHit,
-  SemanticSectionHit,
   LlmModelListing,
   LlmCapabilities,
 } from '../../../shared/plugin-api/renderer';
@@ -378,12 +377,6 @@ export class PluginApiFactory {
             query,
             ...(scope !== undefined ? { scope } : {}),
           }) as Promise<readonly TagSearchHit[]>,
-        searchSemantic: (question, scope, limit) =>
-          invokeBackend('drey.search.semantic', {
-            question,
-            ...(scope !== undefined ? { scope } : {}),
-            ...(limit !== undefined ? { limit } : {}),
-          }) as Promise<readonly SemanticSectionHit[]>,
       },
       links: {
         // Base-owned grammar + resolver (SDK 1.11): plugins render

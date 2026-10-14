@@ -1,5 +1,5 @@
 import type { DreyPluginApi } from '../../../shared/plugin-api/renderer';
-import { deriveVaultScope } from '../shared/semantic.js';
+import { deriveVaultScope } from '../shared/vault-context.js';
 import { el, icon } from './dom.js';
 import { pickerFrame, showPicker } from './picker-frame.js';
 import type { AssistantState } from './state.js';

@@ -1,6 +1,0 @@
-{
-  "name": "sharp",
-  "version": "0.34.1",
-  "description": "Inert stub: Drey embeds text only, never images (ADR-0055). Replaces @huggingface/transformers' native sharp dependency.",
-  "main": "index.js"
-}

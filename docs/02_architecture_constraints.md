@@ -15,8 +15,7 @@ these apply to every phase and are not up for reconsideration per-feature.
 ## Technology constraints
 
 Electron, Angular (standalone components), CodeMirror 6, chokidar,
-transformers.js (WASM-only, in-app embeddings — the native
-`onnxruntime-node`/`sharp` deps are stubbed, ADR-0055), LM Studio
+LM Studio
 (OpenAI-compatible HTTP API), electron-builder for packaging — Windows
 NSIS installer + portable exe, config in `electron-builder.yml`
 ([ADR-0023](09_architecture_decisions/0023-windows-packaging-electron-builder.md),

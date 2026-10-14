@@ -335,10 +335,6 @@ The **Search panel** (open with `Ctrl+Shift+F`) has:
 - **Include chats** (speech-bubble toggle): `chats/` notes stay indexed
   but are excluded from vault/all results — and from replace — unless
   this is on.
-- **Semantic** (brain toggle): ranks the text query by meaning using
-  the Assistant's local embedding index — percent-score badges, tag
-  chips still an exact filter. Requires *Assistant retrieval* enabled in
-  Settings; otherwise a clear error row points there.
 
 Results are sections grouped per file; a click opens the file at the
 section's line, in the file's vault.
@@ -432,14 +428,19 @@ Attach the notes the model should see: `@`-completion, images
 (providers with vision), or scratch text. A small arrow on an answer
 inserts it into the open note.
 
-### Vault context (semantic retrieval)
+### Vault context
 
 The **Vault chip** opens a picker — *Off / Active vault / All vaults*
 plus one checkbox per registered vault, so a non-active vault can be
-targeted without switching. When on, your question is embedded locally
-(see Settings → *Assistant retrieval*) and the most similar note
-sections are injected into that one call. Chat notes are excluded so
-past questions do not drown out the notes that answer them.
+targeted without switching. When on, the note sections that contain
+words of your question are added to that one call — up to four, the
+ones with the rarest words first, a word in a heading counting more.
+Nothing has to be switched on or built for this. It matches words, not
+meaning: ask with a word the note uses. A model that can call tools
+searches and reads the vault further on its own when these sections do
+not answer the question. Chat notes are excluded so past questions do
+not drown out the notes that answer them. The sections come from the
+Tags plugin's index; with that plugin disabled there are none.
 
 ### Live edit
 
@@ -528,9 +529,8 @@ may do, and when it has to ask.
 **The vault.** Which vaults the assistant can look into you choose per
 question, with the **Vault** button under the question field (off, the
 active vault, all vaults, or a selection). In those vaults it can list
-what exists, search for exact words — also inside one note —, find
-sections by meaning while *Assistant retrieval* is on, and read a note
-whole or in parts. With the button off it sees only what you attached
+what exists, search for exact words — also inside one note —, and read
+a note whole or in parts. With the button off it sees only what you attached
 to the question — and the open note, when it is attached, is the one
 file it can still read and change.
 
@@ -612,7 +612,6 @@ opt-in discipline, off by default.
 
 - Tools: `vault_list`, `vault_search` (words, a quoted phrase, a regular
   expression, tags; in the whole vault, a folder or one file),
-  `vault_retrieve` (by meaning, while Assistant retrieval is on),
   `vault_read` (numbered lines, a range or a section), `vault_edit`
   (exact text replacement), `vault_write` (`mode`: create, append or
   overwrite), `vault_move`, `vault_delete` and `tasks_list`. They take
@@ -804,7 +803,6 @@ stored when you leave the field or press Enter. The footer shows
 | [Spelling](#settings-spelling) | dictionaries, personal words |
 | [Vault](#settings-vault) | watcher, link rewriting, history bounds |
 | Actions | Assistant Action templates and triggers |
-| Assistant retrieval | semantic search: model, k, score floor, per-vault index |
 | Diagrams | format of new diagrams (SVG/PNG) |
 | Git | `git` executable path |
 | Tags | prefix colours, rename/merge |
@@ -872,7 +870,6 @@ and the personal word list.
 ### Plugin-contributed pages
 
 ![Actions settings](img/settings-actions.png)
-![Assistant retrieval settings](img/settings-assistant-retrieval.png)
 ![Diagrams settings](img/settings-diagrams.png)
 ![Git settings](img/settings-git.png)
 ![Tags settings](img/settings-tags.png)
@@ -943,7 +940,6 @@ beside your notes.
 | App settings + API keys | `<userData>/app-config.json` (plain text) |
 | Vault registry (which folders, which active) | `<userData>/vault-config.json` |
 | Local note history | `<userData>/history/<vaultId>/` |
-| Semantic index | `<UserData>/plugins/assistant/semantic-index/` |
 | Installed plugins | `<userData>/plugins/<id>/` |
 
 Because the vault is just files, any file-based backup covers your
@@ -981,7 +977,7 @@ history store is deliberately outside it).
 ---
 
 *Manual for Drey 0.6.0; manual content last changed
-2026-10-13. Screenshots were captured automatically from
+2026-10-14. Screenshots were captured automatically from
 the built app (Anthrazit theme, 1600×1000) by
 `e2e/manual-screenshots.spec.ts` — run
 `$env:DREY_MANUAL_SHOTS='1'; npm run e2e:run -- manual-screenshots`

@@ -2,7 +2,10 @@
 
 ## Status
 
-Accepted (milestone 41)
+Superseded by [ADR-0072](0072-vault-context-by-text-search.md)
+(milestone 80, 2026-10-14): the embedding retrieval was removed; the
+Vault chip's context block comes from text search. What follows is the
+record of the decision as it stood. (Accepted in milestone 41.)
 
 ## Context
 

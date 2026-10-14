@@ -27,7 +27,6 @@ import type {
   TagPrefixStyle,
   TagSearchHit,
   TagSearchQuery,
-  SemanticSectionHit,
 } from './search-types';
 import type { VaultFileEntry, VaultStatus } from '../ipc-api';
 import type { PluginManifest } from './manifest';
@@ -90,28 +89,6 @@ export interface SectionSearchProvider {
    * absent = no configured prefixes.
    */
   styles?(): { readonly prefixes: readonly TagPrefixStyle[] };
-}
-
-/**
- * What a plugin registers so base surfaces (the Search panel's semantic
- * mode, MCP `vault_search` mode `semantic`) can run semantic section
- * retrieval (SDK 1.18, ADR-0055). The assistant plugin is the data
- * owner. A second, parallel single slot next to
- * {@link SectionSearchProvider} — pluralising that registry would churn
- * the existing contract for no gain.
- */
-export interface SemanticSearchProvider {
-  /**
-   * The top-`limit` sections most similar to `question`, cosine
-   * descending, section text hydrated fresh from the vault. `scope`
-   * omitted = the active vault; a provider that is switched off simply
-   * never registers.
-   */
-  search(
-    question: string,
-    scope?: SectionSearchScope,
-    limit?: number,
-  ): Promise<readonly SemanticSectionHit[]>;
 }
 
 export type VaultChangeEventKind = 'refresh' | 'write' | 'delete' | 'rename';
@@ -249,8 +226,7 @@ export interface MainChatOptions {
   /**
    * Opts this ONE call into the vault tools (ADR-0021, recut in ADR-0071):
    * the model may list, search and read the vault (`vault_list`,
-   * `vault_search`, `vault_read`, and `vault_retrieve` while semantic
-   * retrieval is on) and — unless the user's vault write rule
+   * `vault_search`, `vault_read`) and — unless the user's vault write rule
    * (`tools.vault.write`) is `off` — change it (`vault_edit`,
    * `vault_write`, `vault_move`, `vault_delete`; a write is confirmed in
    * the diff dialog or applied directly, per that rule). The app's own
@@ -453,12 +429,6 @@ export interface MainPluginContext {
      * `null` when no plugin registered one.
      */
     sectionSearchProvider(): SectionSearchProvider | null;
-    /**
-     * The semantic seam (SDK 1.18, ADR-0055): registered only while the
-     * owning plugin's retrieval is enabled; null provider = semantic
-     * surfaces degrade.
-     */
-    registerSemanticSearch(provider: SemanticSearchProvider): Unsubscribe;
     /**
      * Pushes `search:changed` to the renderer (SDK 1.9): call after the
      * provider's index or styles changed so base surfaces (tag completion,

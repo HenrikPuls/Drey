@@ -300,3 +300,11 @@ As built (milestone 77):
   external tools; plugin and vault tools finish the call they are in.
   The renderer-side `api.llm.chat` with `vaultTools` still attaches the
   whole base set (no plugin uses it); it follows in milestone 77.
+
+## Later change — `vault_retrieve` is gone (milestone 80, ADR-0072)
+
+The toolset is `vault_list`, `vault_search`, `vault_read`,
+`vault_edit`, `vault_write`, `vault_move`, `vault_delete`. The embedding
+retrieval behind `vault_retrieve` was removed
+([ADR-0072](0072-vault-context-by-text-search.md)); the system prompt no
+longer has a variant that names it.

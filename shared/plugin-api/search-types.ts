@@ -64,24 +64,3 @@ export interface TagSearchHit {
    */
   vaultId?: string;
 }
-
-/**
- * One semantically similar section (SDK 1.18, ADR-0055): what a
- * `SemanticSearchProvider` returns. A structural twin of
- * {@link TagSearchHit} plus the cosine `score`; owned here so the
- * contract stays independent of whichever plugin registers the provider.
- */
-export interface SemanticSectionHit {
-  path: string;
-  heading: string;
-  /** 1-based line the section starts on — where a click should land. */
-  line: number;
-  /** ~240-char window around the start of the section, whitespace collapsed. */
-  snippet: string;
-  /** The full section body (heading excluded), hydrated fresh from the vault. */
-  text: string;
-  /** The hit's vault id (ADR-0051) — semantic hits are always disk-backed. */
-  vaultId: string;
-  /** Cosine similarity, 0..1; results arrive descending. */
-  score: number;
-}

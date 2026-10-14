@@ -20,7 +20,7 @@ import {
   EDIT_PROPOSAL_MARKER,
   ChatToolEntry,
 } from './chat-note.js';
-import { compactContextLine } from './semantic.js';
+import { compactContextLine } from './vault-context.js';
 
 export interface ReplayResult {
   messages: ChatMessage[];

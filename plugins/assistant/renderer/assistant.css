@@ -984,7 +984,7 @@
   background: var(--hover-bg);
 }
 
-/* -- Settings (Actions / Assistant retrieval pages) --------------------------
+/* -- Settings (the Actions page) ---------------------------------------------
 
    Only page-specific layout lives here: the form vocabulary (fields, hints,
    inputs, rows, cards, ghost/link buttons, badge, …) comes from the base
@@ -993,11 +993,6 @@
 .assistant-actions-settings .template-head input[type='text'] {
   flex: 1;
   min-width: 120px;
-}
-
-.assistant-retrieval-numbers {
-  align-items: flex-start;
-  gap: 24px;
 }
 
 /* -- The assistant button at a selection + its popover (milestone 74) ------ */

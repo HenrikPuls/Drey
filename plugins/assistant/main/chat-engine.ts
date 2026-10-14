@@ -44,7 +44,7 @@ import {
   type ActiveVaultScope,
   type RetrievedSection,
   type RetrievalOutcome,
-} from '../shared/semantic.js';
+} from '../shared/vault-context.js';
 import { ChatStore } from './chat-store';
 import {
   TITLE_SYSTEM,
@@ -111,23 +111,18 @@ export interface ChatEnginePorts {
   /** One step of the running tool loop, forwarded to the panel (`chat:toolEvent`). */
   onToolEvent(taskId: string, event: ToolCallEvent): void;
   /**
-   * Semantic vault retrieval for one question (ADR-0055): the outcome —
-   * hits with their fresh text, best first, plus WHY there are none
-   * (feature off / floor too high / a custom selection with no registered
-   * vault left). Only called when the ask turned the Vault chip on; hard
-   * failures throw, the caller catches and degrades to no context.
+   * The vault sections for one question (ADR-0072): the outcome — the
+   * sections that contain the question's words, best first, plus WHY
+   * there are none (no section index / nothing found / a custom selection
+   * with no registered vault left). Only called when the ask turned the
+   * Vault chip on; hard failures throw, the caller catches and degrades
+   * to no context.
    */
   retrieveContext(
     question: string,
     scope: ActiveVaultScope,
     vaultIds: readonly string[],
   ): Promise<RetrievalOutcome>;
-  /**
-   * Whether semantic retrieval can answer right now — then the host
-   * offers `vault_retrieve` beside the other vault tools, and the prompt
-   * may name it.
-   */
-  semanticEnabled(): boolean;
   /**
    * The `tasks_list` tool for NON-live asks (SDK 1.11): the spec rides the
    * call's tool set and `run` executes one call against the base task
@@ -335,7 +330,7 @@ export class ChatEngine {
     const activeVault = vaults.find((vault) => vault.active) ?? null;
     const targets = chipOn ? resolveTargetVaultIds(vaults, scope, request.vaultIds) : [];
     const activeInScope = !chipOn || activeVault === null || targets.includes(activeVault.id);
-    // Semantic vault retrieval (ADR-0055): only for a plain ask turn — a
+    // The vault context block (ADR-0072): only for a plain ask turn — a
     // live-edit turn already carries the whole document + tool loop, so the
     // scope is ignored there. Failure degrades to no context, but the
     // REASON persists on the turn (contextStatus) so the panel can show
@@ -351,12 +346,12 @@ export class ChatEngine {
           request.vaultIds,
         );
         contextHits = outcome.hits;
-        if (!outcome.enabled) {
-          contextStatus = { kind: 'disabled' };
+        if (outcome.unavailable === true) {
+          contextStatus = { kind: 'unavailable' };
         } else if (outcome.noTargets === true) {
           contextStatus = { kind: 'unregistered' };
         } else if (outcome.hits.length === 0) {
-          contextStatus = { kind: 'empty', floor: outcome.minScore };
+          contextStatus = { kind: 'empty' };
         }
       } catch (err) {
         contextError = err instanceof Error ? err.message : String(err);
@@ -370,8 +365,7 @@ export class ChatEngine {
     // refused the tools on an earlier ask of this session.
     const canCall = caps.tools && !this.toolsRefused(config);
     // The vault tools ride every ask whose Vault chip is on (ADR-0071):
-    // list, search, read — and retrieval by meaning while it is enabled —
-    // over exactly the chip's vaults, plus the changing tools when the
+    // list, search, read — over exactly the chip's vaults, plus the changing tools when the
     // vault group allows writing. With the chip off the model has no way
     // into the vault beyond what is attached to the question.
     const vaultOn = chipOn && targets.length > 0 && canCall;
@@ -421,7 +415,7 @@ export class ChatEngine {
         tools: withTools
           ? {
               ...(vaultOn
-                ? { vault: { write: groups.vault.write, retrieve: this.ports.semanticEnabled() } }
+                ? { vault: { write: groups.vault.write } }
                 : {}),
               ...(tasksTool !== null ? { tasks: true } : {}),
               ...(templateTools !== null ? { templates: { write: groups.templates.write } } : {}),

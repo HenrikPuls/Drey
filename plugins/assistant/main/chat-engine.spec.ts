@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { ChatEngine, type ChatEnginePorts } from './chat-engine';
 import { ChatStore, type ChatStorePorts } from './chat-store';
 import type { AskRequest } from '../shared/ask';
-import type { RetrievalOutcome } from '../shared/semantic';
+import type { RetrievalOutcome } from '../shared/vault-context';
 import type { ChatMessage, LlmCapabilities, LlmChatResult } from '../../../shared/llm';
 import type { AppConfig } from '../../../shared/app-config';
 import { DEFAULT_APP_CONFIG } from '../../../shared/config/defaults';
@@ -114,9 +114,8 @@ function makeHarness(overrides?: {
     resolveAssetPath: () => null,
     readAssetBase64: async () => null,
     onDelta: () => undefined,
-    retrieveContext: overrides?.retrieve ?? (async () => ({ enabled: true, minScore: 0.3, hits: [] })),
+    retrieveContext: overrides?.retrieve ?? (async () => ({ hits: [] })),
     onToolEvent: () => undefined,
-    semanticEnabled: () => false,
     tasksTool: () => {
       state.tasksCalls += 1;
       return {
@@ -163,9 +162,9 @@ function makeHarness(overrides?: {
 }
 
 describe('ChatEngine scope enforcement (ADR-0069 later change, ADR-0071)', () => {
-  it('arms the host scope from the registry even when retrieval is disabled', async () => {
+  it('arms the host scope from the registry even when no section index answers', async () => {
     const h = makeHarness({
-      retrieve: async () => ({ enabled: false, minScore: 0.3, hits: [] }),
+      retrieve: async () => ({ hits: [], unavailable: true }),
     });
     await h.engine.ask(askRequest({ vaultScope: 'custom', vaultIds: ['docs'] }));
     // calls[0] is the ask; the fire-and-forget title call may land as a
@@ -176,7 +175,7 @@ describe('ChatEngine scope enforcement (ADR-0069 later change, ADR-0071)', () =>
   it('arms the host scope even when retrieval throws — the ask still answers', async () => {
     const h = makeHarness({
       retrieve: async () => {
-        throw new Error('embedder down');
+        throw new Error('index down');
       },
     });
     const result = await h.engine.ask(askRequest({ vaultScope: 'custom', vaultIds: ['docs'] }));
@@ -186,7 +185,7 @@ describe('ChatEngine scope enforcement (ADR-0069 later change, ADR-0071)', () =>
 
   it('withholds the active-vault-only tools when the scope excludes the active vault', async () => {
     const h = makeHarness({
-      retrieve: async () => ({ enabled: false, minScore: 0.3, hits: [] }),
+      retrieve: async () => ({ hits: [], unavailable: true }),
     });
     await h.engine.ask(askRequest({ vaultScope: 'custom', vaultIds: ['docs'] }));
     expect(h.tasksCalls).toBe(0);
@@ -207,7 +206,7 @@ describe('ChatEngine scope enforcement (ADR-0069 later change, ADR-0071)', () =>
 
   it('keeps the aux tools when the scope includes the active vault', async () => {
     const h = makeHarness({
-      retrieve: async () => ({ enabled: false, minScore: 0.3, hits: [] }),
+      retrieve: async () => ({ hits: [], unavailable: true }),
     });
     await h.engine.ask(askRequest({ vaultScope: 'all' }));
     expect(h.calls[0].options.vaultToolsScope).toEqual(['test', 'docs']);
