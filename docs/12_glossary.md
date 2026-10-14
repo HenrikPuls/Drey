@@ -16,7 +16,7 @@ and [ADR-0002](09_architecture_decisions/0002-quick-capture-opens-daily-note.md)
 | Vault id | The stable identity of a registered vault. Minted at registration, survives the folder being moved. |
 | Active vault | The vault that new content goes to by default: daily notes, quick capture, chats. |
 | Note | A Markdown file in a vault, with optional YAML frontmatter. |
-| Section | The part of a note from one heading to the next. The unit the tag index, search and semantic retrieval work on. |
+| Section | The part of a note from one heading to the next. The unit the tag index, search and the assistant's vault context work on. |
 | Tag | A `#label` written in a note's text. May be nested with `/` (`#project/frontend`). Never a folder. |
 | `#task` | The reserved marker for a task line. A structural marker, not a tag. |
 | Wikilink | `[[Note]]` or `[[Note#Heading]]` — a link to another note by name ([ADR-0046](09_architecture_decisions/0046-wikilinks.md)). |
@@ -40,7 +40,7 @@ and [ADR-0002](09_architecture_decisions/0002-quick-capture-opens-daily-note.md)
 | SDK | The versioned interface plugins are written against (`shared/plugin-api/`): `DreyPluginApi` for the renderer half, `MainPluginContext` for the main half. |
 | Seam | One kind of thing a plugin can register: a panel, a tab kind, a command, a save hook, … |
 | Registry | The base-owned list behind a seam. The base draws or calls whatever is registered. |
-| Provider | An object one plugin registers so that the base or another plugin can query its data: section search (tags), semantic search (assistant), task query (tasks). |
+| Provider | An object one plugin registers so that the base or another plugin can query its data: section search (tags), task query (tasks). |
 | Save hook | A function a plugin registers to run after every note save, used to keep its index current. |
 | Quarantine | The state of a plugin that failed to start: not loaded, reported, the app runs without it. |
 
@@ -65,7 +65,7 @@ and [ADR-0002](09_architecture_decisions/0002-quick-capture-opens-daily-note.md)
 | Action | A user-defined prompt run on a note, by hand or on save, whose result is applied after confirmation. |
 | Ask | A question to the assistant in its panel. |
 | Vault chip | The assistant's switch that adds the most relevant note sections to a question. |
-| Semantic retrieval | Finding sections by meaning, through embeddings computed in the app ([ADR-0055](09_architecture_decisions/0055-semantic-vault-retrieval.md)). |
+| Vault context | The note sections that ride an assistant question while its Vault chip is on: the ones that contain words of the question, found by text search ([ADR-0072](09_architecture_decisions/0072-vault-context-by-text-search.md)). |
 | Tool group | A set of tools the assistant may call, with one switch: vault, tasks, templates, web search, web fetch, each external server. |
 | Web chip | The globe button in the assistant's composer: whether the next question may use the tools that leave the machine (web search, web fetch, external servers). |
 | MCP | Model Context Protocol. Drey is both a server (other programs use the vault) and a client (the assistant uses external servers). |

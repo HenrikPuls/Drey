@@ -52,8 +52,8 @@ Two consequences worth knowing:
 
 ## Indexes are caches
 
-The tag and section index, the task index, the backlink index and the
-semantic index are all derived from the Markdown files. None is a source
+The tag and section index, the task index and the backlink index are
+all derived from the Markdown files. None is a source
 of truth and none is stored in the vault. Each is kept current through
 the save hook and the vault-change hook, and each can be dropped and
 rebuilt by a full refresh. A feature that needs data about notes follows

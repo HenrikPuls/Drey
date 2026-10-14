@@ -24,7 +24,6 @@ import {
   type SaveHookResult,
   type SectionSearchProvider,
   type SectionSearchScope,
-  type SemanticSearchProvider,
   type TaskQueryProvider,
   type TextMatchOptions,
   type Unsubscribe,
@@ -140,7 +139,6 @@ export class PluginHost {
   private readonly vaultChangeCallbacks: Array<(event: VaultChangeEvent) => void> = [];
   private readonly saveHooks: Array<SaveHook> = [];
   private searchProvider: SectionSearchProvider | null = null;
-  private semanticSearchProvider: SemanticSearchProvider | null = null;
   private taskProvider: TaskQueryProvider | null = null;
   /**
    * The discovery+activation round, assigned synchronously by the first
@@ -167,7 +165,6 @@ export class PluginHost {
   readonly search: {
     registerSectionSearch(provider: SectionSearchProvider): Unsubscribe;
     sectionSearchProvider(): SectionSearchProvider | null;
-    registerSemanticSearch(provider: SemanticSearchProvider): Unsubscribe;
     notifyChanged(): void;
   };
 
@@ -190,16 +187,6 @@ export class PluginHost {
           if (this.searchProvider === provider) {
             this.searchProvider = null;
             this.emitSearchChanged();
-          }
-        };
-      },
-      // The semantic twin (SDK 1.18): same single-slot discipline; no
-      // vocabulary push — its consumers re-query, nothing is cached base-side.
-      registerSemanticSearch: (provider) => {
-        this.semanticSearchProvider = provider;
-        return () => {
-          if (this.semanticSearchProvider === provider) {
-            this.semanticSearchProvider = null;
           }
         };
       },
@@ -477,22 +464,6 @@ export class PluginHost {
         }
         return provider.vocabulary();
       }
-      case 'drey.search.semantic': {
-        const provider = this.semanticSearchProvider;
-        if (provider === null) {
-          throw new Error('no semantic-search provider is registered');
-        }
-        const question = shape['question'];
-        if (typeof question !== 'string' || question.trim() === '') {
-          throw new Error('semantic search expects a non-empty question');
-        }
-        const limitRaw = shape['limit'];
-        const limit =
-          limitRaw === undefined || limitRaw === null
-            ? undefined
-            : Math.min(Math.max(Math.round(Number(limitRaw)) || 1, 1), 20);
-        return provider.search(question, this.parseSearchScope(shape['scope']), limit);
-      }
       default:
         throw new Error(`unknown host method "${method}"`);
     }
@@ -561,11 +532,6 @@ export class PluginHost {
   /** What MCP's `vault_search` reads; null = the tool degrades with a clear error. */
   getSectionSearchProvider(): SectionSearchProvider | null {
     return this.searchProvider;
-  }
-
-  /** What the semantic surfaces read (SDK 1.18); null = they degrade. */
-  getSemanticSearchProvider(): SemanticSearchProvider | null {
-    return this.semanticSearchProvider;
   }
 
   /** What the assistant's `tasks_list` tool and MCP `tasks_list` read; null = degrade. */
@@ -676,8 +642,6 @@ export class PluginHost {
       search: {
         registerSectionSearch: (provider) => track(this.search.registerSectionSearch(provider)),
         sectionSearchProvider: () => this.search.sectionSearchProvider(),
-        registerSemanticSearch: (provider) =>
-          track(this.search.registerSemanticSearch(provider)),
         notifyChanged: () => this.search.notifyChanged(),
       },
       tasks: {

@@ -158,3 +158,13 @@ two read tools. What stays from this ADR: the retrieved top-k block as
 the floor, the scope resolved from the registry, the self-healing
 index, and `tasks_list` / the template tools withheld when the active
 vault is out of scope.
+
+## Later change — the floor is text search (milestone 80, ADR-0072)
+
+The retrieval floor of this decision was the top-k block of ADR-0055.
+That retrieval is removed; the block now holds the sections that
+contain words of the question
+([ADR-0072](0072-vault-context-by-text-search.md)). The rule of this
+decision stands: the block is a first selection, and a model that can
+call tools looks further. The self-healing index rebuild has nothing
+left to rebuild.

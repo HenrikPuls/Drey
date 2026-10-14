@@ -75,20 +75,13 @@ describe('buildSystemPrompt', () => {
     expect(serversOnly).not.toMatch(/web_search|web_fetch/);
   });
 
-  const READ_ONLY = { vault: { write: 'off' as const, retrieve: false } };
-  const CONFIRM = { vault: { write: 'confirm' as const, retrieve: false } };
+  const READ_ONLY = { vault: { write: 'off' as const } };
+  const CONFIRM = { vault: { write: 'confirm' as const } };
 
-  it('names the reading tools, and vault_retrieve only while retrieval is on', () => {
-    const without = prompt({ tools: READ_ONLY, scopeVaultIds: ['test'] });
-    const withRetrieve = prompt({
-      tools: { vault: { write: 'off', retrieve: true } },
-      scopeVaultIds: ['test'],
-    });
+  it('names the reading tools', () => {
+    const text = prompt({ tools: READ_ONLY, scopeVaultIds: ['test'] });
 
-    expect(without).toContain('- vault_list, vault_search, vault_read —');
-    expect(without).not.toContain('vault_retrieve');
-    expect(withRetrieve).toContain('- vault_list, vault_search, vault_retrieve, vault_read —');
-    expect(withRetrieve).toContain('find sections by meaning');
+    expect(text).toContain('- vault_list, vault_search, vault_read —');
   });
 
   it('says that nothing can be changed while writing is off', () => {
@@ -104,7 +97,7 @@ describe('buildSystemPrompt', () => {
       scopeVaultIds: ['test'],
     });
     const auto = prompt({
-      tools: { vault: { write: 'auto', retrieve: false } },
+      tools: { vault: { write: 'auto' } },
       scopeVaultIds: ['test'],
     });
 

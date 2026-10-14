@@ -256,15 +256,14 @@ line. A part with nothing to say is left out.
      not in scope — then
      `Results name a file as id:path — pass that back as it is.`
      With one vault in scope nothing is said: the argument is not needed.
-3. **Vault context** — the retrieved sections (`buildVaultContextBlock`,
-   ADR-0055), unchanged. It sits before the tool list, so the rule
+3. **Vault context** — the sections found for the question
+   (`buildVaultContextBlock`, ADR-0072; see "The vault context block"
+   below). It sits before the tool list, so the rule
    "tasks are answered from `tasks_list`" is the later instruction.
 4. **Tools** — `You can call these tools before you answer:` and one
    line per tool family **attached to this call**:
-   - `vault_list, vault_search, [vault_retrieve,] vault_read` — the
-     Vault chip is on (`vault_retrieve` is named only while semantic
-     retrieval is enabled):
-     `look through the vault: list what exists, search for exact words (also inside one file)[, find sections by meaning], read a file or part of one.`
+   - `vault_list, vault_search, vault_read` — the Vault chip is on:
+     `look through the vault: list what exists, search for exact words (also inside one file), read a file or part of one.`
      followed by `The vault context above is a first selection; when it does not cover the question, search and read further instead of answering from thin context.`
      — or, without a context block, `Search first, then read what you found before you answer.`
    - `vault_edit, vault_write, vault_move, vault_delete` — unless the
@@ -320,6 +319,44 @@ this call. A provider without a tool loop, a model whose endpoint
 refused the tools, a group that is off and a scope that leaves a tool
 out all get a prompt without it — parts 4 and 5 are then absent.
 
+### The vault context block (milestone 80, ADR-0072)
+
+With the Vault chip on, a plain ask (not a live-edit turn) carries the
+note sections that contain words of the question. No model is involved
+in choosing them.
+
+- **The words** (`queryTerms`, `plugins/assistant/shared/vault-context.ts`):
+  the question lower-cased and split at everything that is not a letter
+  or a digit; words under three characters and a short list of German
+  and English stopwords (question words, articles, pronouns,
+  auxiliaries) are dropped; each word once; at most 8.
+- **The search** (`retrieveVaultContext`,
+  `plugins/assistant/main/vault-context.ts`): one call per word and
+  vault of the chip's scope to the section index the tags plugin
+  registers (`ctx.search.sectionSearchProvider()`, case-insensitive
+  part-word match in heading and text). Sections of chat notes
+  (`chats/`) and sections without text are left out.
+- **The ranking** (`rankLexical`): a section scores the sum of the
+  weights of the words it contains; a word weighs
+  `1 / ln(2 + sections it was found in)`, one and a half times that
+  when it is in the heading. The best 4 ride the question.
+- **The block** (`buildVaultContextBlock`):
+
+  ```
+  VAULT CONTEXT — note sections that contain words of the question; read-only reference, cite them as vault · path:line when you use them.
+
+  [1] <vault> · <path> — <heading> (line <n>)
+  <section text, cut after 1200 characters with "[…section truncated…]">
+  ```
+
+  The vault name is left out when it is not known. A section without a
+  heading is named after its file.
+- **Nothing found** puts no block into the prompt; the turn records why
+  in its ```` ```drey-context ```` fence (`empty`, `unavailable` — no
+  section index, the Tags plugin is disabled —, `unregistered`,
+  `error`). Older turns are replayed as one line,
+  `[Vault context used for this answer: <vault> · <path> — <heading>; …]`.
+
 ### The vault tools (milestones 77–78)
 
 One set, defined in `electron/mcp/tools/defs.ts`, offered to programs
@@ -330,7 +367,6 @@ is off. What a caller gets:
 | | MCP client | Assistant |
 |---|---|---|
 | Vaults | every registered vault | the Vault chip's selection |
-| `vault_retrieve` | while semantic retrieval is enabled | the same |
 | Changing tools | always; a change is confirmed unless `mcp.yolo` | unless `tools.vault.write` is `off`; confirmed under `confirm` |
 | `vault_delete` | always asked | always asked |
 | `chats/`, `.drafts/` | visible, writable | not listed, not searched, not changeable (a chat note can be read by its path) |
@@ -366,7 +402,7 @@ List the files of the vault — the way to see what exists before searching or r
 #### `vault_search`
 
 ```
-Find text in notes — exact matching, like a search field. `query` is one or more words: a note section matches when it contains ALL of them (any order, upper or lower case), and the lines that carry them come back as `path`, heading and `line: text`. Put a phrase in double quotes to match it as written. Set `regex` to treat `query` as a JavaScript regular expression matched line by line. `tags` restricts to sections carrying all of those #tags. `path` restricts to one folder — or to ONE FILE, which is how you search inside a note. Use few, distinctive words; if nothing matches, try other words or fewer. To find notes ABOUT a topic without knowing their wording, use vault_retrieve when it is available. Read a hit in full with vault_read.
+Find text in notes — exact matching, like a search field. `query` is one or more words: a note section matches when it contains ALL of them (any order, upper or lower case), and the lines that carry them come back as `path`, heading and `line: text`. Put a phrase in double quotes to match it as written. Set `regex` to treat `query` as a JavaScript regular expression matched line by line. `tags` restricts to sections carrying all of those #tags. `path` restricts to one folder — or to ONE FILE, which is how you search inside a note. Use few, distinctive words; if nothing matches, try other words or fewer. Read a hit in full with vault_read.
 ```
 
 | Argument | Type | Description |
@@ -378,18 +414,6 @@ Find text in notes — exact matching, like a search field. `query` is one or mo
 | `path` | string | A folder or a single file to search in, vault-relative. |
 | `context_lines` | integer | Lines to show before and after each matching line, 0 to 5. Default 0. |
 | `max_results` | integer | Most matching lines to return. Default 30, at most 100. |
-| `vault` | string | Vault id, to look in one vault only. Leave it out to cover every available vault. |
-
-#### `vault_retrieve`
-
-```
-Find note sections by MEANING: ranks the sections of the vault by how similar they are to `query`, best first — it finds a note about "boat maintenance" for the question "what do I have to do before winter with the ship". Pass a full question or a description of the topic, not single keywords. Returns `path:line`, heading, a score from 0 to 1 and a short excerpt per section; a low score (under 0.4) is a weak match. It does not find exact wording, names or numbers reliably — use vault_search for those. Read a section in full with vault_read.
-```
-
-| Argument | Type | Description |
-|---|---|---|
-| `query` (required) | string | A question or a description of what you are looking for. |
-| `limit` | integer | How many sections to return. Default 8, at most 20. |
 | `vault` | string | Vault id, to look in one vault only. Leave it out to cover every available vault. |
 
 #### `vault_read`
@@ -501,8 +525,6 @@ a model:
   Nothing found: `No matches for "<query>" in <n> files. Try other or fewer words (all of them must occur in one section).`
   With `tags` the hits come from the section index:
   `<path>:<line> — <heading>` and a snippet.
-- `vault_retrieve` — `<n> sections, most similar first:`, then
-  `<path>:<line> — <heading> (score 0.82)` and an excerpt.
 - `vault_read` — `<line>: <text>` rows and a last line:
   `[<path> — all <n> lines]`, or
   `[<path> — lines <a>–<b> of <n>. Continue with start_line=<b+1>.]`.

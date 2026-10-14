@@ -65,22 +65,6 @@ export function createSearchPanel(
       void session.run();
     });
 
-    // Semantic mode (SDK 1.18): rank the text query by similarity over
-    // the assistant's vector index instead of exact-matching it. The
-    // semantic index excludes chats on its own — the chats toggle has
-    // no effect there and disables.
-    const semanticBtn = iconButton(
-      api,
-      'brain',
-      'Semantic search (rank by similarity instead of exact match)',
-      () => {
-        prefs.semantic = !prefs.semantic;
-        session.persistPrefs();
-        session.notify();
-        void session.run();
-      },
-    );
-
     const render = (): void => {
       for (const btn of buttons) {
         const on = btn.dataset['scope'] === prefs.scope;
@@ -89,14 +73,11 @@ export function createSearchPanel(
       }
       chatsBtn.classList.toggle('on', prefs.includeChats);
       chatsBtn.setAttribute('aria-pressed', String(prefs.includeChats));
-      chatsBtn.disabled = prefs.scope === 'file' || session.semanticActive();
-      semanticBtn.classList.toggle('on', prefs.semantic);
-      semanticBtn.setAttribute('aria-pressed', String(prefs.semantic));
-      semanticBtn.disabled = prefs.scope === 'file';
+      chatsBtn.disabled = prefs.scope === 'file';
     };
     render();
     const unsubscribe = session.subscribe(render);
-    host.append(seg, semanticBtn, chatsBtn);
+    host.append(seg, chatsBtn);
     return unsubscribe;
   };
 
@@ -181,8 +162,6 @@ export function createSearchPanel(
     summaryRow.append(summaryText, replaceBtn, exportButton, summarizeButton, clearButton);
 
     const renderToggles = (): void => {
-      // Match flags are exact-match modifiers — meaningless on a ranking.
-      const semantic = session.semanticActive();
       const noHits = state.hits.length === 0 || !state.ran;
       const flags: Array<[HTMLButtonElement, boolean]> = [
         [caseBtn, prefs.matchCase],
@@ -192,12 +171,11 @@ export function createSearchPanel(
       for (const [btn, on] of flags) {
         btn.classList.toggle('on', on);
         btn.setAttribute('aria-pressed', String(on));
-        btn.disabled = semantic;
       }
       replaceBtn.classList.toggle('on', prefs.replaceOpen);
       replaceBtn.setAttribute('aria-pressed', String(prefs.replaceOpen));
-      replaceBtn.hidden = semantic || (noHits && !prefs.replaceOpen);
-      replaceRow.hidden = semantic || !prefs.replaceOpen;
+      replaceBtn.hidden = noHits && !prefs.replaceOpen;
+      replaceRow.hidden = !prefs.replaceOpen;
     };
 
     const renderResults = (): void => {
@@ -256,11 +234,6 @@ export function createSearchPanel(
           const hitHead = el('span', 'tag-search-hit-head');
           hitHead.appendChild(el('span', 'tag-search-hit-heading', hit.heading));
           hitHead.appendChild(el('span', 'tag-search-hit-loc', `:${hit.line}`));
-          if (hit.score !== undefined) {
-            const score = el('span', 'tag-search-hit-score', `${Math.round(hit.score * 100)}%`);
-            score.title = 'Similarity';
-            hitHead.appendChild(score);
-          }
           if (hit.unsaved === true) {
             hitHead.appendChild(el('span', 'tag-search-hit-unsaved', 'unsaved'));
           }
@@ -272,7 +245,7 @@ export function createSearchPanel(
             }
             void api.documents.open(hit.path, hit.line, { vaultId: hit.vaultId });
           });
-          if (prefs.replaceOpen && !session.semanticActive()) {
+          if (prefs.replaceOpen) {
             const replaceOne = el('button', 'icon-btn tag-search-hit-replace') as HTMLButtonElement;
             replaceOne.type = 'button';
             replaceOne.appendChild(api.ui.icon('replace', 14));
@@ -304,9 +277,7 @@ export function createSearchPanel(
       }
       replaceInput.value = state.replacement;
       replaceAllBtn.disabled =
-        !session.hasQuery() ||
-        (prefs.scope === 'file' && session.activeTextDoc() === null) ||
-        session.semanticActive();
+        !session.hasQuery() || (prefs.scope === 'file' && session.activeTextDoc() === null);
       const noHits = state.hits.length === 0 || !state.ran;
       exportButton.hidden = noHits;
       const summarizing = summary.isRunning();

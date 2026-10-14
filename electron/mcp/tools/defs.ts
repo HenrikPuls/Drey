@@ -54,8 +54,7 @@ export const VAULT_SEARCH: McpToolDef = {
     'JavaScript regular expression matched line by line. `tags` restricts to sections ' +
     'carrying all of those #tags. `path` restricts to one folder — or to ONE FILE, which is ' +
     'how you search inside a note. Use few, distinctive words; if nothing matches, try other ' +
-    'words or fewer. To find notes ABOUT a topic without knowing their wording, use ' +
-    'vault_retrieve when it is available. Read a hit in full with vault_read.',
+    'words or fewer. Read a hit in full with vault_read.',
   inputSchema: {
     type: 'object',
     properties: {
@@ -68,27 +67,6 @@ export const VAULT_SEARCH: McpToolDef = {
       max_results: { type: 'integer', description: 'Most matching lines to return. Default 30, at most 100.' },
       vault: VAULT_MANY,
     },
-  },
-};
-
-export const VAULT_RETRIEVE: McpToolDef = {
-  name: 'vault_retrieve',
-  description:
-    'Find note sections by MEANING: ranks the sections of the vault by how similar they are ' +
-    'to `query`, best first — it finds a note about "boat maintenance" for the question ' +
-    '"what do I have to do before winter with the ship". Pass a full question or a ' +
-    'description of the topic, not single keywords. Returns `path:line`, heading, a score ' +
-    'from 0 to 1 and a short excerpt per section; a low score (under 0.4) is a weak match. ' +
-    'It does not find exact wording, names or numbers reliably — use vault_search for ' +
-    'those. Read a section in full with vault_read.',
-  inputSchema: {
-    type: 'object',
-    properties: {
-      query: { type: 'string', description: 'A question or a description of what you are looking for.' },
-      limit: { type: 'integer', description: 'How many sections to return. Default 8, at most 20.' },
-      vault: VAULT_MANY,
-    },
-    required: ['query'],
   },
 };
 
@@ -209,7 +187,7 @@ export const TASKS_LIST: McpToolDef = {
 };
 
 /** The tools that only read. */
-export const READ_TOOLS: readonly McpToolDef[] = [VAULT_LIST, VAULT_SEARCH, VAULT_RETRIEVE, VAULT_READ];
+export const READ_TOOLS: readonly McpToolDef[] = [VAULT_LIST, VAULT_SEARCH, VAULT_READ];
 
 /** The tools that change the vault. */
 export const WRITE_TOOLS: readonly McpToolDef[] = [VAULT_EDIT, VAULT_WRITE, VAULT_MOVE, VAULT_DELETE];

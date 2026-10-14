@@ -12,7 +12,9 @@ import { test, expect, type Page } from './fixtures/drey';
  * the reply text is read, `vault_edit` changes a note on disk — and with
  * the Vault chip off the model reaches the attached note and nothing else
  * of the vault. The open note is changed with the same tool: through its
- * tab, unsaved text included, and in live edit without saving.
+ * tab, unsaved text included, and in live edit without saving. With the
+ * chip on, the sections that contain the question's words ride the system
+ * prompt (milestone 80, ADR-0072).
  */
 
 const MOCK_PORT = 27320;
@@ -21,6 +23,7 @@ const MOCK_BASE_URL = `http://127.0.0.1:${MOCK_PORT}/v1`;
 const NOTE = ['# Harbour', '', 'The harbour fee is 12 euros per night.', ''].join('\n');
 const ANSWER = 'The harbour fee is 12 euros per night.';
 const BERTH = ['# Berth', '', 'The berth fee is 20 euros per night.', ''].join('\n');
+const RELATIVITY = ['# Relativity', '', 'Einstein published four papers in 1905.', ''].join('\n');
 
 interface WireMessage {
   role: string;
@@ -90,6 +93,20 @@ function handler(req: http.IncomingMessage, res: http.ServerResponse): void {
     }
     const question = typeof last?.content === 'string' ? last.content : '';
     const offered = JSON.stringify(body.tools);
+    if (question.includes('Einstein')) {
+      // Answers from the system prompt alone: the context block names the note.
+      const first = body.messages[0]?.content;
+      const system = typeof first === 'string' ? first : '';
+      reply(res, {
+        content:
+          system.includes('VAULT CONTEXT') &&
+          system.includes('physics/relativity.md — Relativity') &&
+          system.includes('four papers in 1905')
+            ? 'CONTEXT RECEIVED'
+            : 'NO CONTEXT',
+      });
+      return;
+    }
     if (question.includes('Which tools')) {
       reply(res, {
         content: offered.includes('vault_search')
@@ -254,7 +271,11 @@ async function ask(page: Page, question: string): Promise<void> {
 
 test.describe('Assistant tool loop', () => {
   test.use({
-    seedVault: { 'notes/harbour.md': NOTE, 'berth.md': BERTH },
+    seedVault: {
+      'notes/harbour.md': NOTE,
+      'berth.md': BERTH,
+      'physics/relativity.md': RELATIVITY,
+    },
     appConfig: {
       llm: {
         enabled: true,
@@ -308,6 +329,22 @@ test.describe('Assistant tool loop', () => {
     const note = chatNotes(vaultDir);
     expect(note).toContain('vault_read');
     expect(note).toContain('The harbour fee is 12 euros per night.');
+  });
+
+  test("the Vault chip puts the sections that contain the question's words into the prompt", async ({
+    page,
+    vaultDir,
+  }) => {
+    await vaultChipOn(page);
+    await ask(page, 'What do I know about Einstein?');
+    const thread = page.locator('.assistant-panel .assistant-thread');
+
+    await expect(thread).toContainText('CONTEXT RECEIVED', { timeout: 30_000 });
+    await expect(thread.locator('.context-chip')).toContainText('vault context · 1 section');
+    // The turn cites what it was given.
+    await expect
+      .poll(() => chatNotes(vaultDir), { timeout: 10_000 })
+      .toContain('"path":"physics/relativity.md"');
   });
 
   test('reads a tool call the model wrote into its reply text', async ({ page, vaultDir }) => {

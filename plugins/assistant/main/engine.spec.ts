@@ -16,7 +16,7 @@ import {
   buildTitleUserMessage,
   sanitizeChatTitle,
 } from './ask-prompts';
-import type { RetrievalOutcome } from '../shared/semantic';
+import type { RetrievalOutcome } from '../shared/vault-context';
 import { DEFAULT_APP_CONFIG, normalizeAppConfig, AppConfig } from '../../../shared/app-config';
 import type { LlmChatResult, ChatMessage, LlmCapabilities, ToolSpec } from '../../../shared/llm';
 import type { SdkTaskRecord } from '../../../shared/plugin-api';
@@ -163,10 +163,8 @@ interface ChatHarness {
   /** The live config object the engine reads -- tests flip tool groups on it. */
   config: AppConfig;
   setCapabilities(caps: Partial<LlmCapabilities>): void;
-  /** The retrieval outcome the Vault chip's ask reports (ADR-0055); replaced per test. */
+  /** The retrieval outcome the Vault chip's ask reports (ADR-0072); replaced per test. */
   retrieval: RetrievalOutcome;
-  /** Whether semantic retrieval is on (then `vault_retrieve` is offered); replaced per test. */
-  semantic: boolean;
 }
 
 function chatHarness(
@@ -224,8 +222,7 @@ function chatHarness(
     files,
     deltas,
     tasksTool: null,
-    retrieval: { enabled: true, minScore: 0.3, hits: [] },
-    semantic: false,
+    retrieval: { hits: [] },
     setConfig(patch) {
       Object.assign(config.llm, patch);
     },
@@ -274,7 +271,6 @@ function chatHarness(
       // it is here to satisfy the port.
       retrieveContext: async () => harness.retrieval,
       onToolEvent: () => undefined,
-      semanticEnabled: () => harness.semantic,
       tasksTool: () => harness.tasksTool,
       // The template tools would change the prompt shape in every ASK
       // below (SDK 1.14); these tests pin the pre-template prompts.
@@ -1389,33 +1385,23 @@ describe('assistant plugin chat engine — vault tools follow the Vault chip (AD
     path: 'a.md',
     heading: 'Near',
     line: 1,
-    score: 0.9,
     text: 'NEAR text',
   };
 
   it('a chip-on ask rides the context block AND the vault tools, bound to the scope', async () => {
     const h = chatHarness();
-    h.retrieval = { enabled: true, minScore: 0.3, hits: [NEAR], targets: ['v1'] };
-    h.semantic = true;
+    h.retrieval = { hits: [NEAR] };
     await h.engine.ask({ ...ASK, vaultScope: 'custom', vaultIds: ['v1'] });
 
     const call = h.calls[0];
     const system = systemOf(call);
     expect(system).toContain('VAULT CONTEXT');
-    expect(system).toContain('- vault_list, vault_search, vault_retrieve, vault_read');
+    expect(system).toContain('- vault_list, vault_search, vault_read');
     expect(system).toContain('The vault context above is a first selection');
     // The tools themselves are the host's: the engine opts in and names the scope.
     expect(call.opts).toMatchObject({ vaultTools: true, vaultToolsScope: ['v1'] });
     expect(call.opts['tools']).toBeUndefined();
     expect(call.opts['maxToolRounds']).toBeUndefined();
-  });
-
-  it('names vault_retrieve only while semantic retrieval is on', async () => {
-    const h = chatHarness();
-    await h.engine.ask({ ...ASK, vaultScope: 'vault' });
-
-    expect(systemOf(h.calls[0])).toContain('- vault_list, vault_search, vault_read');
-    expect(systemOf(h.calls[0])).not.toContain('vault_retrieve');
   });
 
   it('a chip-off ask without a note has no vault tools, no scope and no word about them', async () => {
@@ -1433,7 +1419,7 @@ describe('assistant plugin chat engine — vault tools follow the Vault chip (AD
   it('a provider without tool support keeps the context block but no tools', async () => {
     const h = chatHarness();
     h.setCapabilities({ tools: false });
-    h.retrieval = { enabled: true, minScore: 0.3, hits: [NEAR], targets: ['v1'] };
+    h.retrieval = { hits: [NEAR] };
     await h.engine.ask({ ...ASK, vaultScope: 'vault' });
 
     const call = h.calls[0];
@@ -1445,7 +1431,7 @@ describe('assistant plugin chat engine — vault tools follow the Vault chip (AD
 
   it('a live-edit turn keeps the scope for its vault tools but retrieves no context', async () => {
     const h = chatHarness();
-    h.retrieval = { enabled: true, minScore: 0.3, hits: [NEAR], targets: ['v1'] };
+    h.retrieval = { hits: [NEAR] };
     await h.engine.ask({
       ...ASK,
       note: { path: 'a.md', body: DOC, vaultId: 'v1' },

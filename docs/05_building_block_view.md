@@ -334,7 +334,7 @@ fills** — base knows the interfaces, not the features:
 | Document read/observe/insert/confirmed rewrite/open + the live-edit input lock | `documents.*` (incl. `setEditLock`, ADR-0049) | — |
 | Vault IO + change push | `vault.*` (incl. `saveAsset`) | `ctx.vault.*` (incl. `writeAnnounced`; `announceChanges` after a plugin rewrote the working tree, SDK 1.17) |
 | Backend methods + pushes (the plugin's own IPC) | `backend.invoke` / `backend.on` | `ctx.ipc.handle` / `ctx.ipc.emit` |
-| Save pipeline (`{content?, pendingActions?}`), vault lifecycle, section search, semantic search | — | `ctx.save`, `ctx.vault` hooks, `ctx.search` (`notifyChanged` pushes `search:changed` to the base vocabulary service, SDK 1.9; the provider's optional `styles()` serves the tag prefix colors; `sectionSearchProvider()` is the seam's read side for other plugins — SDK 1.21, the assistant's action engine takes the tag vocabulary for `{{AVAILABLE_TAGS}}` from it; `registerSemanticSearch` is the second, parallel single slot — SDK 1.18, the assistant's similarity index for the Search panel's semantic mode and MCP `vault_search` mode `semantic`, ADR-0055 later change) |
+| Save pipeline (`{content?, pendingActions?}`), vault lifecycle, section search | — | `ctx.save`, `ctx.vault` hooks, `ctx.search` (`notifyChanged` pushes `search:changed` to the base vocabulary service, SDK 1.9; the provider's optional `styles()` serves the tag prefix colors; `sectionSearchProvider()` is the seam's read side for other plugins — SDK 1.21, the assistant's action engine takes the tag vocabulary for `{{AVAILABLE_TAGS}}` from it; the assistant's vault context block reads the section index through the same getter, ADR-0072) |
 | LLM transport | `llm.chat/cancelTask/onDebugEntry/onDelta/listModels/capabilities/onCapabilitiesChanged` | `ctx.llm.chat/suggestTags/capabilities` (chat gains `tools`/`onToolCall`/`maxToolRounds`, ADR-0049; `maxOutputTokens` + the capability push, ADR-0050) |
 | Per-plugin config, app config read/patch | `settings.*`, `appConfig.*` | `ctx.config`, `ctx.appConfig` |
 | Native-surface hide (overlays/gestures) | `env.onNativeSurfaceVisibility` | — |
@@ -735,13 +735,7 @@ Keep it in step whenever a component boundary changes (CLAUDE.md's
   the scope switch a speech-bubble **Include chats** toggle: chat notes
   (`chats/`) stay indexed but are left out of vault / all-vault hits —
   and out of "Replace all" — unless it is on (off by default; the
-  document scope searches the open note as it is), and — milestone 68 —
-  a brain **Semantic** toggle: the vault/all text query ranks by
-  embedding similarity over the assistant's index (base
-  `SemanticSearchProvider` seam, SDK 1.18; percent score badges, tag
-  chips as an exact post-filter, match flags + replace hidden, no
-  provider → a clear error row). MCP `vault_search` takes an optional
-  `vault` argument and a `mode: 'text' | 'semantic'`. Panel +
+  document scope searches the open note as it is). Panel +
   toggle prefs persist in `localStorage['drey.search']`
 - Tasks panel — `plugins/tasks/` (ADR-0033):
   checkbox / `#task` lines in the open document, the whole vault, or all
@@ -839,30 +833,23 @@ Keep it in step whenever a component boundary changes (CLAUDE.md's
    compartment + the meta bar's "Assistant is editing…" hint), the applied
    document persists as the turn's `edit` fence entry, and providers
    without tool support fail visibly
-- **Vault chip — semantic vault retrieval** (milestone 41,
-  [ADR-0055](09_architecture_decisions/0055-semantic-vault-retrieval.md)):
+- **Vault chip — vault context by text search** (milestone 80,
+  [ADR-0072](09_architecture_decisions/0072-vault-context-by-text-search.md)):
   a second composer chip opens a vault picker — *Off / Active vault /
   All vaults* shortcuts plus one checkbox row per registered vault, so a
   non-active vault (e.g. a Git vault) is targetable without activating
-  it; each ask with it on embeds the question in the assistant plugin's
-  worker
-  (transformers.js WASM-only, `plugins/assistant/main/semantic/`) and
-  injects the top-k similar note sections into the system prompt —
-  section text rides ONLY that call (never the replay; older turns cite
-  via a compact ```drey-context fence that names the vault:
-  `vault · path:line`). Index: one JSON file per **every registered**
-  vault (scope-independent)
-  under `<userData>/plugins/assistant/semantic-index/`, kept fresh by the
-  save/vault hook registries, hydrated from the vault at answer time.
-  Settings → "Assistant retrieval" (enabled, model id, k, score floor,
-  per-vault status + rebuild). Independent of `mcp.enabled`; ignored for
-  live-edit turns. A custom selection referencing no registered vault
-  anymore degrades to a visible `unregistered` context status, never to
-  the active vault.
-  The scope holds WITHOUT retrieval too (ADR-0069
+  it; each ask with it on searches the words of the question in the
+  tags plugin's section index and injects the best four sections into
+  the system prompt — section text rides ONLY that call (never the
+  replay; older turns cite via a compact ```drey-context fence that
+  names the vault: `vault · path:line`). No index of the assistant's
+  own, no model, nothing to switch on. Ignored for live-edit turns. A
+  custom selection referencing no registered vault anymore degrades to
+  a visible `unregistered` context status, never to the active vault.
+  The scope does not depend on the context lookup (ADR-0069
   later change): the engine resolves the ask's targets from the vault
   registry and arms the host's vaultToolsScope on every chip-on ask, so
-  retrieval-off or a retrieval error cannot re-arm the base read tools'
+  a missing section index or a failed lookup cannot re-arm the base read tools'
   active-vault default; when the selection excludes the active vault, the
   active-vault-only aux tools (tasks_list, template tools) are withheld
   with their notes, the tools note lists only in-scope vaults, and a
@@ -891,12 +878,12 @@ decision. (Seams — what a *plugin* can extend — are the table above.)
 | Snippets (`tbl`, `code`, … with tabstops) | `plugins/templates/` + Settings → Templates | Plugin templates | M46 |
 | Tag pills + `#tag` completion (the tag chrome) | `src/app/editor/tags/`, `TagVocabularyService` | Base | ADR-0017 |
 | Tag index, prefix colors, rename/merge | `plugins/tags/` (main + Settings → Tags) | Plugin tags | ADR-0017, M53 |
-| Search panel (tag + text, semantic toggle, replace, Export, Summarize) | `plugins/tags/` + the base `SemanticSearchProvider` seam (`api.search.searchSemantic`) | Plugin tags | M33, M37, M68 (ADR-0055 later change) |
+| Search panel (tag + text, replace, Export, Summarize) | `plugins/tags/` | Plugin tags | M33, M37 |
 | Autotag / "Suggest tags" | `electron/llm/tag-suggest.ts`, the editor `⋯` menu | Base | `specs/classifier-spec.md`, M45 |
 | Tasks panel + inline due/priority metadata | `plugins/tasks/` | Plugin tasks | ADR-0033 |
 | Assistant chat + chat notes (`chats/`) | `plugins/assistant/` (`chat-engine.ts`, `chat-store.ts`) | Plugin assistant | ADR-0048 |
 | Tool loop (offered-only, argument check, error results, round budget, closing round, text-written calls, progress events) | `electron/llm/tool-loop.ts`, `shared/llm/tool-args.ts`, `shared/llm/text-tool-calls.ts`; dispatch in `electron/plugin-host/plugin-context.ts` (`buildLlmContext`) | Base (`llm/`, `plugin-host/`) | ADR-0071, M76 |
-| Vault tools for the model — `vault_list`, `vault_search`, `vault_retrieve`, `vault_read`, `vault_edit`, `vault_write`, `vault_move`, `vault_delete` | `electron/mcp/tools/` (`defs.ts` descriptions, `scope.ts` the vaults and paths a call may touch, `list.ts`, `search.ts`, `read.ts`, `write.ts`), `electron/mcp/vault-tools.ts` (`VaultTools`: what a caller is offered, routing, `VaultCallOptions`); edit core `shared/text-edit.ts`; `tasks_list` in `shared/tasks-list-tool.ts`; wired in `electron/app-services.ts`; scope and write rule applied for plugin calls in `electron/plugin-host/plugin-context.ts` (`assistantVaultOptions`) | Base (`mcp/`) — one set for the MCP server and the assistant | ADR-0021, ADR-0071, M77 |
+| Vault tools for the model — `vault_list`, `vault_search`, `vault_read`, `vault_edit`, `vault_write`, `vault_move`, `vault_delete` | `electron/mcp/tools/` (`defs.ts` descriptions, `scope.ts` the vaults and paths a call may touch, `list.ts`, `search.ts`, `read.ts`, `write.ts`), `electron/mcp/vault-tools.ts` (`VaultTools`: what a caller is offered, routing, `VaultCallOptions`); edit core `shared/text-edit.ts`; `tasks_list` in `shared/tasks-list-tool.ts`; wired in `electron/app-services.ts`; scope and write rule applied for plugin calls in `electron/plugin-host/plugin-context.ts` (`assistantVaultOptions`) | Base (`mcp/`) — one set for the MCP server and the assistant | ADR-0021, ADR-0071, M77 |
 | Assistant system prompt | `plugins/assistant/main/system-prompt.ts` (`buildSystemPrompt`), role texts in `ask-prompts.ts` (`ASK_SYSTEM`, `askToolsSystem`, `liveEditSystem`) | Plugin assistant | ADR-0071, M76, M78 |
 | Vault tools on open tabs — reading the buffer, changing a file in its tab, tab follows a move / closes on delete | `electron/ipc/open-docs-bridge.ts` (`OpenDocsBridge`), `shared/ipc/mcp.ts` (`OpenDocsRequest` / `OpenDocsReply`), `src/app/services/open-docs-bridge.service.ts`; used in `electron/mcp/tools/current-text.ts`, `write.ts`; the attached note as a file of the call: `VaultCallOptions.files`, `ToolScope.file` / `locate` | Base (`ipc/`, `mcp/`, renderer `services/`) | ADR-0071, M78 |
 | Tool calls shown while they run | `plugins/assistant/main/index.ts` (`chat:toolEvent`), `renderer/state.ts` (`applyToolProgress`), `renderer/thread.ts` | Plugin assistant | ADR-0071, M76 |
@@ -904,7 +891,7 @@ decision. (Seams — what a *plugin* can extend — are the table above.)
 | Manual Actions (run + on-save queue) | `plugins/assistant/` + `editor-more` menu rows | Plugin assistant | ADR-0011, ADR-0012 |
 | "Structure note (lossless)" built-in Action + the `{{AVAILABLE_TAGS}}` prompt placeholder | `shared/config/schema.ts` (`LOSSLESS_FORMAT_PROMPT`), `shared/llm/prompt-substitution.ts`, `plugins/assistant/main/action-engine.ts` | Shared + plugin assistant | `specs/classifier-spec.md`, M73 |
 | Live edit (model edits the open note) | `plugins/assistant/` + `documents.setEditLock` | Plugin assistant | ADR-0049 |
-| Semantic retrieval (the Vault chip) | `plugins/assistant/main/semantic/` | Plugin assistant | ADR-0055 |
+| Vault context for a question (the Vault chip) | `plugins/assistant/shared/vault-context.ts` (words, ranking, the block), `plugins/assistant/main/vault-context.ts` (the lookup over the section index) | Plugin assistant, over the tags plugin's index | ADR-0072, M80 |
 | Assistant tool groups + external MCP servers | `electron/mcp-client/`, `src/app/tool-approval/`, Settings → "Assistant tools" | Base | ADR-0063 |
 | LLM providers / transport (encrypted keys) | `electron/llm/` (`providers/`, router, task registry), `electron/config-secrets.ts` | Base | ADR-0047, ADR-0014, ADR-0010 later change |
 | Templates panel + template library | `plugins/templates/` | Plugin templates | ADR-0029 |
@@ -3234,7 +3221,7 @@ one push per press, Ctrl+S saves (req-25 unchanged).
   model's own buffer pushes) plus the meta bar's "Assistant is
   editing…" hint. `PLUGIN_API_VERSION` minor → 4.
 
-## 5.27 Semantic vault retrieval (`plugins/assistant/main/semantic/`, ADR-0055)
+## 5.27 Vault context for a question (`plugins/assistant/`, ADR-0072)
 
 The **Vault chip** in the composer opens a picker — *Off / Active
 vault / All vaults* shortcut rows plus one checkbox row per registered
@@ -3242,49 +3229,33 @@ vault, so a non-active vault is targetable without activating it
 (remembered in `localStorage['drey.assistant.vaultScope']` plus the
 custom selection's ids); each ask turned on carries `vaultScope`
 (+ `vaultIds` for a custom subset) in the `AskRequest`, and
-`ChatEngine` retrieves the top-k note sections most similar to the
-question into the system prompt — a small fixed context, no tool loop,
-independent of `mcp.enabled`, ignored for live-edit turns. Citations
-name the vault (`vault · path:line`); a custom selection whose vaults
-all left the registry degrades to a visible `unregistered` context
-status, never to the active vault.
+`ChatEngine` puts the note sections that contain words of the question
+into the system prompt — a small fixed context, ignored for live-edit
+turns. Citations name the vault (`vault · path:line`); a custom
+selection whose vaults all left the registry degrades to a visible
+`unregistered` context status, never to the active vault.
 
-- **`shared/semantic.ts`** (pure, spec-importable) — the `VaultScope`
-  type + normalizer, the scope resolver (`resolveTargetVaultIds`: custom
-  ∩ registry, no active-vault fallback) and its picker twin
-  (`deriveVaultScope`: checked set → scope), config defaults, e5
-  `query:`/`passage:` prefixes,
-  the fence-aware section splitter (copied from the tags plugin's —
-  cross-plugin imports are banned), float32↔base64 vectors, cosine, the
-  `VAULT CONTEXT` block builder, citations + the compact replay line.
-- **`main/semantic/embed-worker.ts`** — the app's ONLY transformers.js
-  import: a worker_threads entry that injects the WASM ONNX runtime via
-  `globalThis[Symbol.for('onnxruntime')]` (the native
-  `onnxruntime-node`/`sharp` dependencies are satisfied by inert stub
-  packages, keeping ADR-0023 intact) and answers `{id, texts}` with
-  `{id, vectors}`. Configured per spawn (`model`, HF cache dir under
-  `<userData>/models`).
-- **`main/semantic/embedder.ts`** — worker supervision: lazy spawn,
-  sequential batches of 16, restart on model change or crash, fail-fast
-  pending rejection.
-- **`main/semantic/vector-index.ts`** — the in-memory index: per vault a
-  `{model, files: Map<path, {path, heading, line, vec}[]>}`; `search`
-  ranks across scoped vaults with a score floor and skips stale-model
-  vaults; `serialize`/`load` map a vault to its JSON file (base64
-  vectors, model stamped).
-- **`main/semantic/service.ts`** — orchestration: plugin config slice
-  (`semantic.enabled/model/topK/minScore`), save-hook + vault-change
-  freshness (per-vault work chains), boot/enabling catch-up of
-  un-indexed files with `semantic:progress` events, debounced atomic
-  JSON persistence (sync flush on quit), and `retrieve()` — embed,
-  top-k, then hydrate each hit's section text fresh from the vault.
-  Backend methods: `semantic:status` / `semantic:rebuild` /
-  `semantic:configChanged`. Since milestone 68 also **`search(question,
-  scope?, limit?)`** — the SDK seam's browse path: same embedding,
-  scope resolution and hydration, but a 12/20 limit budget and a
-  snippet per hit; the provider registers through
-  `ctx.search.registerSemanticSearch` only while enabled (main-side
-  re-sync after every config change).
+Until milestone 80 these sections were chosen by an embedding model
+(ADR-0055). That retrieval — worker, vector index, Settings page, the
+Search panel's Semantic toggle, `vault_retrieve`, the SDK's semantic
+seam — was removed.
+
+- **`shared/vault-context.ts`** (pure, spec-importable) — the
+  `VaultScope` type + normalizer, the scope resolver
+  (`resolveTargetVaultIds`: custom ∩ registry, no active-vault fallback)
+  and its picker twin (`deriveVaultScope`: checked set → scope);
+  `queryTerms` (the question's words without stopwords, at most 8);
+  `rankLexical` (a section scores the sum of the weights of the words
+  it contains, a rare word weighs more, a word in the heading one and a
+  half times); the `chats/` exclusion; the `VAULT CONTEXT` block
+  builder, citations + the compact replay line.
+- **`main/vault-context.ts`** — `retrieveVaultContext`: one search per
+  word and vault of the scope against the section index the tags plugin
+  registered (`ctx.search.sectionSearchProvider()`), then the ranking;
+  the best four sections with their text. It keeps no state and reads
+  no file. The outcome says why it is empty: `unavailable` (no section
+  index — the tags plugin is disabled), `noTargets` (a custom selection
+  without a registered vault).
 - **Search panel files** (`plugins/tags/renderer/`) — `index.ts` only
   wires the parts and registers the `search.open` command:
   `search-session.ts` is the model without DOM (query, persisted
@@ -3294,26 +3265,12 @@ status, never to the active vault.
   confirmation; `search-summary.ts` the Summarize digest into a
   scratch tab; `hit-list.ts` folds unsaved buffers into the hits and
   groups them per file, as pure functions.
-- **Search panel semantic mode** (`plugins/tags/renderer/`, milestone
-  68) — the panel's brain-icon toggle switches the vault/all query to
-  `api.search.searchSemantic`: ranked hits with a percent score badge,
-  tag chips as an exact post-filter (`sectionCarriesTags` in the tags
-  plugin's `shared/search.ts`, same nested-tag rule), match flags and
-  replace hidden, no dirty-buffer folding; a missing provider surfaces
-  as the panel's error row. **MCP `vault_search` mode `semantic`**
-  (`electron/mcp/vault-tools.ts`) — same provider (getter injected in
-  `main.ts` next to the section-search one), `mode: 'text' |
-  'semantic'` defaulting to text; semantic requires `text`, refuses
-  `tags`/`regex`, formats `vault · path:line — heading (score) —
-  snippet`. Pause/resume of rebuilds was considered and dropped
-  (ADR-0055 later change).
-- **Ask flow** — retrieved text rides ONLY the current system prompt
+- **Ask flow** — the section text rides ONLY the current system prompt
   (never persisted, never replayed); the turn persists a compact
   ```drey-context fence rendered as a collapsible chip (click opens the
-  file); older turns replay one `[Vault context used …]` line;
-  `contextError` degrades to a quiet notice. **Settings → "Assistant
-  retrieval"** (plugin category): switch, model id, k, score floor,
-  per-vault status + rebuild.
+  file), or the reason nothing was found; older turns replay one
+  `[Vault context used …]` line; `contextError` degrades to a quiet
+  notice.
 
 ## 5.28 PDF embeds + viewer tab (ADR-0052)
 

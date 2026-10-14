@@ -85,11 +85,10 @@ describe('parsePrefs', () => {
   });
 
   it('reads stored choices', () => {
-    expect(parsePrefs('{"scope":"all","regex":true,"semantic":true}')).toEqual({
+    expect(parsePrefs('{"scope":"all","regex":true}')).toEqual({
       ...DEFAULT_PREFS,
       scope: 'all',
       regex: true,
-      semantic: true,
     });
   });
 

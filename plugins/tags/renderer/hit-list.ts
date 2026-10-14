@@ -6,9 +6,6 @@ import type { TagSearchHit, TagSearchQuery } from '../../../shared/plugin-api/re
 import { runTagSearch } from '../shared/search.js';
 import { sectionRecordsFor } from '../shared/section-records.js';
 
-/** A hit with an optional semantic score — the panel renders a rank badge when present. */
-export type PanelHit = TagSearchHit & { score?: number };
-
 /** An open tab with unsaved text, as far as the search needs it. */
 export interface DirtyDoc {
   readonly path: string;
@@ -52,12 +49,12 @@ export interface HitGroup {
   readonly key: string;
   readonly path: string;
   readonly vaultId: string | null;
-  readonly hits: PanelHit[];
+  readonly hits: TagSearchHit[];
 }
 
 /** The hits per file, files sorted by path; hits keep their order. */
-export function groupHits(hits: readonly PanelHit[]): HitGroup[] {
-  const groups = new Map<string, { path: string; vaultId: string | null; hits: PanelHit[] }>();
+export function groupHits(hits: readonly TagSearchHit[]): HitGroup[] {
+  const groups = new Map<string, { path: string; vaultId: string | null; hits: TagSearchHit[] }>();
   for (const hit of hits) {
     const key = `${hit.vaultId ?? ''} ${hit.path}`;
     let group = groups.get(key);

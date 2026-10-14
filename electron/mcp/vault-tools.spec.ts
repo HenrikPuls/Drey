@@ -9,7 +9,6 @@ import type { AppConfig } from '../../shared/app-config';
 import type { RenameLinksRequest, VaultFileEntry } from '../../shared/ipc-api';
 import type {
   SectionSearchProvider,
-  SemanticSearchProvider,
   SdkTaskRecord,
 } from '../../shared/plugin-api';
 
@@ -163,7 +162,6 @@ function harness(
     vault,
     getSearchProvider: () => null,
     getTaskProvider: () => null,
-    getSemanticProvider: () => null,
     getConfig: () => config({ yolo: over.yolo ?? false }),
     confirmWrite: async (request) => {
       confirms.push(request);
@@ -217,7 +215,7 @@ function harness(
 const HARBOUR = ['# Harbour', '', 'The harbour fee is 12 euros per night.', '', '## Winter', '', 'Take the mast down before the first frost.', ''].join('\n');
 
 describe('VaultTools — what a caller is offered', () => {
-  it('offers every tool to an MCP client, without vault_retrieve while retrieval is off', () => {
+  it('offers every tool to an MCP client', () => {
     const h = harness();
     expect(h.tools.list().map((tool) => tool.name)).toEqual([
       'vault_list',
@@ -229,11 +227,6 @@ describe('VaultTools — what a caller is offered', () => {
       'vault_delete',
       'tasks_list',
     ]);
-  });
-
-  it('adds vault_retrieve while a semantic provider is registered', () => {
-    const h = harness({}, { getSemanticProvider: () => ({ search: async () => [] }) });
-    expect(h.tools.list().map((tool) => tool.name)).toContain('vault_retrieve');
   });
 
   it('leaves the changing tools and tasks_list out of the assistant set when writing is off', () => {
@@ -478,29 +471,6 @@ describe('vault_search', () => {
     const without = await harness(files).run('vault_search', { tags: ['boat'] }, opts);
     expect(without.isError).toBe(true);
     expect(without.text).toContain('Tags plugin is switched off');
-  });
-});
-
-describe('vault_retrieve', () => {
-  const hit = (path: string, score: number): never =>
-    ({ vaultId: 'x', path, heading: 'H', line: 3, snippet: `about ${path}`, text: '', score }) as never;
-
-  it('ranks the sections of every vault in scope together', async () => {
-    const provider: SemanticSearchProvider = {
-      search: async (_question, scope) =>
-        scope?.kind === 'vault' && scope.vaultId === 'docs' ? [hit('d.md', 0.9)] : [hit('t.md', 0.5)],
-    };
-    const result = await harness({}, { getSemanticProvider: () => provider }).run('vault_retrieve', {
-      query: 'what to do before winter',
-    });
-    expect(result.text.indexOf('docs:d.md:3 — H (score 0.90)')).toBeGreaterThan(-1);
-    expect(result.text.indexOf('docs:d.md')).toBeLessThan(result.text.indexOf('vtest:t.md'));
-  });
-
-  it('points to vault_search while retrieval is off', async () => {
-    const result = await harness().run('vault_retrieve', { query: 'x' });
-    expect(result.isError).toBe(true);
-    expect(result.text).toContain('Use vault_search');
   });
 });
 

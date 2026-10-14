@@ -77,10 +77,10 @@ export function mountComposer(
   liveButton.title =
     'Live edit: let the assistant edit this note directly — changes apply immediately (no confirmation). Undo with Ctrl+Z, save with Ctrl+S.';
   liveButton.setAttribute('aria-label', 'Toggle live edit');
-  // The Vault toggle (ADR-0055): a click opens the picker — off, the
+  // The Vault toggle (ADR-0072): a click opens the picker — off, the
   // active vault, all vaults, or any subset (e.g. a non-active Git
-  // vault); each ask then retrieves the most similar note sections of
-  // the selection as context.
+  // vault); each ask then gets the note sections of the selection
+  // that contain its words as context.
   const vaultButton = toolButton('vault', 'database');
   vaultButton.setAttribute('aria-label', 'Pick the vault context');
   // The Web toggle (milestone 79): whether the next ask may reach outside

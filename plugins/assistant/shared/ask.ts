@@ -13,7 +13,7 @@
  * imports).
  */
 import type { AskOutcome } from '../../../shared/llm';
-import { normalizeVaultScope, type VaultScope } from './semantic.js';
+import { normalizeVaultScope, type VaultScope } from './vault-context.js';
 
 /** One file attached to an ask turn. `body` is the document text (LF). */
 export interface AskFile {
@@ -63,10 +63,10 @@ export interface AskRequest {
    */
   noteKey: string | null;
   /**
-   * Semantic vault retrieval for THIS turn (ADR-0055): `off` (chip dark),
+   * The vault scope of THIS turn (ADR-0072): `off` (chip dark),
    * `vault` (active vault), `all` (every registered vault) or `custom`
-   * (the picker's explicit subset — `vaultIds`). The main side retrieves
-   * the top-k sections and injects them into the system prompt; a
+   * (the picker's explicit subset — `vaultIds`). The main side looks up
+   * the best sections and injects them into the system prompt; a
    * live-edit turn ignores the scope.
    */
   vaultScope: VaultScope;

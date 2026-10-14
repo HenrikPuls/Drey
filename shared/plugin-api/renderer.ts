@@ -39,7 +39,6 @@ export type {
   TagPrefixStyle,
   TagSearchHit,
   TagSearchQuery,
-  SemanticSectionHit,
   TextMatchOptions,
 } from './search-types';
 export type { SectionSearchScope } from './main-plugin-api';
