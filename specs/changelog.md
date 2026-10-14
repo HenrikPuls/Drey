@@ -20,6 +20,25 @@ recorded as an explicit decision. The parity checklist lives in
 
 ## Recent milestones
 
+### req-43 — CI stores the exes only for tags and manual runs
+
+Owner request, outside the roadmap list (2026-10-14). **Not yet manually
+verified by the owner.**
+
+CI had failed on every run since 2026-10-13 although every check passed:
+the last step, uploading the setup and portable exe as workflow
+artifacts, hit the account's artifact storage quota (`Artifact storage
+quota has been hit`). Each push to `main` and each PR stored both exes
+for 14 days.
+
+Every run still builds, packs and smoke-tests the exes
+(`verify:pack`); `.github/workflows/ci.yml` now uploads them only for a
+`v*` tag push or a manual run (`workflow_dispatch` — Actions → CI → Run
+workflow, on any branch), kept 3 days. The `v*` Release attachment and
+the e2e failure diagnostics are unchanged. `docs/07` (§CI) follows. The
+artifacts stored before the change still count against the quota until
+they are deleted or expire; GitHub recalculates usage every 6–12 hours.
+
 ### Milestone 80 — Vault context by text search; the embedding retrieval is removed
 
 Owner request, outside the roadmap list (2026-10-14):

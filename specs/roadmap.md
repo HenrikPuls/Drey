@@ -48,8 +48,9 @@ changelog and delete it here — no shipped history on this page.
 **Status (2026-10-14):** version 0.6.0, milestones 1–74 and 76–80
 shipped. Milestone ids are assigned when work starts — check
 `changelog.md` for the highest used (latest: milestone 80; milestone 75
-is assigned to "Configurable shortcuts" below; latest requirement id: req-42, the Cyberpunk app mark —
-an owner request outside the list, shipped in the same step).
+is assigned to "Configurable shortcuts" below; latest requirement id: req-43, CI stores the exes only for
+tags and manual runs — an owner request outside the list, shipped in the
+same step).
 Items A1–A5 of the architectural cleanup shipped on 2026-10-13
 (changelog); A6–A12 remain.
 
