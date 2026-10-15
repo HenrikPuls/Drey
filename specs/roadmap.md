@@ -44,12 +44,15 @@ Open work only. Everything implemented lives in
 lives in [`decisions.md`](decisions.md). When an item ships, move it to the
 changelog and delete it here — no shipped history on this page.
 
-**Status (2026-10-13):** version 0.6.0, milestones 1–74, 76 and 77
-shipped. Milestone ids are assigned when work starts — check
-`changelog.md` for the highest used (latest: milestone 77; milestone 75
-is assigned to "Configurable shortcuts" below, milestones 78–79 to the
-rest of the assistant tool rework at the top of "Now"; latest requirement id: req-42, the Cyberpunk app mark —
-an owner request outside the list, shipped in the same step).
+**Status (2026-10-16):** version 0.6.0, milestones 1–81 shipped, across
+branches: main holds 1–74 and 76–80 (76–80 via the
+`feat/assistant-tool-rework` merge); 75 (with req-43 and the bug-11 fix)
+sits on the unmerged `fix/link-navigation` branch, and 81 (zen mode) on
+`feat/zen-mode` — both awaiting the owner's verification and merge.
+Milestone ids are assigned when work starts — check `changelog.md` for
+the highest used (latest: milestone 81; latest requirement id: req-43,
+CI stores the exes only for tags and manual runs — an owner request
+outside the list, shipped in the same step).
 Items A1–A5 of the architectural cleanup shipped on 2026-10-13
 (changelog); A6–A12 remain.
 
@@ -59,31 +62,17 @@ Items A1–A5 of the architectural cleanup shipped on 2026-10-13
 
 ### Now (small, daily value)
 
-The assistant tool rework below is an owner request, outside the list
-(2026-10-13); its milestones are worked first, in this order, with a
-pause after each. Milestones 76 (the tool loop and the system prompt)
-and 77 (the vault toolset) shipped — see the changelog. ADR-0071 covers
-76–78; milestone 79 is a later change to ADR-0063.
+The assistant tool rework — owner request, outside the list
+(2026-10-13) — is done: milestones 76 (the tool loop and the system
+prompt), 77 (the vault toolset), 78 (the open note through the tools),
+79 (web search and the Web chip) and 80 (vault context by text search;
+the embedding retrieval removed) shipped — see the changelog. ADR-0071
+covers 76–78; 79 is a later change to ADR-0063. All of it still awaits
+the owner's verification.
 
-- **The open note through the same tools (milestone 78).** Main asks the
-  renderer for the buffer of an open file (today a vault tool reads and
-  writes the file on disk: an unsaved change in an open tab is not seen,
-  a write to it ends in the "Changed on disk" merge, and a moved note's
-  tab keeps its old path), so a read sees unsaved text
-  and an edit lands in the tab (live edit: at once and unsaved; otherwise
-  after the diff confirmation). `doc_apply_diff` / `doc_write` /
-  `doc_read` go; the attached note is always in scope. The whole-document
-  `document` fence stays only for providers without a tool loop.
-- **Web search (milestone 79).** A built-in `web_search` tool with a
-  selectable provider — Brave Search, Tavily, a SearXNG URL of the
-  user's own, or DuckDuckGo without a key (a scraper of its HTML page:
-  works at once, may break or be rate-limited; said so in Settings).
-  Off by default, key encrypted like the LLM keys. A **Web chip** in the
-  composer, next to the Vault chip and remembered the same way, switches
-  everything that leaves the machine for the next question —
-  `web_search`, `web_fetch` and the external MCP servers; it appears only
-  when one of them is enabled in Settings. Reverses ADR-0063's "no
-  bundled search provider" and takes its deferred composer switch.
+Item 3 below (configurable shortcuts, milestone 75) shipped on the
+`fix/link-navigation` branch together with req-43 and the bug-11 fix;
+it is not on main yet.
 
 3. **Configurable shortcuts (milestone 75).** One user-defined binding
    per command, stored locally in the app config (never in the vault).
@@ -99,9 +88,6 @@ and 77 (the vault toolset) shipped — see the changelog. ADR-0071 covers
 
 ### Next
 
-6. **Zen mode.** A focused, chrome-free writing/reading view (docks,
-   titlebar and status bar hidden, one toggle). F11 full screen exists
-   (`window.toggleFullScreen`); this is a separate layout mode.
 ~~7. **Screenshots in the app.** Capture a region or window and embed it
    as an attachment (`attachments/`, ADR-0024). ⚠️ Scope open: whole
    window, region, or another application's window.~~

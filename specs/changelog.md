@@ -20,6 +20,70 @@ recorded as an explicit decision. The parity checklist lives in
 
 ## Recent milestones
 
+### Milestone 81 — Zen mode
+
+The roadmap's "Next" item 6: a focused, chrome-free writing/reading view.
+**Not yet manually verified by the owner.**
+
+One command, `view.toggleZen` ("Toggle zen mode", default chord
+`Ctrl+Alt+Z`, View menu row with a check mark, listed in the palette and
+Settings → Keyboard shortcuts like every command), removes the titlebar
+(menu bar and window controls with it), the three docks and the status
+bar from the layout; the centre column — tab bar, meta bar, editor —
+stays, and OS fullscreen (F11) composes with it. Zen is session-transient
+(deliberately not persisted: the app always starts in the full shell) and
+it is a pure render gate in the shell — it never mutates `DockService`
+state, so leaving zen restores the layout exactly as it was entered. With
+the menu bar hidden, the chord and the command palette are the two
+always-available exits.
+
+Verified by: renderer typecheck, lint, the shell unit test (`app.spec.ts`
+zen gate) and three new e2e tests (`e2e/zen.spec.ts`: hide and restore,
+the dock fold state untouched underneath, the palette reachable in zen
+and exiting zen from it).
+
+### Milestone 80 — Vault context by text search; the embedding retrieval removed
+
+Owner request, outside the roadmap list; the last step of the assistant
+tool rework. **Not yet manually verified by the owner.**
+
+With the assistant's Vault chip on, a plain ask carries the note sections
+that contain words of the question — the words searched in the tags
+plugin's section index through the SDK's section-search seam, ranked in
+`plugins/assistant/shared/vault-context.ts` (a rare word weighs more, a
+word in the heading more still), the best four in the system prompt.
+**There is no embedding model and no vector index**: ADR-0055's retrieval
+(transformers.js, ONNX, the Search panel's Semantic toggle, the
+`vault_retrieve` tool, the SDK's semantic seam) was removed and is not to
+be re-proposed (`specs/decisions.md`). Chat notes are excluded
+(`chats/` contains the literal question text of past conversations). The
+context block is a first selection (ADR-0069): the vault tools let
+tool-capable models look further.
+
+### Milestone 79 — Web search and the Web chip
+
+Owner request, outside the roadmap list; ADR-0063 later change. **Not yet
+manually verified by the owner.**
+
+`web_search` joins the tool groups: it asks the provider the user picked
+in Settings — DuckDuckGo without a key, Brave, Tavily, or a SearXNG
+instance (one file each in `electron/mcp-client/search-providers/`). The
+composer's **Web chip** is the per-question switch for everything that
+leaves the machine: off means no external tool rides the call. Opt-in,
+off by default — a documented exception to the "no cloud calls" rule.
+
+### Milestone 78 — The open note through the vault tools
+
+Owner request, outside the roadmap list; ADR-0071's planned step. **Not
+yet manually verified by the owner.**
+
+A file that is open in the editor is read and changed through its tab:
+main asks the renderer (`OpenDocsBridge`) instead of keeping buffers of
+its own. The note attached to an assistant question rides the call as a
+file of its own — in scope even with the chip off, changed with
+`vault_edit`; live edit (ADR-0049) is that file marked `live`. The
+`document` fence is only the fallback for a call without tools.
+
 ### Milestone 77 — One vault toolset for the assistant and the MCP server
 
 Owner request, outside the roadmap list; the second step of the

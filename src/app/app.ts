@@ -37,6 +37,7 @@ import { EditorContextMenu } from './editor-context-menu/editor-context-menu';
 import { EditorContextMenuService } from './editor-context-menu/editor-context-menu.service';
 import { EditorContextMenuRegistry } from './plugin-host';
 import { EditorPrefsService } from './editor/editor-prefs.service';
+import { ZenService } from './services/zen.service';
 import { eraseFormatting } from './editor/erase-formatting';
 import { EditTargetService } from './services/edit-target.service';
 import { EmojiPicker } from './emoji-picker/emoji-picker';
@@ -82,6 +83,7 @@ export class App {
   protected readonly editor = inject(EditorService);
   protected readonly settings = inject(SettingsService);
   protected readonly dock = inject(DockService);
+  protected readonly zen = inject(ZenService);
 
   /**
    * A folded side dock is out of the layout -- except during a panel drag,
@@ -352,6 +354,17 @@ export class App {
       label: 'Toggle full screen',
       keybinding: 'F11',
       run: () => windowChrome.toggleFullScreen(),
+    });
+
+    // Zen mode: the chrome-free writing view (titlebar, docks and status
+    // bar out of the layout; View menu row shares the id). The chord is
+    // the always-available exit -- the menu bar hides with the titlebar.
+    const zen = inject(ZenService);
+    keys.register({
+      id: 'view.toggleZen',
+      label: 'Toggle zen mode',
+      keybinding: 'Mod+Alt+Z',
+      run: () => zen.toggle(),
     });
 
     // The quick switcher / command palette (milestone 59): one overlay,
