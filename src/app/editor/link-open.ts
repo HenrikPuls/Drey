@@ -102,16 +102,52 @@ export function linkTargetDecorations(
 }
 
 /**
+ * The link a click inside a rendered widget (a table, an HTML block, a
+ * callout …) lands on: those widgets hold markdown-it's HTML, so their
+ * links are real `<a href>` elements, and the browser would follow one by
+ * navigating the whole window away from the app. `#anchor` links stay
+ * in-page (footnotes). `null` when the click is on no such link.
+ */
+export function widgetLinkHref(target: EventTarget | null): string | null {
+  const anchor = target instanceof Element ? target.closest('a[href]') : null;
+  const href = anchor?.getAttribute('href')?.trim() ?? '';
+  return href && !href.startsWith('#') ? href : null;
+}
+
+/**
  * @param onOpen called with the raw link target when a marked link is
- *   `Ctrl`/`Cmd`-clicked.
+ *   `Ctrl`/`Cmd`-clicked, or a link inside a rendered widget is clicked.
  */
 export function linkActivation(onOpen: (href: string) => void): Extension {
   const plugin = ViewPlugin.fromClass(
     class {
       decorations: DecorationSet;
 
-      constructor(view: EditorView) {
+      /**
+       * A plain click opens a link in a rendered widget (no caret to place
+       * there). A native listener: the widgets ignore their content's
+       * events, so CodeMirror's own handlers never see the click.
+       */
+      private readonly onWidgetClick = (event: MouseEvent): void => {
+        const href = widgetLinkHref(event.target);
+        if (href === null) {
+          return;
+        }
+        event.preventDefault();
+        if (event.button === 0) {
+          onOpen(href);
+        }
+      };
+
+      constructor(private readonly view: EditorView) {
         this.decorations = linkTargetDecorations(view.state, view.visibleRanges);
+        view.contentDOM.addEventListener('click', this.onWidgetClick);
+        view.contentDOM.addEventListener('auxclick', this.onWidgetClick);
+      }
+
+      destroy(): void {
+        this.view.contentDOM.removeEventListener('click', this.onWidgetClick);
+        this.view.contentDOM.removeEventListener('auxclick', this.onWidgetClick);
       }
 
       update(update: ViewUpdate): void {
