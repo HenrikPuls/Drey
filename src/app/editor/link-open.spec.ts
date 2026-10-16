@@ -2,7 +2,7 @@ import { markdown, markdownLanguage } from '@codemirror/lang-markdown';
 import { languages } from '@codemirror/language-data';
 import { EditorState } from '@codemirror/state';
 import type { DecorationSet } from '@codemirror/view';
-import { linkTargetDecorations, resolveVaultLinkPath } from './link-open';
+import { linkTargetDecorations, resolveVaultLinkPath, widgetLinkHref } from './link-open';
 
 function links(doc: string): { from: number; to: number; href: string }[] {
   const state = EditorState.create({
@@ -76,5 +76,25 @@ describe('resolveVaultLinkPath', () => {
 
   it('returns null when the path climbs above the vault root', () => {
     expect(resolveVaultLinkPath('a.md', '../../../etc/passwd')).toBeNull();
+  });
+});
+
+describe('widgetLinkHref (bug-11)', () => {
+  const inside = (html: string): Element => {
+    const div = document.createElement('div');
+    div.innerHTML = html;
+    return div.querySelector('span') ?? div.firstElementChild!;
+  };
+
+  it('returns the raw href of the link a click lands in', () => {
+    expect(widgetLinkHref(inside('<a href="09_adr/0052-pdf.md"><span>0052</span></a>'))).toBe(
+      '09_adr/0052-pdf.md',
+    );
+  });
+
+  it('is null for in-page anchors and for clicks outside a link', () => {
+    expect(widgetLinkHref(inside('<a href="#fn1"><span>1</span></a>'))).toBeNull();
+    expect(widgetLinkHref(inside('<p><span>text</span></p>'))).toBeNull();
+    expect(widgetLinkHref(null)).toBeNull();
   });
 });

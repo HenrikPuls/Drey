@@ -42,6 +42,38 @@ zen gate) and three new e2e tests (`e2e/zen.spec.ts`: hide and restore,
 the dock fold state untouched underneath, the palette reachable in zen
 and exiting zen from it).
 
+### Fix — a link in a rendered table no longer kills the window (bug-11)
+
+Found by the owner (2026-10-14), outside the list. **Not yet manually
+verified by the owner.**
+
+Clicking a link inside a rendered table (an HTML block, a callout …)
+navigated the whole window: those widgets hold markdown-it's HTML, so
+the link is a real `<a href>`, and a relative note link resolved against
+the app's own origin — the dev server answered "Cannot GET /…", and with
+the app gone the window could neither be used nor closed. Main's
+`will-navigate` guard let it through because it allowed every path of
+that origin.
+
+Now three layers keep the window on the app:
+
+- The editor opens such a link itself: a plain click on a link in a
+  rendered widget goes through the same link opening as a `Ctrl`+click on
+  a link in the text (a note opens in a tab, a web link in the browser);
+  `widgetLinkHref` in `src/app/editor/link-open.ts`. `#anchor` links
+  (footnotes) still jump in place.
+- A renderer-wide guard (`src/app/services/link-navigation-guard.ts`,
+  installed by `App`) cancels any same-origin link that names another
+  page, wherever it was drawn.
+- Main allows a navigation only to the app's entry page (`/` or
+  `/index.html` on the renderer's origin — the dev server's live reload);
+  `electron/navigation-guard.ts`.
+
+Specs: `electron/navigation-guard.spec.ts`,
+`src/app/services/link-navigation-guard.spec.ts`, `widgetLinkHref` cases
+in `link-open.spec.ts`; e2e `e2e/link-navigation.spec.ts` (a link in a
+table opens the note, the window stays). The manual says how links open.
+
 ### Milestone 75 — Configurable shortcuts
 
 Roadmap "Now" item, decided with the owner on 2026-10-13 and

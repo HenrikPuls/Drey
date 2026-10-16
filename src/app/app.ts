@@ -41,6 +41,7 @@ import { EditorPrefsService } from './editor/editor-prefs.service';
 import { ZenService } from './services/zen.service';
 import { eraseFormatting } from './editor/erase-formatting';
 import { EditTargetService } from './services/edit-target.service';
+import { installLinkNavigationGuard } from './services/link-navigation-guard';
 import { EmojiPicker } from './emoji-picker/emoji-picker';
 
 /**
@@ -120,6 +121,9 @@ export class App {
     // the user actually landed on.
     const history = inject(DocHistoryService);
     history.suspend();
+
+    // No link may navigate the window away from the app (bug-11).
+    installLinkNavigationGuard(window);
 
     // Subscribe to the quick-capture hotkey for the app's lifetime.
     inject(DailyNoteService).start();

@@ -2,10 +2,11 @@ import { app, BrowserWindow, shell } from 'electron';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { IPC_CHANNELS } from '../shared/ipc-api';
-import { rendererDevServerUrl, windowIconFor } from './app-paths';
+import { rendererDevServerUrl, rendererOrigin, windowIconFor } from './app-paths';
 import { buildContentSecurityPolicy, CSP_HEADER, isAppDocument } from './content-security-policy';
 import type { ExitBridge } from './ipc';
 import { logLine, watchWebContents } from './logger';
+import { isAllowedNavigation } from './navigation-guard';
 import { attachContextMenu } from './menu';
 
 export interface MainWindowHostDeps {
@@ -136,13 +137,12 @@ export class MainWindowHost {
     watchWebContents(window.webContents);
 
     // Belt-and-braces for the renderer's window-level drag/drop guard
-    // (ADR-0027): a stray file / link drop must never navigate the window
-    // away from the SPA, and an http(s) link opens in the OS browser.
+    // (ADR-0027) and its link guard (bug-11): a stray file / link drop or a
+    // clicked link must never navigate the window away from the SPA -- not
+    // even to another path of the app's own origin, which is no app page --
+    // and an http(s) link opens in the OS browser.
     window.webContents.on('will-navigate', (event, url) => {
-      const allowed = rendererDevServerUrl
-        ? url.startsWith(rendererDevServerUrl)
-        : url.startsWith('app://');
-      if (!allowed) {
+      if (!isAllowedNavigation(url, rendererOrigin)) {
         event.preventDefault();
       }
     });
