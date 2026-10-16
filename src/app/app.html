@@ -7,10 +7,12 @@
     </div>
   }
 
-  <app-titlebar />
+  @if (!zen.active()) {
+    <app-titlebar />
+  }
 
   <div class="layout">
-    @if (dock.hasLeft() || dock.dragActive()) {
+    @if (!zen.active() && (dock.hasLeft() || dock.dragActive())) {
       <app-dock side="left" [class.folded]="folded('left')" />
       @if (dock.hasLeft() && !folded('left')) {
         <div
@@ -34,7 +36,7 @@
         }
       </main>
 
-      @if (dock.hasBottom() || dock.dragActive()) {
+      @if (!zen.active() && (dock.hasBottom() || dock.dragActive())) {
         @if (dock.hasBottom() && !dock.noneOpen('bottom')) {
           <div
             class="divider divider-y"
@@ -48,7 +50,7 @@
       }
     </div>
 
-    @if (dock.hasRight() || dock.dragActive()) {
+    @if (!zen.active() && (dock.hasRight() || dock.dragActive())) {
       @if (dock.hasRight() && !folded('right')) {
         <div
           class="divider divider-x"
@@ -62,7 +64,9 @@
     }
   </div>
 
-  <app-status-bar />
+  @if (!zen.active()) {
+    <app-status-bar />
+  }
 
   @if (settings.screenOpen()) {
     <app-settings />

@@ -103,9 +103,19 @@ Stepping back to a closed note reopens it.
 
 ![The View menu](img/titlebar-view-menu.png)
 
-The **View** menu toggles every panel, the docks, full screen (`F11`)
-and *Reset layout*, which restores the default dock arrangement and
-undocks docked editor panes.
+The **View** menu toggles every panel, the docks, zen mode (`Ctrl+Alt+Z`),
+full screen (`F11`) and *Reset layout*, which restores the default dock
+arrangement and undocks docked editor panes.
+
+### Zen mode
+
+*View → Zen mode* (or `Ctrl+Alt+Z`) hides the titlebar, all docks and
+the status bar and leaves just the editor with its tab bar and meta bar —
+a plain page for writing or reading. It combines freely with `F11` full
+screen. While it is on the menu bar is hidden too; the same chord and the
+command palette (`Mod+Shift+P`) stay available. `Ctrl+Alt+Z` again brings
+everything back exactly as it was — zen never rearranges your layout, and
+it is not remembered across restarts.
 
 ---
 
@@ -943,6 +953,7 @@ hotkey, in [Settings → Keyboard shortcuts](#settings-keyboard-shortcuts).
 | `Alt+Left` / `Alt+Right` | Back / forward (also mouse buttons 3/4) |
 | `Mod+Alt+Enter` / `Mod+Alt+Shift+Enter` | Split editor right / down |
 | `F6` / `Shift+F6` | Focus next / previous pane |
+| `Mod+Alt+Z` | Zen mode (hide titlebar, docks and status bar) |
 | `F11` | Full screen |
 | `Mod+Enter` | Toggle task done (on a task line) |
 | `/` on an empty line | Slash menu (Entry, templates, formatting) |

@@ -45,9 +45,10 @@ Open work only. Everything implemented lives in
 lives in [`decisions.md`](decisions.md). When an item ships, move it to the
 changelog and delete it here — no shipped history on this page.
 
-**Status (2026-10-14):** version 0.6.0, milestones 1–80 shipped.
-Milestone ids are assigned when work starts — check `changelog.md` for
-the highest used (latest: milestone 80; latest requirement id: req-43,
+**Status (2026-10-16):** version 0.6.0, milestones 1–81 shipped; 81
+(zen mode) manually verified by the owner. Milestone ids are assigned
+when work starts — check `changelog.md` for the highest used (latest:
+milestone 81; latest requirement id: req-43,
 CI stores the exes only for tags and manual runs — an owner request
 outside the list, shipped in the same step).
 Items A1–A5 of the architectural cleanup shipped on 2026-10-13
@@ -65,13 +66,13 @@ shipped as milestones 76–79, and the removal of the embedding retrieval
 changelog; all five await the owner's verification. Configurable
 shortcuts shipped as milestone 75 (ADR-0073), also awaiting verification.
 
+Zen mode (the "Next" item 6) shipped as milestone 81; the owner verified
+it on 2026-10-16.
+
 (Nothing else open here — the next item is "Next" below.)
 
 ### Next
 
-6. **Zen mode.** A focused, chrome-free writing/reading view (docks,
-   titlebar and status bar hidden, one toggle). F11 full screen exists
-   (`window.toggleFullScreen`); this is a separate layout mode.
 ~~7. **Screenshots in the app.** Capture a region or window and embed it
    as an attachment (`attachments/`, ADR-0024). ⚠️ Scope open: whole
    window, region, or another application's window.~~

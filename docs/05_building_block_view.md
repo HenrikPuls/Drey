@@ -539,7 +539,15 @@ Keep it in step whenever a component boundary changes (CLAUDE.md's
   `togglefullscreen` role is deliberately absent — its F11 accelerator
   would swallow the key) — the titlebar menu invokes the
   same ids; milestone 59 adds `palette.files` (`Mod+P`) /
-  `palette.commands` (`Mod+Shift+P`) and `settings.open` (`Mod+,`)
+  `palette.commands` (`Mod+Shift+P`) and `settings.open` (`Mod+,`);
+  milestone 81 adds `view.toggleZen` (`Mod+Alt+Z`)
+- `ZenService` (`src/app/services/zen.service.ts`, milestone 81) — zen
+  mode, the chrome-free writing view: a session-transient `active`
+  signal the shell (`app.html`) renders against — titlebar, the three
+  docks and the status bar drop out of the layout, the centre column
+  stays. A pure render gate: it never mutates `DockService` state, so
+  exiting restores the layout as it was entered, and it is deliberately
+  not persisted (the app always starts in the full shell).
 - `PaletteService` + `Palette` (`src/app/palette/`, milestone 59) — the
   quick switcher / command palette, one overlay: files of every vault
   (fuzzy on name then path, session-visited documents first, `Ctrl+Enter`

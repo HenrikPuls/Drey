@@ -22,6 +22,7 @@ import { EditorService } from '../services/editor.service';
 import { EditTargetService } from '../services/edit-target.service';
 import { SettingsService } from '../services/settings.service';
 import { VaultService } from '../vault';
+import { ZenService } from '../services/zen.service';
 import { WindowChromeService } from './window-chrome.service';
 import { duplicateSelection } from '../editor/markdown-commands';
 import type { EditCommand } from '../../../shared/ipc-api';
@@ -78,6 +79,7 @@ export class MenuService {
   private readonly widgets = inject(WidgetRegistryService);
   private readonly contributions = inject(MenuContributionsService);
   private readonly windowChrome = inject(WindowChromeService);
+  private readonly zen = inject(ZenService);
   private readonly help = inject(HelpService);
 
   readonly open = signal<MenuId | null>(null);
@@ -364,6 +366,13 @@ export class MenuService {
           .filter((w) => w.removable && this.settings.widgetEnabled(w.id))
           .map((w) => this.widgetRow(w.id, w.title)),
         SEP,
+        {
+          kind: 'item',
+          label: 'Zen mode',
+          hint: 'Ctrl Alt Z',
+          checked: () => this.zen.active(),
+          run: () => this.run('view.toggleZen'),
+        },
         {
           kind: 'item',
           label: 'Full screen',

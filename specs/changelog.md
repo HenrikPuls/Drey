@@ -20,6 +20,28 @@ recorded as an explicit decision. The parity checklist lives in
 
 ## Recent milestones
 
+### Milestone 81 — Zen mode
+
+The roadmap's "Next" item 6: a focused, chrome-free writing/reading view.
+**Manually verified by the owner (2026-10-16).**
+
+One command, `view.toggleZen` ("Toggle zen mode", default chord
+`Ctrl+Alt+Z`, View menu row with a check mark, listed in the palette and
+Settings → Keyboard shortcuts like every command), removes the titlebar
+(menu bar and window controls with it), the three docks and the status
+bar from the layout; the centre column — tab bar, meta bar, editor —
+stays, and OS fullscreen (F11) composes with it. Zen is session-transient
+(deliberately not persisted: the app always starts in the full shell) and
+it is a pure render gate in the shell — it never mutates `DockService`
+state, so leaving zen restores the layout exactly as it was entered. With
+the menu bar hidden, the chord and the command palette are the two
+always-available exits.
+
+Verified by: renderer typecheck, lint, the shell unit test (`app.spec.ts`
+zen gate) and three new e2e tests (`e2e/zen.spec.ts`: hide and restore,
+the dock fold state untouched underneath, the palette reachable in zen
+and exiting zen from it).
+
 ### Fix — a link in a rendered table no longer kills the window (bug-11)
 
 Found by the owner (2026-10-14), outside the list. **Not yet manually
