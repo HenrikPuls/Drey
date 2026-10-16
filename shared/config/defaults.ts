@@ -4,6 +4,7 @@
  * and `normalize.ts` (validation); re-exported from `shared/app-config.ts`.
  */
 import { DEFAULT_DAILY_DIR } from '../daily';
+import { DEFAULT_CAPTURE_CHORD } from '../keybindings';
 import {
   ActionTemplate,
   ActionTrigger,
@@ -88,6 +89,7 @@ export function defaultToolsConfig(): ToolsConfig {
     tasks: { enabled: true },
     templates: { enabled: true, write: 'auto' },
     webFetch: { enabled: false, approval: 'ask' },
+    webSearch: { enabled: false, provider: 'duckduckgo', apiKey: '', baseUrl: '', approval: 'ask' },
     servers: [],
     maxRounds: TOOL_ROUNDS_DEFAULT,
   };
@@ -194,6 +196,7 @@ export const DEFAULT_APP_CONFIG: AppConfig = {
   vault: { ...DEFAULT_VAULT_CONFIG },
   widgets: { disabled: [] },
   plugins: { disabled: [] },
+  keybindings: { overrides: {}, capture: DEFAULT_CAPTURE_CHORD },
   actions: {
     templates: [searchSummaryTemplate(), autotagTemplate(), losslessFormatTemplate()],
     triggers: [losslessFormatTrigger()],

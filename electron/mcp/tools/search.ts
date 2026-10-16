@@ -1,5 +1,5 @@
 /**
- * `vault_search` and `vault_retrieve` (ADR-0071).
+ * `vault_search` (ADR-0071).
  *
  * `vault_search` is exact matching over the note files themselves — no
  * index of its own (a full-text index was decided against,
@@ -8,11 +8,9 @@
  * is what gives every hit its line number, and what lets `path` narrow
  * the search to one note. Only a `tags` filter goes to the section index,
  * which owns the tag grammar.
- *
- * `vault_retrieve` ranks sections by meaning through the semantic seam.
  */
 import { splitSections } from '../../../shared/note-sections';
-import type { SemanticSectionHit } from '../../../shared/plugin-api';
+import { unsavedKey, unsavedTexts } from './current-text';
 import { cleanPath, isUnder, ResolvedVaults, ScopedVault, ToolScope } from './scope';
 import { fail, McpToolResult, ok, plural, VaultToolDeps } from './types';
 
@@ -25,9 +23,6 @@ const SCAN_MAX_CHARS_PER_FILE = 512 * 1024;
 /** Matching lines shown per section in word mode; the section is the hit. */
 const LINES_PER_SECTION = 3;
 const LINE_MAX_CHARS = 240;
-
-const RETRIEVE_DEFAULT = 8;
-const RETRIEVE_MAX = 20;
 
 function clampInt(raw: unknown, fallback: number, min: number, max: number): number {
   return typeof raw === 'number' && Number.isFinite(raw)
@@ -271,6 +266,9 @@ export async function vaultSearch(
   }
 
   const terms = queryTerms(query);
+  // What an open tab holds unsaved is searched in place of its file, so
+  // the line numbers match what vault_read shows next.
+  const unsaved = await unsavedTexts(deps);
   const out: string[] = [];
   let found = 0;
   let scanned = 0;
@@ -281,10 +279,15 @@ export async function vaultSearch(
     skipped += Math.max(0, files.length - SCAN_MAX_FILES);
     for (const file of files.slice(0, SCAN_MAX_FILES)) {
       let content: string;
-      try {
-        content = (await deps.vault.readFile(file, target.id)).content.replace(/\r\n/g, '\n');
-      } catch {
-        continue;
+      const buffer = unsaved.get(unsavedKey(target.id, file));
+      if (buffer !== undefined) {
+        content = buffer;
+      } else {
+        try {
+          content = (await deps.vault.readFile(file, target.id)).content.replace(/\r\n/g, '\n');
+        } catch {
+          continue;
+        }
       }
       scanned++;
       if (content.length > SCAN_MAX_CHARS_PER_FILE) {
@@ -329,54 +332,6 @@ export async function vaultSearch(
         ? ['', `[stopped at ${found} lines — narrow with \`path\`, more words or \`tags\`, or raise \`max_results\`]`]
         : []),
       ...(skipped > 0 ? ['', `[${plural(skipped, 'file')} not searched — narrow with \`path\`]`] : []),
-    ].join('\n'),
-  );
-}
-
-export async function vaultRetrieve(
-  deps: VaultToolDeps,
-  scope: ToolScope,
-  args: Record<string, unknown>,
-): Promise<McpToolResult> {
-  const provider = deps.getSemanticProvider();
-  if (provider === null) {
-    return fail(
-      'Error: vault_retrieve is unavailable — semantic retrieval is switched off (Settings → Assistant retrieval). Use vault_search with distinctive words instead.',
-    );
-  }
-  const query = typeof args['query'] === 'string' ? args['query'].trim() : '';
-  if (query === '') {
-    return fail('Error: vault_retrieve needs a non-empty `query` — a question or a topic description.');
-  }
-  const resolved = scope.many(args['vault']);
-  if ('error' in resolved) {
-    return fail(resolved.error);
-  }
-  const limit = clampInt(args['limit'], RETRIEVE_DEFAULT, 1, RETRIEVE_MAX);
-  const ranked: Array<{ vault: ScopedVault; hit: SemanticSectionHit }> = [];
-  for (const target of resolved.vaults) {
-    const hits = await provider.search(query, { kind: 'vault', vaultId: target.id }, limit);
-    for (const hit of hits) {
-      if (!scope.isProtected(hit.path.replace(/\\/g, '/'))) {
-        ranked.push({ vault: target, hit });
-      }
-    }
-  }
-  if (ranked.length === 0) {
-    return ok('No sections are similar enough to the query. Try vault_search with distinctive words, or vault_list to see what exists.');
-  }
-  ranked.sort((a, b) => b.hit.score - a.hit.score);
-  const shown = ranked.slice(0, limit);
-  return ok(
-    [
-      `${plural(shown.length, 'section')}, most similar first:`,
-      '',
-      shown
-        .map(
-          ({ vault, hit }) =>
-            `${scope.label(vault, hit.path.replace(/\\/g, '/'), resolved.labelled)}:${hit.line} — ${hit.heading} (score ${hit.score.toFixed(2)})\n  ${clip(hit.snippet)}`,
-        )
-        .join('\n\n'),
     ].join('\n'),
   );
 }

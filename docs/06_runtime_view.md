@@ -1785,6 +1785,11 @@ typed by hand). A nonzero exit or a missing executable surfaces as
 
 ## 6.36 One live-edit ask turn (ADR-0049)
 
+> Since milestone 78 the `doc_*` tools, the `LiveEditSession` and the
+> `chat:liveEdit` push below are gone: a live turn uses the vault tools
+> on the open tab — see 6.61. The lock, the undo step per change and the
+> outcome are unchanged.
+
 The composer's "Live edit" chip is on: the ask targets the open note,
 the model edits it through the `doc_*` tools over the provider loop, and
 every mutating call appears in the editor while the model keeps working.
@@ -2097,8 +2102,9 @@ _(Dropped: the batch-tag-suggestion inbox — see [ADR-0017] and
 [ADR-0018](09_architecture_decisions/0018-manual-refresh-no-file-watcher.md).
 The chokidar file-watcher reaction, originally dropped with ADR-0018,
 came back as the opt-in §6.31 / [ADR-0045](09_architecture_decisions/0045-optional-vault-file-watcher.md).
-The vault-wide chat/RAG scope shipped as §6.44 / milestone 41 /
-[ADR-0055](09_architecture_decisions/0055-semantic-vault-retrieval.md).)_
+The vault-wide chat scope shipped as §6.44: by embedding retrieval in
+milestone 41 (ADR-0055), by text search since milestone 80 /
+[ADR-0072](09_architecture_decisions/0072-vault-context-by-text-search.md).)_
 ## 6.43 Search summarise → LLM digest → `search-summary.md` (milestone 37)
 
 The Search panel's **Summarize** button (next to Export; hidden while no
@@ -2173,49 +2179,45 @@ buffer, and each send snapshots the current text to
 turn cites and what follow-up replays re-read, so the context survives
 the tab being closed (ADR-0048's paths-not-bodies rule stays intact).
 
-## 6.44 Semantic vault retrieval — the ask's Vault chip (milestone 41, ADR-0055)
+## 6.44 Vault context — the ask's Vault chip (milestone 80, ADR-0072)
 
 The assistant composer's **Vault chip** opens a picker: three shortcut
 rows — off, the active vault, all vaults — and one checkbox row per
 registered vault (remembered per app). Checking a subset (e.g. a
 non-active Git vault, without making it the default target for new
 content) sends `vaultScope: 'custom'` plus the selected `vaultIds`. The
-assistant plugin's main side retrieves the top-k note sections most
-similar to the question — embeddings via the plugin's own
-transformers.js WASM worker, one JSON index per vault (all registered
-vaults, independent of the scope) kept fresh by the save-hook /
-vault-change registries, section text hydrated from the vault at answer
-time. Citations carry the vault's name (`vault · path:line`), so equal
-paths across vaults stay distinguishable. Independent of
-`mcp.enabled`; ignored for live-edit turns; a retrieval failure
-degrades to no context plus a quiet notice. A custom selection whose
-vaults have all been removed from the registry degrades visibly to an
-"unregistered" context status — never a silent fallback to the active
-vault.
+assistant plugin's main side looks up the note sections that contain
+words of the question: the words are searched in the section index the
+tags plugin keeps (in memory, kept fresh by its own save and
+vault-change hooks), the hits are ranked, and the best four ride the
+system prompt. Citations carry the vault's name (`vault · path:line`),
+so equal paths across vaults stay distinguishable. Ignored for
+live-edit turns; a failed lookup degrades to no context plus a quiet
+notice. A custom selection whose vaults have all been removed from the
+registry degrades visibly to an "unregistered" context status — never a
+silent fallback to the active vault.
 
 ```mermaid
 sequenceDiagram
     actor User
     participant Panel as Assistant panel (renderer)
     participant Ask as main 'ask' → ChatEngine
-    participant Sem as SemanticService (plugin main)
-    participant W as embed-worker (WASM, transformers.js)
-    participant Vault as ctx.vault
+    participant Ctx as retrieveVaultContext (assistant main)
+    participant Idx as section index (tags plugin, via ctx.search)
     participant LLM as ctx.llm.chat → provider
 
     User->>Panel: open Vault chip picker (off / active / all / subset)
     User->>Panel: send question (vaultScope, vaultIds?)
     Panel->>Ask: invoke('ask', request)
-    Ask->>Sem: retrieveContext(question, scope, vaultIds)
-    Sem->>Sem: resolveTargetVaultIds (custom ∩ registry, no fallback)
-    Sem->>W: embed("query: …")
-    W-->>Sem: query vector (384 dims)
-    Sem->>Sem: cosine top-k over the scoped vaults' indexes (min score floor)
-    loop each hit
-        Sem->>Vault: read(path)
-        Sem->>Sem: section text fresh from disk (hydration)
+    Ask->>Ctx: retrieveContext(question, scope, vaultIds)
+    Ctx->>Ctx: resolveTargetVaultIds (custom ∩ registry, no fallback)
+    Ctx->>Ctx: queryTerms (no stopwords, at most 8 words)
+    loop each word, each vault in scope
+        Ctx->>Idx: search({ tags: [], text: word }, { vault })
+        Idx-->>Ctx: sections with heading, line and text
     end
-    Sem-->>Ask: RetrievedSection[] (vault, path, heading, line, score, text)
+    Ctx->>Ctx: drop chats/ and empty sections, rankLexical, best 4
+    Ctx-->>Ask: RetrievedSection[] (vault, path, heading, line, text)
     Ask->>Ask: system prompt += VAULT CONTEXT block
     Ask->>LLM: chat(system, replay…, question)
     LLM-->>Ask: answer
@@ -2224,55 +2226,17 @@ sequenceDiagram
     Note over Ask: follow-up replays one [Vault context used —] line
 ```
 
-Index freshness is the tags-index pattern: a save hook re-embeds the
-saved file (one worker round per batch of sections), a vault-change
-round deletes / re-reads / rebuilds, and enabling the feature (or a
-model change) triggers a background catch-up build with progress in
-Settings → "Assistant retrieval" (per-vault status + Rebuild). Vectors
-are stamped with the embedding model; a mismatch marks the vault stale
-and search skips it until rebuilt. Retrieved text rides only the current
-call — it is never persisted into the note and never replayed, so a
-follow-up's context stays small (the small-model budget).
+There is nothing to build and nothing to keep fresh on the assistant's
+side: the lookup holds no state. Without a section index (the tags
+plugin disabled) the turn records `unavailable`; with no section found
+it records `empty`. The section text rides only the current call — it
+is never persisted into the note and never replayed, so a follow-up's
+context stays small. The block is a first selection: a model that can
+call tools searches and reads further through the vault tools (§6.59).
 
-Since milestone 68 the same index serves two browse consumers through
-the base `SemanticSearchProvider` seam (SDK 1.18; the assistant plugin
-registers the provider only while retrieval is enabled, so "no
-provider" is the degrade signal):
-
-```mermaid
-sequenceDiagram
-    actor User
-    participant Panel as Search panel (tags plugin, renderer)
-    participant Host as plugin host 'drey.search.semantic'
-    participant Sem as SemanticService.search (assistant main)
-    participant MCP as external MCP client
-    participant W as embed-worker
-
-    User->>Panel: toggle brain icon ON, type a question, Enter
-    Panel->>Host: api.search.searchSemantic(question, scope, 12)
-    alt no provider registered (retrieval disabled)
-        Host-->>Panel: reject → error row ("enable Assistant retrieval")
-    else provider present
-        Host->>Sem: search(question, scope, limit)
-        Sem->>W: embed("query: …")
-        Sem->>Sem: top-limit cosine (configured score floor)
-        loop each hit
-            Sem->>Sem: hydrate section text + snippet from disk
-        end
-        Sem-->>Host: SemanticSectionHit[] (score desc)
-        Host-->>Panel: hits
-        Panel->>Panel: tag chips post-filter (sectionCarriesTags)<br/>group per file, render % score badges
-    end
-    MCP->>Host: vault_search {mode:"semantic", text, vault?, maxResults?}
-    Host->>Sem: same search()
-    Host-->>MCP: "vault · path:line — heading (score 0.87) — snippet" lines
-```
-
-Pause/resume of large rebuilds on interactive use was considered and
-dropped: an ask queues behind at most one 16-passage embed batch (the
-worker is FIFO and synchronous), never a whole rebuild — and a
-mid-rebuild index being incomplete is not a problem pausing fixes
-(ADR-0055 later change).
+Until milestone 80 the sections were chosen by an embedding model
+(ADR-0055), and the same index served the Search panel's Semantic
+toggle and the tool `vault_retrieve`. All of that was removed.
 
 ## 6.45 Capture through the `/` menu — Entry block and templates (milestone 43, ADR-0057)
 
@@ -2648,7 +2612,10 @@ sequenceDiagram
 ```
 
 `web_fetch` takes the same path with `runWebFetch` in place of the MCP
-call. A denial is an ordinary tool result: the model reads it and
+call, and `web_search` (milestone 79) with `runWebSearch`: one request
+to the provider chosen in Settings, the hits back as numbered text. None
+of this is attached unless the question's **Web chip** is on — the chat
+engine passes `externalTools` only then. A denial is an ordinary tool result: the model reads it and
 answers without the call. Cancelling the generation aborts a running
 call through the task's abort signal.
 
@@ -2993,7 +2960,7 @@ sequenceDiagram
     CE->>CE: resolve the chip to vault ids (registry)
     CE->>Host: chat({ vaultTools: true, vaultToolsScope: [docs] })
     Host->>VT: toolSpecs({ scope, write: tools.vault.write, origin: assistant, protectAppFolders })
-    VT-->>Host: read tools (+ vault_retrieve while semantic is on) (+ changing tools unless write = off)
+    VT-->>Host: read tools (+ changing tools unless write = off)
     Note over Host: tool loop (6.59)
     Host->>VT: call(vault_search, { query }, options)
     VT->>VM: listMarkdownFiles / readFile — only the vaults in scope
@@ -3026,3 +2993,92 @@ read or written. `vault_write`, `vault_move` and `vault_delete` take the
 same path — a move and a deletion ask in the approval dialog instead of
 the diff, a deletion always. A program on the MCP server runs the same
 code with every registered vault in scope and `mcp.yolo` as its rule.
+
+## 6.61 A vault tool changes a file that is open in a tab (milestone 78, [ADR-0071](09_architecture_decisions/0071-unified-vault-toolset-and-agent-loop.md))
+
+```mermaid
+sequenceDiagram
+    actor User
+    participant CE as ChatEngine (plugin)
+    participant Host as PluginHost (ctx.llm.chat)
+    participant VT as VaultTools (mcp/tools)
+    participant OB as OpenDocsBridge (main)
+    participant OS as OpenDocsBridgeService (renderer)
+    participant ES as EditorService
+    participant Dlg as Confirmation dialog
+
+    CE->>Host: chat({ vaultTools, vaultToolsScope: chip or [], vaultToolsFiles: [note, live?], onVaultChange })
+    Host->>VT: toolSpecs(options) — empty scope + a file: vault_read, vault_edit, vault_write
+    Note over Host: tool loop (6.59)
+    Host->>VT: call(vault_edit, { path, edits })
+    VT->>VT: ToolScope.locate — the file of the call is found by its path
+    VT->>OB: peek(vaultId, path)
+    OB->>OS: open-docs:request { peek }
+    OS->>ES: docFor(key)
+    OS-->>OB: open-docs:reply { buffers: [buffer] }
+    alt not open
+        VT->>VT: read and write the file on disk (6.60)
+    else open
+        VT->>VT: applyTextEdits on the buffer
+        alt live file
+            VT->>OB: apply(content, save: false)
+            OB->>OS: open-docs:request { apply }
+            OS->>ES: updateBuffer — unsaved, one undo step
+        else write rule confirm (or off, for the file of the call)
+            VT->>Dlg: buffer before / after (ADR-0011)
+            User->>Dlg: accept
+            VT->>OB: apply(content, save: true)
+            OB->>OS: open-docs:request { apply }
+            OS->>ES: applyRewrite — buffer, then the note's own save
+            OS-->>OB: { applied, saved }
+        end
+        VT-->>Host: "Edited <path>: …" (+ "not saved yet" when the save stopped)
+    end
+    VT->>CE: onVaultChange({ vaultId, path, before, after })
+    Host-->>CE: answer + toolTrace
+    CE->>CE: the note changed → applied edit entry in the chat note
+```
+
+Main keeps no buffers: every question goes to the renderer at the moment
+of the call, and a window that does not answer reads as "not open".
+`vault_read` and the scan of `vault_search` use the same `peek` /
+`dirty`; `vault_move` sends `moved` (the tab is retargeted) and
+`vault_delete` sends `closed`. A program on the MCP server takes the
+same path with `mcp.yolo` as its rule.
+
+## 6.62 Record a shortcut → the registry and the hotkey follow (milestone 75, [ADR-0073](09_architecture_decisions/0073-configurable-shortcuts.md))
+
+```mermaid
+sequenceDiagram
+    actor User
+    participant Page as SettingsShortcuts (renderer)
+    participant KS as KeybindingService
+    participant SS as SettingsService (draft)
+    participant Main as config:set (main)
+    participant CH as CaptureHotkey (main)
+
+    User->>Page: Change on a row
+    Page->>KS: pause() — chords are read, not run
+    User->>Page: presses Ctrl+Shift+K
+    Page->>Page: chordFromKeyPress → chordProblem (needs Ctrl/Alt or F-key, not reserved)
+    alt another row holds the chord
+        Page-->>User: "Ctrl Shift K is held by …" + Replace
+        User->>Page: Replace — the holder is left without a shortcut
+    end
+    Page->>KS: resume
+    Page->>SS: setKeybindings(slice) — the self-saving draft
+    SS->>Main: config:set
+    Main->>Main: normalizeAppConfig (invalid chords dropped)
+    Main->>CH: sync(keybindings.capture) — re-register only if changed or failed
+    Main-->>SS: stored config
+    SS->>KS: (App effect) setOverrides(config.keybindings.overrides)
+    KS->>KS: rebuild the chord index, bump revision
+    Note over KS: menus, palette, tooltips and the shortcuts page print the new chord
+    Page->>Main: shortcuts:capture-status
+    Main-->>Page: { chord, registered } — "In use by another program" when false
+```
+
+The registry never reads the Settings draft: a chord takes effect when
+it is stored. A plugin command's override is keyed by its id, so it
+applies whenever the plugin registers the command — also after the
+plugin was disabled and enabled again.

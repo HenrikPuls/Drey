@@ -23,6 +23,7 @@ import { DocHistoryService } from './services/doc-history.service';
 import { EditorZoomService } from './services/editor-zoom.service';
 import { LogService } from './services/log.service';
 import { McpBridgeService } from './services/mcp-bridge.service';
+import { OpenDocsBridgeService } from './services/open-docs-bridge.service';
 import { PaneLayout, PaneService } from './panes';
 import { SettingsService } from './services/settings.service';
 import { AboutService } from './services/about.service';
@@ -150,6 +151,8 @@ export class App {
     inject(McpBridgeService).start();
     // External tool calls that need the user's approval (ADR-0063).
     inject(ToolApprovalService).start();
+    // What the vault tools ask about open tabs (ADR-0071).
+    inject(OpenDocsBridgeService).start();
     // Answer main's save-before-exit question (bug-5) and show the dialog
     // when there are dirty documents.
     inject(ExitConfirmService).start();
@@ -217,6 +220,11 @@ export class App {
     // App-wide keyboard commands. Features register here the same way; the
     // titlebar menu bar invokes the same command ids.
     const keys = inject(KeybindingService);
+    // The user's chords (Settings → Keyboard shortcuts, ADR-0073) — the
+    // persisted config, never the Settings draft.
+    effect(() => {
+      keys.setOverrides(this.settings.config()?.keybindings.overrides ?? {});
+    });
     keys.register({
       id: 'note.new',
       label: 'New note',

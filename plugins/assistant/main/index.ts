@@ -6,7 +6,6 @@ import type {
   NoteSavedEvent,
   SaveHookResult,
   SdkTaskRecord,
-  Unsubscribe,
 } from '../../../shared/plugin-api';
 import { parseAskPayload } from '../shared/ask.js';
 import {
@@ -24,15 +23,10 @@ import { ActionEngine, type ChatFn } from './action-engine';
 import { ChatEngine } from './chat-engine';
 import { ChatStore } from './chat-store';
 import { createTemplateTools } from './template-tools';
-import { createSemanticService, type SemanticService } from './semantic/service';
-import { readFile } from 'node:fs/promises';
+import { retrieveVaultContext } from './vault-context';
+import { readFile, rm } from 'node:fs/promises';
 import { dialog, app } from 'electron';
 import * as path from 'node:path';
-
-/** `…/app.asar/…` → `…/app.asar.unpacked/…` (worker + glue must be real files). */
-function unpackedPath(p: string): string {
-  return p.replace(/app\.asar([\\/])/, 'app.asar.unpacked$1');
-}
 
 /**
  * Flattens the tree-shaped `ctx.vault.list()` result into vault-relative
@@ -57,9 +51,6 @@ function flattenFileTree(
   }
   return out;
 }
-
-/** Module-level so `deactivate` can stop the worker + flush the indexes. */
-let disposeSemantic: (() => void) | null = null;
 
 /**
  * The Assistant plugin's main entry (ADR-0044 stage 7): the on-save Actions
@@ -102,56 +93,16 @@ const plugin: MainPluginModule = {
       return list.map((vault) => ({ id: vault.id, name: vault.name, active: vault.active === true }));
     };
 
-    // -- semantic vault retrieval (ADR-0055) --------------------------------
-    // One worker owns the transformers.js WASM pipeline; indexes persist
-    // next to the plugin config and ride the save/vault registries like
-    // the tags index. Retrieval happens in the ask flow (see the port).
-    const semantic = createSemanticService(ctx, {
-      dataDir: path.join(app.getPath('userData'), 'plugins', ctx.pluginId),
-      workerPath: unpackedPath(path.join(__dirname, 'semantic', 'embed-worker.js')),
-      modelCacheDir: path.join(app.getPath('userData'), 'models'),
-    });
-    disposeSemantic = () => semantic.dispose();
-    // The SDK semantic seam (1.18): registered only while retrieval is
-    // enabled — "no provider" is the degrade signal the Search panel's
-    // semantic mode and MCP `vault_search` react to. Re-synced after
-    // every config change.
-    let semanticSearchUnsub: Unsubscribe | null = null;
-    const syncSemanticSearch = (): void => {
-      if (semantic.isEnabled) {
-        if (semanticSearchUnsub === null) {
-          semanticSearchUnsub = ctx.search.registerSemanticSearch({
-            search: (question, scope, limit) => semantic.search(question, scope, limit),
-          });
-        }
-        return;
-      }
-      semanticSearchUnsub?.();
-      semanticSearchUnsub = null;
-    };
-    void semantic
-      .refreshConfig()
-      .then(() => {
-        syncSemanticSearch();
-        return semantic.isEnabled ? semantic.catchUpAll() : undefined;
-      })
-      .catch((err: unknown) => ctx.log(err instanceof Error ? err.message : String(err), 'warn'));
-    ctx.save.onNoteSaved((event) => {
-      semantic.onSaved(event.vaultId, event.path, event.content);
-    });
-    ctx.vault.onChanged((event) => semantic.onVaultChanged(event));
-    ctx.ipc.handle('semantic:status', () => semantic.status());
-    ctx.ipc.handle('semantic:rebuild', (payload) => {
-      const { vaultId } = (payload ?? {}) as { vaultId?: unknown };
-      if (vaultId !== undefined && typeof vaultId !== 'string') {
-        throw new Error('malformed semantic:rebuild payload');
-      }
-      return semantic.rebuild(vaultId as string | undefined);
-    });
-    ctx.ipc.handle('semantic:configChanged', async () => {
-      await semantic.onConfigChanged();
-      syncSemanticSearch();
-    });
+    // The embedding retrieval is gone (ADR-0072): what it left in the
+    // app's own data folder — the vector indexes and the downloaded
+    // model — is removed once, quietly.
+    const userData = app.getPath('userData');
+    for (const leftover of [
+      path.join(userData, 'plugins', ctx.pluginId, 'semantic-index'),
+      path.join(userData, 'models'),
+    ]) {
+      void rm(leftover, { recursive: true, force: true }).catch(() => undefined);
+    }
 
     const chatEngine = new ChatEngine(
       chatStore,
@@ -162,6 +113,12 @@ const plugin: MainPluginModule = {
           ...(options?.vaultTools !== undefined ? { vaultTools: options.vaultTools } : {}),
           ...(options?.vaultToolsScope !== undefined
             ? { vaultToolsScope: options.vaultToolsScope }
+            : {}),
+          ...(options?.vaultToolsFiles !== undefined
+            ? { vaultToolsFiles: options.vaultToolsFiles }
+            : {}),
+          ...(options?.onVaultChange !== undefined
+            ? { onVaultChange: options.onVaultChange }
             : {}),
           ...(options?.externalTools !== undefined
             ? { externalTools: options.externalTools }
@@ -205,11 +162,17 @@ const plugin: MainPluginModule = {
           }
         },
         onDelta: (taskId, text) => ctx.ipc.emit('chat:delta', { taskId, text }),
-        onLiveEdit: (path, content) => ctx.ipc.emit('chat:liveEdit', { path, content }),
         onToolEvent: (taskId, event) => ctx.ipc.emit('chat:toolEvent', { taskId, ...event }),
         retrieveContext: (question, scope, vaultIds) =>
-          semantic.retrieve(question, scope, vaultIds),
-        semanticEnabled: () => semantic.isEnabled,
+          retrieveVaultContext(
+            {
+              listVaults: () => vaultInfos(),
+              sectionSearch: () => ctx.search.sectionSearchProvider(),
+            },
+            question,
+            scope,
+            vaultIds,
+          ),
         tasksTool: () => {
           // Live at call time: the tasks plugin can (de)activate between
           // asks only via an app restart, but the getter keeps the engine
@@ -352,11 +315,6 @@ const plugin: MainPluginModule = {
       }
       return stageExternalFiles(ctx, referenceNote);
     });
-  },
-
-  deactivate() {
-    disposeSemantic?.();
-    disposeSemantic = null;
   },
 };
 

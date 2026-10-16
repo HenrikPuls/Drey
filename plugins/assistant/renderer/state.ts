@@ -12,7 +12,7 @@
 import type { ActionOutcome } from '../../../shared/plugin-api';
 import type { AskRequest, AssistantOutcome } from '../shared/ask';
 import { MAX_EXTRA_FILES, MAX_IMAGES, truncateFileBody } from '../shared/ask.js';
-import { normalizeVaultScope, type VaultScope } from '../shared/semantic.js';
+import { normalizeVaultScope, type VaultScope } from '../shared/vault-context.js';
 import {
   isChatNotePath,
   isDailyNotePath,
@@ -65,6 +65,29 @@ function storeVaultScope(scope: VaultScope, vaultIds: readonly string[]): void {
       globalThis.localStorage?.setItem(VAULT_SCOPE_VAULTS_KEY, JSON.stringify(vaultIds));
     } else {
       globalThis.localStorage?.removeItem(VAULT_SCOPE_VAULTS_KEY);
+    }
+  } catch {
+    // Storage unavailable (tests, privacy mode) — session state only.
+  }
+}
+
+/** localStorage key for the Web chip (present = on). */
+const WEB_KEY = 'drey.assistant.web';
+
+function loadWeb(): boolean {
+  try {
+    return globalThis.localStorage?.getItem(WEB_KEY) === 'on';
+  } catch {
+    return false;
+  }
+}
+
+function storeWeb(on: boolean): void {
+  try {
+    if (on) {
+      globalThis.localStorage?.setItem(WEB_KEY, 'on');
+    } else {
+      globalThis.localStorage?.removeItem(WEB_KEY);
     }
   } catch {
     // Storage unavailable (tests, privacy mode) — session state only.
@@ -196,6 +219,12 @@ export interface AssistantPorts {
    */
   setEditLock(path: string, locked: boolean): void;
   /**
+   * Whether Settings has anything switched on that leaves the machine —
+   * web search, web fetch, an MCP server (live). The Web chip shows only
+   * then.
+   */
+  externalTools(): Promise<boolean>;
+  /**
    * The configured daily-notes root (AppConfig `daily.dir`, live) — the
    * decoupling anchor: a daily note never binds a chat and never pulls
    * one on focus (57c).
@@ -261,7 +290,7 @@ export interface AssistantState {
   liveEdit(): boolean;
   toggleLiveEdit(): void;
   /**
-   * Semantic vault retrieval (ADR-0055): `off` (chip dark) / `vault` /
+   * The Vault chip's scope (ADR-0072): `off` (chip dark) / `vault` /
    * `all` / `custom` (the picker's explicit subset — `customVaultIds`).
    * Session state persisted to localStorage; set through the chip's
    * picker. A `custom` selection whose vaults vanished from the registry
@@ -275,6 +304,17 @@ export interface AssistantState {
   setVaultScope(scope: VaultScope, vaultIds?: readonly string[]): void;
   /** Re-reads the registry and prunes a stale custom selection. */
   refreshVaults(): Promise<void>;
+  /**
+   * The Web chip (milestone 79): whether the next ask may reach outside
+   * the machine — web search, web fetch, the user's MCP servers.
+   * Remembered across sessions like the Vault chip; off until switched on.
+   */
+  web(): boolean;
+  toggleWeb(): void;
+  /** Whether Settings has any of those switched on; the chip shows only then. */
+  webAvailable(): boolean;
+  /** Re-reads that from the config (it changes in Settings, not here). */
+  refreshWeb(): Promise<void>;
   extraFiles(): readonly string[];
   /** Adds a file chip; resolves to a reason string when refused. */
   addFile(path: string): { ok: boolean; reason?: string };
@@ -361,11 +401,15 @@ export function createAssistantState(ports: AssistantPorts, tasks: RunningTasks)
   let deferredFollowKey: string | null | undefined;
   /** Live edit (ADR-0049) — session flag, one toggle in the chips row. */
   let liveEdit = false;
-  /** Semantic vault retrieval (ADR-0055) — remembered across sessions. */
+  /** The Vault chip's scope (ADR-0072) — remembered across sessions. */
   let vaultScope: VaultScope = loadVaultScope();
   // Ids only ever matter to a custom scope; a stale key under another
   // scope starts empty rather than resurrecting an old selection.
   let customVaultIds: string[] = vaultScope === 'custom' ? loadCustomVaultIds() : [];
+  /** The Web chip — remembered across sessions. */
+  let web = loadWeb();
+  /** Whether Settings offers anything for it; false until first read. */
+  let webAvailable = false;
   /** The vault registry cache (drives the picker + selection sanitation). */
   let vaults: { id: string; name: string; active: boolean }[] = [];
   let streaming: StreamingTurn | null = null;
@@ -529,6 +573,28 @@ export function createAssistantState(ports: AssistantPorts, tasks: RunningTasks)
         }
       }
       notify();
+    },
+
+    web: () => web,
+    webAvailable: () => webAvailable,
+
+    toggleWeb() {
+      web = !web;
+      storeWeb(web);
+      notify();
+    },
+
+    async refreshWeb() {
+      let next: boolean;
+      try {
+        next = await ports.externalTools();
+      } catch {
+        return; // keep whatever we had
+      }
+      if (next !== webAvailable) {
+        webAvailable = next;
+        notify();
+      }
     },
 
     extraFiles: () => filesByNote.get(chipKey()) ?? [],
@@ -792,7 +858,11 @@ export function createAssistantState(ports: AssistantPorts, tasks: RunningTasks)
           if (active === null) {
             throw new Error('This note is not open.');
           }
-          note = { path: active.path, body: active.body };
+          note = {
+            path: active.path,
+            body: active.body,
+            ...(active.vaultId !== null ? { vaultId: active.vaultId } : {}),
+          };
         }
         // Extra files are read at send time (open tabs as their live
         // buffer, the rest from disk); ones that vanished from the vault
@@ -863,6 +933,9 @@ export function createAssistantState(ports: AssistantPorts, tasks: RunningTasks)
           noteKey,
           vaultScope,
           vaultIds: [...customVaultIds],
+          // Only what the chip shows: with nothing switched on in Settings
+          // it is hidden, and a remembered "on" must not ride unseen.
+          web: web && webAvailable,
           ...(options?.selection !== undefined && options.selection.trim() !== ''
             ? { selection: options.selection }
             : {}),
@@ -894,9 +967,10 @@ export function createAssistantState(ports: AssistantPorts, tasks: RunningTasks)
             await refreshChats();
             return true;
           }
-          // A live turn's changes are already in the tab (pushed per tool
-          // call) and in the chat note (the applied edit entry, persisted
-          // main-side) — nothing to confirm, only to report (ADR-0049).
+          // A live turn's changes are already in the tab (the vault tools
+          // put each one there) and in the chat note (the applied edit
+          // entry, persisted main-side) — nothing to confirm, only to
+          // report (ADR-0049).
           if (result.outcome.kind === 'liveEdit') {
             notice =
               result.outcome.applied > 0

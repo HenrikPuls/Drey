@@ -4,7 +4,7 @@ import * as path from 'node:path';
 import { AppConfigStore } from './app-config';
 import { DailyNoteManager } from './daily-note';
 import { NoteHistoryStore } from './history/note-history-store';
-import type { McpWriteBridge, ToolApprovalBridge } from './ipc';
+import type { McpWriteBridge, OpenDocsBridge, ToolApprovalBridge } from './ipc';
 import { LinkRewriter } from './link-rewriter';
 import { LlmDebugLog, LlmRouter, LlmTaskRegistry, TagSuggester, buildClients } from './llm';
 import { McpHttpTransport, VaultTools, createVaultMcpServer } from './mcp';
@@ -25,6 +25,8 @@ export interface AppServicesDeps {
   readonly mcpWriteBridge: McpWriteBridge;
   /** Asks the user about one external tool call (ADR-0063). */
   readonly toolApprovalBridge: ToolApprovalBridge;
+  /** The editor's open tabs, for the vault tools (ADR-0071). */
+  readonly openDocsBridge: OpenDocsBridge;
   /** Per-plugin activation telemetry (the log file and the splash). */
   readonly onPluginActivated: NonNullable<PluginHostDeps['onPluginActivated']>;
 }
@@ -129,9 +131,6 @@ export function buildAppServices(deps: AppServicesDeps): AppServices {
     getSearchProvider: () => pluginHost?.getSectionSearchProvider() ?? null,
     // The task-index seam (SDK 1.11): reads the tasks plugin's provider.
     getTaskProvider: () => pluginHost?.getTaskQueryProvider() ?? null,
-    // The semantic seam (SDK 1.18): reads the assistant plugin's
-    // provider while its retrieval is enabled.
-    getSemanticProvider: () => pluginHost?.getSemanticSearchProvider() ?? null,
     getConfig: () => appConfig.get(),
     confirmWrite: (request) => deps.mcpWriteBridge.requestConfirmation(request),
     // A move or a delete has no diff to show: the approval dialog asks,
@@ -150,6 +149,8 @@ export function buildAppServices(deps: AppServicesDeps): AppServices {
         otherPaths: [...changedPaths, ...deletedPaths].filter((file) => !isNote(file)),
       }),
     announceRefresh: (vaultId) => vaultAnnouncer.announceFullRefresh(vaultId),
+    // A tool reads and changes an open file through its tab (ADR-0071).
+    openDocs: deps.openDocsBridge,
   });
   // The assistant's external tools (ADR-0063): the configured MCP
   // servers plus the built-in web_fetch, each behind its approval rule.

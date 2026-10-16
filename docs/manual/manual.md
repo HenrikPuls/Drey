@@ -345,10 +345,6 @@ The **Search panel** (open with `Ctrl+Shift+F`) has:
 - **Include chats** (speech-bubble toggle): `chats/` notes stay indexed
   but are excluded from vault/all results — and from replace — unless
   this is on.
-- **Semantic** (brain toggle): ranks the text query by meaning using
-  the Assistant's local embedding index — percent-score badges, tag
-  chips still an exact filter. Requires *Assistant retrieval* enabled in
-  Settings; otherwise a clear error row points there.
 
 Results are sections grouped per file; a click opens the file at the
 section's line, in the file's vault.
@@ -442,23 +438,39 @@ Attach the notes the model should see: `@`-completion, images
 (providers with vision), or scratch text. A small arrow on an answer
 inserts it into the open note.
 
-### Vault context (semantic retrieval)
+### Vault context
 
 The **Vault chip** opens a picker — *Off / Active vault / All vaults*
 plus one checkbox per registered vault, so a non-active vault can be
-targeted without switching. When on, your question is embedded locally
-(see Settings → *Assistant retrieval*) and the most similar note
-sections are injected into that one call. Chat notes are excluded so
-past questions do not drown out the notes that answer them.
+targeted without switching. When on, the note sections that contain
+words of your question are added to that one call — up to four, the
+ones with the rarest words first, a word in a heading counting more.
+Nothing has to be switched on or built for this. It matches words, not
+meaning: ask with a word the note uses. A model that can call tools
+searches and reads the vault further on its own when these sections do
+not answer the question. Chat notes are excluded so past questions do
+not drown out the notes that answer them. The sections come from the
+Tags plugin's index; with that plugin disabled there are none.
 
 ### Live edit
 
 The **Live edit** chip opts a single question into direct editing: the
-model edits the open note through `doc_apply_diff` / `doc_write` /
-`doc_read` tools, each change lands in the editor as one undoable step,
-the document is locked against your typing while the turn runs, and the
-result is recorded in the chat note. Providers without tool support
-fail visibly.
+model changes the open note piece by piece (`vault_edit`), each change
+lands in the editor as one undoable step — without a confirmation and
+**without saving**; you save when you are happy with it. The document is
+locked against your typing while the turn runs, and the result is
+recorded in the chat note. It also works on a new tab you have not
+saved anywhere yet. Live edit needs a model that can call tools;
+otherwise it says so.
+
+Without live edit the assistant changes the open note the same way, but
+shows you each change as a diff first and saves the note once you
+accept. This works with the Vault chip off as well — the note attached
+to the question is always within reach, the rest of the vault only with
+the chip. The assistant works on what the tab shows, so text you have
+not saved yet is seen and kept. (A model or provider that cannot call
+tools returns the whole changed document instead; you confirm it in the
+same dialog.)
 
 ### Actions
 
@@ -527,15 +539,17 @@ may do, and when it has to ask.
 **The vault.** Which vaults the assistant can look into you choose per
 question, with the **Vault** button under the question field (off, the
 active vault, all vaults, or a selection). In those vaults it can list
-what exists, search for exact words — also inside one note —, find
-sections by meaning while *Assistant retrieval* is on, and read a note
-whole or in parts. With the button off it sees only what you attached
-to the question.
+what exists, search for exact words — also inside one note —, and read
+a note whole or in parts. With the button off it sees only what you attached
+to the question — and the open note, when it is attached, is the one
+file it can still read and change.
 
 Whether it may also **change** notes there is the *Vault* choice in
 Settings → Assistant tools:
 
-- **Not allowed** — it only reads.
+- **Not allowed** — it only reads. The one exception is the note
+  attached to your question: a change you ask for there is shown as a
+  diff and applied when you accept.
 - **Show the change and ask first** — every edit, new file or appended
   text opens the diff dialog; you accept or decline.
 - **Change without asking** — edits apply at once. Use it when you trust
@@ -545,10 +559,13 @@ A **move** asks in a small dialog under *ask first*; a **deletion**
 always asks, and the file goes to the recycle bin. The assistant changes
 part of a note by replacing exact text, so a small change stays small
 in the diff. It never touches a vault the Vault button did not select,
-and it leaves your chat notes and drafts alone.
+and it leaves your chat notes and drafts alone. A note that is open in
+a tab is read as the tab shows it and changed in the tab, so unsaved
+text is neither missed nor overwritten; the same goes for programs
+connected to Drey's MCP server.
 
-**The other groups** — tasks, templates, web fetch and each external MCP
-server — have a switch each, `write: confirm | auto` where they write,
+**The other groups** — tasks, templates, web search, web fetch and each
+external MCP server — have a switch each, `write: confirm | auto` where they write,
 and `approval: ask | allow` on everything that leaves the machine. An
 external tool call under *ask* shows the shared approval dialog (source,
 tool, arguments — *Allow / Always allow / Deny*).
@@ -565,11 +582,36 @@ turn — the model is told what was wrong and tries again. If your model
 or its server does not accept tools at all, the assistant notices on the
 first question and goes on without them.
 
+### Web search and the Web button
+
+Settings → **Assistant tools** → *Web search* lets the assistant search
+the web (`web_search`). Pick a provider:
+
+- **DuckDuckGo** — no account, works at once. Drey reads DuckDuckGo's
+  ordinary result page, which is not made for programs: it can change or
+  refuse requests. Fine to try things out.
+- **Brave Search** or **Tavily** — dependable; each needs an API key
+  from the provider. The key is stored encrypted on this computer.
+- **SearXNG** — the address of an instance you run yourself. It must
+  allow the JSON format (`search.formats` in its `settings.yml`).
+
+A search returns titles, addresses and short excerpts. With *Web fetch*
+on as well, the assistant can then read the pages it found. Your search
+words go to the provider you chose — with *Ask every time* you see them
+before each search.
+
+Whether a question may use any of this is your choice per question: the
+**globe button** under the question field. It appears once web search,
+web fetch or an MCP server is switched on in Settings, starts off, and
+stays the way you left it. Off means nothing leaves this computer
+through a tool; on lets the assistant search, fetch pages and call your
+MCP servers for that question.
+
 ### Drey as an MCP *client*
 
 Add external MCP servers (stdio or Streamable HTTP); their tools reach
-the model as `mcp__<server>__<tool>`. The built-in `web_fetch` group is
-a tool like the rest.
+the model as `mcp__<server>__<tool>`. Like web search and web fetch they
+ride a question only while the globe button is on.
 
 ### Drey as an MCP *server*
 
@@ -580,7 +622,6 @@ opt-in discipline, off by default.
 
 - Tools: `vault_list`, `vault_search` (words, a quoted phrase, a regular
   expression, tags; in the whole vault, a folder or one file),
-  `vault_retrieve` (by meaning, while Assistant retrieval is on),
   `vault_read` (numbered lines, a range or a section), `vault_edit`
   (exact text replacement), `vault_write` (`mode`: create, append or
   overwrite), `vault_move`, `vault_delete` and `tasks_list`. They take
@@ -766,13 +807,13 @@ stored when you leave the field or press Enter. The footer shows
 | [Assistant tools](#settings-assistant-tools) | tool groups, write/approval rules, external MCP servers |
 | [Daily notes](#settings-daily-notes) | daily folder and template behaviour |
 | [Entry format](#settings-entry-format) | the slash menu's Entry block |
+| [Keyboard shortcuts](#settings-keyboard-shortcuts) | the shortcut of every command, the quick-capture hotkey |
 | [LLM](#settings-llm) | provider, endpoint, key, model |
 | [MCP](#settings-mcp) | Drey's own vault server for other programs |
 | [Panels & plugins](#settings-panels-plugins) | panel and plugin switches, live plugin status |
 | [Spelling](#settings-spelling) | dictionaries, personal words |
 | [Vault](#settings-vault) | watcher, link rewriting, history bounds |
 | Actions | Assistant Action templates and triggers |
-| Assistant retrieval | semantic search: model, k, score floor, per-vault index |
 | Diagrams | format of new diagrams (SVG/PNG) |
 | Git | `git` executable path |
 | Tags | prefix colours, rename/merge |
@@ -805,6 +846,23 @@ The daily notes root folder (default `daily/`) and template behaviour.
 What the slash menu's **Entry** block inserts: built-in *classic* and
 *ruled* patterns or your own, with the `{{time}}` / `{{date}}` /
 `{{datetime}}` / `{{title}}` / `{{tags}}` / `{{content}}` placeholders.
+
+### Settings: Keyboard shortcuts {#settings-keyboard-shortcuts}
+
+![Keyboard shortcuts settings](img/settings-keyboard-shortcuts.png)
+
+Every command and the system-wide **quick-capture** hotkey, each with
+its shortcut. **Change** waits for you to press the new keys (Esc
+cancels); **Remove** leaves the command without a shortcut; **Reset**
+brings back the one Drey ships with. A shortcut needs `Ctrl` or `Alt`,
+or a function key (`F1`–`F12`) — a plain letter would swallow typing —
+and the editor's own keys (undo, the clipboard, find, zoom, …) cannot be
+taken; they are listed under *Fixed*. If another command already has
+the keys you press, Drey names it and offers **Replace**, which leaves
+that command without a shortcut. When another program holds the
+quick-capture keys, the row says so — choose another combination.
+Your shortcuts show everywhere at once: the menus, the command palette
+and Help → Keyboard shortcuts.
 
 ### Settings: LLM {#settings-llm}
 
@@ -840,7 +898,6 @@ and the personal word list.
 ### Plugin-contributed pages
 
 ![Actions settings](img/settings-actions.png)
-![Assistant retrieval settings](img/settings-assistant-retrieval.png)
 ![Diagrams settings](img/settings-diagrams.png)
 ![Git settings](img/settings-git.png)
 ![Tags settings](img/settings-tags.png)
@@ -874,7 +931,9 @@ brings them back.
 
 ## 20. Keyboard shortcuts
 
-`Ctrl` is `Cmd` on macOS. `Mod` below means exactly that.
+`Ctrl` is `Cmd` on macOS. `Mod` below means exactly that. These are the
+shortcuts Drey ships with; change any of them, and the quick-capture
+hotkey, in [Settings → Keyboard shortcuts](#settings-keyboard-shortcuts).
 
 | Shortcut | Action |
 | --- | --- |
@@ -898,9 +957,9 @@ brings them back.
 | `/` on an empty line | Slash menu (Entry, templates, formatting) |
 | `Esc` | Close menus, dialogs, drag operations |
 
-The command palette lists every command with its current shortcut — and
-so does Help → **Keyboard shortcuts**, as a document you can keep open
-beside your notes.
+The command palette lists every command with its current shortcut — your
+own, where you changed one — and so does Help → **Keyboard shortcuts**,
+as a document you can keep open beside your notes.
 
 ---
 
@@ -912,7 +971,6 @@ beside your notes.
 | App settings + API keys | `<userData>/app-config.json` (plain text) |
 | Vault registry (which folders, which active) | `<userData>/vault-config.json` |
 | Local note history | `<userData>/history/<vaultId>/` |
-| Semantic index | `<UserData>/plugins/assistant/semantic-index/` |
 | Installed plugins | `<userData>/plugins/<id>/` |
 
 Because the vault is just files, any file-based backup covers your

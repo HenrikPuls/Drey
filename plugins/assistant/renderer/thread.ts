@@ -136,10 +136,11 @@ export function createThread(
   };
 
   /**
-   * Retrieved-vault citations (ADR-0055): one collapsible chip listing
-   * what this turn consulted; a click opens the source file. A chip-on
+   * Vault-context citations (ADR-0072): one collapsible chip listing
+   * what this turn was given; a click opens the source file. A chip-on
    * turn with NO hits still gets a chip — the persisted contextStatus
-   * says why (floor / disabled / failed) instead of silent nothing.
+   * says why (nothing found / not available / failed) instead of silent
+   * nothing.
    */
   const contextChipNode = (turn: ChatNoteTurn, index: number): HTMLElement => {
     const key = `${index}:ctx`;
@@ -159,18 +160,10 @@ export function createThread(
       );
     } else if (status.kind === 'empty') {
       chip.classList.add('muted');
-      summary.appendChild(
-        el(
-          'span',
-          undefined,
-          `vault context · no sections above the score floor (${status.floor.toFixed(2)})`,
-        ),
-      );
-    } else if (status.kind === 'disabled') {
+      summary.appendChild(el('span', undefined, 'vault context · no matching sections'));
+    } else if (status.kind === 'unavailable' || status.kind === 'disabled') {
       chip.classList.add('muted');
-      summary.appendChild(
-        el('span', undefined, 'vault context · retrieval is off in Settings → Assistant retrieval'),
-      );
+      summary.appendChild(el('span', undefined, 'vault context · not available'));
     } else if (status.kind === 'unregistered') {
       chip.classList.add('muted');
       summary.appendChild(
@@ -201,10 +194,12 @@ export function createThread(
         const hint = el('div', 'context-hint');
         if (status.kind === 'empty') {
           hint.textContent =
-            'Nothing matched above the similarity cutoff. Raise k or lower the minimum score under Settings → Assistant retrieval.';
-        } else if (status.kind === 'disabled') {
+            'No note section contains the words of the question. A model that can call tools searches the vault further by itself.';
+        } else if (status.kind === 'unavailable') {
           hint.textContent =
-            'The Vault chip was on, but semantic retrieval is turned off. Enable it under Settings → Assistant retrieval (the first build downloads the embedding model once).';
+            'The Vault chip was on, but the section index was not available. Enable the Tags plugin under Settings → Panels & plugins.';
+        } else if (status.kind === 'disabled') {
+          hint.textContent = 'The Vault chip was on, but vault retrieval was switched off at the time.';
         } else if (status.kind === 'unregistered') {
           hint.textContent =
             'The vault selection referenced vaults that are no longer registered. Pick the vaults again with the Vault chip.';

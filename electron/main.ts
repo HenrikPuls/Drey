@@ -12,10 +12,17 @@ import {
 } from './app-paths';
 import { registerPrivilegedSchemes, registerProtocolHandlers } from './app-protocols';
 import { buildAppServices, syncMcpHttpTransport, type AppServices } from './app-services';
+import { CaptureHotkey } from './capture-hotkey';
 import type { DailyNoteManager } from './daily-note';
 import { ExternalFileGate, extractOpenPaths } from './external-open';
 import { installMainProcessLogging, logLine } from './logger';
-import { registerIpcHandlers, ExitBridge, McpWriteBridge, ToolApprovalBridge } from './ipc';
+import {
+  registerIpcHandlers,
+  ExitBridge,
+  McpWriteBridge,
+  OpenDocsBridge,
+  ToolApprovalBridge,
+} from './ipc';
 import { MainWindowHost } from './main-window';
 import { buildApplicationMenu } from './menu';
 import type { UnreadableFile } from './safe-file';
@@ -33,18 +40,6 @@ import { startupMark } from './startup-timing';
  * its exit prompt are `main-window.ts`; the custom schemes are
  * `app-protocols.ts`.
  */
-
-/**
- * Global hotkey for quick-capture (milestone 4). One constant here until a
- * settings UI can rebind it (later milestone). `Ctrl/Cmd+Alt+N`: mnemonic
- * (N = note), and `Ctrl+Alt`+letter is rarely claimed as a system-wide
- * shortcut, so collision risk is low.
- *
- * It does not open a popup (the specs' original plan) -- per the project
- * owner's call it brings the main window forward and opens today's daily
- * note in the editor. See docs/09_architecture_decisions/0002-*.md.
- */
-const CAPTURE_SHORTCUT = 'CommandOrControl+Alt+N';
 
 /**
  * What `scripts/dev-electron.mjs` sends over the child-process channel
@@ -99,6 +94,8 @@ const mainWindow: MainWindowHost = new MainWindowHost({
 const mcpWriteBridge = new McpWriteBridge(() => mainWindow.current);
 /** The same pattern for one external tool call's approval (ADR-0063). */
 const toolApprovalBridge = new ToolApprovalBridge(() => mainWindow.current);
+/** What the vault tools ask the editor about its open tabs (ADR-0071). */
+const openDocsBridge = new OpenDocsBridge(() => mainWindow.current);
 
 /**
  * Files the OS hands to Drey (Explorer "Open with" / a default-program
@@ -221,6 +218,7 @@ if (!app.requestSingleInstanceLock() && !allowMultiInstance) {
       getMainWindow: () => mainWindow.current,
       mcpWriteBridge,
       toolApprovalBridge,
+      openDocsBridge,
       onPluginActivated: ({ id, name, ok, ms, index, total }) => {
         logLine(
           `[startup] plugin "${id}" ${ok ? 'activated' : 'FAILED'} in ${Math.round(ms)}ms`,
@@ -272,6 +270,14 @@ if (!app.requestSingleInstanceLock() && !allowMultiInstance) {
     });
 
     registerProtocolHandlers(vaultManager, pluginHost);
+    // The quick-capture hotkey (milestone 4): it does not open a popup
+    // (the specs' original plan) -- per the owner's call it brings the main
+    // window forward and opens today's daily note (ADR-0002). Its chord is
+    // the user's since milestone 75 (`keybindings.capture`, ADR-0073);
+    // registered below once the startup round is through.
+    const captureHotkey = new CaptureHotkey(() => {
+      void openTodayDailyNote(dailyNotes);
+    });
     registerIpcHandlers({
       getMainWindow: () => mainWindow.current,
       sessionBackups: built.sessionBackups,
@@ -289,6 +295,7 @@ if (!app.requestSingleInstanceLock() && !allowMultiInstance) {
       mcpWriteBridge,
       mcpClients,
       toolApprovalBridge,
+      openDocsBridge,
       syncMcpClients: () => mcpClients.sync(appConfig.get().tools.servers),
       exitBridge,
       externalFiles,
@@ -302,6 +309,7 @@ if (!app.requestSingleInstanceLock() && !allowMultiInstance) {
           window.setIcon(icon);
         }
       },
+      captureHotkey,
       fullVaultRefresh: () => vaultAnnouncer.announceFullRefresh(),
       announceVaultChange: (changes) => vaultAnnouncer.announceExternal(changes),
       pluginHost,
@@ -363,16 +371,7 @@ if (!app.requestSingleInstanceLock() && !allowMultiInstance) {
     await vaultWatcher.syncFromConfig();
     startupMark('MCP transport + vault watcher synced');
 
-    const shortcutRegistered = globalShortcut.register(CAPTURE_SHORTCUT, () => {
-      void openTodayDailyNote(dailyNotes);
-    });
-    if (!shortcutRegistered) {
-      // Another app owns the combo. Non-fatal -- the rest of the app
-      // works, and a later settings UI will let the user pick another.
-      console.warn(
-        `Quick-capture hotkey ${CAPTURE_SHORTCUT} could not be registered (already in use).`,
-      );
-    }
+    captureHotkey.sync(appConfig.get().keybindings.capture);
 
     app.on('activate', () => {
       // `mainWindow`, not `getAllWindows().length`: the splash also is a

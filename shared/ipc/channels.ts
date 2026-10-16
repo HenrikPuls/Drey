@@ -92,6 +92,7 @@ export const IPC_CHANNELS = {
   searchChanged: 'search:changed',
   configGet: 'config:get',
   configSet: 'config:set',
+  captureHotkeyStatus: 'shortcuts:capture-status',
   llmListModels: 'llm:list-models',
   llmTestConnection: 'llm:test-connection',
   llmDebugList: 'llm:debug-list',
@@ -114,6 +115,9 @@ export const IPC_CHANNELS = {
   toolsReconnect: 'tools:reconnect',
   toolsApprovalRequest: 'tools:approval-request',
   toolsApprovalDecision: 'tools:approval-decision',
+  // The editor's open tabs, asked by the vault tools (milestone 78, ADR-0071).
+  openDocsRequest: 'open-docs:request',
+  openDocsReply: 'open-docs:reply',
   // Vault change push (ADR-0045): main -> renderer after any external or
   // MCP write lands -- formerly the MCP-only 'mcp:vault-changed'. Carries
   // the changed paths when a scoped reload is possible.

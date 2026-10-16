@@ -26,6 +26,7 @@ const VALID = {
   noteKey: 'v1::a.md',
   vaultScope: 'off',
   vaultIds: [],
+  web: false,
 };
 
 describe('assistant plugin ask contract (plugins/assistant/shared/ask)', () => {
@@ -121,6 +122,7 @@ const BASE = {
   noteKey: null,
   vaultScope: 'off',
   vaultIds: [],
+  web: false,
 };
 
 describe('parseAskPayload — selection', () => {

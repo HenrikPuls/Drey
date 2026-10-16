@@ -12,8 +12,6 @@ export interface SearchPrefs {
   replaceOpen: boolean;
   /** Vault / all scope: list hits from assistant chat notes (`chats/`) too. */
   includeChats: boolean;
-  /** Vault / all scope: rank the text query semantically (SDK 1.18) instead of exact-matching it. */
-  semantic: boolean;
 }
 
 export const DEFAULT_PREFS: SearchPrefs = {
@@ -23,7 +21,6 @@ export const DEFAULT_PREFS: SearchPrefs = {
   wholeWord: false,
   regex: false,
   replaceOpen: false,
-  semantic: false,
 };
 
 /** Reads stored prefs; anything missing or malformed falls back to the default. */
@@ -42,7 +39,6 @@ export function parsePrefs(raw: string | null): SearchPrefs {
       regex: parsed.regex === true,
       replaceOpen: parsed.replaceOpen === true,
       includeChats: parsed.includeChats === true,
-      semantic: parsed.semantic === true,
     };
   } catch {
     return { ...DEFAULT_PREFS };

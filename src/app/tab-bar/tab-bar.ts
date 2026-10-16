@@ -2,6 +2,7 @@ import { ChangeDetectionStrategy, Component, HostListener, computed, inject, inp
 import { EditorService, type OpenDoc } from '../services/editor.service';
 import { DocKindRegistry } from '../plugin-host';
 import { HistoryService } from '../history';
+import { KeybindingService } from '../keybindings';
 import { PaneService, type PaneRegion } from '../panes/pane.service';
 import { TabDragService } from './tab-drag.service';
 import { Icon, type IconName } from '../icons/icon';
@@ -47,6 +48,7 @@ export class TabBar {
   protected readonly panes = inject(PaneService);
   protected readonly tabDrag = inject(TabDragService);
   protected readonly history = inject(HistoryService);
+  protected readonly keys = inject(KeybindingService);
   private readonly docKinds = inject(DocKindRegistry);
 
   readonly paneId = input.required<string>();

@@ -9,7 +9,6 @@ import {
   formatSearchSummaryHeader,
   replaceInRanges,
   runTagSearch,
-  sectionCarriesTags,
 } from './search';
 import type { SearchableSection, TagSearchHit } from './search';
 
@@ -300,20 +299,5 @@ describe('buildSearchSummarySources', () => {
   it('normalises backslash separators', () => {
     const sources = buildSearchSummarySources([hit('daily\\win.md', 'Tag', 4)], 1);
     expect(sources).toContain('- [[daily/win#Tag]] — daily/win.md:4');
-  });
-});
-
-describe('sectionCarriesTags — the semantic panel mode post-filter (SDK 1.18)', () => {
-  it('needs every wanted tag in the section (heading included, nested counts)', () => {
-    expect(sectionCarriesTags('Heading', 'body with #project/frontend notes', ['project'])).toBe(true);
-    expect(sectionCarriesTags('Heading', 'body with #project/frontend notes', ['project', 'frontend'])).toBe(false);
-    expect(sectionCarriesTags('#work heading', 'plain body', ['work'])).toBe(true);
-    expect(sectionCarriesTags('Heading', '#a and #b body', ['a', 'b'])).toBe(true);
-    expect(sectionCarriesTags('Heading', '#a only', ['a', 'b'])).toBe(false);
-  });
-
-  it('lower-cases the wanted tags and skips an empty want list', () => {
-    expect(sectionCarriesTags('H', '#project body', ['Project'])).toBe(true);
-    expect(sectionCarriesTags('H', 'no tags at all', [])).toBe(true);
   });
 });

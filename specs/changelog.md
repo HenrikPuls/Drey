@@ -23,7 +23,7 @@ recorded as an explicit decision. The parity checklist lives in
 ### Milestone 81 — Zen mode
 
 The roadmap's "Next" item 6: a focused, chrome-free writing/reading view.
-**Not yet manually verified by the owner.**
+**Manually verified by the owner (2026-10-16).**
 
 One command, `view.toggleZen` ("Toggle zen mode", default chord
 `Ctrl+Alt+Z`, View menu row with a check mark, listed in the palette and
@@ -42,47 +42,236 @@ zen gate) and three new e2e tests (`e2e/zen.spec.ts`: hide and restore,
 the dock fold state untouched underneath, the palette reachable in zen
 and exiting zen from it).
 
-### Milestone 80 — Vault context by text search; the embedding retrieval removed
+### Milestone 75 — Configurable shortcuts
 
-Owner request, outside the roadmap list; the last step of the assistant
-tool rework. **Not yet manually verified by the owner.**
+Roadmap "Now" item, decided with the owner on 2026-10-13 and
+2026-10-14:
+[ADR-0073](../docs/09_architecture_decisions/0073-configurable-shortcuts.md).
+**Not yet manually verified by the owner.**
 
-With the assistant's Vault chip on, a plain ask carries the note sections
-that contain words of the question — the words searched in the tags
-plugin's section index through the SDK's section-search seam, ranked in
-`plugins/assistant/shared/vault-context.ts` (a rare word weighs more, a
-word in the heading more still), the best four in the system prompt.
-**There is no embedding model and no vector index**: ADR-0055's retrieval
-(transformers.js, ONNX, the Search panel's Semantic toggle, the
-`vault_retrieve` tool, the SDK's semantic seam) was removed and is not to
-be re-proposed (`specs/decisions.md`). Chat notes are excluded
-(`chats/` contains the literal question text of past conversations). The
-context block is a first selection (ADR-0069): the vault tools let
-tool-capable models look further.
+**Settings → Keyboard shortcuts** lists every command (base and plugin)
+and the system-wide **quick-capture** hotkey, each with its shortcut.
+*Change* records the next key press (Esc cancels), *Remove* leaves the
+command without a shortcut, *Reset* brings back the default. A chord
+needs Ctrl or Alt, or a function key; the chords the editor and Electron
+need (undo/redo, clipboard, select all, find, Ctrl Enter, zoom,
+Ctrl Space, the line moves, Alt F4) are refused with a message. A chord
+another command holds is named with its holder and a **Replace** that
+leaves the holder without one; two defaults that collide are marked.
+The editor's fixed keys are listed read-only below.
+
+- **Storage:** a new base config slice, `keybindings`
+  (`overrides: { commandId: chord | null }`, `capture: chord | null`,
+  default `Mod+Alt+N`). `normalizeAppConfig` keeps chords canonical and
+  drops one that is no longer assignable, so the command falls back to
+  its default.
+- **One chord grammar** in `shared/keybindings.ts`: parse, canonical
+  spelling, the key-press reader, the validation, the effective chord,
+  the Electron accelerator. The renderer's old `parseChord` and the
+  palette's `formatChord` now sit on it (`formatChord` moved into
+  `src/app/keybindings/`).
+- **`KeybindingService`** resolves every chord through the overrides
+  (fed by `App` from the persisted config), rebuilds its index on each
+  change — which also fixes a stale chord: a disabled plugin's inert
+  stand-in used to keep the old chord bound — and offers `hint()` /
+  `titled()`, which every menu row, the tab and editor context menus,
+  the line-numbers tooltip and the formatting strip now print instead
+  of literal "Ctrl …" strings. A plugin menu row that runs a registered
+  command shows that command's chord.
+- **Quick capture** moved out of `main.ts` into
+  `electron/capture-hotkey.ts`: registered from the config at startup,
+  re-registered on `config:set` when the chord changed or the last try
+  failed; `shortcuts:capture-status` tells the page "In use by another
+  program".
+- Help → **Keyboard shortcuts** shows the user's capture chord; its fixed
+  rows gained *Select line*, the line moves and *Ctrl Space*.
+- Specs: `shared/keybindings.spec.ts`, keybinding cases in
+  `shared/app-config.spec.ts`, `electron/capture-hotkey.spec.ts`, override /
+  pause / stale-chord cases in `keybinding.service.spec.ts`,
+  `settings/shortcuts/shortcut-model.spec.ts` and
+  `settings-shortcuts.spec.ts` (record, Esc, reserved, Replace, hotkey in
+  use), the quick-capture row in `shortcuts-doc.spec.ts`; e2e
+  `e2e/shortcuts.spec.ts` (a rebound command runs on its new chord and
+  the View menu shows it; Replace). Docs: ADR-0073, `docs/05`, `docs/06`
+  §6.62, the manual (§18, §20).
+
+### req-43 — CI stores the exes only for tags and manual runs
+
+Owner request, outside the roadmap list (2026-10-14). **Not yet manually
+verified by the owner.**
+
+CI had failed on every run since 2026-10-13 although every check passed:
+the last step, uploading the setup and portable exe as workflow
+artifacts, hit the account's artifact storage quota (`Artifact storage
+quota has been hit`). Each push to `main` and each PR stored both exes
+for 14 days.
+
+Every run still builds, packs and smoke-tests the exes
+(`verify:pack`); `.github/workflows/ci.yml` now uploads them only for a
+`v*` tag push or a manual run (`workflow_dispatch` — Actions → CI → Run
+workflow, on any branch), kept 3 days. The `v*` Release attachment and
+the e2e failure diagnostics are unchanged. `docs/07` (§CI) follows. The
+artifacts stored before the change still count against the quota until
+they are deleted or expire; GitHub recalculates usage every 6–12 hours.
+
+### Milestone 80 — Vault context by text search; the embedding retrieval is removed
+
+Owner request, outside the roadmap list (2026-10-14):
+[ADR-0072](../docs/09_architecture_decisions/0072-vault-context-by-text-search.md),
+which supersedes ADR-0055. **Not yet manually verified by the owner.**
+
+The finding that led to it: the semantic search returned sections that
+had nothing to do with the question, and did not find a note that
+contains the very word searched for ("einstein").
+
+- **The Vault chip's context comes from text search.** With the chip
+  on, a question carries up to four note sections that contain its
+  words. The question is split into words (no stopwords, nothing under
+  three characters, at most eight); each is searched in the tags
+  plugin's section index — case-insensitive, inside words too, in
+  heading and text; a section scores the sum of the weights of the
+  words it contains, a rare word weighing more and a word in the heading
+  one and a half times. Chat notes stay out. Nothing has to be switched
+  on, downloaded or built. A model that can call tools still searches
+  and reads further by itself.
+- **Removed:** the embedding worker and the per-vault vector index
+  (`plugins/assistant/main/semantic/`); Settings → *Assistant
+  retrieval*; the Search panel's **Semantic** toggle and its score
+  badges; the tool `vault_retrieve` (assistant and MCP server) and its
+  mention in the system prompt; the SDK's semantic seam
+  (`registerSemanticSearch`, `searchSemantic`, `SemanticSearchProvider`,
+  `SemanticSectionHit`) — **SDK 1.26, the one removal under a minor
+  version**, reasoned in the ADR and in `plugins/AUTHORING.md`; the
+  dependencies `@huggingface/transformers`, `onnxruntime-web`,
+  `onnxruntime-common` and the stub packages for `onnxruntime-node` and
+  `sharp` (`tools/stubs/`), with their `asarUnpack` entries and the CI
+  junction step.
+- **Left-overs are cleaned up once:** when the assistant plugin starts
+  it deletes `<userData>/plugins/assistant/semantic-index/` and
+  `<userData>/models/`. The `semantic.*` keys in the plugin's config
+  file are ignored.
+- **Old chat notes still read.** A turn's `drey-context` fence may say
+  `disabled` or `empty` with a `floor` (written before this
+  milestone); both are still parsed and shown. New turns write `empty`
+  (no section contains the words) or `unavailable` (no section index —
+  the Tags plugin is disabled).
+- **Not covered:** a question finds a section only through its words —
+  no synonyms, no paraphrases; the block reads saved text, not an
+  unsaved tab; the number of sections is fixed; templates are not in the
+  section index.
+- Specs: `plugins/assistant/shared/vault-context.spec.ts` (the words,
+  the ranking, the scope helpers, the block),
+  `plugins/assistant/main/vault-context.spec.ts` (the lookup over a
+  fake section index, the "einstein" case, the reasons for an empty
+  result), `plugins/assistant/shared/ask-context.spec.ts` (the new and
+  the old context statuses), `plugins/assistant/main/engine.spec.ts`,
+  `chat-engine.spec.ts` and `system-prompt.spec.ts`,
+  `electron/mcp/vault-tools.spec.ts`,
+  `plugins/tags/renderer/hit-list.spec.ts`; e2e
+  `assistant-tools.spec.ts` (a chip-on question about "Einstein" reaches
+  the model with the section that contains the word, and the turn cites
+  it). The specs of the removed
+  service, the vector index and `vault_retrieve` went with them.
 
 ### Milestone 79 — Web search and the Web chip
 
-Owner request, outside the roadmap list; ADR-0063 later change. **Not yet
-manually verified by the owner.**
+Owner request, outside the roadmap list; the last step of the assistant
+tool rework (a later change to
+[ADR-0063](../docs/09_architecture_decisions/0063-mcp-client-and-assistant-tool-groups.md)).
+**Not yet manually verified by the owner.**
 
-`web_search` joins the tool groups: it asks the provider the user picked
-in Settings — DuckDuckGo without a key, Brave, Tavily, or a SearXNG
-instance (one file each in `electron/mcp-client/search-providers/`). The
-composer's **Web chip** is the per-question switch for everything that
-leaves the machine: off means no external tool rides the call. Opt-in,
-off by default — a documented exception to the "no cloud calls" rule.
+- **A built-in `web_search` tool.** Settings → Assistant tools → *Web
+  search*: a switch, a provider and its approval rule (`tools.webSearch`,
+  off by default). Four providers, one file each under
+  `electron/mcp-client/search-providers/`: **DuckDuckGo** without a key
+  (its HTML result page is read — works at once, may change or refuse
+  requests; Settings says so), **Brave Search** and **Tavily** with an
+  API key, **SearXNG** with the address of an instance of the user's
+  own. A search returns title, address and a short excerpt of up to ten
+  results; a failure reaches the model as `Error: the web search failed
+  (<provider>): …` with what to change. The tool is offered only when
+  its provider has what it needs (no key yet = not offered, and
+  Settings says so). The key is encrypted in `app-config.json` like the
+  LLM key; switching the provider clears it.
+- **Asked like the other external calls.** A search under *ask* shows
+  the approval dialog with the search words; *Always allow* sets the
+  search rule only (source `web_search`, apart from `web_fetch`'s
+  `web`).
+- **The Web chip.** A globe button in the composer, next to the Vault
+  button and remembered the same way (`localStorage`), decides for each
+  question whether anything may leave the machine through a tool:
+  `web_search`, `web_fetch` and the external MCP servers ride a question
+  only while it is on (`AskRequest.web`). It shows only while Settings
+  has one of them switched on, and it starts **off** — a change for
+  setups that had web fetch or a server enabled: those tools now need
+  the chip. Settings stays the permission; the chip is the per-question
+  choice.
+- **The prompt names what is there.** The external line of the system
+  prompt lists exactly the attached kinds (`web_search`, `web_fetch`,
+  `mcp__<server>__<tool>`) and, with search and fetch together, says to
+  read a page before relying on an excerpt.
+- **Not covered:** a key per provider; a guard against private
+  addresses; the chip follows a Settings change when the pointer or the
+  focus returns to the composer (plugins get no config-change event).
+- Specs: `electron/mcp-client/web-search.spec.ts` (each provider's
+  request and parsing, the DuckDuckGo page, failures, abort),
+  `mcp-client.spec.ts` (offer, approval source, refusal),
+  `shared/app-config.spec.ts`, `electron/config-secrets.spec.ts`,
+  `plugins/assistant/main/engine.spec.ts` and `system-prompt.spec.ts`,
+  `plugins/assistant/renderer/state.spec.ts`,
+  `src/app/tool-approval/tool-approval.service.spec.ts`; e2e
+  `assistant-tools.spec.ts` (the chip off and on, a search against a
+  local SearXNG stand-in).
 
-### Milestone 78 — The open note through the vault tools
+### Milestone 78 — The open note through the same tools
 
-Owner request, outside the roadmap list; ADR-0071's planned step. **Not
-yet manually verified by the owner.**
+Owner request, outside the roadmap list; the third step of the
+assistant tool rework
+([ADR-0071](../docs/09_architecture_decisions/0071-unified-vault-toolset-and-agent-loop.md)).
+**Not yet manually verified by the owner.**
 
-A file that is open in the editor is read and changed through its tab:
-main asks the renderer (`OpenDocsBridge`) instead of keeping buffers of
-its own. The note attached to an assistant question rides the call as a
-file of its own — in scope even with the chip off, changed with
-`vault_edit`; live edit (ADR-0049) is that file marked `live`. The
-`document` fence is only the fallback for a call without tools.
+- **A vault tool sees what the tab shows.** Main asks the renderer about
+  open tabs over a new bridge (`OpenDocsBridge` in `electron/ipc/`,
+  `OpenDocsBridgeService` in the renderer; channels `open-docs:request`
+  / `open-docs:reply`). `vault_read` and the word / regex scan of
+  `vault_search` read the buffer of an open file, unsaved text included.
+  `vault_edit` and `vault_write` change an open file **in its tab** and
+  save it from there (the on-save Actions stay out); the confirmation
+  diff is made against the buffer. `vault_move` takes the tab along and
+  rewrites links in unsaved notes in their buffers; `vault_delete`
+  closes the tab. This holds for programs on the MCP server too. Without
+  a window the tools work on the files, as before.
+- **The attached note is changed with `vault_edit`.** The assistant puts
+  the note of the question into the tools' scope (`vaultToolsFiles`),
+  whatever the Vault chip says: with the chip off the model gets
+  `vault_read`, `vault_edit` and `vault_write` for that one file. The
+  whole-document `document` fence stays the protocol where no tools ride
+  (a provider without a tool loop, a model that refused them) and for a
+  chat note, a draft or a file opened from outside the vaults. `tools.vault.write:
+  off` does not block the attached note — its change is asked in the
+  diff, as an ask-mode edit always was.
+- **Live edit uses the same tools.** `doc_apply_diff`, `doc_write`,
+  `doc_read`, the main-side working copy and the `chat:liveEdit` push
+  are gone (`plugins/assistant/main/live-edit.ts` deleted). A live turn
+  marks the note `live`: every change lands in the tab at once, without
+  the dialog and without saving.
+- **A tab that was never saved is edited the same way** — live or after
+  the diff. It rides the call as a file without a vault
+  (`vaultId: null`); the tools reach it in the editor only, never save
+  it and never read a vault file of the same name.
+- A turn whose tools changed the note persists the resulting document
+  as its applied `edit` entry (live or not). The assistant's
+  confirmation dialog no longer times out after two minutes.
+- SDK 1.25: `MainChatOptions.vaultToolsFiles`, `onVaultChange`.
+  `VaultCallOptions.files` / `onChange`, `VaultToolDeps.openDocs`.
+- Prompts: `askToolsSystem`, `liveEditSystem`
+  (`specs/classifier-spec.md`).
+- Tests: `electron/mcp/vault-tools.spec.ts` (open tabs, files in a
+  call's own scope), `plugins/assistant/main/chat-engine.spec.ts`,
+  `system-prompt.spec.ts`, `electron/plugin-host/plugin-context.spec.ts`,
+  `src/app/services/open-docs-bridge.service.spec.ts`,
+  `e2e/assistant-tools.spec.ts` (the open note through its tab; live
+  edit unsaved).
 
 ### Milestone 77 — One vault toolset for the assistant and the MCP server
 

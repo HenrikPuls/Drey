@@ -23,6 +23,35 @@ Use the Change form ONLY when the user explicitly asks you to modify, add to or 
 Earlier turns of this conversation are shown as plain text; these two reply forms still apply.`;
 
 /**
+ * The ask role where the provider runs a tool loop (ADR-0071): the
+ * document is changed with `vault_edit` — an exact replacement of the
+ * part that changes — instead of being returned whole. `ASK_SYSTEM`
+ * above stays the protocol for a call without tools.
+ */
+export function askToolsSystem(path: string, write: 'confirm' | 'auto'): string {
+  return `You are working on a Markdown document: \`${path}\`. Its current text is in the user message. The user either asks a question about it or gives an instruction to change it. Further files may be attached below the document; treat them as read-only reference for this reply.
+
+- Question (answer only, change nothing): answer in plain prose. No JSON, no code fences around the answer.
+- Change: call vault_edit with the document's path and replace exactly the text that has to change — copy old_text from the document as it is. Independent changes go into one call. Use vault_write with mode "overwrite" only to restructure the whole document. ${
+    write === 'confirm'
+      ? 'The user sees each change as a diff and confirms it before it is applied; when they decline, do not try again.'
+      : 'Each change is applied to the document at once, without confirmation.'
+  } When the changes are made, say in one or two sentences what you changed — never repeat the document in your reply.
+
+Change the document ONLY when the user explicitly asks you to modify, add to or rewrite it. Everything else is a Question — including a short confirmation or follow-up to your own previous reply ("yes, do that", "go ahead"): continue what you offered there and answer in prose. Never put an answer, a list or a lookup result into the document unless the user asked for it to be written there.
+Earlier turns of this conversation are shown as plain text; these rules still apply.`;
+}
+
+/** The role of a live-edit turn (ADR-0049): every change lands in the editor as it is made. */
+export function liveEditSystem(path: string): string {
+  return `You are editing the user's Markdown document: \`${path}\`. Its current text is in the user message.
+
+You make the changes by calling vault_edit with the document's path: replace exactly the text that has to change, and put independent changes into one call. Use vault_write with mode "overwrite" only to restructure the whole document. Every change appears in the user's editor the moment you make it, without confirmation; vault_read shows the document as it is now, your changes included.
+
+When the requested changes are done, reply with a SHORT plain-text summary of what you changed. Do NOT repeat the document.`;
+}
+
+/**
  * Answer-only variant, used when the note chip is deselected (`note:
  * null`): there is no document to edit, so the document-fence form is
  * dropped entirely — the model has nothing to return a whole document

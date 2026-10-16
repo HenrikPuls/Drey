@@ -39,7 +39,6 @@ graph LR
 | **External tool servers and web pages** | Tool calls the model makes; fetched pages | Opt-in, each source asks before a call unless set to "allow" ([ADR-0063](09_architecture_decisions/0063-mcp-client-and-assistant-tool-groups.md)). |
 | **Other programs using Drey's MCP server** | Vault search, read and (confirmed) write | Opt-in. Local connections only ([ADR-0021](09_architecture_decisions/0021-mcp-vault-server.md)). |
 | **Installed git** | Commands and their output | Used only for a vault that is a repository ([ADR-0065](09_architecture_decisions/0065-git-vaults-source-control-plugin.md)). |
-| **Hugging Face hub** | One download of the embedding model | Only when semantic retrieval is first switched on; cached afterwards ([ADR-0055](09_architecture_decisions/0055-semantic-vault-retrieval.md)). |
 | **Operating system** | Files handed to Drey; documents handed back to their own program | [ADR-0054](09_architecture_decisions/0054-opening-files-from-the-os.md), [ADR-0066](09_architecture_decisions/0066-office-documents-open-in-their-own-program.md). |
 
 ## 3.2 Technical context
@@ -51,6 +50,7 @@ graph LR
 | Model, CLI | out | A child process (`claude -p`), JSON lines on stdout. |
 | External MCP servers | out | Official MCP SDK over stdio or Streamable HTTP; tools only. |
 | Web fetch | out | An `http:` / `https:` page request, started by a model's tool call. |
+| Web search | out | One request per search to the provider chosen in Settings (DuckDuckGo, Brave Search, Tavily, or a SearXNG instance), started by a model's tool call. |
 | Drey's MCP server | in | MCP over a stdio bridge or local HTTP. |
 | git | out | `execFile`, no shell, one queue per repository. |
 | Files from the OS | in | Command-line arguments, also from a second instance. |

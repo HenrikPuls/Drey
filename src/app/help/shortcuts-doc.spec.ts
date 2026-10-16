@@ -45,9 +45,16 @@ describe('buildShortcutsMarkdown', () => {
 
     expect(md).toContain('## Editing');
     expect(md).toContain('| Ctrl F | Find in note |');
-    expect(md).toContain('| Ctrl Alt N | Quick capture (system-wide, while Drey runs) |');
-    // No commands: the Commands table holds only its header.
+    // No commands: the Commands table holds only the quick-capture row.
     const commandsSection = md.slice(md.indexOf('## Commands'), md.indexOf('## Editing'));
     expect(commandsSection).not.toContain('| New note');
+  });
+
+  it('lists the quick-capture hotkey the user chose, or none (ADR-0073)', () => {
+    expect(buildShortcutsMarkdown([])).toContain(
+      '| Quick capture (system-wide, while Drey runs) | Ctrl Alt N |',
+    );
+    expect(buildShortcutsMarkdown([], 'Mod+Alt+Q')).toContain('while Drey runs) | Ctrl Alt Q |');
+    expect(buildShortcutsMarkdown([], null)).toContain('while Drey runs) | — |');
   });
 });

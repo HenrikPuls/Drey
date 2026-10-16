@@ -7,7 +7,7 @@
  * `PluginHost.buildContext`.
  */
 import type { MainPluginContext, Unsubscribe, VaultChangeEvent } from '../../shared/plugin-api';
-import type { VaultCallOptions, VaultTools, VaultWriteRule } from '../mcp';
+import { NO_VAULT, type VaultCallOptions, type VaultTools, type VaultWriteRule } from '../mcp';
 import type { PluginHostDeps } from './plugin-host';
 
 /** Remembers an `Unsubscribe` the context handed out, so deactivation can drain it. */
@@ -17,17 +17,22 @@ export type TrackDisposable = <T>(unsubscribe: T) => T;
  * What a plugin call may do with the vault tools (ADR-0071): the vaults
  * the caller named are the scope of reading AND writing, the vault
  * group's rule decides whether it may write and whether it asks, and the
- * app's own folders stay out. Pure, spec-covered.
+ * app's own folders stay out. `extra` carries the files that are in scope
+ * by themselves (the attached note) and the caller's change listener.
+ * Pure, spec-covered.
  */
 export function assistantVaultOptions(
   scope: readonly string[] | undefined,
   write: VaultWriteRule,
+  extra: Pick<VaultCallOptions, 'files' | 'onChange'> = {},
 ): VaultCallOptions {
   return {
     ...(scope !== undefined ? { scope } : {}),
     write,
     origin: 'assistant',
     protectAppFolders: true,
+    ...(extra.files !== undefined && extra.files.length > 0 ? { files: extra.files } : {}),
+    ...(extra.onChange !== undefined ? { onChange: extra.onChange } : {}),
   };
 }
 
@@ -163,7 +168,23 @@ export function buildLlmContext(
             // is not part of it — the assistant brings its own and leaves
             // it out on purpose where the task index would answer for
             // the wrong vault.
-            const vaultOptions = assistantVaultOptions(options?.vaultToolsScope, groups.vault.write);
+            const activeVaultId = deps.vaultManager.getActiveVaultId();
+            const vaultOptions = assistantVaultOptions(
+              options?.vaultToolsScope,
+              groups.vault.write,
+              {
+                files: (options?.vaultToolsFiles ?? []).flatMap((file) => {
+                  const vaultId =
+                    file.vaultId === null ? NO_VAULT : (file.vaultId ?? activeVaultId);
+                  return vaultId === null
+                    ? []
+                    : [{ vaultId, path: file.path, ...(file.live === true ? { live: true } : {}) }];
+                }),
+                ...(options?.onVaultChange !== undefined
+                  ? { onChange: options.onVaultChange }
+                  : {}),
+              },
+            );
             const vaultSpecs =
               options?.vaultTools === true && deps.vaultTools !== undefined
                 ? deps.vaultTools

@@ -4,7 +4,7 @@ import type {
   MenuContribution,
   PluginRendererModule,
 } from '../../../shared/plugin-api/renderer';
-import type { AppConfig } from '../../../shared/app-config';
+import { hasExternalTools, type AppConfig } from '../../../shared/app-config';
 import type { AssistantOutcome } from '../shared/ask';
 import type { ChatNoteView, ChatSummary } from '../shared/chat-note';
 import { resolveActions } from '../../../shared/llm/actions';
@@ -13,7 +13,6 @@ import { createRunningTasks } from './running-tasks.js';
 import { createAssistantState, type AssistantPorts } from './state.js';
 import {
   actionsSettingsPage,
-  retrievalSettingsPage,
   SELECTION_BUTTON_SETTING,
 } from './settings-pages.js';
 import { promptEntriesFrom, promptsDirFor } from './prompts.js';
@@ -138,6 +137,7 @@ const plugin: PluginRendererModule = {
         const config = await api.appConfig.get();
         return config.daily.dir;
       },
+      externalTools: async () => hasExternalTools((await api.appConfig.get()).tools),
       listVaults: async () => {
         const list = await api.vault.listVaults();
         return list.map((vault) => ({
@@ -149,6 +149,7 @@ const plugin: PluginRendererModule = {
     };
 
     const state = createAssistantState(ports, tasks);
+    void state.refreshWeb();
     // Vault writes elsewhere (or our own chat-note appends) stale the
     // picker cache; the lazy cache reloads on the next open. The same
     // round covers registry mutations (add/remove), so the Vault chip's
@@ -156,17 +157,6 @@ const plugin: PluginRendererModule = {
     api.vault.onChanged(() => {
       state.invalidateChats();
       void state.refreshVaults();
-    });
-
-    // Live edit (ADR-0049): each mutating doc-tool call pushes the whole
-    // working copy; the host applies it to the open tab as one unsaved edit
-    // (one undo step). Fire-and-forget — the main side owns the working
-    // copy; a closed tab simply no-ops (the chat note keeps the record).
-    api.backend.on('chat:liveEdit', (data) => {
-      const shape = (data ?? {}) as { path?: unknown; content?: unknown };
-      if (typeof shape.path === 'string' && typeof shape.content === 'string') {
-        api.documents.setBuffer(shape.path, shape.content);
-      }
     });
 
     // -- active-document tracking (chips) + the chat-note hydration rule:
@@ -395,9 +385,6 @@ const plugin: PluginRendererModule = {
         selectionButtonOn = on;
       }),
     );
-    // The semantic retrieval page is plugin-config driven (not appConfig),
-    // so it does not need the patch announcement.
-    api.ui.registerSettingsPage(retrievalSettingsPage(api));
 
     void refreshConfig();
   },

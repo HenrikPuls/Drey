@@ -6,7 +6,10 @@ import {
   EDITOR_FONT_SCALE_MAX,
   EDITOR_FONT_SCALE_MIN,
   LEGACY_AUTOTAG_PROMPT,
+  externalToolSources,
+  hasExternalTools,
   normalizeAppConfig,
+  webSearchReady,
 } from './app-config';
 
 describe('normalizeAppConfig', () => {
@@ -36,6 +39,33 @@ describe('normalizeAppConfig', () => {
 
   it('round-trips the defaults unchanged', () => {
     expect(normalizeAppConfig(DEFAULT_APP_CONFIG)).toEqual(DEFAULT_APP_CONFIG);
+  });
+
+  it('keeps assignable chord overrides canonical, drops invalid ones (ADR-0073)', () => {
+    const config = normalizeAppConfig({
+      keybindings: {
+        overrides: {
+          'note.new': 'shift+ctrl+k',
+          'note.save': null,
+          'dock.toggleLeft': 'K',
+          'palette.files': 'Mod+Z',
+          'help.manual': 42,
+        },
+        capture: 'Mod+Alt+Q',
+      },
+    });
+    expect(config.keybindings).toEqual({
+      overrides: { 'note.new': 'Mod+Shift+K', 'note.save': null },
+      capture: 'Mod+Alt+Q',
+    });
+  });
+
+  it('defaults the capture hotkey, keeps "none", replaces an invalid one', () => {
+    expect(normalizeAppConfig({}).keybindings).toEqual({ overrides: {}, capture: 'Mod+Alt+N' });
+    expect(normalizeAppConfig({ keybindings: { capture: null } }).keybindings.capture).toBeNull();
+    expect(normalizeAppConfig({ keybindings: { capture: 'Q' } }).keybindings.capture).toBe(
+      'Mod+Alt+N',
+    );
   });
 
   it('defaults the MCP block to off and coerces a bad port', () => {
@@ -267,6 +297,7 @@ describe('normalizeAppConfig', () => {
       tasks: { enabled: true },
       templates: { enabled: true, write: 'auto' },
       webFetch: { enabled: false, approval: 'ask' },
+      webSearch: { enabled: false, provider: 'duckduckgo', apiKey: '', baseUrl: '', approval: 'ask' },
       servers: [],
       maxRounds: 12,
     });
@@ -282,6 +313,29 @@ describe('normalizeAppConfig', () => {
     expect(normalizeAppConfig({ mcp: { enabled: false } }).tools.vault).toEqual({ write: 'off' });
     // Once the slice exists, the MCP switch no longer steers it.
     expect(normalizeAppConfig({ mcp: { enabled: false }, tools: {} }).tools.vault.write).toBe('confirm');
+  });
+
+  it('tools.webSearch (milestone 79): an unknown provider falls back, and it is ready only with what the provider needs', () => {
+    const search = (group: unknown) => normalizeAppConfig({ tools: { webSearch: group } }).tools.webSearch;
+    expect(search({ enabled: true, provider: 'bing', apiKey: ' k ', approval: 'allow' })).toEqual({
+      enabled: true,
+      provider: 'duckduckgo',
+      apiKey: 'k',
+      baseUrl: '',
+      approval: 'allow',
+    });
+    expect(webSearchReady(search({ enabled: false }))).toBe(false);
+    expect(webSearchReady(search({ enabled: true }))).toBe(true);
+    expect(webSearchReady(search({ enabled: true, provider: 'brave' }))).toBe(false);
+    expect(webSearchReady(search({ enabled: true, provider: 'brave', apiKey: 'k' }))).toBe(true);
+    expect(webSearchReady(search({ enabled: true, provider: 'searxng', apiKey: 'k' }))).toBe(false);
+    expect(webSearchReady(search({ enabled: true, provider: 'searxng', baseUrl: 'http://s' }))).toBe(true);
+
+    const tools = normalizeAppConfig({ tools: {} }).tools;
+    expect(hasExternalTools(tools)).toBe(false);
+    tools.webSearch.enabled = true;
+    expect(externalToolSources(tools)).toEqual({ webSearch: true, webFetch: false, servers: false });
+    expect(hasExternalTools(tools)).toBe(true);
   });
 
   it('tools.vault: the old switch becomes the "off" of the write rule (ADR-0071)', () => {

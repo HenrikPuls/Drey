@@ -1,11 +1,10 @@
 import { MAX_EXTRA_FILES, parseAskPayload } from './ask';
 import type { AskRequest } from './ask';
-import { DEFAULT_SEMANTIC_MODEL, encodeVector } from './semantic';
 import { parseChatNote, serializeTurn } from './chat-note';
 import { buildReplayMessages } from './chat-replay';
 
 /**
- * The ADR-0055 additions to the ask contract and the chat-note grammar:
+ * The vault-context additions to the ask contract and the chat-note grammar:
  * the `vaultScope` field (with legacy tolerance), the ```drey-context
  * fence roundtrip, and the compact replay line that keeps follow-ups
  * small.
@@ -21,6 +20,7 @@ const baseRequest: AskRequest = {
   noteKey: null,
   vaultScope: 'off',
   vaultIds: [],
+  web: false,
 };
 
 describe('parseAskPayload vaultScope', () => {
@@ -95,7 +95,7 @@ describe('the ```drey-context fence', () => {
     expect(view.turns[0].contextStatus).toEqual({ kind: 'empty', floor: 0.3 });
   });
 
-  it('roundtrips the disabled, unregistered and error statuses', () => {
+  it('roundtrips the unavailable, disabled, unregistered and error statuses', () => {
     const base = {
       role: 'assistant' as const,
       at: null,
@@ -106,6 +106,12 @@ describe('the ```drey-context fence', () => {
       context: [],
       start: 0,
     };
+    const unavailable = parseChatNote(
+      serializeTurn({ ...base, contextStatus: { kind: 'unavailable' } }),
+    );
+    expect(unavailable.turns[0].contextStatus).toEqual({ kind: 'unavailable' });
+    const plainEmpty = parseChatNote(serializeTurn({ ...base, contextStatus: { kind: 'empty' } }));
+    expect(plainEmpty.turns[0].contextStatus).toEqual({ kind: 'empty' });
     const disabled = parseChatNote(serializeTurn({ ...base, contextStatus: { kind: 'disabled' } }));
     expect(disabled.turns[0].contextStatus).toEqual({ kind: 'disabled' });
     const unregistered = parseChatNote(
@@ -113,9 +119,9 @@ describe('the ```drey-context fence', () => {
     );
     expect(unregistered.turns[0].contextStatus).toEqual({ kind: 'unregistered' });
     const failed = parseChatNote(
-      serializeTurn({ ...base, contextStatus: { kind: 'error', message: 'worker died' } }),
+      serializeTurn({ ...base, contextStatus: { kind: 'error', message: 'index gone' } }),
     );
-    expect(failed.turns[0].contextStatus).toEqual({ kind: 'error', message: 'worker died' });
+    expect(failed.turns[0].contextStatus).toEqual({ kind: 'error', message: 'index gone' });
   });
 
   it('tolerates a hand-mangled context line (dropped, not fatal)', () => {
@@ -128,7 +134,7 @@ describe('the ```drey-context fence', () => {
       '{not json',
       '{"cite":{"path":"ok.md","heading":"H","line":2}}',
       '{"status":"nonsense"}',
-      '{"status":"empty"}',
+      '{"status":"error"}',
       '```',
       '',
     ].join('\n');
@@ -204,25 +210,5 @@ describe('replay with context citations', () => {
     const result = await buildReplayMessages(turns, async () => null);
     expect(result.messages).toHaveLength(1);
     expect(result.messages[0].content).toBe('[Vault context used for this answer: x.md — X]');
-  });
-});
-
-describe('vector encoding fits the index file', () => {
-  it('encodes a 384-dim vector at base64 size (4 bytes → ~5.3 chars)', () => {
-    const vector = Float32Array.from({ length: 384 }, (_, i) => (i % 7) / 7);
-    const encoded = encodeVector(vector);
-    expect(encoded.length).toBe(2048);
-  });
-});
-
-describe('ask caps unchanged', () => {
-  it('keeps the extra-file cap', () => {
-    expect(MAX_EXTRA_FILES).toBe(10);
-  });
-});
-
-describe('model default', () => {
-  it('stays the small multilingual e5', () => {
-    expect(DEFAULT_SEMANTIC_MODEL).toBe('Xenova/multilingual-e5-small');
   });
 });

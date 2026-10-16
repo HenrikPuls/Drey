@@ -12,6 +12,7 @@ describe('buildAskUserMessage — selection (milestone 74)', () => {
     noteKey: null,
     vaultScope: 'off' as const,
     vaultIds: [],
+    web: false,
   };
 
   it('places the selected section between the question and the document', () => {

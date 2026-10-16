@@ -26,6 +26,7 @@ import { ZenService } from '../services/zen.service';
 import { WindowChromeService } from './window-chrome.service';
 import { duplicateSelection } from '../editor/markdown-commands';
 import type { EditCommand } from '../../../shared/ipc-api';
+import type { MenuContribution } from '../../../shared/plugin-api/renderer';
 
 export type MenuId = 'file' | 'edit' | 'selection' | 'view' | 'help';
 
@@ -96,6 +97,26 @@ export class MenuService {
 
   close(): void {
     this.open.set(null);
+  }
+
+  /**
+   * A registry command's chord in effect, as the row prints it — the
+   * user's chord since milestone 75 (ADR-0073); `undefined` for none.
+   */
+  private hint(commandId: string): string | undefined {
+    return this.keys.hint(commandId) || undefined;
+  }
+
+  /**
+   * A contributed row that runs a registered command shows that command's
+   * chord in effect; any other row keeps the hint it brought.
+   */
+  private contributionHint(item: MenuContribution): { hint?: string } {
+    const hint =
+      item.commandId !== undefined && this.keys.isRegistered(item.commandId)
+        ? this.hint(item.commandId)
+        : item.hint;
+    return hint !== undefined ? { hint } : {};
   }
 
   private run(commandId: string): void {
@@ -209,7 +230,7 @@ export class MenuService {
       ...items.map((item) => ({
         kind: 'item' as const,
         label: item.label,
-        ...(item.hint !== undefined ? { hint: item.hint } : {}),
+        ...this.contributionHint(item),
         run: item.commandId
           ? () => this.run(item.commandId!)
           : item.run
@@ -227,7 +248,7 @@ export class MenuService {
       id: 'file',
       label: 'File',
       rows: [
-        { kind: 'item', label: 'New note', hint: 'Ctrl N', run: () => this.run('note.new') },
+        { kind: 'item', label: 'New note', hint: this.hint('note.new'), run: () => this.run('note.new') },
         SEP,
         {
           kind: 'item',
@@ -239,18 +260,18 @@ export class MenuService {
           },
         },
         SEP,
-        { kind: 'item', label: 'Save', hint: 'Ctrl S', run: () => this.run('note.save') },
+        { kind: 'item', label: 'Save', hint: this.hint('note.save'), run: () => this.run('note.save') },
         {
           kind: 'item',
           label: 'Save all',
-          hint: 'Ctrl Alt S',
+          hint: this.hint('note.saveAll'),
           run: () => this.run('note.saveAll'),
         },
         SEP,
         {
           kind: 'item',
           label: 'Settings',
-          hint: 'Ctrl ,',
+          hint: this.hint('settings.open'),
           run: () => {
             this.close();
             this.settings.openScreen();
@@ -274,7 +295,7 @@ export class MenuService {
         {
           kind: 'item',
           label: 'Search all notes',
-          hint: 'Ctrl Shift F',
+          hint: this.hint('search.open'),
           run: () => this.run('search.open'),
         },
         ...this.contributionRows('edit'),
@@ -301,41 +322,41 @@ export class MenuService {
         {
           kind: 'item',
           label: 'Back',
-          hint: 'Alt Left',
+          hint: this.hint('doc.back'),
           run: this.history.canBack() ? () => this.run('doc.back') : undefined,
         },
         {
           kind: 'item',
           label: 'Forward',
-          hint: 'Alt Right',
+          hint: this.hint('doc.forward'),
           run: this.history.canForward() ? () => this.run('doc.forward') : undefined,
         },
-        { kind: 'item', label: 'Go to file…', hint: 'Ctrl P', run: () => this.run('palette.files') },
+        { kind: 'item', label: 'Go to file…', hint: this.hint('palette.files'), run: () => this.run('palette.files') },
         {
           kind: 'item',
           label: 'Command palette…',
-          hint: 'Ctrl Shift P',
+          hint: this.hint('palette.commands'),
           run: () => this.run('palette.commands'),
         },
         SEP,
         {
           kind: 'item',
           label: 'Line numbers',
-          hint: 'Ctrl G',
+          hint: this.hint('editor.toggleLineNumbers'),
           checked: () => this.editor.lineNumbers(),
           run: () => this.run('editor.toggleLineNumbers'),
         },
         {
           kind: 'item',
           label: 'Left dock',
-          hint: 'Ctrl B',
+          hint: this.hint('dock.toggleLeft'),
           checked: () => !this.dock.sideFolded('left'),
           run: () => this.run('dock.toggleLeft'),
         },
         {
           kind: 'item',
           label: 'Right dock',
-          hint: 'Ctrl Alt B',
+          hint: this.hint('dock.toggleRight'),
           checked: () => !this.dock.sideFolded('right'),
           run: () => this.run('dock.toggleRight'),
         },
@@ -355,32 +376,32 @@ export class MenuService {
         {
           kind: 'item',
           label: 'Full screen',
-          hint: 'F11',
+          hint: this.hint('window.toggleFullScreen'),
           checked: () => this.windowChrome.fullscreen(),
           run: () => this.run('window.toggleFullScreen'),
         },
         {
           kind: 'item',
           label: 'Split editor right',
-          hint: 'Ctrl Alt Enter',
+          hint: this.hint('pane.splitRight'),
           run: this.editor.openDocs().length > 0 ? () => this.run('pane.splitRight') : undefined,
         },
         {
           kind: 'item',
           label: 'Split editor down',
-          hint: 'Ctrl Alt Shift Enter',
+          hint: this.hint('pane.splitDown'),
           run: this.editor.openDocs().length > 0 ? () => this.run('pane.splitDown') : undefined,
         },
         {
           kind: 'item',
           label: 'Focus next pane',
-          hint: 'F6',
+          hint: this.hint('pane.focusNext'),
           run: this.panes.paneIds().length > 1 ? () => this.run('pane.focusNext') : undefined,
         },
         {
           kind: 'item',
           label: 'Focus previous pane',
-          hint: 'Shift F6',
+          hint: this.hint('pane.focusPrev'),
           run: this.panes.paneIds().length > 1 ? () => this.run('pane.focusPrev') : undefined,
         },
         {
@@ -401,8 +422,13 @@ export class MenuService {
       id: 'help',
       label: 'Help',
       rows: [
-        { kind: 'item', label: 'User manual', hint: 'F1', run: () => this.run('help.manual') },
-        { kind: 'item', label: 'Keyboard shortcuts', run: () => this.run('help.shortcuts') },
+        { kind: 'item', label: 'User manual', hint: this.hint('help.manual'), run: () => this.run('help.manual') },
+        {
+          kind: 'item',
+          label: 'Keyboard shortcuts',
+          hint: this.hint('help.shortcuts'),
+          run: () => this.run('help.shortcuts'),
+        },
         SEP,
         {
           kind: 'item',

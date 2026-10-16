@@ -80,8 +80,18 @@
       <button type="button" (click)="moveToDock('right')">Move to right dock</button>
       <button type="button" (click)="moveToDock('bottom')">Move to bottom dock</button>
       <div class="ctx-sep" role="separator"></div>
-      <button type="button" (click)="split(m.path, 'row')">Split right <span class="ctx-key">Ctrl Alt Enter</span></button>
-      <button type="button" (click)="split(m.path, 'column')">Split down <span class="ctx-key">Ctrl Alt Shift Enter</span></button>
+      <button type="button" (click)="split(m.path, 'row')">
+        Split right
+        @if (keys.hint('pane.splitRight'); as key) {
+          <span class="ctx-key">{{ key }}</span>
+        }
+      </button>
+      <button type="button" (click)="split(m.path, 'column')">
+        Split down
+        @if (keys.hint('pane.splitDown'); as key) {
+          <span class="ctx-key">{{ key }}</span>
+        }
+      </button>
       @if (editor.isMarkdown(editor.docFor(m.path)?.path ?? '')) {
         <div class="ctx-sep" role="separator"></div>
         <button type="button" (click)="exportPdf(m.path)">Export as PDF…</button>

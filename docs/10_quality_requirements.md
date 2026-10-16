@@ -37,8 +37,7 @@ with unsaved edits, is not asked about ([§11](11_risks_and_technical_debt.md)).
 | Someone copies the settings file. | API keys in it are unreadable on another machine or account. | `config-secrets.ts`. |
 
 Known limits: a note that embeds a picture from the web loads it, which
-tells that server the note was opened; switching on semantic retrieval
-downloads the embedding model once ([§3](03_system_scope_and_context.md)).
+tells that server the note was opened.
 
 ## 10.4 Writing is never blocked
 

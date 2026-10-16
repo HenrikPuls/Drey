@@ -1,0 +1,90 @@
+<app-settings-pane
+  title="Keyboard shortcuts"
+  description="The shortcut of every command and the system-wide quick-capture hotkey. Click Change and press the new keys; Esc cancels."
+>
+  <section>
+    <h3>Commands</h3>
+    <ul class="list shortcuts">
+      @for (row of rows(); track row.id) {
+        <li [class.recording]="recording() === row.id">
+          <div class="row">
+            <span class="name">{{ row.label }}</span>
+            @if (recording() === row.id) {
+              <span class="chord prompt status-pending">Press the new keys…</span>
+            } @else if (row.chord) {
+              <span class="chord mono" [class.status-error]="conflicts().has(row.id)">{{
+                format(row.chord)
+              }}</span>
+            } @else {
+              <span class="chord none">None</span>
+            }
+            @if (recording() === row.id) {
+              <button type="button" class="link" (click)="stopRecording()">Cancel</button>
+            } @else {
+              <button type="button" class="link" (click)="startRecording(row)">Change</button>
+            }
+            <button
+              type="button"
+              class="link"
+              [disabled]="!row.chord || recording() === row.id"
+              (click)="remove(row)"
+            >
+              Remove
+            </button>
+            <button
+              type="button"
+              class="link"
+              [disabled]="!row.changed || recording() === row.id"
+              (click)="reset(row)"
+            >
+              Reset
+            </button>
+          </div>
+
+          @if (row.id === captureId && captureInUse()) {
+            <p class="note status-error">
+              In use by another program — Drey could not claim it. Choose another.
+            </p>
+          }
+          @if (conflicts().has(row.id) && pending()?.rowId !== row.id) {
+            <p class="note status-error">Another command has the same shortcut.</p>
+          }
+          @if (problem(); as problem) {
+            @if (problem.rowId === row.id) {
+              <p class="note status-error">{{ problem.text }}</p>
+            }
+          }
+          @if (pending(); as pending) {
+            @if (pending.rowId === row.id) {
+              <div class="row note">
+                <span class="name">
+                  {{ format(pending.chord) }} is held by “{{ pending.holder.label }}”.
+                </span>
+                <button type="button" class="ghost" (click)="confirmReplace()">Replace</button>
+                <button type="button" class="link" (click)="cancelReplace()">Cancel</button>
+              </div>
+              <p class="note field-hint">Replace leaves “{{ pending.holder.label }}” without a shortcut.</p>
+            }
+          }
+        </li>
+      }
+    </ul>
+  </section>
+
+  <section>
+    <h3>Fixed</h3>
+    <p class="section-hint">
+      The editor's own keys and the mouse side buttons (back and forward) cannot be changed.
+    </p>
+    <ul class="list shortcuts">
+      @for (row of fixed; track row.keys) {
+        <li>
+          <div class="row">
+            <span class="name">{{ row.label }}</span>
+            <span class="chord mono">{{ row.keys }}</span>
+          </div>
+        </li>
+      }
+    </ul>
+  </section>
+</app-settings-pane>

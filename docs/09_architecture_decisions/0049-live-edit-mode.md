@@ -114,3 +114,17 @@ builder lists the vault tools that ride along. A model whose endpoint
 refused the tools cannot run a live edit and says so. The `doc_*` tools
 are replaced by the base toolset in milestone 78. See
 [ADR-0071](0071-unified-vault-toolset-and-agent-loop.md).
+
+## Later change — the doc tools are gone (milestone 78, ADR-0071)
+
+A live-edit turn edits the note with the base vault tools (`vault_edit`,
+`vault_write`, `vault_read`). The note rides the call as a file marked
+`live`; the host puts each change into its open tab through the
+open-documents bridge — at once, without the dialog, not saved.
+`live-edit.ts`, the main-side working copy and the `chat:liveEdit` event
+are removed; the model reads the tab's buffer itself, so there is no
+second copy to keep consistent. What stays from this ADR: the chip, the
+input lock for the turn, one undo step per change, the applied `edit`
+entry in the chat note, the visible failure without tool support. A
+tab that was never saved stays a target: it rides as a file without a
+vault and is changed in the editor only. See [ADR-0071](0071-unified-vault-toolset-and-agent-loop.md).

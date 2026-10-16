@@ -4,7 +4,7 @@
 
 Accepted (2026-10-13), built in three steps: the tool loop and the system
 prompt (milestone 76, **done**), the vault toolset (milestone 77,
-**done**), the open note through the same tools (milestone 78, planned).
+**done**), the open note through the same tools (milestone 78, **done**).
 Changes ADR-0021 (the vault tools), ADR-0049 (live edit), ADR-0063 (the
 tool groups) and ADR-0069 (the explore tools); each gets its later-change
 note with the milestone that changes it.
@@ -187,12 +187,49 @@ As built (milestone 77):
 
 ### 4. The open note through the same tools (milestone 78)
 
-Main asks the renderer for the buffer of an open file. A read sees
-unsaved text; an edit of an open file lands in the tab — in live-edit
-mode at once and unsaved, otherwise after the ADR-0011 diff. The
-`doc_*` tools go. The whole-document `document` fence stays as the
-protocol for providers without a tool loop and for a model that refused
-the tools.
+- **Main asks the renderer about open tabs.** The renderer is the only
+  place that knows what a tab shows, so main holds no copy: a bridge
+  (`OpenDocsBridge`, `open-docs:request` / `open-docs:reply`; renderer
+  side `OpenDocsBridgeService`) answers `peek` (the buffer of one file),
+  `dirty` (every unsaved vault file), `apply` (put text into the tab,
+  saved or not), `moved` and `closed`. The tools get it as
+  `VaultToolDeps.openDocs`; without a window, or without an answer in
+  time, a file reads as not open and the tool works on disk.
+- **A read sees the buffer.** `vault_read` and the word / regex scan of
+  `vault_search` read an open file as its tab shows it. The tag search
+  and `vault_retrieve` read their indexes, which follow saves.
+- **A change to an open file is made in its tab.** `vault_edit` and
+  `vault_write` compute and confirm against the buffer, put the result
+  into the tab and save it from there (the note's own save pipeline:
+  conflict guard, history, index; the on-save Actions stay out). A file
+  that is not open is written through the vault manager as before.
+  `vault_move` retargets the tab and hands unsaved notes to the link
+  rewrite as buffers (ADR-0059); `vault_delete` closes the tab. This
+  holds for programs on the MCP server too — it ends the stale diff and
+  the "Changed on disk" merge after a tool write.
+- **A call can carry files of its own** (`VaultCallOptions.files`, SDK
+  `vaultToolsFiles`): in scope beside the vaults of the Vault chip, found
+  by path alone. The assistant passes the note attached to the question.
+  With the chip off the scope is empty and the model is offered
+  `vault_read`, `vault_edit` and `vault_write`, which reach that file
+  only. Such a file is never refused for writing: a rule of `off` asks
+  in the diff — an ask-mode edit of the open note was always possible
+  after confirmation, and the vault group's switch is about the rest of
+  the vault.
+- **Live edit is a flag on that file** (`live`, ADR-0049): a change goes
+  into the tab at once, without the dialog and without saving. The
+  `doc_*` tools, the main-side working copy and the `chat:liveEdit` push
+  are gone.
+- **The engine learns about changes from the host** (`onVaultChange`):
+  a turn whose tools changed the attached note persists the resulting
+  document as its applied `edit` entry and counts the changes of a live
+  turn.
+- **The `document` fence stays** as the protocol where no tools ride (a
+  provider without a tool loop, a model that refused the tools) and for
+  a note the tools do not take: a chat note, a draft, a file opened
+  from outside the vaults (ADR-0054).
+- The assistant's own confirmation no longer times out (ADR-0014: the
+  user cancels the ask instead); a connected program's still does.
 
 ## Considered and rejected
 
@@ -206,6 +243,14 @@ the tools.
   occur are shallow (broken JSON, a missing argument, a string for a
   number); a full validator would add a dependency and messages written
   for programmers, not for the model that has to act on them.
+- **A copy of the open buffers in main**, kept current by pushes from
+  the renderer. Two owners of the same text and a window in which they
+  disagree; asking at the moment of the call needs neither.
+- **Writing the file and letting the tab reload.** Works for a clean
+  tab only; a tab with unsaved text ends in the conflict merge, and a
+  live edit must not touch the disk at all.
+- **Keeping the `doc_*` tools for live edit.** A second edit tool with
+  its own argument names for the same operation.
 - **Raising the round cap instead of closing the loop.** A higher cap
   only moves the point at which the turn is lost.
 - **Leaving the reply to a prompt that named dropped tools.** One
@@ -238,12 +283,28 @@ the tools.
   covers every registered vault.
 - `PLUGIN_API_VERSION` minor 23 → 24: `vaultToolsScope` bounds reading
   and writing of every vault tool (it used to drop two read tools).
-- Until milestone 78 a vault tool works on the file on disk: an unsaved
-  change in an open tab is not seen, a write to that file surfaces as
-  "Changed on disk", and a moved note's tab keeps its old path.
+- `PLUGIN_API_VERSION` minor 24 → 25: `vaultToolsFiles`,
+  `onVaultChange`. Additive.
+- Since milestone 78 a tool change to an open file is saved by the tab:
+  it reveals the tab, and a save that stops at the conflict dialog
+  leaves the change in the buffer (the tool result says so).
+- With `tools.vault.write: off` the assistant can still change the note
+  attached to the question, after the diff.
+- A tab that was never saved is a file of the call too (`vaultId: null`
+  in the SDK, `NO_VAULT` in the tools): it is read and changed in the
+  editor only, a tool never saves it and never looks its name up on
+  disk. Live edit and the confirmed edit both work on it.
 - The semantic service keeps four methods only the removed explore
   tools used; removing them is a follow-up.
 - Not done in milestone 76: the abort signal still reaches only the
   external tools; plugin and vault tools finish the call they are in.
   The renderer-side `api.llm.chat` with `vaultTools` still attaches the
   whole base set (no plugin uses it); it follows in milestone 77.
+
+## Later change — `vault_retrieve` is gone (milestone 80, ADR-0072)
+
+The toolset is `vault_list`, `vault_search`, `vault_read`,
+`vault_edit`, `vault_write`, `vault_move`, `vault_delete`. The embedding
+retrieval behind `vault_retrieve` was removed
+([ADR-0072](0072-vault-context-by-text-search.md)); the system prompt no
+longer has a variant that names it.

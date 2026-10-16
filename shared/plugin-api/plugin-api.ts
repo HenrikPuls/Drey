@@ -19,7 +19,6 @@ import type { ActionOutcome, ChatMessage, LlmCapabilities, LlmDebugEntry } from 
 import type { AppConfig } from '../app-config';
 import type { SectionSearchScope, VaultOpOptions } from './main-plugin-api';
 import type {
-  SemanticSectionHit,
   TagSearchHit,
   TagSearchQuery,
 } from './search-types';
@@ -318,7 +317,11 @@ export interface CodeMirrorModules {
 export interface PluginCommand {
   readonly id: string;
   readonly label: string;
-  /** Chord string, e.g. `Mod+Shift+K` (`Mod` = Ctrl/Cmd). Conflicts: first registration wins. */
+  /**
+   * The DEFAULT chord, e.g. `Mod+Shift+K` (`Mod` = Ctrl/Cmd). The user may
+   * replace or remove it in Settings → Keyboard shortcuts (ADR-0073), keyed
+   * by `id`. Conflicts between defaults: first registration wins.
+   */
   readonly keybinding?: string;
   /**
    * `payload` carries optional context from the invoker (SDK 1.9 — e.g.
@@ -632,17 +635,6 @@ export interface DreyPluginApi {
     vocabulary(): Promise<readonly TagEntry[]>;
     /** `scope` defaults to the active vault; `{ kind: 'all' }` spans every vault. */
     searchSections(query: TagSearchQuery, scope?: SectionSearchScope): Promise<readonly TagSearchHit[]>;
-    /**
-     * Semantic retrieval (SDK 1.18, ADR-0055): the top-`limit` sections
-     * most similar to `question`, score-descending. Rejects when no
-     * semantic provider is registered (the owning plugin is disabled or
-     * its retrieval switched off).
-     */
-    searchSemantic(
-      question: string,
-      scope?: SectionSearchScope,
-      limit?: number,
-    ): Promise<readonly SemanticSectionHit[]>;
   };
 
   /**

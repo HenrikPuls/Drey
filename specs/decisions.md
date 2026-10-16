@@ -23,9 +23,21 @@ one means moving it back to the roadmap with a new justification.
 - **Job Queue (generic, multi-consumer)** — background processes with
   status/progress, crash persistence, auto-pause on interactive use,
   meant to cover both re-indexing and export. No second consumer exists
-  yet; a scoped version ships inside the Semantic Search milestone
-  instead. Revisit as a standalone subsystem once export (or similar)
+  yet; a scoped version shipped inside the embedding retrieval of
+  milestone 41, which milestone 80 removed. Revisit as a standalone subsystem once export (or similar)
   needs it too.
+- **Embedding retrieval ("semantic search")** — built as milestone 41
+  (ADR-0055: transformers.js WASM worker, `multilingual-e5-small`, one
+  JSON vector index per vault) and extended in milestones 68 and 71;
+  **removed in milestone 80 (2026-10-14)**. The owner's finding: the
+  hits did not fit — a note containing the very word searched for
+  ("einstein") was not found, while unrelated sections ranked high —
+  and the price was a model download, a slow index build, the ONNX
+  runtime in the package and its packaging special cases. Since
+  milestone 77 a tool-capable model searches the vault itself. What
+  replaced it: the Vault chip's context block from text search over the
+  section index (ADR-0072). Not to be re-proposed with the same small
+  model; a larger one would make the index build slower still.
 - **Dedicated keyword search / FTS index** — free-text tag search already
   covers the common case; no evidence it's a bottleneck.
 - **Daily tasks day view** — read-only multi-day aggregate; Tasks panel
@@ -42,12 +54,26 @@ one means moving it back to the roadmap with a new justification.
 
 ## Won't do (decided against, kept for the record)
 
+- **One composer switch per external source** (search, fetch, each MCP
+  server) — decided with the owner for milestone 79 (2026-10-13): one
+  Web chip covers everything that leaves the machine; which sources
+  exist and whether they ask stays in Settings → Assistant tools. A
+  tools menu in an already full tool row was ADR-0063's reason to defer
+  the switch at all.
+- **Web search only through an MCP server the user adds** — ADR-0063's
+  first answer ("no bundled search provider: a vendor choice and a key
+  the app would have to own"). Reversed in milestone 79 (2026-10-13):
+  setting up a search server was the hurdle that kept the assistant
+  offline. The app still owns no key — the user picks the provider and
+  enters their own, or uses DuckDuckGo without one.
+
 - **Pause / resume of large semantic rebuilds on interactive use** —
   considered for milestone 68 and dropped: an interactive ask never
   waits for a rebuild (the query embed queues behind at most one
   16-passage batch — tens of ms — then searches the current index),
   and the actual gap (a mid-rebuild index is incomplete) is not fixable
-  by pausing. Recorded in ADR-0055's later-change section.
+  by pausing. Recorded in ADR-0055's later-change section. Moot since
+  milestone 80: there is no rebuild any more.
 - **Task Center / stable task ids** (req-35) — implemented as milestone
   44 (`#task/id:<id>` mint-on-tick write-back) and reverted before
   release: the token is permanent noise in plain Markdown, adoption is
@@ -87,3 +113,7 @@ one means moving it back to the roadmap with a new justification.
   library for tool arguments*: the slips are shallow, and the messages
   have to be written for the model. *A higher round cap instead of a
   closing round*: it only moves the point where the turn is lost.
+  *A copy of the open buffers in main* (milestone 78): two owners of
+  the same text; main asks the renderer at the moment of the call
+  instead. *Keeping the `doc_*` live-edit tools*: a second edit tool for
+  the same operation.

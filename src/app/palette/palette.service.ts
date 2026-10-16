@@ -1,6 +1,6 @@
 import { Injectable, computed, inject, signal } from '@angular/core';
 import { VaultFileEntry } from '../../../shared/ipc-api';
-import { KeybindingService } from '../keybindings';
+import { formatChord, KeybindingService } from '../keybindings';
 import { DocHistoryService } from '../services/doc-history.service';
 import { EditorService, docKey } from '../services/editor.service';
 import { VaultService } from '../vault';
@@ -33,28 +33,7 @@ interface FileItem {
 const OWN_COMMANDS = new Set(['palette.files', 'palette.commands']);
 const LIMIT = 60;
 
-const IS_MAC = typeof navigator !== 'undefined' && /mac/i.test(navigator.platform);
-
-/** `Mod+Shift+F` as the menus print it: `Ctrl Shift F`. */
-export function formatChord(spec: string | undefined): string {
-  if (!spec) {
-    return '';
-  }
-  return spec
-    .split('+')
-    .map((raw) => {
-      const part = raw.trim();
-      const lower = part.toLowerCase();
-      if (lower === 'mod') {
-        return IS_MAC ? 'Cmd' : 'Ctrl';
-      }
-      if (lower.startsWith('arrow')) {
-        return part.slice(5);
-      }
-      return part.length === 1 ? part.toUpperCase() : part;
-    })
-    .join(' ');
-}
+export { formatChord };
 
 /**
  * The quick switcher and command palette (milestone 59): ONE overlay, two

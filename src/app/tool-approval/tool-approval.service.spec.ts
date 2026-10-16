@@ -85,4 +85,12 @@ describe('ToolApprovalService', () => {
     await service.answer('always');
     expect(stored.tools.webFetch.approval).toBe('allow');
   });
+
+  it('"Always allow" on a web search sets the search rule, not the fetch rule', async () => {
+    service.enqueue(request(1, 'web_search'));
+
+    await service.answer('always');
+    expect(stored.tools.webSearch.approval).toBe('allow');
+    expect(stored.tools.webFetch.approval).toBe('ask');
+  });
 });

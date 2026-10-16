@@ -7,29 +7,26 @@
 import type {
   DreyPluginApi,
   SectionSearchScope,
+  TagSearchHit,
   TagSearchQuery,
 } from '../../../shared/plugin-api/renderer';
 import {
   buildTextMatcher,
   filterChatHits,
   runTagSearch,
-  sectionCarriesTags,
 } from '../shared/search.js';
 import { sectionRecordsFor } from '../shared/section-records.js';
-import { mergeOpenBufferHits, type PanelHit } from './hit-list.js';
+import { mergeOpenBufferHits } from './hit-list.js';
 import { loadPrefs, savePrefs, type SearchPrefs } from './search-prefs.js';
 
 /** Files under here are kept out of the tag index (mirrors the main-side index). */
 const TEMPLATES_PREFIX = 'templates/';
 
-/** The SDK seam's hit budget (mirrors the assistant's DEFAULT_SEMANTIC_SEARCH_LIMIT). */
-const SEMANTIC_LIMIT = 12;
-
 export interface SearchState {
   queryTags: string[];
   queryText: string;
   replacement: string;
-  hits: PanelHit[];
+  hits: TagSearchHit[];
   searching: boolean;
   ran: boolean;
   /** Matcher / provider error, surfaced instead of a silent empty list. */
@@ -50,8 +47,6 @@ export interface SearchSession {
   notify(): void;
   activeVaultId(): string | null;
   hasQuery(): boolean;
-  /** Semantic mode: vault/all scope only — the renderer cannot embed a file-scope buffer. */
-  semanticActive(): boolean;
   currentQuery(): TagSearchQuery;
   /** The focused document when it is a text tab, else null. */
   activeTextDoc(): ReturnType<DreyPluginApi['documents']['active']>;
@@ -94,7 +89,6 @@ export function createSearchSession(api: DreyPluginApi): SearchSession {
     summaryError: null,
   };
   const hasQuery = (): boolean => state.queryTags.length > 0 || state.queryText.trim() !== '';
-  const semanticActive = (): boolean => prefs.semantic && prefs.scope !== 'file';
 
   const currentQuery = (): TagSearchQuery => ({
     tags: state.queryTags,
@@ -142,18 +136,10 @@ export function createSearchSession(api: DreyPluginApi): SearchSession {
       notify();
       return;
     }
-    if (semanticActive()) {
-      // Nothing to embed without text — tags alone cannot rank.
-      if (state.queryText.trim() === '') {
-        refuse('Type a question to search semantically.');
-        return;
-      }
-    } else {
-      const matcher = buildTextMatcher(currentQuery());
-      if (!matcher.ok) {
-        refuse(matcher.error);
-        return;
-      }
+    const matcher = buildTextMatcher(currentQuery());
+    if (!matcher.ok) {
+      refuse(matcher.error);
+      return;
     }
     if (prefs.scope === 'file' && activeTextDoc() === null) {
       refuse('Open a text document to search the file scope.');
@@ -180,37 +166,19 @@ export function createSearchSession(api: DreyPluginApi): SearchSession {
             : activeVaultId !== null
               ? { kind: 'vault', vaultId: activeVaultId }
               : undefined;
-        if (semanticActive()) {
-          // Ranking over disk state: no dirty-buffer folding (the index
-          // is disk-side), no chats toggle (the semantic index excludes
-          // chat notes by design, ADR-0055). Tag chips stay meaningful
-          // as an exact post-filter over the hydrated section text.
-          const hits = await api.search.searchSemantic(
-            state.queryText.trim(),
-            scope,
-            SEMANTIC_LIMIT,
-          );
-          state.hits = hits.filter((hit) =>
-            sectionCarriesTags(hit.heading, hit.text, state.queryTags),
-          );
-        } else {
-          const query = currentQuery();
-          const diskHits = await api.search.searchSections(query, scope);
-          // Chats stay indexed; the panel lists them only on request.
-          state.hits = filterChatHits(
-            mergeOpenBufferHits(diskHits, dirtyDocs(), query),
-            prefs.includeChats,
-          );
-        }
+        const query = currentQuery();
+        const diskHits = await api.search.searchSections(query, scope);
+        // Chats stay indexed; the panel lists them only on request.
+        state.hits = filterChatHits(
+          mergeOpenBufferHits(diskHits, dirtyDocs(), query),
+          prefs.includeChats,
+        );
         state.ran = true;
       }
     } catch (error) {
       // A rejected search (e.g. the tags backend is gone) is a message,
       // never a silent empty panel.
-      const message = error instanceof Error ? error.message : String(error);
-      state.error = message.includes('no semantic-search provider')
-        ? "Semantic search is unavailable — the assistant's retrieval is disabled (Settings → Assistant retrieval)."
-        : message;
+      state.error = error instanceof Error ? error.message : String(error);
       state.hits = [];
     } finally {
       state.searching = false;
@@ -232,7 +200,6 @@ export function createSearchSession(api: DreyPluginApi): SearchSession {
     notify,
     activeVaultId: () => activeVaultId,
     hasQuery,
-    semanticActive,
     currentQuery,
     activeTextDoc,
     run,

@@ -4,11 +4,11 @@ import { isLocalHost, isLocalOrigin } from './http-transport';
 import { createVaultMcpServer } from './server';
 import { VaultTools } from './vault-tools';
 import type { VaultCallOptions, VaultToolDeps } from './vault-tools';
+import type { OpenDocs } from './tools/types';
 import type { AppConfig } from '../../shared/app-config';
 import type { RenameLinksRequest, VaultFileEntry } from '../../shared/ipc-api';
 import type {
   SectionSearchProvider,
-  SemanticSearchProvider,
   SdkTaskRecord,
 } from '../../shared/plugin-api';
 
@@ -162,7 +162,6 @@ function harness(
     vault,
     getSearchProvider: () => null,
     getTaskProvider: () => null,
-    getSemanticProvider: () => null,
     getConfig: () => config({ yolo: over.yolo ?? false }),
     confirmWrite: async (request) => {
       confirms.push(request);
@@ -216,7 +215,7 @@ function harness(
 const HARBOUR = ['# Harbour', '', 'The harbour fee is 12 euros per night.', '', '## Winter', '', 'Take the mast down before the first frost.', ''].join('\n');
 
 describe('VaultTools — what a caller is offered', () => {
-  it('offers every tool to an MCP client, without vault_retrieve while retrieval is off', () => {
+  it('offers every tool to an MCP client', () => {
     const h = harness();
     expect(h.tools.list().map((tool) => tool.name)).toEqual([
       'vault_list',
@@ -228,11 +227,6 @@ describe('VaultTools — what a caller is offered', () => {
       'vault_delete',
       'tasks_list',
     ]);
-  });
-
-  it('adds vault_retrieve while a semantic provider is registered', () => {
-    const h = harness({}, { getSemanticProvider: () => ({ search: async () => [] }) });
-    expect(h.tools.list().map((tool) => tool.name)).toContain('vault_retrieve');
   });
 
   it('leaves the changing tools and tasks_list out of the assistant set when writing is off', () => {
@@ -477,29 +471,6 @@ describe('vault_search', () => {
     const without = await harness(files).run('vault_search', { tags: ['boat'] }, opts);
     expect(without.isError).toBe(true);
     expect(without.text).toContain('Tags plugin is switched off');
-  });
-});
-
-describe('vault_retrieve', () => {
-  const hit = (path: string, score: number): never =>
-    ({ vaultId: 'x', path, heading: 'H', line: 3, snippet: `about ${path}`, text: '', score }) as never;
-
-  it('ranks the sections of every vault in scope together', async () => {
-    const provider: SemanticSearchProvider = {
-      search: async (_question, scope) =>
-        scope?.kind === 'vault' && scope.vaultId === 'docs' ? [hit('d.md', 0.9)] : [hit('t.md', 0.5)],
-    };
-    const result = await harness({}, { getSemanticProvider: () => provider }).run('vault_retrieve', {
-      query: 'what to do before winter',
-    });
-    expect(result.text.indexOf('docs:d.md:3 — H (score 0.90)')).toBeGreaterThan(-1);
-    expect(result.text.indexOf('docs:d.md')).toBeLessThan(result.text.indexOf('vtest:t.md'));
-  });
-
-  it('points to vault_search while retrieval is off', async () => {
-    const result = await harness().run('vault_retrieve', { query: 'x' });
-    expect(result.isError).toBe(true);
-    expect(result.text).toContain('Use vault_search');
   });
 });
 
@@ -778,5 +749,314 @@ describe('tasks_list (through the vault tools)', () => {
     expect((await h.run('tasks_list', { text: 'Tidy', vault: 'vtest' })).text).toBe(JSON.stringify(TASK));
     expect(queries[0]).toMatchObject({ text: 'Tidy', vaultId: 'vtest', sort: 'importance' });
     expect((await harness().run('tasks_list', {})).text).toContain('Tasks plugin is switched off');
+  });
+});
+
+/** The editor's open tabs, as the tools reach them: buffers by `vaultId:path`, and what was done to them. */
+function openTabs(buffers: Record<string, { content: string; dirty: boolean }>) {
+  const applied: Array<{ key: string; content: string; save: boolean; origin: string }> = [];
+  const moved: string[] = [];
+  const closed: string[] = [];
+  let takes = true;
+  const openDocs: OpenDocs = {
+    peek: async (vaultId, path) => buffers[`${vaultId}:${path}`] ?? null,
+    dirty: async () =>
+      Object.entries(buffers)
+        .filter(([, doc]) => doc.dirty)
+        .map(([key, doc]) => {
+          const [vaultId, path] = key.split(':');
+          return { vaultId, path, content: doc.content };
+        }),
+    apply: async (vaultId, path, content, options) => {
+      if (!takes) {
+        return { applied: false, saved: false };
+      }
+      applied.push({ key: `${vaultId}:${path}`, content, ...options });
+      buffers[`${vaultId}:${path}`] = { content, dirty: !options.save };
+      return { applied: true, saved: options.save };
+    },
+    moved: async (vaultId, from, to) => {
+      moved.push(`${vaultId}:${from}>${to}`);
+    },
+    closed: async (vaultId, path) => {
+      closed.push(`${vaultId}:${path}`);
+    },
+  };
+  return {
+    openDocs,
+    applied,
+    moved,
+    closed,
+    refuse: () => {
+      takes = false;
+    },
+  };
+}
+
+describe('VaultTools — a file that is open in the editor (milestone 78)', () => {
+  const ON_DISK = '# Plan\n\nFee: 10\n';
+  const IN_TAB = '# Plan\n\nFee: 10\nUnsaved line\n';
+  const AUTO: VaultCallOptions = { scope: ['vtest'], write: 'auto', origin: 'assistant' };
+
+  it('reads and searches what the tab shows, unsaved text included', async () => {
+    const tabs = openTabs({ 'vtest:plan.md': { content: IN_TAB, dirty: true } });
+    const h = harness({ vtest: { 'plan.md': ON_DISK } }, { openDocs: tabs.openDocs });
+
+    expect((await h.run('vault_read', { path: 'plan.md' })).text).toContain('4: Unsaved line');
+    const found = await h.run('vault_search', { query: 'unsaved' });
+    expect(found.text).toContain('plan.md');
+    expect(found.text).toContain('4: Unsaved line');
+  });
+
+  it('edits the buffer and saves from the tab instead of writing the file', async () => {
+    const tabs = openTabs({ 'vtest:plan.md': { content: IN_TAB, dirty: true } });
+    const h = harness({ vtest: { 'plan.md': ON_DISK } }, { openDocs: tabs.openDocs });
+
+    const result = await h.run(
+      'vault_edit',
+      { path: 'plan.md', edits: [{ old_text: 'Unsaved line', new_text: 'Kept line' }] },
+      AUTO,
+    );
+
+    expect(result).toEqual({ text: 'Edited plan.md: 1 replacement at line 4.', isError: false });
+    expect(tabs.applied).toEqual([
+      { key: 'vtest:plan.md', content: '# Plan\n\nFee: 10\nKept line\n', save: true, origin: 'assistant' },
+    ]);
+    // The tab's own save wrote it: no second write, no announcement from the tool.
+    expect(h.writes).toEqual([]);
+    expect(h.announced).toEqual([]);
+  });
+
+  it('shows the confirmation the buffer, not the stale file', async () => {
+    const tabs = openTabs({ 'vtest:plan.md': { content: IN_TAB, dirty: true } });
+    const h = harness({ vtest: { 'plan.md': ON_DISK } }, { openDocs: tabs.openDocs });
+
+    await h.run(
+      'vault_edit',
+      { path: 'plan.md', edits: [{ old_text: 'Fee: 10', new_text: 'Fee: 12' }] },
+      { scope: ['vtest'], write: 'confirm' },
+    );
+
+    expect(h.confirms[0]).toMatchObject({ before: IN_TAB, after: '# Plan\n\nFee: 12\nUnsaved line\n' });
+  });
+
+  it('says so when the tab took the change but could not save it', async () => {
+    const tabs = openTabs({ 'vtest:plan.md': { content: ON_DISK, dirty: false } });
+    tabs.openDocs.apply = async () => ({ applied: true, saved: false });
+    const h = harness({ vtest: { 'plan.md': ON_DISK } }, { openDocs: tabs.openDocs });
+
+    const result = await h.run(
+      'vault_write',
+      { path: 'plan.md', content: 'More\n', mode: 'append' },
+      AUTO,
+    );
+
+    expect(result.text).toBe(
+      'Appended to plan.md (now 5 lines). The change is in the open editor tab and not saved yet.',
+    );
+  });
+
+  it('changes nothing when the tab does not take the change', async () => {
+    const tabs = openTabs({ 'vtest:plan.md': { content: ON_DISK, dirty: false } });
+    tabs.refuse();
+    const h = harness({ vtest: { 'plan.md': ON_DISK } }, { openDocs: tabs.openDocs });
+
+    const result = await h.run(
+      'vault_edit',
+      { path: 'plan.md', edits: [{ old_text: 'Fee: 10', new_text: 'Fee: 12' }] },
+      AUTO,
+    );
+
+    expect(result.isError).toBe(true);
+    expect(result.text).toContain('could not be applied there');
+    expect(h.writes).toEqual([]);
+  });
+
+  it('writes a file that is not open to disk, as before', async () => {
+    const tabs = openTabs({});
+    const h = harness({ vtest: { 'plan.md': ON_DISK } }, { openDocs: tabs.openDocs });
+
+    await h.run('vault_edit', { path: 'plan.md', edits: [{ old_text: 'Fee: 10', new_text: 'Fee: 12' }] }, AUTO);
+
+    expect(tabs.applied).toEqual([]);
+    expect(h.writes).toMatchObject([{ path: 'plan.md', content: '# Plan\n\nFee: 12\n' }]);
+    expect(h.announced).toHaveLength(1);
+  });
+
+  it('a moved file takes its tab along, a deleted one closes it', async () => {
+    const tabs = openTabs({ 'vtest:other.md': { content: 'See [[plan]].\n', dirty: true } });
+    const h = harness(
+      { vtest: { 'plan.md': ON_DISK, 'other.md': 'See [[plan]].\n', 'old.md': 'x\n' } },
+      { openDocs: tabs.openDocs },
+    );
+
+    await h.run('vault_move', { from: 'plan.md', to: 'archive/plan.md' }, AUTO);
+    await h.run('vault_delete', { path: 'old.md' }, AUTO);
+
+    expect(tabs.moved).toEqual(['vtest:plan.md>archive/plan.md']);
+    // Unsaved notes are handed to the link rewrite as buffers (ADR-0059).
+    expect(h.renames[0].buffers).toEqual([{ path: 'other.md', content: 'See [[plan]].\n' }]);
+    expect(tabs.closed).toEqual(['vtest:old.md']);
+  });
+
+  it('tells the caller about every change it made', async () => {
+    const changes: unknown[] = [];
+    const h = harness({ vtest: { 'plan.md': ON_DISK } });
+
+    await h.run(
+      'vault_edit',
+      { path: 'plan.md', edits: [{ old_text: 'Fee: 10', new_text: 'Fee: 12' }] },
+      { ...AUTO, onChange: (change) => changes.push(change) },
+    );
+
+    expect(changes).toEqual([
+      { vaultId: 'vtest', path: 'plan.md', before: ON_DISK, after: '# Plan\n\nFee: 12\n' },
+    ]);
+  });
+});
+
+describe('VaultTools — files a call carries in its own scope (milestone 78)', () => {
+  const NOTE = '# Plan\n\nFee: 10\n';
+  const files = () => ({ vtest: { 'plan.md': NOTE, 'other.md': 'Other\n' }, docs: { 'guide.md': 'Guide\n' } });
+  const EDIT = { path: 'plan.md', edits: [{ old_text: 'Fee: 10', new_text: 'Fee: 12' }] };
+  const names = (h: ReturnType<typeof harness>, options: VaultCallOptions): string[] =>
+    h.tools.toolSpecs(options).map((spec) => spec.name);
+
+  it('offers only the single-file tools when no vault is in scope', () => {
+    const h = harness(files());
+    const own = [{ vaultId: 'vtest', path: 'plan.md' }];
+
+    expect(names(h, { scope: [], write: 'confirm', files: own })).toEqual([
+      'vault_read',
+      'vault_edit',
+      'vault_write',
+    ]);
+    expect(names(h, { scope: [], write: 'off', files: own })).toEqual([
+      'vault_read',
+      'vault_edit',
+      'vault_write',
+    ]);
+  });
+
+  it('adds the tools to change the file where the vault may only be read', () => {
+    const h = harness(files());
+
+    expect(
+      names(h, { scope: ['docs'], write: 'off', files: [{ vaultId: 'vtest', path: 'plan.md' }] }),
+    ).toEqual(['vault_list', 'vault_search', 'vault_read', 'vault_edit', 'vault_write']);
+  });
+
+  it('reaches the file by its path alone, and nothing else in its vault', async () => {
+    const h = harness(files());
+    const options: VaultCallOptions = {
+      scope: [],
+      write: 'auto',
+      files: [{ vaultId: 'vtest', path: 'plan.md' }],
+    };
+
+    expect((await h.run('vault_read', { path: 'plan.md' }, options)).text).toContain('3: Fee: 10');
+    const other = await h.run('vault_read', { path: 'other.md' }, options);
+    expect(other.isError).toBe(true);
+    expect(other.text).toContain('only plan.md can be read and changed in this conversation');
+    expect((await h.run('vault_search', { query: 'fee' }, options)).isError).toBe(true);
+  });
+
+  it('finds the file in its own vault while the scope names another one', async () => {
+    const h = harness(files());
+    const options: VaultCallOptions = {
+      scope: ['docs'],
+      write: 'auto',
+      files: [{ vaultId: 'vtest', path: 'plan.md' }],
+    };
+
+    expect((await h.run('vault_edit', EDIT, options)).isError).toBe(false);
+    expect(h.store['vtest']['plan.md']).toContain('Fee: 12');
+    // The scope still bounds everything else.
+    expect((await h.run('vault_read', { path: 'other.md', vault: 'vtest' }, options)).isError).toBe(true);
+  });
+
+  it('asks first where the write rule is off, and still refuses every other file', async () => {
+    const h = harness(files());
+    const options: VaultCallOptions = {
+      scope: ['vtest'],
+      write: 'off',
+      files: [{ vaultId: 'vtest', path: 'plan.md' }],
+    };
+
+    expect((await h.run('vault_edit', EDIT, options)).isError).toBe(false);
+    expect(h.confirms).toHaveLength(1);
+    const other = await h.run(
+      'vault_edit',
+      { path: 'other.md', edits: [{ old_text: 'Other', new_text: 'X' }] },
+      options,
+    );
+    expect(other.text).toContain('changing files is switched off');
+    expect((await h.run('vault_delete', { path: 'plan.md' }, options)).text).toContain(
+      'changing files is switched off',
+    );
+  });
+
+  it('a live file is changed in its tab at once: no dialog, not saved', async () => {
+    const tabs = openTabs({ 'vtest:plan.md': { content: NOTE, dirty: false } });
+    const h = harness(files(), { openDocs: tabs.openDocs });
+
+    const result = await h.run('vault_edit', EDIT, {
+      scope: [],
+      write: 'confirm',
+      origin: 'assistant',
+      files: [{ vaultId: 'vtest', path: 'plan.md', live: true }],
+    });
+
+    expect(result).toEqual({ text: 'Edited plan.md: 1 replacement at line 3.', isError: false });
+    expect(h.confirms).toEqual([]);
+    expect(tabs.applied).toEqual([
+      { key: 'vtest:plan.md', content: '# Plan\n\nFee: 12\n', save: false, origin: 'assistant' },
+    ]);
+    expect(h.writes).toEqual([]);
+  });
+
+  it('a tab that was never saved is read and changed in the editor only', async () => {
+    const tabs = openTabs({ ':Untitled-1': { content: 'Draft text\n', dirty: true } });
+    const h = harness({ vtest: { 'Untitled-1': 'A FILE OF THE SAME NAME\n' } }, { openDocs: tabs.openDocs });
+    const options: VaultCallOptions = {
+      scope: ['vtest'],
+      write: 'auto',
+      origin: 'assistant',
+      files: [{ vaultId: '', path: 'Untitled-1' }],
+    };
+
+    expect((await h.run('vault_read', { path: 'Untitled-1' }, options)).text).toContain('1: Draft text');
+    const result = await h.run(
+      'vault_edit',
+      { path: 'Untitled-1', edits: [{ old_text: 'Draft', new_text: 'Final' }] },
+      options,
+    );
+
+    expect(result.isError).toBe(false);
+    // Into the tab, never saved by the tool, and the vault's file untouched.
+    expect(tabs.applied).toEqual([
+      { key: ':Untitled-1', content: 'Final text\n', save: false, origin: 'assistant' },
+    ]);
+    expect(h.writes).toEqual([]);
+    expect(h.store['vtest']['Untitled-1']).toBe('A FILE OF THE SAME NAME\n');
+  });
+
+  it('a tab that was closed meanwhile is not looked up on disk', async () => {
+    const tabs = openTabs({});
+    const h = harness({ vtest: { 'Untitled-1': 'A FILE OF THE SAME NAME\n' } }, { openDocs: tabs.openDocs });
+    const options: VaultCallOptions = {
+      scope: [],
+      write: 'auto',
+      files: [{ vaultId: '', path: 'Untitled-1', live: true }],
+    };
+
+    expect((await h.run('vault_read', { path: 'Untitled-1' }, options)).isError).toBe(true);
+    const written = await h.run(
+      'vault_write',
+      { path: 'Untitled-1', content: 'x', mode: 'overwrite' },
+      options,
+    );
+    expect(written.text).toContain('is not open in the editor any more');
+    expect(h.writes).toEqual([]);
   });
 });

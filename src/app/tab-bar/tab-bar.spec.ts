@@ -2,6 +2,7 @@ import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { TabBar } from './tab-bar';
 import { EditorService } from '../services/editor.service';
 import { PaneService } from '../panes/pane.service';
+import { KeybindingService } from '../keybindings';
 import { DreyApi } from '../../../shared/ipc-api';
 
 describe('TabBar', () => {
@@ -116,6 +117,10 @@ describe('TabBar', () => {
   });
 
   it('offers "Split right" / "Split down" / "Export as PDF…" / "Close others" / "Close all" from the tab context menu', async () => {
+    // The split rows print the chords in effect of these commands (ADR-0073).
+    const keys = TestBed.inject(KeybindingService);
+    keys.register({ id: 'pane.splitRight', label: 'Split right', keybinding: 'Mod+Alt+Enter', run: () => {} });
+    keys.register({ id: 'pane.splitDown', label: 'Split down', keybinding: 'Mod+Alt+Shift+Enter', run: () => {} });
     await editor.openFile('c.md', undefined, { keepFocused: true });
     fixture.detectChanges();
     const compiled = fixture.nativeElement as HTMLElement;

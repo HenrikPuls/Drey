@@ -7,6 +7,7 @@ import { SettingsDockWidgets } from './dock-widgets/settings-dock-widgets';
 import { SettingsEntry } from './entry/settings-entry';
 import { SettingsLlm } from './llm/settings-llm';
 import { SettingsMcp } from './mcp/settings-mcp';
+import { SettingsShortcuts } from './shortcuts/settings-shortcuts';
 import { SettingsTools } from './tools/settings-tools';
 import { SettingsSpellcheck } from './spellcheck/settings-spellcheck';
 import { SettingsVault } from './vault/settings-vault';
@@ -99,6 +100,12 @@ const CORE_CATEGORIES: readonly SettingsCategory[] = [
   },
   { id: 'daily', label: 'Daily notes', hint: 'Startup & storage folder', component: SettingsDaily },
   { id: 'entry', label: 'Entry format', hint: 'The / menu Entry block', component: SettingsEntry },
+  {
+    id: 'shortcuts',
+    label: 'Keyboard shortcuts',
+    hint: 'Commands & quick capture',
+    component: SettingsShortcuts,
+  },
   { id: 'llm', label: 'LLM', hint: 'Local model connection', component: SettingsLlm },
   { id: 'mcp', label: 'MCP', hint: 'Vault server for other apps', component: SettingsMcp },
   {

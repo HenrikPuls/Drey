@@ -13,12 +13,18 @@
  * imports).
  */
 import type { AskOutcome } from '../../../shared/llm';
-import { normalizeVaultScope, type VaultScope } from './semantic.js';
+import { normalizeVaultScope, type VaultScope } from './vault-context.js';
 
 /** One file attached to an ask turn. `body` is the document text (LF). */
 export interface AskFile {
   path: string;
   body: string;
+  /**
+   * The vault the file lives in. Set on the attached note of an open
+   * vault tab — the model's edits are addressed to it (ADR-0071); absent
+   * for a scratch tab and for reference files.
+   */
+  vaultId?: string;
 }
 
 /**
@@ -30,10 +36,11 @@ export interface AskFile {
  * as vision parts when the provider supports them.
  *
  * `liveEdit` opts THIS turn into immediate-apply editing (ADR-0049): the
- * model edits `note` directly through the doc tools, each change lands in
- * the editor as it happens, nothing is confirmed. Requires `note !== null`
- * and only ever travels true for a live-editable target (the renderer
- * clamps it — never a `chats/`/`.drafts/` auto-save path).
+ * model edits `note` with the vault tools, each change lands in the open
+ * tab as it happens, nothing is confirmed and nothing is saved. Requires
+ * `note !== null` and only ever travels true for a live-editable target
+ * (the renderer clamps it — never a `chats/`/`.drafts/` auto-save path;
+ * a tab that was never saved is a target, it carries no `vaultId`).
  */
 export interface AskRequest {
   question: string;
@@ -56,10 +63,10 @@ export interface AskRequest {
    */
   noteKey: string | null;
   /**
-   * Semantic vault retrieval for THIS turn (ADR-0055): `off` (chip dark),
+   * The vault scope of THIS turn (ADR-0072): `off` (chip dark),
    * `vault` (active vault), `all` (every registered vault) or `custom`
-   * (the picker's explicit subset — `vaultIds`). The main side retrieves
-   * the top-k sections and injects them into the system prompt; a
+   * (the picker's explicit subset — `vaultIds`). The main side looks up
+   * the best sections and injects them into the system prompt; a
    * live-edit turn ignores the scope.
    */
   vaultScope: VaultScope;
@@ -68,6 +75,12 @@ export interface AskRequest {
    * of removed vaults drop out there). Empty for every other scope.
    */
   vaultIds: string[];
+  /**
+   * The Web chip (milestone 79): whether this turn may reach outside the
+   * machine — `web_search`, `web_fetch` and the user's MCP servers, as far
+   * as Settings switched them on. Off: none of them rides the call.
+   */
+  web: boolean;
   /**
    * The text selected in the open note when the question was asked from
    * the selection button (milestone 74). Rides the user message as a
@@ -105,10 +118,10 @@ export function quoteSelection(selection: string, question: string): string {
 
 /**
  * The result of a live-edit ask turn (ADR-0049): the changes are already
- * applied — to the open tab (pushed per tool call) and to the chat note
- * (the turn's applied `edit` entry). `applied` counts the applied hunks /
- * whole-document replacements, `text` is the model's summary (or a
- * fallback when the model produced none).
+ * applied — to the open tab (one per tool call) and to the chat note
+ * (the turn's applied `edit` entry). `applied` counts the tool calls that
+ * changed the note, `text` is the model's summary (or a fallback when the
+ * model produced none).
  */
 export interface LiveEditOutcome {
   kind: 'liveEdit';
@@ -152,7 +165,7 @@ export function parseAskPayload(payload: unknown): {
   taskId?: string;
 } {
   const shape = (payload ?? {}) as Record<string, unknown>;
-  const { question, note, extraFiles, images, chatPath, liveEdit, noteKey, vaultScope, vaultIds, selection, taskId } = shape;
+  const { question, note, extraFiles, images, chatPath, liveEdit, noteKey, vaultScope, vaultIds, web, selection, taskId } = shape;
   if (typeof question !== 'string') {
     throw new Error('malformed ask payload');
   }
@@ -194,6 +207,7 @@ export function parseAskPayload(payload: unknown): {
       noteKey: noteKey === undefined ? null : (noteKey as string | null),
       vaultScope: normalizeVaultScope(vaultScope),
       vaultIds: vaultIds === undefined ? [] : (vaultIds as string[]),
+      web: web === true,
       ...(typeof selection === 'string' && selection.trim() !== '' ? { selection } : {}),
     },
     ...(typeof taskId === 'string' ? { taskId } : {}),
@@ -209,11 +223,12 @@ function isVaultIdList(value: unknown): value is string[] {
 }
 
 function isAskFile(value: unknown): value is AskFile {
-  const file = value as { path?: unknown; body?: unknown } | null;
+  const file = value as { path?: unknown; body?: unknown; vaultId?: unknown } | null;
   return (
     !!file &&
     typeof file === 'object' &&
     typeof file.path === 'string' &&
-    typeof file.body === 'string'
+    typeof file.body === 'string' &&
+    (file.vaultId === undefined || typeof file.vaultId === 'string')
   );
 }

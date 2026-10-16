@@ -60,7 +60,7 @@ leaves the app on the previous build. Verify with
 
 - `apiVersion` is a **major gate**: a manifest whose major differs from
   `PLUGIN_API_VERSION.major` (`shared/plugin-api/versions.ts`, currently
-  `{ major: 1, minor: 18 }`) is never imported — the plugin shows up in
+  `{ major: 1, minor: 26 }`) is never imported — the plugin shows up in
   Settings → Panels & plugins as incompatible. Minor bumps are additive;
   1.9 added `commands.run(id, payload?)`, `ui.createTagField` (the shared
   tag chip field — prefer it over a hand-rolled chip row), the main-side
@@ -232,7 +232,8 @@ pure-field case.
 ## SDK 1.15 — external tools and the confirmation question
 
 - `ctx.llm.chat(messages, { externalTools: true })` adds the user's
-  external tool set to ONE call: the built-in `web_fetch` and the tools
+  external tool set to ONE call: the built-in `web_search` (since
+  milestone 79) and `web_fetch`, and the tools
   of their MCP servers (`mcp__<serverId>__<tool>`), as far as Settings →
   Assistant tools enables them. The host runs each call and asks the
   user first when the source is set to "ask" — a plugin never sees the
@@ -294,20 +295,11 @@ pure-field case.
   re-read (open tabs are then left alone). The git plugin
   (`plugins/git/`) is the reference for all three.
 
-## SDK 1.18 — the semantic search seam
+## SDK 1.18 — the semantic search seam (removed in 1.26)
 
-- `ctx.search.registerSemanticSearch(provider)` (main) is a second,
-  parallel single slot next to the section-search one: the provider's
-  `search(question, scope?, limit?)` returns similarity-ranked
-  `SemanticSectionHit[]` (path/heading/line/snippet/text/vaultId/score,
-  hydrated fresh from the vault). Register only while your feature is
-  actually on — "no provider" is what base surfaces degrade on. The
-  renderer side is `api.search.searchSemantic(question, scope?, limit?)`
-  (limit clamped 1..20, default 12); it rejects with a clear message
-  when no provider is registered. The assistant plugin
-  (`plugins/assistant/`, ADR-0055) is the reference implementation;
-  the tags plugin's Search panel and MCP `vault_search` mode `semantic`
-  are the reference consumers.
+- `ctx.search.registerSemanticSearch`, `api.search.searchSemantic`,
+  `SemanticSearchProvider` and `SemanticSectionHit` existed from 1.18
+  to 1.25. See "SDK 1.26" below.
 
 ## SDK 1.19 — a strip icon for your panel
 
@@ -389,11 +381,42 @@ For a `ctx.llm.chat` call that carries tools (`tools` + `onToolCall`,
 - A result longer than 16 000 characters is cut. Return less: a range,
   a limit, and a line that says how to get the rest.
 
+## SDK 1.26 — the semantic search seam is gone
+
+The embedding retrieval was removed from the app (ADR-0072), and with it
+its SDK surface: `ctx.search.registerSemanticSearch` (main),
+`api.search.searchSemantic` (renderer) and the types
+`SemanticSearchProvider` / `SemanticSectionHit`. The vault tool
+`vault_retrieve` is gone too.
+
+This is the one removal made under a minor version — minors are
+otherwise additive. The seam had a single provider and a single caller,
+both built into the app, and a major step would have marked every
+installed plugin incompatible. If your plugin called `searchSemantic`,
+it already handled the rejection "no provider"; guard the call
+(`typeof api.search.searchSemantic === 'function'`) or drop it. To
+find sections by their words, use `api.search.searchSections` /
+`ctx.search.sectionSearchProvider()`.
+
+## SDK 1.25 — files of a call, and what the tools changed
+
+`MainChatOptions.vaultToolsFiles` names files the call's vault tools may
+read and change beside the vaults of `vaultToolsScope` — `{ vaultId?,
+path, live? }`, the vault defaulting to the active one; `vaultId: null`
+names a tab that was never saved (`path` is the tab's name — it is
+changed in the editor only and never saved by a tool). With an empty
+scope the model is offered `vault_read`, `vault_edit` and `vault_write`
+for these files only. Such a file can always be changed (a write rule
+of `off` asks in the diff); `live: true` puts every change into the
+file's open tab at once, unconfirmed and unsaved. `onVaultChange` is
+called after each change a vault tool of the call made, with the text
+before and after. A file that is open in the editor is read and changed
+through its tab by every vault tool (ADR-0071).
+
 ## SDK 1.24 — the vault tools and their scope
 
 - `vaultTools: true` on a `ctx.llm.chat` call attaches the vault tools:
-  `vault_list`, `vault_search`, `vault_read` (and `vault_retrieve` while
-  semantic retrieval is enabled), plus `vault_edit`, `vault_write`,
+  `vault_list`, `vault_search`, `vault_read`, plus `vault_edit`, `vault_write`,
   `vault_move`, `vault_delete` unless the user's vault write rule is
   "not allowed". The user's rule also decides whether a change is
   confirmed first; a deletion always is.

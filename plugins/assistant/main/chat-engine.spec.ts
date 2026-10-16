@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { ChatEngine, type ChatEnginePorts } from './chat-engine';
 import { ChatStore, type ChatStorePorts } from './chat-store';
 import type { AskRequest } from '../shared/ask';
-import type { RetrievalOutcome } from '../shared/semantic';
+import type { RetrievalOutcome } from '../shared/vault-context';
 import type { ChatMessage, LlmCapabilities, LlmChatResult } from '../../../shared/llm';
 import type { AppConfig } from '../../../shared/app-config';
 import { DEFAULT_APP_CONFIG } from '../../../shared/config/defaults';
@@ -22,8 +22,10 @@ const VAULTS = [
   { id: 'docs', name: 'docs', active: false },
 ] as const;
 
-function makeStore(initial?: Record<string, string>): ChatStore {
-  const files = new Map<string, string>(Object.entries(initial ?? {}));
+function makeStore(
+  initial?: Record<string, string>,
+  files = new Map<string, string>(Object.entries(initial ?? {})),
+): ChatStore {
   const ports: ChatStorePorts = {
     read: async (path) => {
       const content = files.get(path);
@@ -49,6 +51,7 @@ const CONFIG: AppConfig = {
     tasks: { enabled: true },
     templates: { enabled: true, write: 'confirm' },
     webFetch: { enabled: false, approval: 'ask' },
+    webSearch: { ...DEFAULT_APP_CONFIG.tools.webSearch },
     servers: [],
   },
 };
@@ -72,6 +75,7 @@ function askRequest(overrides?: Partial<AskRequest>): AskRequest {
     noteKey: null,
     vaultScope: 'off',
     vaultIds: [],
+    web: false,
     ...overrides,
   };
 }
@@ -83,12 +87,20 @@ interface Harness {
   tasksCalls: number;
   templatesCalls: number;
   reads: Array<{ path: string; fallbackVaultIds?: readonly string[] }>;
+  /** The chat notes as written, by path. */
+  files: Map<string, string>;
 }
+
+type NoteChange = { vaultId: string; path: string; before: string; after: string };
 
 function makeHarness(overrides?: {
   retrieve?: () => Promise<RetrievalOutcome>;
   vaults?: readonly { id: string; name: string; active: boolean }[];
   chatNote?: Record<string, string>;
+  /** Plays the host: what the model's tool calls do during the one call. */
+  reply?: (options: { onVaultChange?: (change: NoteChange) => void }) => LlmChatResult;
+  config?: AppConfig;
+  caps?: LlmCapabilities;
 }): Harness {
   const calls: Harness['calls'] = [];
   const reads: Harness['reads'] = [];
@@ -102,10 +114,8 @@ function makeHarness(overrides?: {
     resolveAssetPath: () => null,
     readAssetBase64: async () => null,
     onDelta: () => undefined,
-    onLiveEdit: () => undefined,
-    retrieveContext: overrides?.retrieve ?? (async () => ({ enabled: true, minScore: 0.3, hits: [] })),
+    retrieveContext: overrides?.retrieve ?? (async () => ({ hits: [] })),
     onToolEvent: () => undefined,
-    semanticEnabled: () => false,
     tasksTool: () => {
       state.tasksCalls += 1;
       return {
@@ -119,16 +129,21 @@ function makeHarness(overrides?: {
       return { specs: [], names: new Set(), run: async () => '' };
     },
   };
-  const store = makeStore(overrides?.chatNote);
+  const files = new Map<string, string>(Object.entries(overrides?.chatNote ?? {}));
+  const store = makeStore(undefined, files);
   const engine = new ChatEngine(
     store,
-    () => CONFIG,
+    () => overrides?.config ?? CONFIG,
     async (messages, options) => {
       calls.push({ messages, options: (options ?? {}) as Record<string, unknown> });
+      // The title call carries no options and is no part of the exchange.
+      if (overrides?.reply !== undefined && options !== undefined) {
+        return overrides.reply(options);
+      }
       const result: LlmChatResult = { text: 'Answer.' };
       return result;
     },
-    () => CAPS,
+    () => overrides?.caps ?? CAPS,
     ports,
   );
   return {
@@ -136,6 +151,7 @@ function makeHarness(overrides?: {
     store,
     calls,
     reads,
+    files,
     get tasksCalls() {
       return state.tasksCalls;
     },
@@ -146,9 +162,9 @@ function makeHarness(overrides?: {
 }
 
 describe('ChatEngine scope enforcement (ADR-0069 later change, ADR-0071)', () => {
-  it('arms the host scope from the registry even when retrieval is disabled', async () => {
+  it('arms the host scope from the registry even when no section index answers', async () => {
     const h = makeHarness({
-      retrieve: async () => ({ enabled: false, minScore: 0.3, hits: [] }),
+      retrieve: async () => ({ hits: [], unavailable: true }),
     });
     await h.engine.ask(askRequest({ vaultScope: 'custom', vaultIds: ['docs'] }));
     // calls[0] is the ask; the fire-and-forget title call may land as a
@@ -159,7 +175,7 @@ describe('ChatEngine scope enforcement (ADR-0069 later change, ADR-0071)', () =>
   it('arms the host scope even when retrieval throws — the ask still answers', async () => {
     const h = makeHarness({
       retrieve: async () => {
-        throw new Error('embedder down');
+        throw new Error('index down');
       },
     });
     const result = await h.engine.ask(askRequest({ vaultScope: 'custom', vaultIds: ['docs'] }));
@@ -169,7 +185,7 @@ describe('ChatEngine scope enforcement (ADR-0069 later change, ADR-0071)', () =>
 
   it('withholds the active-vault-only tools when the scope excludes the active vault', async () => {
     const h = makeHarness({
-      retrieve: async () => ({ enabled: false, minScore: 0.3, hits: [] }),
+      retrieve: async () => ({ hits: [], unavailable: true }),
     });
     await h.engine.ask(askRequest({ vaultScope: 'custom', vaultIds: ['docs'] }));
     expect(h.tasksCalls).toBe(0);
@@ -190,7 +206,7 @@ describe('ChatEngine scope enforcement (ADR-0069 later change, ADR-0071)', () =>
 
   it('keeps the aux tools when the scope includes the active vault', async () => {
     const h = makeHarness({
-      retrieve: async () => ({ enabled: false, minScore: 0.3, hits: [] }),
+      retrieve: async () => ({ hits: [], unavailable: true }),
     });
     await h.engine.ask(askRequest({ vaultScope: 'all' }));
     expect(h.calls[0].options.vaultToolsScope).toEqual(['test', 'docs']);
@@ -272,5 +288,140 @@ describe('ChatEngine — a question about a selection (milestone 74)', () => {
     expect(h.calls[0]?.messages.at(-1)?.content).not.toContain('SELECTED SECTION');
     const view = await h.store.read(result.chatPath);
     expect(view.turns[0]?.text).toBe('Hallo?');
+  });
+});
+
+describe('ChatEngine — the attached note through the vault tools (milestone 78)', () => {
+  const NOTE = { path: 'notes/plan.md', body: '# Plan\n\nFee: 10\n', vaultId: 'test' };
+  const AFTER = '# Plan\n\nFee: 12\n';
+  const systemOf = (h: Harness): string => h.calls[0].messages[0]?.content ?? '';
+
+  it('puts the note into the tools\' scope with the Vault chip off', async () => {
+    const h = makeHarness();
+    await h.engine.ask(askRequest({ note: NOTE }));
+
+    expect(h.calls[0].options).toMatchObject({
+      vaultTools: true,
+      vaultToolsScope: [],
+      vaultToolsFiles: [{ vaultId: 'test', path: 'notes/plan.md' }],
+    });
+    expect(systemOf(h)).toContain('call vault_edit with the document\'s path');
+    expect(systemOf(h)).not.toContain('````document');
+  });
+
+  it('keeps the chip\'s vaults as the scope and adds the note beside them', async () => {
+    const h = makeHarness();
+    await h.engine.ask(askRequest({ note: NOTE, vaultScope: 'custom', vaultIds: ['docs'] }));
+
+    expect(h.calls[0].options).toMatchObject({
+      vaultToolsScope: ['docs'],
+      vaultToolsFiles: [{ vaultId: 'test', path: 'notes/plan.md' }],
+    });
+  });
+
+  it('a change the tools made is the turn\'s applied edit, and the reply is an answer', async () => {
+    const h = makeHarness({
+      reply: (options) => {
+        options.onVaultChange?.({ vaultId: 'test', path: 'notes/other.md', before: 'a', after: 'b' });
+        options.onVaultChange?.({ vaultId: 'test', path: NOTE.path, before: NOTE.body, after: AFTER });
+        return { text: 'Raised the fee to 12.' };
+      },
+    });
+
+    const result = await h.engine.ask(askRequest({ note: NOTE }));
+
+    expect(result.outcome).toEqual({ kind: 'answer', text: 'Raised the fee to 12.' });
+    const chat = h.files.get(result.chatPath) ?? '';
+    expect(chat).toContain('Fee: 12');
+    expect(chat).not.toContain('notes/other.md');
+  });
+
+  it('a fenced document after a tool change is not offered as a second proposal', async () => {
+    const h = makeHarness({
+      reply: (options) => {
+        options.onVaultChange?.({ vaultId: 'test', path: NOTE.path, before: NOTE.body, after: AFTER });
+        return { text: 'Done.\n\n````document\n# Something else\n````' };
+      },
+    });
+
+    const result = await h.engine.ask(askRequest({ note: NOTE }));
+
+    expect(result.outcome).toEqual({ kind: 'answer', text: 'Done.' });
+  });
+
+  it('a live turn marks the note live and reports how many calls changed it', async () => {
+    const h = makeHarness({
+      reply: (options) => {
+        options.onVaultChange?.({ vaultId: 'test', path: NOTE.path, before: NOTE.body, after: 'x\n' });
+        options.onVaultChange?.({ vaultId: 'test', path: NOTE.path, before: 'x\n', after: AFTER });
+        return { text: '' };
+      },
+    });
+
+    const result = await h.engine.ask(askRequest({ note: NOTE, liveEdit: true }));
+
+    expect(h.calls[0].options).toMatchObject({
+      vaultToolsFiles: [{ vaultId: 'test', path: 'notes/plan.md', live: true }],
+    });
+    expect(systemOf(h)).toContain('Every change appears in the user\'s editor');
+    expect(result.outcome).toEqual({
+      kind: 'liveEdit',
+      path: 'notes/plan.md',
+      applied: 2,
+      text: 'Applied 2 edit(s) to notes/plan.md.',
+    });
+    expect(h.files.get(result.chatPath) ?? '').toContain('Fee: 12');
+  });
+
+  it('a chat note and a file from outside the vaults keep the whole-document reply form', async () => {
+    for (const note of [
+      { path: 'chats/2026/10/talk.md', body: 'x\n', vaultId: 'test' },
+      { path: 'C:\\Users\\me\\notes.md', body: 'x\n' },
+    ]) {
+      const h = makeHarness();
+      await h.engine.ask(askRequest({ note }));
+
+      expect(h.calls[0].options.vaultToolsFiles).toBeUndefined();
+      expect(h.calls[0].options.vaultTools).toBeUndefined();
+      expect(systemOf(h)).toContain('````document');
+    }
+  });
+
+  it('a tab that was never saved is edited with the tools, live too', async () => {
+    const h = makeHarness({
+      reply: (options) => {
+        options.onVaultChange?.({ vaultId: '', path: 'Untitled-1', before: 'x\n', after: 'y\n' });
+        return { text: 'Shortened.' };
+      },
+    });
+
+    const result = await h.engine.ask(
+      askRequest({ note: { path: 'Untitled-1', body: 'x\n' }, liveEdit: true }),
+    );
+
+    expect(h.calls[0].options).toMatchObject({
+      vaultTools: true,
+      vaultToolsScope: [],
+      vaultToolsFiles: [{ vaultId: null, path: 'Untitled-1', live: true }],
+    });
+    expect(result.outcome).toMatchObject({ kind: 'liveEdit', applied: 1, text: 'Shortened.' });
+  });
+
+  it('a provider without a tool loop keeps the whole-document reply form', async () => {
+    const h = makeHarness({ caps: { ...CAPS, tools: false } });
+    await h.engine.ask(askRequest({ note: NOTE }));
+
+    expect(h.calls[0].options.vaultToolsFiles).toBeUndefined();
+    expect(systemOf(h)).toContain('````document');
+    expect(systemOf(h)).not.toContain('vault_edit');
+  });
+
+  it('refuses a live turn on a file from outside the vaults before anything is written', async () => {
+    const h = makeHarness();
+
+    await expect(
+      h.engine.ask(askRequest({ note: { path: '/home/me/notes.md', body: 'x\n' }, liveEdit: true })),
+    ).rejects.toThrow('Live edit is unavailable for this document.');
+    expect(h.files.size).toBe(0);
   });
 });

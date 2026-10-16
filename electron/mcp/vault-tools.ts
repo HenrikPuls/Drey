@@ -6,7 +6,7 @@
  * concern per file; this class decides what a caller is offered and
  * routes a call.
  *
- *  - `vault_list`, `vault_search`, `vault_retrieve`, `vault_read` — read;
+ *  - `vault_list`, `vault_search`, `vault_read` — read;
  *  - `vault_edit`, `vault_write`, `vault_move`, `vault_delete` — change;
  *  - `tasks_list` — the task index (offered to MCP clients here; the
  *    assistant attaches it itself).
@@ -21,14 +21,15 @@ import { runTasksList } from '../../shared/tasks-list-tool';
 import {
   READ_TOOLS,
   TASKS_LIST,
-  VAULT_RETRIEVE,
-  WRITE_TOOL_NAMES,
+  VAULT_EDIT,
+  VAULT_READ,
+  VAULT_WRITE,
   WRITE_TOOLS,
 } from './tools/defs';
 import { vaultList } from './tools/list';
 import { vaultRead } from './tools/read';
 import { ToolScope } from './tools/scope';
-import { vaultRetrieve, vaultSearch } from './tools/search';
+import { vaultSearch } from './tools/search';
 import {
   fail,
   McpToolDef,
@@ -60,15 +61,22 @@ export class VaultTools {
   }
 
   /**
-   * The tools a caller is offered. `vault_retrieve` is there only while
-   * semantic retrieval can answer; the changing tools only when the
-   * caller may write at all.
+   * The tools a caller is offered: the changing tools only when the
+   * caller may write at all. A call that carries files of its own (the
+   * assistant's attached note) always gets the tools to read and change
+   * a single file — and nothing else when no vault is in its scope.
    */
   list(options?: VaultCallOptions, include: { tasks: boolean } = { tasks: true }): McpToolDef[] {
-    const semantic = this.deps.getSemanticProvider() !== null;
+    const scope = new ToolScope(this.deps.vault, options ?? {});
+    const ownFiles = scope.files.length > 0;
+    if (scope.inScope.length === 0 && ownFiles) {
+      return [VAULT_READ, VAULT_EDIT, VAULT_WRITE];
+    }
+    const writing =
+      this.rule(options) !== 'off' ? WRITE_TOOLS : ownFiles ? [VAULT_EDIT, VAULT_WRITE] : [];
     return [
-      ...READ_TOOLS.filter((tool) => semantic || tool.name !== VAULT_RETRIEVE.name),
-      ...(this.rule(options) === 'off' ? [] : WRITE_TOOLS),
+      ...READ_TOOLS,
+      ...writing,
       ...(include.tasks ? [TASKS_LIST] : []),
     ];
   }
@@ -94,23 +102,23 @@ export class VaultTools {
   ): Promise<McpToolResult> {
     const { deps } = this;
     const scope = new ToolScope(deps.vault, options ?? {});
-    const rule = this.rule(options);
-    if (WRITE_TOOL_NAMES.has(name) && rule === 'off') {
-      return fail(
-        'Error: changing files is switched off for the assistant (Settings → Assistant tools). Tell the user what you would have changed instead.',
-      );
-    }
-    const write: WriteContext = { deps, scope, rule, origin: options?.origin ?? 'mcp' };
+    // Whether a change is allowed is decided per file, where it is made:
+    // a file the call carries in its own scope is never refused.
+    const write: WriteContext = {
+      deps,
+      scope,
+      rule: this.rule(options),
+      origin: options?.origin ?? 'mcp',
+      ...(options?.onChange !== undefined ? { onChange: options.onChange } : {}),
+    };
     try {
       switch (name) {
         case 'vault_list':
           return await vaultList(deps.vault, scope, args);
         case 'vault_search':
           return await vaultSearch(deps, scope, args);
-        case 'vault_retrieve':
-          return await vaultRetrieve(deps, scope, args);
         case 'vault_read':
-          return await vaultRead(deps.vault, scope, args);
+          return await vaultRead(deps, scope, args);
         case 'vault_edit':
           return await vaultEdit(write, args);
         case 'vault_write':
