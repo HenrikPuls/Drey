@@ -20,6 +20,10 @@
 # winCodeSign + NSIS toolchain ~100 MB -- only paid once per lockfile).
 # fetch-depth: 0 because scripts/stamp-build.mjs uses `git rev-list --count
 # HEAD` as the build number (depth 1 would always stamp 1).
+#
+# Every action runs on the Node 24 runtime (req-44) -- GitHub deprecated
+# the Node 20 line the v4 majors still targeted: checkout@v7 /
+# setup-node@v7 / cache@v6 / upload-artifact@v7 / gh-release@v3.
 
 name: CI
 
@@ -48,18 +52,18 @@ jobs:
       ELECTRON_BUILDER_CACHE: ${{ github.workspace }}\.cache\electron-builder
     steps:
       - name: Checkout (full history for the build stamp)
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           fetch-depth: 0
 
       - name: Set up Node 24
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v7
         with:
           node-version: 24
           cache: npm
 
       - name: Cache Electron + electron-builder downloads
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: |
             .cache/electron
@@ -101,7 +105,7 @@ jobs:
       # The script is idempotent on its .version stamp, so a cache hit makes
       # it a no-op; the pin file is the cache key.
       - name: Cache the draw.io web app
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: plugins/drawio/vendor
           key: drawio-webapp-${{ hashFiles('plugins/drawio/drawio-version.json', 'scripts/fetch-drawio.mjs') }}
@@ -130,7 +134,7 @@ jobs:
 
       - name: Upload e2e failure diagnostics
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: e2e-diagnostics-${{ github.sha }}
           path: |
@@ -154,7 +158,7 @@ jobs:
 
       - name: Upload exes as workflow artifacts (v* tags and manual runs)
         if: startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch'
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: drey-windows-${{ github.sha }}
           path: |
@@ -165,7 +169,7 @@ jobs:
 
       - name: Attach exes to GitHub Release (v* tags only)
         if: startsWith(github.ref, 'refs/tags/v')
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           files: |
             release/drey-*-setup.exe

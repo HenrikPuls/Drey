@@ -20,6 +20,27 @@ recorded as an explicit decision. The parity checklist lives in
 
 ## Recent milestones
 
+### req-44 — CI runs on the Node 24 actions runtime
+
+Owner request, outside the list (2026-10-17): the run annotations warned
+that `actions/checkout@v4`, `setup-node@v4` and `cache@v4` (and with them
+`upload-artifact@v4` and `action-gh-release@v2`) still target the
+deprecated Node 20 action runtime. **Not yet manually verified by the
+owner.**
+
+- `.github/workflows/ci.yml`: the actions move to the current majors —
+  `actions/checkout@v7`, `actions/setup-node@v7`, `actions/cache@v6`,
+  `actions/upload-artifact@v7`, `softprops/action-gh-release@v3`; every
+  one of them runs on Node 24. No input the workflow uses changed, and
+  the job itself already built with Node 24 (`node-version: 24` stays).
+- `package.json` declares `"engines": { "node": ">=24" }` — advisory
+  (no `engine-strict`), matching the vendored `.tools/node` (24.20.0)
+  and the CI job. The runtime is Node 24 for tooling, tests and CI;
+  the packaged app keeps Electron's bundled Node as before.
+- `@types/node` stays at `^26` (unchanged since the scaffolding): the
+  types run ahead of the LTS runtime, and every typecheck is green
+  against it.
+
 ### Fix — CI: the drawio palette e2e no longer types into a half-open palette (bug-12)
 
 Owner request, outside the list (2026-10-17): the main-branch CI run
