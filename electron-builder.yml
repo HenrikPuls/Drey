@@ -9,6 +9,17 @@ appId: de.lariscus.drey
 productName: drey
 copyright: Copyright © 2026 Henrik Puls
 
+# The in-app updater's source (milestone 82, ADR-0074): GitHub Releases.
+# With a publish config present, electron-builder writes `latest.yml`
+# (the version + SHA512 manifest electron-updater reads), the
+# `*.exe.blockmap` files (differential downloads) and the packaged
+# `app-update.yml` even under `--publish never` — CI attaches them to the
+# release; the app never publishes itself.
+publish:
+  provider: github
+  owner: HenrikPuls
+  repo: Drey
+
 directories:
   # NOT the default `dist/` -- Angular owns dist/drey/.
   output: release

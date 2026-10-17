@@ -19,6 +19,7 @@ import {
   ToolsConfig,
   UiScale,
   UpdateLinksMode,
+  UpdatesConfig,
   VaultConfig,
   activeEntryPattern,
   clampEditorFontScale,
@@ -378,6 +379,13 @@ export class SettingsService {
   patchVault(patch: Partial<VaultConfig>): void {
     this.mutate((config) => {
       config.vault = { ...config.vault, ...patch };
+    });
+  }
+
+  /** Settings → Updates: the startup-check switch and the skipped version. */
+  patchUpdates(patch: Partial<UpdatesConfig>): void {
+    this.mutate((config) => {
+      config.updates = { ...config.updates, ...patch };
     });
   }
 

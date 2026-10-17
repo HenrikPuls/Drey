@@ -41,6 +41,20 @@ describe('normalizeAppConfig', () => {
     expect(normalizeAppConfig(DEFAULT_APP_CONFIG)).toEqual(DEFAULT_APP_CONFIG);
   });
 
+  it('normalises the updates slice (ADR-0074): check on by default, skip kept', () => {
+    expect(normalizeAppConfig({}).updates).toEqual({
+      checkOnStartup: true,
+      skippedVersion: null,
+    });
+    expect(
+      normalizeAppConfig({ updates: { checkOnStartup: false, skippedVersion: '0.7.0' } }).updates,
+    ).toEqual({ checkOnStartup: false, skippedVersion: '0.7.0' });
+    // Malformed values fall back, not crash: a hand-edited file with a
+    // blank skip and a non-boolean switch.
+    expect(normalizeAppConfig({ updates: { checkOnStartup: 'yes', skippedVersion: '  ' } }).updates)
+      .toEqual({ checkOnStartup: true, skippedVersion: null });
+  });
+
   it('keeps assignable chord overrides canonical, drops invalid ones (ADR-0073)', () => {
     const config = normalizeAppConfig({
       keybindings: {

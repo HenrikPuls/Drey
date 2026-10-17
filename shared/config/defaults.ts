@@ -22,6 +22,7 @@ import {
   LOSSLESS_FORMAT_PROMPT,
   McpConfig,
   ToolsConfig,
+  UpdatesConfig,
   RULED_ENTRY_PATTERN,
   SEARCH_SUMMARY_PROMPT,
   AUTOTAG_PROMPT,
@@ -68,6 +69,16 @@ export const DEFAULT_VAULT_CONFIG: VaultConfig = {
   watch: false,
   updateLinksOnRename: 'ask',
   history: { enabled: true, keepDays: 30, maxPerFile: 50 },
+};
+
+/**
+ * The update check's defaults (ADR-0074): on by default — the check
+ * sends no user content, and an off-by-default updater never reaches
+ * the users who never found the toggle.
+ */
+export const DEFAULT_UPDATES_CONFIG: UpdatesConfig = {
+  checkOnStartup: true,
+  skippedVersion: null,
 };
 
 export const DEFAULT_APPEARANCE: AppearanceConfig = {
@@ -194,6 +205,7 @@ export const DEFAULT_APP_CONFIG: AppConfig = {
   daily: { ...DEFAULT_DAILY_CONFIG },
   templates: { ...DEFAULT_TEMPLATES_CONFIG },
   vault: { ...DEFAULT_VAULT_CONFIG },
+  updates: { ...DEFAULT_UPDATES_CONFIG },
   widgets: { disabled: [] },
   plugins: { disabled: [] },
   keybindings: { overrides: {}, capture: DEFAULT_CAPTURE_CHORD },

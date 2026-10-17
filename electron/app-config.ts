@@ -121,10 +121,10 @@ export class AppConfigStore {
   }
 
   /**
-   * Replaces the whole config with `next` (the Settings screen is the only
-   * editor and always holds the full object), normalises it, persists, and
-   * returns the stored result so the renderer adopts exactly what landed on
-   * disk.
+   * Replaces the whole config with `next` (the Settings screen, which
+   * always holds the full object), normalises it, persists, and returns
+   * the stored result so the renderer adopts exactly what landed on disk.
+   * Main-side partial writes go through `patch()`.
    */
   set(next: unknown): AppConfig {
     this.config = normalizeAppConfig(next);
@@ -137,6 +137,18 @@ export class AppConfigStore {
       }
     }
     return this.config;
+  }
+
+  /**
+   * A main-process-side partial write (ADR-0074): merges `patch` into the
+   * stored config and takes the same normalise/persist/notify path as
+   * `set()`. First user: the update dialog's "Skip this version", decided
+   * in a native dialog with no Settings screen involved. A concurrent
+   * renderer draft can later overwrite the patched field — benign (the
+   * next ask then re-offers the skipped version).
+   */
+  patch(patch: Partial<AppConfig>): AppConfig {
+    return this.set({ ...this.config, ...patch });
   }
 
   private writeToDisk(): void {

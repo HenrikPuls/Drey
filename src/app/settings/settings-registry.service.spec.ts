@@ -16,6 +16,7 @@ describe('SettingsCategoryRegistry category order (req-33)', () => {
       'MCP',
       'Panels & plugins',
       'Spelling',
+      'Updates',
       'Vault',
       'About',
     ]);
@@ -39,6 +40,7 @@ describe('SettingsCategoryRegistry category order (req-33)', () => {
       'MCP',
       'Panels & plugins',
       'Spelling',
+      'Updates',
       'Vault',
       'Alpha plugin',
       'Zeta plugin',

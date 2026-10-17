@@ -10,6 +10,7 @@ import { SettingsMcp } from './mcp/settings-mcp';
 import { SettingsShortcuts } from './shortcuts/settings-shortcuts';
 import { SettingsTools } from './tools/settings-tools';
 import { SettingsSpellcheck } from './spellcheck/settings-spellcheck';
+import { SettingsUpdates } from './updates/settings-updates';
 import { SettingsVault } from './vault/settings-vault';
 import { SettingsCategory } from './settings-category';
 
@@ -119,6 +120,12 @@ const CORE_CATEGORIES: readonly SettingsCategory[] = [
     label: 'Spelling',
     hint: 'Dictionaries & language',
     component: SettingsSpellcheck,
+  },
+  {
+    id: 'updates',
+    label: 'Updates',
+    hint: 'Check & install app updates',
+    component: SettingsUpdates,
   },
   { id: 'vault', label: 'Vault', hint: 'External change detection', component: SettingsVault },
 ];
