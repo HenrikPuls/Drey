@@ -26,7 +26,8 @@ An owner request, outside the list (2026-10-17), with the architecture
 settled in a plan review the same day: [ADR-0075](../docs/09_architecture_decisions/0075-agent-fleet-architecture-governance-and-run-control.md)
 (the agent fleet to come — milestones 84/85) and
 [ADR-0076](../docs/09_architecture_decisions/0076-ticket-repository-format-and-coordination.md)
-(the format shipped here). **Not yet manually verified by the owner.**
+(the format shipped here). Owner-verified 2026-10-17 (signed off after
+the first live board rounds T-0001 – T-0006).
 
 Tickets live in **their own git repository** (GitHub in practice,
 Azure DevOps first-class — the system speaks plain git only),
