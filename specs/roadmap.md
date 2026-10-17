@@ -53,8 +53,8 @@ ids are assigned when work starts — check `changelog.md` for the
 highest used (latest: milestone 81; latest requirement id: req-43,
 CI stores the exes only for tags and manual runs — an owner request
 outside the list, shipped in the same step).
-Items A1–A5 of the architectural cleanup shipped on 2026-10-13 and
-A10–A11 on 2026-10-17 (changelog); A6–A9 and A12 remain.
+Items A1–A5 of the architectural cleanup shipped on 2026-10-13, and
+A10–A12 on 2026-10-17 (changelog); A6–A9 remain.
 
 ### Known defects
 
@@ -108,7 +108,7 @@ of 2026-10-13 — evidence and reasoning per item in
 2026-10-13", same numbering). Not ordered against the feature lists above:
 the owner picks when one is taken. Within the section the order is by
 value for effort. A1–A5 are done (see `changelog.md`), and so are the
-follow-ups A10–A11; the ids of the
+follow-ups A10–A12; the ids of the
 rest are kept so they still match `docs/11`.
 
 - **A6 — Plugin settings out of the base config.** `AppConfig` holds
@@ -131,13 +131,6 @@ rest are kept so they still match `docs/11`.
   milestone-by-milestone record (§5.1–§5.40) into an archive file and
   group the 57 runtime flows by topic. Changes section numbers that
   `CLAUDE.md` and the ADRs link to — ⚠️ owner decision.
-
-Follow-up of A1–A5 (found on the way, not started):
-
-- **A12 — Tests for the split composition root.** `buildAppServices`
-  (`electron/app-services.ts`), `MainWindowHost` and the
-  `plugin-context.ts` builders can now be constructed on their own; only
-  the end-to-end suite covers them so far.
 
 ### Needs an owner decision
 

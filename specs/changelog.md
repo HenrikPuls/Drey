@@ -20,6 +20,41 @@ recorded as an explicit decision. The parity checklist lives in
 
 ## Recent milestones
 
+### Architectural cleanup A12 — unit tests for the composition root
+
+Item A12, the last follow-up of the 2026-10-13 architecture review
+([`docs/11`](../docs/11_risks_and_technical_debt.md)). No change to what
+the app does; 28 new specs cover what only the end-to-end suite reached
+before. The Node suite is at 1,519 (was 1,491).
+
+- **`electron/app-services.spec.ts`.** `buildAppServices` runs for real
+  against a throwaway user-data dir: all eighteen services construct,
+  the config store reads defaults, the vault manager starts without a
+  vault, the plugin host's activation promise resolves before
+  `discoverAndActivate`, and the history sweep tolerates its missing
+  root. `syncMcpHttpTransport` follows the config: the endpoint starts
+  on `mcp.enabled` + `mcp.httpEnabled`, stops otherwise, and a taken
+  port warns instead of throwing.
+- **`electron/main-window.spec.ts`.** The save-before-exit state
+  machine (bug-5), driven over a fake `BrowserWindow` whose `close`
+  mirrors the real one — the event may be prevented, then the window is
+  destroyed and `closed` fires. The first close holds and asks the
+  renderer; "save" closes through; an app-level quit runs the same
+  prompt and calls `app.quit` only after the window is gone; "cancel"
+  keeps the window open and leaves no quit intent behind; a second X
+  while the dialog is up waits without asking twice; a fresh window
+  prompts again.
+- **`electron/plugin-host/plugin-context.spec.ts`.** The plugin's vault
+  context was untested beside `buildLlmContext`: writes carry the
+  plugin id as the history origin, `writeAnnounced`/`delete` resolve the
+  vault and run the external-change announcement, `confirmWrite` marks
+  its request as an assistant overwrite (and answers false without a
+  bridge), `announceChanges` sends an empty round as a full refresh and
+  splits notes from other files, and `assistantVaultOptions` carries
+  origin, protection, scope and the per-call files.
+
+  origin, protection, scope and the per-call files.
+
 ### Architectural cleanup A10–A11 — the plugin specs typechecked, runtime cycles checked
 
 Items A10 and A11, the follow-ups of the 2026-10-13 architecture review
