@@ -41,10 +41,59 @@ owner.**
   types run ahead of the LTS runtime, and every typecheck is green
   against it.
 
+### Fix — CI: the drawio palette e2e no longer types into a half-open palette (bug-12)
+
+Owner request, outside the list (2026-10-17): the main-branch CI run
+behind PR #15 failed both tests that create a diagram through the command
+palette. **Not yet manually verified by the owner.**
+
+They typed "New diagram" immediately after `Ctrl+Shift+P`, before the
+Angular overlay had mounted — the dropped keys left a one-letter query
+whose best fuzzy match is "Git: Merge a branch…", so Enter opened the
+branch picker instead of creating a diagram. That picker was live because
+the e2e vaults sit under `test-results/` inside the checkout, where git's
+upward discovery resolves every test vault to the Drey sources
+themselves — one confirmed dialog away from a real `git merge` in the CI
+checkout.
+
+- `e2e/drawio.spec.ts`: a `runCommand` helper waits for the palette and
+  the filtered command row before Enter (what `e2e/zen.spec.ts` already
+  did).
+- `e2e/manual-screenshots.spec.ts`: the file-palette screenshot waits for
+  the dialog before typing — same race, dormant.
+- `e2e/fixtures/drey.ts`: the launched app gets
+  `GIT_CEILING_DIRECTORIES` at the repo root, so a non-git test vault
+  stays non-git even inside the checkout (the git specs init their repos
+  in the vault, which the ceiling does not touch).
+
+No app code changed; tests only.
+
+### req-45 — the positive update-check answer is inline green text, not a dialog
+
+An owner request, outside the list (2026-10-17, on top of milestone 82).
+**Manually verified by the owner (2026-10-17).**
+
+A manual "Check for updates" that finds nothing new no longer opens a
+window: main sets the `up-to-date` status only, and the renderer shows
+it — green text in the status bar ("The latest version (Drey x.y.z) is
+already installed.", six seconds, next to the word count) for a
+Help-menu check, and the same line in green in Settings → Updates for a
+check from there. The asks (update available, install) and the failure
+dialogs are unchanged; the startup check stays silent as before.
+
+Verified by: renderer + main typechecks, lint, the new
+`src/app/services/update.service.spec.ts`, the status-bar spec's note
+cases, and the reworked state-machine spec case (no dialog on
+`up-to-date`). ADR-0074 carries a later-change note.
+
 ### Milestone 82 — auto-update from GitHub Releases
 
 The old "Next" item 8, split: the update system ships here, code signing
-stays its own item. **Not yet manually verified by the owner.**
+stays its own item. **Manually verified by the owner (2026-10-17)** — the
+full round on a real install: baseline 0.7.0, the startup ask, skip and
+later, the manual check, the differential download, the install through
+the save-before-exit prompt (dirty tab saved, cancel path included), the
+relaunch on 0.7.1, and req-45's green inline confirmation.
 
 Drey can now update itself from the repo's GitHub Releases
 ([ADR-0074](../docs/09_architecture_decisions/0074-github-releases-auto-update.md)).

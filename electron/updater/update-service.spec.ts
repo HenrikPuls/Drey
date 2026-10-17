@@ -238,12 +238,12 @@ describe('UpdateService', () => {
     expect(service.status().phase).toBe('available');
   });
 
-  it('reports "up to date" on a manual check with no newer release', async () => {
+  it('reports "up to date" through the status only — no dialog (req-45)', async () => {
     const { service, updater } = makeService();
     updater.checkForUpdates.mockResolvedValue(checkResult('0.6.0'));
 
     await service.checkManually();
-    expect(mocks.shown.map((d) => d.message)).toEqual(['Drey is up to date']);
+    expect(mocks.shown).toHaveLength(0);
     expect(service.status().phase).toBe('up-to-date');
   });
 

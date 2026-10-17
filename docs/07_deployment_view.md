@@ -114,8 +114,9 @@ change, on a real Windows machine with an installed (NSIS) build:
    *Remind me later* → restart → asks again. *Skip this version* →
    restart → silent; Settings → Updates shows the skipped version and
    "Ask about it again" clears it.
-4. **Manual check:** Help menu → *Check for updates* — same dialog; with
-   no newer release it says "Drey is up to date".
+4. **Manual check:** Help menu → *Check for updates* — with no newer
+   release a short green note appears in the status bar ("The latest
+   version … is already installed."), no dialog.
 5. **Download + install:** answer *Download update* → progress in
    Settings → Updates (blockmap delta small if the previous release is
    close) → *Update downloaded* dialog → *Install and restart* → the

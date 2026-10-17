@@ -122,3 +122,11 @@ the releases page in a browser. No proxy settings, no credentials.
   (`allowPrerelease`), code signing (its own roadmap item), an update
   history / "what changed" view (the release notes live on the releases
   page).
+
+### Later change (req-45)
+
+The positive answer of a manual check is no longer a dialog: an
+"up to date" result is status only, shown by the renderer as green
+inline text — a six-second note in the status bar for a Help-menu
+check, the green status line in Settings → Updates for a check from
+there. The asks and the failure dialogs are unchanged.

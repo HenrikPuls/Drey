@@ -7,6 +7,9 @@
   <span class="dot">·</span>
   <span class="count">{{ editor.charCount() }} chars</span>
 }
+@if (update.notice(); as note) {
+  <span class="update-note">{{ note }}</span>
+}
 <button type="button" class="settings" (click)="settings.openScreen()" aria-label="Settings">
   <app-icon name="settings" [size]="12" />
   <span>Settings</span>
