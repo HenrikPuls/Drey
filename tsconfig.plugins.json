@@ -1,0 +1,14 @@
+/* Typecheck project for the plugin specs (A10). The plugin specs run
+ * under plain Node in vitest.plugins.config.mts, which transpiles without
+ * checking types -- this project is what makes `tsc --noEmit` see them.
+ * They are pure TypeScript with fake/injected APIs (no Angular, no DOM, no
+ * Electron runtime), so unlike tsconfig.spec.json (the Angular runner's
+ * project) no DOM/lib extras are needed beyond the base config.
+ */
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "types": ["vitest/globals"]
+  },
+  "include": ["plugins/**/*.spec.ts"]
+}

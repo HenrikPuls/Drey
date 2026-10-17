@@ -53,8 +53,8 @@ ids are assigned when work starts — check `changelog.md` for the
 highest used (latest: milestone 81; latest requirement id: req-43,
 CI stores the exes only for tags and manual runs — an owner request
 outside the list, shipped in the same step).
-Items A1–A5 of the architectural cleanup shipped on 2026-10-13
-(changelog); A6–A12 remain.
+Items A1–A5 of the architectural cleanup shipped on 2026-10-13 and
+A10–A11 on 2026-10-17 (changelog); A6–A9 and A12 remain.
 
 ### Known defects
 
@@ -107,7 +107,8 @@ of 2026-10-13 — evidence and reasoning per item in
 [`docs/11`](../docs/11_risks_and_technical_debt.md) ("Architecture review
 2026-10-13", same numbering). Not ordered against the feature lists above:
 the owner picks when one is taken. Within the section the order is by
-value for effort. A1–A5 are done (see `changelog.md`); the ids of the
+value for effort. A1–A5 are done (see `changelog.md`), and so are the
+follow-ups A10–A11; the ids of the
 rest are kept so they still match `docs/11`.
 
 - **A6 — Plugin settings out of the base config.** `AppConfig` holds
@@ -131,18 +132,8 @@ rest are kept so they still match `docs/11`.
   group the 57 runtime flows by topic. Changes section numbers that
   `CLAUDE.md` and the ADRs link to — ⚠️ owner decision.
 
-Follow-ups of A1–A5 (found on the way, none started):
+Follow-up of A1–A5 (found on the way, not started):
 
-- **A10 — Typecheck the plugin specs.** `plugins/**/*.spec.ts` belongs
-  only to the root `tsconfig.spec.json`, which no CI step compiles: the
-  Node suite runs the specs without checking types. Six type errors sit
-  in `plugins/assistant/main/chat-engine.spec.ts` (older than A1). Fix
-  them and add the project to CI, or give the plugin specs a project of
-  their own.
-- **A11 — Check for import cycles in CI.** A3 removed the two renderer
-  cycles and none exist in `electron/`, `shared/` or `plugins/`, but
-  nothing stops a new one. A small script over the import graph (or
-  `import/no-cycle`) as a lint step.
 - **A12 — Tests for the split composition root.** `buildAppServices`
   (`electron/app-services.ts`), `MainWindowHost` and the
   `plugin-context.ts` builders can now be constructed on their own; only

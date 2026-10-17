@@ -20,6 +20,32 @@ recorded as an explicit decision. The parity checklist lives in
 
 ## Recent milestones
 
+### Architectural cleanup A10–A11 — the plugin specs typechecked, runtime cycles checked
+
+Items A10 and A11, the follow-ups of the 2026-10-13 architecture review
+([`docs/11`](../docs/11_risks_and_technical_debt.md)). No change to what
+the app does.
+
+- **A10 — the plugin specs are typechecked in CI.** A new project,
+  `tsconfig.plugins.json`, covers `plugins/**/*.spec.ts` (the Node suite
+  transpiles them without checking types); the CI step runs
+  `tsc --noEmit` over it. It surfaced twelve errors, all in
+  `plugins/assistant/main/chat-engine.spec.ts` (older than A1): a fake
+  provider id, a tool stub without `parameters.properties` and ten dot
+  accesses into the config's index signature, now bracket accesses.
+- **A11 — a script fails on runtime import cycles.**
+  `scripts/check-cycles.mjs` (`npm run cycles`, CI step after lint)
+  builds the import graph over `electron/`, `shared/`, `plugins/` and
+  `src/` and fails with the cycle chain. An edge counts only when the
+  importing file uses a value of the imported module: `import type`
+  never does, and a clause whose every name resolves to an interface or
+  type alias is erased by the compilers (tsc elides it in the CJS build,
+  esbuild drops the unused specifiers), so it cannot cycle at runtime.
+  The classification uses the TypeScript compiler API — no new
+  dependency. Today's graph: no runtime cycles across 689 files. (The
+  full graph, type-only edges included, has 11 loops that all live in
+  type-only imports — legal, and left as they are.)
+
 ### Milestone 81 — Zen mode
 
 The roadmap's "Next" item 6: a focused, chrome-free writing/reading view.

@@ -12,6 +12,7 @@
     "test": "ng test",
     "test:plugins": "vitest run --config vitest.plugins.config.mts",
     "lint": "eslint \"electron/**/*.ts\" \"shared/**/*.ts\" \"src/**/*.ts\" \"plugins/**/*.ts\"",
+    "cycles": "node scripts/check-cycles.mjs",
     "verify:pack": "node scripts/verify-pack.mjs",
     "build:renderer": "ng build",
     "build:electron": "tsc -p electron/tsconfig.json && node scripts/bundle-preload.mjs",
