@@ -44,8 +44,8 @@ and exiting zen from it).
 
 ### Fix — a link in a rendered table no longer kills the window (bug-11)
 
-Found by the owner (2026-10-14), outside the list. **Not yet manually
-verified by the owner.**
+Found by the owner (2026-10-14), outside the list. **Manually verified
+by the owner (2026-10-17).**
 
 Clicking a link inside a rendered table (an HTML block, a callout …)
 navigated the whole window: those widgets hold markdown-it's HTML, so
