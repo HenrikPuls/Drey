@@ -173,7 +173,9 @@ menu:
 - **Live Preview** (default) — a true in-place preview: the cursor sits
   in the rendered document, Markdown markers reveal only around the
   selection, tables/images/diagrams render as widgets that show their
-  raw source while the caret is inside them.
+  raw source while the caret is inside them. A link in the text opens
+  with `Ctrl`+click (a plain click places the caret); a link inside a
+  rendered table or block opens with a plain click.
 - **View** — read-only rendering; plain clicks follow links.
 - **Source** — raw Markdown.
 
