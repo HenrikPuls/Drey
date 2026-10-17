@@ -217,6 +217,20 @@ describe('assembleBoard', () => {
     expect(snap.issues.some((i) => i.message.includes('unexpected file'))).toBe(true);
   });
 
+  it('never badges _meta files as strays, even when fed unfiltered', () => {
+    const base = baseInput([{ path: 'tickets/inbox/T-0001.md', text: ticketText('T-0001', 'One') }]);
+    const snap = assembleBoard({
+      ...base,
+      files: [
+        ...base.files,
+        { path: 'tickets/_meta/pipeline.md', text: 'x' },
+        { path: 'tickets/_meta/T-0099.md', text: ticketText('T-0099', 'Hidden') },
+      ],
+    });
+    expect(snap.issues.filter((i) => i.message.includes('unexpected file'))).toEqual([]);
+    expect(snap.columns.flatMap((c) => c.tickets).some((t) => t.id === 'T-0099')).toBe(false);
+  });
+
   it('applies pins as the column top and marks cards pinned', () => {
     const snap = assembleBoard(
       baseInput(

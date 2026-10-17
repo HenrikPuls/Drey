@@ -349,11 +349,15 @@ export function assembleBoard(input: AssembleInput): BoardSnapshot {
   for (const file of input.files) {
     const parts = ticketPathParts(file.path);
     if (parts === null) {
-      issues.push(strayFileIssue(file.path));
+      // `_meta` holds the board's configuration, not tickets — only
+      // genuinely stray files get the badge.
+      if (!file.path.startsWith('tickets/_meta/')) {
+        issues.push(strayFileIssue(file.path));
+      }
       continue;
     }
     if (parts.phase === '_meta') {
-      continue; // _meta lives in file reads, not in columns.
+      continue; // a ticket-stemmed file inside _meta: ignore, don't column it.
     }
     const parsed = parseTicketFile(file.text, file.path);
     if (parsed.meta.repo !== null && !repoNames.has(parsed.meta.repo)) {
