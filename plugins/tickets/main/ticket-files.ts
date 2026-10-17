@@ -221,6 +221,15 @@ export interface TransitionPatch {
   readonly claimBy?: string;
   /** Clear the claim fields instead (a release). */
   readonly releaseClaim?: boolean;
+  /**
+   * Stamp the live-run map (ADR-0075 run control, M84): `{pid, started-at,
+   * stream}` with the stream field naming the run id — the stream file
+   * itself lives under the machine-local fleet root, so the ticket file
+   * stays portable across the machines the repo syncs to.
+   */
+  readonly run?: TicketRun;
+  /** Remove the live-run map (the run ended). */
+  readonly clearRun?: boolean;
 }
 
 /** Applies a transition/claim patch to a ticket file's text and appends the
@@ -251,6 +260,16 @@ export function patchTicketFile(text: string, patch: TransitionPatch): string {
   } else if (patch.releaseClaim === true) {
     removeKey(doc, 'claimed-by');
     removeKey(doc, 'claimed-at');
+  }
+
+  if (patch.run !== undefined) {
+    doc.set('run', doc.createNode({
+      pid: patch.run.pid,
+      'started-at': patch.run['started-at'],
+      stream: patch.run.stream,
+    }));
+  } else if (patch.clearRun === true) {
+    removeKey(doc, 'run');
   }
 
   // Leaving the inbox always clears a parked state (schema rule).
