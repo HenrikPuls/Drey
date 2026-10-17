@@ -81,8 +81,26 @@ included.
    window, region, or another application's window.~~
 8. **Code signing.** The installer is unsigned — Windows SmartScreen
    warns on the first run of every fresh exe, updates included
-   (`docs/11`). Split from the auto-update item; the update channel
-   itself is milestone 82. ⚠️ Depends on a certificate decision.
+   (`docs/11`). **Owner decision 2026-10-17: deferred** — the update
+   channel ships unsigned (integrity is the SHA512 in `latest.yml`,
+   ADR-0074); revisit when distribution justifies the cost. Options
+   evaluated:
+   - **Azure Trusted Signing** (~$10/month) — key in Microsoft's HSM,
+     CI-native (electron-builder `azureSignOptions`, GitHub Action). Open
+     question: identity validation for individuals in Germany.
+   - **Certum Open Source Code Signing** (OV, ~€25–50/yr) — for
+     individual OSS developers; SimplySign cloud token, CI signing
+     fiddly.
+   - **SignPath Foundation** (free for OSS) — Drey qualifies on paper;
+     an approval process, signing rides their service.
+   - **EV certificate** (~€300–700/yr) — the only instant SmartScreen
+     reputation, but needs a registered business and a USB token that
+     fights GitHub-hosted runners.
+
+   ⚠️ When it happens: once an installed build is signed,
+   electron-updater pins the publisher identity — future updates must
+   keep it, and a later certificate migration needs a deliberate
+   manual-download hop. Cut the first signed release knowingly.
 9. **Tags at scale.** The Autotag prompt embeds the whole vocabulary
     (fine to low hundreds) and there is no near-duplicate detection
     (`sailing` vs. `boat`). Add a pre-filter and a duplicate finder
