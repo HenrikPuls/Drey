@@ -375,6 +375,7 @@ test.describe('manual: shell & editor', () => {
 
     // The file palette.
     await page.keyboard.press('Control+P');
+    await expect(page.locator('app-palette .palette')).toBeVisible();
     await page.keyboard.type('rela');
     await page.waitForTimeout(300);
     await shoot(page, 'palette-files.png');
