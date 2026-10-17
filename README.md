@@ -100,3 +100,11 @@ renderer only, against the production build instead of the dev server)
 and their inline comments for the reasoning -- notably why
 `ELECTRON_RUN_AS_NODE` is explicitly cleared in these configs (see
 `docs/11_risks_and_technical_debt.md`, "Environment gotchas").
+
+## License
+
+Drey is licensed under the **GPL-3.0-only** — see [`LICENSE`](LICENSE).
+The third-party licenses of everything bundled into a build are listed
+in the app (Settings → About). The bundled draw.io diagram editor ships
+under Apache-2.0; "draw.io" is a registered trademark of draw.io AG —
+Drey is not affiliated with, endorsed by, or sponsored by draw.io.

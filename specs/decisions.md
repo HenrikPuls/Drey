@@ -9,9 +9,11 @@ one means moving it back to the roadmap with a new justification.
 ## Excluded ideas
 
 - **Req-3/req-15** — `copilot-web` provider (Playwright + system Edge
-  driving M365 Copilot's website). Prototyped, never merged
-  (`feat/copilot-web-provider`, ADR-0040) — fragile PoC. Not part of the
-  Req-29 remainder any more.
+  driving M365 Copilot's website). Prototyped, never merged — fragile
+  PoC (ADR-0040). The code now lives in the private
+  `drey-private-plugins` repository (moved there 2026-10-17 when this
+  repo went public; the branch is no longer on the public remote). Not
+  part of the Req-29 remainder any more.
 - **Req-17** — Jira integration: inline live ticket status, create
   tickets from the editor.
 - **req-9** — OCR remainder (iPad): on-device handwriting recognition.
