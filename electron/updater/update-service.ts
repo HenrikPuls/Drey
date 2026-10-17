@@ -147,8 +147,10 @@ export class UpdateService {
   }
 
   /**
-   * A check the user asked for (Help menu, Settings → Updates): every
-   * outcome gets its native dialog, skipped versions included.
+   * A check the user asked for (Help menu, Settings → Updates). Failures
+   * and the asks stay native dialogs; the positive "up to date" result
+   * is status only — the renderer shows it as inline green text
+   * (req-45), so it never blocks with a window.
    */
   async checkManually(): Promise<UpdateStatus> {
     await this.check(/* reportErrors */ true);
@@ -245,14 +247,11 @@ export class UpdateService {
       }
       const version = result.updateInfo.version;
       if (!isNewerVersion(app.getVersion(), version)) {
+        // The positive result is status only — no dialog (req-45): the
+        // renderer shows it as green inline text (status bar / Updates
+        // page), so a "nothing to do" answer never blocks the user.
         this.availableVersion = null;
         this.setPhase('up-to-date');
-        if (reportErrors) {
-          await this.showInfo(
-            'Drey is up to date',
-            `This installation runs Drey ${app.getVersion()} — the newest release.`,
-          );
-        }
         return;
       }
       this.availableVersion = version;

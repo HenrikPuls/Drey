@@ -14,6 +14,16 @@ export class UpdateService {
   /** The last status main pushed (or answered); `null` before the first. */
   readonly status = signal<UpdateStatus | null>(null);
 
+  /**
+   * A short-lived green line for the status bar (req-45): the positive
+   * "no update" answer of a manual check, shown inline instead of a
+   * dialog. `null` when there is nothing to show; auto-clears after a
+   * few seconds.
+   */
+  readonly notice = signal<string | null>(null);
+
+  private noticeTimer: ReturnType<typeof setTimeout> | null = null;
+
   constructor() {
     const api = typeof window !== 'undefined' ? window.dreyApi : undefined;
     if (api === undefined) {
@@ -23,9 +33,25 @@ export class UpdateService {
     void api.getUpdateStatus().then((status) => this.status.set(status));
   }
 
-  /** Help menu / Settings → Updates "Check for updates" — main shows the result. */
+  /**
+   * Help menu / Settings → Updates "Check for updates". The asks and
+   * failures surface as native dialogs from main; the positive result
+   * becomes the status-bar notice (req-45).
+   */
   checkNow(): void {
-    void window.dreyApi?.checkForUpdates();
+    void window.dreyApi?.checkForUpdates().then((status) => {
+      if (status.phase === 'up-to-date') {
+        this.showNotice(`The latest version (Drey ${status.currentVersion}) is already installed.`);
+      }
+    });
+  }
+
+  private showNotice(text: string): void {
+    this.notice.set(text);
+    if (this.noticeTimer !== null) {
+      clearTimeout(this.noticeTimer);
+    }
+    this.noticeTimer = setTimeout(() => this.notice.set(null), 6_000);
   }
 
   /** Downloads the found update; progress arrives through the status push. */

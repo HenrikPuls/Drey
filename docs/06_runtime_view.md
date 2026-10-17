@@ -3102,7 +3102,7 @@ sequenceDiagram
     GH-->>EU: version + sha512 + file list
     alt no newer x.y.z version / check failed
         EU-->>US: not-available / error
-        Note over US: silent — log only (ADR-0074)
+        Note over US: startup: silent — log only (ADR-0074);<br/>a manual check's "up to date" is green<br/>inline text instead of a dialog (req-45)
     else newer version, not `updates.skippedVersion`
         EU-->>US: update-available (0.7.0)
         US-->>User: native dialog: Download / Skip this version / Remind me later
