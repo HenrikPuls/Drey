@@ -20,6 +20,62 @@ recorded as an explicit decision. The parity checklist lives in
 
 ## Recent milestones
 
+### Milestone 84 — the fleet runner: on-demand agent runs with run control
+
+Item M84 of the ticket system + agent fleet (ADR-0075; the format is
+ADR-0076). The workers are external agent CLI sessions in their own
+worktrees — **OpenCode first** (driven through its local serve API),
+**Claude Code second** (stream-json) — and the owner assigns workers
+per task: the ticket's `worker:` pin wins over the phase handover's
+`@worker` pin, over the repo default in `_meta/repos.md`, over the
+configured default, then the fleet's first worker. **Not yet manually
+verified by the owner** — the specs and suites are green; the live
+rounds on the real tickets repo are the owner's next step.
+
+- **The fleet runner** is a standalone headless Node process, spawned
+  detached by the tickets plugin (`ELECTRON_RUN_AS_NODE`, the sibling
+  file of its own bundle), rooted under `<userData>/fleet/` — single
+  instance through a descriptor file, idle self-shutdown, and it
+  survives Drey closing and restarting. Its control surface is a
+  loopback HTTP endpoint with a bearer token
+  (`start/stop/send/status/stream` — a terminal with curl reaches it
+  too, as the owner asked). It owns what Drey cannot: the worker
+  process table, the per-run stream files (`stream.jsonl`, tail-able
+  by anyone), the tree-kills with a PID-reuse guard (the recorded
+  `started-at`), the per-ticket worktrees on `t/<id>`, and the
+  **machine gate** — the ticket's backticked acceptance commands, run
+  locally after the worker exits; a green gate moves the ticket to the
+  next phase with the board's exact transition semantics (move + stamp
+  + log + one commit), a red one parks the failure in the ticket's Log
+  and frees the run slot.
+- **Two worker adapters behind one steer ladder.** OpenCode drives
+  `serve` bound to loopback with a password: a prompt POST into the
+  live session is the native injection rung, `abort` the soft stop,
+  and messages carry the token usage and cost for the footer; progress
+  is polled, not streamed (v1's event stream dropped mid-turn, v2's
+  offset stream is the upgrade path). Claude Code drives the CLI over
+  stream-json: stdin held open for injection, `--resume <sessionRef>`
+  as the stop+resume rung. Every steer and stop lands in the ticket's
+  Log with its rung.
+- **Run control in the board.** The card menu gains *Run agent* (a
+  dialog: worker + permission mode), *Watch run* (tailing the stream),
+  *Steer run* and *Stop run*; the board's new footer shows every live
+  run with state, age, token usage, cost and steer count — the owner's
+  request of 2026-10-17. While a run is live the ticket carries the
+  `run` map (at most one), and the dialog's explicit worker choice is
+  recorded as the ticket's `worker:` pin.
+
+Verified by: the plugin typechecks (main, renderer, specs), lint,
+import cycles, the full unit suites (Node 1,618 — 34 new, among them
+the provider adapters against scripted seams, the supervisor's gate
+and success-move semantics, the config store's race contract), and the
+complete production build incl. the plugin bundle.
+
+Docs: `specs/ticket-schema.md` (the `worker` field, the `run` map's
+semantics, the handover `@worker` pin, `repos.md` `worker:`, the
+prompts directory), the roadmap's M85 remainder, `docs/05` §5.41 and
+`docs/06` §6.65, the manual's fleet section.
+
 ### Milestone 83 — the tickets foundation: a kanban board over a dedicated tickets repository
 
 An owner request, outside the list (2026-10-17), with the architecture

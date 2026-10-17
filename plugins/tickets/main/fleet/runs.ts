@@ -25,6 +25,10 @@ import type { RunInfo, RunRequest, RunState, SteerRung } from './protocol';
 
 const execAsync = promisify(nodeExec);
 
+/** The gate's shell exec: owner-authored commands need a shell. */
+const execShell = (command: string, cwd: string): Promise<void> =>
+  execAsync(command, { cwd, windowsHide: true, timeout: 30 * 60_000 }).then(() => undefined);
+
 export interface StoredRun {
   readonly request: RunRequest;
   readonly info: RunInfo;
@@ -43,8 +47,12 @@ export interface RunSupervisorDeps {
   readonly now?: () => Date;
   /** Test seam over the machine gate's shell exec. */
   readonly exec?: ExecFn;
+  /** Test seam over the gate's shell commands (cwd = the worktree). */
+  readonly execShell?: (command: string, cwd: string) => Promise<void>;
   /** Test seam over worktree preparation. */
   readonly prepareWorktree?: (request: RunRequest, worktreePath: string) => Promise<void>;
+  /** Test seam over the tickets repo's git (the spec recorder). */
+  readonly ticketsGit?: Pick<TicketsGit, 'run' | 'locate' | 'commitPaths'>;
 }
 
 interface LiveRun {
@@ -62,13 +70,13 @@ const TERMINAL: readonly RunState[] = ['done', 'stopped', 'failed'];
 
 export class RunSupervisor {
   private readonly runs = new Map<string, LiveRun>();
-  private readonly git: TicketsGit;
+  private readonly git: Pick<TicketsGit, 'run' | 'locate' | 'commitPaths'>;
   private readonly now: () => Date;
   private readonly exec: ExecFn;
   private readonly prepareWorktree: (request: RunRequest, worktreePath: string) => Promise<void>;
 
   constructor(private readonly deps: RunSupervisorDeps) {
-    this.git = new TicketsGit(() => deps.git);
+    this.git = deps.ticketsGit ?? new TicketsGit(() => deps.git);
     this.now = deps.now ?? ((): Date => new Date());
     this.exec =
       deps.exec ??
@@ -356,7 +364,7 @@ export class RunSupervisor {
     for (const command of run.request.acceptance) {
       await this.logLine(run, `gate: ${command}`);
       try {
-        await execAsync(command, { cwd: run.info.worktreePath, windowsHide: true, timeout: 30 * 60_000 });
+        await (this.deps.execShell ?? execShell)(command, run.info.worktreePath);
       } catch (error) {
         const detail = messageOf(error).split('\n')[0] ?? 'failed';
         return `\`${command}\` failed — ${detail.slice(0, 300)}`;
@@ -483,7 +491,7 @@ export class RunSupervisor {
           now: this.now(),
           actor: this.agentActor(),
           clearRun: true,
-          ...(note !== null ? { action: note } : {}),
+          action: note ?? `run ${run.info.state}`,
         }),
       );
     } catch (error) {

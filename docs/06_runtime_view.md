@@ -3171,3 +3171,45 @@ ticket). A drag within one column is the same dance minus the move:
 only `order.md`'s section is rewritten (pins = the cards above and
 including the drop). No git repository → the move still happens, the
 board warns "not versioned", and the commit step is skipped.
+
+## 6.65 A fleet run: start, steer, gate, and the ticket moves itself (milestone 84, [ADR-0075](09_architecture_decisions/0075-agent-fleet-architecture-governance-and-run-control.md))
+
+```mermaid
+sequenceDiagram
+    participant P as Tickets panel (renderer)
+    participant B as BoardService (plugin main)
+    participant F as FleetClient
+    participant R as fleet runner (standalone)
+    participant W as worker (opencode / claude-code)
+    participant G as installed git
+
+    P->>B: fleetStart { id, worker?, permissionMode? }
+    B->>B: resolve assignment (ticket pin > handover @worker > repo > default)
+    B->>B: read prompt (tickets/_meta/prompts/<ref>.md), compose instruction
+    B->>F: start(RunRequest)
+    F->>R: POST /start (loopback + bearer)
+    R->>G: worktree add <root>/worktrees/<repo>-<id> (branch t/<id>)
+    R->>W: spawn (opencode serve | claude -p stream-json), stdout -> stream.jsonl
+    R->>G: ticket patch: run map + Log "run R-… started" (one commit)
+    W-->>R: events (session ref, tokens, cost) -> stream.jsonl + run.json
+    P->>F: fleetStatus (polled / pushed) — footer: state, age, tokens, cost
+    P->>R: fleetSend (steer) — the ladder's best rung, logged in the ticket
+    P->>R: fleetStop — soft abort, then kill-tree guarded by started-at
+    W->>R: exit
+    R->>R: machine gate — the ticket's backticked acceptance commands
+    alt gate green and a next phase exists
+        R->>G: move tickets/<phase>/<id>.md -> next phase + stamp + Log (one commit)
+    end
+    R->>G: clear the run map (one commit) — at most one live run
+```
+
+The runner is a plain Node process (spawned detached under
+`ELECTRON_RUN_AS_NODE` from the plugin bundle), so it survives Drey
+closing and restarting; Drey re-adopts it through
+`<userRoot>/fleet/runner.json` instead of spawning a second one. All
+of the runner's ticket writes use the board's exact transition
+semantics — the same patch helpers, `add -- paths` + `commit -- paths`
+— and the deterministic validator runs before every action. A red
+gate (or a refused validation: no acceptance criteria, a non-`t/<id>`
+branch, an unknown worker pin) never moves the ticket; the reason
+lands in the Log and the run slot is freed for the next attempt.
