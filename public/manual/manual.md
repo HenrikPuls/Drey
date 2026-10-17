@@ -712,6 +712,13 @@ Claims: moving a ticket into a claim-flagged phase (Build by default)
 stamps who works on it and when. A stale claim is visible by its age;
 taking over replaces it and logs the previous holder.
 
+The context menu also opens the ticket's **work folder in a terminal**
+("Open work folder in terminal") — the local checkout configured as
+`path:` for the ticket's repository in `repos.md`, so testing is one
+click: `.\dev.ps1` for Drey, whatever the repo uses elsewhere. The
+entry explains itself when the ticket names no repository or the
+repository has no `path:` yet.
+
 Pushing and pulling the tickets repo is ordinary git — use the
 [Source control](#12-git-source-control) panel like for any other
 vault. With a remote, two machines racing for the same ticket are
