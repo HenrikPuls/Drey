@@ -1,6 +1,12 @@
-# Drey — your private AI knowledge vault
+# Drey — your private note vault that runs your work
 
-Local, topic-based note-taking app (Electron + Angular). See
+Your notes are the context. Agents are the hands. You are the gates.
+
+Drey is a local-first Markdown note app — plain files in a folder you
+own, no lock-in — with a true in-place live preview, daily notes,
+tasks, tags, templates, search, diagrams and PDF export, and an
+optional AI assistant that reads your vault and acts on it through
+permissioned tools. See
 [`AGENTS.md`](AGENTS.md) (the tool-neutral agent entry point) and
 [`CLAUDE.md`](CLAUDE.md) for the full project context, and
 [`specs/`](specs/) for the binding concept/schema/classifier

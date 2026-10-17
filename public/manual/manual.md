@@ -1,9 +1,10 @@
 # Drey — User Manual
 
-Drey is a private, local-first knowledge vault: your notes are plain
-Markdown files in a folder you own, and the app around them — editor,
-search, tasks, an optional AI assistant — runs entirely on your machine.
-Nothing leaves it unless you explicitly switch on a hosted AI provider.
+Drey is a private, local-first note vault that runs your work: your
+notes are plain Markdown files in a folder you own, and the app around
+them — editor, search, tasks, an optional AI assistant with
+permissioned tools — runs entirely on your machine. Nothing leaves it
+unless you explicitly switch on a hosted AI provider.
 
 > All screenshots in this manual were taken from the app's default
 > **Anthrazit** theme (neutral charcoal, blue accent) on Windows. The demo
