@@ -20,6 +20,88 @@ recorded as an explicit decision. The parity checklist lives in
 
 ## Recent milestones
 
+### Milestone 83 — the tickets foundation: a kanban board over a dedicated tickets repository
+
+An owner request, outside the list (2026-10-17), with the architecture
+settled in a plan review the same day: [ADR-0075](../docs/09_architecture_decisions/0075-agent-fleet-architecture-governance-and-run-control.md)
+(the agent fleet to come — milestones 84/85) and
+[ADR-0076](../docs/09_architecture_decisions/0076-ticket-repository-format-and-coordination.md)
+(the format shipped here). Owner-verified 2026-10-17 (signed off after
+the first live board rounds T-0001 – T-0006).
+
+Tickets live in **their own git repository** (GitHub in practice,
+Azure DevOps first-class — the system speaks plain git only),
+registered as an ordinary vault. One Markdown file per ticket
+(`tickets/<phase>/T-00xx.md`, id = filename = immutable identity), the
+phase is the directory, and a transition is a move plus **exactly one
+commit** (`add -- paths` + `commit -- paths`, never touching unrelated
+staged work) — the repo's history is the ticket's timeline. The board
+stores nothing: columns, order, claims and ages are derived from the
+files on every refresh.
+
+The new `tickets` plugin: the **Tickets** dock panel (columns with WIP
+counts, cards with priority dots, repo/claim/parked chips and issue
+badges), capture through a small modal (title, priority, repo,
+description → next free id in the inbox), drag & drop for transitions
+and for order pins (a drag writes `tickets/_meta/order.md`, not the
+tickets — sparse sections, union-merge-safe), a card context menu
+(open, copy the deterministic branch `t/T-00xx`, take over / release a
+claim), and a two-step **Initialize the tickets board** in the empty
+state (writes `pipeline.md`, `order.md`, `repos.md`). The pipeline is
+configuration in the repo: ordered phases with title, WIP limit, claim
+flag and per-handover spec (`manual | agent <prompt-ref> | ci | none`)
+— parsed and displayed now, acted on from milestone 84.
+
+Asymmetric tolerance throughout: machine writes are strict
+(`specs/ticket-schema.md`), human edits are free, and the reader
+normalizes visibly — anything ambiguous becomes a badge on the card
+(duplicate ids across phases, a branch field violating the `t/<id>`
+rule, an unknown repo), never a guess. **No CI on the tickets repo**
+(owner's ruling): the deterministic validator runs where the data is
+read — the board on every render, the fleet runner before every action
+from M84. A tickets vault without a git repo works, with a warning that
+transitions are unversioned.
+
+Verified by: the plugin typechecks (main, renderer, specs), lint,
+import cycles, the full unit suites (Node 1,584 — 44 new in
+`plugins/tickets/` — and Angular 1,131), and the complete production
+build incl. the plugin bundle (`dist-electron/plugins/tickets/`).
+
+Docs: ADR-0075, ADR-0076, `specs/ticket-schema.md` (the complete
+machine-facing format spec) + the `frontmatter-schema.md` pointer,
+`docs/05` §5.0 (plugins paragraph, diagram, feature row) + §5.41,
+`docs/06` §6.64, the manual's new chapter 13 (chapters 13–22 shifted
+to 14–23), the roadmap's M84/M85 remainder. Known edge, accepted for
+the trial: a ticket file that sits open and dirty in the editor while
+the board moves it gets the ordinary "changed on disk" treatment; and
+pushing the tickets repo stays manual (Source control panel) until the
+fleet runner owns it (M84).
+
+**First board use (2026-10-17, tickets T-0001–T-0004 in the owner's
+`drey-tickets` repo):** capture, initialize and drag-pins worked
+end-to-end on the owner's machine. Three follow-ups shipped from those
+tickets: the board opens as a **centre editor tab** (`tickets://board`
+doc kind, the browser-tab pattern — one shared board store serves the
+dock panel and the tab; wider columns in the tab), **creating a
+ticket opens the pre-filled file** in the editor (`create` returns the
+minted id and path), and the card context menu **opens the ticket's
+work folder in a terminal** (`repos.md` gains a per-repo local `path:`;
+the spawn mirrors the base's `openTerminalIn` — Windows Terminal with
+a cmd fallback, detached, outliving the app). On the ticket branches
+`t/T-0002` / `t/T-0001` / `t/T-0004`, fast-forwarded onto the
+integration branch.
+
+**Second board round (2026-10-17, tickets T-0005/T-0006):** the board's
+columns **fold to a narrow strip** (T-0005) — the count and the title
+rotated 90°, the head chevron folds, one click on the strip (or a
+dragged card hovering it) unfolds, and which columns stay folded
+persists as view state in `localStorage['drey.tickets']` (the
+tasks-panel pattern; never in the tickets repo — ADR-0076). Folding
+`done` and empty phases is how all eight columns fit the dock panel.
+The T-0002 centre editor tab was **removed again** (T-0006, the owner's
+ruling — the dock panel is the board's home; the shared-store refactor
+from T-0002 stays, serving the panel).
+
 ### req-44 — CI runs on the Node 24 actions runtime
 
 Owner request, outside the list (2026-10-17): the run annotations warned

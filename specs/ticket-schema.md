@@ -1,0 +1,257 @@
+# Ticket Schema — the tickets repository format
+
+The complete, machine-facing specification of the tickets repository
+(ADR-0076; the fleet that works it is ADR-0075). Written so that a
+human, a Drey component, or an agent CLI can operate the format from
+this file alone. Ticket files are **not** vault notes — only the YAML
+conventions shared with [`frontmatter-schema.md`](frontmatter-schema.md)
+apply (quoted dates, plain text).
+
+Top-level rules, once, up front:
+
+- **One file per ticket. The phase is the directory. The filename is
+  the identity.** A ticket file moves between directories; its name
+  never changes.
+- **Every phase transition is one git commit** (`git mv` semantics +
+  the frontmatter stamp), message format
+  `tickets: <id> <from> -> <to>` (ASCII arrow).
+- **Machine writers write strictly** (the exact shapes below);
+  **humans edit freely**; **readers normalize visibly** — anything a
+  reader cannot parse unambiguously is reported as an issue on the
+  board, never guessed. Tolerate noise, never ambiguity.
+- All timestamps are **UTC, seconds precision, quoted**:
+  `'2026-10-17T14:32:00Z'`.
+- Line endings LF. Encoding UTF-8.
+
+## Layout
+
+```
+tickets/
+  _meta/
+    pipeline.md     # the phases + handover config (config, never data)
+    order.md        # sparse per-column order pins (data, never config)
+    repos.md        # work-repo name -> clone URL/path mapping
+  inbox/
+    T-0042.md       # one ticket per file, in its current phase's folder
+  prioritized/
+  plan/
+  plan-review/
+  build/
+  review/
+  commit/
+  done/
+```
+
+The phase folders are exactly the phases configured in `pipeline.md`
+(the set above is the default, not fixed). `_meta` is reserved;
+nothing else lives beside the phase folders. A vault whose root
+contains `tickets/_meta/pipeline.md` **is** a tickets vault — that
+file's presence is the detection marker.
+
+### Id minting
+
+`T-` + at least four digits, zero-padded to four (`T-0042`, `T-1327`,
+`T-10000`). The next free id is **max of all existing ids across every
+phase folder + 1** (never reuse a gap — a deleted ticket's id stays
+burned; git history is the record). If two sides minted the same id
+independently, the merge conflict is resolved by the **later** side:
+re-mint the next free id and rename file, `branch:` field and the work
+branch together in one commit.
+
+### The branch rule
+
+The work branch of a ticket is deterministic: `t/<id>` (`t/T-0042`).
+The `branch:` frontmatter field is cross-validated against the rule —
+**the rule wins**, a mismatch is an issue badge, not an error. Machine
+writers always write the rule's value.
+
+## Ticket file
+
+```markdown
+---
+id: T-0042
+title: 'Fix the palette race in CI'
+repo: drey
+priority: high
+rank: 5000
+branch: t/T-0042
+entered-inbox: '2026-10-17T14:32:00Z'
+entered-prioritized: '2026-10-17T15:01:12Z'
+claimed-by: owner@desk
+claimed-at: '2026-10-17T15:04:00Z'
+references: ["t/T-0041", "https://github.com/HenrikPuls/Drey/pull/12"]
+---
+
+## Description
+
+What and why, in plain Markdown. Links to notes, PRs, people.
+
+## Plan
+
+How. Filled in the plan phase; must end with the acceptance criteria.
+
+### Acceptance criteria
+
+- [ ] `npm run verify:unit` — exits 0
+- [ ] `npm run verify:pack` — exits 0
+
+## Log
+
+- '2026-10-17T14:32:00Z' owner — created in inbox
+- '2026-10-17T15:01:12Z' owner — inbox -> prioritized
+- '2026-10-17T15:04:00Z' owner — claimed (build)
+```
+
+### Frontmatter fields
+
+| Field | Shape | Rules |
+|---|---|---|
+| `id` | `T-\d{4,}` | Required. Must equal the filename stem. Immutable. |
+| `title` | string | Required. One line, quoted when it contains `:`. |
+| `repo` | string | Name from `_meta/repos.md`. May be empty until the ticket leaves inbox for a work phase; entering one without a known repo is an issue. |
+| `priority` | `urgent \| high \| normal \| low` | Required. Default `normal`; machine writers always write it. |
+| `rank` | integer 0–999999 | Default `5000`. Fine ordering inside derived order. |
+| `branch` | `t/<id>` | Written by machine writers; validated against the rule; rule wins. |
+| `entered-<phase>` | UTC timestamp | One per phase ever entered; holds the **most recent** entry time into that phase (first entry lives in git history). `entered-inbox` exists from creation. |
+| `claimed-by` | `<who>@<host>` (agents append `:<session>`) | Set when the ticket enters a claim-flagged phase (default: build); `owner@<host>` for the human. Takeover overwrites and logs the old value. |
+| `claimed-at` | UTC timestamp | Set with `claimed-by`. |
+| `run` | map `{pid, started-at, stream}` | Reserved for run control (ADR-0075); milestone 84 writes it, readers only validate the shape. At most one live run. |
+| `references` | list of strings | Optional. Ticket ids (`t/T-0041`), URLs, vault paths. |
+| `parked-reason` | string | With `parked-at`; the ticket sits in inbox while parked (circuit breaker, budgets — ADR-0075). Any transition out of inbox clears both. |
+| `parked-at` | UTC timestamp | See `parked-reason`. |
+
+Unknown keys are preserved on rewrite and reported as noise (not an
+error). Human edits never break the file: what parses as YAML reads;
+what does not is a badge.
+
+### Body sections
+
+Free Markdown; the section headings below are convention that Drey and
+the runner rely on:
+
+- `## Description` — what and why. The capture text lands here.
+- `## Plan` — how; authored in plan phase. Leaving plan-review without
+  acceptance criteria is an issue (the machine gate needs them).
+- `### Acceptance criteria` — under Plan. Checkbox lines whose text
+  starts with a backticked command; the machine gate runs exactly
+  these, locally, in the worker's checkout (ADR-0076: validator, not
+  CI).
+- `## Log` — append-only. Machine-appended entries use the exact line
+  shape `- '<UTC timestamp>' <who> — <text>`; humans may append in any
+  readable shape. Every transition, claim, takeover, injection, stop
+  and budget event lands here (ADR-0075).
+
+## `_meta/pipeline.md` — the phases and their handovers
+
+```markdown
+---
+phases:
+  - { id: inbox, title: Inbox, handover: manual }
+  - { id: prioritized, title: Prioritized, handover: manual }
+  - { id: plan, title: Plan, wip: 1, handover: manual }
+  - { id: plan-review, title: Plan review, handover: manual }
+  - { id: build, title: Build, wip: 3, claim: true, handover: agent build-default }
+  - { id: review, title: Review, handover: manual }
+  - { id: commit, title: Commit, handover: manual }
+  - { id: done, title: Done, handover: none }
+---
+Prose for humans. The board follows this file on refresh.
+```
+
+- `id`: `[a-z][a-z0-9-]*`, unique, = the directory name. The first
+  phase is the capture target; the last is terminal (only humans move
+  tickets into it).
+- `title`: board column header.
+- `wip`: optional integer. Over-limit shows red on the board
+  (`4/3`); it warns, it does not block a human.
+- `claim`: optional `true` — entering this phase stamps the claim
+  fields.
+- `handover`: what must happen for a ticket to LEAVE this phase:
+  `manual` (a human moves it), `agent <prompt-ref>` (the fleet runs
+  prompt `<prompt-ref>` and the runner moves it on success),
+  `ci` (an executable check passes — milestone 85), `none` (terminal).
+  Milestone 83 parses and displays these; `agent`/`ci` act from M84/M85.
+- Editing this file is the owner's; the board re-reads it on every
+  refresh. Unknown keys in a phase entry are ignored.
+
+**Agent lane rules** (enforced by the runner, not the board — the
+board serves the human): an agent takes only the top of the pinned
+`prioritized` queue that is available (unclaimed), moves a ticket
+exactly one column forward per transition, never across a `manual`
+handover, never backwards, never into the last phase.
+
+## `_meta/order.md` — sparse order pins
+
+```markdown
+# Column order pins — listed ids form the top of their column
+
+## prioritized
+
+- T-0042
+- T-0019
+
+## build
+
+- T-0007
+```
+
+A section per phase (only phases that have pins; only pinned ids —
+that is the sparseness). Column order = pinned ids in listed order
+first, then unpinned ids in derived order. A drag within a column pins
+everything above and including the drop position. Unknown ids in a
+section are ignored with a noise badge. Two branches adding different
+pins union on merge; a text conflict is resolved by hand, union
+semantics. Rank collisions in derived order fall back to
+`entered-<phase>`, then id.
+
+## `_meta/repos.md` — work repositories
+
+```markdown
+---
+repos:
+  drey:
+    url: https://github.com/HenrikPuls/Drey.git
+    branch: main
+    path: E:/projects/Drey-m83
+  lariscus:
+    url: https://dev.azure.com/org/project/_git/lariscus
+    branch: main
+    policy: Azure DevOps branch policies protect main
+---
+Prose for humans.
+```
+
+`url` is any git remote (or a local path for a repo that only lives
+on this machine); `branch` is the integration branch the ticket branch
+forks from and merges into; `policy` is a free-text note recording
+which protection exists (ADR-0075: hosts are interchangeable, the
+fleet never calls a host API). `path` is the **local checkout /
+worktree** where the repo's work is tested — the board's card context
+menu opens a terminal there ("Open work folder in terminal": run
+`.\dev.ps1`, the repo's build, whatever it uses). Names are unique; a
+ticket's `repo:` must name one of them once it is in a work phase.
+
+## Validation (where it runs, what it checks)
+
+There is **no CI on the tickets repository** (owner's ruling,
+ADR-0076). The one deterministic validator runs where the data is
+read: the board on every render (issues are badges on the card and the
+column; the board still renders), the fleet runner before every action
+(refuses an erroneous ticket). Checks, all deterministic:
+
+1. id grammar; id = filename stem; no id in two phases.
+2. Required fields present (`id`, `title`, `priority`); enums valid;
+   timestamps parse; `run` map shape.
+3. `branch` matches `t/<id>` (rule wins; mismatch = badge).
+4. Phase directory ∈ `pipeline.md` phases (tickets in an unknown
+   folder render in a trailing "unknown" column — visible, not lost).
+5. `entered-<phase>` keys reference known phases (unknown keys =
+   noise badge).
+6. `claimed-by` grammar; `claimed-at` present with `claimed-by`.
+7. `repo` (when present) resolves in `repos.md`.
+8. `order.md` sections reference known phases and live ids.
+9. Leaving `plan-review` without acceptance criteria = issue on the
+   ticket (the board shows it; the runner enforces it from M84).
+
+A validation issue never blocks rendering and never blocks a human
+transition (a warning shows); it blocks an agent action.

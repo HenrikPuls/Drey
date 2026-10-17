@@ -123,6 +123,15 @@ save-before-exit prompt.
   app's userData, never in the vault; app config and API keys likewise.
   In a Git vault the app runs the installed `git` and adds no files of its own.
 
+## Ticket repositories (separate repo, own format)
+
+A vault can be a dedicated **tickets repository** (ADR-0076): one
+Markdown file per kanban ticket, phase = directory, transitions as git
+moves, configured through `tickets/_meta/pipeline.md`. That format has
+its own complete specification in [`ticket-schema.md`](ticket-schema.md);
+only the YAML conventions above (quoted dates, LF) carry over — ticket
+files are not notes, and none of the note frontmatter fields apply.
+
 ## Structural folders
 
 - `daily/` — default root of the daily notes (`daily/<year>/<month>/…`;

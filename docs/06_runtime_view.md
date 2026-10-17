@@ -3102,7 +3102,7 @@ sequenceDiagram
     GH-->>EU: version + sha512 + file list
     alt no newer x.y.z version / check failed
         EU-->>US: not-available / error
-        Note over US: startup: silent — log only (ADR-0074);<br/>a manual check's "up to date" is green<br/>inline text instead of a dialog (req-45)
+        Note over US: startup: silent ï¿½ log only (ADR-0074);<br/>a manual check's "up to date" is green<br/>inline text instead of a dialog (req-45)
     else newer version, not `updates.skippedVersion`
         EU-->>US: update-available (0.7.0)
         US-->>User: native dialog: Download / Skip this version / Remind me later
@@ -3116,13 +3116,13 @@ sequenceDiagram
             EU-->>US: update-downloaded
             US-->>User: native dialog: Install and restart / Later
             opt Install and restart
-                US->>WH: window.close() — the ordinary path
+                US->>WH: window.close() ï¿½ the ordinary path
                 WH->>R: exit:confirm-request (bug-5)
                 R-->>WH: save / discard (a cancel leaves everything as it was)
                 WH->>Main: window closed -> app.quit()
                 Main->>US: finishQuit() at will-quit (one-shot)
                 US->>EU: quitAndInstall(false, true)
-                EU->>User: NSIS installer (assisted, per-user) — installs + relaunches Drey
+                EU->>User: NSIS installer (assisted, per-user) ï¿½ installs + relaunches Drey
                 Note over Main: the fresh instance takes the single-instance lock
             end
         end
@@ -3132,5 +3132,42 @@ sequenceDiagram
 The renderer never touches the network: it triggers (`update:check`,
 `update:download`, `update:install`) and displays the pushed status over
 `shared/ipc/updates.ts`. A dev run, a non-Windows platform and the
-portable exe never construct the updater at all — they report
+portable exe never construct the updater at all ï¿½ they report
 `unsupported` and offer the releases page instead.
+
+## 6.64 A ticket moves: board snapshot, drag & drop, the one-commit transition (milestone 83, [ADR-0075](09_architecture_decisions/0075-agent-fleet-architecture-governance-and-run-control.md), [ADR-0076](09_architecture_decisions/0076-ticket-repository-format-and-coordination.md))
+
+```mermaid
+sequenceDiagram
+    participant P as Tickets panel (renderer)
+    participant B as BoardService (plugin main)
+    participant V as VaultManager (base)
+    participant G as installed git
+
+    Note over P,B: mount / vault round / ticket save ï¿½ all three end in the same pull
+    P->>B: invoke("board")
+    B->>V: listVaults() ï¿½ find the vault with tickets/_meta/pipeline.md
+    B->>V: read pipeline.md, order.md, repos.md, listMarkdownFiles()
+    B->>V: read every tickets/<phase>/<id>.md
+    B-->>P: BoardSnapshot (columns, order, issues ï¿½ derived, nothing stored)
+
+    Note over P,G: drag T-0042 from inbox onto build (drop index 1)
+    P->>B: invoke("transition", {id, from: inbox, to: build, index: 1})
+    B->>B: queue ï¿½ re-resolve: T-0042 still in inbox?
+    B->>V: read the ticket file
+    B->>B: patch ï¿½ stamp entered-build, claim owner@host, Log line, clear parked
+    B->>V: fs.rename old â†’ new (tickets/build/), write patched content
+    B->>B: rewrite order.md ï¿½ id leaves every section, pins above the drop
+    B->>V: announceChanges (changed + deleted paths ï¿½ tree, indexes, tabs reload)
+    B->>G: add -- <old> <new> <order.md> ï¿½ commit -m "tickets: T-0042 inbox -> build" -- <paths>
+    B-->>P: { ok } ï¿½ board-changed (debounced) ï¿½ the panel re-pulls
+```
+
+The claim fields and the WIP count are consequences of the same file
+move: entering a `claim: true` phase stamps `claimed-by`/`claimed-at`
+(the push compare-and-swap of ADR-0076 is plain git once the tickets
+repo has a remote ï¿½ the losing pusher re-reads and picks the next
+ticket). A drag within one column is the same dance minus the move:
+only `order.md`'s section is rewritten (pins = the cards above and
+including the drop). No git repository â†’ the move still happens, the
+board warns "not versioned", and the commit step is skipped.
