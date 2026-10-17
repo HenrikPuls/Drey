@@ -47,7 +47,7 @@ Open work only. Everything implemented lives in
 lives in [`decisions.md`](decisions.md). When an item ships, move it to the
 changelog and delete it here — no shipped history on this page.
 
-**Status (2026-10-17):** version 0.6.0, milestones 1–82 shipped —
+**Status (2026-10-17):** version 0.7.0, milestones 1–82 shipped —
 milestone 82 (auto-update from GitHub Releases, ADR-0074) is code-
 complete and awaits the owner's manual verification (the installer-flow
 checklist in `docs/07`). The
