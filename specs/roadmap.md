@@ -47,7 +47,7 @@ Open work only. Everything implemented lives in
 lives in [`decisions.md`](decisions.md). When an item ships, move it to the
 changelog and delete it here — no shipped history on this page.
 
-**Status (2026-10-17):** version 0.7.0, milestones 1–82 shipped —
+**Status (2026-10-17):** version 0.7.1, milestones 1–82 shipped —
 milestone 82 (auto-update from GitHub Releases, ADR-0074) is code-
 complete and awaits the owner's manual verification (the installer-flow
 checklist in `docs/07`). The
@@ -55,9 +55,9 @@ owner's verification round for 1–81 closed 2026-10-17: every "not yet manually
 verified" marker in the changelog is cleared, the bug-11 fix included.
 Milestone
 ids are assigned when work starts — check `changelog.md` for the
-highest used (latest: milestone 82; latest requirement id: req-43,
-CI stores the exes only for tags and manual runs — an owner request
-outside the list, shipped in the same step).
+highest used (latest: milestone 82; latest requirement id: req-45,
+the update check's positive answer is inline text — req-43's CI change
+was an owner request outside the list, shipped in the same step).
 Items A1–A5 of the architectural cleanup shipped on 2026-10-13, and
 A10–A12 on 2026-10-17 (changelog); A6–A9 remain.
 

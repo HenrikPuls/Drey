@@ -906,10 +906,12 @@ and the personal word list.
   off to keep the app entirely offline.
 - **Status** — the current version, a *Check for updates* button (same
   as the Help menu), the download progress, and *Install and restart*
-  once an update is downloaded. Installing closes Drey — unsaved tabs go
-  through the usual save-before-exit prompt — and the installer
-  relaunches the app when done. Windows may show its SmartScreen warning
-  before the installer starts (the exes are unsigned).
+  once an update is downloaded. When this already is the newest release,
+  the status line shows it in green — no dialog. Installing closes
+  Drey — unsaved tabs go through the usual save-before-exit prompt — and
+  the installer relaunches the app when done. Windows may show its
+  SmartScreen warning before the installer starts (the exes are
+  unsigned).
 - A version you answered **Skip this version** to is listed with an *Ask
   about it again* link; the startup prompt stays silent for exactly that
   version, a manual check always reports.
@@ -943,8 +945,9 @@ The **Help** menu in the title bar has everything:
   matches the command palette, because it is built from the same
   registry at the moment you open it.
 - **Check for updates** — looks for a newer Drey release now (see
-  [Settings → Updates](#settings-updates)); the result is a dialog, and
-  downloading still asks first.
+  [Settings → Updates](#settings-updates)). A new version asks before it
+  downloads; when this already is the newest release, a short green note
+  in the status bar says so — no dialog.
 - **About Drey** — version, build number and licence information (the
   same page as Settings → *About*).
 
@@ -1032,7 +1035,7 @@ history store is deliberately outside it).
 
 ---
 
-*Manual for Drey 0.7.0; manual content last changed
+*Manual for Drey 0.7.1; manual content last changed
 2026-10-17. Screenshots were captured automatically from
 the built app (Anthrazit theme, 1600×1000) by
 `e2e/manual-screenshots.spec.ts` — run
