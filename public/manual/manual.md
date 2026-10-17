@@ -701,7 +701,12 @@ a priority, optionally a repository and a description land as
 `T-00xx.md` in the inbox. Click a card to open the ticket file — it is
 an ordinary note (description, plan, executable acceptance criteria and
 an append-only log). Drag cards between columns to move them through
-the pipeline; drag within a column to pin an order. The context menu
+the pipeline; drag within a column to pin an order. **Fold a column**
+with the chevron in its head: it shrinks to a narrow strip carrying
+the count and the title rotated sideways — click the strip, or drag a
+card onto it, to unfold it again. Which columns stay folded is
+remembered across restarts (it is view state, never written to the
+repo). The context menu
 (right-click a card) opens the file, copies the deterministic branch
 name `t/T-00xx` for the work repository, and takes over or releases a
 claim. Over-WIP columns show a red count; validation findings (a
