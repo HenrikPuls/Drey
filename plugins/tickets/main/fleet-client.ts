@@ -39,10 +39,11 @@ export class FleetClient {
 
   constructor(private readonly opts: FleetClientOpts) {}
 
-  /** All runs, newest first; `[]` when the runner is down (never throws). */
+  /** All runs, newest first; `[]` when no runner is alive (never throws,
+   *  never spawns — the runner comes up on `start` only). */
   async runs(): Promise<readonly RunInfo[]> {
     try {
-      if (!(await this.ensureRunner())) {
+      if (!(await this.withRunner())) {
         return [];
       }
       const data = await this.get<{ runs: RunInfo[] }>('/status');
@@ -66,14 +67,14 @@ export class FleetClient {
   }
 
   async stop(runId: string, reason: string | null): Promise<{ ok: boolean; error?: string }> {
-    if (!(await this.ensureRunner())) {
+    if (!(await this.withRunner())) {
       return { ok: false, error: 'the fleet runner is not running' };
     }
     return this.post<{ ok: boolean; error?: string }>('/stop', { runId, reason });
   }
 
   async send(runId: string, text: string): Promise<{ ok: boolean; error?: string; rung?: string }> {
-    if (!(await this.ensureRunner())) {
+    if (!(await this.withRunner())) {
       return { ok: false, error: 'the fleet runner is not running' };
     }
     return this.post<{ ok: boolean; error?: string; rung?: string }>('/send', { runId, text });
@@ -82,7 +83,7 @@ export class FleetClient {
   /** The run's stream so far (the watch view's text), or null. */
   async stream(runId: string): Promise<string | null> {
     try {
-      if (!(await this.ensureRunner())) {
+      if (!(await this.withRunner())) {
         return null;
       }
       const res = await fetch(`${this.base()}/stream/${encodeURIComponent(runId)}`, {
@@ -111,7 +112,8 @@ export class FleetClient {
     return { Authorization: `Bearer ${this.descriptor?.token ?? ''}` };
   }
 
-  /** Descriptor file → health check → spawn the sibling when both fail. */
+  /** Descriptor file → health check → spawn the sibling when both fail.
+   *  Spawn-capable: only `start` may bring the runner up. */
   private async ensureRunner(): Promise<boolean> {
     if (this.descriptor !== null && (await this.alive(this.descriptor))) {
       return true;
@@ -121,6 +123,15 @@ export class FleetClient {
       return true;
     }
     return this.spawnRunner();
+  }
+
+  /** Read-only adoption: talk to a runner that is already alive, never spawn. */
+  private async withRunner(): Promise<boolean> {
+    if (this.descriptor !== null && (await this.alive(this.descriptor))) {
+      return true;
+    }
+    this.descriptor = await this.readDescriptor();
+    return this.descriptor !== null && (await this.alive(this.descriptor));
   }
 
   private async spawnRunner(): Promise<boolean> {
