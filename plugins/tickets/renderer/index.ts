@@ -18,6 +18,7 @@ import {
   type MutationResult,
   type TicketCard,
 } from '../shared/tickets';
+import { createColumnCollapseStore } from './column-collapse';
 
 /** The doc-kind tab key of the board view (never a vault path). */
 const BOARD_TAB_KEY = 'tickets://board';
@@ -64,6 +65,10 @@ interface BoardView {
 
 const views = new Set<BoardView>();
 
+/** Which phases are folded to their narrow strip (T-0005) — one state
+ *  for every view, persisted as pure view state (never in the repo). */
+const collapse = createColumnCollapseStore(window.localStorage);
+
 const notifyViews = (): void => {
   for (const view of views) {
     view.render();
@@ -79,6 +84,8 @@ function refreshBoard(): Promise<void> {
   inFlight = (async () => {
     try {
       snapshot = (await invokeBoard('board')) as BoardSnapshot;
+      // Drop persisted fold state of phases that no longer exist.
+      collapse.prune(snapshot.columns.map((column) => column.phase.id));
       note = '';
     } catch (error) {
       note = messageOf(error);
@@ -256,20 +263,60 @@ function cardNode(api: DreyPluginApi, card: TicketCard, column: BoardColumn): HT
   return node;
 }
 
+/** Column head / strip count text: plain, or `n/wip` against a limit. */
+const countText = (column: BoardColumn): string =>
+  column.phase.wip === null
+    ? String(column.tickets.length)
+    : `${column.tickets.length}/${column.phase.wip}`;
+
+const isOverWip = (column: BoardColumn): boolean =>
+  column.phase.wip !== null && column.tickets.length > column.phase.wip;
+
+/** A column folded to its narrow strip (T-0005): the count and the
+ *  title rotated 90°, so eight folded phases cost a sliver of width.
+ *  One click — or a dragged card hovering it — unfolds the column. */
+function collapsedColumnNode(column: BoardColumn): HTMLElement {
+  const node = el('section', 'tickets-col tickets-collapsed');
+  node.dataset['phase'] = column.phase.id;
+
+  const count = countText(column);
+  const strip = el('button', 'tickets-col-strip');
+  strip.type = 'button';
+  strip.title = `Expand "${column.phase.title}" — ${count} ticket${column.tickets.length === 1 ? '' : 's'}`;
+  strip.setAttribute('aria-label', strip.title);
+  const countEl = el('span', 'tickets-col-count', count);
+  if (isOverWip(column)) {
+    countEl.classList.add('tickets-col-over');
+  }
+  strip.append(countEl, el('span', 'tickets-col-strip-title', column.phase.title));
+  const expand = (): void => {
+    collapse.setCollapsed(column.phase.id, false);
+    notifyViews();
+  };
+  strip.addEventListener('click', expand);
+  strip.addEventListener('dragover', (event) => {
+    if (draggedId === null) {
+      return;
+    }
+    event.preventDefault();
+    expand(); // unfolding makes the drop target reachable mid-drag
+  });
+  node.append(strip);
+  return node;
+}
+
 function columnNode(api: DreyPluginApi, column: BoardColumn): HTMLElement {
+  if (collapse.isCollapsed(column.phase.id)) {
+    return collapsedColumnNode(column);
+  }
+
   const node = el('section', 'tickets-col');
   node.dataset['phase'] = column.phase.id;
 
   const head = el('div', 'tickets-col-head');
   head.append(el('span', 'tickets-col-title', column.phase.title));
-  const count = el(
-    'span',
-    'tickets-col-count',
-    column.phase.wip === null
-      ? String(column.tickets.length)
-      : `${column.tickets.length}/${column.phase.wip}`,
-  );
-  if (column.phase.wip !== null && column.tickets.length > column.phase.wip) {
+  const count = el('span', 'tickets-col-count', countText(column));
+  if (isOverWip(column)) {
     count.classList.add('tickets-col-over');
     count.title = `WIP limit ${column.phase.wip} exceeded`;
   }
@@ -284,6 +331,16 @@ function columnNode(api: DreyPluginApi, column: BoardColumn): HTMLElement {
     handover.title = 'Agents handle this handover (from milestone 84)';
     head.append(handover);
   }
+  const fold = el('button', 'tickets-col-fold');
+  fold.type = 'button';
+  fold.title = 'Collapse column to a strip';
+  fold.setAttribute('aria-label', `Collapse the "${column.phase.title}" column`);
+  fold.append(api.ui.icon('chevron-left', 12));
+  fold.addEventListener('click', () => {
+    collapse.setCollapsed(column.phase.id, true);
+    notifyViews();
+  });
+  head.append(fold);
   node.append(head);
 
   const list = el('div', 'tickets-col-list');

@@ -175,6 +175,52 @@
   padding: 2px 0;
 }
 
+/* A folded column (T-0005): a narrow strip carrying the count and the
+ * title rotated 90°, so folded phases cost a sliver of width. One
+ * click — or a dragged card hovering it — unfolds the column. */
+
+.tickets-col.tickets-collapsed {
+  flex: 0 0 26px;
+  padding: 8px 0;
+}
+
+.tickets-col-strip {
+  flex: 1;
+  min-height: 0;
+  writing-mode: vertical-rl;
+  border: 0;
+  background: transparent;
+  color: var(--text-3);
+  font: inherit;
+  font-size: 0.72rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-align: center;
+  cursor: pointer;
+}
+
+.tickets-col-strip:hover {
+  color: var(--text-2);
+}
+
+/* The collapse affordance in the expanded column head. */
+
+.tickets-col-fold {
+  flex: none;
+  display: inline-flex;
+  padding: 1px;
+  border: 0;
+  border-radius: var(--radius-xs);
+  background: transparent;
+  color: var(--text-5);
+  cursor: pointer;
+}
+
+.tickets-col-fold:hover {
+  background: var(--hover-bg);
+  color: var(--text-2);
+}
+
 /* Drop markers: a line above the insertion card, or at the list end. */
 
 .tickets-insert-above {

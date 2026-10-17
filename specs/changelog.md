@@ -90,6 +90,14 @@ a cmd fallback, detached, outliving the app). On the ticket branches
 `t/T-0002` / `t/T-0001` / `t/T-0004`, fast-forwarded onto the
 integration branch.
 
+**Second board round (2026-10-17, tickets T-0005/T-0006):** the board's
+columns **fold to a narrow strip** (T-0005) — the count and the title
+rotated 90°, the head chevron folds, one click on the strip (or a
+dragged card hovering it) unfolds, and which columns stay folded
+persists as view state in `localStorage['drey.tickets']` (the
+tasks-panel pattern; never in the tickets repo — ADR-0076). Folding
+`done` and empty phases is how all eight columns fit the dock panel.
+
 ### req-45 — the positive update-check answer is inline green text, not a dialog
 
 An owner request, outside the list (2026-10-17, on top of milestone 82).
