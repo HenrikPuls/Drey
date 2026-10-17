@@ -3,12 +3,14 @@
  * CLI, each normalizing to the same handle — start, steer (the ladder's
  * best rung), stop, and normalized stream events for the run log.
  *
- * - `opencode` drives `opencode serve` (v2) bound to loopback and talks
- *   its HTTP API: a prompt POST into the running session is the native
- *   injection rung, `abort` the soft stop, and assistant messages carry
- *   tokens and cost for the Tickets panel footer. Progress is POLLED,
- *   not streamed — v1's event stream dropped mid-turn, and the runner
- *   must not care which generation it found.
+ * - `opencode` drives `opencode serve` (v2, pinned against v2.0.32) bound
+ *   to loopback: the server prints its BASIC credential on stdout, a
+ *   prompt POST queues the turn (delivery `steer` while one is live — the
+ *   native injection rung), `interrupt` is the soft stop, and the session
+ *   object carries cumulative tokens and cost for the Tickets panel
+ *   footer. Progress is POLLED, not streamed — v1's event stream dropped
+ *   mid-turn, and the runner must not care which generation it found; the
+ *   message list's `idle` marker ends the turn.
  * - `claude-code` drives the CLI over stream-json: stdin is held open
  *   (`--input-format stream-json`), so injection writes a user message
  *   in; resume is `--resume <sessionRef>`.
@@ -169,18 +171,47 @@ export function claudeCodeAdapter(spawnFn: SpawnFn, now: NowFn = (): Date => new
 }
 
 // ---------------------------------------------------------------------------
-// opencode — v2 server API over loopback
+// opencode — v2 server API over loopback (pinned against v2.0.32)
+
+interface OcUsage {
+  readonly input?: number;
+  readonly output?: number;
+  readonly cache?: { readonly read?: number; readonly write?: number };
+}
+
+interface OcContentPart {
+  readonly type?: string;
+  readonly text?: string;
+}
+
+/** One message-list item — FLAT in v2 (no v1-style `info` wrapper). */
+interface OcMessage {
+  readonly id?: string;
+  readonly type?: string;
+  readonly content?: ReadonlyArray<OcContentPart>;
+  readonly tokens?: OcUsage;
+  readonly cost?: number;
+  readonly time?: { readonly created?: number; readonly completed?: number };
+}
+
+interface OcSession {
+  readonly cost?: number;
+  readonly tokens?: OcUsage;
+}
 
 /**
- * The v2 surface the adapter speaks. The owner's live spike round pins
- * these against the installed binary; they live here so correcting the
- * fleet is a one-file change.
+ * The v2 surface the adapter speaks, pinned by the owner's spike against
+ * v2.0.32: the server prints `server password <token>` on stdout, every
+ * request carries HTTP BASIC auth (`opencode:<token>`), responses wrap in
+ * `{data}`, and a turn ends with an `idle` message in the list.
  */
 export const OPENCODE_API = {
-  health: '/global/health',
-  createSession: '/session',
-  messages: (id: string): string => `/session/${id}/message`,
-  abort: (id: string): string => `/session/${id}/abort`,
+  info: '/api/info',
+  createSession: '/api/session',
+  session: (id: string): string => `/api/session/${id}`,
+  prompt: (id: string): string => `/api/session/${id}/prompt`,
+  messages: (id: string): string => `/api/session/${id}/message`,
+  interrupt: (id: string): string => `/api/session/${id}/interrupt`,
 } as const;
 
 export function opencodeAdapter(
@@ -196,17 +227,26 @@ export function opencodeAdapter(
     spawn(start) {
       const state = {
         sessionRef: start.resumeRef,
+        alive: true,
         tokensIn: 0,
         tokensOut: 0,
         costUsd: null as number | null,
-        password: `fleet-${Math.random().toString(36).slice(2)}`,
-        alive: true,
+        startedAt: 0,
+        turnDone: false,
+        ended: false,
+        seenAssistant: new Set<string>(),
+        lastText: '',
       };
       let server: RunnerProcess | null = null;
       let pollTimer: ReturnType<typeof setInterval> | null = null;
 
       const exitResolve = { current: null as ((code: number | null) => void) | null };
+      let finished = false;
       const finish = (code: number | null): void => {
+        if (finished) {
+          return;
+        }
+        finished = true;
         state.alive = false;
         if (pollTimer !== null) {
           clearInterval(pollTimer);
@@ -221,32 +261,100 @@ export function opencodeAdapter(
       let address = '';
       let auth: Record<string, string> = {};
 
-      const pollUsage = async (): Promise<void> => {
-        if (!state.alive || state.sessionRef === null || address === '') {
+      const postPrompt = async (text: string): Promise<void> => {
+        if (state.sessionRef === null || address === '') {
           return;
         }
         try {
-          const res = await fetchFn(`${address}${OPENCODE_API.messages(state.sessionRef)}`, { headers: auth });
+          const res = await fetchFn(`${address}${OPENCODE_API.prompt(state.sessionRef)}`, {
+            method: 'POST',
+            headers: { ...auth, 'content-type': 'application/json' },
+            body: JSON.stringify({ text }),
+          });
           if (!res.ok) {
-            return;
+            start.onEvent({ ts: nowIso(now), kind: 'error', text: `prompt failed: ${res.status}` });
           }
-          const messages = (await res.json()) as Array<{
-            info?: { role?: string; tokens?: { input?: number; output?: number }; cost?: number };
-          }>;
-          for (const m of messages.slice().reverse()) {
-            if (m.info?.role === 'assistant' && m.info.tokens !== undefined) {
-              state.tokensIn = m.info.tokens.input ?? state.tokensIn;
-              state.tokensOut = m.info.tokens.output ?? state.tokensOut;
-              state.costUsd = m.info.cost ?? state.costUsd;
-              start.onEvent({
-                ts: nowIso(now),
-                kind: 'usage',
-                tokensIn: state.tokensIn,
-                tokensOut: state.tokensOut,
-                ...(state.costUsd !== null ? { costUsd: state.costUsd } : {}),
-              });
-              break;
+        } catch (error) {
+          if (state.alive) {
+            start.onEvent({ ts: nowIso(now), kind: 'error', text: String(error).slice(0, 300) });
+          }
+        }
+      };
+
+      /** Text of the message's `text` content parts, trimmed. */
+      const messageText = (m: OcMessage): string =>
+        (m.content ?? [])
+          .filter((part) => part.type === 'text')
+          .map((part) => part.text ?? '')
+          .join('\n')
+          .trim();
+
+      /** One poll round: cumulative usage + stream text + the turn's end. */
+      const pollTurn = async (): Promise<void> => {
+        if (!state.alive || state.sessionRef === null || address === '' || state.turnDone) {
+          return;
+        }
+        try {
+          const res = await fetchFn(`${address}${OPENCODE_API.session(state.sessionRef)}`, { headers: auth });
+          if (res.ok) {
+            const body = (await res.json()) as { data?: OcSession };
+            const s = body.data;
+            if (s !== undefined) {
+              const tokensIn = (s.tokens?.input ?? 0) + (s.tokens?.cache?.read ?? 0);
+              const tokensOut = s.tokens?.output ?? 0;
+              const cost = s.cost ?? null;
+              if (tokensIn !== state.tokensIn || tokensOut !== state.tokensOut || cost !== state.costUsd) {
+                state.tokensIn = tokensIn;
+                state.tokensOut = tokensOut;
+                state.costUsd = cost;
+                start.onEvent({
+                  ts: nowIso(now),
+                  kind: 'usage',
+                  tokensIn,
+                  tokensOut,
+                  ...(cost !== null ? { costUsd: cost } : {}),
+                });
+              }
             }
+          }
+
+          const list = await fetchFn(`${address}${OPENCODE_API.messages(state.sessionRef)}`, { headers: auth });
+          if (list.ok) {
+            const body = (await list.json()) as { data?: OcMessage[] };
+            // The API lists newest first; walk chronologically.
+            for (const m of (body.data ?? []).slice().reverse()) {
+              if (m.type === 'assistant') {
+                if (m.id !== undefined && !state.seenAssistant.has(m.id)) {
+                  state.seenAssistant.add(m.id);
+                  const text = messageText(m);
+                  if (text !== '') {
+                    state.lastText = text;
+                    start.onEvent({ ts: nowIso(now), kind: 'text', text: text.slice(0, 8_000) });
+                  }
+                }
+                if ((m.time?.completed ?? 0) > 0) {
+                  state.lastText = messageText(m) || state.lastText;
+                }
+              }
+              // The server writes the turn's end into the list itself.
+              if (m.type === 'idle' && (m.time?.created ?? 0) >= state.startedAt) {
+                state.turnDone = true;
+              }
+            }
+          }
+
+          if (state.turnDone && !state.ended) {
+            state.ended = true;
+            start.onEvent({
+              ts: nowIso(now),
+              kind: 'result',
+              text: state.lastText.slice(0, 8_000),
+              tokensIn: state.tokensIn,
+              tokensOut: state.tokensOut,
+              ...(state.costUsd !== null ? { costUsd: state.costUsd } : {}),
+            });
+            // The turn is over — the fleet owns the worker process.
+            void server?.killTree();
           }
         } catch {
           // a dropped poll round is noise; the next one catches up
@@ -264,22 +372,15 @@ export function opencodeAdapter(
           if (!state.alive || state.sessionRef === null || address === '') {
             return 'refused';
           }
-          try {
-            await fetchFn(`${address}${OPENCODE_API.messages(state.sessionRef)}`, {
-              method: 'POST',
-              headers: { ...auth, 'content-type': 'application/json' },
-              body: JSON.stringify({ text }),
-            });
-            return 'inject';
-          } catch {
-            return 'refused';
-          }
+          // While a turn is live the server queues the POST with delivery
+          // `steer` — the native injection rung.
+          await postPrompt(text);
+          return 'inject';
         },
         stop: async () => {
-          state.alive = false;
           if (state.sessionRef !== null && address !== '') {
             try {
-              await fetchFn(`${address}${OPENCODE_API.abort(state.sessionRef)}`, { method: 'POST', headers: auth });
+              await fetchFn(`${address}${OPENCODE_API.interrupt(state.sessionRef)}`, { method: 'POST', headers: auth });
             } catch {
               // the tree-kill below is the guarantee
             }
@@ -293,16 +394,56 @@ export function opencodeAdapter(
       void (async (): Promise<void> => {
         const port = await pickPort();
         address = `http://127.0.0.1:${port}`;
-        auth = { Authorization: `Bearer ${state.password}` };
         server = spawnFn(
           'opencode',
-          ['serve', '--hostname', '127.0.0.1', '--port', String(port), '--auto'],
-          { cwd: start.cwd, env: { OPENCODE_SERVER_PASSWORD: state.password } },
+          ['serve', '--hostname', '127.0.0.1', '--port', String(port)],
+          { cwd: start.cwd },
         );
         server.onExit((code) => finish(code));
 
-        // The server answers /global/health once its services are up.
-        const deadline = Date.now() + 60_000;
+        // The server prints its credential on stdout:
+        //   server password <token>
+        const password = await new Promise<string>((resolve, reject) => {
+          let buffer = '';
+          let seen = false;
+          const deadline = Date.now() + 60_000;
+          const tick = setInterval(() => {
+            if (seen) {
+              clearInterval(tick);
+            } else if (!state.alive) {
+              clearInterval(tick);
+              reject(new Error('opencode serve exited before printing the server password'));
+            } else if (Date.now() > deadline) {
+              clearInterval(tick);
+              reject(new Error('opencode serve never printed the server password'));
+            }
+          }, 400);
+          server?.onStdout((chunk) => {
+            if (seen) {
+              return;
+            }
+            buffer += chunk;
+            let at = buffer.indexOf('\n');
+            while (at >= 0) {
+              const line = buffer.slice(0, at).trim();
+              buffer = buffer.slice(at + 1);
+              at = buffer.indexOf('\n');
+              const match = /^server password (\S+)\s*$/.exec(line);
+              if (match !== null) {
+                seen = true;
+                clearInterval(tick);
+                resolve(match[1]!);
+                return;
+              }
+            }
+          });
+        });
+        // v2 speaks HTTP BASIC with the fixed user `opencode`.
+        auth = { Authorization: `Basic ${Buffer.from(`opencode:${password}`).toString('base64')}` };
+
+        // GET /api/info answers once the services are up — the same ping
+        // the official client's health check uses.
+        const deadline = Date.now() + 30_000;
         for (;;) {
           if (!state.alive) {
             await server.killTree();
@@ -310,7 +451,7 @@ export function opencodeAdapter(
             return;
           }
           try {
-            const res = await fetchFn(`${address}${OPENCODE_API.health}`, { headers: auth });
+            const res = await fetchFn(`${address}${OPENCODE_API.info}`, { headers: auth });
             if (res.ok) {
               break;
             }
@@ -320,7 +461,7 @@ export function opencodeAdapter(
           if (Date.now() > deadline) {
             throw new Error('opencode serve did not become ready in time');
           }
-          await new Promise((resolve) => setTimeout(resolve, 400));
+          await new Promise((resolve) => setTimeout(resolve, 300));
         }
         if (!state.alive) {
           await server.killTree();
@@ -334,45 +475,30 @@ export function opencodeAdapter(
             headers: { ...auth, 'content-type': 'application/json' },
             body: JSON.stringify({ title: `fleet ${start.ticketId}` }),
           });
-          const body = (await res.json()) as { id?: string };
-          if (typeof body.id !== 'string') {
+          const body = (await res.json()) as { data?: { id?: string } };
+          const id = body.data?.id;
+          if (typeof id !== 'string') {
             throw new Error('opencode: session create returned no id');
           }
-          state.sessionRef = body.id;
-          start.onSessionRef(body.id);
+          state.sessionRef = id;
+          start.onSessionRef(id);
         }
         start.onEvent({
           ts: nowIso(now),
           kind: 'note',
           text: `opencode serve on 127.0.0.1:${port}, session ${state.sessionRef}`,
         });
+        state.startedAt = now().getTime();
 
-        pollTimer = setInterval(() => void pollUsage(), 2_000);
+        pollTimer = setInterval(() => void pollTurn(), 2_000);
 
-        // The prompt POST resolves when the turn completes — that IS the
-        // run's lifecycle. A steer POST is queued by the server and lands
-        // in the same session (the native injection rung).
-        try {
-          const res = await fetchFn(`${address}${OPENCODE_API.messages(state.sessionRef)}`, {
-            method: 'POST',
-            headers: { ...auth, 'content-type': 'application/json' },
-            body: JSON.stringify({ text: start.instruction }),
-          });
-          const text = await res.text();
-          if (!res.ok) {
-            start.onEvent({
-              ts: nowIso(now),
-              kind: 'error',
-              text: `prompt failed: ${res.status} ${text.slice(0, 300)}`,
-            });
-          }
-        } catch (error) {
-          if (state.alive) {
-            start.onEvent({ ts: nowIso(now), kind: 'error', text: String(error).slice(0, 300) });
-          }
-        }
+        // The prompt POST queues the turn and returns at once; the poll
+        // loop watches the message list for the `idle` end marker.
+        await postPrompt(start.instruction);
       })().catch((error: unknown) => {
-        start.onEvent({ ts: nowIso(now), kind: 'error', text: String(error).slice(0, 400) });
+        if (state.alive) {
+          start.onEvent({ ts: nowIso(now), kind: 'error', text: String(error).slice(0, 400) });
+        }
         finish(-1);
       });
 

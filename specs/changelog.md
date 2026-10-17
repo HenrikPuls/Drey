@@ -49,11 +49,14 @@ rounds on the real tickets repo are the owner's next step.
   + log + one commit), a red one parks the failure in the ticket's Log
   and frees the run slot.
 - **Two worker adapters behind one steer ladder.** OpenCode drives
-  `serve` bound to loopback with a password: a prompt POST into the
-  live session is the native injection rung, `abort` the soft stop,
-  and messages carry the token usage and cost for the footer; progress
-  is polled, not streamed (v1's event stream dropped mid-turn, v2's
-  offset stream is the upgrade path). Claude Code drives the CLI over
+  `serve` bound to loopback — pinned live against v2.0.32: the server
+  prints its BASIC credential (`server password …` on stdout), a prompt
+  POST into the live session is the native injection rung (delivery
+  `steer`), `interrupt` is the soft stop, and the session object
+  carries the token usage and cost for the footer; progress is polled,
+  not streamed, and the message list's `idle` marker ends the turn
+  (v1's event stream dropped mid-turn, v2's offset stream is the
+  upgrade path). Claude Code drives the CLI over
   stream-json: stdin held open for injection, `--resume <sessionRef>`
   as the stop+resume rung. Every steer and stop lands in the ticket's
   Log with its rung.
