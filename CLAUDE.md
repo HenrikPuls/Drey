@@ -724,6 +724,16 @@ Pause after each milestone, show what works, don't push through several
 milestones in one uninterrupted stretch. (Milestones 10, 11, 15 and 19
 were explicit exceptions.)
 
+## Worktrees
+
+Milestone work happens in a git worktree branched off `main` (`git worktree
+add -b <branch> <path> main`, or the agent's worktree tool), so parallel
+sessions never conflict; the session's working directory moves there.
+Everything — code, specs, docs — lands on the worktree's branch; nothing
+touches `main` directly. When the owner declares the work **signed off**,
+the branch is merged back into `main` (ordinary merge, no force-push) and
+the worktree is removed.
+
 ## Working Style — important
 
 This is meant to feel like pair programming, not a silent code generator:
