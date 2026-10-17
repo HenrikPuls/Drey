@@ -47,7 +47,7 @@ describe('collectWords', () => {
     expect(words('```\nnixwort\n```\n\nEcht')).toEqual(['Echt']);
     expect(words('[Text](./nixwort.md)')).toEqual(['Text']);
     expect(words('<!-- drey:src nixwort -->\nEcht')).toEqual(['Echt']);
-    expect(words('mail an puls@newgraphic.de heute')).toEqual(['mail', 'an', 'heute']);
+    expect(words('mail an puls@example.test heute')).toEqual(['mail', 'an', 'heute']);
   });
 
   it('skips extended-dialect syntax, not the prose around it (milestone 72)', () => {
