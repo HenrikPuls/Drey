@@ -3,7 +3,7 @@ import { defaultToolsConfig } from '../../shared/app-config';
 import type { ToolSpec } from '../../shared/llm';
 import type { LlmChatOptions } from '../llm';
 import type { VaultCallOptions } from '../mcp';
-import { buildLlmContext, runVaultTool } from './plugin-context';
+import { assistantVaultOptions, buildLlmContext, buildVaultContext, runVaultTool } from './plugin-context';
 
 /**
  * What a plugin's `ctx.llm.chat` hands the provider (ADR-0071): the merged
@@ -204,5 +204,153 @@ describe('runVaultTool', () => {
       /^Error: the arguments of vault_read are not valid JSON/,
     );
     expect(call).not.toHaveBeenCalled();
+  });
+});
+
+describe('assistantVaultOptions - what a plugin call hands the base', () => {
+  it('carries origin, protection and the write rule; scope only when set', () => {
+    expect(assistantVaultOptions(undefined, 'confirm')).toEqual({
+      write: 'confirm',
+      origin: 'assistant',
+      protectAppFolders: true,
+    });
+    expect(assistantVaultOptions(['docs'], 'off')).toEqual({
+      scope: ['docs'],
+      write: 'off',
+      origin: 'assistant',
+      protectAppFolders: true,
+    });
+  });
+
+  it('passes files and onChange through only when set', () => {
+    const files = [{ vaultId: 'v1', path: 'note.md' }];
+    const onChange = () => undefined;
+    expect(assistantVaultOptions(undefined, 'confirm', { files })).toMatchObject({ files });
+    expect(assistantVaultOptions(undefined, 'confirm', { files: [] })).not.toHaveProperty('files');
+    expect(assistantVaultOptions(undefined, 'confirm', { onChange })).toMatchObject({ onChange });
+  });
+});
+
+describe('buildVaultContext - the ctx.vault of a plugin', () => {
+  function vaultHarness() {
+    const announcer = {
+      announceExternal: vi.fn(),
+      announceFullRefresh: vi.fn(),
+    };
+    const vaultManager = {
+      listVaults: vi.fn(async () => [{ id: 'v1', name: 'V', active: true }]),
+      readFile: vi.fn(async () => ({ content: 'body' })),
+      writeFile: vi.fn(async () => 42),
+      resolveVaultId: vi.fn((id?: string | null) => id ?? 'active'),
+      deleteEntry: vi.fn(async () => ({ trashed: true })),
+      saveAsset: vi.fn(async () => 'attachments/x.png'),
+      listFiles: vi.fn(async () => ['note.md']),
+      listMarkdownFiles: vi.fn(async () => ['note.md']),
+      resolveAssetPath: vi.fn(() => null),
+      pickSavePath: vi.fn(async () => null),
+    };
+    let subscribed: ((event: unknown) => void) | null = null;
+    const confirmWrite = vi.fn(async (request: { path: string }) => request.path === 'ok.md');
+    const ctx = buildVaultContext(
+      'my-plugin',
+      {
+        vaultManager: vaultManager as never,
+        vaultAnnouncer: () => announcer as never,
+        confirmWrite,
+      },
+      (cb) => {
+        subscribed = cb as never;
+        return () => {
+          subscribed = null;
+        };
+      },
+    );
+    return { ctx, vaultManager, announcer, confirmWrite, subscribed: () => subscribed };
+  }
+
+  it('reads and writes with the plugin id as the history origin', async () => {
+    const h = vaultHarness();
+    await expect(h.ctx.read('a.md', { vaultId: 'v1' })).resolves.toBe('body');
+    expect(h.vaultManager.readFile).toHaveBeenCalledWith('a.md', 'v1');
+    await expect(h.ctx.write('a.md', 'new', { vaultId: 'v1' })).resolves.toBe(42);
+    expect(h.vaultManager.writeFile).toHaveBeenCalledWith('a.md', 'new', 'v1', { origin: 'my-plugin' });
+  });
+
+  it('writeAnnounced resolves the vault and announces the changed path', async () => {
+    const h = vaultHarness();
+    await expect(h.ctx.writeAnnounced('chat/x.md', 'hi')).resolves.toBe(42);
+    expect(h.vaultManager.resolveVaultId).toHaveBeenCalledWith(undefined);
+    expect(h.vaultManager.writeFile).toHaveBeenCalledWith('chat/x.md', 'hi', 'active', {
+      origin: 'my-plugin',
+    });
+    expect(h.announcer.announceExternal).toHaveBeenCalledWith({
+      vaultId: 'active',
+      changedPaths: ['chat/x.md'],
+      deletedPaths: [],
+    });
+  });
+
+  it('delete answers whether it trashed and announces the deletion', async () => {
+    const h = vaultHarness();
+    await expect(h.ctx.delete('old.md', { vaultId: 'v1' })).resolves.toBe(true);
+    expect(h.announcer.announceExternal).toHaveBeenCalledWith({
+      vaultId: 'v1',
+      changedPaths: [],
+      deletedPaths: ['old.md'],
+    });
+  });
+
+  it('confirmWrite marks the request as an assistant overwrite', async () => {
+    const h = vaultHarness();
+    await expect(h.ctx.confirmWrite({ path: 'ok.md' } as never)).resolves.toBe(true);
+    expect(h.confirmWrite).toHaveBeenCalledWith({ path: 'ok.md', mode: 'overwrite', origin: 'assistant' });
+    await expect(h.ctx.confirmWrite({ path: 'no.md' } as never)).resolves.toBe(false);
+  });
+
+  it('confirmWrite answers false when no bridge is wired', async () => {
+    const ctx = buildVaultContext(
+      'my-plugin',
+      { vaultManager: {} as never, vaultAnnouncer: () => null as never, confirmWrite: undefined },
+      () => () => undefined,
+    );
+    await expect(ctx.confirmWrite({ path: 'x.md' } as never)).resolves.toBe(false);
+  });
+
+  it('announceChanges sends an empty round as a full refresh', () => {
+    const h = vaultHarness();
+    h.ctx.announceChanges({ vaultId: 'v1' });
+    expect(h.announcer.announceFullRefresh).toHaveBeenCalledWith('v1');
+    expect(h.announcer.announceExternal).not.toHaveBeenCalled();
+  });
+
+  it('announceChanges splits notes from other files', () => {
+    const h = vaultHarness();
+    h.ctx.announceChanges({
+      vaultId: 'v1',
+      changedPaths: ['a.md', 'b.png'],
+      deletedPaths: ['c.md', 'd.pdf'],
+    });
+    expect(h.announcer.announceExternal).toHaveBeenCalledWith({
+      vaultId: 'v1',
+      changedPaths: ['a.md'],
+      deletedPaths: ['c.md'],
+      otherPaths: ['b.png', 'd.pdf'],
+    });
+  });
+
+  it('hands the change callback to onChanged and unsubscribes', () => {
+    const h = vaultHarness();
+    const cb = () => undefined;
+    const unsub = h.ctx.onChanged(cb);
+    expect(h.subscribed()).toBe(cb);
+    unsub();
+    expect(h.subscribed()).toBeNull();
+  });
+
+  it('lists vaults and markdown files through the manager', async () => {
+    const h = vaultHarness();
+    await expect(h.ctx.listVaults()).resolves.toEqual([{ id: 'v1', name: 'V', active: true }]);
+    await expect(h.ctx.listMarkdownFiles({ vaultId: 'v1' })).resolves.toEqual(['note.md']);
+    expect(h.vaultManager.listMarkdownFiles).toHaveBeenCalledWith('v1');
   });
 });
