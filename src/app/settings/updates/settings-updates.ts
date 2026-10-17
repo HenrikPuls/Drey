@@ -36,7 +36,7 @@ export class SettingsUpdates {
       case 'checking':
         return 'Checking for updates…';
       case 'up-to-date':
-        return `Drey ${status.currentVersion} is up to date.`;
+        return `The latest version (Drey ${status.currentVersion}) is already installed.`;
       case 'available':
         return `Drey ${status.availableVersion} is available.`;
       case 'downloading':
