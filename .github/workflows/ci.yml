@@ -1,8 +1,9 @@
 # CI for Drey (Windows-first, see docs/07_deployment_view.md).
 #
 # One windows-latest job, one build, in pipeline order:
-# lint -> typechecks -> unit tests -> build -> e2e (real Electron app)
-# -> NSIS + portable pack -> packed-app smoke test -> artifacts.
+# lint -> import cycles -> typechecks -> unit tests -> build -> e2e
+# (real Electron app) -> NSIS + portable pack -> packed-app smoke test
+# -> artifacts.
 #
 # Every run builds, packs and smoke-tests the two exes, but only a `v*` tag
 # push or a manual run (Actions -> CI -> Run workflow) uploads them as
@@ -69,11 +70,17 @@ jobs:
       - name: Lint
         run: npm run lint
 
+      - name: Runtime import cycles
+        run: npm run cycles
+
       - name: Typecheck main + shared
         run: node node_modules/typescript/bin/tsc -p electron/tsconfig.json --noEmit
 
       - name: Typecheck main-process specs
         run: node node_modules/typescript/bin/tsc -p electron/tsconfig.spec.json
+
+      - name: Typecheck plugin specs
+        run: node node_modules/typescript/bin/tsc -p tsconfig.plugins.json --noEmit
 
       - name: Typecheck renderer
         run: node node_modules/typescript/bin/tsc -p tsconfig.app.json --noEmit

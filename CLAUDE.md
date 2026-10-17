@@ -69,6 +69,7 @@ toolchain is removable by deleting `.tools/`). Never assume a bare `node`,
   script path**, not by bin-shim name:
   - Typecheck main + shared: `node node_modules/typescript/bin/tsc -p electron/tsconfig.json --noEmit`
   - Typecheck renderer: `node node_modules/typescript/bin/tsc -p tsconfig.app.json --noEmit`
+  - Typecheck plugin specs: `node node_modules/typescript/bin/tsc -p tsconfig.plugins.json --noEmit`
   - Unit tests: `node node_modules/@angular/cli/bin/ng.js test --watch=false`
     (add `--include "src/.../x.spec.ts"` to scope it)
   - Main-process, shared and plugin tests (`electron/**/*.spec.ts`,
@@ -87,6 +88,10 @@ toolchain is removable by deleting `.tools/`). Never assume a bare `node`,
     type-only import counts) plus `no-floating-promises` /
     `no-misused-promises` (a promise meant to run on its own is marked
     `void`)
+  - Runtime import cycles: `node scripts/check-cycles.mjs` — fails with
+    the cycle chain if a runtime edge ever closes a loop again
+    (`import type` and type-only clauses don't count; the compilers erase
+    them)
   - Production renderer build: `node node_modules/@angular/cli/bin/ng.js build --configuration production`
   - Emit the main process: `node node_modules/typescript/bin/tsc -p electron/tsconfig.json`,
     then `node scripts/bundle-preload.mjs` — the main window is sandboxed
@@ -735,3 +740,11 @@ This is meant to feel like pair programming, not a silent code generator:
 - For genuine alternatives with different trade-offs: state the options and
   a recommendation, then wait for confirmation — don't just pick the most
   likely option and run with it unasked.
+- **Ask for rights instead of working around their absence.** When a tool
+  restriction slows the work down — Plan mode's read-only sandbox refusing
+  a scratch file or a plan-directory write, a blocked command, anything
+  where the contorted workaround costs more than the ask — stop and say
+  what is blocked and what access would make it one step (e.g. "let me
+  write a temp analysis script" or "this needs edit rights"). Efficiency
+  beats silently coping; plan sessions here are usually supervised, so
+  prompting the owner is cheap.

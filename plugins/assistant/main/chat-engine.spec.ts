@@ -44,7 +44,7 @@ function makeStore(
 
 const CONFIG: AppConfig = {
   ...DEFAULT_APP_CONFIG,
-  llm: { ...DEFAULT_APP_CONFIG.llm, enabled: true, provider: 'test', model: 'm1' },
+  llm: { ...DEFAULT_APP_CONFIG.llm, enabled: true, provider: 'openai-compat', model: 'm1' },
   tools: {
     ...DEFAULT_APP_CONFIG.tools,
     vault: { write: 'confirm' },
@@ -119,7 +119,7 @@ function makeHarness(overrides?: {
     tasksTool: () => {
       state.tasksCalls += 1;
       return {
-        spec: { name: 'tasks_list', description: 'list tasks', parameters: { type: 'object' } },
+        spec: { name: 'tasks_list', description: 'list tasks', parameters: { type: 'object', properties: {} } },
         run: async () => '',
         query: async () => [],
       };
@@ -169,7 +169,7 @@ describe('ChatEngine scope enforcement (ADR-0069 later change, ADR-0071)', () =>
     await h.engine.ask(askRequest({ vaultScope: 'custom', vaultIds: ['docs'] }));
     // calls[0] is the ask; the fire-and-forget title call may land as a
     // second entry — the assertion only reads the ask's options.
-    expect(h.calls[0].options.vaultToolsScope).toEqual(['docs']);
+    expect(h.calls[0].options['vaultToolsScope']).toEqual(['docs']);
   });
 
   it('arms the host scope even when retrieval throws — the ask still answers', async () => {
@@ -179,7 +179,7 @@ describe('ChatEngine scope enforcement (ADR-0069 later change, ADR-0071)', () =>
       },
     });
     const result = await h.engine.ask(askRequest({ vaultScope: 'custom', vaultIds: ['docs'] }));
-    expect(h.calls[0].options.vaultToolsScope).toEqual(['docs']);
+    expect(h.calls[0].options['vaultToolsScope']).toEqual(['docs']);
     expect(result.outcome.kind).toBe('answer');
   });
 
@@ -200,8 +200,8 @@ describe('ChatEngine scope enforcement (ADR-0069 later change, ADR-0071)', () =>
     expect(system).not.toContain('tasks_list');
     expect(system).not.toContain('template_list');
     expect(system).toContain('- vault_list, vault_search, vault_read');
-    expect(h.calls[0].options.vaultTools).toBe(true);
-    expect(h.calls[0].options.vaultToolsScope).toEqual(['docs']);
+    expect(h.calls[0].options['vaultTools']).toBe(true);
+    expect(h.calls[0].options['vaultToolsScope']).toEqual(['docs']);
   });
 
   it('keeps the aux tools when the scope includes the active vault', async () => {
@@ -209,7 +209,7 @@ describe('ChatEngine scope enforcement (ADR-0069 later change, ADR-0071)', () =>
       retrieve: async () => ({ hits: [], unavailable: true }),
     });
     await h.engine.ask(askRequest({ vaultScope: 'all' }));
-    expect(h.calls[0].options.vaultToolsScope).toEqual(['test', 'docs']);
+    expect(h.calls[0].options['vaultToolsScope']).toEqual(['test', 'docs']);
     expect(h.tasksCalls).toBe(1);
     expect(h.templatesCalls).toBe(1);
     const system = h.calls[0].messages[0]?.content ?? '';
@@ -220,11 +220,11 @@ describe('ChatEngine scope enforcement (ADR-0069 later change, ADR-0071)', () =>
   it('does not arm a scope and adds no scope notes when the chip is off', async () => {
     const h = makeHarness();
     await h.engine.ask(askRequest({ vaultScope: 'off' }));
-    expect(h.calls[0].options.vaultToolsScope).toBeUndefined();
+    expect(h.calls[0].options['vaultToolsScope']).toBeUndefined();
     const system = h.calls[0].messages[0]?.content ?? '';
     expect(system).not.toContain('The vault for this question');
     // Chip off: no way into the vault beyond what is attached (ADR-0071).
-    expect(h.calls[0].options.vaultTools).toBeUndefined();
+    expect(h.calls[0].options['vaultTools']).toBeUndefined();
     expect(system).not.toContain('vault_search');
   });
 
@@ -381,8 +381,8 @@ describe('ChatEngine — the attached note through the vault tools (milestone 78
       const h = makeHarness();
       await h.engine.ask(askRequest({ note }));
 
-      expect(h.calls[0].options.vaultToolsFiles).toBeUndefined();
-      expect(h.calls[0].options.vaultTools).toBeUndefined();
+      expect(h.calls[0].options['vaultToolsFiles']).toBeUndefined();
+      expect(h.calls[0].options['vaultTools']).toBeUndefined();
       expect(systemOf(h)).toContain('````document');
     }
   });
@@ -411,7 +411,7 @@ describe('ChatEngine — the attached note through the vault tools (milestone 78
     const h = makeHarness({ caps: { ...CAPS, tools: false } });
     await h.engine.ask(askRequest({ note: NOTE }));
 
-    expect(h.calls[0].options.vaultToolsFiles).toBeUndefined();
+    expect(h.calls[0].options['vaultToolsFiles']).toBeUndefined();
     expect(systemOf(h)).toContain('````document');
     expect(systemOf(h)).not.toContain('vault_edit');
   });

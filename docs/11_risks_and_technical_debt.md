@@ -33,9 +33,10 @@ its own rules say it should. Ordered by value for effort.
 (roadmap items A1–A5; `specs/changelog.md`). The rows stay as the record
 of what was found. Finding 7's possible defect was checked: the fixed
 `templates/daily.md` is what the specs describe, so it stayed. Open:
-4, 5, 8 and 9, plus three follow-ups in the roadmap (plugin specs are
-not typechecked in CI, nothing prevents a new import cycle, the split
-composition root has no unit tests).
+4, 5, 8 and 9, plus one follow-up in the roadmap (the split composition
+root has no unit tests). Two roadmap follow-ups shipped on 2026-10-17:
+the plugin specs are typechecked in CI (`tsconfig.plugins.json`), and
+`npm run cycles` fails on runtime import cycles.
 
 | # | Finding | Evidence | Suggested step |
 |---|---|---|---|
