@@ -1,10 +1,11 @@
 /**
- * The Tickets dock panel (ADR-0076, milestone 83): a kanban board over
- * the tickets vault. Plain DOM (ADR-0044 rule 2); all data comes from
- * `backend.invoke('board')` snapshots — the renderer never parses a
- * ticket file. Interactions: capture through a small modal, phase
- * transitions and order pins through drag & drop, claims through the
- * card context menu.
+ * The Tickets board (ADR-0076, milestone 83): a kanban view over the
+ * tickets vault, mountable in TWO places — the dock panel and a centre
+ * editor tab (`tickets://board`, the browser-tab pattern of ADR-0042,
+ * milestone 83 follow-up T-0002). Plain DOM (ADR-0044 rule 2); all data
+ * comes from `backend.invoke('board')` snapshots — the renderer never
+ * parses a ticket file. One module-level store serves every view; a
+ * view is just a DOM root plus a render call.
  */
 import type { DreyPluginApi, PluginWidgetContrib } from '../../../shared/plugin-api/renderer';
 import {
@@ -16,6 +17,9 @@ import {
   type MutationResult,
   type TicketCard,
 } from '../shared/tickets';
+
+/** The doc-kind tab key of the board view (never a vault path). */
+const BOARD_TAB_KEY = 'tickets://board';
 
 function el<K extends keyof HTMLElementTagNameMap>(
   tag: K,
@@ -39,261 +43,288 @@ const PRIORITY_LABEL: Record<TicketCard['meta']['priority'], string> = {
   low: 'Low',
 };
 
-export function createTicketsWidget(api: DreyPluginApi): PluginWidgetContrib {
-  let snapshot: BoardSnapshot | null = null;
-  let busy = false;
-  let note = '';
+const messageOf = (error: unknown): string =>
+  error instanceof Error ? error.message : String(error);
 
-  const messageOf = (error: unknown): string =>
-    error instanceof Error ? error.message : String(error);
+// --- the shared board store (one snapshot, any number of views) --------
 
-  const refresh = async (): Promise<void> => {
-    busy = true;
-    renderRoots();
+let snapshot: BoardSnapshot | null = null;
+let busy = false;
+let note = '';
+let inFlight: Promise<void> | null = null;
+
+interface BoardView {
+  readonly root: HTMLElement;
+  /** Status-line text for this view ('' hides the line). */
+  readonly status: () => string;
+  render(): void;
+  dispose(): void;
+}
+
+const views = new Set<BoardView>();
+
+const notifyViews = (): void => {
+  for (const view of views) {
+    view.render();
+  }
+};
+
+function refreshBoard(): Promise<void> {
+  if (inFlight !== null) {
+    return inFlight;
+  }
+  busy = true;
+  notifyViews();
+  inFlight = (async () => {
     try {
-      snapshot = (await api.backend.invoke('board')) as BoardSnapshot;
+      snapshot = (await invokeBoard('board')) as BoardSnapshot;
       note = '';
     } catch (error) {
       note = messageOf(error);
     } finally {
       busy = false;
+      inFlight = null;
     }
-    renderRoots();
-  };
+    notifyViews();
+  })();
+  return inFlight;
+}
 
-  const run = async (label: string, invoke: () => Promise<unknown>): Promise<void> => {
-    busy = true;
-    note = `${label}…`;
-    renderRoots();
-    let result: MutationResult;
-    try {
-      result = (await invoke()) as MutationResult;
-    } catch (error) {
-      result = { ok: false, error: messageOf(error) };
-    }
-    if (!result.ok && result.error !== undefined) {
-      note = result.error;
-      busy = false;
-      renderRoots();
-      return;
-    }
-    busy = false;
-    note = result.warning ?? '';
-    await refresh();
-  };
+/** Runs a mutation: busy line, error surfacing, then a fresh pull.
+ *  Returns the backend's result (with `id`/`path` for `create`). */
+async function runMutation(label: string, invoke: () => Promise<unknown>): Promise<MutationResult> {
+  busy = true;
+  note = `${label}…`;
+  notifyViews();
+  let result: MutationResult;
+  try {
+    result = (await invoke()) as MutationResult;
+  } catch (error) {
+    result = { ok: false, error: messageOf(error) };
+  }
+  busy = false;
+  note = result.ok ? (result.warning ?? '') : (result.error ?? '');
+  await refreshBoard();
+  return result;
+}
 
-  // --- drag state (module-local; Chromium wants setData too) -----------
-  let draggedId: string | null = null;
-  let draggedFrom: string | null = null;
-  let insertPhase: string | null = null;
-  let insertAt = 0;
+// `backend` is set in activate(); the helpers above close over it.
+let backend: DreyPluginApi['backend'] | null = null;
 
-  const clearInsert = (): void => {
-    for (const marker of document.querySelectorAll('.tickets-insert-above')) {
-      marker.classList.remove('tickets-insert-above');
-    }
-    for (const marker of document.querySelectorAll('.tickets-insert-end')) {
-      marker.classList.remove('tickets-insert-end');
-    }
-    insertPhase = null;
-  };
+/** The board's IPC seam — one place, typed; activation precedes every call. */
+function invokeBoard(method: string, payload?: unknown): Promise<unknown> {
+  if (backend === null) {
+    return Promise.reject(new Error('the tickets plugin is not active'));
+  }
+  return backend.invoke(method, payload);
+}
 
-  const insertionIndex = (list: HTMLElement, y: number): number => {
-    const cards = [...list.querySelectorAll(':scope > .tickets-card')] as HTMLElement[];
-    for (let i = 0; i < cards.length; i++) {
-      const rect = cards[i]!.getBoundingClientRect();
-      if (y < rect.top + rect.height / 2) {
-        return i;
-      }
-    }
-    return cards.length;
-  };
+/** Opens a ticket file in the editor (the tickets vault, wherever the
+ *  active pane lives — a centre tab like any note). */
+function openTicketFile(api: DreyPluginApi, path: string): void {
+  if (snapshot?.vaultId != null) {
+    void api.documents.open(path, undefined, { vaultId: snapshot.vaultId });
+  }
+}
 
-  const markInsert = (list: HTMLElement, phase: string, y: number): void => {
+// --- drag state (one interaction at a time, shared across views) -------
+
+let draggedId: string | null = null;
+let draggedFrom: string | null = null;
+let insertPhase: string | null = null;
+let insertAt = 0;
+
+const clearInsert = (): void => {
+  for (const marker of document.querySelectorAll('.tickets-insert-above')) {
+    marker.classList.remove('tickets-insert-above');
+  }
+  for (const marker of document.querySelectorAll('.tickets-insert-end')) {
+    marker.classList.remove('tickets-insert-end');
+  }
+  insertPhase = null;
+};
+
+const insertionIndex = (list: HTMLElement, y: number): number => {
+  const cards = [...list.querySelectorAll(':scope > .tickets-card')] as HTMLElement[];
+  for (let i = 0; i < cards.length; i++) {
+    const rect = cards[i]!.getBoundingClientRect();
+    if (y < rect.top + rect.height / 2) {
+      return i;
+    }
+  }
+  return cards.length;
+};
+
+const markInsert = (list: HTMLElement, phase: string, y: number): void => {
+  clearInsert();
+  insertPhase = phase;
+  insertAt = insertionIndex(list, y);
+  const cards = [...list.querySelectorAll(':scope > .tickets-card')] as HTMLElement[];
+  if (insertAt < cards.length) {
+    cards[insertAt]!.classList.add('tickets-insert-above');
+  } else {
+    list.classList.add('tickets-insert-end');
+  }
+};
+
+// --- the board DOM (columns, cards, drag & drop) ------------------------
+
+function cardNode(api: DreyPluginApi, card: TicketCard, column: BoardColumn): HTMLElement {
+  const node = el('article', 'tickets-card');
+  node.draggable = true;
+  node.dataset['id'] = card.id;
+  if (card.pinned) {
+    node.classList.add('tickets-pinned');
+  }
+  if (card.meta.claimedBy !== null) {
+    node.classList.add('tickets-claimed');
+  }
+  if (card.meta.parkedReason !== null) {
+    node.classList.add('tickets-parked');
+  }
+
+  const top = el('div', 'tickets-card-top');
+  top.append(el('span', 'tickets-id', card.id));
+  const dot = el('span', `tickets-prio tickets-prio-${card.meta.priority}`);
+  dot.title = PRIORITY_LABEL[card.meta.priority];
+  top.append(dot);
+  if (card.pinned) {
+    const pin = el('span', 'tickets-mark', 'pinned');
+    pin.title = 'Pinned in order.md';
+    top.append(pin);
+  }
+  if (card.issues.length > 0) {
+    const badge = el('span', 'tickets-issues', String(card.issues.length));
+    const worst = card.issues.some((i) => i.level === 'error')
+      ? 'error'
+      : card.issues.some((i) => i.level === 'warning')
+        ? 'warning'
+        : 'noise';
+    badge.classList.add(`tickets-issues-${worst}`);
+    badge.title = card.issues.map((i) => `[${i.level}] ${i.message}`).join('\n');
+    top.append(badge);
+  }
+  node.append(top);
+
+  node.append(el('div', 'tickets-title', card.meta.title ?? '(untitled)'));
+
+  const meta = el('div', 'tickets-card-meta');
+  if (card.meta.repo !== null) {
+    meta.append(el('span', 'tickets-chip', card.meta.repo));
+  }
+  if (card.meta.parkedReason !== null) {
+    const parked = el('span', 'tickets-chip tickets-chip-parked', 'parked');
+    parked.title = card.meta.parkedReason;
+    meta.append(parked);
+  }
+  if (card.meta.claimedBy !== null) {
+    const claim = el('span', 'tickets-chip tickets-chip-claim', card.meta.claimedBy);
+    claim.title = `claimed ${ageOf(card.meta.claimedAt)} ago`;
+    claim.append(el('span', 'tickets-age', ageOf(card.meta.claimedAt)));
+    meta.append(claim);
+  }
+  node.append(meta);
+
+  node.title = `${card.id} — ${card.meta.title ?? ''}\n${card.path}\nBranch ${branchForTicket(card.id)}`;
+
+  node.addEventListener('click', () => openTicketFile(api, card.path));
+  node.addEventListener('contextmenu', (event) => {
+    event.preventDefault();
+    openCardMenu(api, card, event, runMutation, (path) => openTicketFile(api, path));
+  });
+  node.addEventListener('dragstart', (event) => {
+    draggedId = card.id;
+    draggedFrom = column.phase.id;
+    event.dataTransfer?.setData('text/plain', card.id);
+    if (event.dataTransfer !== null) {
+      event.dataTransfer.effectAllowed = 'move';
+    }
+  });
+  node.addEventListener('dragend', () => {
+    draggedId = null;
+    draggedFrom = null;
     clearInsert();
-    insertPhase = phase;
-    insertAt = insertionIndex(list, y);
-    const cards = [...list.querySelectorAll(':scope > .tickets-card')] as HTMLElement[];
-    if (insertAt < cards.length) {
-      cards[insertAt]!.classList.add('tickets-insert-above');
-    } else {
-      list.classList.add('tickets-insert-end');
-    }
-  };
+  });
+  return node;
+}
 
-  const cardNode = (card: TicketCard, column: BoardColumn): HTMLElement => {
-    const node = el('article', 'tickets-card');
-    node.draggable = true;
-    node.dataset['id'] = card.id;
-    if (card.pinned) {
-      node.classList.add('tickets-pinned');
-    }
-    if (card.meta.claimedBy !== null) {
-      node.classList.add('tickets-claimed');
-    }
-    if (card.meta.parkedReason !== null) {
-      node.classList.add('tickets-parked');
-    }
+function columnNode(api: DreyPluginApi, column: BoardColumn): HTMLElement {
+  const node = el('section', 'tickets-col');
+  node.dataset['phase'] = column.phase.id;
 
-    const top = el('div', 'tickets-card-top');
-    top.append(el('span', 'tickets-id', card.id));
-    const dot = el('span', `tickets-prio tickets-prio-${card.meta.priority}`);
-    dot.title = PRIORITY_LABEL[card.meta.priority];
-    top.append(dot);
-    if (card.pinned) {
-      const pin = el('span', 'tickets-mark', 'pinned');
-      pin.title = 'Pinned in order.md';
-      top.append(pin);
-    }
-    if (card.issues.length > 0) {
-      const badge = el('span', 'tickets-issues', String(card.issues.length));
-      const worst = card.issues.some((i) => i.level === 'error')
-        ? 'error'
-        : card.issues.some((i) => i.level === 'warning')
-          ? 'warning'
-          : 'noise';
-      badge.classList.add(`tickets-issues-${worst}`);
-      badge.title = card.issues.map((i) => `[${i.level}] ${i.message}`).join('\n');
-      top.append(badge);
-    }
-    node.append(top);
+  const head = el('div', 'tickets-col-head');
+  head.append(el('span', 'tickets-col-title', column.phase.title));
+  const count = el(
+    'span',
+    'tickets-col-count',
+    column.phase.wip === null
+      ? String(column.tickets.length)
+      : `${column.tickets.length}/${column.phase.wip}`,
+  );
+  if (column.phase.wip !== null && column.tickets.length > column.phase.wip) {
+    count.classList.add('tickets-col-over');
+    count.title = `WIP limit ${column.phase.wip} exceeded`;
+  }
+  head.append(count);
+  if (column.unknown) {
+    const mark = el('span', 'tickets-col-unknown', 'not in pipeline');
+    mark.title = 'This directory has tickets but pipeline.md does not list it';
+    head.append(mark);
+  }
+  if (column.phase.handover.startsWith('agent')) {
+    const handover = el('span', 'tickets-col-agent', column.phase.handover);
+    handover.title = 'Agents handle this handover (from milestone 84)';
+    head.append(handover);
+  }
+  node.append(head);
 
-    node.append(el('div', 'tickets-title', card.meta.title ?? '(untitled)'));
-
-    const meta = el('div', 'tickets-card-meta');
-    if (card.meta.repo !== null) {
-      meta.append(el('span', 'tickets-chip', card.meta.repo));
-    }
-    if (card.meta.parkedReason !== null) {
-      const parked = el('span', 'tickets-chip tickets-chip-parked', 'parked');
-      parked.title = card.meta.parkedReason;
-      meta.append(parked);
-    }
-    if (card.meta.claimedBy !== null) {
-      const claim = el('span', 'tickets-chip tickets-chip-claim', card.meta.claimedBy);
-      claim.title = `claimed ${ageOf(card.meta.claimedAt)} ago`;
-      claim.append(el('span', 'tickets-age', ageOf(card.meta.claimedAt)));
-      meta.append(claim);
-    }
-    node.append(meta);
-
-    node.title = `${card.id} — ${card.meta.title ?? ''}\n${card.path}\nBranch ${branchForTicket(card.id)}`;
-
-    node.addEventListener('click', () => {
-      if (snapshot?.vaultId != null) {
-        void api.documents.open(card.path, undefined, { vaultId: snapshot.vaultId });
-      }
-    });
-    node.addEventListener('contextmenu', (event) => {
-      event.preventDefault();
-      openCardMenu(api, card, event, snapshot?.vaultId ?? null, run);
-    });
-    node.addEventListener('dragstart', (event) => {
-      draggedId = card.id;
-      draggedFrom = column.phase.id;
-      event.dataTransfer?.setData('text/plain', card.id);
-      if (event.dataTransfer !== null) {
-        event.dataTransfer.effectAllowed = 'move';
-      }
-    });
-    node.addEventListener('dragend', () => {
-      draggedId = null;
-      draggedFrom = null;
-      clearInsert();
-    });
-    return node;
-  };
-
-  const columnNode = (column: BoardColumn): HTMLElement => {
-    const node = el('section', 'tickets-col');
-    node.dataset['phase'] = column.phase.id;
-
-    const head = el('div', 'tickets-col-head');
-    head.append(el('span', 'tickets-col-title', column.phase.title));
-    const count = el(
-      'span',
-      'tickets-col-count',
-      column.phase.wip === null
-        ? String(column.tickets.length)
-        : `${column.tickets.length}/${column.phase.wip}`,
-    );
-    if (column.phase.wip !== null && column.tickets.length > column.phase.wip) {
-      count.classList.add('tickets-col-over');
-      count.title = `WIP limit ${column.phase.wip} exceeded`;
-    }
-    head.append(count);
-    if (column.unknown) {
-      const mark = el('span', 'tickets-col-unknown', 'not in pipeline');
-      mark.title = 'This directory has tickets but pipeline.md does not list it';
-      head.append(mark);
-    }
-    if (column.phase.handover.startsWith('agent')) {
-      const handover = el('span', 'tickets-col-agent', column.phase.handover);
-      handover.title = 'Agents handle this handover (from milestone 84)';
-      head.append(handover);
-    }
-    node.append(head);
-
-    const list = el('div', 'tickets-col-list');
-    for (const card of column.tickets) {
-      list.append(cardNode(card, column));
-    }
-    if (column.tickets.length === 0) {
-      list.append(el('div', 'tickets-col-empty', '—'));
-    }
-    list.addEventListener('dragover', (event) => {
-      if (draggedId === null) {
-        return;
-      }
-      event.preventDefault();
-      markInsert(list, column.phase.id, event.clientY);
-    });
-    list.addEventListener('dragleave', (event) => {
-      if (!list.contains(event.relatedTarget as Node | null)) {
-        clearInsert();
-      }
-    });
-    list.addEventListener('drop', (event) => {
-      event.preventDefault();
-      const id = draggedId ?? event.dataTransfer?.getData('text/plain') ?? null;
-      const from = draggedFrom;
-      const phase = insertPhase ?? column.phase.id;
-      const index = insertAt;
-      draggedId = null;
-      draggedFrom = null;
-      clearInsert();
-      if (id === null || from === null) {
-        return;
-      }
-      if (from === phase) {
-        void run('Reordering', () =>
-          api.backend.invoke('reorder', { phase, id, index }) as Promise<MutationResult>,
-        );
-      } else {
-        void run('Moving', () =>
-          api.backend.invoke('transition', { id, from, to: phase, index }) as Promise<MutationResult>,
-        );
-      }
-    });
-    node.append(list);
-    return node;
-  };
-
-  // --- root render ------------------------------------------------------
-
-  let body: HTMLElement | null = null;
-  let statusEl: HTMLElement | null = null;
-
-  const renderRoots = (): void => {
-    if (statusEl !== null) {
-      statusEl.textContent = busy ? (note || 'Loading…') : note;
-      statusEl.classList.toggle('tickets-note-busy', busy);
-      statusEl.style.display = note === '' && !busy ? 'none' : '';
-    }
-    if (body === null) {
+  const list = el('div', 'tickets-col-list');
+  for (const card of column.tickets) {
+    list.append(cardNode(api, card, column));
+  }
+  if (column.tickets.length === 0) {
+    list.append(el('div', 'tickets-col-empty', '—'));
+  }
+  list.addEventListener('dragover', (event) => {
+    if (draggedId === null) {
       return;
     }
-    const root = body;
+    event.preventDefault();
+    markInsert(list, column.phase.id, event.clientY);
+  });
+  list.addEventListener('dragleave', (event) => {
+    if (!list.contains(event.relatedTarget as Node | null)) {
+      clearInsert();
+    }
+  });
+  list.addEventListener('drop', (event) => {
+    event.preventDefault();
+    const id = draggedId ?? event.dataTransfer?.getData('text/plain') ?? null;
+    const from = draggedFrom;
+    const phase = insertPhase ?? column.phase.id;
+    const index = insertAt;
+    draggedId = null;
+    draggedFrom = null;
+    clearInsert();
+    if (id === null || from === null) {
+      return;
+    }
+    if (from === phase) {
+      void runMutation('Reordering', () => invokeBoard('reorder', { phase, id, index }));
+    } else {
+      void runMutation('Moving', () => invokeBoard('transition', { id, from, to: phase, index }));
+    }
+  });
+  node.append(list);
+  return node;
+}
+
+/** A board view: renders the current snapshot into `root` on demand.
+ *  The empty state (no tickets vault) is part of the view — a board tab
+ *  without a vault shows the same guidance as the panel. */
+function buildBoardView(api: DreyPluginApi): BoardView {
+  const root = el('div', 'tickets-view');
+  const render = (): void => {
     root.textContent = '';
     const snap = snapshot;
     if (snap === null) {
@@ -301,12 +332,12 @@ export function createTicketsWidget(api: DreyPluginApi): PluginWidgetContrib {
       return;
     }
     if (snap.vaultId === null) {
-      root.append(emptyState(api, snap, run));
+      root.append(emptyState(api, snap, runMutation));
       return;
     }
     const board = el('div', 'tickets-board');
     for (const column of snap.columns) {
-      board.append(columnNode(column));
+      board.append(columnNode(api, column));
     }
     root.append(board);
     if (!snap.isGitRepo) {
@@ -322,7 +353,14 @@ export function createTicketsWidget(api: DreyPluginApi): PluginWidgetContrib {
       root.prepend(issues);
     }
   };
+  const view: BoardView = { root, status: () => (busy ? note || 'Loading…' : note), render, dispose: () => undefined };
+  render();
+  return view;
+}
 
+// --- the dock panel -------------------------------------------------------
+
+export function createTicketsWidget(api: DreyPluginApi): PluginWidgetContrib {
   return {
     id: 'tickets',
     title: 'Tickets',
@@ -339,13 +377,6 @@ export function createTicketsWidget(api: DreyPluginApi): PluginWidgetContrib {
       return open > 0 ? `${open} open` : null;
     },
     headerActions: (host) => {
-      const refreshButton = el('button', 'icon-btn');
-      refreshButton.type = 'button';
-      refreshButton.title = 'Refresh the board';
-      refreshButton.setAttribute('aria-label', 'Refresh the board');
-      refreshButton.append(api.ui.icon('refresh-cw', 14));
-      refreshButton.addEventListener('click', () => void refresh());
-
       const newButton = el('button', 'icon-btn');
       newButton.type = 'button';
       newButton.title = 'New ticket';
@@ -353,26 +384,54 @@ export function createTicketsWidget(api: DreyPluginApi): PluginWidgetContrib {
       newButton.append(api.ui.icon('plus', 14));
       newButton.addEventListener('click', () => {
         if (snapshot?.vaultId != null) {
-          openCreateModal(api, snapshot, run);
+          openCreateModal(api, snapshot);
         }
       });
 
-      host.append(newButton, refreshButton);
+      const boardButton = el('button', 'icon-btn');
+      boardButton.type = 'button';
+      boardButton.title = 'Open the board in the editor area';
+      boardButton.setAttribute('aria-label', 'Open the board in the editor area');
+      boardButton.append(api.ui.icon('window', 14));
+      boardButton.addEventListener('click', () => {
+        api.documents.addDoc('tickets-board', BOARD_TAB_KEY, 'Tickets');
+      });
+
+      const refreshButton = el('button', 'icon-btn');
+      refreshButton.type = 'button';
+      refreshButton.title = 'Refresh the board';
+      refreshButton.setAttribute('aria-label', 'Refresh the board');
+      refreshButton.append(api.ui.icon('refresh-cw', 14));
+      refreshButton.addEventListener('click', () => void refreshBoard());
+
+      host.append(newButton, boardButton, refreshButton);
       return () => undefined;
     },
     mount: (panel) => {
       panel.classList.add('tickets-panel');
-      body = panel;
-      statusEl = el('div', 'tickets-note');
-      panel.append(statusEl);
-      const unsubEvents = api.backend.on('board-changed', () => void refresh());
-      const unsubVault = api.vault.onChanged(() => void refresh());
-      void refresh();
+      const statusEl = el('div', 'tickets-note');
+      const view = buildBoardView(api);
+      views.add(view);
+      const renderStatus = (): void => {
+        statusEl.textContent = view.status();
+        statusEl.classList.toggle('tickets-note-busy', busy);
+        statusEl.style.display = statusEl.textContent === '' ? 'none' : '';
+      };
+      const decorated: BoardView = {
+        root: view.root,
+        status: view.status,
+        render: () => {
+          view.render();
+          renderStatus();
+        },
+        dispose: view.dispose,
+      };
+      views.delete(view);
+      views.add(decorated);
+      panel.append(statusEl, view.root);
+      decorated.render();
       return () => {
-        unsubEvents();
-        unsubVault();
-        body = null;
-        statusEl = null;
+        views.delete(decorated);
       };
     },
   };
@@ -383,7 +442,7 @@ export function createTicketsWidget(api: DreyPluginApi): PluginWidgetContrib {
 function emptyState(
   api: DreyPluginApi,
   snap: BoardSnapshot,
-  run: (label: string, invoke: () => Promise<unknown>) => Promise<void>,
+  run: (label: string, invoke: () => Promise<unknown>) => Promise<MutationResult>,
 ): HTMLElement {
   const box = el('div', 'tickets-empty');
   box.append(el('p', undefined, 'No tickets vault detected.'));
@@ -409,7 +468,7 @@ function emptyState(
       button.classList.add('tickets-init-armed');
       return;
     }
-      void run('Initializing', () => api.backend.invoke('initialize', {}));
+    void run('Initializing', () => invokeBoard('initialize', {}));
   });
   if (snap.activeVaultName === null) {
     button.disabled = true;
@@ -419,13 +478,9 @@ function emptyState(
   return box;
 }
 
-// --- the create modal -------------------------------------------------------
+// --- the create modal (opens the new file — T-0001) ------------------------
 
-function openCreateModal(
-  api: DreyPluginApi,
-  snap: BoardSnapshot,
-  run: (label: string, invoke: () => Promise<unknown>) => Promise<void>,
-): void {
+function openCreateModal(api: DreyPluginApi, snap: BoardSnapshot): void {
   const close = api.ui.showModal((host) => {
     const form = el('div', 'tickets-form');
     const title = el('input', 'tickets-form-title') as HTMLInputElement;
@@ -470,29 +525,30 @@ function openCreateModal(
     cancel.addEventListener('click', () => close());
     const create = el('button', 'tickets-form-create', 'Create ticket');
     create.type = 'button';
-    create.addEventListener('click', () => {
+    const submit = (): void => {
       const text = title.value.trim();
       if (text === '') {
         title.focus();
         return;
       }
       close();
-      void run('Creating', () =>
-        api.backend.invoke('create', {
+      void runMutation('Creating', () =>
+        invokeBoard('create', {
           title: text,
           priority: priority.value,
           repo: repo.value === '' ? null : repo.value,
           description: description.value,
         }),
       );
-    });
+    };
+    create.addEventListener('click', submit);
     actions.append(cancel, create);
 
     form.append(title, row, description, actions);
     form.addEventListener('keydown', (event) => {
       if (event.key === 'Enter' && event.target === title) {
         event.preventDefault();
-        create.click();
+        submit();
       }
       if (event.key === 'Escape') {
         close();
@@ -509,8 +565,8 @@ function openCardMenu(
   api: DreyPluginApi,
   card: TicketCard,
   event: MouseEvent,
-  vaultId: string | null,
-  run: (label: string, invoke: () => Promise<unknown>) => Promise<void>,
+  run: (label: string, invoke: () => Promise<unknown>) => Promise<MutationResult>,
+  openFile: (path: string) => void,
 ): void {
   for (const other of document.querySelectorAll('.tickets-menu')) {
     other.remove();
@@ -527,25 +583,21 @@ function openCardMenu(
     menu.append(button);
   };
 
-  item('Open ticket file', () => {
-    if (vaultId !== null) {
-      void api.documents.open(card.path, undefined, { vaultId });
-    }
-  });
+  item('Open ticket file', () => openFile(card.path));
   item(`Copy branch (${branchForTicket(card.id)})`, () => {
     void navigator.clipboard.writeText(branchForTicket(card.id));
   });
   item(
     'Take over claim',
     () => {
-      void run('Taking over', () => api.backend.invoke('claim', { id: card.id, mode: 'takeover' }));
+      void run('Taking over', () => invokeBoard('claim', { id: card.id, mode: 'takeover' }));
     },
     card.meta.claimedBy !== null && card.meta.claimedBy.startsWith('owner@'),
   );
   item(
     'Release claim',
     () => {
-      void run('Releasing', () => api.backend.invoke('claim', { id: card.id, mode: 'release' }));
+      void run('Releasing', () => invokeBoard('claim', { id: card.id, mode: 'release' }));
     },
     card.meta.claimedBy === null,
   );
@@ -570,9 +622,41 @@ function openCardMenu(
   });
 }
 
+// --- activation -------------------------------------------------------------
+
 const plugin: { activate(api: DreyPluginApi): void } = {
   activate(api) {
+    backend = api.backend;
     api.ui.registerWidget(createTicketsWidget(api));
+
+    // The board as a centre editor tab (T-0002, the browser-tab
+    // pattern): full width, session-restorable, stateless.
+    api.ui.registerDocKind({
+      kind: 'tickets-board',
+      serialize: () => null,
+      restore: (path) => api.documents.addDoc('tickets-board', path, 'Tickets'),
+      mount: (tabBody, _path) => {
+        tabBody.classList.add('tickets-docview');
+        const view = buildBoardView(api);
+        views.add(view);
+        tabBody.append(view.root);
+        view.render();
+        return () => {
+          views.delete(view);
+        };
+      },
+      icon: 'layers',
+      statusText: () => {
+        if (snapshot === null || snapshot.vaultId === null) {
+          return null;
+        }
+        return `${snapshot.vaultName ?? 'Tickets'} — ${openTicketCount(snapshot)} open`;
+      },
+    });
+
+    api.backend.on('board-changed', () => void refreshBoard());
+    api.vault.onChanged(() => void refreshBoard());
+    void refreshBoard();
   },
 };
 
