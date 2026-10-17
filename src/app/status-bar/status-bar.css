@@ -32,6 +32,18 @@
   color: var(--text-faint);
 }
 
+/* The transient positive answer of a manual update check (req-45):
+   green inline text instead of a dialog; auto-clears via the service. */
+.update-note {
+  flex: none;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-family: var(--font-sans);
+  font-size: 11.5px;
+  color: var(--status-added);
+}
+
 .settings {
   margin-left: auto;
   flex: none;

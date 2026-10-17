@@ -1,6 +1,7 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { DreyApi } from '../../../shared/ipc-api';
 import { EditorService } from '../services/editor.service';
+import { UpdateService } from '../services/update.service';
 import { StatusBar } from './status-bar';
 
 describe('StatusBar', () => {
@@ -10,7 +11,10 @@ describe('StatusBar', () => {
 
   beforeEach(async () => {
     window.dreyApi = {
-      readVaultFile: () => Promise.resolve({ content: 'one two three', modifiedMs: 1 }),    } as unknown as DreyApi;
+      readVaultFile: () => Promise.resolve({ content: 'one two three', modifiedMs: 1 }),
+      getUpdateStatus: () => Promise.resolve(null),
+      onUpdateStatusChanged: () => () => undefined,
+    } as unknown as DreyApi;
     await TestBed.configureTestingModule({ imports: [StatusBar] }).compileComponents();
     editor = TestBed.inject(EditorService);
     fixture = TestBed.createComponent(StatusBar);
@@ -43,5 +47,19 @@ describe('StatusBar', () => {
     editor.setImageViewport(null);
     fixture.detectChanges();
     expect(el.querySelector('.count')?.textContent?.trim()).toBe('—');
+  });
+
+  it('shows the transient update note as inline text (req-45)', () => {
+    TestBed.inject(UpdateService).notice.set(
+      'The latest version (Drey 0.7.0) is already installed.',
+    );
+    fixture.detectChanges();
+    const note = el.querySelector('.update-note');
+    expect(note?.textContent?.trim()).toContain('already installed');
+  });
+
+  it('shows no update note by default', () => {
+    fixture.detectChanges();
+    expect(el.querySelector('.update-note')).toBeNull();
   });
 });

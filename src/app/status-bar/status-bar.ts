@@ -3,12 +3,13 @@ import { Icon } from '../icons/icon';
 import { DocKindRegistry } from '../plugin-host';
 import { EditorService } from '../services/editor.service';
 import { SettingsService } from '../services/settings.service';
+import { UpdateService } from '../services/update.service';
 
 /**
  * The 26px status bar pinned to the bottom of the shell: word / character
  * count for the active document (or the pixel size + zoom for an image
- * tab, ADR-0026), and the Settings entry at the right (moved off the old
- * sidebar footer).
+ * tab, ADR-0026), the transient green update note (req-45), and the
+ * Settings entry at the right (moved off the old sidebar footer).
  */
 @Component({
   selector: 'app-status-bar',
@@ -20,6 +21,7 @@ import { SettingsService } from '../services/settings.service';
 export class StatusBar {
   protected readonly editor = inject(EditorService);
   protected readonly settings = inject(SettingsService);
+  protected readonly update = inject(UpdateService);
   private readonly docKinds = inject(DocKindRegistry);
 
   /** `"<W> × <H> · <zoom>%"` for the active image tab; `—` before it loads. */

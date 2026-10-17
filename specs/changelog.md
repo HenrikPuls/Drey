@@ -20,6 +20,24 @@ recorded as an explicit decision. The parity checklist lives in
 
 ## Recent milestones
 
+### req-45 — the positive update-check answer is inline green text, not a dialog
+
+An owner request, outside the list (2026-10-17, on top of milestone 82).
+**Not yet manually verified by the owner.**
+
+A manual "Check for updates" that finds nothing new no longer opens a
+window: main sets the `up-to-date` status only, and the renderer shows
+it — green text in the status bar ("The latest version (Drey x.y.z) is
+already installed.", six seconds, next to the word count) for a
+Help-menu check, and the same line in green in Settings → Updates for a
+check from there. The asks (update available, install) and the failure
+dialogs are unchanged; the startup check stays silent as before.
+
+Verified by: renderer + main typechecks, lint, the new
+`src/app/services/update.service.spec.ts`, the status-bar spec's note
+cases, and the reworked state-machine spec case (no dialog on
+`up-to-date`). ADR-0074 carries a later-change note.
+
 ### Milestone 82 — auto-update from GitHub Releases
 
 The old "Next" item 8, split: the update system ships here, code signing

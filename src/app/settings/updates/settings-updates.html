@@ -34,7 +34,12 @@
     <section>
       <h3>Status</h3>
       @if (statusLine(); as line) {
-        <p class="field-hint">{{ line }}</p>
+        <p
+          class="field-hint"
+          [class.status-ok]="update.status()?.phase === 'up-to-date'"
+        >
+          {{ line }}
+        </p>
       }
       @if (update.status()?.phase === 'error' && update.status()?.error) {
         <p class="field-hint">{{ update.status()?.error }}</p>
