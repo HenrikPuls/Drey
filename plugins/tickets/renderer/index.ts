@@ -1,8 +1,6 @@
 /**
  * The Tickets board (ADR-0076, milestone 83): a kanban view over the
- * tickets vault, mountable in TWO places — the dock panel and a centre
- * editor tab (`tickets://board`, the browser-tab pattern of ADR-0042,
- * milestone 83 follow-up T-0002). Plain DOM (ADR-0044 rule 2); all data
+ * tickets vault in the dock panel. Plain DOM (ADR-0044 rule 2); all data
  * comes from `backend.invoke('board')` snapshots — the renderer never
  * parses a ticket file. One module-level store serves every view; a
  * view is just a DOM root plus a render call.
@@ -19,9 +17,6 @@ import {
   type TicketCard,
 } from '../shared/tickets';
 import { createColumnCollapseStore } from './column-collapse';
-
-/** The doc-kind tab key of the board view (never a vault path). */
-const BOARD_TAB_KEY = 'tickets://board';
 
 function el<K extends keyof HTMLElementTagNameMap>(
   tag: K,
@@ -385,8 +380,8 @@ function columnNode(api: DreyPluginApi, column: BoardColumn): HTMLElement {
 }
 
 /** A board view: renders the current snapshot into `root` on demand.
- *  The empty state (no tickets vault) is part of the view — a board tab
- *  without a vault shows the same guidance as the panel. */
+ *  The empty state (no tickets vault) is part of the view — the
+ *  guidance shows wherever the board is mounted. */
 function buildBoardView(api: DreyPluginApi): BoardView {
   const root = el('div', 'tickets-view');
   const render = (): void => {
@@ -453,15 +448,6 @@ export function createTicketsWidget(api: DreyPluginApi): PluginWidgetContrib {
         }
       });
 
-      const boardButton = el('button', 'icon-btn');
-      boardButton.type = 'button';
-      boardButton.title = 'Open the board in the editor area';
-      boardButton.setAttribute('aria-label', 'Open the board in the editor area');
-      boardButton.append(api.ui.icon('window', 14));
-      boardButton.addEventListener('click', () => {
-        api.documents.addDoc('tickets-board', BOARD_TAB_KEY, 'Tickets');
-      });
-
       const refreshButton = el('button', 'icon-btn');
       refreshButton.type = 'button';
       refreshButton.title = 'Refresh the board';
@@ -469,7 +455,7 @@ export function createTicketsWidget(api: DreyPluginApi): PluginWidgetContrib {
       refreshButton.append(api.ui.icon('refresh-cw', 14));
       refreshButton.addEventListener('click', () => void refreshBoard());
 
-      host.append(newButton, boardButton, refreshButton);
+      host.append(newButton, refreshButton);
       return () => undefined;
     },
     mount: (panel) => {
@@ -730,31 +716,6 @@ const plugin: { activate(api: DreyPluginApi): void } = {
   activate(api) {
     backend = api.backend;
     api.ui.registerWidget(createTicketsWidget(api));
-
-    // The board as a centre editor tab (T-0002, the browser-tab
-    // pattern): full width, session-restorable, stateless.
-    api.ui.registerDocKind({
-      kind: 'tickets-board',
-      serialize: () => null,
-      restore: (path) => api.documents.addDoc('tickets-board', path, 'Tickets'),
-      mount: (tabBody, _path) => {
-        tabBody.classList.add('tickets-docview');
-        const view = buildBoardView(api);
-        views.add(view);
-        tabBody.append(view.root);
-        view.render();
-        return () => {
-          views.delete(view);
-        };
-      },
-      icon: 'layers',
-      statusText: () => {
-        if (snapshot === null || snapshot.vaultId === null) {
-          return null;
-        }
-        return `${snapshot.vaultName ?? 'Tickets'} — ${openTicketCount(snapshot)} open`;
-      },
-    });
 
     api.backend.on('board-changed', () => void refreshBoard());
     api.vault.onChanged(() => void refreshBoard());

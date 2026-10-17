@@ -97,6 +97,9 @@ dragged card hovering it) unfolds, and which columns stay folded
 persists as view state in `localStorage['drey.tickets']` (the
 tasks-panel pattern; never in the tickets repo — ADR-0076). Folding
 `done` and empty phases is how all eight columns fit the dock panel.
+The T-0002 centre editor tab was **removed again** (T-0006, the owner's
+ruling — the dock panel is the board's home; the shared-store refactor
+from T-0002 stays, serving the panel).
 
 ### req-45 — the positive update-check answer is inline green text, not a dialog
 
