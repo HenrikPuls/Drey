@@ -687,6 +687,9 @@ export class PluginHost {
         return track(() => removeItem(plugin.willQuitCallbacks, cb));
       },
       appVersion: app.getVersion(),
+      /** `<userData>` — app-data roots a plugin may build on (SDK 1.27:
+       *  the fleet's `<userData>/fleet`). Never the vault. */
+      userRoot: this.deps.userRoot,
     };
   }
 

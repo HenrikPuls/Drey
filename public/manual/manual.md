@@ -734,6 +734,31 @@ next ticket.
 The complete format — every field, the grammar, the agent rules — is
 specified in the repo's `specs/ticket-schema.md`.
 
+### Running agents on tickets (the fleet)
+
+A ticket can be worked by an **external agent CLI** — OpenCode or
+Claude Code — while you watch from the board. Right-click a card and
+choose **Run agent**: the dialog lets you pick the worker (the card
+shows the one your pins resolve to: the ticket's `worker:` field wins,
+then the phase's `@worker` pin in `pipeline.md`, then the repo's
+`worker:` in `repos.md`, then the configured default) and how freely
+it may act. The worker gets a checkout of the ticket's repo on its own
+branch (`t/<id>`), the ticket's description, plan and the phase's
+prompt as its brief.
+
+While the run is live, the board's **footer** shows its state, age,
+token usage and cost; the card carries a ▶ chip. From the card menu or
+the footer you can **Watch** (tail the run's output), **Steer** (send
+a message into the live run — it lands in the ticket's Log) or
+**Stop** it. When the worker finishes, the runner executes the
+ticket's **acceptance criteria** (the backticked commands under Plan):
+all green means the ticket moves to the next phase on its own; a
+failure parks the reason in the Log and leaves the ticket where it is.
+
+Runs survive closing Drey — the runner is its own small process. You
+can reach it from a terminal, too: its address and token live in
+`<user data>/fleet/runner.json`.
+
 ---
 
 ## 14. Diagrams (draw.io)

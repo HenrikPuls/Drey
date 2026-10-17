@@ -12,6 +12,7 @@
  */
 import { promises as fsp } from 'node:fs';
 import { hostname } from 'node:os';
+import * as path from 'node:path';
 import type {
   MainPluginContext,
   MainPluginModule,
@@ -31,9 +32,17 @@ import {
   pinsAfterDrop,
   rewriteOrderSection,
 } from './ticket-board';
-import { newTicketFileText, patchTicketFile } from './ticket-files';
+import {
+  acceptanceCommands,
+  newTicketFileText,
+  patchTicketFile,
+  ticketSections,
+} from './ticket-files';
 import { openTerminalAt } from './open-terminal';
 import { TicketsGit, type RepoLocation } from './tickets-git';
+import { FleetClient } from './fleet-client';
+import { composeInstruction, resolveAssignment } from './fleet/assignment';
+import type { PermissionMode, RunRequest } from './fleet/protocol';
 
 const PIPELINE_PATH = 'tickets/_meta/pipeline.md';
 const ORDER_PATH = 'tickets/_meta/order.md';
@@ -93,6 +102,8 @@ class BoardService {
   constructor(
     private readonly ctx: MainPluginContext,
     private readonly git: TicketsGit,
+    private readonly defaultWorker: string,
+    private readonly fleet: FleetClient,
   ) {}
 
   /** The board's emit, debounced — one push per burst of changes. */
@@ -151,6 +162,7 @@ class BoardService {
         vaultName: null,
         activeVaultName: active?.name ?? null,
         isGitRepo: false,
+        defaultWorker: this.defaultWorker,
         pipelineText: null,
         orderText: null,
         reposText: null,
@@ -176,6 +188,7 @@ class BoardService {
       vaultName: vault.name,
       activeVaultName: active?.name ?? null,
       isGitRepo: location !== null,
+      defaultWorker: this.defaultWorker,
       pipelineText,
       orderText,
       reposText,
@@ -460,6 +473,120 @@ class BoardService {
     });
   }
 
+  /**
+   * Starts a fleet run for one ticket (M84, ADR-0075): resolve the
+   * worker (ticket pin > handover pin > repo default > configured
+   * default), read the handover's prompt, compose the deterministic
+   * instruction and hand the runner the request. The runner owns the
+   * worker process and the ticket stamps; this side refuses early with
+   * the reason a human can act on.
+   */
+  startRun(input: {
+    ticketId: string;
+    workerChoice: string | null;
+    permissionMode: PermissionMode;
+  }): Promise<{ ok: boolean; error?: string; runId?: string }> {
+    return this.enqueue(async () => {
+      const vault = await this.detect();
+      if (vault === null) {
+        return { ok: false, error: 'no tickets vault detected' };
+      }
+      const snap = await this.snapshot();
+      let card: TicketCard | null = null;
+      let phaseId: string | null = null;
+      for (const column of snap.columns) {
+        const found = column.tickets.find((t) => t.id === input.ticketId);
+        if (found !== undefined) {
+          card = found;
+          phaseId = column.phase.id;
+          break;
+        }
+      }
+      if (card === null || phaseId === null) {
+        return { ok: false, error: `${input.ticketId} is not on the board` };
+      }
+      if (card.meta.run !== null) {
+        return { ok: false, error: `${card.id} already has a live run — stop it first` };
+      }
+      const repo =
+        card.meta.repo === null ? null : (snap.repos.find((r) => r.name === card!.meta.repo) ?? null);
+      if (repo === null) {
+        return { ok: false, error: `${card.id} names no repository — set repo: to a _meta/repos.md entry` };
+      }
+      if (repo.path === null) {
+        return { ok: false, error: `"${repo.name}" has no local path: in _meta/repos.md — the worker needs a checkout` };
+      }
+      const text = await this.ctx.vault.read(card.path, { vaultId: vault.id });
+      const acceptance = acceptanceCommands(text);
+      if (acceptance.length === 0) {
+        return {
+          ok: false,
+          error: `${card.id} has no acceptance criteria — the machine gate would have nothing to run`,
+        };
+      }
+      const assignment = resolveAssignment({
+        ticketWorker: input.workerChoice ?? card.meta.worker,
+        handover: snap.pipeline.find((p) => p.id === phaseId)?.handover ?? null,
+        repoWorker: repo.worker,
+        configuredDefault: this.defaultWorker,
+      });
+      if (!assignment.ok) {
+        return { ok: false, error: assignment.error };
+      }
+      let prompt: string | null = null;
+      if (assignment.promptRef !== null) {
+        prompt = await this.readOptional(vault.id, `tickets/_meta/prompts/${assignment.promptRef}.md`);
+        if (prompt === null) {
+          return {
+            ok: false,
+            error: `the handover names prompt "${assignment.promptRef}", but tickets/_meta/prompts/${assignment.promptRef}.md is missing`,
+          };
+        }
+      }
+      const phaseIndex = snap.pipeline.findIndex((p) => p.id === phaseId);
+      const nextPhase = phaseIndex >= 0 && phaseIndex + 1 < snap.pipeline.length
+        ? (snap.pipeline[phaseIndex + 1] ?? null)
+        : null;
+      const { description, plan } = ticketSections(text);
+      const gitPath = ((await this.ctx.config.get<string>('gitPath')) ?? '').trim();
+      const request: RunRequest = {
+        ticketId: card.id,
+        ticketsVaultPath: vault.path,
+        ticketRelPath: card.path,
+        phase: card.phase,
+        repoPath: repo.path,
+        branch: card.meta.branch ?? `t/${card.id}`,
+        baseRef: repo.branch,
+        provider: assignment.provider,
+        model: assignment.model,
+        permissionMode: input.permissionMode,
+        instruction: composeInstruction({
+          ticketId: card.id,
+          title: card.meta.title ?? card.id,
+          repo: repo.name,
+          branch: card.meta.branch ?? `t/${card.id}`,
+          worktreePath: `${repo.name}-${card.id}`,
+          phase: card.phase,
+          description,
+          plan,
+          prompt,
+          acceptance,
+        }),
+        acceptance,
+        git: gitPath === '' ? 'git' : gitPath,
+        nextPhase: nextPhase?.id ?? null,
+        claimIdentity: nextPhase?.claim === true ? `agent@${hostname().toLowerCase()}` : null,
+        ...(input.workerChoice !== null ? { recordWorker: input.workerChoice } : {}),
+      };
+      const outcome = await this.fleet.start(request);
+      if (outcome.ok) {
+        this.announceChanged();
+        return { ok: true, runId: outcome.run.id };
+      }
+      return { ok: false, error: outcome.error };
+    });
+  }
+
   initialize(vaultId: string | null): Promise<MutationResult> {
     return this.enqueue(async () => {
       const vaults = await this.ctx.vault.listVaults();
@@ -533,7 +660,14 @@ const plugin: MainPluginModule = {
   async activate(ctx: MainPluginContext) {
     const gitPath = ((await ctx.config.get<string>('gitPath')) ?? '').trim();
     const git = new TicketsGit(() => (gitPath === '' ? 'git' : gitPath));
-    const board = new BoardService(ctx, git);
+    const defaultWorker = ((await ctx.config.get<string>('defaultWorker')) ?? '').trim() || 'opencode';
+    const fleet = new FleetClient({
+      root: path.join(ctx.app.userRoot, 'fleet'),
+      runnerScript: path.join(__dirname, 'fleet', 'runner.js'),
+      log: ctx.log,
+      onRunsChanged: (runs) => ctx.ipc.emit('fleet-changed', runs),
+    });
+    const board = new BoardService(ctx, git, defaultWorker, fleet);
 
     ctx.ipc.handle('board', () => board.snapshot());
 
@@ -586,6 +720,48 @@ const plugin: MainPluginModule = {
         return { ok: false, error: 'bad claim payload' };
       }
       return board.setClaim({ id: p.id, mode: p.mode });
+    });
+
+    // --- the fleet (M84, ADR-0075) -------------------------------------
+    ctx.ipc.handle('fleetStatus', async () => ({ runs: await fleet.runs() }));
+
+    ctx.ipc.handle('fleetStart', async (payload) => {
+      const p = payload as { id?: unknown; worker?: unknown; permissionMode?: unknown };
+      if (typeof p.id !== 'string') {
+        return { ok: false, error: 'bad fleet start payload' };
+      }
+      return board.startRun({
+        ticketId: p.id,
+        workerChoice: typeof p.worker === 'string' && p.worker.trim() !== '' ? p.worker.trim() : null,
+        permissionMode: p.permissionMode === 'bypass' ? 'bypass' : 'accept-edits',
+      });
+    });
+
+    ctx.ipc.handle('fleetStop', async (payload) => {
+      const p = payload as { runId?: unknown; reason?: unknown };
+      if (typeof p.runId !== 'string') {
+        return { ok: false, error: 'bad fleet stop payload' };
+      }
+      return fleet.stop(
+        p.runId,
+        typeof p.reason === 'string' && p.reason.trim() !== '' ? p.reason.trim() : null,
+      );
+    });
+
+    ctx.ipc.handle('fleetSend', async (payload) => {
+      const p = payload as { runId?: unknown; text?: unknown };
+      if (typeof p.runId !== 'string' || typeof p.text !== 'string' || p.text.trim() === '') {
+        return { ok: false, error: 'bad fleet send payload' };
+      }
+      return fleet.send(p.runId, p.text.trim());
+    });
+
+    ctx.ipc.handle('fleetStream', async (payload) => {
+      const p = payload as { runId?: unknown };
+      if (typeof p.runId !== 'string') {
+        return { text: '' };
+      }
+      return { text: (await fleet.stream(p.runId)) ?? '' };
     });
 
     // T-0004: open the ticket's work checkout in the OS terminal — the

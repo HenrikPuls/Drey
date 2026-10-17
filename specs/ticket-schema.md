@@ -31,6 +31,7 @@ tickets/
     pipeline.md     # the phases + handover config (config, never data)
     order.md        # sparse per-column order pins (data, never config)
     repos.md        # work-repo name -> clone URL/path mapping
+    prompts/        # the handover prompts (`agent <prompt-ref>` names one file)
   inbox/
     T-0042.md       # one ticket per file, in its current phase's folder
   prioritized/
@@ -109,13 +110,14 @@ How. Filled in the plan phase; must end with the acceptance criteria.
 | `id` | `T-\d{4,}` | Required. Must equal the filename stem. Immutable. |
 | `title` | string | Required. One line, quoted when it contains `:`. |
 | `repo` | string | Name from `_meta/repos.md`. May be empty until the ticket leaves inbox for a work phase; entering one without a known repo is an issue. |
+| `worker` | string | Optional pin for the fleet worker (M84): `opencode`, `claude-code`, or `<provider>/<model>`. Wins over the phase handover's `@worker` pin, the repo's `worker:` and the configured default. An unknown value badges the card; a run start with it refuses. |
 | `priority` | `urgent \| high \| normal \| low` | Required. Default `normal`; machine writers always write it. |
 | `rank` | integer 0–999999 | Default `5000`. Fine ordering inside derived order. |
 | `branch` | `t/<id>` | Written by machine writers; validated against the rule; rule wins. |
 | `entered-<phase>` | UTC timestamp | One per phase ever entered; holds the **most recent** entry time into that phase (first entry lives in git history). `entered-inbox` exists from creation. |
 | `claimed-by` | `<who>@<host>` (agents append `:<session>`) | Set when the ticket enters a claim-flagged phase (default: build); `owner@<host>` for the human. Takeover overwrites and logs the old value. |
 | `claimed-at` | UTC timestamp | Set with `claimed-by`. |
-| `run` | map `{pid, started-at, stream}` | Reserved for run control (ADR-0075); milestone 84 writes it, readers only validate the shape. At most one live run. |
+| `run` | map `{pid, started-at, stream}` | The live run (ADR-0075 run control): stamped by the fleet runner at start, cleared at end — at most one live run per ticket. `stream` names the **run id**; the stream file itself lives machine-local under `<userData>/fleet/runs/<id>/stream.jsonl`, so the ticket stays portable across the machines the repo syncs to. Readers validate the shape. |
 | `references` | list of strings | Optional. Ticket ids (`t/T-0041`), URLs, vault paths. |
 | `parked-reason` | string | With `parked-at`; the ticket sits in inbox while parked (circuit breaker, budgets — ADR-0075). Any transition out of inbox clears both. |
 | `parked-at` | UTC timestamp | See `parked-reason`. |
@@ -167,10 +169,13 @@ Prose for humans. The board follows this file on refresh.
 - `claim`: optional `true` — entering this phase stamps the claim
   fields.
 - `handover`: what must happen for a ticket to LEAVE this phase:
-  `manual` (a human moves it), `agent <prompt-ref>` (the fleet runs
-  prompt `<prompt-ref>` and the runner moves it on success),
-  `ci` (an executable check passes — milestone 85), `none` (terminal).
-  Milestone 83 parses and displays these; `agent`/`ci` act from M84/M85.
+  `manual` (a human moves it), `agent <prompt-ref>[@<worker>]` (the
+  fleet runs prompt `<prompt-ref>` — `tickets/_meta/prompts/<ref>.md`
+  in the tickets repo — and the runner moves it on success; the
+  optional `@worker` pins which agent CLI, otherwise the assignment
+  ladder decides), `ci` (an executable check passes — milestone 85),
+  `none` (terminal). Milestone 83 parses and displays these; `agent`
+  acts from M84, `ci` from M85.
 - Editing this file is the owner's; the board re-reads it on every
   refresh. Unknown keys in a phase entry are ignored.
 
@@ -228,8 +233,10 @@ which protection exists (ADR-0075: hosts are interchangeable, the
 fleet never calls a host API). `path` is the **local checkout /
 worktree** where the repo's work is tested — the board's card context
 menu opens a terminal there ("Open work folder in terminal": run
-`.\dev.ps1`, the repo's build, whatever it uses). Names are unique; a
-ticket's `repo:` must name one of them once it is in a work phase.
+`.\dev.ps1`, the repo's build, whatever it uses). `worker` (M84) is
+the repo's default fleet worker for tickets on this repo. Names are
+unique; a ticket's `repo:` must name one of them once it is in a work
+phase.
 
 ## Validation (where it runs, what it checks)
 

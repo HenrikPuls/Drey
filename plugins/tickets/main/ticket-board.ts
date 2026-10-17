@@ -9,6 +9,7 @@ import { parseDocument } from 'yaml';
 import { splitFrontmatter } from '../../../shared/frontmatter';
 import {
   priorityWeight,
+  resolveCardWorker,
   type BoardColumn,
   type BoardSnapshot,
   type PipelinePhase,
@@ -204,6 +205,7 @@ export function parseRepos(text: string | null): ReposParse {
       branch: typeof map['branch'] === 'string' && map['branch'].trim() !== '' ? map['branch'] : null,
       policy: typeof map['policy'] === 'string' && map['policy'].trim() !== '' ? map['policy'] : null,
       path: typeof map['path'] === 'string' && map['path'].trim() !== '' ? map['path'].trim() : null,
+      worker: typeof map['worker'] === 'string' && map['worker'].trim() !== '' ? map['worker'].trim() : null,
     });
   }
   return { repos, error: null };
@@ -302,6 +304,9 @@ export interface AssembleInput {
   readonly orderText: string | null;
   readonly reposText: string | null;
   readonly files: readonly BoardFile[];
+  /** The plugin's configured default worker (M84) — what cards show when
+   *  nothing above them pins one. */
+  readonly defaultWorker: string;
 }
 
 /** Files under `tickets/` that are neither `_meta` nor ticket-shaped. */
@@ -373,6 +378,12 @@ export function assembleBoard(input: AssembleInput): BoardSnapshot {
       phase: parts.phase,
       meta: parsed.meta,
       pinned: (orderParse.pins[parts.phase] ?? []).includes(parts.stem),
+      worker: resolveCardWorker(
+        parsed.meta.worker,
+        phases.find((p) => p.id === parts.phase)?.handover ?? null,
+        reposParse.repos.find((r) => r.name === parsed.meta.repo)?.worker ?? null,
+        input.defaultWorker,
+      ),
       issues: [...parsed.issues],
     };
     const list = byPhase.get(parts.phase) ?? [];
@@ -432,6 +443,7 @@ export function assembleBoard(input: AssembleInput): BoardSnapshot {
     vaultName: input.vaultName,
     activeVaultName: input.activeVaultName,
     isGitRepo: input.isGitRepo,
+    defaultWorker: input.defaultWorker,
     pipeline: phases,
     pipelineError: pipelineParse.error,
     repos: reposParse.repos,

@@ -88,6 +88,7 @@ export function parseTicketFile(text: string, relPath: string): ParsedTicket {
   }
 
   const repo = asText(obj['repo']);
+  const worker = asText(obj['worker']);
 
   const rawPriority = asText(obj['priority']);
   let priority: TicketPriority = 'normal';
@@ -151,6 +152,7 @@ export function parseTicketFile(text: string, relPath: string): ParsedTicket {
       id: parts.stem,
       title,
       repo,
+      worker,
       priority,
       rank,
       // The rule wins over whatever the file says (ADR-0076).
@@ -172,6 +174,7 @@ function emptyMeta(stem?: string): TicketMeta {
     id: stem ?? null,
     title: null,
     repo: null,
+    worker: null,
     priority: 'normal',
     rank: DEFAULT_RANK,
     branch: stem === undefined ? null : branchForTicket(stem),
@@ -205,6 +208,72 @@ function parseRun(value: unknown, issues: TicketIssue[]): TicketRun | null {
 }
 
 // ---------------------------------------------------------------------------
+// The machine gate's input: the ticket's acceptance commands.
+
+/** A ticket body's H2 sections, trimmed (frontmatter and fences off). */
+export function ticketSections(text: string): { description: string; plan: string } {
+  const body = text.replace(/^---\n[\s\S]*?\n---\n?/, '');
+  let current: 'description' | 'plan' | null = null;
+  const description: string[] = [];
+  const plan: string[] = [];
+  for (const line of body.split('\n')) {
+    if (/^##\s+Description\s*$/.test(line)) {
+      current = 'description';
+      continue;
+    }
+    if (/^##\s+Plan\s*$/.test(line)) {
+      current = 'plan';
+      continue;
+    }
+    if (/^##\s/.test(line)) {
+      current = null; // Log or a future section
+      continue;
+    }
+    if (current === 'description') {
+      description.push(line);
+    } else if (current === 'plan') {
+      plan.push(line);
+    }
+  }
+  return {
+    description: description.join('\n').trim(),
+    plan: plan.join('\n').trim(),
+  };
+}
+
+/**
+ * The backticked checkbox commands under `### Acceptance criteria` (the
+ * Plan section), in order — exactly what the fleet runner executes in
+ * the worker's checkout (ADR-0076: validator, not CI). Human prose
+ * around them is ignored; a checkbox without a backticked command is
+ * not executable and is skipped.
+ */
+export function acceptanceCommands(text: string): string[] {
+  const commands: string[] = [];
+  let inCriteria = false;
+  for (const line of text.split('\n')) {
+    if (/^##\s/.test(line)) {
+      inCriteria = false; // any H2 leaves the Plan section behind
+      continue;
+    }
+    if (/^###\s+Acceptance criteria\s*$/.test(line)) {
+      inCriteria = true;
+      continue;
+    }
+    if (/^###\s/.test(line)) {
+      inCriteria = false; // another H3 ends the criteria
+      continue;
+    }
+    // The command is the first backtick run; trailing prose ("— exits 0") is allowed.
+    const match = /^-\s+\[.]\s+`([^`]+)`/.exec(line);
+    if (inCriteria && match !== null) {
+      commands.push(match[1]!);
+    }
+  }
+  return commands;
+}
+
+// ---------------------------------------------------------------------------
 // Patching (transitions, claims) — targeted node mutation, house style.
 
 export interface TransitionPatch {
@@ -221,6 +290,17 @@ export interface TransitionPatch {
   readonly claimBy?: string;
   /** Clear the claim fields instead (a release). */
   readonly releaseClaim?: boolean;
+  /**
+   * Stamp the live-run map (ADR-0075 run control, M84): `{pid, started-at,
+   * stream}` with the stream field naming the run id — the stream file
+   * itself lives under the machine-local fleet root, so the ticket file
+   * stays portable across the machines the repo syncs to.
+   */
+  readonly run?: TicketRun;
+  /** Remove the live-run map (the run ended). */
+  readonly clearRun?: boolean;
+  /** Pin (or with `''` clear) the ticket's worker — a fleet run start records the choice. */
+  readonly setWorker?: string;
 }
 
 /** Applies a transition/claim patch to a ticket file's text and appends the
@@ -251,6 +331,24 @@ export function patchTicketFile(text: string, patch: TransitionPatch): string {
   } else if (patch.releaseClaim === true) {
     removeKey(doc, 'claimed-by');
     removeKey(doc, 'claimed-at');
+  }
+
+  if (patch.run !== undefined) {
+    doc.set('run', doc.createNode({
+      pid: patch.run.pid,
+      'started-at': patch.run['started-at'],
+      stream: patch.run.stream,
+    }));
+  } else if (patch.clearRun === true) {
+    removeKey(doc, 'run');
+  }
+
+  if (patch.setWorker !== undefined) {
+    if (patch.setWorker === '') {
+      removeKey(doc, 'worker');
+    } else {
+      setQuoted(doc, 'worker', patch.setWorker);
+    }
   }
 
   // Leaving the inbox always clears a parked state (schema rule).
