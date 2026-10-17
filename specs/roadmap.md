@@ -90,7 +90,10 @@ what remains, in order:
   (survives Drey, holds the worker pipes), Run/Stop/Steer/Watch per
   ticket, live stream-json injection with stop+resume fallback, the
   session-manager send adapter. ⚠️ Needs the session-manager's send API
-  shape from the owner at start.
+  shape from the owner at start. Owner request (2026-10-17): while an
+  agent works on a ticket, the Tickets panel shows a **footer with live
+  progress, token usage and status** of that run — fed by the runner,
+  so it ships with M84, not before.
 - **M85 — continuous orchestration:** dispatcher, lease reaper,
   budgets/circuit breaker, heartbeats, cycle-time metrics, sampling
   audit, semantic gate, `fleet_*` MCP tools. Built only if the M83/M84

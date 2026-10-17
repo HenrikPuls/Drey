@@ -199,8 +199,14 @@ function cardNode(api: DreyPluginApi, card: TicketCard, column: BoardColumn): HT
   dot.title = PRIORITY_LABEL[card.meta.priority];
   top.append(dot);
   if (card.pinned) {
-    const pin = el('span', 'tickets-mark', 'pinned');
-    pin.title = 'Pinned in order.md';
+    const pin = el('span', 'tickets-mark');
+    pin.title = 'Pinned in order.md — click to unpin';
+    pin.classList.add('tickets-mark-btn');
+    pin.append(api.ui.icon('pin', 11));
+    pin.addEventListener('click', (event) => {
+      event.stopPropagation();
+      void runMutation('Unpinning', () => invokeBoard('unpin', { id: card.id }));
+    });
     top.append(pin);
   }
   if (card.issues.length > 0) {
@@ -237,7 +243,16 @@ function cardNode(api: DreyPluginApi, card: TicketCard, column: BoardColumn): HT
 
   node.title = `${card.id} — ${card.meta.title ?? ''}\n${card.path}\nBranch ${branchForTicket(card.id)}`;
 
+  node.tabIndex = 0;
+  node.setAttribute('role', 'button');
+  node.setAttribute('aria-label', `${card.id} ${card.meta.title ?? '(untitled)'}`);
   node.addEventListener('click', () => openTicketFile(api, card.path));
+  node.addEventListener('keydown', (event) => {
+    if (event.key === 'Enter' && event.target === node) {
+      event.preventDefault();
+      openTicketFile(api, card.path);
+    }
+  });
   node.addEventListener('contextmenu', (event) => {
     event.preventDefault();
     openCardMenu(api, card, event, runMutation, (path) => openTicketFile(api, path));
@@ -250,10 +265,15 @@ function cardNode(api: DreyPluginApi, card: TicketCard, column: BoardColumn): HT
       event.dataTransfer.effectAllowed = 'move';
     }
   });
+  node.addEventListener('dragstart', () => node.classList.add('tickets-dragging'));
   node.addEventListener('dragend', () => {
+    node.classList.remove('tickets-dragging');
     draggedId = null;
     draggedFrom = null;
     clearInsert();
+    for (const col of document.querySelectorAll('.tickets-drop-target')) {
+      col.classList.remove('tickets-drop-target');
+    }
   });
   return node;
 }
@@ -343,22 +363,25 @@ function columnNode(api: DreyPluginApi, column: BoardColumn): HTMLElement {
     list.append(cardNode(api, card, column));
   }
   if (column.tickets.length === 0) {
-    list.append(el('div', 'tickets-col-empty', '—'));
+    list.append(el('div', 'tickets-col-empty', 'No tickets'));
   }
   list.addEventListener('dragover', (event) => {
     if (draggedId === null) {
       return;
     }
     event.preventDefault();
+    node.classList.add('tickets-drop-target');
     markInsert(list, column.phase.id, event.clientY);
   });
   list.addEventListener('dragleave', (event) => {
     if (!list.contains(event.relatedTarget as Node | null)) {
+      node.classList.remove('tickets-drop-target');
       clearInsert();
     }
   });
   list.addEventListener('drop', (event) => {
     event.preventDefault();
+    node.classList.remove('tickets-drop-target');
     const id = draggedId ?? event.dataTransfer?.getData('text/plain') ?? null;
     const from = draggedFrom;
     const phase = insertPhase ?? column.phase.id;
@@ -384,7 +407,42 @@ function columnNode(api: DreyPluginApi, column: BoardColumn): HTMLElement {
  *  guidance shows wherever the board is mounted. */
 function buildBoardView(api: DreyPluginApi): BoardView {
   const root = el('div', 'tickets-view');
+  /** The visible section survives every re-render: the board's
+   *  horizontal scroll and each column's vertical scroll are read before
+   *  the DOM is rebuilt and put back afterwards. */
+  const restoreScroll = (): (() => void) => {
+    const left = root.querySelector<HTMLElement>('.tickets-board')?.scrollLeft ?? 0;
+    const tops = new Map<string, number>();
+    for (const col of root.querySelectorAll<HTMLElement>('.tickets-col')) {
+      const list = col.querySelector<HTMLElement>('.tickets-col-list');
+      if (list !== null && col.dataset['phase'] !== undefined) {
+        tops.set(col.dataset['phase'], list.scrollTop);
+      }
+    }
+    return () => {
+      const board = root.querySelector<HTMLElement>('.tickets-board');
+      if (board === null) {
+        return;
+      }
+      board.scrollLeft = left;
+      for (const col of board.querySelectorAll<HTMLElement>('.tickets-col')) {
+        const top = tops.get(col.dataset['phase'] ?? '');
+        const list = col.querySelector<HTMLElement>('.tickets-col-list');
+        if (top !== undefined && list !== null) {
+          list.scrollTop = top;
+        }
+      }
+    };
+  };
   const render = (): void => {
+    const restore = restoreScroll();
+    try {
+      draw();
+    } finally {
+      restore();
+    }
+  };
+  const draw = (): void => {
     root.textContent = '';
     const snap = snapshot;
     if (snap === null) {
@@ -601,7 +659,16 @@ function openCreateModal(api: DreyPluginApi, snap: BoardSnapshot): void {
     create.addEventListener('click', submit);
     actions.append(cancel, create);
 
-    form.append(title, row, description, actions);
+    const field = (label: string, control: HTMLElement): HTMLElement => {
+      const wrap = el('label', 'tickets-form-field');
+      wrap.append(el('span', 'tickets-form-label', label), control);
+      return wrap;
+    };
+    const rowFields = el('div', 'tickets-form-row');
+    rowFields.append(field('Priority', priority), field('Repository', repo));
+
+    form.append(el('h3', 'tickets-form-heading', 'New ticket'));
+    form.append(field('Title', title), rowFields, field('Description', description), actions);
     form.addEventListener('keydown', (event) => {
       if (event.key === 'Enter' && event.target === title) {
         event.preventDefault();
@@ -675,6 +742,12 @@ function openCardMenu(
     });
     menu.append(button);
   }
+  if (card.pinned) {
+    item('Unpin from order', () => {
+      void run('Unpinning', () => invokeBoard('unpin', { id: card.id }));
+    });
+  }
+  menu.append(el('div', 'tickets-menu-sep'));
   item(
     'Take over claim',
     () => {
@@ -690,7 +763,9 @@ function openCardMenu(
     card.meta.claimedBy === null,
   );
 
+  menu.setAttribute('role', 'menu');
   document.body.append(menu);
+  menu.querySelector<HTMLButtonElement>('.tickets-menu-item:not(:disabled)')?.focus();
   const rect = menu.getBoundingClientRect();
   menu.style.left = `${Math.max(0, Math.min(event.clientX, window.innerWidth - rect.width - 8))}px`;
   menu.style.top = `${Math.max(0, Math.min(event.clientY, window.innerHeight - rect.height - 8))}px`;
