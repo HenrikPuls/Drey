@@ -25,8 +25,8 @@ recorded as an explicit decision. The parity checklist lives in
 Owner request, outside the list (2026-10-17): the run annotations warned
 that `actions/checkout@v4`, `setup-node@v4` and `cache@v4` (and with them
 `upload-artifact@v4` and `action-gh-release@v2`) still target the
-deprecated Node 20 action runtime. **Not yet manually verified by the
-owner.**
+deprecated Node 20 action runtime. **Manually verified by the owner
+(2026-10-17).**
 
 - `.github/workflows/ci.yml`: the actions move to the current majors —
   `actions/checkout@v7`, `actions/setup-node@v7`, `actions/cache@v6`,
@@ -45,7 +45,7 @@ owner.**
 
 Owner request, outside the list (2026-10-17): the main-branch CI run
 behind PR #15 failed both tests that create a diagram through the command
-palette. **Not yet manually verified by the owner.**
+palette. **Manually verified by the owner (2026-10-17).**
 
 They typed "New diagram" immediately after `Ctrl+Shift+P`, before the
 Angular overlay had mounted — the dropped keys left a one-letter query

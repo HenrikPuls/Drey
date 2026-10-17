@@ -50,12 +50,12 @@ changelog and delete it here — no shipped history on this page.
 **Status (2026-10-17):** version 0.7.1, milestones 1–82 shipped and
 owner-verified — milestone 82 (auto-update from GitHub Releases,
 ADR-0074) end-to-end on a real install, the 0.7.0 → 0.7.1 update round
-included (docs/07 checklist); the CI fixes bug-12 and req-44 still
-carry the marker. Milestone
+included (docs/07 checklist). Milestone
 ids are assigned when work starts — check `changelog.md` for the
 highest used (latest: milestone 82; latest requirement id: req-45,
 the update check's positive answer is inline text — req-43 and req-44
-were owner requests outside the list, shipped in the same step).
+were owner requests outside the list, shipped and owner-verified in
+the same step).
 Items A1–A5 of the architectural cleanup shipped on 2026-10-13, and
 A10–A12 on 2026-10-17 (changelog); A6–A9 remain.
 
