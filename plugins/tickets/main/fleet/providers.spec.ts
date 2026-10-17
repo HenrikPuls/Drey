@@ -1,7 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
-import { claudeCodeAdapter, OPENCODE_API, opencodeAdapter, type NormalizedEvent } from './providers';
+import { claudeCodeAdapter, OPENCODE_API, opencodeAdapter, type FetchFn, type NormalizedEvent, type ProviderStart } from './providers';
 import type { RunnerProcess, SpawnFn } from './procs';
-import type { ProviderStart } from './providers';
 
 /**
  * The worker adapters against scripted node seams (no real CLIs): what
@@ -42,7 +41,6 @@ function fakeProcess(): RunnerProcess & {
     onExit: (cb) => {
       listeners.exit = cb;
     },
-    killTree,
     stdout: (line) => listeners.stdout(`${line}\n`),
     stdinWrites,
     killTree,
@@ -53,7 +51,7 @@ function fakeProcess(): RunnerProcess & {
 
 const spawnOf = (proc: ReturnType<typeof fakeProcess>): SpawnFn => () => proc;
 
-const collect = () => {
+const collect = (overrides: Partial<ProviderStart> = {}) => {
   const events: NormalizedEvent[] = [];
   const sessions: string[] = [];
   const start: ProviderStart = {
@@ -65,6 +63,7 @@ const collect = () => {
     ticketId: 'T-0001',
     onEvent: (event) => events.push(event),
     onSessionRef: (ref) => sessions.push(ref),
+    ...overrides,
   };
   return { events, sessions, start };
 };
@@ -109,8 +108,7 @@ describe('the claude-code adapter', () => {
       seen.push([...args]);
       return fakeProcess();
     };
-    const { start } = collect();
-    start.resumeRef = 'ses_9';
+    const { start } = collect({ resumeRef: 'ses_9' });
     claudeCodeAdapter(spawnFn).spawn(start);
     expect(seen[0]).toContain('--resume');
     expect(seen[0]).toContain('ses_9');
@@ -118,15 +116,15 @@ describe('the claude-code adapter', () => {
 });
 
 describe('the opencode adapter', () => {
-  /** A scripted fetch: health fails twice, then everything answers. */
+  /** A scripted fetch: health fails once, then everything answers. */
   function scriptedFetch(opts: {
     sessionCreated: (body: unknown) => void;
     prompts: string[];
-  }): { fetch: ReturnType<typeof vi.fn>; calls: Array<{ url: string; init?: RequestInit }> } {
+  }): { fetch: FetchFn; calls: Array<{ url: string; init?: RequestInit }> } {
     const calls: Array<{ url: string; init?: RequestInit }> = [];
     let healthChecks = 0;
-    const fetch = vi.fn(async (url: string | URL, init?: RequestInit): Promise<Response> => {
-      const text = typeof url === 'string' ? url : url.toString();
+    const fetch: FetchFn = async (url, init) => {
+      const text = url;
       calls.push({ url: text, init });
       if (text.endsWith(OPENCODE_API.health)) {
         healthChecks += 1;
@@ -151,8 +149,8 @@ describe('the opencode adapter', () => {
         return { ok: true, status: 200 } as unknown as Response;
       }
       return { ok: true, status: 200, json: async () => ({}) } as unknown as Response;
-    });
-    return { fetch: fetch as unknown as typeof fetch, calls };
+    };
+    return { fetch, calls };
   }
 
   it('boots serve, creates the session, prompts it and reports usage', async () => {
@@ -200,13 +198,13 @@ describe('the opencode adapter', () => {
       prompts,
     });
     // Patch abort capture.
-    const fetchWithAbort = (async (url: string | URL, init?: RequestInit): Promise<Response> => {
-      const text = typeof url === 'string' ? url : url.toString();
+    const fetchWithAbort: FetchFn = async (url, init) => {
+      const text = url;
       if (text.endsWith(OPENCODE_API.abort('ses_oc'))) {
         aborts.push(text);
       }
       return fetch(url, init);
-    }) as typeof fetch;
+    };
     const proc = fakeProcess();
     const { start } = collect();
     const handle = opencodeAdapter(spawnOf(proc), fetchWithAbort, async () => 47000).spawn(start);

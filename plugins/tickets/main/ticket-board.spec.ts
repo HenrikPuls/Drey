@@ -184,6 +184,7 @@ describe('assembleBoard', () => {
     vaultName: 'tickets',
     activeVaultName: 'tickets',
     isGitRepo: true,
+    defaultWorker: 'opencode',
     pipelineText: PIPELINE,
     orderText,
     reposText: '---\nrepos:\n  drey:\n    url: https://example/drey.git\n---\n',
@@ -228,6 +229,7 @@ describe('assembleBoard', () => {
     const base = baseInput([{ path: 'tickets/inbox/T-0001.md', text: ticketText('T-0001', 'One') }]);
     const snap = assembleBoard({
       ...base,
+      defaultWorker: 'opencode',
       files: [
         ...base.files,
         { path: 'tickets/_meta/pipeline.md', text: 'x' },

@@ -125,7 +125,7 @@ describe('worker values and the assignment ladder', () => {
       source: 'default',
       promptRef: 'build-default',
     });
-    expect(resolveAssignment({ ...base, configuredDefault: 'claude-code' }).source).toBe('default');
+    expect(resolveAssignment({ ...base, configuredDefault: 'claude-code' })).toMatchObject({ source: 'default' });
     expect(resolveAssignment({ ...base, configuredDefault: 'claude-code', repoWorker: 'opencode' })).toEqual({
       ok: true,
       provider: 'opencode',
