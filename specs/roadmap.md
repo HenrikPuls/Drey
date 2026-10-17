@@ -194,6 +194,13 @@ rest are kept so they still match `docs/11`.
 - **Shared note parse for the per-vault indexes** — tags, tasks and
   backlinks each scan every `.md` on their own;
   only worth it once a large vault makes refresh slow.
+- **Editor as a full dock panel** — the note editor living *among* a
+  dock's panels (sortable like Files/Tasks), not only as an editor band
+  above them (M20, ADR-0038); when nothing is open and a file gets
+  opened, the default home stays the centre column. Owner idea
+  (2026-10-17, "füge es nur als todo hinzu"), parked uncommitted — a
+  core change to the dock/pane system that would need an ADR of its
+  own.
 
 ### Follow-ups of shipped milestones (none committed)
 
