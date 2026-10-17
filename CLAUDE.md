@@ -1,4 +1,4 @@
-# Drey — your private AI knowledge vault — Project Context for Claude Code
+# Drey — your private note vault that runs your work — Project Context for Claude Code
 
 ## Overview
 
