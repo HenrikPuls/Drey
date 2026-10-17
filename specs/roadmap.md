@@ -45,7 +45,8 @@ Open work only. Everything implemented lives in
 lives in [`decisions.md`](decisions.md). When an item ships, move it to the
 changelog and delete it here — no shipped history on this page.
 
-**Status (2026-10-17):** version 0.6.0, milestones 1–81 shipped. The
+**Status (2026-10-17):** version 0.6.0, milestones 1–81 shipped; milestone
+82 (auto-update from GitHub Releases) is in progress — see "Now". The
 owner's verification round closed 2026-10-17: every "not yet manually
 verified" marker in the changelog is cleared, the bug-11 fix included.
 Milestone
@@ -70,16 +71,22 @@ former "Next" item 6) as milestone 81 — see the changelog. All of it is
 owner-verified (verification round closed 2026-10-17), the bug-11 fix
 included.
 
-(Nothing else open here — the next item is "Next" below.)
+The update check (milestone 82, started 2026-10-17) is the
+owner-requested build-out of the old "Auto-update + code signing" item:
+the in-app update function against the repo's GitHub Releases — startup
+check (on by default, ADR-0074), ask before download and install,
+differential downloads, quit through the save-before-exit prompt, NSIS
+install + relaunch. Code signing is split off (Next, item 8).
 
 ### Next
 
 ~~7. **Screenshots in the app.** Capture a region or window and embed it
    as an attachment (`attachments/`, ADR-0024). ⚠️ Scope open: whole
    window, region, or another application's window.~~
-8. **Auto-update + code signing.** The installer is unsigned and there is
-   no update channel (`docs/11`). Only worth it if Drey is handed to
-   others — ⚠️ owner decision.
+8. **Code signing.** The installer is unsigned — Windows SmartScreen
+   warns on the first run of every fresh exe, updates included
+   (`docs/11`). Split from the auto-update item; the update channel
+   itself is milestone 82. ⚠️ Depends on a certificate decision.
 9. **Tags at scale.** The Autotag prompt embeds the whole vocabulary
     (fine to low hundreds) and there is no near-duplicate detection
     (`sailing` vs. `boat`). Add a pre-filter and a duplicate finder
