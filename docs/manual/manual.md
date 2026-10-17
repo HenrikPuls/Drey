@@ -897,6 +897,26 @@ and the personal word list.
 - **Local note history** — enabled, keep days (30), max versions per
   file (50).
 
+### Settings: Updates {#settings-updates}
+
+- **Check for updates on start** (on by default) — once the app is up,
+  Drey asks GitHub whether a newer release exists. That is all the
+  "automatic" there is: downloading, installing and restarting always
+  ask first, and the check sends none of your notes or settings. Turn it
+  off to keep the app entirely offline.
+- **Status** — the current version, a *Check for updates* button (same
+  as the Help menu), the download progress, and *Install and restart*
+  once an update is downloaded. Installing closes Drey — unsaved tabs go
+  through the usual save-before-exit prompt — and the installer
+  relaunches the app when done. Windows may show its SmartScreen warning
+  before the installer starts (the exes are unsigned).
+- A version you answered **Skip this version** to is listed with an *Ask
+  about it again* link; the startup prompt stays silent for exactly that
+  version, a manual check always reports.
+- The **portable exe** cannot update itself (there is no install to
+  update) — it offers the releases page on GitHub instead. The same
+  fallback appears when a network blocks the check.
+
 ### Plugin-contributed pages
 
 ![Actions settings](img/settings-actions.png)
@@ -922,6 +942,9 @@ The **Help** menu in the title bar has everything:
   knows, base and plugins alike, with its current shortcut. It always
   matches the command palette, because it is built from the same
   registry at the moment you open it.
+- **Check for updates** — looks for a newer Drey release now (see
+  [Settings → Updates](#settings-updates)); the result is a dialog, and
+  downloading still asks first.
 - **About Drey** — version, build number and licence information (the
   same page as Settings → *About*).
 

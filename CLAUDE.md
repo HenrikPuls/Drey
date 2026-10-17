@@ -172,7 +172,10 @@ toolchain is removable by deleting `.tools/`). Never assume a bare `node`,
   presets (OpenRouter, Anthropic API, Z.ai GLM) and CLI providers
   (Claude Code headless, GitHub Copilot CLI) are **opt-in, off by
   default** — a documented exception to the old "no cloud calls" rule,
-  same as the removable `copilot-web` scraper (ADR-0040). No hardcoded
+  same as the removable `copilot-web` scraper (ADR-0040). The startup
+  **update check** against GitHub Releases (ADR-0074) is the one
+  automatic network call: on by default as a bounded exception — it
+  sends no user content, and download, install and restart always ask. No hardcoded
   model id — never assume a specific model is loaded, and never assume
   `/v1/models` is reachable (the model id must stay hand-enterable;
   CLI/web providers advertise no model listing at all). API keys (and
@@ -381,7 +384,9 @@ Main process (`electron/`):
   save/vault hooks, the section-search provider slot, the `.zip`
   installer (ADR-0044/0068)
 - `spellcheck.ts` — nspell + Hunspell dictionaries; `pdf-export.ts` — the
-  "Export as PDF…" flow
+  "Export as PDF…" flow; `updater/` — the GitHub-Releases update flow
+  (ADR-0074): ask-first check/download/install over electron-updater,
+  native dialogs, quit through the exit prompt
 - `safe-file.ts` — atomic writes + guarded config reads (data safety);
   `config-secrets.ts` — API keys encrypted in `app-config.json`
   (ADR-0010 later change); `content-security-policy.ts` — the
@@ -435,7 +440,8 @@ Renderer (`src/app/`):
   `image-viewer/` (ADR-0026), `pdf-viewer/` (ADR-0052),
   `external-open/`, `services/` (settings/appearance/theme/spellcheck
   singletons, `DailyNoteService`, `PluginCatalogService` — the plugin
-  list Settings shows)
+  list Settings shows, `update.service.ts` — the update status mirror +
+  triggers, ADR-0074)
 
 Cross-layer:
 
@@ -443,7 +449,9 @@ Cross-layer:
   `DreyPluginApi`, `MainPluginContext`, `PLUGIN_API_VERSION`)
 - `shared/ipc-api.ts` — the base IPC contract: a barrel over
   `shared/ipc/` (one file per topic — a new channel goes there, importers
-  keep using `shared/ipc-api`); the rest of `shared/` is
+  keep using `shared/ipc-api`); `shared/updates.ts` — the update
+  system's pure halves (version compare, the releases URL); the rest of
+  `shared/` is
   pure, testable logic both sides share (frontmatter, tags, tasks,
   wikilinks, link-rewrite, app-config, …)
 

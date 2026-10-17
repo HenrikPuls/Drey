@@ -3082,3 +3082,55 @@ The registry never reads the Settings draft: a chord takes effect when
 it is stored. A plugin command's override is keyed by its id, so it
 applies whenever the plugin registers the command â€” also after the
 plugin was disabled and enabled again.
+
+## 6.63 Update check, download and install over GitHub Releases (milestone 82, [ADR-0074](09_architecture_decisions/0074-github-releases-auto-update.md))
+
+```mermaid
+sequenceDiagram
+    actor User
+    participant Main as main.ts (main)
+    participant US as UpdateService (main)
+    participant EU as electron-updater
+    participant GH as GitHub Releases
+    participant WH as MainWindowHost
+    participant R as renderer
+
+    Note over Main: startup complete; splash handed over
+    Main->>US: runStartupCheck() after 10 s (updates.checkOnStartup)
+    US->>EU: checkForUpdates()
+    EU->>GH: GET latest.yml of the "Latest" release
+    GH-->>EU: version + sha512 + file list
+    alt no newer x.y.z version / check failed
+        EU-->>US: not-available / error
+        Note over US: silent — log only (ADR-0074)
+    else newer version, not `updates.skippedVersion`
+        EU-->>US: update-available (0.7.0)
+        US-->>User: native dialog: Download / Skip this version / Remind me later
+        alt Skip this version
+            US->>US: AppConfigStore.patch({ updates.skippedVersion })
+        else Download update
+            US->>EU: downloadUpdate()
+            EU->>GH: blockmap differential download
+            EU-->>US: download-progress (percent)
+            US->>R: update:status-changed (Settings -> Updates shows it)
+            EU-->>US: update-downloaded
+            US-->>User: native dialog: Install and restart / Later
+            opt Install and restart
+                US->>WH: window.close() — the ordinary path
+                WH->>R: exit:confirm-request (bug-5)
+                R-->>WH: save / discard (a cancel leaves everything as it was)
+                WH->>Main: window closed -> app.quit()
+                Main->>US: finishQuit() at will-quit (one-shot)
+                US->>EU: quitAndInstall(false, true)
+                EU->>User: NSIS installer (assisted, per-user) — installs + relaunches Drey
+                Note over Main: the fresh instance takes the single-instance lock
+            end
+        end
+    end
+```
+
+The renderer never touches the network: it triggers (`update:check`,
+`update:download`, `update:install`) and displays the pushed status over
+`shared/ipc/updates.ts`. A dev run, a non-Windows platform and the
+portable exe never construct the updater at all — they report
+`unsupported` and offer the releases page instead.

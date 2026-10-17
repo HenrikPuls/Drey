@@ -82,7 +82,7 @@ Two paths cover almost everything:
 | Tools | `mcp/`, `mcp-client/` | The MCP server Drey offers to other programs; the external tool servers, `web_search` and `web_fetch` the assistant may call. |
 | Plugins | `plugin-host/` | Finds, validates, activates and isolates failures of plugins; builds each one's context; installs packages. |
 | App state | `app-config.ts`, `config-secrets.ts`, `session/`, `logger.ts` | Settings on disk (secrets encrypted), the tab session and unsaved buffers, the log file. |
-| Single services | `spellcheck.ts`, `pdf-export.ts`, `external-open.ts`, `open-document.ts` | One job each. |
+| Single services | `spellcheck.ts`, `pdf-export.ts`, `external-open.ts`, `open-document.ts`, `updater/` | One job each. `updater/update-service.ts` is the GitHub-Releases update flow (ADR-0074): ask-first check/download/install, quit through the exit prompt. |
 | The bridge | `preload.ts`, `ipc/` | The renderer-facing surface: thin handlers, no logic of their own. |
 
 ### The renderer, by responsibility
@@ -94,7 +94,7 @@ Two paths cover almost everything:
 | Editor | `editor/` | The only place CodeMirror is used: Live Preview, source mode, the Markdown dialect, toolbar, slash menu, spellcheck, wikilinks, tag pills. |
 | Vault view | `vault/`, `calendar/`, `windows/` | The Files panel and file operations, the calendar, the open-windows list. |
 | Dialogs and viewers | `confirmation-dialog/`, `conflict/`, `history/`, `diff-view/`, `link-update/`, `tool-approval/`, `image-viewer/`, `pdf-viewer/`, `palette/`, `help/` | Each one surface. |
-| Settings | `settings/`, `services/settings.service.ts` | The settings overlay and the config it edits. |
+| Settings | `settings/`, `services/settings.service.ts`, `services/update.service.ts` | The settings overlay and the config it edits; the update status mirror + triggers (ADR-0074). |
 | Commands | `keybindings/` | Every command and its shortcut; the menu, the palette and the shortcuts page read this registry. |
 | Plugins | `plugin-host/` | Loads plugin renderer modules, implements `DreyPluginApi`, owns the registries plugins fill, mounts their DOM. |
 
@@ -887,6 +887,7 @@ decision. (Seams — what a *plugin* can extend — are the table above.)
 | Feature | Files | Owner | Decision |
 | --- | --- | --- | --- |
 | Quick capture (global hotkey → today's note + new entry) | `electron/main.ts`, `electron/capture-hotkey.ts`, `electron/daily-note.ts`, `src/app/services/EditorService` | Base | ADR-0002, ADR-0073 |
+| Update system (startup check, ask-first download/install over GitHub Releases) | `electron/updater/update-service.ts`, `electron/ipc/update-handlers.ts`, `shared/ipc/updates.ts`, `shared/updates.ts` (versions, releases URL), `src/app/services/update.service.ts` (renderer mirror), Settings → Updates, the Help menu's "Check for updates"; supply side: `electron-builder.yml` (`publish: github`) + the CI release attachments | Base | ADR-0074, M82 |
 | Daily notes (calendar open, drafts, daily dir config) | `electron/daily-note.ts`, `src/app/calendar/`, `src/app/services/daily-note.service.ts` | Base | — |
 | Entry capture (`/` menu Entry block, entry format) | `src/app/editor/slash-commands.ts`, Settings → "Entry format" | Base | ADR-0022, ADR-0057 |
 | Editor modes + Live Preview (conceal, block widgets) | `src/app/editor/` (`editor.ts`, `markdown-surface/`, `live-preview/`) | Base | ADR-0008, ADR-0009 |
