@@ -259,7 +259,7 @@ class BoardService {
       }
       const warning = await this.commit(vault, [path], `tickets: ${id} + ${firstPhase}`);
       this.announceChanged();
-      return { ok: true, ...(warning === null ? {} : { warning }) };
+      return { ok: true, id, path, ...(warning === null ? {} : { warning }) };
     });
   }
 

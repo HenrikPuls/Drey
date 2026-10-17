@@ -177,6 +177,13 @@ export interface MutationResult {
   readonly warning?: string;
 }
 
+/** `create`'s success result: the minted id and the new file's path, so
+ *  the caller can open the pre-filled ticket in the editor (T-0001). */
+export interface CreateResult extends MutationResult {
+  readonly id?: string;
+  readonly path?: string;
+}
+
 /** Short human age of an ISO stamp ("3m", "2h", "4d"); '' when unreadable. */
 export function ageOf(iso: string | null, now: number = Date.now()): string {
   if (iso === null) {

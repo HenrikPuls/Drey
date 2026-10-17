@@ -14,6 +14,7 @@ import {
   openTicketCount,
   type BoardColumn,
   type BoardSnapshot,
+  type CreateResult,
   type MutationResult,
   type TicketCard,
 } from '../shared/tickets';
@@ -539,7 +540,13 @@ function openCreateModal(api: DreyPluginApi, snap: BoardSnapshot): void {
           repo: repo.value === '' ? null : repo.value,
           description: description.value,
         }),
-      );
+      ).then((result) => {
+        // The file is pre-filled by the canonical writer — open it so
+        // everything else can be filled in right away (T-0001).
+        if (result.ok && (result as CreateResult).path !== undefined) {
+          openTicketFile(api, (result as CreateResult).path as string);
+        }
+      });
     };
     create.addEventListener('click', submit);
     actions.append(cancel, create);
