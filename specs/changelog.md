@@ -20,6 +20,62 @@ recorded as an explicit decision. The parity checklist lives in
 
 ## Recent milestones
 
+### Milestone 83 — the tickets foundation: a kanban board over a dedicated tickets repository
+
+An owner request, outside the list (2026-10-17), with the architecture
+settled in a plan review the same day: [ADR-0075](../docs/09_architecture_decisions/0075-agent-fleet-architecture-governance-and-run-control.md)
+(the agent fleet to come — milestones 84/85) and
+[ADR-0076](../docs/09_architecture_decisions/0076-ticket-repository-format-and-coordination.md)
+(the format shipped here). **Not yet manually verified by the owner.**
+
+Tickets live in **their own git repository** (GitHub in practice,
+Azure DevOps first-class — the system speaks plain git only),
+registered as an ordinary vault. One Markdown file per ticket
+(`tickets/<phase>/T-00xx.md`, id = filename = immutable identity), the
+phase is the directory, and a transition is a move plus **exactly one
+commit** (`add -- paths` + `commit -- paths`, never touching unrelated
+staged work) — the repo's history is the ticket's timeline. The board
+stores nothing: columns, order, claims and ages are derived from the
+files on every refresh.
+
+The new `tickets` plugin: the **Tickets** dock panel (columns with WIP
+counts, cards with priority dots, repo/claim/parked chips and issue
+badges), capture through a small modal (title, priority, repo,
+description → next free id in the inbox), drag & drop for transitions
+and for order pins (a drag writes `tickets/_meta/order.md`, not the
+tickets — sparse sections, union-merge-safe), a card context menu
+(open, copy the deterministic branch `t/T-00xx`, take over / release a
+claim), and a two-step **Initialize the tickets board** in the empty
+state (writes `pipeline.md`, `order.md`, `repos.md`). The pipeline is
+configuration in the repo: ordered phases with title, WIP limit, claim
+flag and per-handover spec (`manual | agent <prompt-ref> | ci | none`)
+— parsed and displayed now, acted on from milestone 84.
+
+Asymmetric tolerance throughout: machine writes are strict
+(`specs/ticket-schema.md`), human edits are free, and the reader
+normalizes visibly — anything ambiguous becomes a badge on the card
+(duplicate ids across phases, a branch field violating the `t/<id>`
+rule, an unknown repo), never a guess. **No CI on the tickets repo**
+(owner's ruling): the deterministic validator runs where the data is
+read — the board on every render, the fleet runner before every action
+from M84. A tickets vault without a git repo works, with a warning that
+transitions are unversioned.
+
+Verified by: the plugin typechecks (main, renderer, specs), lint,
+import cycles, the full unit suites (Node 1,584 — 44 new in
+`plugins/tickets/` — and Angular 1,131), and the complete production
+build incl. the plugin bundle (`dist-electron/plugins/tickets/`).
+
+Docs: ADR-0075, ADR-0076, `specs/ticket-schema.md` (the complete
+machine-facing format spec) + the `frontmatter-schema.md` pointer,
+`docs/05` §5.0 (plugins paragraph, diagram, feature row) + §5.41,
+`docs/06` §6.64, the manual's new chapter 13 (chapters 13–22 shifted
+to 14–23), the roadmap's M84/M85 remainder. Known edge, accepted for
+the trial: a ticket file that sits open and dirty in the editor while
+the board moves it gets the ordinary "changed on disk" treatment; and
+pushing the tickets repo stays manual (Source control panel) until the
+fleet runner owns it (M84).
+
 ### req-45 — the positive update-check answer is inline green text, not a dialog
 
 An owner request, outside the list (2026-10-17, on top of milestone 82).

@@ -47,15 +47,16 @@ Open work only. Everything implemented lives in
 lives in [`decisions.md`](decisions.md). When an item ships, move it to the
 changelog and delete it here — no shipped history on this page.
 
-**Status (2026-10-17):** version 0.7.1, milestones 1–82 shipped —
-milestone 82 (auto-update from GitHub Releases, ADR-0074) is code-
-complete and awaits the owner's manual verification (the installer-flow
+**Status (2026-10-17):** version 0.7.1, milestones 1–83 shipped —
+milestone 82 (auto-update from GitHub Releases, ADR-0074), req-45 and
+milestone 83 (the tickets foundation, ADR-0075/0076) are code-complete
+and await the owner's manual verification (82's installer-flow
 checklist in `docs/07`). The
 owner's verification round for 1–81 closed 2026-10-17: every "not yet manually
-verified" marker in the changelog is cleared, the bug-11 fix included.
+verified" marker below those entries is cleared, the bug-11 fix included.
 Milestone
 ids are assigned when work starts — check `changelog.md` for the
-highest used (latest: milestone 82; latest requirement id: req-45,
+highest used (latest: milestone 83; latest requirement id: req-45,
 the update check's positive answer is inline text — req-43's CI change
 was an owner request outside the list, shipped in the same step).
 Items A1–A5 of the architectural cleanup shipped on 2026-10-13, and
@@ -75,7 +76,27 @@ former "Next" item 6) as milestone 81 — see the changelog. All of it is
 owner-verified (verification round closed 2026-10-17), the bug-11 fix
 included.
 
-(Nothing else open here — the next item is "Next" below.)
+**Ticket system + agent fleet** (owner request, outside the list,
+2026-10-17; ADR-0075 + ADR-0076, format spec in
+[`specs/ticket-schema.md`](ticket-schema.md)). A kanban-style pipeline
+over Markdown ticket files in a **dedicated tickets repository**
+(registered as an ordinary vault), with external agent CLI sessions
+doing gated work in the work repos' `t/<id>` branches and Drey as the
+cockpit. The foundation shipped as milestone 83 (see the changelog);
+what remains, in order:
+
+- **M84 — on-demand agent + run control:** the standalone fleet runner
+  (survives Drey, holds the worker pipes), Run/Stop/Steer/Watch per
+  ticket, live stream-json injection with stop+resume fallback, the
+  session-manager send adapter. ⚠️ Needs the session-manager's send API
+  shape from the owner at start.
+- **M85 — continuous orchestration:** dispatcher, lease reaper,
+  budgets/circuit breaker, heartbeats, cycle-time metrics, sampling
+  audit, semantic gate, `fleet_*` MCP tools. Built only if the M83/M84
+  trial data justifies it.
+
+Between M83 and M84 sits the daily-use trial of the format (the
+owner's explicit sequencing).
 
 ### Next
 

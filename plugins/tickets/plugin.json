@@ -1,0 +1,12 @@
+{
+  "id": "tickets",
+  "name": "Tickets",
+  "version": "1.0.0",
+  "apiVersion": 1,
+  "description": "A kanban board over a dedicated tickets repository (ADR-0076): one Markdown file per ticket, phase = directory, transitions as git moves with one commit each, capture into the inbox, claims and takeovers, derived order with sparse pins, and the deterministic validator that badges issues instead of trusting CI.",
+  "author": "Drey",
+  "main": "main/index.js",
+  "renderer": "renderer/index.js",
+  "css": ["renderer/board.css"],
+  "permissions": ["documents", "vault", "settings", "main-process"]
+}

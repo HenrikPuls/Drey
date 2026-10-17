@@ -250,14 +250,16 @@ is the sum of the slices. A new channel goes into its topic file;
 importers keep using `shared/ipc-api` (the same shape as
 `shared/app-config.ts` over `shared/config/`).
 
-**Plugins** (`plugins/<id>/`, twelve shipped — `drawio`, the diagram
+**Plugins** (`plugins/<id>/`, thirteen shipped — `drawio`, the diagram
 editor tab of milestone 64, is described in §5.37): `templates`,
 `meeting`, `tags`, `tasks`, `assistant` (Assistant + Actions), `browser`,
 `ocr` (vision-LLM OCR, ADR-0050), `outline` (the open note's heading
 tree, renderer-only), `backlinks` (the "what links here" panel over a
 per-vault outlink index, milestone 54), `git` (file status in the Files
 panel + the Source control panel over the installed git, milestone 65,
-ADR-0065) — plus `sample`, the authoring reference
+ADR-0065), `tickets` (the kanban board over a dedicated tickets
+repository — milestone 83, ADR-0075/0076) — plus `sample`, the authoring
+reference
 (`plugins/TUTORIAL.md`), which milestone 70 (ADR-0068) took out of the
 default build: emitted only under `DREY_BUILD_SAMPLE_PLUGINS=1` (e2e
 sets it), never discovered by an ordinary dev run or package. Each
@@ -294,7 +296,7 @@ graph TB
         MCP["mcp/: VaultTools (vault_search via<br/>registered SectionSearchProvider) ·<br/>mcp-client/: external servers + web_fetch"]
     end
     subgraph Plugins["plugins/<id>/  (dist-electron/plugins/<id>/)"]
-        P1["templates · meeting · tags ·<br/>tasks · assistant · browser · ocr ·<br/>outline · backlinks · drawio · git"]
+        P1["templates · meeting · tags ·<br/>tasks · assistant · browser · ocr ·<br/>outline · backlinks · drawio · git · tickets"]
         P2["each: plugin.json + main/ (CJS,<br/>Node ok) + renderer/ (ESM + CSS over<br/>plugin://, plain DOM) + shared/"]
     end
     SDK["shared/plugin-api/<br/>manifest · DreyPluginApi ·<br/>MainPluginContext · PLUGIN_API_VERSION"]
@@ -922,6 +924,7 @@ decision. (Seams — what a *plugin* can extend — are the table above.)
 | Backlinks panel | `plugins/backlinks/` | Plugin backlinks | M54 |
 | draw.io diagram tabs + embeds | `plugins/drawio/` | Plugin drawio | ADR-0064 |
 | Git vaults + Source control panel (merge, stash, amend, file history) | `plugins/git/` | Plugin git | ADR-0065 (+ M67 later change) |
+| Tickets board over a dedicated tickets repository (kanban, capture → inbox, transitions as git moves, claims, order pins, validator) | `plugins/tickets/` (`main/ticket-files.ts` parse/patch, `main/ticket-board.ts` assembly, `main/tickets-git.ts` transition commits, `renderer/index.ts` the panel); format spec `specs/ticket-schema.md` | Plugin tickets | ADR-0075, ADR-0076, M83 |
 | Wikilinks (render, resolve, create-missing, complete) | `src/app/editor/wikilinks/`, `shared/wikilinks.ts` | Base | ADR-0046 |
 | Link integrity on rename / move | `electron/link-rewriter.ts`, `src/app/link-update/`, `shared/link-rewrite.ts` | Base | ADR-0059 |
 | Save conflicts (mtime guard + merge view) | `electron/note-manager.ts` (guard), `src/app/conflict/` | Base | ADR-0060 |
@@ -3618,3 +3621,14 @@ main-side plugin writes.
 | Image base | `src/app/editor/vault-image.ts` (`resolveHelpImageCandidates`) + `markdown-surface.ts` | A help doc's `assetBase` (`manual/`) resolves relative `![](...)` refs as app-origin URLs (`ng serve` / `app://` alike); explicit schemes and `..` escapes yield nothing. |
 | Help service | `src/app/help/` (`HelpService`, `shortcuts-doc.ts`) | Fetches `manual/manual.md` relative to the app origin → `openHelpDoc`; `buildShortcutsMarkdown` renders the live `KeybindingService` registry (mouse buttons included) plus the fixed non-registry rows. |
 | Menu + commands | `src/app/titlebar/menu.service.ts` (`help` menu), `src/app/app.ts` (`help.manual` F1, `help.shortcuts`) | *User manual* / *Keyboard shortcuts* run the registered commands (palette lists them); *About Drey* opens Settings on About via `SettingsService.openScreen(category?)` (`openCategory` preset, consumed once by the Settings component). |
+
+## 5.41 Tickets � the board over a dedicated tickets repository (milestone 83, [ADR-0075](09_architecture_decisions/0075-agent-fleet-architecture-governance-and-run-control.md), [ADR-0076](09_architecture_decisions/0076-ticket-repository-format-and-coordination.md))
+
+| Block | Where | Responsibility |
+| --- | --- | --- |
+| Shared contract | `plugins/tickets/shared/tickets.ts` | The IPC shapes (`BoardSnapshot`, `TicketCard`, `PipelinePhase`, `RepoRef`, `MutationResult`), the id grammar (`T-` + =4 digits), the branch rule both ways (`t/<id>`), id minting (max + 1, never reused), coarse ages, the open count. |
+| Ticket files | `plugins/tickets/main/ticket-files.ts` | Parse / patch / canonical creation of ticket Markdown (strict frontmatter per `specs/ticket-schema.md`, tolerant reader that reports what it forgives). Patching is targeted `yaml` node mutation (the `shared/frontmatter.ts` discipline): `entered-<phase>` stamps, claim fields, parked clearing, the append-only Log section. |
+| Board assembly | `plugins/tickets/main/ticket-board.ts` | Pure: `pipeline.md` / `order.md` / `repos.md` parsing (sparse per-column pins, section rewrite), derived order (priority → rank → `entered-<phase>` → id) with pins as the column top, and `assembleBoard` � files in, snapshot out, every violation an issue badge (duplicate ids on every occurrence, stray files, unknown phase directories as a trailing unknown column). |
+| Transition git | `plugins/tickets/main/tickets-git.ts` | The tickets repo's git access: `execFile` on the installed git (no shell, no terminal prompt), one promise-chain queue per working directory, `locate` (`rev-parse --show-toplevel --show-prefix`) and `commitPaths` � `add -- paths` then `commit -m � -- paths`, so one transition is exactly one commit that never touches unrelated staged work. |
+| Board service | `plugins/tickets/main/index.ts` | Detects the tickets vault (a registered vault with `tickets/_meta/pipeline.md`), rebuilds snapshots from files on every fetch (no stored board state), serializes every mutation through one queue and re-resolves state inside it: capture (id mint + canonical file), transition (`fs.rename` + stamp + log + commit + `announceChanges`, order pin on drop), reorder (`order.md` rewrite), claim takeover/release, initialize (writes the three `_meta` templates). Pushes `board-changed` (debounced) on vault rounds and ticket saves. |
+| Panel | `plugins/tickets/renderer/index.ts` + `board.css` | The "Tickets" dock widget (`id: tickets`, left, closed by default): columns with WIP counts, cards (priority dot, repo/claim/parked chips, issue badges, pin mark), click opens the ticket file, context menu (open, copy branch, take over / release claim), drag & drop between and within columns with an insertion marker, the new-ticket modal (title, priority, repo, description), and the no-vault empty state with a two-step Initialize. Never parses a file � snapshots only. |

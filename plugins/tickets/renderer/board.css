@@ -1,0 +1,445 @@
+/*
+ * Tickets plugin styles (ADR-0044: plugin CSS is global — every rule
+ * is scoped under the plugin's own `tickets-` classes).
+ */
+
+.tickets-panel {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.tickets-note {
+  flex: none;
+  padding: 2px 8px;
+  font-size: 0.75rem;
+  color: var(--text-3);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.tickets-note-busy {
+  color: var(--text-2);
+}
+
+.tickets-board-issues {
+  flex: none;
+  margin: 0 8px 2px;
+  padding: 2px 6px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-xs);
+  font-size: 0.75rem;
+  color: var(--text-3);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.tickets-warn {
+  flex: none;
+  padding: 4px 8px;
+  font-size: 0.75rem;
+  color: var(--text-3);
+}
+
+.tickets-board {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  gap: 8px;
+  padding: 4px 8px 8px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  align-items: stretch;
+}
+
+/* ---- columns ---- */
+
+.tickets-col {
+  flex: 0 0 208px;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-search);
+}
+
+.tickets-col-head {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 8px;
+  border-bottom: 1px solid var(--border);
+}
+
+.tickets-col-title {
+  flex: 1;
+  min-width: 0;
+  font-size: 0.78rem;
+  color: var(--text-heading);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.tickets-col-count {
+  flex: none;
+  font-size: 0.72rem;
+  font-family: var(--font-mono);
+  color: var(--text-3);
+}
+
+.tickets-col-over {
+  color: var(--status-modified);
+  font-weight: 600;
+}
+
+.tickets-col-unknown {
+  flex: none;
+  font-size: 0.62rem;
+  padding: 0 4px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-xs);
+  color: var(--text-3);
+}
+
+.tickets-col-agent {
+  flex: none;
+  max-width: 84px;
+  font-size: 0.62rem;
+  color: var(--text-5);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.tickets-col-list {
+  flex: 1;
+  min-height: 24px;
+  overflow-y: auto;
+  padding: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.tickets-col-empty {
+  color: var(--text-6);
+  font-size: 0.75rem;
+  text-align: center;
+  padding: 2px 0;
+}
+
+/* Drop markers: a line above the insertion card, or at the list end. */
+
+.tickets-insert-above {
+  box-shadow: 0 -2px 0 0 var(--accent);
+}
+
+.tickets-col-list.tickets-insert-end {
+  box-shadow: inset 0 2px 0 0 var(--accent);
+}
+
+/* ---- cards ---- */
+
+.tickets-card {
+  position: relative;
+  padding: 5px 7px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-xs);
+  background: var(--bg-editor);
+  cursor: pointer;
+  user-select: none;
+}
+
+.tickets-card:hover {
+  border-color: var(--border-strong);
+  background: var(--hover-bg);
+}
+
+.tickets-card:active {
+  opacity: 0.7;
+}
+
+.tickets-card-top {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.tickets-id {
+  font-family: var(--font-mono);
+  font-size: 0.68rem;
+  color: var(--text-5);
+}
+
+.tickets-prio {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex: none;
+  border: 1px solid var(--border-strong);
+}
+
+.tickets-prio-urgent {
+  background: var(--status-deleted);
+  border-color: var(--status-deleted);
+}
+
+.tickets-prio-high {
+  background: var(--accent);
+  border-color: var(--accent);
+}
+
+.tickets-prio-normal {
+  background: transparent;
+}
+
+.tickets-prio-low {
+  background: transparent;
+  opacity: 0.45;
+}
+
+.tickets-mark {
+  margin-left: auto;
+  font-size: 0.62rem;
+  color: var(--text-6);
+}
+
+.tickets-issues {
+  margin-left: auto;
+  min-width: 14px;
+  text-align: center;
+  padding: 0 3px;
+  border-radius: var(--radius-xs);
+  font-size: 0.65rem;
+  font-family: var(--font-mono);
+}
+
+.tickets-issues-error {
+  background: var(--status-deleted);
+  color: var(--accent-contrast);
+}
+
+.tickets-issues-warning {
+  background: var(--status-modified);
+  color: var(--accent-contrast);
+}
+
+.tickets-issues-noise {
+  border: 1px solid var(--border-strong);
+  color: var(--text-5);
+}
+
+.tickets-title {
+  margin-top: 2px;
+  font-size: 0.78rem;
+  color: var(--text-primary);
+  line-height: 1.25;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.tickets-card-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 3px;
+}
+
+.tickets-chip {
+  font-size: 0.65rem;
+  padding: 0 4px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-xs);
+  color: var(--text-3);
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tickets-chip-claim {
+  border-color: var(--accent-edge);
+  color: var(--accent-text);
+}
+
+.tickets-chip-parked {
+  border-color: var(--status-modified);
+  color: var(--text-3);
+}
+
+.tickets-age {
+  margin-left: 4px;
+  color: var(--text-5);
+}
+
+.tickets-pinned .tickets-id {
+  color: var(--accent-text);
+}
+
+/* ---- empty state ---- */
+
+.tickets-empty {
+  flex: 1;
+  padding: 16px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  justify-content: center;
+  color: var(--text-2);
+  font-size: 0.8rem;
+  overflow-y: auto;
+}
+
+.tickets-empty-steps {
+  margin: 0;
+  padding-left: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  color: var(--text-3);
+}
+
+.tickets-init-btn {
+  align-self: flex-start;
+  padding: 4px 10px;
+  border: 1px solid var(--accent-edge);
+  border-radius: var(--radius-xs);
+  background: transparent;
+  color: var(--accent-text);
+  font: inherit;
+  font-size: 0.8rem;
+  cursor: pointer;
+}
+
+.tickets-init-btn:hover:not(:disabled) {
+  background: var(--hover-bg);
+}
+
+.tickets-init-armed {
+  background: var(--hover-bg-strong);
+}
+
+.tickets-init-btn:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+/* ---- create modal (inside the host's modal overlay) ---- */
+
+.tickets-form {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 320px;
+}
+
+.tickets-form-title {
+  height: var(--field-h);
+  padding: 0 6px;
+  background: var(--bg-input);
+  border: 1px solid var(--field-border);
+  border-radius: var(--radius-xs);
+  color: var(--text-primary);
+  font: inherit;
+  font-size: 0.85rem;
+}
+
+.tickets-form-row {
+  display: flex;
+  gap: 8px;
+}
+
+.tickets-form-row select {
+  flex: 1;
+  height: var(--field-h);
+  padding: 0 4px;
+  background: var(--bg-input);
+  border: 1px solid var(--field-border);
+  border-radius: var(--radius-xs);
+  color: var(--text-primary);
+  font: inherit;
+  font-size: 0.8rem;
+}
+
+.tickets-form-desc {
+  resize: vertical;
+  min-height: 64px;
+  padding: 4px 6px;
+  background: var(--bg-input);
+  border: 1px solid var(--field-border);
+  border-radius: var(--radius-xs);
+  color: var(--text-primary);
+  font: inherit;
+  font-size: 0.8rem;
+}
+
+.tickets-form-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.tickets-form-actions button {
+  padding: 4px 12px;
+  border-radius: var(--radius-xs);
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--text-2);
+  font: inherit;
+  font-size: 0.8rem;
+  cursor: pointer;
+}
+
+.tickets-form-actions button:hover {
+  background: var(--hover-bg);
+}
+
+.tickets-form-create {
+  border-color: var(--accent-edge) !important;
+  color: var(--accent-text) !important;
+}
+
+/* ---- card context menu ---- */
+
+.tickets-menu {
+  position: fixed;
+  z-index: var(--z-modal);
+  display: flex;
+  flex-direction: column;
+  min-width: 180px;
+  padding: 4px;
+  background: var(--bg-editor);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  box-shadow: var(--popover-shadow);
+}
+
+.tickets-menu-item {
+  padding: 5px 10px;
+  border: 0;
+  border-radius: var(--radius-xs);
+  background: transparent;
+  color: var(--text-primary);
+  font: inherit;
+  font-size: 0.8rem;
+  text-align: left;
+  cursor: pointer;
+}
+
+.tickets-menu-item:hover:not(:disabled) {
+  background: var(--hover-bg-strong);
+}
+
+.tickets-menu-item:disabled {
+  color: var(--text-6);
+  cursor: default;
+}

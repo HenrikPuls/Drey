@@ -8,6 +8,7 @@ data schema, and classifier design live in `specs/`:
 - `specs/roadmap.md` — overall concept, open work in priority order, open risks
 - `specs/decisions.md` — ideas excluded or decided against (do not re-propose)
 - `specs/frontmatter-schema.md` — file/frontmatter format
+- `specs/ticket-schema.md` — the tickets repository format (ADR-0075/0076)
 - `specs/classifier-spec.md` — LLM prompts for task/note detection and tag suggestions
 - `specs/changelog.md` — what has shipped, newest first (the record; read on demand)
 
@@ -476,6 +477,10 @@ Plugins (`plugins/<id>/`, ADR-0044 — each `plugin.json` + `main/` +
 - `drawio/` — the diagram editor tab (ADR-0064)
 - `git/` — Git vaults + Source control panel incl. merge, stash, amend,
   file history (ADR-0065 + M67)
+- `tickets/` — the kanban board over a dedicated tickets repository:
+  capture → inbox, transitions as one-commit git moves, claims/takeover,
+  derived order + sparse pins, the deterministic validator
+  (ADR-0075/0076, M83; format spec `specs/ticket-schema.md`)
 - `sample/` — the authoring reference, dev/test-only (ADR-0068);
   `plugins/TUTORIAL.md` + `plugins/AUTHORING.md` are the guides
 
