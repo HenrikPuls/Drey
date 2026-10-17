@@ -45,10 +45,12 @@ Open work only. Everything implemented lives in
 lives in [`decisions.md`](decisions.md). When an item ships, move it to the
 changelog and delete it here — no shipped history on this page.
 
-**Status (2026-10-16):** version 0.6.0, milestones 1–81 shipped; 81
-(zen mode) manually verified by the owner. Milestone ids are assigned
-when work starts — check `changelog.md` for the highest used (latest:
-milestone 81; latest requirement id: req-43,
+**Status (2026-10-17):** version 0.6.0, milestones 1–81 shipped. The
+owner's verification round closed 2026-10-17: every "not yet manually
+verified" marker in the changelog is cleared, the bug-11 fix included.
+Milestone
+ids are assigned when work starts — check `changelog.md` for the
+highest used (latest: milestone 81; latest requirement id: req-43,
 CI stores the exes only for tags and manual runs — an owner request
 outside the list, shipped in the same step).
 Items A1–A5 of the architectural cleanup shipped on 2026-10-13
@@ -61,13 +63,12 @@ Items A1–A5 of the architectural cleanup shipped on 2026-10-13
 ### Now (small, daily value)
 
 The assistant tool rework (owner request, outside the list, 2026-10-13)
-shipped as milestones 76–79, and the removal of the embedding retrieval
-(owner request, outside the list, 2026-10-14) as milestone 80 — see the
-changelog; all five await the owner's verification. Configurable
-shortcuts shipped as milestone 75 (ADR-0073), also awaiting verification.
-
-Zen mode (the "Next" item 6) shipped as milestone 81; the owner verified
-it on 2026-10-16.
+shipped as milestones 76–79, the removal of the embedding retrieval
+(owner request, outside the list, 2026-10-14) as milestone 80,
+configurable shortcuts as milestone 75 (ADR-0073) and zen mode (the
+former "Next" item 6) as milestone 81 — see the changelog. All of it is
+owner-verified (verification round closed 2026-10-17), the bug-11 fix
+included.
 
 (Nothing else open here — the next item is "Next" below.)
 

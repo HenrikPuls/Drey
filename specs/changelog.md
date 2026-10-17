@@ -44,8 +44,8 @@ and exiting zen from it).
 
 ### Fix — a link in a rendered table no longer kills the window (bug-11)
 
-Found by the owner (2026-10-14), outside the list. **Not yet manually
-verified by the owner.**
+Found by the owner (2026-10-14), outside the list. **Manually verified
+by the owner (2026-10-17).**
 
 Clicking a link inside a rendered table (an HTML block, a callout …)
 navigated the whole window: those widgets hold markdown-it's HTML, so
@@ -79,7 +79,7 @@ table opens the note, the window stays). The manual says how links open.
 Roadmap "Now" item, decided with the owner on 2026-10-13 and
 2026-10-14:
 [ADR-0073](../docs/09_architecture_decisions/0073-configurable-shortcuts.md).
-**Not yet manually verified by the owner.**
+
 
 **Settings → Keyboard shortcuts** lists every command (base and plugin)
 and the system-wide **quick-capture** hotkey, each with its shortcut.
@@ -129,8 +129,7 @@ The editor's fixed keys are listed read-only below.
 
 ### req-43 — CI stores the exes only for tags and manual runs
 
-Owner request, outside the roadmap list (2026-10-14). **Not yet manually
-verified by the owner.**
+Owner request, outside the roadmap list (2026-10-14).
 
 CI had failed on every run since 2026-10-13 although every check passed:
 the last step, uploading the setup and portable exe as workflow
@@ -150,7 +149,7 @@ they are deleted or expire; GitHub recalculates usage every 6–12 hours.
 
 Owner request, outside the roadmap list (2026-10-14):
 [ADR-0072](../docs/09_architecture_decisions/0072-vault-context-by-text-search.md),
-which supersedes ADR-0055. **Not yet manually verified by the owner.**
+which supersedes ADR-0055.
 
 The finding that led to it: the semantic search returned sections that
 had nothing to do with the question, and did not find a note that
@@ -210,7 +209,6 @@ contains the very word searched for ("einstein").
 Owner request, outside the roadmap list; the last step of the assistant
 tool rework (a later change to
 [ADR-0063](../docs/09_architecture_decisions/0063-mcp-client-and-assistant-tool-groups.md)).
-**Not yet manually verified by the owner.**
 
 - **A built-in `web_search` tool.** Settings → Assistant tools → *Web
   search*: a switch, a provider and its approval rule (`tools.webSearch`,
@@ -260,7 +258,6 @@ tool rework (a later change to
 Owner request, outside the roadmap list; the third step of the
 assistant tool rework
 ([ADR-0071](../docs/09_architecture_decisions/0071-unified-vault-toolset-and-agent-loop.md)).
-**Not yet manually verified by the owner.**
 
 - **A vault tool sees what the tab shows.** Main asks the renderer about
   open tabs over a new bridge (`OpenDocsBridge` in `electron/ipc/`,
@@ -310,7 +307,6 @@ assistant tool rework
 Owner request, outside the roadmap list; the second step of the
 assistant tool rework
 ([ADR-0071](../docs/09_architecture_decisions/0071-unified-vault-toolset-and-agent-loop.md)).
-**Not yet manually verified by the owner.**
 
 Eight tools replace the base `vault_search` / `vault_read` /
 `vault_write` and the assistant's own `vault_overview` / `vault_find` /
@@ -404,8 +400,7 @@ identical copy — the stored section boundaries are unchanged.
 Owner request, outside the roadmap list; the first of four steps of the
 assistant tool rework
 ([ADR-0071](../docs/09_architecture_decisions/0071-unified-vault-toolset-and-agent-loop.md)).
-No new tools — the existing ones became dependable. **Not yet manually
-verified by the owner.**
+No new tools — the existing ones became dependable.
 
 What changes for the user:
 
@@ -470,9 +465,7 @@ call in flight.
 
 ### req-42 — Cyberpunk has its own app mark
 
-Owner request, outside the roadmap list. **Not yet manually verified by
-the owner.**
-
+Owner request, outside the roadmap list.
 While the **Cyberpunk** theme is on, Drey shows the neon mark
 (`handoff/Designer (10).png`) instead of the default one, in three
 places: the titlebar, Settings → About, and the window's **taskbar /
@@ -503,8 +496,7 @@ was typechecked and linted but not run in this checkout.
 
 Items A1–A5 of the 2026-10-13 architecture review
 ([`docs/11`](../docs/11_risks_and_technical_debt.md)). No change to what
-the app does, with one exception named under A4. **Not yet manually
-verified by the owner.**
+the app does, with one exception named under A4.
 
 - **A1 — tests live next to their code.** 59 spec files moved out of
   `src/app/services/` to the `shared/`, `electron/` or `plugins/<id>/`
@@ -570,8 +562,6 @@ end-to-end tests (startup, splash, CSP, plugins, daily notes, external
 open, images, search) against a fresh build.
 
 ### Milestone 74 — Assistant on a selection
-
-**Not yet manually verified by the owner.**
 
 Selecting text in a note shows a small assistant button next to the
 selection (after the mouse button is released, or on a keyboard
@@ -691,13 +681,9 @@ Code: `src/app/editor/markdown-toolbar.ts` (the strip),
 `markdown-extended.spec.ts` (strip in the context menu, pin round trip)
 and `slash-entry.spec.ts` (picker from `/`: folders, no prompts, arrow
 keys). The diagrams e2e was adjusted but not run in this checkout (the
-draw.io web app is not fetched there). **Not yet manually verified by
-the owner.**
+draw.io web app is not fetched there).
 
 ### Settings apply at once — no Save, no Discard
-
-**Not yet manually verified by the owner.**
-
 - **One model for the whole dialog.** Core pages used a draft with Save /
   Discard and an "unsaved changes" bar; plugin pages saved as you edit;
   the footer changed per page. Now every change applies as it is made.
@@ -758,7 +744,6 @@ Settings → Actions).
 - Specs: `classifier-spec.md` (the placeholder section, the template as
   shipped). Manual: the Actions section.
 
-**Not yet manually verified by the owner.**
 
 ### Manual stamp — the manual's footer states version and content date from the build
 
@@ -772,8 +757,7 @@ would dirty the committed `public/manual` mirror on every new day's
 first build, breaking the script's byte-stability promise; both chosen
 values are deterministic, so an unchanged source still re-syncs without
 git noise. A missing version token fails the build loudly, so a
-hand-edited version cannot come back silently. **Not yet manually
-verified by the owner.**
+hand-edited version cannot come back silently.
 
 ### Editor chrome — unsaved is the save button alone; zoom gets its indicator
 
@@ -924,8 +908,7 @@ click into the editor loaded them again. Owner-verified.
 Owner-reported: with the docs vault selected in the Vault chip, "what is
 this vault about" was answered from the active vault — the chat notes
 showed the model quoting `tasks_list` results (active-vault tasks) while
-the docs context sat unused in the system prompt. **Not yet manually
-verified by the owner.**
+the docs context sat unused in the system prompt.
 
 - **The scope no longer depends on retrieval succeeding.** The chat
   engine resolves the ask's targets from the vault registry
@@ -953,8 +936,6 @@ verified by the owner.**
 
 ### A third bespoke theme: Cyberpunk
 
-**Not yet manually verified by the owner.**
-
 - **Settings → Appearance → Theme → Cyberpunk**, listed with Anthrazit
   and Drey. Violet-black surfaces, a lavender text ramp, violet lines and
   a neon pink accent; popovers glow instead of casting a shadow. Loosely
@@ -975,7 +956,7 @@ verified by the owner.**
 
 Owner request: the fixed top-4 context and the scope leaks of the Vault
 chip were not enough for good answers. The chip-on ask is now
-**hybrid-agentic**. **Not yet manually verified by the owner.**
+**hybrid-agentic**.
 
 - **Baseline stays, tools are added.** The top-k block of semantic
   retrieval still goes into the system prompt; tool-capable providers
@@ -1011,7 +992,7 @@ without a change and without a message. The table keys had the same
 flaw: Enter in such a table added a plain line instead of a row, and
 the arrow keys did not step into or out of it. Both now read the same
 complete tree as the drawing code (`completeSyntaxTree` in
-`block-render.ts`). **Not yet manually verified by the owner.**
+`block-render.ts`).
 
 - Found through a test that failed now and then: on a loaded machine
   even a three-line note can miss the up-front parse budget. A new test
@@ -1026,7 +1007,7 @@ complete tree as the drawing code (`completeSyntaxTree` in
 
 Item 10 of the 2026-10-11 architecture review, sixth and last file. A
 restructuring: nothing the user sees or does changes, and no importer
-changed. **Not yet manually verified by the owner.**
+changed.
 
 - **`shared/ipc-api.ts` went from 1,363 to 65 lines.** It is now the
   barrel over `shared/ipc/`: `channels.ts` (`IPC_CHANNELS`), `app.ts`,
@@ -1042,8 +1023,6 @@ changed. **Not yet manually verified by the owner.**
   sits above the session-backup methods, not above the note history.
 
 ### Anthrazit is the default everywhere; the splash shows the logo as a wordmark
-
-**Not yet manually verified by the owner.**
 
 - **Splash in Anthrazit.** `public/splash.html` still carried the Drey
   (terracotta) tokens; it now uses the Anthrazit ones (charcoal ground,
@@ -1064,7 +1043,7 @@ changed. **Not yet manually verified by the owner.**
 
 A rework of the Settings overlay's styling and structure across all ten
 core panes and the six plugin pages. No setting changed its meaning or
-its storage. **Not yet manually verified by the owner.**
+its storage.
 
 - **One stylesheet instead of two mirrored ones.**
   `src/app/settings/settings-ui.css` is the whole Settings vocabulary —
@@ -1106,8 +1085,7 @@ its storage. **Not yet manually verified by the owner.**
 ### The Source control panel is split into state, commands, widget and dialogs
 
 Item 10 of the 2026-10-11 architecture review, fifth file. A
-restructuring: nothing the user sees or does changes. **Not yet manually
-verified by the owner.**
+restructuring: nothing the user sees or does changes.
 
 - **`plugins/git/renderer/index.ts` went from 1,370 to 79 lines.** It
   was one `activate` function. Now, in the same folder:
@@ -1148,8 +1126,7 @@ exactly 32px. (ADR-0057 later change.)
 ### The Search panel is split into model, DOM, replace and summary
 
 Item 10 of the 2026-10-11 architecture review, fourth file. A
-restructuring: nothing the user sees or does changes. **Not yet manually
-verified by the owner.**
+restructuring: nothing the user sees or does changes.
 
 - **`plugins/tags/renderer/index.ts` went from 1,040 to 60 lines.** It
   was one `activate` function. Now, in the same folder:
@@ -1173,8 +1150,7 @@ verified by the owner.**
 ### The assistant panel is split into thread, composer and pickers
 
 Item 10 of the 2026-10-11 architecture review, third file. A
-restructuring: nothing the user sees or does changes. **Not yet manually
-verified by the owner.**
+restructuring: nothing the user sees or does changes.
 
 - **`plugins/assistant/renderer/panel.ts` went from 1,854 to 101
   lines.** It was one function holding every part of the panel as nested
@@ -1204,8 +1180,7 @@ verified by the owner.**
 ### `EditorService` is split into a facade and four collaborators
 
 Item 10 of the 2026-10-11 architecture review, second file. A
-restructuring: nothing the user sees or does changes. **Not yet manually
-verified by the owner.**
+restructuring: nothing the user sees or does changes.
 
 - **`editor.service.ts` went from 1,727 to 742 lines.** Its public
   surface is unchanged, so none of the ~50 files that use it changed.
@@ -1235,8 +1210,7 @@ verified by the owner.**
 ### The Files panel is split into four files
 
 Item 10 of the 2026-10-11 architecture review, first file. A
-restructuring: nothing the user sees or does changes. **Not yet manually
-verified by the owner.**
+restructuring: nothing the user sees or does changes.
 
 - **`files-panel.ts` went from 1,345 to 732 lines.** It was one component
   holding the tree model, the selection, the drag rules and every file
@@ -1402,8 +1376,7 @@ does, apart from the one fix below.
 ### Main-process tests and typed linting
 
 Third package out of the 2026-10-11 architecture review. No change to
-what the app does, apart from the fixes listed below. **Not yet manually
-verified by the owner.**
+what the app does, apart from the fixes listed below.
 
 - **Lint now knows types.** `eslint.config.mjs` runs
   `no-floating-promises` and `no-misused-promises` over every `.ts` file,
@@ -2659,8 +2632,7 @@ tokens.
 
 ### Milestone 43 — UI refinement: calmer chrome, Anthrazit, capture through the `/` menu ([ADR-0057](../docs/09_architecture_decisions/0057-ui-refinement-icon-chrome-anthrazit-and-slash-capture.md))
 
-Implements the "Drey UI Refinement" design mockup. **Not yet manually
-verified by the owner.**
+Implements the "Drey UI Refinement" design mockup.
 
 - **Chrome typography and controls (all themes).** Panel titles, tabs,
   file names, menus and the status bar are sentence-case sans; mono stays
@@ -2843,7 +2815,7 @@ extras stay, no Anthrazit tokens, no attachment/link services).
   blockquotes still complete. The two duplicated `insideCode()` tree walks
   (tag pills, wikilink decorations) moved onto the shared module's
   decoration twin — same semantics, no behavior change.
-- Tests: `markdown-context.spec.ts` (detector + gate), 
+- Tests: `markdown-context.spec.ts` (detector + gate),
   `word-completion.spec.ts` (ranking, min length, gates, cap, validFor),
   guard cases in `tag-completion.spec.ts` / `wikilink.spec.ts` (their
   mocked contexts now carry real Markdown states). No settings toggle —
