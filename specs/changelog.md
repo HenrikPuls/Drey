@@ -76,6 +76,16 @@ the board moves it gets the ordinary "changed on disk" treatment; and
 pushing the tickets repo stays manual (Source control panel) until the
 fleet runner owns it (M84).
 
+**First board use (2026-10-17, tickets T-0001/T-0002 in the owner's
+`drey-tickets` repo):** capture, initialize and drag-pins worked
+end-to-end on the owner's machine. Two follow-ups shipped from those
+tickets: the board opens as a **centre editor tab** (`tickets://board`
+doc kind, the browser-tab pattern — one shared board store serves the
+dock panel and the tab; wider columns in the tab) and **creating a
+ticket opens the pre-filled file** in the editor (`create` returns the
+minted id and path). Both on the ticket branches `t/T-0002` /
+`t/T-0001`, fast-forwarded onto the integration branch.
+
 ### req-45 — the positive update-check answer is inline green text, not a dialog
 
 An owner request, outside the list (2026-10-17, on top of milestone 82).
