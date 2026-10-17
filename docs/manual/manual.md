@@ -129,7 +129,7 @@ The **Files panel** shows one section per registered vault: a header row
 with the vault's name (the dot marks the active vault) and that vault's
 file tree.
 
-- **Register more vaults** with *Add vaultâ€¦* in the panel header. The
+- **Register more vaults** with *Add vault…* in the panel header. The
   vault header row's context menu (right-click) offers *Set active*,
   *Rename*, *Open in File Explorer* and *Remove*.
 - The **active vault** is the default target for new daily notes, quick
@@ -146,13 +146,13 @@ file tree.
 
 ### Files from outside
 
-- A vault file with an Office extension (`.docx`, `.xlsx`, `.pptx`, â€¦)
+- A vault file with an Office extension (`.docx`, `.xlsx`, `.pptx`, …)
   never opens as a tab — Drey hands it to the operating system, so it
   opens in Word/Excel/PowerPoint. Dropping such a file into a note
   copies it into `attachments/` and links it; **Alt-dropping** links the
   original file instead.
 - Text files from anywhere on disk (Explorer "Open with" â†’ Drey) open
-  as **pinned external tabs**, are saved in place, and "Save asâ€¦"
+  as **pinned external tabs**, are saved in place, and "Save as…"
   copies them into the active vault.
 
 ### Staying in sync
@@ -183,8 +183,8 @@ menu:
 
 ![The â‹¯ menu](img/editor-more-menu.png)
 
-The `â‹¯` menu also holds *Suggest tags* (AI), *File historyâ€¦*,
-*Export as PDFâ€¦*, *Save asâ€¦* and any manual Assistant Actions you have
+The `â‹¯` menu also holds *Suggest tags* (AI), *File history…*,
+*Export as PDF…*, *Save as…* and any manual Assistant Actions you have
 configured.
 
 The editor's text size zooms with `Ctrl +` / `Ctrl -` / `Ctrl 0` or
@@ -200,7 +200,7 @@ Typing `/` on an empty line opens the **slash menu**:
 - **Entry** — the quick-capture block: a `## HH:mm` heading with an
   optional topic, exactly what daily-note journaling uses. The inserted
   format is configurable (Settings â†’ *Entry format*).
-- **Templatesâ€¦** — opens the template picker at the caret (see
+- **Templates…** — opens the template picker at the caret (see
   *Editing aids* below). Typing a template's name after the slash
   (`/stand`) offers it directly, with a preview card.
 - **Formatting** — headings, lists, quotes, tables, code blocks.
@@ -209,7 +209,7 @@ Typing `/` on an empty line opens the **slash menu**:
 
 ### Snippets
 
-Typing a snippet trigger — `tbl`, `code`, `task`, â€¦ — offers a
+Typing a snippet trigger — `tbl`, `code`, `task`, … — offers a
 multi-line block with `${1:placeholder}` tabstops: accept with `Enter`,
 then jump between placeholders with `Tab`. The library is yours to edit
 in Settings â†’ *Templates*.
@@ -241,7 +241,7 @@ in Settings â†’ *Templates*.
   its first menu is the usual *Cut / Copy / Paste* list, open from the
   start. Its **pin** docks the strip into the meta bar and releases it
   again (also *Pin formatting toolbar* in the command palette).
-- **Template picker** — the strip's first button, and *Templatesâ€¦* in
+- **Template picker** — the strip's first button, and *Templates…* in
   the slash menu: type to filter, `â†‘`/`â†“` move through the list,
   `â†’`/`â†` open and close a folder, `Enter` inserts the template at the
   caret, `Esc` closes. The right half previews the selected template.
@@ -383,9 +383,9 @@ default. `#task` is reserved and never suggested for renaming.
 
 - **Note templates** are Markdown files in `templates/`, in subfolders
   if you like. They appear in the Templates panel, in the template
-  picker (the formatting strip's first button, *Templatesâ€¦* in the
+  picker (the formatting strip's first button, *Templates…* in the
   slash menu) and in "New note" flows.
-- **Snippet triggers** (`tbl`, `code`, â€¦) are edited in Settings â†’
+- **Snippet triggers** (`tbl`, `code`, …) are edited in Settings â†’
   *Templates* — the library is user-owned app config, with `${n:placeholder}`
   tabstops.
 - **Prompts** for the Assistant are Markdown files in the `prompts`
@@ -408,7 +408,7 @@ The **Assistant panel** is chat-first:
   chat's own note tab hydrates the panel with it — that is the only
   implicit switch.
 - **Every turn is persisted** as ordinary Markdown under
-  `chats/<year>/<month>/â€¦` (`kind: chat`). Chat notes auto-save; a
+  `chats/<year>/<month>/…` (`kind: chat`). Chat notes auto-save; a
   follow-up replays the whole history, tool calls and applied edits
   included. There is no length cap and no hidden state — the note *is*
   the transcript.
@@ -800,11 +800,11 @@ automatically.
 ![The Open windows panel](img/panel-windows.png)
 
 Other panels: **Outline** shows the open note's heading tree (click to
-jump, fold levels) â€¦
+jump, fold levels) …
 
 ![The Outline panel](img/panel-outline.png)
 
-â€¦ and **Backlinks** lists every note that links to the open one, grouped
+… and **Backlinks** lists every note that links to the open one, grouped
 by file and section.
 
 ![The Backlinks panel](img/panel-backlinks.png)
@@ -824,7 +824,7 @@ current tab, and a no-match query offers *Create note*.
 `Ctrl+Shift+P` opens the **command palette** — every registered command
 with its shortcut (same actions as the menus, plus *Reset layout*,
 *Refresh vault*, *Open today's daily note*, *Toggle source mode*,
-*Export as PDFâ€¦*, *File historyâ€¦*, â€¦).
+*Export as PDF…*, *File history…*, …).
 
 ---
 
@@ -834,7 +834,7 @@ with its shortcut (same actions as the menus, plus *Reset layout*,
 
 Every save that overwrites text keeps the previous version in the app's
 history store (never in the vault; bounded in Settings â†’ *Vault*).
-`â‹¯` â†’ *File historyâ€¦* (also the tab context menu and the command
+`â‹¯` â†’ *File history…* (also the tab context menu and the command
 palette) lists versions with a diff against your current buffer;
 **Restore** loads a version into the editor — saving keeps it.
 
@@ -925,8 +925,8 @@ Every command and the system-wide **quick-capture** hotkey, each with
 its shortcut. **Change** waits for you to press the new keys (Esc
 cancels); **Remove** leaves the command without a shortcut; **Reset**
 brings back the one Drey ships with. A shortcut needs `Ctrl` or `Alt`,
-or a function key (`F1`â€“`F12`) — a plain letter would swallow typing —
-and the editor's own keys (undo, the clipboard, find, zoom, â€¦) cannot be
+or a function key (`F1`–`F12`) — a plain letter would swallow typing —
+and the editor's own keys (undo, the clipboard, find, zoom, …) cannot be
 taken; they are listed under *Fixed*. If another command already has
 the keys you press, Drey names it and offers **Replace**, which leaves
 that command without a shortcut. When another program holds the
@@ -1036,7 +1036,7 @@ hotkey, in [Settings â†’ Keyboard shortcuts](#settings-keyboard-shortcuts).
 | `F1` | This manual |
 | `Ctrl+Alt+N` | Quick capture into today's daily note (global, while Drey runs) |
 | `Mod+N` | New note |
-| `Mod+S` / `Mod+Shift+S` / `Mod+Alt+S` | Save / Save asâ€¦ / Save all |
+| `Mod+S` / `Mod+Shift+S` / `Mod+Alt+S` | Save / Save as… / Save all |
 | `Mod+P` | Quick switcher (files) |
 | `Mod+Shift+P` | Command palette |
 | `Mod+,` | Settings |
