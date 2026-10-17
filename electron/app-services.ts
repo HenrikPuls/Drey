@@ -14,6 +14,7 @@ import { OwnWriteLedger } from './own-write-ledger';
 import { PluginHost, PluginInstaller, type PluginHostDeps } from './plugin-host';
 import { SessionBackupStore } from './session';
 import { SpellcheckService } from './spellcheck';
+import { UpdateService } from './updater/update-service';
 import { VaultChangeAnnouncer } from './vault-change-announcer';
 import { VaultManager } from './vault-manager';
 import { VaultWatcher } from './vault-watcher';
@@ -51,6 +52,7 @@ export interface AppServices {
   readonly pluginInstaller: PluginInstaller;
   readonly spellcheck: SpellcheckService;
   readonly sessionBackups: SessionBackupStore;
+  readonly updateService: UpdateService;
 }
 
 function consoleLog(message: string, level?: 'info' | 'warn' | 'error'): void {
@@ -205,6 +207,9 @@ export function buildAppServices(deps: AppServicesDeps): AppServices {
   const spellcheck = new SpellcheckService(appConfig);
   const mcpHttp = new McpHttpTransport(() => createVaultMcpServer(vaultTools, app.getVersion()));
   const sessionBackups = new SessionBackupStore();
+  // The in-app update system (ADR-0074): inert unless this is a packaged
+  // Windows NSIS build; main.ts decides when the startup check runs.
+  const updateService = new UpdateService({ getMainWindow: deps.getMainWindow, appConfig });
 
   return {
     appConfig,
@@ -225,6 +230,7 @@ export function buildAppServices(deps: AppServicesDeps): AppServices {
     pluginInstaller,
     spellcheck,
     sessionBackups,
+    updateService,
   };
 }
 

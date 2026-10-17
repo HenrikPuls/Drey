@@ -134,6 +134,15 @@ export const IPC_CHANNELS = {
   sessionReadBackup: 'session:read-backup',
   sessionListBackups: 'session:list-backups',
   sessionDeleteBackups: 'session:delete-backups',
+  // The in-app update system (milestone 82, ADR-0074): check, download,
+  // install and the status push. Runs entirely in main; the renderer only
+  // triggers and displays.
+  updateGetStatus: 'update:get-status',
+  updateCheck: 'update:check',
+  updateDownload: 'update:download',
+  updateInstall: 'update:install',
+  updateOpenReleases: 'update:open-releases',
+  updateStatusChanged: 'update:status-changed', // push main -> renderer
   // Plugin host (ADR-0044). Two FIXED channels, not per-plugin names: the
   // invoke payload carries { pluginId, method, payload } and main routes it
   // to that plugin's registered method allowlist; events fan out

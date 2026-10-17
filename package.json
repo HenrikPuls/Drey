@@ -1,6 +1,6 @@
 {
   "name": "drey",
-  "version": "0.6.0",
+  "version": "0.7.0",
   "description": "Drey — your private AI knowledge vault (local Markdown notes, Electron + Angular).",
   "author": "Henrik Puls",
   "homepage": "https://drey.lariscus.de",
@@ -65,6 +65,7 @@
     "codemirror": "^6.0.2",
     "dictionary-de": "^3.0.0",
     "dictionary-en": "^4.0.0",
+    "electron-updater": "^6.8.9",
     "franc-min": "^6.2.0",
     "ical.js": "^2.2.1",
     "katex": "^0.16.47",

@@ -21,6 +21,7 @@
  *   - `ipc/spelling.ts` -- spellcheck
  *   - `ipc/mcp.ts`      -- the MCP vault server, external tool servers
  *   - `ipc/plugins.ts`  -- plugin discovery, invoke / event, plugin packages
+ *   - `ipc/updates.ts`  -- the GitHub-Releases update system (ADR-0074)
  *
  * Each topic file holds its payload types and its slice of the bridge
  * (`AppIpc`, `VaultIpc`, ...); `DreyApi` is their sum. A new channel goes
@@ -33,6 +34,7 @@ import type { NotesIpc } from './ipc/notes';
 import type { PluginsIpc } from './ipc/plugins';
 import type { SpellingIpc } from './ipc/spelling';
 import type { TagsIpc } from './ipc/tags';
+import type { UpdatesIpc } from './ipc/updates';
 import type { VaultIpc } from './ipc/vault';
 
 export * from './ipc/channels';
@@ -44,6 +46,7 @@ export type * from './ipc/tags';
 export type * from './ipc/spelling';
 export type * from './ipc/mcp';
 export type * from './ipc/plugins';
+export type * from './ipc/updates';
 
 export type {
   PluginDescriptorForRenderer,
@@ -56,7 +59,16 @@ export type { ActionOutcome, LlmCapabilities, LlmDebugEntry } from './llm';
 
 /** The API surface exposed on `window.dreyApi` by the preload script. */
 export interface DreyApi
-  extends AppIpc, VaultIpc, NotesIpc, LlmIpc, TagsIpc, SpellingIpc, McpIpc, PluginsIpc {}
+  extends
+    AppIpc,
+    VaultIpc,
+    NotesIpc,
+    LlmIpc,
+    TagsIpc,
+    SpellingIpc,
+    McpIpc,
+    PluginsIpc,
+    UpdatesIpc {}
 
 declare global {
   interface Window {

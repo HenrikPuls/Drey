@@ -22,8 +22,10 @@ An AI-powered knowledge hub for note-taking and task automation.
   also work). Cloud calls are **documented, opt-in exceptions, each off
   by default** (ADR-0047, ADR-0063): the hosted presets (`openrouter`,
   `anthropic`, `zai-glm`), the Claude Code CLI provider, and the
-  assistant's `web_fetch` / external MCP servers. A `copilot-web` provider
-  was prototyped but never merged (see `decisions.md`).
+  assistant's `web_fetch` / external MCP servers. The one exception is
+  the startup **update check** (ADR-0074) — on by default, because it
+  sends no user content and everything after it asks. A `copilot-web`
+  provider was prototyped but never merged (see `decisions.md`).
 - Interactive requests (capture, chat) always take priority over
   background jobs.
 
@@ -45,12 +47,15 @@ Open work only. Everything implemented lives in
 lives in [`decisions.md`](decisions.md). When an item ships, move it to the
 changelog and delete it here — no shipped history on this page.
 
-**Status (2026-10-17):** version 0.6.0, milestones 1–81 shipped. The
-owner's verification round closed 2026-10-17: every "not yet manually
+**Status (2026-10-17):** version 0.7.0, milestones 1–82 shipped —
+milestone 82 (auto-update from GitHub Releases, ADR-0074) is code-
+complete and awaits the owner's manual verification (the installer-flow
+checklist in `docs/07`). The
+owner's verification round for 1–81 closed 2026-10-17: every "not yet manually
 verified" marker in the changelog is cleared, the bug-11 fix included.
 Milestone
 ids are assigned when work starts — check `changelog.md` for the
-highest used (latest: milestone 81; latest requirement id: req-43,
+highest used (latest: milestone 82; latest requirement id: req-43,
 CI stores the exes only for tags and manual runs — an owner request
 outside the list, shipped in the same step).
 Items A1–A5 of the architectural cleanup shipped on 2026-10-13, and
@@ -77,9 +82,10 @@ included.
 ~~7. **Screenshots in the app.** Capture a region or window and embed it
    as an attachment (`attachments/`, ADR-0024). ⚠️ Scope open: whole
    window, region, or another application's window.~~
-8. **Auto-update + code signing.** The installer is unsigned and there is
-   no update channel (`docs/11`). Only worth it if Drey is handed to
-   others — ⚠️ owner decision.
+8. **Code signing.** The installer is unsigned — Windows SmartScreen
+   warns on the first run of every fresh exe, updates included
+   (`docs/11`). Split from the auto-update item; the update channel
+   itself is milestone 82. ⚠️ Depends on a certificate decision.
 9. **Tags at scale.** The Autotag prompt embeds the whole vocabulary
     (fine to low hundreds) and there is no near-duplicate detection
     (`sailing` vs. `boat`). Add a pre-filter and a duplicate finder
