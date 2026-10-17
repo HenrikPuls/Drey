@@ -32,6 +32,7 @@ import {
   rewriteOrderSection,
 } from './ticket-board';
 import { newTicketFileText, patchTicketFile } from './ticket-files';
+import { openTerminalAt } from './open-terminal';
 import { TicketsGit, type RepoLocation } from './tickets-git';
 
 const PIPELINE_PATH = 'tickets/_meta/pipeline.md';
@@ -553,6 +554,32 @@ const plugin: MainPluginModule = {
         return { ok: false, error: 'bad claim payload' };
       }
       return board.setClaim({ id: p.id, mode: p.mode });
+    });
+
+    // T-0004: open the ticket's work checkout in the OS terminal — the
+    // directory where `.\dev.ps1` (or the repo's own build) runs.
+    ctx.ipc.handle('openRepoFolder', async (payload) => {
+      const p = payload as { repo?: unknown };
+      if (typeof p.repo !== 'string' || p.repo.trim() === '') {
+        return { ok: false, error: 'this ticket names no repository' };
+      }
+      const snap = await board.snapshot();
+      const repo = snap.repos.find((r) => r.name === p.repo) ?? null;
+      if (repo === null) {
+        return { ok: false, error: `"${p.repo}" is not in _meta/repos.md` };
+      }
+      if (repo.path === null) {
+        return {
+          ok: false,
+          error: `"${repo.name}" has no local path in _meta/repos.md — add a "path:" entry`,
+        };
+      }
+      try {
+        await openTerminalAt(repo.path);
+        return { ok: true };
+      } catch (error) {
+        return { ok: false, error: messageOf(error) };
+      }
     });
 
     ctx.ipc.handle('initialize', async (payload) => {

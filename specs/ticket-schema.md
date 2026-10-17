@@ -212,6 +212,7 @@ repos:
   drey:
     url: https://github.com/HenrikPuls/Drey.git
     branch: main
+    path: E:/projects/Drey-m83
   lariscus:
     url: https://dev.azure.com/org/project/_git/lariscus
     branch: main
@@ -224,8 +225,11 @@ Prose for humans.
 on this machine); `branch` is the integration branch the ticket branch
 forks from and merges into; `policy` is a free-text note recording
 which protection exists (ADR-0075: hosts are interchangeable, the
-fleet never calls a host API). Names are unique; a ticket's `repo:`
-must name one of them once it is in a work phase.
+fleet never calls a host API). `path` is the **local checkout /
+worktree** where the repo's work is tested — the board's card context
+menu opens a terminal there ("Open work folder in terminal": run
+`.\dev.ps1`, the repo's build, whatever it uses). Names are unique; a
+ticket's `repo:` must name one of them once it is in a work phase.
 
 ## Validation (where it runs, what it checks)
 

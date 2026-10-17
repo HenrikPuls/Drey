@@ -76,15 +76,19 @@ the board moves it gets the ordinary "changed on disk" treatment; and
 pushing the tickets repo stays manual (Source control panel) until the
 fleet runner owns it (M84).
 
-**First board use (2026-10-17, tickets T-0001/T-0002 in the owner's
+**First board use (2026-10-17, tickets T-0001–T-0004 in the owner's
 `drey-tickets` repo):** capture, initialize and drag-pins worked
-end-to-end on the owner's machine. Two follow-ups shipped from those
+end-to-end on the owner's machine. Three follow-ups shipped from those
 tickets: the board opens as a **centre editor tab** (`tickets://board`
 doc kind, the browser-tab pattern — one shared board store serves the
-dock panel and the tab; wider columns in the tab) and **creating a
+dock panel and the tab; wider columns in the tab), **creating a
 ticket opens the pre-filled file** in the editor (`create` returns the
-minted id and path). Both on the ticket branches `t/T-0002` /
-`t/T-0001`, fast-forwarded onto the integration branch.
+minted id and path), and the card context menu **opens the ticket's
+work folder in a terminal** (`repos.md` gains a per-repo local `path:`;
+the spawn mirrors the base's `openTerminalIn` — Windows Terminal with
+a cmd fallback, detached, outliving the app). On the ticket branches
+`t/T-0002` / `t/T-0001` / `t/T-0004`, fast-forwarded onto the
+integration branch.
 
 ### req-45 — the positive update-check answer is inline green text, not a dialog
 

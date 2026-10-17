@@ -203,6 +203,7 @@ export function parseRepos(text: string | null): ReposParse {
       url,
       branch: typeof map['branch'] === 'string' && map['branch'].trim() !== '' ? map['branch'] : null,
       policy: typeof map['policy'] === 'string' && map['policy'].trim() !== '' ? map['policy'] : null,
+      path: typeof map['path'] === 'string' && map['path'].trim() !== '' ? map['path'].trim() : null,
     });
   }
   return { repos, error: null };

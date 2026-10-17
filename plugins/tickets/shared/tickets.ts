@@ -124,6 +124,9 @@ export interface RepoRef {
   readonly url: string;
   readonly branch: string | null;
   readonly policy: string | null;
+  /** Local checkout / worktree to open for testing (T-0004); the clone
+   *  URL stays `url`. Null when not configured. */
+  readonly path: string | null;
 }
 
 export interface BoardColumn {

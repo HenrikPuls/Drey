@@ -74,13 +74,14 @@ describe('order files', () => {
 });
 
 describe('parseRepos', () => {
-  it('reads the mapping with optional branch and policy', () => {
+  it('reads the mapping with optional branch, policy and local path', () => {
     const text = [
       '---',
       'repos:',
       '  drey:',
       '    url: https://github.com/x/Drey.git',
       '    branch: main',
+      '    path: E:/projects/Drey-m83',
       '  local:',
       '    url: E:/code/local',
       '---',
@@ -88,8 +89,14 @@ describe('parseRepos', () => {
     const { repos, error } = parseRepos(text);
     expect(error).toBeNull();
     expect(repos).toHaveLength(2);
-    expect(repos[0]).toMatchObject({ name: 'drey', url: 'https://github.com/x/Drey.git', branch: 'main', policy: null });
-    expect(repos[1]).toMatchObject({ name: 'local', url: 'E:/code/local', branch: null });
+    expect(repos[0]).toMatchObject({
+      name: 'drey',
+      url: 'https://github.com/x/Drey.git',
+      branch: 'main',
+      policy: null,
+      path: 'E:/projects/Drey-m83',
+    });
+    expect(repos[1]).toMatchObject({ name: 'local', url: 'E:/code/local', branch: null, path: null });
   });
 
   it('requires a url per repo and a repos mapping', () => {

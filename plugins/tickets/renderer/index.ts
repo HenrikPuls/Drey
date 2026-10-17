@@ -92,7 +92,8 @@ function refreshBoard(): Promise<void> {
 }
 
 /** Runs a mutation: busy line, error surfacing, then a fresh pull.
- *  Returns the backend's result (with `id`/`path` for `create`). */
+ *  Returns the backend's result (with `id`/`path` for `create`).
+ *  An error keeps its note (no refresh would clear it into view). */
 async function runMutation(label: string, invoke: () => Promise<unknown>): Promise<MutationResult> {
   busy = true;
   note = `${label}…`;
@@ -104,8 +105,14 @@ async function runMutation(label: string, invoke: () => Promise<unknown>): Promi
     result = { ok: false, error: messageOf(error) };
   }
   busy = false;
-  note = result.ok ? (result.warning ?? '') : (result.error ?? '');
+  if (!result.ok) {
+    note = result.error ?? 'the action failed';
+    notifyViews();
+    return result;
+  }
   await refreshBoard();
+  note = result.warning ?? '';
+  notifyViews();
   return result;
 }
 
@@ -594,6 +601,37 @@ function openCardMenu(
   item(`Copy branch (${branchForTicket(card.id)})`, () => {
     void navigator.clipboard.writeText(branchForTicket(card.id));
   });
+  {
+    // T-0004: jump to the work checkout to test the ticket. Needs the
+    // ticket's repo AND a local `path:` for it in _meta/repos.md.
+    const repoPath =
+      card.meta.repo === null
+        ? null
+        : snapshot?.repos.find((r) => r.name === card.meta.repo)?.path ?? null;
+    const reason =
+      card.meta.repo === null
+        ? 'This ticket names no repository'
+        : repoPath === null
+          ? `No local "path:" for "${card.meta.repo}" in _meta/repos.md`
+          : null;
+    const button = el(
+      'button',
+      'tickets-menu-item',
+      reason === null ? `Open work folder in terminal (${repoPath})` : 'Open work folder in terminal',
+    );
+    button.type = 'button';
+    button.disabled = reason !== null;
+    button.title = reason ?? `Opens a terminal at ${repoPath}`;
+    button.addEventListener('click', () => {
+      menu.remove();
+      if (card.meta.repo !== null) {
+        void runMutation('Opening terminal', () =>
+          invokeBoard('openRepoFolder', { repo: card.meta.repo }),
+        );
+      }
+    });
+    menu.append(button);
+  }
   item(
     'Take over claim',
     () => {
