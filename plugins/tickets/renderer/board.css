@@ -457,11 +457,6 @@
   background: var(--hover-bg);
 }
 
-.tickets-form-create {
-  border-color: var(--accent-edge) !important;
-  color: var(--accent-text) !important;
-}
-
 /* ---- card context menu ---- */
 
 .tickets-menu {
@@ -496,4 +491,187 @@
 .tickets-menu-item:disabled {
   color: var(--text-6);
   cursor: default;
+}
+
+/* ---- refinement pass ---- */
+
+.tickets-col {
+  transition: border-color 0.12s, background 0.12s;
+}
+
+.tickets-col.tickets-drop-target {
+  border-color: var(--accent-edge);
+  background: var(--hover-bg);
+}
+
+.tickets-col-head {
+  padding: 6px 8px;
+}
+
+.tickets-col-title {
+  font-weight: 600;
+}
+
+.tickets-col-head > .tickets-col-count {
+  padding: 0 6px;
+  border-radius: 999px;
+  background: var(--hover-bg-strong);
+}
+
+.tickets-col-head > .tickets-col-count.tickets-col-over {
+  background: transparent;
+  border: 1px solid var(--status-modified);
+}
+
+.tickets-col-fold {
+  opacity: 0.55;
+}
+
+.tickets-col:hover .tickets-col-fold,
+.tickets-col-fold:focus-visible {
+  opacity: 1;
+}
+
+.tickets-col-empty {
+  padding: 10px 0;
+  border: 1px dashed var(--border);
+  border-radius: var(--radius-xs);
+}
+
+.tickets-col-strip {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.tickets-col.tickets-collapsed:hover {
+  background: var(--hover-bg);
+}
+
+/* Cards: priority edge, calmer hover, focus ring, drag feedback. */
+
+.tickets-card {
+  border-left-width: 3px;
+  transition: border-color 0.12s, background 0.12s;
+}
+
+.tickets-card:has(.tickets-prio-urgent) {
+  border-left-color: var(--status-deleted);
+}
+
+.tickets-card:has(.tickets-prio-high) {
+  border-left-color: var(--accent);
+}
+
+.tickets-card:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+.tickets-card.tickets-dragging {
+  opacity: 0.45;
+}
+
+.tickets-card-top .tickets-prio {
+  margin-left: auto;
+}
+
+.tickets-card-top .tickets-mark,
+.tickets-card-top .tickets-issues {
+  margin-left: 0;
+}
+
+.tickets-mark {
+  display: inline-flex;
+  color: var(--accent-text);
+}
+
+.tickets-title {
+  margin-top: 3px;
+  font-weight: 500;
+}
+
+.tickets-card-meta:empty {
+  display: none;
+}
+
+.tickets-chip-claim .tickets-age {
+  margin-left: 4px;
+}
+
+.tickets-note-busy {
+  animation: tickets-pulse 1.2s ease-in-out infinite;
+}
+
+@keyframes tickets-pulse {
+  50% {
+    opacity: 0.5;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tickets-note-busy {
+    animation: none;
+  }
+}
+
+/* Create modal. */
+
+.tickets-form {
+  min-width: 340px;
+  gap: 10px;
+}
+
+.tickets-form-heading {
+  margin: 0;
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: var(--text-heading);
+}
+
+.tickets-form-field {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  flex: 1;
+  min-width: 0;
+}
+
+.tickets-form-label {
+  font-size: 0.72rem;
+  color: var(--text-3);
+}
+
+.tickets-form-title:focus,
+.tickets-form-desc:focus,
+.tickets-form-row select:focus {
+  outline: none;
+  border-color: var(--accent-edge);
+}
+
+.tickets-form-actions .tickets-form-create {
+  border-color: var(--accent-edge);
+  color: var(--accent-text);
+}
+
+/* Context menu. */
+
+.tickets-menu-sep {
+  height: 1px;
+  margin: 4px 2px;
+  background: var(--border);
+}
+
+.tickets-menu-item:focus-visible {
+  outline: none;
+  background: var(--hover-bg-strong);
+}
+
+.tickets-mark-btn {
+  cursor: pointer;
+  border-radius: var(--radius-xs);
+}
+
+.tickets-mark-btn:hover {
+  background: var(--hover-bg-strong);
 }

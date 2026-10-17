@@ -101,6 +101,18 @@ The T-0002 centre editor tab was **removed again** (T-0006, the owner's
 ruling — the dock panel is the board's home; the shared-store refactor
 from T-0002 stays, serving the panel).
 
+**Board UI polish (2026-10-17, owner request, outside the list):**
+cards carry a priority edge (urgent/high) and a pin icon instead of the
+word "pinned", are keyboard-reachable (Tab, Enter opens); the dragged
+card dims and the target column highlights; empty columns read "No
+tickets" in a dashed drop zone; the count is a pill; the fold chevron
+dims until hover/focus; the card menu has a separator and focuses its
+first item; the New-ticket dialog has a heading and visible field
+labels. A pinned ticket can be **unpinned** (click the pin icon, or the
+card menu's "Unpin from order"): the new `unpin` IPC removes its id from
+`order.md` and commits, so it falls back to the derived order. **Not yet
+manually verified by the owner.**
+
 ### req-45 — the positive update-check answer is inline green text, not a dialog
 
 An owner request, outside the list (2026-10-17, on top of milestone 82).

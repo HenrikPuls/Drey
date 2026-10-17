@@ -394,6 +394,30 @@ class BoardService {
     });
   }
 
+  /** Drops a ticket's pin: it falls back to the derived order. */
+  unpin(input: { id: string }): Promise<MutationResult> {
+    return this.enqueue(async () => {
+      const vault = await this.detect();
+      if (vault === null) {
+        return { ok: false, error: 'no tickets vault detected' };
+      }
+      const orderText = await this.readOptional(vault.id, ORDER_PATH);
+      const nextText = orderText === null ? null : removeIdFromPins(orderText, input.id);
+      if (orderText === null || nextText === orderText) {
+        return { ok: false, error: `${input.id} is not pinned` };
+      }
+      try {
+        await this.ctx.vault.write(ORDER_PATH, nextText as string, { vaultId: vault.id });
+      } catch (error) {
+        return { ok: false, error: `write failed: ${messageOf(error)}` };
+      }
+      const warning = await this.commit(vault, [ORDER_PATH], `tickets: unpin ${input.id}`);
+      this.ctx.vault.announceChanges({ vaultId: vault.id, changedPaths: [ORDER_PATH] });
+      this.announceChanged();
+      return { ok: true, ...(warning === null ? {} : { warning }) };
+    });
+  }
+
   setClaim(input: { id: string; mode: 'takeover' | 'release' }): Promise<MutationResult> {
     return this.enqueue(async () => {
       const found = await this.findCard(input.id);
@@ -546,6 +570,14 @@ const plugin: MainPluginModule = {
         return { ok: false, error: 'bad reorder payload' };
       }
       return board.reorder({ phase: p.phase, id: p.id, index: Math.floor(p.index) });
+    });
+
+    ctx.ipc.handle('unpin', async (payload) => {
+      const p = payload as { id?: unknown };
+      if (typeof p.id !== 'string') {
+        return { ok: false, error: 'bad unpin payload' };
+      }
+      return board.unpin({ id: p.id });
     });
 
     ctx.ipc.handle('claim', async (payload) => {
