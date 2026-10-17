@@ -40,8 +40,10 @@ electron-builder ([ADR-0023](09_architecture_decisions/0023-windows-packaging-el
 | Target     | File                        | Notes |
 |------------|-----------------------------|-------|
 | `nsis`     | `drey-<version>-setup.exe`  | Installer. `oneClick: false`, per-user (`perMachine: false`), the user may change the install dir, `LICENSE` shown. |
+| `nsis`     | `drey-<version>-setup.exe.blockmap` | The differential-update index of the setup exe (ADR-0074). |
+| `nsis`     | `latest.yml`                | The updater's manifest: version, file name, size, SHA512 (ADR-0074). Written because `publish:` is configured; no upload happens from a local pack. |
 | `portable` | `drey-<version>-portable.exe`| Single self-extracting exe, no install. |
-| `dir`      | `release/win-unpacked/`     | `pack:dir` only — the app tree, for a quick smoke test. |
+| `dir`      | `release/win-unpacked/`     | `pack:dir` only — the app tree, for a quick smoke test. Carries `resources/app-update.yml` (the updater's runtime config) in every pack. |
 
 Both installed and portable builds use the **same** config directory,
 `%APPDATA%\drey` (`productName` is lowercase on purpose) — `app-config.json`
@@ -86,6 +88,48 @@ Details worth knowing:
   the panel under test, which keeps the panel's rows inside their scroll
   clip at any window height.
 - Still no code signing — see "First run / limitations" below.
+
+## Cutting a release — and verifying the update flow ([ADR-0074](09_architecture_decisions/0074-github-releases-auto-update.md))
+
+A release is a `v*` tag on `main`. CI builds, tests, packs and attaches
+to the GitHub Release: both exes, `latest.yml` and the setup `.blockmap`
+(the updater's source of truth). The release must be the repo's
+**Latest** (softprops publishes it as such; do not mark it pre-release —
+the updater's stable channel ignores those). Old releases stay — a
+deleted blockmap only degrades the *next* update to a full download, but
+old installers are the manual fallback.
+
+The full installer flow is verified by hand (no e2e can install into a
+runner meaningfully) — run this checklist once per updater-relevant
+change, on a real Windows machine with an installed (NSIS) build:
+
+1. **Baseline installed:** `drey-<current>-setup.exe` from the last
+   release that carried `app-update.yml` (the first is the one shipping
+   milestone 82). Run it once, put a dirty tab in it.
+2. **Cut the new release:** bump `package.json` `version`, commit, tag
+   `v<version>`, push; wait for CI green and the release assets
+   (`latest.yml` present, `drey-<version>-setup.exe`, `.blockmap`).
+3. **Startup check:** start the old install → after ~10 s the "A Drey
+   update is available" dialog (versions correct, English throughout).
+   *Remind me later* → restart → asks again. *Skip this version* →
+   restart → silent; Settings → Updates shows the skipped version and
+   "Ask about it again" clears it.
+4. **Manual check:** Help menu → *Check for updates* — same dialog; with
+   no newer release it says "Drey is up to date".
+5. **Download + install:** answer *Download update* → progress in
+   Settings → Updates (blockmap delta small if the previous release is
+   close) → *Update downloaded* dialog → *Install and restart* → the
+   **save-before-exit prompt** appears for the dirty tab → save → app
+   quits → NSIS installer (assisted, SmartScreen may warn — unsigned) →
+   finish → Drey relaunches on the **new version** (About / titlebar).
+   The single-instance lock must not complain.
+6. **Cancel path:** repeat with a dirty tab and *Cancel* on the exit
+   prompt — the app stays open, nothing installs, a later plain quit
+   installs the asked-for update.
+7. **Portable + blocked network (spot checks):** the portable exe
+   reports "cannot update itself" + releases-page fallback; with the
+   network off, the startup check stays silent and the manual check
+   shows the error dialog.
 
 ## App layout & the `app://` renderer
 
@@ -217,9 +261,11 @@ registry). Keep the extension list in step with
   NSIS toolchain (~100 MB) into `%LOCALAPPDATA%\electron-builder\Cache` —
   needs network once; offline CI must pre-seed `ELECTRON_BUILDER_CACHE`.
 - **No code signing yet.** The installer and portable exe are unsigned, so
-  Windows SmartScreen shows an "unknown publisher" prompt. Acceptable for
-  personal / small-team use; a real cert is a later step. No auto-update
-  channel either.
+  Windows SmartScreen shows an "unknown publisher" prompt — also on every
+  update install. Acceptable for personal / small-team use; a real cert is
+  a later step. Update integrity until then is the SHA512 in `latest.yml`
+  (electron-updater verifies it after the download); see
+  [ADR-0074](09_architecture_decisions/0074-github-releases-auto-update.md).
 - `build/icon.ico` / `build/icon.png` and `public/icon.png` /
   `public/favicon.ico` are generated from `build/logo-source.png` by
   `npm run make:icon` (`scripts/make-icon.mjs`, `sharp` + `png-to-ico`),

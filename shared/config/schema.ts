@@ -746,6 +746,24 @@ export interface VaultHistoryConfig {
 export type UpdateLinksMode = 'ask' | 'always' | 'never';
 export const UPDATE_LINKS_MODES: readonly UpdateLinksMode[] = ['ask', 'always', 'never'];
 
+/**
+ * Settings category "Updates" (milestone 82, ADR-0074): the in-app update
+ * system against the repo's GitHub Releases. The startup check is the one
+ * automatic network call the app makes — a documented exception (it sends
+ * no user content; download, install and restart always ask).
+ */
+export interface UpdatesConfig {
+  /** Look for a newer release on app start (ADR-0074's opt-in ruling). */
+  checkOnStartup: boolean;
+  /**
+   * The version the user answered "Skip this version" to; the startup
+   * prompt stays silent for exactly that version. `null` = nothing
+   * skipped. Written by the main process (`AppConfigStore.patch`) — the
+   * one config write that does not come from the Settings screen.
+   */
+  skippedVersion: string | null;
+}
+
 export interface AppConfig {
   /** Bumped only on a breaking shape change; `normalizeAppConfig` migrates. */
   version: 1;
@@ -759,6 +777,7 @@ export interface AppConfig {
   daily: DailyConfig;
   templates: TemplatesConfig;
   vault: VaultConfig;
+  updates: UpdatesConfig;
   widgets: WidgetsConfig;
   plugins: PluginsConfig;
   keybindings: KeybindingsConfig;

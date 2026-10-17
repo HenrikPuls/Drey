@@ -10,7 +10,9 @@
 # workflow artifacts (3 days, run page): uploading them on every push and
 # PR filled the account's artifact storage quota (req-43). A `v*` tag push
 # additionally attaches them to a GitHub Release (public, permanent
-# download).
+# download), together with the updater's metadata — `latest.yml` and the
+# NSIS `.blockmap` — so the in-app update system (ADR-0074) has a
+# permanent, versioned source.
 #
 # Caching: ELECTRON_CACHE / ELECTRON_BUILDER_CACHE are redirected into the
 # workspace so actions/cache can pick them up without Windows path
@@ -168,4 +170,6 @@ jobs:
           files: |
             release/drey-*-setup.exe
             release/drey-*-portable.exe
+            release/drey-*-setup.exe.blockmap
+            release/latest.yml
           generate_release_notes: true

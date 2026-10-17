@@ -20,6 +20,59 @@ recorded as an explicit decision. The parity checklist lives in
 
 ## Recent milestones
 
+### Milestone 82 — auto-update from GitHub Releases
+
+The old "Next" item 8, split: the update system ships here, code signing
+stays its own item. **Not yet manually verified by the owner.**
+
+Drey can now update itself from the repo's GitHub Releases
+([ADR-0074](../docs/09_architecture_decisions/0074-github-releases-auto-update.md)).
+electron-updater is the transport (GitHub provider, differential blockmap
+downloads, SHA512 verification); every decision stays Drey's —
+`autoDownload` / `autoInstallOnAppQuit` off, and each ask a native
+English dialog in main: *update available* (Download update / Skip this
+version / Remind me later), *downloaded* (Install and restart / Later).
+On start — 10 s after the splash handover — the app checks GitHub for a
+newer "Latest" release. That check is **on by default**: ADR-0074's
+bounded exception to the everything-opt-in rule (the check sends no user
+content; everything after it asks), with a Settings switch to turn it
+off. "Skip this version" persists `updates.skippedVersion` through the
+first main-side config write (`AppConfigStore.patch`). Installing closes
+the window through the ordinary save-before-exit prompt; the installer
+is armed only once the window really closed, then runs at `will-quit`
+(one-shot `quitAndInstall(false, true)`: assisted NSIS, relaunch after
+install — the fresh instance takes the single-instance lock cleanly).
+The renderer never touches the network: `shared/ipc/updates.ts` +
+`electron/ipc/update-handlers.ts` carry the triggers and a status push;
+the surfaces are Settings → Updates (status, check now, download
+progress, install) and the Help menu's "Check for updates". Dev runs,
+other platforms and the portable exe report `unsupported` and get the
+releases-page fallback; a failed startup check stays silent (log only),
+the manual check shows the error.
+
+Supply side: `electron-builder.yml` declares `publish: github`, so every
+pack writes `latest.yml` (the SHA512 manifest), the setup `.blockmap`
+and the packaged `app-update.yml` — proven on a real local pack
+(`npm run pack`, `verify:pack` all green) — and CI attaches `latest.yml`
++ blockmap to the `v*` release next to the exes. Only releases that
+themselves carry the updater can self-update: 0.6.0 installs make the
+hop to the first updater release by manual download. Corporate proxies
+are noted, not engineered for: the updater rides Electron's `net` stack
+(system proxy, Windows certificate store).
+
+Verified by: renderer + main typechecks, lint, import cycles, the unit
+suites (new: `shared/updates.spec.ts`, the updates slice in
+`shared/app-config.spec.ts`, `electron/updater/update-service.spec.ts` —
+the state machine over fakes), the full production build and the
+packed-app smoke test. The full installer flow has the manual
+verification checklist in
+[`docs/07`](../docs/07_deployment_view.md) ("Cutting a release").
+
+Docs: ADR-0074, `docs/05` (component + feature rows), `docs/06` §6.63,
+`docs/07` (artifacts, CI, release checklist), the manual (Settings →
+Updates, the Help menu). One new runtime dependency: electron-updater
+(now in the About page's licence list).
+
 ### Architectural cleanup A12 — unit tests for the composition root
 
 Item A12, the last follow-up of the 2026-10-13 architecture review

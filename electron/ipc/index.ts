@@ -33,8 +33,10 @@ import { registerPluginHandlers } from './plugin-handlers';
 import { registerQueryHandlers } from './query-handlers';
 import { registerSessionHandlers } from './session-handlers';
 import { registerSpellHandlers } from './spell-handlers';
+import { registerUpdateHandlers } from './update-handlers';
 import { registerVaultHandlers } from './vault-handlers';
 import type { ExternalVaultChanges } from '../vault-change-announcer';
+import { UpdateService } from '../updater/update-service';
 
 export { McpWriteBridge } from './mcp-write-bridge';
 export { ToolApprovalBridge } from './tool-approval-bridge';
@@ -71,6 +73,7 @@ export interface IpcHandlerDeps {
   announceVaultChange: (changes: ExternalVaultChanges) => void;
   pluginHost: PluginHost;
   pluginInstaller: PluginInstaller;
+  updateService: UpdateService;
 }
 
 export function registerIpcHandlers(deps: IpcHandlerDeps): void {
@@ -86,4 +89,5 @@ export function registerIpcHandlers(deps: IpcHandlerDeps): void {
   registerMcpHandlers(deps);
   registerSpellHandlers(deps);
   registerPluginHandlers(deps);
+  registerUpdateHandlers(deps);
 }

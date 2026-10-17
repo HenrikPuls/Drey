@@ -34,6 +34,7 @@ import {
   SpellLanguage,
   StartupProgressReport,
   TagVocabularyPayload,
+  UpdateStatus,
   NoteHistoryEntry,
   RenameLinksPreview,
   RenameLinksRequest,
@@ -343,6 +344,20 @@ const dreyApi: DreyApi = {
   uninstallPlugin: (pluginId: string): Promise<PluginUninstallResult> =>
     ipcRenderer.invoke(IPC_CHANNELS.pluginUninstall, pluginId),
   relaunchApp: (): Promise<void> => ipcRenderer.invoke(IPC_CHANNELS.appRelaunch),
+  // The update system (milestone 82, ADR-0074). Everything runs in main;
+  // the renderer triggers and displays. The status push keeps Settings →
+  // Updates and any future surface in step with the dialogs.
+  getUpdateStatus: (): Promise<UpdateStatus> => ipcRenderer.invoke(IPC_CHANNELS.updateGetStatus),
+  checkForUpdates: (): Promise<UpdateStatus> => ipcRenderer.invoke(IPC_CHANNELS.updateCheck),
+  downloadUpdate: (): Promise<UpdateStatus> => ipcRenderer.invoke(IPC_CHANNELS.updateDownload),
+  installUpdate: (): Promise<void> => ipcRenderer.invoke(IPC_CHANNELS.updateInstall),
+  openReleasesPage: (): Promise<void> => ipcRenderer.invoke(IPC_CHANNELS.updateOpenReleases),
+  onUpdateStatusChanged: (listener: (status: UpdateStatus) => void): (() => void) => {
+    // Forward only the payload, never the IpcRendererEvent (ADR-0001).
+    const wrapped = (_event: IpcRendererEvent, status: UpdateStatus): void => listener(status);
+    ipcRenderer.on(IPC_CHANNELS.updateStatusChanged, wrapped);
+    return () => ipcRenderer.removeListener(IPC_CHANNELS.updateStatusChanged, wrapped);
+  },
 };
 
 contextBridge.exposeInMainWorld('dreyApi', dreyApi);

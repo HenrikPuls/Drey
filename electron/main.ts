@@ -314,6 +314,7 @@ if (!app.requestSingleInstanceLock() && !allowMultiInstance) {
       announceVaultChange: (changes) => vaultAnnouncer.announceExternal(changes),
       pluginHost,
       pluginInstaller: built.pluginInstaller,
+      updateService: built.updateService,
     });
     // The File/Edit/Selection/View menus are drawn by the renderer titlebar
     // now (ADR-0019). Keep a native menu only on macOS, where the menu bar
@@ -373,6 +374,12 @@ if (!app.requestSingleInstanceLock() && !allowMultiInstance) {
 
     captureHotkey.sync(appConfig.get().keybindings.capture);
 
+    // The startup update check (milestone 82, ADR-0074): one quiet look
+    // at the GitHub releases once the workspace is up — never during
+    // boot, never in dev (the service is inert unpackaged), and a failed
+    // check stays in the log.
+    setTimeout(() => void built.updateService.runStartupCheck(), 10_000);
+
     app.on('activate', () => {
       // `mainWindow`, not `getAllWindows().length`: the splash also is a
       // window, and it is no reason to skip recreating the main one.
@@ -397,6 +404,9 @@ if (!app.requestSingleInstanceLock() && !allowMultiInstance) {
   app.on('before-quit', (event) => mainWindow.interceptQuit(event));
 
   app.on('will-quit', () => {
+    // A confirmed update install runs its installer now (ADR-0074): all
+    // windows are gone, the exit prompt already decided over dirty tabs.
+    services?.updateService.finishQuit();
     globalShortcut.unregisterAll();
     splashForShutdown?.close();
     void services?.mcpHttp.stop();

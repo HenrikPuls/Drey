@@ -10,6 +10,7 @@ import {
 import { openSearchPanel } from '@codemirror/search';
 import type { EditorView } from '@codemirror/view';
 import { HelpService } from '../help/help.service';
+import { UpdateService } from '../services/update.service';
 import { KeybindingService } from '../keybindings';
 import { DockService, WidgetId, WidgetRegistryService } from '../dock';
 import {
@@ -81,6 +82,7 @@ export class MenuService {
   private readonly windowChrome = inject(WindowChromeService);
   private readonly zen = inject(ZenService);
   private readonly help = inject(HelpService);
+  private readonly update = inject(UpdateService);
 
   readonly open = signal<MenuId | null>(null);
 
@@ -428,6 +430,14 @@ export class MenuService {
           label: 'Keyboard shortcuts',
           hint: this.hint('help.shortcuts'),
           run: () => this.run('help.shortcuts'),
+        },
+        {
+          kind: 'item',
+          label: 'Check for updates',
+          run: () => {
+            this.close();
+            this.update.checkNow();
+          },
         },
         SEP,
         {

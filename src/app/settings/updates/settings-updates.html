@@ -1,0 +1,65 @@
+<app-settings-pane
+  title="Updates"
+  description="How Drey keeps itself current: a startup check against the Drey releases on GitHub, and the download and install steps — every one of them asks first."
+>
+  @if (updates(); as updates) {
+    <section>
+      <h3>Automatic check</h3>
+      <label class="switch-row">
+        <input
+          type="checkbox"
+          [checked]="updates.checkOnStartup"
+          (change)="onStartupChange($any($event.target).checked)"
+        />
+        <span>
+          <span class="switch-label">Check for updates on start</span>
+          <span class="switch-hint">
+            Once the app is up, Drey asks GitHub whether a newer release exists — nothing else
+            happens on its own: downloading, installing and restarting always ask first. The check
+            sends none of your notes or settings; turn it off to keep the app entirely offline.
+          </span>
+        </span>
+      </label>
+      @if (updates.skippedVersion !== null) {
+        <div class="field">
+          <p class="field-hint">
+            The startup prompt is silent for Drey {{ updates.skippedVersion }} (you chose “Skip this
+            version”); a manual check still reports, and any newer version asks again.
+          </p>
+          <button type="button" class="link" (click)="onClearSkip()">Ask about it again</button>
+        </div>
+      }
+    </section>
+
+    <section>
+      <h3>Status</h3>
+      @if (statusLine(); as line) {
+        <p class="field-hint">{{ line }}</p>
+      }
+      @if (update.status()?.phase === 'error' && update.status()?.error) {
+        <p class="field-hint">{{ update.status()?.error }}</p>
+      }
+      <div class="row">
+        <button type="button" class="ghost" [disabled]="busy()" (click)="update.checkNow()">
+          Check for updates
+        </button>
+        @if (canDownload()) {
+          <button type="button" class="primary" (click)="update.download()">Download update</button>
+        }
+        @if (canInstall()) {
+          <button type="button" class="primary" (click)="update.install()">
+            Install and restart
+          </button>
+        }
+        <button type="button" class="link" (click)="update.openReleasesPage()">
+          Open releases page
+        </button>
+      </div>
+      <p class="field-hint">
+        Installing closes Drey — unsaved tabs go through the usual save-before-exit prompt — and
+        the installer relaunches the app when done. The exes are unsigned, so Windows may show its
+        SmartScreen warning before the installer starts.
+      </p>
+    </section>
+  }
+</app-settings-pane>

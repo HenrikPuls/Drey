@@ -56,6 +56,7 @@ import {
   UPDATE_LINKS_MODES,
   UpdateLinksMode,
   VaultConfig,
+  UpdatesConfig,
   WidgetsConfig,
   PluginsConfig,
   KeybindingsConfig,
@@ -70,6 +71,7 @@ import {
   DEFAULT_MCP_CONFIG,
   defaultToolsConfig,
   DEFAULT_TEMPLATES_CONFIG,
+  DEFAULT_UPDATES_CONFIG,
   DEFAULT_VAULT_CONFIG,
   losslessFormatTemplate,
   ruledEntryTemplate,
@@ -559,6 +561,14 @@ function normalizeSnippets(raw: unknown): SnippetConfig[] {
   return out;
 }
 
+function normalizeUpdates(raw: unknown): UpdatesConfig {
+  const source = (raw ?? {}) as Record<string, unknown>;
+  return {
+    checkOnStartup: bool(source['checkOnStartup'], DEFAULT_UPDATES_CONFIG.checkOnStartup),
+    skippedVersion: optionalText(source['skippedVersion']),
+  };
+}
+
 function normalizeVault(raw: unknown): VaultConfig {
   const source = (raw ?? {}) as Record<string, unknown>;
   const mode = source['updateLinksOnRename'];
@@ -802,6 +812,7 @@ export function normalizeAppConfig(raw: unknown): AppConfig {
     daily: normalizeDaily(source['daily']),
     templates: normalizeTemplatesConfig(source['templates']),
     vault: normalizeVault(source['vault']),
+    updates: normalizeUpdates(source['updates']),
     widgets: normalizeWidgets(source['widgets']),
     plugins: normalizePlugins(source['plugins']),
     keybindings: normalizeKeybindings(source['keybindings']),
