@@ -23,7 +23,7 @@ recorded as an explicit decision. The parity checklist lives in
 ### req-45 — the positive update-check answer is inline green text, not a dialog
 
 An owner request, outside the list (2026-10-17, on top of milestone 82).
-**Not yet manually verified by the owner.**
+**Manually verified by the owner (2026-10-17).**
 
 A manual "Check for updates" that finds nothing new no longer opens a
 window: main sets the `up-to-date` status only, and the renderer shows
@@ -41,7 +41,11 @@ cases, and the reworked state-machine spec case (no dialog on
 ### Milestone 82 — auto-update from GitHub Releases
 
 The old "Next" item 8, split: the update system ships here, code signing
-stays its own item. **Not yet manually verified by the owner.**
+stays its own item. **Manually verified by the owner (2026-10-17)** — the
+full round on a real install: baseline 0.7.0, the startup ask, skip and
+later, the manual check, the differential download, the install through
+the save-before-exit prompt (dirty tab saved, cancel path included), the
+relaunch on 0.7.1, and req-45's green inline confirmation.
 
 Drey can now update itself from the repo's GitHub Releases
 ([ADR-0074](../docs/09_architecture_decisions/0074-github-releases-auto-update.md)).
