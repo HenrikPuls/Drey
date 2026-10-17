@@ -167,6 +167,17 @@ export const test = base.extend<DreyFixtures>({
     // Force the production `app://` renderer even if the caller's shell
     // still has DREY_RENDERER_URL exported from `npm run dev`.
     env['DREY_RENDERER_URL'] = '';
+    // The seeded vault sits under `test-results/` INSIDE this repo's
+    // checkout (so a failure uploads it), which makes git's upward
+    // discovery find the repo itself: every test vault would pose as a Git
+    // vault of the Drey sources -- in CI a full clone with real branches,
+    // one confirmed dialog away from merging inside the checkout (bug-12).
+    // A ceiling at the repo root stops discovery before it leaves the test
+    // tree; the git specs init their repositories inside the vault, which
+    // the ceiling does not touch.
+    env['GIT_CEILING_DIRECTORIES'] = env['GIT_CEILING_DIRECTORIES']
+      ? `${env['GIT_CEILING_DIRECTORIES']}${path.delimiter}${repoRoot}`
+      : repoRoot;
     if (extraPluginDir !== null) {
       env['DREY_EXTRA_PLUGIN_DIR'] = extraPluginDir;
     }

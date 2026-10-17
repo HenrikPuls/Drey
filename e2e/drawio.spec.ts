@@ -38,6 +38,20 @@ async function openFromTree(page: Page, name: string): Promise<void> {
   await page.locator('app-dock[side="left"] .node.file', { hasText: name }).click();
 }
 
+/**
+ * Runs a command through the command palette. The palette is an Angular
+ * overlay: keys typed before it mounts are dropped or split the query, and
+ * the remnant can rank another command first (bug-12) -- so wait for the
+ * dialog and for the filtered row before Enter.
+ */
+async function runCommand(page: Page, label: string): Promise<void> {
+  await page.keyboard.press('Control+Shift+P');
+  await expect(page.locator('app-palette .palette')).toBeVisible();
+  await page.keyboard.type(label);
+  await expect(page.locator('app-palette .palette .item', { hasText: label })).toBeVisible();
+  await page.keyboard.press('Enter');
+}
+
 /** Selects everything in the editor frame and nudges it one step right. */
 async function moveTheBox(page: Page): Promise<void> {
   const frame = page.frameLocator('iframe.drawio-frame');
@@ -168,9 +182,7 @@ test.describe('draw.io diagrams (ADR-0064)', () => {
     await page.keyboard.press('Escape');
     await expect(page.locator('app-settings')).toHaveCount(0);
 
-    await page.keyboard.press('Control+Shift+P');
-    await page.keyboard.type('New diagram');
-    await page.keyboard.press('Enter');
+    await runCommand(page, 'New diagram');
     await expect(page.locator('iframe.drawio-frame')).toBeVisible({ timeout: 30000 });
     const created = (fs.readdirSync(vaultDir, { recursive: true }) as string[]).filter((name) =>
       path.basename(name).startsWith('diagram-'),
@@ -236,9 +248,7 @@ test.describe('draw.io diagrams (ADR-0064)', () => {
   });
 
   test('"New diagram" creates a file and opens it', async ({ page, vaultDir }) => {
-    await page.keyboard.press('Control+Shift+P');
-    await page.keyboard.type('New diagram');
-    await page.keyboard.press('Enter');
+    await runCommand(page, 'New diagram');
 
     await expect(page.locator('iframe.drawio-frame')).toBeVisible({ timeout: 30000 });
     // Beside the focused note (today's daily note), in its attachments folder.

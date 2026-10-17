@@ -20,6 +20,33 @@ recorded as an explicit decision. The parity checklist lives in
 
 ## Recent milestones
 
+### Fix — CI: the drawio palette e2e no longer types into a half-open palette (bug-12)
+
+Owner request, outside the list (2026-10-17): the main-branch CI run
+behind PR #15 failed both tests that create a diagram through the command
+palette. **Not yet manually verified by the owner.**
+
+They typed "New diagram" immediately after `Ctrl+Shift+P`, before the
+Angular overlay had mounted — the dropped keys left a one-letter query
+whose best fuzzy match is "Git: Merge a branch…", so Enter opened the
+branch picker instead of creating a diagram. That picker was live because
+the e2e vaults sit under `test-results/` inside the checkout, where git's
+upward discovery resolves every test vault to the Drey sources
+themselves — one confirmed dialog away from a real `git merge` in the CI
+checkout.
+
+- `e2e/drawio.spec.ts`: a `runCommand` helper waits for the palette and
+  the filtered command row before Enter (what `e2e/zen.spec.ts` already
+  did).
+- `e2e/manual-screenshots.spec.ts`: the file-palette screenshot waits for
+  the dialog before typing — same race, dormant.
+- `e2e/fixtures/drey.ts`: the launched app gets
+  `GIT_CEILING_DIRECTORIES` at the repo root, so a non-git test vault
+  stays non-git even inside the checkout (the git specs init their repos
+  in the vault, which the ceiling does not touch).
+
+No app code changed; tests only.
+
 ### req-45 — the positive update-check answer is inline green text, not a dialog
 
 An owner request, outside the list (2026-10-17, on top of milestone 82).
