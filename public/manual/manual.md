@@ -8,7 +8,7 @@ unless you explicitly switch on a hosted AI provider.
 
 > All screenshots in this manual were taken from the app's default
 > **Anthrazit** theme (neutral charcoal, blue accent) on Windows. The demo
-> vault shown is German â€” your notes can be in any language; the interface
+> vault shown is German — your notes can be in any language; the interface
 > itself is English.
 
 **Contents**
@@ -69,10 +69,10 @@ The app imposes only a few conventional folders inside a vault:
 
 ### The two surfaces of "settings"
 
-- **App settings** (Settings screen, `Ctrl+,`) â€” appearance, AI
+- **App settings** (Settings screen, `Ctrl+,`) — appearance, AI
   connection, plugins and so on. Stored in the operating system's user
   data directory, *never* in the vault.
-- **Vault content** â€” templates, tag prefix colours' effect on notes,
+- **Vault content** — templates, tag prefix colours' effect on notes,
   the daily-note layout. These live in the vault's files.
 
 ---
@@ -83,22 +83,22 @@ The app imposes only a few conventional folders inside a vault:
 
 The frameless window is built from:
 
-- **Titlebar** â€” the accent square, the dock toggles (`Ctrl+B` left,
+- **Titlebar** — the accent square, the dock toggles (`Ctrl+B` left,
   `Ctrl+Alt+B` right), the **File / Edit / Selection / View** menus, the
   back/forward arrows (see below), and minimize/maximize/close.
-- **Left dock** â€” Calendar, Files, Templates, Search, Tasks, Open
+- **Left dock** — Calendar, Files, Templates, Search, Tasks, Open
   windows, Outline, Backlinks, Source control. Every panel can be
   collapsed to its header, dragged to another dock, or resized against
   its neighbours.
-- **Centre column** â€” the tab bar, the meta bar (path, formatting
+- **Centre column** — the tab bar, the meta bar (path, formatting
   buttons, save, `â‹¯` menu) and the editor.
-- **Right dock** â€” the Assistant panel by default.
-- **Status bar** (bottom, 28 px) â€” word/character count, a context hint
+- **Right dock** — the Assistant panel by default.
+- **Status bar** (bottom, 28 px) — word/character count, a context hint
   while panels are being moved, and the Settings entry.
 
 ### Back and forward
 
-The arrows right of the menus walk the session's document history â€”
+The arrows right of the menus walk the session's document history —
 like a browser, across all open panes. `Alt+Left` / `Alt+Right` do the
 same, and the mouse side buttons (XButton1/2) are bound VS Code-style.
 Stepping back to a closed note reopens it.
@@ -112,11 +112,11 @@ arrangement and undocks docked editor panes.
 ### Zen mode
 
 *View â†’ Zen mode* (or `Ctrl+Alt+Z`) hides the titlebar, all docks and
-the status bar and leaves just the editor with its tab bar and meta bar â€”
+the status bar and leaves just the editor with its tab bar and meta bar —
 a plain page for writing or reading. It combines freely with `F11` full
 screen. While it is on the menu bar is hidden too; the same chord and the
 command palette (`Mod+Shift+P`) stay available. `Ctrl+Alt+Z` again brings
-everything back exactly as it was â€” zen never rearranges your layout, and
+everything back exactly as it was — zen never rearranges your layout, and
 it is not remembered across restarts.
 
 ---
@@ -136,7 +136,7 @@ file tree.
   capture and chats. Every operation can still address another vault
   explicitly (search scopes, the tasks panel, drag & drop).
 - Click a file to open it. Right-click a file or folder for **New
-  file / New folder / Rename / Delete** â€” names are edited in place.
+  file / New folder / Rename / Delete** — names are edited in place.
 - **Drag & drop** moves files and folders within a vault, into another
   vault's header row, or onto a folder or file row. Renames and moves
   can automatically rewrite wikilinks that pointed at the old path
@@ -147,7 +147,7 @@ file tree.
 ### Files from outside
 
 - A vault file with an Office extension (`.docx`, `.xlsx`, `.pptx`, â€¦)
-  never opens as a tab â€” Drey hands it to the operating system, so it
+  never opens as a tab — Drey hands it to the operating system, so it
   opens in Word/Excel/PowerPoint. Dropping such a file into a note
   copies it into `attachments/` and links it; **Alt-dropping** links the
   original file instead.
@@ -157,7 +157,7 @@ file tree.
 
 ### Staying in sync
 
-By default Drey does **not** watch the vault folder â€” external changes
+By default Drey does **not** watch the vault folder — external changes
 appear after the **Refresh** button in the Files panel header (or
 `vault.refresh` from the command palette). An opt-in watcher that
 reacts to outside changes immediately can be enabled in
@@ -172,14 +172,14 @@ reacts to outside changes immediately can be enabled in
 One editor, three reading/writing modes, switched in the meta bar's `â‹¯`
 menu:
 
-- **Live Preview** (default) â€” a true in-place preview: the cursor sits
+- **Live Preview** (default) — a true in-place preview: the cursor sits
   in the rendered document, Markdown markers reveal only around the
   selection, tables/images/diagrams render as widgets that show their
   raw source while the caret is inside them. A link in the text opens
   with `Ctrl`+click (a plain click places the caret); a link inside a
   rendered table or block opens with a plain click.
-- **View** â€” read-only rendering; plain clicks follow links.
-- **Source** â€” raw Markdown.
+- **View** — read-only rendering; plain clicks follow links.
+- **Source** — raw Markdown.
 
 ![The â‹¯ menu](img/editor-more-menu.png)
 
@@ -189,7 +189,7 @@ configured.
 
 The editor's text size zooms with `Ctrl +` / `Ctrl -` / `Ctrl 0` or
 `Ctrl`+wheel; while it differs from 100%, the meta bar shows the
-percentage â€” click it to reset.
+percentage — click it to reset.
 
 ![Source mode](img/editor-source.png)
 
@@ -197,19 +197,19 @@ percentage â€” click it to reset.
 
 Typing `/` on an empty line opens the **slash menu**:
 
-- **Entry** â€” the quick-capture block: a `## HH:mm` heading with an
+- **Entry** — the quick-capture block: a `## HH:mm` heading with an
   optional topic, exactly what daily-note journaling uses. The inserted
   format is configurable (Settings â†’ *Entry format*).
-- **Templatesâ€¦** â€” opens the template picker at the caret (see
+- **Templatesâ€¦** — opens the template picker at the caret (see
   *Editing aids* below). Typing a template's name after the slash
   (`/stand`) offers it directly, with a preview card.
-- **Formatting** â€” headings, lists, quotes, tables, code blocks.
+- **Formatting** — headings, lists, quotes, tables, code blocks.
 
 ![The slash menu](img/slash-menu.png)
 
 ### Snippets
 
-Typing a snippet trigger â€” `tbl`, `code`, `task`, â€¦ â€” offers a
+Typing a snippet trigger — `tbl`, `code`, `task`, â€¦ — offers a
 multi-line block with `${1:placeholder}` tabstops: accept with `Enter`,
 then jump between placeholders with `Tab`. The library is yours to edit
 in Settings â†’ *Templates*.
@@ -220,17 +220,17 @@ in Settings â†’ *Templates*.
 
 - `#tag` words render as **pills**; `Ctrl`/`Cmd`-click a pill to search
   it. Typing `#` autocompletes from your existing vocabulary. Tags are
-  free labels â€” `#project/relaunch` style namespaces give structure
+  free labels — `#project/relaunch` style namespaces give structure
   without folders.
 - `[[Note name]]` renders as an internal link (unresolved targets are
-  muted and dotted). `Ctrl`/`Cmd`-click **opens** the target â€” creating
-  the note if it does not exist â€” and `[[Note#Heading]]` jumps to a
+  muted and dotted). `Ctrl`/`Cmd`-click **opens** the target — creating
+  the note if it does not exist — and `[[Note#Heading]]` jumps to a
   heading. `[[Note|alias]]` shows the alias text. Typing after `[[`
   autocompletes note names across all vaults.
 
 ### Editing aids
 
-- **Formatting strip** â€” one row of icons: the template picker,
+- **Formatting strip** — one row of icons: the template picker,
   paragraph style (body text, headings, blockquote, callouts), Bold,
   Italic, more text formats (strikethrough, highlight, sub- and
   superscript, *Clear formatting*), lists, Task list, Link, Table (a
@@ -241,20 +241,20 @@ in Settings â†’ *Templates*.
   its first menu is the usual *Cut / Copy / Paste* list, open from the
   start. Its **pin** docks the strip into the meta bar and releases it
   again (also *Pin formatting toolbar* in the command palette).
-- **Template picker** â€” the strip's first button, and *Templatesâ€¦* in
+- **Template picker** — the strip's first button, and *Templatesâ€¦* in
   the slash menu: type to filter, `â†‘`/`â†“` move through the list,
   `â†’`/`â†` open and close a folder, `Enter` inserts the template at the
   caret, `Esc` closes. The right half previews the selected template.
   Subfolders of `templates/` show as folders; `templates/prompts/`
   (the Assistant's prompts) is left out.
-- **Folding** â€” headings collapse Obsidian-style; the chevron appears on
+- **Folding** — headings collapse Obsidian-style; the chevron appears on
   hover in the gutter.
-- **Line numbers** â€” the *Lines* toggle (`Ctrl+G`), an app-wide
+- **Line numbers** — the *Lines* toggle (`Ctrl+G`), an app-wide
   preference.
-- **Spell checking** â€” Hunspell dictionaries (English and German
+- **Spell checking** — Hunspell dictionaries (English and German
   bundled), per-language and personal word lists in Settings â†’
   *Spelling*.
-- **Find in note** â€” from the `Selection`/context menu; CodeMirror's
+- **Find in note** — from the `Selection`/context menu; CodeMirror's
   search panel.
 - Selection menu helpers: *Select line*, *Move line up/down*,
   *Duplicate selection*, *Toggle task done*.
@@ -285,40 +285,40 @@ Every save keeps the overwritten text as a restorable version
   created with a starter layout on first use and is yours to edit.
   Placeholders: `{{date}}`, `{{time}}`, `{{datetime}}`, `{{title}}`.
 - **Quick capture**: press `Ctrl+Alt+N` anywhere in Windows while Drey
-  is running â€” the window comes forward, today's daily note opens, and a
+  is running — the window comes forward, today's daily note opens, and a
   fresh `## HH:mm` section starts. Type, then `Ctrl+S`. (The main window
-  must be open â€” there is no tray mode. If the hotkey does nothing,
+  must be open — there is no tray mode. If the hotkey does nothing,
   another program owns it.)
 
 Journal entries through the day are exactly the slash menu's **Entry**
-block â€” heading with time, your text, optional `#tags`.
+block — heading with time, your text, optional `#tags`.
 
 ---
 
 ## 6. Tasks
 
-A task is any `- [ ]` checklist line â€” or a plain text line carrying
+A task is any `- [ ]` checklist line — or a plain text line carrying
 `#task`. Tasks understand Obsidian-compatible inline metadata:
 
-- a due date: `ðŸ“… 2026-10-14`
-- a priority glyph: one of `ðŸ”º` `â«` `ðŸ”½`
+- a due date: `📅 2026-10-14`
+- a priority glyph: one of `ðŸ”º` `⏫` `ðŸ”½`
 
 ```markdown
-- [ ] Clarify image rights with the editor ðŸ“… 2026-10-14 â«
+- [ ] Clarify image rights with the editor 📅 2026-10-14 ⏫
 ```
 
 ![The Tasks panel](img/panel-tasks.png)
 
 The **Tasks panel** lists tasks from
 
-- **Doc** â€” the open document's live buffer,
-- **Vault** â€” every note in the active vault,
-- **All** â€” every registered vault, grouped per file with a vault badge.
+- **Doc** — the open document's live buffer,
+- **Vault** — every note in the active vault,
+- **All** — every registered vault, grouped per file with a vault badge.
 
 The toolbar offers *hide done*, a kind filter (checkbox tasks vs.
 `#task` lines) and a sort cycle (file order / due / priority). Rows show
 a due badge (coloured when overdue or due today) and the priority glyph
-â€” both are buttons that re-open their pickers. In the editor, typing
+— both are buttons that re-open their pickers. In the editor, typing
 `due` / `prio` on a task line (or clicking a metadata chip) opens the
 same pickers in place.
 
@@ -333,7 +333,7 @@ same pickers in place.
 
 Tags are free inline `#tag` labels (never directories, no frontmatter
 list). The **Tags plugin** keeps a per-vault index of every
-heading-delimited section â€” tagged or not â€” so full-text search reaches
+heading-delimited section — tagged or not — so full-text search reaches
 unindexed-looking notes too.
 
 ![The Search panel](img/panel-search.png)
@@ -347,7 +347,7 @@ The **Search panel** (open with `Ctrl+Shift+F`) has:
   expression (an invalid regex shows an inline error, not an empty
   list).
 - **Include chats** (speech-bubble toggle): `chats/` notes stay indexed
-  but are excluded from vault/all results â€” and from replace â€” unless
+  but are excluded from vault/all results — and from replace — unless
   this is on.
 
 Results are sections grouped per file; a click opens the file at the
@@ -372,7 +372,7 @@ digest of the hits into an editable scratch tab, cancellable, over the
 
 Settings â†’ **Tags** colours tag prefixes (longest `/`-namespace wins,
 otherwise a deterministic palette) and renames/merges tags across the
-whole vault â€” a grammar-faithful token rewrite, descendants included by
+whole vault — a grammar-faithful token rewrite, descendants included by
 default. `#task` is reserved and never suggested for renaming.
 
 ---
@@ -386,7 +386,7 @@ default. `#task` is reserved and never suggested for renaming.
   picker (the formatting strip's first button, *Templatesâ€¦* in the
   slash menu) and in "New note" flows.
 - **Snippet triggers** (`tbl`, `code`, â€¦) are edited in Settings â†’
-  *Templates* â€” the library is user-owned app config, with `${n:placeholder}`
+  *Templates* — the library is user-owned app config, with `${n:placeholder}`
   tabstops.
 - **Prompts** for the Assistant are Markdown files in the `prompts`
   folder of your templates folder (`templates/prompts/` by default): a
@@ -405,18 +405,18 @@ The **Assistant panel** is chat-first:
 - The head shows the active conversation plus a chat-list button and
   `+` for a new chat. At startup the newest chat loads once; otherwise
   the panel keeps its chat while you move around the app. Opening a
-  chat's own note tab hydrates the panel with it â€” that is the only
+  chat's own note tab hydrates the panel with it — that is the only
   implicit switch.
 - **Every turn is persisted** as ordinary Markdown under
   `chats/<year>/<month>/â€¦` (`kind: chat`). Chat notes auto-save; a
   follow-up replays the whole history, tool calls and applied edits
-  included. There is no length cap and no hidden state â€” the note *is*
+  included. There is no length cap and no hidden state — the note *is*
   the transcript.
 - The **composer** grows with its text and understands `@` to attach
   note chips (autocomplete over vault paths), paste/drop of images, and
   a `+` button to stage external files (they are copied into the vault).
-  The tool row: **Attach** Â· **Live edit** Â· **Vault context** Â·
-  **Prompts** Â· **model picker**.
+  The tool row: **Attach** · **Live edit** · **Vault context** ·
+  **Prompts** · **model picker**.
 
 ![The chat picker](img/assistant-chat-picker.png)
 
@@ -425,10 +425,10 @@ The **Assistant panel** is chat-first:
 Select text in a note and a small assistant button appears next to the
 selection. It opens a popover with:
 
-- a **question field** â€” type and press `Enter`;
-- your **prompts** (the files in the prompts folder, see section 8) â€”
+- a **question field** — type and press `Enter`;
+- your **prompts** (the files in the prompts folder, see section 8) —
   one click asks that prompt;
-- your **manual Actions** â€” one click runs the Action with the selection
+- your **manual Actions** — one click runs the Action with the selection
   as its focus.
 
 A question or prompt is answered in the Assistant panel; the selection
@@ -444,10 +444,10 @@ inserts it into the open note.
 
 ### Vault context
 
-The **Vault chip** opens a picker â€” *Off / Active vault / All vaults*
+The **Vault chip** opens a picker — *Off / Active vault / All vaults*
 plus one checkbox per registered vault, so a non-active vault can be
 targeted without switching. When on, the note sections that contain
-words of your question are added to that one call â€” up to four, the
+words of your question are added to that one call — up to four, the
 ones with the rarest words first, a word in a heading counting more.
 Nothing has to be switched on or built for this. It matches words, not
 meaning: ask with a word the note uses. A model that can call tools
@@ -460,7 +460,7 @@ Tags plugin's index; with that plugin disabled there are none.
 
 The **Live edit** chip opts a single question into direct editing: the
 model changes the open note piece by piece (`vault_edit`), each change
-lands in the editor as one undoable step â€” without a confirmation and
+lands in the editor as one undoable step — without a confirmation and
 **without saving**; you save when you are happy with it. The document is
 locked against your typing while the turn runs, and the result is
 recorded in the chat note. It also works on a new tab you have not
@@ -469,7 +469,7 @@ otherwise it says so.
 
 Without live edit the assistant changes the open note the same way, but
 shows you each change as a diff first and saves the note once you
-accept. This works with the Vault chip off as well â€” the note attached
+accept. This works with the Vault chip off as well — the note attached
 to the question is always within reach, the rest of the vault only with
 the chip. The assistant works on what the tab shows, so text you have
 not saved yet is seen and kept. (A model or provider that cannot call
@@ -478,20 +478,20 @@ same dialog.)
 
 ### Actions
 
-**Actions** are saved prompts with behaviour â€” *Autotag* (suggest
+**Actions** are saved prompts with behaviour — *Autotag* (suggest
 tags), *Search summary*, *Structure note (lossless)*, and your own:
 name + prompt + result kind (inline diff or whole-document preview).
 Triggers run **manually** from the editor's `â‹¯` menu or **on save**.
 Writing results pass through the shared confirmation dialog with a
 "don't ask again" switch. Managed in Settings â†’ *Actions*.
 
-*Structure note (lossless)* turns a raw note into structured Markdown â€”
-headings and lists where they help, obvious typos fixed â€” without
+*Structure note (lossless)* turns a raw note into structured Markdown —
+headings and lists where they help, obvious typos fixed — without
 adding, dropping or interpreting anything, and tags it only with tags
 your vault already uses. It is in the `â‹¯` menu on a fresh install; if
 you had Drey before, add a manual trigger for it in Settings â†’
 *Actions*. You see the whole rewrite side by side before anything
-changes â€” check the tags there, the model is told to invent none but
+changes — check the tags there, the model is told to invent none but
 nothing forces it.
 
 In any Action prompt, `{{AVAILABLE_TAGS}}` is replaced with your vault's
@@ -501,7 +501,7 @@ along; you do not need a placeholder for it.
 ### Suggest tags
 
 `â‹¯` â†’ *Suggest tags* sends the caret's heading section to the model and
-applies its tag suggestions to that section directly â€” the classifier
+applies its tag suggestions to that section directly — the classifier
 only ever suggests; `#task` stays reserved.
 
 ---
@@ -511,21 +511,21 @@ only ever suggests; `#task` stays reserved.
 ![The LLM settings](img/settings-llm.png)
 
 Drey is local-first: the default provider is any **OpenAI-compatible
-endpoint** on your machine â€” LM Studio (the documented default,
+endpoint** on your machine — LM Studio (the documented default,
 `http://localhost:1234/v1`), Unsloth Desktop, llama.cpp, vLLM, Ollama.
 
-- **Master switch** â€” off means classification, Actions and the chat
+- **Master switch** — off means classification, Actions and the chat
   all degrade with a clear message instead of failing silently.
-- **Model id** â€” pick from `GET /models` or type it by hand (CLI/web
+- **Model id** — pick from `GET /models` or type it by hand (CLI/web
   providers advertise no model list at all; the field stays free-form).
-- **No generation timeout** â€” a local model may think for minutes;
+- **No generation timeout** — a local model may think for minutes;
   you cancel instead of the app cutting it off.
 - A request log with runnable `curl` equivalents sits at the bottom of
   the page.
 
-Hosted presets â€” **OpenRouter, Anthropic API, Z.ai GLM** â€” and CLI
-providers â€” **Claude Code (headless)**, **GitHub Copilot CLI**, and the
-removable **Copilot Web** scraper â€” are strictly opt-in and off by
+Hosted presets — **OpenRouter, Anthropic API, Z.ai GLM** — and CLI
+providers — **Claude Code (headless)**, **GitHub Copilot CLI**, and the
+removable **Copilot Web** scraper — are strictly opt-in and off by
 default. API keys are stored in plain text in `app-config.json` in your
 user data directory (like every desktop client of a local endpoint).
 
@@ -543,20 +543,20 @@ may do, and when it has to ask.
 **The vault.** Which vaults the assistant can look into you choose per
 question, with the **Vault** button under the question field (off, the
 active vault, all vaults, or a selection). In those vaults it can list
-what exists, search for exact words â€” also inside one note â€”, and read
+what exists, search for exact words — also inside one note —, and read
 a note whole or in parts. With the button off it sees only what you attached
-to the question â€” and the open note, when it is attached, is the one
+to the question — and the open note, when it is attached, is the one
 file it can still read and change.
 
 Whether it may also **change** notes there is the *Vault* choice in
 Settings â†’ Assistant tools:
 
-- **Not allowed** â€” it only reads. The one exception is the note
+- **Not allowed** — it only reads. The one exception is the note
   attached to your question: a change you ask for there is shown as a
   diff and applied when you accept.
-- **Show the change and ask first** â€” every edit, new file or appended
+- **Show the change and ask first** — every edit, new file or appended
   text opens the diff dialog; you accept or decline.
-- **Change without asking** â€” edits apply at once. Use it when you trust
+- **Change without asking** — edits apply at once. Use it when you trust
   the model and the task.
 
 A **move** asks in a small dialog under *ask first*; a **deletion**
@@ -568,11 +568,11 @@ a tab is read as the tab shows it and changed in the tab, so unsaved
 text is neither missed nor overwritten; the same goes for programs
 connected to Drey's MCP server.
 
-**The other groups** â€” tasks, templates, web search, web fetch and each
-external MCP server â€” have a switch each, `write: confirm | auto` where they write,
+**The other groups** — tasks, templates, web search, web fetch and each
+external MCP server — have a switch each, `write: confirm | auto` where they write,
 and `approval: ask | allow` on everything that leaves the machine. An
 external tool call under *ask* shows the shared approval dialog (source,
-tool, arguments â€” *Allow / Always allow / Deny*).
+tool, arguments — *Allow / Always allow / Deny*).
 
 **Rounds of tool calls per question** (default 12) is how often the
 assistant may look something up or change something before it has to
@@ -582,7 +582,7 @@ keeps circling.
 
 While the assistant works, its answer card lists every tool call as it
 starts, and marks one that failed. A failed call is not the end of the
-turn â€” the model is told what was wrong and tries again. If your model
+turn — the model is told what was wrong and tries again. If your model
 or its server does not accept tools at all, the assistant notices on the
 first question and goes on without them.
 
@@ -591,17 +591,17 @@ first question and goes on without them.
 Settings â†’ **Assistant tools** â†’ *Web search* lets the assistant search
 the web (`web_search`). Pick a provider:
 
-- **DuckDuckGo** â€” no account, works at once. Drey reads DuckDuckGo's
+- **DuckDuckGo** — no account, works at once. Drey reads DuckDuckGo's
   ordinary result page, which is not made for programs: it can change or
   refuse requests. Fine to try things out.
-- **Brave Search** or **Tavily** â€” dependable; each needs an API key
+- **Brave Search** or **Tavily** — dependable; each needs an API key
   from the provider. The key is stored encrypted on this computer.
-- **SearXNG** â€” the address of an instance you run yourself. It must
+- **SearXNG** — the address of an instance you run yourself. It must
   allow the JSON format (`search.formats` in its `settings.yml`).
 
 A search returns titles, addresses and short excerpts. With *Web fetch*
 on as well, the assistant can then read the pages it found. Your search
-words go to the provider you chose â€” with *Ask every time* you see them
+words go to the provider you chose — with *Ask every time* you see them
 before each search.
 
 Whether a question may use any of this is your choice per question: the
@@ -643,20 +643,20 @@ opt-in discipline, off by default.
 ![The Source control panel](img/panel-git.png)
 
 A vault can be a Git repository (its root or a folder inside one). The
-**git plugin** runs your installed `git` â€” no bundled reimplementation.
+**git plugin** runs your installed `git` — no bundled reimplementation.
 The panel shows the repository of the focused document's vault:
 
 - **Branch button** â†’ switch, track a remote branch, create.
-- **Commit** box â€” `Ctrl+Enter`, or *Commit and push*
+- **Commit** box — `Ctrl+Enter`, or *Commit and push*
   (`Ctrl+Shift+Enter`). Drey asks before committing with unsaved tabs,
   and refuses checkout/pull while the vault has unsaved tabs.
-- **Merge conflicts / Staged changes / Changes** lists â€” row click
+- **Merge conflicts / Staged changes / Changes** lists — row click
   compares through the diff view; stage, unstage, discard, open from
   each row.
-- **History** (collapsible) â€” commits not on the upstream carry a
+- **History** (collapsible) — commits not on the upstream carry a
   "â†‘ not pushed" marker.
-- Header icons: Fetch Â· Pull Â· Push Â· More (merge a branch, stash,
-  stashes, amend â€” never of a pushed commit â€” file history) Â· Refresh.
+- Header icons: Fetch · Pull · Push · More (merge a branch, stash,
+  stashes, amend — never of a pushed commit — file history) · Refresh.
 - A merge shows a banner with an abort button; the conflict surface is
   keep mine / keep theirs / mark resolved.
 
@@ -740,12 +740,12 @@ specified in the repo's `specs/ticket-schema.md`.
 
 ![A diagram embedded in a note](img/editor-drawio-embed.png)
 
-Drey bundles **draw.io** offline â€” nothing is sent anywhere.
+Drey bundles **draw.io** offline — nothing is sent anywhere.
 
 - Insert a diagram from the formatting strip's *Insert* menu or with
   `/diagram` in the slash menu. Until first drawn it is a placeholder
   picture in the note.
-- Files: `.drawio` (XML), `.drawio.svg` and `.drawio.png` â€” the two
+- Files: `.drawio` (XML), `.drawio.svg` and `.drawio.png` — the two
   picture formats are ordinary images that carry the diagram inside, so
   notes embed them with the normal image syntax and PDF export needs
   nothing extra. Which format a new diagram gets is set in Settings â†’
@@ -753,7 +753,7 @@ Drey bundles **draw.io** offline â€” nothing is sent anywhere.
 
 ![The draw.io editor tab](img/tab-drawio.png)
 
-Opening a diagram file opens draw.io in its own tab â€” **auto-saving**,
+Opening a diagram file opens draw.io in its own tab — **auto-saving**,
 no manual `Ctrl+S`. A changed picture reloads in open notes
 automatically.
 
@@ -761,12 +761,12 @@ automatically.
 
 ## 15. Images, PDFs and Office documents
 
-- **Paste or drop** images into a note â€” they are stored under
+- **Paste or drop** images into a note — they are stored under
   `attachments/` and referenced with a relative path. Images pasted from
   the web are downloaded and get a `[Source]` link line beneath.
 - Click an image's magnifier to zoom (the picture opens in an image
   tab). PDFs in the vault open in a PDF tab.
-- **Office documents never render in Drey** â€” they open in their own
+- **Office documents never render in Drey** — they open in their own
   program (see [Vaults and files](#3-vaults-and-files)). A note link may
   also be a local `file:` URL to a document outside the vault; nothing
   else may use `file:`, and never a network share.
@@ -783,15 +783,15 @@ automatically.
   down*), or `Ctrl+Alt+Enter` / `Ctrl+Alt+Shift+Enter`. `F6` /
   `Shift+F6` cycle pane focus. The layout is an arbitrary tree of rows
   and columns with draggable splitters.
-- **Tabs** â€” drag to reorder or to move between panes (ghost chip +
+- **Tabs** — drag to reorder or to move between panes (ghost chip +
   drop line; `Esc` cancels). The pin in a tab's context menu keeps it
   from being replaced. Opening a file replaces the focused pane's
   *clean, unpinned* tab; `Ctrl+Enter` in the quick switcher opens
   beside the current tab.
-- **Docked editor bands** â€” any pane can be dragged into the left/right
+- **Docked editor bands** — any pane can be dragged into the left/right
   dock (above the panels) or docked from its tab menu; it persists with
   the session. *View â†’ Reset layout* undocks them.
-- **Panels** â€” every panel header is a drag grip: move panels between
+- **Panels** — every panel header is a drag grip: move panels between
   the left, right and bottom docks, resize them with the splitters,
   collapse them to their 32 px headers. The whole layout persists
   across restarts.
@@ -821,7 +821,7 @@ current tab, and a no-match query offers *Create note*.
 
 ![The command palette](img/palette-commands.png)
 
-`Ctrl+Shift+P` opens the **command palette** â€” every registered command
+`Ctrl+Shift+P` opens the **command palette** — every registered command
 with its shortcut (same actions as the menus, plus *Reset layout*,
 *Refresh vault*, *Open today's daily note*, *Toggle source mode*,
 *Export as PDFâ€¦*, *File historyâ€¦*, â€¦).
@@ -836,15 +836,15 @@ Every save that overwrites text keeps the previous version in the app's
 history store (never in the vault; bounded in Settings â†’ *Vault*).
 `â‹¯` â†’ *File historyâ€¦* (also the tab context menu and the command
 palette) lists versions with a diff against your current buffer;
-**Restore** loads a version into the editor â€” saving keeps it.
+**Restore** loads a version into the editor — saving keeps it.
 
 ![The file history dialog](img/dialog-history.png)
 
 ### Save conflicts
 
 When a file changed on disk after your tab last saw it, `Ctrl+S`
-refuses to overwrite: the **merge view** opens â€” *on disk | result |
-mine* â€” with per-block checkboxes and an editable result column. The
+refuses to overwrite: the **merge view** opens — *on disk | result |
+mine* — with per-block checkboxes and an editable result column. The
 meta bar's "Changed on disk" button opens the same view early.
 
 ![The conflict merge view](img/dialog-conflict.png)
@@ -853,7 +853,7 @@ meta bar's "Changed on disk" button opens the same view early.
 
 - **Exit auto-save**: unsaved untitled tabs are parked in the hidden
   `.drafts/` folder and offered back on the next start (Notepad++
-  style) â€” chats and scratch tabs never raise the exit prompt, only
+  style) — chats and scratch tabs never raise the exit prompt, only
   your own unsaved notes do.
 - **Session restore** reopens tabs, panes, carets and scroll positions.
 - **Renames rewrite links** that would break (ask / always / never in
@@ -866,7 +866,7 @@ meta bar's "Changed on disk" button opens the same view early.
 
 Open with the status-bar entry or `Ctrl+,`. Core categories are
 alphabetical, plugin-contributed ones follow, *About* closes the list.
-Every change applies as you make it â€” there is no *Save* and no
+Every change applies as you make it — there is no *Save* and no
 *Discard*. A switch or a list choice acts at once; a typed value is
 stored when you leave the field or press Enter. The footer shows
 "Changes are saved automatically" and one *Close* button.
@@ -894,9 +894,9 @@ stored when you leave the field or press Enter. The footer shows
 
 ![Appearance settings](img/settings-appearance.png)
 
-Three bespoke themes ship â€” **Anthrazit** (neutral charcoal, blue accent,
+Three bespoke themes ship — **Anthrazit** (neutral charcoal, blue accent,
 AA contrast; the default), **Drey** (terracotta) and **Cyberpunk**
-(violet-black with neon pink and violet) â€” plus a
+(violet-black with neon pink and violet) — plus a
 catalogue of published CodeMirror themes. The accent colour follows the
 theme by default or can be pinned; the UI scale resizes the whole app;
 the editor typeface and font scale affect only the writing surface.
@@ -925,12 +925,12 @@ Every command and the system-wide **quick-capture** hotkey, each with
 its shortcut. **Change** waits for you to press the new keys (Esc
 cancels); **Remove** leaves the command without a shortcut; **Reset**
 brings back the one Drey ships with. A shortcut needs `Ctrl` or `Alt`,
-or a function key (`F1`â€“`F12`) â€” a plain letter would swallow typing â€”
+or a function key (`F1`â€“`F12`) — a plain letter would swallow typing —
 and the editor's own keys (undo, the clipboard, find, zoom, â€¦) cannot be
 taken; they are listed under *Fixed*. If another command already has
 the keys you press, Drey names it and offers **Replace**, which leaves
 that command without a shortcut. When another program holds the
-quick-capture keys, the row says so â€” choose another combination.
+quick-capture keys, the row says so — choose another combination.
 Your shortcuts show everywhere at once: the menus, the command palette
 and Help â†’ Keyboard shortcuts.
 
@@ -959,24 +959,24 @@ and the personal word list.
 
 ![Vault settings](img/settings-vault.png)
 
-- **Watch for external changes** (off by default) â€” the opt-in file
+- **Watch for external changes** (off by default) — the opt-in file
   watcher; with it off, use Refresh.
-- **Rewrite links on rename** â€” `ask` / `always` / `never`.
-- **Local note history** â€” enabled, keep days (30), max versions per
+- **Rewrite links on rename** — `ask` / `always` / `never`.
+- **Local note history** — enabled, keep days (30), max versions per
   file (50).
 
 ### Settings: Updates {#settings-updates}
 
-- **Check for updates on start** (on by default) â€” once the app is up,
+- **Check for updates on start** (on by default) — once the app is up,
   Drey asks GitHub whether a newer release exists. That is all the
   "automatic" there is: downloading, installing and restarting always
   ask first, and the check sends none of your notes or settings. Turn it
   off to keep the app entirely offline.
-- **Status** â€” the current version, a *Check for updates* button (same
+- **Status** — the current version, a *Check for updates* button (same
   as the Help menu), the download progress, and *Install and restart*
   once an update is downloaded. When this already is the newest release,
-  the status line shows it in green â€” no dialog. Installing closes
-  Drey â€” unsaved tabs go through the usual save-before-exit prompt â€” and
+  the status line shows it in green — no dialog. Installing closes
+  Drey — unsaved tabs go through the usual save-before-exit prompt — and
   the installer relaunches the app when done. Windows may show its
   SmartScreen warning before the installer starts (the exes are
   unsigned).
@@ -984,7 +984,7 @@ and the personal word list.
   about it again* link; the startup prompt stays silent for exactly that
   version, a manual check always reports.
 - The **portable exe** cannot update itself (there is no install to
-  update) â€” it offers the releases page on GitHub instead. The same
+  update) — it offers the releases page on GitHub instead. The same
   fallback appears when a network blocks the check.
 
 ### Plugin-contributed pages
@@ -1005,22 +1005,22 @@ and the personal word list.
 
 The **Help** menu in the title bar has everything:
 
-- **User manual** (`F1`) â€” this manual, opened inside the app as a
+- **User manual** (`F1`) — this manual, opened inside the app as a
   read-only pinned tab. Screenshots included; it scrolls and follows
   links like any document.
-- **Keyboard shortcuts** â€” a generated list of every command this build
+- **Keyboard shortcuts** — a generated list of every command this build
   knows, base and plugins alike, with its current shortcut. It always
   matches the command palette, because it is built from the same
   registry at the moment you open it.
-- **Check for updates** â€” looks for a newer Drey release now (see
+- **Check for updates** — looks for a newer Drey release now (see
   [Settings â†’ Updates](#settings-updates)). A new version asks before it
   downloads; when this already is the newest release, a short green note
-  in the status bar says so â€” no dialog.
-- **About Drey** â€” version, build number and licence information (the
+  in the status bar says so — no dialog.
+- **About Drey** — version, build number and licence information (the
   same page as Settings â†’ *About*).
 
 Help documents are normal tabs in every other respect: they can be
-dragged to another pane, and closing one loses nothing â€” the Help menu
+dragged to another pane, and closing one loses nothing — the Help menu
 brings them back.
 
 ---
@@ -1053,8 +1053,8 @@ hotkey, in [Settings â†’ Keyboard shortcuts](#settings-keyboard-shortcuts).
 | `/` on an empty line | Slash menu (Entry, templates, formatting) |
 | `Esc` | Close menus, dialogs, drag operations |
 
-The command palette lists every command with its current shortcut â€” your
-own, where you changed one â€” and so does Help â†’ **Keyboard shortcuts**,
+The command palette lists every command with its current shortcut — your
+own, where you changed one — and so does Help â†’ **Keyboard shortcuts**,
 as a document you can keep open beside your notes.
 
 ---
@@ -1063,41 +1063,41 @@ as a document you can keep open beside your notes.
 
 | Data | Location |
 | --- | --- |
-| Notes, templates, chats, attachments | your vault folder â€” plain Markdown, YAML frontmatter, files |
+| Notes, templates, chats, attachments | your vault folder — plain Markdown, YAML frontmatter, files |
 | App settings + API keys | `<userData>/app-config.json` (plain text) |
 | Vault registry (which folders, which active) | `<userData>/vault-config.json` |
 | Local note history | `<userData>/history/<vaultId>/` |
 | Installed plugins | `<userData>/plugins/<id>/` |
 
 Because the vault is just files, any file-based backup covers your
-notes completely â€” Drey adds no hidden state inside the vault (the
+notes completely — Drey adds no hidden state inside the vault (the
 history store is deliberately outside it).
 
 ---
 
 ## 23. Troubleshooting
 
-- **"LLM features are off"** â€” the master switch in Settings â†’ LLM is
+- **"LLM features are off"** — the master switch in Settings â†’ LLM is
   off, or no model is selected. The request log on the same page shows
   exactly what was (not) sent.
-- **A hosted provider rejects the key** â€” 401/403 is almost always the
+- **A hosted provider rejects the key** — 401/403 is almost always the
   API key, not the URL; the log's `curl` command lets you verify
   outside the app.
-- **Generation seems stuck** â€” there is deliberately no timeout; cancel
+- **Generation seems stuck** — there is deliberately no timeout; cancel
   the turn instead.
-- **Quick capture hotkey does nothing** â€” another program owns
+- **Quick capture hotkey does nothing** — another program owns
   `Ctrl+Alt+N`; Drey logs a warning to the main-process console.
-- **External file changes don't show up** â€” the watcher is off by
+- **External file changes don't show up** — the watcher is off by
   default; press Refresh in the Files panel or enable it in Settings â†’
   Vault.
-- **A plugin's panel is missing** â€” check Settings â†’ *Panels & plugins*
+- **A plugin's panel is missing** — check Settings â†’ *Panels & plugins*
   (changes apply on restart), and the plugin's status line there.
-- **MCP clients can't write** â€” a change waits for the confirmation
+- **MCP clients can't write** — a change waits for the confirmation
   dialog unless YOLO mode is on; a deletion always does.
-- **The assistant says it cannot change a note** â€” Settings â†’ Assistant
+- **The assistant says it cannot change a note** — Settings â†’ Assistant
   tools â†’ *Vault* is set to "Not allowed", or the Vault button under the
   question field does not include that vault.
-- **Git panel is empty** â€” the vault is not inside a Git repository, or
+- **Git panel is empty** — the vault is not inside a Git repository, or
   `git` is not on `PATH` (set it in Settings â†’ *Git*); press Refresh
   after initializing a repository.
 
@@ -1106,6 +1106,6 @@ history store is deliberately outside it).
 *Manual for Drey 0.7.1; manual content last changed
 2026-10-17. Screenshots were captured automatically from
 the built app (Anthrazit theme, 1600Ã—1000) by
-`e2e/manual-screenshots.spec.ts` â€” run
+`e2e/manual-screenshots.spec.ts` — run
 `$env:DREY_MANUAL_SHOTS='1'; npm run e2e:run -- manual-screenshots`
 after `npm run build` to regenerate them.*
