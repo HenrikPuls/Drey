@@ -252,6 +252,7 @@ export class RunSupervisor {
         now: this.now(),
         actor: this.agentActor(),
         action: `run ${id} started (${request.provider}${request.model !== null ? `, ${request.model}` : ''})`,
+        ...(request.recordWorker !== undefined && request.recordWorker !== '' ? { setWorker: request.recordWorker } : {}),
         ...(handle.pid !== null
           ? { run: { pid: handle.pid, 'started-at': this.stamp(), stream: id } }
           : {}),

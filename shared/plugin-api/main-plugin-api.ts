@@ -341,6 +341,10 @@ export interface MainPluginContext {
     getMainWindow(): BrowserWindow | null;
     onWillQuit(cb: () => void): Unsubscribe;
     readonly appVersion: string;
+    /** The app's user-data root (SDK 1.27): app-data a plugin may build
+     *  on, e.g. `<userRoot>/fleet` for the fleet runner's runtime files.
+     *  Never vault content. */
+    readonly userRoot: string;
   };
 
   readonly vault: {

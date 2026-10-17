@@ -14,6 +14,38 @@
 /** `T-` + at least four digits (`T-0042`). Grammar of ids AND file stems. */
 export const TICKET_ID_PATTERN = /^T-\d{4,}$/;
 
+// ---------------------------------------------------------------------------
+// The pipeline's handover spec (`_meta/pipeline.md`, ADR-0076):
+// `manual | agent <prompt-ref>[@<worker>] | ci | none`. Parsed here so
+// the board, the fleet run start and the specs share one grammar.
+
+export type HandoverMode = 'manual' | 'agent' | 'ci' | 'none';
+
+export interface HandoverSpec {
+  readonly mode: HandoverMode;
+  /** The prompt the fleet runs (`agent build-default`); null unless agent. */
+  readonly promptRef: string | null;
+  /** The worker pin (`@opencode`) on the handover, when present. */
+  readonly worker: string | null;
+}
+
+/** Reads a handover spec; anything unreadable degrades to `manual` (the
+ *  asymmetric-tolerance rule: forgive, never guess). */
+export function parseHandover(spec: string): HandoverSpec {
+  const text = spec.trim();
+  if (text === 'manual' || text === 'ci' || text === 'none') {
+    return { mode: text, promptRef: null, worker: null };
+  }
+  if (text === '' || text === 'agent') {
+    return { mode: 'agent', promptRef: null, worker: null };
+  }
+  const match = /^agent\s+(\S+?)(?:@(\S+))?$/.exec(text);
+  if (match !== null) {
+    return { mode: 'agent', promptRef: match[1]!, worker: match[2] ?? null };
+  }
+  return { mode: 'manual', promptRef: null, worker: null };
+}
+
 /** The deterministic work-branch rule — `t/` + the id, both directions. */
 export function branchForTicket(id: string): string {
   return `t/${id}`;
@@ -83,6 +115,8 @@ export interface TicketMeta {
   readonly id: string | null;
   readonly title: string | null;
   readonly repo: string | null;
+  /** The ticket's worker pin (`worker: opencode`); null = not pinned. */
+  readonly worker: string | null;
   readonly priority: TicketPriority;
   readonly rank: number;
   readonly branch: string | null;
@@ -105,6 +139,8 @@ export interface TicketCard {
   readonly phase: string;
   readonly meta: TicketMeta;
   readonly pinned: boolean;
+  /** The resolved fleet worker for this card (M84 display resolution). */
+  readonly worker: string;
   readonly issues: readonly TicketIssue[];
 }
 
@@ -114,8 +150,29 @@ export interface PipelinePhase {
   readonly title: string;
   readonly wip: number | null;
   readonly claim: boolean;
-  /** Raw handover spec (`manual | agent <ref> | ci | none`). */
+  /** Raw handover spec (`manual | agent <ref>[@<worker>] | ci | none`). */
   readonly handover: string;
+}
+
+/**
+ * The display-grade worker resolution for a card (M84): the ticket's
+ * pin wins, then the phase handover's pin, then the repo default, then
+ * the plugin's configured default. The run start re-resolves strictly
+ * (unreadable pins refuse there) — this one only picks what a card
+ * shows.
+ */
+export function resolveCardWorker(
+  ticketWorker: string | null,
+  handover: string | null,
+  repoWorker: string | null,
+  defaultWorker: string,
+): string {
+  for (const value of [ticketWorker, handover === null ? null : parseHandover(handover).worker, repoWorker]) {
+    if (value !== null && value.trim() !== '') {
+      return value;
+    }
+  }
+  return defaultWorker;
 }
 
 /** One work repo from `tickets/_meta/repos.md`. */
@@ -127,6 +184,8 @@ export interface RepoRef {
   /** Local checkout / worktree to open for testing (T-0004); the clone
    *  URL stays `url`. Null when not configured. */
   readonly path: string | null;
+  /** The repo's default fleet worker (`worker: opencode`), or null. */
+  readonly worker: string | null;
 }
 
 export interface BoardColumn {
@@ -145,6 +204,8 @@ export interface BoardSnapshot {
   readonly activeVaultName: string | null;
   /** False when the tickets vault is not a git repo (transitions unversioned). */
   readonly isGitRepo: boolean;
+  /** The configured default fleet worker (M84). */
+  readonly defaultWorker: string;
   readonly pipeline: readonly PipelinePhase[];
   readonly pipelineError: string | null;
   readonly repos: readonly RepoRef[];

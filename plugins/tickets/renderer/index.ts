@@ -17,6 +17,7 @@ import {
   type TicketCard,
 } from '../shared/tickets';
 import { createColumnCollapseStore } from './column-collapse';
+import type { RunInfo } from '../main/fleet/protocol';
 
 function el<K extends keyof HTMLElementTagNameMap>(
   tag: K,
@@ -144,6 +145,24 @@ let draggedFrom: string | null = null;
 let insertPhase: string | null = null;
 let insertAt = 0;
 
+// --- the fleet's live runs (M84, ADR-0075) --------------------------------
+
+const LIVE_RUN_STATES: readonly string[] = ['starting', 'running', 'stopping'];
+let fleetRuns: RunInfo[] = [];
+
+const runForCard = (id: string): RunInfo | null =>
+  fleetRuns.find((r) => r.ticketId === id && LIVE_RUN_STATES.includes(r.state)) ?? null;
+
+const liveRuns = (): readonly RunInfo[] =>
+  fleetRuns.filter((r) => LIVE_RUN_STATES.includes(r.state));
+
+const applyFleetRuns = (runs: readonly RunInfo[]): void => {
+  fleetRuns = [...runs];
+  for (const view of views) {
+    view.render();
+  }
+};
+
 const clearInsert = (): void => {
   for (const marker of document.querySelectorAll('.tickets-insert-above')) {
     marker.classList.remove('tickets-insert-above');
@@ -227,6 +246,17 @@ function cardNode(api: DreyPluginApi, card: TicketCard, column: BoardColumn): HT
   const meta = el('div', 'tickets-card-meta');
   if (card.meta.repo !== null) {
     meta.append(el('span', 'tickets-chip', card.meta.repo));
+  }
+  if (card.meta.worker !== null) {
+    const pinned = el('span', 'tickets-chip tickets-chip-worker', card.worker);
+    pinned.title = `Worker pin — ${card.meta.worker} (falls back to the repo/phase default when empty)`;
+    meta.append(pinned);
+  }
+  const live = runForCard(card.id);
+  if (live !== null) {
+    const runChip = el('span', 'tickets-chip tickets-chip-run', `▶ ${live.state}`);
+    runChip.title = `run ${live.id} (${live.provider}) — ${live.state}; open the card menu to watch, steer or stop`;
+    meta.append(runChip);
   }
   if (card.meta.parkedReason !== null) {
     const parked = el('span', 'tickets-chip tickets-chip-parked', 'parked');
@@ -458,6 +488,10 @@ function buildBoardView(api: DreyPluginApi): BoardView {
       board.append(columnNode(api, column));
     }
     root.append(board);
+    const fleet = fleetFooterNode(api);
+    if (fleet !== null) {
+      root.append(fleet);
+    }
     if (!snap.isGitRepo) {
       const warn = el('div', 'tickets-warn');
       warn.textContent =
@@ -683,6 +717,210 @@ function openCreateModal(api: DreyPluginApi, snap: BoardSnapshot): void {
   });
 }
 
+// --- the fleet run controls (M84, ADR-0075) --------------------------------
+
+const WORKER_LABEL: ReadonlyArray<readonly [string, string]> = [
+  ['opencode', 'OpenCode'],
+  ['claude-code', 'Claude Code'],
+];
+
+/** One live run's row in the board footer: state, spend, and the three controls. */
+function fleetFooterNode(api: DreyPluginApi): HTMLElement | null {
+  const runs = liveRuns();
+  if (runs.length === 0) {
+    return null;
+  }
+  const footer = el('div', 'tickets-fleet');
+  for (const run of runs) {
+    const row = el('div', 'tickets-fleet-run');
+    row.append(
+      el('span', 'tickets-fleet-id', run.ticketId),
+      el('span', 'tickets-fleet-provider', run.provider),
+      el('span', `tickets-fleet-state tickets-fleet-${run.state}`, run.state),
+    );
+    const age = ageOf(run.startedAt);
+    if (age !== '') {
+      const stamp = el('span', 'tickets-age', age);
+      stamp.title = `started ${run.startedAt}`;
+      row.append(stamp);
+    }
+    const tokens = run.tokensIn + run.tokensOut;
+    if (tokens > 0) {
+      row.append(el('span', 'tickets-fleet-tok', `${(tokens / 1000).toFixed(1)}k tok`));
+    }
+    if (run.costUsd !== null && run.costUsd > 0) {
+      row.append(el('span', 'tickets-fleet-cost', `$${run.costUsd.toFixed(2)}`));
+    }
+    if (run.steerCount > 0) {
+      const steer = el('span', 'tickets-fleet-steer', `${run.steerCount}× steer`);
+      steer.title = `last steer rung: ${run.lastSteerRung ?? '—'}`;
+      row.append(steer);
+    }
+    const button = (label: string, title: string, onClick: () => void): void => {
+      const b = el('button', 'tickets-fleet-btn', label);
+      b.type = 'button';
+      b.title = title;
+      b.addEventListener('click', onClick);
+      row.append(b);
+    };
+    button('Watch', `Tail the run's stream (${run.id})`, () => openWatchModal(api, run.id));
+    button('Steer', 'Send a message into the live run', () => openSteerModal(api, run.id));
+    button('Stop', 'Kill the worker (the ticket stays in its phase)', () => {
+      void runMutation('Stopping the run', () => invokeBoard('fleetStop', { runId: run.id, reason: null }));
+    });
+    footer.append(row);
+  }
+  return footer;
+}
+
+function openRunModal(api: DreyPluginApi, card: TicketCard): void {
+  const close = api.ui.showModal((host) => {
+    const form = el('div', 'tickets-form');
+    form.append(el('h3', 'tickets-form-heading', `Run ${card.id} — ${card.meta.title ?? '(untitled)'}`));
+
+    const field = (label: string, control: HTMLElement): HTMLElement => {
+      const wrap = el('label', 'tickets-form-field');
+      wrap.append(el('span', 'tickets-form-label', label), control);
+      return wrap;
+    };
+    const worker = el('select') as HTMLSelectElement;
+    worker.setAttribute('aria-label', 'Worker');
+    for (const [value, label] of WORKER_LABEL) {
+      const option = el('option', undefined, label) as HTMLOptionElement;
+      option.value = value;
+      if (value === card.worker.split('/')[0]) {
+        option.selected = true;
+      }
+      worker.append(option);
+    }
+    const permission = el('select') as HTMLSelectElement;
+    permission.setAttribute('aria-label', 'Permissions');
+    for (const [value, label] of [
+      ['accept-edits', 'Accept edits (asks before commands)'],
+      ['bypass', 'Bypass permissions (unattended)'],
+    ] as const) {
+      const option = el('option', undefined, label) as HTMLOptionElement;
+      option.value = value;
+      if (value === 'accept-edits') {
+        option.selected = true;
+      }
+      permission.append(option);
+    }
+    const rowFields = el('div', 'tickets-form-row');
+    rowFields.append(field('Worker', worker), field('Permissions', permission));
+
+    const hint = el(
+      'p',
+      'tickets-form-hint',
+      'The instruction is composed from the ticket (description, plan, acceptance criteria) plus the phase handover’s prompt. ' +
+        'On a green machine gate the runner moves the ticket to the next phase.',
+    );
+
+    const actions = el('div', 'tickets-form-actions');
+    const cancel = el('button', undefined, 'Cancel');
+    cancel.type = 'button';
+    cancel.addEventListener('click', () => close());
+    const start = el('button', 'tickets-form-create', 'Start run');
+    start.type = 'button';
+    start.addEventListener('click', () => {
+      const workerValue = worker.value;
+      close();
+      void runMutation('Starting the run', () =>
+        invokeBoard('fleetStart', {
+          id: card.id,
+          worker: workerValue,
+          permissionMode: permission.value,
+        }),
+      );
+    });
+    actions.append(cancel, start);
+
+    form.append(rowFields, hint, actions);
+    form.addEventListener('keydown', (event) => {
+      if (event.key === 'Escape') {
+        close();
+      }
+    });
+    host.append(form);
+    worker.focus();
+  });
+}
+
+function openSteerModal(api: DreyPluginApi, runId: string): void {
+  const close = api.ui.showModal((host) => {
+    const form = el('div', 'tickets-form');
+    form.append(el('h3', 'tickets-form-heading', 'Steer the run'));
+    const text = el('textarea', 'tickets-form-desc') as HTMLTextAreaElement;
+    text.rows = 4;
+    text.placeholder = 'What the worker should do differently — lands in the ticket’s Log.';
+    text.setAttribute('aria-label', 'Steer message');
+    const actions = el('div', 'tickets-form-actions');
+    const cancel = el('button', undefined, 'Cancel');
+    cancel.type = 'button';
+    cancel.addEventListener('click', () => close());
+    const send = el('button', 'tickets-form-create', 'Send');
+    send.type = 'button';
+    const submit = (): void => {
+      const message = text.value.trim();
+      if (message === '') {
+        text.focus();
+        return;
+      }
+      close();
+      void runMutation('Steering', () => invokeBoard('fleetSend', { runId, text: message }));
+    };
+    send.addEventListener('click', submit);
+    text.addEventListener('keydown', (event) => {
+      if (event.key === 'Enter' && (event.ctrlKey || event.metaKey)) {
+        event.preventDefault();
+        submit();
+      }
+    });
+    actions.append(cancel, send);
+    form.append(el('p', 'tickets-form-hint', 'Ctrl+Enter sends.'), text, actions);
+    host.append(form);
+    text.focus();
+  });
+}
+
+function openWatchModal(api: DreyPluginApi, runId: string): void {
+  const close = api.ui.showModal((host) => {
+    const box = el('div', 'tickets-form tickets-watch');
+    box.append(el('h3', 'tickets-form-heading', `Run ${runId}`));
+    const out = el('pre', 'tickets-watch-out');
+    out.textContent = 'Loading the stream…';
+    const pull = (): void => {
+      void invokeBoard('fleetStream', { runId }).then((result) => {
+        const text = (result as { text: string }).text ?? '';
+        const keepBottom = out.scrollTop + out.clientHeight >= out.scrollHeight - 8;
+        out.textContent = text === '' ? '(the stream is empty so far)' : text;
+        if (keepBottom) {
+          out.scrollTop = out.scrollHeight;
+        }
+      });
+    };
+    // The poll dies with its DOM node: when the modal closed, `out` is
+    // disconnected and the interval clears itself.
+    const timer = setInterval(() => {
+      if (!out.isConnected) {
+        clearInterval(timer);
+        return;
+      }
+      pull();
+    }, 2_000);
+    const actions = el('div', 'tickets-form-actions');
+    const done = el('button', undefined, 'Close');
+    done.type = 'button';
+    done.addEventListener('click', () => {
+      clearInterval(timer);
+      close();
+    });
+    actions.append(done);
+    box.append(out, actions);
+    host.append(box);
+  });
+}
+
 // --- the card context menu ----------------------------------------------------
 
 function openCardMenu(
@@ -748,6 +986,17 @@ function openCardMenu(
     });
   }
   menu.append(el('div', 'tickets-menu-sep'));
+  const live = runForCard(card.id);
+  if (live === null) {
+    item(`Run agent (${card.worker})…`, () => openRunModal(api, card));
+  } else {
+    item(`Watch run — ${live.state}`, () => openWatchModal(api, live.id));
+    item('Steer run…', () => openSteerModal(api, live.id));
+    item('Stop run', () => {
+      void run('Stopping the run', () => invokeBoard('fleetStop', { runId: live.id, reason: null }));
+    });
+  }
+  menu.append(el('div', 'tickets-menu-sep'));
   item(
     'Take over claim',
     () => {
@@ -794,6 +1043,9 @@ const plugin: { activate(api: DreyPluginApi): void } = {
 
     api.backend.on('board-changed', () => void refreshBoard());
     api.vault.onChanged(() => void refreshBoard());
+    api.backend.on('fleet-changed', (runs) =>
+      applyFleetRuns(Array.isArray(runs) ? (runs as RunInfo[]) : ((runs as { runs: RunInfo[] }).runs ?? [])));
+    void invokeBoard('fleetStatus').then((result) => applyFleetRuns((result as { runs: RunInfo[] }).runs ?? []));
     void refreshBoard();
   },
 };

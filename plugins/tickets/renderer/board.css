@@ -675,3 +675,107 @@
 .tickets-mark-btn:hover {
   background: var(--hover-bg-strong);
 }
+
+/* --- the fleet (M84): live-run footer, worker chips, watch view --- */
+
+.tickets-fleet {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 6px 8px;
+  border-top: 1px solid var(--border-color);
+  background: var(--bg-main);
+}
+
+.tickets-fleet-run {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  min-width: 0;
+}
+
+.tickets-fleet-id {
+  font-weight: 600;
+}
+
+.tickets-fleet-provider {
+  color: var(--text-secondary);
+}
+
+.tickets-fleet-state {
+  text-transform: uppercase;
+  font-size: 10px;
+  letter-spacing: 0.4px;
+  padding: 1px 6px;
+  border-radius: var(--radius-xs);
+  background: var(--hover-bg);
+}
+
+.tickets-fleet-running {
+  color: var(--success, #2e7d32);
+}
+
+.tickets-fleet-stopping,
+.tickets-fleet-detached {
+  color: var(--text-secondary);
+}
+
+.tickets-fleet-tok,
+.tickets-fleet-cost,
+.tickets-fleet-steer {
+  color: var(--text-secondary);
+  font-variant-numeric: tabular-nums;
+}
+
+.tickets-fleet-btn {
+  margin-left: auto;
+  border: none;
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+  padding: 2px 8px;
+  border-radius: var(--radius-xs);
+  font-size: 11px;
+}
+
+.tickets-fleet-run .tickets-fleet-btn + .tickets-fleet-btn {
+  margin-left: 0;
+}
+
+.tickets-fleet-btn:hover {
+  background: var(--hover-bg-strong);
+  color: var(--text-primary);
+}
+
+.tickets-chip-worker {
+  font-style: italic;
+}
+
+.tickets-chip-run {
+  background: var(--hover-bg-strong);
+}
+
+.tickets-watch {
+  width: min(720px, 80vw);
+}
+
+.tickets-watch-out {
+  margin: 0;
+  max-height: 50vh;
+  overflow: auto;
+  font-family: var(--font-mono, monospace);
+  font-size: 11px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  word-break: break-word;
+  background: var(--hover-bg);
+  border-radius: var(--radius-xs);
+  padding: 8px;
+}
+
+.tickets-form-hint {
+  margin: 4px 0 0;
+  font-size: 12px;
+  color: var(--text-secondary);
+}

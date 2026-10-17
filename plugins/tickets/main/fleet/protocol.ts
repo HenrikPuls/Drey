@@ -59,6 +59,8 @@ export interface RunRequest {
   readonly nextPhase: string | null;
   /** Next phase claims (claim: true) → stamped with this identity. */
   readonly claimIdentity: string | null;
+  /** The dialog's explicit worker choice, recorded on the ticket (`worker:`). */
+  readonly recordWorker?: string;
 }
 
 /** A run as the runner reports it — and as `run.json` persists it. */
