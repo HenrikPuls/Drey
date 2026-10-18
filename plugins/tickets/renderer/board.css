@@ -53,6 +53,21 @@
   color: var(--text-3);
 }
 
+/* The cycle-time line (M85): per-column average dwell beside the run stats. */
+.tickets-metrics {
+  flex: none;
+  padding: 3px 8px;
+  font-size: 0.72rem;
+  color: var(--text-4);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.tickets-chip-age {
+  color: var(--text-4);
+}
+
 .tickets-board {
   flex: 1;
   min-height: 0;

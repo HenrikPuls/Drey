@@ -8,9 +8,13 @@
 import type { DreyPluginApi, PluginWidgetContrib } from '../../../shared/plugin-api/renderer';
 import {
   ageOf,
+  averageDwellMs,
   branchForTicket,
+  dwellMs,
   openTicketCount,
   parseHandover,
+  spanWords,
+  timeOnBoardMs,
   type BoardColumn,
   type BoardSnapshot,
   type CreateResult,
@@ -274,6 +278,15 @@ function cardNode(api: DreyPluginApi, card: TicketCard, column: BoardColumn): HT
     const runChip = el('span', 'tickets-chip tickets-chip-run', `▶ ${live.state}`);
     runChip.title = `run ${live.id} (${live.provider}) — ${live.state}; open the card menu to watch, steer or stop`;
     meta.append(runChip);
+  }
+  const dwell = dwellMs(card, column.phase.id);
+  if (dwell !== null) {
+    const age = el('span', 'tickets-chip tickets-chip-age', spanWords(dwell));
+    const onBoard = timeOnBoardMs(card);
+    age.title =
+      `In this column for ${spanWords(dwell)}` +
+      (onBoard !== null ? ` — on the board for ${spanWords(onBoard)}` : '');
+    meta.append(age);
   }
   if (card.meta.parkedReason !== null) {
     const parked = el('span', 'tickets-chip tickets-chip-parked', 'parked');
@@ -565,6 +578,10 @@ function buildBoardView(api: DreyPluginApi): BoardView {
       board.append(columnNode(api, column));
     }
     root.append(board);
+    const metrics = metricsNode(snap);
+    if (metrics !== null) {
+      root.append(metrics);
+    }
     const fleet = fleetFooterNode(api);
     if (fleet !== null) {
       root.append(fleet);
@@ -858,6 +875,30 @@ const WORKER_LABEL: ReadonlyArray<readonly [string, string]> = [
   ['opencode', 'OpenCode'],
   ['claude-code', 'Claude Code'],
 ];
+
+/**
+ * The cycle-time line (M85): each non-empty column's average dwell,
+ * read from the tickets' entered-* stamps — shown beside the fleet's
+ * run stats so a stuck column is visible at a glance.
+ */
+function metricsNode(snap: BoardSnapshot): HTMLElement | null {
+  const now = Date.now();
+  const parts: string[] = [];
+  for (const column of snap.columns) {
+    if (column.tickets.length === 0) {
+      continue;
+    }
+    const avg = averageDwellMs(column.tickets, column.phase.id, now);
+    parts.push(`${column.phase.title} ${avg === null ? '–' : `⌀${spanWords(avg)}`}`);
+  }
+  if (parts.length === 0) {
+    return null;
+  }
+  const line = el('div', 'tickets-metrics', parts.join(' · '));
+  line.title =
+    'Average time this column\'s tickets have been sitting there (from the entered-* stamps)';
+  return line;
+}
 
 /** One live run's row in the board footer: state, spend, and the three controls. */
 function fleetFooterNode(api: DreyPluginApi): HTMLElement | null {

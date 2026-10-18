@@ -314,6 +314,64 @@ export function ageOf(iso: string | null, now: number = Date.now()): string {
   return `${Math.floor(hours / 24)}d`;
 }
 
+/** Short human span of a duration in ms ("now", "3m", "2h", "4d"). */
+export function spanWords(ms: number): string {
+  if (!Number.isFinite(ms) || ms < 0) {
+    return '';
+  }
+  const minutes = Math.floor(ms / 60_000);
+  if (minutes < 1) {
+    return 'now';
+  }
+  if (minutes < 60) {
+    return `${minutes}m`;
+  }
+  const hours = Math.floor(minutes / 60);
+  if (hours < 48) {
+    return `${hours}h`;
+  }
+  return `${Math.floor(hours / 24)}d`;
+}
+
+/** The ticket's dwell in its column: now minus `entered-<phase>` (M85). */
+export function dwellMs(card: TicketCard, phaseId: string, nowMs: number = Date.now()): number | null {
+  const entered = card.meta.entered[phaseId];
+  if (entered === undefined) {
+    return null;
+  }
+  const t = Date.parse(entered);
+  return Number.isNaN(t) ? null : Math.max(0, nowMs - t);
+}
+
+/** The ticket's whole time on the board: now minus its earliest known entry stamp. */
+export function timeOnBoardMs(card: TicketCard, nowMs: number = Date.now()): number | null {
+  const stamps = Object.values(card.meta.entered)
+    .map((iso) => Date.parse(iso))
+    .filter((t) => !Number.isNaN(t));
+  if (stamps.length === 0) {
+    return null;
+  }
+  return Math.max(0, nowMs - Math.min(...stamps));
+}
+
+/**
+ * The column's average dwell in ms (M85 cycle-time metrics), or null
+ * when no ticket in the column carries an entry stamp.
+ */
+export function averageDwellMs(
+  tickets: readonly TicketCard[],
+  phaseId: string,
+  nowMs: number = Date.now(),
+): number | null {
+  const values = tickets
+    .map((card) => dwellMs(card, phaseId, nowMs))
+    .filter((ms): ms is number => ms !== null);
+  if (values.length === 0) {
+    return null;
+  }
+  return values.reduce((sum, ms) => sum + ms, 0) / values.length;
+}
+
 /** The panel header's status value: open tickets (not in the last phase). */
 export function openTicketCount(snapshot: BoardSnapshot): number {
   if (snapshot.columns.length === 0) {

@@ -1,11 +1,16 @@
 import { describe, expect, it } from 'vitest';
 import {
   ageOf,
+  averageDwellMs,
   branchForTicket,
+  dwellMs,
   nextTicketId,
   openTicketCount,
+  spanWords,
   ticketOfBranch,
+  timeOnBoardMs,
   type BoardSnapshot,
+  type TicketCard,
 } from './tickets';
 
 describe('branch rule', () => {
@@ -86,5 +91,64 @@ describe('openTicketCount', () => {
 
   it('is zero without columns', () => {
     expect(openTicketCount({ columns: [] } as unknown as BoardSnapshot)).toBe(0);
+  });
+});
+
+describe('cycle-time metrics (M85)', () => {
+  const now = Date.parse('2026-10-18T12:00:00Z');
+
+  function timedCard(entered: Record<string, string>): TicketCard {
+    return {
+      id: 'T-0001',
+      path: 'tickets/plan/T-0001.md',
+      phase: 'plan',
+      meta: {
+        id: 'T-0001',
+        title: null,
+        repo: null,
+        worker: null,
+        priority: 'normal',
+        rank: 5000,
+        branch: null,
+        claimedBy: null,
+        claimedAt: null,
+        run: null,
+        references: [],
+        parkedReason: null,
+        parkedAt: null,
+        entered,
+      },
+      pinned: false,
+      worker: 'opencode',
+      issues: [],
+    };
+  }
+
+  it('spanWords reads like a human wrote it', () => {
+    expect(spanWords(30_000)).toBe('now');
+    expect(spanWords(5 * 60_000)).toBe('5m');
+    expect(spanWords(3 * 3_600_000)).toBe('3h');
+    expect(spanWords(50 * 3_600_000)).toBe('2d');
+    expect(spanWords(-1)).toBe('');
+  });
+
+  it('dwell reads the column stamp; time on board takes the earliest', () => {
+    const card = timedCard({
+      inbox: '2026-10-16T12:00:00Z',
+      plan: '2026-10-18T10:00:00Z',
+    });
+    expect(dwellMs(card, 'plan', now)).toBe(2 * 3_600_000);
+    expect(dwellMs(card, 'build', now)).toBeNull();
+    expect(timeOnBoardMs(card, now)).toBe(48 * 3_600_000);
+  });
+
+  it('the column average ignores unstampable tickets and returns null when none', () => {
+    const tickets = [
+      timedCard({ plan: '2026-10-18T09:00:00Z' }),
+      timedCard({ plan: '2026-10-18T11:00:00Z' }),
+      timedCard({}),
+    ];
+    expect(averageDwellMs(tickets, 'plan', now)).toBe(2 * 3_600_000);
+    expect(averageDwellMs(tickets, 'build', now)).toBeNull();
   });
 });
