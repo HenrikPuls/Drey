@@ -16,7 +16,9 @@ import { TicketsGit, type GitExecFn } from '../tickets-git';
  */
 
 function fakeAdapter() {
-  const handles: Array<WorkerHandle & { fail: (code: number | null) => void; onEvent: (text: string) => void }> = [];
+  const handles: Array<
+    WorkerHandle & { fail: (code: number | null) => void; onEvent: (text: string) => void; result: () => void }
+  > = [];
   const adapter: ProviderAdapter = {
     id: 'opencode',
     label: 'OpenCode',
@@ -26,6 +28,7 @@ function fakeAdapter() {
       const handle: WorkerHandle & {
         fail: (code: number | null) => void;
         onEvent: (text: string) => void;
+        result: () => void;
       } = {
         pid: 4242,
         exited: new Promise<number | null>((resolve) => {
@@ -37,6 +40,7 @@ function fakeAdapter() {
         }),
         fail: (code) => exitResolve?.(code),
         onEvent: (text) => start.onEvent({ ts: '2026-10-17T12:00:00Z', kind: 'note', text }),
+        result: () => start.onEvent({ ts: '2026-10-17T12:00:00Z', kind: 'result', text: 'done' }),
       };
       handles.push(handle);
       return handle;
@@ -171,6 +175,7 @@ describe('RunSupervisor', () => {
     expect(parseTicketFile(text, rel).meta.run?.stream).toBe(info.id);
 
     adapter.handles[0]!.onEvent('working…');
+    adapter.handles[0]!.result();
     adapter.handles[0]!.fail(0);
     await vi.waitFor(() => expect(sup.get(info.id)?.state).toBe('done'));
 
@@ -197,6 +202,7 @@ describe('RunSupervisor', () => {
     expect(started.ok).toBe(true);
     const id = (started as { run: { id: string } }).run.id;
 
+    adapter.handles[0]!.result();
     adapter.handles[0]!.fail(0);
     await vi.waitFor(() => expect(sup.get(id)?.state).toBe('failed'));
     expect(sup.get(id)?.gateFailure).toContain('exit 1');
@@ -279,12 +285,14 @@ describe('RunSupervisor', () => {
     const id = (started as { run: { id: string } }).run.id;
 
     // The first worker's green gate hands the step to the auditor.
+    adapter.handles[0]!.result();
     adapter.handles[0]!.fail(0);
     await vi.waitFor(() => expect(adapter.handles.length).toBe(2));
     // The ticket has not moved yet — the audit round runs first.
     await expect(fsp.access(path.join(vaultDir, 'tickets', 'plan', 'T-0001.md'))).resolves.toBeUndefined();
 
     // The auditor's green gate moves the ticket, and no third round starts.
+    adapter.handles[1]!.result();
     adapter.handles[1]!.fail(0);
     await vi.waitFor(() => expect(sup.get(id)?.state).toBe('done'));
     await expect(fsp.access(path.join(vaultDir, 'tickets', 'build', 'T-0001.md'))).resolves.toBeUndefined();
@@ -313,11 +321,32 @@ describe('RunSupervisor', () => {
     const started = await sup.start(request({ ticketRelPath: rel }));
     const id = (started as { run: { id: string } }).run.id;
 
+    adapter.handles[0]!.result();
     adapter.handles[0]!.fail(0);
     await vi.waitFor(() => expect(adapter.handles.length).toBe(2));
+    adapter.handles[1]!.result();
     adapter.handles[1]!.fail(0);
     await vi.waitFor(() => expect(sup.get(id)?.state).toBe('failed'));
     await expect(fsp.access(path.join(vaultDir, 'tickets', 'plan', 'T-0001.md'))).resolves.toBeUndefined();
     expect(sup.get(id)?.gateFailure).toContain('failed — exit 1');
+  });
+
+  it('a worker that ends without a result fails red — the gate never runs', async () => {
+    const { sup, adapter, gate } = supervisor();
+    const rel = await writeTicket();
+    const started = await sup.start(request({ ticketRelPath: rel }));
+    const id = (started as { run: { id: string } }).run.id;
+
+    // A crash (or a spawn that never came up): the turn never finished,
+    // so there is no agent-done for the gate to judge.
+    adapter.handles[0]!.fail(-1);
+    await vi.waitFor(() => expect(sup.get(id)?.state).toBe('failed'));
+
+    expect(gate).toEqual([]); // the safety net judges claimed-done work only
+    const text = await fsp.readFile(path.join(vaultDir, rel), 'utf8');
+    expect(parseTicketFile(text, rel).meta.run).toBeNull(); // the slot is free again
+    expect(text).toContain('no agent-done, the step fails');
+    // The ticket did not move.
+    await expect(fsp.access(path.join(vaultDir, 'tickets', 'plan', 'T-0001.md'))).resolves.toBeUndefined();
   });
 });

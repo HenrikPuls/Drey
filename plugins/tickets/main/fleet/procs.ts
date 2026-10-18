@@ -41,6 +41,12 @@ export function nodeSpawnFn(): SpawnFn {
       // Own process group on POSIX so the tree-kill reaches grandchildren;
       // on Windows the tree kill is taskkill /T anyway.
       detached: !isWindows,
+      // npm installs the worker CLIs as `opencode.cmd`/`claude.cmd` shims;
+      // CreateProcess resolves no PATHEXT, so without the shell a plain
+      // `spawn('opencode')` fails with ENOENT and the run dies unborn.
+      // The shell resolves the shims; every argv we pass is shell-safe
+      // (flags and simple values — payloads travel over stdin/HTTP).
+      shell: isWindows,
       stdio: ['pipe', 'pipe', 'pipe'],
       windowsHide: true,
     });
@@ -79,11 +85,12 @@ function spawn(
     cwd: string;
     env?: NodeJS.ProcessEnv;
     detached: boolean;
+    shell?: boolean;
     windowsHide: boolean;
     stdio?: ('pipe' | 'ignore' | 'inherit')[],
   },
 ): import('node:child_process').ChildProcess {
-  return nodeSpawn(cmd, args, opts);
+  return nodeSpawn(cmd, args, { ...opts, shell: opts.shell ?? false });
 }
 
 /**

@@ -88,6 +88,8 @@ interface LiveRun {
   gating: boolean;
   /** The second-opinion round ran (the move follows its own gate). */
   audited: boolean;
+  /** The worker finished its turn — the adapter's `result` event, the agent-done signal. */
+  agentDone: boolean;
 }
 
 const TERMINAL: readonly RunState[] = ['done', 'stopped', 'failed'];
@@ -157,6 +159,7 @@ export class RunSupervisor {
             startedAtMs: Date.parse(stored.info.startedAt),
             gating: false,
             audited: false,
+            agentDone: false,
           });
           continue;
         }
@@ -176,6 +179,7 @@ export class RunSupervisor {
           startedAtMs: Date.parse(stored.info.startedAt),
           gating: false,
           audited: false,
+          agentDone: false,
         };
         this.runs.set(detached.id, live);
         await this.persist(live);
@@ -263,6 +267,7 @@ export class RunSupervisor {
       startedAtMs: this.now().getTime(),
       gating: false,
       audited: false,
+      agentDone: false,
     };
     this.runs.set(id, run);
     await fsp.writeFile(
@@ -382,6 +387,11 @@ export class RunSupervisor {
   }
 
   private async onEvent(run: LiveRun, event: NormalizedEvent): Promise<void> {
+    // Set in the synchronous prefix: the worker's exit can race the event
+    // delivery, and `agentDone` must already be true when the exit decides.
+    if (event.kind === 'result') {
+      run.agentDone = true;
+    }
     await this.appendStream(run, event);
     run.info = {
       ...run.info,
@@ -453,6 +463,18 @@ export class RunSupervisor {
       return;
     }
     if (run.info.state === 'detached') {
+      return;
+    }
+    // Agent-decided completion (ADR-0077): the gate is the safety net for
+    // the agent's claimed-done work. A worker that ends without a result —
+    // a spawn that never came up, a crash — has claimed nothing, so the
+    // step fails red no matter how trivial the gate would be.
+    if (!run.agentDone) {
+      await this.logLine(
+        run,
+        `worker ended without finishing its turn (exit ${code ?? 'signal'}) — no agent-done, the step fails`,
+      );
+      await this.finish(run, 'failed');
       return;
     }
     run.gating = true;
