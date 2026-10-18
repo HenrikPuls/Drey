@@ -30,6 +30,7 @@ import {
   assembleBoard,
   orderAfterInsert,
   parseOrderFile,
+  patchPipelinePhase,
   pinsAfterDrop,
   rewriteOrderSection,
 } from './ticket-board';
@@ -587,6 +588,78 @@ class BoardService {
     });
   }
 
+  /**
+   * Writes one phase's pool keys in `_meta/pipeline.md` (M85, the
+   * settings dialog's writer): setting a worker writes the matching
+   * `agent <prompt-ref>` handover, clearing it writes `manual`. One
+   * commit per change (`tickets: columns <phase> <what>`).
+   */
+  setColumnConfig(input: {
+    phase: string;
+    worker?: string | null;
+    model?: string | null;
+    workers?: number | null;
+    prompt?: string | null;
+  }): Promise<MutationResult> {
+    return this.enqueue(async () => {
+      const vault = await this.detect();
+      if (vault === null) {
+        return { ok: false, error: 'no tickets vault detected' };
+      }
+      const text = await this.readOptional(vault.id, PIPELINE_PATH);
+      if (text === null) {
+        return { ok: false, error: 'tickets/_meta/pipeline.md is missing' };
+      }
+      if (
+        input.worker === undefined &&
+        input.model === undefined &&
+        input.workers === undefined &&
+        input.prompt === undefined
+      ) {
+        return { ok: true }; // nothing to change (e.g. the handover-pin display state)
+      }
+      if (input.worker !== undefined) {
+        const worker = input.worker?.trim() ?? '';
+        if (worker !== '' && worker !== 'opencode' && worker !== 'claude-code') {
+          return { ok: false, error: 'the worker is "opencode" or "claude-code"' };
+        }
+      }
+      let patched: string;
+      try {
+        patched = patchPipelinePhase(text, input.phase, {
+          ...(input.worker !== undefined ? { worker: input.worker } : {}),
+          ...(input.model !== undefined ? { model: input.model } : {}),
+          ...(input.workers !== undefined ? { workers: input.workers } : {}),
+          ...(input.prompt !== undefined ? { prompt: input.prompt } : {}),
+        });
+      } catch (error) {
+        return { ok: false, error: messageOf(error) };
+      }
+      try {
+        await this.ctx.vault.write(PIPELINE_PATH, patched, { vaultId: vault.id });
+      } catch (error) {
+        return { ok: false, error: `write failed: ${messageOf(error)}` };
+      }
+      const what: string[] = [];
+      if (input.worker !== undefined) {
+        what.push(input.worker === null || input.worker.trim() === '' ? 'manual' : `worker ${input.worker.trim()}`);
+      }
+      if (input.model !== undefined) {
+        what.push(`model ${input.model === null || input.model.trim() === '' ? '(none)' : input.model.trim()}`);
+      }
+      if (input.workers !== undefined) {
+        what.push(`workers ${input.workers ?? '(default)'}`);
+      }
+      if (input.prompt !== undefined) {
+        what.push(`prompt ${input.prompt === null || input.prompt.trim() === '' ? '(default)' : input.prompt.trim()}`);
+      }
+      const warning = await this.commit(vault, [PIPELINE_PATH], `tickets: columns ${input.phase} ${what.join(', ')}`);
+      this.ctx.vault.announceChanges({ vaultId: vault.id, changedPaths: [PIPELINE_PATH] });
+      this.announceChanged();
+      return { ok: true, ...(warning === null ? {} : { warning }) };
+    });
+  }
+
   initialize(vaultId: string | null): Promise<MutationResult> {
     return this.enqueue(async () => {
       const vaults = await this.ctx.vault.listVaults();
@@ -722,6 +795,29 @@ const plugin: MainPluginModule = {
         return { ok: false, error: 'bad claim payload' };
       }
       return board.setClaim({ id: p.id, mode: p.mode });
+    });
+
+    // The settings dialog's writer: one phase's pool keys, one commit (M85).
+    ctx.ipc.handle('columns', async (payload) => {
+      const p = payload as {
+        phase?: unknown;
+        worker?: unknown;
+        model?: unknown;
+        workers?: unknown;
+        prompt?: unknown;
+      };
+      if (typeof p.phase !== 'string' || p.phase.trim() === '') {
+        return { ok: false, error: 'bad columns payload' };
+      }
+      return board.setColumnConfig({
+        phase: p.phase,
+        ...(p.worker !== undefined ? { worker: typeof p.worker === 'string' ? p.worker : null } : {}),
+        ...(p.model !== undefined ? { model: typeof p.model === 'string' ? p.model : null } : {}),
+        ...(p.workers !== undefined
+          ? { workers: typeof p.workers === 'number' ? Math.floor(p.workers) : null }
+          : {}),
+        ...(p.prompt !== undefined ? { prompt: typeof p.prompt === 'string' ? p.prompt : null } : {}),
+      });
     });
 
     // --- the fleet (M84, ADR-0075) -------------------------------------

@@ -5,9 +5,10 @@
  * paths, the specs feed it fixtures. Everything here is deterministic:
  * the same files always produce the same board (no stored state).
  */
-import { parseDocument } from 'yaml';
+import { isCollection, isMap, parseDocument, type YAMLMap, type YAMLSeq } from 'yaml';
 import { splitFrontmatter } from '../../../shared/frontmatter';
 import {
+  parseHandover,
   priorityWeight,
   phaseWithoutPoolKeys,
   resolveCardWorker,
@@ -29,9 +30,7 @@ const PHASE_ID = /^[a-z][a-z0-9-]*$/;
 export interface PipelineParse {
   readonly phases: readonly PipelinePhase[];
   readonly error: string | null;
-}
-
-export function parsePipeline(text: string): PipelineParse {
+}export function parsePipeline(text: string): PipelineParse {
   const { yamlText, hadFence } = splitFrontmatter(text);
   if (!hadFence || yamlText === null) {
     return { phases: [], error: 'pipeline.md has no frontmatter fence' };
@@ -88,6 +87,117 @@ export function parsePipeline(text: string): PipelineParse {
     });
   }
   return { phases, error: null };
+}
+
+// --- pipeline.md patching (the settings dialog's writer, M85) ----------------
+
+export interface PhasePoolPatch {
+  /** `opencode` or `claude-code` sets the worker (and the `agent` handover);
+   *  null clears it — the column becomes a manual step and loses its pool. */
+  readonly worker?: string | null;
+  /** The model pin; an empty string or null clears it. */
+  readonly model?: string | null;
+  /** Pool size (≥ 1); null clears it (default 1). */
+  readonly workers?: number | null;
+  /** The prompt ref override; an empty string or null clears it. */
+  readonly prompt?: string | null;
+}
+
+/**
+ * The one patcher for a phase's pool keys in `_meta/pipeline.md` — the
+ * settings dialog writes through here, so a hand-formatted file keeps
+ * its layout, comments and unknown keys (the same document-mutation
+ * discipline as the ticket patcher). Setting a worker writes the
+ * matching `agent <prompt-ref>` handover; clearing it writes `manual`.
+ * Throws on an unparseable pipeline or an unknown phase — the caller
+ * refuses, it never guesses.
+ */
+export function patchPipelinePhase(text: string, phaseId: string, patch: PhasePoolPatch): string {
+  const { yamlText, body, hadFence } = splitFrontmatter(text);
+  if (!hadFence || yamlText === null) {
+    throw new Error('pipeline.md has no frontmatter fence');
+  }
+  const doc = parseDocument(yamlText);
+  if (doc.errors.length > 0) {
+    throw new Error('pipeline.md does not parse');
+  }
+  const phases = doc.get('phases', true);
+  if (!isCollection(phases)) {
+    throw new Error('pipeline.md needs a phases list');
+  }
+  let entry: YAMLMap | null = null;
+  for (const item of (phases as YAMLSeq).items) {
+    const value = isMap(item) ? item : null;
+    if (value !== null && value.get('id') === phaseId) {
+      entry = value;
+      break;
+    }
+  }
+  if (entry === null) {
+    throw new Error(`pipeline.md has no phase "${phaseId}"`);
+  }
+
+  const removeKey = (key: string): void => {
+    if (entry!.has(key)) {
+      entry!.delete(key);
+    }
+  };
+
+  if (patch.worker !== undefined) {
+    const worker = patch.worker?.trim() ?? '';
+    if (worker === '') {
+      // A manual step: the pool and its keys go with the worker.
+      removeKey('worker');
+      removeKey('model');
+      removeKey('workers');
+      removeKey('prompt');
+      entry.set('handover', 'manual');
+    } else {
+      entry.set('worker', worker);
+      const handover = parseHandover(String(entry.get('handover') ?? ''));
+      const promptFromPatch =
+        patch.prompt !== undefined && patch.prompt !== null && patch.prompt.trim() !== ''
+          ? patch.prompt.trim()
+          : null;
+      const promptFromKey =
+        typeof entry.get('prompt') === 'string' && (entry.get('prompt') as string).trim() !== ''
+          ? (entry.get('prompt') as string).trim()
+          : null;
+      const ref = promptFromPatch ?? promptFromKey ?? handover.promptRef ?? `${phaseId}-default`;
+      entry.set('handover', `agent ${ref}`);
+    }
+  }
+  if (patch.model !== undefined) {
+    const model = patch.model?.trim() ?? '';
+    if (model === '') {
+      removeKey('model');
+    } else {
+      entry.set('model', model);
+    }
+  }
+  if (patch.workers !== undefined) {
+    if (patch.workers === null) {
+      removeKey('workers');
+    } else if (Number.isInteger(patch.workers) && patch.workers >= 1) {
+      entry.set('workers', patch.workers);
+    } else {
+      throw new Error('workers must be a whole number of 1 or more');
+    }
+  }
+  if (patch.prompt !== undefined) {
+    const prompt = patch.prompt?.trim() ?? '';
+    if (prompt === '') {
+      removeKey('prompt');
+    } else {
+      entry.set('prompt', prompt);
+    }
+  }
+
+  let yaml = doc.toString({ flowCollectionPadding: false, lineWidth: 0 });
+  if (!yaml.endsWith('\n')) {
+    yaml += '\n';
+  }
+  return `---\n${yaml}---\n${body}`;
 }
 
 // --- order.md --------------------------------------------------------------

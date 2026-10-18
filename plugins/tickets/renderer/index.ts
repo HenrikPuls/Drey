@@ -18,6 +18,7 @@ import {
   type TicketCard,
 } from '../shared/tickets';
 import { createColumnCollapseStore } from './column-collapse';
+import { createTicketsSettingsPage } from './settings-page';
 import type { ChainStatus, RunInfo } from '../main/fleet/protocol';
 
 function el<K extends keyof HTMLElementTagNameMap>(
@@ -1174,6 +1175,7 @@ const plugin: { activate(api: DreyPluginApi): void } = {
   activate(api) {
     backend = api.backend;
     api.ui.registerWidget(createTicketsWidget(api));
+    api.ui.registerSettingsPage(createTicketsSettingsPage(api));
 
     api.backend.on('board-changed', () => void refreshBoard());
     api.vault.onChanged(() => void refreshBoard());

@@ -3,7 +3,7 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { Orchestrator, type OrchestratorDeps, type SupervisorPort } from './orchestrator';
-import type { SupervisorRecord } from './runs';
+import type { StartOutcome, StopOutcome, SupervisorRecord } from './runs';
 import type { RunInfo, RunRequest } from './protocol';
 import { newTicketFileText } from '../ticket-files';
 
@@ -77,7 +77,7 @@ function fakePort() {
   const records: SupervisorRecord[] = [];
   let counter = 0;
   const port: SupervisorPort = {
-    start: vi.fn(async (request: RunRequest) => {
+    start: vi.fn(async (request: RunRequest): Promise<StartOutcome> => {
       counter += 1;
       const info: RunInfo = {
         id: `R-${String(counter).padStart(3, '0')}`,
@@ -101,12 +101,12 @@ function fakePort() {
       records.push({ info, request });
       return { ok: true, run: info };
     }),
-    stop: vi.fn(async (runId: string, reason: string | null) => {
+    stop: vi.fn(async (runId: string, reason: string | null): Promise<StopOutcome> => {
       const index = records.findIndex((r) => r.info.id === runId);
       if (index >= 0) {
         records[index] = { ...records[index]!, info: { ...records[index]!.info, state: 'stopped' } };
       }
-      return { ok: true, reason };
+      return { ok: true };
     }),
     records: () => [...records],
   };

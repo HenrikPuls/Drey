@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { claudeCodeAdapter, OPENCODE_API, opencodeAdapter, type FetchFn, type NormalizedEvent, type ProviderStart } from './providers';
+import { claudeCodeAdapter, modelBody, OPENCODE_API, opencodeAdapter, type FetchFn, type NormalizedEvent, type ProviderStart } from './providers';
 import type { RunnerProcess, SpawnFn } from './procs';
 
 /**
@@ -279,5 +279,19 @@ describe('the opencode adapter', () => {
 
     proc.exit(null);
     vi.useRealTimers();
+  });
+});
+
+describe('modelBody — the OpenCode model pin (v2 shape)', () => {
+  it('splits providerID/modelID at the first slash', () => {
+    expect(modelBody('zai-coding-plan/glm-5.3-flash', 'go')).toEqual({
+      text: 'go',
+      model: { providerID: 'zai-coding-plan', modelID: 'glm-5.3-flash' },
+    });
+  });
+
+  it('a pin without a slash rides as the modelID; no pin sends text only', () => {
+    expect(modelBody('glm-5.3', 'go')).toEqual({ text: 'go', model: { providerID: '', modelID: 'glm-5.3' } });
+    expect(modelBody(null, 'go')).toEqual({ text: 'go' });
   });
 });

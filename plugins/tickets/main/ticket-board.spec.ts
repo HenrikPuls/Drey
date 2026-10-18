@@ -6,6 +6,7 @@ import {
   parseOrderFile,
   parsePipeline,
   parseRepos,
+  patchPipelinePhase,
   pinsAfterDrop,
   rewriteOrderSection,
 } from './ticket-board';
@@ -133,7 +134,7 @@ describe('ordering', () => {
     expect(ordered.map((t) => t.id)).toEqual(['T-0002', 'T-0001', 'T-0004', 'T-0003', 'T-0005']);
   });
 
-  it('pins first in listed order, then derived — unknown pins ignored', () => {
+  it('pins first in listed order, then derived ??? unknown pins ignored', () => {
     const tickets = [
       ticket('T-0001', 'urgent', 5000, ''),
       ticket('T-0002', 'normal', 5000, ''),
@@ -175,7 +176,7 @@ describe('assembleBoard', () => {
       '',
       '## Log',
       '',
-      `- '2026-10-17T09:00:00Z' owner@desk — created in inbox`,
+      `- '2026-10-17T09:00:00Z' owner@desk ??? created in inbox`,
       '',
     ].join('\n');
 
@@ -267,5 +268,51 @@ describe('assembleBoard', () => {
     expect(snap.vaultId).toBeNull();
     expect(snap.pipelineError).toContain('missing');
     expect(snap.columns).toEqual([]);
+  });
+});
+
+describe('patchPipelinePhase - the settings dialog writer', () => {
+  it('setting a worker writes the agent handover and keeps the file shape', () => {
+    const patched = patchPipelinePhase(PIPELINE, 'prioritized', { worker: 'opencode' });
+    const { phases, error } = parsePipeline(patched);
+    expect(error).toBeNull();
+    const prioritized = phases.find((p) => p.id === 'prioritized')!;
+    expect(prioritized.worker).toBe('opencode');
+    expect(prioritized.handover).toBe('agent prioritized-default');
+    // Everything else survives untouched.
+    expect(patched).toContain('wip: 2, claim: true');
+    expect(patched).toContain('Prose.');
+    expect(parsePipeline(patched).phases.find((p) => p.id === 'inbox')!.handover).toBe('manual');
+  });
+
+  it('an explicit prompt rides the new handover; an existing ref is kept', () => {
+    const withPrompt = patchPipelinePhase(PIPELINE, 'prioritized', { worker: 'opencode', prompt: 'plan-heavy' });
+    expect(parsePipeline(withPrompt).phases.find((p) => p.id === 'prioritized')!.handover).toBe('agent plan-heavy');
+    const kept = patchPipelinePhase(PIPELINE, 'build', { worker: 'claude-code' });
+    expect(parsePipeline(kept).phases.find((p) => p.id === 'build')!.handover).toBe('agent build-default');
+  });
+
+  it('clearing the worker writes manual and takes the pool keys with it', () => {
+    const withPool = patchPipelinePhase(PIPELINE, 'build', {
+      model: 'zai/glm-5.3',
+      workers: 4,
+    });
+    const cleared = patchPipelinePhase(withPool, 'build', { worker: null });
+    const build = parsePipeline(cleared).phases.find((p) => p.id === 'build')!;
+    expect(build.handover).toBe('manual');
+    expect(build.worker).toBeNull();
+    expect(build.model).toBeNull();
+    expect(build.workers).toBe(1);
+    expect(build.claim).toBe(true); // claim and wip survive the manual flip
+    expect(build.wip).toBe(2);
+  });
+
+  it('model, workers and prompt patch independently; unknown phases refuse', () => {
+    const patched = patchPipelinePhase(PIPELINE, 'build', { workers: 4, model: 'zai/glm-5.3-flash' });
+    const build = parsePipeline(patched).phases.find((p) => p.id === 'build')!;
+    expect(build.workers).toBe(4);
+    expect(build.model).toBe('zai/glm-5.3-flash');
+    expect(() => patchPipelinePhase(PIPELINE, 'nope', { workers: 2 })).toThrow('no phase "nope"');
+    expect(() => patchPipelinePhase(PIPELINE, 'build', { workers: 0 })).toThrow('whole number');
   });
 });

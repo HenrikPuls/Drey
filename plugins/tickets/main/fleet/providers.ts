@@ -214,6 +214,33 @@ export const OPENCODE_API = {
   interrupt: (id: string): string => `/api/session/${id}/interrupt`,
 } as const;
 
+/**
+ * The prompt body with the model pin in the v2 shape (`providerID` +
+ * `modelID`, split once at the first slash — e.g.
+ * `zai-coding-plan/glm-5.3-flash`). A pin without a slash rides as the
+ * modelID with an empty provider (the server resolves it or refuses —
+ * visible in the stream, never guessed).
+ */
+export function modelBody(model: string | null, text: string): {
+  text: string;
+  model?: { providerID: string; modelID: string };
+} {
+  if (model === null || model.trim() === '') {
+    return { text };
+  }
+  const slashAt = model.indexOf('/');
+  if (slashAt === -1) {
+    return { text, model: { providerID: '', modelID: model.trim() } };
+  }
+  return {
+    text,
+    model: {
+      providerID: model.slice(0, slashAt).trim(),
+      modelID: model.slice(slashAt + 1).trim(),
+    },
+  };
+}
+
 export function opencodeAdapter(
   spawnFn: SpawnFn,
   fetchFn: FetchFn = fetch,
@@ -269,7 +296,11 @@ export function opencodeAdapter(
           const res = await fetchFn(`${address}${OPENCODE_API.prompt(state.sessionRef)}`, {
             method: 'POST',
             headers: { ...auth, 'content-type': 'application/json' },
-            body: JSON.stringify({ text }),
+            // The v2 API takes the model per message as {providerID, modelID};
+            // the fleet's model pin spells that `providerID/modelID` (one
+            // split at the first slash). A pin without a slash is a note,
+            // never a guess.
+            body: JSON.stringify(modelBody(start.model, text)),
           });
           if (!res.ok) {
             start.onEvent({ ts: nowIso(now), kind: 'error', text: `prompt failed: ${res.status}` });

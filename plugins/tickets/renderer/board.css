@@ -173,6 +173,36 @@
   color: var(--text-2);
 }
 
+/* The settings page's pipeline row (M85): phase name left, the pool
+ * fields in one line. */
+.tickets-settings-row {
+  align-items: center;
+  gap: 10px;
+}
+
+.tickets-settings-phase {
+  flex: 0 0 110px;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.tickets-settings-field {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-width: 0;
+}
+
+.tickets-settings-field > .mono-input {
+  width: 110px;
+}
+
+.tickets-settings-label {
+  font-size: 0.72rem;
+  color: var(--text-4);
+}
+
 /* The chain's master switch in the panel header (M85): An / Aus /
  * Notaus. The active state is marked; Notaus is the red button. */
 .tickets-master {
