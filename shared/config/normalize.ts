@@ -16,6 +16,7 @@ import {
   ActionResultKind,
   ActionTemplate,
   ActionTrigger,
+  ActionsConfig,
   ANTHRAZIT_THEME,
   AppConfig,
   AppearanceConfig,
@@ -65,6 +66,7 @@ import { canonicalChord, chordProblem, DEFAULT_CAPTURE_CHORD } from '../keybindi
 import {
   autotagTemplate,
   classicEntryTemplate,
+  DEFAULT_ACTIONS_CONFIG,
   DEFAULT_APP_CONFIG,
   DEFAULT_APPEARANCE,
   DEFAULT_DAILY_CONFIG,
@@ -768,7 +770,7 @@ function normalizeEntryConfig(raw: unknown): EntryConfig {
  */
 function normalizeTriggers(raw: unknown, templates: readonly ActionTemplate[]): ActionTrigger[] {
   if (raw === undefined) {
-    return DEFAULT_APP_CONFIG.actions.triggers.map((t) => ({ ...t }));
+    return DEFAULT_ACTIONS_CONFIG.triggers.map((t) => ({ ...t }));
   }
   const list = Array.isArray(raw) ? raw : [];
   const known = new Set(templates.map((t) => t.id));
@@ -794,11 +796,26 @@ function normalizeTriggers(raw: unknown, templates: readonly ActionTemplate[]): 
   return out;
 }
 
+/**
+ * Parses an unknown blob (parsed JSON, a plugin-config value, an IPC
+ * payload) into a complete `ActionsConfig`: every built-in template
+ * re-injected exactly once, malformed entries dropped, a missing
+ * `triggers` key seeded. The Actions data lives in the assistant plugin's
+ * own config (ADR-0010 later change) — the plugin normalizes every read
+ * through this, and so does the one-time migration.
+ */
+export function normalizeActionsConfig(raw: unknown): ActionsConfig {
+  const source = (raw ?? {}) as Record<string, unknown>;
+  const templates = normalizeTemplates(source['templates']);
+  return {
+    templates,
+    triggers: normalizeTriggers(source['triggers'], templates),
+  };
+}
+
 /** Parses an unknown blob (parsed JSON, IPC payload) into a complete `AppConfig`. */
 export function normalizeAppConfig(raw: unknown): AppConfig {
   const source = (raw ?? {}) as Record<string, unknown>;
-  const actionsSource = (source['actions'] ?? {}) as Record<string, unknown>;
-  const templates = normalizeTemplates(actionsSource['templates']);
   const mcp = normalizeMcp(source['mcp']);
   return {
     version: 1,
@@ -816,9 +833,5 @@ export function normalizeAppConfig(raw: unknown): AppConfig {
     widgets: normalizeWidgets(source['widgets']),
     plugins: normalizePlugins(source['plugins']),
     keybindings: normalizeKeybindings(source['keybindings']),
-    actions: {
-      templates,
-      triggers: normalizeTriggers(actionsSource['triggers'], templates),
-    },
   };
 }

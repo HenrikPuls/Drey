@@ -32,12 +32,14 @@ its own rules say it should. Ordered by value for effort.
 **Status.** Findings 1, 2, 3, 6 and 7 were carried out on 2026-10-13
 (roadmap items A1–A5; `specs/changelog.md`). The rows stay as the record
 of what was found. Finding 7's possible defect was checked: the fixed
-`templates/daily.md` is what the specs describe, so it stayed. Open:
-4, 5, 8 and 9. All three roadmap follow-ups shipped on 2026-10-17: the
-plugin specs are typechecked in CI (`tsconfig.plugins.json`), `npm run
-cycles` fails on runtime import cycles, and the composition root has
-unit tests (`app-services.spec.ts`, `main-window.spec.ts` and the
-vault context in `plugin-context.spec.ts`).
+`templates/daily.md` is what the specs describe, so it stayed. All three
+roadmap follow-ups shipped on 2026-10-17: the plugin specs are
+typechecked in CI (`tsconfig.plugins.json`), `npm run cycles` fails on
+runtime import cycles, and the composition root has unit tests
+(`app-services.spec.ts`, `main-window.spec.ts` and the vault context in
+`plugin-context.spec.ts`). Finding 4 was carried out on 2026-10-18
+(roadmap item A6; the ADR-0010 later change "plugin settings live in the
+plugin's own config"). Open: 5, 8 and 9.
 
 | # | Finding | Evidence | Suggested step |
 |---|---|---|---|

@@ -1,8 +1,9 @@
 /**
  * The assistant plugin's action engine (ADR-0044 stage 7) — the
  * pre-conversion `ActionRunner` (`electron/llm/action-runner.ts`) with its
- * dependencies narrowed to what the base `ctx.llm` facade hands out: a
- * config getter (app-config is base) and one completion call. The task
+ * dependencies narrowed to what the base `ctx.llm` facade hands out: the
+ * plugin's own `actions` config value (moved there from the app config,
+ * ADR-0010 later change) and one completion call. The task
  * registry/abort plumbing lives base-side (`llm.cancelTask` by taskId);
  * the vault tool loop is an option on that call, so the engine never sees
  * the `VaultTools` instance.
@@ -19,7 +20,7 @@ import {
   resolveActions,
   substituteVocabulary,
 } from '../../../shared/llm';
-import { AppConfig } from '../../../shared/app-config';
+import { normalizeActionsConfig } from '../../../shared/app-config';
 
 /** The message a cancelled generation reports (kept in step with the base transport). */
 const CANCELLED_MESSAGE = 'Generation cancelled.';
@@ -35,7 +36,14 @@ const GENERIC_SYSTEM_SUFFIX =
 
 export class ActionEngine {
   constructor(
-    private readonly getConfig: () => AppConfig,
+    /**
+     * The plugin's own config value for the `actions` key — read fresh
+     * per call, normalized here (the built-ins re-inject, malformed
+     * entries drop). The config store is async; the seam may hand back
+     * either a promise or the value.
+     */
+    private readonly readActions: () => unknown,
+    private readonly llmEnabled: () => boolean,
     private readonly chat: ChatFn,
     /**
      * The vault's tag vocabulary for the `{{AVAILABLE_TAGS}}` placeholder
@@ -46,16 +54,20 @@ export class ActionEngine {
   ) {}
 
   /** Enabled actions for a trigger event (the on-save hook's enumeration). */
-  actionsForEvent(event: 'on-save'): ResolvedAction[] {
-    return resolveActions(this.getConfig()).filter((a) => a.enabled && a.event === event);
+  async actionsForEvent(event: 'on-save'): Promise<ResolvedAction[]> {
+    return resolveActions(normalizeActionsConfig(await this.readActions())).filter(
+      (a) => a.enabled && a.event === event,
+    );
   }
 
   async run(triggerId: string, context: ActionContext, taskId?: string): Promise<ActionOutcome> {
-    const action = resolveActions(this.getConfig()).find((a) => a.triggerId === triggerId);
+    const action = resolveActions(normalizeActionsConfig(await this.readActions())).find(
+      (a) => a.triggerId === triggerId,
+    );
     if (!action) {
       return { kind: 'error', triggerId, name: 'Unknown action', message: 'Action not found.' };
     }
-    if (!this.getConfig().llm.enabled) {
+    if (!this.llmEnabled()) {
       return { kind: 'error', triggerId, name: action.name, message: 'LLM features are disabled.' };
     }
     try {

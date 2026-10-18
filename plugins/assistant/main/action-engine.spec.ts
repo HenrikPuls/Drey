@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { ActionEngine } from './action-engine';
-import { DEFAULT_APP_CONFIG } from '../../../shared/app-config';
+import { DEFAULT_ACTIONS_CONFIG } from '../../../shared/app-config';
 import type { ChatMessage } from '../../../shared/llm';
 
 /**
@@ -15,15 +15,11 @@ describe('ActionEngine prompt assembly', () => {
 
   function captureEngine(vocabulary: readonly string[], reply: string) {
     const messages: ChatMessage[] = [];
-    // `llm.enabled` gates the run (`runGeneric` never sees it); the rest
-    // is the default config, which carries the lossless template + its
-    // manual trigger.
-    const config = {
-      ...DEFAULT_APP_CONFIG,
-      llm: { ...DEFAULT_APP_CONFIG.llm, enabled: true },
-    };
+    // The plugin's own `actions` config value — the defaults carry the
+    // lossless template + its manual trigger. `llmEnabled` gates the run.
     const engine = new ActionEngine(
-      () => config,
+      () => DEFAULT_ACTIONS_CONFIG,
+      () => true,
       async (sent) => {
         messages.push(...sent);
         return reply;

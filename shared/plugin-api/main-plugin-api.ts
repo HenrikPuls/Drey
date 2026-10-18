@@ -21,7 +21,7 @@ import type {
   ToolCallEvent,
   ToolSpec,
 } from '../llm';
-import type { AppConfig } from '../app-config';
+import type { AppConfig, BuiltinAction } from '../app-config';
 import type {
   TagEntry,
   TagPrefixStyle,
@@ -474,6 +474,14 @@ export interface MainPluginContext {
     capabilities(): LlmCapabilities;
     /** The vocabulary-carrying tag suggestion (the `autotag` prompt); plugin supplies its vocabulary. */
     suggestTags(entryText: string, vocabulary: readonly string[], taskId?: string): Promise<string[]>;
+    /**
+     * The stored prompt of a built-in action template (editable under
+     * Settings → Actions, kept in the assistant plugin's own config;
+     * SDK 1.28). `null` when missing or blank — the caller falls back to
+     * its shipped constant. The read seam for sibling plugins (the tags
+     * plugin's Summarise uses `search-summary`).
+     */
+    actionPrompt(builtin: BuiltinAction): Promise<string | null>;
     onDebugEntry(cb: (entry: LlmDebugEntry) => void): Unsubscribe;
   };
 

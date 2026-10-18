@@ -1,19 +1,19 @@
 /**
  * The Assistant plugin's Settings page (ADR-0044 stage 7), ported from
- * `src/app/settings/actions/` to plain DOM. Per ADR-0044 rule 3 it saves
- * immediately through `api.appConfig.patch`; each patch is a read-modify-write of the
- * live config.
+ * `src/app/settings/actions/` to plain DOM. It edits the plugin's OWN
+ * config (the `actions` key, ADR-0010 later change) and saves immediately
+ * — each patch is a read-modify-write of the stored section.
  *
  * The Actions page is the engine's config UI: triggers (which template on
- * which event) and the prompt template library. `normalizeAppConfig`
+ * which event) and the prompt template library. `normalizeActionsConfig`
  * re-injects the built-in templates, so "delete" is hidden for those.
  */
 import type { DreyPluginApi, PluginSettingsPageContrib } from '../../../shared/plugin-api/renderer';
+import { normalizeActionsConfig, type ActionsConfig } from '../../../shared/app-config';
 import type {
   ActionEvent,
   ActionTemplate,
   ActionTrigger,
-  AppConfig,
 } from '../../../shared/app-config';
 
 function el<K extends keyof HTMLElementTagNameMap>(
@@ -31,16 +31,14 @@ function el<K extends keyof HTMLElementTagNameMap>(
   return node;
 }
 
-/** Patches one section of the live config (read-modify-write). */
-async function patchSection<K extends keyof AppConfig>(
-  api: DreyPluginApi,
-  key: K,
-  change: (section: AppConfig[K]) => void,
-): Promise<void> {
-  const config = await api.appConfig.get();
-  const section = structuredClone(config[key]);
-  change(section);
-  await api.appConfig.patch({ [key]: section } as unknown as Partial<AppConfig>);
+/**
+ * The actions data is the plugin's OWN config (the `actions` key, ADR-0010
+ * later change): read through `api.settings`, normalized, mutated, written
+ * back whole — the plugin config store has no patch, and the section is
+ * small enough that read-modify-write-whole is the honest round.
+ */
+async function loadActions(api: DreyPluginApi): Promise<ActionsConfig> {
+  return normalizeActionsConfig(await api.settings.get('actions'));
 }
 
 // -- Actions page ------------------------------------------------------------
@@ -70,8 +68,13 @@ export function actionsSettingsPage(
     description: 'The prompts the assistant can run on a note, and when each one runs.',
     mount(root) {
       const patchActions = (
-        change: (section: AppConfig['actions']) => void,
-      ): Promise<void> => patchSection(api, 'actions', change).then(onPatched);
+        change: (section: ActionsConfig) => void,
+      ): Promise<void> =>
+        (async () => {
+          const section = structuredClone(await loadActions(api));
+          change(section);
+          await api.settings.set('actions', section);
+        })().then(onPatched);
       root.classList.add('assistant-actions-settings');
 
       const triggersSection = el('section');
@@ -143,10 +146,10 @@ export function actionsSettingsPage(
       root.appendChild(selectionSection);
 
       let openTemplateId: string | null = null;
-      let config: AppConfig | null = null;
+      let config: ActionsConfig | null = null;
 
       const templateName = (id: string): string =>
-        config?.actions.templates.find((t) => t.id === id)?.name ?? '(deleted template)';
+        config?.templates.find((t) => t.id === id)?.name ?? '(deleted template)';
 
       const triggerRow = (trigger: ActionTrigger): HTMLLIElement => {
         const row = el('li', 'row');
@@ -288,20 +291,20 @@ export function actionsSettingsPage(
       };
 
       const reload = async (): Promise<void> => {
-        config = await api.appConfig.get();
+        config = await loadActions(api);
 
         triggerList.textContent = '';
-        if (config.actions.triggers.length === 0) {
+        if (config.triggers.length === 0) {
           triggerList.appendChild(el('li', 'empty', 'No triggers. Add one below.'));
         }
-        for (const trigger of config.actions.triggers) {
+        for (const trigger of config.triggers) {
           triggerList.appendChild(triggerRow(trigger));
         }
         addTriggerRow.textContent = '';
 
         const templateSelect = el('select') as HTMLSelectElement;
         templateSelect.setAttribute('aria-label', 'Template for the new trigger');
-        for (const template of config.actions.templates) {
+        for (const template of config.templates) {
           const option = el('option', undefined, template.name) as HTMLOptionElement;
           option.value = template.id;
           templateSelect.appendChild(option);
@@ -316,7 +319,7 @@ export function actionsSettingsPage(
         const addBtn = el('button', 'ghost small', 'Add trigger') as HTMLButtonElement;
         addBtn.type = 'button';
         addBtn.addEventListener('click', () => {
-          const templateId = templateSelect.value || config?.actions.templates[0]?.id;
+          const templateId = templateSelect.value || config?.templates[0]?.id;
           if (templateId !== undefined) {
             void patchActions((section) => {
               section.triggers.push({
@@ -332,7 +335,7 @@ export function actionsSettingsPage(
         addTriggerRow.append(templateSelect, eventSelect, addBtn);
 
         templateList.textContent = '';
-        for (const template of config.actions.templates) {
+        for (const template of config.templates) {
           templateList.appendChild(templateRow(template));
         }
       };

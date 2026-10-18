@@ -764,6 +764,20 @@ export interface UpdatesConfig {
   skippedVersion: string | null;
 }
 
+/**
+ * The Actions system's data: editable prompt templates + the trigger →
+ * template mappings. It lives in the ASSISTANT PLUGIN's own config file
+ * (key `actions`), not in `AppConfig` — the engine and the settings page
+ * are the assistant plugin's, and plugin settings go into the plugin's
+ * own config (ADR-0010 later change). The type stays in shared because
+ * base seams read it too (the editor's "Suggest tags" autotag, the tags
+ * plugin's Summarise prompt, the confirmation dialog's trigger flip).
+ */
+export interface ActionsConfig {
+  templates: ActionTemplate[];
+  triggers: ActionTrigger[];
+}
+
 export interface AppConfig {
   /** Bumped only on a breaking shape change; `normalizeAppConfig` migrates. */
   version: 1;
@@ -781,10 +795,6 @@ export interface AppConfig {
   widgets: WidgetsConfig;
   plugins: PluginsConfig;
   keybindings: KeybindingsConfig;
-  actions: {
-    templates: ActionTemplate[];
-    triggers: ActionTrigger[];
-  };
 }
 
 /** The dictionaries that ship with the app; `electron/spellcheck.ts` loads them. */

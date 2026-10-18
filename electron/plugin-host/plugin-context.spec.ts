@@ -57,7 +57,10 @@ function harness(over: { activeVaultId?: string | null } = {}) {
     },
     assistantToolbox: { specs: () => [spec('web_fetch')], run: toolboxRun },
   };
-  const llm = buildLlmContext(deps as never, (unsubscribe) => unsubscribe);
+  const llm = buildLlmContext(deps as never, (unsubscribe) => unsubscribe, async () => ({
+    templates: [],
+    triggers: [],
+  }));
   return { llm, sent, tools, vaultCall, toolboxRun, offered };
 }
 

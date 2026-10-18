@@ -60,7 +60,10 @@ function flattenFileTree(
 const plugin: MainPluginModule = {
   activate(ctx: MainPluginContext) {
     const engine = new ActionEngine(
-      () => ctx.appConfig.get(),
+      // The plugin's own config (the `actions` key) — the engine's data
+      // moved here from the app config (ADR-0010 later change).
+      () => ctx.config.get('actions'),
+      () => ctx.appConfig.get().llm.enabled,
       // The facade returns `LlmChatResult` (ADR-0047); the action engine's
       // `ChatFn` contract stays plain-string, so unwrap here.
       ((messages, options) =>
@@ -334,7 +337,7 @@ async function runOnSaveActions(
   const pendingActions: ActionOutcome[] = [];
   let current = event.content;
   let currentMs = event.modifiedMs;
-  for (const action of engine.actionsForEvent('on-save')) {
+  for (const action of await engine.actionsForEvent('on-save')) {
     const outcome = await engine.run(action.triggerId, {
       path: event.path,
       body: current,

@@ -91,8 +91,10 @@ rounds on real runs are still pending there). What remains:
 
 - **M85 — continuous orchestration:** dispatcher, lease reaper,
   budgets/circuit breaker, heartbeats, cycle-time metrics, sampling
-  audit, semantic gate, `fleet_*` MCP tools. Built only if the M83/M84
-  trial data justifies it.
+  audit, semantic gate, `fleet_*` MCP tools. **Folded into T-0007**
+  (owner, 2026-10-18) — tracked in the owner's tickets repo now; the
+  fold-in supersedes the "only if trial data justifies" condition. The
+  milestone record moves here when it ships.
 
 ### Next
 
@@ -148,15 +150,10 @@ of 2026-10-13 — evidence and reasoning per item in
 [`docs/11`](../docs/11_risks_and_technical_debt.md) ("Architecture review
 2026-10-13", same numbering). Not ordered against the feature lists above:
 the owner picks when one is taken. Within the section the order is by
-value for effort. A1–A5 are done (see `changelog.md`), and so are the
-follow-ups A10–A12; the ids of the
+value for effort. A1–A5 are done (see `changelog.md`), the follow-ups
+A10–A12 shipped on 2026-10-17, and A6 on 2026-10-18; the ids of the
 rest are kept so they still match `docs/11`.
 
-- **A6 — Plugin settings out of the base config.** `AppConfig` holds
-  `actions`, `templates`, `entry` and the plugins' built-in prompt texts.
-  Rule from now on: a new plugin setting goes into the plugin's own
-  config. Moving the existing slices changes the settings file —
-  ⚠️ owner decision, later change to ADR-0010.
 - **A7 — One generic service registry between plugins.** Three provider
   slots (section search, task query; a third, semantic search, went
   with milestone 80) were each added to
