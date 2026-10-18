@@ -154,7 +154,7 @@ describe('Orchestrator', () => {
     }
   });
 
-  it('dispatches the plan pool: own queue first, then tops up from prioritized', async () => {
+  it('dispatches the plan pool from its own queue — never from prioritized', async () => {
     await writeMeta();
     await writeTicket('T-0001', 'prioritized');
     await writeTicket('T-0002', 'prioritized');
@@ -163,24 +163,21 @@ describe('Orchestrator', () => {
     await orch.configure(CONFIG);
     await orch.setMaster('run');
 
+    // The owner's queue (prioritized) is never touched: only the ticket
+    // the owner moved into the worker column runs.
     const started = fleet.records.filter((r) => r.info.state === 'running');
-    expect(started.map((r) => r.request.ticketId)).toEqual(['T-0003', 'T-0001']);
-    // The pulled run sits in prioritized but works for the plan pool,
-    // and its green gate moves the ticket to plan-review — the owner
-    // checkpoint's arrival, not the plan directory.
-    const pull = started.find((r) => r.request.ticketId === 'T-0001')!;
-    expect(pull.request.phase).toBe('prioritized');
-    expect(pull.request.column).toBe('plan');
-    expect(pull.request.nextPhase).toBe('plan-review');
-    expect(pull.request.model).toBe('zai/glm-5.3');
-    expect(pull.request.instruction).toContain('Work the plan step.');
-    // Never into the checkpoint or past it.
-    expect(started.every((r) => r.request.nextPhase !== 'build' || r.request.phase === 'plan-review')).toBe(true);
+    expect(started.map((r) => r.request.ticketId)).toEqual(['T-0003']);
+    expect(started[0]!.request.phase).toBe('plan');
+    expect(started[0]!.request.column).toBe('plan');
+    expect(started[0]!.request.nextPhase).toBe('plan-review');
+    expect(started[0]!.request.model).toBe('zai/glm-5.3');
+    expect(started[0]!.request.instruction).toContain('Work the plan step.');
   });
 
-  it('never pulls across the checkpoint: build does not take plan-review tickets', async () => {
+  it('never pulls from a manual column: neither prioritized nor the checkpoint feeds a pool', async () => {
     await writeMeta();
     await writeTicket('T-0004', 'plan-review');
+    await writeTicket('T-0005', 'commit');
     const { orch, fleet } = orchestrator();
     await orch.configure(CONFIG);
     await orch.setMaster('run');

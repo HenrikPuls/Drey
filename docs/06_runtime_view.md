@@ -3229,7 +3229,7 @@ sequenceDiagram
     F->>R: configure { ticketsVaultPath, git, defaultWorker, permissionMode }
     R->>V: read pipeline.md + order.md + repos.md + tickets/*
     Note over R: dispatch pass — master run + column playing + free slot
-    R->>R: planDispatch: own queue first, top up from the previous column's top (never across an automatic column or an owner checkpoint)
+    R->>R: planDispatch: each playing automatic column serves its own queue only (the machine never pulls from a manual column)
     R->>V: read prompt (tickets/_meta/prompts/<ref>.md)
     R->>R: composeRunRequest (the one builder — column rides as request.column)
     R->>S: start(request) — worktree + brief (the completion discipline at its end)

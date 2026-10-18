@@ -113,16 +113,16 @@ function dispatchable(card: TicketCard, busyTickets: ReadonlySet<string>): boole
 
 /**
  * What to dispatch right now, in dispatch order: per automatic, playing
- * column with a free slot and a move target — its own queue first, then
- * topped up from the previous column's top unless that column is
- * automatic (it dispatches its own) or an owner checkpoint.
+ * column with a free slot and a move target — the column's own queue.
+ * The machine never pulls from a manual column: `prioritized` is the
+ * owner's queue, and he moves tickets into worker columns himself
+ * (owner ruling, 2026-10-18, amending the "drain prioritized" design).
  */
 export function planDispatch(input: PlanDispatchInput): readonly PlannedDispatch[] {
   const plan: PlannedDispatch[] = [];
   if (input.master !== 'run') {
     return plan;
   }
-  const checkpoints = checkpointPhaseIds(input.columns);
   const taken = new Set<string>();
   for (let i = 0; i < input.columns.length; i++) {
     const column = input.columns[i]!;
@@ -150,17 +150,12 @@ export function planDispatch(input: PlanDispatchInput): readonly PlannedDispatch
       plan.push({ workingPhase: phase.id, fromPhase: card.phase, card });
       return true;
     };
-    // The column's own queue first — refinement rounds included.
+    // The column's own queue only — refinement rounds included (owner
+    // ruling, 2026-10-18): the machine never pulls from a manual column.
+    // `prioritized` is the owner's queue; HE moves a ticket into the
+    // worker column, the pool runs it and moves it right when done.
     for (const card of column.tickets) {
       consider(card);
-    }
-    // Top up from the previous column — never across an automatic one
-    // (it feeds its successor itself) and never across a checkpoint.
-    const previous = i > 0 ? input.columns[i - 1]! : null;
-    if (previous !== null && !isAutoPhase(previous.phase) && !checkpoints.has(previous.phase.id)) {
-      for (const card of previous.tickets) {
-        consider(card);
-      }
     }
   }
   return plan;

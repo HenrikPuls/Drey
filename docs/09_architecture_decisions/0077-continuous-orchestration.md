@@ -24,16 +24,16 @@ handover stays the authority: a column is automatic exactly when its handover mo
 
 **The dispatcher lives in the fleet runner.** It already owns the process table and survives Drey restarting; Drey
 only points it at a tickets vault (`chain` config over the loopback API, idempotent, re-sent with every board
-snapshot). Per playing automatic column with free slots it serves the column's own queue first (refinement rounds
-the owner moved back), then tops up from the previous column's top — pinned ids first, then derived order. A pulled
-ticket is worked by the pool of the column it is headed for while its file still sits in the feeding column; on a
-green gate it moves straight to the working column's next phase (prioritized → plan-review in one step). WIP limits
-warn on the board but never gate dispatch — the pool size is the parallelism.
+snapshot). Per playing automatic column with free slots it serves **the column's own queue** (refinement rounds the
+owner moved back) — and nothing else: the machine never pulls from a manual column. `prioritized` is the owner's
+queue; he moves a ticket into the worker column himself, the pool runs it where it lies, and a green gate moves it
+straight to the working column's next phase. WIP limits warn on the board but never gate dispatch — the pool size is
+the parallelism. (Amended 2026-10-18, owner ruling: the original "drain the manual queue before the first automatic
+column" pulled tickets out of `prioritized`, a folder the machine must not touch.)
 
-**Checkpoints: a manual column between automatic ones is the owner's.** The dispatcher never pulls across it — the
-owner's forward move is what feeds the next pool (plan-review in the live default: refine / implement / park, all
-human moves). A manual column before the first automatic one is a plain queue and is drained by the next pool
-(prioritized). Backward moves are always human moves — never blocked, always logged; the lane rule binds agents only.
+**Checkpoints: a manual column between automatic ones is the owner's.** The dispatcher never pulls — the owner's
+forward move is what feeds every pool (plan-review in the live default: refine / implement / park, all human moves).
+Backward moves are always human moves — never blocked, always logged; the lane rule binds agents only.
 
 **Step completion is the agent's call; the gate is the safety net.** Every run brief ends with the completion
 discipline: work the step, run the acceptance commands yourself, declare the step done only when they pass and the

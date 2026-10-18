@@ -31,12 +31,11 @@ verification steps in the ticket) is next.
 
 - **The board becomes a running pipeline.** A column with a worker
   drains itself: the dispatcher (in the fleet runner, which survives
-  Drey restarting) serves the column's own queue first, tops up from
-  the previous column's top, and moves each ticket one column right
-  when its step is done. A manual column between automatic ones is the
-  owner's **checkpoint** — the machine never pulls across it; a manual
-  column before the first worker column is a queue the next pool
-  drains. The worker-per-column is the auto/manual switch, configured
+  Drey restarting) serves the column's own queue and moves each ticket
+  one column right when its step is done. The machine never pulls from
+  a manual column — `prioritized` is the owner's queue, and he moves
+  tickets into the worker columns himself. The worker-per-column is the
+  auto/manual switch, configured
   in the new Settings → Tickets page (one commit per change on
   `pipeline.md`: `worker:` / `model:` / `workers:` / `prompt:`, plus
   `max-red:` / `token-budget:` / `ci:` / `audit:` / `semantic:`). The

@@ -131,11 +131,11 @@ describe('planDispatch', () => {
     expect(plan.map((p) => `${p.workingPhase}:${p.card.id}`)).toEqual(['plan:T-0010', 'plan:T-0011']);
   });
 
-  it('tops up from the previous manual column when own queue is short', () => {
+  it('never tops up from the previous manual column — the owner feeds the pool', () => {
     const plan = planDispatch(input());
-    // plan's own queue has T-0002 (1 of 2 slots); the pull takes prioritized's top
-    expect(plan.map((p) => `${p.workingPhase}:${p.card.id}`)).toEqual(['plan:T-0002', 'plan:T-0001']);
-    expect(plan[1]!.fromPhase).toBe('prioritized');
+    // plan's own queue has T-0002 (1 of 2 slots); prioritized stays the
+    // owner's queue — the machine never touches it.
+    expect(plan.map((p) => `${p.workingPhase}:${p.card.id}`)).toEqual(['plan:T-0002']);
   });
 
   it('never pulls across an owner checkpoint', () => {
@@ -173,7 +173,7 @@ describe('planDispatch', () => {
     const plan = planDispatch(input({ columns, modes: { plan: 'held' } }));
     expect(plan).toEqual([]);
     const playing = planDispatch(input({ columns }));
-    expect(playing.map((p) => `${p.workingPhase}:${p.card.id}`)).toEqual(['plan:T-0023', 'plan:T-0001']);
+    expect(playing.map((p) => `${p.workingPhase}:${p.card.id}`)).toEqual(['plan:T-0023']);
   });
 
   it('skips an automatic terminal column — a green gate would have nowhere to move', () => {
