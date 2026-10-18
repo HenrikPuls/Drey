@@ -16,3 +16,4 @@ export type {
 } from './vault-tools';
 export { createVaultMcpServer, MCP_SERVER_NAME } from './server';
 export { McpHttpTransport } from './http-transport';
+export { PluginMcpTools } from './plugin-tools';

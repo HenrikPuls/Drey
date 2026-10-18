@@ -40,6 +40,7 @@ import {
 } from './ticket-files';
 import { openTerminalAt } from './open-terminal';
 import { TicketsGit, type RepoLocation } from './tickets-git';
+import { createFleetMcpTools } from './mcp-tools';
 import { FleetClient } from './fleet-client';
 import { agentIdentity, composeRunRequest } from './fleet/request';
 import { checkpointPhaseIds, columnPromptRef, isAutoPhase, nextPhaseIdOf } from './fleet/chain';
@@ -930,6 +931,21 @@ const plugin: MainPluginModule = {
       const p = payload as { vaultId?: unknown };
       return board.initialize(typeof p.vaultId === 'string' ? p.vaultId : null);
     });
+
+    // The fleet's MCP tools (M85, SDK 1.29): the assistant and any
+    // program on Drey's MCP server can drive runs conversationally.
+    ctx.mcp.registerTools(
+      createFleetMcpTools({
+        status: async () => ({
+          runs: await fleet.runs(),
+          chain: await fleet.chainStatus(),
+        }),
+        run: (input) => board.startRun(input),
+        stop: (runId) => fleet.stop(runId, null),
+        steer: (runId, text) => fleet.send(runId, text),
+        watch: (runId) => fleet.stream(runId),
+      }),
+    );
 
     // Everything that can change the board: external rounds, saves of
     // ticket files, our own announces (the debounced emit coalesces).

@@ -35,7 +35,7 @@ import type { ActionsConfig } from '../../shared/app-config';
 import type { AppConfigStore } from '../app-config';
 import type { LlmClient, LlmDebugLog, LlmTaskRegistry, TagSuggester } from '../llm';
 import { IPC_CHANNELS } from '../../shared/ipc-api';
-import type { VaultTools } from '../mcp';
+import type { PluginMcpTools, VaultTools } from '../mcp';
 import type { AssistantToolbox } from '../mcp-client';
 import type { VaultManager } from '../vault-manager';
 import type { VaultChangeAnnouncer } from '../vault-change-announcer';
@@ -94,6 +94,12 @@ export interface PluginHostDeps {
    * user's MCP servers, wired in when a plugin passes `externalTools`.
    */
   readonly assistantToolbox?: AssistantToolbox;
+  /**
+   * The plugin-tool registry of Drey's own MCP server (SDK 1.29, M85):
+   * `ctx.mcp.registerTools` puts a provider here; the server lists and
+   * routes the tools beside the vault tools.
+   */
+  readonly mcpTools: PluginMcpTools;
   /** The ADR-0011 diff as a plain question (`ctx.vault.confirmWrite`). */
   readonly confirmWrite?: (request: {
     path: string;
@@ -685,6 +691,9 @@ export class PluginHost {
           plugin.methods.set(method, fn);
         },
         emit: (event, data) => this.emitEvent(id, event, data),
+      },
+      mcp: {
+        registerTools: (provider) => this.deps.mcpTools.register(id, provider),
       },
       log: (message, level) => this.deps.log(`plugin "${id}": ${message}`, level ?? 'info'),
     };

@@ -8,7 +8,7 @@ import { NoteHistoryStore } from './history/note-history-store';
 import type { McpWriteBridge, OpenDocsBridge, ToolApprovalBridge } from './ipc';
 import { LinkRewriter } from './link-rewriter';
 import { LlmDebugLog, LlmRouter, LlmTaskRegistry, TagSuggester, buildClients } from './llm';
-import { McpHttpTransport, VaultTools, createVaultMcpServer } from './mcp';
+import { McpHttpTransport, PluginMcpTools, VaultTools, createVaultMcpServer } from './mcp';
 import { AssistantToolbox, McpClientManager, createMcpClientManager } from './mcp-client';
 import { NoteManager } from './note-manager';
 import { OwnWriteLedger } from './own-write-ledger';
@@ -165,6 +165,10 @@ export function buildAppServices(deps: AppServicesDeps): AppServices {
     mcpClients,
     (request) => deps.toolApprovalBridge.request(request),
   );
+  // The plugin-tool seam on the MCP server (SDK 1.29, M85): plugins
+  // register providers at activation; the server lists and routes them
+  // beside the vault tools.
+  const pluginMcpTools = new PluginMcpTools(consoleLog);
   const tagSuggester = new TagSuggester(
     // The actions slice lives in the assistant plugin's own config (the
     // ADR-0010 later change); the host seam reads + normalizes it. The
@@ -192,6 +196,7 @@ export function buildAppServices(deps: AppServicesDeps): AppServices {
     llmTasks,
     vaultTools,
     assistantToolbox,
+    mcpTools: pluginMcpTools,
     confirmWrite: (request) => deps.mcpWriteBridge.requestConfirmation(request),
     tagSuggester,
     llmDebug,
@@ -214,7 +219,9 @@ export function buildAppServices(deps: AppServicesDeps): AppServices {
     emitNoteSaved: (event) => host.emitNoteSaved(event),
   });
   const spellcheck = new SpellcheckService(appConfig);
-  const mcpHttp = new McpHttpTransport(() => createVaultMcpServer(vaultTools, app.getVersion()));
+  const mcpHttp = new McpHttpTransport(() =>
+    createVaultMcpServer(vaultTools, app.getVersion(), pluginMcpTools),
+  );
   const sessionBackups = new SessionBackupStore();
   // The in-app update system (ADR-0074): inert unless this is a packaged
   // Windows NSIS build; main.ts decides when the startup check runs.

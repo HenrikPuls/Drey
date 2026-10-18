@@ -16,6 +16,12 @@
 export type { PluginStatus } from './versions';
 export { PLUGIN_API_VERSION } from './versions';
 
+export type {
+  PluginMcpTool,
+  PluginMcpToolProvider,
+  PluginMcpToolResult,
+} from './mcp-tools';
+
 export type { ManifestValidation, PluginManifest, PluginPermission } from './manifest';
 export { PLUGIN_ID_PATTERN, validateManifest } from './manifest';
 
