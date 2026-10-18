@@ -94,7 +94,7 @@ async function main(): Promise<void> {
         adapter,
         git: 'git',
         log,
-        onRunSettled: () => orchestrator?.onRunSettled(),
+        onRunSettled: (info) => void orchestrator?.onRunSettled(info),
       }),
     ]),
   );
@@ -292,6 +292,13 @@ async function main(): Promise<void> {
     fsSync.writeFileSync(descriptorPath, `${JSON.stringify(descriptor)}\n`, { mode: 0o600 });
     log(`listening on 127.0.0.1:${port} (pid ${process.pid})`);
   });
+
+  // The lease reaper's round (M85): a run whose worker process is
+  // provably dead is failed and its ticket freed — chain or not.
+  const reapTimer = setInterval(() => {
+    void orchestrator.reapAll().catch((error) => log(`reap failed: ${String(error)}`));
+  }, 60_000);
+  reapTimer.unref();
 
   // Idle shutdown: nothing live, the chain is not running, and nobody
   // asked for a while — the plugin respawns the runner on demand. A

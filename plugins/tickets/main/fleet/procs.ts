@@ -161,6 +161,25 @@ export async function processStartMs(pid: number, exec: ExecFn): Promise<number 
   }
 }
 
+/**
+ * The lease reaper's liveness probe (M85): is the pid a running process?
+ * Cheap and side-effect free — the guarded kill stays reserved for real
+ * stops. A dead pid is what makes a run stale; a silent-but-alive
+ * worker is a local model thinking (ADR-0014: no timeouts).
+ */
+export async function processAlive(pid: number, exec: ExecFn): Promise<boolean> {
+  try {
+    if (isWindows) {
+      const out = await exec('tasklist', ['/FI', `PID eq ${pid}`, '/FO', 'CSV', '/NH']);
+      return out.toLowerCase().includes(`"${pid}"`);
+    }
+    await exec('ps', ['-p', String(pid)]);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 /** A free loopback port (bind, read, close — racy but standard). */
 export function freePort(): Promise<number> {
   return new Promise((resolve, reject) => {

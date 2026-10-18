@@ -301,6 +301,8 @@ export interface TransitionPatch {
   readonly clearRun?: boolean;
   /** Pin (or with `''` clear) the ticket's worker — a fleet run start records the choice. */
   readonly setWorker?: string;
+  /** Park the ticket (`parked-reason` + `parked-at`, M85): circuit breaker, budgets. */
+  readonly park?: string;
 }
 
 /** Applies a transition/claim patch to a ticket file's text and appends the
@@ -349,6 +351,11 @@ export function patchTicketFile(text: string, patch: TransitionPatch): string {
     } else {
       setQuoted(doc, 'worker', patch.setWorker);
     }
+  }
+
+  if (patch.park !== undefined) {
+    setQuoted(doc, 'parked-reason', patch.park);
+    setQuoted(doc, 'parked-at', stamp);
   }
 
   // Leaving the inbox always clears a parked state (schema rule).

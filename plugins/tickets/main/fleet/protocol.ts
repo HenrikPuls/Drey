@@ -170,4 +170,8 @@ export interface ChainStatus {
   readonly master: ChainMaster;
   /** Per working column mode; a phase absent here is `playing`. */
   readonly columns: Readonly<Record<string, ColumnMode>>;
+  /** Consecutive red gates per column (the circuit breaker's counter). */
+  readonly redStreak: Readonly<Record<string, number>>;
+  /** Columns in cooldown — the ISO instant dispatching resumes after a red gate. */
+  readonly cooldownUntil: Readonly<Record<string, string>>;
 }

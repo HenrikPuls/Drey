@@ -15,10 +15,13 @@
  * Drey closed.
  */
 import { promises as fsp } from 'node:fs';
+import { hostname } from 'node:os';
 import * as path from 'node:path';
-import type { BoardColumn, BoardSnapshot } from '../../shared/tickets';
+import type { BoardColumn, BoardSnapshot, PipelinePhase } from '../../shared/tickets';
 import { isValidTicketFile } from '../../shared/tickets';
-import { assembleBoard, type BoardFile } from '../ticket-board';
+import { assembleBoard, parseOrderFile, rewriteOrderSection, type BoardFile } from '../ticket-board';
+import { patchTicketFile } from '../ticket-files';
+import { TicketsGit } from '../tickets-git';
 import { columnPromptRef, nextPhaseIdOf, planDispatch } from './chain';
 import { composeRunRequest } from './request';
 import type { SupervisorRecord, StartOutcome, StopOutcome } from './runs';
@@ -39,6 +42,8 @@ export interface SupervisorPort {
   readonly start: (request: RunRequest) => Promise<StartOutcome>;
   readonly stop: (runId: string, reason: string | null) => Promise<StopOutcome>;
   readonly records: () => readonly SupervisorRecord[];
+  /** The lease reaper round (M85). */
+  readonly reap: () => Promise<void>;
 }
 
 export interface OrchestratorDeps {
@@ -56,17 +61,33 @@ interface ChainFile {
   readonly config: ChainConfig | null;
   readonly master: ChainMaster;
   readonly columns: Record<string, ColumnMode>;
+  readonly redStreak: Record<string, number>;
+  readonly cooldownUntil: Record<string, string>;
+  /** Per column: the day the token sum belongs to, and the sum itself. */
+  readonly tokensDay: Record<string, string>;
+  readonly tokensUsed: Record<string, number>;
 }
 
 const LIVE: readonly string[] = ['starting', 'running', 'stopping'];
 const BLOCKING: readonly string[] = ['starting', 'running', 'stopping', 'detached'];
 
+/** Consecutive red gates a column tolerates without its own `max-red:`. */
+export const DEFAULT_MAX_RED = 3;
+/** The breather after a red gate before the column fires again. */
+export const RED_COOLDOWN_MS = 60_000;
+
 export class Orchestrator {
   private config: ChainConfig | null = null;
   private master: ChainMaster = 'halted';
   private readonly columns: Record<string, ColumnMode> = {};
+  private readonly redStreak: Record<string, number> = {};
+  private readonly cooldownUntil: Record<string, string> = {};
+  private readonly tokensDay: Record<string, string> = {};
+  private readonly tokensUsed: Record<string, number> = {};
   private passing = false;
   private timer: ReturnType<typeof setInterval> | null = null;
+  /** The pipeline config of the last pass — the breaker's thresholds. */
+  private lastPhases: readonly PipelinePhase[] = [];
 
   constructor(private readonly deps: OrchestratorDeps) {}
 
@@ -88,6 +109,26 @@ export class Orchestrator {
           this.columns[phase] = mode;
         }
       }
+      for (const [phase, streak] of Object.entries(parsed.redStreak ?? {})) {
+        if (typeof streak === 'number' && streak >= 0) {
+          this.redStreak[phase] = streak;
+        }
+      }
+      for (const [phase, until] of Object.entries(parsed.cooldownUntil ?? {})) {
+        if (typeof until === 'string' && !Number.isNaN(Date.parse(until))) {
+          this.cooldownUntil[phase] = until;
+        }
+      }
+      for (const [phase, day] of Object.entries(parsed.tokensDay ?? {})) {
+        if (typeof day === 'string') {
+          this.tokensDay[phase] = day;
+        }
+      }
+      for (const [phase, used] of Object.entries(parsed.tokensUsed ?? {})) {
+        if (typeof used === 'number' && used >= 0) {
+          this.tokensUsed[phase] = used;
+        }
+      }
     } catch {
       // a torn chain.json is noise; the plugin re-configures on the next board round
     }
@@ -99,6 +140,8 @@ export class Orchestrator {
       configured: this.config !== null,
       master: this.master,
       columns: { ...this.columns },
+      redStreak: { ...this.redStreak },
+      cooldownUntil: { ...this.cooldownUntil },
     };
   }
 
@@ -156,9 +199,150 @@ export class Orchestrator {
     return this.status();
   }
 
-  /** The supervisors' run-settled hook: a slot freed — dispatch again. */
-  onRunSettled(): void {
-    void this.dispatchPass();
+  /**
+   * The supervisors' run-settled hook (M85): a slot freed, and — for a
+   * dispatched run — the breaker's bookkeeping. Agent-done AND green
+   * gate resets the column's red streak; a red gate raises it (and
+   * cools the column down); over the `max-red` threshold the breaker
+   * trips: the column holds and its next candidate parks in inbox.
+   */
+  async onRunSettled(info: RunInfo): Promise<void> {
+    const record = this.allRecords().find((r) => r.info.id === info.id) ?? null;
+    const column = record?.request.column ?? null;
+    if (column !== null && record !== null) {
+      const tokens = info.tokensIn + info.tokensOut;
+      if (tokens > 0) {
+        const day = this.stamp().slice(0, 10);
+        if (this.tokensDay[column] !== day) {
+          this.tokensDay[column] = day;
+          this.tokensUsed[column] = 0;
+        }
+        this.tokensUsed[column] = (this.tokensUsed[column] ?? 0) + tokens;
+      }
+      if (info.state === 'done') {
+        this.redStreak[column] = 0;
+      }
+      if (info.state === 'failed' && info.gateFailure !== null) {
+        const streak = (this.redStreak[column] ?? 0) + 1;
+        this.redStreak[column] = streak;
+        this.cooldownUntil[column] = new Date(this.now().getTime() + RED_COOLDOWN_MS).toISOString();
+        await this.persist();
+        const maxRed = this.lastPhases.find((p) => p.id === column)?.maxRed ?? DEFAULT_MAX_RED;
+        if (streak >= maxRed) {
+          await this.trip(column, `${streak} red gates in a row`, info.gateFailure);
+        } else {
+          const budget = this.lastPhases.find((p) => p.id === column)?.tokenBudget ?? 0;
+          if (budget > 0 && (this.tokensUsed[column] ?? 0) > budget) {
+            await this.trip(column, 'daily token budget spent', info.gateFailure);
+          } else {
+            this.deps.log(`red gate on ${column} (${streak}/${maxRed}) — the column cools down`);
+          }
+        }
+      } else {
+        await this.persist();
+      }
+    }
+    await this.dispatchPass();
+  }
+
+  /** The breaker trips: the column holds, its next candidate parks. */
+  private async trip(column: string, reason: string, gateFailure: string): Promise<void> {
+    this.columns[column] = 'held';
+    this.deps.log(`circuit breaker tripped on ${column} — ${reason}; the column holds`);
+    await this.persist();
+    await this.parkNextCandidate(column, `${reason}; last gate: ${gateFailure.slice(0, 200)}`);
+  }
+
+  /**
+   * Parks the column's next candidate in inbox (`parked-reason`/
+   * `parked-at`): the breaker's backward move is the machine's, with the
+   * same one-commit semantics as every transition.
+   */
+  private async parkNextCandidate(column: string, reason: string): Promise<void> {
+    const config = this.config;
+    if (config === null) {
+      return;
+    }
+    try {
+      const snap = await readVaultBoard(config.ticketsVaultPath, config.defaultWorker);
+      const col = snap.columns.find((c) => c.phase.id === column) ?? null;
+      const candidate =
+        col?.tickets.find((t) => t.meta.run === null && t.meta.claimedBy === null) ?? null;
+      if (candidate === null) {
+        this.deps.log(`the breaker found no candidate to park on ${column}`);
+        return;
+      }
+      const git = new TicketsGit(() => config.git);
+      const fromRel = candidate.path;
+      const toRel = `tickets/inbox/${candidate.id}.md`;
+      const abs = (rel: string): string => path.join(config.ticketsVaultPath, rel);
+      const text = await fsp.readFile(abs(fromRel), 'utf8');
+      const patched = patchTicketFile(text, {
+        to: 'inbox',
+        from: candidate.phase,
+        now: this.now(),
+        actor: this.agentActor(),
+        action: `parked by the circuit breaker (${column}) — ${reason}`,
+        park: reason,
+      });
+      await fsp.mkdir(path.dirname(abs(toRel)), { recursive: true });
+      await fsp.rename(abs(fromRel), abs(toRel));
+      await fsp.writeFile(abs(toRel), patched, 'utf8');
+      await this.dropPin(config.ticketsVaultPath, candidate.id);
+      const location = await git.locate(config.ticketsVaultPath);
+      if (location !== null) {
+        await git.commitPaths(
+          location.root,
+          [fromRel, toRel].map((p) => `${location.prefix}${p}`),
+          `tickets: ${candidate.id} ${candidate.phase} -> inbox (circuit breaker)`,
+        );
+      }
+      this.deps.log(`parked ${candidate.id} in inbox (${column} breaker) — re-prioritizing revives it`);
+    } catch (error) {
+      this.deps.log(`parking the breaker's candidate failed: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  }
+
+  /** The moved id leaves every pin section (the board's own rule). */
+  private async dropPin(vaultPath: string, ticketId: string): Promise<void> {
+    const orderPath = path.join(vaultPath, 'tickets/_meta/order.md');
+    const orderText = await fsp.readFile(orderPath, 'utf8').catch(() => null);
+    if (orderText === null) {
+      return;
+    }
+    const { pins } = parseOrderFile(orderText);
+    let touched = false;
+    let text = orderText;
+    for (const [section, ids] of Object.entries(pins)) {
+      const kept = ids.filter((x) => x !== ticketId);
+      if (kept.length !== ids.length) {
+        touched = true;
+        text = rewriteOrderSection(text, section, kept);
+      }
+    }
+    if (touched) {
+      await fsp.writeFile(orderPath, text, 'utf8');
+    }
+  }
+
+  /** The supervisors' lease-reaper round (the runner's timer calls this). */
+  async reapAll(): Promise<void> {
+    for (const provider of ['opencode', 'claude-code'] as const) {
+      await this.deps.supervisorOf(provider).reap();
+    }
+  }
+
+  private agentActor(): string {
+    return `agent@${hostname().toLowerCase()}`;
+  }
+
+  private stamp(): string {
+    return (this.deps.now ?? ((): Date => new Date()))().toISOString();
+  }
+
+  private now(): Date {
+    const now = this.deps.now;
+    return now === undefined ? new Date() : now();
   }
 
   dispose(): void {
@@ -222,6 +406,10 @@ export class Orchestrator {
       config: this.config,
       master: this.master,
       columns: { ...this.columns },
+      redStreak: { ...this.redStreak },
+      cooldownUntil: { ...this.cooldownUntil },
+      tokensDay: { ...this.tokensDay },
+      tokensUsed: { ...this.tokensUsed },
     };
     await fsp
       .writeFile(path.join(this.deps.root, CHAIN_FILE), `${JSON.stringify(file, null, 2)}\n`, 'utf8')
@@ -259,7 +447,10 @@ export class Orchestrator {
         modes: this.columns,
         liveByColumn,
         busyTickets,
+        cooldownUntil: this.cooldownUntil,
+        nowMs: this.now().getTime(),
       });
+      this.lastPhases = snap.pipeline;
       for (const item of plan) {
         await this.dispatchOne(config, snap.columns, item.workingPhase, item.card, snap);
       }

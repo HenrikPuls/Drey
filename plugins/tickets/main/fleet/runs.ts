@@ -20,7 +20,7 @@ import { parseOrderFile, rewriteOrderSection } from '../ticket-board';
 import { patchTicketFile } from '../ticket-files';
 import { TicketsGit } from '../tickets-git';
 import type { NormalizedEvent, ProviderAdapter, WorkerHandle } from './providers';
-import { killTreeGuarded, type ExecFn } from './procs';
+import { killTreeGuarded, processAlive, type ExecFn } from './procs';
 import type { RunInfo, RunRequest, RunState, SteerRung } from './protocol';
 
 const execAsync = promisify(nodeExec);
@@ -73,6 +73,8 @@ interface LiveRun {
   readonly dir: string;
   handle: WorkerHandle | null;
   readonly startedAtMs: number;
+  /** The worker exited and the machine gate is deciding — the reaper stands down. */
+  gating: boolean;
 }
 
 const TERMINAL: readonly RunState[] = ['done', 'stopped', 'failed'];
@@ -140,6 +142,7 @@ export class RunSupervisor {
             dir,
             handle: null,
             startedAtMs: Date.parse(stored.info.startedAt),
+            gating: false,
           });
           continue;
         }
@@ -157,6 +160,7 @@ export class RunSupervisor {
           dir,
           handle: null,
           startedAtMs: Date.parse(stored.info.startedAt),
+          gating: false,
         };
         this.runs.set(detached.id, live);
         await this.persist(live);
@@ -242,6 +246,7 @@ export class RunSupervisor {
       dir,
       handle: null,
       startedAtMs: this.now().getTime(),
+      gating: false,
     };
     this.runs.set(id, run);
     await fsp.writeFile(
@@ -375,6 +380,40 @@ export class RunSupervisor {
     await this.persist(run);
   }
 
+  /**
+   * The lease reaper (M85): a run whose worker process is provably dead
+   * but whose record still holds the ticket — a lost exit event, a
+   * spawn that never came up. The run is failed and logged, the
+   * ticket's slot freed. A silent-but-alive worker is never touched: a
+   * local model may think for minutes (ADR-0014).
+   */
+  async reap(): Promise<void> {
+    for (const run of [...this.runs.values()]) {
+      const state = run.info.state;
+      if (TERMINAL.includes(state) || state === 'detached' || state === 'stopping' || run.gating) {
+        continue;
+      }
+      const pid = run.info.pid;
+      if (pid === null) {
+        // A spawn that never produced a worker: lost after two minutes.
+        if (this.now().getTime() - run.startedAtMs > 2 * 60_000) {
+          run.info = { ...run.info, gateFailure: 'lease lost — the worker never started; reaped' };
+          await this.logLine(run, 'lease reaper: the worker never started — run reaped, ticket freed');
+          await this.finish(run, 'failed');
+        }
+        continue;
+      }
+      if (!(await processAlive(pid, this.exec))) {
+        run.info = { ...run.info, gateFailure: 'lease lost — the worker process is gone; reaped' };
+        await this.logLine(run, 'lease reaper: the worker process is gone — run reaped, ticket freed');
+        if (run.handle !== null) {
+          await run.handle.stop().catch(() => undefined);
+        }
+        await this.finish(run, 'failed');
+      }
+    }
+  }
+
   /** The machine gate: the ticket's acceptance commands, in order, in the worktree. */
   private async runGate(run: LiveRun): Promise<string | null> {
     for (const command of run.request.acceptance) {
@@ -390,6 +429,9 @@ export class RunSupervisor {
   }
 
   private async onWorkerExit(run: LiveRun, code: number | null): Promise<void> {
+    if (TERMINAL.includes(run.info.state)) {
+      return; // the lease reaper got here first
+    }
     if (run.info.state === 'stopping') {
       await this.finish(run, 'stopped');
       return;
@@ -397,6 +439,7 @@ export class RunSupervisor {
     if (run.info.state === 'detached') {
       return;
     }
+    run.gating = true;
     const failure = await this.runGate(run);
     if (failure !== null) {
       run.info = { ...run.info, gateFailure: failure };
@@ -493,7 +536,7 @@ export class RunSupervisor {
     await this.clearRunStamp(run, null);
     // The slot is free and the ticket is where it belongs — the chain
     // may dispatch again (M85; a no-op while no chain is configured).
-    this.deps.onRunSettled?.(run.info);
+    void this.deps.onRunSettled?.(run.info);
   }
 
   /**

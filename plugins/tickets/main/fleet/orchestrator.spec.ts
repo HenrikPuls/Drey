@@ -2,7 +2,7 @@ import { promises as fsp } from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { Orchestrator, type OrchestratorDeps, type SupervisorPort } from './orchestrator';
+import { Orchestrator, RED_COOLDOWN_MS, type OrchestratorDeps, type SupervisorPort } from './orchestrator';
 import type { StartOutcome, StopOutcome, SupervisorRecord } from './runs';
 import type { RunInfo, RunRequest } from './protocol';
 import { newTicketFileText } from '../ticket-files';
@@ -109,6 +109,7 @@ function fakePort() {
       return { ok: true };
     }),
     records: () => [...records],
+    reap: vi.fn(async (): Promise<void> => undefined),
   };
   return { port, records, start: port.start, stop: port.stop };
 }
@@ -275,7 +276,10 @@ describe('Orchestrator', () => {
     // T-0003 arrives externally; a settle fires the pass that takes it.
     await writeTicket('T-0003', 'plan');
     await orch.setMaster('run');
-    orch.onRunSettled();
+    await orch.onRunSettled({
+      ...fleet.records[0]!.info,
+      state: 'done',
+    });
     await vi.waitFor(() => expect(fleet.records.length).toBeGreaterThanOrEqual(2));
   });
 
@@ -287,5 +291,60 @@ describe('Orchestrator', () => {
     await orch.configure(CONFIG);
     await orch.setMaster('run');
     expect(fleet.records).toEqual([]);
+  });
+
+  it('the circuit breaker trips on three red gates in a row: held column, candidate parked', async () => {
+    await writeMeta();
+    await writeTicket('T-0001', 'plan');
+    let current = new Date('2026-10-18T12:00:00Z');
+    const { orch, fleet } = orchestrator({ now: () => current });
+    await orch.configure(CONFIG);
+    await orch.setMaster('run');
+    expect(fleet.records).toHaveLength(1);
+
+    // Three red gates: each settle cools the column down; past the
+    // cooldown the pass re-dispatches (the fake never moves the
+    // ticket), the streak raises, and the third red trips the breaker.
+    for (let i = 0; i < 3; i++) {
+      const record = fleet.records.find((r) => r.info.state === 'running')!;
+      const failed = { ...record.info, state: 'failed' as const, gateFailure: 'gate command failed' };
+      fleet.records[fleet.records.indexOf(record)] = { ...record, info: failed };
+      await orch.onRunSettled(failed);
+      // Past the cooldown the next pass fires again (in production the
+      // safety-net timer; here the master flip that always triggers one).
+      current = new Date(current.getTime() + RED_COOLDOWN_MS + 1_000);
+      if (i < 2) {
+        await orch.setMaster('halted');
+        await orch.setMaster('run');
+      }
+    }
+
+    expect(orch.status().columns['plan']).toBe('held');
+    expect(orch.status().redStreak['plan']).toBe(3);
+    // The candidate moved to inbox, parked with the reason (file semantics).
+    const parked = await fsp.readFile(path.join(vaultDir, 'tickets', 'inbox', 'T-0001.md'), 'utf8');
+    expect(parked).toContain('parked-reason');
+    expect(parked).toContain('circuit breaker');
+    await expect(fsp.access(path.join(vaultDir, 'tickets', 'plan', 'T-0001.md'))).rejects.toBeDefined();
+  });
+
+  it('a green gate resets the streak; the cooldown only breathes between reds', async () => {
+    await writeMeta();
+    await writeTicket('T-0001', 'plan');
+    const { orch, fleet } = orchestrator();
+    await orch.configure(CONFIG);
+    await orch.setMaster('run');
+
+    const record = fleet.records[0]!;
+    fleet.records[0] = { ...record, info: { ...record.info, state: 'done' } };
+    await orch.onRunSettled({ ...record.info, state: 'done' });
+    expect(orch.status().redStreak['plan'] ?? 0).toBe(0);
+    expect(orch.status().columns['plan'] ?? 'playing').toBe('playing');
+  });
+
+  it('the lease reaper is reachable through the ports', async () => {
+    const { orch, fleet } = orchestrator();
+    await orch.reapAll();
+    expect(fleet.port.reap).toHaveBeenCalled();
   });
 });

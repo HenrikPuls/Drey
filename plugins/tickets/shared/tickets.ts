@@ -163,6 +163,16 @@ export interface PipelinePhase {
   readonly workers: number;
   /** Explicit prompt ref override (`prompt: plan-heavy`, M85); null = handover ref. */
   readonly prompt: string | null;
+  /**
+   * The circuit breaker's threshold (`max-red:`, M85): consecutive red
+   * gates the column tolerates before it trips. Default 3.
+   */
+  readonly maxRed: number | null;
+  /**
+   * The column's daily token budget (`token-budget:`, M85); null = off.
+   * Summed over the runs the pool settles per day.
+   */
+  readonly tokenBudget: number | null;
 }
 
 /** The default for a phase entry that omits the M85 pool keys —
@@ -170,7 +180,15 @@ export interface PipelinePhase {
 export function phaseWithoutPoolKeys(
   phase: Partial<PipelinePhase> & Pick<PipelinePhase, 'id' | 'title' | 'wip' | 'claim' | 'handover'>,
 ): PipelinePhase {
-  return { worker: null, model: null, workers: 1, prompt: null, ...phase };
+  return {
+    worker: null,
+    model: null,
+    workers: 1,
+    prompt: null,
+    maxRed: null,
+    tokenBudget: null,
+    ...phase,
+  };
 }
 
 /**

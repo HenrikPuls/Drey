@@ -181,4 +181,18 @@ describe('planDispatch', () => {
     const columns = [...input().columns.slice(0, -1), column(done, [card('T-0030', { phase: 'done', path: 'tickets/done/T-0030.md' })])];
     expect(planDispatch(input({ columns })).map((p) => p.workingPhase)).not.toContain('done');
   });
+
+  it('a column in cooldown dispatches nothing until it is over', () => {
+    const now = Date.parse('2026-10-18T12:00:00Z');
+    const cooling = input({
+      cooldownUntil: { plan: '2026-10-18T12:01:00Z' },
+      nowMs: now,
+    });
+    expect(planDispatch(cooling)).toEqual([]);
+    const cooled = input({
+      cooldownUntil: { plan: '2026-10-18T11:59:00Z' },
+      nowMs: now,
+    });
+    expect(planDispatch(cooled).map((p) => p.workingPhase)).toContain('plan');
+  });
 });

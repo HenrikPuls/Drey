@@ -74,6 +74,13 @@ export interface PipelineParse {
       typeof workersRaw === 'number' && Number.isInteger(workersRaw) && workersRaw > 0 ? workersRaw : 1;
     const promptRaw = map['prompt'];
     const prompt = typeof promptRaw === 'string' && promptRaw.trim() !== '' ? promptRaw.trim() : null;
+    const maxRedRaw = map['max-red'];
+    const maxRed = typeof maxRedRaw === 'number' && Number.isInteger(maxRedRaw) && maxRedRaw > 0 ? maxRedRaw : null;
+    const tokenBudgetRaw = map['token-budget'];
+    const tokenBudget =
+      typeof tokenBudgetRaw === 'number' && Number.isFinite(tokenBudgetRaw) && tokenBudgetRaw > 0
+        ? tokenBudgetRaw
+        : null;
     phases.push({
       id,
       title: typeof map['title'] === 'string' && map['title'].trim() !== '' ? map['title'] : id,
@@ -84,6 +91,8 @@ export interface PipelineParse {
       model,
       workers,
       prompt,
+      maxRed,
+      tokenBudget,
     });
   }
   return { phases, error: null };

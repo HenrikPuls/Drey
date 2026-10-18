@@ -89,6 +89,10 @@ export interface PlanDispatchInput {
   /** Ticket ids that must not be dispatched (a live or detached run
    *  somewhere, or a run stamp without a supervised run). */
   readonly busyTickets: ReadonlySet<string>;
+  /** Columns in cooldown until this ISO instant (a red gate's breather). */
+  readonly cooldownUntil?: Readonly<Record<string, string>>;
+  /** Now, for the cooldown comparison (epoch ms). */
+  readonly nowMs?: number;
 }
 
 export interface PlannedDispatch {
@@ -128,6 +132,10 @@ export function planDispatch(input: PlanDispatchInput): readonly PlannedDispatch
     }
     if ((input.modes[phase.id] ?? 'playing') !== 'playing') {
       continue;
+    }
+    const cooldown = input.cooldownUntil?.[phase.id];
+    if (cooldown !== undefined && !Number.isNaN(Date.parse(cooldown)) && (input.nowMs ?? Date.now()) < Date.parse(cooldown)) {
+      continue; // a red gate's breather — the column cools down before it fires again
     }
     let capacity = phase.workers - (input.liveByColumn[phase.id] ?? 0);
     if (capacity <= 0) {
