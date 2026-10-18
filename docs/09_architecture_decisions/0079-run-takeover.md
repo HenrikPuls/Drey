@@ -33,9 +33,29 @@ opencode server needs a per-boot password, and the runner would not know a human
 - **Providers.** Only a handle with `setHold` can be taken over; the runner answers a clear refusal for the others.
   Claude Code has none yet (no verified soft stop in its stream-json mode).
 
+## Re-attach (later change, 2026-10-19)
+
+A runner restart no longer has to orphan a worker (ADR-0075 v1: "does not re-attach"). OpenCode's worker is a server
+with its own session; only the runner's grip on it is lost. So:
+
+- When the server is up, the spawn records `attach.json` in the run's folder — address, the per-boot credential, the
+  process and its creation time. It is a file of its own, never part of `run.json` (which the board reads), written
+  owner-readable where the platform honours it and removed when the run ends.
+- `adopt()` at boot tries `reattach` before detaching: a non-terminal run (also an already detached one) whose recorded
+  process lives gets a handle bound to the running server (`ProviderAdapter.attach`): same steer / interrupt / stop /
+  hold surface, polling resumes, messages already in the stream are not emitted twice, a `held` run stays held, the
+  ticket's run stamp is restored for a run that had been detached. An attached worker has no process handle, so the
+  adapter kills through a supplied function guarded by the recorded creation time (no pid reuse) and treats three failed
+  polls in a row as the server being gone.
+- A worker that finished its turn while nobody watched is idle by re-attach time: its idle marker ends the run and the
+  gate decides, as for any finished turn.
+- Claude Code workers cannot be re-attached (their stdio pipes belong to the dead runner); they still detach.
+- Taking over a run in another phase later needs nothing more than this seam.
+
 ## Consequences
 
-- The run record carries `held`; a runner restart still turns a live run `detached` (ADR-0075) — the hold dies with it.
+- The run record carries `held`; a runner restart turns a live run `detached` only when it cannot be re-attached
+  (Claude Code, a gone process, no attach file) — the hold dies with it then.
 - A held run is never ended by the runner on its own: the owner must hand it back or stop it. A forgotten hold keeps its
   pool slot busy, which is why the banner and the lane say who drives.
 - The takeover surface is the same for every provider that gains `setHold` / `interrupt`; the transcript needs only the

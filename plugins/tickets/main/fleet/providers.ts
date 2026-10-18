@@ -58,6 +58,27 @@ export interface ProviderStart {
   readonly onEvent: (event: NormalizedEvent) => void;
   /** The session to steer/resume with, as soon as the provider reports it. */
   readonly onSessionRef: (ref: string) => void;
+  /**
+   * What a later runner needs to re-attach to this worker (the server's
+   * address and its per-boot credential), reported once the worker is up.
+   * The supervisor keeps it in a file of the run's own — never in the run
+   * record, which crosses to the board.
+   */
+  readonly onAttachInfo?: (info: { readonly address: string; readonly password: string; readonly pid: number | null }) => void;
+}
+
+/** What re-attaching to a worker that outlived its runner takes (OpenCode). */
+export interface AttachInfo {
+  readonly address: string;
+  readonly password: string;
+  readonly sessionRef: string;
+  /** Epoch ms of the run's start: an idle marker before it belongs to an earlier turn. */
+  readonly runStartedMs: number;
+  /** Messages completed at or before this instant are already in the run's stream. */
+  readonly seenBeforeMs: number;
+  readonly pid: number | null;
+  /** Kills the worker's process tree — the adapter holds no process handle of an attached worker. */
+  kill(): Promise<void>;
 }
 
 export interface WorkerHandle {
@@ -88,6 +109,12 @@ export interface ProviderAdapter {
   /** True when steer reaches a live worker without ending it. */
   readonly liveInject: boolean;
   spawn(start: ProviderStart): WorkerHandle;
+  /**
+   * A handle on a worker that outlived its runner (absent when the provider
+   * cannot): the same steer / interrupt / stop / hold surface, bound to the
+   * running server instead of a process this runner started.
+   */
+  attach?(start: ProviderStart, info: AttachInfo): WorkerHandle;
 }
 
 export type FetchFn = (url: string, init?: RequestInit) => Promise<Response>;
@@ -316,369 +343,423 @@ export function opencodeAdapter(
   pickPort: () => Promise<number> = freePort,
   now: NowFn = (): Date => new Date(),
 ): ProviderAdapter {
-  return {
-    id: 'opencode',
-    label: 'OpenCode',
-    liveInject: true,
-    spawn(start) {
-      const state = {
-        sessionRef: start.resumeRef,
-        alive: true,
-        tokensIn: 0,
-        tokensOut: 0,
-        costUsd: null as number | null,
-        startedAt: 0,
-        turnDone: false,
-        /** A human drives the session: an idle marker is not the run's end. */
-        held: false,
-        /** Idle markers older than this belong to an earlier turn. */
-        lastPromptAt: 0,
-        ended: false,
-        seenAssistant: new Set<string>(),
-        seenTools: new Set<string>(),
-        lastText: '',
-        contextTokens: 0,
-      };
-      let server: RunnerProcess | null = null;
-      let pollTimer: ReturnType<typeof setInterval> | null = null;
+  const build = (start: ProviderStart, attached: AttachInfo | null): WorkerHandle => {
+    const state = {
+      sessionRef: start.resumeRef,
+      alive: true,
+      tokensIn: 0,
+      tokensOut: 0,
+      costUsd: null as number | null,
+      startedAt: 0,
+      turnDone: false,
+      /** A human drives the session: an idle marker is not the run's end. */
+      held: false,
+      /** Idle markers older than this belong to an earlier turn. */
+      lastPromptAt: 0,
+      ended: false,
+      seenAssistant: new Set<string>(),
+      seenTools: new Set<string>(),
+      lastText: '',
+      contextTokens: 0,
+    };
+    let server: RunnerProcess | null = null;
+    let pollTimer: ReturnType<typeof setInterval> | null = null;
+    /** Consecutive failed polls of an attached worker: three in a row = its server is gone. */
+    let pollFailures = 0;
 
-      const exitResolve = { current: null as ((code: number | null) => void) | null };
-      let finished = false;
-      const finish = (code: number | null): void => {
-        if (finished) {
-          return;
-        }
-        finished = true;
-        state.alive = false;
-        if (pollTimer !== null) {
-          clearInterval(pollTimer);
-          pollTimer = null;
-        }
-        exitResolve.current?.(code);
-      };
+    const exitResolve = { current: null as ((code: number | null) => void) | null };
+    let finished = false;
+    const basicAuth = (password: string): Record<string, string> => ({
+      // v2 speaks HTTP BASIC with the fixed user `opencode`.
+      Authorization: `Basic ${Buffer.from(`opencode:${password}`).toString('base64')}`,
+    });
+    const finish = (code: number | null): void => {
+      if (finished) {
+        return;
+      }
+      finished = true;
+      state.alive = false;
+      if (pollTimer !== null) {
+        clearInterval(pollTimer);
+        pollTimer = null;
+      }
+      exitResolve.current?.(code);
+    };
 
-      const base = (): string => `http://127.0.0.1:${server === null ? 0 : (server as { port?: number }).port ?? 0}`;
+    const base = (): string => `http://127.0.0.1:${server === null ? 0 : (server as { port?: number }).port ?? 0}`;
 
-      // Filled in by boot(); the closed-over helpers read through `server`.
-      let address = '';
-      let auth: Record<string, string> = {};
+    // Filled in by boot(); the closed-over helpers read through `server`.
+    let address = '';
+    let auth: Record<string, string> = {};
 
-      const postPrompt = async (text: string): Promise<void> => {
-        if (state.sessionRef === null || address === '') {
-          return;
-        }
-        try {
-          const res = await fetchFn(`${address}${OPENCODE_API.prompt(state.sessionRef)}`, {
-            method: 'POST',
-            headers: { ...auth, 'content-type': 'application/json' },
-            // The v2 API takes the model per message as {providerID, modelID};
-            // the fleet's model pin spells that `providerID/modelID` (one
-            // split at the first slash). A pin without a slash is a note,
-            // never a guess.
-            body: JSON.stringify(modelBody(start.model, text)),
-          });
-          if (!res.ok) {
-            start.onEvent({ ts: nowIso(now), kind: 'error', text: `prompt failed: ${res.status}` });
-          }
-        } catch (error) {
-          if (state.alive) {
-            start.onEvent({ ts: nowIso(now), kind: 'error', text: String(error).slice(0, 300) });
-          }
-        }
-      };
-
-      /** Text of the message's `text` content parts, trimmed. */
-      const messageText = (m: OcMessage): string =>
-        (m.content ?? [])
-          .filter((part) => part.type === 'text')
-          .map((part) => part.text ?? '')
-          .join('\n')
-          .trim();
-
-      /** One poll round: cumulative usage + stream text + the turn's end. */
-      const pollTurn = async (): Promise<void> => {
-        if (!state.alive || state.sessionRef === null || address === '' || state.turnDone) {
-          return;
-        }
-        try {
-          const res = await fetchFn(`${address}${OPENCODE_API.session(state.sessionRef)}`, { headers: auth });
-          if (res.ok) {
-            const body = (await res.json()) as { data?: OcSession };
-            const s = body.data;
-            if (s !== undefined) {
-              const tokensIn = (s.tokens?.input ?? 0) + (s.tokens?.cache?.read ?? 0);
-              const tokensOut = s.tokens?.output ?? 0;
-              const cost = s.cost ?? null;
-              if (tokensIn !== state.tokensIn || tokensOut !== state.tokensOut || cost !== state.costUsd) {
-                state.tokensIn = tokensIn;
-                state.tokensOut = tokensOut;
-                state.costUsd = cost;
-                start.onEvent({
-                  ts: nowIso(now),
-                  kind: 'usage',
-                  tokensIn,
-                  tokensOut,
-                  ...(cost !== null ? { costUsd: cost } : {}),
-                });
-              }
-            }
-          }
-
-          const list = await fetchFn(`${address}${OPENCODE_API.messages(state.sessionRef)}`, { headers: auth });
-          if (list.ok) {
-            const body = (await list.json()) as { data?: OcMessage[] };
-            // The API lists newest first; walk chronologically.
-            for (const m of (body.data ?? []).slice().reverse()) {
-              if (m.type === 'assistant') {
-                if (m.tokens !== undefined) {
-                  state.contextTokens = (m.tokens.input ?? 0) + (m.tokens.cache?.read ?? 0);
-                }
-                // A message's text and thinking are read once it is COMPLETE: the
-                // list shows a message while it still streams, and reading it on
-                // first sight lost most of what the worker said.
-                if ((m.time?.completed ?? 0) > 0 && m.id !== undefined && !state.seenAssistant.has(m.id)) {
-                  state.seenAssistant.add(m.id);
-                  const thought = (m.content ?? [])
-                    .filter((part) => part.type === 'reasoning')
-                    .map((part) => part.text ?? '')
-                    .join(' ')
-                    .trim();
-                  if (thought !== '') {
-                    start.onEvent({ ts: nowIso(now), kind: 'note', text: `${THINK_PREFIX}${thought.slice(0, 600)}` });
-                  }
-                  const text = messageText(m);
-                  if (text !== '') {
-                    state.lastText = text;
-                    start.onEvent({
-                      ts: nowIso(now),
-                      kind: 'text',
-                      text: text.slice(0, 8_000),
-                      activity: activityLine(text),
-                      ...(state.contextTokens > 0 ? { contextTokens: state.contextTokens } : {}),
-                    });
-                  }
-                }
-                // Every tool call is one visible step — shown once its input is
-                // there (a call is listed first with an empty input, which read
-                // as a bare "shell" / "read").
-                for (const part of m.content ?? []) {
-                  const input = part.state?.input;
-                  const ready = input !== undefined && Object.keys(input).length > 0;
-                  if (part.type === 'tool' && part.id !== undefined && ready && !state.seenTools.has(part.id)) {
-                    state.seenTools.add(part.id);
-                    const activity = toolActivity(part.name, input);
-                    start.onEvent({
-                      ts: nowIso(now),
-                      kind: 'note',
-                      text: activity,
-                      activity,
-                      ...(state.contextTokens > 0 ? { contextTokens: state.contextTokens } : {}),
-                    });
-                  }
-                }
-                if ((m.time?.completed ?? 0) > 0) {
-                  state.lastText = messageText(m) || state.lastText;
-                }
-              }
-              // The server writes the turn's end into the list itself.
-              if (m.type === 'idle' && !state.held && (m.time?.created ?? 0) >= state.lastPromptAt) {
-                state.turnDone = true;
-              }
-            }
-          }
-
-          if (state.turnDone && !state.ended) {
-            state.ended = true;
-            start.onEvent({
-              ts: nowIso(now),
-              kind: 'result',
-              text: state.lastText.slice(0, 8_000),
-              tokensIn: state.tokensIn,
-              tokensOut: state.tokensOut,
-              ...(state.costUsd !== null ? { costUsd: state.costUsd } : {}),
-            });
-            // The turn is over — the fleet owns the worker process.
-            void server?.killTree();
-          }
-        } catch {
-          // a dropped poll round is noise; the next one catches up
-        }
-      };
-
-      const handle: WorkerHandle = {
-        get pid(): number | null {
-          return server?.pid ?? null;
-        },
-        exited: new Promise<number | null>((resolve) => {
-          exitResolve.current = resolve;
-        }),
-        steer: async (text) => {
-          if (!state.alive || state.sessionRef === null || address === '') {
-            return 'refused';
-          }
-          // While a turn is live the server queues the POST with delivery
-          // `steer` — the native injection rung.
-          state.lastPromptAt = now().getTime();
-          await postPrompt(text);
-          return 'inject';
-        },
-        setHold: (held) => {
-          state.held = held;
-        },
-        interrupt: async () => {
-          if (!state.alive || state.sessionRef === null || address === '') {
-            return false;
-          }
-          try {
-            const res = await Promise.race([
-              fetchFn(`${address}${OPENCODE_API.interrupt(state.sessionRef)}`, { method: 'POST', headers: auth }),
-              new Promise<null>((resolve) => setTimeout(() => resolve(null), INTERRUPT_WAIT_MS)),
-            ]);
-            return res !== null && res.ok;
-          } catch {
-            return false;
-          }
-        },
-        stop: async () => {
-          if (state.sessionRef !== null && address !== '') {
-            // The soft stop is a courtesy with a bound: a server that never
-            // answers the interrupt must not keep the tree-kill from running
-            // (an unbounded wait here let the runner's 10 s shutdown race
-            // exit first and leave the worker alive, unsupervised).
-            let timer: ReturnType<typeof setTimeout> | undefined;
-            try {
-              await Promise.race([
-                fetchFn(`${address}${OPENCODE_API.interrupt(state.sessionRef)}`, { method: 'POST', headers: auth }),
-                new Promise<void>((resolve) => {
-                  timer = setTimeout(resolve, INTERRUPT_WAIT_MS);
-                }),
-              ]);
-            } catch {
-              // the tree-kill below is the guarantee
-            } finally {
-              clearTimeout(timer);
-            }
-          }
-          await server?.killTree();
-        },
-      };
-
-      // The server comes up asynchronously; the handle is live from the
-      // start and every call reads through the closing-over state.
-      void (async (): Promise<void> => {
-        const port = await pickPort();
-        address = `http://127.0.0.1:${port}`;
-        server = spawnFn(
-          'opencode',
-          ['serve', '--hostname', '127.0.0.1', '--port', String(port)],
-          { cwd: start.cwd },
-        );
-        server.onExit((code) => finish(code));
-
-        // The server prints its credential on stdout:
-        //   server password <token>
-        const password = await new Promise<string>((resolve, reject) => {
-          let buffer = '';
-          let seen = false;
-          const deadline = Date.now() + 60_000;
-          const tick = setInterval(() => {
-            if (seen) {
-              clearInterval(tick);
-            } else if (!state.alive) {
-              clearInterval(tick);
-              reject(new Error('opencode serve exited before printing the server password'));
-            } else if (Date.now() > deadline) {
-              clearInterval(tick);
-              reject(new Error('opencode serve never printed the server password'));
-            }
-          }, 400);
-          server?.onStdout((chunk) => {
-            if (seen) {
-              return;
-            }
-            buffer += chunk;
-            let at = buffer.indexOf('\n');
-            while (at >= 0) {
-              const line = buffer.slice(0, at).trim();
-              buffer = buffer.slice(at + 1);
-              at = buffer.indexOf('\n');
-              const match = /^server password (\S+)\s*$/.exec(line);
-              if (match !== null) {
-                seen = true;
-                clearInterval(tick);
-                resolve(match[1]!);
-                return;
-              }
-            }
-          });
+    const postPrompt = async (text: string): Promise<void> => {
+      if (state.sessionRef === null || address === '') {
+        return;
+      }
+      try {
+        const res = await fetchFn(`${address}${OPENCODE_API.prompt(state.sessionRef)}`, {
+          method: 'POST',
+          headers: { ...auth, 'content-type': 'application/json' },
+          // The v2 API takes the model per message as {providerID, modelID};
+          // the fleet's model pin spells that `providerID/modelID` (one
+          // split at the first slash). A pin without a slash is a note,
+          // never a guess.
+          body: JSON.stringify(modelBody(start.model, text)),
         });
-        // v2 speaks HTTP BASIC with the fixed user `opencode`.
-        auth = { Authorization: `Basic ${Buffer.from(`opencode:${password}`).toString('base64')}` };
+        if (!res.ok) {
+          start.onEvent({ ts: nowIso(now), kind: 'error', text: `prompt failed: ${res.status}` });
+        }
+      } catch (error) {
+        if (state.alive) {
+          start.onEvent({ ts: nowIso(now), kind: 'error', text: String(error).slice(0, 300) });
+        }
+      }
+    };
 
-        // GET /api/info answers once the services are up — the same ping
-        // the official client's health check uses.
-        const deadline = Date.now() + 30_000;
-        for (;;) {
-          if (!state.alive) {
-            await server.killTree();
-            finish(null);
+    /** Kills the worker's process tree; an attached worker has no process handle here. */
+    const killWorker = async (): Promise<void> => {
+      if (server !== null) {
+        await server.killTree();
+      } else if (attached !== null) {
+        await attached.kill();
+        finish(null);
+      }
+    };
+
+    /** Text of the message's `text` content parts, trimmed. */
+    const messageText = (m: OcMessage): string =>
+      (m.content ?? [])
+        .filter((part) => part.type === 'text')
+        .map((part) => part.text ?? '')
+        .join('\n')
+        .trim();
+
+    /** One poll round: cumulative usage + stream text + the turn's end. */
+    const pollTurn = async (): Promise<void> => {
+      if (!state.alive || state.sessionRef === null || address === '' || state.turnDone) {
+        return;
+      }
+      try {
+        const res = await fetchFn(`${address}${OPENCODE_API.session(state.sessionRef)}`, { headers: auth });
+        if (res.ok) {
+          const body = (await res.json()) as { data?: OcSession };
+          const s = body.data;
+          if (s !== undefined) {
+            const tokensIn = (s.tokens?.input ?? 0) + (s.tokens?.cache?.read ?? 0);
+            const tokensOut = s.tokens?.output ?? 0;
+            const cost = s.cost ?? null;
+            if (tokensIn !== state.tokensIn || tokensOut !== state.tokensOut || cost !== state.costUsd) {
+              state.tokensIn = tokensIn;
+              state.tokensOut = tokensOut;
+              state.costUsd = cost;
+              start.onEvent({
+                ts: nowIso(now),
+                kind: 'usage',
+                tokensIn,
+                tokensOut,
+                ...(cost !== null ? { costUsd: cost } : {}),
+              });
+            }
+          }
+        }
+
+        const list = await fetchFn(`${address}${OPENCODE_API.messages(state.sessionRef)}`, { headers: auth });
+        if (list.ok) {
+          const body = (await list.json()) as { data?: OcMessage[] };
+          // The API lists newest first; walk chronologically.
+          for (const m of (body.data ?? []).slice().reverse()) {
+            if (m.type === 'assistant' && attached !== null && m.id !== undefined) {
+              const settledAt = m.time?.completed ?? m.time?.created ?? 0;
+              if (settledAt > 0 && settledAt <= attached.seenBeforeMs) {
+                state.seenAssistant.add(m.id);
+                for (const part of m.content ?? []) {
+                  if (part.type === 'tool' && part.id !== undefined) {
+                    state.seenTools.add(part.id);
+                  }
+                }
+              }
+            }
+            if (m.type === 'assistant') {
+              if (m.tokens !== undefined) {
+                state.contextTokens = (m.tokens.input ?? 0) + (m.tokens.cache?.read ?? 0);
+              }
+              // A message's text and thinking are read once it is COMPLETE: the
+              // list shows a message while it still streams, and reading it on
+              // first sight lost most of what the worker said.
+              if ((m.time?.completed ?? 0) > 0 && m.id !== undefined && !state.seenAssistant.has(m.id)) {
+                state.seenAssistant.add(m.id);
+                const thought = (m.content ?? [])
+                  .filter((part) => part.type === 'reasoning')
+                  .map((part) => part.text ?? '')
+                  .join(' ')
+                  .trim();
+                if (thought !== '') {
+                  start.onEvent({ ts: nowIso(now), kind: 'note', text: `${THINK_PREFIX}${thought.slice(0, 600)}` });
+                }
+                const text = messageText(m);
+                if (text !== '') {
+                  state.lastText = text;
+                  start.onEvent({
+                    ts: nowIso(now),
+                    kind: 'text',
+                    text: text.slice(0, 8_000),
+                    activity: activityLine(text),
+                    ...(state.contextTokens > 0 ? { contextTokens: state.contextTokens } : {}),
+                  });
+                }
+              }
+              // Every tool call is one visible step — shown once its input is
+              // there (a call is listed first with an empty input, which read
+              // as a bare "shell" / "read").
+              for (const part of m.content ?? []) {
+                const input = part.state?.input;
+                const ready = input !== undefined && Object.keys(input).length > 0;
+                if (part.type === 'tool' && part.id !== undefined && ready && !state.seenTools.has(part.id)) {
+                  state.seenTools.add(part.id);
+                  const activity = toolActivity(part.name, input);
+                  start.onEvent({
+                    ts: nowIso(now),
+                    kind: 'note',
+                    text: activity,
+                    activity,
+                    ...(state.contextTokens > 0 ? { contextTokens: state.contextTokens } : {}),
+                  });
+                }
+              }
+              if ((m.time?.completed ?? 0) > 0) {
+                state.lastText = messageText(m) || state.lastText;
+              }
+            }
+            // The server writes the turn's end into the list itself.
+            if (m.type === 'idle' && !state.held && (m.time?.created ?? 0) >= state.lastPromptAt) {
+              state.turnDone = true;
+            }
+          }
+        }
+
+        if (state.turnDone && !state.ended) {
+          state.ended = true;
+          start.onEvent({
+            ts: nowIso(now),
+            kind: 'result',
+            text: state.lastText.slice(0, 8_000),
+            tokensIn: state.tokensIn,
+            tokensOut: state.tokensOut,
+            ...(state.costUsd !== null ? { costUsd: state.costUsd } : {}),
+          });
+          // The turn is over — the fleet owns the worker process.
+          void killWorker();
+        }
+        pollFailures = 0;
+      } catch {
+        // A dropped poll round is noise, the next one catches up — unless the
+        // worker is attached (no process exit to tell us): then three in a
+        // row mean its server is gone.
+        pollFailures++;
+        if (attached !== null && pollFailures >= 3) {
+          finish(null);
+        }
+      }
+    };
+
+    const handle: WorkerHandle = {
+      get pid(): number | null {
+        return server?.pid ?? attached?.pid ?? null;
+      },
+      exited: new Promise<number | null>((resolve) => {
+        exitResolve.current = resolve;
+      }),
+      steer: async (text) => {
+        if (!state.alive || state.sessionRef === null || address === '') {
+          return 'refused';
+        }
+        // While a turn is live the server queues the POST with delivery
+        // `steer` — the native injection rung.
+        state.lastPromptAt = now().getTime();
+        await postPrompt(text);
+        return 'inject';
+      },
+      setHold: (held) => {
+        state.held = held;
+      },
+      interrupt: async () => {
+        if (!state.alive || state.sessionRef === null || address === '') {
+          return false;
+        }
+        try {
+          const res = await Promise.race([
+            fetchFn(`${address}${OPENCODE_API.interrupt(state.sessionRef)}`, { method: 'POST', headers: auth }),
+            new Promise<null>((resolve) => setTimeout(() => resolve(null), INTERRUPT_WAIT_MS)),
+          ]);
+          return res !== null && res.ok;
+        } catch {
+          return false;
+        }
+      },
+      stop: async () => {
+        if (state.sessionRef !== null && address !== '') {
+          // The soft stop is a courtesy with a bound: a server that never
+          // answers the interrupt must not keep the tree-kill from running
+          // (an unbounded wait here let the runner's 10 s shutdown race
+          // exit first and leave the worker alive, unsupervised).
+          let timer: ReturnType<typeof setTimeout> | undefined;
+          try {
+            await Promise.race([
+              fetchFn(`${address}${OPENCODE_API.interrupt(state.sessionRef)}`, { method: 'POST', headers: auth }),
+              new Promise<void>((resolve) => {
+                timer = setTimeout(resolve, INTERRUPT_WAIT_MS);
+              }),
+            ]);
+          } catch {
+            // the tree-kill below is the guarantee
+          } finally {
+            clearTimeout(timer);
+          }
+        }
+        await killWorker();
+      },
+    };
+
+    if (attached !== null) {
+      // A worker that outlived its runner: its server is up, its session
+      // exists — only the polling and the handle are ours again.
+      address = attached.address;
+      auth = basicAuth(attached.password);
+      state.sessionRef = attached.sessionRef;
+      state.startedAt = attached.runStartedMs;
+      state.lastPromptAt = attached.runStartedMs;
+      start.onEvent({
+        ts: nowIso(now),
+        kind: 'note',
+        text: `re-attached to the opencode server on ${attached.address}, session ${attached.sessionRef}`,
+      });
+      pollTimer = setInterval(() => void pollTurn(), 2_000);
+      return handle;
+    }
+
+    // The server comes up asynchronously; the handle is live from the
+    // start and every call reads through the closing-over state.
+    void (async (): Promise<void> => {
+      const port = await pickPort();
+      address = `http://127.0.0.1:${port}`;
+      server = spawnFn(
+        'opencode',
+        ['serve', '--hostname', '127.0.0.1', '--port', String(port)],
+        { cwd: start.cwd },
+      );
+      server.onExit((code) => finish(code));
+
+      // The server prints its credential on stdout:
+      //   server password <token>
+      const password = await new Promise<string>((resolve, reject) => {
+        let buffer = '';
+        let seen = false;
+        const deadline = Date.now() + 60_000;
+        const tick = setInterval(() => {
+          if (seen) {
+            clearInterval(tick);
+          } else if (!state.alive) {
+            clearInterval(tick);
+            reject(new Error('opencode serve exited before printing the server password'));
+          } else if (Date.now() > deadline) {
+            clearInterval(tick);
+            reject(new Error('opencode serve never printed the server password'));
+          }
+        }, 400);
+        server?.onStdout((chunk) => {
+          if (seen) {
             return;
           }
-          try {
-            const res = await fetchFn(`${address}${OPENCODE_API.info}`, { headers: auth });
-            if (res.ok) {
-              break;
+          buffer += chunk;
+          let at = buffer.indexOf('\n');
+          while (at >= 0) {
+            const line = buffer.slice(0, at).trim();
+            buffer = buffer.slice(at + 1);
+            at = buffer.indexOf('\n');
+            const match = /^server password (\S+)\s*$/.exec(line);
+            if (match !== null) {
+              seen = true;
+              clearInterval(tick);
+              resolve(match[1]!);
+              return;
             }
-          } catch {
-            // not up yet
           }
-          if (Date.now() > deadline) {
-            throw new Error('opencode serve did not become ready in time');
-          }
-          await new Promise((resolve) => setTimeout(resolve, 300));
-        }
+        });
+      });
+      auth = basicAuth(password);
+
+      // GET /api/info answers once the services are up — the same ping
+      // the official client's health check uses.
+      const deadline = Date.now() + 30_000;
+      for (;;) {
         if (!state.alive) {
           await server.killTree();
           finish(null);
           return;
         }
-
-        if (state.sessionRef === null) {
-          const res = await fetchFn(`${address}${OPENCODE_API.createSession}`, {
-            method: 'POST',
-            headers: { ...auth, 'content-type': 'application/json' },
-            body: JSON.stringify({ title: `fleet ${start.ticketId}` }),
-          });
-          const body = (await res.json()) as { data?: { id?: string } };
-          const id = body.data?.id;
-          if (typeof id !== 'string') {
-            throw new Error('opencode: session create returned no id');
+        try {
+          const res = await fetchFn(`${address}${OPENCODE_API.info}`, { headers: auth });
+          if (res.ok) {
+            break;
           }
-          state.sessionRef = id;
-          start.onSessionRef(id);
+        } catch {
+          // not up yet
         }
-        start.onEvent({
-          ts: nowIso(now),
-          kind: 'note',
-          text: `opencode serve on 127.0.0.1:${port}, session ${state.sessionRef}`,
+        if (Date.now() > deadline) {
+          throw new Error('opencode serve did not become ready in time');
+        }
+        await new Promise((resolve) => setTimeout(resolve, 300));
+      }
+      if (!state.alive) {
+        await server.killTree();
+        finish(null);
+        return;
+      }
+
+      if (state.sessionRef === null) {
+        const res = await fetchFn(`${address}${OPENCODE_API.createSession}`, {
+          method: 'POST',
+          headers: { ...auth, 'content-type': 'application/json' },
+          body: JSON.stringify({ title: `fleet ${start.ticketId}` }),
         });
-        state.startedAt = now().getTime();
-        state.lastPromptAt = state.startedAt;
-
-        pollTimer = setInterval(() => void pollTurn(), 2_000);
-
-        // The prompt POST queues the turn and returns at once; the poll
-        // loop watches the message list for the `idle` end marker.
-        await postPrompt(start.instruction);
-      })().catch((error: unknown) => {
-        if (state.alive) {
-          start.onEvent({ ts: nowIso(now), kind: 'error', text: String(error).slice(0, 400) });
+        const body = (await res.json()) as { data?: { id?: string } };
+        const id = body.data?.id;
+        if (typeof id !== 'string') {
+          throw new Error('opencode: session create returned no id');
         }
-        finish(-1);
+        state.sessionRef = id;
+        start.onSessionRef(id);
+      }
+      start.onAttachInfo?.({ address, password, pid: server.pid > 0 ? server.pid : null });
+      start.onEvent({
+        ts: nowIso(now),
+        kind: 'note',
+        text: `opencode serve on 127.0.0.1:${port}, session ${state.sessionRef}`,
       });
+      state.startedAt = now().getTime();
+      state.lastPromptAt = state.startedAt;
 
-      return handle;
-    },
+      pollTimer = setInterval(() => void pollTurn(), 2_000);
+
+      // The prompt POST queues the turn and returns at once; the poll
+      // loop watches the message list for the `idle` end marker.
+      await postPrompt(start.instruction);
+    })().catch((error: unknown) => {
+      if (state.alive) {
+        start.onEvent({ ts: nowIso(now), kind: 'error', text: String(error).slice(0, 400) });
+      }
+      finish(-1);
+    });
+
+    return handle;
+  };
+
+  return {
+    id: 'opencode',
+    label: 'OpenCode',
+    liveInject: true,
+    spawn: (start) => build(start, null),
+    attach: (start, info) => build(start, info),
   };
 }
 

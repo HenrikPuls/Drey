@@ -20,7 +20,7 @@ import { parseOrderFile, rewriteOrderSection } from '../ticket-board';
 import { acceptanceCommands, patchTicketFile } from '../ticket-files';
 import { TicketsGit } from '../tickets-git';
 import type { NormalizedEvent, ProviderAdapter, WorkerHandle } from './providers';
-import { killTreeGuarded, processAlive, type ExecFn } from './procs';
+import { killTreeGuarded, processAlive, processStartMs, type ExecFn } from './procs';
 import type { RunInfo, RunRequest, RunState, SteerRung } from './protocol';
 
 const execAsync = promisify(nodeExec);
@@ -200,10 +200,11 @@ export class RunSupervisor {
 
   /**
    * Loads persisted runs after a runner restart. Terminal records come
-   * back as history; a non-terminal record has no supervised worker
-   * anymore (v1 does not re-attach), so it is marked `detached` and its
-   * ticket's run slot freed — the owner can watch the leftover stream
-   * file or start fresh.
+   * back as history. A non-terminal record whose worker still lives is
+   * taken back (`reattach`, OpenCode: its server, address and credential
+   * were recorded); otherwise it has no supervised worker anymore, so it
+   * is marked `detached` and its ticket's run slot freed — the owner can
+   * watch the leftover stream file, stop it, or start fresh.
    */
   async adopt(): Promise<void> {
     const runsDir = path.join(this.deps.root, 'runs');
@@ -216,6 +217,13 @@ export class RunSupervisor {
       try {
         const stored = JSON.parse(raw) as StoredRun;
         const dir = path.join(runsDir, id);
+        // A worker that outlived the runner is taken back when its server
+        // still answers (OpenCode); otherwise it is detached below.
+        if (!TERMINAL.includes(stored.info.state) && stored.info.state !== 'stopping') {
+          if (await this.reattach(stored, dir)) {
+            continue;
+          }
+        }
         // A run that is already detached stays as it is: re-detaching it on
         // every boot rewrote its record and re-stamped its ticket each time.
         if (TERMINAL.includes(stored.info.state) || stored.info.state === 'detached') {
@@ -258,6 +266,126 @@ export class RunSupervisor {
         // a torn run.json is noise; skip the run
       }
     }
+  }
+
+  /**
+   * Writes what a later runner needs to take this worker back — the server's
+   * address, its per-boot credential, the process and its creation time (the
+   * pid-reuse guard of a later kill). A file of the run's own, readable by the
+   * owner only where the platform honours it: the credential must never ride
+   * in `run.json`, which the board reads.
+   */
+  private async recordAttach(
+    run: LiveRun,
+    info: { readonly address: string; readonly password: string; readonly pid: number | null },
+  ): Promise<void> {
+    try {
+      const pidStartedMs = info.pid === null ? null : await processStartMs(info.pid, this.exec);
+      await fsp.writeFile(
+        path.join(run.dir, 'attach.json'),
+        JSON.stringify({ address: info.address, password: info.password, pid: info.pid, pidStartedMs }),
+        { encoding: 'utf8', mode: 0o600 },
+      );
+    } catch (error) {
+      this.deps.log(`run ${run.info.id}: could not record the attach info — ${messageOf(error)}`);
+    }
+  }
+
+  /**
+   * Takes a worker that outlived its runner back: the run becomes live again
+   * with a handle bound to the still-running server (a held run stays held).
+   * False — nothing changes, the caller detaches — when the provider cannot
+   * attach, no attach file exists, or the recorded process is gone.
+   */
+  private async reattach(stored: StoredRun, dir: string): Promise<boolean> {
+    const adapter = this.deps.adapter;
+    if (adapter.attach === undefined || stored.info.sessionRef === null) {
+      return false;
+    }
+    const raw = await fsp.readFile(path.join(dir, 'attach.json'), 'utf8').catch(() => null);
+    if (raw === null) {
+      return false;
+    }
+    let attach: { address?: unknown; password?: unknown; pid?: unknown; pidStartedMs?: unknown };
+    try {
+      attach = JSON.parse(raw) as typeof attach;
+    } catch {
+      return false;
+    }
+    const pid = typeof attach.pid === 'number' ? attach.pid : null;
+    if (typeof attach.address !== 'string' || typeof attach.password !== 'string' || pid === null) {
+      return false;
+    }
+    if (!(await processAlive(pid, this.exec))) {
+      return false;
+    }
+    const pidStartedMs = typeof attach.pidStartedMs === 'number' ? attach.pidStartedMs : undefined;
+    const startedAtMs = Date.parse(stored.info.startedAt);
+    const wasDetached = stored.info.state === 'detached';
+    const info: RunInfo = {
+      ...stored.info,
+      state: 'running',
+      pid,
+      endedAt: null,
+      gateFailure: null,
+    };
+    const run: LiveRun = {
+      info,
+      request: stored.request,
+      currentRelPath: stored.request.ticketRelPath,
+      currentPhase: stored.request.phase,
+      dir,
+      handle: null,
+      startedAtMs,
+      gating: false,
+      audited: false,
+      agentDone: false,
+    };
+    this.runs.set(info.id, run);
+    const handle = adapter.attach(
+      {
+        cwd: stored.info.worktreePath,
+        instruction: stored.request.instruction,
+        model: stored.request.model,
+        permissionMode: stored.request.permissionMode,
+        resumeRef: stored.info.sessionRef,
+        ticketId: stored.request.ticketId,
+        onEvent: (event) => void this.onEvent(run, event),
+        onSessionRef: () => undefined,
+      },
+      {
+        address: attach.address,
+        password: attach.password,
+        sessionRef: stored.info.sessionRef,
+        runStartedMs: startedAtMs,
+        seenBeforeMs: Date.parse(stored.info.lastActivity) || 0,
+        pid,
+        kill: async () => {
+          await killTreeGuarded(pid, this.exec, pidStartedMs);
+        },
+      },
+    );
+    run.handle = handle;
+    if (stored.info.held === true) {
+      handle.setHold?.(true);
+    }
+    void handle.exited.then((code) => void this.onWorkerExit(run, code));
+    await this.persist(run);
+    this.deps.log(`run ${info.id}: re-attached to its worker after the runner restarted`);
+    if (wasDetached) {
+      // The ticket's run stamp was cleared when the run was detached.
+      await this.patchTicket(run, (text) =>
+        patchTicketFile(text, {
+          to: run.currentPhase,
+          from: null,
+          now: this.now(),
+          actor: this.agentActor(),
+          action: `run ${info.id} re-attached after the runner restarted`,
+          run: { pid, 'started-at': stored.info.startedAt, stream: info.id },
+        }),
+      ).catch(() => undefined);
+    }
+    return true;
   }
 
   list(): readonly RunInfo[] {
@@ -361,6 +489,7 @@ export class RunSupervisor {
         run.info = { ...run.info, sessionRef: ref };
         void this.persist(run);
       },
+      onAttachInfo: (info) => void this.recordAttach(run, info),
     });
     run.handle = handle;
     run.info = { ...run.info, state: 'running', pid: handle.pid };
@@ -788,6 +917,8 @@ export class RunSupervisor {
     };
     if (TERMINAL.includes(state)) {
       run.handle = null;
+      // The attach credential has no use once the run is over.
+      await fsp.rm(path.join(run.dir, 'attach.json'), { force: true }).catch(() => undefined);
     }
     this.deps.log(`run ${run.info.id} → ${state}`);
     await this.persist(run);

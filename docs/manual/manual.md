@@ -767,7 +767,10 @@ ticket's **acceptance criteria** (the backticked commands under Plan):
 all green means the ticket moves to the next phase on its own; a
 failure parks the reason in the Log and leaves the ticket where it is.
 
-Runs survive closing Drey — the runner is its own small process. You
+Runs survive closing Drey — the runner is its own small process — and,
+for OpenCode workers, even a restart of the runner: the new runner takes the
+still-running worker back. (A Claude Code worker cannot be taken back; its run
+shows as **Detached** and can be stopped from its lane.) You
 can reach it from a terminal, too: its address and token live in
 `<user data>/fleet/runner.json`.
 

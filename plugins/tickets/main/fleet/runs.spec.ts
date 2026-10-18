@@ -2,7 +2,7 @@ import { promises as fsp } from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { ProviderAdapter, WorkerHandle } from './providers';
+import type { AttachInfo, ProviderAdapter, ProviderStart, WorkerHandle } from './providers';
 import { probeExec, RunSupervisor, usageSummary, type RunSupervisorDeps } from './runs';
 import { processAlive } from './procs';
 import type { RunRequest } from './protocol';
@@ -20,11 +20,18 @@ function fakeAdapter() {
   const handles: Array<
     WorkerHandle & { fail: (code: number | null) => void; onEvent: (text: string) => void; result: () => void }
   > = [];
+  const attachInfos: AttachInfo[] = [];
   const adapter: ProviderAdapter = {
     id: 'opencode',
     label: 'OpenCode',
     liveInject: true,
-    spawn: (start) => {
+    spawn: (start) => make(start),
+    attach: (start, info) => {
+      attachInfos.push(info);
+      return make(start);
+    },
+  };
+  const make = (start: ProviderStart) => {
       let exitResolve: ((code: number | null) => void) | null = null;
       const handle: WorkerHandle & {
         fail: (code: number | null) => void;
@@ -47,9 +54,8 @@ function fakeAdapter() {
       };
       handles.push(handle);
       return handle;
-    },
   };
-  return { adapter, handles };
+  return { adapter, handles, attachInfos };
 }
 
 function gitRecorder() {
@@ -219,6 +225,70 @@ describe('RunSupervisor', () => {
       expect(sup.get(runId)?.state).toBe('stopped');
       expect(await fsp.readFile(path.join(vaultDir, rel), 'utf8')).toContain('stopped by the owner — because');
     });
+  });
+
+  it('re-attaches a live worker of a restarted runner, a held run stays held', async () => {
+    const rel = await writeTicket();
+    const dir = path.join(fleetRoot, 'runs', 'R-live');
+    await fsp.mkdir(dir, { recursive: true });
+    const info = {
+      id: 'R-live',
+      ticketId: 'T-0001',
+      provider: 'opencode',
+      state: 'running',
+      held: true,
+      pid: process.pid,
+      startedAt: '2026-10-17T11:00:00Z',
+      endedAt: null,
+      sessionRef: 'ses_live',
+      tokensIn: 5,
+      tokensOut: 1,
+      costUsd: null,
+      lastActivity: '2026-10-17T11:30:00Z',
+      steerCount: 0,
+      lastSteerRung: null,
+      worktreePath: 'x',
+      branch: 't/T-0001',
+      gateFailure: null,
+    };
+    await fsp.writeFile(path.join(dir, 'run.json'), JSON.stringify({ request: request({ ticketRelPath: rel }), info }), 'utf8');
+    // the worker is "alive": the recorded process is this very test process
+    await fsp.writeFile(
+      path.join(dir, 'attach.json'),
+      JSON.stringify({ address: 'http://127.0.0.1:50001', password: 'pw', pid: process.pid, pidStartedMs: null }),
+      'utf8',
+    );
+
+    const { sup, adapter } = supervisor({ exec: probeExec(os.tmpdir()) });
+    await sup.adopt();
+
+    expect(sup.get('R-live')?.state).toBe('running');
+    expect(adapter.attachInfos).toHaveLength(1);
+    expect(adapter.attachInfos[0]).toMatchObject({ address: 'http://127.0.0.1:50001', password: 'pw', sessionRef: 'ses_live', pid: process.pid });
+    expect(adapter.handles[0]!.setHold).toHaveBeenCalledWith(true);
+    // the credential never rides in the run record the board reads
+    expect(await fsp.readFile(path.join(dir, 'run.json'), 'utf8')).not.toContain('pw"');
+  });
+
+  it('does not re-attach when the recorded process is gone or no attach file exists', async () => {
+    const rel = await writeTicket();
+    for (const [id, attach] of [
+      ['R-nofile', null],
+      ['R-dead', { address: 'http://127.0.0.1:50002', password: 'pw', pid: 2_147_483_000, pidStartedMs: null }],
+    ] as const) {
+      const dir = path.join(fleetRoot, 'runs', id);
+      await fsp.mkdir(dir, { recursive: true });
+      const info = { id, ticketId: 'T-0001', provider: 'opencode', state: 'running', pid: null, startedAt: '2026-10-17T11:00:00Z', endedAt: null, sessionRef: 'ses_x', tokensIn: 0, tokensOut: 0, costUsd: null, lastActivity: '2026-10-17T11:00:00Z', steerCount: 0, lastSteerRung: null, worktreePath: 'x', branch: 't/T-0001', gateFailure: null };
+      await fsp.writeFile(path.join(dir, 'run.json'), JSON.stringify({ request: request({ ticketRelPath: rel }), info }), 'utf8');
+      if (attach !== null) {
+        await fsp.writeFile(path.join(dir, 'attach.json'), JSON.stringify(attach), 'utf8');
+      }
+    }
+    const { sup, adapter } = supervisor({ exec: probeExec(os.tmpdir()) });
+    await sup.adopt();
+    expect(adapter.attachInfos).toHaveLength(0);
+    expect(sup.get('R-nofile')?.state).toBe('detached');
+    expect(sup.get('R-dead')?.state).toBe('detached');
   });
 
   it('adopts a live leftover as detached once, and stop ends a detached run (frees the ticket)', async () => {
