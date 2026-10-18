@@ -45,7 +45,7 @@ export function mountMarkdownView(injector: Injector, opts: MarkdownViewOptions)
     element,
     setContent: (text) => {
       if (!disposed) {
-        surface.setContent(text);
+        surface.patchContent(text);
       }
     },
     getContent: () => surface.getContent(),

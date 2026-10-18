@@ -405,8 +405,10 @@ export interface MarkdownViewHandle {
   /** The view root — append it into your pane DOM and give it a height (flex or fixed). */
   readonly element: HTMLElement;
   /**
-   * Replaces the whole text. While the user is scrolled to the bottom the
-   * view follows the growing tail; scrolled up, it stays where it is.
+   * Replaces the whole text, editing only what differs — the user's
+   * selection and caret survive a refresh that re-delivers mostly the same
+   * text. While the user is scrolled to the bottom the view follows the
+   * growing tail; scrolled up, it stays where it is.
    */
   setContent(text: string): void;
   getContent(): string;

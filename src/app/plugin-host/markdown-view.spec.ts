@@ -1,5 +1,6 @@
 import { Injector } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
+import { EditorView } from '@codemirror/view';
 import { DreyApi } from '../../../shared/ipc-api';
 import { normalizeAppConfig } from '../../../shared/app-config';
 import { mountMarkdownView } from './markdown-view';
@@ -42,6 +43,24 @@ describe('mountMarkdownView (ui.createMarkdownView)', () => {
     document.body.append(handle.element);
     handle.setContent('# Heading\n\nbody');
     expect(handle.getContent()).toBe('# Heading\n\nbody');
+    handle.dispose();
+  });
+
+  it('keeps the selection when a refresh re-delivers mostly the same text', () => {
+    const handle = mountMarkdownView(TestBed.inject(Injector), { mode: 'view', content: 'aaa\n\nbbb\n\nccc' });
+    document.body.append(handle.element);
+    const view = EditorView.findFromDOM(handle.element.querySelector('.cm-editor') as HTMLElement)!;
+    view.dispatch({ selection: { anchor: 5, head: 8 } }); // "bbb"
+
+    handle.setContent('aaa\n\nbbb\n\nccc\n\nddd'); // a line was appended
+    expect(view.state.selection.main.from).toBe(5);
+    expect(view.state.selection.main.to).toBe(8);
+
+    handle.setContent('bbb\n\nccc\n\nddd'); // the head was trimmed
+    expect(view.state.sliceDoc(view.state.selection.main.from, view.state.selection.main.to)).toBe('bbb');
+
+    handle.setContent('bbb\n\nccc\n\nddd'); // nothing changed: no dispatch at all
+    expect(handle.getContent()).toBe('bbb\n\nccc\n\nddd');
     handle.dispose();
   });
 
