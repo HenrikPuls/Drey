@@ -92,6 +92,10 @@ export const IPC_CHANNELS = {
   searchChanged: 'search:changed',
   configGet: 'config:get',
   configSet: 'config:set',
+  // The confirmation dialog's per-trigger "don't ask again" flip (the
+  // triggers live in the assistant plugin's own config; ADR-0010 later
+  // change) — a narrow write, not the whole-config `config:set`.
+  configSetTriggerConfirm: 'config:set-trigger-confirm',
   captureHotkeyStatus: 'shortcuts:capture-status',
   llmListModels: 'llm:list-models',
   llmTestConnection: 'llm:test-connection',

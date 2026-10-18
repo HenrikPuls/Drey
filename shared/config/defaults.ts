@@ -8,6 +8,7 @@ import { DEFAULT_CAPTURE_CHORD } from '../keybindings';
 import {
   ActionTemplate,
   ActionTrigger,
+  ActionsConfig,
   AppConfig,
   AppearanceConfig,
   BUILTIN_ENTRY_TEMPLATE_IDS,
@@ -174,6 +175,11 @@ export function losslessFormatTrigger(): ActionTrigger {
   };
 }
 
+export const DEFAULT_ACTIONS_CONFIG: ActionsConfig = {
+  templates: [searchSummaryTemplate(), autotagTemplate(), losslessFormatTemplate()],
+  triggers: [losslessFormatTrigger()],
+};
+
 export const DEFAULT_APP_CONFIG: AppConfig = {
   version: 1,
   llm: {
@@ -209,8 +215,4 @@ export const DEFAULT_APP_CONFIG: AppConfig = {
   widgets: { disabled: [] },
   plugins: { disabled: [] },
   keybindings: { overrides: {}, capture: DEFAULT_CAPTURE_CHORD },
-  actions: {
-    templates: [searchSummaryTemplate(), autotagTemplate(), losslessFormatTemplate()],
-    triggers: [losslessFormatTrigger()],
-  },
 };

@@ -20,6 +20,38 @@ recorded as an explicit decision. The parity checklist lives in
 
 ## Recent milestones
 
+### Architecture cleanup A6 — plugin settings out of the base config
+
+Roadmap item A6 (the 2026-10-13 review, finding 4 in
+[`docs/11`](../docs/11_risks_and_technical_debt.md)); decided in the
+[ADR-0010](../docs/09_architecture_decisions/0010-app-settings-storage.md)
+later change of 2026-10-18. The rule from now on: **a plugin's settings
+live in the plugin's own config** (`ctx.config` / `api.settings`). The
+actions slice — prompt templates, triggers and the built-in prompt
+texts — moved from `app-config.json` into the assistant plugin's own
+config:
+
+- **Ownership.** The action engine reads `ctx.config.get('actions')`,
+  the Actions settings page edits `api.settings` — adding an action
+  feature no longer touches a base file. The slice normalizes through
+  the new shared `normalizeActionsConfig` (built-ins re-inject, the
+  retired built-in stays retired, legacy prompts refresh — all as
+  before).
+- **Migration.** A one-time step before plugin activation copies a
+  stored `app-config.json` `actions` key into the plugin config
+  (idempotent: the plugin copy wins once it exists; a missing key is a
+  fresh default). The stale key stays in the base file as documented
+  dead data.
+- **The base seams stayed narrow.** The editor's "Suggest tags" autotag
+  reads the assistant config through the plugin host; the confirmation
+  dialog's "don't ask again" flips a trigger through the new
+  `config:set-trigger-confirm` handler instead of the whole-config
+  write; the tags plugin's Summarise takes its prompt from the new
+  `ctx.llm.actionPrompt(builtin)` read seam (SDK 1.28).
+- **Still app config, deliberately:** the `templates` slice (its `dir`
+  is vault layout shared by four consumers) and the `entry` slice
+  (all base).
+
 ### Milestone 84 — the fleet runner: on-demand agent runs with run control
 
 Item M84 of the ticket system + agent fleet (ADR-0075; the format is

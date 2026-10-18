@@ -590,37 +590,18 @@ export class SettingsService {
    * The confirmation dialog's "don't ask again for this action" checkbox.
    * Persists immediately -- it is not part of a Settings editing session,
    * and the user expects the next run of that action to skip the prompt.
-   * The draft gets the same edit so an open Settings screen stays in step
-   * (and doesn't undo it on its next save).
+   * The triggers live in the assistant plugin's own config (the ADR-0010
+   * later change), so this goes through the narrow handler instead of the
+   * whole-config write.
    */
   async setTriggerConfirmImmediate(triggerId: string, confirm: boolean): Promise<void> {
-    const config = this._config();
-    if (!config) {
-      return;
-    }
-    const next = structuredClone(config);
-    const trigger = next.actions.triggers.find((t) => t.id === triggerId);
-    if (!trigger || trigger.confirm === confirm) {
-      return;
-    }
-    trigger.confirm = confirm;
-
-    this._config.set(next);
-    this.mutate((draft) => {
-      const draftTrigger = draft.actions.triggers.find((t) => t.id === triggerId);
-      if (draftTrigger) {
-        draftTrigger.confirm = confirm;
-      }
-    });
-
     if (!this.api) {
       return;
     }
     try {
-      this._config.set(normalizeAppConfig(await this.api.setConfig(next)));
+      await this.api.setTriggerConfirm(triggerId, confirm);
     } catch (err) {
       this.saveError.set(err instanceof Error ? err.message : String(err));
-      void this.load();
     }
   }
 

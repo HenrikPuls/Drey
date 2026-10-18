@@ -4,7 +4,12 @@ import type {
   MenuContribution,
   PluginRendererModule,
 } from '../../../shared/plugin-api/renderer';
-import { hasExternalTools, type AppConfig } from '../../../shared/app-config';
+import {
+  hasExternalTools,
+  normalizeActionsConfig,
+  type ActionsConfig,
+  type AppConfig,
+} from '../../../shared/app-config';
 import type { AssistantOutcome } from '../shared/ask';
 import type { ChatNoteView, ChatSummary } from '../shared/chat-note';
 import { resolveActions } from '../../../shared/llm/actions';
@@ -32,10 +37,13 @@ import { createVaultFileCache } from './vault-files.js';
  */
 const plugin: PluginRendererModule = {
   activate(api: DreyPluginApi) {
-    // The live app config, cached for the manual-action rows.
+    // The live app config (templates.dir for the prompts folder) and the
+    // plugin's own actions config, cached for the manual-action rows.
     let appConfigCache: AppConfig | undefined;
+    let actionsCache: ActionsConfig | undefined;
     const refreshConfig = async (): Promise<void> => {
       appConfigCache = await api.appConfig.get();
+      actionsCache = normalizeActionsConfig(await api.settings.get('actions'));
       refreshActionRows();
     };
 
@@ -219,10 +227,10 @@ const plugin: PluginRendererModule = {
     const refreshActionRows = (): void => {
       menuUnsubscribe?.();
       menuUnsubscribe = null;
-      if (appConfigCache === undefined) {
+      if (actionsCache === undefined) {
         return;
       }
-      const manual = resolveActions(appConfigCache).filter(
+      const manual = resolveActions(actionsCache).filter(
         (action) => action.enabled && action.event === 'manual',
       );
       if (manual.length === 0) {
@@ -300,9 +308,9 @@ const plugin: PluginRendererModule = {
       const selection = view.state.sliceDoc(range.from, range.to);
       const coords = view.coordsAtPos(range.head);
       const actions =
-        appConfigCache === undefined
+        actionsCache === undefined
           ? []
-          : resolveActions(appConfigCache)
+          : resolveActions(actionsCache)
               .filter((action) => action.enabled && action.event === 'manual')
               .map((action) => ({ triggerId: action.triggerId, name: action.name }));
       const prompts = (async () =>

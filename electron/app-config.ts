@@ -105,6 +105,11 @@ export class AppConfigStore {
     return this.config;
   }
 
+  /** The file this store persists to (the legacy-actions migration reads it raw). */
+  get filePath(): string {
+    return configFilePath();
+  }
+
   /**
    * Observes every successful write (currently `config:set` and
    * `spell:add-word`); the callback receives the stored config. One wiring

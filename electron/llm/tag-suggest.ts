@@ -13,14 +13,20 @@
  * template. Cancellable via `taskId`.
  */
 import { AUTOTAG_PROMPT } from '../../shared/app-config';
+import type { ActionsConfig } from '../../shared/app-config';
 import { parseSuggestedTags, substituteVocabulary } from '../../shared/llm';
-import { AppConfigStore } from '../app-config';
 import { LlmClient } from './llm-client';
 import { LlmTaskRegistry } from './llm-tasks';
 
 export class TagSuggester {
   constructor(
-    private readonly config: AppConfigStore,
+    /**
+     * The actions config (the assistant plugin's own config since the
+     * ADR-0010 later change), read fresh per call and normalized by the
+     * host seam that hands this in.
+     */
+    private readonly readActions: () => Promise<ActionsConfig>,
+    private readonly llmEnabled: () => boolean,
     private readonly llm: LlmClient,
     private readonly tasks: LlmTaskRegistry,
   ) {}
@@ -30,15 +36,14 @@ export class TagSuggester {
    * off or the call fails.
    */
   async suggest(entryText: string, vocabulary: string[], taskId?: string): Promise<string[]> {
-    if (!this.config.get().llm.enabled) {
+    if (!this.llmEnabled()) {
       throw new Error('LLM features are disabled.');
     }
     if (entryText.trim() === '') {
       return [];
     }
-    const template = this.config
-      .get()
-      .actions.templates.find((entry) => entry.builtin === 'autotag');
+    const actions = await this.readActions();
+    const template = actions.templates.find((entry) => entry.builtin === 'autotag');
     // The shared `{{AVAILABLE_TAGS}}` placeholder — the legacy `{tags}`
     // spelling is substituted too, so a stored edited prompt keeps working.
     const system = substituteVocabulary(template?.prompt ?? AUTOTAG_PROMPT, vocabulary);

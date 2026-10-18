@@ -34,6 +34,25 @@ export function registerConfigHandlers({
 }: ConfigHandlerDeps): void {
   ipcMain.handle(IPC_CHANNELS.configGet, (): AppConfig => appConfig.get());
   ipcMain.handle(IPC_CHANNELS.captureHotkeyStatus, (): CaptureHotkeyStatus => captureHotkey.status());
+  // The confirmation dialog's per-trigger "don't ask again": a narrow
+  // write into the assistant plugin's own config, where the triggers
+  // live since the ADR-0010 later change. NOT the whole-config
+  // `config:set` — that payload no longer carries actions at all.
+  ipcMain.handle(
+    IPC_CHANNELS.configSetTriggerConfirm,
+    async (_event, triggerId: unknown, confirm: unknown): Promise<void> => {
+      if (typeof triggerId !== 'string' || typeof confirm !== 'boolean') {
+        throw new Error('malformed trigger-confirm payload');
+      }
+      const actions = await pluginHost.readActionsConfig();
+      await pluginHost.writePluginConfig('assistant', 'actions', {
+        ...actions,
+        triggers: actions.triggers.map((trigger) =>
+          trigger.id === triggerId ? { ...trigger, confirm } : trigger,
+        ),
+      });
+    },
+  );
   ipcMain.handle(IPC_CHANNELS.configSet, async (_event, next: AppConfig): Promise<AppConfig> => {
     const prevTemplatesDir = appConfig.get().templates.dir;
     const prevTheme = appConfig.get().appearance.theme;

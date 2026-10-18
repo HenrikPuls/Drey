@@ -209,6 +209,8 @@ const dreyApi: DreyApi = {
   getConfig: (): Promise<AppConfig> => ipcRenderer.invoke(IPC_CHANNELS.configGet),
   setConfig: (config: AppConfig): Promise<AppConfig> =>
     ipcRenderer.invoke(IPC_CHANNELS.configSet, config),
+  setTriggerConfirm: (triggerId: string, confirm: boolean): Promise<void> =>
+    ipcRenderer.invoke(IPC_CHANNELS.configSetTriggerConfirm, triggerId, confirm),
   getCaptureHotkeyStatus: (): Promise<CaptureHotkeyStatus> =>
     ipcRenderer.invoke(IPC_CHANNELS.captureHotkeyStatus),
   listLlmModels: (override?: LlmEndpoint): Promise<string[]> =>

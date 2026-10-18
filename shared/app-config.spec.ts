@@ -8,6 +8,7 @@ import {
   LEGACY_AUTOTAG_PROMPT,
   externalToolSources,
   hasExternalTools,
+  normalizeActionsConfig,
   normalizeAppConfig,
   webSearchReady,
 } from './app-config';
@@ -19,22 +20,9 @@ describe('normalizeAppConfig', () => {
     expect(config.llm.enabled).toBe(false);
     expect(config.llm.baseUrl).toBe(DEFAULT_APP_CONFIG.llm.baseUrl);
     expect(config.llm.model).toBeNull();
-    expect(config.actions.templates.map((t) => t.builtin)).toEqual([
-      'search-summary',
-      'autotag',
-      'lossless-format',
-    ]);
-    // A missing `triggers` key is a fresh config: it seeds the lossless
-    // template's manual trigger (the `⋯`-menu row).
-    expect(config.actions.triggers).toEqual([
-      {
-        id: 'trigger:lossless-format',
-        templateId: BUILTIN_TEMPLATE_IDS['lossless-format'],
-        event: 'manual',
-        confirm: true,
-        enabled: true,
-      },
-    ]);
+    // The actions slice left the app config (ADR-0010 later change) — a
+    // stale key in a stored file is dead data normalize never serves.
+    expect(config).not.toHaveProperty('actions');
   });
 
   it('round-trips the defaults unchanged', () => {
@@ -144,100 +132,90 @@ describe('normalizeAppConfig', () => {
   });
 
   it('keeps a user edit to the built-in template, matched by id', () => {
-    const config = normalizeAppConfig({
-      actions: {
-        templates: [
-          {
-            id: BUILTIN_TEMPLATE_IDS['search-summary'],
-            name: 'My digest',
-            prompt: 'do it',
-            resultKind: 'document',
-          },
-        ],
-        triggers: [],
-      },
+    const config = normalizeActionsConfig({
+      templates: [
+        {
+          id: BUILTIN_TEMPLATE_IDS['search-summary'],
+          name: 'My digest',
+          prompt: 'do it',
+          resultKind: 'document',
+        },
+      ],
+      triggers: [],
     });
-    const builtin = config.actions.templates.find((t) => t.builtin === 'search-summary');
+    const builtin = config.templates.find((t) => t.builtin === 'search-summary');
     expect(builtin).toMatchObject({ name: 'My digest', prompt: 'do it', resultKind: 'document' });
-    expect(config.actions.templates.filter((t) => t.builtin === 'search-summary')).toHaveLength(1);
+    expect(config.templates.filter((t) => t.builtin === 'search-summary')).toHaveLength(1);
   });
 
   it('re-injects the built-ins the user deleted', () => {
-    const config = normalizeAppConfig({ actions: { templates: [], triggers: [] } });
-    expect(config.actions.templates.map((t) => t.builtin)).toEqual([
+    const config = normalizeActionsConfig({ templates: [], triggers: [] });
+    expect(config.templates.map((t) => t.builtin)).toEqual([
       'search-summary',
       'autotag',
       'lossless-format',
     ]);
     // An explicit empty trigger array is the user's -- nothing is re-seeded.
-    expect(config.actions.triggers).toHaveLength(0);
+    expect(config.triggers).toHaveLength(0);
   });
 
   it('drops the retired note-summary built-in from a stored config, without resurrecting it', () => {
-    const config = normalizeAppConfig({
-      actions: {
-        templates: [
-          // A config written before the retirement: the built-in (possibly
-          // with user edits) sits in the stored list.
-          { id: 'builtin:note-summary', name: 'Summarise note', prompt: 'sum', resultKind: 'document' },
-          { id: 'u1', name: 'Mine', prompt: 'go', resultKind: 'localized' },
-        ],
-        triggers: [
-          {
-            id: 't1',
-            templateId: 'builtin:note-summary',
-            event: 'on-save',
-            confirm: false,
-            enabled: true,
-          },
-        ],
-      },
+    const config = normalizeActionsConfig({
+      templates: [
+        // A config written before the retirement: the built-in (possibly
+        // with user edits) sits in the stored list.
+        { id: 'builtin:note-summary', name: 'Summarise note', prompt: 'sum', resultKind: 'document' },
+        { id: 'u1', name: 'Mine', prompt: 'go', resultKind: 'localized' },
+      ],
+      triggers: [
+        {
+          id: 't1',
+          templateId: 'builtin:note-summary',
+          event: 'on-save',
+          confirm: false,
+          enabled: true,
+        },
+      ],
     });
-    expect(config.actions.templates.map((t) => t.builtin)).toEqual([
+    expect(config.templates.map((t) => t.builtin)).toEqual([
       'search-summary',
       'autotag',
       'lossless-format',
       null,
     ]);
-    expect(config.actions.templates.filter((t) => t.id === 'builtin:note-summary')).toHaveLength(0);
-    expect(config.actions.triggers).toHaveLength(0);
+    expect(config.templates.filter((t) => t.id === 'builtin:note-summary')).toHaveLength(0);
+    expect(config.triggers).toHaveLength(0);
   });
 
   it('refreshes an unedited legacy autotag prompt to the shared token, keeps a genuine edit', () => {
-    const legacy = normalizeAppConfig({
-      actions: { templates: [{ id: BUILTIN_TEMPLATE_IDS.autotag, prompt: LEGACY_AUTOTAG_PROMPT }] },
+    const legacy = normalizeActionsConfig({
+      templates: [{ id: BUILTIN_TEMPLATE_IDS.autotag, prompt: LEGACY_AUTOTAG_PROMPT }],
     });
-    expect(legacy.actions.templates.find((t) => t.builtin === 'autotag')?.prompt).toBe(
-      AUTOTAG_PROMPT,
-    );
+    expect(legacy.templates.find((t) => t.builtin === 'autotag')?.prompt).toBe(AUTOTAG_PROMPT);
 
-    const edited = normalizeAppConfig({
-      actions: {
-        templates: [
-          {
-            id: BUILTIN_TEMPLATE_IDS.autotag,
-            name: 'My autotag',
-            prompt: 'Existing tags:\n{tags}\nAnswer in German.',
-          },
-        ],
-      },
+    const edited = normalizeActionsConfig({
+      templates: [
+        {
+          id: BUILTIN_TEMPLATE_IDS.autotag,
+          name: 'My autotag',
+          prompt: 'Existing tags:\n{tags}\nAnswer in German.',
+        },
+      ],
     });
-    const mine = edited.actions.templates.find((t) => t.builtin === 'autotag');
+    const mine = edited.templates.find((t) => t.builtin === 'autotag');
     expect(mine?.name).toBe('My autotag');
     expect(mine?.prompt).toBe('Existing tags:\n{tags}\nAnswer in German.');
   });
 
   it('drops a half-written user template but keeps a valid one', () => {
-    const config = normalizeAppConfig({
-      actions: {
-        templates: [
-          { id: 'u1', name: '', prompt: 'x' },
-          { id: 'u2', name: 'Reformat', prompt: 'tidy up', resultKind: 'document' },
-        ],
-        triggers: [],
-      },
+    const config = normalizeActionsConfig({
+      templates: [
+        { id: 'u1', name: '', prompt: 'x' },
+        { id: 'u2', name: 'Reformat', prompt: 'tidy up', resultKind: 'document' },
+      ],
+      triggers: [],
     });
-    const user = config.actions.templates.filter((t) => t.builtin === null);
+    const user = config.templates.filter((t) => t.builtin === null);
     expect(user).toHaveLength(1);
     expect(user[0]).toMatchObject({ id: 'u2', name: 'Reformat', builtin: null });
   });
@@ -525,23 +503,21 @@ describe('normalizeAppConfig', () => {
   });
 
   it('drops a trigger whose template no longer exists', () => {
-    const config = normalizeAppConfig({
-      actions: {
-        templates: [],
-        triggers: [
-          { id: 't1', templateId: 'gone', event: 'manual', confirm: true, enabled: true },
-          {
-            id: 't2',
-            templateId: BUILTIN_TEMPLATE_IDS.autotag,
-            event: 'on-save',
-            confirm: false,
-            enabled: true,
-          },
-        ],
-      },
+    const config = normalizeActionsConfig({
+      templates: [],
+      triggers: [
+        { id: 't1', templateId: 'gone', event: 'manual', confirm: true, enabled: true },
+        {
+          id: 't2',
+          templateId: BUILTIN_TEMPLATE_IDS.autotag,
+          event: 'on-save',
+          confirm: false,
+          enabled: true,
+        },
+      ],
     });
-    expect(config.actions.triggers).toHaveLength(1);
-    expect(config.actions.triggers[0]).toMatchObject({
+    expect(config.triggers).toHaveLength(1);
+    expect(config.triggers[0]).toMatchObject({
       id: 't2',
       event: 'on-save',
       confirm: false,
@@ -549,7 +525,29 @@ describe('normalizeAppConfig', () => {
   });
 
   it('respects an explicit empty triggers array (user removed them all)', () => {
-    const config = normalizeAppConfig({ actions: { templates: [], triggers: [] } });
-    expect(config.actions.triggers).toEqual([]);
+    const config = normalizeActionsConfig({ templates: [], triggers: [] });
+    expect(config.triggers).toEqual([]);
+  });
+});
+
+describe('normalizeActionsConfig', () => {
+  it('fills a missing key from the defaults: the three built-ins + the lossless manual trigger', () => {
+    const actions = normalizeActionsConfig(undefined);
+    expect(actions.templates.map((t) => t.builtin)).toEqual([
+      'search-summary',
+      'autotag',
+      'lossless-format',
+    ]);
+    // A missing `triggers` key is a fresh config: it seeds the lossless
+    // template's manual trigger (the `?`-menu row).
+    expect(actions.triggers).toEqual([
+      {
+        id: 'trigger:lossless-format',
+        templateId: BUILTIN_TEMPLATE_IDS['lossless-format'],
+        event: 'manual',
+        confirm: true,
+        enabled: true,
+      },
+    ]);
   });
 });

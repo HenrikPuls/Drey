@@ -7,7 +7,7 @@
  *
  * See `docs/09_architecture_decisions/0011-unified-confirmation-flow.md`.
  */
-import { ActionEvent, ActionResultKind, AppConfig, BuiltinAction } from '../app-config';
+import { ActionEvent, ActionResultKind, ActionsConfig, BuiltinAction } from '../app-config';
 
 /**
  * The document an action runs against -- always the active editor tab
@@ -65,10 +65,10 @@ export interface ResolvedAction {
 }
 
 /** Joins every trigger to its template, dropping triggers whose template is gone. */
-export function resolveActions(config: AppConfig): ResolvedAction[] {
-  const byId = new Map(config.actions.templates.map((t) => [t.id, t]));
+export function resolveActions(actions: ActionsConfig): ResolvedAction[] {
+  const byId = new Map(actions.templates.map((t) => [t.id, t]));
   const out: ResolvedAction[] = [];
-  for (const trigger of config.actions.triggers) {
+  for (const trigger of actions.triggers) {
     const template = byId.get(trigger.templateId);
     if (!template) {
       continue;

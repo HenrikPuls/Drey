@@ -196,6 +196,13 @@ export interface AppIpc {
   setConfig(config: AppConfig): Promise<AppConfig>;
 
   /**
+   * Flips one action trigger's "confirm" flag (the confirmation dialog's
+   * "don't ask again") in the assistant plugin's own config — the narrow
+   * write that replaced the whole-config round (ADR-0010 later change).
+   */
+  setTriggerConfirm(triggerId: string, confirm: boolean): Promise<void>;
+
+  /**
    * Whether the quick-capture hotkey is registered (ADR-0073). Main
    * re-registers it on every `config:set`; `registered: false` with a
    * chord means another program holds the combo.

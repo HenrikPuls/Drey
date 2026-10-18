@@ -17,7 +17,7 @@ import {
   sanitizeChatTitle,
 } from './ask-prompts';
 import type { RetrievalOutcome } from '../shared/vault-context';
-import { DEFAULT_APP_CONFIG, normalizeAppConfig, AppConfig } from '../../../shared/app-config';
+import { DEFAULT_APP_CONFIG, normalizeAppConfig, normalizeActionsConfig, AppConfig } from '../../../shared/app-config';
 import type { LlmChatResult, ChatMessage, LlmCapabilities, ToolSpec } from '../../../shared/llm';
 import type { SdkTaskRecord } from '../../../shared/plugin-api';
 
@@ -45,30 +45,30 @@ function engineWith(reply: string | Error, options: { llm?: boolean; mcp?: boole
     }
     return reply;
   };
-  const config = normalizeAppConfig({
-    ...DEFAULT_APP_CONFIG,
-    llm: { ...DEFAULT_APP_CONFIG.llm, enabled: options.llm !== false },
-    tools: {
-      ...DEFAULT_APP_CONFIG.tools,
-      vault: { write: 'confirm' },
-    },
+  // The plugin's own `actions` config value, in its raw stored shape —
+  // the engine normalizes per read. `llmEnabled` stands in for the app
+  // config's master switch.
+  const actions = normalizeActionsConfig({
+    templates: [
+      {
+        id: 'template:test',
+        name: 'Reformat',
+        prompt: 'Tidy the document.',
+        resultKind: 'localized',
+        builtin: null,
+      },
+    ],
+    triggers: [
+      {
+        id: 'trigger:test',
+        templateId: 'template:test',
+        event: 'on-save',
+        confirm: false,
+        enabled: true,
+      },
+    ],
   });
-  // One enabled manual trigger over the Reformat-style user template.
-  config.actions.triggers.push({
-    id: 'trigger:test',
-    templateId: 'template:test',
-    event: 'on-save',
-    confirm: false,
-    enabled: true,
-  });
-  config.actions.templates.push({
-    id: 'template:test',
-    name: 'Reformat',
-    prompt: 'Tidy the document.',
-    resultKind: 'localized',
-    builtin: null,
-  });
-  return { engine: new ActionEngine(() => config, chat), calls };
+  return { engine: new ActionEngine(() => actions, () => options.llm !== false, chat), calls };
 }
 
 describe('assistant plugin action engine (plugins/assistant/main)', () => {
@@ -131,9 +131,9 @@ describe('assistant plugin action engine (plugins/assistant/main)', () => {
     expect(calls).toHaveLength(0);
   });
 
-  it('the on-save enumeration only lists enabled on-save triggers', () => {
+  it('the on-save enumeration only lists enabled on-save triggers', async () => {
     const { engine } = engineWith(DOC);
-    const actions = engine.actionsForEvent('on-save');
+    const actions = await engine.actionsForEvent('on-save');
     expect(actions.map((a) => a.triggerId)).toEqual(['trigger:test']);
     expect(actions[0]?.confirm).toBe(false);
   });

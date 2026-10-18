@@ -520,14 +520,9 @@ const plugin: MainPluginModule = {
         }
         // The editable built-in template is the live prompt (the user can
         // reword it under Settings → Actions); this constant only backs a
-        // broken/missing stored text.
-        const template = ctx.appConfig
-          .get()
-          .actions.templates.find((entry) => entry.builtin === 'search-summary');
-        const system =
-          template !== undefined && template.prompt.trim() !== ''
-            ? template.prompt
-            : SEARCH_SUMMARY_PROMPT;
+        // missing/blank stored text.
+        const stored = await ctx.llm.actionPrompt('search-summary');
+        const system = stored ?? SEARCH_SUMMARY_PROMPT;
         const material = buildSearchSummaryMaterial(queryOf(request), hits);
         const messages: ChatMessage[] = [
           { role: 'system', content: system },

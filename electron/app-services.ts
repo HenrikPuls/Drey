@@ -1,6 +1,7 @@
 import { app, type BrowserWindow } from 'electron';
 import chokidar from 'chokidar';
 import * as path from 'node:path';
+import { DEFAULT_ACTIONS_CONFIG } from '../shared/app-config';
 import { AppConfigStore } from './app-config';
 import { DailyNoteManager } from './daily-note';
 import { NoteHistoryStore } from './history/note-history-store';
@@ -164,7 +165,15 @@ export function buildAppServices(deps: AppServicesDeps): AppServices {
     mcpClients,
     (request) => deps.toolApprovalBridge.request(request),
   );
-  const tagSuggester = new TagSuggester(appConfig, llm, llmTasks);
+  const tagSuggester = new TagSuggester(
+    // The actions slice lives in the assistant plugin's own config (the
+    // ADR-0010 later change); the host seam reads + normalizes it. The
+    // closure runs long after `pluginHost` is assigned.
+    async () => (pluginHost !== null ? await pluginHost.readActionsConfig() : DEFAULT_ACTIONS_CONFIG),
+    () => appConfig.get().llm.enabled,
+    llm,
+    llmTasks,
+  );
   // The plugin host registers its method handlers during activate().
   // Since milestone 61 discovery+activation STARTS before the window is
   // created and runs while the renderer parses its bundle — every IPC

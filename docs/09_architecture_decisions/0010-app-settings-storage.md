@@ -238,6 +238,51 @@ Consequences:
   it is open, no longer "until first saved".
 - Forms that *create* something (an MCP server, an entry template) keep
   their own Add / Remove buttons; that is not a page-level save.
+
+## Later change — plugin settings live in the plugin's own config (2026-10-18)
+
+The 2026-10-13 architecture review flagged (finding 4, roadmap item A6)
+that the base settings file had become a landing pad for feature data:
+`AppConfig` carried the actions slice — prompt templates, triggers, and
+with them the built-in prompt texts — although the engine and the
+settings page that own that data had already moved into the assistant
+plugin (ADR-0044 stage 7). Every new plugin setting would have meant
+editing base files.
+
+**Decision.** The rule from now on: **a plugin's settings live in the
+plugin's own config** (`<userData>/plugins/<id>/config.json`, the
+`ctx.config` / `api.settings` store). The actions slice moved there
+(key `actions` in the assistant plugin's config), normalized on every
+read by the shared `normalizeActionsConfig` — the built-ins re-inject,
+the retired built-in stays retired, legacy prompts refresh, exactly as
+`normalizeAppConfig` did before.
+
+- **Migration.** A one-time step before plugin activation
+  (`electron/plugin-host/actions-migration.ts`) copies a stored
+  `app-config.json` `actions` key into the plugin config. Idempotent:
+  once the plugin config holds the key it wins; a base file without the
+  key is a no-op. The stale key is left in the base file rather than
+  rewriting a file that holds sealed secrets — `normalizeAppConfig`
+  never serves it again, so it is dead data with a documented grave.
+- **The base seams stayed narrow.** The editor's "Suggest tags" autotag
+  (`TagSuggester`) reads the actions config through the plugin host; the
+  confirmation dialog's per-trigger "don't ask again" flips through the
+  new `config:set-trigger-confirm` handler instead of the whole-config
+  `config:set` round; and the tags plugin's Summarise takes the stored
+  `search-summary` prompt from the new `ctx.llm.actionPrompt(builtin)`
+  read seam (SDK 1.28) instead of reaching into app config.
+- **Deliberately still here** (application configuration, not plugin
+  settings, by this ADR's own definition): the `templates` slice — its
+  `dir` is vault layout shared by four consumers (the tags and tasks
+  indexes exclude the folder, the assistant's prompt folder hangs off
+  it, a change re-fires the vault refresh) — and the `entry` slice,
+  which is all base. The rule governs where *new* plugin settings go;
+  it does not ask these two to move.
+
+Consequences: adding a plugin setting can no longer mean editing a base
+file; the settings screen's plugin pages read their own store, so a
+plugin's data travels with the plugin; and the base `AppConfig` type no
+longer compiles knowledge about the assistant's features.
 - The ADR-0020 later change (Appearance previews from the draft until
   Save) is reduced to: the draft shows a change before its automatic
   save.

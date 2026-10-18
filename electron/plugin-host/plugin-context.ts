@@ -7,6 +7,7 @@
  * `PluginHost.buildContext`.
  */
 import type { MainPluginContext, Unsubscribe, VaultChangeEvent } from '../../shared/plugin-api';
+import type { ActionsConfig } from '../../shared/app-config';
 import { NO_VAULT, type VaultCallOptions, type VaultTools, type VaultWriteRule } from '../mcp';
 import type { PluginHostDeps } from './plugin-host';
 
@@ -144,6 +145,7 @@ export function buildLlmContext(
     | 'assistantToolbox'
   >,
   track: TrackDisposable,
+  readActions: () => Promise<ActionsConfig>,
 ): MainPluginContext['llm'] {
   const { appConfig, llm, llmTasks, tagSuggester, llmDebug } = deps;
   return {
@@ -237,6 +239,14 @@ export function buildLlmContext(
     // plugin vocabulary) also reachable from plugins.
     suggestTags: (entryText, vocabulary, taskId) =>
       tagSuggester.suggest(entryText, [...vocabulary], taskId),
+    // The stored built-in prompt (assistant plugin config; SDK 1.28) —
+    // the read seam sibling plugins summarize/suggest through. `null`
+    // when missing or blank, so the caller applies its shipped default.
+    actionPrompt: async (builtin) => {
+      const actions = await readActions();
+      const template = actions.templates.find((entry) => entry.builtin === builtin);
+      return template !== undefined && template.prompt.trim() !== '' ? template.prompt : null;
+    },
     onDebugEntry: (cb) => track(llmDebug.onEntry(cb)),
   };
 }

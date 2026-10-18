@@ -1,21 +1,27 @@
 import { TestBed } from '@angular/core/testing';
-import { AppConfig, normalizeAppConfig } from '../../../shared/app-config';
+import { AppConfig, normalizeActionsConfig, normalizeAppConfig } from '../../../shared/app-config';
 import { DreyApi } from '../../../shared/ipc-api';
 import { SettingsService } from './settings.service';
 
 /**
  * A stand-in for the main process: `setConfig` runs the real
  * `normalizeAppConfig`, exactly like `AppConfigStore` does, so the tests
- * exercise the true round-trip shape.
+ * exercise the true round-trip shape. The assistant plugin's own config
+ * (where the actions triggers live since the ADR-0010 later change) is a
+ * second in-memory file; `setTriggerConfirm` runs the real flip logic the
+ * main handler uses.
  */
 function fakeApi(): {
   api: Partial<DreyApi>;
   stored: () => AppConfig;
   setCalls: () => number;
   seed: (partial: Partial<AppConfig>) => void;
+  pluginConfig: () => Record<string, unknown>;
+  seedActions: (actions: unknown) => void;
 } {
   let disk = normalizeAppConfig({});
   let calls = 0;
+  let assistantConfig: Record<string, unknown> = {};
   return {
     api: {
       getConfig: () => Promise.resolve(structuredClone(disk)),
@@ -24,11 +30,25 @@ function fakeApi(): {
         disk = normalizeAppConfig(config);
         return Promise.resolve(structuredClone(disk));
       },
+      setTriggerConfirm: (triggerId: string, confirm: boolean) => {
+        const actions = normalizeActionsConfig(assistantConfig['actions']);
+        assistantConfig['actions'] = {
+          ...actions,
+          triggers: actions.triggers.map((trigger) =>
+            trigger.id === triggerId ? { ...trigger, confirm } : trigger,
+          ),
+        };
+        return Promise.resolve();
+      },
     },
     stored: () => disk,
     setCalls: () => calls,
     seed: (partial) => {
       disk = normalizeAppConfig(partial);
+    },
+    pluginConfig: () => assistantConfig,
+    seedActions: (actions) => {
+      assistantConfig = { actions };
     },
   };
 }
@@ -243,33 +263,31 @@ describe('SettingsService (self-saving draft)', () => {
   describe('"don’t ask again" from the confirmation dialog', () => {
     let triggerId: string;
 
-    beforeEach(async () => {
-      // The Actions editing lives in the assistant plugin now; seed one
-      // manual trigger straight onto disk and re-read it.
-      harness.seed({
-        actions: {
-          templates: [
-            { id: 't1', name: 'Reformat', prompt: 'tidy', resultKind: 'document', builtin: null },
-          ],
-          triggers: [
-            { id: 'trigger:test', templateId: 't1', event: 'manual', confirm: true, enabled: true },
-          ],
-        },
+    beforeEach(() => {
+      // The triggers live in the assistant plugin's own config now; seed
+      // one manual trigger straight onto that "disk".
+      harness.seedActions({
+        templates: [
+          { id: 't1', name: 'Reformat', prompt: 'tidy', resultKind: 'document', builtin: null },
+        ],
+        triggers: [
+          { id: 'trigger:test', templateId: 't1', event: 'manual', confirm: true, enabled: true },
+        ],
       });
-      await service.load();
-      service.openScreen();
-      triggerId = service.config()!.actions.triggers[0].id;
+      triggerId = 'trigger:test';
     });
 
-    it('persists immediately and updates config and draft together', async () => {
+    it('persists immediately, through the narrow handler', async () => {
       await service.setTriggerConfirmImmediate(triggerId, false);
 
-      const stored = harness.stored().actions.triggers.find((t) => t.id === triggerId);
+      const stored = normalizeActionsConfig(harness.pluginConfig()['actions']).triggers.find(
+        (t) => t.id === triggerId,
+      );
       expect(stored?.confirm).toBe(false);
-      expect(service.config()?.actions.triggers[0].confirm).toBe(false);
-      // The draft got the same edit, so an open Settings screen won't undo it.
-      expect(service.draft()?.actions.triggers[0].confirm).toBe(false);
-      expect(service.isDirty()).toBe(false);
+      // The base config carries no actions at all any more — the flip
+      // never touches it.
+      expect(harness.stored()).not.toHaveProperty('actions');
+      expect(harness.setCalls()).toBe(0);
     });
 
     it('leaves unrelated unsaved draft edits alone', async () => {
@@ -280,6 +298,9 @@ describe('SettingsService (self-saving draft)', () => {
       expect(service.draft()?.llm.apiKey).toBe('sk-draft-only');
       expect(harness.stored().llm.apiKey).toBeNull(); // still unsaved
       expect(service.isDirty()).toBe(true);
+      expect(
+        normalizeActionsConfig(harness.pluginConfig()['actions']).triggers[0]?.confirm,
+      ).toBe(false);
     });
   });
 

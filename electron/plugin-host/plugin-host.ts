@@ -30,7 +30,8 @@ import {
   type VaultChangeEvent,
   type LlmModelListing,
 } from '../../shared/plugin-api';
-import { PROVIDER_PRESETS } from '../../shared/app-config';
+import { normalizeActionsConfig, PROVIDER_PRESETS } from '../../shared/app-config';
+import type { ActionsConfig } from '../../shared/app-config';
 import type { AppConfigStore } from '../app-config';
 import type { LlmClient, LlmDebugLog, LlmTaskRegistry, TagSuggester } from '../llm';
 import { IPC_CHANNELS } from '../../shared/ipc-api';
@@ -39,6 +40,7 @@ import type { AssistantToolbox } from '../mcp-client';
 import type { VaultManager } from '../vault-manager';
 import type { VaultChangeAnnouncer } from '../vault-change-announcer';
 import { PluginConfigStore } from './plugin-config-store';
+import { ACTIONS_CONFIG_KEY, ACTIONS_PLUGIN_ID, migrateLegacyActions } from './actions-migration';
 import {
   assistantVaultOptions,
   buildLlmContext,
@@ -228,6 +230,29 @@ export class PluginHost {
     }
   }
 
+  /**
+   * Reads one key of a plugin's own config — the main-side bridge for
+   * base seams that consume published plugin data (the actions slice
+   * behind `TagSuggester` and `ctx.llm.actionPrompt`). Deliberately NOT
+   * in the plugin SDK: a plugin reaches a sibling's data through a
+   * published provider seam, never by reading its file.
+   */
+  readPluginConfig<T>(pluginId: string, key: string): Promise<T | undefined> {
+    return this.configStore.get<T>(pluginId, key);
+  }
+
+  /** Writes one key of a plugin's own config (the trigger-confirm flip). */
+  writePluginConfig<T>(pluginId: string, key: string, value: T): Promise<void> {
+    return this.configStore.set(pluginId, key, value);
+  }
+
+  /** The assistant plugin's actions config, normalized on every read. */
+  readActionsConfig(): Promise<ActionsConfig> {
+    return this.readPluginConfig<unknown>(ACTIONS_PLUGIN_ID, ACTIONS_CONFIG_KEY).then((raw) =>
+      normalizeActionsConfig(raw),
+    );
+  }
+
   /** Scans the roots, then imports + activates every main entry that may load. */
   async discoverAndActivate(): Promise<void> {
     // Assigned synchronously: main.ts calls this before creating the
@@ -239,6 +264,9 @@ export class PluginHost {
   }
 
   private async runDiscoveryAndActivation(): Promise<void> {
+    // The A6 migration must land before any plugin reads its config —
+    // the assistant engine reads `actions` from the moment it activates.
+    await migrateLegacyActions(this.deps.appConfig.filePath, this.configStore);
     const found = await discoverPlugins({
       builtinRoot: this.deps.builtinRoot,
       userRoot: this.deps.userRoot,
@@ -648,7 +676,7 @@ export class PluginHost {
         registerTaskQuery: (provider) => track(this.tasks.registerTaskQuery(provider)),
         queryProvider: () => this.taskProvider,
       },
-      llm: buildLlmContext(this.deps, track),
+      llm: buildLlmContext(this.deps, track, () => this.readActionsConfig()),
       ipc: {
         handle: (method, fn) => {
           if (method.startsWith('drey.')) {
