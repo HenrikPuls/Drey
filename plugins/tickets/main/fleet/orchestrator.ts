@@ -111,19 +111,26 @@ export class Orchestrator {
 
   constructor(private readonly deps: OrchestratorDeps) {}
 
-  /** Loads `<root>/chain.json` — orchestration resumes after a runner restart. */
+  /**
+   * Loads `<root>/chain.json` — the orchestration state resumes after a
+   * runner restart, but the master never does: every boot starts halted,
+   * "An" is a per-session decision (ADR-0077). A persisted "run" is
+   * written back as halted so the disk matches what the board shows.
+   */
   async load(): Promise<void> {
     const raw = await fsp.readFile(path.join(this.deps.root, CHAIN_FILE), 'utf8').catch(() => null);
     if (raw === null) {
       return;
     }
+    let persistedRun = false;
     try {
       const parsed = JSON.parse(raw) as ChainFile;
       if (parsed.version !== 1) {
         return;
       }
       this.config = parsed.config;
-      this.master = parsed.master === 'run' ? 'run' : 'halted';
+      persistedRun = parsed.master === 'run';
+      this.master = 'halted';
       for (const [phase, mode] of Object.entries(parsed.columns ?? {})) {
         if (mode === 'playing' || mode === 'held') {
           this.columns[phase] = mode;
@@ -156,6 +163,9 @@ export class Orchestrator {
       }
     } catch {
       // a torn chain.json is noise; the plugin re-configures on the next board round
+    }
+    if (persistedRun) {
+      await this.persist();
     }
     this.startTimer();
   }

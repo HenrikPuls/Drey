@@ -250,7 +250,7 @@ describe('Orchestrator', () => {
     expect(fleet.start).toHaveBeenCalledTimes(2);
   });
 
-  it('persists master and column state in chain.json and resumes from it', async () => {
+  it('persists column state in chain.json, but the master always boots halted', async () => {
     await writeMeta();
     await writeTicket('T-0001', 'plan');
     const first = orchestrator();
@@ -263,10 +263,13 @@ describe('Orchestrator', () => {
     await second.orch.load();
     const status = second.orch.status();
     expect(status.configured).toBe(true);
-    expect(status.master).toBe('run');
+    // "An" is a per-session decision: the persisted master never resumes.
+    expect(status.master).toBe('halted');
     expect(status.columns['plan']).toBe('held');
-    // Held means: no dispatch on resume either.
+    // Halted means: no dispatch on boot either.
     expect(second.fleet.records).toEqual([]);
+    // The owner's session: An, then the column's state applies again.
+    await second.orch.setMaster('run');
     await second.orch.setColumn('plan', 'playing');
     expect(second.fleet.records).toHaveLength(1);
     second.orch.dispose();

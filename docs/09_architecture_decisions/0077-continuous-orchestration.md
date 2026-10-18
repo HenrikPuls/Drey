@@ -45,8 +45,10 @@ This amends M84's "green gate moves on its own": the gate is not an independent 
 (running work finishes, nothing new dispatches), and the red button — abort every live run through the stop ladder
 and halt, one click. Per column: pause (no new dispatch, current runs finish), stop (abort this column's runs and
 hold), play. Stopping one column never stops the rest. All of it persists in `<userData>/fleet/chain.json` — never
-in the tickets repo (ADR-0076) — and resumes when the runner restarts. A running chain keeps the runner alive (no
-idle self-shutdown): the board drains while Drey is closed.
+in the tickets repo (ADR-0076). The column states resume when the runner restarts; **the master does not**: every
+boot starts halted, because "An" is a per-session decision — a chain must never start moving just because the app
+started (owner ruling, 2026-10-18). A running chain keeps the runner alive (no idle self-shutdown): the board drains
+while Drey is closed.
 
 **Safety nets.** The lease reaper fails a run whose worker process is provably dead (a lost exit event, a spawn that
 never came up) and frees its ticket — a silent-but-alive worker is never touched (ADR-0014: no timeouts on
