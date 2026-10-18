@@ -3,7 +3,7 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ProviderAdapter, WorkerHandle } from './providers';
-import { RunSupervisor, type RunSupervisorDeps } from './runs';
+import { RunSupervisor, usageSummary, type RunSupervisorDeps } from './runs';
 import type { RunRequest } from './protocol';
 import { newTicketFileText, patchTicketFile, parseTicketFile } from '../ticket-files';
 import { TicketsGit, type GitExecFn } from '../tickets-git';
@@ -35,6 +35,8 @@ function fakeAdapter() {
           exitResolve = resolve;
         }),
         steer: vi.fn(async () => 'inject' as const),
+        setHold: vi.fn(),
+        interrupt: vi.fn(async () => true),
         stop: vi.fn(async () => {
           exitResolve?.(null);
         }),
@@ -166,6 +168,41 @@ describe('RunSupervisor', () => {
     expect(second.ok).toBe(false);
     expect((second as { error: string }).error).toContain('already has a live run');
     expect(adapter.handles).toHaveLength(1);
+  });
+
+  it('takeover holds the run, interrupt needs it, release hands it back', async () => {
+    const { sup, adapter } = supervisor();
+    const rel = await writeTicket();
+    const started = await sup.start(request({ ticketRelPath: rel }));
+    const runId = (started as { run: { id: string } }).run.id;
+    const handle = adapter.handles[0]!;
+
+    const early = await sup.interrupt(runId);
+    expect(early.ok).toBe(false);
+    expect((early as { error: string }).error).toContain('not taken over');
+
+    expect((await sup.takeover(runId)).ok).toBe(true);
+    expect(handle.setHold).toHaveBeenLastCalledWith(true);
+    expect(sup.get(runId)?.held).toBe(true);
+
+    expect((await sup.interrupt(runId)).ok).toBe(true);
+    expect(handle.interrupt).toHaveBeenCalledTimes(1);
+
+    expect((await sup.release(runId)).ok).toBe(true);
+    expect(handle.setHold).toHaveBeenLastCalledWith(false);
+    expect(sup.get(runId)?.held).toBe(false);
+  });
+
+  it('refuses a takeover for a worker that cannot be held, and for an unknown run', async () => {
+    const { sup, adapter } = supervisor();
+    const rel = await writeTicket();
+    const started = await sup.start(request({ ticketRelPath: rel }));
+    const runId = (started as { run: { id: string } }).run.id;
+    (adapter.handles[0] as { setHold?: unknown }).setHold = undefined;
+    const refused = await sup.takeover(runId);
+    expect(refused.ok).toBe(false);
+    expect((refused as { error: string }).error).toContain('cannot be taken over');
+    expect((await sup.takeover('R-nope')).ok).toBe(false);
   });
 
   it('validates the deterministic branch and the machine gate before spawning', async () => {
@@ -471,5 +508,17 @@ describe('RunSupervisor', () => {
     const refused = await sup.start(request({ ticketRelPath: rel }));
     expect(refused.ok).toBe(false);
     expect((refused as { error: string }).error).toContain('worktree failed');
+  });
+});
+
+describe('usageSummary — what the ticket Log says a run used', () => {
+  it('names tokens and leaves a zero cost out (flat plans report 0)', () => {
+    expect(usageSummary({ tokensIn: 331_122, tokensOut: 1_511, costUsd: 0 })).toBe(' — 331k in / 2k out');
+    expect(usageSummary({ tokensIn: 3_400_000, tokensOut: 800, costUsd: null })).toBe(' — 3.4M in / 800 out');
+  });
+
+  it('adds a real cost and stays silent when nothing was used', () => {
+    expect(usageSummary({ tokensIn: 1_000, tokensOut: 10, costUsd: 0.124 })).toBe(' — 1k in / 10 out · $0.12');
+    expect(usageSummary({ tokensIn: 0, tokensOut: 0, costUsd: null })).toBe('');
   });
 });

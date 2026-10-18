@@ -1099,3 +1099,89 @@
   flex: 1 1 auto;
   min-height: 0;
 }
+
+/* ---- the takeover tab: transcript above, prompt box below ---- */
+
+.tickets-takeover {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg-main);
+}
+
+.tickets-takeover-banner {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 16px;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-dock);
+  font-size: 0.8rem;
+}
+
+.tickets-takeover-headline {
+  font-weight: 600;
+  color: var(--text-heading);
+}
+
+.tickets-takeover-stats {
+  color: var(--text-4);
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+}
+
+.tickets-takeover-spacer {
+  flex: 1;
+}
+
+.tickets-takeover-controls {
+  display: inline-flex;
+  gap: 6px;
+}
+
+.tickets-takeover-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 26px;
+  padding: 0 10px;
+  border: 1px solid var(--field-border);
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-primary);
+  font: inherit;
+  font-size: 0.75rem;
+  cursor: pointer;
+}
+
+.tickets-takeover-btn:hover {
+  background: var(--hover-bg);
+}
+
+.tickets-takeover-btn[hidden] {
+  display: none;
+}
+
+.tickets-takeover-transcript {
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+.tickets-takeover-prompt {
+  flex: none;
+  max-height: 40%;
+  display: flex;
+  flex-direction: column;
+  margin: 0 16px 16px;
+  border: 1px solid var(--field-border);
+  border-radius: 8px;
+  background: var(--bg-input);
+  overflow: auto;
+}
+
+.tickets-takeover-prompt-input {
+  min-height: 56px;
+}

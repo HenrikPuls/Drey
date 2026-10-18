@@ -65,6 +65,18 @@ export interface WorkerHandle {
   steer(text: string): Promise<SteerRung>;
   /** Hard stop: provider soft-abort first, then the tree-kill. */
   stop(): Promise<void>;
+  /**
+   * Human takeover (absent when the provider cannot do it): while held the
+   * adapter does not treat a finished turn as the end of the run, so the
+   * worker's session stays up for the owner to drive; releasing it lets the
+   * next turn end count again (a worker that is idle by then ends the run).
+   */
+  setHold?(held: boolean): void;
+  /**
+   * The soft stop of the current turn — the session and the worker process
+   * stay (unlike `stop`). False when there is nothing to interrupt.
+   */
+  interrupt?(): Promise<boolean>;
 }
 
 export interface ProviderAdapter {
@@ -314,6 +326,10 @@ export function opencodeAdapter(
         costUsd: null as number | null,
         startedAt: 0,
         turnDone: false,
+        /** A human drives the session: an idle marker is not the run's end. */
+        held: false,
+        /** Idle markers older than this belong to an earlier turn. */
+        lastPromptAt: 0,
         ended: false,
         seenAssistant: new Set<string>(),
         seenTools: new Set<string>(),
@@ -449,7 +465,7 @@ export function opencodeAdapter(
                 }
               }
               // The server writes the turn's end into the list itself.
-              if (m.type === 'idle' && (m.time?.created ?? 0) >= state.startedAt) {
+              if (m.type === 'idle' && !state.held && (m.time?.created ?? 0) >= state.lastPromptAt) {
                 state.turnDone = true;
               }
             }
@@ -486,8 +502,26 @@ export function opencodeAdapter(
           }
           // While a turn is live the server queues the POST with delivery
           // `steer` — the native injection rung.
+          state.lastPromptAt = now().getTime();
           await postPrompt(text);
           return 'inject';
+        },
+        setHold: (held) => {
+          state.held = held;
+        },
+        interrupt: async () => {
+          if (!state.alive || state.sessionRef === null || address === '') {
+            return false;
+          }
+          try {
+            const res = await Promise.race([
+              fetchFn(`${address}${OPENCODE_API.interrupt(state.sessionRef)}`, { method: 'POST', headers: auth }),
+              new Promise<null>((resolve) => setTimeout(() => resolve(null), INTERRUPT_WAIT_MS)),
+            ]);
+            return res !== null && res.ok;
+          } catch {
+            return false;
+          }
         },
         stop: async () => {
           if (state.sessionRef !== null && address !== '') {
@@ -613,6 +647,7 @@ export function opencodeAdapter(
           text: `opencode serve on 127.0.0.1:${port}, session ${state.sessionRef}`,
         });
         state.startedAt = now().getTime();
+        state.lastPromptAt = state.startedAt;
 
         pollTimer = setInterval(() => void pollTurn(), 2_000);
 

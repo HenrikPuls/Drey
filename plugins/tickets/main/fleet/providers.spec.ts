@@ -256,6 +256,43 @@ describe('the opencode adapter', () => {
     vi.useRealTimers();
   });
 
+  it('a held run ignores the idle marker until it is released, and interrupt posts to the server', async () => {
+    vi.useFakeTimers();
+    const interrupts: string[] = [];
+    const at = Date.now();
+    const { fetch } = scriptedFetch({
+      sessionCreated: () => undefined,
+      prompts: [],
+      interrupts,
+      messages: () => [
+        { id: 'msg_i', type: 'idle', time: { created: at + 5_000 }, outcome: 'interrupted' },
+        assistant(at),
+        { id: 'msg_q', type: 'user', time: { created: at }, text: 'Do the ticket.' },
+      ],
+    });
+    const proc = fakeProcess();
+    const { events, start } = collect();
+    const handle = opencodeAdapter(spawnOf(proc), fetch, async () => 47000).spawn(start);
+    handle.setHold?.(true);
+
+    await vi.advanceTimersByTimeAsync(0);
+    proc.stdout('server password sekrit');
+    await vi.advanceTimersByTimeAsync(2_500);
+    expect(events.find((e) => e.kind === 'result')).toBeUndefined();
+    expect(proc.killTree).not.toHaveBeenCalled();
+
+    expect(await handle.interrupt?.()).toBe(true);
+    expect(interrupts.length).toBe(1);
+
+    handle.setHold?.(false);
+    await vi.advanceTimersByTimeAsync(2_500);
+    expect(events.find((e) => e.kind === 'result')).toBeDefined();
+    expect(proc.killTree).toHaveBeenCalled();
+
+    proc.exit(null);
+    vi.useRealTimers();
+  });
+
   it('stop interrupts the session and kills the serve process', async () => {
     vi.useFakeTimers();
     const prompts: string[] = [];

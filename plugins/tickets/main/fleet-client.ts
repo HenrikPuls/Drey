@@ -87,7 +87,7 @@ export class FleetClient {
         this.get<ChainStatus>('/chain').catch(() => null),
       ]);
       this.push({ runs: data.runs, chain });
-      this.pollWhile(data.runs, chain);
+      this.startPolling();
       return data.runs;
     } catch {
       return [];
@@ -122,6 +122,17 @@ export class FleetClient {
       return { ok: false, error: 'the fleet runner is not running' };
     }
     return this.post<{ ok: boolean; error?: string; rung?: string }>('/send', { runId, text });
+  }
+
+  /** Takeover control of a live run: take over, interrupt the turn, hand back. */
+  async control(
+    action: 'takeover' | 'interrupt' | 'release',
+    runId: string,
+  ): Promise<{ ok: boolean; error?: string }> {
+    if (!(await this.withRunner())) {
+      return { ok: false, error: 'the fleet runner is not running' };
+    }
+    return this.post<{ ok: boolean; error?: string }>(`/${action}`, { runId });
   }
 
   /** The run's stream so far (the watch view's text), or null. */
@@ -388,21 +399,16 @@ export class FleetClient {
   }
 
   /**
-   * Polls while anything is live — or while the chain is running, because
-   * the daemon dispatches on its own: a run it starts is not one this
-   * client started, so without the poll the board would only learn of it
-   * on the next manual refresh and show a working column as idle.
-   * Stops itself when the board is quiet and the chain halted.
+   * Keeps the board's view of the fleet fresh for as long as the plugin
+   * lives. The daemon dispatches on its own and can come and go (a build
+   * change retires it, a restart brings it back), so a poll that only runs
+   * while this client already knows of a live run misses exactly the runs
+   * the owner wants to see: the board stayed idle while the log showed the
+   * run. A poll round is one local request, and it pushes only on change.
    */
-  private pollWhile(runs: readonly RunInfo[], chain: ChainStatus | null): void {
-    const live =
-      runs.some((r) => !['done', 'stopped', 'failed', 'detached'].includes(r.state)) ||
-      (chain !== null && chain.configured && chain.master === 'run');
-    if (live && this.pollTimer === null) {
-      this.pollTimer = setInterval(() => void this.runs(), 2_000);
-    } else if (!live && this.pollTimer !== null) {
-      clearInterval(this.pollTimer);
-      this.pollTimer = null;
+  startPolling(): void {
+    if (this.pollTimer === null) {
+      this.pollTimer = setInterval(() => void this.runs(), 2_500);
     }
   }
 

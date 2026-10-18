@@ -106,6 +106,12 @@ export interface RunInfo {
    * the board measures it against a configured window.
    */
   readonly contextTokens?: number | null;
+  /**
+   * The owner has taken the run over (the takeover tab): the worker's
+   * finished turn does not end the run, the reaper leaves a quiet worker
+   * alone, and the runner sends it nothing of its own until it is handed back.
+   */
+  readonly held?: boolean;
   /** The working column whose pool owns this run (`request.column ?? request.phase`). */
   readonly column?: string | null;
   /** How many steer messages reached the worker, and how. */

@@ -752,6 +752,7 @@ const plugin: MainPluginModule = {
       log: ctx.log,
       onFleetChanged: (fleetSnapshot) => ctx.ipc.emit('fleet-changed', fleetSnapshot),
     });
+    fleet.startPolling();
     const board = new BoardService(ctx, git, defaultWorker, autoPermissionMode, gitPath, fleet);
 
     ctx.ipc.handle('board', () => board.snapshot());
@@ -865,6 +866,17 @@ const plugin: MainPluginModule = {
         return { ok: false, error: 'bad fleet send payload' };
       }
       return fleet.send(p.runId, p.text.trim());
+    });
+
+    ctx.ipc.handle('fleetControl', async (payload) => {
+      const p = payload as { action?: unknown; runId?: unknown };
+      if (
+        typeof p.runId !== 'string' ||
+        (p.action !== 'takeover' && p.action !== 'interrupt' && p.action !== 'release')
+      ) {
+        return { ok: false, error: 'bad fleet control payload' };
+      }
+      return fleet.control(p.action, p.runId);
     });
 
     ctx.ipc.handle('fleetStream', async (payload) => {

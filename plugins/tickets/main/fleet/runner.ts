@@ -297,6 +297,23 @@ async function main(): Promise<void> {
         respond(outcome.ok ? 200 : 422, outcome);
         return;
       }
+      if (req.method === 'POST' && (pathname === '/takeover' || pathname === '/interrupt' || pathname === '/release')) {
+        const body = (await readBody(req)) as { runId?: unknown };
+        const supervisor = supervisorOfRun(String(body.runId ?? ''));
+        if (supervisor === null) {
+          respond(404, { ok: false, error: `unknown run "${String(body.runId)}"` });
+          return;
+        }
+        const runId = String(body.runId);
+        const outcome =
+          pathname === '/takeover'
+            ? await supervisor.takeover(runId)
+            : pathname === '/interrupt'
+              ? await supervisor.interrupt(runId)
+              : await supervisor.release(runId);
+        respond(outcome.ok ? 200 : 422, outcome);
+        return;
+      }
       if (req.method === 'POST' && pathname === '/send') {
         const body = (await readBody(req)) as { runId?: unknown; text?: unknown };
         const supervisor = supervisorOfRun(String(body.runId ?? ''));

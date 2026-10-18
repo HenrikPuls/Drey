@@ -5,6 +5,7 @@
  * parses a ticket file. One module-level store serves every view; a
  * view is just a DOM root plus a render call.
  */
+import { transcriptMarkdown } from './transcript';
 import { asCodeBlock, chainLogStamp, visibleChainLog } from './chain-log';
 import type { DreyPluginApi, PluginWidgetContrib } from '../../../shared/plugin-api/renderer';
 import {
@@ -190,9 +191,15 @@ const applyChainStatus = (status: ChainStatus | null): void => {
   notifyViews();
 };
 
+/** Open takeover tabs repaint their banner when the fleet snapshot changes. */
+const fleetListeners = new Set<() => void>();
+
 const applyFleetSnapshot = (payload: { runs?: RunInfo[]; chain?: ChainStatus | null }): void => {
   fleetRuns = Array.isArray(payload.runs) ? [...payload.runs] : [];
   applyChainStatus(payload.chain ?? null);
+  for (const listener of fleetListeners) {
+    listener();
+  }
 };
 
 const clearInsert = (): void => {
@@ -1072,6 +1079,9 @@ function workerLanesNode(api: DreyPluginApi, column: BoardColumn): HTMLElement |
         b.addEventListener('click', onClick);
         actions.append(b);
       };
+      button('arrow-right', run.held === true ? 'Open the takeover tab — you have control' : 'Take over — drive this worker yourself', () => {
+        void takeOver(api, run);
+      });
       button('file-text', `Watch the run's stream (${run.id})`, () => openWatchModal(api, run.id));
       button('message-circle', 'Send a message into the live run', () => openSteerModal(api, run.id));
       button('square', 'Kill the worker (the ticket stays in its phase)', () => {
@@ -1231,6 +1241,158 @@ function openWatchModal(api: DreyPluginApi, runId: string): void {
     box.append(out, actions);
     host.append(box);
   });
+}
+
+// --- the takeover tab (owner request, follow-up of M86; ADR-0078) -------------
+
+const TAKEOVER_KIND = 'tickets-takeover';
+const TAKEOVER_SCHEME = 'takeover://';
+
+/** Opens (or focuses) the takeover tab of one run. */
+function openTakeover(api: DreyPluginApi, run: RunInfo): void {
+  api.documents.addDoc(TAKEOVER_KIND, `${TAKEOVER_SCHEME}${run.id}`, `${run.ticketId} · ${run.provider}`);
+}
+
+/**
+ * The lane's "Take over": the runner holds the run first (its worker's
+ * finished turn no longer ends it), then the tab opens. A refusal — a
+ * worker that cannot be held — stays on the board's note line.
+ */
+async function takeOver(api: DreyPluginApi, run: RunInfo): Promise<void> {
+  if (run.held !== true) {
+    const result = await runMutation('Taking over', () => invokeBoard('fleetControl', { action: 'takeover', runId: run.id }));
+    if (!result.ok) {
+      return;
+    }
+  }
+  openTakeover(api, run);
+}
+
+/**
+ * The tab body: the worker's transcript in the host's read-only Markdown
+ * view (rendered from the run's normalized stream, so the same for every
+ * worker), a prompt box in the compact view below it, and the controls —
+ * interrupt the running turn (the session stays), hand the run back.
+ */
+function mountTakeover(api: DreyPluginApi, host: HTMLElement, runId: string): () => void {
+  const wrap = el('div', 'tickets-takeover');
+
+  const banner = el('div', 'tickets-takeover-banner');
+  const light = el('span', 'tickets-light');
+  const headline = el('span', 'tickets-takeover-headline');
+  const stats = el('span', 'tickets-takeover-stats');
+  const spacer = el('span', 'tickets-takeover-spacer');
+  const controls = el('span', 'tickets-takeover-controls');
+  const iconButton = (icon: string, label: string, title: string, onClick: () => void): HTMLButtonElement => {
+    const b = el('button', 'tickets-takeover-btn');
+    b.type = 'button';
+    b.title = title;
+    b.setAttribute('aria-label', title);
+    b.append(api.ui.icon(icon, 13), document.createTextNode(label));
+    b.addEventListener('click', onClick);
+    return b;
+  };
+  const control = (action: 'takeover' | 'interrupt' | 'release'): void => {
+    void runMutation(
+      action === 'takeover' ? 'Taking over' : action === 'interrupt' ? 'Interrupting' : 'Handing back',
+      () => invokeBoard('fleetControl', { action, runId }),
+    );
+  };
+  const takeBtn = iconButton('arrow-right', 'Take over', 'Take the run over — the runner stops ending it after a finished turn', () =>
+    control('takeover'),
+  );
+  const interruptBtn = iconButton('square', 'Interrupt', 'Interrupt the running turn — the session and its context stay', () =>
+    control('interrupt'),
+  );
+  const releaseBtn = iconButton('arrow-left', 'Hand back', 'Hand the run back to the runner — an idle worker ends the run and the gate decides', () =>
+    control('release'),
+  );
+  controls.append(takeBtn, interruptBtn, releaseBtn);
+  banner.append(light, headline, stats, spacer, controls);
+
+  const transcript = api.ui.createMarkdownView({ mode: 'view', readOnly: true, content: '' });
+  transcript.element.classList.add('tickets-takeover-transcript');
+
+  const promptWrap = el('div', 'tickets-takeover-prompt');
+  const prompt = api.ui.createMarkdownView({
+    compact: true,
+    placeholder: 'Message to the worker — Enter sends',
+    onSubmit: (text) => {
+      const message = text.trim();
+      if (message === '') {
+        return;
+      }
+      void runMutation('Sending', () => invokeBoard('fleetSend', { runId, text: message })).then((result) => {
+        if (result.ok) {
+          prompt.setContent('');
+        }
+      });
+    },
+  });
+  prompt.element.classList.add('tickets-takeover-prompt-input');
+  promptWrap.append(prompt.element);
+
+  const live = (): RunInfo | null => fleetRuns.find((r) => r.id === runId) ?? null;
+  const paintBanner = (): void => {
+    const run = live();
+    const active = run !== null && LIVE_RUN_STATES.includes(run.state);
+    const held = active && run.held === true;
+    const status = run === null ? null : workerStatus(run, Date.now());
+    light.className = `tickets-light tickets-light-${active && status !== null ? status.light : 'idle'}`;
+    headline.textContent =
+      run === null
+        ? 'This run is no longer known to the runner'
+        : !active
+          ? `${run.ticketId} · ${run.provider} — run ${run.state}`
+          : held
+            ? `${run.ticketId} · ${run.provider} — you have control`
+            : `${run.ticketId} · ${run.provider} — the runner is driving`;
+    const fill = run === null ? null : contextFill(run);
+    stats.textContent =
+      run === null
+        ? ''
+        : [
+            status !== null && active ? status.label : '',
+            fill === null ? '' : `context ${Math.round(fill * 100)}%`,
+            `in ${formatTokens(run.tokensIn)} · out ${formatTokens(run.tokensOut)}`,
+          ]
+            .filter((part) => part !== '')
+            .join(' · ');
+    takeBtn.hidden = !active || held;
+    interruptBtn.hidden = !held;
+    releaseBtn.hidden = !held;
+    prompt.setReadOnly(!active);
+  };
+
+  let lastMarkdown = '\u0000';
+  let alive = true;
+  const pull = (): void => {
+    void invokeBoard('fleetStream', { runId }).then((result) => {
+      if (!alive) {
+        return;
+      }
+      const markdown = transcriptMarkdown((result as { text?: string }).text ?? '');
+      const shown = markdown === '' ? '_The stream is empty so far._' : markdown;
+      if (shown !== lastMarkdown) {
+        lastMarkdown = shown;
+        transcript.setContent(shown);
+      }
+    });
+  };
+
+  fleetListeners.add(paintBanner);
+  paintBanner();
+  pull();
+  const timer = setInterval(pull, 2_000);
+  wrap.append(banner, transcript.element, promptWrap);
+  host.append(wrap);
+  return () => {
+    alive = false;
+    clearInterval(timer);
+    fleetListeners.delete(paintBanner);
+    transcript.dispose();
+    prompt.dispose();
+  };
 }
 
 /**
@@ -1443,6 +1605,24 @@ const plugin: { activate(api: DreyPluginApi): void } = {
       restore: () => openChainLog(api),
       mount: (el) => mountChainLog(api, el),
       statusText: () => 'fleet daemon',
+    });
+
+    api.ui.registerDocKind({
+      kind: TAKEOVER_KIND,
+      icon: 'message-circle',
+      serialize: () => null,
+      restore: (path) => {
+        const runId = path.startsWith(TAKEOVER_SCHEME) ? path.slice(TAKEOVER_SCHEME.length) : '';
+        const run = fleetRuns.find((r) => r.id === runId);
+        if (run !== undefined) {
+          openTakeover(api, run);
+        }
+      },
+      mount: (el, path) => mountTakeover(api, el, path.slice(TAKEOVER_SCHEME.length)),
+      statusText: (path) => {
+        const run = fleetRuns.find((r) => r.id === path.slice(TAKEOVER_SCHEME.length));
+        return run === undefined ? null : run.held === true ? 'you have control' : 'runner driving';
+      },
     });
 
     api.backend.on('board-changed', () => void refreshBoard());

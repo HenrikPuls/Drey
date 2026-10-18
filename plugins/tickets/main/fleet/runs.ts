@@ -92,7 +92,31 @@ interface LiveRun {
   agentDone: boolean;
 }
 
+/** What a takeover call answers. */
+export type TakeoverOutcome = { readonly ok: true } | { readonly ok: false; readonly error: string };
+
 const TERMINAL: readonly RunState[] = ['done', 'stopped', 'failed'];
+
+/** 331122 -> `331k`, 3_400_000 -> `3.4M`: the Log's short token counts. */
+function tokenWords(n: number): string {
+  if (n >= 1_000_000) {
+    return `${(n / 1_000_000).toFixed(1)}M`;
+  }
+  return n >= 1_000 ? `${Math.round(n / 1_000)}k` : String(n);
+}
+
+/**
+ * What the run used, for the ticket's Log line: tokens always (input
+ * counts cache reads), cost only when the provider reports one — a flat
+ * coding plan reports 0, which says nothing and is left out.
+ */
+export function usageSummary(info: Pick<RunInfo, 'tokensIn' | 'tokensOut' | 'costUsd'>): string {
+  if (info.tokensIn === 0 && info.tokensOut === 0) {
+    return '';
+  }
+  const cost = info.costUsd !== null && info.costUsd > 0 ? ` · $${info.costUsd.toFixed(2)}` : '';
+  return ` — ${tokenWords(info.tokensIn)} in / ${tokenWords(info.tokensOut)} out${cost}`;
+}
 
 export class RunSupervisor {
   private readonly runs = new Map<string, LiveRun>();
@@ -386,6 +410,8 @@ export class RunSupervisor {
     if (run.handle === null) {
       return { ok: false, error: `run ${runId} has no worker attached to steer` };
     }
+    // The owner's prompt belongs in the run's transcript, whatever its rung.
+    await this.appendStream(run, { ts: this.stamp(), kind: 'note', text: `you › ${text}` });
     const rung = await run.handle.steer(text);
     run.info = { ...run.info, steerCount: run.info.steerCount + 1, lastSteerRung: rung };
     await this.persist(run);
@@ -394,6 +420,73 @@ export class RunSupervisor {
       return { ok: false, error: `the ${run.info.provider} worker took no message — it may have ended` };
     }
     return { ok: true, rung };
+  }
+
+  /**
+   * The owner takes a live run over: the worker's session stays up past a
+   * finished turn until it is handed back (`release`), and the run is
+   * marked `held` so every surface can show who drives. Only providers
+   * whose handle can hold take part (claude-code cannot yet).
+   */
+  async takeover(runId: string): Promise<TakeoverOutcome> {
+    const run = this.liveRunWithHold(runId);
+    if (typeof run === 'string') {
+      return { ok: false, error: run };
+    }
+    run.handle!.setHold!(true);
+    run.info = { ...run.info, held: true };
+    await this.persist(run);
+    await this.logLine(run, 'taken over by the owner');
+    return { ok: true };
+  }
+
+  /** The soft stop of the held run's current turn (the session stays). */
+  async interrupt(runId: string): Promise<TakeoverOutcome> {
+    const run = this.liveRunWithHold(runId);
+    if (typeof run === 'string') {
+      return { ok: false, error: run };
+    }
+    if (run.info.held !== true) {
+      return { ok: false, error: `run ${runId} is not taken over — take it over before interrupting` };
+    }
+    const done = (await run.handle!.interrupt?.()) ?? false;
+    if (!done) {
+      return { ok: false, error: `the ${run.info.provider} worker took no interrupt — it may be idle already` };
+    }
+    await this.logLine(run, 'turn interrupted by the owner — the session is kept');
+    return { ok: true };
+  }
+
+  /**
+   * Hands a held run back to the runner. A worker that is idle by now has
+   * finished its turn, so the run ends and the machine gate decides, as
+   * after any finished turn; a busy worker simply carries on.
+   */
+  async release(runId: string): Promise<TakeoverOutcome> {
+    const run = this.liveRunWithHold(runId);
+    if (typeof run === 'string') {
+      return { ok: false, error: run };
+    }
+    run.handle!.setHold!(false);
+    run.info = { ...run.info, held: false };
+    await this.persist(run);
+    await this.logLine(run, 'handed back to the runner');
+    return { ok: true };
+  }
+
+  /** The live run with a hold-capable worker, or the reason there is none. */
+  private liveRunWithHold(runId: string): LiveRun | string {
+    const run = this.runs.get(runId);
+    if (run === undefined) {
+      return `unknown run "${runId}"`;
+    }
+    if (run.info.state !== 'running' && run.info.state !== 'starting') {
+      return `run ${runId} is ${run.info.state} — nothing to take over`;
+    }
+    if (run.handle === null || run.handle.setHold === undefined) {
+      return `the ${run.info.provider} worker cannot be taken over (only OpenCode can, for now)`;
+    }
+    return run;
   }
 
   /** True while at least one run is starting/running — the idle shutdown waits on this. */
@@ -472,7 +565,7 @@ export class RunSupervisor {
         // A spawn that never produced a worker: lost after two silent
         // minutes. Fresh activity (usage/text events) means a worker is
         // alive even without a recorded pid — never reap it (ADR-0014).
-        if (this.stale(run)) {
+        if (run.info.held !== true && this.stale(run)) {
           run.info = { ...run.info, gateFailure: 'lease lost — the worker never started; reaped' };
           await this.logLine(run, 'lease reaper: the worker never started — run reaped, ticket freed');
           if (run.handle !== null) {
@@ -700,7 +793,7 @@ export class RunSupervisor {
           now: this.now(),
           actor: this.agentActor(),
           clearRun: true,
-          action: note ?? `run ${run.info.state}`,
+          action: note ?? `run ${run.info.state}${usageSummary(run.info)}`,
         }),
       );
     } catch (error) {

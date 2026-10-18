@@ -746,11 +746,23 @@ it may act. The worker gets a checkout of the ticket's repo on its own
 branch (`t/<id>`), the ticket's description, plan and the phase's
 prompt as its brief.
 
-While the run is live, the board's **footer** shows its state, age,
-token usage and cost; the card carries a ▶ chip. From the card menu or
-the footer you can **Watch** (tail the run's output), **Steer** (send
-a message into the live run — it lands in the ticket's Log) or
-**Stop** it. When the worker finishes, the runner executes the
+While the run is live, its column shows a **Workers** strip with one
+lane per run: a traffic light (green working, amber context nearly full
+or stopping, red stalled for five minutes — always with the state in
+words), the worker's current activity, its context window, token usage
+and age; the card carries a ▶ chip. A lane is folded to one line until
+you unfold it (a lane that needs a look opens by itself). In a lane you
+can **Take over**, **Watch** (tail the run's output), **Steer** (send a
+message into the live run — it lands in the ticket's Log) or **Stop**
+it. **Take over** opens a tab with the worker's conversation and a
+prompt box: you can **Interrupt** the running turn (the session and its
+context stay), drive the worker with your own prompts and **Hand back**
+the run — a worker that is idle by then ends the run and the gate
+decides. While you hold a run the runner does not end it. Only OpenCode
+workers can be taken over for now. The **Log** button opens the fleet
+daemon's log in a read-only tab. When a run ends, the ticket's Log line
+records the tokens it used (and the cost, when the provider reports
+one — flat coding plans report none). When the worker finishes, the runner executes the
 ticket's **acceptance criteria** (the backticked commands under Plan):
 all green means the ticket moves to the next phase on its own; a
 failure parks the reason in the Log and leaves the ticket where it is.
