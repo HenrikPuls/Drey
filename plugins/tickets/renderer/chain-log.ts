@@ -26,13 +26,22 @@ export function visibleChainLog(text: string, clearedAt: string): string {
 }
 
 /**
- * Wraps plain text in a fenced code block for the Markdown view: line
- * breaks stay line breaks and nothing in a log line is read as Markdown.
- * The fence is longer than any backtick run inside the text, so a line
- * that itself holds a fence cannot close the block early.
+ * Plain log text as Markdown paragraphs, one per line, with no fence: the
+ * view shows ordinary text the owner can mark and copy line by line. Only
+ * what would turn a line into something else is escaped — a block marker
+ * at its start (heading, quote, list, fence, table) and the inline
+ * `*`, backtick and `<` — so a normal log line is copied unchanged.
+ * Indentation is dropped (four spaces would start a code block).
  */
-export function asCodeBlock(text: string): string {
-  const longest = Math.max(0, ...(text.match(/`+/g) ?? []).map((run) => run.length));
-  const fence = '`'.repeat(Math.max(3, longest + 1));
-  return `${fence}text\n${text}\n${fence}\n`;
+export function asParagraphs(text: string): string {
+  return text
+    .split('\n')
+    .map((raw) => raw.trim())
+    .filter((line) => line !== '')
+    .map((line) =>
+      line
+        .replace(/^([#>|~+-]|\d+[.)]\s|`{3})/, '\\$1')
+        .replace(/([*`<])/g, '\\$1'),
+    )
+    .join('\n\n');
 }

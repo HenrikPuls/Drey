@@ -6,7 +6,7 @@
  * view is just a DOM root plus a render call.
  */
 import { transcriptMarkdown } from './transcript';
-import { asCodeBlock, chainLogStamp, visibleChainLog } from './chain-log';
+import { asParagraphs, chainLogStamp, visibleChainLog } from './chain-log';
 import type { DreyPluginApi, PluginWidgetContrib } from '../../../shared/plugin-api/renderer';
 import {
   ageOf,
@@ -1431,7 +1431,7 @@ function mountChainLog(api: DreyPluginApi, host: HTMLElement): () => void {
   let lastText = '';
   // The host's own Markdown editor, read-only: the log is one fenced block,
   // and the view itself follows the tail while it is scrolled to the bottom.
-  const view = api.ui.createMarkdownView({ mode: 'view', readOnly: true, content: asCodeBlock('Loading the daemon log…') });
+  const view = api.ui.createMarkdownView({ mode: 'view', readOnly: true, content: asParagraphs('Loading the daemon log…') });
   view.element.classList.add('tickets-chain-log-out');
   let alive = true;
   const pull = (): void => {
@@ -1446,7 +1446,7 @@ function mountChainLog(api: DreyPluginApi, host: HTMLElement): () => void {
   const render = (): void => {
     const text = visibleChainLog(lastText, chainLogClearedAt);
     view.setContent(
-      asCodeBlock(
+      asParagraphs(
         text === ''
           ? chainLogClearedAt === ''
             ? '(the daemon has not logged anything yet)'

@@ -32,9 +32,9 @@ environment, one change-detection pass) and hands its host element to the plugin
 
 ## Consequences
 
-- One renderer for every log-like surface. The chain log is the first user (one fenced block per refresh); the
+- One renderer for every log-like surface. The chain log is the first user (one paragraph per line, no fence — a fence would end up in every copy); the
   takeover tab's transcript and prompt box will be the next.
-- A plain-text source must be wrapped for Markdown (`asCodeBlock` in the tickets plugin) or its line breaks and
+- A plain-text source must be wrapped for Markdown (`asParagraphs` in the tickets plugin escapes only what would change a line) or its line breaks and
   `*`/`#` are read as Markdown.
 - The surface carries the host's full editor weight (CodeMirror, Live Preview); a plugin mounting many views at once
   pays for each. Mount one per pane.
