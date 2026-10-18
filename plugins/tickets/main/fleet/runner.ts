@@ -196,7 +196,24 @@ async function main(): Promise<void> {
       }
       if (req.method === 'POST' && pathname === '/shutdown') {
         respond(200, { ok: true });
-        log('shutdown requested — the client starts a newer build');
+        log('shutdown requested — stopping live runs first, then exiting');
+        // Graceful: a worker left alive while its record goes detached is
+        // an unsupervised agent on a parked ticket (T-0007 review). The
+        // stop path is the owner's own button; the wait is bounded so a
+        // hung adapter cannot hold the daemon hostage.
+        const stops = [...supervisors.values()].flatMap((sup) =>
+          sup
+            .list()
+            .filter((info) => info.state === 'starting' || info.state === 'running')
+            .map((info) => sup.stop(info.id, 'the runner is retired for a newer build')),
+        );
+        if (stops.length > 0) {
+          log(`stopping ${stops.length} live run${stops.length === 1 ? '' : 's'} before exit`);
+        }
+        await Promise.race([
+          Promise.allSettled(stops),
+          new Promise((resolve) => setTimeout(resolve, 10_000)),
+        ]);
         setTimeout(() => process.exit(0), 100);
         return;
       }

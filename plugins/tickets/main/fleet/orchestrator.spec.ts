@@ -184,6 +184,34 @@ describe('Orchestrator', () => {
     expect(fleet.records).toEqual([]);
   });
 
+  it('the chain log says why nothing moves — once, not on every pass', async () => {
+    await writeMeta();
+    // T-0001 names a repo that is not in repos.md: the dispatch note.
+    await writeTicket('T-0001', 'plan');
+    await fsp.writeFile(
+      path.join(vaultDir, 'tickets', 'plan', 'T-0001.md'),
+      ticketText('T-0001', 'plan').replace('repo: drey', 'repo: nowhere'),
+      'utf8',
+    );
+    // T-0002 is dispatchable, but its column is held: the held note.
+    await writeTicket('T-0002', 'plan-review');
+    const logs: string[] = [];
+    const { orch, fleet } = orchestrator({ log: (message) => logs.push(message) });
+    await orch.configure(CONFIG);
+    await orch.setColumn('plan-review', 'held');
+    await orch.setMaster('run');
+    await orch.setMaster('halted');
+    await orch.setMaster('run'); // second pass — the notes must stay silent
+
+    const skips = logs.filter((line) => line.includes('T-0001'));
+    expect(skips).toHaveLength(1);
+    expect(skips[0]).toContain('repo "nowhere" is not in repos.md');
+    const held = logs.filter((line) => line.includes('held column'));
+    expect(held).toHaveLength(1);
+    expect(held[0]).toContain('T-0002');
+    expect(fleet.records).toEqual([]);
+  });
+
   it('respects capacity, held columns and busy tickets', async () => {
     await writeMeta();
     await writeTicket('T-0001', 'plan');

@@ -104,7 +104,7 @@ export interface PlannedDispatch {
 }
 
 /** A card the machine may take: unclaimed, unblemished, not already running. */
-function dispatchable(card: TicketCard, busyTickets: ReadonlySet<string>): boolean {
+export function dispatchable(card: TicketCard, busyTickets: ReadonlySet<string>): boolean {
   if (busyTickets.has(card.id) || card.meta.run !== null || card.meta.claimedBy !== null) {
     return false;
   }

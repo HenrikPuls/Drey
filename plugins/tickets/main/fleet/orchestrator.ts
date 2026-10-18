@@ -22,7 +22,7 @@ import { isValidTicketFile, parseHandover } from '../../shared/tickets';
 import { assembleBoard, parseOrderFile, rewriteOrderSection, type BoardFile } from '../ticket-board';
 import { patchTicketFile } from '../ticket-files';
 import { TicketsGit } from '../tickets-git';
-import { columnPromptRef, isAutoPhase, nextPhaseIdOf, planDispatch } from './chain';
+import { columnPromptRef, dispatchable, isAutoPhase, nextPhaseIdOf, planDispatch } from './chain';
 import { composeRunRequest } from './request';
 import { execShell, type SupervisorRecord, type StartOutcome, type StopOutcome } from './runs';
 import type {
@@ -108,6 +108,13 @@ export class Orchestrator {
   /** The pipeline config of the last pass — the breaker's thresholds. */
   private lastPhases: readonly PipelinePhase[] = [];
   private readonly ciBackoff: Record<string, string> = {};
+  /** Skip/wait lines already logged, ticket → line: a pass every 15 s
+   *  must not repeat itself into the chain log. */
+  private readonly notes = new Map<string, string>();
+  /** Tickets noted during the current pass — the sweep keeps only these. */
+  private notedThisPass = new Set<string>();
+  /** The last held-column line, logged on change only. */
+  private heldNote = '';
 
   constructor(private readonly deps: OrchestratorDeps) {}
 
@@ -667,13 +674,79 @@ export class Orchestrator {
         nowMs: this.now().getTime(),
       });
       this.lastPhases = snap.pipeline;
+      this.notedThisPass = new Set();
+      const dispatched = new Set<string>(plan.map((item) => item.card.id));
       for (const item of plan) {
         await this.dispatchOne(config, snap.columns, item.workingPhase, item.card, snap);
+      }
+      this.noteWaits(snap, busyTickets, dispatched);
+      for (const ticket of [...this.notes.keys()]) {
+        if (!this.notedThisPass.has(ticket)) {
+          this.notes.delete(ticket);
+        }
       }
     } catch (error) {
       this.deps.log(`dispatch pass failed: ${error instanceof Error ? error.message : String(error)}`);
     } finally {
       this.passing = false;
+    }
+  }
+
+  /** Logs a per-ticket note once — a later pass with the same reason is
+   *  silent, a changed reason logs again. */
+  private noteSkip(ticketId: string, line: string): void {
+    this.notedThisPass.add(ticketId);
+    if (this.notes.get(ticketId) !== line) {
+      this.notes.set(ticketId, line);
+      this.deps.log(line);
+    }
+  }
+
+  /**
+   * The silent cases the plan leaves behind: a held column with a
+   * waiting candidate, a claim or a leftover run stamp parking a ticket
+   * in a playing column. The chain log should say WHY nothing moves —
+   * the owner once watched ten silent minutes with no explanation.
+   */
+  private noteWaits(snap: BoardSnapshot, busy: ReadonlySet<string>, dispatched: ReadonlySet<string>): void {
+    if (this.master !== 'run') {
+      return; // the chain is off — silence is the honest state
+    }
+    const held: string[] = [];
+    for (const column of snap.columns) {
+      const mode = this.columns[column.phase.id] ?? 'playing';
+      for (const card of column.tickets) {
+        if (dispatched.has(card.id) || busy.has(card.id)) {
+          continue;
+        }
+        if (mode === 'held') {
+          if (dispatchable(card, busy)) {
+            held.push(card.id);
+          }
+          continue;
+        }
+        if (!isAutoPhase(column.phase)) {
+          continue; // manual columns are the owner's queue — silence there
+        }
+        if (card.meta.claimedBy !== null) {
+          this.noteSkip(card.id, `dispatch holds ${card.id}: claimed by ${card.meta.claimedBy} — the pool waits`);
+        } else if (card.meta.run !== null) {
+          this.noteSkip(
+            card.id,
+            `dispatch holds ${card.id}: a run stamp without a live run — stop or resume the detached run`,
+          );
+        }
+      }
+    }
+    const heldLine =
+      held.length > 0
+        ? `${held.join(', ')} ${held.length === 1 ? 'waits' : 'wait'} in a held column — switch the column to playing or move the ticket`
+        : '';
+    if (heldLine !== this.heldNote) {
+      this.heldNote = heldLine;
+      if (heldLine !== '') {
+        this.deps.log(heldLine);
+      }
     }
   }
 
@@ -688,7 +761,8 @@ export class Orchestrator {
     const repo =
       card.meta.repo === null ? null : (snap.repos.find((r) => r.name === card.meta.repo) ?? null);
     if (workingPhase === null || repo === null) {
-      this.deps.log(
+      this.noteSkip(
+        card.id,
         `dispatch skips ${card.id}: ${repo === null ? `repo "${card.meta.repo ?? ''}" is not in repos.md` : 'unknown working phase'}`,
       );
       return;
@@ -700,7 +774,8 @@ export class Orchestrator {
         .readFile(path.join(config.ticketsVaultPath, 'tickets', '_meta', 'prompts', `${promptRef}.md`), 'utf8')
         .catch(() => null);
       if (promptText === null) {
-        this.deps.log(
+        this.noteSkip(
+          card.id,
           `dispatch skips ${card.id}: prompt "${promptRef}" is missing (tickets/_meta/prompts/${promptRef}.md)`,
         );
         return;
@@ -713,7 +788,7 @@ export class Orchestrator {
       .readFile(path.join(config.ticketsVaultPath, card.path), 'utf8')
       .catch(() => null);
     if (text === null) {
-      this.deps.log(`dispatch skips ${card.id}: the ticket file is unreadable`);
+      this.noteSkip(card.id, `dispatch skips ${card.id}: the ticket file is unreadable`);
       return;
     }
     // The pipeline's first worker column takes in fresh tickets: a run
@@ -737,7 +812,7 @@ export class Orchestrator {
       dispatchedBy: workingPhaseId,
     });
     if (!composed.ok) {
-      this.deps.log(`dispatch skips ${card.id}: ${composed.error}`);
+      this.noteSkip(card.id, `dispatch skips ${card.id}: ${composed.error}`);
       return;
     }
     const outcome = await this.deps.supervisorOf(composed.request.provider).start(composed.request);
@@ -746,8 +821,9 @@ export class Orchestrator {
         `dispatched ${card.id} (${workingPhaseId} pool, ${composed.request.provider}` +
           `${composed.request.model !== null ? `/${composed.request.model}` : ''}) as ${outcome.run.id}`,
       );
+      this.notes.delete(card.id);
     } else {
-      this.deps.log(`dispatch refused ${card.id}: ${outcome.error}`);
+      this.noteSkip(card.id, `dispatch refused ${card.id}: ${outcome.error}`);
     }
   }
 }

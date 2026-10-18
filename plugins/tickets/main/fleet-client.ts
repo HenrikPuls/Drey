@@ -41,6 +41,19 @@ export interface FleetSnapshot {
 
 type StartOutcome = { readonly ok: true; readonly run: RunInfo } | { readonly ok: false; readonly error: string };
 
+/**
+ * The retirement decision's ordered core: retire only a daemon whose
+ * build stamp is OLDER than the client's own. Two Drey checkouts share
+ * one fleet root, so an inequality would have the instances retire each
+ * other's runner in an endless loop — the newest build's daemon serves
+ * both, and only a genuinely outdated one is replaced.
+ */
+export function isOlderBuild(daemonBuild: string, clientBuild: string): boolean {
+  const daemon = Date.parse(daemonBuild);
+  const client = Date.parse(clientBuild);
+  return Number.isFinite(daemon) && Number.isFinite(client) && daemon < client;
+}
+
 export class FleetClient {
   private descriptor: RunnerDescriptor | null = null;
   private spawning: Promise<boolean> | null = null;
@@ -256,8 +269,11 @@ export class FleetClient {
   /**
    * True when a healthy runner was booted from an older build of the
    * entry script: the daemon stamps the script's mtime at boot, and the
-   * client compares it with the file on disk now. A rebuilt entry means
-   * the daemon serves stale code (T-0007 review: fixes never loaded).
+   * client compares it with the file on disk now. Ordered on purpose
+   * (`isOlderBuild`): two Drey checkouts can share one fleet root — an
+   * inequality would have them retire each other's runner forever. Only
+   * a daemon OLDER than this build is stale; a newer one serves this
+   * instance too.
    */
   private async isStale(peer: RunnerDescriptor): Promise<boolean> {
     if (peer.build === undefined) {
@@ -267,10 +283,13 @@ export class FleetClient {
       .stat(this.opts.runnerScript)
       .then((s) => s.mtime.toISOString())
       .catch(() => null);
-    return mine !== null && mine !== peer.build;
+    return mine !== null && isOlderBuild(peer.build, mine);
   }
 
-  /** Asks a stale runner to exit; the next start respawns the new build. */
+  /** Asks a stale runner to exit, waits until it is actually gone, and
+   *  only then clears the descriptor so the next start can respawn. The
+   *  wait matters: the runner's boot guard bounces a successor while
+   *  the old peer still answers. */
   private async retireStale(peer: RunnerDescriptor): Promise<void> {
     this.opts.log('the fleet runner predates this build — restarting it', 'warn');
     try {
@@ -281,6 +300,19 @@ export class FleetClient {
     } catch {
       // a daemon that will not take the call is dead to us either way —
       // the next spawn takes over the stale descriptor
+    }
+    const deadline = Date.now() + 3_000;
+    while (Date.now() < deadline) {
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), 500);
+      const alive = await fetch(`${this.base()}/health`, { headers: this.headers(), signal: controller.signal })
+        .then((r) => r.ok)
+        .catch(() => false);
+      clearTimeout(timer);
+      if (!alive) {
+        break;
+      }
+      await new Promise((resolve) => setTimeout(resolve, 100));
     }
     this.descriptor = null;
   }
