@@ -293,6 +293,52 @@ describe('the opencode adapter', () => {
     vi.useRealTimers();
   });
 
+  it('reads a message only once it is complete and shows a tool call only with its input', async () => {
+    vi.useFakeTimers();
+    const at = Date.now();
+    let round = 0;
+    const streaming = {
+      id: 'msg_s',
+      type: 'assistant',
+      time: { created: at + 1 },
+      content: [
+        { type: 'reasoning', text: 'Let me look.' },
+        { type: 'tool', id: 'call_1', name: 'read', state: { status: 'pending', input: {} } },
+      ],
+    };
+    const finished = {
+      ...streaming,
+      time: { created: at + 1, completed: at + 3 },
+      content: [
+        { type: 'reasoning', text: 'Let me look.' },
+        { type: 'text', text: 'Found it.' },
+        { type: 'tool', id: 'call_1', name: 'read', state: { status: 'completed', input: { path: 'src/a.ts' } } },
+      ],
+    };
+    const { fetch } = scriptedFetch({
+      sessionCreated: () => undefined,
+      prompts: [],
+      interrupts: [],
+      messages: () => (round++ < 2 ? [streaming] : [finished]),
+    });
+    const proc = fakeProcess();
+    const { events, start } = collect();
+    opencodeAdapter(spawnOf(proc), fetch, async () => 47000).spawn(start);
+    await vi.advanceTimersByTimeAsync(0);
+    proc.stdout('server password sekrit');
+    await vi.advanceTimersByTimeAsync(2_100);
+    expect(events.filter((e) => e.kind === 'note' && e.text === 'read')).toHaveLength(0);
+    expect(events.find((e) => e.kind === 'text')).toBeUndefined();
+
+    await vi.advanceTimersByTimeAsync(6_000);
+    expect(events.filter((e) => e.text === 'read src/a.ts')).toHaveLength(1);
+    expect(events.find((e) => e.kind === 'text')?.text).toBe('Found it.');
+    expect(events.find((e) => e.text === 'thinking › Let me look.')).toBeDefined();
+
+    proc.exit(null);
+    vi.useRealTimers();
+  });
+
   it('stop interrupts the session and kills the serve process', async () => {
     vi.useFakeTimers();
     const prompts: string[] = [];

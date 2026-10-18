@@ -7,6 +7,9 @@
 /** The owner's own prompts ride the stream as notes with this lead-in. */
 export const YOU_PREFIX = 'you › ';
 
+/** The worker's thinking rides the stream as notes with this lead-in (mirrors providers.ts). */
+export const THINK_PREFIX = 'thinking › ';
+
 interface StreamEvent {
   readonly kind?: string;
   readonly text?: string;
@@ -55,7 +58,10 @@ export function transcriptMarkdown(ndjson: string): string {
         blocks.push(text);
         break;
       case 'note':
-        if (text.startsWith(YOU_PREFIX)) {
+        if (text.startsWith(THINK_PREFIX)) {
+          flush();
+          blocks.push(`> _${text.slice(THINK_PREFIX.length).replace(/\s+/g, ' ')}_`);
+        } else if (text.startsWith(YOU_PREFIX)) {
           flush();
           blocks.push(`> **You** — ${text.slice(YOU_PREFIX.length).replace(/\n/g, '\n> ')}`);
         } else {

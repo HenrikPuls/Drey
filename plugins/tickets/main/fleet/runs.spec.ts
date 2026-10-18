@@ -3,7 +3,8 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ProviderAdapter, WorkerHandle } from './providers';
-import { RunSupervisor, usageSummary, type RunSupervisorDeps } from './runs';
+import { probeExec, RunSupervisor, usageSummary, type RunSupervisorDeps } from './runs';
+import { processAlive } from './procs';
 import type { RunRequest } from './protocol';
 import { newTicketFileText, patchTicketFile, parseTicketFile } from '../ticket-files';
 import { TicketsGit, type GitExecFn } from '../tickets-git';
@@ -520,5 +521,18 @@ describe('usageSummary — what the ticket Log says a run used', () => {
   it('adds a real cost and stays silent when nothing was used', () => {
     expect(usageSummary({ tokensIn: 1_000, tokensOut: 10, costUsd: 0.124 })).toBe(' — 1k in / 10 out · $0.12');
     expect(usageSummary({ tokensIn: 0, tokensOut: 0, costUsd: null })).toBe('');
+  });
+});
+
+describe('probeExec — the process probes keep their arguments apart', () => {
+  it('hands an argument with spaces over as one argument (no shell re-parsing)', async () => {
+    const out = await probeExec(os.tmpdir())(process.execPath, ['-e', 'process.stdout.write(process.argv[1])', 'PID eq 42']);
+    expect(out).toBe('PID eq 42');
+  });
+
+  it('sees a live pid as alive and an impossible one as gone', async () => {
+    const exec = probeExec(os.tmpdir());
+    expect(await processAlive(process.pid, exec)).toBe(true);
+    expect(await processAlive(2_147_483_000, exec)).toBe(false);
   });
 });

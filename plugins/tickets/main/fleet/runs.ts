@@ -11,7 +11,7 @@
  * patch helpers Drey's board service uses, so the semantics cannot
  * drift.
  */
-import { exec as nodeExec } from 'node:child_process';
+import { exec as nodeExec, execFile as nodeExecFile } from 'node:child_process';
 import { promises as fsp } from 'node:fs';
 import { hostname } from 'node:os';
 import * as path from 'node:path';
@@ -24,6 +24,21 @@ import { killTreeGuarded, processAlive, type ExecFn } from './procs';
 import type { RunInfo, RunRequest, RunState, SteerRung } from './protocol';
 
 const execAsync = promisify(nodeExec);
+const execFileAsync = promisify(nodeExecFile);
+
+/**
+ * The process probes' exec (liveness, start time): the program and its
+ * arguments stay separate — no shell, no re-parsing. Joining them into one
+ * command line broke `tasklist /FI "PID eq 42"` (the quotes are the filter's
+ * one argument): the probe failed, every live worker looked dead, and the
+ * lease reaper killed healthy runs.
+ */
+export const probeExec =
+  (cwd: string): ExecFn =>
+  async (cmd, args) => {
+    const { stdout } = await execFileAsync(cmd, [...args], { cwd, windowsHide: true });
+    return stdout;
+  };
 
 /**
  * The gate's shell exec — the owner's commands run with a shell, 30
@@ -128,15 +143,7 @@ export class RunSupervisor {
   constructor(private readonly deps: RunSupervisorDeps) {
     this.git = deps.ticketsGit ?? new TicketsGit(() => deps.git);
     this.now = deps.now ?? ((): Date => new Date());
-    this.exec =
-      deps.exec ??
-      (async (cmd, args) => {
-        const { stdout } = await execAsync(`${cmd} ${args.join(' ')}`, {
-          cwd: this.deps.root,
-          windowsHide: true,
-        });
-        return stdout;
-      });
+    this.exec = deps.exec ?? probeExec(this.deps.root);
     this.prepareWorktree =
       deps.prepareWorktree ??
       (async (request, worktreePath) => {

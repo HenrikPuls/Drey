@@ -36,6 +36,9 @@ export interface NormalizedEvent {
   readonly contextTokens?: number;
 }
 
+/** The stream lead-in of a worker's thinking (the takeover transcript shows it quoted). */
+export const THINK_PREFIX = 'thinking › ';
+
 /** Collapses a text to the one-line activity the board shows. */
 export function activityLine(text: string): string {
   const first = text.split('\n').find((line) => line.trim() !== '') ?? '';
@@ -430,8 +433,19 @@ export function opencodeAdapter(
                 if (m.tokens !== undefined) {
                   state.contextTokens = (m.tokens.input ?? 0) + (m.tokens.cache?.read ?? 0);
                 }
-                if (m.id !== undefined && !state.seenAssistant.has(m.id)) {
+                // A message's text and thinking are read once it is COMPLETE: the
+                // list shows a message while it still streams, and reading it on
+                // first sight lost most of what the worker said.
+                if ((m.time?.completed ?? 0) > 0 && m.id !== undefined && !state.seenAssistant.has(m.id)) {
                   state.seenAssistant.add(m.id);
+                  const thought = (m.content ?? [])
+                    .filter((part) => part.type === 'reasoning')
+                    .map((part) => part.text ?? '')
+                    .join(' ')
+                    .trim();
+                  if (thought !== '') {
+                    start.onEvent({ ts: nowIso(now), kind: 'note', text: `${THINK_PREFIX}${thought.slice(0, 600)}` });
+                  }
                   const text = messageText(m);
                   if (text !== '') {
                     state.lastText = text;
@@ -444,13 +458,15 @@ export function opencodeAdapter(
                     });
                   }
                 }
-                // Every tool call is one visible step: the lane shows what
-                // the worker reads and runs, and a worker that only calls
-                // tools no longer looks silent (and stalled).
+                // Every tool call is one visible step — shown once its input is
+                // there (a call is listed first with an empty input, which read
+                // as a bare "shell" / "read").
                 for (const part of m.content ?? []) {
-                  if (part.type === 'tool' && part.id !== undefined && !state.seenTools.has(part.id)) {
+                  const input = part.state?.input;
+                  const ready = input !== undefined && Object.keys(input).length > 0;
+                  if (part.type === 'tool' && part.id !== undefined && ready && !state.seenTools.has(part.id)) {
                     state.seenTools.add(part.id);
-                    const activity = toolActivity(part.name, part.state?.input);
+                    const activity = toolActivity(part.name, input);
                     start.onEvent({
                       ts: nowIso(now),
                       kind: 'note',

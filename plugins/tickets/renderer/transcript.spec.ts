@@ -32,6 +32,11 @@ describe('transcriptMarkdown', () => {
     expect(md).toBe("- `a 'b' c`");
   });
 
+  it('shows the thinking of the worker as an italic quote', () => {
+    const md = transcriptMarkdown(line({ kind: 'note', text: 'thinking › First   look\nat the file' }));
+    expect(md).toBe('> _First look at the file_');
+  });
+
   it('is empty for an empty stream', () => {
     expect(transcriptMarkdown('')).toBe('');
   });
