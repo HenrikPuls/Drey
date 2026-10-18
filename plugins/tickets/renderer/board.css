@@ -126,6 +126,77 @@
   text-overflow: ellipsis;
 }
 
+/* The owner's checkpoint mark (M85): a manual column between automatic
+ * ones — the machine never pulls across it. */
+.tickets-col-checkpoint {
+  flex: none;
+  font-size: 0.62rem;
+  padding: 0 4px;
+  border: 1px dashed var(--border-strong);
+  border-radius: var(--radius-xs);
+  color: var(--text-4);
+}
+
+/* A held column (paused or stopped): its head dims so the brake reads
+ * at a glance across the whole board. */
+.tickets-col.tickets-col-held {
+  border-style: dashed;
+}
+
+.tickets-col.tickets-col-held > .tickets-col-head {
+  opacity: 0.72;
+}
+
+/* The per-column brakes, next to the fold chevron (M85). */
+.tickets-col-controls {
+  flex: none;
+  display: inline-flex;
+  gap: 1px;
+}
+
+.tickets-col-controls-held {
+  color: var(--text-3);
+}
+
+.tickets-col-btn {
+  display: inline-flex;
+  padding: 1px;
+  border: 0;
+  border-radius: var(--radius-xs);
+  background: transparent;
+  color: var(--text-5);
+  cursor: pointer;
+}
+
+.tickets-col-btn:hover {
+  background: var(--hover-bg);
+  color: var(--text-2);
+}
+
+/* The chain's master switch in the panel header (M85): An / Aus /
+ * Notaus. The active state is marked; Notaus is the red button. */
+.tickets-master {
+  display: inline-flex;
+  gap: 1px;
+  margin-left: 4px;
+  padding-left: 6px;
+  border-left: 1px solid var(--border);
+}
+
+.tickets-master-on {
+  color: var(--accent, var(--text-1));
+  background: var(--hover-bg);
+}
+
+.tickets-master-abort:not(:hover) {
+  color: var(--text-5);
+}
+
+.tickets-master-abort:hover,
+.tickets-master-abort:focus-visible {
+  color: #d64545;
+}
+
 .tickets-col-list {
   flex: 1;
   min-height: 24px;

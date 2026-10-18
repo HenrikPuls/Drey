@@ -92,9 +92,18 @@ export type IconName =
   | 'history'
   | 'upload'
   | 'triangle-alert'
-  | 'brain';
+  | 'brain'
+  | 'play'
+  | 'pause';
 
 const ICONS: Record<IconName, readonly IconShape[]> = {
+  // Lucide "play" / "pause" -- the tickets board's chain master and
+  // per-column run controls (M85).
+  play: [{ kind: 'path', d: 'm6 3 14 9-14 9z' }],
+  pause: [
+    { kind: 'path', d: 'M4 5h4v14H4z' },
+    { kind: 'path', d: 'M16 5h4v14h-4z' },
+  ],
   'chevron-right': [{ kind: 'path', d: 'm9 18 6-6-6-6' }],
   'chevron-left': [{ kind: 'path', d: 'm15 18-6-6 6-6' }],
   'chevron-down': [{ kind: 'path', d: 'm6 9 6 6 6-6' }],

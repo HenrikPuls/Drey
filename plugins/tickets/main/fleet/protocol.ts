@@ -61,6 +61,14 @@ export interface RunRequest {
   readonly claimIdentity: string | null;
   /** The dialog's explicit worker choice, recorded on the ticket (`worker:`). */
   readonly recordWorker?: string;
+  /**
+   * The working column when the orchestrator dispatched the run (M85,
+   * ADR-0077): the pool whose slot the run occupies — which can differ
+   * from `phase`, because a pool tops up from the previous column (the
+   * ticket then still sits in that column while the run works it).
+   * Null on an owner-started run.
+   */
+  readonly column?: string | null;
 }
 
 /** A run as the runner reports it — and as `run.json` persists it. */
@@ -128,4 +136,38 @@ export interface TicketEdit {
   readonly vaultPath: string;
   readonly relPath: string;
   readonly git: string;
+}
+
+// ---------------------------------------------------------------------------
+// The chain (M85, ADR-0077): the orchestrator's configuration and control
+// state. Config rides from the plugin (which owns the plugin config and
+// the vault registry); master and per-column state persist runner-side in
+// `<root>/chain.json` — never in the tickets repo (ADR-0076: no view
+// state in the repo).
+
+/** The master switch: `run` dispatches, `halted` lets running work finish. */
+export type ChainMaster = 'run' | 'halted';
+
+/** One column's brake: `playing` dispatches, `held` waits (a stop also holds). */
+export type ColumnMode = 'playing' | 'held';
+
+/** What the plugin tells the runner about its world (idempotent POST). */
+export interface ChainConfig {
+  /** Absolute path of the tickets vault to orchestrate. */
+  readonly ticketsVaultPath: string;
+  /** Git executable for ticket commits (the plugin's gitPath or `git`). */
+  readonly git: string;
+  /** The plugin's configured default worker (the assignment ring's floor). */
+  readonly defaultWorker: string;
+  /** Permission mode of dispatched runs (no dialog to ask in). */
+  readonly permissionMode: PermissionMode;
+}
+
+/** The chain's control state as the runner reports it. */
+export interface ChainStatus {
+  /** True once a chain config is set (the board shows the master switch). */
+  readonly configured: boolean;
+  readonly master: ChainMaster;
+  /** Per working column mode; a phase absent here is `playing`. */
+  readonly columns: Readonly<Record<string, ColumnMode>>;
 }

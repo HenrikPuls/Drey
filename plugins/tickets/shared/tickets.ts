@@ -152,6 +152,25 @@ export interface PipelinePhase {
   readonly claim: boolean;
   /** Raw handover spec (`manual | agent <ref>[@<worker>] | ci | none`). */
   readonly handover: string;
+  /**
+   * The column's worker pin (`worker: opencode`, M85) — the assignment
+   * ring's column level; unset on a hand-edited manual column.
+   */
+  readonly worker: string | null;
+  /** The column's model pin (`model: zai/glm-5.3`, M85); null = unset. */
+  readonly model: string | null;
+  /** The column's pool size (`workers: 2`, M85) — parallel runs. Default 1. */
+  readonly workers: number;
+  /** Explicit prompt ref override (`prompt: plan-heavy`, M85); null = handover ref. */
+  readonly prompt: string | null;
+}
+
+/** The default for a phase entry that omits the M85 pool keys —
+ *  explicit values win over the defaults. */
+export function phaseWithoutPoolKeys(
+  phase: Partial<PipelinePhase> & Pick<PipelinePhase, 'id' | 'title' | 'wip' | 'claim' | 'handover'>,
+): PipelinePhase {
+  return { worker: null, model: null, workers: 1, prompt: null, ...phase };
 }
 
 /**
@@ -213,6 +232,12 @@ export interface BoardSnapshot {
   readonly columns: readonly BoardColumn[];
   /** Board-level findings (pipeline/repos/order files). */
   readonly issues: readonly TicketIssue[];
+  /**
+   * The owner's checkpoint columns (M85): manual columns between
+   * automatic ones — the machine never pulls across them; the owner's
+   * moves feed the next pool.
+   */
+  readonly checkpoints: readonly string[];
 }
 
 /** `true` when the id parses AND matches the file stem it came from. */

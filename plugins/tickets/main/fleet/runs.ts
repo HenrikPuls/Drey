@@ -38,6 +38,13 @@ export type StartOutcome = { readonly ok: true; readonly run: RunInfo } | { read
 
 export type StopOutcome = { readonly ok: true } | { readonly ok: false; readonly error: string };
 
+/** One run as the supervisor holds it: the record plus its request
+ *  (the orchestrator's port exposes this to count pool slots). */
+export interface SupervisorRecord {
+  readonly info: RunInfo;
+  readonly request: RunRequest;
+}
+
 export interface RunSupervisorDeps {
   readonly root: string;
   readonly adapter: ProviderAdapter;
@@ -53,6 +60,8 @@ export interface RunSupervisorDeps {
   readonly prepareWorktree?: (request: RunRequest, worktreePath: string) => Promise<void>;
   /** Test seam over the tickets repo's git (the spec recorder). */
   readonly ticketsGit?: Pick<TicketsGit, 'run' | 'locate' | 'commitPaths'>;
+  /** Run settled (terminal): the orchestrator's slot-freed trigger (M85). */
+  readonly onRunSettled?: (info: RunInfo) => void;
 }
 
 interface LiveRun {
@@ -160,6 +169,13 @@ export class RunSupervisor {
 
   list(): readonly RunInfo[] {
     return [...this.runs.values()].map((r) => r.info).sort((a, b) => b.startedAt.localeCompare(a.startedAt));
+  }
+
+  /** Every run with its request, newest first (the orchestrator's view). */
+  records(): readonly SupervisorRecord[] {
+    return [...this.runs.values()]
+      .map((r) => ({ info: r.info, request: r.request }))
+      .sort((a, b) => b.info.startedAt.localeCompare(a.info.startedAt));
   }
 
   get(runId: string): RunInfo | null {
@@ -475,6 +491,9 @@ export class RunSupervisor {
     this.deps.log(`run ${run.info.id} → ${state}`);
     await this.persist(run);
     await this.clearRunStamp(run, null);
+    // The slot is free and the ticket is where it belongs — the chain
+    // may dispatch again (M85; a no-op while no chain is configured).
+    this.deps.onRunSettled?.(run.info);
   }
 
   /**

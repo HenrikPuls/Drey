@@ -10,6 +10,7 @@ import {
   ageOf,
   branchForTicket,
   openTicketCount,
+  parseHandover,
   type BoardColumn,
   type BoardSnapshot,
   type CreateResult,
@@ -17,7 +18,7 @@ import {
   type TicketCard,
 } from '../shared/tickets';
 import { createColumnCollapseStore } from './column-collapse';
-import type { RunInfo } from '../main/fleet/protocol';
+import type { ChainStatus, RunInfo } from '../main/fleet/protocol';
 
 function el<K extends keyof HTMLElementTagNameMap>(
   tag: K,
@@ -145,10 +146,11 @@ let draggedFrom: string | null = null;
 let insertPhase: string | null = null;
 let insertAt = 0;
 
-// --- the fleet's live runs (M84, ADR-0075) --------------------------------
+// --- the fleet's live runs and the chain (M84/M85, ADR-0075/0077) ----------
 
 const LIVE_RUN_STATES: readonly string[] = ['starting', 'running', 'stopping'];
 let fleetRuns: RunInfo[] = [];
+let chain: ChainStatus | null = null;
 
 const runForCard = (id: string): RunInfo | null =>
   fleetRuns.find((r) => r.ticketId === id && LIVE_RUN_STATES.includes(r.state)) ?? null;
@@ -156,11 +158,25 @@ const runForCard = (id: string): RunInfo | null =>
 const liveRuns = (): readonly RunInfo[] =>
   fleetRuns.filter((r) => LIVE_RUN_STATES.includes(r.state));
 
-const applyFleetRuns = (runs: readonly RunInfo[]): void => {
-  fleetRuns = [...runs];
-  for (const view of views) {
-    view.render();
+/** The column's brake state — a phase the runner doesn't know is playing. */
+const columnMode = (phaseId: string): 'playing' | 'held' => chain?.columns[phaseId] ?? 'playing';
+
+/** Keeps the header's master switch in step (the buttons live outside the board). */
+const masterButtons: { run: HTMLButtonElement; halt: HTMLButtonElement; abort: HTMLButtonElement }[] = [];
+
+const applyChainStatus = (status: ChainStatus | null): void => {
+  chain = status;
+  const master = status?.master ?? 'halted';
+  for (const buttons of masterButtons) {
+    buttons.run.classList.toggle('tickets-master-on', master === 'run');
+    buttons.halt.classList.toggle('tickets-master-on', master === 'halted');
   }
+  notifyViews();
+};
+
+const applyFleetSnapshot = (payload: { runs?: RunInfo[]; chain?: ChainStatus | null }): void => {
+  fleetRuns = Array.isArray(payload.runs) ? [...payload.runs] : [];
+  applyChainStatus(payload.chain ?? null);
 };
 
 const clearInsert = (): void => {
@@ -308,6 +324,51 @@ function cardNode(api: DreyPluginApi, card: TicketCard, column: BoardColumn): HT
   return node;
 }
 
+/** The column's prompt ref for the pool chip's tooltip. */
+const columnPromptRefOf = (phase: BoardColumn['phase']): string =>
+  phase.prompt ?? parseHandover(phase.handover).promptRef ?? '(the handover names none)';
+
+/**
+ * One column's brakes (M85): pause — no new dispatch, running work
+ * finishes; stop — this column's runs abort and the column holds; play
+ * — the pool takes the column's next ticket again. Stopping one column
+ * never stops the rest.
+ */
+function columnControlsNode(api: DreyPluginApi, column: BoardColumn): HTMLElement {
+  const phaseId = column.phase.id;
+  const box = el('span', 'tickets-col-controls');
+  const button = (icon: string, title: string, onClick: () => void): HTMLButtonElement => {
+    const b = el('button', 'tickets-col-btn');
+    b.type = 'button';
+    b.title = title;
+    b.setAttribute('aria-label', `${title} (${column.phase.title})`);
+    b.append(api.ui.icon(icon, 11));
+    b.addEventListener('click', (event) => {
+      event.stopPropagation();
+      onClick();
+    });
+    return b;
+  };
+  if (columnMode(phaseId) === 'playing') {
+    box.append(
+      button('pause', 'Pause this column — no new dispatch, running work finishes', () => {
+        void runChainAction('chainColumn', { phase: phaseId, mode: 'held' });
+      }),
+      button('square', "Stop this column — abort its runs and hold it (the rest keeps going)", () => {
+        void runChainAction('chainColumnStop', { phase: phaseId });
+      }),
+    );
+  } else {
+    box.append(
+      button('play', "Play this column — the pool takes the column's next ticket", () => {
+        void runChainAction('chainColumn', { phase: phaseId, mode: 'playing' });
+      }),
+    );
+    box.classList.add('tickets-col-controls-held');
+  }
+  return box;
+}
+
 /** Column head / strip count text: plain, or `n/wip` against a limit. */
 const countText = (column: BoardColumn): string =>
   column.phase.wip === null
@@ -357,6 +418,9 @@ function columnNode(api: DreyPluginApi, column: BoardColumn): HTMLElement {
 
   const node = el('section', 'tickets-col');
   node.dataset['phase'] = column.phase.id;
+  if (parseHandover(column.phase.handover).mode === 'agent' && columnMode(column.phase.id) !== 'playing') {
+    node.classList.add('tickets-col-held');
+  }
 
   const head = el('div', 'tickets-col-head');
   head.append(el('span', 'tickets-col-title', column.phase.title));
@@ -371,10 +435,22 @@ function columnNode(api: DreyPluginApi, column: BoardColumn): HTMLElement {
     mark.title = 'This directory has tickets but pipeline.md does not list it';
     head.append(mark);
   }
-  if (column.phase.handover.startsWith('agent')) {
-    const handover = el('span', 'tickets-col-agent', column.phase.handover);
-    handover.title = 'Agents handle this handover (from milestone 84)';
-    head.append(handover);
+  if (snapshot?.checkpoints.includes(column.phase.id) === true) {
+    const mark = el('span', 'tickets-col-checkpoint', 'checkpoint');
+    mark.title =
+      'Owner checkpoint — the machine never pulls across; tickets wait here for your review, your moves feed the next pool';
+    head.append(mark);
+  }
+  if (parseHandover(column.phase.handover).mode === 'agent') {
+    const phase = column.phase;
+    const worker = phase.worker ?? parseHandover(phase.handover).worker ?? 'opencode';
+    const chip = el('span', 'tickets-col-agent', `${worker}${phase.workers > 1 ? ` ×${phase.workers}` : ''}`);
+    chip.title =
+      `Worker pool — ${worker}` +
+      (phase.model !== null ? `, model ${phase.model}` : '') +
+      `, ${phase.workers} parallel, prompt ${columnPromptRefOf(phase)}`;
+    head.append(chip);
+    head.append(columnControlsNode(api, column));
   }
   const fold = el('button', 'tickets-col-fold');
   fold.type = 'button';
@@ -548,6 +624,9 @@ export function createTicketsWidget(api: DreyPluginApi): PluginWidgetContrib {
       refreshButton.addEventListener('click', () => void refreshBoard());
 
       host.append(newButton, refreshButton);
+      // The chain's master switch — meaningful wherever a tickets board
+      // exists; the runner side decides whether anything is automatic.
+      host.append(masterControlNode(api));
       return () => undefined;
     },
     mount: (panel) => {
@@ -715,6 +794,61 @@ function openCreateModal(api: DreyPluginApi, snap: BoardSnapshot): void {
     host.append(form);
     title.focus();
   });
+}
+
+// --- the chain's master switch (M85, ADR-0077) -------------------------------
+
+/**
+ * An / Aus / Notaus in the panel header. An dispatches every playing
+ * automatic column; Aus halts gently (running work finishes); Notaus
+ * aborts every live run through the stop ladder and halts — the red
+ * button, one click, nothing in the way.
+ */
+function masterControlNode(api: DreyPluginApi): HTMLElement {
+  const box = el('span', 'tickets-master');
+  const run = el('button', 'icon-btn');
+  run.type = 'button';
+  run.title = 'Run the chain — columns with a worker drain themselves';
+  run.setAttribute('aria-label', 'Run the chain');
+  run.append(api.ui.icon('play', 14));
+  run.addEventListener('click', () => void runChainAction('chainMaster', { mode: 'run' }));
+
+  const halt = el('button', 'icon-btn');
+  halt.type = 'button';
+  halt.title = 'Halt the chain — running work finishes, nothing new dispatches';
+  halt.setAttribute('aria-label', 'Halt the chain');
+  halt.append(api.ui.icon('pause', 14));
+  halt.addEventListener('click', () => void runChainAction('chainMaster', { mode: 'halted' }));
+
+  const abort = el('button', 'icon-btn tickets-master-abort');
+  abort.type = 'button';
+  abort.title = 'Emergency stop — abort every run and halt the chain';
+  abort.setAttribute('aria-label', 'Emergency stop');
+  abort.append(api.ui.icon('triangle-alert', 14));
+  abort.addEventListener('click', () => void runChainAction('chainAbort', {}));
+
+  masterButtons.push({ run, halt, abort });
+  box.append(run, halt, abort);
+  return box;
+}
+
+/** Runs a chain control and applies the runner's returned state. */
+async function runChainAction(method: string, payload: unknown): Promise<void> {
+  let result: unknown;
+  try {
+    result = await invokeBoard(method, payload);
+  } catch (error) {
+    note = messageOf(error);
+    notifyViews();
+    return;
+  }
+  const status = (result as { status?: ChainStatus; error?: string }).status ?? null;
+  if (status === null) {
+    note = (result as { error?: string }).error ?? 'the chain control failed';
+    notifyViews();
+    return;
+  }
+  applyChainStatus(status);
 }
 
 // --- the fleet run controls (M84, ADR-0075) --------------------------------
@@ -1043,9 +1177,10 @@ const plugin: { activate(api: DreyPluginApi): void } = {
 
     api.backend.on('board-changed', () => void refreshBoard());
     api.vault.onChanged(() => void refreshBoard());
-    api.backend.on('fleet-changed', (runs) =>
-      applyFleetRuns(Array.isArray(runs) ? (runs as RunInfo[]) : ((runs as { runs: RunInfo[] }).runs ?? [])));
-    void invokeBoard('fleetStatus').then((result) => applyFleetRuns((result as { runs: RunInfo[] }).runs ?? []));
+    api.backend.on('fleet-changed', (payload) =>
+      applyFleetSnapshot((payload ?? {}) as { runs?: RunInfo[]; chain?: ChainStatus | null }));
+    void invokeBoard('fleetStatus').then((result) =>
+      applyFleetSnapshot((result ?? {}) as { runs?: RunInfo[]; chain?: ChainStatus | null }));
     void refreshBoard();
   },
 };

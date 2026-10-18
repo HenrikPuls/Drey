@@ -11,7 +11,7 @@
 import { isWorkerProvider, type WorkerProviderId } from './protocol';
 import { parseHandover } from '../../shared/tickets';
 
-export type AssignmentSource = 'ticket' | 'handover' | 'repo' | 'default';
+export type AssignmentSource = 'ticket' | 'column' | 'handover' | 'repo' | 'default';
 
 export interface WorkerChoice {
   readonly provider: WorkerProviderId;
@@ -34,6 +34,10 @@ export function parseWorkerValue(value: string): { provider: WorkerProviderId; m
 export interface AssignmentInput {
   /** The ticket's `worker:` frontmatter pin (raw, may be null). */
   readonly ticketWorker: string | null;
+  /** The working column's `worker:` key (M85) — between ticket and handover. */
+  readonly columnWorker?: string | null;
+  /** The working column's `model:` key (M85) — wins over a model inside a pin. */
+  readonly columnModel?: string | null;
   /** The phase's raw handover spec (`agent build-default@opencode`). */
   readonly handover: string | null;
   /** The work repo's `worker:` default from `_meta/repos.md`. */
@@ -55,6 +59,7 @@ export type Assignment =
 export function resolveAssignment(input: AssignmentInput): Assignment {
   const candidates: ReadonlyArray<{ source: AssignmentSource; value: string | null }> = [
     { source: 'ticket', value: input.ticketWorker },
+    { source: 'column', value: input.columnWorker ?? null },
     { source: 'handover', value: input.handover === null ? null : parseHandoverWorkerValue(input.handover) },
     { source: 'repo', value: input.repoWorker },
     { source: 'default', value: input.configuredDefault },
@@ -65,21 +70,27 @@ export function resolveAssignment(input: AssignmentInput): Assignment {
     }
     const parsed = parseWorkerValue(candidate.value);
     if (parsed === null) {
-      if (candidate.source === 'ticket' || candidate.source === 'handover') {
+      if (candidate.source === 'ticket' || candidate.source === 'handover' || candidate.source === 'column') {
         // An explicit-but-unreadable pin is a refusal, not a fallback.
         return { ok: false, error: `the ${candidate.source}'s worker "${candidate.value}" is unknown — use opencode or claude-code` };
       }
       continue; // a stale repo/config default degrades to the next level
     }
+    const model = input.columnModel !== undefined && input.columnModel !== null && input.columnModel.trim() !== ''
+      ? input.columnModel.trim()
+      : parsed.model;
     return {
       ok: true,
       provider: parsed.provider,
-      model: parsed.model,
+      model,
       source: candidate.source,
       promptRef: promptRefOf(input.handover),
     };
   }
-  return { ok: true, provider: 'opencode', model: null, source: 'default', promptRef: promptRefOf(input.handover) };
+  const fallbackModel = input.columnModel !== undefined && input.columnModel !== null && input.columnModel.trim() !== ''
+    ? input.columnModel.trim()
+    : null;
+  return { ok: true, provider: 'opencode', model: fallbackModel, source: 'default', promptRef: promptRefOf(input.handover) };
 }
 
 
@@ -108,10 +119,23 @@ export interface InstructionInput {
 }
 
 /**
+ * The completion discipline every run brief ends with (M85, ADR-0077):
+ * step completion is the agent's call — its finished turn is the
+ * declaration — and the machine gate is the safety net under it, not an
+ * independent mover.
+ */
+const COMPLETION_DISCIPLINE =
+  'Completion discipline: work the step, then run the gate commands above yourself and fix what they surface. ' +
+  'Declare the step done only when every command passes and you consider the work ready — your finished turn is ' +
+  'that declaration. After it the runner re-runs the gate: green moves the ticket one column right; a red gate ' +
+  'parks the step (the failure is logged and the ticket waits).';
+
+/**
  * Composes the run's instruction: who and where the worker is, what the
  * ticket says (description + plan), the fleet's rules (stay on the
- * branch, leave the worktree the only place), and the machine gate it
- * must keep green. Deterministic text — no model involved.
+ * branch, leave the worktree the only place), the machine gate it
+ * must keep green, and the completion discipline. Deterministic text —
+ * no model involved.
  */
 export function composeInstruction(input: InstructionInput): string {
   const parts: string[] = [];
@@ -139,5 +163,6 @@ export function composeInstruction(input: InstructionInput): string {
         input.acceptance.map((command) => `- \`${command}\``).join('\n'),
     );
   }
+  parts.push(COMPLETION_DISCIPLINE);
   return parts.join('\n\n');
 }

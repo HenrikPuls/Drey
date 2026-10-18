@@ -21,6 +21,7 @@ import type {
 import {
   nextTicketId,
   type BoardSnapshot,
+  type PipelinePhase,
   type TicketCard,
   type TicketPriority,
   TICKET_PRIORITIES,
@@ -33,16 +34,15 @@ import {
   rewriteOrderSection,
 } from './ticket-board';
 import {
-  acceptanceCommands,
   newTicketFileText,
   patchTicketFile,
-  ticketSections,
 } from './ticket-files';
 import { openTerminalAt } from './open-terminal';
 import { TicketsGit, type RepoLocation } from './tickets-git';
 import { FleetClient } from './fleet-client';
-import { composeInstruction, resolveAssignment } from './fleet/assignment';
-import type { PermissionMode, RunRequest } from './fleet/protocol';
+import { agentIdentity, composeRunRequest } from './fleet/request';
+import { checkpointPhaseIds, columnPromptRef, isAutoPhase, nextPhaseIdOf } from './fleet/chain';
+import type { ChainConfig, PermissionMode } from './fleet/protocol';
 
 const PIPELINE_PATH = 'tickets/_meta/pipeline.md';
 const ORDER_PATH = 'tickets/_meta/order.md';
@@ -98,11 +98,14 @@ class BoardService {
   private queueTail: Promise<unknown> = Promise.resolve();
   private readonly gitLocations = new Map<string, RepoLocation | null>();
   private emitDebounce: ReturnType<typeof setTimeout> | null = null;
+  private lastChainConfig: string | null = null;
 
   constructor(
     private readonly ctx: MainPluginContext,
     private readonly git: TicketsGit,
     private readonly defaultWorker: string,
+    private readonly autoPermissionMode: PermissionMode,
+    private readonly gitPath: string,
     private readonly fleet: FleetClient,
   ) {}
 
@@ -157,6 +160,7 @@ class BoardService {
     ]);
     const active = vaults.find((v) => v.active) ?? null;
     if (vault === null) {
+      this.syncChainConfig(null, []);
       return assembleBoard({
         vaultId: null,
         vaultName: null,
@@ -183,7 +187,7 @@ class BoardService {
         text: await this.ctx.vault.read(path, { vaultId: vault.id }),
       })),
     );
-    return assembleBoard({
+    const snapshot = assembleBoard({
       vaultId: vault.id,
       vaultName: vault.name,
       activeVaultName: active?.name ?? null,
@@ -194,6 +198,36 @@ class BoardService {
       reposText,
       files,
     });
+    // The chain follows the pipeline: an automatic column anywhere
+    // points the runner at this vault (M85). Cheap and idempotent —
+    // the runner re-reads the vault on every dispatch pass anyway.
+    this.syncChainConfig(vault, snapshot.pipeline);
+    return snapshot;
+  }
+
+  /** Keeps the runner's chain config in step with the pipeline (never spawns). */
+  private syncChainConfig(
+    vault: { readonly path: string } | null,
+    pipeline: readonly PipelinePhase[],
+  ): ChainConfig | null {
+    const chain: ChainConfig | null =
+      vault !== null && pipeline.some((phase) => isAutoPhase(phase))
+        ? {
+            ticketsVaultPath: vault.path,
+            git: this.gitPath.trim() === '' ? 'git' : this.gitPath.trim(),
+            defaultWorker: this.defaultWorker,
+            permissionMode: this.autoPermissionMode,
+          }
+        : null;
+    const json = chain === null ? null : JSON.stringify(chain);
+    if (json === this.lastChainConfig) {
+      return chain;
+    }
+    this.lastChainConfig = json;
+    if (chain !== null) {
+      void this.fleet.configureChain(chain);
+    }
+    return chain;
   }
 
   /** Find a card anywhere on the board. */
@@ -475,11 +509,11 @@ class BoardService {
 
   /**
    * Starts a fleet run for one ticket (M84, ADR-0075): resolve the
-   * worker (ticket pin > handover pin > repo default > configured
-   * default), read the handover's prompt, compose the deterministic
-   * instruction and hand the runner the request. The runner owns the
-   * worker process and the ticket stamps; this side refuses early with
-   * the reason a human can act on.
+   * worker through the shared request builder (ticket pin > column >
+   * handover pin > repo default > configured default), read the
+   * handover's prompt, and hand the runner the request. The runner owns
+   * the worker process and the ticket stamps; this side refuses early
+   * with the reason a human can act on.
    */
   startRun(input: {
     ticketId: string;
@@ -508,77 +542,43 @@ class BoardService {
       if (card.meta.run !== null) {
         return { ok: false, error: `${card.id} already has a live run — stop it first` };
       }
+      const workingPhase = snap.pipeline.find((p) => p.id === phaseId) ?? null;
       const repo =
         card.meta.repo === null ? null : (snap.repos.find((r) => r.name === card!.meta.repo) ?? null);
-      if (repo === null) {
-        return { ok: false, error: `${card.id} names no repository — set repo: to a _meta/repos.md entry` };
-      }
-      if (repo.path === null) {
-        return { ok: false, error: `"${repo.name}" has no local path: in _meta/repos.md — the worker needs a checkout` };
-      }
       const text = await this.ctx.vault.read(card.path, { vaultId: vault.id });
-      const acceptance = acceptanceCommands(text);
-      if (acceptance.length === 0) {
-        return {
-          ok: false,
-          error: `${card.id} has no acceptance criteria — the machine gate would have nothing to run`,
-        };
-      }
-      const assignment = resolveAssignment({
-        ticketWorker: input.workerChoice ?? card.meta.worker,
-        handover: snap.pipeline.find((p) => p.id === phaseId)?.handover ?? null,
-        repoWorker: repo.worker,
-        configuredDefault: this.defaultWorker,
-      });
-      if (!assignment.ok) {
-        return { ok: false, error: assignment.error };
-      }
+      const promptRef =
+        workingPhase === null ? null : columnPromptRef(workingPhase);
       let prompt: string | null = null;
-      if (assignment.promptRef !== null) {
-        prompt = await this.readOptional(vault.id, `tickets/_meta/prompts/${assignment.promptRef}.md`);
+      if (promptRef !== null) {
+        prompt = await this.readOptional(vault.id, `tickets/_meta/prompts/${promptRef}.md`);
         if (prompt === null) {
           return {
             ok: false,
-            error: `the handover names prompt "${assignment.promptRef}", but tickets/_meta/prompts/${assignment.promptRef}.md is missing`,
+            error: `the handover names prompt "${promptRef}", but tickets/_meta/prompts/${promptRef}.md is missing`,
           };
         }
       }
-      const phaseIndex = snap.pipeline.findIndex((p) => p.id === phaseId);
-      const nextPhase = phaseIndex >= 0 && phaseIndex + 1 < snap.pipeline.length
-        ? (snap.pipeline[phaseIndex + 1] ?? null)
-        : null;
-      const { description, plan } = ticketSections(text);
-      const gitPath = ((await this.ctx.config.get<string>('gitPath')) ?? '').trim();
-      const request: RunRequest = {
-        ticketId: card.id,
-        ticketsVaultPath: vault.path,
-        ticketRelPath: card.path,
-        phase: card.phase,
-        repoPath: repo.path,
-        branch: card.meta.branch ?? `t/${card.id}`,
-        baseRef: repo.branch,
-        provider: assignment.provider,
-        model: assignment.model,
+      const nextPhaseId = nextPhaseIdOf(snap.columns, phaseId);
+      const nextPhaseClaims =
+        nextPhaseId !== null ? (snap.pipeline.find((p) => p.id === nextPhaseId)?.claim === true) : false;
+      const composed = composeRunRequest({
+        card,
+        ticketText: text,
+        vaultPath: vault.path,
+        workingPhase,
+        nextPhaseId,
+        nextPhaseClaims,
+        repo,
+        promptText: prompt,
+        defaultWorker: this.defaultWorker,
         permissionMode: input.permissionMode,
-        instruction: composeInstruction({
-          ticketId: card.id,
-          title: card.meta.title ?? card.id,
-          repo: repo.name,
-          branch: card.meta.branch ?? `t/${card.id}`,
-          worktreePath: `${repo.name}-${card.id}`,
-          phase: card.phase,
-          description,
-          plan,
-          prompt,
-          acceptance,
-        }),
-        acceptance,
-        git: gitPath === '' ? 'git' : gitPath,
-        nextPhase: nextPhase?.id ?? null,
-        claimIdentity: nextPhase?.claim === true ? `agent@${hostname().toLowerCase()}` : null,
-        ...(input.workerChoice !== null ? { recordWorker: input.workerChoice } : {}),
-      };
-      const outcome = await this.fleet.start(request);
+        gitPath: ((await this.ctx.config.get<string>('gitPath')) ?? '').trim(),
+        workerChoice: input.workerChoice,
+      });
+      if (!composed.ok) {
+        return { ok: false, error: composed.error };
+      }
+      const outcome = await this.fleet.start(composed.request);
       if (outcome.ok) {
         this.announceChanged();
         return { ok: true, runId: outcome.run.id };
@@ -661,13 +661,15 @@ const plugin: MainPluginModule = {
     const gitPath = ((await ctx.config.get<string>('gitPath')) ?? '').trim();
     const git = new TicketsGit(() => (gitPath === '' ? 'git' : gitPath));
     const defaultWorker = ((await ctx.config.get<string>('defaultWorker')) ?? '').trim() || 'opencode';
+    const autoPermissionMode: PermissionMode =
+      (await ctx.config.get<string>('autoPermissionMode')) === 'bypass' ? 'bypass' : 'accept-edits';
     const fleet = new FleetClient({
       root: path.join(ctx.app.userRoot, 'fleet'),
       runnerScript: path.join(__dirname, 'fleet', 'runner.js'),
       log: ctx.log,
-      onRunsChanged: (runs) => ctx.ipc.emit('fleet-changed', runs),
+      onFleetChanged: (fleetSnapshot) => ctx.ipc.emit('fleet-changed', fleetSnapshot),
     });
-    const board = new BoardService(ctx, git, defaultWorker, fleet);
+    const board = new BoardService(ctx, git, defaultWorker, autoPermissionMode, gitPath, fleet);
 
     ctx.ipc.handle('board', () => board.snapshot());
 
@@ -723,7 +725,10 @@ const plugin: MainPluginModule = {
     });
 
     // --- the fleet (M84, ADR-0075) -------------------------------------
-    ctx.ipc.handle('fleetStatus', async () => ({ runs: await fleet.runs() }));
+    ctx.ipc.handle('fleetStatus', async () => ({
+      runs: await fleet.runs(),
+      chain: await fleet.chainStatus(),
+    }));
 
     ctx.ipc.handle('fleetStart', async (payload) => {
       const p = payload as { id?: unknown; worker?: unknown; permissionMode?: unknown };
@@ -762,6 +767,41 @@ const plugin: MainPluginModule = {
         return { text: '' };
       }
       return { text: (await fleet.stream(p.runId)) ?? '' };
+    });
+
+    // --- the chain (M85, ADR-0077) -------------------------------------
+    ctx.ipc.handle('chainStatus', async () => fleet.chainStatus());
+
+    ctx.ipc.handle('chainMaster', async (payload) => {
+      const p = payload as { mode?: unknown };
+      if (p.mode !== 'run' && p.mode !== 'halted') {
+        return { ok: false, error: 'the master mode is "run" or "halted"' };
+      }
+      const status = await fleet.setMaster(p.mode);
+      return status === null ? { ok: false, error: 'the fleet runner is not running' } : { ok: true, status };
+    });
+
+    ctx.ipc.handle('chainColumn', async (payload) => {
+      const p = payload as { phase?: unknown; mode?: unknown };
+      if (typeof p.phase !== 'string' || (p.mode !== 'playing' && p.mode !== 'held')) {
+        return { ok: false, error: 'bad chain column payload' };
+      }
+      const status = await fleet.setColumn(p.phase, p.mode);
+      return status === null ? { ok: false, error: 'the fleet runner is not running' } : { ok: true, status };
+    });
+
+    ctx.ipc.handle('chainColumnStop', async (payload) => {
+      const p = payload as { phase?: unknown };
+      if (typeof p.phase !== 'string') {
+        return { ok: false, error: 'bad chain column payload' };
+      }
+      const status = await fleet.stopColumn(p.phase);
+      return status === null ? { ok: false, error: 'the fleet runner is not running' } : { ok: true, status };
+    });
+
+    ctx.ipc.handle('chainAbort', async () => {
+      const status = await fleet.abortAll();
+      return status === null ? { ok: false, error: 'the fleet runner is not running' } : { ok: true, status };
     });
 
     // T-0004: open the ticket's work checkout in the OS terminal — the

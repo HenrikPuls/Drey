@@ -22,8 +22,16 @@ import * as http from 'node:http';
 import * as path from 'node:path';
 import { claudeCodeAdapter, opencodeAdapter } from './providers';
 import { freePort, nodeSpawnFn } from './procs';
+import { Orchestrator } from './orchestrator';
 import { RunSupervisor } from './runs';
-import { isWorkerProvider, type RunRequest, type RunnerDescriptor } from './protocol';
+import {
+  isWorkerProvider,
+  type ChainConfig,
+  type ChainMaster,
+  type ColumnMode,
+  type RunRequest,
+  type RunnerDescriptor,
+} from './protocol';
 
 const VERSION = 1;
 const MAX_BODY = 1024 * 1024;
@@ -70,20 +78,35 @@ async function main(): Promise<void> {
   };
 
   // Runs carry their provider, so the entry keeps one supervisor per
-  // adapter and routes by the request's provider.
+  // adapter and routes by the request's provider. The chain
+  // orchestrator (M85) plans across both; its run-settled hook comes
+  // back through the supervisors' dep.
   const adapters = {
     opencode: opencodeAdapter(nodeSpawnFn()),
     'claude-code': claudeCodeAdapter(nodeSpawnFn()),
   };
+  let orchestrator: Orchestrator | null = null;
   const supervisors = new Map<string, RunSupervisor>(
     Object.values(adapters).map((adapter) => [
       adapter.id,
-      new RunSupervisor({ root: args.root, adapter, git: 'git', log }),
+      new RunSupervisor({
+        root: args.root,
+        adapter,
+        git: 'git',
+        log,
+        onRunSettled: () => orchestrator?.onRunSettled(),
+      }),
     ]),
   );
+  orchestrator = new Orchestrator({
+    root: args.root,
+    log,
+    supervisorOf: (provider) => supervisors.get(provider) ?? supervisors.get('opencode')!,
+  });
   for (const one of supervisors.values()) {
     await one.adopt();
   }
+  await orchestrator.load();
 
   const port = await freePort();
   const token = crypto.randomBytes(24).toString('hex');
@@ -140,6 +163,55 @@ async function main(): Promise<void> {
     try {
       if (req.method === 'GET' && pathname === '/health') {
         respond(200, { ok: true, version: VERSION, live: supervisorsOfLive() });
+        return;
+      }
+      if (req.method === 'GET' && pathname === '/chain') {
+        respond(200, orchestrator.status());
+        return;
+      }
+      if (req.method === 'POST' && pathname === '/chain/config') {
+        const body = (await readBody(req)) as Partial<ChainConfig>;
+        if (typeof body.ticketsVaultPath !== 'string' || body.ticketsVaultPath.trim() === '') {
+          respond(422, { ok: false, error: 'the chain config needs a ticketsVaultPath' });
+          return;
+        }
+        const status = await orchestrator.configure({
+          ticketsVaultPath: body.ticketsVaultPath,
+          git: typeof body.git === 'string' && body.git.trim() !== '' ? body.git : 'git',
+          defaultWorker: typeof body.defaultWorker === 'string' && body.defaultWorker.trim() !== '' ? body.defaultWorker : 'opencode',
+          permissionMode: body.permissionMode === 'bypass' ? 'bypass' : 'accept-edits',
+        });
+        respond(200, status);
+        return;
+      }
+      if (req.method === 'POST' && pathname === '/chain/master') {
+        const body = (await readBody(req)) as { mode?: unknown };
+        if (body.mode !== 'run' && body.mode !== 'halted') {
+          respond(422, { ok: false, error: 'the master mode is "run" or "halted"' });
+          return;
+        }
+        respond(200, await orchestrator.setMaster(body.mode as ChainMaster));
+        return;
+      }
+      if (req.method === 'POST' && pathname === '/chain/column') {
+        const body = (await readBody(req)) as { phase?: unknown; mode?: unknown; stop?: unknown };
+        if (typeof body.phase !== 'string' || body.phase.trim() === '') {
+          respond(422, { ok: false, error: 'the column control needs a phase id' });
+          return;
+        }
+        if (body.stop === true) {
+          respond(200, await orchestrator.stopColumn(body.phase));
+          return;
+        }
+        if (body.mode !== 'playing' && body.mode !== 'held') {
+          respond(422, { ok: false, error: 'the column mode is "playing" or "held"' });
+          return;
+        }
+        respond(200, await orchestrator.setColumn(body.phase, body.mode as ColumnMode));
+        return;
+      }
+      if (req.method === 'POST' && pathname === '/chain/abort') {
+        respond(200, await orchestrator.abortAll());
         return;
       }
       if (req.method === 'GET' && pathname === '/status') {
@@ -221,10 +293,16 @@ async function main(): Promise<void> {
     log(`listening on 127.0.0.1:${port} (pid ${process.pid})`);
   });
 
-  // Idle shutdown: nothing live and nobody asked for a while — the
-  // plugin respawns the runner on demand.
+  // Idle shutdown: nothing live, the chain is not running, and nobody
+  // asked for a while — the plugin respawns the runner on demand. A
+  // running chain keeps the process alive: it is the thing that drains
+  // the board while Drey is closed (M85).
   const idleTimer = setInterval(() => {
-    if (!supervisorsOfLive() && Date.now() - lastRequest > args.idleMs) {
+    if (
+      !orchestrator.active &&
+      !supervisorsOfLive() &&
+      Date.now() - lastRequest > args.idleMs
+    ) {
       log(`idle for ${Math.round(args.idleMs / 1000)}s — shutting down`);
       shutdown(0);
     }

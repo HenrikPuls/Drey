@@ -1,0 +1,120 @@
+/**
+ * The one place a RunRequest is built (M85): Drey's board service (an
+ * owner-started run) and the runner's orchestrator (a dispatched run)
+ * both come through here, so the request they hand the supervisor —
+ * worker ladder, model pin, prompt ref, move target, claim identity —
+ * cannot drift. Pure: file reads (the prompt text, the ticket text)
+ * stay with the caller.
+ */
+import { hostname } from 'node:os';
+import {
+  branchForTicket,
+  type PipelinePhase,
+  type RepoRef,
+  type TicketCard,
+} from '../../shared/tickets';
+import { acceptanceCommands, ticketSections } from '../ticket-files';
+import { composeInstruction, resolveAssignment } from './assignment';
+import type { PermissionMode, RunRequest } from './protocol';
+
+export interface ComposeRunInput {
+  readonly card: TicketCard;
+  /** The ticket file's full text. */
+  readonly ticketText: string;
+  /** Absolute path of the tickets vault. */
+  readonly vaultPath: string;
+  /** The working column's phase config (for an owner run: the phase the
+   *  ticket sits in — the two are the same there). */
+  readonly workingPhase: PipelinePhase | null;
+  /** The move target on a green gate, or null to end the run in place. */
+  readonly nextPhaseId: string | null;
+  /** Whether `nextPhaseId` claims (claim: true) — stamps the agent identity. */
+  readonly nextPhaseClaims: boolean;
+  readonly repo: RepoRef | null;
+  /** The prompt file's text, when the assignment names one (read by the caller). */
+  readonly promptText: string | null;
+  readonly defaultWorker: string;
+  readonly permissionMode: PermissionMode;
+  /** The plugin's gitPath ('' = `git`). */
+  readonly gitPath: string;
+  /** The run dialog's explicit worker choice (owner runs only). */
+  readonly workerChoice: string | null;
+  /** Set when the orchestrator dispatches — the pool whose slot this run occupies. */
+  readonly dispatchedBy?: string;
+}
+
+export type ComposeRunResult =
+  | { readonly ok: true; readonly request: RunRequest }
+  | { readonly ok: false; readonly error: string };
+
+export function composeRunRequest(input: ComposeRunInput): ComposeRunResult {
+  if (input.repo === null) {
+    return {
+      ok: false,
+      error: `${input.card.id} names no repository — set repo: to a _meta/repos.md entry`,
+    };
+  }
+  if (input.repo.path === null) {
+    return {
+      ok: false,
+      error: `"${input.repo.name}" has no local path: in _meta/repos.md — the worker needs a checkout`,
+    };
+  }
+  const acceptance = acceptanceCommands(input.ticketText);
+  if (acceptance.length === 0) {
+    return {
+      ok: false,
+      error: `${input.card.id} has no acceptance criteria — the machine gate would have nothing to run`,
+    };
+  }
+  const handover = input.workingPhase?.handover ?? null;
+  const assignment = resolveAssignment({
+    ticketWorker: input.workerChoice ?? input.card.meta.worker,
+    columnWorker: input.workingPhase?.worker ?? null,
+    columnModel: input.workingPhase?.model ?? null,
+    handover,
+    repoWorker: input.repo.worker,
+    configuredDefault: input.defaultWorker,
+  });
+  if (!assignment.ok) {
+    return { ok: false, error: assignment.error };
+  }
+  const branch = input.card.meta.branch ?? branchForTicket(input.card.id);
+  const sections = ticketSections(input.ticketText);
+  const request: RunRequest = {
+    ticketId: input.card.id,
+    ticketsVaultPath: input.vaultPath,
+    ticketRelPath: input.card.path,
+    phase: input.card.phase,
+    repoPath: input.repo.path,
+    branch,
+    baseRef: input.repo.branch,
+    provider: assignment.provider,
+    model: assignment.model,
+    permissionMode: input.permissionMode,
+    instruction: composeInstruction({
+      ticketId: input.card.id,
+      title: input.card.meta.title ?? input.card.id,
+      repo: input.repo.name,
+      branch,
+      worktreePath: `${input.repo.name}-${input.card.id}`,
+      phase: input.card.phase,
+      description: sections.description,
+      plan: sections.plan,
+      prompt: input.promptText,
+      acceptance,
+    }),
+    acceptance,
+    git: input.gitPath.trim() === '' ? 'git' : input.gitPath.trim(),
+    nextPhase: input.nextPhaseId,
+    claimIdentity: input.nextPhaseClaims && input.nextPhaseId !== null ? agentIdentity() : null,
+    ...(input.workerChoice !== null ? { recordWorker: input.workerChoice } : {}),
+    ...(input.dispatchedBy !== undefined ? { column: input.dispatchedBy } : {}),
+  };
+  return { ok: true, request };
+}
+
+/** The fleet's actor identity for stamps (`agent@<host>`). */
+export function agentIdentity(): string {
+  return `agent@${hostname().toLowerCase()}`;
+}

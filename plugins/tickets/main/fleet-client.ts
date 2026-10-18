@@ -14,6 +14,10 @@ import { spawn } from 'node:child_process';
 import { promises as fsp } from 'node:fs';
 import * as path from 'node:path';
 import type {
+  ChainConfig,
+  ChainMaster,
+  ChainStatus,
+  ColumnMode,
   RunInfo,
   RunRequest,
   RunnerDescriptor,
@@ -25,8 +29,14 @@ export interface FleetClientOpts {
   /** The bundled runner entry (`dist-electron/plugins/tickets/main/fleet/runner.js`). */
   readonly runnerScript: string;
   readonly log: (message: string, level?: 'info' | 'warn' | 'error') => void;
-  /** Pushed whenever the polled run list differs — the board re-renders. */
-  readonly onRunsChanged: (runs: readonly RunInfo[]) => void;
+  /** Pushed whenever the polled run list or chain state differs — the board re-renders. */
+  readonly onFleetChanged: (fleet: FleetSnapshot) => void;
+}
+
+/** What the plugin pushes to the renderer: the runs plus the chain's control state. */
+export interface FleetSnapshot {
+  readonly runs: readonly RunInfo[];
+  readonly chain: ChainStatus | null;
 }
 
 type StartOutcome = { readonly ok: true; readonly run: RunInfo } | { readonly ok: false; readonly error: string };
@@ -35,28 +45,38 @@ export class FleetClient {
   private descriptor: RunnerDescriptor | null = null;
   private spawning: Promise<boolean> | null = null;
   private pollTimer: ReturnType<typeof setInterval> | null = null;
-  private lastRunsJson = '[]';
+  private lastSnapshotJson = '';
 
   constructor(private readonly opts: FleetClientOpts) {}
 
-  /** All runs, newest first; `[]` when no runner is alive (never throws,
-   *  never spawns — the runner comes up on `start` only). */
+  /** All runs plus the chain state, newest first; empty/null when no
+   *  runner is alive (never throws, never spawns — the runner comes up
+   *  on `start` only). */
   async runs(): Promise<readonly RunInfo[]> {
     try {
       if (!(await this.withRunner())) {
+        this.push({ runs: [], chain: null });
         return [];
       }
-      const data = await this.get<{ runs: RunInfo[] }>('/status');
-      const json = JSON.stringify(data.runs);
-      if (json !== this.lastRunsJson) {
-        this.lastRunsJson = json;
-        this.opts.onRunsChanged(data.runs);
-      }
+      const [data, chain] = await Promise.all([
+        this.get<{ runs: RunInfo[] }>('/status'),
+        this.get<ChainStatus>('/chain').catch(() => null),
+      ]);
+      this.push({ runs: data.runs, chain });
       this.pollWhile(data.runs);
       return data.runs;
     } catch {
       return [];
     }
+  }
+
+  private push(fleet: FleetSnapshot): void {
+    const json = JSON.stringify(fleet);
+    if (json === this.lastSnapshotJson) {
+      return;
+    }
+    this.lastSnapshotJson = json;
+    this.opts.onFleetChanged(fleet);
   }
 
   async start(request: RunRequest): Promise<StartOutcome> {
@@ -90,6 +110,78 @@ export class FleetClient {
         headers: this.headers(),
       });
       return res.ok ? await res.text() : null;
+    } catch {
+      return null;
+    }
+  }
+
+  // --- the chain (M85, ADR-0077) -----------------------------------------
+
+  /** The chain's control state, or null when no runner is alive. */
+  async chainStatus(): Promise<ChainStatus | null> {
+    try {
+      if (await this.withRunner()) {
+        return await this.get<ChainStatus>('/chain');
+      }
+    } catch {
+      // fall through
+    }
+    return null;
+  }
+
+  /** Points the runner at a tickets vault. Never spawns: a snapshot
+   *  read must not bring a runner up; the next explicit interaction
+   *  will. A configured chain re-points here when the board moves. */
+  async configureChain(config: ChainConfig): Promise<void> {
+    try {
+      if (await this.withRunner()) {
+        await this.post('/chain/config', config);
+      }
+    } catch {
+      // the runner is gone; the next start re-configures
+    }
+  }
+
+  async setMaster(mode: ChainMaster): Promise<ChainStatus | null> {
+    if (!(await this.ensureRunner())) {
+      return null;
+    }
+    try {
+      return await this.post<ChainStatus>('/chain/master', { mode });
+    } catch {
+      return null;
+    }
+  }
+
+  async setColumn(phase: string, mode: ColumnMode): Promise<ChainStatus | null> {
+    if (!(await this.ensureRunner())) {
+      return null;
+    }
+    try {
+      return await this.post<ChainStatus>('/chain/column', { phase, mode });
+    } catch {
+      return null;
+    }
+  }
+
+  async stopColumn(phase: string): Promise<ChainStatus | null> {
+    if (!(await this.ensureRunner())) {
+      return null;
+    }
+    try {
+      return await this.post<ChainStatus>('/chain/column', { phase, stop: true });
+    } catch {
+      return null;
+    }
+  }
+
+  /** Notaus: halt the chain and abort every live run. */
+  async abortAll(): Promise<ChainStatus | null> {
+    if (!(await this.ensureRunner())) {
+      return null;
+    }
+    try {
+      return await this.post<ChainStatus>('/chain/abort', {});
     } catch {
       return null;
     }

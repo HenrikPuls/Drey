@@ -9,6 +9,7 @@ import { parseDocument } from 'yaml';
 import { splitFrontmatter } from '../../../shared/frontmatter';
 import {
   priorityWeight,
+  phaseWithoutPoolKeys,
   resolveCardWorker,
   type BoardColumn,
   type BoardSnapshot,
@@ -18,6 +19,7 @@ import {
   type TicketIssue,
   type TicketPriority,
 } from '../shared/tickets';
+import { checkpointPhaseIds } from './fleet/chain';
 import { parseTicketFile, ticketPathParts } from './ticket-files';
 
 const PHASE_ID = /^[a-z][a-z0-9-]*$/;
@@ -64,12 +66,25 @@ export function parsePipeline(text: string): PipelineParse {
     seen.add(id);
     const wipRaw = map['wip'];
     const wip = typeof wipRaw === 'number' && Number.isInteger(wipRaw) && wipRaw > 0 ? wipRaw : null;
+    const workerRaw = map['worker'];
+    const worker = typeof workerRaw === 'string' && workerRaw.trim() !== '' ? workerRaw.trim() : null;
+    const modelRaw = map['model'];
+    const model = typeof modelRaw === 'string' && modelRaw.trim() !== '' ? modelRaw.trim() : null;
+    const workersRaw = map['workers'];
+    const workers =
+      typeof workersRaw === 'number' && Number.isInteger(workersRaw) && workersRaw > 0 ? workersRaw : 1;
+    const promptRaw = map['prompt'];
+    const prompt = typeof promptRaw === 'string' && promptRaw.trim() !== '' ? promptRaw.trim() : null;
     phases.push({
       id,
       title: typeof map['title'] === 'string' && map['title'].trim() !== '' ? map['title'] : id,
       wip,
       claim: map['claim'] === true,
       handover: typeof map['handover'] === 'string' && map['handover'].trim() !== '' ? map['handover'] : 'manual',
+      worker,
+      model,
+      workers,
+      prompt,
     });
   }
   return { phases, error: null };
@@ -431,7 +446,7 @@ export function assembleBoard(input: AssembleInput): BoardSnapshot {
     if (!knownDirs.has(dir)) {
       issues.push({ level: 'warning', message: `directory "${dir}" is not a phase in pipeline.md` });
       columns.push({
-        phase: { id: dir, title: dir, wip: null, claim: false, handover: 'manual' },
+        phase: phaseWithoutPoolKeys({ id: dir, title: dir, wip: null, claim: false, handover: 'manual' }),
         unknown: true,
         tickets: orderColumn(byPhase.get(dir)!, orderParse.pins[dir], columnKey(dir)),
       });
@@ -450,5 +465,6 @@ export function assembleBoard(input: AssembleInput): BoardSnapshot {
     reposError: reposParse.error,
     columns,
     issues,
+    checkpoints: [...checkpointPhaseIds(columns)],
   };
 }
