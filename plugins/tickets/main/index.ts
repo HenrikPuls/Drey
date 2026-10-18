@@ -342,7 +342,10 @@ class BoardService {
       }
 
       const text = await this.ctx.vault.read(card.path, { vaultId: vault.id });
-      const claims = toPhase.claim && card.meta.claimedBy === null ? { claimBy: OWNER } : {};
+      // A hand-move never touches the claim (owner ruling, 2026-10-18): a
+      // stamp here would block the target column's pool, since the
+      // dispatcher never takes claimed cards. Claims belong to the
+      // takeover/release menu and to the fleet's own moves.
       let patched: string;
       try {
         patched = patchTicketFile(text, {
@@ -350,7 +353,6 @@ class BoardService {
           from: input.from,
           now: new Date(),
           actor: OWNER,
-          ...claims,
         });
       } catch (error) {
         return { ok: false, error: messageOf(error) };

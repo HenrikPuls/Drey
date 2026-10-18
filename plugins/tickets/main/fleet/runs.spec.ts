@@ -193,6 +193,36 @@ describe('RunSupervisor', () => {
     await expect(fsp.access(path.join(vaultDir, rel))).rejects.toBeDefined();
   });
 
+  it('a fleet move into a non-claim phase releases a stale claim', async () => {
+    const { sup, adapter } = supervisor();
+    const rel = await writeTicket();
+    const started = await sup.start(request({ ticketRelPath: rel }));
+    const id = (started as { run: { id: string } }).run.id;
+
+    // A claim left over from an earlier round rides on the live ticket…
+    const live = path.join(vaultDir, rel);
+    await fsp.writeFile(
+      live,
+      patchTicketFile(await fsp.readFile(live, 'utf8'), {
+        to: 'plan',
+        from: null,
+        now: new Date('2026-10-17T12:00:01Z'),
+        actor: 'owner@desk',
+        claimBy: 'owner@desk',
+      }),
+      'utf8',
+    );
+
+    // …but the fleet's own move never carries it into the next column.
+    adapter.handles[0]!.result();
+    adapter.handles[0]!.fail(0);
+    await vi.waitFor(() => expect(sup.get(id)?.state).toBe('done'));
+
+    const movedRel = 'tickets/build/T-0001.md';
+    const moved = await fsp.readFile(path.join(vaultDir, movedRel), 'utf8');
+    expect(parseTicketFile(moved, movedRel).meta.claimedBy).toBeNull();
+  });
+
   it('a red gate fails the run and the ticket stays put', async () => {
     const { sup, adapter } = supervisor({
       execShell: async () => Promise.reject(new Error('exit 1\nTests failed')),

@@ -537,8 +537,10 @@ export class RunSupervisor {
       const abs = (rel: string): string => path.join(request.ticketsVaultPath, rel);
       const text = await fsp.readFile(abs(oldRel), 'utf8');
       // A claim-flagged next phase stamps the fleet's identity; otherwise
-      // the existing claim rides along (takeover stays the owner's move).
-      const claims = request.claimIdentity !== null ? { claimBy: request.claimIdentity } : {};
+      // the move releases a stale claim — a claim must never ride along
+      // into a column whose pool it would block (review finding 3).
+      const claims =
+        request.claimIdentity !== null ? { claimBy: request.claimIdentity } : { releaseClaim: true };
       const patched = patchTicketFile(text, {
         to: nextPhase,
         from: run.currentPhase,

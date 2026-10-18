@@ -533,7 +533,7 @@ export class Orchestrator {
         now: this.now(),
         actor: this.agentActor(),
         action,
-        ...(claims ? { claimBy: this.agentActor() } : {}),
+        ...(claims ? { claimBy: this.agentActor() } : { releaseClaim: true }),
       });
       await fsp.mkdir(path.dirname(abs(toRel)), { recursive: true });
       await fsp.rename(abs(fromRel), abs(toRel));
