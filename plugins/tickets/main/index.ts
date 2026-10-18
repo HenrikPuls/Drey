@@ -41,6 +41,7 @@ import {
 import { openTerminalAt } from './open-terminal';
 import { TicketsGit, type RepoLocation } from './tickets-git';
 import { createFleetMcpTools } from './mcp-tools';
+import { DEFAULT_PROMPTS } from './default-prompts';
 import { FleetClient } from './fleet-client';
 import { agentIdentity, composeRunRequest } from './fleet/request';
 import { checkpointPhaseIds, columnPromptRef, isAutoPhase, nextPhaseIdOf } from './fleet/chain';
@@ -56,7 +57,7 @@ const DEFAULT_PIPELINE = `---
 phases:
   - { id: inbox, title: Inbox, handover: manual }
   - { id: prioritized, title: Prioritized, handover: manual }
-  - { id: plan, title: Plan, wip: 1, handover: manual }
+  - { id: plan, title: Plan, wip: 1, handover: agent plan-default }
   - { id: plan-review, title: Plan review, handover: manual }
   - { id: build, title: Build, wip: 3, claim: true, handover: agent build-default }
   - { id: review, title: Review, handover: manual }
@@ -67,6 +68,8 @@ The pipeline: ordered phases (first = capture target, last = terminal),
 configurable per handover (manual | agent <prompt-ref> | ci | none).
 See specs/ticket-schema.md. Edit freely; the board follows on refresh.
 `;
+
+const PROMPTS_DIR = 'tickets/_meta/prompts';
 
 const DEFAULT_ORDER = `# Column order pins — listed ids form the top of their column
 
@@ -676,21 +679,25 @@ class BoardService {
       if (await this.readOptional(target.id, PIPELINE_PATH) !== null) {
         return { ok: false, error: `vault "${target.name}" already has a tickets board` };
       }
+      const promptPaths = Object.keys(DEFAULT_PROMPTS).map((ref) => `${PROMPTS_DIR}/${ref}.md`);
       try {
         await this.ctx.vault.write(PIPELINE_PATH, DEFAULT_PIPELINE, { vaultId: target.id });
         await this.ctx.vault.write(ORDER_PATH, DEFAULT_ORDER, { vaultId: target.id });
         await this.ctx.vault.write(REPOS_PATH, DEFAULT_REPOS, { vaultId: target.id });
+        for (const [ref, text] of Object.entries(DEFAULT_PROMPTS)) {
+          await this.ctx.vault.write(`${PROMPTS_DIR}/${ref}.md`, text, { vaultId: target.id });
+        }
       } catch (error) {
         return { ok: false, error: `write failed: ${messageOf(error)}` };
       }
       const warning = await this.commit(
         target,
-        [PIPELINE_PATH, ORDER_PATH, REPOS_PATH],
+        [PIPELINE_PATH, ORDER_PATH, REPOS_PATH, ...promptPaths],
         'tickets: initialize board',
       );
       this.ctx.vault.announceChanges({
         vaultId: target.id,
-        changedPaths: [PIPELINE_PATH, ORDER_PATH, REPOS_PATH],
+        changedPaths: [PIPELINE_PATH, ORDER_PATH, REPOS_PATH, ...promptPaths],
       });
       this.announceChanged();
       return { ok: true, ...(warning === null ? {} : { warning }) };

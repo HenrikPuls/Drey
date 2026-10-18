@@ -54,6 +54,17 @@ export function isOlderBuild(daemonBuild: string, clientBuild: string): boolean 
   return Number.isFinite(daemon) && Number.isFinite(client) && daemon < client;
 }
 
+/**
+ * A daemon that reports no build stamp predates the stamp itself, so it is
+ * older than every build that can ask — it must be retired, not trusted.
+ */
+export function isStaleDaemon(daemonBuild: string | undefined, clientBuild: string | null): boolean {
+  if (daemonBuild === undefined) {
+    return clientBuild !== null;
+  }
+  return clientBuild !== null && isOlderBuild(daemonBuild, clientBuild);
+}
+
 export class FleetClient {
   private descriptor: RunnerDescriptor | null = null;
   private spawning: Promise<boolean> | null = null;
@@ -276,14 +287,11 @@ export class FleetClient {
    * instance too.
    */
   private async isStale(peer: RunnerDescriptor): Promise<boolean> {
-    if (peer.build === undefined) {
-      return false;
-    }
     const mine = await fsp
       .stat(this.opts.runnerScript)
       .then((s) => s.mtime.toISOString())
       .catch(() => null);
-    return mine !== null && isOlderBuild(peer.build, mine);
+    return isStaleDaemon(peer.build, mine);
   }
 
   /** Asks a stale runner to exit, waits until it is actually gone, and

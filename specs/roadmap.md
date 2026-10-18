@@ -92,6 +92,15 @@ milestone 85 (ticket T-0007, ADR-0077 — the board now runs itself
 wherever a column has a worker; see the changelog; the owner's live
 rounds on real runs are still pending there).
 
+**Runner retirement of stamp-less daemons + board setup defaults**
+(owner request, outside the list, 2026-10-18, milestone 87). A fleet
+daemon that reports no build stamp predates the stamp and was never
+retired, so an old build kept serving (it still pulled from
+`prioritized`). Treat it as stale. And "Initialize board" seeds the
+plan and build columns as agent handovers plus the three prompts
+(`plan-default`, `build-default`, `review-default`) in
+`tickets/_meta/prompts/`.
+
 ### Next
 
 ~~7. **Screenshots in the app.** Capture a region or window and embed it

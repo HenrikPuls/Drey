@@ -20,6 +20,22 @@ recorded as an explicit decision. The parity checklist lives in
 
 ## Recent milestones
 
+### Milestone 87 — stale runner daemons retire; the board seeds its prompts (owner request, outside the list)
+
+**Not yet manually verified by the owner.**
+
+- **A daemon without a build stamp is stale.** `isStaleDaemon`
+  (`fleet-client.ts`): a runner whose descriptor carries no `build` predates
+  the stamp, so the client retires and respawns it. Before, it was trusted
+  forever and kept running pre-fix dispatch (pulling from `prioritized`,
+  refusing plan tickets for missing acceptance criteria).
+- **Setup defaults.** "Initialize board" writes the plan column as
+  `agent plan-default` (build was already `agent build-default`) and seeds
+  `tickets/_meta/prompts/{plan,build,review}-default.md`
+  (`main/default-prompts.ts`, same texts as the owner's repo). A column's
+  prompt is passed with the ticket as before (`composeInstruction`).
+- Specs: `fleet-client.spec.ts`, `default-prompts.spec.ts`.
+
 ### Milestone 85 — the chain runs itself: continuous orchestration
 
 Ticket [T-0007](https://github.com/HenrikPuls/Drey) in the owner's
