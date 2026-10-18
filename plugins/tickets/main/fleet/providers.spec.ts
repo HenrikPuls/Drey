@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { claudeCodeAdapter, modelBody, OPENCODE_API, opencodeAdapter, type FetchFn, type NormalizedEvent, type ProviderStart } from './providers';
+import { claudeCodeAdapter, modelBody, OPENCODE_API, opencodeAdapter, type FetchFn, type NormalizedEvent, type ProviderStart, INTERRUPT_WAIT_MS, toolActivity } from './providers';
 import type { RunnerProcess, SpawnFn } from './procs';
 
 /**
@@ -280,6 +280,33 @@ describe('the opencode adapter', () => {
     proc.exit(null);
     vi.useRealTimers();
   });
+
+  it('stop still kills the serve process when the interrupt never answers', async () => {
+    vi.useFakeTimers();
+    const { fetch } = scriptedFetch({
+      sessionCreated: () => undefined,
+      prompts: [],
+      interrupts: [],
+      messages: () => [],
+    });
+    const hanging: FetchFn = (url, init) =>
+      url.includes('/interrupt') ? new Promise<Response>(() => undefined) : fetch(url, init);
+    const proc = fakeProcess();
+    const { start } = collect();
+    const handle = opencodeAdapter(spawnOf(proc), hanging, async () => 47000).spawn(start);
+    await vi.advanceTimersByTimeAsync(0);
+    proc.stdout('server password sekrit');
+    await vi.advanceTimersByTimeAsync(1_000);
+
+    const stopped = handle.stop();
+    expect(proc.killTree).not.toHaveBeenCalled();
+    await vi.advanceTimersByTimeAsync(INTERRUPT_WAIT_MS);
+    await stopped;
+    expect(proc.killTree).toHaveBeenCalled();
+
+    proc.exit(null);
+    vi.useRealTimers();
+  });
 });
 
 describe('modelBody — the OpenCode model pin (v2 shape)', () => {
@@ -293,5 +320,18 @@ describe('modelBody — the OpenCode model pin (v2 shape)', () => {
   it('a pin without a slash rides as the modelID; no pin sends text only', () => {
     expect(modelBody('glm-5.3', 'go')).toEqual({ text: 'go', model: { providerID: '', modelID: 'glm-5.3' } });
     expect(modelBody(null, 'go')).toEqual({ text: 'go' });
+  });
+});
+
+describe('toolActivity — the one line a tool call shows on the lane', () => {
+  it('names the tool and its target', () => {
+    expect(toolActivity('read', { path: 'src/a.ts' })).toBe('read src/a.ts');
+    expect(toolActivity('shell', { command: 'git status --short' })).toBe('shell git status --short');
+    expect(toolActivity('grep', { pattern: 'prepareWorktree' })).toBe('grep prepareWorktree');
+  });
+
+  it('copes with a call without input and caps a long target', () => {
+    expect(toolActivity(undefined, undefined)).toBe('tool');
+    expect(toolActivity('shell', { command: 'x'.repeat(400) }).length).toBeLessThanOrEqual(140);
   });
 });

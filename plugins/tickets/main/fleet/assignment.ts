@@ -116,6 +116,12 @@ export interface InstructionInput {
   readonly plan: string | null;
   readonly prompt: string | null;
   readonly acceptance: readonly string[];
+  /**
+   * Absolute path of the ticket file in the tickets repo (outside the
+   * worktree). Named in the brief so the worker never has to hunt the
+   * disk for it — a plan-phase worker spent most of a run doing that.
+   */
+  readonly ticketFile?: string;
 }
 
 /**
@@ -146,6 +152,12 @@ export function composeInstruction(input: InstructionInput): string {
       `). Stay on that branch; it and the worktree are your only writable places.`,
   );
   parts.push(`The ticket sits in the "${input.phase}" phase of the owner's board.`);
+  if (input.ticketFile !== undefined && input.ticketFile !== '') {
+    parts.push(
+      `The ticket file: ${input.ticketFile} — it lives in the tickets repo, outside the worktree, and is the one ` +
+        `file besides the worktree you may edit (the plan and the Log go there). Use this path directly; do not search the disk for it.`,
+    );
+  }
   const description = input.description.trim();
   if (description !== '') {
     parts.push(`What and why:\n${description}`);

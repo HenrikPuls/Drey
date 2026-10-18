@@ -679,7 +679,12 @@ export class Orchestrator {
       for (const item of plan) {
         await this.dispatchOne(config, snap.columns, item.workingPhase, item.card, snap);
       }
-      this.noteWaits(snap, busyTickets, dispatched);
+      const detachedTickets = new Set<string>(
+        this.allRecords()
+          .filter((record) => record.info.state === 'detached')
+          .map((record) => record.info.ticketId),
+      );
+      this.noteWaits(snap, busyTickets, dispatched, detachedTickets);
       for (const ticket of [...this.notes.keys()]) {
         if (!this.notedThisPass.has(ticket)) {
           this.notes.delete(ticket);
@@ -708,7 +713,12 @@ export class Orchestrator {
    * in a playing column. The chain log should say WHY nothing moves —
    * the owner once watched ten silent minutes with no explanation.
    */
-  private noteWaits(snap: BoardSnapshot, busy: ReadonlySet<string>, dispatched: ReadonlySet<string>): void {
+  private noteWaits(
+    snap: BoardSnapshot,
+    busy: ReadonlySet<string>,
+    dispatched: ReadonlySet<string>,
+    detached: ReadonlySet<string>,
+  ): void {
     if (this.master !== 'run') {
       return; // the chain is off — silence is the honest state
     }
@@ -716,7 +726,19 @@ export class Orchestrator {
     for (const column of snap.columns) {
       const mode = this.columns[column.phase.id] ?? 'playing';
       for (const card of column.tickets) {
-        if (dispatched.has(card.id) || busy.has(card.id)) {
+        if (dispatched.has(card.id)) {
+          continue;
+        }
+        if (busy.has(card.id)) {
+          // A detached run (the runner restarted while its worker lived on)
+          // blocks its ticket until it is stopped — say so, or the column
+          // looks idle for no reason.
+          if (detached.has(card.id) && mode !== 'held' && isAutoPhase(column.phase)) {
+            this.noteSkip(
+              card.id,
+              `dispatch holds ${card.id}: a detached run still blocks it — stop the run (its worker may still be alive) to free the ticket`,
+            );
+          }
           continue;
         }
         if (mode === 'held') {

@@ -34,7 +34,41 @@ recorded as an explicit decision. The parity checklist lives in
   `tickets/_meta/prompts/{plan,build,review}-default.md`
   (`main/default-prompts.ts`, same texts as the owner's repo). A column's
   prompt is passed with the ticket as before (`composeInstruction`).
-- Specs: `fleet-client.spec.ts`, `default-prompts.spec.ts`.
+- **Clear in the chain-log tab.** A "Clear" button hides every line logged
+  up to now; only newer lines show (session-only; the daemon's ring buffer and
+  `runner.log` stay untouched). Pure filter in `renderer/chain-log.ts`.
+- Specs: `fleet-client.spec.ts`, `default-prompts.spec.ts`, `chain-log.spec.ts`.
+
+### Milestone 86 — worker lanes on the tickets board (owner request, outside the list)
+
+Part of ticket T-0007's review round. **Not yet manually verified by
+the owner** — typecheck, lint and the plugin suite are green; the board
+was not yet looked at in the running app.
+
+- **Worker lanes replace the run footer.** Every working column shows a
+  "Workers" strip under its head: one lane per live run of its pool,
+  folded to a single line (traffic light, state in words, ticket, a
+  small context bar) and unfolded to the worker's current activity, its
+  context window against 200k, in/out tokens, cost, age and the
+  Watch / Steer / Stop buttons. A lane that needs a look (amber, red)
+  opens by itself until the owner folds it; the choice is per run and
+  lives in memory only.
+- **The board look follows the redesign:** wider columns (264 px, 320 px with a worker pool), count pills, 8 px cards and a dashed pool tag, a 40 px rail for folded columns, and a pill row above the board (working / need attention / stalled / tokens in flight).
+- **The light** (`renderer/worker-status.ts`, pure + spec): red = a
+  running worker silent for 5 minutes ("Stalled Nm"), amber = context at
+  80 % or more, or stopping; green otherwise. It always carries a word.
+- **Data.** `RunInfo` gained optional `activity`, `contextTokens` and
+  `column`; both adapters report them (claude-code from each assistant
+  event's usage + tool use, opencode from the last assistant message's
+  tokens + text). The context window itself is not known to the runner —
+  the board assumes 200k.
+- **Fix: a no-op bookkeeping commit no longer logs as a failure.** Git prints "nothing to commit" on stdout, which execFile's error message omits, so `commitPaths` rethrew it and the runner log showed "clearing the ticket's run stamp failed"; stdout is now folded into the message and "no changes added to commit" is recognised too (`tickets-git.spec.ts`).
+- **Fix: the run brief names the ticket file.** A plan-phase worker burned most of a run (10 model calls, ~290k input tokens counting cache reads, one line of output) recursively searching the disk for `T-0047.md`, which lives in the tickets repo, outside the worktree it was told was its only writable place. `composeInstruction` now carries the absolute ticket-file path and says it is editable and must not be searched for (`fleet-fields.spec.ts`).
+- **Fix: a run the daemon dispatches on its own now shows up.** The client polled the runner only while it already knew of a live run, so a run started by the chain (not by this client) appeared only after a manual refresh and the column looked idle while the worker ran. It now also polls while the chain master is `run`.
+- **Tool calls are visible.** The opencode adapter turns every tool call into a lane line (`read src/a.ts`, `shell git status`) and counts it as activity, so a worker that only calls tools neither looks silent nor stalls (`toolActivity`, `providers.spec.ts`).
+- **The chain log runs in the host's Markdown editor** (SDK 1.30, [ADR-0078](../docs/09_architecture_decisions/0078-markdown-view-for-plugins.md)): new `ui.createMarkdownView` hands a plugin the existing `MarkdownSurface` as an element (read-only viewer or compact prompt box, tail-following, no document behind it). The log tab replaced its `<pre>` with it, one fenced block per refresh (`asCodeBlock`). Specs: `markdown-view.spec.ts`, `chain-log.spec.ts`.
+- **Fix: a stop no longer waits forever for the opencode interrupt.** `stop()` awaited the server's answer to the soft interrupt without a bound, so when it never came the runner's 10 s shutdown race exited first, the tree-kill never ran and the worker lived on unsupervised (it finished its plan 16 minutes later while its run sat `detached`). The wait is now 3 s (`INTERRUPT_WAIT_MS`), then the tree-kill runs (`providers.spec.ts`). The chain log also says when a detached run blocks a ticket.
+- Specs: `worker-status.spec.ts`.
 
 ### Milestone 85 — the chain runs itself: continuous orchestration
 

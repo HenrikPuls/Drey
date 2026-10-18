@@ -68,6 +68,14 @@ describe('TicketsGit', () => {
     expect(commitCount).toBe(1);
   });
 
+  it('tolerates git\'s "no changes added to commit" outcome too', async () => {
+    const { exec } = recorder((args) =>
+      args.includes('commit') ? new Error('Command failed: git commit\nno changes added to commit') : '',
+    );
+    const git = new TicketsGit(() => 'git', exec);
+    await expect(git.commitPaths('E:/repo', ['a.md'], 'msg')).resolves.toBeUndefined();
+  });
+
   it('rethrows real failures and never interleaves queued runs', async () => {
     const order: string[] = [];
     let failFirst = true;

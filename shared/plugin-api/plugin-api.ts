@@ -370,6 +370,52 @@ export interface TagFieldHandle {
   dispose(): void;
 }
 
+/** Options for `ui.createMarkdownView` (SDK 1.30). */
+export interface MarkdownViewOptions {
+  /** Initial text. */
+  readonly content?: string;
+  /**
+   * The editor's view mode: `live` (Live Preview, editable — the default),
+   * `view` (fully rendered and read-only, like the editor's reading mode)
+   * or `source` (raw Markdown). `view` forces read-only.
+   */
+  readonly mode?: 'live' | 'view' | 'source';
+  /**
+   * Blocks user input (the text stays selectable and copyable);
+   * programmatic `setContent` keeps working. Default false.
+   */
+  readonly readOnly?: boolean;
+  /**
+   * The compact prompt-box look (what the assistant composer is): a few
+   * lines high, Enter submits. Default false — the full document look.
+   */
+  readonly compact?: boolean;
+  /** Compact only: whether Enter submits (default true) or inserts a newline. */
+  readonly submitOnEnter?: boolean;
+  /** Text shown while the view is empty. */
+  readonly placeholder?: string;
+  /** Fires with the whole text after every user edit. */
+  readonly onChange?: (text: string) => void;
+  /** Compact only: Enter was pressed; gets the current text. */
+  readonly onSubmit?: (text: string) => void;
+}
+
+/** Handle to a mounted Markdown view (see `ui.createMarkdownView`). */
+export interface MarkdownViewHandle {
+  /** The view root — append it into your pane DOM and give it a height (flex or fixed). */
+  readonly element: HTMLElement;
+  /**
+   * Replaces the whole text. While the user is scrolled to the bottom the
+   * view follows the growing tail; scrolled up, it stays where it is.
+   */
+  setContent(text: string): void;
+  getContent(): string;
+  setReadOnly(readOnly: boolean): void;
+  focus(): void;
+  /** Detaches the view and releases it; call when the pane unmounts. */
+  dispose(): void;
+}
+
 /** One plain-text run of a parsed inline string (`links.parseInline`, SDK 1.11). */
 export interface InlineTextSegment {
   readonly kind: 'text';
@@ -580,6 +626,15 @@ export interface DreyPluginApi {
      * via `setValues`, dispose with the panel.
      */
     createTagField(opts: TagFieldOptions): TagFieldHandle;
+    /**
+     * The host's own Markdown editor (SDK 1.30) — the CodeMirror surface the
+     * document tabs and the assistant composer use, with Live Preview, the
+     * extended dialect and the host theme — mounted into a plain element.
+     * Read-only and following the tail it is a log or transcript viewer;
+     * `compact` with `onSubmit` it is a prompt box. Mount `handle.element`,
+     * dispose with the pane. Not bound to any document: no save, no tab.
+     */
+    createMarkdownView(opts: MarkdownViewOptions): MarkdownViewHandle;
     /**
      * A glyph from the host's vendored icon set as a plain SVG element
      * (SDK 1.10) -- `currentColor` stroke, sized by `size` (px, default 16).

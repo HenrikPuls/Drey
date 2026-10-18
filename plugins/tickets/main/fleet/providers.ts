@@ -30,6 +30,17 @@ export interface NormalizedEvent {
   readonly tokensIn?: number;
   readonly tokensOut?: number;
   readonly costUsd?: number;
+  /** One short line: what the worker is doing now (a tool call, a text opening). */
+  readonly activity?: string;
+  /** The current context window's size in tokens. */
+  readonly contextTokens?: number;
+}
+
+/** Collapses a text to the one-line activity the board shows. */
+export function activityLine(text: string): string {
+  const first = text.split('\n').find((line) => line.trim() !== '') ?? '';
+  const flat = first.replace(/\s+/g, ' ').trim();
+  return flat.length > 140 ? `${flat.slice(0, 139)}…` : flat;
 }
 
 export interface ProviderStart {
@@ -75,6 +86,7 @@ const nowIso = (now: NowFn): string => now().toISOString();
 interface ClaudeUsage {
   readonly input_tokens?: number;
   readonly cache_read_input_tokens?: number;
+  readonly cache_creation_input_tokens?: number;
   readonly output_tokens?: number;
 }
 
@@ -115,7 +127,10 @@ export function claudeCodeAdapter(spawnFn: SpawnFn, now: NowFn = (): Date => new
             type?: string;
             subtype?: string;
             session_id?: string;
-            message?: { usage?: ClaudeUsage };
+            message?: {
+              usage?: ClaudeUsage;
+              content?: ReadonlyArray<{ type?: string; name?: string; text?: string; input?: Record<string, unknown> }>;
+            };
             usage?: ClaudeUsage;
             total_cost_usd?: number;
             result?: string;
@@ -128,6 +143,32 @@ export function claudeCodeAdapter(spawnFn: SpawnFn, now: NowFn = (): Date => new
           }
           if (event.type === 'system' && event.subtype === 'init' && typeof event.session_id === 'string') {
             start.onSessionRef(event.session_id);
+            continue;
+          }
+          if (event.type === 'assistant' && event.message !== undefined) {
+            // Every model call reports its own usage: the input side of
+            // the latest one is the size of the context right now.
+            const usage = event.message.usage;
+            const contextTokens =
+              usage === undefined
+                ? undefined
+                : (usage.input_tokens ?? 0) + (usage.cache_read_input_tokens ?? 0) + (usage.cache_creation_input_tokens ?? 0);
+            const parts = event.message.content ?? [];
+            const tool = parts.find((p) => p.type === 'tool_use');
+            const activity =
+              tool !== undefined
+                ? activityLine(
+                    `${tool.name ?? 'tool'} ${String(tool.input?.['file_path'] ?? tool.input?.['command'] ?? tool.input?.['pattern'] ?? '')}`,
+                  )
+                : activityLine(parts.find((p) => p.type === 'text')?.text ?? '');
+            if (contextTokens !== undefined || activity !== '') {
+              start.onEvent({
+                ts: nowIso(now),
+                kind: 'usage',
+                ...(contextTokens !== undefined ? { contextTokens } : {}),
+                ...(activity !== '' ? { activity } : {}),
+              });
+            }
             continue;
           }
           if (event.type === 'result') {
@@ -182,6 +223,16 @@ interface OcUsage {
 interface OcContentPart {
   readonly type?: string;
   readonly text?: string;
+  /** A `tool` part: the call's id, the tool's name and its input. */
+  readonly id?: string;
+  readonly name?: string;
+  readonly state?: { readonly input?: Readonly<Record<string, unknown>> };
+}
+
+/** One line for a tool call: `read src/a.ts`, `shell git status`, `grep prepareWorktree`. */
+export function toolActivity(name: string | undefined, input: Readonly<Record<string, unknown>> | undefined): string {
+  const target = input?.['path'] ?? input?.['filePath'] ?? input?.['file_path'] ?? input?.['command'] ?? input?.['pattern'] ?? '';
+  return activityLine(`${name ?? 'tool'} ${typeof target === 'string' ? target : ''}`);
 }
 
 /** One message-list item — FLAT in v2 (no v1-style `info` wrapper). */
@@ -241,6 +292,9 @@ export function modelBody(model: string | null, text: string): {
   };
 }
 
+/** How long a stop waits for the server's answer to the soft interrupt before it kills the tree. */
+export const INTERRUPT_WAIT_MS = 3_000;
+
 export function opencodeAdapter(
   spawnFn: SpawnFn,
   fetchFn: FetchFn = fetch,
@@ -262,7 +316,9 @@ export function opencodeAdapter(
         turnDone: false,
         ended: false,
         seenAssistant: new Set<string>(),
+        seenTools: new Set<string>(),
         lastText: '',
+        contextTokens: 0,
       };
       let server: RunnerProcess | null = null;
       let pollTimer: ReturnType<typeof setInterval> | null = null;
@@ -355,12 +411,37 @@ export function opencodeAdapter(
             // The API lists newest first; walk chronologically.
             for (const m of (body.data ?? []).slice().reverse()) {
               if (m.type === 'assistant') {
+                if (m.tokens !== undefined) {
+                  state.contextTokens = (m.tokens.input ?? 0) + (m.tokens.cache?.read ?? 0);
+                }
                 if (m.id !== undefined && !state.seenAssistant.has(m.id)) {
                   state.seenAssistant.add(m.id);
                   const text = messageText(m);
                   if (text !== '') {
                     state.lastText = text;
-                    start.onEvent({ ts: nowIso(now), kind: 'text', text: text.slice(0, 8_000) });
+                    start.onEvent({
+                      ts: nowIso(now),
+                      kind: 'text',
+                      text: text.slice(0, 8_000),
+                      activity: activityLine(text),
+                      ...(state.contextTokens > 0 ? { contextTokens: state.contextTokens } : {}),
+                    });
+                  }
+                }
+                // Every tool call is one visible step: the lane shows what
+                // the worker reads and runs, and a worker that only calls
+                // tools no longer looks silent (and stalled).
+                for (const part of m.content ?? []) {
+                  if (part.type === 'tool' && part.id !== undefined && !state.seenTools.has(part.id)) {
+                    state.seenTools.add(part.id);
+                    const activity = toolActivity(part.name, part.state?.input);
+                    start.onEvent({
+                      ts: nowIso(now),
+                      kind: 'note',
+                      text: activity,
+                      activity,
+                      ...(state.contextTokens > 0 ? { contextTokens: state.contextTokens } : {}),
+                    });
                   }
                 }
                 if ((m.time?.completed ?? 0) > 0) {
@@ -410,10 +491,22 @@ export function opencodeAdapter(
         },
         stop: async () => {
           if (state.sessionRef !== null && address !== '') {
+            // The soft stop is a courtesy with a bound: a server that never
+            // answers the interrupt must not keep the tree-kill from running
+            // (an unbounded wait here let the runner's 10 s shutdown race
+            // exit first and leave the worker alive, unsupervised).
+            let timer: ReturnType<typeof setTimeout> | undefined;
             try {
-              await fetchFn(`${address}${OPENCODE_API.interrupt(state.sessionRef)}`, { method: 'POST', headers: auth });
+              await Promise.race([
+                fetchFn(`${address}${OPENCODE_API.interrupt(state.sessionRef)}`, { method: 'POST', headers: auth }),
+                new Promise<void>((resolve) => {
+                  timer = setTimeout(resolve, INTERRUPT_WAIT_MS);
+                }),
+              ]);
             } catch {
               // the tree-kill below is the guarantee
+            } finally {
+              clearTimeout(timer);
             }
           }
           await server?.killTree();

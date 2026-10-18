@@ -5,6 +5,7 @@
  * parses a ticket file. One module-level store serves every view; a
  * view is just a DOM root plus a render call.
  */
+import { asCodeBlock, chainLogStamp, visibleChainLog } from './chain-log';
 import type { DreyPluginApi, PluginWidgetContrib } from '../../../shared/plugin-api/renderer';
 import {
   ageOf,
@@ -24,6 +25,16 @@ import {
 import { createColumnCollapseStore } from './column-collapse';
 import { createTicketsSettingsPage } from './settings-page';
 import type { ChainStatus, RunInfo } from '../main/fleet/protocol';
+import {
+  CONTEXT_WARN,
+  contextFill,
+  DEFAULT_CONTEXT_WINDOW,
+  formatTokens,
+  lanesOfColumn,
+  opensByItself,
+  workerStatus,
+  type Light,
+} from './worker-status';
 
 function el<K extends keyof HTMLElementTagNameMap>(
   tag: K,
@@ -432,8 +443,11 @@ function columnNode(api: DreyPluginApi, column: BoardColumn): HTMLElement {
 
   const node = el('section', 'tickets-col');
   node.dataset['phase'] = column.phase.id;
-  if (parseHandover(column.phase.handover).mode === 'agent' && columnMode(column.phase.id) !== 'playing') {
-    node.classList.add('tickets-col-held');
+  if (parseHandover(column.phase.handover).mode === 'agent') {
+    node.classList.add('tickets-col-pool');
+    if (columnMode(column.phase.id) !== 'playing') {
+      node.classList.add('tickets-col-held');
+    }
   }
 
   const head = el('div', 'tickets-col-head');
@@ -477,6 +491,13 @@ function columnNode(api: DreyPluginApi, column: BoardColumn): HTMLElement {
   });
   head.append(fold);
   node.append(head);
+
+  if (parseHandover(column.phase.handover).mode === 'agent') {
+    const lanes = workerLanesNode(api, column);
+    if (lanes !== null) {
+      node.append(lanes);
+    }
+  }
 
   const list = el('div', 'tickets-col-list');
   for (const card of column.tickets) {
@@ -573,6 +594,10 @@ function buildBoardView(api: DreyPluginApi): BoardView {
       root.append(emptyState(api, snap, runMutation));
       return;
     }
+    const summary = fleetSummaryNode();
+    if (summary !== null) {
+      root.append(summary);
+    }
     const board = el('div', 'tickets-board');
     for (const column of snap.columns) {
       board.append(columnNode(api, column));
@@ -581,10 +606,6 @@ function buildBoardView(api: DreyPluginApi): BoardView {
     const metrics = metricsNode(snap);
     if (metrics !== null) {
       root.append(metrics);
-    }
-    const fleet = fleetFooterNode(api);
-    if (fleet !== null) {
-      root.append(fleet);
     }
     if (!snap.isGitRepo) {
       const warn = el('div', 'tickets-warn');
@@ -704,7 +725,7 @@ function emptyState(
   button.addEventListener('click', () => {
     if (!armed) {
       armed = true;
-      button.textContent = `Creates tickets/_meta/{pipeline,order,repos}.md in ${target} — click again`;
+      button.textContent = `Creates tickets/_meta/{pipeline,order,repos}.md and the default prompts in ${target} — click again`;
       button.classList.add('tickets-init-armed');
       return;
     }
@@ -907,53 +928,161 @@ function metricsNode(snap: BoardSnapshot): HTMLElement | null {
   return line;
 }
 
-/** One live run's row in the board footer: state, spend, and the three controls. */
-function fleetFooterNode(api: DreyPluginApi): HTMLElement | null {
+/** The pills above the board: lights of the whole fleet and today's spend. */
+function fleetSummaryNode(): HTMLElement | null {
   const runs = liveRuns();
   if (runs.length === 0) {
     return null;
   }
-  const footer = el('div', 'tickets-fleet');
-  for (const run of runs) {
-    const row = el('div', 'tickets-fleet-run');
-    row.append(
-      el('span', 'tickets-fleet-id', run.ticketId),
-      el('span', 'tickets-fleet-provider', run.provider),
-      el('span', `tickets-fleet-state tickets-fleet-${run.state}`, run.state),
-    );
-    const age = ageOf(run.startedAt);
-    if (age !== '') {
-      const stamp = el('span', 'tickets-age', age);
-      stamp.title = `started ${run.startedAt}`;
-      row.append(stamp);
+  const now = Date.now();
+  const lights = runs.map((run) => workerStatus(run, now).light);
+  const count = (light: Light): number => lights.filter((l) => l === light).length;
+  const bar = el('div', 'tickets-summary');
+  const pill = (light: Light | null, text: string, extra = ''): void => {
+    const p = el('span', `tickets-pill${extra}`);
+    if (light !== null) {
+      p.append(el('span', `tickets-light tickets-light-${light}`));
     }
-    const tokens = run.tokensIn + run.tokensOut;
-    if (tokens > 0) {
-      row.append(el('span', 'tickets-fleet-tok', `${(tokens / 1000).toFixed(1)}k tok`));
-    }
-    if (run.costUsd !== null && run.costUsd > 0) {
-      row.append(el('span', 'tickets-fleet-cost', `$${run.costUsd.toFixed(2)}`));
-    }
-    if (run.steerCount > 0) {
-      const steer = el('span', 'tickets-fleet-steer', `${run.steerCount}× steer`);
-      steer.title = `last steer rung: ${run.lastSteerRung ?? '—'}`;
-      row.append(steer);
-    }
-    const button = (label: string, title: string, onClick: () => void): void => {
-      const b = el('button', 'tickets-fleet-btn', label);
-      b.type = 'button';
-      b.title = title;
-      b.addEventListener('click', onClick);
-      row.append(b);
-    };
-    button('Watch', `Tail the run's stream (${run.id})`, () => openWatchModal(api, run.id));
-    button('Steer', 'Send a message into the live run', () => openSteerModal(api, run.id));
-    button('Stop', 'Kill the worker (the ticket stays in its phase)', () => {
-      void runMutation('Stopping the run', () => invokeBoard('fleetStop', { runId: run.id, reason: null }));
-    });
-    footer.append(row);
+    p.append(document.createTextNode(text));
+    bar.append(p);
+  };
+  pill('green', `${count('green')} working`);
+  if (count('amber') > 0) {
+    pill('amber', `${count('amber')} need attention`);
   }
-  return footer;
+  if (count('red') > 0) {
+    pill('red', `${count('red')} stalled`);
+  }
+  const tokens = runs.reduce((sum, r) => sum + r.tokensIn + r.tokensOut, 0);
+  pill(null, `${formatTokens(tokens)} tokens in flight`, ' tickets-pill-mono');
+  return bar;
+}
+
+/** Lanes the owner folded or unfolded by hand; a lane without an entry follows its light. */
+const laneOpen = new Map<string, boolean>();
+
+/**
+ * The worker lanes of one working column (the board redesign): a header
+ * line with the pool's lights and, per live run, a lane that folds down
+ * to one status line — light, state in words, ticket, context fill —
+ * and unfolds to what the worker is doing, its context window, its
+ * token spend and the controls. A lane that needs a look (amber, red)
+ * is open until the owner folds it.
+ */
+function workerLanesNode(api: DreyPluginApi, column: BoardColumn): HTMLElement | null {
+  const runs = lanesOfColumn(liveRuns(), column.phase.id);
+  const slots = column.phase.workers;
+  if (runs.length === 0 && slots <= 0) {
+    return null;
+  }
+  const now = Date.now();
+  const strip = el('div', 'tickets-lanes');
+
+  const statuses = runs.map((run) => workerStatus(run, now));
+  const worst: Light = statuses.some((s) => s.light === 'red')
+    ? 'red'
+    : statuses.some((s) => s.light === 'amber')
+      ? 'amber'
+      : 'green';
+  const head = el('div', 'tickets-lanes-head');
+  head.append(
+    el('span', `tickets-light tickets-light-${runs.length === 0 ? 'idle' : worst}`),
+    el('span', 'tickets-lanes-title', 'Workers'),
+    el('span', 'tickets-lanes-count', `${runs.length} of ${slots} busy`),
+  );
+  strip.append(head);
+
+  runs.forEach((run, index) => {
+    const status = statuses[index]!;
+    const open = laneOpen.get(run.id) ?? opensByItself(status);
+    const fill = contextFill(run);
+    const fillWarn = fill !== null && fill >= CONTEXT_WARN;
+    const lane = el('div', `tickets-lane tickets-lane-${status.light}`);
+    lane.classList.toggle('tickets-lane-open', open);
+
+    const summary = el('button', 'tickets-lane-summary');
+    summary.type = 'button';
+    summary.setAttribute('aria-expanded', String(open));
+    summary.title = open ? 'Fold the lane' : 'Unfold the lane';
+    const chevron = el('span', 'tickets-lane-chevron');
+    chevron.append(api.ui.icon(open ? 'chevron-down' : 'chevron-right', 11));
+    summary.append(
+      chevron,
+      el('span', `tickets-light tickets-light-${status.light}`),
+      el('span', `tickets-lane-state tickets-lane-state-${status.light}`, status.label),
+      el('span', 'tickets-lane-ticket', run.ticketId),
+    );
+    if (fill !== null && !open) {
+      const mini = el('span', 'tickets-lane-mini');
+      const miniBar = el('span', 'tickets-meter');
+      const miniFill = el('span', `tickets-meter-fill tickets-meter-${fillWarn ? 'amber' : 'green'}`);
+      miniFill.style.width = `${Math.round(fill * 100)}%`;
+      miniBar.append(miniFill);
+      mini.append(miniBar, el('span', 'tickets-lane-pct', `${Math.round(fill * 100)}%`));
+      summary.append(mini);
+    }
+    summary.addEventListener('click', () => {
+      laneOpen.set(run.id, !open);
+      notifyViews();
+    });
+    lane.append(summary);
+
+    if (open) {
+      const body = el('div', 'tickets-lane-body');
+      const activity = run.activity ?? '';
+      const act = el('div', 'tickets-lane-activity', activity !== '' ? activity : 'No output yet');
+      act.title = activity;
+      body.append(act);
+
+      const used = run.contextTokens ?? null;
+      const label = el(
+        'div',
+        'tickets-lane-context-row',
+        used === null
+          ? 'Context — not reported yet'
+          : `Context ${formatTokens(used)} / ${formatTokens(DEFAULT_CONTEXT_WINDOW)} · ${Math.round((fill ?? 0) * 100)}%`,
+      );
+      const bar = el('div', 'tickets-meter');
+      const barFill = el('div', `tickets-meter-fill tickets-meter-${fillWarn ? 'amber' : 'green'}`);
+      barFill.style.width = `${Math.round((fill ?? 0) * 100)}%`;
+      bar.append(barFill);
+      body.append(label, bar);
+
+      const tokens = el('div', 'tickets-lane-tokens');
+      tokens.append(
+        el('span', undefined, `in ${formatTokens(run.tokensIn)}`),
+        el('span', undefined, `out ${formatTokens(run.tokensOut)}`),
+      );
+      if (run.costUsd !== null && run.costUsd > 0) {
+        tokens.append(el('span', undefined, `$${run.costUsd.toFixed(2)}`));
+      }
+      const age = ageOf(run.startedAt);
+      if (age !== '') {
+        tokens.append(el('span', undefined, age));
+      }
+      body.append(tokens);
+
+      const actions = el('div', 'tickets-lane-actions');
+      const button = (icon: string, title: string, onClick: () => void): void => {
+        const b = el('button', 'tickets-col-btn');
+        b.type = 'button';
+        b.title = title;
+        b.setAttribute('aria-label', `${title} (${run.ticketId})`);
+        b.append(api.ui.icon(icon, 12));
+        b.addEventListener('click', onClick);
+        actions.append(b);
+      };
+      button('file-text', `Watch the run's stream (${run.id})`, () => openWatchModal(api, run.id));
+      button('message-circle', 'Send a message into the live run', () => openSteerModal(api, run.id));
+      button('square', 'Kill the worker (the ticket stays in its phase)', () => {
+        void runMutation('Stopping the run', () => invokeBoard('fleetStop', { runId: run.id, reason: null }));
+      });
+      body.append(actions);
+      lane.append(body);
+    }
+    strip.append(lane);
+  });
+  return strip;
 }
 
 function openRunModal(api: DreyPluginApi, card: TicketCard): void {
@@ -1111,6 +1240,10 @@ function openWatchModal(api: DreyPluginApi, runId: string): void {
 const CHAIN_LOG_KIND = 'tickets-chain-log';
 const CHAIN_LOG_KEY = 'chain-log://fleet-daemon';
 
+/** Lines stamped at or before this instant are hidden ("Clear"); the
+ *  daemon's ring buffer and runner.log on disk stay untouched. */
+let chainLogClearedAt = '';
+
 /** Opens (or focuses) the fleet daemon's log tab. */
 function openChainLog(api: DreyPluginApi): void {
   api.documents.addDoc(CHAIN_LOG_KIND, CHAIN_LOG_KEY, 'Fleet daemon log');
@@ -1121,38 +1254,61 @@ function openChainLog(api: DreyPluginApi): void {
  * view is scrolled down. Scrolling up pauses the follow; scrolling back
  * to the bottom resumes it — the terminal behavior (owner ruling).
  */
-function mountChainLog(host: HTMLElement): () => void {
+function mountChainLog(api: DreyPluginApi, host: HTMLElement): () => void {
   const wrap = el('div', 'tickets-chain-log');
+  const bar = el('div', 'tickets-chain-log-bar');
   const hint = el('div', 'tickets-chain-log-hint');
   hint.textContent =
     'Also on disk as <userData>/plugins/fleet/runner.log — follows the tail while you are at the bottom; scroll up to hold, back down to resume.';
-  const out = el('pre', 'tickets-chain-log-out');
-  out.textContent = 'Loading the daemon log…';
-  let follow = true;
-  const atBottom = (): boolean => out.scrollTop + out.clientHeight >= out.scrollHeight - 4;
-  const onScroll = (): void => {
-    follow = atBottom();
-  };
-  out.addEventListener('scroll', onScroll);
+  const clear = el('button', 'icon-btn');
+  clear.type = 'button';
+  clear.title = 'Clear the view — only lines logged from now on are shown (the file on disk is kept)';
+  clear.setAttribute('aria-label', 'Clear log');
+  clear.textContent = 'Clear';
+  bar.append(hint, clear);
+  let lastText = '';
+  // The host's own Markdown editor, read-only: the log is one fenced block,
+  // and the view itself follows the tail while it is scrolled to the bottom.
+  const view = api.ui.createMarkdownView({ mode: 'view', readOnly: true, content: asCodeBlock('Loading the daemon log…') });
+  view.element.classList.add('tickets-chain-log-out');
+  let alive = true;
   const pull = (): void => {
     void invokeBoard('fleetLog').then((result) => {
-      if (!out.isConnected) {
+      if (!alive) {
         return;
       }
-      const text = (result as { text?: string }).text ?? '';
-      out.textContent = text === '' ? '(the daemon has not logged anything yet)' : text;
-      if (follow) {
-        out.scrollTop = out.scrollHeight;
-      }
+      lastText = (result as { text?: string }).text ?? '';
+      render();
     });
   };
+  const render = (): void => {
+    const text = visibleChainLog(lastText, chainLogClearedAt);
+    view.setContent(
+      asCodeBlock(
+        text === ''
+          ? chainLogClearedAt === ''
+            ? '(the daemon has not logged anything yet)'
+            : '(cleared — new lines appear here)'
+          : text,
+      ),
+    );
+  };
+  clear.addEventListener('click', () => {
+    const stamps = lastText.split('\n').map(chainLogStamp).filter((x) => x !== '');
+    const newest = stamps[stamps.length - 1];
+    if (newest !== undefined) {
+      chainLogClearedAt = newest;
+    }
+    render();
+  });
   pull();
   const timer = setInterval(pull, 2_000);
-  wrap.append(hint, out);
+  wrap.append(bar, view.element);
   host.append(wrap);
   return () => {
+    alive = false;
     clearInterval(timer);
-    out.removeEventListener('scroll', onScroll);
+    view.dispose();
   };
 }
 
@@ -1285,7 +1441,7 @@ const plugin: { activate(api: DreyPluginApi): void } = {
       icon: 'scroll-text',
       serialize: () => null,
       restore: () => openChainLog(api),
-      mount: (el) => mountChainLog(el),
+      mount: (el) => mountChainLog(api, el),
       statusText: () => 'fleet daemon',
     });
 

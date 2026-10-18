@@ -7,6 +7,7 @@
  * stay with the caller.
  */
 import { hostname } from 'node:os';
+import path from 'node:path';
 import {
   branchForTicket,
   type PipelinePhase,
@@ -110,6 +111,7 @@ export function composeRunRequest(input: ComposeRunInput): ComposeRunResult {
       plan: sections.plan,
       prompt: input.promptText,
       acceptance,
+      ticketFile: path.join(input.vaultPath, input.card.path),
     }),
     acceptance,
     gate: acceptance.length > 0 ? 'commands' : 'structural',

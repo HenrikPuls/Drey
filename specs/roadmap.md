@@ -101,6 +101,16 @@ plan and build columns as agent handovers plus the three prompts
 (`plan-default`, `build-default`, `review-default`) in
 `tickets/_meta/prompts/`.
 
+**Worker takeover tab** (owner request, outside the list, 2026-10-18,
+follow-up of milestone 86). A lane's "Take over" opens a tab in the main
+view that shows the worker's conversation, lets the owner interrupt the
+running turn (session kept) and drive it with prompts, and hands it back.
+Needs: a soft `interrupt` on the provider handles (today `stop` kills
+the worker), a per-run human hold the dispatcher, reaper and gate respect
+while the owner drives, runner routes + the tab, and an ADR. The design
+is mocked in the "Tickets board redesign" artifact; the in-app browser
+route was considered and rejected (claude-code has no web UI). The transcript and prompt box now have their building block (`ui.createMarkdownView`, ADR-0078): transcript = read-only view over the normalized `stream.jsonl` of either provider rendered once as Markdown, prompt = compact view. Still open: the claude-code adapter reports only the final result, not each reply's full text.
+
 ### Next
 
 ~~7. **Screenshots in the app.** Capture a region or window and embed it

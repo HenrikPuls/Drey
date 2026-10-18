@@ -93,6 +93,21 @@ export interface RunInfo {
   readonly tokensOut: number;
   readonly costUsd: number | null;
   readonly lastActivity: string;
+  /**
+   * What the worker is doing right now, in one short line (the last
+   * tool call or the first line of its last text) — the board's lane
+   * shows it. Absent on a run.json written before the lanes existed.
+   */
+  readonly activity?: string;
+  /**
+   * The size of the worker's current context window in tokens (the
+   * last model call's input incl. cache reads); null/absent while the
+   * provider has reported none. The limit is not known to the runner —
+   * the board measures it against a configured window.
+   */
+  readonly contextTokens?: number | null;
+  /** The working column whose pool owns this run (`request.column ?? request.phase`). */
+  readonly column?: string | null;
   /** How many steer messages reached the worker, and how. */
   readonly steerCount: number;
   readonly lastSteerRung: SteerRung | null;

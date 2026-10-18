@@ -286,6 +286,9 @@ export class RunSupervisor {
       tokensOut: 0,
       costUsd: null,
       lastActivity: this.stamp(),
+      activity: '',
+      contextTokens: null,
+      column: request.column ?? request.phase,
       steerCount: 0,
       lastSteerRung: null,
       worktreePath,
@@ -431,6 +434,8 @@ export class RunSupervisor {
     run.info = {
       ...run.info,
       lastActivity: event.ts,
+      ...(event.activity !== undefined && event.activity !== '' ? { activity: event.activity } : {}),
+      ...(event.contextTokens !== undefined ? { contextTokens: event.contextTokens } : {}),
       ...(event.tokensIn !== undefined ? { tokensIn: event.tokensIn } : {}),
       ...(event.tokensOut !== undefined ? { tokensOut: event.tokensOut } : {}),
       ...(event.costUsd !== undefined ? { costUsd: event.costUsd } : {}),

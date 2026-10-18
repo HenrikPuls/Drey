@@ -32,14 +32,26 @@ export type GitExecFn = (
 ) => Promise<string>;
 
 async function defaultExec(exe: string, args: readonly string[], cwd: string): Promise<string> {
-  const { stdout } = await execFileAsync(exe, ['-c', 'core.quotepath=false', '--literal-pathspecs', ...args], {
-    cwd,
-    windowsHide: true,
-    maxBuffer: MAX_BUFFER,
-    encoding: 'utf8',
-    env: { ...process.env, GIT_TERMINAL_PROMPT: '0', LC_ALL: 'C' },
-  });
-  return stdout;
+  try {
+    const { stdout } = await execFileAsync(exe, ['-c', 'core.quotepath=false', '--literal-pathspecs', ...args], {
+      cwd,
+      windowsHide: true,
+      maxBuffer: MAX_BUFFER,
+      encoding: 'utf8',
+      env: { ...process.env, GIT_TERMINAL_PROMPT: '0', LC_ALL: 'C' },
+    });
+    return stdout;
+  } catch (error) {
+    // Git reports "nothing to commit" on STDOUT (exit 1, empty stderr), and
+    // execFile's message carries only stderr — so fold stdout in, or the
+    // benign outcome below can never be recognised and every no-op commit
+    // looks like a failure in the runner log.
+    const stdout = (error as { stdout?: unknown }).stdout;
+    if (error instanceof Error && typeof stdout === 'string' && stdout.trim() !== '') {
+      error.message = `${error.message}\n${stdout.trim()}`;
+    }
+    throw error;
+  }
 }
 
 export class TicketsGit {
@@ -101,7 +113,7 @@ export class TicketsGit {
       await this.run(root, ['commit', '-m', message, '--', ...unique]);
     } catch (error) {
       const text = error instanceof Error ? error.message : String(error);
-      if (!/nothing to commit|nothing added to commit/i.test(text)) {
+      if (!/nothing to commit|nothing added to commit|no changes added to commit/i.test(text)) {
         throw error;
       }
     }

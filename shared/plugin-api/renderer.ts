@@ -65,6 +65,8 @@ export type {
   EditorExtensionSlot,
   EditorSurfaceContext,
   FileOpenerContrib,
+  MarkdownViewHandle,
+  MarkdownViewOptions,
   MenuContribution,
   OpenDocumentInfo,
   PluginChatOptions,

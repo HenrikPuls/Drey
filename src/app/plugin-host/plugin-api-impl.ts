@@ -36,6 +36,7 @@ import { VaultService } from '../vault/vault.service';
 import { WikilinkService } from '../editor/wikilinks/wikilink.service';
 import { extractWikilinks } from '../editor/wikilinks/wikilink';
 import { HOST_CODEMIRROR } from './runtime-exports';
+import { mountMarkdownView } from './markdown-view';
 import { EditorExtensionRegistry } from './editor-extension-registry.service';
 import { DropDecoderRegistry } from './drop-decoder-registry.service';
 import { FileOpenerRegistry } from '../services/file-opener-registry.service';
@@ -354,6 +355,7 @@ export class PluginApiFactory {
           });
           return field;
         },
+        createMarkdownView: (opts) => mountMarkdownView(this.appInjector, opts),
         icon: (name, size) => createIconElement(name, size),
         setFileDecorations: (vaultId, decorations) =>
           this.decorations.set(pluginId, vaultId, decorations),

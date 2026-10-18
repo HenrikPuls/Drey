@@ -87,7 +87,7 @@ export class FleetClient {
         this.get<ChainStatus>('/chain').catch(() => null),
       ]);
       this.push({ runs: data.runs, chain });
-      this.pollWhile(data.runs);
+      this.pollWhile(data.runs, chain);
       return data.runs;
     } catch {
       return [];
@@ -387,9 +387,17 @@ export class FleetClient {
     }
   }
 
-  /** Polls while anything is live; stops itself when the board is quiet. */
-  private pollWhile(runs: readonly RunInfo[]): void {
-    const live = runs.some((r) => !['done', 'stopped', 'failed', 'detached'].includes(r.state));
+  /**
+   * Polls while anything is live — or while the chain is running, because
+   * the daemon dispatches on its own: a run it starts is not one this
+   * client started, so without the poll the board would only learn of it
+   * on the next manual refresh and show a working column as idle.
+   * Stops itself when the board is quiet and the chain halted.
+   */
+  private pollWhile(runs: readonly RunInfo[], chain: ChainStatus | null): void {
+    const live =
+      runs.some((r) => !['done', 'stopped', 'failed', 'detached'].includes(r.state)) ||
+      (chain !== null && chain.configured && chain.master === 'run');
     if (live && this.pollTimer === null) {
       this.pollTimer = setInterval(() => void this.runs(), 2_000);
     } else if (!live && this.pollTimer !== null) {
