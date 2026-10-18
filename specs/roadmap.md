@@ -91,8 +91,10 @@ rounds on real runs are still pending there). What remains:
 
 - **M85 — continuous orchestration:** dispatcher, lease reaper,
   budgets/circuit breaker, heartbeats, cycle-time metrics, sampling
-  audit, semantic gate, `fleet_*` MCP tools. Built only if the M83/M84
-  trial data justifies it.
+  audit, semantic gate, `fleet_*` MCP tools. **Folded into T-0007**
+  (owner, 2026-10-18) — tracked in the owner's tickets repo now; the
+  fold-in supersedes the "only if trial data justifies" condition. The
+  milestone record moves here when it ships.
 
 ### Next
 
