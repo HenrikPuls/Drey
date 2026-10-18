@@ -66,6 +66,13 @@ export interface RunSupervisorDeps {
   readonly ticketsGit?: Pick<TicketsGit, 'run' | 'locate' | 'commitPaths'>;
   /** Run settled (terminal): the orchestrator's slot-freed trigger (M85). */
   readonly onRunSettled?: (info: RunInfo) => void;
+  /**
+   * The quality rungs (M85, flagged off): on a green gate, return an
+   * instruction to re-run the ticket with — a second worker reviews the
+   * branch before the move — or null to move as normal. Called once per
+   * run; the audit round never samples again.
+   */
+  readonly secondOpinion?: (request: RunRequest) => Promise<string | null>;
 }
 
 interface LiveRun {
@@ -79,6 +86,8 @@ interface LiveRun {
   readonly startedAtMs: number;
   /** The worker exited and the machine gate is deciding — the reaper stands down. */
   gating: boolean;
+  /** The second-opinion round ran (the move follows its own gate). */
+  audited: boolean;
 }
 
 const TERMINAL: readonly RunState[] = ['done', 'stopped', 'failed'];
@@ -147,6 +156,7 @@ export class RunSupervisor {
             handle: null,
             startedAtMs: Date.parse(stored.info.startedAt),
             gating: false,
+            audited: false,
           });
           continue;
         }
@@ -165,6 +175,7 @@ export class RunSupervisor {
           handle: null,
           startedAtMs: Date.parse(stored.info.startedAt),
           gating: false,
+          audited: false,
         };
         this.runs.set(detached.id, live);
         await this.persist(live);
@@ -251,6 +262,7 @@ export class RunSupervisor {
       handle: null,
       startedAtMs: this.now().getTime(),
       gating: false,
+      audited: false,
     };
     this.runs.set(id, run);
     await fsp.writeFile(
@@ -450,6 +462,37 @@ export class RunSupervisor {
       await this.logLine(run, `machine gate failed — ${failure}`);
       await this.finish(run, 'failed');
       return;
+    }
+    // The quality rungs (M85): a green gate may hand the step to a
+    // second worker before it moves — the sampling audit or the
+    // semantic gate's review. One round only; its own gate decides.
+    if (!run.audited && this.deps.secondOpinion !== undefined) {
+      const brief = await this.deps.secondOpinion(run.request).catch(() => null);
+      if (brief !== null && run.handle !== null) {
+        run.audited = true;
+        const worktree = run.info.worktreePath;
+        const resumeRef = run.info.sessionRef;
+        const handle = this.deps.adapter.spawn({
+          cwd: worktree,
+          instruction: brief,
+          model: run.request.model,
+          permissionMode: run.request.permissionMode,
+          resumeRef: null,
+          ticketId: run.request.ticketId,
+          onEvent: (event) => void this.onEvent(run, event),
+          onSessionRef: (ref) => {
+            run.info = { ...run.info, sessionRef: ref };
+            void this.persist(run);
+          },
+        });
+        run.handle = handle;
+        run.gating = false;
+        run.info = { ...run.info, state: 'running', pid: handle.pid };
+        await this.logLine(run, 'second opinion — a fresh worker reviews the step before it moves');
+        await this.persist(run);
+        void handle.exited.then((code) => void this.onWorkerExit(run, code));
+        return;
+      }
     }
     if (run.request.nextPhase !== null) {
       const moved = await this.moveTicketOnSuccess(run, run.request.nextPhase);

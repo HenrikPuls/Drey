@@ -178,6 +178,17 @@ export interface PipelinePhase {
    * ticket one column right — the machine gate in the work repo.
    */
   readonly ci: string | null;
+  /**
+   * The sampling audit's fraction (`audit:`, M85, 0–1; default off): a
+   * green step is sampled and a second worker reviews it before the
+   * move. The live trial decides whether the rung stays.
+   */
+  readonly audit: number | null;
+  /**
+   * The semantic gate (`semantic: true`, M85; default off): every green
+   * step in the column gets a second worker's review before it moves.
+   */
+  readonly semantic: boolean;
 }
 
 /** The default for a phase entry that omits the M85 pool keys —
@@ -193,6 +204,8 @@ export function phaseWithoutPoolKeys(
     maxRed: null,
     tokenBudget: null,
     ci: null,
+    audit: null,
+    semantic: false,
     ...phase,
   };
 }

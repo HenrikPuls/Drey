@@ -265,4 +265,59 @@ describe('RunSupervisor', () => {
     const text = await fsp.readFile(path.join(vaultDir, rel), 'utf8');
     expect(parseTicketFile(text, rel).meta.worker).toBe('claude-code/sonnet');
   });
+
+  it('a second opinion re-runs the step before it moves — once', async () => {
+    let opinions = 0;
+    const { sup, adapter } = supervisor({
+      secondOpinion: async () => {
+        opinions += 1;
+        return 'You are the sampling auditor — review the step.';
+      },
+    });
+    const rel = await writeTicket();
+    const started = await sup.start(request({ ticketRelPath: rel }));
+    const id = (started as { run: { id: string } }).run.id;
+
+    // The first worker's green gate hands the step to the auditor.
+    adapter.handles[0]!.fail(0);
+    await vi.waitFor(() => expect(adapter.handles.length).toBe(2));
+    // The ticket has not moved yet — the audit round runs first.
+    await expect(fsp.access(path.join(vaultDir, 'tickets', 'plan', 'T-0001.md'))).resolves.toBeUndefined();
+
+    // The auditor's green gate moves the ticket, and no third round starts.
+    adapter.handles[1]!.fail(0);
+    await vi.waitFor(() => expect(sup.get(id)?.state).toBe('done'));
+    await expect(fsp.access(path.join(vaultDir, 'tickets', 'build', 'T-0001.md'))).resolves.toBeUndefined();
+    expect(opinions).toBe(1);
+    expect(adapter.handles).toHaveLength(2);
+    const stream = await fsp.readFile(path.join(fleetRoot, 'runs', id, 'stream.jsonl'), 'utf8');
+    expect(stream).toContain('second opinion');
+  });
+
+  it('a red gate in the audit round parks the ticket', async () => {
+    let gateCalls = 0;
+    const gateGreenRounds = 1;
+    const { sup, adapter } = supervisor({
+      secondOpinion: async () => 'audit brief',
+      execShell: async (command) => {
+        // The first gate is green, the auditor's gate runs the same
+        // commands — fail from the second round on via the call count.
+        gateCalls += 1;
+        if (gateCalls > gateGreenRounds) {
+          throw new Error('exit 1\naudit gate red');
+        }
+        void command;
+      },
+    });
+    const rel = await writeTicket();
+    const started = await sup.start(request({ ticketRelPath: rel }));
+    const id = (started as { run: { id: string } }).run.id;
+
+    adapter.handles[0]!.fail(0);
+    await vi.waitFor(() => expect(adapter.handles.length).toBe(2));
+    adapter.handles[1]!.fail(0);
+    await vi.waitFor(() => expect(sup.get(id)?.state).toBe('failed'));
+    await expect(fsp.access(path.join(vaultDir, 'tickets', 'plan', 'T-0001.md'))).resolves.toBeUndefined();
+    expect(sup.get(id)?.gateFailure).toContain('failed — exit 1');
+  });
 });

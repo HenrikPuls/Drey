@@ -82,6 +82,18 @@ export const RED_COOLDOWN_MS = 60_000;
 /** A failed ci check backs off before its next attempt. */
 export const CI_BACKOFF_MS = 10 * 60_000;
 
+/** The sampling audit's brief — a fresh second worker reviews the step. */
+export const AUDIT_BRIEF =
+  'You are the sampling auditor — a fresh second worker. Before this step may move on, review the work the branch ' +
+  'contains against the ticket: correctness first, then the repo\'s conventions, then leftovers. Fix what you find; ' +
+  'the machine gate must stay green when you end.';
+
+/** The semantic gate's brief — does the branch do the thing, and only the thing. */
+export const SEMANTIC_BRIEF =
+  'You are the semantic gate — a fresh second worker. Judge the step\'s result against what the ticket actually asked ' +
+  'for: does the branch do the thing, does it do only the thing, would the owner accept it? Fix what falls short; the ' +
+  'machine gate must stay green when you end.';
+
 export class Orchestrator {
   private config: ChainConfig | null = null;
   private master: ChainMaster = 'halted';
@@ -343,6 +355,29 @@ export class Orchestrator {
     for (const provider of ['opencode', 'claude-code'] as const) {
       await this.deps.supervisorOf(provider).reap();
     }
+  }
+
+  /**
+   * The quality rungs' decision (M85, flagged off): a dispatched run in
+   * a column with `audit:` (sampled by fraction) or `semantic: true`
+   * (always) gets a second worker before its move — the brief prefixes
+   * the run's own instruction, so the review keeps the whole brief.
+   */
+  async secondOpinion(request: RunRequest): Promise<string | null> {
+    const column = request.column ?? null;
+    if (column === null) {
+      return null;
+    }
+    const phase = this.lastPhases.find((p) => p.id === column);
+    if (phase === undefined) {
+      return null;
+    }
+    const sampled = phase.audit !== null && Math.random() < phase.audit;
+    if (!sampled && phase.semantic !== true) {
+      return null;
+    }
+    const brief = phase.semantic === true ? SEMANTIC_BRIEF : AUDIT_BRIEF;
+    return `${brief}\n\n---\n\n${request.instruction}`;
   }
 
   private agentActor(): string {

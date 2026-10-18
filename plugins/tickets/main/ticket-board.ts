@@ -83,6 +83,12 @@ export interface PipelineParse {
         : null;
     const ciRaw = map['ci'];
     const ci = typeof ciRaw === 'string' && ciRaw.trim() !== '' ? ciRaw.trim() : null;
+    const auditRaw = map['audit'];
+    const audit =
+      typeof auditRaw === 'number' && Number.isFinite(auditRaw) && auditRaw > 0 && auditRaw <= 1
+        ? auditRaw
+        : null;
+    const semantic = map['semantic'] === true;
     phases.push({
       id,
       title: typeof map['title'] === 'string' && map['title'].trim() !== '' ? map['title'] : id,
@@ -96,6 +102,8 @@ export interface PipelineParse {
       maxRed,
       tokenBudget,
       ci,
+      audit,
+      semantic,
     });
   }
   return { phases, error: null };

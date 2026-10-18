@@ -95,6 +95,7 @@ async function main(): Promise<void> {
         git: 'git',
         log,
         onRunSettled: (info) => void orchestrator?.onRunSettled(info),
+        secondOpinion: (request) => orchestrator?.secondOpinion(request) ?? Promise.resolve(null),
       }),
     ]),
   );
