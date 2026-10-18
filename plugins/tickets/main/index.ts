@@ -940,7 +940,12 @@ const plugin: MainPluginModule = {
           runs: await fleet.runs(),
           chain: await fleet.chainStatus(),
         }),
-        run: (input) => board.startRun(input),
+        run: (input) =>
+          board.startRun({
+            ticketId: input.ticketId,
+            workerChoice: input.worker,
+            permissionMode: input.permissionMode,
+          }),
         stop: (runId) => fleet.stop(runId, null),
         steer: (runId, text) => fleet.send(runId, text),
         watch: (runId) => fleet.stream(runId),

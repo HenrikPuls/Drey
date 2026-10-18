@@ -759,6 +759,51 @@ Runs survive closing Drey — the runner is its own small process. You
 can reach it from a terminal, too: its address and token live in
 `<user data>/fleet/runner.json`.
 
+### The chain runs itself (milestone 85)
+
+A column with a **worker** runs itself. In Settings → *Tickets* each
+column gets its pool — the **worker** (OpenCode or Claude Code; unset
+means a manual column that only you move tickets through), an optional
+**model** pin, the **pool size** (how many tickets the column works in
+parallel) and the **prompt** (`tickets/_meta/prompts/<ref>.md`, the
+phase's craft). Every change is one commit on the pipeline file; the
+board follows on refresh.
+
+The **master switch** sits in the board's header: **An** runs the
+chain — every playing automatic column drains its queue. **Aus** halts
+gently (running work finishes, nothing new starts). **Notaus** aborts
+every live run and halts — the red button, one click. Each automatic
+column carries its own **brakes** next to the fold chevron: pause (no
+new dispatch), stop (abort this column's runs and hold it — the rest
+keeps going), play again. All of it survives restarts.
+
+The machine asks the agent to decide its own step's completion — the
+brief ends with the completion discipline: run the acceptance commands
+yourself, end the turn only when they pass. The runner still re-runs
+the gate: green moves the ticket one column right, red parks it (the
+failure lands in the Log, the ticket waits). A column that goes red
+too often trips its **circuit breaker**: it holds, and its next ticket
+parks in Inbox with a reason — re-prioritize it when you're ready.
+After a red gate the column cools down for a minute before it fires
+again.
+
+Where a worker column meets your judgment, the pipeline stays yours: a
+column without a worker between two worker columns is your
+**checkpoint** (plan-review in the default pipeline) — the machine
+never pulls across it; you review, edit, and move the ticket back to
+plan, forward to build, or back to Inbox. A manual column *before* the
+first worker column is a plain queue — the next pool drains it
+(prioritized feeds plan).
+
+The board shows the chain's pulse: each column head carries its pool
+(`opencode ×2`) and its brakes; a thin **cycle-time line** above the
+run footer shows how long each column's tickets have been sitting
+there on average. The `ci` handover works, too: a column with a `ci:`
+command moves its tickets when the check passes in the work repo.
+And the assistant can drive runs: ask it about the fleet — it sees
+`fleet_status`, and can `fleet_run`, `fleet_stop`, `fleet_steer` and
+`fleet_watch` through Drey's MCP server.
+
 ---
 
 ## 14. Diagrams (draw.io)

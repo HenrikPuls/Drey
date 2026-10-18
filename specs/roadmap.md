@@ -47,18 +47,19 @@ Open work only. Everything implemented lives in
 lives in [`decisions.md`](decisions.md). When an item ships, move it to the
 changelog and delete it here — no shipped history on this page.
 
-**Status (2026-10-17):** version 0.7.1, milestones 1–84 built — 1–83
+**Status (2026-10-18):** version 0.7.1, milestones 1–85 built — 1–83
 owner-verified (milestone 82, auto-update from GitHub Releases ADR-0074,
 end-to-end on a real install, the 0.7.0 → 0.7.1 update round included
 docs/07 checklist; milestone 83, the tickets foundation ADR-0075/0076,
 through the live board rounds T-0001 – T-0006 in the owner's tickets
-repo). **Milestone 84 (the fleet runner) is built and suite-green but
-awaits the owner's live rounds** — see its changelog marker. The
+repo). **Milestones 84 (the fleet runner) and 85 (continuous
+orchestration, ticket T-0007, ADR-0077) are built and suite-green but
+await the owner's live rounds** — see their changelog markers. The
 owner's verification round for 1–81 closed 2026-10-17: every "not yet
 manually verified" marker below those entries is cleared, the bug-11
 fix included. Milestone
 ids are assigned when work starts — check `changelog.md` for the
-highest used (latest: milestone 84; latest requirement id: req-45,
+highest used (latest: milestone 85; latest requirement id: req-45,
 the update check's positive answer is inline text — req-43 and req-44
 were owner requests outside the list, shipped and owner-verified in
 the same step).
@@ -85,16 +86,11 @@ included.
 over Markdown ticket files in a **dedicated tickets repository**
 (registered as an ordinary vault), with external agent CLI sessions
 doing gated work in the work repos' `t/<id>` branches and Drey as the
-cockpit. The foundation shipped as milestone 83 and the runner with
-run control as milestone 84 (see the changelog; the owner's live
-rounds on real runs are still pending there). What remains:
-
-- **M85 — continuous orchestration:** dispatcher, lease reaper,
-  budgets/circuit breaker, heartbeats, cycle-time metrics, sampling
-  audit, semantic gate, `fleet_*` MCP tools. **Folded into T-0007**
-  (owner, 2026-10-18) — tracked in the owner's tickets repo now; the
-  fold-in supersedes the "only if trial data justifies" condition. The
-  milestone record moves here when it ships.
+cockpit. The foundation shipped as milestone 83, the runner with
+run control as milestone 84, and continuous orchestration as
+milestone 85 (ticket T-0007, ADR-0077 — the board now runs itself
+wherever a column has a worker; see the changelog; the owner's live
+rounds on real runs are still pending there).
 
 ### Next
 

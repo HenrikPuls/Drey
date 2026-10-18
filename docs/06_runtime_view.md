@@ -3213,3 +3213,45 @@ semantics — the same patch helpers, `add -- paths` + `commit -- paths`
 gate (or a refused validation: no acceptance criteria, a non-`t/<id>`
 branch, an unknown worker pin) never moves the ticket; the reason
 lands in the Log and the run slot is freed for the next attempt.
+
+## 6.66 The chain dispatches: the board drains itself (milestone 85, [ADR-0077](09_architecture_decisions/0077-continuous-orchestration.md))
+
+```mermaid
+sequenceDiagram
+    participant B as BoardService (plugin main)
+    participant F as FleetClient
+    participant R as fleet runner — orchestrator
+    participant V as tickets vault (files)
+    participant S as RunSupervisor
+    participant W as worker (opencode / claude-code)
+
+    B->>F: POST /chain/config (every board snapshot, idempotent)
+    F->>R: configure { ticketsVaultPath, git, defaultWorker, permissionMode }
+    R->>V: read pipeline.md + order.md + repos.md + tickets/*
+    Note over R: dispatch pass — master run + column playing + free slot
+    R->>R: planDispatch: own queue first, top up from the previous column's top (never across an automatic column or an owner checkpoint)
+    R->>V: read prompt (tickets/_meta/prompts/<ref>.md)
+    R->>R: composeRunRequest (the one builder — column rides as request.column)
+    R->>S: start(request) — worktree + brief (the completion discipline at its end)
+    S->>W: spawn
+    W->>S: exit (the agent's finished turn is its done declaration)
+    S->>S: machine gate re-run — the safety net
+    alt agent-done AND green gate
+        S->>V: move one column right (one commit, "(fleet)")
+        S-->>R: onRunSettled(done) — slot freed, next pool may pull
+    else red gate
+        S-->>R: onRunSettled(failed, gateFailure)
+        R->>R: red streak + 60 s cooldown (breaker: max-red trip → column held, next candidate parked in inbox with parked-reason)
+    end
+```
+
+The pass is event-driven — configure, a control change, a run settle —
+with a 15-second safety-net rescan, so external board moves are picked
+up even with Drey closed (a running chain also keeps the runner's idle
+shutdown off). Master An/Aus/Notaus and the per-column brakes are
+runner state under `<userRoot>/fleet/chain.json`, never in the tickets
+repo (ADR-0076). The lease reaper (a 60 s sweep) fails runs whose
+worker process is provably dead; a `ci` handover column runs its `ci:`
+check on the same sweep and moves green tickets right; a sampled
+`audit:` or `semantic:` column hands a green step to a fresh second
+worker before the move.

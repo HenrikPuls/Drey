@@ -20,6 +20,79 @@ recorded as an explicit decision. The parity checklist lives in
 
 ## Recent milestones
 
+### Milestone 85 — the chain runs itself: continuous orchestration
+
+Ticket [T-0007](https://github.com/HenrikPuls/Drey) in the owner's
+tickets repo (M85 folded in by owner request); the design is
+[ADR-0077](../docs/09_architecture_decisions/0077-continuous-orchestration.md),
+which amends ADR-0075 and M84's gate rule. **Not yet manually verified
+by the owner** — the suites are green; the owner's live round (the
+verification steps in the ticket) is next.
+
+- **The board becomes a running pipeline.** A column with a worker
+  drains itself: the dispatcher (in the fleet runner, which survives
+  Drey restarting) serves the column's own queue first, tops up from
+  the previous column's top, and moves each ticket one column right
+  when its step is done. A manual column between automatic ones is the
+  owner's **checkpoint** — the machine never pulls across it; a manual
+  column before the first worker column is a queue the next pool
+  drains. The worker-per-column is the auto/manual switch, configured
+  in the new Settings → Tickets page (one commit per change on
+  `pipeline.md`: `worker:` / `model:` / `workers:` / `prompt:`, plus
+  `max-red:` / `token-budget:` / `ci:` / `audit:` / `semantic:`). The
+  owner's live tickets repo now carries the proposed defaults (plan 2 ×
+  OpenCode/GLM-5.3, build 4 × OpenCode/GLM-5.3-Flash, review 1) and the
+  `_meta/prompts/` (plan/build/review-default — build-default had been
+  referenced since M84 and was still missing).
+- **Completion is the agent's call, the gate the safety net.** Every
+  run brief ends with the completion discipline (run the acceptance
+  commands yourself; your finished turn is the declaration). The runner
+  re-runs the gate: agent-done AND green moves one column right — a
+  pulled ticket jumps from its feeding column straight to the working
+  column's successor (prioritized → plan-review) — a red gate parks the
+  ticket (logged, slot freed).
+- **Master control and brakes.** An / Aus / Notaus in the panel header;
+  per-column pause / stop / play next to the fold chevron; stopping one
+  column never stops the rest. State persists in
+  `<userData>/fleet/chain.json` and resumes with the runner; a running
+  chain keeps the runner alive, so the board drains while Drey is
+  closed.
+- **Safety nets.** The lease reaper fails a run whose worker process is
+  provably dead and frees its ticket (a silent-but-alive worker is
+  never touched — ADR-0014). The circuit breaker counts consecutive red
+  gates per column (`max-red:`, default 3): tripping holds the column
+  and parks its next candidate in Inbox with `parked-reason` — the one
+  machine-sanctioned backward move. A red gate cools the column down
+  for a minute; daily `token-budget:` trips the same way.
+- **The ci handover works.** A `ci:` command runs in the ticket's work
+  repo; green moves the ticket one column right (one commit, `… (ci)`),
+  red backs it off for ten minutes.
+- **Quality rungs, flagged off.** `audit:` (a fraction) samples green
+  steps and `semantic: true` gates every green step — a fresh second
+  worker reviews the branch before the move, one round, its own gate
+  decides. The live trial decides whether they stay.
+- **Cycle-time metrics.** Each card carries its column dwell (from the
+  `entered-*` stamps); a line above the run footer shows every column's
+  average (`⌀`).
+- **The fleet on the MCP server.** SDK 1.29 adds the typed plugin-tool
+  seam (`ctx.mcp.registerTools`): a plugin's tools appear beside the
+  vault tools on Drey's own MCP server. The tickets plugin registers
+  `fleet_status` / `fleet_run` / `fleet_stop` / `fleet_steer` /
+  `fleet_watch` — the assistant and any connected program drive runs
+  conversationally.
+- **One request builder.** `composeRunRequest` builds every RunRequest
+  (owner-started and dispatched alike); the assignment ring gained the
+  column level (ticket pin > column > handover `@worker` > repo >
+  configured default), and model pins now reach OpenCode (v2
+  `providerID/modelID`) as well as Claude Code (`--model`).
+
+Suites and checks: the plugins suite grew to 132 files / 1676 tests
+(orchestrator, chain planning, request builder, ci sweeps, breaker,
+pipeline patcher, MCP seam, fleet tools); `tsc` (main, specs, renderer,
+plugins), ESLint, the cycle check and the plugin build are green.
+Docs: ADR-0077, docs/05 §5.41, docs/06 §6.66, the manual's fleet
+section, `specs/ticket-schema.md` (pool keys, lane rules, ci).
+
 ### Architecture cleanup A6 — plugin settings out of the base config
 
 Roadmap item A6 (the 2026-10-13 review, finding 4 in

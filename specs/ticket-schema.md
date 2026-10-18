@@ -110,7 +110,7 @@ How. Filled in the plan phase; must end with the acceptance criteria.
 | `id` | `T-\d{4,}` | Required. Must equal the filename stem. Immutable. |
 | `title` | string | Required. One line, quoted when it contains `:`. |
 | `repo` | string | Name from `_meta/repos.md`. May be empty until the ticket leaves inbox for a work phase; entering one without a known repo is an issue. |
-| `worker` | string | Optional pin for the fleet worker (M84): `opencode`, `claude-code`, or `<provider>/<model>`. Wins over the phase handover's `@worker` pin, the repo's `worker:` and the configured default. An unknown value badges the card; a run start with it refuses. |
+| `worker` | string | Optional pin for the fleet worker (M84): `opencode`, `claude-code`, or `<provider>/<model>`. Wins over the column's `worker:` key, the phase handover's `@worker` pin, the repo's `worker:` and the configured default (M85's assignment ring). An unknown value badges the card; a run start with it refuses. |
 | `priority` | `urgent \| high \| normal \| low` | Required. Default `normal`; machine writers always write it. |
 | `rank` | integer 0–999999 | Default `5000`. Fine ordering inside derived order. |
 | `branch` | `t/<id>` | Written by machine writers; validated against the rule; rule wins. |
@@ -119,7 +119,7 @@ How. Filled in the plan phase; must end with the acceptance criteria.
 | `claimed-at` | UTC timestamp | Set with `claimed-by`. |
 | `run` | map `{pid, started-at, stream}` | The live run (ADR-0075 run control): stamped by the fleet runner at start, cleared at end — at most one live run per ticket. `stream` names the **run id**; the stream file itself lives machine-local under `<userData>/fleet/runs/<id>/stream.jsonl`, so the ticket stays portable across the machines the repo syncs to. Readers validate the shape. |
 | `references` | list of strings | Optional. Ticket ids (`t/T-0041`), URLs, vault paths. |
-| `parked-reason` | string | With `parked-at`; the ticket sits in inbox while parked (circuit breaker, budgets — ADR-0075). Any transition out of inbox clears both. |
+| `parked-reason` | string | With `parked-at`; the ticket sits in inbox while parked (circuit breaker, budgets — ADR-0075). Any transition out of inbox clears both. The circuit breaker writes them when it parks a column's next candidate (M85); re-prioritizing revives the ticket. |
 | `parked-at` | UTC timestamp | See `parked-reason`. |
 
 Unknown keys are preserved on rewrite and reported as noise (not an
@@ -165,7 +165,8 @@ Prose for humans. The board follows this file on refresh.
   tickets into it).
 - `title`: board column header.
 - `wip`: optional integer. Over-limit shows red on the board
-  (`4/3`); it warns, it does not block a human.
+  (`4/3`); it warns, it does not block a human (and it never gates the
+  dispatcher — the pool size is the parallelism, M85).
 - `claim`: optional `true` — entering this phase stamps the claim
   fields.
 - `handover`: what must happen for a ticket to LEAVE this phase:
@@ -173,17 +174,52 @@ Prose for humans. The board follows this file on refresh.
   fleet runs prompt `<prompt-ref>` — `tickets/_meta/prompts/<ref>.md`
   in the tickets repo — and the runner moves it on success; the
   optional `@worker` pins which agent CLI, otherwise the assignment
-  ladder decides), `ci` (an executable check passes — milestone 85),
-  `none` (terminal). Milestone 83 parses and displays these; `agent`
-  acts from M84, `ci` from M85.
+  ladder decides), `ci` (an executable check passes — the phase's
+  `ci:` command, run runner-side in the ticket's work repo since M85),
+  `none` (terminal). A column is **automatic** exactly when its
+  handover mode is `agent` (M85's dispatcher drives it); `manual`
+  columns are the human's.
 - Editing this file is the owner's; the board re-reads it on every
   refresh. Unknown keys in a phase entry are ignored.
 
+**Pool keys** (M85, ADR-0077 — the settings dialog writes them with one
+commit per change; hand edits win on refresh):
+
+- `worker:` — the column's worker pin (`opencode`,
+  `claude-code`, `<provider>/<model>`), the assignment ladder's column
+  level (ticket pin > column > handover `@worker` > repo default >
+  configured default). Unset on a manual column.
+- `model:` — the model pin for the column's runs (OpenCode:
+  `providerID/modelID`).
+- `workers:` — the pool size (integer ≥ 1, default 1): up to N
+  concurrent runs drain the column.
+- `prompt:` — the prompt ref override; the default is the handover's
+  ref (and setting a worker in the dialog writes the matching
+  `agent <phase>-default` handover, clearing it writes `manual`).
+- `max-red:` — the circuit breaker's tolerance: consecutive red gates
+  the column takes before it trips (holds + parks its next candidate
+  in inbox). Default 3.
+- `token-budget:` — the column's daily token budget (the pool's settled
+  runs are summed per day); over budget trips the breaker. Off by
+  default.
+- `ci:` — the `ci` handover's executable check (a shell command, run in
+  the ticket's work repo checkout); a green check moves the ticket one
+  column right, a red one backs the ticket off for ten minutes.
+- `audit:` — a fraction 0–1: a green step is sampled and a fresh second
+  worker reviews it before the move. Default off.
+- `semantic: true` — every green step in the column gets a second
+  worker's review before it moves. Default off.
+
 **Agent lane rules** (enforced by the runner, not the board — the
-board serves the human): an agent takes only the top of the pinned
-`prioritized` queue that is available (unclaimed), moves a ticket
-exactly one column forward per transition, never across a `manual`
-handover, never backwards, never into the last phase.
+board serves the human): an agent works the tickets the dispatcher
+gives it — the column's own queue first, then the previous column's
+top — and a dispatched run's completion moves the ticket from where it
+sits to the **working column's next phase** (a pulled ticket goes
+`prioritized` → `plan-review` in one step). A manual column between
+automatic columns is the owner's **checkpoint**: the machine never
+pulls across it, and only the owner's moves cross it (refine /
+implement / park). Backward moves are human moves — the one exception
+is the circuit breaker's park into inbox, always logged.
 
 ## `_meta/order.md` — sparse order pins
 
