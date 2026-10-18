@@ -173,6 +173,11 @@ export interface PipelinePhase {
    * Summed over the runs the pool settles per day.
    */
   readonly tokenBudget: number | null;
+  /**
+   * The ci handover's check command (`ci:`, M85): a green run moves the
+   * ticket one column right — the machine gate in the work repo.
+   */
+  readonly ci: string | null;
 }
 
 /** The default for a phase entry that omits the M85 pool keys —
@@ -187,6 +192,7 @@ export function phaseWithoutPoolKeys(
     prompt: null,
     maxRed: null,
     tokenBudget: null,
+    ci: null,
     ...phase,
   };
 }

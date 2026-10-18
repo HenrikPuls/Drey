@@ -81,6 +81,8 @@ export interface PipelineParse {
       typeof tokenBudgetRaw === 'number' && Number.isFinite(tokenBudgetRaw) && tokenBudgetRaw > 0
         ? tokenBudgetRaw
         : null;
+    const ciRaw = map['ci'];
+    const ci = typeof ciRaw === 'string' && ciRaw.trim() !== '' ? ciRaw.trim() : null;
     phases.push({
       id,
       title: typeof map['title'] === 'string' && map['title'].trim() !== '' ? map['title'] : id,
@@ -93,6 +95,7 @@ export interface PipelineParse {
       prompt,
       maxRed,
       tokenBudget,
+      ci,
     });
   }
   return { phases, error: null };

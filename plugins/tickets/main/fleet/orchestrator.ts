@@ -18,13 +18,13 @@ import { promises as fsp } from 'node:fs';
 import { hostname } from 'node:os';
 import * as path from 'node:path';
 import type { BoardColumn, BoardSnapshot, PipelinePhase } from '../../shared/tickets';
-import { isValidTicketFile } from '../../shared/tickets';
+import { isValidTicketFile, parseHandover } from '../../shared/tickets';
 import { assembleBoard, parseOrderFile, rewriteOrderSection, type BoardFile } from '../ticket-board';
 import { patchTicketFile } from '../ticket-files';
 import { TicketsGit } from '../tickets-git';
 import { columnPromptRef, nextPhaseIdOf, planDispatch } from './chain';
 import { composeRunRequest } from './request';
-import type { SupervisorRecord, StartOutcome, StopOutcome } from './runs';
+import { execShell, type SupervisorRecord, type StartOutcome, type StopOutcome } from './runs';
 import type {
   ChainConfig,
   ChainMaster,
@@ -54,6 +54,8 @@ export interface OrchestratorDeps {
   readonly now?: () => Date;
   /** The safety-net rescan interval (default 15 s). */
   readonly scanIntervalMs?: number;
+  /** Test seam over the ci handover's shell exec (cwd = the work repo). */
+  readonly execShell?: (command: string, cwd: string) => Promise<void>;
 }
 
 interface ChainFile {
@@ -66,6 +68,8 @@ interface ChainFile {
   /** Per column: the day the token sum belongs to, and the sum itself. */
   readonly tokensDay: Record<string, string>;
   readonly tokensUsed: Record<string, number>;
+  /** Per ticket: the ci check's next attempt (a failed check backs off). */
+  readonly ciBackoff: Record<string, string>;
 }
 
 const LIVE: readonly string[] = ['starting', 'running', 'stopping'];
@@ -75,6 +79,8 @@ const BLOCKING: readonly string[] = ['starting', 'running', 'stopping', 'detache
 export const DEFAULT_MAX_RED = 3;
 /** The breather after a red gate before the column fires again. */
 export const RED_COOLDOWN_MS = 60_000;
+/** A failed ci check backs off before its next attempt. */
+export const CI_BACKOFF_MS = 10 * 60_000;
 
 export class Orchestrator {
   private config: ChainConfig | null = null;
@@ -85,9 +91,11 @@ export class Orchestrator {
   private readonly tokensDay: Record<string, string> = {};
   private readonly tokensUsed: Record<string, number> = {};
   private passing = false;
+  private ciSweeping = false;
   private timer: ReturnType<typeof setInterval> | null = null;
   /** The pipeline config of the last pass — the breaker's thresholds. */
   private lastPhases: readonly PipelinePhase[] = [];
+  private readonly ciBackoff: Record<string, string> = {};
 
   constructor(private readonly deps: OrchestratorDeps) {}
 
@@ -127,6 +135,11 @@ export class Orchestrator {
       for (const [phase, used] of Object.entries(parsed.tokensUsed ?? {})) {
         if (typeof used === 'number' && used >= 0) {
           this.tokensUsed[phase] = used;
+        }
+      }
+      for (const [ticket, until] of Object.entries(parsed.ciBackoff ?? {})) {
+        if (typeof until === 'string' && !Number.isNaN(Date.parse(until))) {
+          this.ciBackoff[ticket] = until;
         }
       }
     } catch {
@@ -364,11 +377,168 @@ export class Orchestrator {
       return;
     }
     this.timer = setInterval(() => {
+      if (this.config !== null) {
+        void this.ciSweep();
+      }
       if (this.active) {
         void this.dispatchPass();
       }
     }, this.deps.scanIntervalMs ?? 15_000);
     this.timer.unref();
+  }
+
+  /**
+   * The ci handover's round (M85): a `handover: ci` column leaves its
+   * tickets to an executable check — green moves one column right (the
+   * runner performs the move, machine semantics, one commit), red backs
+   * the ticket off for ten minutes. Checks run in the ticket's work
+   * repo, outside the dispatch pass, so a slow check never blocks a
+   * dispatch.
+   */
+  private async ciSweep(): Promise<void> {
+    const config = this.config;
+    if (config === null || this.ciSweeping) {
+      return;
+    }
+    this.ciSweeping = true;
+    try {
+      const snap = await readVaultBoard(config.ticketsVaultPath, config.defaultWorker);
+      this.lastPhases = snap.pipeline;
+      for (const column of snap.columns) {
+        const phase = column.phase;
+        if (parseHandover(phase.handover).mode !== 'ci' || phase.ci === null) {
+          continue;
+        }
+        if ((this.columns[phase.id] ?? 'playing') !== 'playing' || this.master !== 'run') {
+          continue;
+        }
+        const nextPhaseId = nextPhaseIdOf(snap.columns, phase.id);
+        if (nextPhaseId === null) {
+          continue;
+        }
+        for (const card of column.tickets) {
+          if (card.meta.run !== null || card.meta.claimedBy !== null) {
+            continue;
+          }
+          const backoff = this.ciBackoff[card.id];
+          if (backoff !== undefined && this.now().getTime() < Date.parse(backoff)) {
+            continue;
+          }
+          await this.runCiCheck(config, snap, phase, nextPhaseId, card);
+          if (await cardMovedOff(config.ticketsVaultPath, card.path)) {
+            break; // the sweep's column snapshot is stale — the next tick re-reads
+          }
+        }
+      }
+    } catch (error) {
+      this.deps.log(`ci sweep failed: ${error instanceof Error ? error.message : String(error)}`);
+    } finally {
+      this.ciSweeping = false;
+    }
+  }
+
+  private async runCiCheck(
+    config: ChainConfig,
+    snap: BoardSnapshot,
+    phase: PipelinePhase,
+    nextPhaseId: string,
+    card: BoardColumn['tickets'][number],
+  ): Promise<void> {
+    const repo =
+      card.meta.repo === null ? null : (snap.repos.find((r) => r.name === card.meta.repo) ?? null);
+    if (repo === null || repo.path === null || phase.ci === null) {
+      return; // a card without a checkout is the board's badge, not the runner's guess
+    }
+    const command = phase.ci;
+    this.deps.log(`ci ${phase.id}: ${card.id} — ${command}`);
+    try {
+      await (this.deps.execShell ?? execShell)(command, repo.path);
+    } catch (error) {
+      const detail = (error instanceof Error ? error.message : String(error)).split('\n')[0] ?? 'failed';
+      this.ciBackoff[card.id] = new Date(this.now().getTime() + CI_BACKOFF_MS).toISOString();
+      await this.persist();
+      await this.appendTicketLog(config, card, `ci check failed — ${detail.slice(0, 300)} (retry in 10 min)`);
+      return;
+    }
+    const nextClaims = snap.pipeline.find((p) => p.id === nextPhaseId)?.claim === true;
+    const moved = await this.moveTicketForward(config, card, nextPhaseId, `ci check passed — moving to ${nextPhaseId}`, nextClaims);
+    if (moved) {
+      delete this.ciBackoff[card.id];
+      await this.persist();
+    }
+  }
+
+  /** One forward move performed by the machine (ci): move + stamp + one commit. */
+  private async moveTicketForward(
+    config: ChainConfig,
+    card: BoardColumn['tickets'][number],
+    nextPhaseId: string,
+    action: string,
+    claims: boolean,
+  ): Promise<boolean> {
+    try {
+      const git = new TicketsGit(() => config.git);
+      const abs = (rel: string): string => path.join(config.ticketsVaultPath, rel);
+      const fromRel = card.path;
+      const toRel = `tickets/${nextPhaseId}/${card.id}.md`;
+      const text = await fsp.readFile(abs(fromRel), 'utf8');
+      const patched = patchTicketFile(text, {
+        to: nextPhaseId,
+        from: card.phase,
+        now: this.now(),
+        actor: this.agentActor(),
+        action,
+        ...(claims ? { claimBy: this.agentActor() } : {}),
+      });
+      await fsp.mkdir(path.dirname(abs(toRel)), { recursive: true });
+      await fsp.rename(abs(fromRel), abs(toRel));
+      await fsp.writeFile(abs(toRel), patched, 'utf8');
+      await this.dropPin(config.ticketsVaultPath, card.id);
+      const location = await git.locate(config.ticketsVaultPath);
+      if (location !== null) {
+        await git.commitPaths(
+          location.root,
+          [fromRel, toRel].map((p) => `${location.prefix}${p}`),
+          `tickets: ${card.id} ${card.phase} -> ${nextPhaseId} (ci)`,
+        );
+      }
+      this.deps.log(`ci moved ${card.id} to ${nextPhaseId}`);
+      return true;
+    } catch (error) {
+      this.deps.log(`the ci move failed for ${card.id}: ${error instanceof Error ? error.message : String(error)}`);
+      return false;
+    }
+  }
+
+  /** Appends a Log line to the ticket file (one commit; failures logged, never thrown). */
+  private async appendTicketLog(
+    config: ChainConfig,
+    card: BoardColumn['tickets'][number],
+    what: string,
+  ): Promise<void> {
+    try {
+      const git = new TicketsGit(() => config.git);
+      const abs = path.join(config.ticketsVaultPath, card.path);
+      const text = await fsp.readFile(abs, 'utf8');
+      const patched = patchTicketFile(text, {
+        to: card.phase,
+        from: null,
+        now: this.now(),
+        actor: this.agentActor(),
+        action: what,
+      });
+      await fsp.writeFile(abs, patched, 'utf8');
+      const location = await git.locate(config.ticketsVaultPath);
+      if (location !== null) {
+        await git.commitPaths(
+          location.root,
+          [`${location.prefix}${card.path}`],
+          `tickets: ${card.id} ci bookkeeping`,
+        );
+      }
+    } catch (error) {
+      this.deps.log(`the ci log line failed for ${card.id}: ${error instanceof Error ? error.message : String(error)}`);
+    }
   }
 
   private allRecords(): readonly SupervisorRecord[] {
@@ -410,6 +580,7 @@ export class Orchestrator {
       cooldownUntil: { ...this.cooldownUntil },
       tokensDay: { ...this.tokensDay },
       tokensUsed: { ...this.tokensUsed },
+      ciBackoff: { ...this.ciBackoff },
     };
     await fsp
       .writeFile(path.join(this.deps.root, CHAIN_FILE), `${JSON.stringify(file, null, 2)}\n`, 'utf8')
@@ -531,9 +702,18 @@ export class Orchestrator {
   }
 }
 
+/** True when the ticket file no longer sits where the snapshot saw it. */
+async function cardMovedOff(vaultPath: string, relPath: string): Promise<boolean> {
+  try {
+    await fsp.access(path.join(vaultPath, relPath));
+    return false;
+  } catch {
+    return true;
+  }
+}
+
 /** Assembles the board the same way Drey does — from the vault's files. */
-export async function readVaultBoard(vaultPath: string, defaultWorker: string): Promise<BoardSnapshot> {
-  const ticketsDir = path.join(vaultPath, 'tickets');
+export async function readVaultBoard(vaultPath: string, defaultWorker: string): Promise<BoardSnapshot> {  const ticketsDir = path.join(vaultPath, 'tickets');
   const entries = await fsp.readdir(ticketsDir, { withFileTypes: true }).catch(() => []);
   const files: BoardFile[] = [];
   for (const entry of entries) {

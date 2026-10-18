@@ -25,8 +25,12 @@ import type { RunInfo, RunRequest, RunState, SteerRung } from './protocol';
 
 const execAsync = promisify(nodeExec);
 
-/** The gate's shell exec: owner-authored commands need a shell. */
-const execShell = (command: string, cwd: string): Promise<void> =>
+/**
+ * The gate's shell exec — the owner's commands run with a shell, 30
+ * minutes each. The orchestrator's `ci` handover check (M85) uses the
+ * same semantics.
+ */
+export const execShell = (command: string, cwd: string): Promise<void> =>
   execAsync(command, { cwd, windowsHide: true, timeout: 30 * 60_000 }).then(() => undefined);
 
 export interface StoredRun {

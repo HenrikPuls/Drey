@@ -141,8 +141,17 @@ describe('Orchestrator', () => {
   });
 
   afterEach(async () => {
-    await fsp.rm(vaultDir, { recursive: true, force: true });
-    await fsp.rm(fleetRoot, { recursive: true, force: true });
+    // A sweep or pass may still hold a temp file open for a beat.
+    for (const dir of [vaultDir, fleetRoot]) {
+      for (let attempt = 0; attempt < 4; attempt++) {
+        try {
+          await fsp.rm(dir, { recursive: true, force: true });
+          break;
+        } catch {
+          await new Promise((resolve) => setTimeout(resolve, 50));
+        }
+      }
+    }
   });
 
   it('dispatches the plan pool: own queue first, then tops up from prioritized', async () => {
@@ -346,5 +355,76 @@ describe('Orchestrator', () => {
     const { orch, fleet } = orchestrator();
     await orch.reapAll();
     expect(fleet.port.reap).toHaveBeenCalled();
+  });
+
+  describe('the ci handover', () => {
+    const CI_PIPELINE = PIPELINE.replace(
+      '  - { id: plan-review, title: Plan review, handover: manual }',
+      '  - { id: plan-review, title: Plan review, handover: ci, ci: npm run check }',
+    );
+
+    let seam: { execShell: (command: string, cwd: string) => Promise<void> };
+
+    beforeEach(() => {
+      seam = { execShell: async () => undefined };
+    });
+
+    async function writeCiMeta(green: boolean): Promise<void> {
+      await writeMeta();
+      await fsp.writeFile(path.join(vaultDir, 'tickets', '_meta', 'pipeline.md'), CI_PIPELINE, 'utf8');
+      seam.execShell = async (command) => {
+        if (!green) {
+          throw new Error('exit 1\ncheck failed');
+        }
+        void command;
+      };
+    }
+
+    it('a green check moves the ticket one column right (and stamps the claim)', async () => {
+      await writeCiMeta(true);
+      await writeTicket('T-0009', 'plan-review');
+      const { orch } = orchestrator({
+        scanIntervalMs: 20,
+        execShell: (command, cwd) => seam.execShell(command, cwd),
+      });
+      await orch.configure(CONFIG);
+      await orch.setMaster('run');
+      await vi.waitFor(
+        async () => {
+          await expect(fsp.access(path.join(vaultDir, 'tickets', 'build', 'T-0009.md'))).resolves.toBeUndefined();
+        },
+        { timeout: 5_000 },
+      );
+      await new Promise((resolve) => setTimeout(resolve, 50));
+      orch.dispose();
+      const moved = await fsp.readFile(path.join(vaultDir, 'tickets', 'build', 'T-0009.md'), 'utf8');
+      expect(moved).toContain('ci check passed');
+      expect(moved).toContain('claimed-by'); // build claims
+      await expect(fsp.access(path.join(vaultDir, 'tickets', 'plan-review', 'T-0009.md'))).rejects.toBeDefined();
+    });
+
+    it('a red check backs the ticket off — it stays put and the retry waits', async () => {
+      await writeCiMeta(false);
+      await writeTicket('T-0009', 'plan-review');
+      const { orch } = orchestrator({
+        scanIntervalMs: 20,
+        execShell: (command, cwd) => seam.execShell(command, cwd),
+      });
+      await orch.configure(CONFIG);
+      await orch.setMaster('run');
+      await vi.waitFor(
+        async () => {
+          const text = await fsp.readFile(path.join(vaultDir, 'tickets', 'plan-review', 'T-0009.md'), 'utf8');
+          expect(text).toContain('ci check failed');
+        },
+        { timeout: 5_000 },
+      );
+      // The backoff suppresses the next sweep ticks' retries (10 min).
+      await new Promise((resolve) => setTimeout(resolve, 80));
+      orch.dispose();
+      await expect(fsp.access(path.join(vaultDir, 'tickets', 'build', 'T-0009.md'))).rejects.toBeDefined();
+      const text = await fsp.readFile(path.join(vaultDir, 'tickets', 'plan-review', 'T-0009.md'), 'utf8');
+      expect(text).toContain('retry in 10 min');
+    });
   });
 });
