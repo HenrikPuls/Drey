@@ -115,6 +115,19 @@ export class FleetClient {
     }
   }
 
+  /** The daemon's recent log lines (the chain-log view), or null. */
+  async log(): Promise<string | null> {
+    try {
+      if (!(await this.withRunner())) {
+        return null;
+      }
+      const res = await fetch(`${this.base()}/log`, { headers: this.headers() });
+      return res.ok ? await res.text() : null;
+    } catch {
+      return null;
+    }
+  }
+
   // --- the chain (M85, ADR-0077) -----------------------------------------
 
   /** The chain's control state, or null when no runner is alive. */

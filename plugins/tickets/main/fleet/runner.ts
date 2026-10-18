@@ -73,9 +73,32 @@ async function main(): Promise<void> {
     process.exit(0);
   }
 
+  // The daemon's log reaches three places: the console (lost for a
+  // detached process), a ring buffer the /log route serves, and
+  // runner.log — the owner's window into every dispatch decision
+  // (T-0007 review finding 2: the daemon's doings were invisible).
+  const logPath = path.join(args.root, 'runner.log');
+  const ring: string[] = [];
+  let logChain: Promise<void> = Promise.resolve();
   const log = (message: string): void => {
-    console.log(`[fleet ${new Date().toISOString()}] ${message}`);
+    const line = `[fleet ${new Date().toISOString()}] ${message}`;
+    console.log(line);
+    ring.push(line);
+    if (ring.length > 1000) {
+      ring.splice(0, ring.length - 1000);
+    }
+    logChain = logChain
+      .then(async () => {
+        await fsp.appendFile(logPath, `${line}\n`, 'utf8');
+        const stat = await fsp.stat(logPath).catch(() => null);
+        if (stat !== null && stat.size > 512 * 1024) {
+          const text = await fsp.readFile(logPath, 'utf8').catch(() => '');
+          await fsp.writeFile(logPath, text.slice(-256 * 1024), 'utf8');
+        }
+      })
+      .catch(() => undefined);
   };
+  log(`daemon pid ${process.pid} starting in ${args.root} (v${VERSION})`);
 
   // Runs carry their provider, so the entry keeps one supervisor per
   // adapter and routes by the request's provider. The chain
@@ -164,6 +187,14 @@ async function main(): Promise<void> {
     try {
       if (req.method === 'GET' && pathname === '/health') {
         respond(200, { ok: true, version: VERSION, live: supervisorsOfLive() });
+        return;
+      }
+      if (req.method === 'GET' && pathname === '/log') {
+        const params = new URL(req.url ?? '/', 'http://127.0.0.1').searchParams;
+        const tail = Number(params.get('tail') ?? '');
+        const count = Number.isFinite(tail) && tail > 0 ? Math.min(Math.trunc(tail), 2000) : 300;
+        res.writeHead(200, { 'content-type': 'text/plain; charset=utf-8' });
+        res.end(ring.slice(-count).join('\n'));
         return;
       }
       if (req.method === 'GET' && pathname === '/chain') {

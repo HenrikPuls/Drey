@@ -868,6 +868,8 @@ const plugin: MainPluginModule = {
       return { text: (await fleet.stream(p.runId)) ?? '' };
     });
 
+    ctx.ipc.handle('fleetLog', async () => ({ text: (await fleet.log()) ?? '' }));
+
     // --- the chain (M85, ADR-0077) -------------------------------------
     ctx.ipc.handle('chainStatus', async () => fleet.chainStatus());
 

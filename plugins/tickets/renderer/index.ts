@@ -845,8 +845,15 @@ function masterControlNode(api: DreyPluginApi): HTMLElement {
   abort.append(api.ui.icon('triangle-alert', 14));
   abort.addEventListener('click', () => void runChainAction('chainAbort', {}));
 
+  const chainLog = el('button', 'icon-btn');
+  chainLog.type = 'button';
+  chainLog.title = 'Chain log — what the fleet daemon did (dispatches, skips, gates); also <fleet>/runner.log';
+  chainLog.setAttribute('aria-label', 'Chain log');
+  chainLog.textContent = 'Log';
+  chainLog.addEventListener('click', () => openChainLogModal(api));
+
   masterButtons.push({ run, halt, abort });
-  box.append(run, halt, abort);
+  box.append(run, halt, abort, chainLog);
   return box;
 }
 
@@ -1070,6 +1077,52 @@ function openWatchModal(api: DreyPluginApi, runId: string): void {
         const text = (result as { text: string }).text ?? '';
         const keepBottom = out.scrollTop + out.clientHeight >= out.scrollHeight - 8;
         out.textContent = text === '' ? '(the stream is empty so far)' : text;
+        if (keepBottom) {
+          out.scrollTop = out.scrollHeight;
+        }
+      });
+    };
+    // The poll dies with its DOM node: when the modal closed, `out` is
+    // disconnected and the interval clears itself.
+    const timer = setInterval(() => {
+      if (!out.isConnected) {
+        clearInterval(timer);
+        return;
+      }
+      pull();
+    }, 2_000);
+    const actions = el('div', 'tickets-form-actions');
+    const done = el('button', undefined, 'Close');
+    done.type = 'button';
+    done.addEventListener('click', () => {
+      clearInterval(timer);
+      close();
+    });
+    actions.append(done);
+    box.append(out, actions);
+    host.append(box);
+  });
+}
+
+/**
+ * The fleet daemon's log (dispatches, skips, gates, master changes) —
+ * the same lines land in `<userData>/plugins/fleet/runner.log`.
+ */
+function openChainLogModal(api: DreyPluginApi): void {
+  const close = api.ui.showModal((host) => {
+    const box = el('div', 'tickets-form tickets-watch');
+    box.append(el('h3', 'tickets-form-heading', 'Fleet daemon log'));
+    const hint = el('p');
+    hint.textContent =
+      'Every dispatch decision, skip, gate and control change — also on disk as <userData>/plugins/fleet/runner.log.';
+    box.append(hint);
+    const out = el('pre', 'tickets-watch-out');
+    out.textContent = 'Loading the daemon log…';
+    const pull = (): void => {
+      void invokeBoard('fleetLog').then((result) => {
+        const text = (result as { text?: string }).text ?? '';
+        const keepBottom = out.scrollTop + out.clientHeight >= out.scrollHeight - 8;
+        out.textContent = text === '' ? '(the daemon has not logged anything yet)' : text;
         if (keepBottom) {
           out.scrollTop = out.scrollHeight;
         }
