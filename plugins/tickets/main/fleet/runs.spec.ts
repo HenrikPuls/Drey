@@ -51,15 +51,30 @@ function fakeAdapter() {
 
 function gitRecorder() {
   const calls: Array<{ args: readonly string[]; cwd: string }> = [];
+  let worktreeList = '';
   const exec: GitExecFn = async (_exe, args, cwd) => {
     calls.push({ args, cwd });
     if (args[0] === 'rev-parse') {
       return `${path.sep}root${path.sep}tk\n`;
     }
+    // The default prepareWorktree: an existing registration at the same
+    // path throws ("already exists") — the reuse rule answers with the list.
+    if (args[0] === 'worktree' && args[1] === 'add') {
+      throw new Error(`fatal: '${args[2] ?? ''}' already exists`);
+    }
+    if (args[0] === 'worktree' && args[1] === 'list') {
+      return worktreeList;
+    }
     return '';
   };
   const ticketsGit = new TicketsGit(() => 'git', exec);
-  return { ticketsGit, calls };
+  return {
+    ticketsGit,
+    calls,
+    set worktreeList(value: string) {
+      worktreeList = value;
+    },
+  };
 }
 
 let vaultDir = '';
@@ -378,5 +393,37 @@ describe('RunSupervisor', () => {
     expect(text).toContain('no agent-done, the step fails');
     // The ticket did not move.
     await expect(fsp.access(path.join(vaultDir, 'tickets', 'plan', 'T-0001.md'))).resolves.toBeUndefined();
+  });
+
+  it('reuses an existing registered worktree for a re-run', async () => {
+    const { sup, git } = supervisor({ prepareWorktree: undefined });
+    git.worktreeList = [
+      `worktree ${path.join(fleetRoot, 'worktrees', 'kt-T-0001').replace(/\\/g, '/')}`,
+      'branch refs/heads/t/T-0001',
+      '',
+      `worktree ${path.join(fleetRoot, 'worktrees', 'kt-other')}`,
+      'branch refs/heads/other',
+      '',
+    ].join('\n');
+    const rel = await writeTicket();
+
+    // `git worktree add` throws on the existing path; the registration
+    // for the same branch makes the start succeed anyway.
+    const started = await sup.start(request({ ticketRelPath: rel }));
+    expect(started.ok).toBe(true);
+  });
+
+  it('refuses a start whose worktree path is registered for another branch', async () => {
+    const { sup, git } = supervisor({ prepareWorktree: undefined });
+    git.worktreeList = [
+      `worktree ${path.join(fleetRoot, 'worktrees', 'kt-T-0001').replace(/\\/g, '/')}`,
+      'branch refs/heads/other',
+      '',
+    ].join('\n');
+    const rel = await writeTicket();
+
+    const refused = await sup.start(request({ ticketRelPath: rel }));
+    expect(refused.ok).toBe(false);
+    expect((refused as { error: string }).error).toContain('worktree failed');
   });
 });

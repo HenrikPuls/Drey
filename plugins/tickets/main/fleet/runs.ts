@@ -126,8 +126,43 @@ export class RunSupervisor {
         const args = hasBranch
           ? ['worktree', 'add', worktreePath, request.branch]
           : ['worktree', 'add', '-b', request.branch, worktreePath, request.baseRef ?? 'HEAD'];
-        await this.git.run(request.repoPath, args);
+        try {
+          await this.git.run(request.repoPath, args);
+        } catch (error) {
+          // A settled run's worktree is a valid home for a re-run: reuse
+          // it when git has it registered for the same branch; otherwise
+          // surface git's error (T-0007 review: twenty silent start
+          // failures against an existing worktree).
+          if (!(await this.isRegisteredWorktree(request.repoPath, worktreePath, request.branch))) {
+            throw error;
+          }
+        }
       });
+  }
+
+  /** True when `worktreePath` is a registered worktree checked out on `branch`. */
+  private async isRegisteredWorktree(repo: string, worktreePath: string, branch: string): Promise<boolean> {
+    const out = await this.git.run(repo, ['worktree', 'list', '--porcelain']).catch(() => '');
+    const normalize = (p: string): string => p.replace(/\\/g, '/').replace(/\/+$/, '').toLowerCase();
+    const wanted = normalize(worktreePath);
+    const lines = out.split(/\r?\n/);
+    for (let i = 0; i < lines.length; i++) {
+      if (!lines[i]!.startsWith('worktree ')) {
+        continue;
+      }
+      if (normalize(lines[i]!.slice('worktree '.length).trim()) !== wanted) {
+        continue;
+      }
+      for (let j = i + 1; j < lines.length && lines[j] !== ''; j++) {
+        if (lines[j]!.startsWith('branch ')) {
+          if (lines[j]!.slice('branch '.length).trim() === `refs/heads/${branch}`) {
+            return true;
+          }
+          break;
+        }
+      }
+    }
+    return false;
   }
 
   /**
