@@ -17,7 +17,7 @@ import { hostname } from 'node:os';
 import * as path from 'node:path';
 import { promisify } from 'node:util';
 import { parseOrderFile, rewriteOrderSection } from '../ticket-board';
-import { patchTicketFile } from '../ticket-files';
+import { acceptanceCommands, patchTicketFile } from '../ticket-files';
 import { TicketsGit } from '../tickets-git';
 import type { NormalizedEvent, ProviderAdapter, WorkerHandle } from './providers';
 import { killTreeGuarded, processAlive, type ExecFn } from './procs';
@@ -415,7 +415,7 @@ export class RunSupervisor {
     if (request.branch !== `t/${request.ticketId}`) {
       failures.push(`the branch is not the deterministic t/${request.ticketId}`);
     }
-    if (request.acceptance.length === 0) {
+    if (request.acceptance.length === 0 && request.gate !== 'structural') {
       failures.push('the ticket has no acceptance criteria — the machine gate would have nothing to run');
     }
     return failures;
@@ -454,12 +454,25 @@ export class RunSupervisor {
       if (TERMINAL.includes(state) || state === 'detached' || state === 'stopping' || run.gating) {
         continue;
       }
-      const pid = run.info.pid;
+      // The opencode handle reports its pid only once the server has
+      // booted — re-read it before judging "never started" (T-0007
+      // review: the reaper killed runs whose agents were mid-flight).
+      const handlePid = run.handle?.pid ?? null;
+      const pid = run.info.pid ?? (handlePid !== null && handlePid > 0 ? handlePid : null);
+      if (pid !== null && pid !== run.info.pid) {
+        run.info = { ...run.info, pid };
+        await this.persist(run);
+      }
       if (pid === null) {
-        // A spawn that never produced a worker: lost after two minutes.
-        if (this.now().getTime() - run.startedAtMs > 2 * 60_000) {
+        // A spawn that never produced a worker: lost after two silent
+        // minutes. Fresh activity (usage/text events) means a worker is
+        // alive even without a recorded pid — never reap it (ADR-0014).
+        if (this.stale(run)) {
           run.info = { ...run.info, gateFailure: 'lease lost — the worker never started; reaped' };
           await this.logLine(run, 'lease reaper: the worker never started — run reaped, ticket freed');
+          if (run.handle !== null) {
+            await run.handle.stop().catch(() => undefined);
+          }
           await this.finish(run, 'failed');
         }
         continue;
@@ -475,8 +488,31 @@ export class RunSupervisor {
     }
   }
 
-  /** The machine gate: the ticket's acceptance commands, in order, in the worktree. */
+  /** The run's last sign of life is older than two minutes. */
+  private stale(run: LiveRun): boolean {
+    const last = Math.max(run.startedAtMs, Date.parse(run.info.lastActivity) || 0);
+    return this.now().getTime() - last > 2 * 60_000;
+  }
+
+  /**
+   * The machine gate: the ticket's acceptance commands, in order, in the
+   * worktree. A structural run (the plan phase) instead reads what the
+   * run produced — writing the executable criteria IS the plan's
+   * deliverable, so the gate checks they came into existence.
+   */
   private async runGate(run: LiveRun): Promise<string | null> {
+    if (run.request.gate === 'structural') {
+      const text = await fsp
+        .readFile(path.join(run.request.ticketsVaultPath, run.currentRelPath), 'utf8')
+        .catch(() => null);
+      if (text === null) {
+        return 'the ticket file disappeared — nothing to gate';
+      }
+      if (acceptanceCommands(text).length === 0) {
+        return 'the run produced no executable acceptance criteria — a plan must end with at least one `- [ ] `command`` line';
+      }
+      return null;
+    }
     for (const command of run.request.acceptance) {
       await this.logLine(run, `gate: ${command}`);
       try {

@@ -114,6 +114,7 @@ function request(overrides: Partial<RunRequest> = {}): RunRequest {
     permissionMode: 'accept-edits',
     instruction: 'Do the ticket.',
     acceptance: ['npm run verify:unit'],
+    gate: 'commands',
     git: 'git',
     nextPhase: 'build',
     claimIdentity: null,
@@ -175,6 +176,51 @@ describe('RunSupervisor', () => {
     const noGate = await sup.start(request({ acceptance: [] }));
     expect(noGate.ok).toBe(false);
     expect((noGate as { error: string }).error).toContain('no acceptance criteria');
+    // The first worker column may take the ticket anyway: its run gates
+    // structurally (the plan writes the criteria).
+    const structural = await sup.start(request({ acceptance: [], gate: 'structural' }));
+    expect(structural.ok).toBe(true);
+  });
+
+  it('a structural run fails red when no acceptance criteria came into existence', async () => {
+    const { sup, adapter, gate } = supervisor();
+    const rel = await writeTicket();
+    const started = await sup.start(request({ acceptance: [], gate: 'structural' }));
+    const id = (started as { run: { id: string } }).run.id;
+
+    adapter.handles[0]!.result();
+    adapter.handles[0]!.fail(0);
+    await vi.waitFor(() => expect(sup.get(id)?.state).toBe('failed'));
+
+    expect(gate).toEqual([]); // no commands to run — the gate reads instead
+    expect(sup.get(id)?.gateFailure).toContain('no executable acceptance criteria');
+    const text = await fsp.readFile(path.join(vaultDir, rel), 'utf8');
+    expect(parseTicketFile(text, rel).meta.run).toBeNull();
+  });
+
+  it('a structural run passes when the plan produced acceptance criteria', async () => {
+    const { sup, adapter, gate } = supervisor();
+    const rel = await writeTicket();
+    const started = await sup.start(request({ acceptance: [], gate: 'structural' }));
+    const id = (started as { run: { id: string } }).run.id;
+
+    // The plan's deliverable: acceptance criteria appear in the ticket…
+    const live = path.join(vaultDir, rel);
+    await fsp.writeFile(
+      live,
+      (await fsp.readFile(live, 'utf8')).replace(
+        '### Acceptance criteria',
+        '### Acceptance criteria\n\n- [ ] `node -e "process.exit(0)"` — exits 0',
+      ),
+      'utf8',
+    );
+
+    // …and the gate reads them as green (no commands to run).
+    adapter.handles[0]!.result();
+    adapter.handles[0]!.fail(0);
+    await vi.waitFor(() => expect(sup.get(id)?.state).toBe('done'));
+    expect(gate).toEqual([]);
+    await expect(fsp.access(path.join(vaultDir, 'tickets', 'build', 'T-0001.md'))).resolves.toBeUndefined();
   });
 
   it('a green worker passes the gate and moves the ticket on (one commit)', async () => {

@@ -22,7 +22,7 @@ import { isValidTicketFile, parseHandover } from '../../shared/tickets';
 import { assembleBoard, parseOrderFile, rewriteOrderSection, type BoardFile } from '../ticket-board';
 import { patchTicketFile } from '../ticket-files';
 import { TicketsGit } from '../tickets-git';
-import { columnPromptRef, nextPhaseIdOf, planDispatch } from './chain';
+import { columnPromptRef, isAutoPhase, nextPhaseIdOf, planDispatch } from './chain';
 import { composeRunRequest } from './request';
 import { execShell, type SupervisorRecord, type StartOutcome, type StopOutcome } from './runs';
 import type {
@@ -716,6 +716,10 @@ export class Orchestrator {
       this.deps.log(`dispatch skips ${card.id}: the ticket file is unreadable`);
       return;
     }
+    // The pipeline's first worker column takes in fresh tickets: a run
+    // there gates structurally (the plan WRITES the acceptance criteria)
+    // instead of demanding criteria the ticket cannot have yet.
+    const firstWorker = snap.pipeline.find((p) => isAutoPhase(p)) ?? null;
     const composed = composeRunRequest({
       card,
       ticketText: text,
@@ -729,6 +733,7 @@ export class Orchestrator {
       permissionMode: config.permissionMode,
       gitPath: config.git,
       workerChoice: null,
+      structuralGateAllowed: firstWorker?.id === workingPhaseId,
       dispatchedBy: workingPhaseId,
     });
     if (!composed.ok) {

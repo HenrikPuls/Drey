@@ -39,6 +39,13 @@ export interface ComposeRunInput {
   readonly gitPath: string;
   /** The run dialog's explicit worker choice (owner runs only). */
   readonly workerChoice: string | null;
+  /**
+   * Set by the orchestrator for the pipeline's first worker column: a
+   * ticket entering there carries no acceptance criteria yet (writing
+   * them is the plan's job), so the run gates structurally — the gate
+   * then checks the criteria came into existence — instead of refusing.
+   */
+  readonly structuralGateAllowed?: boolean;
   /** Set when the orchestrator dispatches — the pool whose slot this run occupies. */
   readonly dispatchedBy?: string;
 }
@@ -61,7 +68,7 @@ export function composeRunRequest(input: ComposeRunInput): ComposeRunResult {
     };
   }
   const acceptance = acceptanceCommands(input.ticketText);
-  if (acceptance.length === 0) {
+  if (acceptance.length === 0 && input.structuralGateAllowed !== true) {
     return {
       ok: false,
       error: `${input.card.id} has no acceptance criteria — the machine gate would have nothing to run`,
@@ -105,6 +112,7 @@ export function composeRunRequest(input: ComposeRunInput): ComposeRunResult {
       acceptance,
     }),
     acceptance,
+    gate: acceptance.length > 0 ? 'commands' : 'structural',
     git: input.gitPath.trim() === '' ? 'git' : input.gitPath.trim(),
     nextPhase: input.nextPhaseId,
     claimIdentity: input.nextPhaseClaims && input.nextPhaseId !== null ? agentIdentity() : null,

@@ -78,6 +78,10 @@ async function main(): Promise<void> {
   // runner.log — the owner's window into every dispatch decision
   // (T-0007 review finding 2: the daemon's doings were invisible).
   const logPath = path.join(args.root, 'runner.log');
+  // The build stamp: the entry file's mtime at boot. When the file on
+  // disk moves on (a new build), the client retires this daemon and
+  // respawns — stale code never serves a second session.
+  const buildStamp = (await fsp.stat(__filename)).mtime.toISOString();
   const ring: string[] = [];
   let logChain: Promise<void> = Promise.resolve();
   const log = (message: string): void => {
@@ -140,6 +144,7 @@ async function main(): Promise<void> {
     pid: process.pid,
     startedAt: new Date().toISOString(),
     version: VERSION,
+    build: buildStamp,
   };
   const tokenBuffer = Buffer.from(token, 'utf8');
 
@@ -186,7 +191,13 @@ async function main(): Promise<void> {
     const { pathname, parts } = url(req);
     try {
       if (req.method === 'GET' && pathname === '/health') {
-        respond(200, { ok: true, version: VERSION, live: supervisorsOfLive() });
+        respond(200, { ok: true, version: VERSION, build: buildStamp, live: supervisorsOfLive() });
+        return;
+      }
+      if (req.method === 'POST' && pathname === '/shutdown') {
+        respond(200, { ok: true });
+        log('shutdown requested — the client starts a newer build');
+        setTimeout(() => process.exit(0), 100);
         return;
       }
       if (req.method === 'GET' && pathname === '/log') {

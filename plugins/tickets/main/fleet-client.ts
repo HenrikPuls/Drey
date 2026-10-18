@@ -217,14 +217,22 @@ export class FleetClient {
     return { Authorization: `Bearer ${this.descriptor?.token ?? ''}` };
   }
 
-  /** Descriptor file → health check → spawn the sibling when both fail.
-   *  Spawn-capable: only `start` may bring the runner up. */
+  /** Descriptor file → health check → build check → spawn the sibling
+   *  when all fail. Spawn-capable: only `start` may bring the runner up. */
   private async ensureRunner(): Promise<boolean> {
     if (this.descriptor !== null && (await this.alive(this.descriptor))) {
+      if (await this.isStale(this.descriptor)) {
+        await this.retireStale(this.descriptor);
+        return this.spawnRunner();
+      }
       return true;
     }
     this.descriptor = await this.readDescriptor();
     if (this.descriptor !== null && (await this.alive(this.descriptor))) {
+      if (await this.isStale(this.descriptor)) {
+        await this.retireStale(this.descriptor);
+        return this.spawnRunner();
+      }
       return true;
     }
     return this.spawnRunner();
@@ -233,10 +241,48 @@ export class FleetClient {
   /** Read-only adoption: talk to a runner that is already alive, never spawn. */
   private async withRunner(): Promise<boolean> {
     if (this.descriptor !== null && (await this.alive(this.descriptor))) {
+      if (await this.isStale(this.descriptor)) {
+        // The read-only path never spawns; the next explicit interaction
+        // starts the new build.
+        await this.retireStale(this.descriptor);
+        return false;
+      }
       return true;
     }
     this.descriptor = await this.readDescriptor();
     return this.descriptor !== null && (await this.alive(this.descriptor));
+  }
+
+  /**
+   * True when a healthy runner was booted from an older build of the
+   * entry script: the daemon stamps the script's mtime at boot, and the
+   * client compares it with the file on disk now. A rebuilt entry means
+   * the daemon serves stale code (T-0007 review: fixes never loaded).
+   */
+  private async isStale(peer: RunnerDescriptor): Promise<boolean> {
+    if (peer.build === undefined) {
+      return false;
+    }
+    const mine = await fsp
+      .stat(this.opts.runnerScript)
+      .then((s) => s.mtime.toISOString())
+      .catch(() => null);
+    return mine !== null && mine !== peer.build;
+  }
+
+  /** Asks a stale runner to exit; the next start respawns the new build. */
+  private async retireStale(peer: RunnerDescriptor): Promise<void> {
+    this.opts.log('the fleet runner predates this build — restarting it', 'warn');
+    try {
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), 1_500);
+      await fetch(`${this.base()}/shutdown`, { method: 'POST', headers: this.headers(), signal: controller.signal });
+      clearTimeout(timer);
+    } catch {
+      // a daemon that will not take the call is dead to us either way —
+      // the next spawn takes over the stale descriptor
+    }
+    this.descriptor = null;
   }
 
   private async spawnRunner(): Promise<boolean> {

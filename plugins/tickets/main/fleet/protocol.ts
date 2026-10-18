@@ -53,6 +53,13 @@ export interface RunRequest {
   readonly instruction: string;
   /** The machine gate: the ticket's backticked acceptance commands, in order. */
   readonly acceptance: readonly string[];
+  /**
+   * `commands` runs the acceptance commands (the normal gate).
+   * `structural` is the plan phase's gate: the ticket entered without
+   * executable criteria (writing them is the plan's job), so the gate
+   * instead checks that the run produced at least one.
+   */
+  readonly gate: 'commands' | 'structural';
   /** Git executable for worktree + ticket commits (the plugin's gitPath or `git`). */
   readonly git: string;
   /** Transition target after a green gate — the pipeline's next phase id. */
@@ -128,6 +135,11 @@ export interface RunnerDescriptor {
   readonly pid: number;
   readonly startedAt: string;
   readonly version: number;
+  /**
+   * Build stamp of the entry script (its mtime at boot, ISO) — the
+   * client's respawn signal when the file on disk has moved on.
+   */
+  readonly build?: string;
 }
 
 /** Which ticket-file stamps the runner performs itself (same semantics
