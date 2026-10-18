@@ -977,7 +977,12 @@ const laneOpen = new Map<string, boolean>();
  * is open until the owner folds it.
  */
 function workerLanesNode(api: DreyPluginApi, column: BoardColumn): HTMLElement | null {
-  const runs = lanesOfColumn(liveRuns(), column.phase.id);
+  // A detached run (the runner restarted while its worker lived on) keeps
+  // its ticket blocked until it is stopped, so it gets a lane with a Stop.
+  const runs = lanesOfColumn(
+    fleetRuns.filter((r) => LIVE_RUN_STATES.includes(r.state) || r.state === 'detached'),
+    column.phase.id,
+  );
   const slots = column.phase.workers;
   if (runs.length === 0 && slots <= 0) {
     return null;
@@ -995,7 +1000,7 @@ function workerLanesNode(api: DreyPluginApi, column: BoardColumn): HTMLElement |
   head.append(
     el('span', `tickets-light tickets-light-${runs.length === 0 ? 'idle' : worst}`),
     el('span', 'tickets-lanes-title', 'Workers'),
-    el('span', 'tickets-lanes-count', `${runs.length} of ${slots} busy`),
+    el('span', 'tickets-lanes-count', `${runs.filter((r) => r.state !== 'detached').length} of ${slots} busy`),
   );
   strip.append(head);
 
@@ -1037,7 +1042,15 @@ function workerLanesNode(api: DreyPluginApi, column: BoardColumn): HTMLElement |
     if (open) {
       const body = el('div', 'tickets-lane-body');
       const activity = run.activity ?? '';
-      const act = el('div', 'tickets-lane-activity', activity !== '' ? activity : 'No output yet');
+      const act = el(
+        'div',
+        'tickets-lane-activity',
+        run.state === 'detached'
+          ? 'The runner restarted while this worker lived on — stop the run to free the ticket'
+          : activity !== ''
+            ? activity
+            : 'No output yet',
+      );
       act.title = activity;
       body.append(act);
 
@@ -1079,12 +1092,16 @@ function workerLanesNode(api: DreyPluginApi, column: BoardColumn): HTMLElement |
         b.addEventListener('click', onClick);
         actions.append(b);
       };
-      button('arrow-right', run.held === true ? 'Open the takeover tab — you have control' : 'Take over — drive this worker yourself', () => {
-        void takeOver(api, run);
-      });
+      if (run.state !== 'detached') {
+        button('arrow-right', run.held === true ? 'Open the takeover tab — you have control' : 'Take over — drive this worker yourself', () => {
+          void takeOver(api, run);
+        });
+      }
       button('file-text', `Watch the run's stream (${run.id})`, () => openWatchModal(api, run.id));
-      button('message-circle', 'Send a message into the live run', () => openSteerModal(api, run.id));
-      button('square', 'Kill the worker (the ticket stays in its phase)', () => {
+      if (run.state !== 'detached') {
+        button('message-circle', 'Send a message into the live run', () => openSteerModal(api, run.id));
+      }
+      button('square', run.state === 'detached' ? 'Stop the run — frees the ticket (the worker is killed if it still lives)' : 'Kill the worker (the ticket stays in its phase)', () => {
         void runMutation('Stopping the run', () => invokeBoard('fleetStop', { runId: run.id, reason: null }));
       });
       body.append(actions);

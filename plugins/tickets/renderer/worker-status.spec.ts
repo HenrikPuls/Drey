@@ -88,3 +88,9 @@ describe('lanes', () => {
     expect(lanesOfColumn(runs, 'build').map((r) => r.id)).toEqual(['a', 'b']);
   });
 });
+
+describe('workerStatus — a detached run', () => {
+  it('is amber and says so (the runner lost its worker)', () => {
+    expect(workerStatus(run({ state: 'detached' }), NOW)).toEqual({ light: 'amber', label: 'Detached' });
+  });
+});

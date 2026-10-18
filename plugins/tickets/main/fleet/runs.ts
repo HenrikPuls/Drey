@@ -214,7 +214,9 @@ export class RunSupervisor {
       try {
         const stored = JSON.parse(raw) as StoredRun;
         const dir = path.join(runsDir, id);
-        if (TERMINAL.includes(stored.info.state)) {
+        // A run that is already detached stays as it is: re-detaching it on
+        // every boot rewrote its record and re-stamped its ticket each time.
+        if (TERMINAL.includes(stored.info.state) || stored.info.state === 'detached') {
           this.runs.set(stored.info.id, {
             info: stored.info,
             request: stored.request,
@@ -387,9 +389,12 @@ export class RunSupervisor {
     if (run === undefined) {
       return { ok: false, error: `unknown run "${runId}"` };
     }
-    if (TERMINAL.includes(run.info.state) || run.info.state === 'detached') {
+    if (TERMINAL.includes(run.info.state)) {
       return { ok: false, error: `run ${runId} already ended (${run.info.state})` };
     }
+    // A detached run has no attached worker: stopping it kills the recorded
+    // process if it still lives and ends the record — the only way to free
+    // the ticket it blocks.
     run.info = { ...run.info, state: 'stopping' };
     await this.logLine(run, `stopped by the owner${reason !== null ? ` — ${reason}` : ''}`);
     if (run.handle !== null) {
@@ -804,6 +809,10 @@ export class RunSupervisor {
         }),
       );
     } catch (error) {
+      if ((error as { code?: string }).code === 'ENOENT') {
+        // The ticket moved on (or was removed) since the run: nothing to clear.
+        return;
+      }
       this.deps.log(`run ${run.info.id}: clearing the ticket's run stamp failed — ${messageOf(error)}`);
     }
   }

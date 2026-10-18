@@ -206,6 +206,46 @@ describe('RunSupervisor', () => {
     expect((await sup.takeover('R-nope')).ok).toBe(false);
   });
 
+  it('adopts a live leftover as detached once, and stop ends a detached run (frees the ticket)', async () => {
+    const rel = await writeTicket();
+    const dir = path.join(fleetRoot, 'runs', 'R-old');
+    await fsp.mkdir(dir, { recursive: true });
+    const info = {
+      id: 'R-old',
+      ticketId: 'T-0001',
+      provider: 'opencode',
+      state: 'running',
+      pid: null,
+      startedAt: '2026-10-17T11:00:00Z',
+      endedAt: null,
+      sessionRef: null,
+      tokensIn: 0,
+      tokensOut: 0,
+      costUsd: null,
+      lastActivity: '2026-10-17T11:00:00Z',
+      steerCount: 0,
+      lastSteerRung: null,
+      worktreePath: 'x',
+      branch: 't/T-0001',
+      gateFailure: null,
+    };
+    await fsp.writeFile(path.join(dir, 'run.json'), JSON.stringify({ request: request({ ticketRelPath: rel }), info }), 'utf8');
+
+    const first = supervisor();
+    await first.sup.adopt();
+    expect(first.sup.get('R-old')?.state).toBe('detached');
+
+    // A second boot leaves the detached record alone (no re-detach, no new stamp).
+    const before = await fsp.readFile(path.join(dir, 'run.json'), 'utf8');
+    const second = supervisor();
+    await second.sup.adopt();
+    expect(await fsp.readFile(path.join(dir, 'run.json'), 'utf8')).toBe(before);
+
+    const stopped = await second.sup.stop('R-old', 'owner');
+    expect(stopped.ok).toBe(true);
+    expect(second.sup.get('R-old')?.state).toBe('stopped');
+  });
+
   it('validates the deterministic branch and the machine gate before spawning', async () => {
     const { sup } = supervisor();
     await writeTicket();

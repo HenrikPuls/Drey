@@ -33,6 +33,9 @@ export function contextFill(run: RunInfo, windowTokens: number = DEFAULT_CONTEXT
 
 /** Traffic light of one live run: stalled beats a full context beats fine. */
 export function workerStatus(run: RunInfo, nowMs: number, windowTokens: number = DEFAULT_CONTEXT_WINDOW): WorkerStatus {
+  if (run.state === 'detached') {
+    return { light: 'amber', label: 'Detached' };
+  }
   const silentMs = nowMs - (Date.parse(run.lastActivity) || nowMs);
   if (run.state === 'running' && silentMs >= STALL_MS) {
     return { light: 'red', label: `Stalled ${Math.floor(silentMs / 60_000)}m` };
