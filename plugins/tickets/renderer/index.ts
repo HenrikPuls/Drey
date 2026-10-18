@@ -847,10 +847,10 @@ function masterControlNode(api: DreyPluginApi): HTMLElement {
 
   const chainLog = el('button', 'icon-btn');
   chainLog.type = 'button';
-  chainLog.title = 'Chain log — what the fleet daemon did (dispatches, skips, gates); also <fleet>/runner.log';
+  chainLog.title = 'Chain log — what the fleet daemon did (dispatches, skips, gates), as a readonly editor tab';
   chainLog.setAttribute('aria-label', 'Chain log');
   chainLog.textContent = 'Log';
-  chainLog.addEventListener('click', () => openChainLogModal(api));
+  chainLog.addEventListener('click', () => openChainLog(api));
 
   masterButtons.push({ run, halt, abort });
   box.append(run, halt, abort, chainLog);
@@ -1105,49 +1105,55 @@ function openWatchModal(api: DreyPluginApi, runId: string): void {
 }
 
 /**
- * The fleet daemon's log (dispatches, skips, gates, master changes) —
- * the same lines land in `<userData>/plugins/fleet/runner.log`.
+ * The fleet daemon's chain log as a readonly editor tab: the same lines
+ * land in `<userData>/plugins/fleet/runner.log` (T-0007 review finding 2).
  */
-function openChainLogModal(api: DreyPluginApi): void {
-  const close = api.ui.showModal((host) => {
-    const box = el('div', 'tickets-form tickets-watch');
-    box.append(el('h3', 'tickets-form-heading', 'Fleet daemon log'));
-    const hint = el('p');
-    hint.textContent =
-      'Every dispatch decision, skip, gate and control change — also on disk as <userData>/plugins/fleet/runner.log.';
-    box.append(hint);
-    const out = el('pre', 'tickets-watch-out');
-    out.textContent = 'Loading the daemon log…';
-    const pull = (): void => {
-      void invokeBoard('fleetLog').then((result) => {
-        const text = (result as { text?: string }).text ?? '';
-        const keepBottom = out.scrollTop + out.clientHeight >= out.scrollHeight - 8;
-        out.textContent = text === '' ? '(the daemon has not logged anything yet)' : text;
-        if (keepBottom) {
-          out.scrollTop = out.scrollHeight;
-        }
-      });
-    };
-    // The poll dies with its DOM node: when the modal closed, `out` is
-    // disconnected and the interval clears itself.
-    const timer = setInterval(() => {
+const CHAIN_LOG_KIND = 'tickets-chain-log';
+const CHAIN_LOG_KEY = 'chain-log://fleet-daemon';
+
+/** Opens (or focuses) the fleet daemon's log tab. */
+function openChainLog(api: DreyPluginApi): void {
+  api.documents.addDoc(CHAIN_LOG_KIND, CHAIN_LOG_KEY, 'Fleet daemon log');
+}
+
+/**
+ * The log's pane body: a readonly tail that follows the bottom while the
+ * view is scrolled down. Scrolling up pauses the follow; scrolling back
+ * to the bottom resumes it — the terminal behavior (owner ruling).
+ */
+function mountChainLog(host: HTMLElement): () => void {
+  const wrap = el('div', 'tickets-chain-log');
+  const hint = el('div', 'tickets-chain-log-hint');
+  hint.textContent =
+    'Also on disk as <userData>/plugins/fleet/runner.log — follows the tail while you are at the bottom; scroll up to hold, back down to resume.';
+  const out = el('pre', 'tickets-chain-log-out');
+  out.textContent = 'Loading the daemon log…';
+  let follow = true;
+  const atBottom = (): boolean => out.scrollTop + out.clientHeight >= out.scrollHeight - 4;
+  const onScroll = (): void => {
+    follow = atBottom();
+  };
+  out.addEventListener('scroll', onScroll);
+  const pull = (): void => {
+    void invokeBoard('fleetLog').then((result) => {
       if (!out.isConnected) {
-        clearInterval(timer);
         return;
       }
-      pull();
-    }, 2_000);
-    const actions = el('div', 'tickets-form-actions');
-    const done = el('button', undefined, 'Close');
-    done.type = 'button';
-    done.addEventListener('click', () => {
-      clearInterval(timer);
-      close();
+      const text = (result as { text?: string }).text ?? '';
+      out.textContent = text === '' ? '(the daemon has not logged anything yet)' : text;
+      if (follow) {
+        out.scrollTop = out.scrollHeight;
+      }
     });
-    actions.append(done);
-    box.append(out, actions);
-    host.append(box);
-  });
+  };
+  pull();
+  const timer = setInterval(pull, 2_000);
+  wrap.append(hint, out);
+  host.append(wrap);
+  return () => {
+    clearInterval(timer);
+    out.removeEventListener('scroll', onScroll);
+  };
 }
 
 // --- the card context menu ----------------------------------------------------
@@ -1270,6 +1276,18 @@ const plugin: { activate(api: DreyPluginApi): void } = {
     backend = api.backend;
     api.ui.registerWidget(createTicketsWidget(api));
     api.ui.registerSettingsPage(createTicketsSettingsPage(api));
+
+    // The fleet daemon's chain log: a readonly, tail-following editor tab
+    // (T-0007 review finding 2). Stateless — the session snapshot reopens
+    // it from the fixed key.
+    api.ui.registerDocKind({
+      kind: CHAIN_LOG_KIND,
+      icon: 'scroll-text',
+      serialize: () => null,
+      restore: () => openChainLog(api),
+      mount: (el) => mountChainLog(el),
+      statusText: () => 'fleet daemon',
+    });
 
     api.backend.on('board-changed', () => void refreshBoard());
     api.vault.onChanged(() => void refreshBoard());
