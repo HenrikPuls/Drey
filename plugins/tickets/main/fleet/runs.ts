@@ -105,6 +105,8 @@ interface LiveRun {
   audited: boolean;
   /** The worker finished its turn — the adapter's `result` event, the agent-done signal. */
   agentDone: boolean;
+  /** Why the owner stopped the run — becomes the ticket Log line when the run ends. */
+  stopNote?: string;
 }
 
 /** What a takeover call answers. */
@@ -396,7 +398,11 @@ export class RunSupervisor {
     // process if it still lives and ends the record — the only way to free
     // the ticket it blocks.
     run.info = { ...run.info, state: 'stopping' };
-    await this.logLine(run, `stopped by the owner${reason !== null ? ` — ${reason}` : ''}`);
+    // The worker dies FIRST and the Log line follows with the run's end: the
+    // line used to be written before the kill (a ticket write plus a git
+    // commit), and a runner shutdown that gave up waiting on it exited with
+    // the worker still alive — the orphans.
+    run.stopNote = `stopped by the owner${reason !== null ? ` — ${reason}` : ''}`;
     if (run.handle !== null) {
       await run.handle.stop();
       // onWorkerExit sees 'stopping' and finishes the run.
@@ -785,7 +791,7 @@ export class RunSupervisor {
     }
     this.deps.log(`run ${run.info.id} → ${state}`);
     await this.persist(run);
-    await this.clearRunStamp(run, null);
+    await this.clearRunStamp(run, run.stopNote === undefined ? null : `${run.stopNote}${usageSummary(run.info)}`);
     // The slot is free and the ticket is where it belongs — the chain
     // may dispatch again (M85; a no-op while no chain is configured).
     void this.deps.onRunSettled?.(run.info);

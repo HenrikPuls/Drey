@@ -206,6 +206,21 @@ describe('RunSupervisor', () => {
     expect((await sup.takeover('R-nope')).ok).toBe(false);
   });
 
+  it('stop kills the worker first and the ticket Log line comes with the run\'s end', async () => {
+    const { sup, adapter } = supervisor();
+    const rel = await writeTicket();
+    const started = await sup.start(request({ ticketRelPath: rel }));
+    const runId = (started as { run: { id: string } }).run.id;
+
+    const outcome = await sup.stop(runId, 'because');
+    expect(outcome.ok).toBe(true);
+    expect(adapter.handles[0]!.stop).toHaveBeenCalledTimes(1);
+    await vi.waitFor(async () => {
+      expect(sup.get(runId)?.state).toBe('stopped');
+      expect(await fsp.readFile(path.join(vaultDir, rel), 'utf8')).toContain('stopped by the owner — because');
+    });
+  });
+
   it('adopts a live leftover as detached once, and stop ends a detached run (frees the ticket)', async () => {
     const rel = await writeTicket();
     const dir = path.join(fleetRoot, 'runs', 'R-old');
