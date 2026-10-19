@@ -117,7 +117,7 @@ function supervisor(overrides: Partial<RunSupervisorDeps> = {}): {
     git: 'git',
     log: () => undefined,
     now: () => new Date('2026-10-17T12:00:00Z'),
-    prepareWorktree: async () => undefined,
+    prepareWorktree: async () => ({ outcome: 'created', sessionInvalidated: false, movedTo: null }),
     execShell: async (command) => {
       gate.push([command]);
     },

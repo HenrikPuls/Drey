@@ -22,6 +22,7 @@ import { TicketsGit } from '../tickets-git';
 import type { NormalizedEvent, ProviderAdapter, WorkerHandle } from './providers';
 import { killTreeGuarded, type ExecFn } from './procs';
 import type { RunInfo, RunRequest, RunState, SteerRung } from './protocol';
+import { prepareWorktree as defaultPrepareWorktree, type PreparedWorktree } from './worktrees';
 
 const execAsync = promisify(nodeExec);
 
@@ -50,7 +51,7 @@ export interface RunSupervisorDeps {
   /** Test seam over the gate's shell commands (cwd = the worktree). */
   readonly execShell?: (command: string, cwd: string) => Promise<void>;
   /** Test seam over worktree preparation. */
-  readonly prepareWorktree?: (request: RunRequest, worktreePath: string) => Promise<void>;
+  readonly prepareWorktree?: (request: RunRequest, worktreePath: string) => Promise<PreparedWorktree>;
   /** Test seam over the tickets repo's git (the spec recorder). */
   readonly ticketsGit?: Pick<TicketsGit, 'run' | 'locate' | 'commitPaths'>;
 }
@@ -73,7 +74,7 @@ export class RunSupervisor {
   private readonly git: Pick<TicketsGit, 'run' | 'locate' | 'commitPaths'>;
   private readonly now: () => Date;
   private readonly exec: ExecFn;
-  private readonly prepareWorktree: (request: RunRequest, worktreePath: string) => Promise<void>;
+  private readonly prepareWorktree: (request: RunRequest, worktreePath: string) => Promise<PreparedWorktree>;
 
   constructor(private readonly deps: RunSupervisorDeps) {
     this.git = deps.ticketsGit ?? new TicketsGit(() => deps.git);
@@ -89,19 +90,7 @@ export class RunSupervisor {
       });
     this.prepareWorktree =
       deps.prepareWorktree ??
-      (async (request, worktreePath) => {
-        await fsp.mkdir(path.dirname(worktreePath), { recursive: true });
-        // The branch usually exists (created when the ticket was planned);
-        // a missing branch is created from the repo's base ref.
-        const hasBranch = await this.git
-          .run(request.repoPath, ['rev-parse', '--verify', request.branch])
-          .then(() => true)
-          .catch(() => false);
-        const args = hasBranch
-          ? ['worktree', 'add', worktreePath, request.branch]
-          : ['worktree', 'add', '-b', request.branch, worktreePath, request.baseRef ?? 'HEAD'];
-        await this.git.run(request.repoPath, args);
-      });
+      ((request, worktreePath) => defaultPrepareWorktree(this.git, request, worktreePath, this.now));
   }
 
   /**
@@ -192,9 +181,10 @@ export class RunSupervisor {
       `${request.repoPath.split(/[\\/]/).at(-1) ?? 'repo'}-${request.ticketId}`,
     );
 
+    let prepared: PreparedWorktree;
     try {
       await fsp.mkdir(dir, { recursive: true });
-      await this.prepareWorktree(request, worktreePath);
+      prepared = await this.prepareWorktree(request, worktreePath);
     } catch (error) {
       return { ok: false, error: `worktree failed: ${messageOf(error)}` };
     }
@@ -216,6 +206,7 @@ export class RunSupervisor {
       lastSteerRung: null,
       worktreePath,
       branch: request.branch,
+      worktree: prepared.outcome,
       gateFailure: null,
     };
     const run: LiveRun = {
@@ -228,9 +219,15 @@ export class RunSupervisor {
       startedAtMs: this.now().getTime(),
     };
     this.runs.set(id, run);
+    const openNote = (text: string): string => `${JSON.stringify({ ts: this.stamp(), kind: 'note', text })}\n`;
     await fsp.writeFile(
       path.join(dir, 'stream.jsonl'),
-      `${JSON.stringify({ ts: this.stamp(), kind: 'note', text: `run ${id} for ${request.ticketId} on ${request.branch}` })}\n`,
+      openNote(`run ${id} for ${request.ticketId} on ${request.branch} — worktree ${prepared.outcome}`) +
+        (prepared.outcome === 'moved-aside'
+          ? openNote(
+              `stale dirty worktree moved aside to ${prepared.movedTo} — kept, not deleted; earlier session context is invalid`,
+            )
+          : ''),
       'utf8',
     );
 
@@ -259,7 +256,7 @@ export class RunSupervisor {
         from: null,
         now: this.now(),
         actor: this.agentActor(),
-        action: `run ${id} started (${request.provider}${request.model !== null ? `, ${request.model}` : ''})`,
+        action: `run ${id} started (${request.provider}${request.model !== null ? `, ${request.model}` : ''}) — worktree ${prepared.outcome}`,
         ...(request.recordWorker !== undefined && request.recordWorker !== '' ? { setWorker: request.recordWorker } : {}),
         ...(handle.pid !== null
           ? { run: { pid: handle.pid, 'started-at': this.stamp(), stream: id } }
