@@ -7,6 +7,7 @@ import { imageExtension, pdfExtension } from '../../../../shared/asset-name';
 import { clampEmbedWidth, parseImageEmbed, setEmbedWidth } from '../../../../shared/image-embed';
 import { applyExtendedMarkdown } from '../../../../shared/markdown/markdown-it-extended';
 import { frontmatterEnd } from '../markdown-frontmatter';
+import { highlightFence } from '../preview-highlight';
 import { extractWikilinks } from '../wikilinks/wikilink';
 import { fenceLang } from './fenced-code';
 import { MathWidget } from './math-widget';
@@ -87,7 +88,7 @@ export function completeSyntaxTree(state: EditorState): Tree {
  * the editor's KaTeX copy is widget-side, and cells stay sync-rendered.
  */
 const tableMd = new MarkdownIt({ html: false });
-applyExtendedMarkdown(tableMd);
+applyExtendedMarkdown(tableMd, { fenceHighlight: highlightFence });
 
 /**
  * HTML regions render with `html: true`: the region may interleave raw HTML
@@ -96,7 +97,7 @@ applyExtendedMarkdown(tableMd);
  * `sanitizeHtml`.
  */
 const htmlMd = new MarkdownIt({ html: true });
-applyExtendedMarkdown(htmlMd);
+applyExtendedMarkdown(htmlMd, { fenceHighlight: highlightFence });
 
 type EmbedKind = 'table' | 'mermaid' | 'image' | 'pdf' | 'html' | 'math';
 
