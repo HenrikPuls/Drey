@@ -22,7 +22,7 @@ import * as http from 'node:http';
 import * as path from 'node:path';
 import { fleetBuildStamp } from './build-stamp';
 import { claudeCodeAdapter, opencodeAdapter } from './providers';
-import { freePort, nodeSpawnFn } from './procs';
+import { freePort, nodeSpawnFn, scrubInheritedEnv } from './procs';
 import { Orchestrator } from './orchestrator';
 import { MAX_ATTACHMENT_BYTES, RunSupervisor } from './runs';
 import {
@@ -106,6 +106,10 @@ async function main(): Promise<void> {
       .catch(() => undefined);
   };
   log(`daemon pid ${process.pid} starting in ${args.root} (v${VERSION})`);
+  const scrubbed = scrubInheritedEnv(process.env);
+  if (scrubbed.length > 0) {
+    log(`workers start without ${scrubbed.length} inherited variable(s): ${scrubbed.join(', ')}`);
+  }
 
   // Runs carry their provider, so the entry keeps one supervisor per
   // adapter and routes by the request's provider. The chain

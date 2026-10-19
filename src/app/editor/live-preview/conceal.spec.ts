@@ -2,7 +2,7 @@ import { markdown, markdownLanguage } from '@codemirror/lang-markdown';
 import { EditorState } from '@codemirror/state';
 import { Decoration, DecorationSet } from '@codemirror/view';
 import { extendedMarkdown } from '../markdown-extensions';
-import { concealDecorations } from './conceal';
+import { calloutFolds, concealDecorations, toggleCalloutFold } from './conceal';
 import { BulletWidget, CheckboxWidget, HrWidget } from './widgets';
 import { CalloutTitleWidget, EmojiWidget, FootnoteRefWidget } from './extended-widgets';
 
@@ -16,6 +16,7 @@ function state(doc: string, anchor = doc.length): EditorState {
         // The surface's exact grammar: built-in Emoji out, curated one in.
         extensions: [{ remove: ['Emoji'] }, ...extendedMarkdown],
       }),
+      calloutFolds,
     ],
   });
 }
@@ -293,6 +294,43 @@ describe('concealDecorations', () => {
     const title = widgets(all).find((e) => e.deco.spec['widget'] instanceof CalloutTitleWidget);
     expect((title?.deco.spec['widget'] as CalloutTitleWidget).label).toBe('Warning');
     expect(lineClasses(all).some((c) => c.cls.includes('lp-callout-warning'))).toBe(true);
+  });
+
+  describe('foldable callouts (req-54)', () => {
+    const doc = 'intro\n\n> [!QUOTE]- Thinking\n> line one\n> line two\n';
+    const titleOf = (all: Entry[]) =>
+      widgets(all).find((e) => e.deco.spec['widget'] instanceof CalloutTitleWidget)?.deco.spec[
+        'widget'
+      ] as CalloutTitleWidget | undefined;
+    const foldedLines = (all: Entry[]) =>
+      lineClasses(all).filter((c) => c.cls === 'lp-callout-folded').map((c) => c.from);
+
+    it('a `-` callout starts folded: its body lines leave the layout, the title is the sole line', () => {
+      const all = build(doc, 0);
+      expect(titleOf(all)?.fold).toBe('closed');
+      expect(foldedLines(all)).toEqual([doc.indexOf('> line one'), doc.indexOf('> line two')]);
+      expect(lineClasses(all).some((c) => c.from === 7 && c.cls.includes('lp-callout-last'))).toBe(true);
+    });
+
+    it('a `+` callout starts open; a plain one has no chevron', () => {
+      expect(titleOf(build(doc.replace(']-', ']+'), 0))?.fold).toBe('open');
+      expect(foldedLines(build(doc.replace(']-', ']+'), 0))).toEqual([]);
+      expect(titleOf(build(doc.replace(']-', ']'), 0))?.fold).toBeNull();
+    });
+
+    it('a flip recorded in the fold field inverts the default and follows edits above it', () => {
+      const s = state(doc, 0);
+      const flipped = s.update({ effects: toggleCalloutFold.of(7) }).state;
+      expect(titleOf(entries(concealDecorations(flipped, [{ from: 0, to: flipped.doc.length }])))?.fold).toBe('open');
+      const shifted = flipped.update({ changes: { from: 0, insert: 'more ' } }).state;
+      expect([...shifted.field(calloutFolds)]).toEqual([12]);
+      const again = shifted.update({ effects: toggleCalloutFold.of(12) }).state;
+      expect(again.field(calloutFolds).size).toBe(0);
+    });
+
+    it('the caret inside the body unfolds it while it is there', () => {
+      expect(foldedLines(build(doc, doc.indexOf('line one') + 2))).toEqual([]);
+    });
   });
 
   it('a plain blockquote keeps the lp-quote styling', () => {

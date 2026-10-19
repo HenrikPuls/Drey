@@ -123,6 +123,16 @@ describe('parseRepos', () => {
     expect(parseRepos('---\nrepos: 3\n---\n').error).toContain('mapping');
     expect(parseRepos(null).repos).toEqual([]);
   });
+
+  it('reads link: as one folder or a list, and refuses a path that leaves the repo (req-56)', () => {
+    const repo = (link: string): string => `---\nrepos:\n  drey:\n    url: x\n    link: ${link}\n---\n`;
+    expect(parseRepos(repo('[.tools, node_modules/]')).repos[0]?.link).toEqual(['.tools', 'node_modules']);
+    expect(parseRepos(repo('node_modules')).repos[0]?.link).toEqual(['node_modules']);
+    expect(parseRepos('---\nrepos:\n  drey:\n    url: x\n---\n').repos[0]?.link).toBeUndefined();
+    expect(parseRepos(repo('../outside')).error).toContain('must be a path inside the repo');
+    expect(parseRepos(repo('C:/abs')).error).toContain('must be a path inside the repo');
+    expect(parseRepos(repo('3')).error).toContain('folder name or a list');
+  });
 });
 
 describe('ordering', () => {

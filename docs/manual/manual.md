@@ -231,7 +231,9 @@ in Settings â†’ *Templates*.
 ### Editing aids
 
 - **Formatting strip** — one row of icons: the template picker,
-  paragraph style (body text, headings, blockquote, callouts), Bold,
+  paragraph style (body text, headings, blockquote, callouts — a
+  callout written `> [!note]-` starts folded and `> [!note]+` open; a
+  click on its title folds or unfolds it), Bold,
   Italic, more text formats (strikethrough, highlight, sub- and
   superscript, *Clear formatting*), lists, Task list, Link, Table (a
   size grid) and an *Insert* menu (image, emoji, footnote, math,
@@ -757,7 +759,11 @@ then the phase's `@worker` pin in `pipeline.md`, then the repo's
 `worker:` in `repos.md`, then the configured default) and how freely
 it may act. The worker gets a checkout of the ticket's repo on its own
 branch (`t/<id>`), the ticket's description, plan and the phase's
-prompt as its brief.
+prompt as its brief. Folders the checkout has but git ignores — its
+toolchain, say `.tools` and `node_modules` — can be shared with every
+such checkout instead of rebuilt: list them as `link: [.tools,
+node_modules]` under the repository in `repos.md`, and the worker is
+told to use them and install nothing.
 
 While the run is live, its column shows a **Workers** strip with one
 lane per run: a traffic light (green working, amber context nearly full
@@ -771,11 +777,16 @@ it. **Take over** opens a tab with the worker's conversation and a
 prompt box: you can **Interrupt** the running turn (the session and its
 context stay), drive the worker with your own prompts and **Hand back**
 the run — a worker that is idle by then ends the run and the gate
-decides. While you hold a run the runner does not end it. Only OpenCode
+decides. While you hold a run the runner does not end it. In the
+conversation each of the worker's thoughts is a folded **Thinking** box
+whose title previews it; click the title to read the whole thought, and
+again to fold it. Only OpenCode
 workers can be taken over for now. The **Log** button opens the fleet
 daemon's log in a read-only tab. When a run ends, the ticket's Log line
-records the tokens it used (and the cost, when the provider reports
-one — flat coding plans report none). When the worker finishes, the runner executes the
+records the tokens it used — how much of the input came from the
+provider's cache, and the cost, when the provider reports one (flat
+coding plans report none). A run that continues an earlier session
+counts only its own tokens. When the worker finishes, the runner executes the
 ticket's **acceptance criteria** (the backticked commands under Plan):
 all green means the ticket moves to the next phase on its own; a
 failure parks the reason in the Log and leaves the ticket where it is.

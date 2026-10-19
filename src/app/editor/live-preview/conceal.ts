@@ -1,6 +1,6 @@
 import { ensureSyntaxTree, syntaxTree } from '@codemirror/language';
 import type { SyntaxNode } from '@lezer/common';
-import { EditorState, Range } from '@codemirror/state';
+import { EditorState, Range, StateEffect, StateField } from '@codemirror/state';
 import { Decoration, DecorationSet, EditorView, ViewPlugin, ViewUpdate } from '@codemirror/view';
 import { parseCalloutMarker } from '../../../../shared/markdown/callouts';
 import { emojiFor } from '../../../../shared/markdown/emoji';
@@ -53,6 +53,37 @@ const superscriptMark = Decoration.mark({ class: 'lp-sup' });
 const footnoteDefLine = Decoration.line({ class: 'lp-footnote-def' });
 const footnoteDefLineFirst = Decoration.line({ class: 'lp-footnote-def lp-footnote-def-first' });
 const hidden = Decoration.replace({});
+/** A body line of a folded callout: out of the layout (req-54). */
+const foldedLine = Decoration.line({ class: 'lp-callout-folded' });
+const foldableTitleMark = Decoration.mark({ class: 'lp-callout-foldable' });
+
+/** Flips one foldable callout away from (or back to) its marker's default; the position is its first line's start. */
+export const toggleCalloutFold = StateEffect.define<number>({ map: (pos, change) => change.mapPos(pos) });
+
+/**
+ * The foldable callouts (`[!TYPE]-` starts folded, `[!TYPE]+` open) the
+ * reader flipped, by first-line start. View state only — the document
+ * keeps its marker, the next open shows the default again (Obsidian's
+ * behaviour too).
+ */
+export const calloutFolds = StateField.define<ReadonlySet<number>>({
+  create: () => new Set<number>(),
+  update(value, tr) {
+    let next: Set<number> | null = null;
+    if (tr.docChanged && value.size > 0) {
+      next = new Set([...value].map((pos) => tr.changes.mapPos(pos)));
+    }
+    for (const effect of tr.effects) {
+      if (effect.is(toggleCalloutFold)) {
+        next ??= new Set(value);
+        if (!next.delete(effect.value)) {
+          next.add(effect.value);
+        }
+      }
+    }
+    return next ?? value;
+  },
+});
 
 /**
  * Callout line decorations, cached per (kind, position): the palette
@@ -103,6 +134,7 @@ export function concealDecorations(
   const deco: Range<Decoration>[] = [];
   const doc = state.doc;
   const fmEnd = frontmatterEnd(state.sliceDoc());
+  const folds = state.field(calloutFolds, false) ?? new Set<number>();
 
   // Read-only rendering (view mode) never reveals: the selection is
   // ignored entirely, so no line can "activate" and flip to raw Markdown.
@@ -306,13 +338,20 @@ export function concealDecorations(
             const lead = /^\s*>\s?/.exec(first.text)?.[0].length ?? 0;
             const marker = parseCalloutMarker(first.text.slice(lead));
             if (marker !== null) {
+              // A foldable callout (req-54): `-` starts folded, `+` open,
+              // the reader's flips invert that. The caret inside unfolds
+              // it, like any construct reveals around the selection.
+              const flipped = folds.has(first.from);
+              const open =
+                marker.fold === null ? null : (marker.fold === '+') !== flipped || touches(first.to + 1, node.to);
+              const folded = open === false && last.number > first.number;
               for (let pos = Math.max(node.from, fmEnd); pos <= node.to;) {
                 const line = doc.lineAt(pos);
                 deco.push(
                   calloutLine(
                     marker.kind,
                     line.number === first.number
-                      ? line.number === last.number
+                      ? line.number === last.number || folded
                         ? 'sole'
                         : 'first'
                       : line.number === last.number
@@ -320,7 +359,17 @@ export function concealDecorations(
                         : 'mid',
                   ).range(line.from),
                 );
+                if (folded && line.number > first.number) {
+                  deco.push(foldedLine.range(line.from));
+                }
                 pos = line.to + 1;
+              }
+              if (open !== null && !reveal && marker.title !== null) {
+                // Reading view: the custom title text folds too.
+                const titleFrom = first.from + lead + marker.length;
+                if (titleFrom < first.to) {
+                  deco.push(foldableTitleMark.range(titleFrom, first.to));
+                }
               }
               if (!touches(first.from, first.to)) {
                 const markerFrom = first.from + lead;
@@ -331,6 +380,7 @@ export function concealDecorations(
                     widget: new CalloutTitleWidget(
                       marker.info.icon,
                       marker.title === null ? marker.info.label : null,
+                      open === null ? null : open ? 'open' : 'closed',
                     ),
                   }),
                 );
@@ -497,7 +547,20 @@ function toggleTask(view: EditorView, pos: number): boolean {
   return true;
 }
 
-export const livePreviewConceal = (opts: { revealSelection?: boolean } = {}) =>
+/** A click on a foldable callout's title widget flips it — no caret move, so the marker stays concealed. */
+function toggleFoldAt(event: MouseEvent, view: EditorView): boolean {
+  const target = event.target as HTMLElement | null;
+  const title = target?.closest('.lp-callout-foldable');
+  if (!title) {
+    return false;
+  }
+  event.preventDefault();
+  view.dispatch({ effects: toggleCalloutFold.of(view.state.doc.lineAt(view.posAtDOM(title)).from) });
+  return true;
+}
+
+export const livePreviewConceal = (opts: { revealSelection?: boolean } = {}) => [
+  calloutFolds,
   ViewPlugin.fromClass(
     class {
       decorations: DecorationSet;
@@ -514,6 +577,7 @@ export const livePreviewConceal = (opts: { revealSelection?: boolean } = {}) =>
           update.docChanged ||
           update.selectionSet ||
           update.viewportChanged ||
+          update.state.field(calloutFolds) !== update.startState.field(calloutFolds) ||
           syntaxTree(update.state) !== syntaxTree(update.startState)
         ) {
           this.decorations = concealDecorations(update.state, update.view.visibleRanges, opts);
@@ -524,6 +588,10 @@ export const livePreviewConceal = (opts: { revealSelection?: boolean } = {}) =>
       decorations: (v) => v.decorations,
       eventHandlers: {
         mousedown(event, view) {
+          // Folding changes the view, not the document: read-only too.
+          if (toggleFoldAt(event, view)) {
+            return true;
+          }
           // Toggling a task checkbox edits the document -- never in a
           // read-only state (the dispatch itself would bypass `readOnly`).
           if (view.state.readOnly) {
@@ -535,4 +603,5 @@ export const livePreviewConceal = (opts: { revealSelection?: boolean } = {}) =>
         },
       },
     },
-  );
+  ),
+];

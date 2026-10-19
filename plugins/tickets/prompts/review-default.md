@@ -40,6 +40,11 @@ How to work:
 - Batch independent reads and searches into one step instead of one at a
   time. Use the dedicated read, search and edit tools over shell
   pipelines; keep the shell for running commands.
+- Keep the context small: every model call carries everything read so
+  far. Search first, then read the lines you need; read a file whole
+  only when it is short. Do not read a file again unless it changed.
+  Search the repo's AGENTS.md / CLAUDE.md for the topic at hand instead
+  of reading them whole.
 - Read a file before you change it. Make the smallest change that does
   the job: no extra features, refactors, comments or abstractions the
   ticket did not ask for.

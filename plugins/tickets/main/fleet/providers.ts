@@ -29,6 +29,8 @@ export interface NormalizedEvent {
   readonly text?: string;
   readonly tokensIn?: number;
   readonly tokensOut?: number;
+  /** The part of `tokensIn` the provider served from its prompt cache. */
+  readonly cacheReadTokens?: number;
   readonly costUsd?: number;
   /** One short line: what the worker is doing now (a tool call, a text opening). */
   readonly activity?: string;
@@ -42,6 +44,9 @@ export interface NormalizedEvent {
 
 /** The stream lead-in of a worker's thinking (the takeover transcript shows it quoted). */
 export const THINK_PREFIX = 'thinking › ';
+
+/** How much of one thought the stream keeps — whole, short of a runaway (req-54; was 600 chars). */
+export const THINK_MAX = 8_000;
 
 /** A tool's outcome rides the stream as a note with this lead-in (the `⎿` line under its call). */
 export const RESULT_PREFIX = 'result › ';
@@ -72,6 +77,35 @@ export interface ProviderStart {
    * record, which crosses to the board.
    */
   readonly onAttachInfo?: (info: { readonly address: string; readonly password: string; readonly pid: number | null }) => void;
+  /**
+   * What the resumed session had already spent before this run (req-53):
+   * the adapter reports the session's totals minus this base. Absent on
+   * a resume, the adapter reads it from the session before its first
+   * prompt and reports it through `onUsageBase`; a fresh session starts
+   * at zero.
+   */
+  readonly usageBase?: UsageTotals;
+  readonly onUsageBase?: (base: UsageTotals) => void;
+}
+
+/** A session's cumulative usage (OpenCode keeps it per session, across runs). */
+export interface UsageTotals {
+  readonly tokensIn: number;
+  readonly tokensOut: number;
+  readonly cacheReadTokens: number;
+  readonly costUsd: number | null;
+}
+
+export const ZERO_USAGE: UsageTotals = { tokensIn: 0, tokensOut: 0, cacheReadTokens: 0, costUsd: null };
+
+/** The session's totals as this run's own: minus the base, never below zero. */
+export function usageSince(total: UsageTotals, base: UsageTotals): UsageTotals {
+  return {
+    tokensIn: Math.max(0, total.tokensIn - base.tokensIn),
+    tokensOut: Math.max(0, total.tokensOut - base.tokensOut),
+    cacheReadTokens: Math.max(0, total.cacheReadTokens - base.cacheReadTokens),
+    costUsd: total.costUsd === null ? null : Math.max(0, total.costUsd - (base.costUsd ?? 0)),
+  };
 }
 
 /** What re-attaching to a worker that outlived its runner takes (OpenCode). */
@@ -239,7 +273,7 @@ export function claudeCodeAdapter(spawnFn: SpawnFn, now: NowFn = (): Date => new
             let activity = '';
             for (const part of parts) {
               if (part.type === 'thinking' && (part.thinking ?? '').trim() !== '') {
-                start.onEvent({ ts: nowIso(now), kind: 'note', text: `${THINK_PREFIX}${(part.thinking ?? '').trim().slice(0, 600)}` });
+                start.onEvent({ ts: nowIso(now), kind: 'note', text: `${THINK_PREFIX}${(part.thinking ?? '').trim().slice(0, THINK_MAX)}` });
               } else if (part.type === 'text' && (part.text ?? '').trim() !== '') {
                 activity = activityLine(part.text ?? '');
                 start.onEvent({ ts: nowIso(now), kind: 'text', text: (part.text ?? '').slice(0, 8_000) });
@@ -261,7 +295,8 @@ export function claudeCodeAdapter(spawnFn: SpawnFn, now: NowFn = (): Date => new
           if (event.type === 'result') {
             // The result event carries the run's cumulative usage.
             const usage: ClaudeUsage = event.usage ?? event.message?.usage ?? {};
-            const tokensIn = (usage.input_tokens ?? 0) + (usage.cache_read_input_tokens ?? 0);
+            const cacheReadTokens = usage.cache_read_input_tokens ?? 0;
+            const tokensIn = (usage.input_tokens ?? 0) + cacheReadTokens;
             const tokensOut = usage.output_tokens ?? 0;
             start.onEvent({
               ts: nowIso(now),
@@ -269,6 +304,7 @@ export function claudeCodeAdapter(spawnFn: SpawnFn, now: NowFn = (): Date => new
               text: (event.result ?? '').slice(0, 8_000),
               tokensIn,
               tokensOut,
+              cacheReadTokens,
               ...(typeof event.total_cost_usd === 'number' ? { costUsd: event.total_cost_usd } : {}),
             });
             busy = false;
@@ -431,7 +467,10 @@ export function opencodeAdapter(
       alive: true,
       tokensIn: 0,
       tokensOut: 0,
+      cacheReadTokens: 0,
       costUsd: null as number | null,
+      /** The resumed session's earlier spend; null until a resume has read it. */
+      usageBase: (start.usageBase ?? (attached !== null || start.resumeRef === null ? ZERO_USAGE : null)) as UsageTotals | null,
       startedAt: 0,
       turnDone: false,
       /** A human drives the session: an idle marker is not the run's end. */
@@ -568,9 +607,51 @@ export function opencodeAdapter(
         .join('\n')
         .trim();
 
+    /** The session's cumulative usage as the server reports it (input counts cache reads). */
+    const sessionTotals = (s: OcSession): UsageTotals => {
+      const cacheReadTokens = s.tokens?.cache?.read ?? 0;
+      return {
+        tokensIn: (s.tokens?.input ?? 0) + cacheReadTokens,
+        tokensOut: s.tokens?.output ?? 0,
+        cacheReadTokens,
+        costUsd: s.cost ?? null,
+      };
+    };
+
+    /**
+     * A resumed session's spend before this run (req-53): OpenCode's
+     * session totals are cumulative, so without the base a resumed run
+     * re-counted every earlier run of the session. Unreadable = zero, said
+     * in the stream.
+     */
+    const readUsageBase = async (): Promise<void> => {
+      if (state.usageBase !== null || state.sessionRef === null) {
+        return;
+      }
+      let base: UsageTotals | null = null;
+      try {
+        const res = await fetchFn(`${address}${OPENCODE_API.session(state.sessionRef)}`, { headers: auth });
+        if (res.ok) {
+          const s = ((await res.json()) as { data?: OcSession }).data;
+          base = s === undefined ? null : sessionTotals(s);
+        }
+      } catch {
+        // reported below
+      }
+      if (base === null) {
+        start.onEvent({
+          ts: nowIso(now),
+          kind: 'note',
+          text: "the resumed session's earlier usage could not be read — this run's token counts include it",
+        });
+      }
+      state.usageBase = base ?? ZERO_USAGE;
+      start.onUsageBase?.(state.usageBase);
+    };
+
     /** One poll round: cumulative usage + stream text + the turn's end. */
     const pollTurn = async (): Promise<void> => {
-      if (!state.alive || state.sessionRef === null || address === '' || state.turnDone) {
+      if (!state.alive || state.sessionRef === null || address === '' || state.turnDone || state.usageBase === null) {
         return;
       }
       try {
@@ -579,19 +660,24 @@ export function opencodeAdapter(
           const body = (await res.json()) as { data?: OcSession };
           const s = body.data;
           if (s !== undefined) {
-            const tokensIn = (s.tokens?.input ?? 0) + (s.tokens?.cache?.read ?? 0);
-            const tokensOut = s.tokens?.output ?? 0;
-            const cost = s.cost ?? null;
-            if (tokensIn !== state.tokensIn || tokensOut !== state.tokensOut || cost !== state.costUsd) {
-              state.tokensIn = tokensIn;
-              state.tokensOut = tokensOut;
-              state.costUsd = cost;
+            const own = usageSince(sessionTotals(s), state.usageBase);
+            if (
+              own.tokensIn !== state.tokensIn ||
+              own.tokensOut !== state.tokensOut ||
+              own.cacheReadTokens !== state.cacheReadTokens ||
+              own.costUsd !== state.costUsd
+            ) {
+              state.tokensIn = own.tokensIn;
+              state.tokensOut = own.tokensOut;
+              state.cacheReadTokens = own.cacheReadTokens;
+              state.costUsd = own.costUsd;
               start.onEvent({
                 ts: nowIso(now),
                 kind: 'usage',
-                tokensIn,
-                tokensOut,
-                ...(cost !== null ? { costUsd: cost } : {}),
+                tokensIn: own.tokensIn,
+                tokensOut: own.tokensOut,
+                cacheReadTokens: own.cacheReadTokens,
+                ...(own.costUsd !== null ? { costUsd: own.costUsd } : {}),
               });
             }
           }
@@ -635,10 +721,10 @@ export function opencodeAdapter(
                 const thought = (m.content ?? [])
                   .filter((part) => part.type === 'reasoning')
                   .map((part) => part.text ?? '')
-                  .join(' ')
+                  .join('\n\n')
                   .trim();
                 if (thought !== '') {
-                  start.onEvent({ ts: nowIso(now), kind: 'note', text: `${THINK_PREFIX}${thought.slice(0, 600)}` });
+                  start.onEvent({ ts: nowIso(now), kind: 'note', text: `${THINK_PREFIX}${thought.slice(0, THINK_MAX)}` });
                 }
                 const text = messageText(m);
                 if (text !== '') {
@@ -689,6 +775,7 @@ export function opencodeAdapter(
             text: state.lastText.slice(0, 8_000),
             tokensIn: state.tokensIn,
             tokensOut: state.tokensOut,
+            cacheReadTokens: state.cacheReadTokens,
             ...(state.costUsd !== null ? { costUsd: state.costUsd } : {}),
           });
           // The turn is over — the fleet owns the worker process.
@@ -885,6 +972,8 @@ export function opencodeAdapter(
         kind: 'note',
         text: `opencode serve on 127.0.0.1:${port}, session ${state.sessionRef}`,
       });
+      // Before the prompt: the resumed session's totals are its past only.
+      await readUsageBase();
       state.startedAt = now().getTime();
       state.lastPromptAt = state.startedAt;
 

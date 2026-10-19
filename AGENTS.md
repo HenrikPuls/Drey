@@ -7,6 +7,13 @@ anything: language conventions, the no-global-Node toolchain, architecture
 decisions, ownership map, coding style, and working style all apply to every
 agent, regardless of tool.
 
+**Fleet workers** — an unattended run on a ticket, whose brief names a
+ticket file — start from
+[`docs/agents/fleet-worker.md`](docs/agents/fleet-worker.md) instead: the
+toolchain, where things live, and which of `CLAUDE.md`'s interactive rules
+do not apply to an unattended run. Open `CLAUDE.md` only at the section a
+step needs.
+
 Tool-neutral operational guides:
 
 - [`plugins/tickets/FLEET.md`](plugins/tickets/FLEET.md) — running and

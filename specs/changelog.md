@@ -20,6 +20,122 @@ recorded as an explicit decision. The parity checklist lives in
 
 ## Recent milestones
 
+### req-56 — Fleet workers start oriented: a ready toolchain, a clean environment, a short map (owner request, outside the list)
+
+**Not yet manually verified by the owner.** The run audit (2026-10-19)
+found every worker spending 8–28 shell calls on the toolchain alone —
+probing for `.tools` / `node_modules`, making junctions of its own, even
+`npm ci`, and clearing an inherited `npm_config_allow_scripts` — and
+reading the whole 49 KB `CLAUDE.md` first, because `AGENTS.md` (which
+OpenCode loads by itself) said "read it in full". `CLAUDE.md` is written
+for pair programming (ask, pause, wait for confirmation), which an
+unattended run cannot follow.
+
+- **`link:` in `repos.md`**: the checkout's git-ignored folders a fleet
+  worktree links instead of rebuilding (`linkShared` in
+  `fleet/worktrees.ts`): a junction on Windows, a directory symlink
+  elsewhere; only when the checkout has the folder, the worktree does
+  not, and git ignores it there (asked as a folder, with the literal
+  pathspecs the git seam sets lifted for that call — `check-ignore`
+  refuses them). The stream opens with a `worktree links:` line; a
+  recreate removes every top-level link before it deletes the old tree,
+  so a recursive delete never reaches the checkout. The brief gains a
+  "Toolchain" line: use the links, install nothing.
+- **Clean environment**: the runner drops the `npm_*`, `INIT_CWD` and
+  `ELECTRON_RUN_AS_NODE` variables it inherits at boot
+  (`scrubInheritedEnv`, logged), so workers, the gate's shell and git
+  start without `npm run dev`'s config — and an Electron a worker starts
+  is Electron again, not Node.
+- **`docs/agents/fleet-worker.md`**: a short orientation — how to behave
+  without anyone to ask, the toolchain commands, where things live, how
+  to find the rest, which specs a change owes. `AGENTS.md` and
+  `CLAUDE.md` send fleet workers there and to `CLAUDE.md` by section.
+- The board's `repos.md` needs `link: [.tools, node_modules]` under
+  `drey` for this repo (owner's data; not set by this change).
+- Specs: `worktrees.spec.ts` (real git: linked / present / left out, a
+  non-ignored folder refused, a recreate keeps the checkout's folder),
+  `ticket-board.spec.ts` (`link:` parsing and its refusals),
+  `procs.spec.ts`, `fleet-fields.spec.ts` (the Toolchain line).
+
+### req-55 — Fleet: the run brief stops duplicating the ticket; prompts keep the context small (owner request, outside the list)
+
+**Not yet manually verified by the owner.** The run audit (2026-10-19)
+measured every model call's input from the session deltas — it matches
+the reported context to within 0.2 %, so the token figures are real: a
+plan run is ~59 calls averaging ~111k tokens. Part of that was
+duplicated: the brief quotes the ticket's description and plan in full,
+and the worker's first step was reading the whole ticket file anyway
+(T-0043's build: 26k chars of brief, then 25k chars of the file), followed by
+the whole 49 KB `CLAUDE.md` — both carried by every later call.
+
+- `composeInstruction` now says, before the quoted ticket, that the
+  description and plan are complete there, the ticket file is not to be
+  read to learn them, and an edit reads only the section it changes (the
+  Log: its last lines). This holds for every run, whatever prompt the
+  column uses (`fleet-fields.spec.ts`).
+- The four shipped prompts (`plugins/tickets/prompts/`) gain a "keep the
+  context small" rule under *How to work*: search first and read line
+  ranges, read a file whole only when it is short, never re-read an
+  unchanged file, search `AGENTS.md` / `CLAUDE.md` for the topic instead
+  of reading them whole. The board's own copies in
+  `tickets/_meta/prompts/` are the owner's (Settings → Tickets offers
+  "Reset to the shipped version").
+
+### req-54 — Foldable callouts; the takeover shows each thought whole, folded (owner request, outside the list)
+
+**Not yet manually verified by the owner.** The worker's thinking was cut
+to 600 characters when it was stored and to one 280-character line in
+the takeover transcript.
+
+- **Foldable callouts in the editor** (Obsidian's fold suffix, parsed
+  since milestone 72 but never acted on): `> [!note]-` starts folded,
+  `> [!note]+` open; a click on the title widget (chevron + icon, in the
+  reading view also the title text) flips it. The fold is view state — a
+  `calloutFolds` state field of flipped first-line positions, mapped
+  through edits — and is never written to the file; the caret inside the
+  body unfolds it, like every construct reveals around the selection.
+  Folded body lines leave the layout (`.lp-callout-folded`). The PDF
+  export and markdown-it render a folded callout open: a printed page
+  cannot fold (`conceal.spec.ts`).
+- **Thinking whole**: both adapters keep up to 8,000 characters of a
+  thought (`THINK_MAX`), OpenCode's reasoning parts joined by blank
+  lines instead of spaces. The takeover transcript renders each thought
+  as `> [!QUOTE]- Thinking — <preview>`, folded, with the whole thought
+  as its body (`transcript.spec.ts`).
+
+### req-53 — Fleet: a resumed OpenCode session counts only its own run; cache reads recorded apart (owner request, outside the list)
+
+**Not yet manually verified by the owner.** An audit of the fleet's run
+history (2026-10-19) found a resumed run starting at the session's
+lifetime totals: OpenCode keeps cumulative tokens per session, and the
+adapter reported them as the run's own. One resumed T-0041 build showed
+18.5M input tokens of which 17.9M belonged to the run before it — the
+token budget (`tokensUsed`), the board's lanes and the ticket Log all
+counted that twice.
+
+- **Usage base.** On a resume the OpenCode adapter reads the session's
+  totals *before* its first prompt and reports only what grows past them
+  (`usageSince`). The base is reported through `onUsageBase` and kept in
+  `run.json` (`usageBase`, beside the record, not in the board's
+  `RunInfo`), so a re-attach or a resume in place after a runner handover
+  (req-51) goes on subtracting the same base instead of restarting the
+  count. An unreadable base is zero, said in the stream. A fresh session
+  starts at zero as before.
+- **Cache reads apart.** `cacheReadTokens` rides the usage and result
+  events (OpenCode `tokens.cache.read`, Claude Code
+  `cache_read_input_tokens`) and the run record. `tokensIn` keeps
+  counting them (the budget is unchanged); the ticket Log says
+  `6.6M in (6.2M cached) / 13k out`, the worker lane adds `cached …`, the
+  takeover tab's stats the same.
+- Specs: `providers.spec.ts` (resume subtracts the pre-prompt totals, a
+  given base is used as is, cache reads on both adapters),
+  `runs.spec.ts` (the base survives a handover; none recorded = zero;
+  the Log names the cached part).
+
+Not covered: the second-opinion worker (M85 quality rungs, flagged off)
+starts a fresh session whose counts replace the first worker's in the
+same run — a roadmap follow-up.
+
 ### req-52 — Test splitting: scoped day-to-day runs, full gate at release (owner request, outside the list)
 
 The two unit suites grew past 240

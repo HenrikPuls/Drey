@@ -19,10 +19,10 @@ import { promisify } from 'node:util';
 import { parseOrderFile, rewriteOrderSection } from '../ticket-board';
 import { acceptanceCommands, patchTicketFile, ticketPathParts } from '../ticket-files';
 import { TicketsGit } from '../tickets-git';
-import type { NormalizedEvent, ProviderAdapter, WorkerHandle } from './providers';
+import { ZERO_USAGE, type NormalizedEvent, type ProviderAdapter, type UsageTotals, type WorkerHandle } from './providers';
 import { killTreeGuarded, processAlive, processStartMs, type ExecFn } from './procs';
 import type { RunInfo, RunRequest, RunState, SteerRung } from './protocol';
-import { prepareWorktree as defaultPrepareWorktree, type PreparedWorktree } from './worktrees';
+import { prepareWorktree as defaultPrepareWorktree, type LinkReport, type PreparedWorktree } from './worktrees';
 
 const execAsync = promisify(nodeExec);
 const execFileAsync = promisify(nodeExecFile);
@@ -54,6 +54,8 @@ export interface StoredRun {
   readonly info: RunInfo;
   /** Set by a runner that retired for a newer build without stopping the run (req-51). */
   readonly handover?: RunHandover;
+  /** A resumed session's spend before this run (req-53) — a reattach or resume in place keeps subtracting it. */
+  readonly usageBase?: UsageTotals;
 }
 
 /**
@@ -138,6 +140,8 @@ interface LiveRun {
   reopened?: boolean;
   /** The runner is retiring and left this run to its successor: its worker's exit decides nothing here. */
   handover?: RunHandover;
+  /** The resumed session's spend before this run, once the adapter read it (req-53). */
+  usageBase?: UsageTotals;
 }
 
 /** What a takeover call answers. */
@@ -159,15 +163,27 @@ function tokenWords(n: number): string {
 
 /**
  * What the run used, for the ticket's Log line: tokens always (input
- * counts cache reads), cost only when the provider reports one — a flat
- * coding plan reports 0, which says nothing and is left out.
+ * counts cache reads, named when the provider reported any), cost only
+ * when the provider reports one — a flat coding plan reports 0, which
+ * says nothing and is left out.
  */
-export function usageSummary(info: Pick<RunInfo, 'tokensIn' | 'tokensOut' | 'costUsd'>): string {
+export function usageSummary(info: Pick<RunInfo, 'tokensIn' | 'tokensOut' | 'cacheReadTokens' | 'costUsd'>): string {
   if (info.tokensIn === 0 && info.tokensOut === 0) {
     return '';
   }
+  const cached = (info.cacheReadTokens ?? 0) > 0 ? ` (${tokenWords(info.cacheReadTokens ?? 0)} cached)` : '';
   const cost = info.costUsd !== null && info.costUsd > 0 ? ` · $${info.costUsd.toFixed(2)}` : '';
-  return ` — ${tokenWords(info.tokensIn)} in / ${tokenWords(info.tokensOut)} out${cost}`;
+  return ` — ${tokenWords(info.tokensIn)} in${cached} / ${tokenWords(info.tokensOut)} out${cost}`;
+}
+
+/** The stream's setup line for the repo's `link:` folders (req-56). */
+export function linkNote(report: LinkReport): string {
+  const parts = [
+    report.linked.length > 0 ? `linked ${report.linked.join(', ')}` : '',
+    report.present.length > 0 ? `already there ${report.present.join(', ')}` : '',
+    ...report.skipped.map((s) => `left out ${s.path} (${s.reason})`),
+  ].filter((part) => part !== '');
+  return `worktree links: ${parts.join('; ')}`;
 }
 
 export class RunSupervisor {
@@ -340,6 +356,7 @@ export class RunSupervisor {
       gating: false,
       audited: false,
       agentDone: false,
+      ...(stored.usageBase !== undefined ? { usageBase: stored.usageBase } : {}),
     };
     this.runs.set(info.id, run);
     const handle = adapter.attach(
@@ -350,6 +367,7 @@ export class RunSupervisor {
         permissionMode: stored.request.permissionMode,
         resumeRef: stored.info.sessionRef,
         ticketId: stored.request.ticketId,
+        usageBase: stored.usageBase ?? ZERO_USAGE,
         onEvent: (event) => void this.onEvent(run, event),
         onSessionRef: () => undefined,
       },
@@ -417,6 +435,7 @@ export class RunSupervisor {
       gating: false,
       audited: false,
       agentDone: false,
+      ...(stored.usageBase !== undefined ? { usageBase: stored.usageBase } : {}),
     };
     let handle: WorkerHandle;
     try {
@@ -427,6 +446,8 @@ export class RunSupervisor {
         permissionMode: stored.request.permissionMode,
         resumeRef: sessionRef,
         ticketId: stored.request.ticketId,
+        // The same run goes on: its own earlier spend stays counted.
+        usageBase: stored.usageBase ?? ZERO_USAGE,
         onEvent: (event) => void this.onEvent(run, event),
         onSessionRef: (ref) => {
           run.info = { ...run.info, sessionRef: ref };
@@ -617,7 +638,8 @@ export class RunSupervisor {
           ? openNote(
               `stale dirty worktree moved aside to ${prepared.movedTo} — kept, not deleted; earlier session context is invalid`,
             )
-          : ''),
+          : '') +
+        (prepared.links !== undefined ? openNote(linkNote(prepared.links)) : ''),
       'utf8',
     );
 
@@ -634,6 +656,10 @@ export class RunSupervisor {
         void this.persist(run);
       },
       onAttachInfo: (info) => void this.recordAttach(run, info),
+      onUsageBase: (base) => {
+        run.usageBase = base;
+        void this.persist(run);
+      },
     });
     run.handle = handle;
     run.info = { ...run.info, state: 'running', pid: handle.pid };
@@ -958,6 +984,7 @@ export class RunSupervisor {
       ...(event.commands !== undefined ? { commands: event.commands } : {}),
       ...(event.tokensIn !== undefined ? { tokensIn: event.tokensIn } : {}),
       ...(event.tokensOut !== undefined ? { tokensOut: event.tokensOut } : {}),
+      ...(event.cacheReadTokens !== undefined ? { cacheReadTokens: event.cacheReadTokens } : {}),
       ...(event.costUsd !== undefined ? { costUsd: event.costUsd } : {}),
     };
     if (event.kind === 'error') {
@@ -1294,6 +1321,7 @@ export class RunSupervisor {
       request: run.request,
       info: run.info,
       ...(run.handover !== undefined ? { handover: run.handover } : {}),
+      ...(run.usageBase !== undefined ? { usageBase: run.usageBase } : {}),
     };
     await fsp.writeFile(path.join(run.dir, 'run.json'), JSON.stringify(stored, null, 2), 'utf8');
   }

@@ -84,7 +84,10 @@ Diagnose read-only first; only stop/steer/switch on the owner's ask.
    `build`).
 2. `GET /health` — alive, how many live runs, which build.
 3. `GET /status` — the runs: id, ticketId, provider, **state**, pid,
-   tokensIn/Out, costUsd, sessionRef, worktreePath, gateFailure. A run id
+   tokensIn/Out (`tokensIn` counts cache reads; `cacheReadTokens` is
+   that cached part, req-53 — and a resumed session counts only this
+   run, its earlier spend is `usageBase` in `run.json`), costUsd,
+   sessionRef, worktreePath, gateFailure. A run id
    can appear **twice**: at boot every provider supervisor adopts every
    stored record from `runs/`, so boot-adopted runs land in both lists —
    dedupe by id when summarizing.
@@ -170,7 +173,17 @@ per-column token budget) · `ciBackoff`.
   the worker ignores the stop — the supervisor tree-kills, give it a moment,
   then check the pid.
 - **Where did the agent work?** → `worktrees/<repo>-<ticket>` on branch
-  `t/<id>`; inspect with `git -C <worktree> ...`. The runner commits ticket
+  `t/<id>`; inspect with `git -C <worktree> ...`. Folders listed under
+  the repo's `link:` in `repos.md` (req-56) are junctions into the
+  owner's checkout — the stream's `worktree links:` line says which were
+  linked or left out and why. Before removing a worktree by hand, remove
+  its junctions (`cmd /c rmdir <worktree>\node_modules` removes the link,
+  not the target) — never a recursive delete through them. The runner's
+  own recreate does that itself.
+- **A worker's npm or Electron behaves oddly** → the runner drops the
+  `npm_*`, `INIT_CWD` and `ELECTRON_RUN_AS_NODE` variables it inherits
+  at boot (req-56; `runner.log` names them); a runner started before that
+  build still hands them on. The runner commits ticket
   bookkeeping ("fleet run bookkeeping") in the tickets repo itself.
 - **A transition did not reach the remote** → check pipeline.md's `push:`
   key first (absent = pushing is the owner's business), then
