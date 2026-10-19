@@ -980,6 +980,7 @@ export class RunSupervisor {
       lastActivity: event.ts,
       ...(event.activity !== undefined && event.activity !== '' ? { activity: event.activity } : {}),
       ...(event.contextTokens !== undefined ? { contextTokens: event.contextTokens } : {}),
+      ...(event.contextWindow !== undefined ? { contextWindow: event.contextWindow } : {}),
       ...(event.turn !== undefined ? { turn: event.turn } : {}),
       ...(event.commands !== undefined ? { commands: event.commands } : {}),
       ...(event.tokensIn !== undefined ? { tokensIn: event.tokensIn } : {}),

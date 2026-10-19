@@ -36,6 +36,8 @@ export interface NormalizedEvent {
   readonly activity?: string;
   /** The current context window's size in tokens. */
   readonly contextTokens?: number;
+  /** The model's context window in tokens (its limit), reported once when known. */
+  readonly contextWindow?: number;
   /** The worker's turn state, when it changed: mid-turn or standing. */
   readonly turn?: 'busy' | 'idle';
   /** The slash commands the worker accepts (names without the slash). */
