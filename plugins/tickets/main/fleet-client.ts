@@ -22,6 +22,7 @@ import type {
   RunRequest,
   RunnerDescriptor,
 } from './fleet/protocol';
+import { fleetBuildStamp, isStaleDaemon } from './fleet/build-stamp';
 
 export interface FleetClientOpts {
   /** The fleet root — `<userRoot>/fleet` (descriptor, runs, worktrees). */
@@ -41,33 +42,13 @@ export interface FleetSnapshot {
 
 type StartOutcome = { readonly ok: true; readonly run: RunInfo } | { readonly ok: false; readonly error: string };
 
-/**
- * The retirement decision's ordered core: retire only a daemon whose
- * build stamp is OLDER than the client's own. Two Drey checkouts share
- * one fleet root, so an inequality would have the instances retire each
- * other's runner in an endless loop — the newest build's daemon serves
- * both, and only a genuinely outdated one is replaced.
- */
-export function isOlderBuild(daemonBuild: string, clientBuild: string): boolean {
-  const daemon = Date.parse(daemonBuild);
-  const client = Date.parse(clientBuild);
-  return Number.isFinite(daemon) && Number.isFinite(client) && daemon < client;
-}
-
-/**
- * A daemon that reports no build stamp predates the stamp itself, so it is
- * older than every build that can ask — it must be retired, not trusted.
- */
-export function isStaleDaemon(daemonBuild: string | undefined, clientBuild: string | null): boolean {
-  if (daemonBuild === undefined) {
-    return clientBuild !== null;
-  }
-  return clientBuild !== null && isOlderBuild(daemonBuild, clientBuild);
-}
-
 export class FleetClient {
   private descriptor: RunnerDescriptor | null = null;
   private spawning: Promise<boolean> | null = null;
+  private retiring: Promise<boolean> | null = null;
+  private stampCache: { readonly mtimeMs: number; readonly stamp: string } | null = null;
+  /** The last "handover deferred" reason logged — logged once, not every poll. */
+  private deferNote: string | null = null;
   private pollTimer: ReturnType<typeof setInterval> | null = null;
   private lastSnapshotJson = '';
 
@@ -294,32 +275,26 @@ export class FleetClient {
   /** Descriptor file → health check → build check → spawn the sibling
    *  when all fail. Spawn-capable: only `start` may bring the runner up. */
   private async ensureRunner(): Promise<boolean> {
-    if (this.descriptor !== null && (await this.alive(this.descriptor))) {
-      if (await this.isStale(this.descriptor)) {
-        await this.retireStale(this.descriptor);
+    if (this.descriptor === null || !(await this.alive(this.descriptor))) {
+      this.descriptor = await this.readDescriptor();
+      if (this.descriptor === null || !(await this.alive(this.descriptor))) {
         return this.spawnRunner();
       }
-      return true;
     }
-    this.descriptor = await this.readDescriptor();
-    if (this.descriptor !== null && (await this.alive(this.descriptor))) {
-      if (await this.isStale(this.descriptor)) {
-        await this.retireStale(this.descriptor);
-        return this.spawnRunner();
-      }
-      return true;
+    if (await this.isStale(this.descriptor)) {
+      // A deferred handover leaves the old runner serving for now.
+      return (await this.retireStale(this.descriptor)) ? this.spawnRunner() : true;
     }
-    return this.spawnRunner();
+    return true;
   }
 
-  /** Read-only adoption: talk to a runner that is already alive, never spawn. */
+  /** Read-only adoption: talk to a runner that is already alive, never
+   *  spawn one from nothing. Replacing a retired one is the exception:
+   *  its handed-over runs wait for a successor to take them back. */
   private async withRunner(): Promise<boolean> {
     if (this.descriptor !== null && (await this.alive(this.descriptor))) {
       if (await this.isStale(this.descriptor)) {
-        // The read-only path never spawns; the next explicit interaction
-        // starts the new build.
-        await this.retireStale(this.descriptor);
-        return false;
+        return (await this.retireStale(this.descriptor)) ? this.spawnRunner() : true;
       }
       return true;
     }
@@ -328,38 +303,80 @@ export class FleetClient {
   }
 
   /**
-   * True when a healthy runner was booted from an older build of the
-   * entry script: the daemon stamps the script's mtime at boot, and the
-   * client compares it with the file on disk now. Ordered on purpose
-   * (`isOlderBuild`): two Drey checkouts can share one fleet root — an
-   * inequality would have them retire each other's runner forever. Only
-   * a daemon OLDER than this build is stale; a newer one serves this
-   * instance too.
+   * True when a healthy runner serves other fleet code than this build
+   * and is older (`isStaleDaemon`, req-51): the stamp is a hash of the
+   * compiled fleet code, so a rebuild that changed none of it keeps the
+   * runner and its workers. Ordered on purpose: two Drey checkouts can
+   * share one fleet root — only a daemon OLDER than this build is
+   * stale; a newer one serves this instance too.
    */
   private async isStale(peer: RunnerDescriptor): Promise<boolean> {
-    const mine = await fsp
-      .stat(this.opts.runnerScript)
-      .then((s) => s.mtime.toISOString())
-      .catch(() => null);
-    return isStaleDaemon(peer.build, mine);
+    return isStaleDaemon(peer.build, await this.ownBuild());
   }
 
-  /** Asks a stale runner to exit, waits until it is actually gone, and
-   *  only then clears the descriptor so the next start can respawn. The
-   *  wait matters: the runner's boot guard bounces a successor while
-   *  the old peer still answers. */
-  private async retireStale(peer: RunnerDescriptor): Promise<void> {
-    this.opts.log('the fleet runner predates this build — restarting it', 'warn');
+  /** This build's stamp, re-hashed only when the entry file was rewritten
+   *  (every build rewrites it) — the poll asks every few seconds. */
+  private async ownBuild(): Promise<string | null> {
+    const stat = await fsp.stat(this.opts.runnerScript).catch(() => null);
+    if (stat === null) {
+      return null;
+    }
+    if (this.stampCache?.mtimeMs !== stat.mtimeMs) {
+      const stamp = await fleetBuildStamp(this.opts.runnerScript).catch(() => null);
+      if (stamp === null) {
+        return null;
+      }
+      this.stampCache = { mtimeMs: stat.mtimeMs, stamp };
+    }
+    return this.stampCache.stamp;
+  }
+
+  /**
+   * Asks a stale runner to hand its runs over and exit (req-51): its
+   * workers are not stopped — the successor re-attaches or resumes them.
+   * A runner with a run in its gate (or being stopped) refuses: false,
+   * and it serves on until a later poll finds it free. Otherwise waits
+   * until the old runner is actually gone and clears the descriptor so a
+   * successor can come up — the runner's boot guard bounces a successor
+   * while the old peer still answers, and the old one answers until its
+   * handover records are written.
+   */
+  private retireStale(peer: RunnerDescriptor): Promise<boolean> {
+    // The poll and an explicit interaction can both find the stale peer:
+    // one handover, both wait for it.
+    this.retiring ??= this.handOver(peer).finally(() => {
+      this.retiring = null;
+    });
+    return this.retiring;
+  }
+
+  private async handOver(peer: RunnerDescriptor): Promise<boolean> {
     try {
       const controller = new AbortController();
       const timer = setTimeout(() => controller.abort(), 1_500);
-      await fetch(`${this.base()}/shutdown`, { method: 'POST', headers: this.headers(), signal: controller.signal });
+      const res = await fetch(`${this.base()}/shutdown`, {
+        method: 'POST',
+        headers: { ...this.headers(), 'content-type': 'application/json' },
+        body: JSON.stringify({ handover: true }),
+        signal: controller.signal,
+      });
       clearTimeout(timer);
+      if (res.status === 409) {
+        const body = (await res.json().catch(() => ({}))) as { error?: string };
+        const note = body.error ?? 'the runner is busy';
+        if (note !== this.deferNote) {
+          this.deferNote = note;
+          this.opts.log(`the fleet runner predates this build — handover deferred: ${note}`, 'warn');
+        }
+        return false;
+      }
     } catch {
       // a daemon that will not take the call is dead to us either way —
       // the next spawn takes over the stale descriptor
     }
-    const deadline = Date.now() + 3_000;
+    this.deferNote = null;
+    this.opts.log(`the fleet runner predates this build — it hands its runs over to a new one (pid ${peer.pid})`, 'warn');
+    const deadline = Date.now() + 20_000;
     while (Date.now() < deadline) {
       const controller = new AbortController();
       const timer = setTimeout(() => controller.abort(), 500);
@@ -373,6 +390,7 @@ export class FleetClient {
       await new Promise((resolve) => setTimeout(resolve, 100));
     }
     this.descriptor = null;
+    return true;
   }
 
   private async spawnRunner(): Promise<boolean> {

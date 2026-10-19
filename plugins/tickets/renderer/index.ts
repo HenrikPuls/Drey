@@ -1253,7 +1253,11 @@ const QUICK_PROMPTS: ReadonlyArray<readonly [string, string]> = [
 
 /** Opens (or focuses) the takeover tab of one run. */
 function openTakeover(api: DreyPluginApi, run: RunInfo): void {
-  api.documents.addDoc(TAKEOVER_KIND, `${TAKEOVER_SCHEME}${run.id}`, `${run.ticketId} · ${run.provider}`);
+  api.documents.addDoc(TAKEOVER_KIND, `${TAKEOVER_SCHEME}${run.id}`, takeoverTitle(run));
+}
+
+function takeoverTitle(run: RunInfo): string {
+  return `${run.ticketId} · ${run.provider}`;
 }
 
 /**
@@ -1826,12 +1830,20 @@ const plugin: { activate(api: DreyPluginApi): void } = {
     api.ui.registerDocKind({
       kind: TAKEOVER_KIND,
       icon: 'message-circle',
-      serialize: () => null,
-      restore: (path) => {
+      // The title rides in the session (req-51): a restore runs before the
+      // first fleet snapshot arrives, and the tab used to be dropped for
+      // want of its run. The banner fills in once the runner answers.
+      serialize: (path) => {
+        const run = fleetRuns.find((r) => r.id === path.slice(TAKEOVER_SCHEME.length));
+        return run === undefined ? null : { title: takeoverTitle(run) };
+      },
+      restore: (path, data) => {
         const runId = path.startsWith(TAKEOVER_SCHEME) ? path.slice(TAKEOVER_SCHEME.length) : '';
         const run = fleetRuns.find((r) => r.id === runId);
-        if (run !== undefined) {
-          openTakeover(api, run);
+        const saved = (data as { title?: unknown } | null)?.title;
+        const title = run !== undefined ? takeoverTitle(run) : typeof saved === 'string' ? saved : null;
+        if (runId !== '' && title !== null) {
+          api.documents.addDoc(TAKEOVER_KIND, `${TAKEOVER_SCHEME}${runId}`, title);
         }
       },
       mount: (el, path) => mountTakeover(api, el, path.slice(TAKEOVER_SCHEME.length)),

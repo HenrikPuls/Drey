@@ -20,6 +20,34 @@ recorded as an explicit decision. The parity checklist lives in
 
 ## Recent milestones
 
+### req-51 — Fleet workers survive a Drey rebuild (owner request, outside the list)
+
+**Not yet manually verified by the owner.** The owner develops Drey with Drey's own fleet while running the
+checkout under `npm run dev`, and every rebuild used to stop all live workers. Now
+([ADR-0079](../docs/09_architecture_decisions/0079-run-takeover.md) later change):
+
+- **Content-hash build stamp** (`plugins/tickets/main/fleet/build-stamp.ts`). The runner's `build` is
+  `<builtAt>#<hash>`, a hash over `runner.js` and every module it requires from the build (18 files today), where
+  the runner's stamp used to be the mtime of `runner.js`. A rebuild that leaves that code unchanged keeps the runner
+  and its workers. When the code differs, only an older daemon is retired, as before (two checkouts on one fleet root).
+- **Handover instead of stop.** Retiring a runner sends `POST /shutdown {handover: true}`. A run that is gating,
+  starting or stopping defers the handover (409, logged once; the old runner keeps serving and the next poll asks
+  again). Otherwise the old runner starts nothing new and leaves OpenCode workers running for re-attach. It stops any
+  other worker, since a worker whose pipes nobody reads is unsupervised, and marks each live record `handover`. The
+  new runner re-attaches, or **resumes the session in place** (same run id, record, stream and ticket stamp; a held
+  run comes back held and waits for the owner). A plain `/shutdown`, Stop and Notaus still stop runs.
+- **Fixed:** both per-provider supervisors adopted every run record, so the Claude Code supervisor detached an
+  OpenCode run that had just been re-attached (and the history of a run sat in the wrong supervisor). Each now adopts
+  only its own provider's runs.
+- **Takeover tabs reopen after a restart.** The tab saves its title in the session, so the restore no longer waits
+  for a fleet snapshot that hasn't arrived yet.
+- Specs: `fleet/build-stamp.spec.ts` (stamp decision, require closure, an unchanged rebuild keeps the hash),
+  `fleet/runs.spec.ts` "RunSupervisor handover" (stop vs. leave running, gate deferral, resume in place, held,
+  no session → detached, provider filter) and `fleet-client.spec.ts` (a refused handover keeps the old runner, logged
+  once). Docs: ADR-0079, `plugins/tickets/FLEET.md`, docs/05, docs/06 §6.65, the manual.
+- Not covered: the real CLIs across a real rebuild. Whether an OpenCode server outlives its runner's exit on Windows
+  is assumed from ADR-0079's re-attach, not re-measured.
+
 ### req-50 — the Tickets settings page reworked: a sortable pipeline, numbered folders, prompts as they are on disk (owner request, outside the list)
 
 **Not yet manually verified by the owner.** Designed first in Claude
@@ -75,7 +103,6 @@ T-0041, which is merged into this branch.
 - Not changed: the board itself, the SDK. Known gap found on the way: a
   `pipeline.md` with CRLF line endings does not parse (a fresh clone with
   `core.autocrlf=true`) — a follow-up.
-
 
 ### Takeover steering and colour (owner request, outside the list)
 

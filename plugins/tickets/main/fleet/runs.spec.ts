@@ -3,7 +3,7 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { AttachInfo, ProviderAdapter, ProviderStart, WorkerHandle } from './providers';
-import { probeExec, RunSupervisor, usageSummary, type RunSupervisorDeps } from './runs';
+import { HANDOVER_CONTINUE, HANDOVER_HELD, probeExec, RunSupervisor, usageSummary, type RunSupervisorDeps } from './runs';
 import { processAlive } from './procs';
 import type { RunRequest } from './protocol';
 import { newTicketFileText, patchTicketFile, parseTicketFile } from '../ticket-files';
@@ -764,5 +764,167 @@ describe('probeExec — the process probes keep their arguments apart', () => {
     const exec = probeExec(os.tmpdir());
     expect(await processAlive(process.pid, exec)).toBe(true);
     expect(await processAlive(2_147_483_000, exec)).toBe(false);
+  });
+});
+
+/**
+ * The runner handover (req-51): a runner retired for a newer build leaves
+ * its live runs to the successor instead of stopping them. The probe exec
+ * answers nothing, so no real process is ever probed or killed here.
+ */
+describe('RunSupervisor handover', () => {
+  const noProbe = async (): Promise<string> => '';
+
+  beforeEach(async () => {
+    vaultDir = await fsp.mkdtemp(path.join(os.tmpdir(), 'drey-vault-'));
+    fleetRoot = await fsp.mkdtemp(path.join(os.tmpdir(), 'drey-fleet-'));
+  });
+
+  afterEach(async () => {
+    await fsp.rm(vaultDir, { recursive: true, force: true });
+    await fsp.rm(fleetRoot, { recursive: true, force: true });
+  });
+
+  /** A Claude-Code-like fake: same scripted handles, no attach. */
+  function claudeSupervisor(): ReturnType<typeof supervisor> {
+    const fake = fakeAdapter();
+    const adapter: ProviderAdapter = { ...fake.adapter, id: 'claude-code', attach: undefined };
+    const built = supervisor({ adapter, exec: noProbe });
+    return { ...built, adapter: fake };
+  }
+
+  async function startedClaudeRun(sup: RunSupervisor, adapter: ReturnType<typeof fakeAdapter>): Promise<string> {
+    const rel = await writeTicket();
+    const started = await sup.start(request({ ticketRelPath: rel, provider: 'claude-code' }));
+    expect(started.ok).toBe(true);
+    adapter.starts[0]!.onSessionRef('ses_claude');
+    const id = (started as { run: { id: string } }).run.id;
+    // the session ref is persisted fire-and-forget: wait for that write to land
+    await vi.waitFor(async () =>
+      expect(await fsp.readFile(path.join(fleetRoot, 'runs', id, 'run.json'), 'utf8').catch(() => '')).toContain('ses_claude'),
+    );
+    return id;
+  }
+
+  const storedOf = async (id: string): Promise<{ info: { state: string }; handover?: { mode: string } }> =>
+    JSON.parse(await fsp.readFile(path.join(fleetRoot, 'runs', id, 'run.json'), 'utf8')) as {
+      info: { state: string };
+      handover?: { mode: string };
+    };
+
+  it('stops a worker it cannot leave running, keeps the run live on disk and the ticket stamped', async () => {
+    const { sup, adapter } = claudeSupervisor();
+    const id = await startedClaudeRun(sup, adapter);
+
+    expect(sup.handoverBlocker()).toBeNull();
+    expect(await sup.handOver()).toBe(1);
+
+    expect(adapter.handles[0]!.stop).toHaveBeenCalled();
+    // the worker's exit decides nothing in the retiring runner
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(sup.get(id)?.state).toBe('running');
+    const stored = await storedOf(id);
+    expect(stored.info.state).toBe('running');
+    expect(stored.handover?.mode).toBe('resume');
+    const text = await fsp.readFile(path.join(vaultDir, 'tickets/plan/T-0001.md'), 'utf8');
+    expect(parseTicketFile(text, 'tickets/plan/T-0001.md').meta.run).not.toBeNull();
+
+    // nothing new starts, and a stop would be undone by the successor's resume
+    expect((await sup.start(request())).ok).toBe(false);
+    expect((await sup.stop(id, null)).ok).toBe(false);
+  });
+
+  it('leaves a worker with an attach file running for the successor to re-attach', async () => {
+    const { sup, adapter } = supervisor({ exec: noProbe });
+    const rel = await writeTicket();
+    const started = await sup.start(request({ ticketRelPath: rel }));
+    const id = (started as { run: { id: string } }).run.id;
+    await fsp.writeFile(path.join(fleetRoot, 'runs', id, 'attach.json'), '{}', 'utf8');
+
+    await sup.handOver();
+    expect(adapter.handles[0]!.stop).not.toHaveBeenCalled();
+    expect((await storedOf(id)).handover?.mode).toBe('reattach');
+  });
+
+  it('defers while a run is in its machine gate', async () => {
+    let releaseGate: () => void = () => undefined;
+    const { sup, adapter } = supervisor({
+      exec: noProbe,
+      execShell: () =>
+        new Promise<void>((resolve) => {
+          releaseGate = resolve;
+        }),
+    });
+    const rel = await writeTicket();
+    const started = await sup.start(request({ ticketRelPath: rel }));
+    const id = (started as { run: { id: string } }).run.id;
+    adapter.handles[0]!.result();
+    adapter.handles[0]!.fail(0);
+    await vi.waitFor(() => expect(sup.handoverBlocker()).toContain('machine gate'));
+    releaseGate();
+    await vi.waitFor(() => expect(sup.get(id)?.state).toBe('done'));
+    expect(sup.handoverBlocker()).toBeNull();
+  });
+
+  it('the successor resumes a handed-over session in place — same run id, a fresh worker', async () => {
+    const first = claudeSupervisor();
+    const id = await startedClaudeRun(first.sup, first.adapter);
+    await first.sup.handOver();
+
+    const second = claudeSupervisor();
+    await second.sup.adopt();
+
+    const run = second.sup.get(id);
+    expect(run?.state).toBe('running');
+    expect(run?.pid).toBe(4242);
+    expect(second.adapter.starts).toHaveLength(1);
+    expect(second.adapter.starts[0]!.resumeRef).toBe('ses_claude');
+    expect(second.adapter.starts[0]!.instruction).toBe(HANDOVER_CONTINUE);
+    // the record is an ordinary live run again
+    expect((await storedOf(id)).handover).toBeUndefined();
+    const text = await fsp.readFile(path.join(vaultDir, 'tickets/plan/T-0001.md'), 'utf8');
+    expect(text).toContain(`run ${id} resumed after a runner handover`);
+
+    // and it ends like any run: agent done, gate green, the ticket moves
+    second.adapter.handles[0]!.result();
+    second.adapter.handles[0]!.fail(0);
+    await vi.waitFor(() => expect(second.sup.get(id)?.state).toBe('done'));
+  });
+
+  it('a held run comes back held, its worker told to wait for the owner', async () => {
+    const first = claudeSupervisor();
+    const id = await startedClaudeRun(first.sup, first.adapter);
+    expect((await first.sup.takeover(id)).ok).toBe(true);
+    await first.sup.handOver();
+
+    const second = claudeSupervisor();
+    await second.sup.adopt();
+    expect(second.sup.get(id)?.held).toBe(true);
+    expect(second.adapter.starts[0]!.instruction).toBe(HANDOVER_HELD);
+    expect(second.adapter.handles[0]!.setHold).toHaveBeenCalledWith(true);
+  });
+
+  it('a handed-over run without a session detaches as before', async () => {
+    const first = claudeSupervisor();
+    const rel = await writeTicket();
+    const started = await first.sup.start(request({ ticketRelPath: rel, provider: 'claude-code' }));
+    const id = (started as { run: { id: string } }).run.id;
+    await first.sup.handOver();
+
+    const second = claudeSupervisor();
+    await second.sup.adopt();
+    expect(second.sup.get(id)?.state).toBe('detached');
+    expect(second.adapter.starts).toHaveLength(0);
+  });
+
+  it('a supervisor adopts only its own provider\'s runs', async () => {
+    const first = claudeSupervisor();
+    const id = await startedClaudeRun(first.sup, first.adapter);
+    const before = await fsp.readFile(path.join(fleetRoot, 'runs', id, 'run.json'), 'utf8');
+
+    const opencode = supervisor({ exec: noProbe });
+    await opencode.sup.adopt();
+    expect(opencode.sup.get(id)).toBeNull();
+    expect(await fsp.readFile(path.join(fleetRoot, 'runs', id, 'run.json'), 'utf8')).toBe(before);
   });
 });

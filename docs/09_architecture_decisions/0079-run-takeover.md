@@ -68,6 +68,36 @@ with its own session; only the runner's grip on it is lost. So:
   The board shows it everywhere a run is shown: a breathing green light and "Running", a hollow gray one and "Standing"
   (with "— you drive" when held); a standing worker is never "stalled".
 
+## Runs survive a Drey rebuild (later change, 2026-10-19, req-51)
+
+The owner develops Drey with Drey's own fleet, running the checkout under `npm run dev`. Every rebuild retired the
+runner, because its build stamp was the mtime of `runner.js` and tsc rewrites every file. `/shutdown` then stopped all
+live workers. Three changes:
+
+- **The stamp is a content hash** (`fleet/build-stamp.ts`): `<builtAt>#<hash>`, where the hash covers `runner.js` and
+  its relative `require` closure (`fleet/`, the ticket-file helpers, `plugins/tickets/shared/`, the repo's `shared/`),
+  and `builtAt` is the newest mtime among those files. The same hash is never stale. A different hash retires only an
+  older daemon, as before, so two checkouts sharing a fleet root still don't retire each other in a loop. A stamp
+  without a hash (a pre-req-51 daemon) compares by date. The client re-hashes only when the entry file's mtime moves.
+- **Retirement is a handover, not a stop.** The client sends `POST /shutdown {handover: true}`. The runner refuses
+  with 409 while a run is gating, starting or stopping, because the ticket move or the stop's Log line would be lost.
+  The client then keeps using the old runner and asks again on its next poll, logging the reason once. Otherwise the
+  runner starts nothing new and writes `handover` (`reattach | resume`, the worker's creation time) into each live
+  record. It leaves a worker with an `attach.json` running and stops any other worker, because a worker whose pipes
+  nobody reads is unsupervised (the T-0007 review). It exits only after that, so the successor's boot guard can't
+  overtake it. The successor's `adopt()` tries `reattach` first. A handed-over run it cannot bind to is **resumed in
+  place**: any worker still alive is killed (guarded by the recorded creation time), and a fresh worker resumes the
+  provider session under the same run id, record, stream and ticket stamp. Its opening line depends on whether the run
+  was held: an unheld run "continues the step", a held one finishes the owner's request or reports back and waits. It
+  then ends like any run, through the gate. A handed-over run that never reported a session detaches as before. The
+  owner's Stop, Notaus and a plain `POST /shutdown` keep stopping runs. A run that has been handed over refuses a stop
+  until its successor has it.
+- **Each supervisor adopts only its own provider's runs.** Both supervisors used to adopt every record, so the Claude
+  Code one detached an OpenCode run the OpenCode one had just re-attached.
+
+The takeover tab saves its title in the session, so a restore no longer depends on the first fleet snapshot having
+arrived, and the tab reconnects to its run (the same id after a handover).
+
 ## Consequences
 
 - The run record carries `held`; a runner restart turns a live run `detached` only when it cannot be re-attached

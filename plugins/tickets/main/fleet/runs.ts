@@ -52,7 +52,33 @@ export const execShell = (command: string, cwd: string): Promise<void> =>
 export interface StoredRun {
   readonly request: RunRequest;
   readonly info: RunInfo;
+  /** Set by a runner that retired for a newer build without stopping the run (req-51). */
+  readonly handover?: RunHandover;
 }
+
+/**
+ * How a retiring runner left a live run for its successor (req-51):
+ * `reattach` — the worker lives on and the successor binds to it
+ * (OpenCode's server); `resume` — the worker was stopped (its pipes die
+ * with the runner, Claude Code) and the successor resumes the provider
+ * session in place, under the same run id. `pidStartedMs` is the
+ * worker's creation time, the pid-reuse guard of the successor's kill.
+ */
+export interface RunHandover {
+  readonly mode: 'reattach' | 'resume';
+  readonly at: string;
+  readonly pidStartedMs: number | null;
+}
+
+/** The opening line of a session resumed after a runner handover. */
+export const HANDOVER_CONTINUE =
+  'The fleet runner was replaced by a newer build and your session was resumed; your last turn may have been cut short. ' +
+  'Continue the step where you left off; your original brief is earlier in this conversation.';
+
+/** The same for a run the owner holds: the worker picks up the owner's request, then waits. */
+export const HANDOVER_HELD =
+  'The fleet runner was replaced by a newer build and your session was resumed; your last turn may have been cut short. ' +
+  'If you were in the middle of something the owner asked, finish it; otherwise reply with one short line that you are back, then wait for their instructions.';
 
 export type StartOutcome = { readonly ok: true; readonly run: RunInfo } | { readonly ok: false; readonly error: string };
 
@@ -110,6 +136,8 @@ interface LiveRun {
   stopNote?: string;
   /** An ended run's session the owner reopened: held from the start, no gate and no move at its end. */
   reopened?: boolean;
+  /** The runner is retiring and left this run to its successor: its worker's exit decides nothing here. */
+  handover?: RunHandover;
 }
 
 /** What a takeover call answers. */
@@ -144,6 +172,8 @@ export function usageSummary(info: Pick<RunInfo, 'tokensIn' | 'tokensOut' | 'cos
 
 export class RunSupervisor {
   private readonly runs = new Map<string, LiveRun>();
+  /** Set by `handOver`: this runner is going, it starts nothing new. */
+  private retiring = false;
   private readonly git: Pick<TicketsGit, 'run' | 'locate' | 'commitPaths' | 'push'>;
   private readonly now: () => Date;
   private readonly exec: ExecFn;
@@ -176,11 +206,21 @@ export class RunSupervisor {
       }
       try {
         const stored = JSON.parse(raw) as StoredRun;
+        // The runner keeps one supervisor per provider and each adopts its
+        // own runs: two adopting every record had the second detach what
+        // the first had just re-attached.
+        if ((stored.info.provider ?? 'opencode') !== this.deps.adapter.id) {
+          continue;
+        }
         const dir = path.join(runsDir, id);
         // A worker that outlived the runner is taken back when its server
-        // still answers (OpenCode); otherwise it is detached below.
+        // still answers (OpenCode); a run handed over by a retiring runner
+        // is otherwise resumed in place (req-51); else it is detached below.
         if (!TERMINAL.includes(stored.info.state) && stored.info.state !== 'stopping') {
           if (await this.reattach(stored, dir)) {
+            continue;
+          }
+          if (stored.handover !== undefined && (await this.resumeInPlace(stored, stored.handover, dir))) {
             continue;
           }
         }
@@ -348,6 +388,137 @@ export class RunSupervisor {
     return true;
   }
 
+  /**
+   * A run a retiring runner handed over whose worker cannot be bound to
+   * (req-51): a fresh worker resumes the provider session under the same
+   * run — id, record, stream, ticket stamp — so the board and an open
+   * takeover tab simply carry on. A worker still alive is killed first
+   * (guarded by its recorded creation time): one worker per worktree,
+   * never an unsupervised one. False — the caller detaches — without a
+   * session to resume or when the spawn fails.
+   */
+  private async resumeInPlace(stored: StoredRun, handover: RunHandover, dir: string): Promise<boolean> {
+    const sessionRef = stored.info.sessionRef;
+    if (sessionRef === null) {
+      return false;
+    }
+    if (stored.info.pid !== null && handover.pidStartedMs !== null) {
+      await killTreeGuarded(stored.info.pid, this.exec, handover.pidStartedMs).catch(() => undefined);
+    }
+    const held = stored.info.held === true;
+    const run: LiveRun = {
+      info: { ...stored.info, state: 'running', pid: null, endedAt: null, gateFailure: null },
+      request: stored.request,
+      currentRelPath: stored.request.ticketRelPath,
+      currentPhase: stored.request.phase,
+      dir,
+      handle: null,
+      startedAtMs: Date.parse(stored.info.startedAt),
+      gating: false,
+      audited: false,
+      agentDone: false,
+    };
+    let handle: WorkerHandle;
+    try {
+      handle = this.deps.adapter.spawn({
+        cwd: stored.info.worktreePath,
+        instruction: held ? HANDOVER_HELD : HANDOVER_CONTINUE,
+        model: stored.request.model,
+        permissionMode: stored.request.permissionMode,
+        resumeRef: sessionRef,
+        ticketId: stored.request.ticketId,
+        onEvent: (event) => void this.onEvent(run, event),
+        onSessionRef: (ref) => {
+          run.info = { ...run.info, sessionRef: ref };
+          void this.persist(run);
+        },
+        onAttachInfo: (info) => void this.recordAttach(run, info),
+      });
+    } catch (error) {
+      this.deps.log(`run ${stored.info.id}: the handed-over session could not be resumed — ${messageOf(error)}`);
+      return false;
+    }
+    this.runs.set(run.info.id, run);
+    run.handle = handle;
+    run.info = { ...run.info, pid: handle.pid };
+    if (held) {
+      handle.setHold?.(true);
+    }
+    void handle.exited.then((code) => void this.onWorkerExit(run, code));
+    await this.persist(run);
+    this.deps.log(`run ${run.info.id}: resumed in place after a runner handover`);
+    await this.appendStream(run, {
+      ts: this.stamp(),
+      kind: 'note',
+      text: 'the runner was replaced by a newer build — the session is resumed in a fresh worker',
+    });
+    await this.patchTicket(run, (text) =>
+      patchTicketFile(text, {
+        to: run.currentPhase,
+        from: null,
+        now: this.now(),
+        actor: this.agentActor(),
+        action: `run ${run.info.id} resumed after a runner handover`,
+        ...(handle.pid !== null ? { run: { pid: handle.pid, 'started-at': stored.info.startedAt, stream: run.info.id } } : {}),
+      }),
+    ).catch(() => undefined);
+    return true;
+  }
+
+  /**
+   * Why this runner cannot hand over right now, or null (req-51): a run
+   * in its machine gate, starting or being stopped is mid-transition —
+   * the ticket move or the stop's Log line would be lost. The client
+   * keeps the runner serving and asks again later.
+   */
+  handoverBlocker(): string | null {
+    for (const run of this.runs.values()) {
+      if (TERMINAL.includes(run.info.state) || run.info.state === 'detached') {
+        continue;
+      }
+      if (run.gating) {
+        return `run ${run.info.id} (${run.info.ticketId}) is in its machine gate`;
+      }
+      if (run.info.state === 'stopping' || run.info.state === 'starting') {
+        return `run ${run.info.id} (${run.info.ticketId}) is ${run.info.state}`;
+      }
+    }
+    return null;
+  }
+
+  /**
+   * The retiring runner's half of a handover (req-51): every live run is
+   * left to the successor instead of stopped. A worker the successor can
+   * bind to (a recorded attach file) keeps running; any other is stopped
+   * here — its pipes die with this process, and a worker nobody reads is
+   * an unsupervised agent (the T-0007 review) — and its session is
+   * resumed by the successor. Nothing new starts afterwards; the ticket
+   * keeps its run stamp, since the run goes on.
+   */
+  async handOver(): Promise<number> {
+    this.retiring = true;
+    let count = 0;
+    for (const run of [...this.runs.values()]) {
+      if (run.info.state !== 'running' && run.info.state !== 'starting') {
+        continue;
+      }
+      const attachable =
+        this.deps.adapter.attach !== undefined &&
+        (await fsp.stat(path.join(run.dir, 'attach.json')).then(() => true, () => false));
+      const pid = run.info.pid ?? (run.handle?.pid !== undefined && run.handle.pid !== null && run.handle.pid > 0 ? run.handle.pid : null);
+      const pidStartedMs = pid === null ? null : await processStartMs(pid, this.exec).catch(() => null);
+      run.handover = { mode: attachable ? 'reattach' : 'resume', at: this.stamp(), pidStartedMs };
+      run.info = { ...run.info, pid };
+      await this.persist(run);
+      if (!attachable && run.handle !== null) {
+        await run.handle.stop().catch(() => undefined);
+      }
+      this.deps.log(`run ${run.info.id}: handed over (${run.handover.mode})`);
+      count++;
+    }
+    return count;
+  }
+
   list(): readonly RunInfo[] {
     return [...this.runs.values()].map((r) => r.info).sort((a, b) => b.startedAt.localeCompare(a.startedAt));
   }
@@ -370,6 +541,9 @@ export class RunSupervisor {
   }
 
   async start(request: RunRequest, resumeRef: string | null = null, reopened = false): Promise<StartOutcome> {
+    if (this.retiring) {
+      return { ok: false, error: 'the runner is handing over to a newer build — try again in a moment' };
+    }
     const live = this.list().find(
       (r) => r.ticketId === request.ticketId && !TERMINAL.includes(r.state) && r.state !== 'detached',
     );
@@ -500,6 +674,10 @@ export class RunSupervisor {
     }
     if (TERMINAL.includes(run.info.state)) {
       return { ok: false, error: `run ${runId} already ended (${run.info.state})` };
+    }
+    if (run.handover !== undefined) {
+      // Its successor owns it now; a stop here would be undone by the resume.
+      return { ok: false, error: 'the runner is handing over to a newer build — try again in a moment' };
     }
     // A detached run has no attached worker: stopping it kills the recorded
     // process if it still lives and ends the record — the only way to free
@@ -798,7 +976,7 @@ export class RunSupervisor {
   async reap(): Promise<void> {
     for (const run of [...this.runs.values()]) {
       const state = run.info.state;
-      if (TERMINAL.includes(state) || state === 'detached' || state === 'stopping' || run.gating) {
+      if (TERMINAL.includes(state) || state === 'detached' || state === 'stopping' || run.gating || run.handover !== undefined) {
         continue;
       }
       // The opencode handle reports its pid only once the server has
@@ -875,6 +1053,9 @@ export class RunSupervisor {
   private async onWorkerExit(run: LiveRun, code: number | null): Promise<void> {
     if (TERMINAL.includes(run.info.state)) {
       return; // the lease reaper got here first
+    }
+    if (run.handover !== undefined) {
+      return; // handed over: the successor decides how this run goes on
     }
     if (run.info.state === 'stopping') {
       await this.finish(run, 'stopped');
@@ -1109,7 +1290,11 @@ export class RunSupervisor {
   }
 
   private async persist(run: LiveRun): Promise<void> {
-    const stored: StoredRun = { request: run.request, info: run.info };
+    const stored: StoredRun = {
+      request: run.request,
+      info: run.info,
+      ...(run.handover !== undefined ? { handover: run.handover } : {}),
+    };
     await fsp.writeFile(path.join(run.dir, 'run.json'), JSON.stringify(stored, null, 2), 'utf8');
   }
 

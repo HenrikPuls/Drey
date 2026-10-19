@@ -783,7 +783,17 @@ failure parks the reason in the Log and leaves the ticket where it is.
 Runs survive closing Drey — the runner is its own small process — and,
 for OpenCode workers, even a restart of the runner: the new runner takes the
 still-running worker back. (A Claude Code worker cannot be taken back; its run
-shows as **Detached** and can be stopped from its lane.) You
+shows as **Detached** and can be stopped from its lane.)
+
+Rebuilding Drey doesn't interrupt the fleet either, so you can work on Drey
+tickets from the Drey you're changing. A rebuild that leaves the runner's code
+unchanged keeps the runner as it is. When that code did change, the old runner
+hands its runs over to the new one instead of stopping them: OpenCode workers are
+taken back, and a Claude Code worker's session continues in a fresh worker under
+the same run. Its last turn may be cut short, but the work in its folder stays.
+Open run tabs come back after the restart and pick their run up again. A run
+that is checking its acceptance criteria finishes first; the handover waits for
+it. You
 can reach it from a terminal, too: its address and token live in
 `<user data>/plugins/fleet/runner.json`.
 

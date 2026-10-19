@@ -3206,13 +3206,48 @@ sequenceDiagram
 The runner is a plain Node process (spawned detached under
 `ELECTRON_RUN_AS_NODE` from the plugin bundle), so it survives Drey
 closing and restarting; Drey re-adopts it through
-`<userRoot>/fleet/runner.json` instead of spawning a second one. All
+`<userRoot>/fleet/runner.json` instead of spawning a second one. A
+rebuild of Drey replaces the runner only when the fleet code itself
+changed, and then by a handover that keeps the runs going (req-51, the
+sequence below). All
 of the runner's ticket writes use the board's exact transition
 semantics — the same patch helpers, `add -- paths` + `commit -- paths`
 — and the deterministic validator runs before every action. A red
 gate (or a refused validation: no acceptance criteria, a non-`t/<id>`
 branch, an unknown worker pin) never moves the ticket; the reason
 lands in the Log and the run slot is freed for the next attempt.
+
+### Runner handover after a rebuild (req-51, [ADR-0079](09_architecture_decisions/0079-run-takeover.md) later change)
+
+```mermaid
+sequenceDiagram
+    participant F as FleetClient (rebuilt Drey)
+    participant O as old runner
+    participant W as workers
+    participant N as new runner
+    F->>O: GET /health → build "<builtAt>#<hash>"
+    F->>F: fleetBuildStamp(runner.js) — same hash? keep O, done
+    F->>O: POST /shutdown {handover: true}
+    alt a run is gating / starting / stopping
+        O-->>F: 409 reason — F keeps using O, asks again next poll
+    else free
+        O-->>F: 200
+        O->>O: retiring — starts nothing new
+        O->>W: OpenCode (attach.json): left running
+        O->>W: others (Claude Code): stop — the pipes die with O
+        O->>O: run.json += handover {mode, pidStartedMs}; exit
+        F->>F: wait until /health fails
+        F->>N: spawn runner.js
+        N->>W: adopt(): reattach the OpenCode server
+        N->>W: resumeInPlace: guarded kill of a leftover, spawn with resumeRef — same run id
+        N->>N: ticket Log "resumed after a runner handover"
+    end
+```
+
+The ticket keeps its run stamp throughout (only the pid changes on a
+resume in place), so the board and an open takeover tab simply carry on;
+the takeover tab's saved title lets a Drey restart reopen it before the
+first fleet snapshot.
 
 ## 6.66 The chain dispatches: the board drains itself (milestone 85, [ADR-0077](09_architecture_decisions/0077-continuous-orchestration.md))
 

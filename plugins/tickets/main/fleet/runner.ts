@@ -20,6 +20,7 @@ import * as fsSync from 'node:fs';
 import { promises as fsp } from 'node:fs';
 import * as http from 'node:http';
 import * as path from 'node:path';
+import { fleetBuildStamp } from './build-stamp';
 import { claudeCodeAdapter, opencodeAdapter } from './providers';
 import { freePort, nodeSpawnFn } from './procs';
 import { Orchestrator } from './orchestrator';
@@ -78,10 +79,12 @@ async function main(): Promise<void> {
   // runner.log — the owner's window into every dispatch decision
   // (T-0007 review finding 2: the daemon's doings were invisible).
   const logPath = path.join(args.root, 'runner.log');
-  // The build stamp: the entry file's mtime at boot. When the file on
-  // disk moves on (a new build), the client retires this daemon and
-  // respawns — stale code never serves a second session.
-  const buildStamp = (await fsp.stat(__filename)).mtime.toISOString();
+  // The build stamp (req-51): a hash of the fleet code this process
+  // loaded, plus its newest mtime. A rebuild that changed none of it
+  // keeps this daemon; one that did makes the client retire it with a
+  // handover — stale code never serves a second session.
+  const buildStamp = await fleetBuildStamp(__filename);
+  let handingOver = false;
   const ring: string[] = [];
   let logChain: Promise<void> = Promise.resolve();
   const log = (message: string): void => {
@@ -195,8 +198,41 @@ async function main(): Promise<void> {
         return;
       }
       if (req.method === 'POST' && pathname === '/shutdown') {
+        const body = (await readBody(req).catch(() => ({}))) as { handover?: unknown };
+        if (body.handover === true) {
+          // Retired for a newer build (req-51): the runs go on under the
+          // successor. Mid-transition runs make it wait — the client asks
+          // again on its next poll and this runner serves on meanwhile.
+          if (handingOver) {
+            respond(200, { ok: true });
+            return;
+          }
+          const blocker = [...supervisors.values()].map((sup) => sup.handoverBlocker()).find((b) => b !== null) ?? null;
+          if (blocker !== null) {
+            respond(409, { ok: false, error: blocker });
+            return;
+          }
+          handingOver = true;
+          respond(200, { ok: true });
+          log('handover requested by a newer build — leaving the live runs to the successor');
+          let count = 0;
+          for (const sup of supervisors.values()) {
+            count += await sup.handOver().catch((error) => {
+              log(`handover failed: ${String(error)}`);
+              return 0;
+            });
+          }
+          log(`handed over ${count} live run${count === 1 ? '' : 's'} — exiting`);
+          // runner.log is written behind a promise chain: flush it, or the
+          // handover's lines are lost with the process.
+          await logChain;
+          // The descriptor goes only now: until the records are written, a
+          // successor's boot guard must still find this runner alive.
+          shutdown(0);
+          return;
+        }
         respond(200, { ok: true });
-        log('shutdown requested — stopping live runs first, then exiting');
+        log('shutdown requested — stopping live runs first, then exiting (a newer build hands over instead)');
         // Graceful: a worker left alive while its record goes detached is
         // an unsupervised agent on a parked ticket (T-0007 review). The
         // stop path is the owner's own button; the wait is bounded so a
@@ -205,7 +241,7 @@ async function main(): Promise<void> {
           sup
             .list()
             .filter((info) => info.state === 'starting' || info.state === 'running')
-            .map((info) => sup.stop(info.id, 'the runner is retired for a newer build')),
+            .map((info) => sup.stop(info.id, 'the runner was shut down')),
         );
         if (stops.length > 0) {
           log(`stopping ${stops.length} live run${stops.length === 1 ? '' : 's'} before exit`);
