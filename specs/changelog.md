@@ -47,6 +47,15 @@ run surfaced two defects; both are fixed on the branch `t/T-0051`:
   the same Lezer grammars and palette via `preview-highlight.ts` and
   `applyExtendedMarkdown`'s new `fenceHighlight` option — the PDF
   export keeps plain fences (its print palette has no editor tokens).
+- **The legacy Karma gate command runs again.** `npm test` is a small
+  wrapper (`scripts/test.mjs`) that drops the fossil `--browsers` flag
+  (loudly, on stderr) and forwards everything else verbatim to `ng
+  test`: the tickets pipeline still invokes
+  `npm test -- --watch=false --browsers=ChromeHeadless`, which vitest
+  otherwise fails at launch demanding an uninstallable
+  `@vitest/browser-*` provider. The suite itself is untouched — it
+  runs headless in jsdom as it did, and the exit code is the real
+  suite's.
 
 ### req-56 — Fleet workers start oriented: a ready toolchain, a clean environment, a short map (owner request, outside the list)
 
