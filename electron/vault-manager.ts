@@ -25,6 +25,7 @@ import {
   readJsonObjectGuarded,
   type UnreadableFile,
 } from './safe-file';
+import { isReservedRootName } from './vault-scan-rules';
 
 /**
  * `vault-config.json` v2 (ADR-0051): every registered vault plus which one
@@ -918,10 +919,23 @@ function launchTerminal(cmd: string, args: string[], cwd?: string): Promise<bool
   });
 }
 
+/** Same directory, slash-insensitive on win32 (the scan root compare). */
+function samePath(a: string, b: string): boolean {
+  const key = (p: string): string => {
+    const resolved = path.resolve(p).replaceAll('\\', '/');
+    return process.platform === 'win32' ? resolved.toLowerCase() : resolved;
+  };
+  return key(a) === key(b);
+}
+
 async function collectMarkdown(dir: string, vaultRoot: string, out: string[]): Promise<void> {
   const dirents = await fsp.readdir(dir, { withFileTypes: true });
+  // Root depth only (T-0044, ADR-0080): reserved `_`-folders (the
+  // fleet's `_worktrees/` base) are machine state, not vault content —
+  // `tickets/_meta` below the root stays indexed.
+  const atRoot = samePath(dir, vaultRoot);
   for (const dirent of dirents) {
-    if (dirent.name.startsWith('.')) {
+    if (dirent.name.startsWith('.') || (atRoot && isReservedRootName(dirent.name))) {
       continue;
     }
     const fullPath = path.join(dir, dirent.name);
@@ -936,12 +950,14 @@ async function collectMarkdown(dir: string, vaultRoot: string, out: string[]): P
 async function readDirRecursive(dir: string, vaultRoot: string): Promise<VaultFileEntry[]> {
   const dirents = await fsp.readdir(dir, { withFileTypes: true });
   const entries: VaultFileEntry[] = [];
+  const atRoot = samePath(dir, vaultRoot);
 
   for (const dirent of dirents) {
     // Skips dotfiles/dotfolders (.git, .obsidian, ...). Nothing in the
     // Phase-1 spec needs those surfaced, and hiding them by default is
-    // the conventional behavior for this kind of file tree.
-    if (dirent.name.startsWith('.')) {
+    // the conventional behavior for this kind of file tree. Reserved
+    // `_`-folders at the root (T-0044) join them — machine state.
+    if (dirent.name.startsWith('.') || (atRoot && isReservedRootName(dirent.name))) {
       continue;
     }
 

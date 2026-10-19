@@ -264,6 +264,23 @@ describe('VaultManager reading and writing', () => {
     expect(await manager.listMarkdownFiles()).toEqual(['b.md', 'zeta/inner.md']);
   });
 
+  it('hides reserved _ root folders, but tickets/_meta below the root stays listed (T-0044)', async () => {
+    const { manager, a } = twoVaults();
+    put(a, '_worktrees/T-0044/plugins/tickets/main/index.ts');
+    put(a, '_worktrees/T-0044/note.md');
+    put(a, '_scratch/hidden.md');
+    put(a, 'tickets/_meta/pipeline.md');
+    put(a, 'tickets/10-inbox/T-0042.md');
+
+    expect((await manager.listMarkdownFiles()).sort()).toEqual(
+      ['tickets/10-inbox/T-0042.md', 'tickets/_meta/pipeline.md'].sort(),
+    );
+    const tree = await manager.listFiles();
+    expect(tree.map((e) => e.name)).toEqual(['tickets']);
+    // localeCompare order — '_' sorts before the digits.
+    expect(tree[0]!.children.map((e) => e.name)).toEqual(['_meta', '10-inbox']);
+  });
+
   it('lists the notes of every vault whose folder is there', async () => {
     const { manager, a, b } = twoVaults();
     put(a, 'one.md');

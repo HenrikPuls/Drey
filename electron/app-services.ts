@@ -18,6 +18,7 @@ import { SpellcheckService } from './spellcheck';
 import { UpdateService } from './updater/update-service';
 import { VaultChangeAnnouncer } from './vault-change-announcer';
 import { VaultManager } from './vault-manager';
+import { vaultScanIgnore } from './vault-scan-rules';
 import { VaultWatcher } from './vault-watcher';
 
 /** What building the services needs from the window-and-lifecycle half. */
@@ -105,9 +106,12 @@ export function buildAppServices(deps: AppServicesDeps): AppServices {
         // The initial scan must not announce every existing file as a
         // change; the `ready` gate covers anything that slips through.
         ignoreInitial: true,
-        // Same dot-entries the file tree and the indexes exclude
-        // (.git, .obsidian, .drafts/, .<name>.chat.json sidecars).
-        ignored: /(^|[\\/])\./,
+        // The vault-scan rules (T-0044): the dot entries the file tree
+        // and the indexes exclude (.git, .obsidian, .drafts/,
+        // .<name>.chat.json sidecars), plus reserved `_` root folders
+        // (the fleet's `_worktrees/` base) — agent writes there must
+        // never reach the indexes.
+        ignored: vaultScanIgnore(root),
         // OneDrive & friends deliver files in flux; wait for the write
         // to settle so indexes never see half a file.
         awaitWriteFinish: { stabilityThreshold: 500, pollInterval: 100 },
