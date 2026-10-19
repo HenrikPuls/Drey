@@ -1398,9 +1398,8 @@
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 6px 10px;
-  border-bottom: 1px solid var(--border);
-  font-size: 0.78rem;
+  padding: 8px 20px;
+  font-size: 0.8rem;
   color: color-mix(in srgb, var(--tk-tone) 70%, var(--text-heading));
 }
 

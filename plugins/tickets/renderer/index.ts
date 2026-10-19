@@ -1493,7 +1493,6 @@ function mountTakeover(api: DreyPluginApi, host: HTMLElement, runId: string): ()
     progressText.textContent = `${verb}… ${seconds >= 60 ? `${Math.floor(seconds / 60)}m ${seconds % 60}s` : `${seconds}s`} · ↓ ${formatTokens(run.tokensOut)} tokens`;
     progress.hidden = false;
   };
-  promptWrap.prepend(progress);
   promptWrap.append(commandMenu, attachRow, prompt.element, composerBar);
 
   const live = (): RunInfo | null => fleetRuns.find((r) => r.id === runId) ?? null;
@@ -1572,7 +1571,7 @@ function mountTakeover(api: DreyPluginApi, host: HTMLElement, runId: string): ()
   pull();
   const timer = setInterval(pull, 2_000);
   const tick = setInterval(paintBanner, 1_000);
-  wrap.append(banner, transcript.element, promptWrap);
+  wrap.append(banner, transcript.element, progress, promptWrap);
   host.append(wrap);
   return () => {
     alive = false;
