@@ -73,10 +73,23 @@ stays tolerated** (`tickets/inbox/…` reads exactly like
 `git mv`, and ship order is free). Writers resolve their target
 directory per move: the derived `NN-<id>` name when it exists, else any
 existing directory whose stripped id matches, else the derived name
-(created on first use). Inserting a column takes a **gap number**
-(`35-qa`) — code never renumbers existing directories, so there is no
-rename cascade. Directory names are never written into ticket files,
-order.md or branches.
+(created on first use). Inserting a column by hand takes a **gap
+number** (`35-qa`) — no move ever renumbers existing directories, so
+there is no rename cascade. Directory names are never written into
+ticket files, order.md or branches.
+
+**Renumbering is an explicit owner action** (req-50, Settings →
+Tickets): reordering the columns there rewrites `pipeline.md` and
+renames every phase folder whose number no longer matches its position,
+in **one commit** (`tickets: reorder phases <ids…>`); "Number folders"
+does the renaming alone (`tickets: number phase folders`) — the
+migration of an unprefixed repo, or tidying gap numbers. Several
+folders of one phase (an unprefixed `inbox` beside a machine-made
+`10-inbox`) fold into the derived one; `_meta`, `archive` and folders
+that name no phase are never touched. Both refuse while a ticket in a
+renamed folder has a live `run:` (the runner holds its path), and
+refuse before touching anything when two files of one name would land
+in one folder.
 
 ### Archive (T-0041)
 

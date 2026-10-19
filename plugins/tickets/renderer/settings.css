@@ -1,0 +1,520 @@
+/*
+ * Settings → Tickets (req-50): the pipeline table, the prompt list with
+ * the host Markdown editor, the fleet rows. Built on the settings
+ * vocabulary (settings-ui.css: section-hint, callout, button.ghost /
+ * primary, mono-input) and the global .icon-btn; everything here is the
+ * page's own and carries the tset- prefix. Theme tokens only.
+ */
+
+.tset {
+  display: flex;
+  flex-direction: column;
+  gap: 28px;
+}
+
+.tset-muted {
+  font-size: 0.78rem;
+  color: var(--text-4);
+}
+
+.tset-error {
+  color: var(--status-deleted);
+}
+
+.tset-repo > .tset-muted {
+  flex: none;
+  white-space: nowrap;
+}
+
+.tset-repo {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  margin-top: -12px;
+}
+
+.tset-repo-path {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--font-mono);
+  font-size: 0.78rem;
+  color: var(--text-2);
+}
+
+.tset-section {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 0;
+}
+
+.tset-section-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: var(--icon-btn);
+}
+
+.tset-section-head > h3 {
+  margin: 0;
+}
+
+.tset-head-tools {
+  display: inline-flex;
+  gap: 2px;
+  margin-left: auto;
+}
+
+/* --- chips ---------------------------------------------------------------- */
+
+.tset-chip {
+  display: inline-flex;
+  align-items: center;
+  height: 22px;
+  padding: 0 8px;
+  box-sizing: border-box;
+  border-radius: var(--radius-xs);
+  font-size: 0.72rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.tset-chip-auto {
+  background: color-mix(in srgb, var(--status-added) 20%, transparent);
+  color: var(--text-primary);
+}
+
+.tset-chip-manual {
+  border: 1px solid var(--border);
+  color: var(--text-4);
+}
+
+/* --- the folder-numbering banner ------------------------------------------ */
+
+.tset-banner {
+  align-items: flex-start;
+}
+
+.tset-banner-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.tset-banner-text > strong {
+  color: var(--text-primary);
+}
+
+/* --- the pipeline table --------------------------------------------------- */
+
+.tset-table {
+  display: flex;
+  flex-direction: column;
+  border-top: 1px solid var(--border);
+  overflow-x: auto;
+}
+
+.tset-row {
+  display: grid;
+  grid-template-columns:
+    18px 24px minmax(110px, 1.2fr) 104px minmax(110px, 1.4fr)
+    48px minmax(100px, 1fr) 14px;
+  column-gap: 8px;
+  align-items: center;
+  min-width: 600px;
+  min-height: 42px;
+  padding: 5px 8px;
+  box-sizing: border-box;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-main);
+  position: relative;
+}
+
+.tset-row:not(.tset-row-head):hover {
+  background: var(--hover-bg);
+}
+
+.tset-row:focus-visible {
+  outline: 1px solid var(--accent-ring);
+  outline-offset: -1px;
+}
+
+.tset-row-head {
+  min-height: 30px;
+  background: transparent;
+}
+
+.tset-th {
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: var(--text-4);
+}
+
+.tset-row.tset-dragging {
+  z-index: 2;
+  background: var(--hover-bg-strong);
+  outline: 1px solid var(--field-border);
+  border-radius: var(--radius-md);
+  cursor: grabbing;
+}
+
+.tset-row.tset-drop-before {
+  box-shadow: inset 0 2px 0 var(--accent);
+}
+
+.tset-row.tset-drop-after {
+  box-shadow: inset 0 -2px 0 var(--accent);
+}
+
+.tset-grip,
+.tset-pin {
+  display: flex;
+  justify-content: center;
+  color: var(--text-4);
+}
+
+.tset-grip {
+  cursor: grab;
+  touch-action: none;
+}
+
+.tset-grip:hover {
+  color: var(--text-primary);
+}
+
+.tset-num {
+  font-family: var(--font-mono);
+  font-size: 0.78rem;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-4);
+}
+
+.tset-name {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.tset-name-meta {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  margin-top: 2px;
+}
+
+.tset-name-meta > .tset-chip {
+  flex: none;
+  height: 18px;
+  padding: 0 6px;
+  font-size: 0.68rem;
+}
+
+.tset-name-title {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.tset-name-dir {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  color: var(--text-4);
+}
+
+.tset-cell {
+  min-width: 0;
+}
+
+.tset-cell > select,
+.tset-cell > input,
+.tset-cell > .tset-combo > input {
+  width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+}
+
+.tset-dash {
+  color: var(--text-4);
+}
+
+.tset-cell-status {
+  display: flex;
+  justify-content: center;
+  color: var(--status-added);
+}
+
+.tset-cell-status.tset-error {
+  color: var(--status-deleted);
+}
+
+.tset-status {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 28px;
+  font-size: 0.82rem;
+  color: var(--text-2);
+}
+
+.tset-status:empty {
+  display: none;
+}
+
+.tset-status-ok > svg {
+  color: var(--status-added);
+}
+
+.tset-status-error {
+  color: var(--status-deleted);
+}
+
+/* --- the model picker ----------------------------------------------------- */
+
+.tset-combo {
+  position: relative;
+}
+
+.tset-combo-list {
+  position: absolute;
+  z-index: 20;
+  top: calc(100% + 2px);
+  left: 0;
+  min-width: 100%;
+  width: max-content;
+  max-width: 420px;
+  max-height: 260px;
+  margin: 0;
+  padding: 4px;
+  overflow-y: auto;
+  list-style: none;
+  border: 1px solid var(--popover-border, var(--border-strong));
+  border-radius: var(--radius-md);
+  background: var(--bg-main);
+  box-shadow: var(--popover-shadow, none);
+}
+
+.tset-combo-group {
+  padding: 6px 8px 2px;
+  font-size: 0.68rem;
+  color: var(--text-4);
+}
+
+.tset-combo-item {
+  padding: 4px 8px;
+  border-radius: var(--radius-xs);
+  font-family: var(--font-mono);
+  font-size: 0.78rem;
+  color: var(--text-2);
+  cursor: pointer;
+}
+
+.tset-combo-item:hover,
+.tset-combo-item.active {
+  background: var(--hover-bg);
+}
+
+.tset-combo-item.current {
+  color: var(--accent-fg, var(--accent));
+}
+
+.tset-combo-empty {
+  padding: 6px 8px;
+  font-size: 0.75rem;
+  color: var(--text-4);
+}
+
+/* --- prompts: list + editor ----------------------------------------------- */
+
+.tset-prompts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+  align-items: flex-start;
+}
+
+.tset-plist {
+  flex: 1 1 190px;
+  max-width: 240px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.tset-pitem {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 7px 10px;
+  border: 0;
+  border-radius: var(--radius-xs);
+  background: transparent;
+  text-align: left;
+  font: inherit;
+  cursor: pointer;
+}
+
+.tset-pitem:hover {
+  background: var(--hover-bg);
+}
+
+.tset-pitem:focus-visible {
+  outline: 1px solid var(--accent-ring);
+  outline-offset: -1px;
+}
+
+.tset-pitem-on {
+  background: var(--hover-bg);
+  box-shadow: inset 2px 0 0 var(--accent);
+}
+
+.tset-pitem-name {
+  font-family: var(--font-mono);
+  font-size: 0.8rem;
+  color: var(--text-primary);
+}
+
+.tset-pitem-used {
+  font-size: 0.72rem;
+  color: var(--text-4);
+}
+
+.tset-pdetail {
+  flex: 999 1 420px;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.tset-pbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 28px;
+  flex-wrap: wrap;
+}
+
+.tset-pname {
+  font-family: var(--font-mono);
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.tset-pstate {
+  margin-left: auto;
+}
+
+.tset-editor {
+  height: 380px;
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--field-border, var(--border-strong));
+  border-radius: var(--radius-xs);
+  background: var(--bg-editor, var(--bg-main));
+  overflow: hidden;
+}
+
+.tset-editor:focus-within {
+  border-color: var(--accent-ring);
+}
+
+.tset-editor > * {
+  flex: 1;
+  min-height: 0;
+}
+
+.tset-pfoot {
+  min-height: 16px;
+  font-size: 0.75rem;
+  color: var(--text-4);
+}
+
+.tset-notice {
+  justify-content: space-between;
+}
+
+.tset-pempty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 28px 16px;
+  border: 1px dashed var(--border);
+  border-radius: var(--radius-md);
+  text-align: center;
+}
+
+.tset-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.tset-newprompt {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-xs);
+}
+
+.tset-newprompt-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.tset-newprompt-row > input {
+  flex: 1;
+  min-width: 0;
+}
+
+/* --- fleet ---------------------------------------------------------------- */
+
+.tset-kv {
+  display: grid;
+  grid-template-columns: minmax(0, 220px) minmax(0, 1fr);
+  column-gap: 24px;
+  row-gap: 14px;
+  align-items: start;
+}
+
+.tset-kv-label {
+  padding-top: 5px;
+  font-weight: 600;
+  color: var(--text-2);
+}
+
+.tset-kv-value {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-width: 360px;
+}
+
+@media (max-width: 720px) {
+  .tset-kv {
+    grid-template-columns: minmax(0, 1fr);
+    row-gap: 4px;
+  }
+
+  .tset-kv-value {
+    margin-bottom: 10px;
+  }
+}
+
+/* `hidden` must win over the vocabulary's display rules (.callout is flex). */
+.tset [hidden] {
+  display: none !important;
+}

@@ -3255,3 +3255,36 @@ worker process is provably dead; a `ci` handover column runs its `ci:`
 check on the same sweep and moves green tickets right; a sampled
 `audit:` or `semantic:` column hands a green step to a fresh second
 worker before the move.
+
+## 6.67 Reordering the pipeline renumbers the phase folders (req-50)
+
+```mermaid
+sequenceDiagram
+    actor O as Owner
+    participant P as Settings → Tickets (settings-columns.ts)
+    participant B as BoardService (plugin main)
+    participant V as tickets vault (files)
+    participant G as git (tickets repo)
+
+    O->>P: drag a row by its grip, or Alt+↑/↓ on a focused row
+    P->>P: canMove / moveItem (Inbox and Done pinned)
+    P->>B: reorderPhases(order)
+    B->>B: reorderPipelinePhases(pipeline.md, order) — whole entries move
+    B->>V: list the phase folders
+    B->>B: planFolderNumbering(dirs, order) → renames to NN-<id>
+    alt a ticket in a renamed folder has a live run
+        B-->>P: refused — the status line says which ticket
+    else
+        B->>V: applyFolderNumbering — park sources under temp names, then fill the targets
+        B->>V: write pipeline.md
+        B->>G: commitTree(folders + pipeline.md) — one commit "tickets: reorder phases …"
+        B-->>P: ok, moved = N (board-changed event)
+        P->>P: status "X moved to position NN. N folders renumbered." + Undo (the reverse move)
+    end
+```
+
+"Number folders" runs the same body with the current order and no
+`pipeline.md` change (`tickets: number phase folders`). Nothing else
+renumbers: a ticket move into a phase reuses whatever folder the phase
+already has (T-0041), so a hand-made gap column keeps its number until
+the owner reorders or numbers.

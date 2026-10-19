@@ -20,6 +20,63 @@ recorded as an explicit decision. The parity checklist lives in
 
 ## Recent milestones
 
+### req-50 — the Tickets settings page reworked: a sortable pipeline, numbered folders, prompts as they are on disk (owner request, outside the list)
+
+**Not yet manually verified by the owner.** Designed first in Claude
+Design (Anthrazit); the mockup is the reference for the layout. Built on
+T-0041, which is merged into this branch.
+
+- **One sortable pipeline table** instead of a card per column: grip,
+  folder number (`10` … `80`), column name with a Runs itself /
+  Checkpoint chip and its folder, worker, model, pool, prompt — manual
+  columns show dashes where a pool would be. Drag a row by its grip or
+  press Alt+↑/↓ on a focused row; Inbox (capture) and Done (terminal)
+  are pinned. A move rewrites `pipeline.md` **and renumbers the phase
+  folders in one commit** (`tickets: reorder phases …`); the status line
+  says what moved and offers **Undo** (the reverse move). Refused while
+  a ticket in a renamed folder has a live run.
+- **"Number folders"** — a banner appears while any phase folder lacks
+  its number (an unprefixed repo from before T-0041, or a gap number);
+  one click renames them all in one commit
+  (`tickets: number phase folders`). **T-0041 rule change:** code still
+  never renumbers on a move or a hand-made gap column; it renumbers only
+  on the owner's explicit reorder or "Number folders".
+- **Prompts are the files on disk, nothing else.** The shipped defaults
+  are real files now, `plugins/tickets/prompts/{plan,build,review,commit}-default.md`
+  (copied beside the built plugin by `scripts/build-plugins.mjs`;
+  `commit-default` is new as a shipped prompt), read by
+  `loadShippedPrompts()` for "Initialize board" and for **Reset to the
+  shipped version**. The page lists only `tickets/_meta/prompts/*.md`
+  (no rows for prompts the folder lacks, no "Edited" badge from comparing
+  with code), shows the folder's path with an open-folder button, and
+  follows the board's change events, so an outside edit shows up
+  (silently when nothing is unsaved, as a "changed outside Drey" notice
+  otherwise). An empty folder offers **Add Drey's prompts**.
+- **The prompt editor is the host's Markdown editor**
+  (`ui.createMarkdownView`, Live Preview) in a list/detail layout; it
+  saves when the editor is left or on Save, one commit per save.
+  Ctrl+S is not offered: the app's keybinding layer takes it at window
+  capture before a plugin page sees it.
+- Main: `reorderPhases`, `numberFolders`, `folders`, `promptRestore`,
+  `openFolder` handlers; pure `reorderPipelinePhases` (ticket-board.ts),
+  `planFolderNumbering` / `applyFolderNumbering` (phase-dirs.ts, swaps
+  through temporary names, refuses before touching anything when two
+  files of one name would meet), `TicketsGit.commitTree` (`add -A` for
+  the renames). The renderer is split into `settings-page.ts`,
+  `settings-columns.ts`, `settings-prompts.ts`, `settings-model-picker.ts`,
+  `settings-order.ts` (pure) and `settings.css` (`tset-` prefix); the
+  duplicated req-46 block in `board.css` (which also overrode board
+  rules) is gone.
+- Specs: `default-prompts.spec.ts`, `settings-order.spec.ts`, reorder
+  rules in `ticket-board.spec.ts`, planner / executor / real-git commit
+  in `phase-dirs.spec.ts`. Driven in the built app against a scratch
+  clone of the tickets repo: Number folders, keyboard and drag reorder,
+  Undo, prompt save, reset, outside edit — each one clean commit.
+- Not changed: the board itself, the SDK. Known gap found on the way: a
+  `pipeline.md` with CRLF line endings does not parse (a fresh clone with
+  `core.autocrlf=true`) — a follow-up.
+
+
 ### Takeover steering and colour (owner request, outside the list)
 
 **Not yet manually verified by the owner.**

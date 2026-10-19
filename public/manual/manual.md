@@ -789,23 +789,44 @@ can reach it from a terminal, too: its address and token live in
 
 ### The chain runs itself (milestone 85)
 
-A column with a **worker** runs itself. In Settings → *Tickets* each
-column is a card: the **worker** (OpenCode or Claude Code; unset means a
-manual column that only you move tickets through), the **pool size** (how
-many tickets the column works in parallel), the **model** and the
-**prompt**. The model field is a picker: click it to see what the worker
-offers (OpenCode lists its own `provider/model` ids, Claude Code its
-aliases), type to filter, or type an id the list does not know. The
-prompt is chosen from the files in `tickets/_meta/prompts/`; **Edit**
-jumps to that prompt's editor. Every change is one commit; the board
-follows on refresh.
+A column with a **worker** runs itself. Settings → *Tickets* shows the
+tickets repository's folder at the top (the folder button opens it) and
+the **Pipeline** as one table, a row per column in pipeline order: its
+folder number (`10`, `20`, …), name, a *Runs itself* or *Checkpoint*
+chip with the folder, then the **worker** (OpenCode or Claude Code;
+*Manual* means a column only you move tickets through), the **model**,
+the **pool size** (how many tickets the column works in parallel) and
+the **prompt**. A manual column shows dashes there. The model field is a
+picker: click it to see what the worker offers (OpenCode lists its own
+`provider/model` ids, Claude Code its aliases), type to filter, or type
+an id the list does not know. The prompt is chosen from the files in
+`tickets/_meta/prompts/`. Every change is one commit; the board follows.
 
-Below the columns, **Prompts** lists every prompt file as an editor.
-Open one, change the text and leave the field (or press Ctrl+S): it is
-saved and committed. **Revert** drops unsaved changes, **Reset to
-default** restores the text Drey ships for the three seeded prompts,
-and **New prompt** creates another one to pick in a column. A changed
-prompt reaches the next run, not one that is already running.
+**Reordering columns.** Drag a row by its grip, or focus a row and press
+Alt+↑ / Alt+↓. Inbox (where new tickets land) and Done stay first and
+last. A move rewrites `pipeline.md` and renames the phase folders to
+their new numbers in one commit; the line under the table says what
+moved, with **Undo**. A column whose tickets are being worked on right
+now cannot be renumbered — stop or finish the run first.
+
+**Number folders.** Phase folders carry their column number
+(`10-inbox`, `20-prioritized`, …). A repository from before that — or one
+with a folder you numbered by hand — shows a banner; **Number folders**
+renames every folder to its number in one commit. Tickets keep their
+columns.
+
+**Prompts** lists the files in `tickets/_meta/prompts/` exactly as they
+are on disk; the buttons in its header create a prompt, open the folder
+and reload it. Pick one on the left and edit it on the right, in the same
+Markdown editor as your notes. It is saved and committed when you leave
+the editor or press **Save**; the circular arrow discards unsaved
+changes, and the clock button resets a prompt Drey ships
+(`plan-default`, `build-default`, `review-default`, `commit-default`) to
+Drey's version after you confirm — your text stays in the git history.
+If the file changes outside Drey while you have unsaved text, a notice
+offers **Load from disk**. An empty folder offers **Add Drey's
+prompts**. A changed prompt reaches the next run, not one that is
+already running.
 
 The **master switch** sits in the board's header: **An** runs the
 chain — every playing automatic column drains its queue. **Aus** halts

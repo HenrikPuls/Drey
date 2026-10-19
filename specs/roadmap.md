@@ -102,15 +102,6 @@ plan and build columns as agent handovers plus the three prompts
 (`plan-default`, `build-default`, `review-default`) in
 `tickets/_meta/prompts/`.
 
-**req-50 — Tickets settings rework** (owner request, outside the list,
-2026-10-19; in progress on `t/T-0007`, built on T-0041 merged in). The
-page redesigned (Claude Design first, Anthrazit), the pipeline columns
-sortable — a reorder rewrites `pipeline.md` and renumbers the phase
-folders in one commit, and a "Number folders" action migrates an
-unprefixed repo — and the prompts shown are exactly the files in
-`tickets/_meta/prompts/`: the shipped defaults become real `.md` files
-(`plugins/tickets/prompts/`), no synthetic rows.
-
 **Takeover follow-ups.** The Claude Code interrupt (stream-json `control_request`)
 is not yet verified against the installed CLI. Also open: a token budget per run
 (stop a worker that reads without writing), and a tickets-repo-side credit
@@ -235,6 +226,13 @@ rest are kept so they still match `docs/11`.
 
 ### Follow-ups of shipped milestones (none committed)
 
+- **req-50 (Tickets settings):** a `pipeline.md` (or any tickets meta
+  file) with CRLF line endings does not parse — `splitFrontmatter` finds
+  no fence — so a fresh clone of the tickets repo under
+  `core.autocrlf=true` shows an empty board; and plugin pages cannot
+  take Ctrl+S (the keybinding layer swallows it at window capture; an
+  SDK way to pause or scope chords would let the prompt editor save on
+  Ctrl+S).
 - **Milestone 63 (MCP, ADR-0063):** OAuth-protected servers, handing
   servers to the Claude Code CLI provider, MCP resources / prompts.
 - **Milestone 76 (tool loop, ADR-0071):** streaming the answer of a
