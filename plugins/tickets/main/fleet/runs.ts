@@ -114,6 +114,10 @@ interface LiveRun {
 /** What a takeover call answers. */
 export type TakeoverOutcome = { readonly ok: true } | { readonly ok: false; readonly error: string };
 
+/** The largest file the takeover tab attaches. */
+export const MAX_ATTACHMENT_BYTES = 10 * 1024 * 1024;
+const ATTACHMENT_DIR = '.drey-attachments';
+
 const TERMINAL: readonly RunState[] = ['done', 'stopped', 'failed'];
 
 /** 331122 -> `331k`, 3_400_000 -> `3.4M`: the Log's short token counts. */
@@ -680,6 +684,46 @@ export class RunSupervisor {
     );
   }
 
+  /**
+   * Stores a file the owner attaches in the takeover tab inside the run's
+   * worktree (`.drey-attachments/`, kept out of git through the checkout's
+   * exclude file) and returns its absolute path — the prompt then names
+   * the path, which both workers can read.
+   */
+  async attachFile(
+    runId: string,
+    name: string,
+    dataBase64: string,
+  ): Promise<{ ok: true; path: string } | { ok: false; error: string }> {
+    const run = this.runs.get(runId);
+    if (run === undefined) {
+      return { ok: false, error: `unknown run "${runId}"` };
+    }
+    const bytes = Buffer.from(dataBase64, 'base64');
+    if (bytes.length === 0 || bytes.length > MAX_ATTACHMENT_BYTES) {
+      return { ok: false, error: `an attachment is 1 byte to ${MAX_ATTACHMENT_BYTES / 1024 / 1024} MB` };
+    }
+    const worktree = run.info.worktreePath;
+    const dir = path.join(worktree, ATTACHMENT_DIR);
+    const safe = name.replace(/[^\w.\- ]/g, '_').slice(-80) || 'file';
+    const target = path.join(dir, `${this.now().getTime()}-${safe}`);
+    try {
+      await fsp.mkdir(dir, { recursive: true });
+      await fsp.writeFile(target, bytes);
+      const excludeRel = (await this.git.run(worktree, ['rev-parse', '--git-path', 'info/exclude'])).trim();
+      const exclude = path.resolve(worktree, excludeRel);
+      const current = await fsp.readFile(exclude, 'utf8').catch(() => '');
+      if (!current.split('\n').some((line) => line.trim() === `${ATTACHMENT_DIR}/`)) {
+        await fsp.mkdir(path.dirname(exclude), { recursive: true });
+        const lead = current === '' || current.endsWith('\n') ? '' : '\n';
+        await fsp.writeFile(exclude, `${current}${lead}${ATTACHMENT_DIR}/\n`, 'utf8');
+      }
+    } catch (error) {
+      return { ok: false, error: `the attachment could not be stored: ${messageOf(error)}` };
+    }
+    return { ok: true, path: target };
+  }
+
   /** The soft stop of the held run's current turn (the session stays). */
   async interrupt(runId: string): Promise<TakeoverOutcome> {
     const run = this.liveRunWithHold(runId);
@@ -768,6 +812,7 @@ export class RunSupervisor {
       ...(event.activity !== undefined && event.activity !== '' ? { activity: event.activity } : {}),
       ...(event.contextTokens !== undefined ? { contextTokens: event.contextTokens } : {}),
       ...(event.turn !== undefined ? { turn: event.turn } : {}),
+      ...(event.commands !== undefined ? { commands: event.commands } : {}),
       ...(event.tokensIn !== undefined ? { tokensIn: event.tokensIn } : {}),
       ...(event.tokensOut !== undefined ? { tokensOut: event.tokensOut } : {}),
       ...(event.costUsd !== undefined ? { costUsd: event.costUsd } : {}),

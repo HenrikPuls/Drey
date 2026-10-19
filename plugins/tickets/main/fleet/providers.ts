@@ -36,6 +36,8 @@ export interface NormalizedEvent {
   readonly contextTokens?: number;
   /** The worker's turn state, when it changed: mid-turn or standing. */
   readonly turn?: 'busy' | 'idle';
+  /** The slash commands the worker accepts (names without the slash). */
+  readonly commands?: readonly string[];
 }
 
 /** The stream lead-in of a worker's thinking (the takeover transcript shows it quoted). */
@@ -187,6 +189,7 @@ export function claudeCodeAdapter(spawnFn: SpawnFn, now: NowFn = (): Date => new
             type?: string;
             subtype?: string;
             session_id?: string;
+            slash_commands?: unknown[];
             message?: {
               usage?: ClaudeUsage;
               content?: ReadonlyArray<{ type?: string; name?: string; text?: string; thinking?: string; input?: Record<string, unknown>; content?: unknown; is_error?: boolean }>;
@@ -203,6 +206,10 @@ export function claudeCodeAdapter(spawnFn: SpawnFn, now: NowFn = (): Date => new
           }
           if (event.type === 'system' && event.subtype === 'init' && typeof event.session_id === 'string') {
             start.onSessionRef(event.session_id);
+            if (Array.isArray(event.slash_commands)) {
+              const names = event.slash_commands.filter((c): c is string => typeof c === 'string').map((c) => c.replace(/^\//, ''));
+              start.onEvent({ ts: nowIso(now), kind: 'usage', commands: names });
+            }
             continue;
           }
           if (event.type === 'user' && event.message !== undefined) {
@@ -373,7 +380,14 @@ export const OPENCODE_API = {
   prompt: (id: string): string => `/api/session/${id}/prompt`,
   messages: (id: string): string => `/api/session/${id}/message`,
   interrupt: (id: string): string => `/api/session/${id}/interrupt`,
+  /** The project's custom commands (`GET`, `{data: [{name, …}]}`). */
+  commands: '/api/command',
+  command: (id: string): string => `/api/session/${id}/command`,
+  compact: (id: string): string => `/api/session/${id}/compact`,
 } as const;
+
+/** The slash commands every OpenCode worker has besides the project's own. */
+export const OPENCODE_BUILTIN_COMMANDS: readonly string[] = ['compact'];
 
 /**
  * The prompt body with the model pin in the v2 shape (`providerID` +
@@ -482,6 +496,57 @@ export function opencodeAdapter(
         if (state.alive) {
           start.onEvent({ ts: nowIso(now), kind: 'error', text: String(error).slice(0, 300) });
         }
+      }
+    };
+
+    /** The project's custom commands, fetched once the server is up. */
+    const customCommands = new Set<string>();
+    const loadCommands = async (): Promise<void> => {
+      try {
+        const res = await fetchFn(`${address}${OPENCODE_API.commands}`, { headers: auth });
+        if (res.ok) {
+          const body = (await res.json()) as { data?: ReadonlyArray<{ name?: string }> };
+          for (const c of body.data ?? []) {
+            if (typeof c.name === 'string') {
+              customCommands.add(c.name);
+            }
+          }
+        }
+      } catch {
+        // the built-ins alone are still offered
+      }
+      start.onEvent({ ts: nowIso(now), kind: 'usage', commands: [...OPENCODE_BUILTIN_COMMANDS, ...customCommands] });
+    };
+
+    /**
+     * A `/name args` prompt that names a command the server knows runs as
+     * that command (compact, or the project's own); anything else is plain
+     * text for the model. False = not a command, send it as a prompt.
+     */
+    const postCommand = async (name: string, args: string): Promise<boolean> => {
+      if (state.sessionRef === null || address === '') {
+        return false;
+      }
+      const isCompact = name === 'compact';
+      if (!isCompact && !customCommands.has(name)) {
+        return false;
+      }
+      try {
+        const res = await fetchFn(
+          `${address}${isCompact ? OPENCODE_API.compact(state.sessionRef) : OPENCODE_API.command(state.sessionRef)}`,
+          {
+            method: 'POST',
+            headers: { ...auth, 'content-type': 'application/json' },
+            body: JSON.stringify(isCompact ? {} : { name, text: args }),
+          },
+        );
+        if (!res.ok) {
+          start.onEvent({ ts: nowIso(now), kind: 'error', text: `/${name} failed: ${res.status}` });
+        }
+        return res.ok;
+      } catch (error) {
+        start.onEvent({ ts: nowIso(now), kind: 'error', text: String(error).slice(0, 300) });
+        return false;
       }
     };
 
@@ -655,6 +720,10 @@ export function opencodeAdapter(
         // While a turn is live the server queues the POST with delivery
         // `steer` — the native injection rung.
         state.lastPromptAt = now().getTime();
+        const slash = /^\/([\w.-]+)(?:\s+([\s\S]*))?$/.exec(text.trim());
+        if (slash !== null && (await postCommand(slash[1]!, (slash[2] ?? '').trim()))) {
+          return 'inject';
+        }
         await postPrompt(text);
         return 'inject';
       },
@@ -713,6 +782,7 @@ export function opencodeAdapter(
         text: `re-attached to the opencode server on ${attached.address}, session ${attached.sessionRef}`,
       });
       pollTimer = setInterval(() => void pollTurn(), 2_000);
+      void loadCommands();
       return handle;
     }
 
@@ -819,6 +889,7 @@ export function opencodeAdapter(
       state.lastPromptAt = state.startedAt;
 
       pollTimer = setInterval(() => void pollTurn(), 2_000);
+      await loadCommands();
 
       // The prompt POST queues the turn and returns at once; the poll
       // loop watches the message list for the `idle` end marker.

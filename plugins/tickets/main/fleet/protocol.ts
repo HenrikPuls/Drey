@@ -119,6 +119,11 @@ export interface RunInfo {
    * cannot).
    */
   readonly turn?: 'busy' | 'idle';
+  /**
+   * The slash commands the worker accepts (names without the slash) — the
+   * takeover tab's prompt box lists them. Absent until the worker reports.
+   */
+  readonly commands?: readonly string[];
   /** The working column whose pool owns this run (`request.column ?? request.phase`). */
   readonly column?: string | null;
   /** How many steer messages reached the worker, and how. */

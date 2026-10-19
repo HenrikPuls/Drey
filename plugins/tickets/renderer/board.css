@@ -1817,3 +1817,107 @@
 .tickets-takeover-btn-primary[hidden] {
   display: none;
 }
+
+/* ---- takeover: slash-command list, attachments, the plus button ---- */
+
+.tickets-takeover-commands {
+  flex: none;
+  max-height: 168px;
+  overflow: auto;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-dock);
+}
+
+.tickets-takeover-commands[hidden],
+.tickets-takeover-attached[hidden] {
+  display: none;
+}
+
+.tickets-takeover-command {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  width: 100%;
+  padding: 5px 12px;
+  border: none;
+  background: transparent;
+  color: var(--text-primary);
+  font: inherit;
+  font-size: 0.78rem;
+  text-align: left;
+  cursor: pointer;
+}
+
+.tickets-takeover-command:hover {
+  background: var(--accent-surface);
+}
+
+.tickets-takeover-command-name {
+  flex: none;
+  font-family: var(--font-mono);
+  color: var(--accent-fg);
+}
+
+.tickets-takeover-command-hint {
+  color: var(--text-4);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tickets-takeover-attached {
+  flex: none;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 6px 10px 0;
+}
+
+.tickets-takeover-attachment {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  max-width: 260px;
+  padding: 2px 4px 2px 8px;
+  border: 1px solid color-mix(in srgb, var(--accent) 55%, var(--field-border));
+  border-radius: 10px;
+  background: var(--accent-surface);
+  color: var(--accent-fg);
+  font-size: 0.72rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tickets-takeover-attachment-x {
+  border: none;
+  background: transparent;
+  color: inherit;
+  font-size: 0.9rem;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.tickets-takeover-plus {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border: 1px solid var(--field-border);
+  border-radius: 50%;
+  background: transparent;
+  color: var(--text-heading);
+  cursor: pointer;
+}
+
+.tickets-takeover-plus:hover:not(:disabled) {
+  background: var(--accent-surface);
+  border-color: var(--accent);
+}
+
+.tickets-takeover-plus:disabled {
+  opacity: 0.45;
+  cursor: default;
+}

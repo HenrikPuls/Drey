@@ -150,6 +150,14 @@ export class FleetClient {
     return this.post<{ ok: boolean; error?: string; rung?: string }>('/send', { runId, text });
   }
 
+  /** A file for the takeover prompt: stored in the run's worktree, its path comes back. */
+  async attach(runId: string, name: string, data: string): Promise<{ ok: boolean; error?: string; path?: string }> {
+    if (!(await this.withRunner())) {
+      return { ok: false, error: 'the fleet runner is not running' };
+    }
+    return this.post<{ ok: boolean; error?: string; path?: string }>('/attach', { runId, name, data });
+  }
+
   /** Takeover control of a live run: take over, interrupt the turn, hand back. */
   async control(
     action: 'takeover' | 'interrupt' | 'release' | 'resume',

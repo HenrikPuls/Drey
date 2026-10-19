@@ -1221,6 +1221,28 @@ function openRunModal(api: DreyPluginApi, card: TicketCard): void {
 const TAKEOVER_KIND = 'tickets-takeover';
 const TAKEOVER_SCHEME = 'takeover://';
 
+/** The largest file the prompt box attaches (the runner enforces the same). */
+const MAX_ATTACH_BYTES = 10 * 1024 * 1024;
+
+/** Short notes for the commands both workers share; others show their name only. */
+const COMMAND_HINTS: Readonly<Record<string, string>> = {
+  compact: 'Summarise the conversation to free context',
+  clear: 'Start over with an empty context',
+  context: 'Show what fills the context window',
+  cost: 'Show the session cost',
+  init: 'Write a CLAUDE.md for the project',
+  review: 'Review the changes',
+  help: 'List the available commands',
+};
+
+const bytesToBase64 = (bytes: Uint8Array): string => {
+  let binary = '';
+  for (let offset = 0; offset < bytes.length; offset += 0x8000) {
+    binary += String.fromCharCode(...bytes.subarray(offset, offset + 0x8000));
+  }
+  return btoa(binary);
+};
+
 /** One-click starters for the takeover prompt box: a label and the text it fills in. */
 const QUICK_PROMPTS: ReadonlyArray<readonly [string, string]> = [
   ['Continue', 'Continue where you left off.'],
@@ -1282,11 +1304,60 @@ function mountTakeover(api: DreyPluginApi, host: HTMLElement, runId: string): ()
   transcript.element.classList.add('tickets-takeover-transcript');
 
   const promptWrap = el('div', 'tickets-takeover-prompt');
+  // Files and pictures for the worker: stored in its worktree, named in the message.
+  const attached: { name: string; path: string }[] = [];
+  const attachRow = el('div', 'tickets-takeover-attached');
+  attachRow.hidden = true;
+  const paintAttached = (): void => {
+    attachRow.replaceChildren();
+    for (const [index, file] of attached.entries()) {
+      const chip = el('span', 'tickets-takeover-attachment');
+      chip.title = file.path;
+      const drop = el('button', 'tickets-takeover-attachment-x', '×');
+      drop.type = 'button';
+      drop.title = 'Remove from the message';
+      drop.setAttribute('aria-label', `Remove ${file.name}`);
+      drop.addEventListener('click', () => {
+        attached.splice(index, 1);
+        paintAttached();
+        paintBanner();
+      });
+      chip.append(document.createTextNode(file.name), drop);
+      attachRow.append(chip);
+    }
+    attachRow.hidden = attached.length === 0;
+  };
+  const addFiles = async (files: Iterable<File>): Promise<void> => {
+    for (const file of files) {
+      if (file.size > MAX_ATTACH_BYTES) {
+        note = `${file.name} is larger than ${MAX_ATTACH_BYTES / 1024 / 1024} MB`;
+        notifyViews();
+        continue;
+      }
+      const data = bytesToBase64(new Uint8Array(await file.arrayBuffer()));
+      const name = file.name !== '' ? file.name : `pasted.${(file.type.split('/')[1] ?? 'png').replace(/[^a-z0-9]/gi, '')}`;
+      const result = (await invokeBoard('fleetAttach', { runId, name, data })) as { ok?: boolean; error?: string; path?: string };
+      if (result.ok === true && typeof result.path === 'string') {
+        attached.push({ name, path: result.path });
+      } else {
+        note = result.error ?? `${name} could not be attached`;
+        notifyViews();
+      }
+    }
+    paintAttached();
+    paintBanner();
+  };
+
   const send = async (text: string, interruptFirst: boolean): Promise<void> => {
-    const message = text.trim();
-    if (message === '') {
+    const typed = text.trim();
+    if (typed === '' && attached.length === 0) {
       return;
     }
+    // A slash command stays a command: attachments ride after it as plain text.
+    const message =
+      attached.length === 0
+        ? typed
+        : `${typed === '' ? 'See the attached files.' : typed}\n\nAttached files:\n${attached.map((a) => `- ${a.path}`).join('\n')}`;
     if (interruptFirst) {
       // An idle worker refuses the interrupt — the message still goes out.
       await invokeBoard('fleetControl', { action: 'interrupt', runId });
@@ -1294,19 +1365,86 @@ function mountTakeover(api: DreyPluginApi, host: HTMLElement, runId: string): ()
     const result = await runMutation('Sending', () => invokeBoard('fleetSend', { runId, text: message }));
     if (result.ok) {
       prompt.setContent('');
+      attached.length = 0;
+      paintAttached();
       prompt.focus();
     }
   };
+
+  // "/" lists the commands the worker accepts; anything typed goes through as it is.
+  const commandMenu = el('div', 'tickets-takeover-commands');
+  commandMenu.hidden = true;
+  const paintCommands = (text: string): void => {
+    const match = /^\/([\w.-]*)$/.exec(text);
+    const known = live()?.commands ?? [];
+    const shown = match === null ? [] : known.filter((name) => name.toLowerCase().startsWith(match[1]!.toLowerCase())).slice(0, 12);
+    commandMenu.replaceChildren();
+    for (const name of shown) {
+      const item = el('button', 'tickets-takeover-command');
+      item.type = 'button';
+      item.append(el('span', 'tickets-takeover-command-name', `/${name}`), el('span', 'tickets-takeover-command-hint', COMMAND_HINTS[name] ?? ''));
+      item.addEventListener('click', () => {
+        prompt.setContent(`/${name} `);
+        commandMenu.hidden = true;
+        prompt.focus();
+      });
+      commandMenu.append(item);
+    }
+    commandMenu.hidden = shown.length === 0;
+  };
   const prompt = api.ui.createMarkdownView({
     compact: true,
-    placeholder: 'Message the worker',
+    placeholder: 'Message the worker — type / for commands',
+    onChange: (text) => {
+      paintCommands(text);
+      paintBanner();
+    },
     onSubmit: (text) => {
+      commandMenu.hidden = true;
       void send(text, false);
     },
   });
   prompt.element.classList.add('tickets-takeover-prompt-input');
 
   const composerBar = el('div', 'tickets-takeover-composer');
+  const fileInput = el('input');
+  fileInput.type = 'file';
+  fileInput.multiple = true;
+  fileInput.hidden = true;
+  fileInput.addEventListener('change', () => {
+    const picked = [...(fileInput.files ?? [])];
+    fileInput.value = '';
+    void addFiles(picked);
+  });
+  const plusBtn = el('button', 'tickets-takeover-plus');
+  plusBtn.type = 'button';
+  plusBtn.title = 'Attach files or pictures — the worker reads them from its worktree';
+  plusBtn.setAttribute('aria-label', 'Attach files');
+  plusBtn.append(api.ui.icon('plus', 15));
+  plusBtn.addEventListener('click', () => fileInput.click());
+  promptWrap.addEventListener('dragover', (event) => {
+    if (event.dataTransfer?.types.includes('Files') === true) {
+      event.preventDefault();
+    }
+  });
+  promptWrap.addEventListener('drop', (event) => {
+    const dropped = [...(event.dataTransfer?.files ?? [])];
+    if (dropped.length > 0) {
+      event.preventDefault();
+      void addFiles(dropped);
+    }
+  });
+  promptWrap.addEventListener(
+    'paste',
+    (event) => {
+      const pasted = [...(event.clipboardData?.files ?? [])];
+      if (pasted.length > 0) {
+        event.preventDefault();
+        void addFiles(pasted);
+      }
+    },
+    true,
+  );
   const chips = el('span', 'tickets-takeover-chips');
   for (const [label, text] of QUICK_PROMPTS) {
     const chip = el('button', 'tickets-takeover-chip', label);
@@ -1327,7 +1465,7 @@ function mountTakeover(api: DreyPluginApi, host: HTMLElement, runId: string): ()
     void send(prompt.getContent(), false);
   });
   sendBtn.classList.add('tickets-takeover-btn-primary');
-  composerBar.append(chips, composerSpacer, stopBtn, sendBtn);
+  composerBar.append(plusBtn, fileInput, chips, composerSpacer, stopBtn, sendBtn);
 
   // The worker's pulse while a turn runs: what it does now and for how long.
   const progress = el('div', 'tickets-takeover-progress');
@@ -1352,7 +1490,7 @@ function mountTakeover(api: DreyPluginApi, host: HTMLElement, runId: string): ()
     progress.hidden = false;
   };
   promptWrap.prepend(progress);
-  promptWrap.append(prompt.element, composerBar);
+  promptWrap.append(commandMenu, attachRow, prompt.element, composerBar);
 
   const live = (): RunInfo | null => fleetRuns.find((r) => r.id === runId) ?? null;
   const paintBanner = (): void => {
@@ -1400,8 +1538,9 @@ function mountTakeover(api: DreyPluginApi, host: HTMLElement, runId: string): ()
                 : 'waiting'
               : 'working';
     stopBtn.hidden = !busy;
-    sendBtn.hidden = busy && prompt.getContent().trim() === '';
+    sendBtn.hidden = busy && prompt.getContent().trim() === '' && attached.length === 0;
     sendBtn.disabled = !active;
+    plusBtn.disabled = !active;
     for (const chip of chips.children) {
       (chip as HTMLButtonElement).disabled = !active;
     }

@@ -134,6 +134,14 @@ describe('the claude-code adapter', () => {
     expect(proc.stdinWrites.at(-1)).toContain('Change course');
   });
 
+  it('reports the slash commands the CLI lists at init', () => {
+    const proc = fakeProcess();
+    const { events, start } = collect();
+    claudeCodeAdapter(spawnOf(proc)).spawn(start);
+    proc.stdout(JSON.stringify({ type: 'system', subtype: 'init', session_id: 'ses_1', slash_commands: ['compact', '/cost'] }));
+    expect(events.find((e) => e.commands !== undefined)?.commands).toEqual(['compact', 'cost']);
+  });
+
   it('a finished turn closes the input unless the owner holds the worker', () => {
     const proc = fakeProcess();
     const { events, start } = collect();
@@ -274,7 +282,7 @@ describe('the opencode adapter', () => {
 
     // The usage poll lands within the interval (input + cache read).
     await vi.advanceTimersByTimeAsync(2_500);
-    const usage = events.find((e) => e.kind === 'usage');
+    const usage = events.find((e) => e.kind === 'usage' && e.tokensIn !== undefined);
     expect(usage?.tokensIn).toBe(14);
     expect(usage?.tokensOut).toBe(5);
     expect(usage?.costUsd).toBe(0.02);
@@ -286,6 +294,41 @@ describe('the opencode adapter', () => {
     await handle.stop();
     expect(interrupts.length).toBe(1);
     expect(proc.killTree).toHaveBeenCalled();
+
+    proc.exit(null);
+    vi.useRealTimers();
+  });
+
+  it('lists its slash commands and runs a known one as a command, not as text', async () => {
+    vi.useFakeTimers();
+    const prompts: string[] = [];
+    const posted: Array<{ url: string; body: string }> = [];
+    const { fetch: base } = scriptedFetch({ sessionCreated: () => undefined, prompts, interrupts: [], messages: () => [] });
+    const json = (body: unknown): Response => ({ ok: true, status: 200, json: async () => body }) as unknown as Response;
+    const fetch: FetchFn = async (url, init) => {
+      if (url.endsWith(OPENCODE_API.commands)) {
+        return json({ data: [{ name: 'deploy' }] });
+      }
+      if (url.endsWith(OPENCODE_API.compact('ses_oc')) || url.endsWith(OPENCODE_API.command('ses_oc'))) {
+        posted.push({ url, body: String(init?.body) });
+        return json({ data: {} });
+      }
+      return base(url, init);
+    };
+    const proc = fakeProcess();
+    const { events, start } = collect();
+    const handle = opencodeAdapter(spawnOf(proc), fetch, async () => 47000).spawn(start);
+    await vi.advanceTimersByTimeAsync(100);
+    proc.stdout('server password sekrit');
+    await vi.advanceTimersByTimeAsync(3_000);
+    expect(events.find((e) => e.commands !== undefined)?.commands).toEqual(['compact', 'deploy']);
+
+    await handle.steer('/compact');
+    await handle.steer('/deploy staging now');
+    await handle.steer('/nosuch thing');
+    expect(posted.map((p) => p.url.split('/').at(-1))).toEqual(['compact', 'command']);
+    expect(JSON.parse(posted[1]!.body)).toEqual({ name: 'deploy', text: 'staging now' });
+    expect(prompts.at(-1)).toContain('/nosuch thing');
 
     proc.exit(null);
     vi.useRealTimers();

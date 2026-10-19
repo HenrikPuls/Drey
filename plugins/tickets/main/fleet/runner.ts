@@ -23,7 +23,7 @@ import * as path from 'node:path';
 import { claudeCodeAdapter, opencodeAdapter } from './providers';
 import { freePort, nodeSpawnFn } from './procs';
 import { Orchestrator } from './orchestrator';
-import { RunSupervisor } from './runs';
+import { MAX_ATTACHMENT_BYTES, RunSupervisor } from './runs';
 import {
   isWorkerProvider,
   type ChainConfig,
@@ -169,12 +169,12 @@ async function main(): Promise<void> {
     return { pathname: parsed.pathname, parts: parsed.pathname.split('/').filter((p) => p !== '') };
   };
 
-  const readBody = async (req: http.IncomingMessage): Promise<unknown> => {
+  const readBody = async (req: http.IncomingMessage, limit = MAX_BODY): Promise<unknown> => {
     const chunks: Buffer[] = [];
     let size = 0;
     for await (const chunk of req) {
       size += (chunk as Buffer).length;
-      if (size > MAX_BODY) {
+      if (size > limit) {
         throw new Error('body too large');
       }
       chunks.push(chunk as Buffer);
@@ -294,6 +294,22 @@ async function main(): Promise<void> {
           return;
         }
         const outcome = await supervisor.stop(String(body.runId), typeof body.reason === 'string' ? body.reason : null);
+        respond(outcome.ok ? 200 : 422, outcome);
+        return;
+      }
+      if (req.method === 'POST' && pathname === '/attach') {
+        // base64 of up to MAX_ATTACHMENT_BYTES, plus the JSON around it
+        const body = (await readBody(req, Math.ceil(MAX_ATTACHMENT_BYTES * 1.4) + 4096)) as {
+          runId?: unknown;
+          name?: unknown;
+          data?: unknown;
+        };
+        const supervisor = supervisorOfRun(String(body.runId ?? ''));
+        if (supervisor === null || typeof body.name !== 'string' || typeof body.data !== 'string') {
+          respond(404, { ok: false, error: 'unknown run or bad attachment' });
+          return;
+        }
+        const outcome = await supervisor.attachFile(String(body.runId), body.name, body.data);
         respond(outcome.ok ? 200 : 422, outcome);
         return;
       }

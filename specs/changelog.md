@@ -40,6 +40,14 @@ recorded as an explicit decision. The parity checklist lives in
 - **Composer slimmed**: no hint text, short placeholder, a red **Stop** button
   while a turn runs (replaces the banner's Interrupt), and a progress line
   ("Thinking… 12s · ↓ tokens", or the current tool call) above the box.
+- **Slash commands and attachments in the takeover prompt**: typing `/`
+  lists the commands the worker reports (Claude Code: the CLI's init list;
+  OpenCode: `compact` plus the project's `GET /api/command`); a command
+  goes through as typed — for OpenCode as the real `/compact` / `/command`
+  call, not as text. The "+" button, drag-and-drop and paste (screenshots)
+  attach files: stored in the run's worktree under `.drey-attachments/`
+  (git-excluded, 10 MB each, `POST /attach`) and named in the message.
+  Attached files are not yet checked against a real worker.
 - Specs: three claude-code adapter cases in `providers.spec.ts`.
 
 ### req-49 — past worker logs on the board; the board follows the runner (owner request, outside the list)

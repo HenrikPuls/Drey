@@ -980,6 +980,14 @@ const plugin: MainPluginModule = {
       return fleet.send(p.runId, p.text.trim());
     });
 
+    ctx.ipc.handle('fleetAttach', async (payload) => {
+      const p = payload as { runId?: unknown; name?: unknown; data?: unknown };
+      if (typeof p.runId !== 'string' || typeof p.name !== 'string' || typeof p.data !== 'string') {
+        return { ok: false, error: 'bad fleet attach payload' };
+      }
+      return fleet.attach(p.runId, p.name, p.data);
+    });
+
     ctx.ipc.handle('fleetControl', async (payload) => {
       const p = payload as { action?: unknown; runId?: unknown };
       if (
