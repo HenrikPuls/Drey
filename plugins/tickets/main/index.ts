@@ -20,6 +20,7 @@ import type {
 } from '../../../shared/plugin-api';
 import {
   nextTicketId,
+  TICKETS_ARCHIVE_DIR,
   type BoardSnapshot,
   type TicketCard,
   type TicketPriority,
@@ -516,6 +517,84 @@ class BoardService {
     });
   }
 
+  /**
+   * Archives a ticket (T-0041): the reserved `tickets/archive/` folder
+   * beside `_meta` — not a column, invisible on the board. The treatment
+   * is exact: Log line `archived`, one commit `tickets: <id> archived`,
+   * pin cleanup; NO `entered-` stamp (the Log marker is what makes it
+   * idempotent and a revive detectable); claim fields ride along.
+   * Reviving is a move back into a phase folder — normalization stamps
+   * it as `archive -> <phase>`. Final deletion is the owner's manual
+   * act inside `archive/`.
+   */
+  archive(input: { id: string }): Promise<MutationResult> {
+    return this.enqueue(async () => {
+      const vault = await this.detect();
+      if (vault === null) {
+        return { ok: false, error: 'no tickets vault detected' };
+      }
+      const snap = await this.snapshot();
+      let card: TicketCard | null = null;
+      for (const column of snap.columns) {
+        const found = column.tickets.find((t) => t.id === input.id);
+        if (found !== undefined) {
+          card = found;
+          break;
+        }
+      }
+      if (card === null) {
+        return { ok: false, error: `${input.id} is not on the board` };
+      }
+      const text = await this.ctx.vault.read(card.path, { vaultId: vault.id });
+      let patched: string;
+      try {
+        patched = patchTicketFile(text, {
+          to: 'archive',
+          from: null,
+          now: new Date(),
+          actor: OWNER,
+          action: 'archived',
+        });
+      } catch (error) {
+        return { ok: false, error: messageOf(error) };
+      }
+      const newPath = `${TICKETS_ARCHIVE_DIR}/${card.id}.md`;
+      try {
+        const oldAbs = this.ctx.vault.resolveAssetPath(card.path, { vaultId: vault.id });
+        const dirAbs = this.ctx.vault.resolveAssetPath(TICKETS_ARCHIVE_DIR, { vaultId: vault.id });
+        const newAbs = this.ctx.vault.resolveAssetPath(newPath, { vaultId: vault.id });
+        if (oldAbs === null || dirAbs === null || newAbs === null) {
+          return { ok: false, error: 'ticket path escapes the vault' };
+        }
+        await fsp.mkdir(dirAbs, { recursive: true });
+        await fsp.rename(oldAbs, newAbs);
+        await this.ctx.vault.write(newPath, patched, { vaultId: vault.id });
+      } catch (error) {
+        return { ok: false, error: `move failed: ${messageOf(error)}` };
+      }
+      const orderText = await this.readOptional(vault.id, ORDER_PATH);
+      const nextOrder = orderText === null ? null : removeIdFromPins(orderText, card.id);
+      const orderChanged = nextOrder !== null && nextOrder !== orderText;
+      if (orderChanged) {
+        await this.ctx.vault.write(ORDER_PATH, nextOrder as string, { vaultId: vault.id });
+      }
+      const warning = await this.commit(
+        vault,
+        [card.path, newPath, ...(orderChanged ? [ORDER_PATH] : [])],
+        `tickets: ${card.id} archived`,
+      );
+      const pushWarning = await this.pushTransition(vault, snap.pushRemote);
+      const warnings = [warning, pushWarning].filter((w): w is string => w !== null);
+      this.ctx.vault.announceChanges({
+        vaultId: vault.id,
+        changedPaths: [newPath, ...(orderChanged ? [ORDER_PATH] : [])],
+        deletedPaths: [card.path],
+      });
+      this.announceChanged();
+      return { ok: true, ...(warnings.length === 0 ? {} : { warning: warnings.join('; ') }) };
+    });
+  }
+
   reorder(input: { phase: string; id: string; index: number }): Promise<MutationResult> {
     return this.enqueue(async () => {
       const vault = await this.detect();
@@ -846,6 +925,14 @@ const plugin: MainPluginModule = {
         return { ok: false, error: 'bad claim payload' };
       }
       return board.setClaim({ id: p.id, mode: p.mode });
+    });
+
+    ctx.ipc.handle('archive', async (payload) => {
+      const p = payload as { id?: unknown };
+      if (typeof p.id !== 'string') {
+        return { ok: false, error: 'bad archive payload' };
+      }
+      return board.archive({ id: p.id });
     });
 
     // --- the fleet (M84, ADR-0075) -------------------------------------

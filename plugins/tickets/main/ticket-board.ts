@@ -10,6 +10,7 @@ import { splitFrontmatter } from '../../../shared/frontmatter';
 import {
   priorityWeight,
   resolveCardWorker,
+  TICKETS_ARCHIVE_DIR,
   type BoardColumn,
   type BoardSnapshot,
   type PipelinePhase,
@@ -396,6 +397,13 @@ export function assembleBoard(input: AssembleInput): BoardSnapshot {
   }
   const byPhase = new Map<string, AssemblyCard[]>();
   for (const file of input.files) {
+    // The reserved archive folder (T-0041): beside `_meta`, never a
+    // column, never a counter, never a stray badge — invisible here.
+    // (Normalization still treats files moved into it; deletion inside
+    // it stays the owner's manual act.)
+    if (file.path.startsWith(`${TICKETS_ARCHIVE_DIR}/`)) {
+      continue;
+    }
     const parts = ticketPathParts(file.path);
     if (parts === null) {
       // `_meta` holds the board's configuration, not tickets — only

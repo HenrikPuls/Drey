@@ -282,6 +282,18 @@ describe('assembleBoard', () => {
     expect(snap.columns.flatMap((c) => c.tickets).some((t) => t.id === 'T-0099')).toBe(false);
   });
 
+  it('excludes tickets/archive/ entirely — no column, no badge, no count (T-0041)', () => {
+    const snap = assembleBoard(baseInput([
+      { path: 'tickets/inbox/T-0001.md', text: ticketText('T-0001', 'One') },
+      { path: 'tickets/archive/T-0002.md', text: ticketText('T-0002', 'Gone but kept') },
+    ]));
+    expect(snap.columns.flatMap((c) => c.tickets).some((t) => t.id === 'T-0002')).toBe(false);
+    expect(snap.issues.some((i) => i.message.includes('T-0002'))).toBe(false);
+    expect(snap.issues.some((i) => i.message.includes('archive'))).toBe(false);
+    // A pipeline phase named "archive" is not fed from the reserved folder.
+    expect(snap.columns.some((c) => c.phase.id === 'archive')).toBe(false);
+  });
+
   it('applies pins as the column top and marks cards pinned', () => {
     const snap = assembleBoard(
       baseInput(

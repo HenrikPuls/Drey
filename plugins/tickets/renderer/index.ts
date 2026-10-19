@@ -1011,6 +1011,26 @@ function openCardMenu(
     },
     card.meta.claimedBy === null,
   );
+  menu.append(el('div', 'tickets-menu-sep'));
+  {
+    // T-0041: archive instead of delete — armed two-step, so a single
+    // click never sends a ticket to tickets/archive/. The first click
+    // only relabels; the menu closing disarms.
+    const button = el('button', 'tickets-menu-item', 'Archive…');
+    button.type = 'button';
+    button.title = 'Moves the ticket to tickets/archive/ — out of the board, kept in git';
+    let armed = false;
+    button.addEventListener('click', () => {
+      if (!armed) {
+        armed = true;
+        button.textContent = 'Archive — click again';
+        return;
+      }
+      menu.remove();
+      void run('Archiving', () => invokeBoard('archive', { id: card.id }));
+    });
+    menu.append(button);
+  }
 
   menu.setAttribute('role', 'menu');
   document.body.append(menu);
