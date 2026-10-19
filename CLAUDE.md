@@ -66,21 +66,36 @@ toolchain is removable by deleting `.tools/`). Never assume a bare `node`,
   side for checking several agent outputs — they share one userData /
   one set of settings (config/session = last writer wins); the lock
   holder keeps the quick-capture hotkey
+- Test runs (`npm run …`; PowerShell after `env.ps1`, Bash with
+  `.tools/node` on PATH): `npm run test:plugin -- <id>` runs one
+  plugin's specs — the daily loop while working on a plugin; `--watch`
+  switches to watch mode, anything else passes through to vitest
+  (`-t "name"`), and a path fragment instead of an id scopes outside
+  `plugins/` (`shared`, `electron/ipc`). `npm run test:plugins` runs
+  the whole out-of-Angular suite, `npm run test:app` the renderer suite
+  once. `npm run test:all` — lint, the four typechecks, import cycles,
+  both suites — is the **release gate**: `prepack` runs it before every
+  `npm run pack` (skip the gate with `npm run pack --ignore-scripts`).
+  `pack:dir` stays the fast unpacked smoke build and runs no gate —
+  npm fires no pre-hooks for colon-named scripts anyway; run
+  `npm run test:all` yourself there when needed.
 - Bash: `export PATH="$PWD/.tools/node:$PATH"`, then invoke tools **by
   script path**, not by bin-shim name:
-  - Typecheck main + shared: `node node_modules/typescript/bin/tsc -p electron/tsconfig.json --noEmit`
-  - Typecheck renderer: `node node_modules/typescript/bin/tsc -p tsconfig.app.json --noEmit`
-  - Typecheck plugin specs: `node node_modules/typescript/bin/tsc -p tsconfig.plugins.json --noEmit`
-  - Unit tests: `node node_modules/@angular/cli/bin/ng.js test --watch=false`
-    (add `--include "src/.../x.spec.ts"` to scope it)
+  - Typecheck (all four configs): `npm run typecheck`; raw, one config
+    at a time: `node node_modules/typescript/bin/tsc -p <config>
+    --noEmit` with `electron/tsconfig.json` (main + shared),
+    `tsconfig.app.json` (renderer) or `tsconfig.plugins.json`
+    (plugins; `electron/tsconfig.spec.json` has `noEmit` in the config)
+  - Unit tests: `npm run test:app` (scope it with
+    `npm run test:app -- --include "src/.../x.spec.ts"`); raw:
+    `node node_modules/@angular/cli/bin/ng.js test --watch=false`
   - Main-process, shared and plugin tests (`electron/**/*.spec.ts`,
     `shared/**/*.spec.ts`, `plugins/**/*.spec.ts`; plain Node,
     `vi.mock('electron')` where needed, `// @vitest-environment jsdom` at
     the top of a spec that needs a DOM):
-    `node node_modules/vitest/vitest.mjs run --config vitest.plugins.config.mts`
-    (append a path fragment to scope it); the typecheck of the
-    `electron/` and `shared/` specs is
-    `node node_modules/typescript/bin/tsc -p electron/tsconfig.spec.json`.
+    `npm run test:plugin -- <id>` for one plugin, `npm run test:plugins`
+    for everything (raw:
+    `node node_modules/vitest/vitest.mjs run --config vitest.plugins.config.mts plugins/<id>`).
     **A spec sits beside the file it tests** — `src/app/` holds only
     specs of renderer code
   - Lint: `node node_modules/eslint/bin/eslint.js "electron/**/*.ts" "shared/**/*.ts" "src/**/*.ts" "plugins/**/*.ts"`
