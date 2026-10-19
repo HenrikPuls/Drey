@@ -41,6 +41,9 @@ export interface NormalizedEvent {
 /** The stream lead-in of a worker's thinking (the takeover transcript shows it quoted). */
 export const THINK_PREFIX = 'thinking › ';
 
+/** A tool's outcome rides the stream as a note with this lead-in (the `⎿` line under its call). */
+export const RESULT_PREFIX = 'result › ';
+
 /** Collapses a text to the one-line activity the board shows. */
 export function activityLine(text: string): string {
   const first = text.split('\n').find((line) => line.trim() !== '') ?? '';
@@ -173,7 +176,7 @@ export function claudeCodeAdapter(spawnFn: SpawnFn, now: NowFn = (): Date => new
             session_id?: string;
             message?: {
               usage?: ClaudeUsage;
-              content?: ReadonlyArray<{ type?: string; name?: string; text?: string; thinking?: string; input?: Record<string, unknown> }>;
+              content?: ReadonlyArray<{ type?: string; name?: string; text?: string; thinking?: string; input?: Record<string, unknown>; content?: unknown; is_error?: boolean }>;
             };
             usage?: ClaudeUsage;
             total_cost_usd?: number;
@@ -187,6 +190,19 @@ export function claudeCodeAdapter(spawnFn: SpawnFn, now: NowFn = (): Date => new
           }
           if (event.type === 'system' && event.subtype === 'init' && typeof event.session_id === 'string') {
             start.onSessionRef(event.session_id);
+            continue;
+          }
+          if (event.type === 'user' && event.message !== undefined) {
+            for (const part of event.message.content ?? []) {
+              if (part.type !== 'tool_result') {
+                continue;
+              }
+              const raw = typeof part.content === 'string' ? part.content : '';
+              const first = activityLine(raw);
+              if (first !== '' || part.is_error === true) {
+                start.onEvent({ ts: nowIso(now), kind: 'note', text: `${RESULT_PREFIX}${part.is_error === true ? 'failed: ' : ''}${first}` });
+              }
+            }
             continue;
           }
           if (event.type === 'assistant' && event.message !== undefined) {

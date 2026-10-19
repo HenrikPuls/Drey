@@ -48,6 +48,13 @@ describe('transcriptMarkdown', () => {
     expect(md).toBe('<sub>run R-1 for T-1 on t/T-1</sub>\n\nAll done.\n\n---\n\n**✓ Turn finished**');
   });
 
+  it('hangs a tool outcome under its call', () => {
+    const md = transcriptMarkdown(
+      [line({ kind: 'note', text: 'Read src/a.ts' }), line({ kind: 'note', text: 'result › 120 lines' })].join('\n'),
+    );
+    expect(md).toBe('● **Read** `src/a.ts`  \n&nbsp;&nbsp;⎿ _120 lines_');
+  });
+
   it('is empty for an empty stream', () => {
     expect(transcriptMarkdown('')).toBe('');
   });

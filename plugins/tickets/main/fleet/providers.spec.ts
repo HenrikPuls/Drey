@@ -117,6 +117,14 @@ describe('the claude-code adapter', () => {
     expect(events.at(-1)?.contextTokens).toBe(15);
   });
 
+  it('writes a tool result as an outcome note', () => {
+    const proc = fakeProcess();
+    const { events, start } = collect();
+    claudeCodeAdapter(spawnOf(proc)).spawn(start);
+    proc.stdout(JSON.stringify({ type: 'user', message: { content: [{ type: 'tool_result', content: 'line one\nline two' }] } }));
+    expect(events.map((e) => e.text)).toEqual(['result › line one']);
+  });
+
   it('steer writes a user message into the held stdin (the injection rung)', async () => {
     const proc = fakeProcess();
     const { start } = collect();

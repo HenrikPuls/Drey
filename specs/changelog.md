@@ -32,7 +32,9 @@ recorded as an explicit decision. The parity checklist lives in
 - **Claude Code workers now fill the transcript.** The `claude-code`
   adapter only emitted usage events, so its takeover tab stayed empty; it
   now writes thinking, replies and every tool call like the opencode
-  adapter. Spec: `providers.spec.ts`.
+  adapter, and each tool's outcome hangs under its call as a `⎿` line
+  (first line of the result, `failed:` on an error). Spec:
+  `providers.spec.ts`, `transcript.spec.ts`.
 - **Seeded prompts share a "How to work" block** (batched reads, dedicated
   tools, smallest change, verify before claiming, short factual
   hand-off). Only new boards seed it; edited vault prompts are untouched.

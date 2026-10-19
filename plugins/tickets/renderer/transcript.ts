@@ -10,6 +10,9 @@ export const YOU_PREFIX = 'you › ';
 /** The worker's thinking rides the stream as notes with this lead-in (mirrors providers.ts). */
 export const THINK_PREFIX = 'thinking › ';
 
+/** A tool's outcome (mirrors providers.ts). */
+export const RESULT_PREFIX = 'result › ';
+
 interface StreamEvent {
   readonly kind?: string;
   readonly text?: string;
@@ -81,6 +84,11 @@ export function transcriptMarkdown(ndjson: string): string {
           const thought = flat(text.slice(THINK_PREFIX.length));
           const shown = thought.length > THINK_SHOWN ? `${thought.slice(0, THINK_SHOWN).trimEnd()}…` : thought;
           blocks.push(`> _∴ Thinking — ${shown}_`);
+        } else if (text.startsWith(RESULT_PREFIX)) {
+          const outcome = flat(text.slice(RESULT_PREFIX.length));
+          if (steps.length > 0 && outcome !== '') {
+            steps.push(`&nbsp;&nbsp;⎿ _${outcome}_`);
+          }
         } else if (text.startsWith(YOU_PREFIX)) {
           flush();
           blocks.push(`> **›** ${text.slice(YOU_PREFIX.length).replace(/\n/g, '\n> ')}`);
