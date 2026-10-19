@@ -29,7 +29,7 @@ import type { ChainStatus, RunInfo } from '../main/fleet/protocol';
 import {
   CONTEXT_WARN,
   contextFill,
-  DEFAULT_CONTEXT_WINDOW,
+  contextLabel,
   formatTokens,
   lanesOfColumn,
   opensByItself,
@@ -1086,14 +1086,7 @@ function workerLanesNode(api: DreyPluginApi, column: BoardColumn): HTMLElement |
       act.title = activity;
       body.append(act);
 
-      const used = run.contextTokens ?? null;
-      const label = el(
-        'div',
-        'tickets-lane-context-row',
-        used === null
-          ? 'Context — not reported yet'
-          : `Context ${formatTokens(used)} / ${formatTokens(DEFAULT_CONTEXT_WINDOW)} · ${Math.round((fill ?? 0) * 100)}%`,
-      );
+      const label = el('div', 'tickets-lane-context-row', contextLabel(run));
       const bar = el('div', 'tickets-meter');
       const barFill = el('div', `tickets-meter-fill tickets-meter-${fillWarn ? 'amber' : 'green'}`);
       barFill.style.width = `${Math.round((fill ?? 0) * 100)}%`;
