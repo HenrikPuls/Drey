@@ -20,6 +20,27 @@ recorded as an explicit decision. The parity checklist lives in
 
 ## Recent milestones
 
+### Fix — fleet: the context bar measures the model's real window (T-0052)
+
+The worker lanes measured the used context (`RunInfo.contextTokens`,
+the last model call's input incl. cache reads) against a hardcoded
+200k — a 1M-token model read ~5× too full and warned "Context full"
+from the first call. The runner now asks the opencode v2 server for
+the model's window once per worker (`GET /api/model`, matched by the
+run's model pin — `providerID` + `id`, then `providerID` + `modelID`,
+a `#variant` suffix stripped; without a pin `GET /api/model/default`):
+a hit rides the run as `RunInfo.contextWindow` (absent on old run.json
+records), a miss or a failed fetch is one stream note — the number is
+never guessed. The board (`plugins/tickets/renderer/worker-status.ts`)
+defaults the denominator to `run.contextWindow ?? DEFAULT_CONTEXT_WINDOW`;
+200k stays only as the documented fallback, and the new pure
+`contextLabel(run)` builds the lane row text in one place. claude-code
+stays on the fallback (its stream-json surface reports no window).
+Specs: `main/fleet/context-window.spec.ts` (the adapter against
+scripted fakes), `renderer/context-window.spec.ts` (fill, status,
+label), plus a runs.spec.ts pin that a once-reported window survives
+later events. **Not yet manually verified by the owner.**
+
 ### req-57 — CI green on Windows runners: the shipped ticket prompts stay LF on every checkout (owner request, outside the list)
 
 M85 added `default-prompts.spec.ts`, which byte-compares the raw shipped
