@@ -240,34 +240,369 @@
   color: var(--text-2);
 }
 
-/* The settings page's pipeline row (M85): phase name left, the pool
- * fields in one line. */
-.tickets-settings-row {
-  align-items: center;
+/* The settings page (M85, req-46): one card per column, then one editor
+ * per prompt. Cards stack; inside a card the short fields share a row and
+ * the long ones (model, prompt) take the full width. */
+.tickets-cols,
+.tickets-prompts {
+  display: flex;
+  flex-direction: column;
   gap: 10px;
 }
 
-.tickets-settings-phase {
-  flex: 0 0 110px;
-  overflow: hidden;
+.tickets-col-card {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--bg-input);
+}
+
+.tickets-col-head {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px 8px;
+}
+
+.tickets-col-title {
+  flex: 1;
+  min-width: 0;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--text-heading);
   white-space: nowrap;
+  overflow: hidden;
   text-overflow: ellipsis;
 }
 
-.tickets-settings-field {
+.tickets-col-count {
+  flex: none;
+  min-width: 22px;
+  height: 18px;
+  padding: 0 6px;
+  box-sizing: border-box;
   display: inline-flex;
   align-items: center;
-  gap: 5px;
+  justify-content: center;
+  border-radius: 9px;
+  background: var(--bg-input);
+  font-size: 0.72rem;
+  font-family: var(--font-mono);
+  color: var(--text-2);
+}
+
+.tickets-col-over {
+  color: var(--status-modified);
+  font-weight: 600;
+}
+
+.tickets-col-unknown {
+  flex: none;
+  font-size: 0.62rem;
+  padding: 0 4px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-xs);
+  color: var(--text-3);
+}
+
+.tickets-col-agent {
+  flex: none;
+  max-width: 120px;
+  height: 18px;
+  padding: 0 6px;
+  box-sizing: border-box;
+  display: inline-flex;
+  align-items: center;
+  border: 1px dashed var(--border-strong);
+  border-radius: var(--radius-xs);
+  font-size: 0.68rem;
+  font-family: var(--font-mono);
+  color: var(--text-4);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* The owner's checkpoint mark (M85): a manual column between automatic
+ * ones — the machine never pulls across it. */
+.tickets-col-checkpoint {
+  flex: none;
+  font-size: 0.68rem;
+  height: 18px;
+  padding: 0 6px;
+  box-sizing: border-box;
+  display: inline-flex;
+  align-items: center;
+  border: 1px dashed var(--border-strong);
+  border-radius: var(--radius-xs);
+  color: var(--text-4);
+}
+
+/* A held column (paused or stopped): its head dims so the brake reads
+ * at a glance across the whole board. */
+.tickets-col.tickets-col-held {
+  border-style: dashed;
+}
+
+.tickets-col.tickets-col-held > .tickets-col-head {
+  opacity: 0.72;
+}
+
+/* The per-column brakes, next to the fold chevron (M85). */
+.tickets-col-controls {
+  flex: none;
+  display: inline-flex;
+  gap: 1px;
+}
+
+.tickets-col-controls-held {
+  color: var(--text-3);
+}
+
+.tickets-col-btn {
+  display: inline-flex;
+  padding: 1px;
+  border: 0;
+  border-radius: var(--radius-xs);
+  background: transparent;
+  color: var(--text-5);
+  cursor: pointer;
+}
+
+.tickets-col-btn:hover {
+  background: var(--hover-bg);
+  color: var(--text-2);
+}
+
+/* The settings page (M85, req-46): one card per column, then one editor
+ * per prompt. Cards stack; inside a card the short fields share a row and
+ * the long ones (model, prompt) take the full width. */
+.tickets-cols,
+.tickets-prompts {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.tickets-col-card {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--bg-input);
+}
+
+.tickets-col-card.tickets-col-manual > :not(.tickets-col-head):not(.tickets-grid:has(select:enabled)) {
+  opacity: 0.55;
+}
+
+.tickets-col-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
   min-width: 0;
 }
 
-.tickets-settings-field > .mono-input {
-  width: 110px;
+.tickets-col-title {
+  margin: 0;
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: var(--text-heading);
 }
 
-.tickets-settings-label {
+.tickets-badge {
+  padding: 1px 7px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  font-size: 0.7rem;
+  color: var(--text-4);
+  white-space: nowrap;
+}
+
+.tickets-badge-auto {
+  border-color: var(--accent-edge, var(--accent));
+  color: var(--accent-text, var(--accent));
+}
+
+.tickets-badge-warn {
+  border-color: var(--status-deleted);
+  color: var(--status-deleted);
+}
+
+.tickets-hint {
+  margin-left: auto;
   font-size: 0.72rem;
   color: var(--text-4);
+}
+
+.tickets-hint-error {
+  color: var(--status-deleted);
+}
+
+.tickets-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 120px;
+  gap: 10px;
+}
+
+.tickets-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.tickets-label {
+  font-size: 0.72rem;
+  color: var(--text-4);
+}
+
+.tickets-field input,
+.tickets-field select {
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.tickets-inline {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.tickets-inline > select {
+  flex: 1;
+}
+
+/* The model picker: input with a filterable list underneath. */
+.tickets-combo {
+  position: relative;
+}
+
+.tickets-combo-note {
+  margin: 4px 0 0;
+}
+
+.tickets-combo-list {
+  position: absolute;
+  z-index: 20;
+  top: calc(var(--set-control-h-compact, 28px) + 2px);
+  left: 0;
+  right: 0;
+  max-height: 260px;
+  margin: 0;
+  padding: 4px;
+  overflow-y: auto;
+  list-style: none;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-md);
+  background: var(--bg-main);
+  box-shadow: 0 6px 20px rgb(0 0 0 / 0.35);
+}
+
+.tickets-combo-group {
+  padding: 6px 8px 2px;
+  font-size: 0.68rem;
+  letter-spacing: 0.02em;
+  color: var(--text-5);
+}
+
+.tickets-combo-item {
+  padding: 4px 8px;
+  border-radius: var(--radius-xs);
+  font-family: var(--font-mono);
+  font-size: 0.78rem;
+  color: var(--text-2);
+  cursor: pointer;
+}
+
+.tickets-combo-item:hover,
+.tickets-combo-item.active {
+  background: var(--hover-bg);
+}
+
+.tickets-combo-item.current {
+  color: var(--accent-text, var(--accent));
+}
+
+.tickets-combo-empty {
+  padding: 6px 8px;
+  font-size: 0.75rem;
+  color: var(--text-4);
+}
+
+/* A prompt: a disclosure row that opens into its editor. */
+.tickets-prompt {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--bg-input);
+}
+
+.tickets-prompt-summary {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 14px;
+  cursor: pointer;
+  list-style: none;
+}
+
+.tickets-prompt-summary::-webkit-details-marker {
+  display: none;
+}
+
+.tickets-prompt-summary::before {
+  content: '\25B8';
+  color: var(--text-5);
+  transition: transform 0.12s;
+}
+
+.tickets-prompt[open] > .tickets-prompt-summary::before {
+  transform: rotate(90deg);
+}
+
+.tickets-prompt-name {
+  font-family: var(--font-mono);
+  font-size: 0.82rem;
+  color: var(--text-primary);
+}
+
+.tickets-prompt-used {
+  margin-left: auto;
+  font-size: 0.72rem;
+  color: var(--text-4);
+}
+
+.tickets-prompt-text {
+  display: block;
+  width: calc(100% - 28px);
+  box-sizing: border-box;
+  margin: 0 14px;
+  min-height: 16rem;
+  line-height: 1.55;
+  tab-size: 2;
+}
+
+.tickets-prompt-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 14px 12px;
+}
+
+.tickets-newprompt {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.tickets-newprompt > input {
+  flex: 1;
 }
 
 /* The chain's master switch in the panel header (M85): An / Aus /

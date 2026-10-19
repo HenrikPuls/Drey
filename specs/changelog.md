@@ -20,6 +20,28 @@ recorded as an explicit decision. The parity checklist lives in
 
 ## Recent milestones
 
+### req-46 — the Tickets settings page: column cards, a model picker and editable prompts (owner request, outside the list)
+
+**Not yet manually verified by the owner.**
+
+- **Column cards.** The pipeline columns were one cramped row each (the column
+  name cut to "I…", the model pin a 110px field). Each column is now a card:
+  full title, a "Runs itself / Your checkpoint" badge, worker and pool size
+  on one line, model and prompt full width. A manual column's pool, model and
+  prompt are disabled, not hidden.
+- **Model picker.** A combobox over what the worker CLI offers: `opencode
+  models` (new `worker-models.ts`, cached for a minute, `providerID/modelID`
+  lines grouped by provider) or the Claude Code aliases; type to filter,
+  arrows/Enter/Escape, free text stays possible when the list is empty or
+  stale. Saved when a row is chosen or the field is left.
+- **Prompt editing.** The prompt is a select over `tickets/_meta/prompts/`
+  with an Edit shortcut, and a new **Prompts** section holds one editor per
+  file: saved on leaving the field or Ctrl+S, one commit per save
+  (`tickets: prompt <ref> edit|add|reset`), Revert, Reset to default for the
+  three seeded prompts (two-click confirm, no native dialog), New prompt.
+  Main gained `prompts`, `promptSave` and `models` handlers.
+- Specs: `worker-models.spec.ts`; manual updated. Not changed: ADRs, schema.
+
 ### Milestone 87 — stale runner daemons retire; the board seeds its prompts (owner request, outside the list)
 
 **Not yet manually verified by the owner.**

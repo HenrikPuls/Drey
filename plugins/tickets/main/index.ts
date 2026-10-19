@@ -43,6 +43,7 @@ import { TicketsGit, type RepoLocation } from './tickets-git';
 import { createFleetMcpTools } from './mcp-tools';
 import { DEFAULT_PROMPTS } from './default-prompts';
 import { FleetClient } from './fleet-client';
+import { listWorkerModels } from './worker-models';
 import { agentIdentity, composeRunRequest } from './fleet/request';
 import { checkpointPhaseIds, columnPromptRef, isAutoPhase, nextPhaseIdOf } from './fleet/chain';
 import type { ChainConfig, PermissionMode } from './fleet/protocol';
@@ -70,6 +71,17 @@ See specs/ticket-schema.md. Edit freely; the board follows on refresh.
 `;
 
 const PROMPTS_DIR = 'tickets/_meta/prompts';
+const PROMPT_REF = /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/;
+
+interface PromptEntry {
+  readonly ref: string;
+  readonly text: string;
+  /** One of the three prompts a board is initialised with. */
+  readonly seeded: boolean;
+  /** A seeded prompt whose text differs from the shipped one. */
+  readonly edited: boolean;
+  readonly missing?: boolean;
+}
 
 const DEFAULT_ORDER = `# Column order pins — listed ids form the top of their column
 
@@ -666,6 +678,83 @@ class BoardService {
     });
   }
 
+  /**
+   * Every prompt file under `_meta/prompts/` with its text (req-46, the
+   * settings page's editor). A seeded default that was never edited is
+   * flagged so the page can offer "Reset" only where it means something.
+   */
+  async listPrompts(): Promise<readonly PromptEntry[]> {
+    const vault = await this.detect();
+    if (vault === null) {
+      return [];
+    }
+    const dir = this.ctx.vault.resolveAssetPath(PROMPTS_DIR, { vaultId: vault.id });
+    if (dir === null) {
+      return [];
+    }
+    let names: string[];
+    try {
+      names = (await fsp.readdir(dir)).filter((n) => n.endsWith('.md')).sort();
+    } catch {
+      names = [];
+    }
+    const entries: PromptEntry[] = [];
+    for (const name of names) {
+      const ref = name.slice(0, -3);
+      const text = await this.readOptional(vault.id, `${PROMPTS_DIR}/${name}`);
+      const seeded = DEFAULT_PROMPTS[ref];
+      entries.push({
+        ref,
+        text: text ?? '',
+        seeded: seeded !== undefined,
+        edited: seeded !== undefined && seeded !== text,
+      });
+    }
+    // A seeded prompt whose file was deleted still shows up, restorable.
+    for (const ref of Object.keys(DEFAULT_PROMPTS)) {
+      if (!entries.some((e) => e.ref === ref)) {
+        entries.push({ ref, text: '', seeded: true, edited: true, missing: true });
+      }
+    }
+    return entries;
+  }
+
+  /** Writes one prompt file (create or replace); one commit per save. */
+  savePrompt(input: { ref: string; text?: string; reset?: boolean }): Promise<MutationResult> {
+    return this.enqueue(async () => {
+      if (!PROMPT_REF.test(input.ref)) {
+        return { ok: false, error: 'a prompt name is letters, digits, dot, dash and underscore' };
+      }
+      const vault = await this.detect();
+      if (vault === null) {
+        return { ok: false, error: 'no tickets vault detected' };
+      }
+      const file = `${PROMPTS_DIR}/${input.ref}.md`;
+      let text = input.text ?? '';
+      if (input.reset === true) {
+        const seeded = DEFAULT_PROMPTS[input.ref];
+        if (seeded === undefined) {
+          return { ok: false, error: `"${input.ref}" has no shipped default` };
+        }
+        text = seeded;
+      }
+      const before = await this.readOptional(vault.id, file);
+      if (before === text) {
+        return { ok: true };
+      }
+      try {
+        await this.ctx.vault.write(file, text, { vaultId: vault.id });
+      } catch (error) {
+        return { ok: false, error: `write failed: ${messageOf(error)}` };
+      }
+      const verb = input.reset === true ? 'reset' : before === null ? 'add' : 'edit';
+      const warning = await this.commit(vault, [file], `tickets: prompt ${input.ref} ${verb}`);
+      this.ctx.vault.announceChanges({ vaultId: vault.id, changedPaths: [file] });
+      this.announceChanged();
+      return { ok: true, ...(warning === null ? {} : { warning }) };
+    });
+  }
+
   initialize(vaultId: string | null): Promise<MutationResult> {
     return this.enqueue(async () => {
       const vaults = await this.ctx.vault.listVaults();
@@ -829,6 +918,29 @@ const plugin: MainPluginModule = {
           : {}),
         ...(p.prompt !== undefined ? { prompt: typeof p.prompt === 'string' ? p.prompt : null } : {}),
       });
+    });
+
+    // The prompts the columns name, editable from the settings page (req-46).
+    ctx.ipc.handle('prompts', () => board.listPrompts());
+    ctx.ipc.handle('promptSave', async (payload) => {
+      const p = payload as { ref?: unknown; text?: unknown; reset?: unknown };
+      if (typeof p.ref !== 'string') {
+        return { ok: false, error: 'bad prompt payload' };
+      }
+      if (p.reset !== true && typeof p.text !== 'string') {
+        return { ok: false, error: 'bad prompt payload' };
+      }
+      return board.savePrompt({
+        ref: p.ref,
+        ...(typeof p.text === 'string' ? { text: p.text } : {}),
+        ...(p.reset === true ? { reset: true } : {}),
+      });
+    });
+
+    // The model picker's list: what the worker CLI offers (req-46).
+    ctx.ipc.handle('models', async (payload) => {
+      const p = payload as { worker?: unknown };
+      return listWorkerModels(typeof p.worker === 'string' ? p.worker : defaultWorker);
     });
 
     // --- the fleet (M84, ADR-0075) -------------------------------------
