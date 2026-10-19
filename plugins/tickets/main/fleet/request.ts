@@ -29,6 +29,11 @@ export interface ComposeRunInput {
   readonly workingPhase: PipelinePhase | null;
   /** The move target on a green gate, or null to end the run in place. */
   readonly nextPhaseId: string | null;
+  /** The directory the green move writes into (T-0041: resolved against
+   *  the dirs on disk, `resolvePhaseDir`); null = the bare phase id. */
+  readonly nextPhaseDir: string | null;
+  /** pipeline.md's `push:` remote (T-0041); null = never push. */
+  readonly pushRemote: string | null;
   /** Whether `nextPhaseId` claims (claim: true) — stamps the agent identity. */
   readonly nextPhaseClaims: boolean;
   readonly repo: RepoRef | null;
@@ -117,6 +122,8 @@ export function composeRunRequest(input: ComposeRunInput): ComposeRunResult {
     gate: acceptance.length > 0 ? 'commands' : 'structural',
     git: input.gitPath.trim() === '' ? 'git' : input.gitPath.trim(),
     nextPhase: input.nextPhaseId,
+    nextPhaseDir: input.nextPhaseId === null ? null : input.nextPhaseDir,
+    pushRemote: input.pushRemote,
     claimIdentity: input.nextPhaseClaims && input.nextPhaseId !== null ? agentIdentity() : null,
     ...(input.workerChoice !== null ? { recordWorker: input.workerChoice } : {}),
     ...(input.dispatchedBy !== undefined ? { column: input.dispatchedBy } : {}),

@@ -242,6 +242,82 @@ pipeline patcher, MCP seam, fleet tools); `tsc` (main, specs, renderer,
 plugins), ESLint, the cycle check and the plugin build are green.
 Docs: ADR-0077, docs/05 §5.41, docs/06 §6.66, the manual's fleet
 section, `specs/ticket-schema.md` (pool keys, lane rules, ci).
+### Tickets — numbered phase folders, file moves as transitions, archive, auto-push (T-0041)
+
+Owner rulings from the 2026-10-18 rounds (ADR-0076 later change,
+`specs/ticket-schema.md` updated in the same change):
+
+- **Numbered phase folders** (`10-inbox` … `80-done`, `NN` = pipeline
+  position × 10): one strip point for every reader
+  (`ticketPathParts` → prefix-stripped ids — board grouping, validator
+  and `entered-` noise checks see clean ids), one derive-and-reuse
+  resolver for every writer (new `plugins/tickets/main/phase-dirs.ts`;
+  an existing `35-qa` or unprefixed `inbox` wins over the derived name,
+  so inserting a column takes a gap number and nothing ever renames).
+  No ticket-file changes: `entered-*` keys, order.md sections and
+  branch names keep the clean ids.
+- **A file move is a ticket move:** stateless drift detection (new
+  `plugins/tickets/main/normalize.ts`, pure) runs on every `board`
+  IPC fetch — a ticket in phase B whose `entered-<B>` stamp is missing
+  or older than the newest event gets the full board-move treatment
+  (stamp, Log line, pin cleanup, one commit, actor `owner@<host>`);
+  works after restarts, skips live-`run:` tickets, logs backwards and
+  skipping moves without blocking (lane rules stay runner-only).
+  `BoardService.refresh()` (normalize + snapshot) is the board route;
+  `snapshot()` itself stays pure so enqueued mutations never deadlock.
+- **Archive instead of delete:** reserved `tickets/archive/` beside
+  `_meta` — never a column, invisible, no counter. Card menu gains a
+  two-step armed **Archive…** item; a file moved into the folder gets
+  the same treatment via normalization: Log marker `— archived` (no
+  `entered-` stamp — idempotent, and revive → re-archive stays
+  detectable), one commit `tickets: <id> archived`, pin cleanup,
+  claim fields ride along. Reviving is a move back into a phase;
+  deletion inside `archive/` stays the owner's manual act.
+- **Auto-push:** optional `push:` remote in pipeline.md (a git-config
+  remote name; non-strings degrade to noise). Every transition commit
+  — board move, normalization move, archive, runner success move —
+  pushes `git push <remote> HEAD` (`TicketsGit.push`); failures warn,
+  never block. `RunRequest` grew additively (`nextPhaseDir`,
+  `pushRemote`).
+
+Specs: numbered-dir folding and `push:` parsing
+(`ticket-files.spec.ts`, `ticket-board.spec.ts`, `tickets.spec.ts`),
+resolver (`phase-dirs.spec.ts`), every predicate row of the drift pass
+(`normalize.spec.ts`), numbered target dir + prefix-aware validation +
+push/no-push over the git seam (`runs.spec.ts`, `tickets-git.spec.ts`).
+**Not yet manually verified by the owner.**
+
+### Fix — fleet: worktree preparation is idempotent per ticket (T-0047)
+
+Split from T-0046. The runner's `prepareWorktree` always ran
+`git worktree add`, so a second run for the same ticket (the next
+phase, a gate retry) failed with "already exists". Preparation is now
+a state machine (`plugins/tickets/main/fleet/worktrees.ts`) over
+`git worktree list --porcelain`:
+
+- registered and on `t/<id>` — **reused** as is, clean or dirty (a
+  retry wants exactly the half-finished work; untracked counts as
+  dirty);
+- unregistered, directory missing or empty — **created** (`worktree
+  prune`, then add — `-b` only when the branch does not exist yet);
+- stale (content at the path, no healthy registration) and clean —
+  **recreated**; stale and dirty — **moved-aside** to
+  `<path>.stale-<stamp>`, never deleted (a directory that no longer
+  answers to git counts as dirty);
+- wrong branch, locked, or a rebase/merge in progress — a descriptive
+  error, nothing modified.
+
+The outcome (`reused | created | recreated | moved-aside`) rides
+`RunInfo.worktree` (absent on adopted pre-T-0047 records), the run
+stream's opening note and the ticket Log's start action; a moved-aside
+worktree adds a stream note with the parking path. `recreated` /
+`moved-aside` also set `sessionInvalidated` on the prepared result —
+exposed for T-0049's resume work, read by nothing in v1. Preparation
+is serialized by a module-level lock keyed by the repo, so two
+concurrent starts — one ticket, or two tickets in one repo at
+`workers: 2/4` — cannot race on `worktree add`. Spec: real git in
+temp repos over every state, the fail rows and the lock
+(`worktrees.spec.ts`). **Not yet manually verified by the owner.**
 
 ### Architecture cleanup A6 — plugin settings out of the base config
 

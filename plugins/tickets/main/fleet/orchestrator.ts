@@ -18,12 +18,13 @@ import { promises as fsp } from 'node:fs';
 import { hostname } from 'node:os';
 import * as path from 'node:path';
 import type { BoardColumn, BoardSnapshot, PipelinePhase } from '../../shared/tickets';
-import { isValidTicketFile, parseHandover } from '../../shared/tickets';
+import { isValidTicketFile, parseHandover, stripPhasePrefix, TICKETS_ARCHIVE_DIR } from '../../shared/tickets';
 import { assembleBoard, parseOrderFile, rewriteOrderSection, type BoardFile } from '../ticket-board';
 import { patchTicketFile } from '../ticket-files';
 import { TicketsGit } from '../tickets-git';
 import { columnPromptRef, dispatchable, isAutoPhase, nextPhaseIdOf, planDispatch } from './chain';
 import { composeRunRequest } from './request';
+import { listTicketDirs, resolvePhaseDir } from '../phase-dirs';
 import { execShell, type SupervisorRecord, type StartOutcome, type StopOutcome } from './runs';
 import type {
   ChainConfig,
@@ -316,7 +317,8 @@ export class Orchestrator {
       }
       const git = new TicketsGit(() => config.git);
       const fromRel = candidate.path;
-      const toRel = `tickets/inbox/${candidate.id}.md`;
+      const inboxDir = await phaseDirOf(config.ticketsVaultPath, snap.pipeline, 'inbox');
+      const toRel = `tickets/${inboxDir}/${candidate.id}.md`;
       const abs = (rel: string): string => path.join(config.ticketsVaultPath, rel);
       const text = await fsp.readFile(abs(fromRel), 'utf8');
       const patched = patchTicketFile(text, {
@@ -532,7 +534,8 @@ export class Orchestrator {
       const git = new TicketsGit(() => config.git);
       const abs = (rel: string): string => path.join(config.ticketsVaultPath, rel);
       const fromRel = card.path;
-      const toRel = `tickets/${nextPhaseId}/${card.id}.md`;
+      const pipeline = (await readVaultBoard(config.ticketsVaultPath, config.defaultWorker)).pipeline;
+      const toRel = `tickets/${await phaseDirOf(config.ticketsVaultPath, pipeline, nextPhaseId)}/${card.id}.md`;
       const text = await fsp.readFile(abs(fromRel), 'utf8');
       const patched = patchTicketFile(text, {
         to: nextPhaseId,
@@ -823,6 +826,15 @@ export class Orchestrator {
       vaultPath: config.ticketsVaultPath,
       workingPhase,
       nextPhaseId,
+      nextPhaseDir:
+        nextPhaseId === null
+          ? null
+          : resolvePhaseDir(
+              await listTicketDirs(path.join(config.ticketsVaultPath, 'tickets')),
+              snap.pipeline.findIndex((p) => p.id === nextPhaseId) + 1,
+              nextPhaseId,
+            ),
+      pushRemote: snap.pushRemote,
       nextPhaseClaims,
       repo,
       promptText,
@@ -865,7 +877,7 @@ export async function readVaultBoard(vaultPath: string, defaultWorker: string): 
   const entries = await fsp.readdir(ticketsDir, { withFileTypes: true }).catch(() => []);
   const files: BoardFile[] = [];
   for (const entry of entries) {
-    if (!entry.isDirectory() || entry.name === '_meta') {
+    if (!entry.isDirectory() || entry.name === '_meta' || `tickets/${entry.name}` === TICKETS_ARCHIVE_DIR) {
       continue;
     }
     const dir = path.join(ticketsDir, entry.name);
@@ -898,4 +910,16 @@ export async function readVaultBoard(vaultPath: string, defaultWorker: string): 
     reposText,
     files,
   });
+}
+
+/** The directory a machine move into `phaseId` writes (T-0041): resolved
+ *  against the directories on disk, never rebuilt from the bare id. */
+async function phaseDirOf(
+  vaultPath: string,
+  pipeline: readonly PipelinePhase[],
+  phaseId: string,
+): Promise<string> {
+  const position = pipeline.findIndex((p) => p.id === phaseId) + 1;
+  const dirs = await listTicketDirs(path.join(vaultPath, 'tickets'));
+  return position === 0 ? (dirs.find((d) => stripPhasePrefix(d) === phaseId) ?? phaseId) : resolvePhaseDir(dirs, position, phaseId);
 }

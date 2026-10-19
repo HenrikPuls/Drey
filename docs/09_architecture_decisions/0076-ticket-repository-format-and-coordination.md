@@ -137,3 +137,46 @@ of `frontmatter-schema.md` apply beyond the shared YAML conventions
 - The `run:` frontmatter map (pid, started-at, stream) is reserved for
   milestone 84's run control; milestone 83 validates it but never
   writes it.
+
+## Later change — numbered folders, moves as transitions, archive, auto-push (2026-10-19, T-0041)
+
+Four owner rulings from the 2026-10-18 design rounds, implemented in
+T-0041:
+
+- **Numbered phase folders.** Phase directories are named `NN-<id>`
+  (`NN` = 1-based pipeline position × 10: `10-inbox` … `80-done`).
+  Readers strip a leading `\d+-` and match the rest against the
+  pipeline ids — an unprefixed directory stays tolerated, so the
+  migration of an existing repo is 8× `git mv` and ship order is free.
+  Ticket files never change: `entered-*` keys, order.md sections and
+  branch names keep the clean ids. One shared resolver derives every
+  writer's target directory; it **reuses before it derives** (an
+  existing `35-qa` or unprefixed `inbox` wins over the derived name),
+  so inserting a column takes a gap number and nothing ever renames —
+  no cascade.
+- **A file move is a ticket move.** A ticket file moved between phase
+  folders outside the board gets exactly the board-move treatment:
+  stateless normalization on every board fetch derives the need from
+  the files (an `entered-<B>` stamp missing or older than the newest
+  event), then stamps, logs, cleans pins and commits once — actor
+  `owner@<host>`. No watcher (they are opt-in, ADR-0018/0045), no
+  "seen moves" state file; it survives restarts and never fights the
+  runner (live-`run:` tickets are skipped; writes go through the same
+  queue and patcher). Lane rules stay runner-only: human moves are
+  logged, never blocked.
+- **Archive instead of delete.** `tickets/archive/` is a reserved
+  folder beside `_meta` — never a column, invisible on the board, no
+  counter (owner ruling). Archiving (card menu, two-step armed, or a
+  file move into the folder) appends the Log marker `— archived` and
+  commits `tickets: <id> archived` with pin cleanup; there is
+  deliberately **no** `entered-archive` key — the marker is what makes
+  archival idempotent and a revive-then-re-archive detectable. Reviving
+  is a move back into a phase folder (normalization stamps it as
+  `archive -> <phase>`); final deletion stays the owner's manual act
+  inside `archive/`.
+- **Auto-push.** An optional `push:` key in pipeline.md names a git
+  remote (a name from git config — URLs belong to git, and can carry
+  credentials). When set, each transition commit — board move,
+  normalization move, archive, runner success move — is pushed with
+  `git push <remote> HEAD`. Default off; a failure is a warning (board)
+  or log line (runner), never a failed transition.

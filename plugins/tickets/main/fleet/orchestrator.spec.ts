@@ -6,6 +6,8 @@ import { Orchestrator, RED_COOLDOWN_MS, type OrchestratorDeps, type SupervisorPo
 import type { StartOutcome, StopOutcome, SupervisorRecord } from './runs';
 import type { RunInfo, RunRequest } from './protocol';
 import { newTicketFileText } from '../ticket-files';
+import { listTicketDirs } from '../phase-dirs';
+import { stripPhasePrefix } from '../../shared/tickets';
 
 /**
  * The chain orchestrator against a REAL tickets vault (temp dir) and a
@@ -57,6 +59,19 @@ function ticketText(id: string, phase: string): string {
     'Executable checks as backticked checkbox lines; the machine gate runs them.',
     '- [ ] `npm run verify:unit` — exits 0',
   );
+}
+
+/** Where a ticket of `phase` sits (T-0041: a machine move may create the
+ *  numbered `NN-<phase>` folder); the unprefixed path when it is nowhere. */
+async function phasePath(phase: string, id: string): Promise<string> {
+  const root = path.join(vaultDir, 'tickets');
+  for (const dir of await listTicketDirs(root)) {
+    const candidate = path.join(root, dir, `${id}.md`);
+    if (stripPhasePrefix(dir) === phase && (await fsp.access(candidate).then(() => true, () => false))) {
+      return candidate;
+    }
+  }
+  return path.join(root, phase, `${id}.md`);
 }
 
 async function writeTicket(id: string, phase: string): Promise<void> {
@@ -359,7 +374,7 @@ describe('Orchestrator', () => {
     expect(orch.status().columns['plan']).toBe('held');
     expect(orch.status().redStreak['plan']).toBe(3);
     // The candidate moved to inbox, parked with the reason (file semantics).
-    const parked = await fsp.readFile(path.join(vaultDir, 'tickets', 'inbox', 'T-0001.md'), 'utf8');
+    const parked = await fsp.readFile(await phasePath('inbox', 'T-0001'), 'utf8');
     expect(parked).toContain('parked-reason');
     expect(parked).toContain('circuit breaker');
     await expect(fsp.access(path.join(vaultDir, 'tickets', 'plan', 'T-0001.md'))).rejects.toBeDefined();
@@ -419,13 +434,13 @@ describe('Orchestrator', () => {
       await orch.setMaster('run');
       await vi.waitFor(
         async () => {
-          await expect(fsp.access(path.join(vaultDir, 'tickets', 'build', 'T-0009.md'))).resolves.toBeUndefined();
+          await expect(fsp.access(await phasePath('build', 'T-0009'))).resolves.toBeUndefined();
         },
         { timeout: 5_000 },
       );
       await new Promise((resolve) => setTimeout(resolve, 50));
       orch.dispose();
-      const moved = await fsp.readFile(path.join(vaultDir, 'tickets', 'build', 'T-0009.md'), 'utf8');
+      const moved = await fsp.readFile(await phasePath('build', 'T-0009'), 'utf8');
       expect(moved).toContain('ci check passed');
       expect(moved).toContain('claimed-by'); // build claims
       await expect(fsp.access(path.join(vaultDir, 'tickets', 'plan-review', 'T-0009.md'))).rejects.toBeDefined();
@@ -450,7 +465,7 @@ describe('Orchestrator', () => {
       // The backoff suppresses the next sweep ticks' retries (10 min).
       await new Promise((resolve) => setTimeout(resolve, 80));
       orch.dispose();
-      await expect(fsp.access(path.join(vaultDir, 'tickets', 'build', 'T-0009.md'))).rejects.toBeDefined();
+      await expect(fsp.access(await phasePath('build', 'T-0009'))).rejects.toBeDefined();
       const text = await fsp.readFile(path.join(vaultDir, 'tickets', 'plan-review', 'T-0009.md'), 'utf8');
       expect(text).toContain('retry in 10 min');
     });

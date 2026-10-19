@@ -128,6 +128,8 @@ function request(overrides: Partial<RunRequest> = {}): RunRequest {
     gate: 'commands',
     git: 'git',
     nextPhase: 'build',
+    nextPhaseDir: 'build',
+    pushRemote: null,
     claimIdentity: null,
     ...overrides,
   };
@@ -148,7 +150,7 @@ function supervisor(overrides: Partial<RunSupervisorDeps> = {}): {
     git: 'git',
     log: () => undefined,
     now: () => new Date('2026-10-17T12:00:00Z'),
-    prepareWorktree: async () => undefined,
+    prepareWorktree: async () => ({ outcome: 'created', sessionInvalidated: false, movedTo: null }),
     execShell: async (command) => {
       gate.push([command]);
     },
@@ -385,6 +387,9 @@ describe('RunSupervisor', () => {
     const noGate = await sup.start(request({ acceptance: [] }));
     expect(noGate.ok).toBe(false);
     expect((noGate as { error: string }).error).toContain('no acceptance criteria');
+    const wrongPath = await sup.start(request({ ticketRelPath: 'tickets/build/T-0001.md' }));
+    expect(wrongPath.ok).toBe(false);
+    expect((wrongPath as { error: string }).error).toContain('does not match id and phase');
     // The first worker column may take the ticket anyway: its run gates
     // structurally (the plan writes the criteria).
     const structural = await sup.start(request({ acceptance: [], gate: 'structural' }));
@@ -430,6 +435,15 @@ describe('RunSupervisor', () => {
     await vi.waitFor(() => expect(sup.get(id)?.state).toBe('done'));
     expect(gate).toEqual([]);
     await expect(fsp.access(path.join(vaultDir, 'tickets', 'build', 'T-0001.md'))).resolves.toBeUndefined();
+  });
+
+  it('accepts a numbered phase directory in the ticket path (T-0041)', async () => {
+    const { sup } = supervisor();
+    const rel = 'tickets/30-plan/T-0001.md';
+    await fsp.mkdir(path.join(vaultDir, 'tickets', '30-plan'), { recursive: true });
+    await fsp.writeFile(path.join(vaultDir, rel), ticketText(), 'utf8');
+    const started = await sup.start(request({ ticketRelPath: rel }));
+    expect(started.ok).toBe(true);
   });
 
   it('a green worker passes the gate and moves the ticket on (one commit)', async () => {
@@ -491,6 +505,51 @@ describe('RunSupervisor', () => {
     const movedRel = 'tickets/build/T-0001.md';
     const moved = await fsp.readFile(path.join(vaultDir, movedRel), 'utf8');
     expect(parseTicketFile(moved, movedRel).meta.claimedBy).toBeNull();
+  });
+
+  it('moves the ticket into the resolved numbered directory (T-0041)', async () => {
+    const { sup, adapter } = supervisor();
+    const rel = await writeTicket();
+    const started = await sup.start(
+      request({ ticketRelPath: rel, nextPhase: 'qa', nextPhaseDir: '35-qa' }),
+    );
+    expect(started.ok).toBe(true);
+    const id = (started as { run: { id: string } }).run.id;
+
+    adapter.handles[0]!.result();
+    adapter.handles[0]!.fail(0);
+    await vi.waitFor(() => expect(sup.get(id)?.state).toBe('done'));
+
+    const movedRel = 'tickets/35-qa/T-0001.md';
+    const moved = await fsp.readFile(path.join(vaultDir, movedRel), 'utf8');
+    expect(parseTicketFile(moved, movedRel).meta.entered['qa']).toBeDefined();
+    expect(moved).toContain('moving to qa');
+    await expect(fsp.access(path.join(vaultDir, rel))).rejects.toBeDefined();
+  });
+
+  it('pushes the transition commit when the request names a remote, never otherwise (T-0041)', async () => {
+    const withPush = supervisor();
+    const rel = await writeTicket();
+    const started = await withPush.sup.start(request({ ticketRelPath: rel, pushRemote: 'origin' }));
+    expect(started.ok).toBe(true);
+    const id = (started as { run: { id: string } }).run.id;
+
+    withPush.adapter.handles[0]!.result();
+    withPush.adapter.handles[0]!.fail(0);
+    await vi.waitFor(() => expect(withPush.sup.get(id)?.state).toBe('done'));
+
+    const push = withPush.git.calls.find((c) => c.args[0] === 'push');
+    expect(push?.args).toEqual(['push', 'origin', 'HEAD']);
+    expect(push?.cwd).toBe(`${path.sep}root${path.sep}tk`);
+
+    const noPush = supervisor();
+    const rel2 = await writeTicket();
+    const started2 = await noPush.sup.start(request({ ticketRelPath: rel2 }));
+    const id2 = (started2 as { run: { id: string } }).run.id;
+    noPush.adapter.handles[0]!.result();
+    noPush.adapter.handles[0]!.fail(0);
+    await vi.waitFor(() => expect(noPush.sup.get(id2)?.state).toBe('done'));
+    expect(noPush.git.calls.some((c) => c.args[0] === 'push')).toBe(false);
   });
 
   it('a red gate fails the run and the ticket stays put', async () => {

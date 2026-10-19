@@ -12,6 +12,7 @@ import {
   priorityWeight,
   phaseWithoutPoolKeys,
   resolveCardWorker,
+  TICKETS_ARCHIVE_DIR,
   type BoardColumn,
   type BoardSnapshot,
   type PipelinePhase,
@@ -29,15 +30,21 @@ const PHASE_ID = /^[a-z][a-z0-9-]*$/;
 
 export interface PipelineParse {
   readonly phases: readonly PipelinePhase[];
+  /** The optional top-level `push:` remote (T-0041); null = never push. */
+  readonly pushRemote: string | null;
   readonly error: string | null;
-}export function parsePipeline(text: string): PipelineParse {
+  /** Noise findings the parse forgave (a non-string `push:`). */
+  readonly issues: readonly TicketIssue[];
+}
+
+export function parsePipeline(text: string): PipelineParse {
   const { yamlText, hadFence } = splitFrontmatter(text);
   if (!hadFence || yamlText === null) {
-    return { phases: [], error: 'pipeline.md has no frontmatter fence' };
+    return { phases: [], pushRemote: null, error: 'pipeline.md has no frontmatter fence', issues: [] };
   }
   const doc = parseDocument(yamlText);
   if (doc.errors.length > 0) {
-    return { phases: [], error: `pipeline.md does not parse: ${doc.errors[0]!.message}` };
+    return { phases: [], pushRemote: null, error: `pipeline.md does not parse: ${doc.errors[0]!.message}`, issues: [] };
   }
   const parsed = doc.toJS() as unknown;
   const root = parsed && typeof parsed === 'object' && !Array.isArray(parsed)
@@ -45,22 +52,34 @@ export interface PipelineParse {
     : {};
   const rawPhases = root['phases'];
   if (!Array.isArray(rawPhases) || rawPhases.length === 0) {
-    return { phases: [], error: 'pipeline.md needs a non-empty phases list' };
+    return { phases: [], pushRemote: null, error: 'pipeline.md needs a non-empty phases list', issues: [] };
+  }
+
+  const issues: TicketIssue[] = [];
+  const rawPush = root['push'];
+  let pushRemote: string | null = null;
+  if (rawPush !== undefined && rawPush !== null) {
+    if (typeof rawPush === 'string' && rawPush.trim() !== '') {
+      pushRemote = rawPush.trim();
+    } else {
+      // A remote NAME belongs here (git config owns URLs); anything else is forgiven visibly.
+      issues.push({ level: 'noise', message: 'pipeline.md: push must be a remote name string — ignored' });
+    }
   }
 
   const phases: PipelinePhase[] = [];
   const seen = new Set<string>();
   for (const entry of rawPhases) {
     if (entry === null || typeof entry !== 'object' || Array.isArray(entry)) {
-      return { phases: [], error: 'every pipeline phase must be a mapping' };
+      return { phases: [], pushRemote: null, error: 'every pipeline phase must be a mapping', issues };
     }
     const map = entry as Record<string, unknown>;
     const id = typeof map['id'] === 'string' ? map['id'] : '';
     if (!PHASE_ID.test(id)) {
-      return { phases: [], error: `phase id "${id}" must match ${PHASE_ID.source}` };
+      return { phases: [], pushRemote: null, error: `phase id "${id}" must match ${PHASE_ID.source}`, issues };
     }
     if (seen.has(id)) {
-      return { phases: [], error: `duplicate phase id "${id}"` };
+      return { phases: [], pushRemote: null, error: `duplicate phase id "${id}"`, issues };
     }
     seen.add(id);
     const wipRaw = map['wip'];
@@ -106,7 +125,7 @@ export interface PipelineParse {
       semantic,
     });
   }
-  return { phases, error: null };
+  return { phases, pushRemote, error: null, issues };
 }
 
 // --- pipeline.md patching (the settings dialog's writer, M85) ----------------
@@ -304,6 +323,30 @@ export function rewriteOrderSection(text: string, phase: string, ids: readonly s
   return result;
 }
 
+/** Strips one id from every pin section, in text form — a moved or
+ *  archived ticket leaves all of them (T-0041 moved this beside its
+ *  building blocks so every writer shares it). */
+export function removeIdFromPins(orderText: string, id: string): string {
+  const { pins } = parseOrderFile(orderText);
+  let touched = false;
+  const cleaned: Record<string, string[]> = {};
+  for (const [section, ids] of Object.entries(pins)) {
+    const kept = ids.filter((x) => x !== id);
+    if (kept.length !== ids.length) {
+      touched = true;
+    }
+    cleaned[section] = kept;
+  }
+  if (!touched) {
+    return orderText;
+  }
+  let text = orderText;
+  for (const [section, ids] of Object.entries(cleaned)) {
+    text = rewriteOrderSection(text, section, ids);
+  }
+  return text;
+}
+
 // --- repos.md --------------------------------------------------------------
 
 export interface ReposParse {
@@ -463,10 +506,13 @@ export function assembleBoard(input: AssembleInput): BoardSnapshot {
   const issues: TicketIssue[] = [];
 
   const pipelineParse = input.pipelineText === null
-    ? { phases: [], error: 'tickets/_meta/pipeline.md is missing' }
+    ? { phases: [], pushRemote: null, error: 'tickets/_meta/pipeline.md is missing', issues: [] }
     : parsePipeline(input.pipelineText);
   if (pipelineParse.error !== null) {
     issues.push({ level: 'error', message: pipelineParse.error });
+  }
+  for (const issue of pipelineParse.issues) {
+    issues.push({ level: issue.level, message: issue.message });
   }
   const phases = pipelineParse.phases;
   const phaseIds = new Set(phases.map((p) => p.id));
@@ -498,6 +544,13 @@ export function assembleBoard(input: AssembleInput): BoardSnapshot {
   }
   const byPhase = new Map<string, AssemblyCard[]>();
   for (const file of input.files) {
+    // The reserved archive folder (T-0041): beside `_meta`, never a
+    // column, never a counter, never a stray badge — invisible here.
+    // (Normalization still treats files moved into it; deletion inside
+    // it stays the owner's manual act.)
+    if (file.path.startsWith(`${TICKETS_ARCHIVE_DIR}/`)) {
+      continue;
+    }
     const parts = ticketPathParts(file.path);
     if (parts === null) {
       // `_meta` holds the board's configuration, not tickets — only
@@ -591,6 +644,7 @@ export function assembleBoard(input: AssembleInput): BoardSnapshot {
     defaultWorker: input.defaultWorker,
     pipeline: phases,
     pipelineError: pipelineParse.error,
+    pushRemote: pipelineParse.pushRemote,
     repos: reposParse.repos,
     reposError: reposParse.error,
     columns,

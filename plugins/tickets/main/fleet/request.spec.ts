@@ -75,6 +75,8 @@ function base(over: Partial<Parameters<typeof composeRunRequest>[0]> = {}): Para
     vaultPath: 'V:/tickets',
     workingPhase: null,
     nextPhaseId: 'plan',
+    nextPhaseDir: null,
+    pushRemote: null,
     nextPhaseClaims: false,
     repo: REPO,
     promptText: null,

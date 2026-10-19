@@ -20,6 +20,7 @@ import type {
 } from '../../../shared/plugin-api';
 import {
   nextTicketId,
+  TICKETS_ARCHIVE_DIR,
   type BoardSnapshot,
   type PipelinePhase,
   type TicketCard,
@@ -31,13 +32,19 @@ import {
   orderAfterInsert,
   parseOrderFile,
   patchPipelinePhase,
+  parsePipeline,
   pinsAfterDrop,
+  removeIdFromPins,
   rewriteOrderSection,
 } from './ticket-board';
 import {
   newTicketFileText,
   patchTicketFile,
+  ticketPathParts,
+  ticketSections,
 } from './ticket-files';
+import { listTicketDirs, resolvePhaseDir } from './phase-dirs';
+import { detectDrift, type DriftDetection } from './normalize';
 import { openTerminalAt } from './open-terminal';
 import { TicketsGit, type RepoLocation } from './tickets-git';
 import { createFleetMcpTools } from './mcp-tools';
@@ -169,6 +176,13 @@ class BoardService {
     return this.gitLocations.get(vaultPath) ?? null;
   }
 
+  /** The directories under `tickets/` as they exist on disk (T-0041) —
+   *  what every writer resolves its target directory against. */
+  private async ticketDirs(vault: VaultLike): Promise<string[]> {
+    const abs = this.ctx.vault.resolveAssetPath('tickets', { vaultId: vault.id });
+    return abs === null ? [] : await listTicketDirs(abs);
+  }
+
   /** Snapshot from files — every fetch rebuilds (no stored board state). */
   async snapshot(): Promise<BoardSnapshot> {
     const [vault, vaults] = await Promise.all([
@@ -263,6 +277,104 @@ class BoardService {
     return null;
   }
 
+  /**
+   * The `board` IPC route (T-0041): normalize first — a file move is a
+   * ticket move — then snapshot. Normalization runs enqueued (the same
+   * single-writer queue as every mutation) and snapshots are taken
+   * OUTSIDE it, so this never nests `enqueue` inside `enqueue`.
+   */
+  async refresh(): Promise<BoardSnapshot> {
+    await this.normalizeDrift();
+    return this.snapshot();
+  }
+
+  /**
+   * Stateless drift treatment, derived from the files alone (T-0041,
+   * ADR-0076 later change): every ticket that sits in a phase its
+   * `entered-*` stamps disagree with receives the full board-move
+   * treatment — stamp, Log line, pin cleanup, exactly one commit. A
+   * file dropped into `tickets/archive/` gets the archive treatment.
+   * Idempotent by construction: the treatment makes the file's state
+   * consistent, so the next pass finds nothing (the announce → re-fetch
+   * echo lands on the fixpoint). Per-item try/catch: one broken ticket
+   * never blocks the rest or the board.
+   */
+  private normalizeDrift(): Promise<void> {
+    return this.enqueue(async () => {
+      const vault = await this.detect();
+      if (vault === null) {
+        return;
+      }
+      const pipelineText = await this.readOptional(vault.id, PIPELINE_PATH);
+      if (pipelineText === null) {
+        return;
+      }
+      const { phases, pushRemote } = parsePipeline(pipelineText);
+      const mdFiles = await this.ctx.vault.listMarkdownFiles({ vaultId: vault.id });
+      const paths = mdFiles.filter((p) => p.startsWith('tickets/') && !p.startsWith('tickets/_meta/'));
+      const files: { path: string; text: string }[] = [];
+      for (const p of paths) {
+        const text = await this.ctx.vault.read(p, { vaultId: vault.id }).catch(() => null);
+        if (text !== null) {
+          files.push({ path: p, text });
+        }
+      }
+      for (const drift of detectDrift(files, phases)) {
+        const text = files.find((f) => f.path === drift.path)?.text;
+        if (text === undefined) {
+          continue;
+        }
+        try {
+          await this.treatDrift(vault, drift, text, pushRemote);
+        } catch (error) {
+          this.ctx.log(`normalizing ${drift.id} (${drift.path}) failed: ${messageOf(error)}`, 'warn');
+        }
+      }
+    });
+  }
+
+  /** One drift's full transition treatment. The path never changes —
+   *  only stamps, Log and pins; exactly one commit closes it. */
+  private async treatDrift(
+    vault: VaultLike,
+    drift: DriftDetection,
+    text: string,
+    pushRemote: string | null,
+  ): Promise<void> {
+    const now = new Date();
+    const patched =
+      drift.kind === 'archive'
+        ? patchTicketFile(text, { to: 'archive', from: null, now, actor: OWNER, action: 'archived' })
+        : patchTicketFile(text, {
+            to: drift.phase,
+            // null (no event at all) logs honestly as `unknown -> <phase>`
+            from: drift.from ?? 'unknown',
+            now,
+            actor: OWNER,
+          });
+    await this.ctx.vault.write(drift.path, patched, { vaultId: vault.id });
+
+    const orderText = await this.readOptional(vault.id, ORDER_PATH);
+    const nextOrder = orderText === null ? null : removeIdFromPins(orderText, drift.id);
+    const orderChanged = nextOrder !== null && nextOrder !== orderText;
+    if (orderChanged) {
+      await this.ctx.vault.write(ORDER_PATH, nextOrder as string, { vaultId: vault.id });
+    }
+
+    const message =
+      drift.kind === 'archive'
+        ? `tickets: ${drift.id} archived`
+        : `tickets: ${drift.id} ${drift.from ?? 'unknown'} -> ${drift.phase}`;
+    await this.commit(vault, [drift.path, ...(orderChanged ? [ORDER_PATH] : [])], message);
+    // The optional auto-push (T-0041): warning-level, never a failed move.
+    await this.pushTransition(vault, pushRemote);
+    this.ctx.vault.announceChanges({
+      vaultId: vault.id,
+      changedPaths: [drift.path, ...(orderChanged ? [ORDER_PATH] : [])],
+    });
+    this.announceChanged();
+  }
+
   /** Serialize mutations; failures never block the next one. */
   private enqueue<T>(op: () => Promise<T>): Promise<T> {
     const next = this.queueTail.catch(() => undefined).then(op);
@@ -287,6 +399,30 @@ class BoardService {
     }
   }
 
+  /**
+   * The optional auto-push after a transition commit (T-0041,
+   * pipeline.md `push:`): `git push <remote> HEAD` from the tickets repo
+   * root. A failure is a warning the panel shows — never a failed
+   * transition; the commit is already durable. Null remote = no push.
+   */
+  private async pushTransition(vault: VaultLike, remote: string | null): Promise<string | null> {
+    if (remote === null) {
+      return null;
+    }
+    const location = await this.locate(vault.path);
+    if (location === null) {
+      return null;
+    }
+    try {
+      await this.git.push(location.root, remote);
+      return null;
+    } catch (error) {
+      const text = messageOf(error).split('\n')[0] ?? 'push failed';
+      this.ctx.log(`git push to "${remote}" failed: ${text}`, 'warn');
+      return `git push to "${remote}" failed: ${text}`;
+    }
+  }
+
   createTicket(input: {
     title: string;
     priority: TicketPriority;
@@ -305,7 +441,8 @@ class BoardService {
       const ids = snap.columns.flatMap((c) => c.tickets.map((t) => t.id));
       const id = nextTicketId(ids);
       const firstPhase = snap.pipeline[0]!.id;
-      const path = `tickets/${firstPhase}/${id}.md`;
+      const firstDir = resolvePhaseDir(await this.ticketDirs(vault), 1, firstPhase);
+      const path = `tickets/${firstDir}/${id}.md`;
       const text = newTicketFileText({
         id,
         title: input.title,
@@ -352,7 +489,10 @@ class BoardService {
       if (toPhase === null) {
         return { ok: false, error: `"${input.to}" is not a phase in the pipeline` };
       }
-      if (card.path !== `tickets/${input.from}/${input.id}.md`) {
+      // Prefix-aware path guard (T-0041): the card may sit in `10-inbox`
+      // or `inbox` — the stripped phase id is the identity.
+      const parts = ticketPathParts(card.path);
+      if (parts === null || parts.phase !== input.from || parts.stem !== input.id) {
         return { ok: false, error: `${input.id} sits in an unexpected path (${card.path})` };
       }
 
@@ -373,10 +513,15 @@ class BoardService {
         return { ok: false, error: messageOf(error) };
       }
 
-      const newPath = `tickets/${input.to}/${input.id}.md`;
+      const toDir = resolvePhaseDir(
+        await this.ticketDirs(vault),
+        snap.pipeline.findIndex((p) => p.id === input.to) + 1,
+        input.to,
+      );
+      const newPath = `tickets/${toDir}/${input.id}.md`;
       try {
         const oldAbs = this.ctx.vault.resolveAssetPath(card.path, { vaultId: vault.id });
-        const dirAbs = this.ctx.vault.resolveAssetPath(`tickets/${input.to}`, { vaultId: vault.id });
+        const dirAbs = this.ctx.vault.resolveAssetPath(`tickets/${toDir}`, { vaultId: vault.id });
         const newAbs = this.ctx.vault.resolveAssetPath(newPath, { vaultId: vault.id });
         if (oldAbs === null || dirAbs === null || newAbs === null) {
           return { ok: false, error: 'ticket path escapes the vault' };
@@ -416,13 +561,94 @@ class BoardService {
         commitPaths,
         `tickets: ${input.id} ${input.from} -> ${input.to}`,
       );
+      // The optional auto-push (T-0041): warning-level, never a failed move.
+      const pushWarning = await this.pushTransition(vault, snap.pushRemote);
+      const warnings = [warning, pushWarning].filter((w): w is string => w !== null);
       this.ctx.vault.announceChanges({
         vaultId: vault.id,
         changedPaths: [newPath, ...(orderChanged ? [ORDER_PATH] : [])],
         deletedPaths: [card.path],
       });
       this.announceChanged();
-      return { ok: true, ...(warning === null ? {} : { warning }) };
+      return { ok: true, ...(warnings.length === 0 ? {} : { warning: warnings.join('; ') }) };
+    });
+  }
+
+  /**
+   * Archives a ticket (T-0041): the reserved `tickets/archive/` folder
+   * beside `_meta` — not a column, invisible on the board. The treatment
+   * is exact: Log line `archived`, one commit `tickets: <id> archived`,
+   * pin cleanup; NO `entered-` stamp (the Log marker is what makes it
+   * idempotent and a revive detectable); claim fields ride along.
+   * Reviving is a move back into a phase folder — normalization stamps
+   * it as `archive -> <phase>`. Final deletion is the owner's manual
+   * act inside `archive/`.
+   */
+  archive(input: { id: string }): Promise<MutationResult> {
+    return this.enqueue(async () => {
+      const vault = await this.detect();
+      if (vault === null) {
+        return { ok: false, error: 'no tickets vault detected' };
+      }
+      const snap = await this.snapshot();
+      let card: TicketCard | null = null;
+      for (const column of snap.columns) {
+        const found = column.tickets.find((t) => t.id === input.id);
+        if (found !== undefined) {
+          card = found;
+          break;
+        }
+      }
+      if (card === null) {
+        return { ok: false, error: `${input.id} is not on the board` };
+      }
+      const text = await this.ctx.vault.read(card.path, { vaultId: vault.id });
+      let patched: string;
+      try {
+        patched = patchTicketFile(text, {
+          to: 'archive',
+          from: null,
+          now: new Date(),
+          actor: OWNER,
+          action: 'archived',
+        });
+      } catch (error) {
+        return { ok: false, error: messageOf(error) };
+      }
+      const newPath = `${TICKETS_ARCHIVE_DIR}/${card.id}.md`;
+      try {
+        const oldAbs = this.ctx.vault.resolveAssetPath(card.path, { vaultId: vault.id });
+        const dirAbs = this.ctx.vault.resolveAssetPath(TICKETS_ARCHIVE_DIR, { vaultId: vault.id });
+        const newAbs = this.ctx.vault.resolveAssetPath(newPath, { vaultId: vault.id });
+        if (oldAbs === null || dirAbs === null || newAbs === null) {
+          return { ok: false, error: 'ticket path escapes the vault' };
+        }
+        await fsp.mkdir(dirAbs, { recursive: true });
+        await fsp.rename(oldAbs, newAbs);
+        await this.ctx.vault.write(newPath, patched, { vaultId: vault.id });
+      } catch (error) {
+        return { ok: false, error: `move failed: ${messageOf(error)}` };
+      }
+      const orderText = await this.readOptional(vault.id, ORDER_PATH);
+      const nextOrder = orderText === null ? null : removeIdFromPins(orderText, card.id);
+      const orderChanged = nextOrder !== null && nextOrder !== orderText;
+      if (orderChanged) {
+        await this.ctx.vault.write(ORDER_PATH, nextOrder as string, { vaultId: vault.id });
+      }
+      const warning = await this.commit(
+        vault,
+        [card.path, newPath, ...(orderChanged ? [ORDER_PATH] : [])],
+        `tickets: ${card.id} archived`,
+      );
+      const pushWarning = await this.pushTransition(vault, snap.pushRemote);
+      const warnings = [warning, pushWarning].filter((w): w is string => w !== null);
+      this.ctx.vault.announceChanges({
+        vaultId: vault.id,
+        changedPaths: [newPath, ...(orderChanged ? [ORDER_PATH] : [])],
+        deletedPaths: [card.path],
+      });
+      this.announceChanged();
+      return { ok: true, ...(warnings.length === 0 ? {} : { warning: warnings.join('; ') }) };
     });
   }
 
@@ -586,6 +812,15 @@ class BoardService {
         vaultPath: vault.path,
         workingPhase,
         nextPhaseId,
+        nextPhaseDir:
+          nextPhaseId === null
+            ? null
+            : resolvePhaseDir(
+                await this.ticketDirs(vault),
+                snap.pipeline.findIndex((p) => p.id === nextPhaseId) + 1,
+                nextPhaseId,
+              ),
+        pushRemote: snap.pushRemote,
         nextPhaseClaims,
         repo,
         promptText: prompt,
@@ -802,28 +1037,6 @@ class BoardService {
   }
 }
 
-/** Strips one id from every pin section, in text form. */
-function removeIdFromPins(orderText: string, id: string): string {
-  const { pins } = parseOrderFile(orderText);
-  let touched = false;
-  const cleaned: Record<string, string[]> = {};
-  for (const [section, ids] of Object.entries(pins)) {
-    const kept = ids.filter((x) => x !== id);
-    if (kept.length !== ids.length) {
-      touched = true;
-    }
-    cleaned[section] = kept;
-  }
-  if (!touched) {
-    return orderText;
-  }
-  let text = orderText;
-  for (const [section, ids] of Object.entries(cleaned)) {
-    text = rewriteOrderSection(text, section, ids);
-  }
-  return text;
-}
-
 function messageOf(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
@@ -844,7 +1057,7 @@ const plugin: MainPluginModule = {
     fleet.startPolling();
     const board = new BoardService(ctx, git, defaultWorker, autoPermissionMode, gitPath, fleet);
 
-    ctx.ipc.handle('board', () => board.snapshot());
+    ctx.ipc.handle('board', () => board.refresh());
 
     ctx.ipc.handle('create', async (payload) => {
       const p = payload as { title?: unknown; priority?: unknown; repo?: unknown; description?: unknown };
@@ -941,6 +1154,14 @@ const plugin: MainPluginModule = {
     ctx.ipc.handle('models', async (payload) => {
       const p = payload as { worker?: unknown };
       return listWorkerModels(typeof p.worker === 'string' ? p.worker : defaultWorker);
+    });
+
+    ctx.ipc.handle('archive', async (payload) => {
+      const p = payload as { id?: unknown };
+      if (typeof p.id !== 'string') {
+        return { ok: false, error: 'bad archive payload' };
+      }
+      return board.archive({ id: p.id });
     });
 
     // --- the fleet (M84, ADR-0075) -------------------------------------

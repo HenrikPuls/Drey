@@ -17,11 +17,12 @@ import { hostname } from 'node:os';
 import * as path from 'node:path';
 import { promisify } from 'node:util';
 import { parseOrderFile, rewriteOrderSection } from '../ticket-board';
-import { acceptanceCommands, patchTicketFile } from '../ticket-files';
+import { acceptanceCommands, patchTicketFile, ticketPathParts } from '../ticket-files';
 import { TicketsGit } from '../tickets-git';
 import type { NormalizedEvent, ProviderAdapter, WorkerHandle } from './providers';
 import { killTreeGuarded, processAlive, processStartMs, type ExecFn } from './procs';
 import type { RunInfo, RunRequest, RunState, SteerRung } from './protocol';
+import { prepareWorktree as defaultPrepareWorktree, type PreparedWorktree } from './worktrees';
 
 const execAsync = promisify(nodeExec);
 const execFileAsync = promisify(nodeExecFile);
@@ -76,9 +77,9 @@ export interface RunSupervisorDeps {
   /** Test seam over the gate's shell commands (cwd = the worktree). */
   readonly execShell?: (command: string, cwd: string) => Promise<void>;
   /** Test seam over worktree preparation. */
-  readonly prepareWorktree?: (request: RunRequest, worktreePath: string) => Promise<void>;
+  readonly prepareWorktree?: (request: RunRequest, worktreePath: string) => Promise<PreparedWorktree>;
   /** Test seam over the tickets repo's git (the spec recorder). */
-  readonly ticketsGit?: Pick<TicketsGit, 'run' | 'locate' | 'commitPaths'>;
+  readonly ticketsGit?: Pick<TicketsGit, 'run' | 'locate' | 'commitPaths' | 'push'>;
   /** Run settled (terminal): the orchestrator's slot-freed trigger (M85). */
   readonly onRunSettled?: (info: RunInfo) => void;
   /**
@@ -143,10 +144,10 @@ export function usageSummary(info: Pick<RunInfo, 'tokensIn' | 'tokensOut' | 'cos
 
 export class RunSupervisor {
   private readonly runs = new Map<string, LiveRun>();
-  private readonly git: Pick<TicketsGit, 'run' | 'locate' | 'commitPaths'>;
+  private readonly git: Pick<TicketsGit, 'run' | 'locate' | 'commitPaths' | 'push'>;
   private readonly now: () => Date;
   private readonly exec: ExecFn;
-  private readonly prepareWorktree: (request: RunRequest, worktreePath: string) => Promise<void>;
+  private readonly prepareWorktree: (request: RunRequest, worktreePath: string) => Promise<PreparedWorktree>;
 
   constructor(private readonly deps: RunSupervisorDeps) {
     this.git = deps.ticketsGit ?? new TicketsGit(() => deps.git);
@@ -154,54 +155,7 @@ export class RunSupervisor {
     this.exec = deps.exec ?? probeExec(this.deps.root);
     this.prepareWorktree =
       deps.prepareWorktree ??
-      (async (request, worktreePath) => {
-        await fsp.mkdir(path.dirname(worktreePath), { recursive: true });
-        // The branch usually exists (created when the ticket was planned);
-        // a missing branch is created from the repo's base ref.
-        const hasBranch = await this.git
-          .run(request.repoPath, ['rev-parse', '--verify', request.branch])
-          .then(() => true)
-          .catch(() => false);
-        const args = hasBranch
-          ? ['worktree', 'add', worktreePath, request.branch]
-          : ['worktree', 'add', '-b', request.branch, worktreePath, request.baseRef ?? 'HEAD'];
-        try {
-          await this.git.run(request.repoPath, args);
-        } catch (error) {
-          // A settled run's worktree is a valid home for a re-run: reuse
-          // it when git has it registered for the same branch; otherwise
-          // surface git's error (T-0007 review: twenty silent start
-          // failures against an existing worktree).
-          if (!(await this.isRegisteredWorktree(request.repoPath, worktreePath, request.branch))) {
-            throw error;
-          }
-        }
-      });
-  }
-
-  /** True when `worktreePath` is a registered worktree checked out on `branch`. */
-  private async isRegisteredWorktree(repo: string, worktreePath: string, branch: string): Promise<boolean> {
-    const out = await this.git.run(repo, ['worktree', 'list', '--porcelain']).catch(() => '');
-    const normalize = (p: string): string => p.replace(/\\/g, '/').replace(/\/+$/, '').toLowerCase();
-    const wanted = normalize(worktreePath);
-    const lines = out.split(/\r?\n/);
-    for (let i = 0; i < lines.length; i++) {
-      if (!lines[i]!.startsWith('worktree ')) {
-        continue;
-      }
-      if (normalize(lines[i]!.slice('worktree '.length).trim()) !== wanted) {
-        continue;
-      }
-      for (let j = i + 1; j < lines.length && lines[j] !== ''; j++) {
-        if (lines[j]!.startsWith('branch ')) {
-          if (lines[j]!.slice('branch '.length).trim() === `refs/heads/${branch}`) {
-            return true;
-          }
-          break;
-        }
-      }
-    }
-    return false;
+      ((request, worktreePath) => defaultPrepareWorktree(this.git, request, worktreePath, this.now));
   }
 
   /**
@@ -436,9 +390,10 @@ export class RunSupervisor {
       `${request.repoPath.split(/[\\/]/).at(-1) ?? 'repo'}-${request.ticketId}`,
     );
 
+    let prepared: PreparedWorktree;
     try {
       await fsp.mkdir(dir, { recursive: true });
-      await this.prepareWorktree(request, worktreePath);
+      prepared = await this.prepareWorktree(request, worktreePath);
     } catch (error) {
       return { ok: false, error: `worktree failed: ${messageOf(error)}` };
     }
@@ -463,6 +418,7 @@ export class RunSupervisor {
       lastSteerRung: null,
       worktreePath,
       branch: request.branch,
+      worktree: prepared.outcome,
       gateFailure: null,
     };
     const run: LiveRun = {
@@ -479,9 +435,15 @@ export class RunSupervisor {
       ...(reopened ? { reopened: true } : {}),
     };
     this.runs.set(id, run);
+    const openNote = (text: string): string => `${JSON.stringify({ ts: this.stamp(), kind: 'note', text })}\n`;
     await fsp.writeFile(
       path.join(dir, 'stream.jsonl'),
-      `${JSON.stringify({ ts: this.stamp(), kind: 'note', text: `run ${id} for ${request.ticketId} on ${request.branch}` })}\n`,
+      openNote(`run ${id} for ${request.ticketId} on ${request.branch} — worktree ${prepared.outcome}`) +
+        (prepared.outcome === 'moved-aside'
+          ? openNote(
+              `stale dirty worktree moved aside to ${prepared.movedTo} — kept, not deleted; earlier session context is invalid`,
+            )
+          : ''),
       'utf8',
     );
 
@@ -519,7 +481,7 @@ export class RunSupervisor {
         from: null,
         now: this.now(),
         actor: this.agentActor(),
-        action: `run ${id} started (${request.provider}${request.model !== null ? `, ${request.model}` : ''})`,
+        action: `run ${id} started (${request.provider}${request.model !== null ? `, ${request.model}` : ''}) — worktree ${prepared.outcome}`,
         ...(request.recordWorker !== undefined && request.recordWorker !== '' ? { setWorker: request.recordWorker } : {}),
         ...(handle.pid !== null
           ? { run: { pid: handle.pid, 'started-at': this.stamp(), stream: id } }
@@ -784,7 +746,10 @@ export class RunSupervisor {
     if (!/^T-\d{4,}$/.test(request.ticketId)) {
       failures.push(`"${request.ticketId}" is not a ticket id`);
     }
-    if (request.ticketRelPath !== `tickets/${request.phase}/${request.ticketId}.md`) {
+    // Prefix-aware (T-0041): `tickets/30-plan/…` and `tickets/plan/…` both
+    // match the phase `plan` — the stripped id is the identity.
+    const parts = ticketPathParts(request.ticketRelPath);
+    if (parts === null || parts.phase !== request.phase || parts.stem !== request.ticketId) {
       failures.push(`the ticket path does not match id and phase (${request.ticketRelPath})`);
     }
     if (request.instruction.trim() === '') {
@@ -990,7 +955,10 @@ export class RunSupervisor {
   private async moveTicketOnSuccess(run: LiveRun, nextPhase: string): Promise<{ ok: true } | { ok: false; error: string }> {
     const request = run.request;
     const oldRel = run.currentRelPath;
-    const newRel = `tickets/${nextPhase}/${request.ticketId}.md`;
+    // The resolved (numbered) target directory (T-0041); records stored
+    // before it carry no nextPhaseDir — the bare phase id is the fallback.
+    const nextDir = request.nextPhaseDir ?? nextPhase;
+    const newRel = `tickets/${nextDir}/${request.ticketId}.md`;
     try {
       const abs = (rel: string): string => path.join(request.ticketsVaultPath, rel);
       const text = await fsp.readFile(abs(oldRel), 'utf8');
@@ -1019,6 +987,15 @@ export class RunSupervisor {
           repoRel,
           `tickets: ${request.ticketId} ${run.currentPhase} -> ${nextPhase} (fleet)`,
         );
+        // The optional auto-push (T-0041): a failed push is a log line,
+        // never a failed transition — the commit is already durable.
+        if (request.pushRemote !== null) {
+          try {
+            await this.git.push(location.root, request.pushRemote);
+          } catch (error) {
+            this.deps.log(`push of the transition to "${request.pushRemote}" failed — ${messageOf(error)}`);
+          }
+        }
       }
       run.currentRelPath = newRel;
       run.currentPhase = nextPhase;

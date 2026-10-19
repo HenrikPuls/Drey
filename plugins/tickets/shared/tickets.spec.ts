@@ -7,6 +7,8 @@ import {
   nextTicketId,
   openTicketCount,
   spanWords,
+  phaseDirectoryName,
+  stripPhasePrefix,
   ticketOfBranch,
   timeOnBoardMs,
   type BoardSnapshot,
@@ -19,6 +21,24 @@ describe('branch rule', () => {
     expect(ticketOfBranch('t/T-0042')).toBe('T-0042');
     expect(ticketOfBranch('feature/T-0042')).toBeNull();
     expect(ticketOfBranch('t/nope')).toBeNull();
+  });
+});
+
+describe('numbered phase folders (T-0041)', () => {
+  it('stripPhasePrefix removes a leading number dash, tolerates the rest', () => {
+    expect(stripPhasePrefix('10-inbox')).toBe('inbox');
+    expect(stripPhasePrefix('35-qa')).toBe('qa');
+    expect(stripPhasePrefix('100-done')).toBe('done');
+    expect(stripPhasePrefix('inbox')).toBe('inbox');
+    expect(stripPhasePrefix('_meta')).toBe('_meta');
+    expect(stripPhasePrefix('archive')).toBe('archive');
+  });
+
+  it('phaseDirectoryName derives the pipeline position × 10, two digits', () => {
+    expect(phaseDirectoryName(1, 'inbox')).toBe('10-inbox');
+    expect(phaseDirectoryName(4, 'plan-review')).toBe('40-plan-review');
+    expect(phaseDirectoryName(8, 'done')).toBe('80-done');
+    expect(phaseDirectoryName(10, 'extra')).toBe('100-extra');
   });
 });
 
