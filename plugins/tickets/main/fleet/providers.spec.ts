@@ -93,6 +93,30 @@ describe('the claude-code adapter', () => {
     expect(result?.costUsd).toBe(0.12);
   });
 
+  it('writes thinking, replies and tool calls into the transcript', () => {
+    const proc = fakeProcess();
+    const { events, start } = collect();
+    claudeCodeAdapter(spawnOf(proc)).spawn(start);
+    proc.stdout(JSON.stringify({
+      type: 'assistant',
+      message: {
+        usage: { input_tokens: 10, cache_read_input_tokens: 5 },
+        content: [
+          { type: 'thinking', thinking: 'Look at the file first.' },
+          { type: 'text', text: 'Reading it now.' },
+          { type: 'tool_use', name: 'Read', input: { file_path: 'src/a.ts' } },
+        ],
+      },
+    }));
+    expect(events.map((e) => [e.kind, e.text ?? ''])).toEqual([
+      ['note', 'thinking › Look at the file first.'],
+      ['text', 'Reading it now.'],
+      ['note', 'Read src/a.ts'],
+      ['usage', ''],
+    ]);
+    expect(events.at(-1)?.contextTokens).toBe(15);
+  });
+
   it('steer writes a user message into the held stdin (the injection rung)', async () => {
     const proc = fakeProcess();
     const { start } = collect();

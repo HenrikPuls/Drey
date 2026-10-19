@@ -24,22 +24,39 @@ const parseLine = (line: string): StreamEvent | null => {
   }
 };
 
-/** Collapses a note into one bullet line (no backticks, no line breaks). */
-const noteLine = (text: string): string => `- \`${text.replace(/`/g, "'").replace(/\s+/g, ' ').trim()}\``;
+/** Run-setup notes the worker adapters write (not a tool call). */
+const SETUP_NOTE = /^(run R-|opencode serve|re-attached)/i;
+
+const THINK_SHOWN = 280;
+
+/** Collapses a note into one line (no backticks, no line breaks). */
+const flat = (text: string): string => text.replace(/`/g, "'").replace(/\s+/g, ' ').trim();
+
+/** `read src/a.ts` becomes `● **Read** \`src/a.ts\`` — a tool call as Claude Code shows it. */
+const toolLine = (text: string): string => {
+  const [verb = '', ...rest] = flat(text).split(' ');
+  const name = verb.charAt(0).toUpperCase() + verb.slice(1);
+  const target = rest.join(' ');
+  return target === '' ? `● **${name}**` : `● **${name}** \`${target}\``;
+};
 
 /**
- * Markdown for the stream: the worker's replies as paragraphs, its tool
- * calls and the run's notes as bullet runs, the owner's prompts as quotes,
- * the final result and errors as bold lead-ins; usage events are numbers
- * the status line carries, not transcript.
+ * Markdown for the stream, laid out like Claude Code's own transcript: the
+ * worker's replies as paragraphs, every tool call one `● Tool target` step
+ * (a run of steps stays together), thinking as a dim one-line quote, run
+ * setup folded into a single muted line, the owner's prompts as `›`
+ * quotes, and the closing result / errors set off by a rule. The result
+ * body is dropped when the last reply already said it; usage events are
+ * numbers the status line carries, not transcript.
  */
 export function transcriptMarkdown(ndjson: string): string {
   const blocks: string[] = [];
-  let bullets: string[] = [];
+  let steps: string[] = [];
+  let lastText = '';
   const flush = (): void => {
-    if (bullets.length > 0) {
-      blocks.push(bullets.join('\n'));
-      bullets = [];
+    if (steps.length > 0) {
+      blocks.push(steps.join('  \n'));
+      steps = [];
     }
   };
   for (const raw of ndjson.split('\n')) {
@@ -56,25 +73,31 @@ export function transcriptMarkdown(ndjson: string): string {
       case 'text':
         flush();
         blocks.push(text);
+        lastText = text;
         break;
       case 'note':
         if (text.startsWith(THINK_PREFIX)) {
           flush();
-          blocks.push(`> _${text.slice(THINK_PREFIX.length).replace(/\s+/g, ' ')}_`);
+          const thought = flat(text.slice(THINK_PREFIX.length));
+          const shown = thought.length > THINK_SHOWN ? `${thought.slice(0, THINK_SHOWN).trimEnd()}…` : thought;
+          blocks.push(`> _∴ Thinking — ${shown}_`);
         } else if (text.startsWith(YOU_PREFIX)) {
           flush();
-          blocks.push(`> **You** — ${text.slice(YOU_PREFIX.length).replace(/\n/g, '\n> ')}`);
+          blocks.push(`> **›** ${text.slice(YOU_PREFIX.length).replace(/\n/g, '\n> ')}`);
+        } else if (SETUP_NOTE.test(text)) {
+          flush();
+          blocks.push(`<sub>${flat(text)}</sub>`);
         } else {
-          bullets.push(noteLine(text));
+          steps.push(toolLine(text));
         }
         break;
       case 'result':
         flush();
-        blocks.push(`**Turn finished**\n\n${text}`);
+        blocks.push(text === lastText ? '---\n\n**✓ Turn finished**' : `---\n\n**✓ Turn finished**\n\n${text}`);
         break;
       case 'error':
         flush();
-        blocks.push(`**Error** — ${text}`);
+        blocks.push(`**✗ Error** — ${text}`);
         break;
       default:
         break;

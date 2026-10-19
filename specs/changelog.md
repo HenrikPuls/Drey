@@ -20,6 +20,23 @@ recorded as an explicit decision. The parity checklist lives in
 
 ## Recent milestones
 
+### req-47 — the takeover transcript reads like Claude Code (owner request, outside the list)
+
+**Not yet manually verified by the owner.**
+
+- Tool calls are `● Tool target` steps (a run stays together), thinking is
+  a one-line `∴ Thinking —` quote cut at 280 characters, run setup folds
+  into one muted line, the owner's prompts are `›` quotes, and the turn's
+  end is a rule plus `✓ Turn finished` (the result body is dropped when the
+  last reply already said it). Specs: `transcript.spec.ts`.
+- **Claude Code workers now fill the transcript.** The `claude-code`
+  adapter only emitted usage events, so its takeover tab stayed empty; it
+  now writes thinking, replies and every tool call like the opencode
+  adapter. Spec: `providers.spec.ts`.
+- **Seeded prompts share a "How to work" block** (batched reads, dedicated
+  tools, smallest change, verify before claiming, short factual
+  hand-off). Only new boards seed it; edited vault prompts are untouched.
+
 ### req-46 — the Tickets settings page: column cards, a model picker and editable prompts (owner request, outside the list)
 
 **Not yet manually verified by the owner.**

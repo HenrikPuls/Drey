@@ -11,5 +11,8 @@ describe('DEFAULT_PROMPTS', () => {
       expect(text.endsWith('\n')).toBe(true);
     }
     expect(DEFAULT_PROMPTS['plan-default']).toContain('`## Plan`');
+    for (const text of Object.values(DEFAULT_PROMPTS)) {
+      expect(text).toContain('How to work:');
+    }
   });
 });

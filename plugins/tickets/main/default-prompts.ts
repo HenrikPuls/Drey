@@ -5,7 +5,28 @@
  * Editing the files in the vault is the owner's; these are only the seed.
  */
 
-export const DEFAULT_PROMPTS: Readonly<Record<string, string>> = {
+/**
+ * How every pipeline worker works, appended to each seeded prompt: the
+ * habits that make an agent loop fast and honest (parallel reads, the
+ * dedicated tools, no unasked extras, a short factual hand-off).
+ */
+const WORKING_STYLE = `
+How to work:
+- Batch independent reads and searches into one step instead of one at a
+  time. Use the dedicated read, search and edit tools over shell
+  pipelines; keep the shell for running commands.
+- Read a file before you change it. Make the smallest change that does
+  the job: no extra features, refactors, comments or abstractions the
+  ticket did not ask for.
+- Verify before you claim: run the check and read its output. Report a
+  failure with its output, and say plainly what you skipped or could not
+  verify. Never describe work as done that you did not see pass.
+- Keep text between steps to one short sentence. Your Log entry and final
+  message are for a reader who saw none of this: lead with the outcome,
+  then what matters, in plain prose without filler.
+`;
+
+const BASE_PROMPTS: Readonly<Record<string, string>> = {
   'plan-default': `You are the planning step of the owner's ticket pipeline. Produce or
 refine the ticket's plan, in the ticket file itself, on the branch.
 Plan only: do not implement, and do not change files other than the
@@ -120,3 +141,7 @@ adopt them.
 - Commit the ticket-file change on the branch.
 `,
 };
+
+export const DEFAULT_PROMPTS: Readonly<Record<string, string>> = Object.fromEntries(
+  Object.entries(BASE_PROMPTS).map(([ref, text]) => [ref, `${text}${WORKING_STYLE}`]),
+);

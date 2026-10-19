@@ -173,7 +173,7 @@ export function claudeCodeAdapter(spawnFn: SpawnFn, now: NowFn = (): Date => new
             session_id?: string;
             message?: {
               usage?: ClaudeUsage;
-              content?: ReadonlyArray<{ type?: string; name?: string; text?: string; input?: Record<string, unknown> }>;
+              content?: ReadonlyArray<{ type?: string; name?: string; text?: string; thinking?: string; input?: Record<string, unknown> }>;
             };
             usage?: ClaudeUsage;
             total_cost_usd?: number;
@@ -198,13 +198,20 @@ export function claudeCodeAdapter(spawnFn: SpawnFn, now: NowFn = (): Date => new
                 ? undefined
                 : (usage.input_tokens ?? 0) + (usage.cache_read_input_tokens ?? 0) + (usage.cache_creation_input_tokens ?? 0);
             const parts = event.message.content ?? [];
-            const tool = parts.find((p) => p.type === 'tool_use');
-            const activity =
-              tool !== undefined
-                ? activityLine(
-                    `${tool.name ?? 'tool'} ${String(tool.input?.['file_path'] ?? tool.input?.['command'] ?? tool.input?.['pattern'] ?? '')}`,
-                  )
-                : activityLine(parts.find((p) => p.type === 'text')?.text ?? '');
+            // The transcript the takeover tab shows: thinking, replies and
+            // every tool call, as the opencode adapter writes them.
+            let activity = '';
+            for (const part of parts) {
+              if (part.type === 'thinking' && (part.thinking ?? '').trim() !== '') {
+                start.onEvent({ ts: nowIso(now), kind: 'note', text: `${THINK_PREFIX}${(part.thinking ?? '').trim().slice(0, 600)}` });
+              } else if (part.type === 'text' && (part.text ?? '').trim() !== '') {
+                activity = activityLine(part.text ?? '');
+                start.onEvent({ ts: nowIso(now), kind: 'text', text: (part.text ?? '').slice(0, 8_000) });
+              } else if (part.type === 'tool_use') {
+                activity = toolActivity(part.name, part.input);
+                start.onEvent({ ts: nowIso(now), kind: 'note', text: activity });
+              }
+            }
             if (contextTokens !== undefined || activity !== '') {
               start.onEvent({
                 ts: nowIso(now),
