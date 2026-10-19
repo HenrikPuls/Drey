@@ -437,6 +437,7 @@ export function parseRepos(text: string | null): ReposParse {
       policy: typeof map['policy'] === 'string' && map['policy'].trim() !== '' ? map['policy'] : null,
       path: typeof map['path'] === 'string' && map['path'].trim() !== '' ? map['path'].trim() : null,
       worker: typeof map['worker'] === 'string' && map['worker'].trim() !== '' ? map['worker'].trim() : null,
+      worktrees: typeof map['worktrees'] === 'string' && map['worktrees'].trim() !== '' ? map['worktrees'].trim() : null,
     });
   }
   return { repos, error: null };

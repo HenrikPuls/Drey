@@ -118,6 +118,7 @@ function request(overrides: Partial<RunRequest> = {}): RunRequest {
     ticketRelPath: 'tickets/plan/T-0001.md',
     phase: 'plan',
     repoPath: 'W:/kt',
+    worktreePath: 'W:/fleet-worktrees/T-0001',
     branch: 't/T-0001',
     baseRef: null,
     provider: 'opencode',
@@ -711,8 +712,10 @@ describe('RunSupervisor', () => {
 
   it('reuses an existing registered worktree for a re-run', async () => {
     const { sup, git } = supervisor({ prepareWorktree: undefined });
+    // The path comes from the request (T-0044) — the runner never derives one.
+    const wt = request().worktreePath.replace(/\\/g, '/');
     git.worktreeList = [
-      `worktree ${path.join(fleetRoot, 'worktrees', 'kt-T-0001').replace(/\\/g, '/')}`,
+      `worktree ${wt}`,
       'branch refs/heads/t/T-0001',
       '',
       `worktree ${path.join(fleetRoot, 'worktrees', 'kt-other')}`,
@@ -729,8 +732,9 @@ describe('RunSupervisor', () => {
 
   it('refuses a start whose worktree path is registered for another branch', async () => {
     const { sup, git } = supervisor({ prepareWorktree: undefined });
+    const wt = request().worktreePath.replace(/\\/g, '/');
     git.worktreeList = [
-      `worktree ${path.join(fleetRoot, 'worktrees', 'kt-T-0001').replace(/\\/g, '/')}`,
+      `worktree ${wt}`,
       'branch refs/heads/other',
       '',
     ].join('\n');
