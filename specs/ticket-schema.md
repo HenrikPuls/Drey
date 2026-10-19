@@ -161,8 +161,11 @@ Prose for humans. The board follows this file on refresh.
 ```
 
 - `id`: `[a-z][a-z0-9-]*`, unique, = the directory name. The first
-  phase is the capture target; the last is terminal (only humans move
-  tickets into it).
+  phase is the capture target; the last is terminal — nothing moves
+  out of it. Humans always may move tickets into it, and so may the
+  machine from an agent-driven column whose next phase it is (owner
+  ruling 2026-10-19: the commit column's agent pushes the work onto
+  the integration branch, then the ticket goes `commit -> done`).
 - `title`: board column header.
 - `wip`: optional integer. Over-limit shows red on the board
   (`4/3`); it warns, it does not block a human (and it never gates the
