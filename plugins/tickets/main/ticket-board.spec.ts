@@ -31,6 +31,22 @@ describe('parsePipeline', () => {
     expect(phases[0]!.title).toBe('Inbox');
   });
 
+  it('reads the optional push: remote (T-0041)', () => {
+    const withPush = PIPELINE.replace(/^---/, "---\npush: origin");
+    const parsed = parsePipeline(withPush);
+    expect(parsed.pushRemote).toBe('origin');
+    expect(parsed.issues).toEqual([]);
+    expect(parsePipeline(PIPELINE).pushRemote).toBeNull();
+  });
+
+  it('a non-string push: degrades to null with a noise finding', () => {
+    const parsed = parsePipeline(PIPELINE.replace(/^---/, '---\npush: [upstream, 42]'));
+    expect(parsed.pushRemote).toBeNull();
+    expect(parsed.issues).toHaveLength(1);
+    expect(parsed.issues[0]!.level).toBe('noise');
+    expect(parsed.issues[0]!.message).toContain('push');
+  });
+
   it('refuses empty lists, duplicate ids and bad id grammar', () => {
     expect(parsePipeline('---\nphases: []\n---\n').error).toContain('non-empty');
     const dup = '---\nphases:\n  - { id: inbox }\n  - { id: inbox }\n---\n';
@@ -200,6 +216,32 @@ describe('assembleBoard', () => {
     expect(snap.columns[0]!.tickets.map((t) => t.id)).toEqual(['T-0002']);
     expect(snap.columns[2]!.tickets.map((t) => t.id)).toEqual(['T-0001']);
     expect(snap.issues).toEqual([]);
+  });
+
+  it('folds numbered phase directories into the stripped phase columns (T-0041)', () => {
+    const snap = assembleBoard(baseInput([
+      { path: 'tickets/10-inbox/T-0002.md', text: ticketText('T-0002', 'Second') },
+      { path: 'tickets/35-qa/T-0001.md', text: ticketText('T-0001', 'Gap column') },
+      { path: 'tickets/inbox/T-0003.md', text: ticketText('T-0003', 'Unprefixed') },
+    ]));
+    // Configured columns first (pipeline order), numbered and unprefixed
+    // inbox files folded into ONE inbox column.
+    expect(snap.columns.slice(0, 4).map((c) => c.phase.id)).toEqual(['inbox', 'prioritized', 'build', 'done']);
+    expect(snap.columns[0]!.tickets.map((t) => t.id)).toEqual(['T-0002', 'T-0003']);
+    // 35-qa is not a pipeline phase here: it lands in the trailing unknown
+    // column under its STRIPPED id (reader-forgiving, never renumbered).
+    const unknown = snap.columns[snap.columns.length - 1]!;
+    expect(unknown.unknown).toBe(true);
+    expect(unknown.phase.id).toBe('qa');
+    // The card keeps its real on-disk path.
+    expect(snap.columns[0]!.tickets[0]!.path).toBe('tickets/10-inbox/T-0002.md');
+  });
+
+  it('threads the pipeline push: remote into the snapshot (T-0041)', () => {
+    const withPush = PIPELINE.replace(/^---/, '---\npush: origin');
+    const snap = assembleBoard({ ...baseInput([]), pipelineText: withPush });
+    expect(snap.pushRemote).toBe('origin');
+    expect(assembleBoard(baseInput([])).pushRemote).toBeNull();
   });
 
   it('carries an unknown phase directory as a trailing unknown column', () => {

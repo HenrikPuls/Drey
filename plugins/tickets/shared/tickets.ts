@@ -229,6 +229,8 @@ export interface BoardSnapshot {
   readonly defaultWorker: string;
   readonly pipeline: readonly PipelinePhase[];
   readonly pipelineError: string | null;
+  /** pipeline.md's optional `push:` remote (T-0041); null = never push. */
+  readonly pushRemote: string | null;
   readonly repos: readonly RepoRef[];
   readonly reposError: string | null;
   readonly columns: readonly BoardColumn[];
