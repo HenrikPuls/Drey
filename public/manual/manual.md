@@ -757,7 +757,7 @@ failure parks the reason in the Log and leaves the ticket where it is.
 
 Runs survive closing Drey — the runner is its own small process. You
 can reach it from a terminal, too: its address and token live in
-`<user data>/fleet/runner.json`.
+`<user data>/plugins/fleet/runner.json`.
 
 ---
 
