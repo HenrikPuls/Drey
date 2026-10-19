@@ -59,8 +59,8 @@ owner's verification round for 1–81 closed 2026-10-17: every "not yet
 manually verified" marker below those entries is cleared, the bug-11
 fix included. Milestone
 ids are assigned when work starts — check `changelog.md` for the
-highest used (latest: milestone 85; latest requirement id: req-51 (fleet workers survive a
-Drey rebuild),
+highest used (latest: milestone 85; latest requirement id: req-53 (a resumed
+OpenCode session counts only its own run),
 the update check's positive answer is inline text — req-43 and req-44
 were owner requests outside the list, shipped and owner-verified in
 the same step).
@@ -236,6 +236,11 @@ rest are kept so they still match `docs/11`.
 
 ### Follow-ups of shipped milestones (none committed)
 
+- **req-53 (fleet usage):** the second-opinion worker (M85 quality rungs,
+  flagged off) runs in a fresh session under the same run, and its usage
+  events replace the first worker's counts instead of adding to them —
+  the run then under-reports. Carry the first worker's totals forward
+  when the second opinion starts.
 - **req-50 (Tickets settings):** a `pipeline.md` (or any tickets meta
   file) with CRLF line endings does not parse — `splitFrontmatter` finds
   no fence — so a fresh clone of the tickets repo under

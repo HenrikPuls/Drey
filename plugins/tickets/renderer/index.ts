@@ -1105,6 +1105,9 @@ function workerLanesNode(api: DreyPluginApi, column: BoardColumn): HTMLElement |
         el('span', undefined, `in ${formatTokens(run.tokensIn)}`),
         el('span', undefined, `out ${formatTokens(run.tokensOut)}`),
       );
+      if ((run.cacheReadTokens ?? 0) > 0) {
+        tokens.append(el('span', undefined, `cached ${formatTokens(run.cacheReadTokens ?? 0)}`));
+      }
       if (run.costUsd !== null && run.costUsd > 0) {
         tokens.append(el('span', undefined, `$${run.costUsd.toFixed(2)}`));
       }
@@ -1520,7 +1523,7 @@ function mountTakeover(api: DreyPluginApi, host: HTMLElement, runId: string): ()
         : [
             status !== null && (active || detached) ? status.label : '',
             fill === null ? '' : `context ${Math.round(fill * 100)}%`,
-            `in ${formatTokens(run.tokensIn)} · out ${formatTokens(run.tokensOut)}`,
+            `in ${formatTokens(run.tokensIn)}${(run.cacheReadTokens ?? 0) > 0 ? ` (${formatTokens(run.cacheReadTokens ?? 0)} cached)` : ''} · out ${formatTokens(run.tokensOut)}`,
           ]
             .filter((part) => part !== '')
             .join(' · ');

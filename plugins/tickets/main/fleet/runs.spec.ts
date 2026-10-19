@@ -752,6 +752,13 @@ describe('usageSummary — what the ticket Log says a run used', () => {
     expect(usageSummary({ tokensIn: 1_000, tokensOut: 10, costUsd: 0.124 })).toBe(' — 1k in / 10 out · $0.12');
     expect(usageSummary({ tokensIn: 0, tokensOut: 0, costUsd: null })).toBe('');
   });
+
+  it('names the cached part of the input when the provider reported one (req-53)', () => {
+    expect(usageSummary({ tokensIn: 6_565_245, tokensOut: 12_779, cacheReadTokens: 6_200_000, costUsd: 0 })).toBe(
+      ' — 6.6M in (6.2M cached) / 13k out',
+    );
+    expect(usageSummary({ tokensIn: 1_000, tokensOut: 10, cacheReadTokens: 0, costUsd: null })).toBe(' — 1k in / 10 out');
+  });
 });
 
 describe('probeExec — the process probes keep their arguments apart', () => {
@@ -889,6 +896,29 @@ describe('RunSupervisor handover', () => {
     second.adapter.handles[0]!.result();
     second.adapter.handles[0]!.fail(0);
     await vi.waitFor(() => expect(second.sup.get(id)?.state).toBe('done'));
+  });
+
+  it("keeps a resumed session's usage base across the handover, so the run's counts go on from its own (req-53)", async () => {
+    const first = claudeSupervisor();
+    const id = await startedClaudeRun(first.sup, first.adapter);
+    const base = { tokensIn: 10_000, tokensOut: 50, cacheReadTokens: 9_000, costUsd: null };
+    first.adapter.starts[0]!.onUsageBase!(base);
+    await vi.waitFor(async () => expect(await fsp.readFile(path.join(fleetRoot, 'runs', id, 'run.json'), 'utf8')).toContain('usageBase'));
+    await first.sup.handOver();
+
+    const second = claudeSupervisor();
+    await second.sup.adopt();
+    expect(second.adapter.starts[0]!.usageBase).toEqual(base);
+  });
+
+  it('a run without a recorded base resumes from zero — its own session is counted whole', async () => {
+    const first = claudeSupervisor();
+    const id = await startedClaudeRun(first.sup, first.adapter);
+    await first.sup.handOver();
+    const second = claudeSupervisor();
+    await second.sup.adopt();
+    expect(second.sup.get(id)?.state).toBe('running');
+    expect(second.adapter.starts[0]!.usageBase).toEqual({ tokensIn: 0, tokensOut: 0, cacheReadTokens: 0, costUsd: null });
   });
 
   it('a held run comes back held, its worker told to wait for the owner', async () => {

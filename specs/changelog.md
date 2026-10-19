@@ -20,6 +20,39 @@ recorded as an explicit decision. The parity checklist lives in
 
 ## Recent milestones
 
+### req-53 — Fleet: a resumed OpenCode session counts only its own run; cache reads recorded apart (owner request, outside the list)
+
+**Not yet manually verified by the owner.** An audit of the fleet's run
+history (2026-10-19) found a resumed run starting at the session's
+lifetime totals: OpenCode keeps cumulative tokens per session, and the
+adapter reported them as the run's own. One resumed T-0041 build showed
+18.5M input tokens of which 17.9M belonged to the run before it — the
+token budget (`tokensUsed`), the board's lanes and the ticket Log all
+counted that twice.
+
+- **Usage base.** On a resume the OpenCode adapter reads the session's
+  totals *before* its first prompt and reports only what grows past them
+  (`usageSince`). The base is reported through `onUsageBase` and kept in
+  `run.json` (`usageBase`, beside the record, not in the board's
+  `RunInfo`), so a re-attach or a resume in place after a runner handover
+  (req-51) goes on subtracting the same base instead of restarting the
+  count. An unreadable base is zero, said in the stream. A fresh session
+  starts at zero as before.
+- **Cache reads apart.** `cacheReadTokens` rides the usage and result
+  events (OpenCode `tokens.cache.read`, Claude Code
+  `cache_read_input_tokens`) and the run record. `tokensIn` keeps
+  counting them (the budget is unchanged); the ticket Log says
+  `6.6M in (6.2M cached) / 13k out`, the worker lane adds `cached …`, the
+  takeover tab's stats the same.
+- Specs: `providers.spec.ts` (resume subtracts the pre-prompt totals, a
+  given base is used as is, cache reads on both adapters),
+  `runs.spec.ts` (the base survives a handover; none recorded = zero;
+  the Log names the cached part).
+
+Not covered: the second-opinion worker (M85 quality rungs, flagged off)
+starts a fresh session whose counts replace the first worker's in the
+same run — a roadmap follow-up.
+
 ### req-52 — Test splitting: scoped day-to-day runs, full gate at release (owner request, outside the list)
 
 The two unit suites grew past 240

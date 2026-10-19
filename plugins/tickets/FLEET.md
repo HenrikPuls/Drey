@@ -84,7 +84,10 @@ Diagnose read-only first; only stop/steer/switch on the owner's ask.
    `build`).
 2. `GET /health` — alive, how many live runs, which build.
 3. `GET /status` — the runs: id, ticketId, provider, **state**, pid,
-   tokensIn/Out, costUsd, sessionRef, worktreePath, gateFailure. A run id
+   tokensIn/Out (`tokensIn` counts cache reads; `cacheReadTokens` is
+   that cached part, req-53 — and a resumed session counts only this
+   run, its earlier spend is `usageBase` in `run.json`), costUsd,
+   sessionRef, worktreePath, gateFailure. A run id
    can appear **twice**: at boot every provider supervisor adopts every
    stored record from `runs/`, so boot-adopted runs land in both lists —
    dedupe by id when summarizing.

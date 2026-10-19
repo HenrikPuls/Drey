@@ -89,6 +89,7 @@ describe('the claude-code adapter', () => {
     expect(sessions).toEqual(['ses_1']);
     const result = events.find((e) => e.kind === 'result');
     expect(result?.tokensIn).toBe(150);
+    expect(result?.cacheReadTokens).toBe(50);
     expect(result?.tokensOut).toBe(30);
     expect(result?.costUsd).toBe(0.12);
   });
@@ -284,6 +285,7 @@ describe('the opencode adapter', () => {
     await vi.advanceTimersByTimeAsync(2_500);
     const usage = events.find((e) => e.kind === 'usage' && e.tokensIn !== undefined);
     expect(usage?.tokensIn).toBe(14);
+    expect(usage?.cacheReadTokens).toBe(4);
     expect(usage?.tokensOut).toBe(5);
     expect(usage?.costUsd).toBe(0.02);
 
@@ -525,6 +527,73 @@ describe('the opencode adapter', () => {
     await stopping.stop();
     expect(kill).toHaveBeenCalledTimes(1);
     await expect(stopping.exited).resolves.toBeNull();
+    vi.useRealTimers();
+  });
+
+  it('a resumed session counts only this run: the totals before the first prompt are the base (req-53)', async () => {
+    vi.useFakeTimers();
+    const prompts: string[] = [];
+    let created = false;
+    const usage = { tokens: { input: 1_000, cache: { read: 9_000 }, output: 50 }, cost: 0.5 };
+    const { fetch } = scriptedFetch({
+      sessionCreated: () => {
+        created = true;
+      },
+      prompts,
+      interrupts: [],
+      messages: () => [],
+      usage,
+    });
+    const bases: unknown[] = [];
+    const proc = fakeProcess();
+    const { events, start } = collect({ resumeRef: 'ses_oc', onUsageBase: (base) => bases.push(base) });
+    opencodeAdapter(spawnOf(proc), fetch, async () => 47000).spawn(start);
+    // the stdout listener is attached once the port is picked
+    await vi.advanceTimersByTimeAsync(100);
+    proc.stdout('server password sekrit');
+    await vi.advanceTimersByTimeAsync(1_000);
+    expect(created).toBe(false);
+    expect(bases).toEqual([{ tokensIn: 10_000, tokensOut: 50, cacheReadTokens: 9_000, costUsd: 0.5 }]);
+    expect(prompts[0]).toContain('Do the ticket.');
+
+    usage.tokens = { input: 1_500, cache: { read: 12_000 }, output: 80 };
+    usage.cost = 0.7;
+    await vi.advanceTimersByTimeAsync(2_500);
+    const last = events.filter((e) => e.kind === 'usage' && e.tokensIn !== undefined).at(-1);
+    expect(last?.tokensIn).toBe(3_500);
+    expect(last?.cacheReadTokens).toBe(3_000);
+    expect(last?.tokensOut).toBe(30);
+    expect(last?.costUsd).toBeCloseTo(0.2);
+    proc.exit(null);
+    vi.useRealTimers();
+  });
+
+  it('a given base is subtracted as it is — an attached run keeps its own earlier spend counted', async () => {
+    vi.useFakeTimers();
+    const usage = { tokens: { input: 2_000, cache: { read: 18_000 }, output: 400 }, cost: 0 };
+    const { fetch } = scriptedFetch({ sessionCreated: () => undefined, prompts: [], interrupts: [], messages: () => [], usage });
+    const bases: unknown[] = [];
+    const { events, start } = collect({
+      resumeRef: 'ses_oc',
+      usageBase: { tokensIn: 10_000, tokensOut: 50, cacheReadTokens: 9_000, costUsd: 0 },
+      onUsageBase: (base) => bases.push(base),
+    });
+    const handle = opencodeAdapter(vi.fn() as unknown as SpawnFn, fetch, async () => 47000).attach!(start, {
+      address: 'http://127.0.0.1:50001',
+      password: 'pw',
+      sessionRef: 'ses_oc',
+      runStartedMs: Date.now(),
+      seenBeforeMs: Date.now(),
+      pid: 777,
+      kill: async () => undefined,
+    });
+    await vi.advanceTimersByTimeAsync(2_500);
+    expect(bases).toEqual([]);
+    const last = events.filter((e) => e.kind === 'usage' && e.tokensIn !== undefined).at(-1);
+    expect(last?.tokensIn).toBe(10_000);
+    expect(last?.cacheReadTokens).toBe(9_000);
+    expect(last?.tokensOut).toBe(350);
+    await handle.stop();
     vi.useRealTimers();
   });
 

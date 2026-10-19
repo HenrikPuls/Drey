@@ -102,6 +102,11 @@ export interface RunInfo {
   readonly sessionRef: string | null;
   readonly tokensIn: number;
   readonly tokensOut: number;
+  /**
+   * The part of `tokensIn` served from the provider's prompt cache
+   * (req-53) — absent on a run.json written before it was recorded.
+   */
+  readonly cacheReadTokens?: number;
   readonly costUsd: number | null;
   readonly lastActivity: string;
   /**
