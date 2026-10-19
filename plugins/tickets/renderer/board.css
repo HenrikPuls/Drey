@@ -897,6 +897,28 @@
   background: var(--status-deleted);
 }
 
+/* A running worker's light breathes; a standing one (idle) is a still, hollow gray dot. */
+.tickets-light-green {
+  animation: tickets-breathe 1.8s ease-in-out infinite;
+}
+
+.tickets-light-idle {
+  background: transparent;
+  box-shadow: inset 0 0 0 1.5px var(--text-faint);
+}
+
+@keyframes tickets-breathe {
+  50% {
+    opacity: 0.35;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tickets-light-green {
+    animation: none;
+  }
+}
+
 .tickets-lane {
   border: 1px solid var(--border);
   border-left-width: 3px;
@@ -914,6 +936,10 @@
 
 .tickets-lane-red {
   border-left-color: var(--status-deleted);
+}
+
+.tickets-lane-idle {
+  border-left-color: var(--text-faint);
 }
 
 .tickets-lane-summary {
@@ -958,6 +984,10 @@
 
 .tickets-lane-state-red {
   color: var(--status-deleted);
+}
+
+.tickets-lane-state-idle {
+  color: var(--text-3);
 }
 
 .tickets-lane-ticket {

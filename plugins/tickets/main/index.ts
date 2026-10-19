@@ -872,7 +872,7 @@ const plugin: MainPluginModule = {
       const p = payload as { action?: unknown; runId?: unknown };
       if (
         typeof p.runId !== 'string' ||
-        (p.action !== 'takeover' && p.action !== 'interrupt' && p.action !== 'release')
+        (p.action !== 'takeover' && p.action !== 'interrupt' && p.action !== 'release' && p.action !== 'resume')
       ) {
         return { ok: false, error: 'bad fleet control payload' };
       }

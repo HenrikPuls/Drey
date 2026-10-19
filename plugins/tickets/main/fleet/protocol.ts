@@ -112,6 +112,13 @@ export interface RunInfo {
    * alone, and the runner sends it nothing of its own until it is handed back.
    */
   readonly held?: boolean;
+  /**
+   * Whether the worker is in the middle of a turn (`busy`) or standing
+   * and waiting for input (`idle`) — the board's "running or standing".
+   * Absent while the provider has not said (and for providers that
+   * cannot).
+   */
+  readonly turn?: 'busy' | 'idle';
   /** The working column whose pool owns this run (`request.column ?? request.phase`). */
   readonly column?: string | null;
   /** How many steer messages reached the worker, and how. */

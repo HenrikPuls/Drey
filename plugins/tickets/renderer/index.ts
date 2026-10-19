@@ -127,6 +127,10 @@ async function runMutation(label: string, invoke: () => Promise<unknown>): Promi
   }
   busy = false;
   if (!result.ok) {
+    // A refused action often means the screen is stale (a stop of a run
+    // that has already ended): pull the real state, or the lane stays and
+    // every click repeats the same refusal.
+    await refreshBoard().catch(() => undefined);
     note = result.error ?? 'the action failed';
     notifyViews();
     return result;
@@ -953,7 +957,10 @@ function fleetSummaryNode(): HTMLElement | null {
     p.append(document.createTextNode(text));
     bar.append(p);
   };
-  pill('green', `${count('green')} working`);
+  pill('green', `${count('green')} running`);
+  if (count('idle') > 0) {
+    pill('idle', `${count('idle')} standing`);
+  }
   if (count('amber') > 0) {
     pill('amber', `${count('amber')} need attention`);
   }
@@ -995,7 +1002,9 @@ function workerLanesNode(api: DreyPluginApi, column: BoardColumn): HTMLElement |
     ? 'red'
     : statuses.some((s) => s.light === 'amber')
       ? 'amber'
-      : 'green';
+      : statuses.some((s) => s.light === 'green')
+        ? 'green'
+        : 'idle';
   const head = el('div', 'tickets-lanes-head');
   head.append(
     el('span', `tickets-light tickets-light-${runs.length === 0 ? 'idle' : worst}`),
@@ -1092,14 +1101,13 @@ function workerLanesNode(api: DreyPluginApi, column: BoardColumn): HTMLElement |
         b.addEventListener('click', onClick);
         actions.append(b);
       };
-      if (run.state !== 'detached') {
-        button('arrow-right', run.held === true ? 'Open the takeover tab — you have control' : 'Take over — drive this worker yourself', () => {
-          void takeOver(api, run);
+      button('arrow-right', 'Open the run — its conversation, controls and prompt (nothing changes until you send a command)', () => {
+        openTakeover(api, run);
+      });
+      if (run.state === 'detached' && run.sessionRef !== null) {
+        button('rotate-ccw', 'Resume the session in a new worker — the run is attached again', () => {
+          void runMutation('Resuming', () => invokeBoard('fleetControl', { action: 'resume', runId: run.id }));
         });
-      }
-      button('file-text', `Watch the run's stream (${run.id})`, () => openWatchModal(api, run.id));
-      if (run.state !== 'detached') {
-        button('message-circle', 'Send a message into the live run', () => openSteerModal(api, run.id));
       }
       button('square', run.state === 'detached' ? 'Stop the run — frees the ticket (the worker is killed if it still lives)' : 'Kill the worker (the ticket stays in its phase)', () => {
         void runMutation('Stopping the run', () => invokeBoard('fleetStop', { runId: run.id, reason: null }));
@@ -1185,81 +1193,6 @@ function openRunModal(api: DreyPluginApi, card: TicketCard): void {
   });
 }
 
-function openSteerModal(api: DreyPluginApi, runId: string): void {
-  const close = api.ui.showModal((host) => {
-    const form = el('div', 'tickets-form');
-    form.append(el('h3', 'tickets-form-heading', 'Steer the run'));
-    const text = el('textarea', 'tickets-form-desc') as HTMLTextAreaElement;
-    text.rows = 4;
-    text.placeholder = 'What the worker should do differently — lands in the ticket’s Log.';
-    text.setAttribute('aria-label', 'Steer message');
-    const actions = el('div', 'tickets-form-actions');
-    const cancel = el('button', undefined, 'Cancel');
-    cancel.type = 'button';
-    cancel.addEventListener('click', () => close());
-    const send = el('button', 'tickets-form-create', 'Send');
-    send.type = 'button';
-    const submit = (): void => {
-      const message = text.value.trim();
-      if (message === '') {
-        text.focus();
-        return;
-      }
-      close();
-      void runMutation('Steering', () => invokeBoard('fleetSend', { runId, text: message }));
-    };
-    send.addEventListener('click', submit);
-    text.addEventListener('keydown', (event) => {
-      if (event.key === 'Enter' && (event.ctrlKey || event.metaKey)) {
-        event.preventDefault();
-        submit();
-      }
-    });
-    actions.append(cancel, send);
-    form.append(el('p', 'tickets-form-hint', 'Ctrl+Enter sends.'), text, actions);
-    host.append(form);
-    text.focus();
-  });
-}
-
-function openWatchModal(api: DreyPluginApi, runId: string): void {
-  const close = api.ui.showModal((host) => {
-    const box = el('div', 'tickets-form tickets-watch');
-    box.append(el('h3', 'tickets-form-heading', `Run ${runId}`));
-    const out = el('pre', 'tickets-watch-out');
-    out.textContent = 'Loading the stream…';
-    const pull = (): void => {
-      void invokeBoard('fleetStream', { runId }).then((result) => {
-        const text = (result as { text: string }).text ?? '';
-        const keepBottom = out.scrollTop + out.clientHeight >= out.scrollHeight - 8;
-        out.textContent = text === '' ? '(the stream is empty so far)' : text;
-        if (keepBottom) {
-          out.scrollTop = out.scrollHeight;
-        }
-      });
-    };
-    // The poll dies with its DOM node: when the modal closed, `out` is
-    // disconnected and the interval clears itself.
-    const timer = setInterval(() => {
-      if (!out.isConnected) {
-        clearInterval(timer);
-        return;
-      }
-      pull();
-    }, 2_000);
-    const actions = el('div', 'tickets-form-actions');
-    const done = el('button', undefined, 'Close');
-    done.type = 'button';
-    done.addEventListener('click', () => {
-      clearInterval(timer);
-      close();
-    });
-    actions.append(done);
-    box.append(out, actions);
-    host.append(box);
-  });
-}
-
 // --- the takeover tab (owner request, follow-up of M86; ADR-0078) -------------
 
 const TAKEOVER_KIND = 'tickets-takeover';
@@ -1268,21 +1201,6 @@ const TAKEOVER_SCHEME = 'takeover://';
 /** Opens (or focuses) the takeover tab of one run. */
 function openTakeover(api: DreyPluginApi, run: RunInfo): void {
   api.documents.addDoc(TAKEOVER_KIND, `${TAKEOVER_SCHEME}${run.id}`, `${run.ticketId} · ${run.provider}`);
-}
-
-/**
- * The lane's "Take over": the runner holds the run first (its worker's
- * finished turn no longer ends it), then the tab opens. A refusal — a
- * worker that cannot be held — stays on the board's note line.
- */
-async function takeOver(api: DreyPluginApi, run: RunInfo): Promise<void> {
-  if (run.held !== true) {
-    const result = await runMutation('Taking over', () => invokeBoard('fleetControl', { action: 'takeover', runId: run.id }));
-    if (!result.ok) {
-      return;
-    }
-  }
-  openTakeover(api, run);
 }
 
 /**
@@ -1309,22 +1227,22 @@ function mountTakeover(api: DreyPluginApi, host: HTMLElement, runId: string): ()
     b.addEventListener('click', onClick);
     return b;
   };
-  const control = (action: 'takeover' | 'interrupt' | 'release'): void => {
+  const control = (action: 'interrupt' | 'release' | 'resume'): void => {
     void runMutation(
-      action === 'takeover' ? 'Taking over' : action === 'interrupt' ? 'Interrupting' : 'Handing back',
+      action === 'interrupt' ? 'Interrupting' : action === 'resume' ? 'Resuming' : 'Handing back',
       () => invokeBoard('fleetControl', { action, runId }),
     );
   };
-  const takeBtn = iconButton('arrow-right', 'Take over', 'Take the run over — the runner stops ending it after a finished turn', () =>
-    control('takeover'),
+  const resumeBtn = iconButton('rotate-ccw', 'Resume', 'Resume the session in a new worker — the run is attached again', () =>
+    control('resume'),
   );
-  const interruptBtn = iconButton('square', 'Interrupt', 'Interrupt the running turn — the session and its context stay', () =>
+  const interruptBtn = iconButton('square', 'Interrupt', 'Interrupt the running turn — you take control, the session and its context stay', () =>
     control('interrupt'),
   );
   const releaseBtn = iconButton('arrow-left', 'Hand back', 'Hand the run back to the runner — an idle worker ends the run and the gate decides', () =>
     control('release'),
   );
-  controls.append(takeBtn, interruptBtn, releaseBtn);
+  controls.append(resumeBtn, interruptBtn, releaseBtn);
   banner.append(light, headline, stats, spacer, controls);
 
   const transcript = api.ui.createMarkdownView({ mode: 'view', readOnly: true, content: '' });
@@ -1354,29 +1272,32 @@ function mountTakeover(api: DreyPluginApi, host: HTMLElement, runId: string): ()
     const run = live();
     const active = run !== null && LIVE_RUN_STATES.includes(run.state);
     const held = active && run.held === true;
+    const detached = run !== null && run.state === 'detached';
     const status = run === null ? null : workerStatus(run, Date.now());
-    light.className = `tickets-light tickets-light-${active && status !== null ? status.light : 'idle'}`;
+    light.className = `tickets-light tickets-light-${(active || detached) && status !== null ? status.light : 'idle'}`;
     headline.textContent =
       run === null
         ? 'This run is no longer known to the runner'
-        : !active
-          ? `${run.ticketId} · ${run.provider} — run ${run.state}`
-          : held
-            ? `${run.ticketId} · ${run.provider} — you have control`
-            : `${run.ticketId} · ${run.provider} — the runner is driving`;
+        : detached
+          ? `${run.ticketId} · ${run.provider} — detached: the runner lost its worker`
+          : !active
+            ? `${run.ticketId} · ${run.provider} — run ${run.state}`
+            : held
+              ? `${run.ticketId} · ${run.provider} — you have control`
+              : `${run.ticketId} · ${run.provider} — the runner is driving; your first command takes over`;
     const fill = run === null ? null : contextFill(run);
     stats.textContent =
       run === null
         ? ''
         : [
-            status !== null && active ? status.label : '',
+            status !== null && (active || detached) ? status.label : '',
             fill === null ? '' : `context ${Math.round(fill * 100)}%`,
             `in ${formatTokens(run.tokensIn)} · out ${formatTokens(run.tokensOut)}`,
           ]
             .filter((part) => part !== '')
             .join(' · ');
-    takeBtn.hidden = !active || held;
-    interruptBtn.hidden = !held;
+    resumeBtn.hidden = !(detached && run !== null && run.sessionRef !== null);
+    interruptBtn.hidden = !active;
     releaseBtn.hidden = !held;
     prompt.setReadOnly(!active);
   };
@@ -1560,8 +1481,7 @@ function openCardMenu(
   if (live === null) {
     item(`Run agent (${card.worker})…`, () => openRunModal(api, card));
   } else {
-    item(`Watch run — ${live.state}`, () => openWatchModal(api, live.id));
-    item('Steer run…', () => openSteerModal(api, live.id));
+    item(`Open run — ${live.state}`, () => openTakeover(api, live));
     item('Stop run', () => {
       void run('Stopping the run', () => invokeBoard('fleetStop', { runId: live.id, reason: null }));
     });

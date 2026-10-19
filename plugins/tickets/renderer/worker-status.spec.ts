@@ -94,3 +94,18 @@ describe('workerStatus — a detached run', () => {
     expect(workerStatus(run({ state: 'detached' }), NOW)).toEqual({ light: 'amber', label: 'Detached' });
   });
 });
+
+describe('workerStatus — running or standing', () => {
+  it('says Running for a worker in the middle of a turn', () => {
+    expect(workerStatus(run({ turn: 'busy' }), NOW)).toEqual({ light: 'green', label: 'Running' });
+  });
+
+  it('says Standing for a worker with no turn in progress, never stalled', () => {
+    const silent = new Date(NOW - 20 * 60_000).toISOString();
+    expect(workerStatus(run({ turn: 'idle', lastActivity: silent }), NOW)).toEqual({ light: 'idle', label: 'Standing' });
+  });
+
+  it('says whose turn it is when the owner holds a standing worker', () => {
+    expect(workerStatus(run({ turn: 'idle', held: true }), NOW).label).toBe('Standing — you drive');
+  });
+});

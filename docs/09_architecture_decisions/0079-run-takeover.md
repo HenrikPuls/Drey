@@ -52,6 +52,22 @@ with its own session; only the runner's grip on it is lost. So:
 - Claude Code workers cannot be re-attached (their stdio pipes belong to the dead runner); they still detach.
 - Taking over a run in another phase later needs nothing more than this seam.
 
+## Implicit takeover, resume, running or standing (later change, 2026-10-19)
+
+- **One button, no hold on open.** A lane has one "Open" button; opening the tab only watches — the runner keeps
+  driving. The hold is taken implicitly at the owner's first command: `send` and `interrupt` call `holdForOwner`
+  (hold once, log "taken over by the owner (first prompt | interrupt)"), so the explicit "Take over" step and button
+  are gone (`POST /takeover` stays for the API). Hand back stays an explicit button, shown while held. The earlier
+  rule "opened from a lane's Take over, which holds the run first" no longer applies.
+- **Resume a detached run.** A run the runner cannot re-attach (Claude Code, a gone process, no attach file) keeps its
+  provider session. `POST /resume` ends the detached record as `stopped` and starts a fresh worker with
+  `resumeRef` = that session, under a new run of the same request and a short "session resumed — continue" brief. The
+  owner gets an attached run again; a run that never reported a session cannot be resumed.
+- **Running or standing.** `RunInfo.turn` (`busy | idle`) is the worker's turn state: the opencode adapter reads it
+  from the newest message of the session (an idle marker = standing, anything else = mid-turn) and emits it on change.
+  The board shows it everywhere a run is shown: a breathing green light and "Running", a hollow gray one and "Standing"
+  (with "— you drive" when held); a standing worker is never "stalled".
+
 ## Consequences
 
 - The run record carries `held`; a runner restart turns a live run `detached` only when it cannot be re-attached

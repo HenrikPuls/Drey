@@ -34,6 +34,8 @@ export interface NormalizedEvent {
   readonly activity?: string;
   /** The current context window's size in tokens. */
   readonly contextTokens?: number;
+  /** The worker's turn state, when it changed: mid-turn or standing. */
+  readonly turn?: 'busy' | 'idle';
 }
 
 /** The stream lead-in of a worker's thinking (the takeover transcript shows it quoted). */
@@ -354,6 +356,7 @@ export function opencodeAdapter(
       turnDone: false,
       /** A human drives the session: an idle marker is not the run's end. */
       held: false,
+      turn: undefined as 'busy' | 'idle' | undefined,
       /** Idle markers older than this belong to an earlier turn. */
       lastPromptAt: 0,
       ended: false,
@@ -466,6 +469,16 @@ export function opencodeAdapter(
         const list = await fetchFn(`${address}${OPENCODE_API.messages(state.sessionRef)}`, { headers: auth });
         if (list.ok) {
           const body = (await list.json()) as { data?: OcMessage[] };
+          // The newest message says whether the worker stands (an idle
+          // marker) or is mid-turn (anything after the last prompt).
+          const newest = (body.data ?? [])[0];
+          if (newest !== undefined) {
+            const turn = newest.type === 'idle' ? 'idle' : 'busy';
+            if (turn !== state.turn) {
+              state.turn = turn;
+              start.onEvent({ ts: nowIso(now), kind: 'usage', turn });
+            }
+          }
           // The API lists newest first; walk chronologically.
           for (const m of (body.data ?? []).slice().reverse()) {
             if (m.type === 'assistant' && attached !== null && m.id !== undefined) {

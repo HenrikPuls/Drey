@@ -14,7 +14,8 @@ export const STALL_MS = 5 * 60_000;
 /** A context fill from here on warns (amber). */
 export const CONTEXT_WARN = 0.8;
 
-export type Light = 'green' | 'amber' | 'red';
+/** `idle` (gray) is a worker that stands: no turn in progress, waiting for input. */
+export type Light = 'green' | 'amber' | 'red' | 'idle';
 
 export interface WorkerStatus {
   readonly light: Light;
@@ -36,6 +37,10 @@ export function workerStatus(run: RunInfo, nowMs: number, windowTokens: number =
   if (run.state === 'detached') {
     return { light: 'amber', label: 'Detached' };
   }
+  // A worker that stands (no turn in progress) is neither working nor stalled.
+  if (run.state === 'running' && run.turn === 'idle') {
+    return { light: 'idle', label: run.held === true ? 'Standing — you drive' : 'Standing' };
+  }
   const silentMs = nowMs - (Date.parse(run.lastActivity) || nowMs);
   if (run.state === 'running' && silentMs >= STALL_MS) {
     return { light: 'red', label: `Stalled ${Math.floor(silentMs / 60_000)}m` };
@@ -50,7 +55,7 @@ export function workerStatus(run: RunInfo, nowMs: number, windowTokens: number =
   if (run.state === 'starting') {
     return { light: 'green', label: 'Starting' };
   }
-  return { light: 'green', label: 'Working' };
+  return { light: 'green', label: run.turn === 'busy' ? 'Running' : 'Working' };
 }
 
 /** 1234 -> `1.2k`, 3_400_000 -> `3.4M`; small numbers stay whole. */
@@ -65,7 +70,7 @@ export function formatTokens(n: number): string {
 }
 
 /** Lanes that need a look open by themselves; a quiet one stays folded. */
-export const opensByItself = (status: WorkerStatus): boolean => status.light !== 'green';
+export const opensByItself = (status: WorkerStatus): boolean => status.light === 'amber' || status.light === 'red';
 
 /** The runs of one working column, oldest first (a stable lane order). */
 export function lanesOfColumn(runs: readonly RunInfo[], phaseId: string): RunInfo[] {

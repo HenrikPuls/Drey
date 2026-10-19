@@ -409,7 +409,7 @@ export class RunSupervisor {
     return run === undefined ? null : path.join(run.dir, 'stream.jsonl');
   }
 
-  async start(request: RunRequest): Promise<StartOutcome> {
+  async start(request: RunRequest, resumeRef: string | null = null): Promise<StartOutcome> {
     const live = this.list().find(
       (r) => r.ticketId === request.ticketId && !TERMINAL.includes(r.state) && r.state !== 'detached',
     );
@@ -482,7 +482,7 @@ export class RunSupervisor {
       instruction: request.instruction,
       model: request.model,
       permissionMode: request.permissionMode,
-      resumeRef: null,
+      resumeRef,
       ticketId: request.ticketId,
       onEvent: (event) => void this.onEvent(run, event),
       onSessionRef: (ref) => {
@@ -557,6 +557,10 @@ export class RunSupervisor {
     if (run.handle === null) {
       return { ok: false, error: `run ${runId} has no worker attached to steer` };
     }
+    // The first prompt of the owner takes the run over: until then the
+    // runner drives as usual (the tab only watches), from here on the
+    // worker's finished turn no longer ends the run.
+    await this.holdForOwner(run, 'first prompt');
     // The owner's prompt belongs in the run's transcript, whatever its rung.
     await this.appendStream(run, { ts: this.stamp(), kind: 'note', text: `you › ${text}` });
     const rung = await run.handle.steer(text);
@@ -587,15 +591,63 @@ export class RunSupervisor {
     return { ok: true };
   }
 
+  /**
+   * Takes the run over implicitly when the owner first acts on it (a
+   * prompt, an interrupt): a worker that can hold is held, once. A worker
+   * that cannot (Claude Code) is left as it is — the caller carries on.
+   */
+  private async holdForOwner(run: LiveRun, why: string): Promise<void> {
+    if (run.info.held === true || run.handle === null || run.handle.setHold === undefined) {
+      return;
+    }
+    run.handle.setHold(true);
+    run.info = { ...run.info, held: true };
+    await this.persist(run);
+    await this.logLine(run, `taken over by the owner (${why})`);
+  }
+
+  /**
+   * Brings a detached run back: its worker could not be re-attached (the
+   * process is gone, or the provider cannot), but the provider's session
+   * still exists. The detached record ends as stopped and a fresh worker
+   * resumes that session under a new run of the same request — the
+   * owner's "make it attached again".
+   */
+  async resume(runId: string): Promise<StartOutcome> {
+    const old = this.runs.get(runId);
+    if (old === undefined) {
+      return { ok: false, error: `unknown run "${runId}"` };
+    }
+    if (old.info.state !== 'detached') {
+      return { ok: false, error: `run ${runId} is ${old.info.state} — only a detached run is resumed` };
+    }
+    if (old.info.sessionRef === null) {
+      return { ok: false, error: `run ${runId} never reported a session — nothing to resume (start the ticket fresh)` };
+    }
+    const sessionRef = old.info.sessionRef;
+    old.stopNote = 'resumed in a new run';
+    if (old.info.pid !== null) {
+      await killTreeGuarded(old.info.pid, this.exec, old.startedAtMs);
+    }
+    await this.finish(old, 'stopped');
+    return this.start(
+      {
+        ...old.request,
+        instruction:
+          'The runner restarted and this session was resumed. Continue the step where you left off; ' +
+          'your original brief is earlier in this conversation. Do not search the disk for files already named in it.',
+      },
+      sessionRef,
+    );
+  }
+
   /** The soft stop of the held run's current turn (the session stays). */
   async interrupt(runId: string): Promise<TakeoverOutcome> {
     const run = this.liveRunWithHold(runId);
     if (typeof run === 'string') {
       return { ok: false, error: run };
     }
-    if (run.info.held !== true) {
-      return { ok: false, error: `run ${runId} is not taken over — take it over before interrupting` };
-    }
+    await this.holdForOwner(run, 'interrupt');
     const done = (await run.handle!.interrupt?.()) ?? false;
     if (!done) {
       return { ok: false, error: `the ${run.info.provider} worker took no interrupt — it may be idle already` };
@@ -676,6 +728,7 @@ export class RunSupervisor {
       lastActivity: event.ts,
       ...(event.activity !== undefined && event.activity !== '' ? { activity: event.activity } : {}),
       ...(event.contextTokens !== undefined ? { contextTokens: event.contextTokens } : {}),
+      ...(event.turn !== undefined ? { turn: event.turn } : {}),
       ...(event.tokensIn !== undefined ? { tokensIn: event.tokensIn } : {}),
       ...(event.tokensOut !== undefined ? { tokensOut: event.tokensOut } : {}),
       ...(event.costUsd !== undefined ? { costUsd: event.costUsd } : {}),

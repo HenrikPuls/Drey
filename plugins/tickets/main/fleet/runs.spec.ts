@@ -21,6 +21,7 @@ function fakeAdapter() {
     WorkerHandle & { fail: (code: number | null) => void; onEvent: (text: string) => void; result: () => void }
   > = [];
   const attachInfos: AttachInfo[] = [];
+  const starts: ProviderStart[] = [];
   const adapter: ProviderAdapter = {
     id: 'opencode',
     label: 'OpenCode',
@@ -32,6 +33,7 @@ function fakeAdapter() {
     },
   };
   const make = (start: ProviderStart) => {
+      starts.push(start);
       let exitResolve: ((code: number | null) => void) | null = null;
       const handle: WorkerHandle & {
         fail: (code: number | null) => void;
@@ -55,7 +57,7 @@ function fakeAdapter() {
       handles.push(handle);
       return handle;
   };
-  return { adapter, handles, attachInfos };
+  return { adapter, handles, attachInfos, starts };
 }
 
 function gitRecorder() {
@@ -177,16 +179,12 @@ describe('RunSupervisor', () => {
     expect(adapter.handles).toHaveLength(1);
   });
 
-  it('takeover holds the run, interrupt needs it, release hands it back', async () => {
+  it('takeover holds the run, an interrupt takes over by itself, release hands it back', async () => {
     const { sup, adapter } = supervisor();
     const rel = await writeTicket();
     const started = await sup.start(request({ ticketRelPath: rel }));
     const runId = (started as { run: { id: string } }).run.id;
     const handle = adapter.handles[0]!;
-
-    const early = await sup.interrupt(runId);
-    expect(early.ok).toBe(false);
-    expect((early as { error: string }).error).toContain('not taken over');
 
     expect((await sup.takeover(runId)).ok).toBe(true);
     expect(handle.setHold).toHaveBeenLastCalledWith(true);
@@ -198,6 +196,54 @@ describe('RunSupervisor', () => {
     expect((await sup.release(runId)).ok).toBe(true);
     expect(handle.setHold).toHaveBeenLastCalledWith(false);
     expect(sup.get(runId)?.held).toBe(false);
+  });
+
+  it('the first prompt takes the run over by itself; opening and watching never do', async () => {
+    const { sup, adapter } = supervisor();
+    const rel = await writeTicket();
+    const started = await sup.start(request({ ticketRelPath: rel }));
+    const runId = (started as { run: { id: string } }).run.id;
+    expect(sup.get(runId)?.held).not.toBe(true);
+
+    expect((await sup.send(runId, 'look at the spec')).ok).toBe(true);
+    expect(adapter.handles[0]!.setHold).toHaveBeenLastCalledWith(true);
+    expect(sup.get(runId)?.held).toBe(true);
+  });
+
+  it('an interrupt of a run nobody holds takes it over first', async () => {
+    const { sup, adapter } = supervisor();
+    const rel = await writeTicket();
+    const started = await sup.start(request({ ticketRelPath: rel }));
+    const runId = (started as { run: { id: string } }).run.id;
+    expect((await sup.interrupt(runId)).ok).toBe(true);
+    expect(adapter.handles[0]!.setHold).toHaveBeenCalledWith(true);
+    expect(sup.get(runId)?.held).toBe(true);
+  });
+
+  it('resume ends a detached run and resumes its session in a new run', async () => {
+    const rel = await writeTicket();
+    const dir = path.join(fleetRoot, 'runs', 'R-gone');
+    await fsp.mkdir(dir, { recursive: true });
+    const info = { id: 'R-gone', ticketId: 'T-0001', provider: 'opencode', state: 'detached', pid: null, startedAt: '2026-10-17T11:00:00Z', endedAt: null, sessionRef: 'ses_gone', tokensIn: 0, tokensOut: 0, costUsd: null, lastActivity: '2026-10-17T11:00:00Z', steerCount: 0, lastSteerRung: null, worktreePath: 'x', branch: 't/T-0001', gateFailure: null };
+    await fsp.writeFile(path.join(dir, 'run.json'), JSON.stringify({ request: request({ ticketRelPath: rel }), info }), 'utf8');
+    const { sup, adapter } = supervisor();
+    await sup.adopt();
+
+    const outcome = await sup.resume('R-gone');
+    expect(outcome.ok).toBe(true);
+    expect(sup.get('R-gone')?.state).toBe('stopped');
+    expect(adapter.starts).toHaveLength(1);
+    expect(adapter.starts[0]!.resumeRef).toBe('ses_gone');
+    expect(adapter.starts[0]!.instruction).toContain('session was resumed');
+  });
+
+  it('resume refuses a run that is not detached or never reported a session', async () => {
+    const { sup } = supervisor();
+    const rel = await writeTicket();
+    const started = await sup.start(request({ ticketRelPath: rel }));
+    const runId = (started as { run: { id: string } }).run.id;
+    expect((await sup.resume(runId)).ok).toBe(false);
+    expect((await sup.resume('R-nope')).ok).toBe(false);
   });
 
   it('refuses a takeover for a worker that cannot be held, and for an unknown run', async () => {

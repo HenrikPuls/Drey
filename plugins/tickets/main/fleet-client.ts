@@ -126,7 +126,7 @@ export class FleetClient {
 
   /** Takeover control of a live run: take over, interrupt the turn, hand back. */
   async control(
-    action: 'takeover' | 'interrupt' | 'release',
+    action: 'takeover' | 'interrupt' | 'release' | 'resume',
     runId: string,
   ): Promise<{ ok: boolean; error?: string }> {
     if (!(await this.withRunner())) {
