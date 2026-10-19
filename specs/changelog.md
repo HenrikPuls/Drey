@@ -20,6 +20,22 @@ recorded as an explicit decision. The parity checklist lives in
 
 ## Recent milestones
 
+### Fix — fleet: worktree matching survives path aliases (`RUNNER~1`, junctions)
+
+Follow-up on the T-0047 fix below, caught by CI on the GitHub Windows
+runner: `git worktree list --porcelain` reports the canonical path git
+resolves through the filesystem, while the requested path can reach the
+same directory through an alias — the runner's 8.3 temp dir
+(`C:\Users\RUNNER~1\…` for `runneradmin`) being the live case. The
+string-form comparison missed the listing entry, so healthy worktrees
+fell into the stale rows: a locked tree was renamed aside, a clean one
+recreated over its still-live registration ("missing but already
+registered worktree"). Listing entries now get a `realpath` second
+chance (`findWorktreeEntry` in `worktrees.ts`); a path that cannot be
+resolved (a registered but vanished tree) still matches by string form
+only. Spec: a junction reproduces the alias shape on any Windows
+checkout (`worktrees.spec.ts`).
+
 ### Fix — fleet: worktree preparation is idempotent per ticket (T-0047)
 
 Split from T-0046. The runner's `prepareWorktree` always ran

@@ -43,8 +43,9 @@ export interface PreparedWorktree {
 
 export interface WorktreeListEntry {
   /** Normalized: forward slashes (porcelain prints `C:/…`; `path.join`
-   *  yields backslashes — both sides are resolved and case-folded on
-   *  win32 where they are compared, see `sameWorktreePath`). */
+   *  yields backslashes — compared case-folded on win32, with a
+   *  `realpath` second chance against path aliases, see
+   *  `findWorktreeEntry`). */
   readonly path: string;
   /** `refs/heads/<name>`; null = detached or bare. */
   readonly branch: string | null;
@@ -135,7 +136,7 @@ async function prepareUnlocked(
   now: () => Date,
 ): Promise<PreparedWorktree> {
   const listing = await git.run(request.repoPath, ['worktree', 'list', '--porcelain']);
-  const entry = parseWorktreePorcelain(listing).find((e) => sameWorktreePath(e.path, worktreePath)) ?? null;
+  const entry = await findWorktreeEntry(listing, worktreePath);
 
   // Registered and healthy: reuse as is, clean or dirty — zero
   // mutating git calls.
@@ -296,6 +297,47 @@ function repoLockKey(p: string): string {
 
 function sameWorktreePath(a: string, b: string): boolean {
   return normalizeForMatch(a) === normalizeForMatch(b);
+}
+
+/**
+ * Finds the worktree's entry in the listing. String form decides first
+ * (the common case — both sides spell the same path); as a second
+ * chance both sides go through `realpath`, because git canonicalizes
+ * the paths it reports through the filesystem while the caller's path
+ * can reach the same directory through an alias — an 8.3 short name
+ * (`RUNNER~1` for `runneradmin`, the shape of the GitHub Windows
+ * runner's temp dir) or a junction. A path that cannot be resolved
+ * (a registered but vanished tree) only ever matches by string form.
+ */
+async function findWorktreeEntry(
+  porcelain: string,
+  worktreePath: string,
+): Promise<WorktreeListEntry | null> {
+  const entries = parseWorktreePorcelain(porcelain);
+  for (const entry of entries) {
+    if (sameWorktreePath(entry.path, worktreePath)) {
+      return entry;
+    }
+  }
+  const requested = await realPathOrNull(worktreePath);
+  if (requested === null) {
+    return null;
+  }
+  for (const entry of entries) {
+    const real = await realPathOrNull(entry.path);
+    if (real !== null && sameWorktreePath(real, requested)) {
+      return entry;
+    }
+  }
+  return null;
+}
+
+async function realPathOrNull(p: string): Promise<string | null> {
+  try {
+    return await fsp.realpath(p);
+  } catch {
+    return null;
+  }
 }
 
 function normalizeForMatch(p: string): string {

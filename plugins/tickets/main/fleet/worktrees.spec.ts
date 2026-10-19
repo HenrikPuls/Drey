@@ -154,6 +154,32 @@ describe('prepareWorktree (real git)', () => {
     expect(await siblings()).toEqual([adminName]);
   });
 
+  it.skipIf(process.platform !== 'win32')(
+    'reuses a worktree reached through a path alias (git reports the canonical path)',
+    async () => {
+      // The GitHub Windows runner's temp dir is an 8.3 short name
+      // (`RUNNER~1` for `runneradmin`): git registers and reports the
+      // canonical long path, so the requested path is an alias of the
+      // listed one. A junction reproduces that shape on any checkout.
+      const aliasBase = `${baseDir}-alias`;
+      await execFileAsync('cmd', ['/c', 'mklink', '/J', aliasBase, baseDir], { windowsHide: true });
+      try {
+        const aliasPath = path.join(aliasBase, 'fleet-root', 'worktrees', 'repo-T-0091');
+        await prepareWorktree(fleetGit(), req(), aliasPath, frozen);
+        await fsp.writeFile(path.join(aliasPath, 'untracked.txt'), 'kept\n');
+
+        const result = await prepareWorktree(fleetGit(), req(), aliasPath, frozen);
+        expect(result).toEqual({ outcome: 'reused', sessionInvalidated: false, movedTo: null });
+        await expect(fsp.readFile(path.join(aliasPath, 'untracked.txt'), 'utf8')).resolves.toBe(
+          'kept\n',
+        );
+        expect(await siblings()).toEqual([adminName]);
+      } finally {
+        await execFileAsync('cmd', ['/c', 'rmdir', aliasBase], { windowsHide: true });
+      }
+    },
+  );
+
   it('re-creates a removed worktree with the branch history intact', async () => {
     await prepareWorktree(fleetGit(), req(), worktreePath, frozen);
     await git(worktreePath, ['commit', '--allow-empty', '-m', 'worktree work']);
