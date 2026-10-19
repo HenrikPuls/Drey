@@ -20,6 +20,51 @@ recorded as an explicit decision. The parity checklist lives in
 
 ## Recent milestones
 
+### req-53 — Tickets settings round 2: column CRUD, reorder, store-on-leave, prompt dropdown (owner request, outside the list)
+
+**Not yet manually verified by the owner.** Round 1 (req-50) made Settings →
+Tickets a sortable table whose every control committed immediately. The owner
+ruled out the commit cascade ("damit wir nicht unnötig viele commits haben"),
+so round 2 replaces the two writers with one store-on-leave batch:
+
+- **Column CRUD.** **+** opens a title modal (the id is the slugified title,
+  live preview, duplicates refused) and appends the column **before the
+  terminal**, manual, its folder on a **gap number** (`35-qa`: the free
+  integer between the neighbours nearest the midpoint, ties to the smaller —
+  `gapFolderName` in `main/phase-dirs.ts`). The armed **−** removes an empty
+  middle column and refuses with a reason otherwise (ticket count shown;
+  first/capture and last/terminal are structural); the emptied folder is
+  deleted `rmdir`-safely and the `order.md` pin section dropped
+  (`dropOrderSections`). ↑/↓, drag and Alt+arrows reorder.
+- **Store-on-leave.** The dialog buffers everything — structure and
+  per-column `worker:`/`model:`/`workers:`/prompt — in a new pure renderer
+  module (`renderer/settings-buffer.ts`, fully specced) and writes on leaving
+  as **one** commit (`tickets: columns +qa; -staging; reorder; build worker
+  opencode, workers 2`), folder renames included: `applyColumns` in the board
+  service (validate → live-run guard → rmdir/mkdir/conditional renumber →
+  pipeline.md + order.md → one `commitTree`). Renumber-to-derived happens
+  only when the surviving phases' relative order changed; a pure add/remove
+  never renames. Patches ride as diffs against the base state, so a hand
+  edit of pipeline.md made while the dialog was open survives. The flush is
+  fire-and-forget (the dispose is synchronous); uncommitted buffer state is
+  dialog-only and lost if the app dies. `setColumnConfig` and `reorderPhases`
+  are gone — `columns` carries the batch, no compat shim.
+- **Prompt dropdown.** The board snapshot carries `promptRefs` (stems of
+  `tickets/_meta/prompts/*.md`, one readdir); the per-column prompt field is
+  a select whose `''` value **is** "the handover's ref" (label names it,
+  `(none)` without one) — an explicit `prompt:` equal to the handover's ref
+  is finally distinguishable — and a ref whose file is missing is marked,
+  never silent. Creating prompts stays vault markdown in Drey (owner ruling).
+- Reloads merge into the buffer (`mergeBuffer`: vanished removals/patches
+  drop, adds keep, unknown phases slot in before the terminal), so the
+  removal pre-check's ticket counts stay fresh without losing edits.
+
+Docs: `specs/ticket-schema.md` (numbered-folders CRUD rules, pool-keys
+store-on-leave wording), docs/05's tickets rows. Specs:
+`renderer/settings-buffer.spec.ts` (new, the gate's fail-first command),
+folded `applyColumnsToPipeline`/`validateColumnsBatch` cases in
+`ticket-board.spec.ts`, `gapFolderName` cases in `phase-dirs.spec.ts`.
+
 ### req-52 — Test splitting: scoped day-to-day runs, full gate at release (owner request, outside the list)
 
 The two unit suites grew past 240

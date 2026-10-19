@@ -91,6 +91,26 @@ renamed folder has a live `run:` (the runner holds its path), and
 refuse before touching anything when two files of one name would land
 in one folder.
 
+**Column CRUD is buffered, store-on-leave (T-0043)**: Settings →
+Tickets adds (**+**, a title modal — the id is the slugified title and
+must be unique; the column is appended **before the terminal** and
+starts `manual`; its folder takes a **gap number** — the free integer
+between its neighbours' numbers nearest the midpoint, ties to the
+smaller, derived name as the fallback — no rename cascade), removes
+(**−**, two-step armed; refused with a reason when the column still
+holds tickets — the count is shown — or is the first (capture target)
+or last (terminal) column; the emptied folder is deleted and the
+column's `order.md` pin section cleaned) and reorders (↑/↓, drag,
+Alt+arrows). Everything the dialog buffers — structure **and**
+per-column pool keys — is applied and committed when the owner leaves
+the dialog, as **one commit** (`tickets: columns +qa; -staging;
+reorder; build worker opencode, workers 2`), folder renames included.
+A batch that reordered the surviving columns renumbers the folders to
+their derived names; a pure add/remove never renumbers. Uncommitted
+buffer state is dialog-only and lost if the app dies (edits are
+explicit); a refused leave-commit (a live run appearing mid-flight,
+mid-flight drift) reaches the log, not a dialog.
+
 ### Archive (T-0041)
 
 `tickets/archive/` is a reserved folder beside `_meta`: **not a board
@@ -248,8 +268,9 @@ Prose for humans. The board follows this file on refresh.
 - Editing this file is the owner's; the board re-reads it on every
   refresh. Unknown keys in a phase entry are ignored.
 
-**Pool keys** (M85, ADR-0077 — the settings dialog writes them with one
-commit per change; hand edits win on refresh):
+**Pool keys** (M85, ADR-0077 — the settings dialog buffers them and
+writes them store-on-leave with everything else, as one commit per
+leave (T-0043); hand edits win on refresh):
 
 - `worker:` — the column's worker pin (`opencode`,
   `claude-code`, `<provider>/<model>`), the assignment ladder's column
