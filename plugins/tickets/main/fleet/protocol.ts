@@ -45,6 +45,12 @@ export interface RunRequest {
   readonly branch: string;
   /** The base ref a fresh worktree branches from (repos.md `branch:` or HEAD). */
   readonly baseRef: string | null;
+  /**
+   * Git-ignored folders of `repoPath` the worktree links instead of
+   * rebuilding (repos.md `link:`, req-56) — the toolchain a worker would
+   * otherwise hunt for. Absent on requests from before it existed.
+   */
+  readonly links?: readonly string[];
   readonly provider: WorkerProviderId;
   readonly permissionMode: PermissionMode;
   /** Provider model pin, when the assignment names one (`worker@provider/model`). */

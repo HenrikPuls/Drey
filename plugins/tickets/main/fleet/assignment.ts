@@ -122,6 +122,8 @@ export interface InstructionInput {
    * disk for it — a plan-phase worker spent most of a run doing that.
    */
   readonly ticketFile?: string;
+  /** The repo's `link:` folders the runner links into the worktree (req-56). */
+  readonly links?: readonly string[];
 }
 
 /**
@@ -152,6 +154,15 @@ export function composeInstruction(input: InstructionInput): string {
       `). Stay on that branch; it and the worktree are your only writable places.`,
   );
   parts.push(`The ticket sits in the "${input.phase}" phase of the owner's board.`);
+  if (input.links !== undefined && input.links.length > 0) {
+    // Workers used to probe for the toolchain and improvise — junctions
+    // of their own, even an install — in every run (req-56).
+    parts.push(
+      `Toolchain: ${input.links.map((l) => `\`${l}\``).join(', ')} ${input.links.length === 1 ? 'is' : 'are'} linked into the ` +
+        `checkout from the repo's main folder, ready to use. Do not run an install (npm ci, npm install, …) and do not ` +
+        `create or replace links: the folders are shared with the owner's checkout.`,
+    );
+  }
   if (input.ticketFile !== undefined && input.ticketFile !== '') {
     parts.push(
       `The ticket file: ${input.ticketFile} — it lives in the tickets repo, outside the worktree, and is the one ` +

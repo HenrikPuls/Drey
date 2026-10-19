@@ -438,8 +438,43 @@ export function parseRepos(text: string | null): ReposParse {
       path: typeof map['path'] === 'string' && map['path'].trim() !== '' ? map['path'].trim() : null,
       worker: typeof map['worker'] === 'string' && map['worker'].trim() !== '' ? map['worker'].trim() : null,
     });
+    const links = parseRepoLinks(map['link']);
+    if (typeof links === 'string') {
+      return { repos: [], error: `repos.md: repo "${name}" ${links}` };
+    }
+    if (links.length > 0) {
+      repos[repos.length - 1] = { ...repos[repos.length - 1]!, link: links };
+    }
   }
   return { repos, error: null };
+}
+
+/**
+ * `link:` (req-56) — the checkout's git-ignored folders a fleet worktree
+ * borrows instead of rebuilding (`.tools`, `node_modules`): one name or a
+ * list, each relative to the repo root, never leaving it. A string is
+ * the reason it is refused.
+ */
+function parseRepoLinks(raw: unknown): readonly string[] | string {
+  if (raw === undefined || raw === null) {
+    return [];
+  }
+  const items = typeof raw === 'string' ? [raw] : Array.isArray(raw) ? raw : null;
+  if (items === null || items.some((item) => typeof item !== 'string')) {
+    return 'link: must be a folder name or a list of them';
+  }
+  const links: string[] = [];
+  for (const item of items as string[]) {
+    const rel = item.trim().replaceAll('\\', '/').replace(/\/+$/, '');
+    if (rel === '') {
+      continue;
+    }
+    if (rel.startsWith('/') || /^[a-zA-Z]:/.test(rel) || rel.split('/').some((part) => part === '..' || part === '.')) {
+      return `link: "${item}" must be a path inside the repo (no absolute path, no ..)`;
+    }
+    links.push(rel);
+  }
+  return links;
 }
 
 // --- ordering ----------------------------------------------------------------

@@ -20,6 +20,43 @@ recorded as an explicit decision. The parity checklist lives in
 
 ## Recent milestones
 
+### req-56 — Fleet workers start oriented: a ready toolchain, a clean environment, a short map (owner request, outside the list)
+
+**Not yet manually verified by the owner.** The run audit (2026-10-19)
+found every worker spending 8–28 shell calls on the toolchain alone —
+probing for `.tools` / `node_modules`, making junctions of its own, even
+`npm ci`, and clearing an inherited `npm_config_allow_scripts` — and
+reading the whole 49 KB `CLAUDE.md` first, because `AGENTS.md` (which
+OpenCode loads by itself) said "read it in full". `CLAUDE.md` is written
+for pair programming (ask, pause, wait for confirmation), which an
+unattended run cannot follow.
+
+- **`link:` in `repos.md`**: the checkout's git-ignored folders a fleet
+  worktree links instead of rebuilding (`linkShared` in
+  `fleet/worktrees.ts`): a junction on Windows, a directory symlink
+  elsewhere; only when the checkout has the folder, the worktree does
+  not, and git ignores it there (asked as a folder, with the literal
+  pathspecs the git seam sets lifted for that call — `check-ignore`
+  refuses them). The stream opens with a `worktree links:` line; a
+  recreate removes every top-level link before it deletes the old tree,
+  so a recursive delete never reaches the checkout. The brief gains a
+  "Toolchain" line: use the links, install nothing.
+- **Clean environment**: the runner drops the `npm_*`, `INIT_CWD` and
+  `ELECTRON_RUN_AS_NODE` variables it inherits at boot
+  (`scrubInheritedEnv`, logged), so workers, the gate's shell and git
+  start without `npm run dev`'s config — and an Electron a worker starts
+  is Electron again, not Node.
+- **`docs/agents/fleet-worker.md`**: a short orientation — how to behave
+  without anyone to ask, the toolchain commands, where things live, how
+  to find the rest, which specs a change owes. `AGENTS.md` and
+  `CLAUDE.md` send fleet workers there and to `CLAUDE.md` by section.
+- The board's `repos.md` needs `link: [.tools, node_modules]` under
+  `drey` for this repo (owner's data; not set by this change).
+- Specs: `worktrees.spec.ts` (real git: linked / present / left out, a
+  non-ignored folder refused, a recreate keeps the checkout's folder),
+  `ticket-board.spec.ts` (`link:` parsing and its refusals),
+  `procs.spec.ts`, `fleet-fields.spec.ts` (the Toolchain line).
+
 ### req-55 — Fleet: the run brief stops duplicating the ticket; prompts keep the context small (owner request, outside the list)
 
 **Not yet manually verified by the owner.** The run audit (2026-10-19)

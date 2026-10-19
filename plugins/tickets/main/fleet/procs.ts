@@ -33,6 +33,26 @@ export type SpawnFn = (
   opts: { readonly cwd: string; readonly env?: Readonly<Record<string, string>> },
 ) => RunnerProcess;
 
+/**
+ * What the runner inherits from the process that spawned it and must not
+ * hand on (req-56): `npm run dev` puts its `npm_*` config and lifecycle
+ * variables (and `INIT_CWD`) into Drey's environment — an inherited
+ * `npm_config_allow_scripts` broke every worker's npm call — and the
+ * runner itself runs under `ELECTRON_RUN_AS_NODE`, which would turn any
+ * Electron a worker starts into plain Node. Removed once, at the runner's
+ * boot, so workers, the gate's shell and git all start clean. Returns the
+ * names it removed.
+ */
+export function scrubInheritedEnv(env: NodeJS.ProcessEnv): readonly string[] {
+  const removed = Object.keys(env).filter(
+    (key) => /^npm_/i.test(key) || key.toUpperCase() === 'INIT_CWD' || key.toUpperCase() === 'ELECTRON_RUN_AS_NODE',
+  );
+  for (const key of removed) {
+    delete env[key];
+  }
+  return removed;
+}
+
 export function nodeSpawnFn(): SpawnFn {
   return (cmd, args, opts) => {
     const child = spawn(cmd, args, {

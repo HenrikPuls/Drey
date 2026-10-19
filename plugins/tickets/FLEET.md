@@ -173,7 +173,17 @@ per-column token budget) · `ciBackoff`.
   the worker ignores the stop — the supervisor tree-kills, give it a moment,
   then check the pid.
 - **Where did the agent work?** → `worktrees/<repo>-<ticket>` on branch
-  `t/<id>`; inspect with `git -C <worktree> ...`. The runner commits ticket
+  `t/<id>`; inspect with `git -C <worktree> ...`. Folders listed under
+  the repo's `link:` in `repos.md` (req-56) are junctions into the
+  owner's checkout — the stream's `worktree links:` line says which were
+  linked or left out and why. Before removing a worktree by hand, remove
+  its junctions (`cmd /c rmdir <worktree>\node_modules` removes the link,
+  not the target) — never a recursive delete through them. The runner's
+  own recreate does that itself.
+- **A worker's npm or Electron behaves oddly** → the runner drops the
+  `npm_*`, `INIT_CWD` and `ELECTRON_RUN_AS_NODE` variables it inherits
+  at boot (req-56; `runner.log` names them); a runner started before that
+  build still hands them on. The runner commits ticket
   bookkeeping ("fleet run bookkeeping") in the tickets repo itself.
 - **A transition did not reach the remote** → check pipeline.md's `push:`
   key first (absent = pushing is the owner's business), then

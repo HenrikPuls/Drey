@@ -28,7 +28,7 @@ const parseLine = (line: string): StreamEvent | null => {
 };
 
 /** Run-setup notes the worker adapters write (not a tool call). */
-const SETUP_NOTE = /^(run R-|opencode serve|re-attached)/i;
+const SETUP_NOTE = /^(run R-|opencode serve|re-attached|worktree links:)/i;
 
 /** How much of a thought its folded title previews. */
 const THINK_PREVIEW = 100;

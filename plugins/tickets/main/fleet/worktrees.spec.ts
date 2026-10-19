@@ -117,7 +117,7 @@ describe('prepareWorktree (real git)', () => {
   });
 
   const fleetGit = (): TicketsGit => new TicketsGit(() => 'git');
-  const req = (overrides: Partial<Pick<RunRequest, 'repoPath' | 'branch' | 'baseRef'>> = {}) => ({
+  const req = (overrides: Partial<Pick<RunRequest, 'repoPath' | 'branch' | 'baseRef' | 'links'>> = {}) => ({
     repoPath: repo,
     branch: BRANCH,
     baseRef: 'main',
@@ -202,6 +202,53 @@ describe('prepareWorktree (real git)', () => {
     expect(result).toEqual({ outcome: 'recreated', sessionInvalidated: true, movedTo: null });
     expect(await listing()).toContain(`branch refs/heads/${BRANCH}`);
     expect(await headOf(worktreePath)).toBe(BRANCH);
+  });
+
+  describe('link: — the toolchain folders a worktree borrows (req-56)', () => {
+    beforeEach(async () => {
+      await fsp.writeFile(path.join(repo, '.gitignore'), 'node_modules/\n.tools/\n');
+      await git(repo, ['add', '.gitignore']);
+      await git(repo, ['commit', '-m', 'ignore']);
+      await fsp.mkdir(path.join(repo, 'node_modules', 'pkg'), { recursive: true });
+      await fsp.writeFile(path.join(repo, 'node_modules', 'pkg', 'index.js'), 'shared\n');
+    });
+
+    it('links an ignored folder the checkout has, and reports the rest', async () => {
+      const result = await prepareWorktree(
+        fleetGit(),
+        { ...req(), links: ['node_modules', '.tools', 'file.txt'] },
+        worktreePath,
+        frozen,
+      );
+      expect(result.links).toEqual({
+        linked: ['node_modules'],
+        present: ['file.txt'],
+        skipped: [{ path: '.tools', reason: 'the checkout has no such folder' }],
+      });
+      await expect(fsp.readFile(path.join(worktreePath, 'node_modules', 'pkg', 'index.js'), 'utf8')).resolves.toBe('shared\n');
+      expect((await fsp.lstat(path.join(worktreePath, 'node_modules'))).isSymbolicLink()).toBe(true);
+      expect((await git(worktreePath, ['status', '--porcelain'])).trim()).toBe('');
+    });
+
+    it('leaves out a folder git would see as a change', async () => {
+      await fsp.mkdir(path.join(repo, 'tracked-dir'));
+      const result = await prepareWorktree(fleetGit(), { ...req(), links: ['tracked-dir'] }, worktreePath, frozen);
+      expect(result.links?.skipped).toEqual([
+        { path: 'tracked-dir', reason: 'git does not ignore it — a link would show as a change' },
+      ]);
+    });
+
+    it('a reused worktree keeps its link; a recreate removes it first and never empties the checkout', async () => {
+      await prepareWorktree(fleetGit(), { ...req(), links: ['node_modules'] }, worktreePath, frozen);
+      expect((await prepareWorktree(fleetGit(), { ...req(), links: ['node_modules'] }, worktreePath, frozen)).links?.present).toEqual([
+        'node_modules',
+      ]);
+      await fsp.rm(path.join(repo, '.git', 'worktrees', adminName, 'gitdir'));
+      const result = await prepareWorktree(fleetGit(), { ...req(), links: ['node_modules'] }, worktreePath, frozen);
+      expect(result.outcome).toBe('recreated');
+      expect(result.links?.linked).toEqual(['node_modules']);
+      await expect(fsp.readFile(path.join(repo, 'node_modules', 'pkg', 'index.js'), 'utf8')).resolves.toBe('shared\n');
+    });
   });
 
   it('moves a stale dirty worktree aside, keeps it, and checks out fresh', async () => {

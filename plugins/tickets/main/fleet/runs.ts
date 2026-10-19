@@ -22,7 +22,7 @@ import { TicketsGit } from '../tickets-git';
 import { ZERO_USAGE, type NormalizedEvent, type ProviderAdapter, type UsageTotals, type WorkerHandle } from './providers';
 import { killTreeGuarded, processAlive, processStartMs, type ExecFn } from './procs';
 import type { RunInfo, RunRequest, RunState, SteerRung } from './protocol';
-import { prepareWorktree as defaultPrepareWorktree, type PreparedWorktree } from './worktrees';
+import { prepareWorktree as defaultPrepareWorktree, type LinkReport, type PreparedWorktree } from './worktrees';
 
 const execAsync = promisify(nodeExec);
 const execFileAsync = promisify(nodeExecFile);
@@ -174,6 +174,16 @@ export function usageSummary(info: Pick<RunInfo, 'tokensIn' | 'tokensOut' | 'cac
   const cached = (info.cacheReadTokens ?? 0) > 0 ? ` (${tokenWords(info.cacheReadTokens ?? 0)} cached)` : '';
   const cost = info.costUsd !== null && info.costUsd > 0 ? ` · $${info.costUsd.toFixed(2)}` : '';
   return ` — ${tokenWords(info.tokensIn)} in${cached} / ${tokenWords(info.tokensOut)} out${cost}`;
+}
+
+/** The stream's setup line for the repo's `link:` folders (req-56). */
+export function linkNote(report: LinkReport): string {
+  const parts = [
+    report.linked.length > 0 ? `linked ${report.linked.join(', ')}` : '',
+    report.present.length > 0 ? `already there ${report.present.join(', ')}` : '',
+    ...report.skipped.map((s) => `left out ${s.path} (${s.reason})`),
+  ].filter((part) => part !== '');
+  return `worktree links: ${parts.join('; ')}`;
 }
 
 export class RunSupervisor {
@@ -628,7 +638,8 @@ export class RunSupervisor {
           ? openNote(
               `stale dirty worktree moved aside to ${prepared.movedTo} — kept, not deleted; earlier session context is invalid`,
             )
-          : ''),
+          : '') +
+        (prepared.links !== undefined ? openNote(linkNote(prepared.links)) : ''),
       'utf8',
     );
 

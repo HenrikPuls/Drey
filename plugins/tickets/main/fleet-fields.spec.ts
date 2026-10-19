@@ -224,4 +224,23 @@ describe('composeInstruction — the deterministic run brief', () => {
     expect(composeInstruction({ ...base, plan: null })).toContain('description is quoted in full below');
     expect(composeInstruction({ ...base, plan: null, ticketFile: undefined })).not.toContain('quoted in full');
   });
+
+  it("names the linked toolchain and forbids an install, only when the repo links something (req-56)", () => {
+    const base = {
+      ticketId: 'T-0007',
+      title: 'Add the thing',
+      repo: null,
+      branch: 't/T-0007',
+      worktreePath: 'W',
+      phase: 'build',
+      description: 'It should work.',
+      plan: null,
+      prompt: null,
+      acceptance: [],
+    };
+    const text = composeInstruction({ ...base, links: ['.tools', 'node_modules'] });
+    expect(text).toContain('Toolchain: `.tools`, `node_modules` are linked into the checkout');
+    expect(text).toContain('Do not run an install');
+    expect(composeInstruction(base)).not.toContain('Toolchain:');
+  });
 });

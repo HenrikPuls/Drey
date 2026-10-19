@@ -17,6 +17,9 @@ binding specification, not just background reading.
 
 `AGENTS.md` is the tool-neutral entry point for coding agents; it points
 here, and everything in this file binds every agent regardless of tool.
+An unattended **fleet worker** on a ticket starts from
+`docs/agents/fleet-worker.md` instead (toolchain, where things live, which
+interactive rules below do not apply to it) and opens this file by section.
 
 ## Language Convention
 

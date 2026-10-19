@@ -759,7 +759,11 @@ then the phase's `@worker` pin in `pipeline.md`, then the repo's
 `worker:` in `repos.md`, then the configured default) and how freely
 it may act. The worker gets a checkout of the ticket's repo on its own
 branch (`t/<id>`), the ticket's description, plan and the phase's
-prompt as its brief.
+prompt as its brief. Folders the checkout has but git ignores — its
+toolchain, say `.tools` and `node_modules` — can be shared with every
+such checkout instead of rebuilt: list them as `link: [.tools,
+node_modules]` under the repository in `repos.md`, and the worker is
+told to use them and install nothing.
 
 While the run is live, its column shows a **Workers** strip with one
 lane per run: a traffic light (green working, amber context nearly full

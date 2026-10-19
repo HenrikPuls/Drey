@@ -320,6 +320,7 @@ repos:
     url: https://github.com/HenrikPuls/Drey.git
     branch: main
     path: E:/projects/Drey-m83
+    link: [.tools, node_modules]
   lariscus:
     url: https://dev.azure.com/org/project/_git/lariscus
     branch: main
@@ -336,7 +337,14 @@ fleet never calls a host API). `path` is the **local checkout /
 worktree** where the repo's work is tested — the board's card context
 menu opens a terminal there ("Open work folder in terminal": run
 `.\dev.ps1`, the repo's build, whatever it uses). `worker` (M84) is
-the repo's default fleet worker for tickets on this repo. Names are
+the repo's default fleet worker for tickets on this repo. `link`
+(req-56) names git-ignored folders of the checkout at `path` — one
+name or a list, relative, never leaving the repo — that the runner
+links into every fleet worktree (a junction on Windows, a directory
+symlink elsewhere) instead of the worker rebuilding them: the toolchain
+(`.tools`, `node_modules`). A folder is linked only when the checkout
+has it, the worktree does not, and git ignores it there; the brief then
+tells the worker not to install anything. Names are
 unique; a ticket's `repo:` must name one of them once it is in a work
 phase.
 

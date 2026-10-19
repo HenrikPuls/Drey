@@ -1,0 +1,77 @@
+# Fleet worker orientation
+
+You run unattended on one ticket of the owner's board, in a worktree of
+this repo on the ticket's branch `t/<id>`. Your brief names the ticket
+file, quotes its description and plan, and carries the phase prompt —
+that is your task. This page tells you where things are and which of the
+repo's rules apply to you. Read it instead of `CLAUDE.md` in full; open
+`CLAUDE.md` only at the section a step needs (search its headings).
+
+## How to behave
+
+- Nobody answers questions during the run. Where `CLAUDE.md` says to ask,
+  pause or wait for confirmation, decide within the plan and write the
+  open question into the ticket's Log; if no honest decision exists, stop
+  and log the blocker.
+- Stay inside the plan's scope. No worktree of your own; no merge into
+  `main` and no push unless your phase prompt asks for it (the commit
+  step does) — otherwise the runner and the owner handle that.
+- Do not start the app (`npm run dev`, `.\dev.ps1`, `npm run app`): there
+  is no one to look at it. Unit tests, typecheck and lint are your proof.
+- Everything code-side is English (identifiers, comments, commit
+  messages, every string the UI shows). Notes a user writes stay as
+  they are.
+
+## Toolchain (no global Node)
+
+- `.tools/` (portable Node) and `node_modules/` are linked into your
+  worktree from the owner's checkout when the board's `repos.md` says so —
+  the brief's "Toolchain" line tells you. Never run an install (`npm ci`,
+  `npm install`) and never create or replace those links.
+- PowerShell: `. .\env.ps1` once, then `npm run …`. Bash:
+  `export PATH="$PWD/.tools/node:$PATH"`.
+- One plugin's specs: `npm run test:plugin -- <id>` (a path fragment
+  scopes outside `plugins/`: `shared`, `electron/ipc`).
+- Renderer specs: `npm run test:app -- --include "src/app/…/x.spec.ts"`.
+- Typecheck, all four configs: `npm run typecheck`. Import cycles:
+  `node scripts/check-cycles.mjs`.
+- Lint the files you touched:
+  `node node_modules/eslint/bin/eslint.js <files>`.
+- The full gate is `npm run test:all` (several minutes) — run it once at
+  the end of a build step, not after every edit.
+
+## Where things live
+
+| Path | What |
+|---|---|
+| `electron/` | main process: vault and note IO, LLM transport, MCP server, plugin host |
+| `src/app/` | Angular renderer: editor (`editor/`), panes and docks, settings, plugin host |
+| `shared/` | pure logic both sides use; `shared/plugin-api/` is the versioned plugin SDK, `shared/ipc/` the IPC contract |
+| `plugins/<id>/` | runtime plugins: `main/` (Node), `renderer/` (plain DOM, bundled), `shared/` |
+| `plugins/tickets/` | this board and the fleet runner (`main/fleet/`); guides `FLEET.md`, `BOARD.md` |
+| `specs/` | binding specs: `roadmap.md`, `changelog.md`, `decisions.md`, `frontmatter-schema.md`, `ticket-schema.md`, `classifier-spec.md` |
+| `docs/` | arc42 docs; `docs/05_building_block_view.md` § "Feature → files index" maps a feature to its files; ADRs in `docs/09_architecture_decisions/` |
+| `docs/manual/manual.md` | the user manual shipped in the app |
+| `e2e/` | Playwright tests (need a full build — leave them to the owner unless the plan names one) |
+
+A spec sits beside the file it tests. The dependency rules between
+`shared/`, `src/`, `electron/` and `plugins/` are enforced by lint
+(`docs/05` § "The dependency rules").
+
+## Finding things without reading everything
+
+- Start from the plan's file list and line ranges. Otherwise search for
+  the symbol or the UI string, then read the lines around the hits.
+- "Which file owns X": `CLAUDE.md` § "Ownership Map", then `docs/05`
+  § "Feature → files index".
+- Why something is the way it is: the ADR the code comment or the
+  ownership map names; ideas already rejected: `specs/decisions.md` (do
+  not re-propose them).
+
+## Specs and docs your change owes
+
+When your change alters what a spec file describes, update it in the
+same branch: the table under `CLAUDE.md` § "The spec files and who they
+belong to" says which file covers what, and the manual covers what the
+user sees. Name every spec or doc you changed — or deliberately left —
+in your Log line.
