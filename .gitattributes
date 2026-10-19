@@ -1,0 +1,4 @@
+# The shipped ticket prompts are read as raw bytes -- default-prompts.spec.ts
+# asserts pure LF -- so a fresh checkout must never smudge them to CRLF,
+# whatever the machine's core.autocrlf says.
+plugins/tickets/prompts/*.md text eol=lf
