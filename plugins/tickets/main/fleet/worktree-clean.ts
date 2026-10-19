@@ -26,7 +26,7 @@ export interface RemoveOptions {
 export type RemoveOutcome =
   | { readonly ok: true }
   | { readonly ok: false; readonly dirty: true; readonly status: string }
-  | { readonly ok: false; readonly error: string };
+  | { readonly ok: false; readonly dirty?: undefined; readonly error: string };
 
 /**
  * Removes one registered worktree. `status --porcelain` reads the tree
@@ -67,6 +67,12 @@ export interface CleanWorktreesInput {
   readonly fleetRoot: string;
   /** Worktree paths of live runs — never removed. */
   readonly protectedPaths: readonly string[];
+  /**
+   * The boot migration's scope (T-0044): only the legacy base is
+   * cleaned (settled tickets' home trees stay — they are the work
+   * surface re-runs reuse). The Clean up button uses the full scope.
+   */
+  readonly legacyOnly?: boolean;
 }
 
 export interface CleanupReport {
@@ -97,7 +103,11 @@ export async function cleanWorktrees(git: GitSeam, input: CleanWorktreesInput): 
     if (repo.path === null) {
       continue;
     }
-    const bases = [worktreeBaseFor(input.vaultPath, repo), legacyWorktreeBase(input.fleetRoot)];
+    const bases =
+      input.legacyOnly === true ? [legacyWorktreeBase(input.fleetRoot)] : [
+        worktreeBaseFor(input.vaultPath, repo),
+        legacyWorktreeBase(input.fleetRoot),
+      ];
     let listing: string;
     try {
       listing = await git.run(repo.path, ['worktree', 'list', '--porcelain']);

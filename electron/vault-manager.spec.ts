@@ -278,7 +278,7 @@ describe('VaultManager reading and writing', () => {
     const tree = await manager.listFiles();
     expect(tree.map((e) => e.name)).toEqual(['tickets']);
     // localeCompare order — '_' sorts before the digits.
-    expect(tree[0]!.children.map((e) => e.name)).toEqual(['_meta', '10-inbox']);
+    expect((tree[0]?.children ?? []).map((e) => e.name)).toEqual(['_meta', '10-inbox']);
   });
 
   it('lists the notes of every vault whose folder is there', async () => {
