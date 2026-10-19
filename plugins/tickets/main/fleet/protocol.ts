@@ -63,6 +63,10 @@ export interface RunRequest {
   readonly recordWorker?: string;
 }
 
+/** How the run's worktree was obtained — `prepareWorktree` (T-0047) is
+ *  idempotent per ticket, so a repeated run reports what it did. */
+export type WorktreeOutcome = 'reused' | 'created' | 'recreated' | 'moved-aside';
+
 /** A run as the runner reports it — and as `run.json` persists it. */
 export interface RunInfo {
   readonly id: string;
@@ -83,6 +87,8 @@ export interface RunInfo {
   readonly lastSteerRung: SteerRung | null;
   readonly worktreePath: string;
   readonly branch: string;
+  /** On every run started after T-0047; absent on adopted pre-T-0047 records. */
+  readonly worktree?: WorktreeOutcome;
   /** The last gate failure, when the machine gate stopped the run short. */
   readonly gateFailure: string | null;
 }
