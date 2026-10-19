@@ -15,6 +15,7 @@ import {
   TICKETS_ARCHIVE_DIR,
   type BoardColumn,
   type BoardSnapshot,
+  type ColumnsBatch,
   type PipelinePhase,
   type RepoRef,
   type TicketCard,
@@ -128,124 +129,113 @@ export function parsePipeline(text: string): PipelineParse {
   return { phases, pushRemote, error: null, issues };
 }
 
-// --- pipeline.md patching (the settings dialog's writer, M85) ----------------
+// --- pipeline.md column batch (T-0043: the settings dialog's one writer) ----
 
-export interface PhasePoolPatch {
-  /** `opencode` or `claude-code` sets the worker (and the `agent` handover);
-   *  null clears it — the column becomes a manual step and loses its pool. */
-  readonly worker?: string | null;
-  /** The model pin; an empty string or null clears it. */
-  readonly model?: string | null;
-  /** Pool size (≥ 1); null clears it (default 1). */
-  readonly workers?: number | null;
-  /** The prompt ref override; an empty string or null clears it. */
-  readonly prompt?: string | null;
+/**
+ * Authoritative check of a store-on-leave batch before anything is
+ * touched: null = valid, a string is the owner-readable refusal. The
+ * dialog pre-checks what its snapshot knows; this re-checks against the
+ * files main just read. It never guesses — every refusal names the
+ * reason the owner can act on.
+ */
+export function validateColumnsBatch(
+  current: readonly PipelinePhase[],
+  batch: ColumnsBatch,
+  counts: Readonly<Record<string, number>>,
+): string | null {
+  if (current.length === 0) {
+    return 'the pipeline is empty or does not parse';
+  }
+  const currentIds = current.map((p) => p.id);
+  const survivors = currentIds.filter((id) => !batch.remove.includes(id));
+
+  // The order must name every surviving and added column exactly once.
+  const dupes = batch.order.filter((id, i) => batch.order.indexOf(id) !== i);
+  if (
+    batch.order.length !== survivors.length + batch.add.length ||
+    dupes.length > 0 ||
+    survivors.some((id) => !batch.order.includes(id)) ||
+    batch.add.some((a) => !batch.order.includes(a.id))
+  ) {
+    return 'the new order must name every pipeline phase exactly once';
+  }
+  // Removed ids: exist, neither first nor last, and hold no tickets.
+  for (const id of batch.remove) {
+    if (!currentIds.includes(id)) {
+      return `column "${id}" is not in the pipeline`;
+    }
+    if (id === currentIds[0]) {
+      return `"${id}" is the first column — the capture target for new tickets`;
+    }
+    if (id === currentIds[currentIds.length - 1]) {
+      return `"${id}" is the last column — the terminal`;
+    }
+    const held = counts[id] ?? 0;
+    if (held > 0) {
+      return `"${id}" still holds ${held} ${held === 1 ? 'ticket' : 'tickets'} — move or archive ${held === 1 ? 'it' : 'them'} first`;
+    }
+  }
+  // Added ids: a slot before the terminal exists, the grammar holds, and
+  // the id collides with nothing.
+  if (batch.add.length > 0 && current.length < 2) {
+    return 'a pipeline needs a first and a last column before one can be added';
+  }
+  for (const added of batch.add) {
+    if (typeof added.title !== 'string' || added.title.trim() === '') {
+      return `new column "${added.id}" needs a title`;
+    }
+    if (!PHASE_ID.test(added.id)) {
+      return `new column id "${added.id}" must match ${PHASE_ID.source}`;
+    }
+    if (currentIds.includes(added.id) || batch.add.filter((a) => a.id === added.id).length > 1) {
+      return `a column of id "${added.id}" already exists`;
+    }
+  }
+  // The capture target and the terminal keep their places.
+  if (batch.order[0] !== currentIds[0] || batch.order[batch.order.length - 1] !== currentIds[currentIds.length - 1]) {
+    return 'the first and the last phase keep their places';
+  }
+  // Patches: well-formed values on columns the batch keeps.
+  for (const [id, patch] of Object.entries(batch.patch)) {
+    if (!survivors.includes(id) && !batch.add.some((a) => a.id === id)) {
+      return `a patch names "${id}", which is not a column of this batch`;
+    }
+    if (patch.worker !== undefined && patch.worker !== null) {
+      const worker = patch.worker.trim();
+      if (worker !== '' && worker !== 'opencode' && worker !== 'claude-code') {
+        return 'the worker is "opencode" or "claude-code"';
+      }
+    }
+    if (
+      patch.workers !== undefined &&
+      patch.workers !== null &&
+      (!Number.isInteger(patch.workers) || patch.workers < 1)
+    ) {
+      return 'workers must be a whole number of 1 or more';
+    }
+    if (patch.model !== undefined && patch.model !== null && typeof patch.model !== 'string') {
+      return `the model of "${id}" must be a string`;
+    }
+    if (patch.prompt !== undefined && patch.prompt !== null && typeof patch.prompt !== 'string') {
+      return `the prompt of "${id}" must be a string`;
+    }
+  }
+  return null;
 }
 
 /**
- * The one patcher for a phase's pool keys in `_meta/pipeline.md` — the
- * settings dialog writes through here, so a hand-formatted file keeps
- * its layout, comments and unknown keys (the same document-mutation
- * discipline as the ticket patcher). Setting a worker writes the
- * matching `agent <prompt-ref>` handover; clearing it writes `manual`.
- * Throws on an unparseable pipeline or an unknown phase — the caller
- * refuses, it never guesses.
+ * One YAML-document pass for the whole store-on-leave batch: delete
+ * removed entries, splice added entries (`{ id, title, handover:
+ * manual }`) at their order positions, reorder, then apply the
+ * per-column patches with the round-1 semantics (setting a worker
+ * writes the matching `agent <ref>` handover — ref: patch prompt >
+ * existing prompt key > handover ref > `<id>-default`; clearing it
+ * writes `manual` and the pool keys go). A hand-formatted file keeps
+ * its layout, comments, unknown keys and prose body (document
+ * mutation, never a re-serialize). Throws on an unparseable pipeline
+ * or an unknown phase — the caller refuses, it never guesses.
  */
-export function patchPipelinePhase(text: string, phaseId: string, patch: PhasePoolPatch): string {
-  const { yamlText, body, hadFence } = splitFrontmatter(text);
-  if (!hadFence || yamlText === null) {
-    throw new Error('pipeline.md has no frontmatter fence');
-  }
-  const doc = parseDocument(yamlText);
-  if (doc.errors.length > 0) {
-    throw new Error('pipeline.md does not parse');
-  }
-  const phases = doc.get('phases', true);
-  if (!isCollection(phases)) {
-    throw new Error('pipeline.md needs a phases list');
-  }
-  let entry: YAMLMap | null = null;
-  for (const item of (phases as YAMLSeq).items) {
-    const value = isMap(item) ? item : null;
-    if (value !== null && value.get('id') === phaseId) {
-      entry = value;
-      break;
-    }
-  }
-  if (entry === null) {
-    throw new Error(`pipeline.md has no phase "${phaseId}"`);
-  }
-
-  const removeKey = (key: string): void => {
-    if (entry!.has(key)) {
-      entry!.delete(key);
-    }
-  };
-
-  if (patch.worker !== undefined) {
-    const worker = patch.worker?.trim() ?? '';
-    if (worker === '') {
-      // A manual step: the pool and its keys go with the worker.
-      removeKey('worker');
-      removeKey('model');
-      removeKey('workers');
-      removeKey('prompt');
-      entry.set('handover', 'manual');
-    } else {
-      entry.set('worker', worker);
-      const handover = parseHandover(String(entry.get('handover') ?? ''));
-      const promptFromPatch =
-        patch.prompt !== undefined && patch.prompt !== null && patch.prompt.trim() !== ''
-          ? patch.prompt.trim()
-          : null;
-      const promptFromKey =
-        typeof entry.get('prompt') === 'string' && (entry.get('prompt') as string).trim() !== ''
-          ? (entry.get('prompt') as string).trim()
-          : null;
-      const ref = promptFromPatch ?? promptFromKey ?? handover.promptRef ?? `${phaseId}-default`;
-      entry.set('handover', `agent ${ref}`);
-    }
-  }
-  if (patch.model !== undefined) {
-    const model = patch.model?.trim() ?? '';
-    if (model === '') {
-      removeKey('model');
-    } else {
-      entry.set('model', model);
-    }
-  }
-  if (patch.workers !== undefined) {
-    if (patch.workers === null) {
-      removeKey('workers');
-    } else if (Number.isInteger(patch.workers) && patch.workers >= 1) {
-      entry.set('workers', patch.workers);
-    } else {
-      throw new Error('workers must be a whole number of 1 or more');
-    }
-  }
-  if (patch.prompt !== undefined) {
-    const prompt = patch.prompt?.trim() ?? '';
-    if (prompt === '') {
-      removeKey('prompt');
-    } else {
-      entry.set('prompt', prompt);
-    }
-  }
-
-  let yaml = doc.toString({ flowCollectionPadding: false, lineWidth: 0 });
-  if (!yaml.endsWith('\n')) {
-    yaml += '\n';
-  }
-  return `---\n${yaml}---\n${body}`;
-}
-
-/**
- * Rewrites the order of pipeline.md's phases (req-50, the settings page's
- * sortable columns). `order` must name every phase exactly once, and the
- * first (capture target) and last (terminal) phase keep their places.
- * Each entry moves whole — keys, comments and the prose body stay.
- */
-export function reorderPipelinePhases(text: string, order: readonly string[]): string {
+export function applyColumnsToPipeline(text: string, batch: ColumnsBatch): string {
   const { yamlText, body, hadFence } = splitFrontmatter(text);
   if (!hadFence || yamlText === null) {
     throw new Error('pipeline.md has no frontmatter fence');
@@ -259,22 +249,111 @@ export function reorderPipelinePhases(text: string, order: readonly string[]): s
     throw new Error('pipeline.md needs a phases list');
   }
   const items = (phases as YAMLSeq).items;
-  const idOf = (item: unknown): string | null => {
-    const id = isMap(item) ? item.get('id') : null;
-    return typeof id === 'string' ? id : null;
-  };
-  const current = items.map(idOf);
+  const entryOf = new Map<string, YAMLMap>();
+  for (const item of items) {
+    const value = isMap(item) ? item : null;
+    const id = value !== null ? value.get('id') : null;
+    if (value === null || typeof id !== 'string') {
+      throw new Error('every pipeline phase must be a mapping with an id');
+    }
+    entryOf.set(id, value);
+  }
+  const currentIds = items.map((item) => (isMap(item) ? String(item.get('id')) : ''));
+  for (const id of batch.remove) {
+    if (!entryOf.has(id)) {
+      throw new Error(`pipeline.md has no phase "${id}"`);
+    }
+  }
+  for (const added of batch.add) {
+    if (entryOf.has(added.id) || currentIds.includes(added.id)) {
+      throw new Error(`a column of id "${added.id}" already exists`);
+    }
+  }
+  for (const id of Object.keys(batch.patch)) {
+    if (!entryOf.has(id) && !batch.add.some((a) => a.id === id)) {
+      throw new Error(`pipeline.md has no phase "${id}"`);
+    }
+  }
+
+  // Splice the added entries (manual, no pool keys) and lay out the order.
+  const nodeOf = new Map<string, YAMLMap>(entryOf);
+  for (const added of batch.add) {
+    nodeOf.set(added.id, doc.createNode({ id: added.id, title: added.title, handover: 'manual' }) as YAMLMap);
+  }
+  const ordered = [...batch.order];
+  if (new Set(ordered).size !== ordered.length) {
+    throw new Error('the new order must name every pipeline phase exactly once');
+  }
   if (
-    order.length !== current.length ||
-    new Set(order).size !== order.length ||
-    current.some((id) => id === null || !order.includes(id))
+    ordered.some((id) => !nodeOf.has(id)) ||
+    currentIds.filter((id) => !batch.remove.includes(id)).some((id) => !ordered.includes(id))
   ) {
     throw new Error('the new order must name every pipeline phase exactly once');
   }
-  if (order[0] !== current[0] || order[order.length - 1] !== current[current.length - 1]) {
+  if (ordered[0] !== currentIds[0] || ordered[ordered.length - 1] !== currentIds[currentIds.length - 1]) {
     throw new Error('the first and the last phase keep their places');
   }
-  (phases as YAMLSeq).items = order.map((id) => items[current.indexOf(id)]!);
+  (phases as YAMLSeq).items = ordered.map((id) => nodeOf.get(id)!);
+
+  // Per-column patches, round-1 semantics.
+  for (const [id, patch] of Object.entries(batch.patch)) {
+    const entry = nodeOf.get(id)!;
+    const removeKey = (key: string): void => {
+      if (entry.has(key)) {
+        entry.delete(key);
+      }
+    };
+    if (patch.worker !== undefined) {
+      const worker = patch.worker?.trim() ?? '';
+      if (worker === '') {
+        // A manual step: the pool and its keys go with the worker.
+        removeKey('worker');
+        removeKey('model');
+        removeKey('workers');
+        removeKey('prompt');
+        entry.set('handover', 'manual');
+      } else {
+        entry.set('worker', worker);
+        const handover = parseHandover(String(entry.get('handover') ?? ''));
+        const promptFromPatch =
+          patch.prompt !== undefined && patch.prompt !== null && patch.prompt.trim() !== ''
+            ? patch.prompt.trim()
+            : null;
+        const promptFromKey =
+          typeof entry.get('prompt') === 'string' && (entry.get('prompt') as string).trim() !== ''
+            ? (entry.get('prompt') as string).trim()
+            : null;
+        const ref = promptFromPatch ?? promptFromKey ?? handover.promptRef ?? `${id}-default`;
+        entry.set('handover', `agent ${ref}`);
+      }
+    }
+    if (patch.model !== undefined) {
+      const model = patch.model?.trim() ?? '';
+      if (model === '') {
+        removeKey('model');
+      } else {
+        entry.set('model', model);
+      }
+    }
+    if (patch.workers !== undefined) {
+      if (patch.workers === null) {
+        removeKey('workers');
+      } else if (Number.isInteger(patch.workers) && patch.workers >= 1) {
+        entry.set('workers', patch.workers);
+      } else {
+        throw new Error('workers must be a whole number of 1 or more');
+      }
+    }
+    if (patch.prompt !== undefined) {
+      const prompt = patch.prompt?.trim() ?? '';
+      if (prompt === '') {
+        removeKey('prompt');
+      } else {
+        entry.set('prompt', prompt);
+      }
+    }
+  }
+
   let yaml = doc.toString({ flowCollectionPadding: false, lineWidth: 0 });
   if (!yaml.endsWith('\n')) {
     yaml += '\n';
@@ -388,6 +467,41 @@ export function removeIdFromPins(orderText: string, id: string): string {
     text = rewriteOrderSection(text, section, ids);
   }
   return text;
+}
+
+/** Drops the pin sections of `phaseIds` from order.md — a removed column
+ *  (T-0043) takes its pins with it. Everything else stays verbatim; null
+ *  when `text` is null or nothing matched (no write). */
+export function dropOrderSections(text: string | null, phaseIds: readonly string[]): string | null {
+  if (text === null || phaseIds.length === 0) {
+    return null;
+  }
+  const drop = new Set(phaseIds);
+  const out: string[] = [];
+  let dropping = false;
+  let touched = false;
+  for (const rawLine of text.split('\n')) {
+    const heading = /^##\s+(.+?)\s*$/.exec(rawLine.trim());
+    if (heading !== null) {
+      dropping = drop.has(heading[1]!);
+      if (dropping) {
+        touched = true;
+      } else {
+        out.push(rawLine);
+      }
+      continue;
+    }
+    if (!dropping) {
+      out.push(rawLine);
+    }
+  }
+  if (!touched) {
+    return null;
+  }
+  while (out.length > 0 && out[out.length - 1] === '') {
+    out.pop();
+  }
+  return `${out.join('\n')}\n`;
 }
 
 // --- repos.md --------------------------------------------------------------
@@ -538,6 +652,9 @@ export interface AssembleInput {
   /** The plugin's configured default worker (M84) — what cards show when
    *  nothing above them pins one. */
   readonly defaultWorker: string;
+  /** Stems of `tickets/_meta/prompts/*.md` (T-0043) — optional so the
+   *  orchestrator and older fixtures need no churn; default []. */
+  readonly promptRefs?: readonly string[];
 }
 
 /** Files under `tickets/` that are neither `_meta` nor ticket-shaped. */
@@ -693,5 +810,6 @@ export function assembleBoard(input: AssembleInput): BoardSnapshot {
     columns,
     issues,
     checkpoints: [...checkpointPhaseIds(columns)],
+    promptRefs: [...(input.promptRefs ?? [])],
   };
 }

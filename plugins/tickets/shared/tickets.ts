@@ -298,6 +298,8 @@ export interface BoardSnapshot {
    * moves feed the next pool.
    */
   readonly checkpoints: readonly string[];
+  /** Stems of `tickets/_meta/prompts/*.md` as they are on disk (T-0043). */
+  readonly promptRefs: readonly string[];
 }
 
 /** `true` when the id parses AND matches the file stem it came from. */
@@ -326,6 +328,42 @@ export interface MutationResult {
   readonly warning?: string;
   /** Reorder / "Number folders" (req-50): how many folders were renamed. */
   readonly moved?: number;
+}
+
+// --- the columns batch (T-0043: store-on-leave) -----------------------------
+
+/** One column's pool-key edit as the dialog buffers it (T-0043).
+ *  Undefined keys are untouched — patch semantics, so a hand edit of
+ *  pipeline.md made while the dialog was open survives. */
+export interface ColumnFieldPatch {
+  readonly worker?: string | null; // '' / null clears (column goes manual)
+  readonly model?: string | null;
+  readonly workers?: number | null; // integer >= 1; null = default
+  readonly prompt?: string | null; // null = follow the handover's ref
+}
+
+/** The store-on-leave batch: everything the owner buffered, applied and
+ *  committed in one go (`tickets: columns …`). */
+export interface ColumnsBatch {
+  /** The full new phase order: every surviving id + the added ids, once each. */
+  readonly order: readonly string[];
+  /** New columns at their `order` position (manual, no pool keys). */
+  readonly add: readonly { readonly id: string; readonly title: string }[];
+  /** Removed column ids (must hold no tickets; never first or last). */
+  readonly remove: readonly string[];
+  /** Pool-key patches per surviving column id. */
+  readonly patch: Readonly<Record<string, ColumnFieldPatch>>;
+}
+
+/** 'QA gate' -> 'qa-gate'; null when the slug would violate ^[a-z][a-z0-9-]*$
+ *  (empty, or starts with a digit/dash). Shared: the modal pre-checks, main
+ *  re-validates. */
+export function slugifyPhaseId(title: string): string | null {
+  const slug = title
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '');
+  return /^[a-z][a-z0-9-]*$/.test(slug) ? slug : null;
 }
 
 /** One file of `tickets/_meta/prompts/` as it is on disk (req-50). */

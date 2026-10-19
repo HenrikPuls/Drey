@@ -6,6 +6,7 @@ import {
   dwellMs,
   nextTicketId,
   openTicketCount,
+  slugifyPhaseId,
   spanWords,
   phaseDirectoryName,
   stripPhasePrefix,
@@ -55,6 +56,33 @@ describe('nextTicketId', () => {
 
   it('ignores non-id strings', () => {
     expect(nextTicketId(['readme', 'T-0001'])).toBe('T-0002');
+  });
+});
+
+describe('slugifyPhaseId (T-0043)', () => {
+  it('slugifies titles into the phase-id grammar', () => {
+    expect(slugifyPhaseId('QA gate')).toBe('qa-gate');
+    expect(slugifyPhaseId('Plan review')).toBe('plan-review');
+    expect(slugifyPhaseId('Done')).toBe('done');
+    expect(slugifyPhaseId('Plan (review)')).toBe('plan-review');
+    expect(slugifyPhaseId('  Multiple   spaces  ')).toBe('multiple-spaces');
+    expect(slugifyPhaseId('Unterstrich_mit_underscore')).toBe('unterstrich-mit-underscore');
+  });
+
+  it('is null when the slug would violate the grammar', () => {
+    expect(slugifyPhaseId('')).toBeNull();
+    expect(slugifyPhaseId('   ')).toBeNull();
+    expect(slugifyPhaseId('42 QA')).toBeNull(); // starts with a digit
+    expect(slugifyPhaseId('1st review')).toBeNull();
+    expect(slugifyPhaseId('---')).toBeNull(); // dashes alone trim to empty
+  });
+
+  it('keeps the grammar the pipeline parser enforces', () => {
+    for (const title of ['QA gate', 'Build 2', 'a']) {
+      const slug = slugifyPhaseId(title);
+      expect(slug).not.toBeNull();
+      expect(slug).toMatch(/^[a-z][a-z0-9-]*$/);
+    }
   });
 });
 

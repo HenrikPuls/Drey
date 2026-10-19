@@ -1,16 +1,18 @@
 import { describe, expect, it } from 'vitest';
 import {
+  applyColumnsToPipeline,
   assembleBoard,
+  dropOrderSections,
   orderAfterInsert,
   orderColumn,
   parseOrderFile,
   parsePipeline,
   parseRepos,
-  patchPipelinePhase,
-  reorderPipelinePhases,
   pinsAfterDrop,
   rewriteOrderSection,
+  validateColumnsBatch,
 } from './ticket-board';
+import type { ColumnsBatch, PipelinePhase } from '../shared/tickets';
 
 const PIPELINE = `---
 phases:
@@ -246,6 +248,12 @@ describe('assembleBoard', () => {
     expect(assembleBoard(baseInput([])).pushRemote).toBeNull();
   });
 
+  it('carries promptRefs into the snapshot, defaulting to none (T-0043)', () => {
+    const snap = assembleBoard({ ...baseInput([]), promptRefs: ['build-default', 'plan-heavy'] });
+    expect(snap.promptRefs).toEqual(['build-default', 'plan-heavy']);
+    expect(assembleBoard(baseInput([])).promptRefs).toEqual([]);
+  });
+
   it('carries an unknown phase directory as a trailing unknown column', () => {
     const snap = assembleBoard(baseInput([
       { path: 'tickets/inbox/T-0002.md', text: ticketText('T-0002', 'Second') },
@@ -326,9 +334,20 @@ describe('assembleBoard', () => {
   });
 });
 
-describe('patchPipelinePhase - the settings dialog writer', () => {
+describe('applyColumnsToPipeline - the store-on-leave writer (T-0043)', () => {
+  const batchOf = (parts: Partial<ColumnsBatch>): ColumnsBatch => ({
+    order: ['inbox', 'prioritized', 'build', 'done'],
+    add: [],
+    remove: [],
+    patch: {},
+    ...parts,
+  });
+
   it('setting a worker writes the agent handover and keeps the file shape', () => {
-    const patched = patchPipelinePhase(PIPELINE, 'prioritized', { worker: 'opencode' });
+    const patched = applyColumnsToPipeline(
+      PIPELINE,
+      batchOf({ patch: { prioritized: { worker: 'opencode' } } }),
+    );
     const { phases, error } = parsePipeline(patched);
     expect(error).toBeNull();
     const prioritized = phases.find((p) => p.id === 'prioritized')!;
@@ -341,18 +360,23 @@ describe('patchPipelinePhase - the settings dialog writer', () => {
   });
 
   it('an explicit prompt rides the new handover; an existing ref is kept', () => {
-    const withPrompt = patchPipelinePhase(PIPELINE, 'prioritized', { worker: 'opencode', prompt: 'plan-heavy' });
-    expect(parsePipeline(withPrompt).phases.find((p) => p.id === 'prioritized')!.handover).toBe('agent plan-heavy');
-    const kept = patchPipelinePhase(PIPELINE, 'build', { worker: 'claude-code' });
+    const withPrompt = applyColumnsToPipeline(
+      PIPELINE,
+      batchOf({ patch: { prioritized: { worker: 'opencode', prompt: 'plan-heavy' } } }),
+    );
+    expect(parsePipeline(withPrompt).phases.find((p) => p.id === 'prioritized')!.handover).toBe(
+      'agent plan-heavy',
+    );
+    const kept = applyColumnsToPipeline(PIPELINE, batchOf({ patch: { build: { worker: 'claude-code' } } }));
     expect(parsePipeline(kept).phases.find((p) => p.id === 'build')!.handover).toBe('agent build-default');
   });
 
   it('clearing the worker writes manual and takes the pool keys with it', () => {
-    const withPool = patchPipelinePhase(PIPELINE, 'build', {
-      model: 'zai/glm-5.3',
-      workers: 4,
-    });
-    const cleared = patchPipelinePhase(withPool, 'build', { worker: null });
+    const withPool = applyColumnsToPipeline(
+      PIPELINE,
+      batchOf({ patch: { build: { model: 'zai/glm-5.3', workers: 4 } } }),
+    );
+    const cleared = applyColumnsToPipeline(withPool, batchOf({ patch: { build: { worker: null } } }));
     const build = parsePipeline(cleared).phases.find((p) => p.id === 'build')!;
     expect(build.handover).toBe('manual');
     expect(build.worker).toBeNull();
@@ -363,18 +387,23 @@ describe('patchPipelinePhase - the settings dialog writer', () => {
   });
 
   it('model, workers and prompt patch independently; unknown phases refuse', () => {
-    const patched = patchPipelinePhase(PIPELINE, 'build', { workers: 4, model: 'zai/glm-5.3-flash' });
+    const patched = applyColumnsToPipeline(
+      PIPELINE,
+      batchOf({ patch: { build: { workers: 4, model: 'zai/glm-5.3-flash' } } }),
+    );
     const build = parsePipeline(patched).phases.find((p) => p.id === 'build')!;
     expect(build.workers).toBe(4);
     expect(build.model).toBe('zai/glm-5.3-flash');
-    expect(() => patchPipelinePhase(PIPELINE, 'nope', { workers: 2 })).toThrow('no phase "nope"');
-    expect(() => patchPipelinePhase(PIPELINE, 'build', { workers: 0 })).toThrow('whole number');
+    expect(() => applyColumnsToPipeline(PIPELINE, batchOf({ patch: { nope: { workers: 2 } } }))).toThrow(
+      'no phase "nope"',
+    );
+    expect(() => applyColumnsToPipeline(PIPELINE, batchOf({ patch: { build: { workers: 0 } } }))).toThrow(
+      'whole number',
+    );
   });
-});
 
-describe('reorderPipelinePhases - the sortable columns (req-50)', () => {
   it('moves whole entries and keeps every key and the prose', () => {
-    const swapped = reorderPipelinePhases(PIPELINE, ['inbox', 'build', 'prioritized', 'done']);
+    const swapped = applyColumnsToPipeline(PIPELINE, batchOf({ order: ['inbox', 'build', 'prioritized', 'done'] }));
     const { phases, error } = parsePipeline(swapped);
     expect(error).toBeNull();
     expect(phases.map((p) => p.id)).toEqual(['inbox', 'build', 'prioritized', 'done']);
@@ -384,10 +413,293 @@ describe('reorderPipelinePhases - the sortable columns (req-50)', () => {
   });
 
   it('refuses an order that drops, repeats or invents a phase, or moves the ends', () => {
-    expect(() => reorderPipelinePhases(PIPELINE, ['inbox', 'build', 'done'])).toThrow('exactly once');
-    expect(() => reorderPipelinePhases(PIPELINE, ['inbox', 'build', 'build', 'done'])).toThrow('exactly once');
-    expect(() => reorderPipelinePhases(PIPELINE, ['inbox', 'qa', 'prioritized', 'done'])).toThrow('exactly once');
-    expect(() => reorderPipelinePhases(PIPELINE, ['prioritized', 'inbox', 'build', 'done'])).toThrow('keep their places');
-    expect(() => reorderPipelinePhases(PIPELINE, ['inbox', 'prioritized', 'done', 'build'])).toThrow('keep their places');
+    expect(() => applyColumnsToPipeline(PIPELINE, batchOf({ order: ['inbox', 'build', 'done'] }))).toThrow(
+      'exactly once',
+    );
+    expect(() =>
+      applyColumnsToPipeline(PIPELINE, batchOf({ order: ['inbox', 'build', 'build', 'done'] })),
+    ).toThrow('exactly once');
+    expect(() =>
+      applyColumnsToPipeline(PIPELINE, batchOf({ order: ['inbox', 'qa', 'prioritized', 'done'] })),
+    ).toThrow('exactly once');
+    expect(() =>
+      applyColumnsToPipeline(PIPELINE, batchOf({ order: ['prioritized', 'inbox', 'build', 'done'] })),
+    ).toThrow('keep their places');
+    expect(() =>
+      applyColumnsToPipeline(PIPELINE, batchOf({ order: ['inbox', 'prioritized', 'done', 'build'] })),
+    ).toThrow('keep their places');
+  });
+
+  it('splices an added column at its order position, manual, before the terminal', () => {
+    const withQa = applyColumnsToPipeline(
+      PIPELINE,
+      batchOf({
+        order: ['inbox', 'prioritized', 'build', 'qa', 'done'],
+        add: [{ id: 'qa', title: 'QA' }],
+      }),
+    );
+    const { phases, error } = parsePipeline(withQa);
+    expect(error).toBeNull();
+    expect(phases.map((p) => p.id)).toEqual(['inbox', 'prioritized', 'build', 'qa', 'done']);
+    const qa = phases.find((p) => p.id === 'qa')!;
+    expect(qa.title).toBe('QA');
+    expect(qa.handover).toBe('manual');
+    expect(withQa).toContain('Prose.');
+    // Setting a worker on the fresh column in the same session works
+    // (one batch: the add and the patch ride together).
+    const staffed = applyColumnsToPipeline(
+      PIPELINE,
+      batchOf({
+        order: ['inbox', 'prioritized', 'build', 'qa', 'done'],
+        add: [{ id: 'qa', title: 'QA' }],
+        patch: { qa: { worker: 'opencode', workers: 2 } },
+      }),
+    );
+    const staffedQa = parsePipeline(staffed).phases.find((p) => p.id === 'qa')!;
+    expect(staffedQa.handover).toBe('agent qa-default');
+    expect(staffedQa.worker).toBe('opencode');
+    expect(staffedQa.workers).toBe(2);
+  });
+
+  it('deletes a removed entry and applies a patch in the same pass', () => {
+    const result = applyColumnsToPipeline(
+      PIPELINE,
+      batchOf({
+        order: ['inbox', 'build', 'done'],
+        remove: ['prioritized'],
+        patch: { build: { workers: 3 } },
+      }),
+    );
+    const { phases, error } = parsePipeline(result);
+    expect(error).toBeNull();
+    expect(phases.map((p) => p.id)).toEqual(['inbox', 'build', 'done']);
+    expect(phases.find((p) => p.id === 'build')!.workers).toBe(3);
+    expect(() =>
+      applyColumnsToPipeline(PIPELINE, batchOf({ order: ['inbox', 'build', 'done'], remove: ['nope'] })),
+    ).toThrow('no phase "nope"');
+  });
+
+  it('keeps unknown phase keys, comments and the hand-made layout (document mutation)', () => {
+    const loaded = [
+      '---',
+      'push: origin',
+      '# the pipeline',
+      'phases:',
+      '  # capture',
+      '  - { id: inbox, title: Inbox, handover: manual }',
+      '  - id: build',
+      '    title: Build',
+      '    wip: 2',
+      '    claim: true',
+      '    handover: agent build-default',
+      '    worker: opencode',
+      '    model: zai/glm-5.3',
+      '    max-red: 5',
+      '    token-budget: 250000',
+      '    ci: npm test',
+      '    audit: 0.25',
+      '    semantic: true',
+      '  - { id: done, title: Done, handover: none }',
+      '---',
+      'Prose.',
+    ].join('\n');
+    const patched = applyColumnsToPipeline(
+      loaded,
+      batchOf({
+        order: ['inbox', 'qa', 'build', 'done'],
+        add: [{ id: 'qa', title: 'QA' }],
+        patch: { build: { workers: 2 } },
+      }),
+    );
+    expect(patched).toContain('# the pipeline');
+    expect(patched).toContain('# capture');
+    expect(patched).toContain('max-red: 5');
+    expect(patched).toContain('token-budget: 250000');
+    expect(patched).toContain('ci: npm test');
+    expect(patched).toContain('audit: 0.25');
+    expect(patched).toContain('semantic: true');
+    expect(patched).toContain('push: origin');
+    const { phases, error } = parsePipeline(patched);
+    expect(error).toBeNull();
+    const build = phases.find((p) => p.id === 'build')!;
+    expect(build.workers).toBe(2);
+    expect(build.maxRed).toBe(5);
+    expect(build.ci).toBe('npm test');
+    expect(build.semantic).toBe(true);
+  });
+});
+
+describe('validateColumnsBatch - the authoritative refusal (T-0043)', () => {
+  const phases = (ids: readonly string[]): PipelinePhase[] =>
+    ids.map(
+      (id) =>
+        ({
+          id,
+          title: id,
+          wip: null,
+          claim: false,
+          handover: 'manual',
+          worker: null,
+          model: null,
+          workers: 1,
+          prompt: null,
+          maxRed: null,
+          tokenBudget: null,
+          ci: null,
+          audit: null,
+          semantic: false,
+        }) as PipelinePhase,
+    );
+  const current = phases(['inbox', 'prioritized', 'build', 'review', 'done']);
+  const batchOf = (parts: Partial<ColumnsBatch>): ColumnsBatch => ({
+    order: current.map((p) => p.id),
+    add: [],
+    remove: [],
+    patch: {},
+    ...parts,
+  });
+
+  it('accepts a well-formed batch (null)', () => {
+    expect(
+      validateColumnsBatch(current, batchOf({ order: ['inbox', 'build', 'prioritized', 'review', 'done'] }), {
+        build: 2,
+      }),
+    ).toBeNull();
+    expect(
+      validateColumnsBatch(
+        current,
+        batchOf({
+          order: ['inbox', 'build', 'review', 'done'],
+          remove: ['prioritized'],
+          patch: { build: { worker: 'opencode', workers: 3, model: 'zai/glm-5.3', prompt: 'plan-heavy' } },
+        }),
+        { build: 2 },
+      ),
+    ).toBeNull();
+  });
+
+  it('refuses a wrong order, wrong ends and invented or repeated ids', () => {
+    expect(
+      validateColumnsBatch(current, batchOf({ order: ['inbox', 'build', 'review', 'done'] }), {}),
+    ).toContain('exactly once');
+    expect(
+      validateColumnsBatch(current, batchOf({ order: ['inbox', 'build', 'build', 'review', 'done'] }), {}),
+    ).toContain('exactly once');
+    expect(
+      validateColumnsBatch(current, batchOf({ order: ['prioritized', 'inbox', 'build', 'review', 'done'] }), {}),
+    ).toContain('keep their places');
+    expect(
+      validateColumnsBatch(current, batchOf({ order: ['inbox', 'prioritized', 'build', 'done', 'review'] }), {}),
+    ).toContain('keep their places');
+    expect(validateColumnsBatch([], batchOf({ order: [] }), {})).toContain('pipeline is empty');
+  });
+
+  it('refuses added ids that break the grammar or collide', () => {
+    const order = ['inbox', 'prioritized', 'build', 'review', 'qa', 'done'];
+    expect(
+      validateColumnsBatch(
+        current,
+        batchOf({ order: ['inbox', 'prioritized', 'build', 'review', '1qa', 'done'], add: [{ id: '1qa', title: 'QA' }] }),
+        {},
+      ),
+    ).toContain('must match');
+    expect(
+      validateColumnsBatch(current, batchOf({ order: [...current.map((p) => p.id), 'build'], add: [] }), {}),
+    ).toContain('exactly once');
+    expect(
+      validateColumnsBatch(current, batchOf({ order, add: [{ id: 'qa', title: '' }] }), {}),
+    ).toContain('title');
+    // Two adds of one id collide with each other.
+    expect(
+      validateColumnsBatch(
+        current,
+        batchOf({ order: ['inbox', 'prioritized', 'build', 'review', 'qa', 'qa2', 'done'], add: [{ id: 'qa', title: 'QA' }, { id: 'qa', title: 'QA' }] }),
+        {},
+      ),
+    ).toContain('already exists');
+    // A pipeline of one phase has no before-terminal slot.
+    expect(
+      validateColumnsBatch(
+        phases(['inbox']),
+        {
+          order: ['inbox', 'qa'],
+          add: [{ id: 'qa', title: 'QA' }],
+          remove: [],
+          patch: {},
+        },
+        {},
+      ),
+    ).toContain('first and a last column');
+  });
+
+  it('refuses removing the first, the last, an unknown or a holding column', () => {
+    expect(
+      validateColumnsBatch(current, batchOf({ order: ['prioritized', 'build', 'review', 'done'], remove: ['inbox'] }), {}),
+    ).toContain('first column');
+    expect(
+      validateColumnsBatch(current, batchOf({ order: ['inbox', 'prioritized', 'build', 'review'], remove: ['done'] }), {}),
+    ).toContain('last column');
+    expect(
+      validateColumnsBatch(current, batchOf({ remove: ['nope'] }), {}),
+    ).toContain('not in the pipeline');
+    expect(
+      validateColumnsBatch(
+        current,
+        batchOf({ order: ['inbox', 'build', 'review', 'done'], remove: ['prioritized'] }),
+        { prioritized: 3 },
+      ),
+    ).toBe('"prioritized" still holds 3 tickets — move or archive them first');
+    expect(
+      validateColumnsBatch(
+        current,
+        batchOf({ order: ['inbox', 'build', 'review', 'done'], remove: ['prioritized'] }),
+        { prioritized: 1 },
+      ),
+    ).toBe('"prioritized" still holds 1 ticket — move or archive it first');
+  });
+
+  it('refuses ill-formed patch values and patches of foreign columns', () => {
+    expect(validateColumnsBatch(current, batchOf({ patch: { build: { worker: 'github' } } }), {})).toContain(
+      'the worker is',
+    );
+    expect(validateColumnsBatch(current, batchOf({ patch: { build: { workers: 1.5 } } }), {})).toContain(
+      'whole number',
+    );
+    expect(validateColumnsBatch(current, batchOf({ patch: { build: { workers: 0 } } }), {})).toContain(
+      'whole number',
+    );
+    expect(
+      validateColumnsBatch(
+        current,
+        batchOf({ order: ['inbox', 'build', 'review', 'done'], remove: ['prioritized'], patch: { prioritized: { workers: 2 } } }),
+        {},
+      ),
+    ).toContain('not a column of this batch');
+    expect(validateColumnsBatch(current, batchOf({ patch: { nope: { workers: 2 } } }), {})).toContain(
+      'not a column of this batch',
+    );
+  });
+});
+
+describe('dropOrderSections (T-0043)', () => {
+  const TEXT = '# pins\n\n## prioritized\n\n- T-0002\n- T-0001\n\n## build\n\n- T-0005\n';
+
+  it('drops the named sections and keeps the rest verbatim', () => {
+    const next = dropOrderSections(TEXT, ['build']);
+    expect(parseOrderFile(next).pins).toEqual({ prioritized: ['T-0002', 'T-0001'] });
+    expect(next).toContain('# pins');
+    expect(next).not.toContain('T-0005');
+  });
+
+  it('drops several sections, including a trailing one', () => {
+    const next = dropOrderSections(TEXT, ['prioritized', 'build']);
+    expect(parseOrderFile(next).pins).toEqual({});
+    expect(next).toBe('# pins\n');
+  });
+
+  it('is null for a null text, no ids or nothing matched (no write)', () => {
+    expect(dropOrderSections(null, ['build'])).toBeNull();
+    expect(dropOrderSections(TEXT, [])).toBeNull();
+    expect(dropOrderSections(TEXT, ['qa'])).toBeNull();
   });
 });
