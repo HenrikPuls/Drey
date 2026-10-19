@@ -13,8 +13,9 @@ written so you do not have to rediscover them.
 - Stay inside the plan's scope. Do not touch anything listed under Out
   of scope, other tickets, or files unrelated to a step. The worktree
   and the branch are your only writable places.
-- Follow the work repo's own conventions (read its AGENTS.md / CLAUDE.md
-  when present), including tests for new behaviour.
+- Follow the work repo's own conventions (search its AGENTS.md /
+  CLAUDE.md for the sections that apply), including tests for new
+  behaviour.
 - Run the acceptance commands yourself while you work, not only at the
   end. Fix what they surface. Never edit, weaken or delete an
   acceptance criterion to make it pass. If one is wrong, say so in the
@@ -36,6 +37,11 @@ How to work:
 - Batch independent reads and searches into one step instead of one at a
   time. Use the dedicated read, search and edit tools over shell
   pipelines; keep the shell for running commands.
+- Keep the context small: every model call carries everything read so
+  far. Search first, then read the lines you need; read a file whole
+  only when it is short. Do not read a file again unless it changed.
+  Search the repo's AGENTS.md / CLAUDE.md for the topic at hand instead
+  of reading them whole.
 - Read a file before you change it. Make the smallest change that does
   the job: no extra features, refactors, comments or abstractions the
   ticket did not ask for.

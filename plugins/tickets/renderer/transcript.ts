@@ -30,7 +30,24 @@ const parseLine = (line: string): StreamEvent | null => {
 /** Run-setup notes the worker adapters write (not a tool call). */
 const SETUP_NOTE = /^(run R-|opencode serve|re-attached)/i;
 
-const THINK_SHOWN = 280;
+/** How much of a thought its folded title previews. */
+const THINK_PREVIEW = 100;
+
+/**
+ * A thought as a folded callout (req-54): the title previews its opening,
+ * a click unfolds the whole thought. The body keeps the worker's line
+ * breaks, each line quoted into the callout.
+ */
+const thinkingBlock = (raw: string): string => {
+  const preview = flat(raw);
+  const title = preview.length > THINK_PREVIEW ? `${preview.slice(0, THINK_PREVIEW).trimEnd()}…` : preview;
+  const body = raw
+    .trim()
+    .split('\n')
+    .map((line) => (line.trim() === '' ? '>' : `> ${line.trimEnd()}`))
+    .join('\n');
+  return `> [!QUOTE]- Thinking — ${title}\n${body}`;
+};
 
 /** Collapses a note into one line (no backticks, no line breaks). */
 const flat = (text: string): string => text.replace(/`/g, "'").replace(/\s+/g, ' ').trim();
@@ -46,7 +63,7 @@ const toolLine = (text: string): string => {
 /**
  * Markdown for the stream, laid out like Claude Code's own transcript: the
  * worker's replies as paragraphs, every tool call one `● Tool target` step
- * (a run of steps stays together), thinking as a dim one-line quote, run
+ * (a run of steps stays together), thinking as a folded callout, run
  * setup folded into a single muted line, the owner's prompts as `›`
  * quotes, and the closing result / errors set off by a rule. The result
  * body is dropped when the last reply already said it; usage events are
@@ -81,9 +98,7 @@ export function transcriptMarkdown(ndjson: string): string {
       case 'note':
         if (text.startsWith(THINK_PREFIX)) {
           flush();
-          const thought = flat(text.slice(THINK_PREFIX.length));
-          const shown = thought.length > THINK_SHOWN ? `${thought.slice(0, THINK_SHOWN).trimEnd()}…` : thought;
-          blocks.push(`> _∴ Thinking — ${shown}_`);
+          blocks.push(thinkingBlock(text.slice(THINK_PREFIX.length)));
         } else if (text.startsWith(RESULT_PREFIX)) {
           const outcome = flat(text.slice(RESULT_PREFIX.length));
           if (steps.length > 0 && outcome !== '') {

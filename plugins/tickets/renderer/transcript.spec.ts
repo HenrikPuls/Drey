@@ -32,9 +32,20 @@ describe('transcriptMarkdown', () => {
     expect(md).toBe("● **A** `'b' c`");
   });
 
-  it('shows the thinking of the worker as a one-line italic quote', () => {
-    const md = transcriptMarkdown(line({ kind: 'note', text: 'thinking › First   look\nat the file' }));
-    expect(md).toBe('> _∴ Thinking — First look at the file_');
+  it('shows the thinking of the worker as a folded callout with the whole thought inside (req-54)', () => {
+    const md = transcriptMarkdown(line({ kind: 'note', text: 'thinking › First   look\nat the file\n\nThen `edit`' }));
+    expect(md).toBe(
+      "> [!QUOTE]- Thinking — First look at the file Then 'edit'\n> First   look\n> at the file\n>\n> Then `edit`",
+    );
+  });
+
+  it('previews a long thought in its title and keeps the full text in the body', () => {
+    const long = 'word '.repeat(60).trim();
+    const md = transcriptMarkdown(line({ kind: 'note', text: `thinking › ${long}` }));
+    const [title, body] = md.split('\n');
+    expect(title!.length).toBeLessThan(140);
+    expect(title!.endsWith('…')).toBe(true);
+    expect(body).toBe(`> ${long}`);
   });
 
   it('drops a result body the last reply already said and folds run setup', () => {

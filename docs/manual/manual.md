@@ -231,7 +231,9 @@ in Settings â†’ *Templates*.
 ### Editing aids
 
 - **Formatting strip** — one row of icons: the template picker,
-  paragraph style (body text, headings, blockquote, callouts), Bold,
+  paragraph style (body text, headings, blockquote, callouts — a
+  callout written `> [!note]-` starts folded and `> [!note]+` open; a
+  click on its title folds or unfolds it), Bold,
   Italic, more text formats (strikethrough, highlight, sub- and
   superscript, *Clear formatting*), lists, Task list, Link, Table (a
   size grid) and an *Insert* menu (image, emoji, footnote, math,
@@ -771,11 +773,16 @@ it. **Take over** opens a tab with the worker's conversation and a
 prompt box: you can **Interrupt** the running turn (the session and its
 context stay), drive the worker with your own prompts and **Hand back**
 the run — a worker that is idle by then ends the run and the gate
-decides. While you hold a run the runner does not end it. Only OpenCode
+decides. While you hold a run the runner does not end it. In the
+conversation each of the worker's thoughts is a folded **Thinking** box
+whose title previews it; click the title to read the whole thought, and
+again to fold it. Only OpenCode
 workers can be taken over for now. The **Log** button opens the fleet
 daemon's log in a read-only tab. When a run ends, the ticket's Log line
-records the tokens it used (and the cost, when the provider reports
-one — flat coding plans report none). When the worker finishes, the runner executes the
+records the tokens it used — how much of the input came from the
+provider's cache, and the cost, when the provider reports one (flat
+coding plans report none). A run that continues an earlier session
+counts only its own tokens. When the worker finishes, the runner executes the
 ticket's **acceptance criteria** (the backticked commands under Plan):
 all green means the ticket moves to the next phase on its own; a
 failure parks the reason in the Log and leaves the ticket where it is.

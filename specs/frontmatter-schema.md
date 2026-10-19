@@ -73,7 +73,10 @@ updated: '2026-09-05T14:32:00'
 - **Markdown dialect** (milestone 72, [ADR-0070](../docs/09_architecture_decisions/0070-extended-markdown-dialect.md)):
   besides CommonMark/GFM the editor, every Markdown view and the PDF
   export understand bare-URL autolinks, sub/superscript, `==highlight==`,
-  GitHub/Obsidian callouts (`> [!note]`), `$…$` / `$$…$$` math (KaTeX),
+  GitHub/Obsidian callouts (`> [!note]`; Obsidian's fold suffix —
+  `> [!note]-` folded, `> [!note]+` open — folds in the editor on a click
+  of the title, req-54; the fold is view state, never written back, and
+  the exports render the callout open), `$…$` / `$$…$$` math (KaTeX),
   footnotes and curated `:emoji:` shortcodes. All of it is plain text in
   the file — the app stores nothing extra, and a tool that does not know
   the syntax still shows readable Markdown. Shared pure halves:

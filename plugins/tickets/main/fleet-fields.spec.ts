@@ -204,4 +204,24 @@ describe('composeInstruction — the deterministic run brief', () => {
     expect(text).toContain('Follow the house style.');
     expect(text).toContain('- `npm run verify:unit`');
   });
+
+  it('tells the worker the quoted ticket is complete, so it does not read the file again (req-55)', () => {
+    const base = {
+      ticketId: 'T-0007',
+      title: 'Add the thing',
+      repo: null,
+      branch: 't/T-0007',
+      worktreePath: 'W',
+      phase: 'build',
+      description: 'It should work.',
+      prompt: null,
+      acceptance: [],
+      ticketFile: 'E:/tickets/T-0007.md',
+    };
+    const text = composeInstruction({ ...base, plan: 'Step one.' });
+    expect(text).toContain('description and plan are quoted in full below — do not read the ticket file');
+    expect(text.indexOf('quoted in full below')).toBeLessThan(text.indexOf('What and why:'));
+    expect(composeInstruction({ ...base, plan: null })).toContain('description is quoted in full below');
+    expect(composeInstruction({ ...base, plan: null, ticketFile: undefined })).not.toContain('quoted in full');
+  });
 });

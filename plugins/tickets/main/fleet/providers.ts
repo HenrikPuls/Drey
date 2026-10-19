@@ -45,6 +45,9 @@ export interface NormalizedEvent {
 /** The stream lead-in of a worker's thinking (the takeover transcript shows it quoted). */
 export const THINK_PREFIX = 'thinking › ';
 
+/** How much of one thought the stream keeps — whole, short of a runaway (req-54; was 600 chars). */
+export const THINK_MAX = 8_000;
+
 /** A tool's outcome rides the stream as a note with this lead-in (the `⎿` line under its call). */
 export const RESULT_PREFIX = 'result › ';
 
@@ -270,7 +273,7 @@ export function claudeCodeAdapter(spawnFn: SpawnFn, now: NowFn = (): Date => new
             let activity = '';
             for (const part of parts) {
               if (part.type === 'thinking' && (part.thinking ?? '').trim() !== '') {
-                start.onEvent({ ts: nowIso(now), kind: 'note', text: `${THINK_PREFIX}${(part.thinking ?? '').trim().slice(0, 600)}` });
+                start.onEvent({ ts: nowIso(now), kind: 'note', text: `${THINK_PREFIX}${(part.thinking ?? '').trim().slice(0, THINK_MAX)}` });
               } else if (part.type === 'text' && (part.text ?? '').trim() !== '') {
                 activity = activityLine(part.text ?? '');
                 start.onEvent({ ts: nowIso(now), kind: 'text', text: (part.text ?? '').slice(0, 8_000) });
@@ -718,10 +721,10 @@ export function opencodeAdapter(
                 const thought = (m.content ?? [])
                   .filter((part) => part.type === 'reasoning')
                   .map((part) => part.text ?? '')
-                  .join(' ')
+                  .join('\n\n')
                   .trim();
                 if (thought !== '') {
-                  start.onEvent({ ts: nowIso(now), kind: 'note', text: `${THINK_PREFIX}${thought.slice(0, 600)}` });
+                  start.onEvent({ ts: nowIso(now), kind: 'note', text: `${THINK_PREFIX}${thought.slice(0, THINK_MAX)}` });
                 }
                 const text = messageText(m);
                 if (text !== '') {

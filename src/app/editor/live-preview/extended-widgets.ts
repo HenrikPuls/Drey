@@ -64,23 +64,35 @@ export class FootnoteDefMarkWidget extends WidgetType {
 /**
  * `[!TYPE]` → the callout's icon and (when the marker line carries no
  * custom title) its label; a custom title renders as the plain text that
- * already follows the marker.
+ * already follows the marker. A foldable callout (`[!TYPE]-` / `[!TYPE]+`,
+ * req-54) leads with a chevron, and a click on the widget folds it
+ * (`livePreviewConceal`'s mousedown handler).
  */
 export class CalloutTitleWidget extends WidgetType {
   constructor(
     readonly icon: string,
     readonly label: string | null,
+    readonly fold: 'open' | 'closed' | null = null,
   ) {
     super();
   }
 
   override eq(other: CalloutTitleWidget): boolean {
-    return other.icon === this.icon && other.label === this.label;
+    return other.icon === this.icon && other.label === this.label && other.fold === this.fold;
   }
 
   toDOM(): HTMLElement {
     const span = document.createElement('span');
     span.className = 'lp-callout-title';
+    if (this.fold !== null) {
+      span.classList.add('lp-callout-foldable');
+      span.dataset['fold'] = this.fold;
+      span.title = this.fold === 'closed' ? 'Expand' : 'Collapse';
+      const chevron = document.createElement('span');
+      chevron.className = 'lp-callout-chevron';
+      chevron.textContent = this.fold === 'closed' ? '▸' : '▾';
+      span.appendChild(chevron);
+    }
     const icon = document.createElement('span');
     icon.className = 'lp-callout-icon';
     icon.textContent = this.icon;

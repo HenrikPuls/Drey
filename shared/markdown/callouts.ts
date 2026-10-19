@@ -10,9 +10,10 @@
  * > body paragraphs
  * ```
  *
- * Obsidian adds the fold suffix (`> [!NOTE]-` starts collapsed); it is
- * parsed and normalized away — callouts render statically (GitHub-alert
- * behavior), the suffix only suppresses nothing. Keywords: GitHub's five
+ * Obsidian adds the fold suffix (`> [!NOTE]-` starts collapsed, `+`
+ * open): the editor's Live Preview and reading view fold such a callout
+ * on a click of its title (req-54); the exports render it open — a
+ * printed page cannot fold. Keywords: GitHub's five
  * (NOTE, TIP, IMPORTANT, WARNING, CAUTION) are the canonical kinds;
  * Obsidian's aliases fold onto them so a vault written in either flavor
  * reads the same.
@@ -70,7 +71,7 @@ export interface CalloutMarker {
   info: CalloutTypeInfo;
   /** Custom title after the marker, `null` when the line carries none. */
   title: string | null;
-  /** Obsidian fold suffix: `-` collapsed, `+` expanded. Parsed, not acted on. */
+  /** Obsidian fold suffix: `-` collapsed, `+` expanded; null = not foldable. */
   fold: '-' | '+' | null;
   /** Length of the marker token itself (`[!TYPE]` plus fold suffix). */
   length: number;

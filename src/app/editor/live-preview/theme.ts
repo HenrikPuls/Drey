@@ -382,6 +382,19 @@ export const livePreviewTheme = EditorView.theme(
     '.lp-callout-icon': {
       marginRight: '6px',
     },
+    '.lp-callout-foldable': {
+      cursor: 'pointer',
+    },
+    '.lp-callout-chevron': {
+      display: 'inline-block',
+      width: '1em',
+      marginRight: '4px',
+      color: 'var(--text-faint)',
+    },
+    // A folded callout's body lines leave the layout (req-54).
+    '.cm-line.lp-callout-folded': {
+      display: 'none',
+    },
 
     // Math (KaTeX, `math-widget.ts`). Display blocks center in a padded
     // box like a mermaid diagram; inline math sits on the text line.

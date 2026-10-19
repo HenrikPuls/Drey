@@ -159,11 +159,22 @@ export function composeInstruction(input: InstructionInput): string {
     );
   }
   const description = input.description.trim();
+  const plan = input.plan?.trim() ?? '';
+  if (input.ticketFile !== undefined && input.ticketFile !== '' && (description !== '' || plan !== '')) {
+    // The worker re-read the whole ticket file first thing in every run
+    // (req-55): a second copy of what follows here, carried by every
+    // model call of the run.
+    parts.push(
+      'The ticket\'s description' +
+        (plan !== '' ? ' and plan are' : ' is') +
+        ' quoted in full below — do not read the ticket file to learn them. When you edit it, read only the ' +
+        'section you change (the Log is at its end: read its last lines).',
+    );
+  }
   if (description !== '') {
     parts.push(`What and why:\n${description}`);
   }
-  const plan = input.plan?.trim();
-  if (plan !== null && plan !== undefined && plan !== '') {
+  if (plan !== '') {
     parts.push(`The ticket's plan:\n${plan}`);
   }
   if (input.prompt !== null && input.prompt.trim() !== '') {

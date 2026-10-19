@@ -20,6 +20,52 @@ recorded as an explicit decision. The parity checklist lives in
 
 ## Recent milestones
 
+### req-55 — Fleet: the run brief stops duplicating the ticket; prompts keep the context small (owner request, outside the list)
+
+**Not yet manually verified by the owner.** The run audit (2026-10-19)
+measured every model call's input from the session deltas — it matches
+the reported context to within 0.2 %, so the token figures are real: a
+plan run is ~59 calls averaging ~111k tokens. Part of that was
+duplicated: the brief quotes the ticket's description and plan in full,
+and the worker's first step was reading the whole ticket file anyway
+(T-0043's build: 26k chars of brief, then 25k chars of the file), followed by
+the whole 49 KB `CLAUDE.md` — both carried by every later call.
+
+- `composeInstruction` now says, before the quoted ticket, that the
+  description and plan are complete there, the ticket file is not to be
+  read to learn them, and an edit reads only the section it changes (the
+  Log: its last lines). This holds for every run, whatever prompt the
+  column uses (`fleet-fields.spec.ts`).
+- The four shipped prompts (`plugins/tickets/prompts/`) gain a "keep the
+  context small" rule under *How to work*: search first and read line
+  ranges, read a file whole only when it is short, never re-read an
+  unchanged file, search `AGENTS.md` / `CLAUDE.md` for the topic instead
+  of reading them whole. The board's own copies in
+  `tickets/_meta/prompts/` are the owner's (Settings → Tickets offers
+  "Reset to the shipped version").
+
+### req-54 — Foldable callouts; the takeover shows each thought whole, folded (owner request, outside the list)
+
+**Not yet manually verified by the owner.** The worker's thinking was cut
+to 600 characters when it was stored and to one 280-character line in
+the takeover transcript.
+
+- **Foldable callouts in the editor** (Obsidian's fold suffix, parsed
+  since milestone 72 but never acted on): `> [!note]-` starts folded,
+  `> [!note]+` open; a click on the title widget (chevron + icon, in the
+  reading view also the title text) flips it. The fold is view state — a
+  `calloutFolds` state field of flipped first-line positions, mapped
+  through edits — and is never written to the file; the caret inside the
+  body unfolds it, like every construct reveals around the selection.
+  Folded body lines leave the layout (`.lp-callout-folded`). The PDF
+  export and markdown-it render a folded callout open: a printed page
+  cannot fold (`conceal.spec.ts`).
+- **Thinking whole**: both adapters keep up to 8,000 characters of a
+  thought (`THINK_MAX`), OpenCode's reasoning parts joined by blank
+  lines instead of spaces. The takeover transcript renders each thought
+  as `> [!QUOTE]- Thinking — <preview>`, folded, with the whole thought
+  as its body (`transcript.spec.ts`).
+
 ### req-53 — Fleet: a resumed OpenCode session counts only its own run; cache reads recorded apart (owner request, outside the list)
 
 **Not yet manually verified by the owner.** An audit of the fleet's run
