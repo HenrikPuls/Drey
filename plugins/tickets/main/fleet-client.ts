@@ -79,8 +79,10 @@ export class FleetClient {
   async runs(): Promise<readonly RunInfo[]> {
     try {
       if (!(await this.withRunner())) {
-        this.push({ runs: [], chain: null });
-        return [];
+        // No daemon: the finished runs are still on disk, so their logs stay reachable.
+        const history = await this.readHistory();
+        this.push({ runs: history, chain: null });
+        return history;
       }
       const [data, chain] = await Promise.all([
         this.get<{ runs: RunInfo[] }>('/status'),
@@ -92,6 +94,30 @@ export class FleetClient {
     } catch {
       return [];
     }
+  }
+
+  /** The persisted runs (`runs/<id>/run.json`), newest first. Without a
+   *  runner nothing supervises them, so a record that was still live reads
+   *  as `stopped` (no lane for it). */
+  private async readHistory(): Promise<RunInfo[]> {
+    const runsDir = path.join(this.opts.root, 'runs');
+    const ids = await fsp.readdir(runsDir).catch(() => [] as string[]);
+    const found: RunInfo[] = [];
+    for (const id of ids) {
+      try {
+        const stored = JSON.parse(await fsp.readFile(path.join(runsDir, id, 'run.json'), 'utf8')) as {
+          info?: RunInfo;
+        };
+        if (stored.info === undefined) {
+          continue;
+        }
+        const settled = ['done', 'stopped', 'failed', 'detached'].includes(stored.info.state);
+        found.push(settled ? stored.info : { ...stored.info, state: 'stopped' });
+      } catch {
+        // an unreadable record is skipped
+      }
+    }
+    return found.sort((a, b) => b.startedAt.localeCompare(a.startedAt));
   }
 
   private push(fleet: FleetSnapshot): void {
@@ -139,7 +165,9 @@ export class FleetClient {
   async stream(runId: string): Promise<string | null> {
     try {
       if (!(await this.withRunner())) {
-        return null;
+        return /^[\w.-]+$/.test(runId)
+          ? await fsp.readFile(path.join(this.opts.root, 'runs', runId, 'stream.jsonl'), 'utf8').catch(() => null)
+          : null;
       }
       const res = await fetch(`${this.base()}/stream/${encodeURIComponent(runId)}`, {
         headers: this.headers(),

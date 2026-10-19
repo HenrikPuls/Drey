@@ -20,6 +20,13 @@ recorded as an explicit decision. The parity checklist lives in
 
 ## Recent milestones
 
+### req-49 — past worker logs on the board; the board follows the runner (owner request, outside the list)
+
+**Not yet manually verified by the owner.**
+
+- A card's context menu lists the ticket's earlier runs (finished, stopped, failed, detached; newest first, eight at most) as "Past run — column · state · time"; each opens its read-only transcript in the takeover tab. The runs and their `stream.jsonl` were already kept on disk — only the menu offered the live run alone. With no fleet daemon alive (it retires when idle) the client now reads the history straight from `runs/<id>/run.json` and `stream.jsonl` (`fleet-client.ts`, `readHistory`), so past logs are listed and readable then too.
+- The board now pulls when the fleet snapshot's runs or run states change (`plugins/tickets/renderer/index.ts`, `applyFleetSnapshot`): the runner moves tickets with git commits that raise no vault event, so a run starting or ending left the columns stale until the manual refresh.
+
 ### req-48 — theme contrast repair and formatted, coloured assistant answers (owner request, outside the list)
 
 **Not yet manually verified by the owner.**

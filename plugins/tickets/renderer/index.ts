@@ -207,8 +207,20 @@ const applyChainStatus = (status: ChainStatus | null): void => {
 /** Open takeover tabs repaint their banner when the fleet snapshot changes. */
 const fleetListeners = new Set<() => void>();
 
+/** Runs and their states: the runner moves tickets (git commits in the
+ *  tickets repository) when a run starts or ends, without a vault event, so
+ *  a change here is the board's cue to pull. */
+const runSignature = (runs: readonly RunInfo[]): string =>
+  runs.map((r) => `${r.id}:${r.state}`).join('|');
+let lastRunSignature: string | null = null;
+
 const applyFleetSnapshot = (payload: { runs?: RunInfo[]; chain?: ChainStatus | null }): void => {
   fleetRuns = Array.isArray(payload.runs) ? [...payload.runs] : [];
+  const signature = runSignature(fleetRuns);
+  if (lastRunSignature !== null && signature !== lastRunSignature) {
+    void refreshBoard();
+  }
+  lastRunSignature = signature;
   applyChainStatus(payload.chain ?? null);
   for (const listener of fleetListeners) {
     listener();
@@ -1496,6 +1508,18 @@ function openCardMenu(
     item('Stop run', () => {
       void run('Stopping the run', () => invokeBoard('fleetStop', { runId: live.id, reason: null }));
     });
+  }
+  // Earlier runs of this ticket (other columns, finished or stopped): their
+  // transcripts stay on disk, and the takeover tab shows them read-only.
+  const past = fleetRuns
+    .filter((r) => r.ticketId === card.id && !LIVE_RUN_STATES.includes(r.state))
+    .sort((a, b) => b.startedAt.localeCompare(a.startedAt))
+    .slice(0, 8);
+  for (const earlier of past) {
+    const when = earlier.startedAt.replace('T', ' ').slice(0, 16);
+    item(`Past run — ${earlier.column ?? earlier.provider} · ${earlier.state} · ${when}`, () =>
+      openTakeover(api, earlier),
+    );
   }
   menu.append(el('div', 'tickets-menu-sep'));
   item(
