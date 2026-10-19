@@ -20,6 +20,36 @@ recorded as an explicit decision. The parity checklist lives in
 
 ## Recent milestones
 
+### req-52 — Test splitting: scoped day-to-day runs, full gate at release (owner request, outside the list)
+
+The two unit suites grew past 240
+spec files, and every change — even in one plugin — ran all of them. The suites
+themselves stay as they are; what changed is how they are *selected*:
+
+- **One plugin's specs:** `npm run test:plugin -- <id>` (`scripts/test-plugin.mjs`)
+  runs only `plugins/<id>/**` through `vitest.plugins.config.mts`. A path
+  fragment instead of an id scopes anywhere in that suite (`shared`,
+  `electron/ipc`, `plugins/tags/main`); `--watch` switches to watch mode,
+  any other argument passes through to vitest (`-t "name"`). An unknown scope
+  fails with the list of plugin ids instead of silently running nothing.
+- **Renderer suite once:** `npm run test:app` (`ng test --watch=false`;
+  scope with `npm run test:app -- --include "src/…/x.spec.ts"`).
+- **Typecheck in one command:** `npm run typecheck` chains the four tsc
+  configs (main+shared, renderer, plugin specs, electron/shared specs).
+- **Release gate:** `npm run test:all` — lint, the four typechecks, import
+  cycles, `test:app`, `test:plugins`. `prepack` runs it before every
+  `npm run pack`; skip with `npm run pack --ignore-scripts`. `pack:dir`
+  stays the fast unpacked smoke build without a gate: npm fires no
+  pre-hooks for colon-named scripts (`prepack:dir` never ran — verified
+  against npm 11.19), and a full gate would defeat the "fast" in its
+  docs/07 purpose; `npm run test:all` is the manual gate there.
+- e2e (Playwright) stays a conscious separate step (`npm run e2e`) — it
+  builds the whole app itself, which would double the gate's runtime.
+
+Docs: CLAUDE.md toolchain section now leads with the scripts; docs/07's pack
+sequence gains the gate as step 0. VS Code gained one-shot tasks
+`npm: test:plugins` / `npm: test:app` beside the existing watch task.
+
 ### req-51 — Fleet workers survive a Drey rebuild (owner request, outside the list)
 
 **Not yet manually verified by the owner.** The owner develops Drey with Drey's own fleet while running the

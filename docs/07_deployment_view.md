@@ -9,6 +9,11 @@ electron-builder ([ADR-0023](09_architecture_decisions/0023-windows-packaging-el
 
 `npm run pack` (or `pack:dir` for a fast unpacked build) runs, in order:
 
+0. `test:all` — the release gate, via `prepack` (**`npm run pack` only**;
+   `pack:dir` stays the fast smoke build and runs no gate — npm fires
+   no pre-hooks for colon-named scripts): lint, the four typechecks,
+   import cycles, then both unit suites (`test:app`, `test:plugins`).
+   Skippable with `npm run pack --ignore-scripts`.
 1. `clean` — wipes `dist/`, `dist-electron/`, `release/` (`tsc` never
    cleans its `outDir`, so a stale build could otherwise ship orphaned
    files).

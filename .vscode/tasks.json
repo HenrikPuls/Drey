@@ -67,6 +67,29 @@
       }
     },
     {
+      // One-shot runs of the two unit suites (the npm: test task above is
+      // the watch variant). Scope test:plugins with the helper script's
+      // argument: ["run", "test:plugin", "--", "tickets"].
+      "type": "shell",
+      "label": "npm: test:plugins",
+      "command": "${workspaceFolder}\\.tools\\node\\npm.cmd",
+      "args": ["run", "test:plugins"],
+      "options": {
+        "env": { "PATH": "${workspaceFolder}\\.tools\\node;${env:PATH}" }
+      },
+      "problemMatcher": []
+    },
+    {
+      "type": "shell",
+      "label": "npm: test:app",
+      "command": "${workspaceFolder}\\.tools\\node\\npm.cmd",
+      "args": ["run", "test:app"],
+      "options": {
+        "env": { "PATH": "${workspaceFolder}\\.tools\\node;${env:PATH}" }
+      },
+      "problemMatcher": []
+    },
+    {
       // Compiles electron/*.ts + shared/*.ts to dist-electron/. Used as a
       // preLaunchTask by the "Electron: Main" debug configs -- a plain
       // one-shot build, no watch/background behavior needed.

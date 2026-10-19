@@ -81,6 +81,16 @@ former "Next" item 6) as milestone 81 — see the changelog. All of it is
 owner-verified (verification round closed 2026-10-17), the bug-11 fix
 included.
 
+**Fresh worktrees check out CRLF; the tickets prompt specs require raw
+LF.** The repo-local git config has `core.autocrlf=true`, so a fresh
+worktree writes every text file with CRLF — while the main checkout
+carries LF on disk (written directly, never re-checked-out). The spec
+`plugins/tickets/main/default-prompts.spec.ts` reads the shipped prompt
+files *raw* and asserts byte-exact LF, so it fails in every fresh
+worktree (first seen in the req-52 gate run, 2026-10-19). A
+`.gitattributes` marking the tracked text as LF would make checkouts
+deterministic; owner decision (it touches every file type).
+
 **Ticket system + agent fleet** (owner request, outside the list,
 2026-10-17; ADR-0075 + ADR-0076, format spec in
 [`specs/ticket-schema.md`](ticket-schema.md)). A kanban-style pipeline
