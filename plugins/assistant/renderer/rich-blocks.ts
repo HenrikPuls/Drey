@@ -3,7 +3,7 @@
  * paragraphs and lists: fenced code, headings, rules, quotes, tables.
  * Everything is built as DOM nodes — model output is untrusted text.
  */
-import { tokenize } from './code-highlight.js';
+import type { DreyPluginApi } from '../../../shared/plugin-api/renderer';
 import { icon } from './dom.js';
 
 export const FENCE = /^\s*```\s*([\w+#.-]*)\s*$/;
@@ -75,8 +75,12 @@ function diffKind(line: string): string {
   return line.startsWith('-') ? 'del' : '';
 }
 
-/** A fenced block: language label, copy button, syntax-coloured tokens (diffs per line). */
-export function codeBlockNode(code: string, lang: string): HTMLElement {
+/**
+ * A fenced block: language label, copy button, the host's syntax colours
+ * (`ui.highlightCode`, filled in once the grammar has loaded; the plain
+ * text shows meanwhile and stays for an unknown language). Diffs colour per line.
+ */
+export function codeBlockNode(api: DreyPluginApi, code: string, lang: string): HTMLElement {
   const block = el('div', 'md-code');
   const head = el('div', 'md-code-head');
   head.appendChild(el('span', 'md-code-lang', lang === '' ? 'text' : lang));
@@ -103,11 +107,21 @@ export function codeBlockNode(code: string, lang: string): HTMLElement {
       );
     });
   } else {
-    for (const token of tokenize(code, lang)) {
-      codeEl.appendChild(
-        token.kind === 'plain' ? document.createTextNode(token.text) : el('span', `tok-${token.kind}`, token.text),
-      );
-    }
+    codeEl.textContent = code;
+    void api.ui
+      .highlightCode(code, lang)
+      .then((spans) => {
+        if (spans === null) {
+          return;
+        }
+        codeEl.textContent = '';
+        for (const span of spans) {
+          codeEl.appendChild(
+            span.className === '' ? document.createTextNode(span.text) : el('span', span.className, span.text),
+          );
+        }
+      })
+      .catch(() => undefined);
   }
   pre.appendChild(codeEl);
   block.appendChild(pre);

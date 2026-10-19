@@ -25,7 +25,8 @@ recorded as an explicit decision. The parity checklist lives in
 **Not yet manually verified by the owner.**
 
 - Contrast: `--accent` as text measured 3.5–4.0:1 on Anthrazit docks and fields; a new `--accent-fg` token (accent lifted toward the heading colour, ≥4.5:1 on dock, editor and field surfaces) now carries every accent-coloured text/link. Code comments use `--text-4` instead of `--text-faint` (3.7:1). The tickets board used an undefined `--text-secondary` (now `--text-3`), 9px chips, and 0.55–0.72 opacity stacked on dim text — raised.
-- Assistant answers render fenced code (language label, copy button, syntax colours following the theme; Cyberpunk neon; `diff` per line), headings, quotes, rules and tables, in `plugins/assistant/renderer/{code-highlight,rich-blocks,rich-text}.ts`. Specs in `rich-text.spec.ts`.
+- Assistant answers render fenced code (language label, copy button, `diff` per line), headings, quotes, rules and tables (`plugins/assistant/renderer/{rich-blocks,rich-text}.ts`). The code is coloured by the host: new SDK 1.31 `ui.highlightCode(code, lang)` (`src/app/plugin-host/code-highlight.ts`, ADR-0078 later change) -- `language-data` grammar loaded on demand, Lezer parse, the theme's `HighlightStyle`. Specs: `rich-blocks.spec.ts`, `code-highlight.spec.ts`.
+- Active states use the highlight colour again (ticket card hover, open panel icons, active Settings category, active file); the card of the ticket open in the editor is outlined; the editor selection selector matches CodeMirror's focused chain.
 
 ### req-47 — the takeover transcript reads like Claude Code (owner request, outside the list)
 

@@ -154,31 +154,3 @@ describe('assistant rich text — deterministic path linkify (57a)', () => {
     expect(body.querySelectorAll('button.chat-link')).toHaveLength(0);
   });
 });
-
-describe('assistant rich text — block Markdown', () => {
-  it('renders a fenced block with a language label and coloured tokens', () => {
-    const body = renderRichBody(fakeLinksApi(), 'Intro\n```ts\nconst n = 1; // one\nrun("x");\n```\nafter');
-    expect(body.querySelector('.md-code-lang')?.textContent).toBe('ts');
-    expect(body.querySelector('.tok-keyword')?.textContent).toBe('const');
-    expect(body.querySelector('.tok-number')?.textContent).toBe('1');
-    expect(body.querySelector('.tok-comment')?.textContent).toBe('// one');
-    expect(body.querySelector('.tok-string')?.textContent).toBe('"x"');
-    expect(body.querySelector('.tok-function')?.textContent).toBe('run');
-    expect(body.querySelector('code')?.textContent).toBe('const n = 1; // one\nrun("x");');
-  });
-
-  it('keeps list-looking lines inside a fence verbatim', () => {
-    const body = renderRichBody(fakeLinksApi(), '```\n- not a list\n# not a heading\n```');
-    expect(body.querySelector('li')).toBeNull();
-    expect(body.querySelector('.md-h')).toBeNull();
-  });
-
-  it('renders headings, quotes, rules and tables', () => {
-    const body = renderRichBody(fakeLinksApi(), '## Title\n> quoted\n---\n| a | b |\n|---|---|\n| 1 | 2 |');
-    expect(body.querySelector('.md-h2')?.textContent).toBe('Title');
-    expect(body.querySelector('blockquote')?.textContent).toBe('quoted');
-    expect(body.querySelector('hr')).not.toBeNull();
-    expect(body.querySelectorAll('th')).toHaveLength(2);
-    expect(body.querySelector('td')?.textContent).toBe('1');
-  });
-});

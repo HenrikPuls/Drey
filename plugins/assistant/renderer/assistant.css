@@ -258,8 +258,8 @@
 }
 
 /* Block Markdown in answers: headings, quotes, rules, tables and fenced
-   code with theme-following syntax colours (token palette mirrors the
-   editor's highlight style; Cyberpunk swaps in its neon set). */
+   code with the host's syntax colours (`ui.highlightCode`: the editor's
+   highlight style, whose classes carry the colours -- no palette here). */
 .assistant-thread .md-h {
   margin: 8px 0 4px;
   font-weight: 600;
@@ -359,21 +359,9 @@
   font: inherit;
 }
 
-.assistant-thread .tok-comment { color: var(--text-4); font-style: italic; }
-.assistant-thread .tok-keyword { color: var(--accent-hover); }
-.assistant-thread .tok-string { color: color-mix(in srgb, #7fb069 60%, var(--text-heading)); }
-.assistant-thread .tok-number { color: color-mix(in srgb, #d9a066 60%, var(--text-heading)); }
-.assistant-thread .tok-function,
-.assistant-thread .tok-type { color: var(--text-heading); }
 .assistant-thread .tok-diff-add { color: var(--status-added); }
 .assistant-thread .tok-diff-del { color: var(--status-deleted); }
 .assistant-thread .tok-diff-hunk { color: var(--text-4); }
-
-:root[data-theme='cyberpunk'] .assistant-thread .tok-keyword { color: #ff4fa8; }
-:root[data-theme='cyberpunk'] .assistant-thread .tok-string { color: #6dffb3; }
-:root[data-theme='cyberpunk'] .assistant-thread .tok-number { color: #ffe066; }
-:root[data-theme='cyberpunk'] .assistant-thread .tok-function,
-:root[data-theme='cyberpunk'] .assistant-thread .tok-type { color: #4de8ff; }
 
 /* Wikilinks in answers: accent, hover underline; unresolved = muted +
    dotted (the editor's missing-note look) and a click creates the note. */

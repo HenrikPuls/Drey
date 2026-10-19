@@ -224,7 +224,7 @@ export function renderRichBody(api: DreyPluginApi, text: string): HTMLElement {
         body.push(lines[n]);
         n += 1;
       }
-      block(codeBlockNode(body.join('\n'), fence[1]));
+      block(codeBlockNode(api, body.join('\n'), fence[1]));
       continue;
     }
     const heading = HEADING.exec(line);

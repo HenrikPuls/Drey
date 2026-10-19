@@ -21,7 +21,7 @@ const YELLOW = '#ffe066';
 
 const glow = (hex: string): string => `0 0 12px ${hex}80`;
 
-const cyberpunkHighlightStyle = HighlightStyle.define([
+export const cyberpunkHighlightStyle = HighlightStyle.define([
   { tag: t.heading1, color: PINK, textShadow: glow(PINK) },
   { tag: t.heading2, color: VIOLET, textShadow: glow(VIOLET) },
   { tag: t.heading3, color: CYAN },

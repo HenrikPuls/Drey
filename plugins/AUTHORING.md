@@ -60,7 +60,7 @@ leaves the app on the previous build. Verify with
 
 - `apiVersion` is a **major gate**: a manifest whose major differs from
   `PLUGIN_API_VERSION.major` (`shared/plugin-api/versions.ts`, currently
-  `{ major: 1, minor: 26 }`) is never imported — the plugin shows up in
+  `{ major: 1, minor: 31 }`) is never imported — the plugin shows up in
   Settings → Panels & plugins as incompatible. Minor bumps are additive;
   1.9 added `commands.run(id, payload?)`, `ui.createTagField` (the shared
   tag chip field — prefer it over a hand-rolled chip row), the main-side
@@ -70,6 +70,9 @@ leaves the app on the previous build. Verify with
   icon-only controls and always give the button a `title` and an
   `aria-label`) and the `freeText` mode of `ui.createTagField` (one input
   for a text query and `#tag` chips, plus `setText`);
+  1.31 added `ui.highlightCode(code, lang)` -- the editor's own syntax
+  colouring for code outside an editor (async; runs of `{ text, className }`,
+  `null` for an unknown language), so a plugin never ships its own tokenizer.
   `ui.registerComposerContribution` is a deprecated no-op since the
   "Add entry" drawer was removed (ADR-0057). 1.11 added the task-index
   seam (`ctx.tasks.registerTaskQuery` / `queryProvider` — the `TaskQueryProvider`

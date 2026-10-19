@@ -335,6 +335,7 @@ fills** — base knows the interfaces, not the features:
 | Menu rows (`file`/`edit`/`selection`/`view`/`editor-more`) | `ui.registerMenuContributions` | — |
 | Commands + keybindings | `commands.register` / `run(id, payload?)` (payload carries invoker context, SDK 1.9 — the base tag pills run `search.open` with `{ tag }`) | — |
 | Shared tag chip field (colored chips + completion, milestone 33) | `ui.createTagField` | — |
+| Syntax colouring of code outside an editor (SDK 1.31): `language-data` grammar loaded on demand, Lezer parse, the active theme's `HighlightStyle` (Cyberpunk's own, else Drey's) | `ui.highlightCode` → `src/app/plugin-host/code-highlight.ts` | — |
 | Editor extensions (host CM instances), drop decoders, context-menu items (with the click target, ADR-0050), composer slot | `editor.*` | — |
 | Document read/observe/insert/confirmed rewrite/open + the live-edit input lock | `documents.*` (incl. `setEditLock`, ADR-0049) | — |
 | Vault IO + change push | `vault.*` (incl. `saveAsset`) | `ctx.vault.*` (incl. `writeAnnounced`; `announceChanges` after a plugin rewrote the working tree, SDK 1.17) |

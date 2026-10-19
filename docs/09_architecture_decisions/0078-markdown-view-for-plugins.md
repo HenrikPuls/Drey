@@ -30,6 +30,14 @@ environment, one change-detection pass) and hands its host element to the plugin
 - Additive: SDK minor 29 → 30. Implementation `src/app/plugin-host/markdown-view.ts` (spec: mounts under TestBed,
   replaces text read-only, tolerates calls after `dispose`).
 
+## Later change — `ui.highlightCode` (SDK 1.31)
+
+A plugin that renders code itself (the assistant's chat answers: fenced blocks) must not carry a tokenizer of its own
+nor import `@codemirror/*` (rule 1). `ui.highlightCode(code, lang)` resolves the grammar from the same
+`@codemirror/language-data` catalogue notes use (loaded on demand), parses with Lezer and returns `{ text, className }`
+runs coloured by the active theme's `HighlightStyle` (Cyberpunk's own, the Drey token style otherwise; the style sheet
+is mounted once by a throwaway view). `null` = unknown language. Additive: SDK minor 30 → 31.
+
 ## Consequences
 
 - One renderer for every log-like surface. The chain log is the first user (one paragraph per line, no fence — a fence would end up in every copy); the

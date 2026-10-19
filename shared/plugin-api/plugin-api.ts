@@ -370,6 +370,13 @@ export interface TagFieldHandle {
   dispose(): void;
 }
 
+/** One run of highlighted code (`ui.highlightCode`, SDK 1.31). */
+export interface HighlightedSpan {
+  readonly text: string;
+  /** The host highlight style's class for this run; `''` = unstyled text. */
+  readonly className: string;
+}
+
 /** Options for `ui.createMarkdownView` (SDK 1.30). */
 export interface MarkdownViewOptions {
   /** Initial text. */
@@ -637,6 +644,16 @@ export interface DreyPluginApi {
      * dispose with the pane. Not bound to any document: no save, no tab.
      */
     createMarkdownView(opts: MarkdownViewOptions): MarkdownViewHandle;
+    /**
+     * The editor's syntax colouring for code outside any editor (SDK 1.31):
+     * the grammar for `lang` (a language name, alias or file extension, as
+     * in a fence's info string) is loaded on demand and parsed like fenced
+     * code in a note. Resolves to runs whose `className` carries the active
+     * theme's colours -- put each run in a `<span class>`; the concatenated
+     * `text` equals `code`. Resolves to `null` for an unknown language (show
+     * the code plain).
+     */
+    highlightCode(code: string, lang: string): Promise<readonly HighlightedSpan[] | null>;
     /**
      * A glyph from the host's vendored icon set as a plain SVG element
      * (SDK 1.10) -- `currentColor` stroke, sized by `size` (px, default 16).

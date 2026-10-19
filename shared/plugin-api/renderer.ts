@@ -65,6 +65,7 @@ export type {
   EditorExtensionSlot,
   EditorSurfaceContext,
   FileOpenerContrib,
+  HighlightedSpan,
   MarkdownViewHandle,
   MarkdownViewOptions,
   MenuContribution,
