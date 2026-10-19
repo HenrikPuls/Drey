@@ -2,7 +2,7 @@ import { promises as fsp } from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { applyFolderNumbering, listTicketDirs, planFolderNumbering, resolvePhaseDir } from './phase-dirs';
+import { applyFolderNumbering, gapFolderName, listTicketDirs, planFolderNumbering, resolvePhaseDir } from './phase-dirs';
 import { TicketsGit } from './tickets-git';
 
 describe('resolvePhaseDir', () => {
@@ -72,6 +72,58 @@ describe('planFolderNumbering (req-50)', () => {
 
   it('is empty for a numbered repo', () => {
     expect(planFolderNumbering(['10-inbox', '20-plan', '30-build', '40-done', 'archive', '_meta'], ORDER)).toEqual([]);
+  });
+});
+
+describe('gapFolderName (T-0043)', () => {
+  // A new column slots in before the terminal: full NEW order, neighbours
+  // are the phases around the new id's position.
+  const ORDER = ['inbox', 'prioritized', 'build', 'qa', 'done'];
+
+  it('picks the free integer nearest the gap midpoint (ties to the smaller)', () => {
+    // Neighbours 30-build and 40-done: span (30, 40), midpoint 35.
+    expect(gapFolderName(['10-inbox', '20-prioritized', '30-build', '40-done'], ORDER, 'qa')).toBe('35-qa');
+    // A tighter span (33, 40) holds 34..39; the midpoint 36 wins.
+    expect(gapFolderName(['10-inbox', '20-prioritized', '33-build', '40-done'], ORDER, 'qa')).toBe('36-qa');
+    // An even span (31, 40) ties 35 and 36 to the smaller.
+    expect(gapFolderName(['10-inbox', '20-prioritized', '31-build', '40-done'], ORDER, 'qa')).toBe('35-qa');
+  });
+
+  it('walks outward from a taken midpoint, smaller number first', () => {
+    // 35 is taken by a stray folder: the smaller tie 34 wins.
+    expect(
+      gapFolderName(['10-inbox', '20-prioritized', '30-build', '40-done', '35-stray'], ORDER, 'qa'),
+    ).toBe('34-qa');
+    // 34 and 35 taken: 36 is the nearest free integer.
+    expect(
+      gapFolderName(
+        ['10-inbox', '20-prioritized', '30-build', '40-done', '34-stray', '35-stray'],
+        ORDER,
+        'qa',
+      ),
+    ).toBe('36-qa');
+  });
+
+  it('counts an unprefixed neighbour as its derived position', () => {
+    // `done` unprefixed at order position 5 counts as 50: span (30, 50).
+    expect(gapFolderName(['10-inbox', '20-prioritized', '30-build', 'done'], ORDER, 'qa')).toBe('40-qa');
+  });
+
+  it('falls back to the derived name when the neighbours touch or the span is full', () => {
+    // 39-build and 40-done leave no integer between them; the new column
+    // sits at order position 4 -> derived 40-qa.
+    expect(gapFolderName(['10-inbox', '20-prioritized', '39-build', '40-done'], ORDER, 'qa')).toBe('40-qa');
+    // Every integer of the span taken: same fallback.
+    const dirs = ['10-inbox', '20-prioritized', '30-build', '40-done'];
+    for (let n = 31; n <= 39; n++) {
+      dirs.push(`${n}-x${n}`);
+    }
+    expect(gapFolderName(dirs, ORDER, 'qa')).toBe('40-qa');
+  });
+
+  it('derives for an end position instead of guessing a gap', () => {
+    // Not actually a middle slot (defensive): the derived name of that spot.
+    expect(gapFolderName(['10-inbox', '20-build'], ['inbox', 'build', 'qa'], 'qa')).toBe('30-qa');
   });
 });
 

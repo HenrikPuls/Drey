@@ -72,6 +72,68 @@ export function planFolderNumbering(dirs: readonly string[], phaseIds: readonly 
 }
 
 /**
+ * The folder name for a new column (T-0043): the free integer in the
+ * gap between the new phase's neighbours, nearest the midpoint (ties to
+ * the smaller), as `<n>-<id>`. `order` is the NEW pipeline order and
+ * includes `newId`; the neighbours are the folders of the phases around
+ * it (an unprefixed folder counts as its derived position × 10). No
+ * free integer — touching neighbours or none in the span — falls back
+ * to the derived `phaseDirectoryName(position, id)`: a shared number
+ * never collides, the gap is Explorer sort order, not a constraint.
+ */
+export function gapFolderName(dirs: readonly string[], order: readonly string[], newId: string): string {
+  const position = order.indexOf(newId); // 0-based; adds sit before the terminal
+  if (position < 1 || position > order.length - 2) {
+    return phaseDirectoryName(Math.max(position + 1, 1), newId);
+  }
+  const numberIn = (dir: string): number | null => {
+    const match = /^(\d+)-/.exec(dir);
+    return match === null ? null : Number(match[1]);
+  };
+  const neighbourNumber = (phaseId: string): number => {
+    const index = order.indexOf(phaseId);
+    for (const dir of dirs) {
+      if (stripPhasePrefix(dir) === phaseId) {
+        const n = numberIn(dir);
+        if (n !== null) {
+          return n;
+        }
+        break; // unprefixed: the derived position of that phase
+      }
+    }
+    return (index + 1) * 10;
+  };
+  const left = neighbourNumber(order[position - 1]!);
+  const right = neighbourNumber(order[position + 1]!);
+  const taken = new Set<number>();
+  for (const dir of dirs) {
+    const n = numberIn(dir);
+    if (n !== null) {
+      taken.add(n);
+    }
+  }
+  // The open span between the neighbours (empty when they touch).
+  const lo = Math.min(left, right) + 1;
+  const hi = Math.max(left, right) - 1;
+  if (lo > hi) {
+    return phaseDirectoryName(position + 1, newId);
+  }
+  const mid = Math.floor((lo + hi) / 2);
+  const free = (n: number): boolean => n >= lo && n <= hi && !taken.has(n);
+  for (let offset = 0; offset <= hi - lo; offset++) {
+    const below = mid - offset;
+    if (free(below)) {
+      return `${below}-${newId}`;
+    }
+    const above = mid + offset;
+    if (offset > 0 && free(above)) {
+      return `${above}-${newId}`;
+    }
+  }
+  return phaseDirectoryName(position + 1, newId);
+}
+
+/**
  * Carries out `moves` under `ticketsRootAbs`, file by file. Checked first
  * (two files of one name landing in one folder refuse the whole run, and
  * nothing is touched); then every source folder is parked under a
