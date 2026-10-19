@@ -160,6 +160,15 @@ function openTicketFile(api: DreyPluginApi, path: string): void {
   }
 }
 
+/** Outlines the card whose ticket file is the active editor tab. */
+function markOpenCard(api: DreyPluginApi): void {
+  const active = api.documents.active();
+  const path = active !== null && active.vaultId === snapshot?.vaultId ? active.path : null;
+  for (const node of document.querySelectorAll<HTMLElement>('.tickets-card')) {
+    node.classList.toggle('tickets-card-open', path !== null && node.dataset['path'] === path);
+  }
+}
+
 // --- drag state (one interaction at a time, shared across views) -------
 
 let draggedId: string | null = null;
@@ -245,6 +254,7 @@ function cardNode(api: DreyPluginApi, card: TicketCard, column: BoardColumn): HT
   const node = el('article', 'tickets-card');
   node.draggable = true;
   node.dataset['id'] = card.id;
+  node.dataset['path'] = card.path;
   if (card.pinned) {
     node.classList.add('tickets-pinned');
   }
@@ -590,6 +600,7 @@ function buildBoardView(api: DreyPluginApi): BoardView {
     const restore = restoreScroll();
     try {
       draw();
+      markOpenCard(api);
     } finally {
       restore();
     }
@@ -1562,6 +1573,11 @@ const plugin: { activate(api: DreyPluginApi): void } = {
       },
     });
 
+    api.documents.onChange((event) => {
+      if (event.type === 'active-changed' || event.type === 'docs-changed') {
+        markOpenCard(api);
+      }
+    });
     api.backend.on('board-changed', () => void refreshBoard());
     api.vault.onChanged(() => void refreshBoard());
     api.backend.on('fleet-changed', (payload) =>

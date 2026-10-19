@@ -234,7 +234,7 @@ export const livePreviewTheme = EditorView.theme(
       borderRadius: 'var(--radius-xs)',
     },
     '.lp-html a': {
-      color: 'var(--accent)',
+      color: 'var(--accent-fg)',
     },
     '.lp-html summary': {
       cursor: 'pointer',
@@ -332,7 +332,7 @@ export const livePreviewTheme = EditorView.theme(
 
     // `[^footnote]` refs render as a small accent superscript.
     '.lp-footnote-ref': {
-      color: 'var(--accent)',
+      color: 'var(--accent-fg)',
       fontSize: '0.72em',
       lineHeight: '1',
       cursor: 'default',

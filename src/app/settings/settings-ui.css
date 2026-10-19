@@ -471,7 +471,7 @@
 }
 
 :where(.settings-ui) .status-pending {
-  color: var(--accent);
+  color: var(--accent-fg);
 }
 
 /* A message that needs attention inside the page flow. */

@@ -20,6 +20,13 @@ recorded as an explicit decision. The parity checklist lives in
 
 ## Recent milestones
 
+### req-48 — theme contrast repair and formatted, coloured assistant answers (owner request, outside the list)
+
+**Not yet manually verified by the owner.**
+
+- Contrast: `--accent` as text measured 3.5–4.0:1 on Anthrazit docks and fields; a new `--accent-fg` token (accent lifted toward the heading colour, ≥4.5:1 on dock, editor and field surfaces) now carries every accent-coloured text/link. Code comments use `--text-4` instead of `--text-faint` (3.7:1). The tickets board used an undefined `--text-secondary` (now `--text-3`), 9px chips, and 0.55–0.72 opacity stacked on dim text — raised.
+- Assistant answers render fenced code (language label, copy button, syntax colours following the theme; Cyberpunk neon; `diff` per line), headings, quotes, rules and tables, in `plugins/assistant/renderer/{code-highlight,rich-blocks,rich-text}.ts`. Specs in `rich-text.spec.ts`.
+
 ### req-47 — the takeover transcript reads like Claude Code (owner request, outside the list)
 
 **Not yet manually verified by the owner.**

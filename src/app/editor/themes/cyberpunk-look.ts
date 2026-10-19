@@ -41,7 +41,7 @@ const cyberpunkHighlightStyle = HighlightStyle.define([
 
   // Tokens inside fenced code -- the set stays as complete as the Drey
   // one, so nothing falls through to the light-background fallback style.
-  { tag: t.comment, color: 'var(--text-faint)', fontStyle: 'italic' },
+  { tag: t.comment, color: 'var(--text-4)', fontStyle: 'italic' },
   {
     tag: [t.keyword, t.operatorKeyword, t.modifier, t.self, t.bool, t.atom, t.null, t.tagName],
     color: PINK,

@@ -147,7 +147,7 @@ export function wikilinks(options: {
 
 const wikilinkTheme = EditorView.theme({
   '.cm-wikilink': {
-    color: 'var(--accent)',
+    color: 'var(--accent-fg)',
     cursor: 'pointer',
   },
   '.cm-wikilink:hover': {

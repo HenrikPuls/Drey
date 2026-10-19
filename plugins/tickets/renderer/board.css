@@ -57,8 +57,8 @@
 .tickets-metrics {
   flex: none;
   padding: 3px 8px;
-  font-size: 0.72rem;
-  color: var(--text-4);
+  font-size: 0.78rem;
+  color: var(--text-3);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -219,7 +219,7 @@
 }
 
 .tickets-col.tickets-col-held > .tickets-col-head {
-  opacity: 0.72;
+  opacity: 0.88;
 }
 
 /* The per-column brakes, next to the fold chevron (M85). */
@@ -728,8 +728,13 @@
 }
 
 .tickets-card:hover {
-  border-color: var(--border-strong);
-  background: var(--hover-bg);
+  border-color: var(--accent-ring);
+  background: color-mix(in srgb, var(--accent) 8%, var(--bg-input));
+}
+
+.tickets-card.tickets-card-open {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 1px var(--accent);
 }
 
 .tickets-card:active {
@@ -826,7 +831,7 @@
 }
 
 .tickets-chip {
-  font-size: 0.65rem;
+  font-size: 0.72rem;
   padding: 0 4px;
   border: 1px solid var(--border);
   border-radius: var(--radius-xs);
@@ -1041,7 +1046,7 @@
 }
 
 .tickets-col-fold {
-  opacity: 0.55;
+  opacity: 0.85;
 }
 
 .tickets-col:hover .tickets-col-fold,
@@ -1441,7 +1446,7 @@
 .tickets-form-hint {
   margin: 4px 0 0;
   font-size: 12px;
-  color: var(--text-secondary);
+  color: var(--text-3);
 }
 
 /* The fleet daemon's chain log as a readonly editor tab (T-0007 review):
@@ -1468,7 +1473,7 @@
   min-width: 0;
   padding: 6px 16px;
   font-size: 11px;
-  opacity: 0.6;
+  opacity: 0.85;
 }
 
 .tickets-chain-log-out {

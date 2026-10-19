@@ -97,7 +97,8 @@
 }
 
 .category.active {
-  background: var(--active-bg);
+  background: var(--accent-surface);
+  box-shadow: inset 2px 0 0 var(--accent);
 }
 
 .category.active .label {

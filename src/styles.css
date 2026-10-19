@@ -53,6 +53,7 @@
      alternatives live in `ACCENT_PRESETS` (shared/app-config.ts). ---- */
   --accent: #c96442;
   --accent-hover: color-mix(in srgb, var(--accent) 78%, white);
+  --accent-fg: color-mix(in srgb, var(--accent) 72%, var(--text-heading)); /* accent as TEXT: lifted so it clears 4.5:1 on dock, editor and field surfaces */
   --accent-contrast: #1b1a19; /* text/glyph on a filled accent surface */
   --accent-surface: color-mix(in srgb, var(--accent) 15%, transparent); /* tag chip fill */
   --accent-text: color-mix(in srgb, var(--accent) 58%, #f2efe9); /* tag chip text */
@@ -453,7 +454,7 @@ textarea::placeholder {
 .icon-btn[aria-pressed='true'],
 .icon-btn[aria-selected='true'] {
   background: var(--accent-surface);
-  color: var(--accent);
+  color: var(--accent-fg);
 }
 
 .icon-btn:disabled {
