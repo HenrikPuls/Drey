@@ -36,8 +36,10 @@ import {
   acceptanceCommands,
   newTicketFileText,
   patchTicketFile,
+  ticketPathParts,
   ticketSections,
 } from './ticket-files';
+import { listTicketDirs, resolvePhaseDir } from './phase-dirs';
 import { openTerminalAt } from './open-terminal';
 import { TicketsGit, type RepoLocation } from './tickets-git';
 import { FleetClient } from './fleet-client';
@@ -149,6 +151,13 @@ class BoardService {
     return this.gitLocations.get(vaultPath) ?? null;
   }
 
+  /** The directories under `tickets/` as they exist on disk (T-0041) —
+   *  what every writer resolves its target directory against. */
+  private async ticketDirs(vault: VaultLike): Promise<string[]> {
+    const abs = this.ctx.vault.resolveAssetPath('tickets', { vaultId: vault.id });
+    return abs === null ? [] : await listTicketDirs(abs);
+  }
+
   /** Snapshot from files — every fetch rebuilds (no stored board state). */
   async snapshot(): Promise<BoardSnapshot> {
     const [vault, vaults] = await Promise.all([
@@ -254,7 +263,8 @@ class BoardService {
       const ids = snap.columns.flatMap((c) => c.tickets.map((t) => t.id));
       const id = nextTicketId(ids);
       const firstPhase = snap.pipeline[0]!.id;
-      const path = `tickets/${firstPhase}/${id}.md`;
+      const firstDir = resolvePhaseDir(await this.ticketDirs(vault), 1, firstPhase);
+      const path = `tickets/${firstDir}/${id}.md`;
       const text = newTicketFileText({
         id,
         title: input.title,
@@ -301,7 +311,10 @@ class BoardService {
       if (toPhase === null) {
         return { ok: false, error: `"${input.to}" is not a phase in the pipeline` };
       }
-      if (card.path !== `tickets/${input.from}/${input.id}.md`) {
+      // Prefix-aware path guard (T-0041): the card may sit in `10-inbox`
+      // or `inbox` — the stripped phase id is the identity.
+      const parts = ticketPathParts(card.path);
+      if (parts === null || parts.phase !== input.from || parts.stem !== input.id) {
         return { ok: false, error: `${input.id} sits in an unexpected path (${card.path})` };
       }
 
@@ -320,10 +333,15 @@ class BoardService {
         return { ok: false, error: messageOf(error) };
       }
 
-      const newPath = `tickets/${input.to}/${input.id}.md`;
+      const toDir = resolvePhaseDir(
+        await this.ticketDirs(vault),
+        snap.pipeline.findIndex((p) => p.id === input.to) + 1,
+        input.to,
+      );
+      const newPath = `tickets/${toDir}/${input.id}.md`;
       try {
         const oldAbs = this.ctx.vault.resolveAssetPath(card.path, { vaultId: vault.id });
-        const dirAbs = this.ctx.vault.resolveAssetPath(`tickets/${input.to}`, { vaultId: vault.id });
+        const dirAbs = this.ctx.vault.resolveAssetPath(`tickets/${toDir}`, { vaultId: vault.id });
         const newAbs = this.ctx.vault.resolveAssetPath(newPath, { vaultId: vault.id });
         if (oldAbs === null || dirAbs === null || newAbs === null) {
           return { ok: false, error: 'ticket path escapes the vault' };
@@ -547,6 +565,9 @@ class BoardService {
       const nextPhase = phaseIndex >= 0 && phaseIndex + 1 < snap.pipeline.length
         ? (snap.pipeline[phaseIndex + 1] ?? null)
         : null;
+      const nextPhaseDir = nextPhase === null
+        ? null
+        : resolvePhaseDir(await this.ticketDirs(vault), phaseIndex + 2, nextPhase.id);
       const { description, plan } = ticketSections(text);
       const gitPath = ((await this.ctx.config.get<string>('gitPath')) ?? '').trim();
       const request: RunRequest = {
@@ -575,6 +596,8 @@ class BoardService {
         acceptance,
         git: gitPath === '' ? 'git' : gitPath,
         nextPhase: nextPhase?.id ?? null,
+        nextPhaseDir,
+        pushRemote: snap.pushRemote,
         claimIdentity: nextPhase?.claim === true ? `agent@${hostname().toLowerCase()}` : null,
         ...(input.workerChoice !== null ? { recordWorker: input.workerChoice } : {}),
       };

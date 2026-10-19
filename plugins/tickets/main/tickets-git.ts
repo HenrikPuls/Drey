@@ -106,4 +106,14 @@ export class TicketsGit {
       }
     }
   }
+
+  /**
+   * Pushes HEAD to `remote` — the optional auto-push after a transition
+   * commit (pipeline.md `push:`, T-0041). `remote` is a NAME from git
+   * config, never a URL. Callers treat a failure as a warning: the
+   * transition commit is already durable.
+   */
+  async push(root: string, remote: string): Promise<void> {
+    await this.run(root, ['push', remote, 'HEAD']);
+  }
 }

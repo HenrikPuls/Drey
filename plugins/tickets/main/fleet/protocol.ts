@@ -57,6 +57,13 @@ export interface RunRequest {
   readonly git: string;
   /** Transition target after a green gate — the pipeline's next phase id. */
   readonly nextPhase: string | null;
+  /** Resolved directory name for `nextPhase` (numbered `NN-<id>` folders,
+   *  T-0041); null exactly when `nextPhase` is null. Older stored records
+   *  predate it — readers fall back to the phase id. */
+  readonly nextPhaseDir: string | null;
+  /** pipeline.md `push:` — the remote the transition commit is pushed to
+   *  after a green move (T-0041); null = never push. */
+  readonly pushRemote: string | null;
   /** Next phase claims (claim: true) → stamped with this identity. */
   readonly claimIdentity: string | null;
   /** The dialog's explicit worker choice, recorded on the ticket (`worker:`). */

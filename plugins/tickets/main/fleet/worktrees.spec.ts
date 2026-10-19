@@ -397,6 +397,8 @@ describe('RunSupervisor worktree wiring', () => {
       acceptance: ['npm run verify:unit'],
       git: 'git',
       nextPhase: 'build',
+      nextPhaseDir: 'build',
+      pushRemote: null,
       claimIdentity: null,
       ...overrides,
     };
